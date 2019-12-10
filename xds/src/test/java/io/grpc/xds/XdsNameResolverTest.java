@@ -159,7 +159,7 @@ public class XdsNameResolverTest {
             HOST_NAME + ":" + PORT,
             args,
             backoffPolicyProvider,
-            fakeClock.getStopwatchSupplier().get(),
+            fakeClock.getStopwatchSupplier(),
             channelFactory,
             bootstrapper);
     assertThat(responseObservers).isEmpty();
@@ -184,7 +184,7 @@ public class XdsNameResolverTest {
             HOST_NAME + ":" + PORT,
             args,
             backoffPolicyProvider,
-            fakeClock.getStopwatchSupplier().get(),
+            fakeClock.getStopwatchSupplier(),
             channelFactory,
             bootstrapper);
     resolver.start(mockListener);
@@ -209,7 +209,7 @@ public class XdsNameResolverTest {
             HOST_NAME + ":" + PORT,
             args,
             backoffPolicyProvider,
-            fakeClock.getStopwatchSupplier().get(),
+            fakeClock.getStopwatchSupplier(),
             channelFactory,
             bootstrapper);
     resolver.start(mockListener);

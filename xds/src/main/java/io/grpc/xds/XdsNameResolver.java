@@ -16,9 +16,11 @@
 
 package io.grpc.xds;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.Stopwatch;
+import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
@@ -66,13 +68,14 @@ final class XdsNameResolver extends NameResolver {
       String name,
       final Args args,
       final BackoffPolicy.Provider backoffPolicyProvider,
-      final Stopwatch stopwatch,
+      final Supplier<Stopwatch> stopwatchSupplier,
       final XdsChannelFactory channelFactory,
       Bootstrapper bootstrapper) {
     URI nameUri = URI.create("//" + checkNotNull(name, "name"));
+    checkArgument(nameUri.getHost() != null, "Invalid hostname: %s", name);
     authority =
         checkNotNull(nameUri.getAuthority(), "nameUri (%s) doesn't have an authority", nameUri);
-    hostName = checkNotNull(nameUri.getHost(), "invalid hostname: %s", name);
+    hostName = nameUri.getHost();
     port = nameUri.getPort();  // -1 if not specified
     this.bootstrapper = checkNotNull(bootstrapper, "bootstrapper");
     XdsClientFactory xdsClientFactory = new XdsClientFactory() {
@@ -87,7 +90,7 @@ final class XdsNameResolver extends NameResolver {
                 checkNotNull(args.getSynchronizationContext(), "syncContext"),
                 checkNotNull(args.getScheduledExecutorService(), "timeService"),
                 checkNotNull(backoffPolicyProvider, "backoffPolicyProvider"),
-                checkNotNull(stopwatch, "stopwatch"));
+                checkNotNull(stopwatchSupplier, "stopwatchSupplier"));
       }
     };
     xdsClientPool = new RefCountedXdsClientObjectPool(xdsClientFactory);

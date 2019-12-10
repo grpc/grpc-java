@@ -54,7 +54,7 @@ public final class XdsNameResolverProvider extends NameResolverProvider {
               name,
               args,
               new ExponentialBackoffPolicy.Provider(),
-              GrpcUtil.STOPWATCH_SUPPLIER.get(),
+              GrpcUtil.STOPWATCH_SUPPLIER,
               XdsChannelFactory.getInstance(),
               Bootstrapper.getInstance());
     }
