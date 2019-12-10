@@ -18,60 +18,79 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
-import io.envoyproxy.envoy.api.v2.core.Node;
+import com.google.common.base.Stopwatch;
+import com.google.common.collect.ImmutableList;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
 import io.grpc.Status;
+import io.grpc.Status.Code;
+import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.JsonParser;
+import io.grpc.internal.ObjectPool;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
-import io.grpc.xds.Bootstrapper.ChannelCreds;
-import io.grpc.xds.Bootstrapper.ServerInfo;
+import io.grpc.xds.XdsClient.ConfigUpdate;
+import io.grpc.xds.XdsClient.ConfigWatcher;
+import io.grpc.xds.XdsClient.RefCountedXdsClientObjectPool;
+import io.grpc.xds.XdsClient.XdsChannelFactory;
+import io.grpc.xds.XdsClient.XdsClientFactory;
 import java.io.IOException;
 import java.net.URI;
-import java.util.Collections;
-import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
+import javax.annotation.Nullable;
 
 /**
  * A {@link NameResolver} for resolving gRPC target names with "xds-experimental" scheme.
  *
- * <p>The implementation is for load balancing alpha release only. No actual VHDS is involved. It
- * always returns a hard-coded service config that selects the xds_experimental LB policy with
- * round-robin as the child policy.
+ * <p>Resolving a gRPC target involves contacting the traffic director via xDS protocol to
+ * retrieve service information and produce a service config to the caller.
  *
  * @see XdsNameResolverProvider
  */
 final class XdsNameResolver extends NameResolver {
 
-  // TODO(chengyuanzhang): delete this later, it was a workaround for demo.
-  @NameResolver.ResolutionResultAttr
-  static final Attributes.Key<Node> XDS_NODE = Attributes.Key.create("xds-node");
-  // TODO(chengyuanzhang): delete this later, XdsClient (to be implemented) constructed here
-  //  should take channel credentials config. This workaround is passing channel credentials
-  //  config to xDS load balancer, which is doing the xDS RPC communication for now.
-  @NameResolver.ResolutionResultAttr
-  static final Attributes.Key<List<ChannelCreds>> XDS_CHANNEL_CREDS_LIST =
-      Attributes.Key.create("xds-channel-creds-list");
+  private static final AtomicReference<BootstrapInfo> bootstrapInfoRef = new AtomicReference<>();
 
   private final String authority;
+  private final String hostName;
+  private final int port;
+  private final ObjectPool<XdsClient> xdsClientPool;
   private final Bootstrapper bootstrapper;
 
-  XdsNameResolver(String name) {
-    this(name, Bootstrapper.getInstance());
-  }
+  @Nullable
+  private XdsClient xdsClient;
 
-  @VisibleForTesting
-  XdsNameResolver(String name, Bootstrapper bootstrapper) {
+  XdsNameResolver(
+      String name,
+      final Args args,
+      final BackoffPolicy.Provider backoffPolicyProvider,
+      final Stopwatch stopwatch,
+      final XdsChannelFactory channelFactory,
+      Bootstrapper bootstrapper) {
     URI nameUri = URI.create("//" + checkNotNull(name, "name"));
-    Preconditions.checkArgument(nameUri.getHost() != null, "Invalid hostname: %s", name);
     authority =
-        Preconditions.checkNotNull(
-            nameUri.getAuthority(), "nameUri (%s) doesn't have an authority", nameUri);
-    this.bootstrapper = Preconditions.checkNotNull(bootstrapper, "bootstrapper");
+        checkNotNull(nameUri.getAuthority(), "nameUri (%s) doesn't have an authority", nameUri);
+    hostName = checkNotNull(nameUri.getHost(), "invalid hostname: %s", name);
+    port = nameUri.getPort();  // -1 if not specified
+    this.bootstrapper = checkNotNull(bootstrapper, "bootstrapper");
+    XdsClientFactory xdsClientFactory = new XdsClientFactory() {
+      @Override
+      XdsClient createXdsClient() {
+        BootstrapInfo bootstrapInfo = bootstrapInfoRef.get();
+        return
+            new XdsClientImpl(
+                bootstrapInfo.getServers(),
+                checkNotNull(channelFactory, "channelFactory"),
+                bootstrapInfo.getNode(),
+                checkNotNull(args.getSynchronizationContext(), "syncContext"),
+                checkNotNull(args.getScheduledExecutorService(), "timeService"),
+                checkNotNull(backoffPolicyProvider, "backoffPolicyProvider"),
+                checkNotNull(stopwatch, "stopwatch"));
+      }
+    };
+    xdsClientPool = new RefCountedXdsClientObjectPool(xdsClientFactory);
   }
 
   @Override
@@ -89,49 +108,63 @@ final class XdsNameResolver extends NameResolver {
       listener.onError(Status.UNAVAILABLE.withDescription("Failed to bootstrap").withCause(e));
       return;
     }
-
-    List<ServerInfo> serverList = bootstrapInfo.getServers();
-    if (serverList.isEmpty()) {
+    if (bootstrapInfo.getServers().isEmpty()) {
       listener.onError(
           Status.UNAVAILABLE.withDescription("No traffic director provided by bootstrap"));
       return;
     }
+    bootstrapInfoRef.set(bootstrapInfo);
 
-    // Currently we only support using the first server from bootstrap.
-    ServerInfo serverInfo = serverList.get(0);
+    xdsClient = xdsClientPool.getObject();
+    xdsClient.watchConfigData(hostName, port, new ConfigWatcher() {
+      @Override
+      public void onConfigChanged(ConfigUpdate update) {
+        String serviceConfig = "{\n"
+            + "  \"loadBalancingConfig\": [\n"
+            + "    {\n"
+            + "      \"cds_experimental\": {\n"
+            + "        \"cluster\": \"" + update.getClusterName() + "\"\n"
+            + "      }\n"
+            + "    }\n"
+            + "  ]\n"
+            + "}";
+        Map<String, ?> config;
+        try {
+          config = (Map<String, ?>) JsonParser.parse(serviceConfig);
+        } catch (IOException e) {
+          throw new AssertionError("Should never happen: invalid service config format");
+        }
+        Attributes attrs =
+            Attributes.newBuilder()
+                .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, config)
+                .set(XdsAttributes.XDS_CLIENT_REF, xdsClientPool)
+                .build();
+        ResolutionResult result =
+            ResolutionResult.newBuilder()
+                .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+                .setAttributes(attrs).build();
+        listener.onResult(result);
+      }
 
-    String serviceConfig = "{\n"
-        + "  \"loadBalancingConfig\": [\n"
-        + "    {\n"
-        + "      \"xds_experimental\": {\n"
-        + "        \"childPolicy\": [ {\"round_robin\": {} } ]\n"
-        + "      }\n"
-        + "    }"
-        + "  ]\n"
-        + "}";
-    Map<String, ?> config;
-    try {
-      config = (Map<String, ?>) JsonParser.parse(serviceConfig);
-    } catch (IOException e) {
-      listener.onError(
-          Status.UNKNOWN.withDescription("Invalid service config").withCause(e));
-      throw new AssertionError("Invalid service config");
-    }
-    Attributes attrs =
-        Attributes.newBuilder()
-            .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, config)
-            .set(XDS_NODE, bootstrapInfo.getNode())
-            .set(XDS_CHANNEL_CREDS_LIST, serverInfo.getChannelCredentials())
-            .build();
-    ResolutionResult result =
-        ResolutionResult.newBuilder()
-            .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
-            .setAttributes(attrs)
-            .build();
-    listener.onResult(result);
+      @Override
+      public void onError(Status error) {
+        // In order to distinguish between IO error and resource not found, which trigger
+        // different handling, return an empty resolution result to channel for resource not
+        // found.
+        // TODO(chengyuanzhang): Returning an empty resolution result based on status code is
+        //  a temporary solution. More design discussion needs to be done.
+        if (error.getCode().equals(Code.NOT_FOUND)) {
+          listener.onResult(ResolutionResult.newBuilder().build());
+        }
+        listener.onError(error);
+      }
+    });
   }
 
   @Override
   public void shutdown() {
+    if (xdsClient != null) {
+      xdsClientPool.returnObject(xdsClient);
+    }
   }
 }

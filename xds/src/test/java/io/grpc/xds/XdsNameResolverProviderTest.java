@@ -82,4 +82,31 @@ public class XdsNameResolverProviderTest {
             args))
         .isNull();
   }
+
+  @Test
+  public void validName_withAuthority() {
+    XdsNameResolver resolver =
+        provider.newNameResolver(
+            URI.create("xds-experimental://trafficdirector.google.com/foo.googleapis.com"), args);
+    assertThat(resolver).isNotNull();
+    assertThat(resolver.getServiceAuthority()).isEqualTo("foo.googleapis.com");
+  }
+
+  @Test
+  public void validName_noAuthority() {
+    XdsNameResolver resolver =
+        provider.newNameResolver(URI.create("xds-experimental:///foo.googleapis.com"), args);
+    assertThat(resolver).isNotNull();
+    assertThat(resolver.getServiceAuthority()).isEqualTo("foo.googleapis.com");
+  }
+
+  @Test
+  public void invalidName_hostnameContainsUnderscore() {
+    try {
+      provider.newNameResolver(URI.create("xds-experimental:///foo_bar.googleapis.com"), args);
+      fail("Expected IllegalArgumentException");
+    } catch (IllegalArgumentException e) {
+      // Expected
+    }
+  }
 }
