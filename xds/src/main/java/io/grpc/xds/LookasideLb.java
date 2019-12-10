@@ -23,7 +23,6 @@ import static java.util.logging.Level.FINEST;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import io.envoyproxy.envoy.api.v2.core.Node;
 import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
@@ -53,7 +52,6 @@ import io.grpc.xds.XdsClient.RefCountedXdsClientObjectPool;
 import io.grpc.xds.XdsClient.XdsClientFactory;
 import io.grpc.xds.XdsLoadBalancerProvider.XdsConfig;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -165,36 +163,21 @@ final class LookasideLb extends LoadBalancer {
 
     // Init XdsClient.
     if (xdsClient == null) {
-      // There are three usecases:
-      // 1. The EDS-only legacy usecase that requires balancerName from xds config.
-      //    Note: we don't support balancerName change.
-      //    TODO(zdapeng): Remove the legacy case.
-      // 2. The EDS-only with bootstrap usecase:
-      //    The name resolver resolves a ResolvedAddresses with an XdsConfig without balancerName
-      //    field. Use the bootstrap information to create a channel.
-      // 3. Non EDS-only usecase:
+      // There are two usecases:
+      // 1. The EDS-only:
+      //    The name resolver resolves a ResolvedAddresses with an XdsConfig. Use the bootstrap
+      //    information to create a channel.
+      // 2. Non EDS-only usecase:
       //    XDS_CLIENT_REF attribute is available from ResolvedAddresses either from
       //    XdsNameResolver or CDS policy.
       //
       // We assume XdsConfig switching happens only within one usecase, and there is no switching
       // between different usecases.
-      if (newXdsConfig.balancerName != null) {
-        // This is the EDS-only legacy usecase that requires balancerName from xds config.
-        channel = initLbChannel(
-            lookasideLbHelper, newXdsConfig.balancerName, Collections.<ChannelCreds>emptyList());
-        xdsClientRef = new RefCountedXdsClientObjectPool(new XdsClientFactory() {
-          @Override
-          XdsClient createXdsClient() {
-            return new XdsComms2(
-                channel, lookasideLbHelper, new ExponentialBackoffPolicy.Provider(),
-                GrpcUtil.STOPWATCH_SUPPLIER, Node.getDefaultInstance());
-          }
-        });
-      } else if (xdsClientRefFromResolver != null) {
+      if (xdsClientRefFromResolver != null) {
         // This is the Non EDS-only usecase.
         xdsClientRef = xdsClientRefFromResolver;
       } else {
-        // This is the EDS-only with bootstrap usecase.
+        // This is the EDS-only usecase.
         final BootstrapInfo bootstrapInfo;
         try {
           bootstrapInfo = bootstrapper.readBootstrap();
@@ -230,15 +213,12 @@ final class LookasideLb extends LoadBalancer {
         });
       }
 
-      // At this point the xdsClientRef is assigned in all usecases, cache them for later use.
+      // At this point the xdsClientRef is assigned in both usecases, cache them for later use.
       this.xdsClientRef = xdsClientRef;
       xdsClient = xdsClientRef.getObject();
     }
 
-    // Note: balancerName change is unsupported and ignored.
-    // TODO(zdapeng): Remove support for balancerName.
     // Note: childPolicy change will be handled in LocalityStore, to be implemented.
-
     // If edsServiceName in XdsConfig is changed, do a graceful switch.
     if (xdsConfig == null
         || !Objects.equals(newXdsConfig.edsServiceName, xdsConfig.edsServiceName)) {
@@ -295,11 +275,11 @@ final class LookasideLb extends LoadBalancer {
 
   private static ManagedChannel initLbChannel(
       Helper helper,
-      String balancerName,
+      String serverUri,
       List<ChannelCreds> channelCredsList) {
     ManagedChannel channel = null;
     try {
-      channel = helper.createResolvingOobChannel(balancerName);
+      channel = helper.createResolvingOobChannel(serverUri);
     } catch (UnsupportedOperationException uoe) {
       // Temporary solution until createResolvingOobChannel is implemented.
       // FIXME (https://github.com/grpc/grpc-java/issues/5495)
@@ -309,19 +289,19 @@ final class LookasideLb extends LoadBalancer {
             FINEST,
             "createResolvingOobChannel() not supported by the helper: " + helper,
             uoe);
-        logger.log(FINEST, "creating oob channel for target {0}", balancerName);
+        logger.log(FINEST, "creating oob channel for target {0}", serverUri);
       }
 
       // Use the first supported channel credentials configuration.
       // Currently, only "google_default" is supported.
       for (ChannelCreds creds : channelCredsList) {
         if (creds.getType().equals("google_default")) {
-          channel = GoogleDefaultChannelBuilder.forTarget(balancerName).build();
+          channel = GoogleDefaultChannelBuilder.forTarget(serverUri).build();
           break;
         }
       }
       if (channel == null) {
-        channel = ManagedChannelBuilder.forTarget(balancerName).build();
+        channel = ManagedChannelBuilder.forTarget(serverUri).build();
       }
     }
     return channel;
@@ -401,8 +381,6 @@ final class LookasideLb extends LoadBalancer {
 
       @Override
       public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-        XdsConfig xdsConfig = (XdsConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
-
         if (endpointWatcher != null) {
           // TODO(zddapeng): Handle child policy changed if any.
           return;
@@ -420,7 +398,7 @@ final class LookasideLb extends LoadBalancer {
 
         // TODO(zdapeng): Use XdsClient to do Lrs directly.
         // For now create an LRS Client.
-        if (xdsConfig.balancerName != null) {
+        if (channel != null) {
           lrsClient = loadReportClientFactory.createLoadReportClient(
               channel, helper, new ExponentialBackoffPolicy.Provider(), loadStatsStore);
         } else {

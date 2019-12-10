@@ -173,7 +173,6 @@ public class XdsLoadBalancerProviderTest {
     assertThat(configOrError.getConfig()).isInstanceOf(XdsConfig.class);
     assertThat(configOrError.getConfig()).isEqualTo(
         new XdsConfig(
-            "dns:///balancer.example.com:8080",
             ServiceConfigUtil.unwrapLoadBalancingConfig(
                 checkObject(JsonParser.parse("{\"supported_1\" : {}}"))),
             ServiceConfigUtil.unwrapLoadBalancingConfig(

@@ -76,8 +76,6 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
   static ConfigOrError parseLoadBalancingConfigPolicy(
       Map<String, ?> rawLoadBalancingPolicyConfig, LoadBalancerRegistry registry) {
     try {
-      String newBalancerName =
-          ServiceConfigUtil.getBalancerNameFromXdsConfig(rawLoadBalancingPolicyConfig);
       LbConfig childPolicy = selectChildPolicy(rawLoadBalancingPolicyConfig, registry);
       LbConfig fallbackPolicy = selectFallbackPolicy(rawLoadBalancingPolicyConfig, registry);
       String edsServiceName =
@@ -85,8 +83,7 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
       String lrsServerName =
           ServiceConfigUtil.getLrsServerNameFromXdsConfig(rawLoadBalancingPolicyConfig);
       return ConfigOrError.fromConfig(
-          new XdsConfig(
-              newBalancerName, childPolicy, fallbackPolicy, edsServiceName, lrsServerName));
+          new XdsConfig(childPolicy, fallbackPolicy, edsServiceName, lrsServerName));
     } catch (RuntimeException e) {
       return ConfigOrError.fromError(
           Status.UNKNOWN.withDescription("Failed to parse config " + e.getMessage()).withCause(e));
@@ -130,9 +127,6 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
    * Represents a successfully parsed and validated LoadBalancingConfig for XDS.
    */
   static final class XdsConfig {
-    // TODO(chengyuanzhang): delete after shifting to use bootstrap.
-    @Nullable
-    final String balancerName;
     // TODO(carl-mastrangelo): make these Object's containing the fully parsed child configs.
     @Nullable
     final LbConfig childPolicy;
@@ -149,10 +143,10 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
     final String lrsServerName;
 
     XdsConfig(
-        @Nullable String balancerName, @Nullable LbConfig childPolicy,
-        @Nullable LbConfig fallbackPolicy, @Nullable String edsServiceName,
+        @Nullable LbConfig childPolicy,
+        @Nullable LbConfig fallbackPolicy,
+        @Nullable String edsServiceName,
         @Nullable String lrsServerName) {
-      this.balancerName = balancerName;
       this.childPolicy = childPolicy;
       this.fallbackPolicy = fallbackPolicy;
       this.edsServiceName = edsServiceName;
@@ -162,7 +156,6 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(this)
-          .add("balancerName", balancerName)
           .add("childPolicy", childPolicy)
           .add("fallbackPolicy", fallbackPolicy)
           .add("edsServiceName", edsServiceName)
@@ -176,8 +169,7 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
         return false;
       }
       XdsConfig that = (XdsConfig) obj;
-      return Objects.equal(this.balancerName, that.balancerName)
-          && Objects.equal(this.childPolicy, that.childPolicy)
+      return Objects.equal(this.childPolicy, that.childPolicy)
           && Objects.equal(this.fallbackPolicy, that.fallbackPolicy)
           && Objects.equal(this.edsServiceName, that.edsServiceName)
           && Objects.equal(this.lrsServerName, that.lrsServerName);
@@ -185,8 +177,7 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
 
     @Override
     public int hashCode() {
-      return Objects.hashCode(
-          balancerName, childPolicy, fallbackPolicy, edsServiceName, lrsServerName);
+      return Objects.hashCode(childPolicy, fallbackPolicy, edsServiceName, lrsServerName);
     }
   }
 }

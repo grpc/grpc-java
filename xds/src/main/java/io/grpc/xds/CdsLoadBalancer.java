@@ -253,7 +253,6 @@ public final class CdsLoadBalancer extends LoadBalancer {
           "The load balancing policy in ClusterUpdate '%s' is not supported", newUpdate);
 
       final XdsConfig edsConfig = new XdsConfig(
-          /* balancerName = */ null,
           new LbConfig(newUpdate.getLbPolicy(), ImmutableMap.<String, Object>of()),
           /* fallbackPolicy = */ null,
           /* edsServiceName = */ newUpdate.getEdsServiceName(),
