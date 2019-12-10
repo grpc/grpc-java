@@ -59,7 +59,9 @@ import io.grpc.xds.XdsClient.XdsClientFactory;
 import io.grpc.xds.XdsLoadBalancerProvider.XdsConfig;
 import java.net.InetSocketAddress;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Deque;
+import java.util.List;
 import java.util.Map;
 import org.junit.Before;
 import org.junit.Test;
@@ -374,9 +376,13 @@ public class CdsLoadBalancerTest {
     assertThat(edsLoadBalancers).hasSize(1);
     Helper edsLbHelper1 = edsLbHelpers.poll();
 
+    ArrayList<EquivalentAddressGroup> eagList = new ArrayList<>();
+    eagList.add(new EquivalentAddressGroup(new InetSocketAddress("foo.com", 8080)));
+    eagList.add(new EquivalentAddressGroup(InetSocketAddress.createUnresolved("localhost", 8081),
+        Attributes.newBuilder().set(XdsAttributes.XDS_CLIENT_REF, xdsClientRef).build()));
     LoadBalancer.CreateSubchannelArgs createSubchannelArgs =
         LoadBalancer.CreateSubchannelArgs.newBuilder()
-            .setAddresses(new EquivalentAddressGroup(new InetSocketAddress("foo.com", 8080)))
+            .setAddresses(eagList)
             .build();
     ArgumentCaptor<LoadBalancer.CreateSubchannelArgs> createSubchannelArgsCaptor1 =
         ArgumentCaptor.forClass(null);
@@ -385,9 +391,18 @@ public class CdsLoadBalancerTest {
     edsLbHelper1.createSubchannel(createSubchannelArgs);
     verify(helper, times(1)).createSubchannel(createSubchannelArgsCaptor1.capture());
     LoadBalancer.CreateSubchannelArgs capturedValue = createSubchannelArgsCaptor1.getValue();
+    List<EquivalentAddressGroup> capturedEagList = capturedValue.getAddresses();
+    assertThat(capturedEagList.size()).isEqualTo(2);
+    EquivalentAddressGroup capturedEag = capturedEagList.get(0);
     UpstreamTlsContext capturedUpstreamTlsContext =
-        capturedValue.getAttributes().get(XdsAttributes.ATTR_UPSTREAM_TLS_CONTEXT);
+        capturedEag.getAttributes().get(XdsAttributes.ATTR_UPSTREAM_TLS_CONTEXT);
     assertThat(capturedUpstreamTlsContext).isSameInstanceAs(upstreamTlsContext);
+    capturedEag = capturedEagList.get(1);
+    capturedUpstreamTlsContext =
+        capturedEag.getAttributes().get(XdsAttributes.ATTR_UPSTREAM_TLS_CONTEXT);
+    assertThat(capturedUpstreamTlsContext).isSameInstanceAs(upstreamTlsContext);
+    assertThat(capturedEag.getAttributes().get(XdsAttributes.XDS_CLIENT_REF))
+        .isSameInstanceAs(xdsClientRef);
 
     LoadBalancer edsLoadBalancer1 = edsLoadBalancers.poll();
 

@@ -26,6 +26,7 @@ import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
+import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver.ConfigOrError;
@@ -39,6 +40,8 @@ import io.grpc.xds.XdsClient.ClusterUpdate;
 import io.grpc.xds.XdsClient.ClusterWatcher;
 import io.grpc.xds.XdsLoadBalancerProvider.XdsConfig;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
@@ -247,15 +250,33 @@ public final class CdsLoadBalancer extends LoadBalancer {
         createSubchannelArgs =
             createSubchannelArgs
                 .toBuilder()
-                .setAttributes(
-                    createSubchannelArgs
-                        .getAttributes()
-                        .toBuilder()
-                        .set(XdsAttributes.ATTR_UPSTREAM_TLS_CONTEXT, upstreamTlsContext.get())
-                        .build())
+                .setAttributes(createSubchannelArgs.getAttributes())
+                .setAddresses(
+                    addUpstreamTlsContext(createSubchannelArgs.getAddresses(),
+                        upstreamTlsContext.get()))
                 .build();
       }
       return delegate.createSubchannel(createSubchannelArgs);
+    }
+
+    private static List<EquivalentAddressGroup> addUpstreamTlsContext(
+        List<EquivalentAddressGroup> addresses,
+        UpstreamTlsContext upstreamTlsContext) {
+      if (upstreamTlsContext == null || addresses == null) {
+        return addresses;
+      }
+      ArrayList<EquivalentAddressGroup> copyList = new ArrayList<>(addresses.size());
+      for (EquivalentAddressGroup eag : addresses) {
+        EquivalentAddressGroup eagCopy =
+            new EquivalentAddressGroup(eag.getAddresses(),
+                eag.getAttributes()
+                .toBuilder()
+                .set(XdsAttributes.ATTR_UPSTREAM_TLS_CONTEXT, upstreamTlsContext)
+                .build()
+                );
+        copyList.add(eagCopy);
+      }
+      return copyList;
     }
 
     @Override
@@ -295,9 +316,7 @@ public final class CdsLoadBalancer extends LoadBalancer {
           /* edsServiceName = */ newUpdate.getEdsServiceName(),
           /* lrsServerName = */ newUpdate.getLrsServerName());
       UpstreamTlsContext upstreamTlsContext = newUpdate.getUpstreamTlsContext();
-      if (upstreamTlsContext != null) {
-        helper.upstreamTlsContext.set(upstreamTlsContext);
-      }
+      helper.upstreamTlsContext.set(upstreamTlsContext);
       if (edsBalancer == null) {
         edsBalancer = lbRegistry.getProvider(XDS_POLICY_NAME).newLoadBalancer(helper);
       }
