@@ -87,7 +87,7 @@ public class RouteGuideServerTest {
   @After
   public void tearDown() {
     try {
-		  server.stop();
+      server.stop();
     } catch (InterruptedException e) {
       e.printStackTrace();
     }
