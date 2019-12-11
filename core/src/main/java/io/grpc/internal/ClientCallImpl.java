@@ -283,12 +283,14 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     }
     stream.setDecompressorRegistry(decompressorRegistry);
     channelCallsTracer.reportCallStarted();
+    cancellationListener = new ContextCancellationListener(observer);
     stream.start(new ClientStreamListenerImpl(observer));
 
     // Delay any sources of cancellation after start(), because most of the transports are broken if
     // they receive cancel before start. Issue #1343 has more details
 
     // Propagate later Context cancellation to the remote side.
+    context.addListener(cancellationListener, directExecutor());
     if (effectiveDeadline != null
         // If the context has the effective deadline, we don't need to schedule an extra task.
         && !effectiveDeadline.equals(context.getDeadline())
@@ -299,8 +301,6 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       deadlineCancellationNotifyApplicationFuture =
           startDeadlineNotifyApplicationTimer(effectiveDeadline, observer);
     }
-    cancellationListener = new ContextCancellationListener(observer);
-    context.addListener(cancellationListener, directExecutor());
     if (cancelListenersShouldBeRemoved) {
       // Race detected! ClientStreamListener.closed may have been called before
       // deadlineCancellationFuture was set / context listener added, thereby preventing the future
