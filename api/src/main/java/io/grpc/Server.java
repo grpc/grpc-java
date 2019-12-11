@@ -107,7 +107,7 @@ public abstract class Server {
    * After this call returns, this server has released the listening socket(s) and may be reused by
    * another server.
    *
-   * Note that this method will not wait for preexisting calls to finish before returning.
+   * <p>Note that this method will not wait for preexisting calls to finish before returning.
    * {@link #awaitTermination()} or {@link #awaitTermination(long, TimeUnit)} needs to be called to
    * wait for existing calls to finish.
    *
