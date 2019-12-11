@@ -22,6 +22,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
+import io.envoyproxy.envoy.api.v2.core.Node;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
@@ -33,6 +34,7 @@ import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.ObjectPool;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
+import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.XdsClient.ConfigUpdate;
 import io.grpc.xds.XdsClient.ConfigWatcher;
 import io.grpc.xds.XdsClient.RefCountedXdsClientObjectPool;
@@ -40,6 +42,7 @@ import io.grpc.xds.XdsClient.XdsChannelFactory;
 import io.grpc.xds.XdsClient.XdsClientFactory;
 import java.io.IOException;
 import java.net.URI;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import javax.annotation.Nullable;
@@ -105,21 +108,22 @@ final class XdsNameResolver extends NameResolver {
       listener.onError(Status.UNAVAILABLE.withDescription("Failed to bootstrap").withCause(e));
       return;
     }
-    if (bootstrapInfo.getServers().isEmpty()) {
+    final List<ServerInfo> serverList = bootstrapInfo.getServers();
+    final Node node = bootstrapInfo.getNode();
+    if (serverList.isEmpty()) {
       listener.onError(
           Status.UNAVAILABLE.withDescription("No traffic director provided by bootstrap"));
       return;
     }
 
-    final BootstrapInfo bootstrapInfoRef = bootstrapInfo;
     XdsClientFactory xdsClientFactory = new XdsClientFactory() {
       @Override
       XdsClient createXdsClient() {
         return
             new XdsClientImpl(
-                bootstrapInfoRef.getServers(),
+                serverList,
                 channelFactory,
-                bootstrapInfoRef.getNode(),
+                node,
                 syncContext,
                 timeService,
                 backoffPolicyProvider,
