@@ -289,14 +289,4 @@ final class ManagedChannelServiceConfig {
           ServiceConfigUtil.getNonFatalStatusCodesFromHedgingPolicy(hedgingPolicy));
     }
   }
-
-  @Override
-  public String toString() {
-    return MoreObjects.toStringHelper(this)
-        .add("serviceMethodMap", serviceMethodMap)
-        .add("serviceMap", serviceMap)
-        .add("retryThrottling", retryThrottling)
-        .add("loadBalancingConfig", loadBalancingConfig)
-        .toString();
-  }
 }

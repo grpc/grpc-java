@@ -173,7 +173,6 @@ public abstract class LoadBalancer {
     private final List<EquivalentAddressGroup> addresses;
     @NameResolver.ResolutionResultAttr
     private final Attributes attributes;
-    // TODO(jihuncho) this should be policy selection?
     @Nullable
     private final Object loadBalancingPolicyConfig;
     // Make sure to update toBuilder() below!
