@@ -148,7 +148,9 @@ final class XdsNameResolver extends NameResolver {
         try {
           config = (Map<String, ?>) JsonParser.parse(serviceConfig);
         } catch (IOException e) {
-          throw new AssertionError("Should never happen: invalid service config format");
+          listener.onError(
+              Status.UNKNOWN.withDescription("Invalid service config").withCause(e));
+          return;
         }
         Attributes attrs =
             Attributes.newBuilder()
