@@ -138,7 +138,7 @@ final class XdsNameResolver extends NameResolver {
         String serviceConfig = "{\n"
             + "  \"loadBalancingConfig\": [\n"
             + "    {\n"
-            + "      \"cds_experimental\": {\n"
+            + "      \"experimental_cds\": {\n"
             + "        \"cluster\": \"" + update.getClusterName() + "\"\n"
             + "      }\n"
             + "    }\n"
