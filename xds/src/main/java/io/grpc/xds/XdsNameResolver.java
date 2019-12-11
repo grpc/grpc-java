@@ -27,6 +27,7 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.Status.Code;
+import io.grpc.SynchronizationContext;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.JsonParser;
@@ -40,7 +41,7 @@ import io.grpc.xds.XdsClient.XdsClientFactory;
 import java.io.IOException;
 import java.net.URI;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.ScheduledExecutorService;
 import javax.annotation.Nullable;
 
 /**
@@ -53,23 +54,27 @@ import javax.annotation.Nullable;
  */
 final class XdsNameResolver extends NameResolver {
 
-  private static final AtomicReference<BootstrapInfo> bootstrapInfoRef = new AtomicReference<>();
-
   private final String authority;
   private final String hostName;
   private final int port;
-  private final ObjectPool<XdsClient> xdsClientPool;
+  private final XdsChannelFactory channelFactory;
+  private final SynchronizationContext syncContext;
+  private final ScheduledExecutorService timeService;
+  private final BackoffPolicy.Provider backoffPolicyProvider;
+  private final Supplier<Stopwatch> stopwatchSupplier;
   private final Bootstrapper bootstrapper;
 
+  @Nullable
+  private ObjectPool<XdsClient> xdsClientPool;
   @Nullable
   private XdsClient xdsClient;
 
   XdsNameResolver(
       String name,
-      final Args args,
-      final BackoffPolicy.Provider backoffPolicyProvider,
-      final Supplier<Stopwatch> stopwatchSupplier,
-      final XdsChannelFactory channelFactory,
+      Args args,
+      BackoffPolicy.Provider backoffPolicyProvider,
+      Supplier<Stopwatch> stopwatchSupplier,
+      XdsChannelFactory channelFactory,
       Bootstrapper bootstrapper) {
     URI nameUri = URI.create("//" + checkNotNull(name, "name"));
     checkArgument(nameUri.getHost() != null, "Invalid hostname: %s", name);
@@ -77,23 +82,12 @@ final class XdsNameResolver extends NameResolver {
         checkNotNull(nameUri.getAuthority(), "nameUri (%s) doesn't have an authority", nameUri);
     hostName = nameUri.getHost();
     port = nameUri.getPort();  // -1 if not specified
+    this.channelFactory = checkNotNull(channelFactory, "channelFactory");
+    this.syncContext = checkNotNull(args.getSynchronizationContext(), "syncContext");
+    this.timeService = checkNotNull(args.getScheduledExecutorService(), "timeService");
+    this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
+    this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
     this.bootstrapper = checkNotNull(bootstrapper, "bootstrapper");
-    XdsClientFactory xdsClientFactory = new XdsClientFactory() {
-      @Override
-      XdsClient createXdsClient() {
-        BootstrapInfo bootstrapInfo = bootstrapInfoRef.get();
-        return
-            new XdsClientImpl(
-                bootstrapInfo.getServers(),
-                checkNotNull(channelFactory, "channelFactory"),
-                bootstrapInfo.getNode(),
-                checkNotNull(args.getSynchronizationContext(), "syncContext"),
-                checkNotNull(args.getScheduledExecutorService(), "timeService"),
-                checkNotNull(backoffPolicyProvider, "backoffPolicyProvider"),
-                checkNotNull(stopwatchSupplier, "stopwatchSupplier"));
-      }
-    };
-    xdsClientPool = new RefCountedXdsClientObjectPool(xdsClientFactory);
   }
 
   @Override
@@ -116,8 +110,23 @@ final class XdsNameResolver extends NameResolver {
           Status.UNAVAILABLE.withDescription("No traffic director provided by bootstrap"));
       return;
     }
-    bootstrapInfoRef.set(bootstrapInfo);
 
+    final BootstrapInfo bootstrapInfoRef = bootstrapInfo;
+    XdsClientFactory xdsClientFactory = new XdsClientFactory() {
+      @Override
+      XdsClient createXdsClient() {
+        return
+            new XdsClientImpl(
+                bootstrapInfoRef.getServers(),
+                channelFactory,
+                bootstrapInfoRef.getNode(),
+                syncContext,
+                timeService,
+                backoffPolicyProvider,
+                stopwatchSupplier);
+      }
+    };
+    xdsClientPool = new RefCountedXdsClientObjectPool(xdsClientFactory);
     xdsClient = xdsClientPool.getObject();
     xdsClient.watchConfigData(hostName, port, new ConfigWatcher() {
       @Override
