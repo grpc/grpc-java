@@ -145,7 +145,8 @@ final class XdsNameResolver extends NameResolver {
         ResolutionResult result =
             ResolutionResult.newBuilder()
                 .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
-                .setAttributes(attrs).build();
+                .setAttributes(attrs)
+                .build();
         listener.onResult(result);
       }
 
