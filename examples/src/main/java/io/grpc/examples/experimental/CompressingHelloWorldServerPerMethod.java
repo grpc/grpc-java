@@ -17,6 +17,7 @@
 package io.grpc.examples.experimental;
 
 import java.io.IOException;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
 import io.grpc.Server;
@@ -57,7 +58,11 @@ public class CompressingHelloWorldServerPerMethod {
 
   private void stop() {
     if (server != null) {
-      server.shutdown();
+      try {
+        server.shutdown().awaitTermination(30, TimeUnit.SECONDS);
+      } catch (InterruptedException e) {
+        logger.warning(e.getMessage());
+      }
     }
   }
 

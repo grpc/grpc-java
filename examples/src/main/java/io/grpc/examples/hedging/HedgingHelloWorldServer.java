@@ -29,6 +29,7 @@ import io.grpc.examples.helloworld.HelloRequest;
 import io.grpc.stub.StreamObserver;
 import java.io.IOException;
 import java.util.Random;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
 /**
@@ -61,7 +62,11 @@ public class HedgingHelloWorldServer {
 
   private void stop() {
     if (server != null) {
-      server.shutdown();
+      try {
+        server.shutdown().awaitTermination(30, TimeUnit.SECONDS);
+      } catch (InterruptedException e) {
+        logger.warning(e.getMessage());
+      }
     }
   }
 

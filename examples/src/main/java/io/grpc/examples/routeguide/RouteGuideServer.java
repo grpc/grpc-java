@@ -36,6 +36,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -82,7 +83,11 @@ public class RouteGuideServer {
   /** Stop serving requests and shutdown resources. */
   public void stop() {
     if (server != null) {
-      server.shutdown();
+      try {
+        server.shutdown().awaitTermination(30, TimeUnit.SECONDS);
+      } catch (InterruptedException e) {
+        logger.warning(e.getMessage());
+      }
     }
   }
 
