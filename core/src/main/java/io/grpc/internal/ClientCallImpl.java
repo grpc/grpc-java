@@ -68,11 +68,11 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   private static final Logger log = Logger.getLogger(ClientCallImpl.class.getName());
   private static final byte[] FULL_STREAM_DECOMPRESSION_ENCODINGS
       = "gzip".getBytes(Charset.forName("US-ASCII"));
-  // There is a race between server receiving the cancellation from the client and the server
-  // cancelling the stream, which changes the final status of the stream from the server's
-  // perspective.
-  // Mitigate this by introduce a delay for client to send the cancel request.(b/118879795)
-  // This only impacts server statistics.
+  // When a deadline is exceeded, there is a race between the server receiving the cancellation from
+  // the client and the server cancelling the stream itself. If the client's cancellation is
+  // received first, then the stream's status will be CANCELLED instead of DEADLINE_EXCEEDED.
+  // This prevents server monitoring from noticing high rate of DEADLINE_EXCEEDED, a common
+  // monitoring metric (b/118879795). Mitigate this by delayed sending of the client's cancellation.
   @VisibleForTesting
   static final long DEADLINE_EXPIRATION_CANCEL_DELAY_NANOS = TimeUnit.SECONDS.toNanos(1);
 
@@ -89,8 +89,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   private boolean cancelCalled;
   private boolean halfCloseCalled;
   private final ClientTransportProvider clientTransportProvider;
-  private final ContextCancellationListener cancellationListener
-      = new ContextCancellationListener();
+  private ContextCancellationListener cancellationListener;
   private final ScheduledExecutorService deadlineCancellationExecutor;
   private boolean fullStreamDecompression;
   private DecompressorRegistry decompressorRegistry = DecompressorRegistry.getDefaultInstance();
@@ -127,23 +126,19 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   }
 
   private final class ContextCancellationListener implements CancellationListener {
-    // This is NOT null only if the stream cancellation need to be delayed in the case of
-    // deadline-exceeded.
-    @Nullable private Listener<RespT> observer;
+    private Listener<RespT> observer;
 
-    private void setObserver(Listener<RespT> observer) {
+    private ContextCancellationListener(Listener<RespT> observer) {
       this.observer = observer;
     }
 
     @Override
-    public void cancelled(final Context context) {
+    public void cancelled(Context context) {
       if (context.getDeadline() == null || !context.getDeadline().isExpired()) {
         stream.cancel(statusFromCancelled(context));
       } else {
-        if (observer != null) {
-          Status status = statusFromCancelled(context);
-          delayedCancelOnDeadlineExceeded(status, observer);
-        }
+        Status status = statusFromCancelled(context);
+        delayedCancelOnDeadlineExceeded(status, observer);
       }
     }
   }
@@ -218,7 +213,6 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     }
   }
 
-  @SuppressWarnings("unchecked")
   private void startInternal(final Listener<RespT> observer, Metadata headers) {
     checkState(stream == null, "Already started");
     checkState(!cancelCalled, "call was cancelled");
@@ -304,9 +298,8 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         && !(stream instanceof FailingClientStream)) {
       deadlineCancellationNotifyApplicationFuture =
           startDeadlineNotifyApplicationTimer(effectiveDeadline, observer);
-    } else {
-      cancellationListener.setObserver(observer);
     }
+    cancellationListener = new ContextCancellationListener(observer);
     context.addListener(cancellationListener, directExecutor());
     if (cancelListenersShouldBeRemoved) {
       // Race detected! ClientStreamListener.closed may have been called before
@@ -390,6 +383,10 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   }
 
   private void delayedCancelOnDeadlineExceeded(final Status status, Listener<RespT> observer) {
+    if (deadlineCancellationSendToServerFuture != null) {
+      return;
+    }
+
     class DeadlineExceededSendCancelToServerTimer implements Runnable {
       @Override
       public void run() {
@@ -399,6 +396,8 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       }
     }
 
+    // This races with removeContextListenerAndCancelDeadlineFuture(). Since calling cancel() on a
+    // stream multiple time is safe, the race here is fine.
     deadlineCancellationSendToServerFuture =  deadlineCancellationExecutor.schedule(
         new LogExceptionRunnable(new DeadlineExceededSendCancelToServerTimer()),
         DEADLINE_EXPIRATION_CANCEL_DELAY_NANOS,
