@@ -1421,6 +1421,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
                 ResolvedAddresses.newBuilder()
                     .setAddresses(servers)
                     .setAttributes(effectiveAttrs)
+                    // note this is ManagedChannelServiceConfig
+                    .setLoadBalancingPolicyConfig(effectiveServiceConfig.parsed.getConfig())
                     .build());
 
             if (!handleResult.isOk()) {
@@ -1926,7 +1928,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       try {
         Object loadBalancingPolicySelection;
         ConfigOrError choiceFromLoadBalancer =
-            autoLoadBalancerFactory.selectLoadBalancerPolicy(rawServiceConfig);
+            autoLoadBalancerFactory.parseLoadBalancerPolicy(rawServiceConfig);
         if (choiceFromLoadBalancer == null) {
           loadBalancingPolicySelection = null;
         } else if (choiceFromLoadBalancer.getError() != null) {
