@@ -104,8 +104,12 @@ public abstract class Server {
 
   /**
    * Initiates an orderly shutdown in which preexisting calls continue but new calls are rejected.
-   * This call will not wait for preexisting calls finish before returning. After this call returns,
-   * this server has released the listening socket(s) and may be reused by another server.
+   * After this call returns, this server has released the listening socket(s) and may be reused by
+   * another server.
+   *
+   * Note that this method will not wait for preexisting calls to finish before returning.
+   * {@link #awaitTermination()} or {@link #awaitTermination(long, TimeUnit)} needs to be called to
+   * wait for existing calls to finish.
    *
    * @return {@code this} object
    * @since 1.0.0
