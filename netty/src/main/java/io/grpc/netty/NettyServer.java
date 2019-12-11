@@ -288,10 +288,11 @@ class NettyServer implements InternalServer, InternalWithLogId {
         if (stats != null) {
           channelz.removeListenSocket(stats);
         }
+        sharedResourceReferenceCounter.release();
+        protocolNegotiator.close();
         synchronized (NettyServer.this) {
           listener.serverShutdown();
         }
-        sharedResourceReferenceCounter.release();
       }
     });
     try {
