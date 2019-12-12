@@ -475,7 +475,7 @@ public class MetadataTest {
 
     Metadata h2 = new Metadata(3, partial);
     assertEquals(new Fish(LANCE), h2.get(KEY));
-    assertSame(anotherSalmon, h2.get(KEY_STREAMED));
+    assertEquals(anotherSalmon, h2.get(KEY_STREAMED));
     assertSame(anotherSalmon, h2.get(KEY_IMMUTABLE));
   }
 

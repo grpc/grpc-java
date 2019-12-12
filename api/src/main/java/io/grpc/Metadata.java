@@ -131,6 +131,11 @@ public final class Metadata {
   /**
    * Constructor called by the transport layer when it receives partially-parsed metadata.
    * Metadata will mutate the passed in array.
+   *
+   * @param usedNames the number of names
+   * @param namesAndValues an array of interleaved names and values, with each name
+   *     (at even indices) represented by a byte array, and values (at odd indices) as
+   *     described by {@link InternalMetadata#newMetadataWithParsedValues}.
    */
   Metadata(int usedNames, Object[] namesAndValues) {
     assert (namesAndValues.length & 1) == 0
@@ -188,9 +193,9 @@ public final class Metadata {
   private <T> T valueAsT(int i, Key<T> key) {
     Object value = value(i);
     if (value instanceof byte[]) {
-      return key.parseBytes((byte[]) value(i));
+      return key.parseBytes((byte[]) value);
     } else {
-      return ((LazyValue<?>) value(i)).toObject(key);
+      return ((LazyValue<?>) value).toObject(key);
     }
   }
 
@@ -931,10 +936,7 @@ public final class Metadata {
     <T2> T2 toObject(Key<T2> key) {
       if (key.serializesToStreams()) {
         BinaryStreamMarshaller<T2> marshaller = getBinaryStreamMarshaller(key);
-        if (marshaller == this.marshaller) {
-          // The marshallers match so T2 == T.
-          return (T2) value;
-        } else if (marshaller != null) {
+        if (marshaller != null) {
           return marshaller.parseStream(toStream());
         }
       }
