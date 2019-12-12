@@ -36,14 +36,17 @@ import io.grpc.internal.ServerTransportListener;
 import io.grpc.internal.SharedResourcePool;
 import io.grpc.internal.TransportTracer;
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.WriteBufferWaterMark;
+import io.netty.util.AsciiString;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -54,8 +57,26 @@ public class NettyServerTest {
   private final InternalChannelz channelz = new InternalChannelz();
 
   @Test
-  public void getPort() throws Exception {
+  public void startStop() throws Exception {
     InetSocketAddress addr = new InetSocketAddress(0);
+
+    class TestProtocolNegotiator implements ProtocolNegotiator {
+      boolean closed;
+
+      @Override public ChannelHandler newHandler(GrpcHttp2ConnectionHandler handler) {
+        throw new UnsupportedOperationException();
+      }
+
+      @Override public void close() {
+        closed = true;
+      }
+
+      @Override public AsciiString scheme() {
+        return Utils.HTTP;
+      }
+    }
+
+    TestProtocolNegotiator protocolNegotiator = new TestProtocolNegotiator();
     NettyServer ns = new NettyServer(
         addr,
         Utils.DEFAULT_SERVER_CHANNEL_FACTORY,
@@ -63,7 +84,7 @@ public class NettyServerTest {
         SharedResourcePool.forResource(Utils.DEFAULT_BOSS_EVENT_LOOP_GROUP),
         SharedResourcePool.forResource(Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP),
         SharedResourcePool.forResource(Utils.BYTE_BUF_ALLOCATOR),
-        ProtocolNegotiators.plaintext(),
+        protocolNegotiator,
         Collections.<ServerStreamTracer.Factory>emptyList(),
         TransportTracer.getDefaultFactory(),
         1, // ignore
@@ -75,6 +96,7 @@ public class NettyServerTest {
         1, 1, // ignore
         true, 0, // ignore
         channelz);
+    final SettableFuture<Void> serverShutdownCalled = SettableFuture.create();
     ns.start(new ServerListener() {
       @Override
       public ServerTransportListener transportCreated(ServerTransport transport) {
@@ -82,7 +104,9 @@ public class NettyServerTest {
       }
 
       @Override
-      public void serverShutdown() {}
+      public void serverShutdown() {
+        serverShutdownCalled.set(null);
+      }
     });
 
     // Check that we got an actual port.
@@ -90,6 +114,9 @@ public class NettyServerTest {
 
     // Cleanup
     ns.shutdown();
+    // serverShutdown() signals that resources are freed
+    serverShutdownCalled.get(1, TimeUnit.SECONDS);
+    assertThat(protocolNegotiator.closed).isTrue();
   }
 
   @Test

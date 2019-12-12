@@ -897,13 +897,14 @@ final class ManagedChannelImpl extends ManagedChannel implements
     if (shutdown.get() && subchannels.isEmpty() && oobChannels.isEmpty()) {
       channelLogger.log(ChannelLogLevel.INFO, "Terminated");
       channelz.removeRootChannel(this);
-      terminated = true;
-      terminatedLatch.countDown();
       executorPool.returnObject(executor);
       balancerRpcExecutorHolder.release();
       offloadExecutorHolder.release();
       // Release the transport factory so that it can deallocate any resources.
       transportFactory.close();
+
+      terminated = true;
+      terminatedLatch.countDown();
     }
   }
 
