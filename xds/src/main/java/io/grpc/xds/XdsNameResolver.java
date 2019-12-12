@@ -183,7 +183,7 @@ final class XdsNameResolver extends NameResolver {
   @Override
   public void shutdown() {
     if (xdsClient != null) {
-      xdsClientPool.returnObject(xdsClient);
+      xdsClient = xdsClientPool.returnObject(xdsClient);
     }
   }
 }
