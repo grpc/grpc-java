@@ -106,8 +106,9 @@ public class XdsNameResolverProviderTest {
 
   @Test
   public void invalidName_hostnameContainsUnderscore() {
+    URI uri = URI.create("xds-experimental:///foo_bar.googleapis.com");
     try {
-      provider.newNameResolver(URI.create("xds-experimental:///foo_bar.googleapis.com"), args);
+      provider.newNameResolver(uri, args);
       fail("Expected IllegalArgumentException");
     } catch (IllegalArgumentException e) {
       // Expected
