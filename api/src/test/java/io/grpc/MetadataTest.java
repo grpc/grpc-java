@@ -470,8 +470,8 @@ public class MetadataTest {
     Fish anotherSalmon = new Fish("salmon");
 
     Object[] partial = InternalMetadata.serializePartial(h);
-    partial[3] = InternalMetadata.parsedValue(KEY_STREAMED, anotherSalmon);
-    partial[5] = InternalMetadata.parsedValue(KEY_IMMUTABLE, anotherSalmon);
+    partial[3] = InternalMetadata.parsedValue(FISH_STREAM_MARSHALLER, anotherSalmon);
+    partial[5] = InternalMetadata.parsedValue(IMMUTABLE_FISH_MARSHALLER, anotherSalmon);
 
     Metadata h2 = new Metadata(3, partial);
     assertEquals(new Fish(LANCE), h2.get(KEY));

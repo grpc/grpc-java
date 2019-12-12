@@ -100,13 +100,13 @@ public final class InternalMetadata {
   /**
    * Creates a holder for a pre-parsed value read by the transport.
    *
-   * @param key The key associated with this value.
+   * @param marshaller The {@link Metadata#BinaryStreamMarshaller} associated with this value.
    * @param value The value to store.
    * @return an object holding the pre-parsed value for this key.
    */
   @Internal
-  public static <T> Object parsedValue(Key<T> key, T value) {
-    return Metadata.LazyValue.create(key, value);
+  public static <T> Object parsedValue(BinaryStreamMarshaller<T> marshaller, T value) {
+    return new Metadata.LazyValue(marshaller, value);
   }
 
   /**

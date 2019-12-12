@@ -912,7 +912,7 @@ public final class Metadata {
     }
 
     /** A value set by the application. */
-    private LazyValue(BinaryStreamMarshaller<T> marshaller, T value) {
+    LazyValue(BinaryStreamMarshaller<T> marshaller, T value) {
       this.marshaller = marshaller;
       this.value = value;
     }
