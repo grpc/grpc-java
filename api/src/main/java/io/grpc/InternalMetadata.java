@@ -106,7 +106,7 @@ public final class InternalMetadata {
    */
   @Internal
   public static <T> Object parsedValue(BinaryStreamMarshaller<T> marshaller, T value) {
-    return new Metadata.LazyValue(marshaller, value);
+    return new Metadata.LazyValue<>(marshaller, value);
   }
 
   /**
