@@ -141,6 +141,7 @@ public class XdsNameResolverTest {
     channelFactory = new XdsChannelFactory() {
       @Override
       ManagedChannel createChannel(List<ServerInfo> servers) {
+        assertThat(Iterables.getOnlyElement(servers).getServerUri()).isEqualTo(serverName);
         return channel;
       }
     };
