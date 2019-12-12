@@ -136,7 +136,8 @@ public class ManualFlowControlServer {
     Runtime.getRuntime().addShutdownHook(new Thread() {
       @Override
       public void run() {
-        logger.info("Shutting down");
+        // Use stderr here since the logger may have been reset by its JVM shutdown hook.
+        System.err.println("Shutting down");
         try {
           server.shutdown().awaitTermination(30, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
