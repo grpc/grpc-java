@@ -1421,6 +1421,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
                 ResolvedAddresses.newBuilder()
                     .setAddresses(servers)
                     .setAttributes(effectiveAttrs)
+                    .setLoadBalancingPolicyConfig(effectiveServiceConfig.parsed.getConfig())
                     .build());
 
             if (!handleResult.isOk()) {
@@ -1922,17 +1923,18 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public ConfigOrError parseServiceConfig(Map<String, ?> rawServiceConfig) {
       try {
-        Object loadBalancingPolicySelection;
+        Object loadBalancingPolicySelections;
         ConfigOrError choiceFromLoadBalancer =
-            autoLoadBalancerFactory.selectLoadBalancerPolicy(rawServiceConfig);
+            autoLoadBalancerFactory.parseLoadBalancerPolicies(rawServiceConfig);
         if (choiceFromLoadBalancer == null) {
-          loadBalancingPolicySelection = null;
+          loadBalancingPolicySelections = null;
         } else if (choiceFromLoadBalancer.getError() != null) {
           return ConfigOrError.fromError(choiceFromLoadBalancer.getError());
         } else {
-          loadBalancingPolicySelection = choiceFromLoadBalancer.getConfig();
+          loadBalancingPolicySelections = choiceFromLoadBalancer.getConfig();
         }
         return ConfigOrError.fromConfig(
             ManagedChannelServiceConfig.fromServiceConfig(
@@ -1940,7 +1942,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
                 retryEnabled,
                 maxRetryAttemptsLimit,
                 maxHedgedAttemptsLimit,
-                loadBalancingPolicySelection));
+                (List<Object>) loadBalancingPolicySelections));
       } catch (RuntimeException e) {
         return ConfigOrError.fromError(
             Status.UNKNOWN.withDescription("failed to parse service config").withCause(e));

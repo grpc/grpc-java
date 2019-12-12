@@ -3697,7 +3697,7 @@ public class ManagedChannelImplTest {
 
     assertThat(coe.getError()).isNull();
     ManagedChannelServiceConfig cfg = (ManagedChannelServiceConfig) coe.getConfig();
-    assertThat(cfg.getLoadBalancingConfig()).isEqualTo(null);
+    assertThat(cfg.getLoadBalancingConfig()).isNull();
   }
 
   @Test
