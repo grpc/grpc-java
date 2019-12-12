@@ -932,7 +932,6 @@ public final class Metadata {
       return serialized;
     }
 
-    @SuppressWarnings({"unchecked", "ReferenceEquality"})
     <T2> T2 toObject(Key<T2> key) {
       if (key.serializesToStreams()) {
         BinaryStreamMarshaller<T2> marshaller = getBinaryStreamMarshaller(key);
