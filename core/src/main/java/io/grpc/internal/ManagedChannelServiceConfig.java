@@ -62,7 +62,7 @@ final class ManagedChannelServiceConfig {
             new HashMap<String, MethodInfo>(),
             new HashMap<String, MethodInfo>(),
             /* retryThrottling= */ null,
-            /* loadBalancingConfig= */ Collections.emptyList());
+            /* loadBalancingConfig= */ null);
   }
 
   /**

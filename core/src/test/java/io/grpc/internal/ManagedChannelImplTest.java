@@ -53,7 +53,6 @@ import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
-import com.google.common.truth.Truth;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
@@ -103,6 +102,7 @@ import io.grpc.ServerMethodDefinition;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StringMarshaller;
+import io.grpc.internal.AutoConfiguredLoadBalancerFactory.PolicySelection;
 import io.grpc.internal.ClientTransportFactory.ClientTransportOptions;
 import io.grpc.internal.InternalSubchannel.TransportLogger;
 import io.grpc.internal.ManagedChannelImpl.ScParser;
@@ -961,67 +961,6 @@ public class ManagedChannelImplTest {
     verify(mockCallListener).onClose(same(status), any(Metadata.class));
 
     assertTrue(nameResolverBackoff.isCancelled());
-  }
-
-  @Test
-  public void nameResolverReturnsEmptySubLists_becomeErrorByDefault() throws Exception {
-    String errorDescription = "NameResolver returned no usable address";
-
-    // Pass a FakeNameResolverFactory with an empty list and LB config
-    FakeNameResolverFactory nameResolverFactory =
-        new FakeNameResolverFactory.Builder(expectedUri).build();
-    Map<String, Object> rawServiceConfig =
-        parseConfig("{\"loadBalancingConfig\": [ {\"mock_lb\": { \"setting1\": \"high\" } } ] }");
-    ManagedChannelServiceConfig managedChannelServiceConfig =
-        ManagedChannelServiceConfig.fromServiceConfig(rawServiceConfig, true, 3, 3, null);
-    nameResolverFactory.nextRawServiceConfig.set(rawServiceConfig);
-    nameResolverFactory.nextConfigOrError.set(
-        ConfigOrError.fromConfig(managedChannelServiceConfig));
-    channelBuilder.nameResolverFactory(nameResolverFactory);
-    createChannel();
-
-    // LoadBalancer received the error
-    verify(mockLoadBalancerProvider).newLoadBalancer(any(Helper.class));
-    verify(mockLoadBalancer).handleNameResolutionError(statusCaptor.capture());
-    Status status = statusCaptor.getValue();
-    assertSame(Status.Code.UNAVAILABLE, status.getCode());
-    Truth.assertThat(status.getDescription()).startsWith(errorDescription);
-
-    // A resolution retry has been scheduled
-    assertEquals(1, timer.numPendingTasks(NAME_RESOLVER_REFRESH_TASK_FILTER));
-  }
-
-  @Test
-  public void nameResolverReturnsEmptySubLists_optionallyAllowed() throws Exception {
-    when(mockLoadBalancer.canHandleEmptyAddressListFromNameResolution()).thenReturn(true);
-
-    // Pass a FakeNameResolverFactory with an empty list and LB config
-    FakeNameResolverFactory nameResolverFactory =
-        new FakeNameResolverFactory.Builder(expectedUri).build();
-    Map<String, Object> rawServiceConfig =
-        parseConfig("{\"loadBalancingConfig\": [ {\"mock_lb\": { \"setting1\": \"high\" } } ] }");
-    ManagedChannelServiceConfig managedChannelServiceConfig =
-        ManagedChannelServiceConfig.fromServiceConfig(rawServiceConfig, true, 3, 3, null);
-    nameResolverFactory.nextRawServiceConfig.set(rawServiceConfig);
-    nameResolverFactory.nextConfigOrError.set(
-        ConfigOrError.fromConfig(managedChannelServiceConfig));
-    channelBuilder.nameResolverFactory(nameResolverFactory);
-    createChannel();
-
-    // LoadBalancer received the empty list and the LB config
-    verify(mockLoadBalancerProvider).newLoadBalancer(any(Helper.class));
-    ArgumentCaptor<ResolvedAddresses> resultCaptor =
-        ArgumentCaptor.forClass(ResolvedAddresses.class);
-    verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
-    assertThat(resultCaptor.getValue().getAddresses()).isEmpty();
-    Attributes actualAttrs = resultCaptor.getValue().getAttributes();
-    Map<String, ?> lbConfig = actualAttrs.get(LoadBalancer.ATTR_LOAD_BALANCING_CONFIG);
-    assertEquals(ImmutableMap.of("setting1", "high"), lbConfig);
-    assertSame(
-        rawServiceConfig, actualAttrs.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG));
-
-    // A no resolution retry
-    assertEquals(0, timer.numPendingTasks(NAME_RESOLVER_REFRESH_TASK_FILTER));
   }
 
   @Test
@@ -3422,8 +3361,6 @@ public class ManagedChannelImplTest {
       @Override
       public void start(Listener2 listener) {
         this.listener = listener;
-        ManagedChannelServiceConfig managedChannelServiceConfig =
-            ManagedChannelServiceConfig.fromServiceConfig(invalidServiceConfig, true, 3, 3, null);
         listener.onResult(
             ResolutionResult.newBuilder()
                 .setAddresses(addresses)
@@ -3432,7 +3369,9 @@ public class ManagedChannelImplTest {
                         .set(
                             GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, invalidServiceConfig)
                         .build())
-                .setServiceConfig(ConfigOrError.fromConfig(managedChannelServiceConfig))
+                .setServiceConfig(
+                    ConfigOrError.fromError(
+                        Status.INTERNAL.withDescription("kaboom is invalid")))
                 .build());
       }
 
@@ -3477,18 +3416,21 @@ public class ManagedChannelImplTest {
     ListenableFuture<Void> future1 = ClientCalls.futureUnaryCall(call1, null);
     executor.runDueTasks();
     try {
-      future1.get();
+      future1.get(1, TimeUnit.SECONDS);
       Assert.fail();
     } catch (ExecutionException e) {
       assertThat(Throwables.getStackTraceAsString(e.getCause())).contains("kaboom");
     }
 
     // ok the service config is bad, let's fix it.
-
     Map<String, Object> rawServiceConfig =
         parseConfig("{\"loadBalancingConfig\": [{\"round_robin\": {}}]}");
+    Object fakeLbConfig = new Object();
+    PolicySelection lbConfigs =
+        new PolicySelection(mockLoadBalancerProvider, ConfigOrError.fromConfig(fakeLbConfig));
+    mockLoadBalancerProvider.parseLoadBalancingPolicyConfig(rawServiceConfig);
     ManagedChannelServiceConfig managedChannelServiceConfig =
-        ManagedChannelServiceConfig.fromServiceConfig(rawServiceConfig, true, 3, 3, null);
+        ManagedChannelServiceConfig.fromServiceConfig(rawServiceConfig, true, 3, 3, lbConfigs);
     factory.resolver.listener.onResult(
         ResolutionResult.newBuilder()
             .setAddresses(addresses)
@@ -3645,7 +3587,8 @@ public class ManagedChannelImplTest {
         retryEnabled,
         maxRetryAttemptsLimit,
         maxHedgedAttemptsLimit,
-        autoConfiguredLoadBalancerFactory);
+        autoConfiguredLoadBalancerFactory,
+        mock(ChannelLogger.class));
 
     ConfigOrError coe = parser.parseServiceConfig(ImmutableMap.<String, Object>of());
 
@@ -3667,7 +3610,8 @@ public class ManagedChannelImplTest {
         retryEnabled,
         maxRetryAttemptsLimit,
         maxHedgedAttemptsLimit,
-        autoConfiguredLoadBalancerFactory);
+        autoConfiguredLoadBalancerFactory,
+        mock(ChannelLogger.class));
 
     ConfigOrError coe =
         parser.parseServiceConfig(ImmutableMap.<String, Object>of("methodConfig", "bogus"));
@@ -3690,7 +3634,8 @@ public class ManagedChannelImplTest {
         retryEnabled,
         maxRetryAttemptsLimit,
         maxHedgedAttemptsLimit,
-        autoConfiguredLoadBalancerFactory);
+        autoConfiguredLoadBalancerFactory,
+        mock(ChannelLogger.class));
 
     ConfigOrError coe =
         parser.parseServiceConfig(ImmutableMap.of("loadBalancingConfig", ImmutableList.of()));

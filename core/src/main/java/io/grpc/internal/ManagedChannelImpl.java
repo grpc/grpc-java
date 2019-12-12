@@ -592,7 +592,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
             retryEnabled,
             builder.maxRetryAttempts,
             builder.maxHedgedAttempts,
-            loadBalancerFactory);
+            loadBalancerFactory,
+            channelLogger);
     this.nameResolverArgs =
         NameResolver.Args.newBuilder()
             .setDefaultPort(builder.getDefaultPort())
@@ -1417,11 +1418,13 @@ final class ManagedChannelImpl extends ManagedChannel implements
                   .build();
             }
 
+            Object loadBalancingPolicyConfig =
+                effectiveServiceConfig == null ? null : effectiveServiceConfig.parsed.getConfig();
             Status handleResult = helper.lb.tryHandleResolvedAddresses(
                 ResolvedAddresses.newBuilder()
                     .setAddresses(servers)
                     .setAttributes(effectiveAttrs)
-                    .setLoadBalancingPolicyConfig(effectiveServiceConfig.parsed.getConfig())
+                    .setLoadBalancingPolicyConfig(loadBalancingPolicyConfig)
                     .build());
 
             if (!handleResult.isOk()) {
@@ -1909,32 +1912,34 @@ final class ManagedChannelImpl extends ManagedChannel implements
     private final int maxRetryAttemptsLimit;
     private final int maxHedgedAttemptsLimit;
     private final AutoConfiguredLoadBalancerFactory autoLoadBalancerFactory;
+    private final ChannelLogger channelLogger;
 
     ScParser(
         boolean retryEnabled,
         int maxRetryAttemptsLimit,
         int maxHedgedAttemptsLimit,
-        AutoConfiguredLoadBalancerFactory autoLoadBalancerFactory) {
+        AutoConfiguredLoadBalancerFactory autoLoadBalancerFactory,
+        ChannelLogger channelLogger) {
       this.retryEnabled = retryEnabled;
       this.maxRetryAttemptsLimit = maxRetryAttemptsLimit;
       this.maxHedgedAttemptsLimit = maxHedgedAttemptsLimit;
       this.autoLoadBalancerFactory =
           checkNotNull(autoLoadBalancerFactory, "autoLoadBalancerFactory");
+      this.channelLogger = checkNotNull(channelLogger, "channelLogger");
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     public ConfigOrError parseServiceConfig(Map<String, ?> rawServiceConfig) {
       try {
-        Object loadBalancingPolicySelections;
+        Object loadBalancingPolicySelection;
         ConfigOrError choiceFromLoadBalancer =
-            autoLoadBalancerFactory.parseLoadBalancerPolicies(rawServiceConfig);
+            autoLoadBalancerFactory.parseLoadBalancerPolicy(rawServiceConfig, channelLogger);
         if (choiceFromLoadBalancer == null) {
-          loadBalancingPolicySelections = null;
+          loadBalancingPolicySelection = null;
         } else if (choiceFromLoadBalancer.getError() != null) {
           return ConfigOrError.fromError(choiceFromLoadBalancer.getError());
         } else {
-          loadBalancingPolicySelections = choiceFromLoadBalancer.getConfig();
+          loadBalancingPolicySelection = choiceFromLoadBalancer.getConfig();
         }
         return ConfigOrError.fromConfig(
             ManagedChannelServiceConfig.fromServiceConfig(
@@ -1942,7 +1947,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
                 retryEnabled,
                 maxRetryAttemptsLimit,
                 maxHedgedAttemptsLimit,
-                (List<Object>) loadBalancingPolicySelections));
+                loadBalancingPolicySelection));
       } catch (RuntimeException e) {
         return ConfigOrError.fromError(
             Status.UNKNOWN.withDescription("failed to parse service config").withCause(e));
