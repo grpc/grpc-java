@@ -53,7 +53,7 @@ public class CompressingHelloWorldServerPerMethod {
         try {
           CompressingHelloWorldServerPerMethod.this.stop();
         } catch (InterruptedException e) {
-          e.printStackTrace();
+          e.printStackTrace(System.err);
         }
         System.err.println("*** server shut down");
       }

@@ -140,7 +140,7 @@ public class ManualFlowControlServer {
         try {
           server.shutdown().awaitTermination(30, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
-          e.printStackTrace();
+          e.printStackTrace(System.err);
         }
       }
     });

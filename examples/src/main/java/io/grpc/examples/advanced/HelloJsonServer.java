@@ -63,7 +63,7 @@ public class HelloJsonServer {
         try {
           HelloJsonServer.this.stop();
         } catch (InterruptedException e) {
-          e.printStackTrace();
+          e.printStackTrace(System.err);
         }
         System.err.println("*** server shut down");
       }

@@ -57,7 +57,7 @@ public class HedgingHelloWorldServer {
         try {
           HedgingHelloWorldServer.this.stop();
         } catch (InterruptedException e) {
-          e.printStackTrace();
+          e.printStackTrace(System.err);
         }
         System.err.println("*** server shut down");
       }

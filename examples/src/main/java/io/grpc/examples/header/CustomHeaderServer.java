@@ -52,7 +52,7 @@ public class CustomHeaderServer {
         try {
           CustomHeaderServer.this.stop();
         } catch (InterruptedException e) {
-          e.printStackTrace();
+          e.printStackTrace(System.err);
         }
         System.err.println("*** server shut down");
       }
