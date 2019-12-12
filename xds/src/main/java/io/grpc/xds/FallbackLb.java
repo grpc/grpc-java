@@ -100,6 +100,13 @@ final class FallbackLb extends ForwardingLoadBalancer {
     }
 
     LbConfig fallbackPolicy = xdsConfig.fallbackPolicy;
+    if (fallbackPolicy == null) {
+      // In the latest xDS design, fallback is not supported.
+      fallbackLbHelper.updateBalancingState(
+          TRANSIENT_FAILURE,
+          new ErrorPicker(Status.UNAVAILABLE.withDescription("Fallback is not supported")));
+      return;
+    }
     String newFallbackPolicyName = fallbackPolicy.getPolicyName();
     fallbackPolicyLb.switchTo(lbRegistry.getProvider(newFallbackPolicyName));
 
