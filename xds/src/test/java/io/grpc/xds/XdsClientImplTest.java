@@ -2543,6 +2543,20 @@ public class XdsClientImplTest {
 
     // Client sent an CDS ACK request (Omitted).
 
+    // No longer interested in endpoint information after RPC resumes.
+    xdsClient.cancelEndpointDataWatch("cluster.googleapis.com", endpointWatcher);
+    // Client updates EDS resource subscription immediately.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest(NODE, "", ImmutableList.<String>of(),
+            XdsClientImpl.ADS_TYPE_URL_EDS, "")));
+
+    // Become interested in endpoints of another cluster.
+    xdsClient.watchEndpointData("cluster2.googleapis.com", endpointWatcher);
+    // Client updates EDS resource subscription immediately.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster2.googleapis.com",
+            XdsClientImpl.ADS_TYPE_URL_EDS, "")));
+
     // Management server closes the RPC stream again.
     responseObserver.onCompleted();
 
@@ -2560,7 +2574,7 @@ public class XdsClientImplTest {
         .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster.googleapis.com",
             XdsClientImpl.ADS_TYPE_URL_CDS, "")));
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster.googleapis.com",
+        .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster2.googleapis.com",
             XdsClientImpl.ADS_TYPE_URL_EDS, "")));
 
     // Management server becomes unreachable again.
@@ -2570,7 +2584,7 @@ public class XdsClientImplTest {
 
     // No longer interested in previous cluster and endpoints in that cluster.
     xdsClient.cancelClusterDataWatch("cluster.googleapis.com", clusterWatcher);
-    xdsClient.cancelEndpointDataWatch("cluster.googleapis.com", endpointWatcher);
+    xdsClient.cancelEndpointDataWatch("cluster2.googleapis.com", endpointWatcher);
 
     // Retry after backoff.
     fakeClock.forwardNanos(19L);
@@ -2587,7 +2601,7 @@ public class XdsClientImplTest {
         .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster.googleapis.com",
             XdsClientImpl.ADS_TYPE_URL_CDS, "")));
     verify(requestObserver, never())
-        .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster.googleapis.com",
+        .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster2.googleapis.com",
             XdsClientImpl.ADS_TYPE_URL_EDS, "")));
 
     verifyNoMoreInteractions(mockedDiscoveryService, backoffPolicyProvider, backoffPolicy1,
