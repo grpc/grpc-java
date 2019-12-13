@@ -1001,6 +1001,7 @@ final class XdsClientImpl extends XdsClient {
               .setResponseNonce(nonce)
               .build();
       requestWriter.onNext(request);
+      logger.log(Level.FINE, "Sent DiscoveryRequest {0}", request);
     }
 
     /**
@@ -1034,6 +1035,7 @@ final class XdsClientImpl extends XdsClient {
               .setResponseNonce(nonce)
               .build();
       requestWriter.onNext(request);
+      logger.log(Level.FINE, "Sent ACK request {0}", request);
     }
 
     /**
@@ -1072,6 +1074,7 @@ final class XdsClientImpl extends XdsClient {
                       .setMessage(message))
               .build();
       requestWriter.onNext(request);
+      logger.log(Level.FINE, "Sent NACK request {0}", request);
     }
   }
 
