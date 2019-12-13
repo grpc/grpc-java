@@ -66,6 +66,7 @@ import javax.annotation.Nullable;
  * created by the fallback balancer.
  */
 // Must be accessed/run in SynchronizedContext.
+// TODO(zdapeng) Refactor to a final class.
 interface LocalityStore {
 
   void reset();
@@ -75,25 +76,6 @@ interface LocalityStore {
   void updateDropPercentage(List<DropOverload> dropOverloads);
 
   void updateOobMetricsReportInterval(long reportIntervalNano);
-
-  @VisibleForTesting
-  abstract class LocalityStoreFactory {
-    private static final LocalityStoreFactory DEFAULT_INSTANCE =
-        new LocalityStoreFactory() {
-          @Override
-          LocalityStore newLocalityStore(
-              Helper helper, LoadBalancerRegistry lbRegistry, LoadStatsStore loadStatsStore) {
-            return new LocalityStoreImpl(helper, lbRegistry, loadStatsStore);
-          }
-        };
-
-    static LocalityStoreFactory getInstance() {
-      return DEFAULT_INSTANCE;
-    }
-
-    abstract LocalityStore newLocalityStore(
-        Helper helper, LoadBalancerRegistry lbRegistry, LoadStatsStore loadStatsStore);
-  }
 
   final class LocalityStoreImpl implements LocalityStore {
     private static final String ROUND_ROBIN = "round_robin";
