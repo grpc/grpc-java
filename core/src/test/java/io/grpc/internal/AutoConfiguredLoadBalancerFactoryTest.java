@@ -17,7 +17,6 @@
 package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
-import static io.grpc.LoadBalancer.ATTR_LOAD_BALANCING_CONFIG;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.AdditionalAnswers.delegatesTo;
@@ -58,12 +57,12 @@ import io.grpc.grpclb.GrpclbLoadBalancerProvider;
 import io.grpc.internal.AutoConfiguredLoadBalancerFactory.AutoConfiguredLoadBalancer;
 import io.grpc.internal.AutoConfiguredLoadBalancerFactory.PolicyException;
 import io.grpc.internal.AutoConfiguredLoadBalancerFactory.PolicySelection;
+import io.grpc.internal.AutoConfiguredLoadBalancerFactory.ResolvedPolicySelection;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import java.net.SocketAddress;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
@@ -196,6 +195,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
         ResolvedAddresses.newBuilder()
             .setAddresses(servers)
             .setAttributes(Attributes.EMPTY)
+            .setLoadBalancingPolicyConfig(ManagedChannelServiceConfig.empty())
             .build());
 
     assertThat(handleResult.getCode()).isEqualTo(Status.Code.OK);
@@ -203,13 +203,13 @@ public class AutoConfiguredLoadBalancerFactoryTest {
   }
 
   @Test
-  public void handleResolvedAddressGroups_shutsDownOldBalancer() {
-    Map<String, String> serviceConfig = new HashMap<>();
-    serviceConfig.put("loadBalancingPolicy", "round_robin");
-    Attributes serviceConfigAttrs =
-        Attributes.newBuilder()
-            .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig)
-            .build();
+  public void handleResolvedAddressGroups_shutsDownOldBalancer() throws Exception {
+    Map<String, ?> serviceConfig =
+        parseConfig("{\"loadBalancingConfig\": [ {\"round_robin\": { } } ] }");
+    ConfigOrError lbConfigs = lbf.parseLoadBalancerPolicy(serviceConfig, channelLogger);
+    ManagedChannelServiceConfig mcsc = ManagedChannelServiceConfig
+        .fromServiceConfig(serviceConfig, true, 3, 3, lbConfigs.getConfig());
+
     final List<EquivalentAddressGroup> servers =
         Collections.singletonList(new EquivalentAddressGroup(new SocketAddress(){}));
     Helper helper = new TestHelper() {
@@ -238,7 +238,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     Status handleResult = lb.tryHandleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers)
-            .setAttributes(serviceConfigAttrs)
+            .setLoadBalancingPolicyConfig(mcsc)
             .build());
 
     assertThat(handleResult.getCode()).isEqualTo(Status.Code.OK);
@@ -248,13 +248,15 @@ public class AutoConfiguredLoadBalancerFactoryTest {
   }
 
   @Test
+  @SuppressWarnings("unchecked")
   public void handleResolvedAddressGroups_propagateLbConfigToDelegate() throws Exception {
     Map<String, ?> serviceConfig =
         parseConfig("{\"loadBalancingConfig\": [ {\"test_lb\": { \"setting1\": \"high\" } } ] }");
-    Attributes serviceConfigAttrs =
-        Attributes.newBuilder()
-            .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig)
-            .build();
+    ConfigOrError lbConfigs = lbf.parseLoadBalancerPolicy(serviceConfig, channelLogger);
+    assertThat(lbConfigs.getConfig()).isNotNull();
+    ManagedChannelServiceConfig mcsc = ManagedChannelServiceConfig
+        .fromServiceConfig(serviceConfig, true, 3, 3, lbConfigs.getConfig());
+
     final List<EquivalentAddressGroup> servers =
         Collections.singletonList(new EquivalentAddressGroup(new SocketAddress(){}));
     Helper helper = new TestHelper();
@@ -263,7 +265,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     Status handleResult = lb.tryHandleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers)
-            .setAttributes(serviceConfigAttrs)
+            .setLoadBalancingPolicyConfig(mcsc)
             .build());
 
     verify(testLbBalancerProvider).newLoadBalancer(same(helper));
@@ -273,22 +275,22 @@ public class AutoConfiguredLoadBalancerFactoryTest {
         ArgumentCaptor.forClass(ResolvedAddresses.class);
     verify(testLbBalancer).handleResolvedAddresses(resultCaptor.capture());
     assertThat(resultCaptor.getValue().getAddresses()).containsExactlyElementsIn(servers).inOrder();
-    Attributes actualAttributes = resultCaptor.getValue().getAttributes();
-    assertThat(actualAttributes.get(ATTR_LOAD_BALANCING_CONFIG))
-        .isEqualTo(Collections.singletonMap("setting1", "high"));
     verify(testLbBalancer, atLeast(0)).canHandleEmptyAddressListFromNameResolution();
+    ArgumentCaptor<Map<String, ?>> lbConfigCaptor = ArgumentCaptor.forClass(Map.class);
+    verify(testLbBalancerProvider).parseLoadBalancingPolicyConfig(lbConfigCaptor.capture());
+    assertThat(lbConfigCaptor.getValue()).containsExactly("setting1", "high");
     verifyNoMoreInteractions(testLbBalancer);
 
     serviceConfig =
         parseConfig("{\"loadBalancingConfig\": [ {\"test_lb\": { \"setting1\": \"low\" } } ] }");
-    serviceConfigAttrs =
-        Attributes.newBuilder()
-            .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig)
-            .build();
+    lbConfigs = lbf.parseLoadBalancerPolicy(serviceConfig, channelLogger);
+    mcsc = ManagedChannelServiceConfig
+        .fromServiceConfig(serviceConfig, true, 3, 3, lbConfigs.getConfig());
+
     handleResult = lb.tryHandleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers)
-            .setAttributes(serviceConfigAttrs)
+            .setLoadBalancingPolicyConfig(mcsc)
             .build());
 
     resultCaptor =
@@ -296,10 +298,9 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     verify(testLbBalancer, times(2)).handleResolvedAddresses(resultCaptor.capture());
     assertThat(handleResult.getCode()).isEqualTo(Status.Code.OK);
     assertThat(resultCaptor.getValue().getAddresses()).containsExactlyElementsIn(servers).inOrder();
-    actualAttributes = resultCaptor.getValue().getAttributes();
-    // But the balancer config is changed.
-    assertThat(actualAttributes.get(ATTR_LOAD_BALANCING_CONFIG))
-        .isEqualTo(Collections.singletonMap("setting1", "low"));
+    verify(testLbBalancerProvider, times(2))
+        .parseLoadBalancingPolicyConfig(lbConfigCaptor.capture());
+    assertThat(lbConfigCaptor.getValue()).containsExactly("setting1", "low");
     // Service config didn't change policy, thus the delegateLb is not swapped
     verifyNoMoreInteractions(testLbBalancer);
     verify(testLbBalancerProvider).newLoadBalancer(any(Helper.class));
@@ -347,11 +348,13 @@ public class AutoConfiguredLoadBalancerFactoryTest {
 
     Map<String, ?> serviceConfig =
         parseConfig("{\"loadBalancingConfig\": [ {\"test_lb\": { \"setting1\": \"high\" } } ] }");
+    ConfigOrError lbConfig = lbf.parseLoadBalancerPolicy(serviceConfig, helper.getChannelLogger());
+    ManagedChannelServiceConfig mcsc = ManagedChannelServiceConfig
+        .fromServiceConfig(serviceConfig, true, 3, 3, lbConfig.getConfig());
     Status handleResult = lb.tryHandleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
-            .setAttributes(Attributes.newBuilder()
-                .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig).build())
+            .setLoadBalancingPolicyConfig(mcsc)
             .build());
 
     assertThat(testLbBalancer.canHandleEmptyAddressListFromNameResolution()).isFalse();
@@ -368,11 +371,13 @@ public class AutoConfiguredLoadBalancerFactoryTest {
 
     Map<String, ?> serviceConfig =
         parseConfig("{\"loadBalancingConfig\": [ {\"test_lb2\": { \"setting1\": \"high\" } } ] }");
+    ConfigOrError lbConfigs = lbf.parseLoadBalancerPolicy(serviceConfig, helper.getChannelLogger());
+    ManagedChannelServiceConfig mcsc = ManagedChannelServiceConfig
+        .fromServiceConfig(serviceConfig, true, 3, 3, lbConfigs.getConfig());
     Status handleResult = lb.tryHandleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
-            .setAttributes(Attributes.newBuilder()
-                .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig).build())
+            .setLoadBalancingPolicyConfig(mcsc)
             .build());
 
     assertThat(handleResult.getCode()).isEqualTo(Status.Code.OK);
@@ -382,26 +387,23 @@ public class AutoConfiguredLoadBalancerFactoryTest {
         ArgumentCaptor.forClass(ResolvedAddresses.class);
     verify(testLbBalancer2).handleResolvedAddresses(resultCaptor.capture());
     assertThat(resultCaptor.getValue().getAddresses()).isEmpty();
-    Attributes actualAttributes = resultCaptor.getValue().getAttributes();
-
-    Map<String, ?> lbConfig = actualAttributes.get(LoadBalancer.ATTR_LOAD_BALANCING_CONFIG);
-    assertThat(lbConfig).isEqualTo(Collections.<String, Object>singletonMap("setting1", "high"));
-    assertThat(actualAttributes.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG))
-        .isSameInstanceAs(serviceConfig);
+    assertThat(resultCaptor.getValue().getLoadBalancingPolicyConfig())
+        .isEqualTo(nextParsedConfigOrError2.get());
   }
 
   @Test
   public void decideLoadBalancerProvider_noBalancerAddresses_noServiceConfig_pickFirst()
       throws Exception {
     AutoConfiguredLoadBalancer lb = lbf.newLoadBalancer(new TestHelper());
-    Map<String, ?> serviceConfig = null;
+    ManagedChannelServiceConfig serviceConfig = null;
     List<EquivalentAddressGroup> servers =
         Collections.singletonList(new EquivalentAddressGroup(new SocketAddress(){}));
-    PolicySelection selection = lb.decideLoadBalancerProvider(servers, serviceConfig);
+    ResolvedPolicySelection selection = lb.pickLoadBalancerProvider(servers, serviceConfig);
 
-    assertThat(selection.provider).isInstanceOf(PickFirstLoadBalancerProvider.class);
+    assertThat(selection.policySelection.provider)
+        .isInstanceOf(PickFirstLoadBalancerProvider.class);
     assertThat(selection.serverList).isEqualTo(servers);
-    assertThat(selection.config).isNull();
+    assertThat(selection.policySelection.config).isNull();
     verifyZeroInteractions(channelLogger);
   }
 
@@ -410,39 +412,45 @@ public class AutoConfiguredLoadBalancerFactoryTest {
       throws Exception {
     AutoConfiguredLoadBalancer lb = new AutoConfiguredLoadBalancerFactory("test_lb")
         .newLoadBalancer(new TestHelper());
-    Map<String, ?> serviceConfig = null;
+    ManagedChannelServiceConfig serviceConfig = null;
     List<EquivalentAddressGroup> servers =
         Collections.singletonList(new EquivalentAddressGroup(new SocketAddress(){}));
-    PolicySelection selection = lb.decideLoadBalancerProvider(servers, serviceConfig);
+    ResolvedPolicySelection selection = lb.pickLoadBalancerProvider(servers, serviceConfig);
 
-    assertThat(selection.provider).isSameInstanceAs(testLbBalancerProvider);
+    assertThat(selection.policySelection.provider).isSameInstanceAs(testLbBalancerProvider);
     assertThat(selection.serverList).isEqualTo(servers);
-    assertThat(selection.config).isNull();
+    assertThat(selection.policySelection.config).isNull();
     verifyZeroInteractions(channelLogger);
   }
 
   @Test
   public void decideLoadBalancerProvider_oneBalancer_noServiceConfig_grpclb() throws Exception {
     AutoConfiguredLoadBalancer lb = lbf.newLoadBalancer(new TestHelper());
-    Map<String, ?> serviceConfig = null;
+    ManagedChannelServiceConfig serviceConfig = null;
     List<EquivalentAddressGroup> servers =
         Collections.singletonList(
             new EquivalentAddressGroup(
                 new SocketAddress(){},
                 Attributes.newBuilder().set(GrpcAttributes.ATTR_LB_ADDR_AUTHORITY, "ok").build()));
-    PolicySelection selection = lb.decideLoadBalancerProvider(servers, serviceConfig);
+    ResolvedPolicySelection selection = lb.pickLoadBalancerProvider(servers, serviceConfig);
 
-    assertThat(selection.provider).isInstanceOf(GrpclbLoadBalancerProvider.class);
+    assertThat(selection.policySelection.provider).isInstanceOf(GrpclbLoadBalancerProvider.class);
     assertThat(selection.serverList).isEqualTo(servers);
-    assertThat(selection.config).isNull();
+    assertThat(selection.policySelection.config).isNull();
     verifyZeroInteractions(channelLogger);
   }
 
   @Test
   public void decideLoadBalancerProvider_serviceConfigLbPolicy() throws Exception {
     AutoConfiguredLoadBalancer lb = lbf.newLoadBalancer(new TestHelper());
-    Map<String, String> serviceConfig = new HashMap<>();
-    serviceConfig.put("loadBalancingPolicy", "test_lb");
+    Map<String, ?> rawServiceConfig =
+        parseConfig("{\"loadBalancingPolicy\": \"round_robin\"}");
+
+    ConfigOrError lbConfig = lbf.parseLoadBalancerPolicy(rawServiceConfig, channelLogger);
+    assertThat(lbConfig.getConfig()).isNotNull();
+    ManagedChannelServiceConfig mcsc =
+        ManagedChannelServiceConfig
+            .fromServiceConfig(rawServiceConfig, true, 3, 3, lbConfig.getConfig());
     List<EquivalentAddressGroup> servers =
         Arrays.asList(
             new EquivalentAddressGroup(
@@ -451,21 +459,25 @@ public class AutoConfiguredLoadBalancerFactoryTest {
             new EquivalentAddressGroup(
                 new SocketAddress(){}));
     List<EquivalentAddressGroup> backends = Arrays.asList(servers.get(1));
-    ConfigOrError testConfig = ConfigOrError.fromConfig("test config");
-    nextParsedConfigOrError.set(testConfig);
-    PolicySelection selection = lb.decideLoadBalancerProvider(servers, serviceConfig);
+    ResolvedPolicySelection selection = lb.pickLoadBalancerProvider(servers, mcsc);
 
-    assertThat(selection.provider).isEqualTo(testLbBalancerProvider);
+    assertThat(selection.policySelection.provider.getClass().getName()).isEqualTo(
+        "io.grpc.util.SecretRoundRobinLoadBalancerProvider$Provider");
     assertThat(selection.serverList).isEqualTo(backends);
-    assertThat(selection.config).isEqualTo(testConfig);
     verifyZeroInteractions(channelLogger);
   }
 
   @Test
   public void decideLoadBalancerProvider_serviceConfigLbConfig() throws Exception {
     AutoConfiguredLoadBalancer lb = lbf.newLoadBalancer(new TestHelper());
-    Map<String, ?> serviceConfig =
-        parseConfig("{\"loadBalancingConfig\": [ {\"test_lb\": {} } ] }");
+    Map<String, ?> rawServiceConfig =
+        parseConfig("{\"loadBalancingConfig\": [{\"round_robin\": {}}]}");
+
+    ConfigOrError lbConfig = lbf.parseLoadBalancerPolicy(rawServiceConfig, channelLogger);
+    assertThat(lbConfig.getConfig()).isNotNull();
+    ManagedChannelServiceConfig mcsc =
+        ManagedChannelServiceConfig
+            .fromServiceConfig(rawServiceConfig, true, 3, 3, lbConfig.getConfig());
     List<EquivalentAddressGroup> servers =
         Arrays.asList(
             new EquivalentAddressGroup(
@@ -474,56 +486,61 @@ public class AutoConfiguredLoadBalancerFactoryTest {
             new EquivalentAddressGroup(
                 new SocketAddress(){}));
     List<EquivalentAddressGroup> backends = Arrays.asList(servers.get(1));
-    ConfigOrError testConfig = ConfigOrError.fromConfig("test config");
-    nextParsedConfigOrError.set(testConfig);
-    PolicySelection selection = lb.decideLoadBalancerProvider(servers, serviceConfig);
+    ResolvedPolicySelection selection = lb.pickLoadBalancerProvider(servers, mcsc);
 
-    assertThat(selection.provider).isSameInstanceAs(testLbBalancerProvider);
+    assertThat(selection.policySelection.provider.getClass().getName()).isEqualTo(
+        "io.grpc.util.SecretRoundRobinLoadBalancerProvider$Provider");
     assertThat(selection.serverList).isEqualTo(backends);
-    assertThat(selection.config).isEqualTo(testConfig);
     verifyZeroInteractions(channelLogger);
   }
 
   @Test
   public void decideLoadBalancerProvider_grpclbConfigPropagated() throws Exception {
     AutoConfiguredLoadBalancer lb = lbf.newLoadBalancer(new TestHelper());
-    Map<String, ?> serviceConfig =
+    Map<String, ?> rawServiceConfig =
         parseConfig(
             "{\"loadBalancingConfig\": ["
-            + "{\"grpclb\": {\"childPolicy\": [ {\"pick_first\": {} } ] } }"
-            + "] }");
+                + "{\"grpclb\": {\"childPolicy\": [ {\"pick_first\": {} } ] } }"
+                + "] }");
+    ConfigOrError lbConfig = lbf.parseLoadBalancerPolicy(rawServiceConfig, channelLogger);
+    assertThat(lbConfig.getConfig()).isNotNull();
+    ManagedChannelServiceConfig mcsc =
+        ManagedChannelServiceConfig
+            .fromServiceConfig(rawServiceConfig, true, 3, 3, lbConfig.getConfig());
+
     List<EquivalentAddressGroup> servers =
         Collections.singletonList(
             new EquivalentAddressGroup(
                 new SocketAddress(){},
                 Attributes.newBuilder().set(GrpcAttributes.ATTR_LB_ADDR_AUTHORITY, "ok").build()));
-    PolicySelection selection = lb.decideLoadBalancerProvider(servers, serviceConfig);
+    ResolvedPolicySelection selection = lb.pickLoadBalancerProvider(servers, mcsc);
 
-    assertThat(selection.provider).isInstanceOf(GrpclbLoadBalancerProvider.class);
+    assertThat(selection.policySelection.provider).isInstanceOf(GrpclbLoadBalancerProvider.class);
     assertThat(selection.serverList).isEqualTo(servers);
-    // Mode enum is not visible, using toString
-    assertThat(selection.config.toString()).contains("PICK_FIRST");
+    assertThat(selection.policySelection.config)
+        .isEqualTo(((PolicySelection) lbConfig.getConfig()).config);
     verifyZeroInteractions(channelLogger);
   }
 
   @Test
   public void decideLoadBalancerProvider_policyUnavailButGrpclbAddressPresent() throws Exception {
     AutoConfiguredLoadBalancer lb = lbf.newLoadBalancer(new TestHelper());
-    Map<String, ?> serviceConfig =
-        parseConfig(
-            "{\"loadBalancingConfig\": ["
-            + "{\"unavail\": {} }"
-            + "] }");
+    Map<String, ?> rawServiceConfig =
+        parseConfig("{\"loadBalancingConfig\": [{\"unavail\": {}}]}");
+    ManagedChannelServiceConfig mcsc =
+        ManagedChannelServiceConfig
+            .fromServiceConfig(rawServiceConfig, true, 3, 3, null);
+
     List<EquivalentAddressGroup> servers =
         Collections.singletonList(
             new EquivalentAddressGroup(
                 new SocketAddress(){},
                 Attributes.newBuilder().set(GrpcAttributes.ATTR_LB_ADDR_AUTHORITY, "ok").build()));
-    PolicySelection selection = lb.decideLoadBalancerProvider(servers, serviceConfig);
+    ResolvedPolicySelection selection = lb.pickLoadBalancerProvider(servers, mcsc);
 
-    assertThat(selection.provider).isInstanceOf(GrpclbLoadBalancerProvider.class);
+    assertThat(selection.policySelection.provider).isInstanceOf(GrpclbLoadBalancerProvider.class);
     assertThat(selection.serverList).isEqualTo(servers);
-    assertThat(selection.config).isNull();
+    assertThat(selection.policySelection.config).isNull();
     verifyZeroInteractions(channelLogger);
   }
 
@@ -533,35 +550,36 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     LoadBalancerRegistry registry = new LoadBalancerRegistry();
     registry.register(new PickFirstLoadBalancerProvider());
     LoadBalancerProvider fakeRoundRobinProvider =
-        new FakeLoadBalancerProvider(
-            "round_robin", testLbBalancer, /* nextParsedLbPolicyConfig= */ null);
+        new FakeLoadBalancerProvider("round_robin", testLbBalancer, null);
     registry.register(fakeRoundRobinProvider);
     AutoConfiguredLoadBalancer lb = new AutoConfiguredLoadBalancerFactory(
         registry, GrpcUtil.DEFAULT_LB_POLICY).newLoadBalancer(new TestHelper());
-    Map<String, ?> serviceConfig =
+    Map<String, ?> rawServiceConfig =
         parseConfig("{\"loadBalancingConfig\": [ {\"grpclb\": {} } ] }");
+    ManagedChannelServiceConfig mcsc =
+        ManagedChannelServiceConfig.fromServiceConfig(rawServiceConfig, true, 3, 3, null);
     List<EquivalentAddressGroup> servers =
         Arrays.asList(
             new EquivalentAddressGroup(
                 new SocketAddress(){},
                 Attributes.newBuilder().set(GrpcAttributes.ATTR_LB_ADDR_AUTHORITY, "ok").build()),
             new EquivalentAddressGroup(new SocketAddress(){}));
-    PolicySelection selection = lb.decideLoadBalancerProvider(servers, serviceConfig);
+    ResolvedPolicySelection selection = lb.pickLoadBalancerProvider(servers, mcsc);
 
-    assertThat(selection.provider).isSameInstanceAs(fakeRoundRobinProvider);
-    assertThat(selection.config).isNull();
+    assertThat(selection.policySelection.provider).isSameInstanceAs(fakeRoundRobinProvider);
+    assertThat(selection.policySelection.config).isNull();
     verify(channelLogger).log(
         eq(ChannelLogLevel.ERROR),
         startsWith("Found balancer addresses but grpclb runtime is missing"));
 
     // Called for the second time, the warning is only logged once
-    selection = lb.decideLoadBalancerProvider(servers, serviceConfig);
+    selection = lb.pickLoadBalancerProvider(servers, mcsc);
 
-    assertThat(selection.provider).isSameInstanceAs(fakeRoundRobinProvider);
+    assertThat(selection.policySelection.provider).isSameInstanceAs(fakeRoundRobinProvider);
+    assertThat(selection.policySelection.config).isNull();
     // Balancer addresses are filtered out in the server list passed to round_robin
     assertThat(selection.serverList).containsExactly(servers.get(1));
-    assertThat(selection.config).isNull();
-    verifyNoMoreInteractions(channelLogger);
+    verifyNoMoreInteractions(channelLogger);;
   }
 
   @Test
@@ -569,20 +587,20 @@ public class AutoConfiguredLoadBalancerFactoryTest {
       throws Exception {
     LoadBalancerRegistry registry = new LoadBalancerRegistry();
     registry.register(new PickFirstLoadBalancerProvider());
-    registry.register(
-        new FakeLoadBalancerProvider(
-            "round_robin", testLbBalancer, /* nextParsedLbPolicyConfig= */ null));
+    registry.register(new FakeLoadBalancerProvider("round_robin", testLbBalancer, null));
     AutoConfiguredLoadBalancer lb = new AutoConfiguredLoadBalancerFactory(
         registry, GrpcUtil.DEFAULT_LB_POLICY).newLoadBalancer(new TestHelper());
-    Map<String, ?> serviceConfig =
+    Map<String, ?> rawServiceConfig =
         parseConfig("{\"loadBalancingConfig\": [ {\"grpclb\": {} } ] }");
+    ManagedChannelServiceConfig mcsc =
+        ManagedChannelServiceConfig.fromServiceConfig(rawServiceConfig, true, 3, 3, null);
     List<EquivalentAddressGroup> servers =
         Collections.singletonList(
             new EquivalentAddressGroup(
                 new SocketAddress(){},
                 Attributes.newBuilder().set(GrpcAttributes.ATTR_LB_ADDR_AUTHORITY, "ok").build()));
     try {
-      lb.decideLoadBalancerProvider(servers, serviceConfig);
+      lb.pickLoadBalancerProvider(servers, mcsc);
       fail("Should throw");
     } catch (PolicyException e) {
       assertThat(e)
@@ -594,104 +612,25 @@ public class AutoConfiguredLoadBalancerFactoryTest {
   @Test
   public void decideLoadBalancerProvider_serviceConfigLbPolicyOverridesDefault() throws Exception {
     AutoConfiguredLoadBalancer lb = lbf.newLoadBalancer(new TestHelper());
-    Map<String, String> serviceConfig = new HashMap<>();
-    serviceConfig.put("loadBalancingPolicy", "test_lb2");
+    Map<String, ?> rawServiceConfig =
+        parseConfig("{\"loadBalancingPolicy\": \"round_robin\"}");
+    ConfigOrError lbConfigs = lbf.parseLoadBalancerPolicy(rawServiceConfig, channelLogger);
+    assertThat(lbConfigs.getConfig()).isNotNull();
+    ManagedChannelServiceConfig mcsc =
+        ManagedChannelServiceConfig
+            .fromServiceConfig(rawServiceConfig, true, 3, 3, lbConfigs.getConfig());
     List<EquivalentAddressGroup> servers =
         Collections.singletonList(new EquivalentAddressGroup(new SocketAddress(){}));
-    ConfigOrError testConfig = ConfigOrError.fromConfig("test config");
-    nextParsedConfigOrError2.set(testConfig);
-    PolicySelection selection = lb.decideLoadBalancerProvider(servers, serviceConfig);
 
-    assertThat(selection.provider).isSameInstanceAs(testLbBalancerProvider2);
-    assertThat(selection.config).isEqualTo(testConfig);
-    verifyZeroInteractions(channelLogger);
-  }
+    ResolvedPolicySelection selection = lb.pickLoadBalancerProvider(servers, mcsc);
 
-  @Test
-  public void decideLoadBalancerProvider_serviceConfigLbConfigOverridesDefault() throws Exception {
-    AutoConfiguredLoadBalancer lb = lbf.newLoadBalancer(new TestHelper());
-    Map<String, ?> serviceConfig =
-        parseConfig("{\"loadBalancingConfig\": [ {\"round_robin\": {\"setting1\": \"high\"} } ] }");
-    List<EquivalentAddressGroup> servers =
-        Collections.singletonList(new EquivalentAddressGroup(new SocketAddress(){}));
-    PolicySelection selection = lb.decideLoadBalancerProvider(servers, serviceConfig);
-
-    assertThat(selection.provider.getClass().getName()).isEqualTo(
+    assertThat(selection.policySelection.provider.getClass().getName()).isEqualTo(
         "io.grpc.util.SecretRoundRobinLoadBalancerProvider$Provider");
-    assertThat(selection.serverList).isEqualTo(servers);
-    assertThat(selection.config).isEqualTo(ConfigOrError.fromConfig("no service config"));
     verifyZeroInteractions(channelLogger);
   }
 
   @Test
-  public void decideLoadBalancerProvider_serviceConfigLbPolicyFailsOnUnknown() {
-    AutoConfiguredLoadBalancer lb = lbf.newLoadBalancer(new TestHelper());
-    Map<String, String> serviceConfig = new HashMap<>();
-    serviceConfig.put("loadBalancingPolicy", "MAGIC_BALANCER");
-    List<EquivalentAddressGroup> servers =
-        Collections.singletonList(new EquivalentAddressGroup(new SocketAddress(){}));
-    try {
-      lb.decideLoadBalancerProvider(servers, serviceConfig);
-      fail();
-    } catch (PolicyException e) {
-      assertThat(e).hasMessageThat().isEqualTo(
-          "None of [magic_balancer] specified by Service Config are available.");
-    }
-  }
-
-  @Test
-  public void decideLoadBalancerProvider_serviceConfigLbConfigFailsOnUnknown() throws Exception {
-    AutoConfiguredLoadBalancer lb = lbf.newLoadBalancer(new TestHelper());
-    Map<String, ?> serviceConfig =
-        parseConfig("{\"loadBalancingConfig\": [ {\"magic_balancer\": {} } ] }");
-    List<EquivalentAddressGroup> servers =
-        Collections.singletonList(new EquivalentAddressGroup(new SocketAddress(){}));
-    try {
-      lb.decideLoadBalancerProvider(servers, serviceConfig);
-      fail();
-    } catch (PolicyException e) {
-      assertThat(e).hasMessageThat().isEqualTo(
-          "None of [magic_balancer] specified by Service Config are available.");
-    }
-  }
-
-  @Test
-  public void decideLoadBalancerProvider_serviceConfigLbConfigSkipUnknown() throws Exception {
-    AutoConfiguredLoadBalancer lb = lbf.newLoadBalancer(new TestHelper());
-    Map<String, ?> serviceConfig =
-        parseConfig(
-            "{\"loadBalancingConfig\": [ {\"magic_balancer\": {} }, {\"test_lb\": {} } ] }");
-    List<EquivalentAddressGroup> servers =
-        Collections.singletonList(new EquivalentAddressGroup(new SocketAddress(){}));
-    ConfigOrError testConfig = ConfigOrError.fromConfig("default via magic balancer");
-    nextParsedConfigOrError.set(testConfig);
-    PolicySelection selection = lb.decideLoadBalancerProvider(servers, serviceConfig);
-
-    assertThat(selection.provider).isSameInstanceAs(testLbBalancerProvider);
-    assertThat(selection.serverList).isEqualTo(servers);
-    assertThat(selection.config).isEqualTo(testConfig);
-    verify(channelLogger).log(
-        eq(ChannelLogLevel.DEBUG),
-        eq("{0} specified by Service Config are not available"),
-        eq(new LinkedHashSet<>(Arrays.asList("magic_balancer"))));
-  }
-
-  @Test
-  public void decideLoadBalancerProvider_serviceConfigHasZeroLbConfig() throws Exception {
-    AutoConfiguredLoadBalancer lb = lbf.newLoadBalancer(new TestHelper());
-    List<EquivalentAddressGroup> servers =
-        Collections.singletonList(new EquivalentAddressGroup(new SocketAddress(){}));
-    PolicySelection selection = lb.decideLoadBalancerProvider(
-        servers, Collections.<String, Object>emptyMap());
-
-    assertThat(selection.provider).isInstanceOf(PickFirstLoadBalancerProvider.class);
-    assertThat(selection.serverList).isEqualTo(servers);
-    assertThat(selection.config).isNull();
-    verifyZeroInteractions(channelLogger);
-  }
-
-  @Test
-  public void channelTracing_lbPolicyChanged() {
+  public void channelTracing_lbPolicyChanged() throws Exception {
     final FakeClock clock = new FakeClock();
     List<EquivalentAddressGroup> servers =
         Collections.singletonList(new EquivalentAddressGroup(new SocketAddress(){}));
@@ -748,44 +687,48 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     assertThat(handleResult.getCode()).isEqualTo(Status.Code.OK);
     verifyNoMoreInteractions(channelLogger);
 
-    Map<String, String> serviceConfig = new HashMap<>();
-    serviceConfig.put("loadBalancingPolicy", "test_lb");
-    ConfigOrError fakeConfig = ConfigOrError.fromConfig("fake config");
-    nextParsedConfigOrError.set(fakeConfig);
+    ConfigOrError testLbParsedConfig = ConfigOrError.fromConfig("foo");
+    nextParsedConfigOrError.set(testLbParsedConfig);
+    Map<String, ?> serviceConfig =
+        parseConfig("{\"loadBalancingConfig\": [ {\"test_lb\": { } } ] }");
+    ConfigOrError lbConfigs = lbf.parseLoadBalancerPolicy(serviceConfig, channelLogger);
+    ManagedChannelServiceConfig mcsc = ManagedChannelServiceConfig
+        .fromServiceConfig(serviceConfig, true, 3, 3, lbConfigs.getConfig());
     handleResult = lb.tryHandleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers)
-            .setAttributes(
-                Attributes.newBuilder()
-                    .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig)
-                    .build())
+            .setLoadBalancingPolicyConfig(mcsc)
             .build());
 
     assertThat(handleResult.getCode()).isEqualTo(Status.Code.OK);
     verify(channelLogger).log(
         eq(ChannelLogLevel.INFO),
         eq("Load balancer changed from {0} to {1}"),
-        eq("PickFirstLoadBalancer"), eq(testLbBalancer.getClass().getSimpleName()));
+        eq("PickFirstLoadBalancer"),
+        eq(testLbBalancer.getClass().getSimpleName()));
+
     verify(channelLogger).log(
         eq(ChannelLogLevel.DEBUG),
         eq("Load-balancing config: {0}"),
-        eq(fakeConfig));
+        eq(testLbParsedConfig));
     verifyNoMoreInteractions(channelLogger);
 
-    fakeConfig = ConfigOrError.fromConfig("another fake config");
-    serviceConfig.put("loadBalancingPolicy", "test_lb");
-    nextParsedConfigOrError.set(fakeConfig);
+    testLbParsedConfig = ConfigOrError.fromConfig("bar");
+    nextParsedConfigOrError.set(testLbParsedConfig);
+    serviceConfig = parseConfig("{\"loadBalancingConfig\": [ {\"test_lb\": { } } ] }");
+    lbConfigs = lbf.parseLoadBalancerPolicy(serviceConfig, channelLogger);
+    mcsc = ManagedChannelServiceConfig
+        .fromServiceConfig(serviceConfig, true, 3, 3, lbConfigs.getConfig());
     handleResult = lb.tryHandleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers)
-            .setAttributes(Attributes.newBuilder()
-                .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig).build())
+            .setLoadBalancingPolicyConfig(mcsc)
             .build());
     assertThat(handleResult.getCode()).isEqualTo(Status.Code.OK);
     verify(channelLogger).log(
         eq(ChannelLogLevel.DEBUG),
         eq("Load-balancing config: {0}"),
-        eq(fakeConfig));
+        eq(testLbParsedConfig));
     verifyNoMoreInteractions(channelLogger);
 
     servers = Collections.singletonList(new EquivalentAddressGroup(
@@ -805,6 +748,80 @@ public class AutoConfiguredLoadBalancerFactoryTest {
 
     verifyNoMoreInteractions(channelLogger);
   }
+
+  @Test
+  public void parseLoadBalancerPolicy_failedOnUnknown() throws Exception {
+    Map<String, ?> serviceConfig =
+        parseConfig("{\"loadBalancingConfig\": [ {\"magic_balancer\": {} } ] }");
+    ConfigOrError parsed = lbf.parseLoadBalancerPolicy(serviceConfig, channelLogger);
+    assertThat(parsed.getError()).isNotNull();
+    assertThat(parsed.getError().getDescription())
+        .isEqualTo("None of [magic_balancer] specified by Service Config are available.");
+  }
+
+  @Test
+  public void parseLoadBalancerPolicy_multipleValidPolicies() throws Exception {
+    Map<String, ?> serviceConfig =
+        parseConfig(
+            "{\"loadBalancingConfig\": ["
+                + "{\"round_robin\": {}},"
+                + "{\"test_lb\": {} } ] }");
+    ConfigOrError parsed = lbf.parseLoadBalancerPolicy(serviceConfig, channelLogger);
+    assertThat(parsed).isNotNull();
+    assertThat(parsed.getError()).isNull();
+    assertThat(parsed.getConfig()).isInstanceOf(PolicySelection.class);
+    assertThat(((PolicySelection) parsed.getConfig()).provider.getClass().getName())
+        .isEqualTo("io.grpc.util.SecretRoundRobinLoadBalancerProvider$Provider");
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void parseLoadBalancerPolicy_firstInvalidPolicy() throws Exception {
+    when(testLbBalancerProvider.parseLoadBalancingPolicyConfig(any(Map.class)))
+        .thenReturn(ConfigOrError.fromError(Status.UNKNOWN));
+    Map<String, ?> serviceConfig =
+        parseConfig(
+            "{\"loadBalancingConfig\": ["
+                + "{\"test_lb\": {}},"
+                + "{\"round_robin\": {} } ] }");
+    ConfigOrError parsed = lbf.parseLoadBalancerPolicy(serviceConfig, channelLogger);
+    assertThat(parsed).isNotNull();
+    assertThat(parsed.getConfig()).isNotNull();
+    assertThat(((PolicySelection) parsed.getConfig()).config.getError()).isNotNull();
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void parseLoadBalancerPolicy_firstValidSecondInvalidPolicy() throws Exception {
+    when(testLbBalancerProvider.parseLoadBalancingPolicyConfig(any(Map.class)))
+        .thenReturn(ConfigOrError.fromError(Status.UNKNOWN));
+    Map<String, ?> serviceConfig =
+        parseConfig(
+            "{\"loadBalancingConfig\": ["
+                + "{\"round_robin\": {}},"
+                + "{\"test_lb\": {} } ] }");
+    ConfigOrError parsed = lbf.parseLoadBalancerPolicy(serviceConfig, channelLogger);
+    assertThat(parsed).isNotNull();
+    assertThat(parsed.getConfig()).isNotNull();
+    assertThat(((PolicySelection) parsed.getConfig()).config.getConfig()).isNotNull();
+  }
+
+  @Test
+  public void parseLoadBalancerPolicy_someProvidesAreNotAvailable() throws Exception {
+    Map<String, ?> serviceConfig =
+        parseConfig("{\"loadBalancingConfig\": [ "
+            + "{\"magic_balancer\": {} },"
+            + "{\"round_robin\": {}} ] }");
+    ConfigOrError parsed = lbf.parseLoadBalancerPolicy(serviceConfig, channelLogger);
+    assertThat(parsed).isNotNull();
+    assertThat(parsed.getConfig()).isNotNull();
+    assertThat(((PolicySelection) parsed.getConfig()).config.getConfig()).isNotNull();
+    verify(channelLogger).log(
+        eq(ChannelLogLevel.DEBUG),
+        eq("{0} specified by Service Config are not available"),
+        eq(new ArrayList<>(Collections.singletonList("magic_balancer"))));
+  }
+
 
   public static class ForwardingLoadBalancer extends LoadBalancer {
     private final LoadBalancer delegate;

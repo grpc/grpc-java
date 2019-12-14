@@ -17,10 +17,12 @@
 package io.grpc.internal;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.LoadBalancer.ATTR_LOAD_BALANCING_CONFIG;
+import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.MoreObjects;
 import io.grpc.Attributes;
+import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
@@ -39,7 +41,6 @@ import io.grpc.Status;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.logging.Logger;
@@ -107,23 +108,25 @@ public final class AutoConfiguredLoadBalancerFactory {
 
     /**
      * Returns non-OK status if resolvedAddresses is empty and delegate lb requires address ({@link
-     * LoadBalancer#canHandleEmptyAddressListFromNameResolution()} returns {@code false}).
-     * {@code AutoConfiguredLoadBalancer} doesn't expose {@code
-     * canHandleEmptyAddressListFromNameResolution} because delegate LB may not be deterministic.
+     * LoadBalancer#canHandleEmptyAddressListFromNameResolution()} returns {@code false}). {@code
+     * AutoConfiguredLoadBalancer} doesn't expose {@code
+     * canHandleEmptyAddressListFromNameResolution} because it depends on the delegated LB.
      */
-    // TODO(jihuncho) migrate to use parsed config
     Status tryHandleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       List<EquivalentAddressGroup> servers = resolvedAddresses.getAddresses();
       Attributes attributes = resolvedAddresses.getAttributes();
-      if (attributes.get(ATTR_LOAD_BALANCING_CONFIG) != null) {
-        throw new IllegalArgumentException(
-            "Unexpected ATTR_LOAD_BALANCING_CONFIG from upstream: "
-            + attributes.get(ATTR_LOAD_BALANCING_CONFIG));
-      }
-      Map<String, ?> configMap = attributes.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
-      PolicySelection selection;
+
+      Object lbPolicyConfig = resolvedAddresses.getLoadBalancingPolicyConfig();
+      checkState(
+          lbPolicyConfig == null || lbPolicyConfig instanceof ManagedChannelServiceConfig,
+          "Expected to have LoadBalancingPolicyConfig type %s, but got %s",
+          ManagedChannelServiceConfig.class,
+          lbPolicyConfig != null ? lbPolicyConfig.getClass() : "null");
+      ManagedChannelServiceConfig mcsc = (ManagedChannelServiceConfig) lbPolicyConfig;
+      ResolvedPolicySelection resolvedSelection;
+
       try {
-        selection = decideLoadBalancerProvider(servers, configMap);
+        resolvedSelection = pickLoadBalancerProvider(servers, mcsc);
       } catch (PolicyException e) {
         Status s = Status.INTERNAL.withDescription(e.getMessage());
         helper.updateBalancingState(ConnectivityState.TRANSIENT_FAILURE, new FailingPicker(s));
@@ -132,6 +135,7 @@ public final class AutoConfiguredLoadBalancerFactory {
         delegate = new NoopLoadBalancer();
         return Status.OK;
       }
+      PolicySelection selection = resolvedSelection.policySelection;
 
       if (delegateProvider == null
           || !selection.provider.getPolicyName().equals(delegateProvider.getPolicyName())) {
@@ -144,28 +148,26 @@ public final class AutoConfiguredLoadBalancerFactory {
             ChannelLogLevel.INFO, "Load balancer changed from {0} to {1}",
             old.getClass().getSimpleName(), delegate.getClass().getSimpleName());
       }
-
-      ConfigOrError lbPolicyConfig = null;
-      if (selection.config != null) {
+      PolicySelection policySelection =
+          mcsc != null ? (PolicySelection) mcsc.getLoadBalancingConfig() : null;
+      ConfigOrError lbConfig = null;
+      if (policySelection != null) {
         helper.getChannelLogger().log(
             ChannelLogLevel.DEBUG, "Load-balancing config: {0}", selection.config);
-        attributes =
-            attributes.toBuilder().set(ATTR_LOAD_BALANCING_CONFIG, selection.rawConfig).build();
-        lbPolicyConfig = delegateProvider
-            .parseLoadBalancingPolicyConfig(selection.rawConfig);
+        lbConfig = policySelection.config;
       }
 
       LoadBalancer delegate = getDelegate();
-      if (selection.serverList.isEmpty()
+      if (resolvedSelection.serverList.isEmpty()
           && !delegate.canHandleEmptyAddressListFromNameResolution()) {
         return Status.UNAVAILABLE.withDescription(
             "NameResolver returned no usable address. addrs=" + servers + ", attrs=" + attributes);
       } else {
         delegate.handleResolvedAddresses(
             ResolvedAddresses.newBuilder()
-                .setAddresses(selection.serverList)
+                .setAddresses(resolvedSelection.serverList)
                 .setAttributes(attributes)
-                .setLoadBalancingPolicyConfig(lbPolicyConfig)
+                .setLoadBalancingPolicyConfig(lbConfig)
                 .build());
         return Status.OK;
       }
@@ -211,18 +213,18 @@ public final class AutoConfiguredLoadBalancerFactory {
      *   <li>User provided lb on the channel.  This is a degenerate case and not handled here.
      *       This options is deprecated.</li>
      *   <li>Policy from "loadBalancingConfig" if present.  This is not covered here.</li>
-     *   <li>"grpclb" if any gRPC LB balancer addresses are present</li>
      *   <li>The policy from "loadBalancingPolicy" if present</li>
+     *   <li>"grpclb" if any gRPC LB balancer addresses are present</li>
      *   <li>"pick_first" if the service config choice does not specify</li>
      * </ol>
      *
      * @param servers The list of servers reported
-     * @param config the service config object
+     * @param mcsc the parsed {@link ManagedChannelServiceConfig}
      * @return the new load balancer factory, never null
      */
     @VisibleForTesting
-    PolicySelection decideLoadBalancerProvider(
-        List<EquivalentAddressGroup> servers, @Nullable Map<String, ?> config)
+    ResolvedPolicySelection pickLoadBalancerProvider(
+        List<EquivalentAddressGroup> servers, @Nullable ManagedChannelServiceConfig mcsc)
         throws PolicyException {
       // Check for balancer addresses
       boolean haveBalancerAddress = false;
@@ -235,36 +237,12 @@ public final class AutoConfiguredLoadBalancerFactory {
         }
       }
 
-      List<LbConfig> lbConfigs = null;
-      if (config != null) {
-        List<Map<String, ?>> rawLbConfigs =
-            ServiceConfigUtil.getLoadBalancingConfigsFromServiceConfig(config);
-        lbConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(rawLbConfigs);
-      }
-      if (lbConfigs != null && !lbConfigs.isEmpty()) {
-        LinkedHashSet<String> policiesTried = new LinkedHashSet<>();
-        for (LbConfig lbConfig : lbConfigs) {
-          String policy = lbConfig.getPolicyName();
-          LoadBalancerProvider provider = registry.getProvider(policy);
-          if (provider == null) {
-            policiesTried.add(policy);
-          } else {
-            if (!policiesTried.isEmpty()) {
-              // Before returning, log all previously tried policies
-              helper.getChannelLogger().log(
-                  ChannelLogLevel.DEBUG,
-                  "{0} specified by Service Config are not available", policiesTried);
-            }
-            return new PolicySelection(
-                provider,
-                policy.equals(GRPCLB_POLICY_NAME) ? servers : backendAddrs,
-                provider.parseLoadBalancingPolicyConfig(lbConfig.getRawConfigValue()),
-                lbConfig.getRawConfigValue());
-          }
-        }
-        if (!haveBalancerAddress) {
-          throw new PolicyException(
-            "None of " + policiesTried + " specified by Service Config are available.");
+      if (mcsc != null && mcsc.getLoadBalancingConfig() != null) {
+        PolicySelection policy = (PolicySelection) mcsc.getLoadBalancingConfig();
+        if (policy.provider != null) {
+          String policyName = policy.provider.getPolicyName();
+          return new ResolvedPolicySelection(
+              policy, policyName.equals(GRPCLB_POLICY_NAME) ? servers : backendAddrs);
         }
       }
 
@@ -285,26 +263,25 @@ public final class AutoConfiguredLoadBalancerFactory {
             helper.getChannelLogger().log(ChannelLogLevel.ERROR, errorMsg);
             logger.warning(errorMsg);
           }
-          return new PolicySelection(
-              getProviderOrThrow(
-                  "round_robin", "received balancer addresses but grpclb runtime is missing"),
-              backendAddrs,
-              /* config= */ null,
-              /* rawConfig= */ null);
+          return new ResolvedPolicySelection(
+              new PolicySelection(
+                  getProviderOrThrow(
+                      "round_robin", "received balancer addresses but grpclb runtime is missing"),
+                  /* config= */ null),
+              backendAddrs);
         }
-        return
-            new PolicySelection(grpclbProvider, servers, /* config= */ null, /* rawConfig= */ null);
+        return new ResolvedPolicySelection(
+            new PolicySelection(grpclbProvider, /* config= */ null), servers);
       }
       // No balancer address this time.  If balancer address shows up later, we want to make sure
       // the warning is logged one more time.
       roundRobinDueToGrpclbDepMissing = false;
 
       // No config nor balancer address. Use default.
-      return new PolicySelection(
-          getProviderOrThrow(defaultPolicy, "using default policy"),
-          servers,
-          /* config= */ null,
-          /* rawConfig= */ null);
+      return new ResolvedPolicySelection(
+          new PolicySelection(
+              getProviderOrThrow(defaultPolicy, "using default policy"), /* config= */ null),
+          servers);
     }
   }
 
@@ -319,13 +296,19 @@ public final class AutoConfiguredLoadBalancerFactory {
   }
 
   /**
-   * Unlike a normal {@link LoadBalancer.Factory}, this accepts a full service config rather than
+   * Parses first available LoadBalancer policy from service config. Available LoadBalancer should
+   * be registered to {@link LoadBalancerRegistry}. If the first available LoadBalancer policy is
+   * invalid, it doesn't fall-back to next available policy, instead it returns error. This also
+   * means, it ignores LoadBalancer policies after the first available one even if any of them are
+   * invalid.
+   *
+   * <p>Unlike a normal {@link LoadBalancer.Factory}, this accepts a full service config rather than
    * the LoadBalancingConfig.
    *
    * @return null if no selection could be made.
    */
   @Nullable
-  ConfigOrError selectLoadBalancerPolicy(Map<String, ?> serviceConfig) {
+  ConfigOrError parseLoadBalancerPolicy(Map<String, ?> serviceConfig, ChannelLogger channelLogger) {
     try {
       List<LbConfig> loadBalancerConfigs = null;
       if (serviceConfig != null) {
@@ -341,11 +324,14 @@ public final class AutoConfiguredLoadBalancerFactory {
           if (provider == null) {
             policiesTried.add(policy);
           } else {
+            if (!policiesTried.isEmpty()) {
+              channelLogger.log(
+                  ChannelLogLevel.DEBUG,
+                  "{0} specified by Service Config are not available", policiesTried);
+            }
             return ConfigOrError.fromConfig(new PolicySelection(
                 provider,
-                /* serverList= */ Collections.<EquivalentAddressGroup>emptyList(),
-                provider.parseLoadBalancingPolicyConfig(lbConfig.getRawConfigValue()),
-                lbConfig.getRawConfigValue()));
+                provider.parseLoadBalancingPolicyConfig(lbConfig.getRawConfigValue())));
           }
         }
         return ConfigOrError.fromError(
@@ -371,20 +357,41 @@ public final class AutoConfiguredLoadBalancerFactory {
   @VisibleForTesting
   static final class PolicySelection {
     final LoadBalancerProvider provider;
-    @Nullable final List<EquivalentAddressGroup> serverList;
     @Nullable final ConfigOrError config;
-    // TODO(jihuncho) remove when AutoConfiguredLoadBalancerFactory doesn't depend on the Attributes
-    @Nullable final Map<String, ?> rawConfig;
 
     PolicySelection(
         LoadBalancerProvider provider,
-        List<EquivalentAddressGroup> serverList,
-        @Nullable ConfigOrError config,
-        @Nullable Map<String, ?> rawConfig) {
+        @Nullable ConfigOrError config) {
       this.provider = checkNotNull(provider, "provider");
-      this.serverList = Collections.unmodifiableList(checkNotNull(serverList, "serverList"));
       this.config = config;
-      this.rawConfig = rawConfig;
+    }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(this)
+          .add("provider", provider)
+          .add("config", config)
+          .toString();
+    }
+  }
+
+  @VisibleForTesting
+  static final class ResolvedPolicySelection {
+    final PolicySelection policySelection;
+    final List<EquivalentAddressGroup> serverList;
+
+    public ResolvedPolicySelection(
+        PolicySelection policySelection, List<EquivalentAddressGroup> serverList) {
+      this.policySelection = checkNotNull(policySelection, "policySelection");
+      this.serverList = Collections.unmodifiableList(checkNotNull(serverList, "serverList"));
+    }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(this)
+          .add("policySelection", policySelection)
+          .add("serverList", serverList)
+          .toString();
     }
   }
 

@@ -73,7 +73,7 @@ final class ManagedChannelServiceConfig {
       boolean retryEnabled,
       int maxRetryAttemptsLimit,
       int maxHedgedAttemptsLimit,
-      @Nullable Object loadBalancingConfig) {
+      Object loadBalancingConfig) {
     Throttle retryThrottling = null;
     if (retryEnabled) {
       retryThrottling = ServiceConfigUtil.getThrottlePolicy(serviceConfig);

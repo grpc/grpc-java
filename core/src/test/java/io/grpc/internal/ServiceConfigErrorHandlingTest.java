@@ -44,6 +44,7 @@ import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
+import io.grpc.internal.AutoConfiguredLoadBalancerFactory.PolicySelection;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.util.ArrayList;
@@ -107,6 +108,8 @@ public class ServiceConfigErrorHandlingTest {
   private FakeLoadBalancer mockLoadBalancer =
       mock(FakeLoadBalancer.class, delegatesTo(new FakeLoadBalancer()));
 
+  private final AtomicReference<ConfigOrError> nextLbConfig = new AtomicReference<>();
+
   private final LoadBalancerProvider mockLoadBalancerProvider =
       mock(LoadBalancerProvider.class, delegatesTo(new LoadBalancerProvider() {
         @Override
@@ -128,6 +131,12 @@ public class ServiceConfigErrorHandlingTest {
         @Override
         public String getPolicyName() {
           return MOCK_POLICY_NAME;
+        }
+
+        @Override
+        public ConfigOrError parseLoadBalancingPolicyConfig(
+            Map<String, ?> rawLoadBalancingPolicyConfig) {
+          return ConfigOrError.fromConfig(new PolicySelection(this, nextLbConfig.get()));
         }
       }));
 
@@ -251,9 +260,14 @@ public class ServiceConfigErrorHandlingTest {
 
     Map<String, Object> rawServiceConfig =
         parseJson("{\"loadBalancingConfig\": [{\"mock_lb\": {}}]}");
-    ManagedChannelServiceConfig managedChannelServiceConfig =
-        ManagedChannelServiceConfig.fromServiceConfig(rawServiceConfig, true, 3, 3, null);
+    Object fakeLbConfig = new Object();
+    nextLbConfig.set(ConfigOrError.fromConfig(fakeLbConfig));
+    ConfigOrError lbConfigs =
+        mockLoadBalancerProvider.parseLoadBalancingPolicyConfig(rawServiceConfig);
     nameResolverFactory.nextRawServiceConfig.set(rawServiceConfig);
+    ManagedChannelServiceConfig managedChannelServiceConfig =
+        ManagedChannelServiceConfig
+            .fromServiceConfig(rawServiceConfig, true, 3, 3, lbConfigs.getConfig());
     nameResolverFactory.nextConfigOrError.set(
         ConfigOrError.fromConfig(managedChannelServiceConfig));
 
@@ -272,10 +286,19 @@ public class ServiceConfigErrorHandlingTest {
     assertThat(channel.getState(true)).isEqualTo(ConnectivityState.IDLE);
 
     reset(mockLoadBalancer);
-    Map<String, Object> ignoredServiceConfig =
+    Map<String, ?> ignoredServiceConfig =
         parseJson("{\"loadBalancingConfig\": [{\"round_robin\": {}}]}");
+    fakeLbConfig = new Object();
+    nextLbConfig.set(ConfigOrError.fromConfig(fakeLbConfig));
+    lbConfigs =
+        mockLoadBalancerProvider.parseLoadBalancingPolicyConfig(ignoredServiceConfig);
+    nameResolverFactory.nextRawServiceConfig.set(ignoredServiceConfig);
     managedChannelServiceConfig =
-        ManagedChannelServiceConfig.fromServiceConfig(ignoredServiceConfig, true, 3, 3, null);
+        ManagedChannelServiceConfig
+            .fromServiceConfig(ignoredServiceConfig, true, 3, 3, lbConfigs.getConfig());
+
+    nameResolverFactory.nextConfigOrError.set(
+        ConfigOrError.fromConfig(managedChannelServiceConfig));
     nameResolverFactory.nextRawServiceConfig.set(ignoredServiceConfig);
     nameResolverFactory.nextConfigOrError.set(
         ConfigOrError.fromConfig(managedChannelServiceConfig));
@@ -301,14 +324,16 @@ public class ServiceConfigErrorHandlingTest {
     channelBuilder.nameResolverFactory(nameResolverFactory);
     when(mockLoadBalancer.canHandleEmptyAddressListFromNameResolution()).thenReturn(true);
 
-    String rawLoadBalancingConfig = "{\"param1\": \"value1\", \"param2\": \"value2\"}";
-    Map<String, Object> loadBalancingConfig = parseJson(rawLoadBalancingConfig);
     Map<String, Object> rawServiceConfig =
-        parseJson(
-            "{\"loadBalancingConfig\": [{\"mock_lb\" : " + rawLoadBalancingConfig + "}]}");
+        parseJson("{\"loadBalancingConfig\": [{\"mock_lb\": {}}]}");
+    Object fakeLbConfig = new Object();
+    nextLbConfig.set(ConfigOrError.fromConfig(fakeLbConfig));
+    ConfigOrError lbConfigs =
+        mockLoadBalancerProvider.parseLoadBalancingPolicyConfig(rawServiceConfig);
     nameResolverFactory.nextRawServiceConfig.set(rawServiceConfig);
     ManagedChannelServiceConfig managedChannelServiceConfig =
-        ManagedChannelServiceConfig.fromServiceConfig(rawServiceConfig, true, 3, 3, null);
+        ManagedChannelServiceConfig
+            .fromServiceConfig(rawServiceConfig, true, 3, 3, lbConfigs.getConfig());
     nameResolverFactory.nextConfigOrError.set(
         ConfigOrError.fromConfig(managedChannelServiceConfig));
 
@@ -319,9 +344,7 @@ public class ServiceConfigErrorHandlingTest {
     verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
     ResolvedAddresses resolvedAddresses = resultCaptor.getValue();
     assertThat(resolvedAddresses.getAddresses()).isEmpty();
-    assertThat(getLbPolicyConfig(resolvedAddresses)).isNotNull();
-    assertThat(resolvedAddresses.getAttributes().get(LoadBalancer.ATTR_LOAD_BALANCING_CONFIG))
-        .isEqualTo(loadBalancingConfig);
+    assertThat(getLbPolicyConfig(resolvedAddresses)).isSameInstanceAs(fakeLbConfig);
     verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
 
     assertThat(channel.getState(false)).isNotEqualTo(ConnectivityState.TRANSIENT_FAILURE);
@@ -336,10 +359,15 @@ public class ServiceConfigErrorHandlingTest {
     channelBuilder.nameResolverFactory(nameResolverFactory);
 
     Map<String, Object> rawServiceConfig =
-        parseJson("{\"loadBalancingConfig\": [{\"mock_lb\": {\"param1\": \"value1\"}}]}");
+        parseJson("{\"loadBalancingConfig\": [{\"mock_lb\": {}}]}");
+    Object fakeLbConfig = new Object();
+    nextLbConfig.set(ConfigOrError.fromConfig(fakeLbConfig));
+    ConfigOrError lbConfigs =
+        mockLoadBalancerProvider.parseLoadBalancingPolicyConfig(rawServiceConfig);
     nameResolverFactory.nextRawServiceConfig.set(rawServiceConfig);
     ManagedChannelServiceConfig managedChannelServiceConfig =
-        ManagedChannelServiceConfig.fromServiceConfig(rawServiceConfig, true, 3, 3, null);
+        ManagedChannelServiceConfig
+            .fromServiceConfig(rawServiceConfig, true, 3, 3, lbConfigs.getConfig());
     nameResolverFactory.nextConfigOrError.set(
         ConfigOrError.fromConfig(managedChannelServiceConfig));
 
@@ -350,9 +378,7 @@ public class ServiceConfigErrorHandlingTest {
     verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
     ResolvedAddresses resolvedAddresses = resultCaptor.getValue();
     assertThat(resolvedAddresses.getAddresses()).containsExactly(addressGroup);
-    assertThat(getLbPolicyConfig(resolvedAddresses)).isNotNull();
-    assertThat(resolvedAddresses.getAttributes().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG))
-        .isEqualTo(rawServiceConfig);
+    assertThat(getLbPolicyConfig(resolvedAddresses)).isSameInstanceAs(fakeLbConfig);
     verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
 
     assertThat(channel.getState(false)).isNotEqualTo(ConnectivityState.TRANSIENT_FAILURE);
@@ -467,9 +493,14 @@ public class ServiceConfigErrorHandlingTest {
 
     Map<String, Object> rawServiceConfig =
         parseJson("{\"loadBalancingConfig\": [{\"mock_lb\": {}}]}");
+    Object fakeLbConfig = new Object();
+    nextLbConfig.set(ConfigOrError.fromConfig(fakeLbConfig));
+    ConfigOrError lbConfigs =
+        mockLoadBalancerProvider.parseLoadBalancingPolicyConfig(rawServiceConfig);
     nameResolverFactory.nextRawServiceConfig.set(rawServiceConfig);
     ManagedChannelServiceConfig managedChannelServiceConfig =
-        ManagedChannelServiceConfig.fromServiceConfig(rawServiceConfig, true, 3, 3, null);
+        ManagedChannelServiceConfig
+            .fromServiceConfig(rawServiceConfig, true, 3, 3, lbConfigs.getConfig());
     nameResolverFactory.nextConfigOrError.set(
         ConfigOrError.fromConfig(managedChannelServiceConfig));
 

@@ -592,7 +592,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
             retryEnabled,
             builder.maxRetryAttempts,
             builder.maxHedgedAttempts,
-            loadBalancerFactory);
+            loadBalancerFactory,
+            channelLogger);
     this.nameResolverArgs =
         NameResolver.Args.newBuilder()
             .setDefaultPort(builder.getDefaultPort())
@@ -1417,10 +1418,13 @@ final class ManagedChannelImpl extends ManagedChannel implements
                   .build();
             }
 
+            Object loadBalancingPolicyConfig =
+                effectiveServiceConfig == null ? null : effectiveServiceConfig.parsed.getConfig();
             Status handleResult = helper.lb.tryHandleResolvedAddresses(
                 ResolvedAddresses.newBuilder()
                     .setAddresses(servers)
                     .setAttributes(effectiveAttrs)
+                    .setLoadBalancingPolicyConfig(loadBalancingPolicyConfig)
                     .build());
 
             if (!handleResult.isOk()) {
@@ -1908,17 +1912,20 @@ final class ManagedChannelImpl extends ManagedChannel implements
     private final int maxRetryAttemptsLimit;
     private final int maxHedgedAttemptsLimit;
     private final AutoConfiguredLoadBalancerFactory autoLoadBalancerFactory;
+    private final ChannelLogger channelLogger;
 
     ScParser(
         boolean retryEnabled,
         int maxRetryAttemptsLimit,
         int maxHedgedAttemptsLimit,
-        AutoConfiguredLoadBalancerFactory autoLoadBalancerFactory) {
+        AutoConfiguredLoadBalancerFactory autoLoadBalancerFactory,
+        ChannelLogger channelLogger) {
       this.retryEnabled = retryEnabled;
       this.maxRetryAttemptsLimit = maxRetryAttemptsLimit;
       this.maxHedgedAttemptsLimit = maxHedgedAttemptsLimit;
       this.autoLoadBalancerFactory =
           checkNotNull(autoLoadBalancerFactory, "autoLoadBalancerFactory");
+      this.channelLogger = checkNotNull(channelLogger, "channelLogger");
     }
 
     @Override
@@ -1926,7 +1933,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       try {
         Object loadBalancingPolicySelection;
         ConfigOrError choiceFromLoadBalancer =
-            autoLoadBalancerFactory.selectLoadBalancerPolicy(rawServiceConfig);
+            autoLoadBalancerFactory.parseLoadBalancerPolicy(rawServiceConfig, channelLogger);
         if (choiceFromLoadBalancer == null) {
           loadBalancingPolicySelection = null;
         } else if (choiceFromLoadBalancer.getError() != null) {
