@@ -57,8 +57,8 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * <p>An authority string will be converted to a {@code NameResolver}-compliant URI, which has
    * the scheme from the name resolver with the highest priority (e.g. {@code "dns"}),
    * no authority, and the original authority string as its path after properly escaped.
-   * We recommend specifying the schema explicitly if it is known, to avoid problems with other
-   * libraries that might contain additional NameResolvers.
+   * We recommend libraries to specify the schema explicitly if it is known, since libraries cannot
+   * know which NameResolver will be default during runtime.
    * Example authority strings:
    * <ul>
    *   <li>{@code "localhost"}</li>
