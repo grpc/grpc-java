@@ -395,7 +395,6 @@ final class XdsClientImpl extends XdsClient {
     String rdsRouteConfigName = null;
     // Process the requested Listener if exists, either extract cluster information from in-lined
     // RouteConfiguration message or send an RDS request for dynamic resolution.
-    // Ignore HttpConnectionManager messages for unrequested resources, without validating them.
     if (requestedHttpConnManager != null) {
       // The HttpConnectionManager message must either provide the RouteConfiguration directly
       // in-line or tell the client to use RDS to obtain it.
