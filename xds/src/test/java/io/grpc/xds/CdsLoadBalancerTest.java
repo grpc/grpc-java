@@ -32,6 +32,9 @@ import static org.mockito.Mockito.verify;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
+import io.envoyproxy.envoy.api.v2.auth.SdsSecretConfig;
+import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
 import io.grpc.ConnectivityState;
@@ -54,8 +57,11 @@ import io.grpc.xds.XdsClient.EndpointWatcher;
 import io.grpc.xds.XdsClient.RefCountedXdsClientObjectPool;
 import io.grpc.xds.XdsClient.XdsClientFactory;
 import io.grpc.xds.XdsLoadBalancerProvider.XdsConfig;
+import java.net.InetSocketAddress;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Deque;
+import java.util.List;
 import java.util.Map;
 import org.junit.Before;
 import org.junit.Test;
@@ -319,6 +325,87 @@ public class CdsLoadBalancerTest {
     cdsLoadBalancer.shutdown();
     verify(edsLoadBalancer2).shutdown();
     verify(xdsClient).cancelClusterDataWatch("bar.googleapis.com", clusterWatcher2);
+    assertThat(xdsClientRef.xdsClient).isNull();
+  }
+
+  @Test
+  public void handleCdsConfigs_withUpstreamTlsContext() throws Exception {
+    assertThat(xdsClient).isNull();
+
+    String lbConfigRaw1 = "{'cluster' : 'foo.googleapis.com'}".replace("'", "\"");
+    @SuppressWarnings("unchecked")
+    Map<String, ?> lbConfig1 = (Map<String, ?>) JsonParser.parse(lbConfigRaw1);
+    ResolvedAddresses resolvedAddresses1 =
+         ResolvedAddresses.newBuilder()
+             .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+             .setAttributes(
+                 Attributes.newBuilder()
+                     .set(ATTR_LOAD_BALANCING_CONFIG, lbConfig1)
+                     .set(XdsAttributes.XDS_CLIENT_REF, xdsClientRef)
+                     .build())
+             .build();
+    cdsLoadBalancer.handleResolvedAddresses(resolvedAddresses1);
+
+    ArgumentCaptor<ClusterWatcher> clusterWatcherCaptor1 = ArgumentCaptor.forClass(null);
+    verify(xdsClient).watchClusterData(eq("foo.googleapis.com"), clusterWatcherCaptor1.capture());
+
+    UpstreamTlsContext upstreamTlsContext =
+        UpstreamTlsContext.newBuilder()
+            .setCommonTlsContext(
+                CommonTlsContext.newBuilder()
+                    .addTlsCertificateSdsSecretConfigs(
+                        SdsSecretConfig.newBuilder().setName("cert-sds-name"))
+                    .setValidationContextSdsSecretConfig(
+                        SdsSecretConfig.newBuilder().setName("valid-sds-name")))
+            .build();
+
+    ClusterWatcher clusterWatcher1 = clusterWatcherCaptor1.getValue();
+    clusterWatcher1.onClusterChanged(
+        ClusterUpdate.newBuilder()
+            .setClusterName("foo.googleapis.com")
+            .setEdsServiceName("edsServiceFoo.googleapis.com")
+            .setLbPolicy("round_robin")
+            .setEnableLrs(false)
+            .setUpstreamTlsContext(upstreamTlsContext)
+            .build());
+
+    assertThat(edsLbHelpers).hasSize(1);
+    assertThat(edsLoadBalancers).hasSize(1);
+    Helper edsLbHelper1 = edsLbHelpers.poll();
+
+    ArrayList<EquivalentAddressGroup> eagList = new ArrayList<>();
+    eagList.add(new EquivalentAddressGroup(new InetSocketAddress("foo.com", 8080)));
+    eagList.add(new EquivalentAddressGroup(InetSocketAddress.createUnresolved("localhost", 8081),
+        Attributes.newBuilder().set(XdsAttributes.XDS_CLIENT_REF, xdsClientRef).build()));
+    LoadBalancer.CreateSubchannelArgs createSubchannelArgs =
+        LoadBalancer.CreateSubchannelArgs.newBuilder()
+            .setAddresses(eagList)
+            .build();
+    ArgumentCaptor<LoadBalancer.CreateSubchannelArgs> createSubchannelArgsCaptor1 =
+        ArgumentCaptor.forClass(null);
+    verify(helper, never())
+        .createSubchannel(any(LoadBalancer.CreateSubchannelArgs.class));
+    edsLbHelper1.createSubchannel(createSubchannelArgs);
+    verify(helper, times(1)).createSubchannel(createSubchannelArgsCaptor1.capture());
+    LoadBalancer.CreateSubchannelArgs capturedValue = createSubchannelArgsCaptor1.getValue();
+    List<EquivalentAddressGroup> capturedEagList = capturedValue.getAddresses();
+    assertThat(capturedEagList.size()).isEqualTo(2);
+    EquivalentAddressGroup capturedEag = capturedEagList.get(0);
+    UpstreamTlsContext capturedUpstreamTlsContext =
+        capturedEag.getAttributes().get(XdsAttributes.ATTR_UPSTREAM_TLS_CONTEXT);
+    assertThat(capturedUpstreamTlsContext).isSameInstanceAs(upstreamTlsContext);
+    capturedEag = capturedEagList.get(1);
+    capturedUpstreamTlsContext =
+        capturedEag.getAttributes().get(XdsAttributes.ATTR_UPSTREAM_TLS_CONTEXT);
+    assertThat(capturedUpstreamTlsContext).isSameInstanceAs(upstreamTlsContext);
+    assertThat(capturedEag.getAttributes().get(XdsAttributes.XDS_CLIENT_REF))
+        .isSameInstanceAs(xdsClientRef);
+
+    LoadBalancer edsLoadBalancer1 = edsLoadBalancers.poll();
+
+    cdsLoadBalancer.shutdown();
+    verify(edsLoadBalancer1).shutdown();
+    verify(xdsClient).cancelClusterDataWatch("foo.googleapis.com", clusterWatcher1);
     assertThat(xdsClientRef.xdsClient).isNull();
   }
 

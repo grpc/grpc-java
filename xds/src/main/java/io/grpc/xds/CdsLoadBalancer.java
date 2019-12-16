@@ -22,23 +22,29 @@ import static io.grpc.xds.XdsLoadBalancerProvider.XDS_POLICY_NAME;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
+import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
+import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
+import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.CdsLoadBalancerProvider.CdsConfig;
 import io.grpc.xds.XdsClient.ClusterUpdate;
 import io.grpc.xds.XdsClient.ClusterWatcher;
 import io.grpc.xds.XdsLoadBalancerProvider.XdsConfig;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nullable;
 
 /**
@@ -228,9 +234,58 @@ public final class CdsLoadBalancer extends LoadBalancer {
     }
   }
 
+  private static final class EdsLoadBalancingHelper extends ForwardingLoadBalancerHelper {
+    private final Helper delegate;
+    private final AtomicReference<UpstreamTlsContext> upstreamTlsContext;
+
+    EdsLoadBalancingHelper(Helper helper, AtomicReference<UpstreamTlsContext> upstreamTlsContext) {
+      this.delegate = helper;
+      this.upstreamTlsContext = upstreamTlsContext;
+    }
+
+    @Override
+    public Subchannel createSubchannel(CreateSubchannelArgs createSubchannelArgs) {
+      if (upstreamTlsContext.get() != null) {
+        createSubchannelArgs =
+            createSubchannelArgs
+                .toBuilder()
+                .setAddresses(
+                    addUpstreamTlsContext(createSubchannelArgs.getAddresses(),
+                        upstreamTlsContext.get()))
+                .build();
+      }
+      return delegate.createSubchannel(createSubchannelArgs);
+    }
+
+    private static List<EquivalentAddressGroup> addUpstreamTlsContext(
+        List<EquivalentAddressGroup> addresses,
+        UpstreamTlsContext upstreamTlsContext) {
+      if (upstreamTlsContext == null || addresses == null) {
+        return addresses;
+      }
+      ArrayList<EquivalentAddressGroup> copyList = new ArrayList<>(addresses.size());
+      for (EquivalentAddressGroup eag : addresses) {
+        EquivalentAddressGroup eagCopy =
+            new EquivalentAddressGroup(eag.getAddresses(),
+                eag.getAttributes()
+                .toBuilder()
+                .set(XdsAttributes.ATTR_UPSTREAM_TLS_CONTEXT, upstreamTlsContext)
+                .build()
+                );
+        copyList.add(eagCopy);
+      }
+      return copyList;
+    }
+
+    @Override
+    protected Helper delegate() {
+      return delegate;
+    }
+  }
+
   private final class ClusterWatcherImpl implements ClusterWatcher {
 
-    final Helper helper;
+    final EdsLoadBalancingHelper helper;
     final ResolvedAddresses resolvedAddresses;
 
     // EDS balancer for the cluster.
@@ -240,7 +295,7 @@ public final class CdsLoadBalancer extends LoadBalancer {
     LoadBalancer edsBalancer;
 
     ClusterWatcherImpl(Helper helper, ResolvedAddresses resolvedAddresses) {
-      this.helper = helper;
+      this.helper = new EdsLoadBalancingHelper(helper, new AtomicReference<UpstreamTlsContext>());
       this.resolvedAddresses = resolvedAddresses;
     }
 
@@ -257,6 +312,8 @@ public final class CdsLoadBalancer extends LoadBalancer {
           /* fallbackPolicy = */ null,
           /* edsServiceName = */ newUpdate.getEdsServiceName(),
           /* lrsServerName = */ newUpdate.getLrsServerName());
+      UpstreamTlsContext upstreamTlsContext = newUpdate.getUpstreamTlsContext();
+      helper.upstreamTlsContext.set(upstreamTlsContext);
       if (edsBalancer == null) {
         edsBalancer = lbRegistry.getProvider(XDS_POLICY_NAME).newLoadBalancer(helper);
       }

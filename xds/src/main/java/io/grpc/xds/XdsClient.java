@@ -480,7 +480,7 @@ abstract class XdsClient {
    * Factory for creating channels to xDS severs.
    */
   abstract static class XdsChannelFactory {
-    private static XdsChannelFactory DEFAULT_INSTANCE = new XdsChannelFactory() {
+    private static final XdsChannelFactory DEFAULT_INSTANCE = new XdsChannelFactory() {
 
       /**
        * Creates a channel to the first server in the given list.

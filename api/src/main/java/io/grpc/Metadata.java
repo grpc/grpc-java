@@ -23,6 +23,10 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.io.BaseEncoding;
+import com.google.common.io.ByteStreams;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -118,32 +122,81 @@ public final class Metadata {
    * Constructor called by the transport layer when it receives binary metadata. Metadata will
    * mutate the passed in array.
    *
-   * @param usedNames the number of
+   * @param usedNames the number of names
    */
   Metadata(int usedNames, byte[]... binaryValues) {
-    assert (binaryValues.length & 1) == 0 : "Odd number of key-value pairs " + binaryValues.length;
-    size = usedNames;
-    namesAndValues = binaryValues;
+    this(usedNames, (Object[]) binaryValues);
   }
 
-  private byte[][] namesAndValues;
+  /**
+   * Constructor called by the transport layer when it receives partially-parsed metadata.
+   * Metadata will mutate the passed in array.
+   *
+   * @param usedNames the number of names
+   * @param namesAndValues an array of interleaved names and values, with each name
+   *     (at even indices) represented by a byte array, and values (at odd indices) as
+   *     described by {@link InternalMetadata#newMetadataWithParsedValues}.
+   */
+  Metadata(int usedNames, Object[] namesAndValues) {
+    assert (namesAndValues.length & 1) == 0
+        : "Odd number of key-value pairs " + namesAndValues.length;
+    size = usedNames;
+    this.namesAndValues = namesAndValues;
+  }
+
+  private Object[] namesAndValues;
   // The unscaled number of headers present.
   private int size;
 
   private byte[] name(int i) {
-    return namesAndValues[i * 2];
+    return (byte[]) namesAndValues[i * 2];
   }
 
   private void name(int i, byte[] name) {
     namesAndValues[i * 2] = name;
   }
 
-  private byte[] value(int i) {
+  private Object value(int i) {
     return namesAndValues[i * 2 + 1];
   }
 
   private void value(int i, byte[] value) {
     namesAndValues[i * 2 + 1] = value;
+  }
+
+  private void value(int i, Object value) {
+    if (namesAndValues instanceof byte[][]) {
+      // Reallocate an array of Object.
+      expand(cap());
+    }
+    namesAndValues[i * 2 + 1] = value;
+  }
+
+  private byte[] valueAsBytes(int i) {
+    Object value = value(i);
+    if (value instanceof byte[]) {
+      return (byte[]) value;
+    } else {
+      return ((LazyValue<?>) value).toBytes();
+    }
+  }
+
+  private Object valueAsBytesOrStream(int i) {
+    Object value = value(i);
+    if (value instanceof byte[]) {
+      return value;
+    } else {
+      return ((LazyValue<?>) value).toStream();
+    }
+  }
+
+  private <T> T valueAsT(int i, Key<T> key) {
+    Object value = value(i);
+    if (value instanceof byte[]) {
+      return key.parseBytes((byte[]) value);
+    } else {
+      return ((LazyValue<?>) value).toObject(key);
+    }
   }
 
   private int cap() {
@@ -192,7 +245,7 @@ public final class Metadata {
   public <T> T get(Key<T> key) {
     for (int i = size - 1; i >= 0; i--) {
       if (bytesEqual(key.asciiName(), name(i))) {
-        return key.parseBytes(value(i));
+        return valueAsT(i, key);
       }
     }
     return null;
@@ -231,7 +284,7 @@ public final class Metadata {
         public T next() {
           if (hasNext()) {
             hasNext = false;
-            return key.parseBytes(value(idx++));
+            return valueAsT(idx++, key);
           }
           throw new NoSuchElementException();
         }
@@ -288,7 +341,11 @@ public final class Metadata {
     Preconditions.checkNotNull(value, "value");
     maybeExpand();
     name(size, key.asciiName());
-    value(size, key.toBytes(value));
+    if (key.serializesToStreams()) {
+      value(size, LazyValue.create(key, value));
+    } else {
+      value(size, key.toBytes(value));
+    }
     size++;
   }
 
@@ -300,7 +357,7 @@ public final class Metadata {
 
   // Expands to exactly the desired capacity.
   private void expand(int newCapacity) {
-    byte[][] newNamesAndValues = new byte[newCapacity][];
+    Object[] newNamesAndValues = new Object[newCapacity];
     if (!isEmpty()) {
       System.arraycopy(namesAndValues, 0, newNamesAndValues, 0, len());
     }
@@ -322,8 +379,7 @@ public final class Metadata {
       if (!bytesEqual(key.asciiName(), name(i))) {
         continue;
       }
-      @SuppressWarnings("unchecked")
-      T stored = key.parseBytes(value(i));
+      T stored = valueAsT(i, key);
       if (!value.equals(stored)) {
         continue;
       }
@@ -333,7 +389,7 @@ public final class Metadata {
       System.arraycopy(namesAndValues, readIdx, namesAndValues, writeIdx, readLen);
       size -= 1;
       name(size, null);
-      value(size, null);
+      value(size, (byte[]) null);
       return true;
     }
     return false;
@@ -350,7 +406,7 @@ public final class Metadata {
     for (; readIdx < size; readIdx++) {
       if (bytesEqual(key.asciiName(), name(readIdx))) {
         ret = ret != null ? ret : new ArrayList<T>();
-        ret.add(key.parseBytes(value(readIdx)));
+        ret.add(valueAsT(readIdx, key));
         continue;
       }
       name(writeIdx, name(readIdx));
@@ -406,11 +462,36 @@ public final class Metadata {
    */
   @Nullable
   byte[][] serialize() {
-    if (len() == cap()) {
-      return namesAndValues;
-    }
     byte[][] serialized = new byte[len()][];
-    System.arraycopy(namesAndValues, 0, serialized, 0, len());
+    if (namesAndValues instanceof byte[][]) {
+      System.arraycopy(namesAndValues, 0, serialized, 0, len());
+    } else {
+      for (int i = 0; i < size; i++) {
+        serialized[i * 2] = name(i);
+        serialized[i * 2 + 1] = valueAsBytes(i);
+      }
+    }
+    return serialized;
+  }
+
+  /**
+   * Serializes all metadata entries, leaving some values as {@link InputStream}s.
+   *
+   * <p>Produces serialized names and values interleaved. result[i*2] are names, while
+   * result[i*2+1] are values.
+   *
+   * <p>Names are byte arrays as described according to the {@link #serialize}
+   * method. Values are either byte arrays or {@link InputStream}s.
+   *
+   * <p>This method is intended for transport use only.
+   */
+  @Nullable
+  Object[] serializePartial() {
+    Object[] serialized = new Object[len()];
+    for (int i = 0; i < size; i++) {
+      serialized[i * 2] = name(i);
+      serialized[i * 2 + 1] = valueAsBytesOrStream(i);
+    }
     return serialized;
   }
 
@@ -467,9 +548,9 @@ public final class Metadata {
       String headerName = new String(name(i), US_ASCII);
       sb.append(headerName).append('=');
       if (headerName.endsWith(BINARY_HEADER_SUFFIX)) {
-        sb.append(BASE64_ENCODING_OMIT_PADDING.encode(value(i)));
+        sb.append(BASE64_ENCODING_OMIT_PADDING.encode(valueAsBytes(i)));
       } else {
-        String headerValue = new String(value(i), US_ASCII);
+        String headerValue = new String(valueAsBytes(i), US_ASCII);
         sb.append(headerValue);
       }
     }
@@ -532,6 +613,25 @@ public final class Metadata {
     T parseAsciiString(String serialized);
   }
 
+  /** Marshaller for metadata values that are serialized to an InputStream. */
+  public interface BinaryStreamMarshaller<T> {
+    /**
+     * Serializes a metadata value to an {@link InputStream}.
+     *
+     * @param value to serialize
+     * @return serialized version of value
+     */
+    InputStream toStream(T value);
+
+    /**
+     * Parses a serialized metadata value from an {@link InputStream}.
+     *
+     * @param stream of metadata to parse
+     * @return a parsed instance of type T
+     */
+    T parseStream(InputStream stream);
+  }
+
   /**
    * Key for metadata entries. Allows for parsing and serialization of metadata.
    *
@@ -580,6 +680,16 @@ public final class Metadata {
     }
 
     /**
+     * Creates a key for a binary header, serializing to input streams.
+     *
+     * @param name Must contain only the valid key characters as defined in the class comment. Must
+     *     end with {@link #BINARY_HEADER_SUFFIX}.
+     */
+    public static <T> Key<T> of(String name, BinaryStreamMarshaller<T> marshaller) {
+      return new LazyStreamBinaryKey<>(name, marshaller);
+    }
+
+    /**
      * Creates a key for an ASCII header.
      *
      * @param name Must contain only the valid key characters as defined in the class comment. Must
@@ -601,6 +711,7 @@ public final class Metadata {
 
     private final String name;
     private final byte[] nameBytes;
+    private final Object marshaller;
 
     private static BitSet generateValidTChars() {
       BitSet valid = new BitSet(0x7f);
@@ -632,10 +743,11 @@ public final class Metadata {
       return n;
     }
 
-    private Key(String name, boolean pseudo) {
+    private Key(String name, boolean pseudo, Object marshaller) {
       this.originalName = checkNotNull(name, "name");
       this.name = validateName(this.originalName.toLowerCase(Locale.ROOT), pseudo);
       this.nameBytes = this.name.getBytes(US_ASCII);
+      this.marshaller = marshaller;
     }
 
     /**
@@ -706,6 +818,28 @@ public final class Metadata {
      * @return a parsed instance of type T
      */
     abstract T parseBytes(byte[] serialized);
+
+    /**
+     * @return whether this key will be serialized to bytes lazily.
+     */
+    boolean serializesToStreams() {
+      return false;
+    }
+
+    /**
+     * Gets this keys (implementation-specific) marshaller, or null if the
+     * marshaller is not of the given type.
+     *
+     * @param marshallerClass The type we expect the marshaller to be.
+     * @return the marshaller object for this key, or null.
+     */
+    @Nullable
+    final <M> M getMarshaller(Class<M> marshallerClass) {
+      if (marshallerClass.isInstance(marshaller)) {
+        return marshallerClass.cast(marshaller);
+      }
+      return null;
+    }
   }
 
   private static class BinaryKey<T> extends Key<T> {
@@ -713,7 +847,7 @@ public final class Metadata {
 
     /** Keys have a name and a binary marshaller used for serialization. */
     private BinaryKey(String name, BinaryMarshaller<T> marshaller) {
-      super(name, false /* not pseudo */);
+      super(name, false /* not pseudo */, marshaller);
       checkArgument(
           name.endsWith(BINARY_HEADER_SUFFIX),
           "Binary header is named %s. It must end with %s",
@@ -734,12 +868,93 @@ public final class Metadata {
     }
   }
 
+  /** A binary key for values which should be serialized lazily to {@Link InputStream}s. */
+  private static class LazyStreamBinaryKey<T> extends Key<T> {
+
+    private final BinaryStreamMarshaller<T> marshaller;
+
+    /** Keys have a name and a stream marshaller used for serialization. */
+    private LazyStreamBinaryKey(String name, BinaryStreamMarshaller<T> marshaller) {
+      super(name, false /* not pseudo */, marshaller);
+      checkArgument(
+          name.endsWith(BINARY_HEADER_SUFFIX),
+          "Binary header is named %s. It must end with %s",
+          name,
+          BINARY_HEADER_SUFFIX);
+      checkArgument(name.length() > BINARY_HEADER_SUFFIX.length(), "empty key name");
+      this.marshaller = checkNotNull(marshaller, "marshaller is null");
+    }
+
+    @Override
+    byte[] toBytes(T value) {
+      return streamToBytes(marshaller.toStream(value));
+    }
+
+    @Override
+    T parseBytes(byte[] serialized) {
+      return marshaller.parseStream(new ByteArrayInputStream(serialized));
+    }
+
+    @Override
+    boolean serializesToStreams() {
+      return true;
+    }
+  }
+
+  /** Internal holder for values which are serialized/de-serialized lazily. */
+  static final class LazyValue<T> {
+    private final BinaryStreamMarshaller<T> marshaller;
+    private final T value;
+    private volatile byte[] serialized;
+
+    static <T> LazyValue<T> create(Key<T> key, T value) {
+      return new LazyValue<>(checkNotNull(getBinaryStreamMarshaller(key)), value);
+    }
+
+    /** A value set by the application. */
+    LazyValue(BinaryStreamMarshaller<T> marshaller, T value) {
+      this.marshaller = marshaller;
+      this.value = value;
+    }
+
+    InputStream toStream() {
+      return marshaller.toStream(value);
+    }
+
+    byte[] toBytes() {
+      if (serialized == null) {
+        synchronized (this) {
+          if (serialized == null) {
+            serialized = streamToBytes(toStream());
+          }
+        }
+      }
+      return serialized;
+    }
+
+    <T2> T2 toObject(Key<T2> key) {
+      if (key.serializesToStreams()) {
+        BinaryStreamMarshaller<T2> marshaller = getBinaryStreamMarshaller(key);
+        if (marshaller != null) {
+          return marshaller.parseStream(toStream());
+        }
+      }
+      return key.parseBytes(toBytes());
+    }
+
+    @Nullable
+    @SuppressWarnings("unchecked")
+    private static <T> BinaryStreamMarshaller<T> getBinaryStreamMarshaller(Key<T> key) {
+      return (BinaryStreamMarshaller<T>) key.getMarshaller(BinaryStreamMarshaller.class);
+    }
+  }
+
   private static class AsciiKey<T> extends Key<T> {
     private final AsciiMarshaller<T> marshaller;
 
     /** Keys have a name and an ASCII marshaller used for serialization. */
     private AsciiKey(String name, boolean pseudo, AsciiMarshaller<T> marshaller) {
-      super(name, pseudo);
+      super(name, pseudo, marshaller);
       Preconditions.checkArgument(
           !name.endsWith(BINARY_HEADER_SUFFIX),
           "ASCII header is named %s.  Only binary headers may end with %s",
@@ -764,7 +979,7 @@ public final class Metadata {
 
     /** Keys have a name and an ASCII marshaller used for serialization. */
     private TrustedAsciiKey(String name, boolean pseudo, TrustedAsciiMarshaller<T> marshaller) {
-      super(name, pseudo);
+      super(name, pseudo, marshaller);
       Preconditions.checkArgument(
           !name.endsWith(BINARY_HEADER_SUFFIX),
           "ASCII header is named %s.  Only binary headers may end with %s",
@@ -807,5 +1022,13 @@ public final class Metadata {
      * @return a parsed instance of type T
      */
     T parseAsciiString(byte[] serialized);
+  }
+
+  private static byte[] streamToBytes(InputStream stream) {
+    try {
+      return ByteStreams.toByteArray(stream);
+    } catch (IOException ioe) {
+      throw new RuntimeException("failure reading serialized stream", ioe);
+    }
   }
 }
