@@ -181,7 +181,7 @@ final class XdsClientImpl extends XdsClient {
     } else {
       ldsResourceName = hostName + ":" + port;
     }
-    if (rpcRetryTimer != null) {
+    if (rpcRetryTimer != null && rpcRetryTimer.isPending()) {
       // Currently in retry backoff.
       return;
     }
@@ -210,7 +210,7 @@ final class XdsClientImpl extends XdsClient {
     if (clusterNamesToClusterUpdates.containsKey(clusterName)) {
       watcher.onClusterChanged(clusterNamesToClusterUpdates.get(clusterName));
     }
-    if (rpcRetryTimer != null) {
+    if (rpcRetryTimer != null && rpcRetryTimer.isPending()) {
       // Currently in retry backoff.
       return;
     }
@@ -241,7 +241,7 @@ final class XdsClientImpl extends XdsClient {
       }
       // No longer interested in this cluster, send an updated CDS request to unsubscribe
       // this resource.
-      if (rpcRetryTimer != null) {
+      if (rpcRetryTimer != null && rpcRetryTimer.isPending()) {
         // Currently in retry backoff.
         return;
       }
@@ -271,7 +271,7 @@ final class XdsClientImpl extends XdsClient {
     if (clusterNamesToEndpointUpdates.containsKey(clusterName)) {
       watcher.onEndpointChanged(clusterNamesToEndpointUpdates.get(clusterName));
     }
-    if (rpcRetryTimer != null) {
+    if (rpcRetryTimer != null && rpcRetryTimer.isPending()) {
       // Currently in retry backoff.
       return;
     }
@@ -299,7 +299,7 @@ final class XdsClientImpl extends XdsClient {
       clusterNamesToEndpointUpdates.remove(clusterName);
       // No longer interested in this cluster, send an updated EDS request to unsubscribe
       // this resource.
-      if (rpcRetryTimer != null) {
+      if (rpcRetryTimer != null && rpcRetryTimer.isPending()) {
         // Currently in retry backoff.
         return;
       }
