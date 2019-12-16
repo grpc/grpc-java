@@ -425,7 +425,7 @@ The following code snippet shows how you can call the Google Cloud PubSub API us
 
 ```java
 // Create a channel to the test service.
-ManagedChannel channel = ManagedChannelBuilder.forTarget("pubsub.googleapis.com")
+ManagedChannel channel = ManagedChannelBuilder.forTarget("dns:///pubsub.googleapis.com")
     .build();
 // Get the default credentials from the environment
 GoogleCredentials creds = GoogleCredentials.getApplicationDefault();
