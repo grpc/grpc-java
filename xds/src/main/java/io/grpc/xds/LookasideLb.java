@@ -200,20 +200,38 @@ final class LookasideLb extends LoadBalancer {
       xdsClient = xdsClientPool.getObject();
     }
 
+    // The edsServiceName field is null in legacy gRPC client with EDS: use target authority for
+    // querying endpoints, but in the future we expect this to be explicitly given by EDS config.
+    // We assume if edsServiceName is null, it will always be null in later resolver updates;
+    // and if edsServiceName is not null, it will always be not null.
+    String clusterServiceName = newXdsConfig.edsServiceName;
+    if (clusterServiceName == null) {
+      clusterServiceName = lookasideLbHelper.getAuthority();
+    }
+    if (clusterName == null) {
+      // TODO(zdapeng): Use the correct cluster name. Currently load reporting will be broken if
+      //     edsServiceName is changed because we are using edsServiceName for the cluster name.
+      clusterName = clusterServiceName;
+    }
+
+    boolean shouldReportStats = newXdsConfig.lrsServerName != null;
+    if (shouldReportStats && !isReportingStats()) {
+      // Start load reporting. This may be a restarting after previously stopping the load
+      // reporting, so need to re-add all the pre-existing loadStatsStores to the new
+      // loadReportClient.
+      loadReportClient = xdsClient.reportClientStats(clusterName, newXdsConfig.lrsServerName);
+      for (Map.Entry<String, LoadStatsStore> entry : loadStatsStoreMap.entrySet()) {
+        loadReportClient.addLoadStatsStore(entry.getKey(), entry.getValue());
+      }
+    }
+    if (!shouldReportStats && isReportingStats()) {
+      cancelClientStatsReport();
+    }
+
     // Note: childPolicy change will be handled in LocalityStore, to be implemented.
     // If edsServiceName in XdsConfig is changed, do a graceful switch.
     if (xdsConfig == null
         || !Objects.equals(newXdsConfig.edsServiceName, xdsConfig.edsServiceName)) {
-      String clusterServiceName = newXdsConfig.edsServiceName;
-
-      // The edsServiceName field is null in legacy gRPC client with EDS: use target authority for
-      // querying endpoints, but in the future we expect this to be explicitly given by EDS config.
-      // We assume if edsServiceName is null, it will always be null in later resolver updates;
-      // and if edsServiceName is not null, it will always be not null.
-      if (clusterServiceName == null) {
-        clusterServiceName = lookasideLbHelper.getAuthority();
-      }
-
       LoadBalancer.Factory clusterEndpointsLoadBalancerFactory =
           new ClusterEndpointsBalancerFactory(clusterServiceName);
       switchingLoadBalancer.switchTo(clusterEndpointsLoadBalancerFactory);
@@ -223,22 +241,6 @@ final class LookasideLb extends LoadBalancer {
         .setLoadBalancingPolicyConfig(newXdsConfig)
         .build();
     switchingLoadBalancer.handleResolvedAddresses(resolvedAddresses);
-
-    if (clusterName == null) {
-      // TODO(zdapeng): Use the real cluster name. Currently load reporting will be broken if
-      //     edsServiceName is changed because we are using edsServiceName for the cluster name.
-      clusterName = newXdsConfig.edsServiceName;
-      if (clusterName == null) {
-        clusterName = lookasideLbHelper.getAuthority();
-      }
-    }
-    boolean shouldReportStats = newXdsConfig.lrsServerName != null;
-    if (shouldReportStats && !isReportingStats()) {
-      reportClientStats(clusterName, newXdsConfig.lrsServerName);
-    }
-    if (!shouldReportStats && isReportingStats()) {
-      cancelClientStatsReport();
-    }
 
     this.xdsConfig = newXdsConfig;
   }
@@ -277,19 +279,8 @@ final class LookasideLb extends LoadBalancer {
     return loadReportClient != null;
   }
 
-  /** Starts to report client stats for the cluster. */
-  private void reportClientStats(String clusterName, String serverUri) {
-    loadReportClient = xdsClient.reportClientStats(clusterName, serverUri);
-    for (Map.Entry<String, LoadStatsStore> entry : loadStatsStoreMap.entrySet()) {
-      loadReportClient.addLoadStatsStore(entry.getKey(), entry.getValue());
-    }
-  }
-
   /** Stops to report client stats for the cluster. */
   private void cancelClientStatsReport() {
-    for (String clusterServiceName : loadStatsStoreMap.keySet()) {
-      loadReportClient.removeLoadStatsStore(clusterServiceName);
-    }
     xdsClient.cancelClientStatsReport(clusterName);
     loadReportClient = null;
   }
