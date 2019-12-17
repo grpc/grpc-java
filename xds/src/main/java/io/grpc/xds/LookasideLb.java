@@ -116,7 +116,7 @@ final class LookasideLb extends LoadBalancer {
 
   @Override
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-    channelLogger.log(ChannelLogLevel.DEBUG, "Received ResolvedAddresses '%s'", resolvedAddresses);
+    channelLogger.log(ChannelLogLevel.DEBUG, "Received ResolvedAddresses '{0}'", resolvedAddresses);
 
     Attributes attributes = resolvedAddresses.getAttributes();
     XdsConfig newXdsConfig;
@@ -237,7 +237,7 @@ final class LookasideLb extends LoadBalancer {
 
   @Override
   public void handleNameResolutionError(Status error) {
-    channelLogger.log(ChannelLogLevel.ERROR, "Name resolution error: '%s'", error);
+    channelLogger.log(ChannelLogLevel.ERROR, "Name resolution error: '{0}'", error);
     // Go into TRANSIENT_FAILURE if we have not yet received any endpoint update. Otherwise,
     // we keep running with the data we had previously.
     if (endpointWatcher == null) {
@@ -465,7 +465,7 @@ final class LookasideLb extends LoadBalancer {
     public void onEndpointChanged(EndpointUpdate endpointUpdate) {
       channelLogger.log(
           ChannelLogLevel.DEBUG,
-          "EDS load balancer received an endpoint update: '%s'",
+          "EDS load balancer received an endpoint update: '{0}'",
           endpointUpdate);
 
       if (!firstEndpointUpdateReceived) {
@@ -502,7 +502,7 @@ final class LookasideLb extends LoadBalancer {
     @Override
     public void onError(Status error) {
       channelLogger.log(
-          ChannelLogLevel.ERROR, "EDS load balancer received an error: '%s'",  error);
+          ChannelLogLevel.ERROR, "EDS load balancer received an error: '{0}'",  error);
       endpointUpdateCallback.onError();
     }
   }

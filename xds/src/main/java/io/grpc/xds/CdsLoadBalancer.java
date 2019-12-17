@@ -83,7 +83,7 @@ public final class CdsLoadBalancer extends LoadBalancer {
 
   @Override
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-    channelLogger.log(ChannelLogLevel.DEBUG, "Received ResolvedAddresses '%s'", resolvedAddresses);
+    channelLogger.log(ChannelLogLevel.DEBUG, "Received ResolvedAddresses '{0}'", resolvedAddresses);
     Attributes attributes = resolvedAddresses.getAttributes();
     if (xdsClientRef == null) {
       xdsClientRef = resolvedAddresses.getAttributes().get(XdsAttributes.XDS_CLIENT_REF);
@@ -133,7 +133,7 @@ public final class CdsLoadBalancer extends LoadBalancer {
 
   @Override
   public void handleNameResolutionError(Status error) {
-    channelLogger.log(ChannelLogLevel.ERROR, "Name resolution error: '%s'", error);
+    channelLogger.log(ChannelLogLevel.ERROR, "Name resolution error: '{0}'", error);
     // Go into TRANSIENT_FAILURE if we have not yet received any cluster resource. Otherwise,
     // we keep running with the data we had previously.
     if (clusterWatcher == null) {
@@ -302,7 +302,7 @@ public final class CdsLoadBalancer extends LoadBalancer {
     @Override
     public void onClusterChanged(ClusterUpdate newUpdate) {
       channelLogger.log(
-          ChannelLogLevel.DEBUG, "CDS load balancer received a cluster update: '%s'",  newUpdate);
+          ChannelLogLevel.DEBUG, "CDS load balancer received a cluster update: '{0}'",  newUpdate);
       checkArgument(
           newUpdate.getLbPolicy().equals("round_robin"),
           "The load balancing policy in ClusterUpdate '%s' is not supported", newUpdate);
@@ -329,7 +329,8 @@ public final class CdsLoadBalancer extends LoadBalancer {
 
     @Override
     public void onError(Status error) {
-      channelLogger.log(ChannelLogLevel.ERROR, "CDS load balancer received an error: '%s'",  error);
+      channelLogger.log(
+          ChannelLogLevel.ERROR, "CDS load balancer received an error: '{0}'",  error);
 
       // Go into TRANSIENT_FAILURE if we have not yet created the child
       // policy (i.e., we have not yet received valid data for the cluster). Otherwise,
