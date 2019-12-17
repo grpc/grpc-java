@@ -55,8 +55,11 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * </ul>
    *
    * <p>An authority string will be converted to a {@code NameResolver}-compliant URI, which has
-   * {@code "dns"} as the scheme, no authority, and the original authority string as its path after
-   * properly escaped. Example authority strings:
+   * the scheme from the name resolver with the highest priority (e.g. {@code "dns"}),
+   * no authority, and the original authority string as its path after properly escaped.
+   * We recommend libraries to specify the schema explicitly if it is known, since libraries cannot
+   * know which NameResolver will be default during runtime.
+   * Example authority strings:
    * <ul>
    *   <li>{@code "localhost"}</li>
    *   <li>{@code "127.0.0.1"}</li>
@@ -173,27 +176,6 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * @since 1.0.0
    */
   public abstract T overrideAuthority(String authority);
-
-  /**
-   * Use of a plaintext connection to the server. By default a secure connection mechanism
-   * such as TLS will be used.
-   *
-   * <p>Should only be used for testing or for APIs where the use of such API or the data
-   * exchanged is not sensitive.
-   *
-   * @param skipNegotiation @{code true} if there is a priori knowledge that the endpoint supports
-   *                        plaintext, {@code false} if plaintext use must be negotiated.
-   * @deprecated Use {@link #usePlaintext()} instead.
-   *
-   * @throws UnsupportedOperationException if plaintext mode is not supported.
-   * @return this
-   * @since 1.0.0
-   */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1772")
-  @Deprecated
-  public T usePlaintext(boolean skipNegotiation) {
-    throw new UnsupportedOperationException();
-  }
 
   /**
    * Use of a plaintext connection to the server. By default a secure connection mechanism

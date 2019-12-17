@@ -65,7 +65,8 @@ import javax.net.ssl.SSLException;
 public final class NettyChannelBuilder
     extends AbstractManagedChannelImplBuilder<NettyChannelBuilder> {
 
-  public static final int DEFAULT_FLOW_CONTROL_WINDOW = 1048576; // 1MiB
+  // 1MiB.
+  public static final int DEFAULT_FLOW_CONTROL_WINDOW = 1024 * 1024;
 
   private static final long AS_LARGE_AS_INFINITE = TimeUnit.DAYS.toNanos(1000L);
 
@@ -282,23 +283,6 @@ public final class NettyChannelBuilder
   public NettyChannelBuilder maxInboundMetadataSize(int bytes) {
     checkArgument(bytes > 0, "maxInboundMetadataSize must be > 0");
     this.maxHeaderListSize = bytes;
-    return this;
-  }
-
-  /**
-   * Equivalent to using {@link #negotiationType(NegotiationType)} with {@code PLAINTEXT} or
-   * {@code PLAINTEXT_UPGRADE}.
-   *
-   * @deprecated use {@link #usePlaintext()} instead.
-   */
-  @Override
-  @Deprecated
-  public NettyChannelBuilder usePlaintext(boolean skipNegotiation) {
-    if (skipNegotiation) {
-      negotiationType(NegotiationType.PLAINTEXT);
-    } else {
-      negotiationType(NegotiationType.PLAINTEXT_UPGRADE);
-    }
     return this;
   }
 

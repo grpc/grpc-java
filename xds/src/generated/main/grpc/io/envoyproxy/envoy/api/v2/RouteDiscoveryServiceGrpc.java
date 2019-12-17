@@ -131,7 +131,14 @@ public final class RouteDiscoveryServiceGrpc {
    * Creates a new async stub that supports all call types for the service
    */
   public static RouteDiscoveryServiceStub newStub(io.grpc.Channel channel) {
-    return new RouteDiscoveryServiceStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<RouteDiscoveryServiceStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<RouteDiscoveryServiceStub>() {
+        @java.lang.Override
+        public RouteDiscoveryServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new RouteDiscoveryServiceStub(channel, callOptions);
+        }
+      };
+    return RouteDiscoveryServiceStub.newStub(factory, channel);
   }
 
   /**
@@ -139,7 +146,14 @@ public final class RouteDiscoveryServiceGrpc {
    */
   public static RouteDiscoveryServiceBlockingStub newBlockingStub(
       io.grpc.Channel channel) {
-    return new RouteDiscoveryServiceBlockingStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<RouteDiscoveryServiceBlockingStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<RouteDiscoveryServiceBlockingStub>() {
+        @java.lang.Override
+        public RouteDiscoveryServiceBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new RouteDiscoveryServiceBlockingStub(channel, callOptions);
+        }
+      };
+    return RouteDiscoveryServiceBlockingStub.newStub(factory, channel);
   }
 
   /**
@@ -147,7 +161,14 @@ public final class RouteDiscoveryServiceGrpc {
    */
   public static RouteDiscoveryServiceFutureStub newFutureStub(
       io.grpc.Channel channel) {
-    return new RouteDiscoveryServiceFutureStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<RouteDiscoveryServiceFutureStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<RouteDiscoveryServiceFutureStub>() {
+        @java.lang.Override
+        public RouteDiscoveryServiceFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new RouteDiscoveryServiceFutureStub(channel, callOptions);
+        }
+      };
+    return RouteDiscoveryServiceFutureStub.newStub(factory, channel);
   }
 
   /**
@@ -218,19 +239,15 @@ public final class RouteDiscoveryServiceGrpc {
    * a route table via this identifier.
    * </pre>
    */
-  public static final class RouteDiscoveryServiceStub extends io.grpc.stub.AbstractStub<RouteDiscoveryServiceStub> {
-    private RouteDiscoveryServiceStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
-    private RouteDiscoveryServiceStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+  public static final class RouteDiscoveryServiceStub extends io.grpc.stub.AbstractAsyncStub<RouteDiscoveryServiceStub> {
+    private RouteDiscoveryServiceStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected RouteDiscoveryServiceStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+    protected RouteDiscoveryServiceStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       return new RouteDiscoveryServiceStub(channel, callOptions);
     }
 
@@ -268,19 +285,15 @@ public final class RouteDiscoveryServiceGrpc {
    * a route table via this identifier.
    * </pre>
    */
-  public static final class RouteDiscoveryServiceBlockingStub extends io.grpc.stub.AbstractStub<RouteDiscoveryServiceBlockingStub> {
-    private RouteDiscoveryServiceBlockingStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
-    private RouteDiscoveryServiceBlockingStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+  public static final class RouteDiscoveryServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<RouteDiscoveryServiceBlockingStub> {
+    private RouteDiscoveryServiceBlockingStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected RouteDiscoveryServiceBlockingStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+    protected RouteDiscoveryServiceBlockingStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       return new RouteDiscoveryServiceBlockingStub(channel, callOptions);
     }
 
@@ -301,19 +314,15 @@ public final class RouteDiscoveryServiceGrpc {
    * a route table via this identifier.
    * </pre>
    */
-  public static final class RouteDiscoveryServiceFutureStub extends io.grpc.stub.AbstractStub<RouteDiscoveryServiceFutureStub> {
-    private RouteDiscoveryServiceFutureStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
-    private RouteDiscoveryServiceFutureStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+  public static final class RouteDiscoveryServiceFutureStub extends io.grpc.stub.AbstractFutureStub<RouteDiscoveryServiceFutureStub> {
+    private RouteDiscoveryServiceFutureStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected RouteDiscoveryServiceFutureStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+    protected RouteDiscoveryServiceFutureStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       return new RouteDiscoveryServiceFutureStub(channel, callOptions);
     }
 

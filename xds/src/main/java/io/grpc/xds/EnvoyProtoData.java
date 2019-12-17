@@ -195,15 +195,16 @@ final class EnvoyProtoData {
     private final int loadBalancingWeight;
     private final boolean isHealthy;
 
-    /** Must only be used for testing. */
-    // TODO(chengyuanzhang): migrate tests to use LbEndpoint(EquivalentAddressGroup, int, boolean)
-    //  and should add tests for LB policies dealing with unhealthy endpoints.
     @VisibleForTesting
-    LbEndpoint(EquivalentAddressGroup eag, int loadBalancingWeight) {
-      this(eag, loadBalancingWeight, true);
+    LbEndpoint(String address, int port, int loadBalancingWeight, boolean isHealthy) {
+      this(
+          new EquivalentAddressGroup(
+              new InetSocketAddress(address, port)),
+          loadBalancingWeight, isHealthy);
     }
 
-    private LbEndpoint(EquivalentAddressGroup eag, int loadBalancingWeight, boolean isHealthy) {
+    @VisibleForTesting
+    LbEndpoint(EquivalentAddressGroup eag, int loadBalancingWeight, boolean isHealthy) {
       this.eag = eag;
       this.loadBalancingWeight = loadBalancingWeight;
       this.isHealthy = isHealthy;

@@ -24,6 +24,7 @@ import static org.mockito.Mockito.verify;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import io.envoyproxy.envoy.api.v2.core.Node;
+import io.grpc.ChannelLogger;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.ResolutionResult;
 import io.grpc.NameResolver.ServiceConfigParser;
@@ -69,6 +70,7 @@ public class XdsNameResolverTest {
           .setProxyDetector(GrpcUtil.NOOP_PROXY_DETECTOR)
           .setSynchronizationContext(syncContext)
           .setServiceConfigParser(mock(ServiceConfigParser.class))
+          .setChannelLogger(mock(ChannelLogger.class))
           .build();
 
   private final XdsNameResolverProvider provider = new XdsNameResolverProvider();
@@ -108,9 +110,12 @@ public class XdsNameResolverTest {
     final ChannelCreds googleDefaultCreds = new ChannelCreds("google_default", null);
     Bootstrapper bootstrapper = new Bootstrapper() {
       @Override
-      BootstrapInfo readBootstrap() {
-        return new BootstrapInfo("trafficdirector.googleapis.com",
-            ImmutableList.of(loasCreds, googleDefaultCreds), FAKE_BOOTSTRAP_NODE);
+      public BootstrapInfo readBootstrap() {
+        List<ServerInfo> serverList =
+            ImmutableList.of(
+                new ServerInfo("trafficdirector.googleapis.com",
+                    ImmutableList.of(loasCreds, googleDefaultCreds)));
+        return new BootstrapInfo(serverList, FAKE_BOOTSTRAP_NODE);
       }
     };
     XdsNameResolver resolver = new XdsNameResolver("foo.googleapis.com", bootstrapper);
@@ -131,8 +136,6 @@ public class XdsNameResolverTest {
     Map<String, ?> rawConfigValues = (Map<String, ?>) xdsLbConfig.get("xds_experimental");
     assertThat(rawConfigValues)
         .containsExactly(
-            "balancerName",
-            "trafficdirector.googleapis.com",
             "childPolicy",
             Collections.singletonList(
                 Collections.singletonMap("round_robin", Collections.EMPTY_MAP)));
@@ -142,10 +145,28 @@ public class XdsNameResolverTest {
   }
 
   @Test
+  public void resolve_bootstrapProvidesNoTrafficDirectorInfo() {
+    Bootstrapper bootstrapper = new Bootstrapper() {
+      @Override
+      public BootstrapInfo readBootstrap() {
+        return new BootstrapInfo(ImmutableList.<ServerInfo>of(), FAKE_BOOTSTRAP_NODE);
+      }
+    };
+
+    XdsNameResolver resolver = new XdsNameResolver("foo.googleapis.com", bootstrapper);
+    resolver.start(mockListener);
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
+    verify(mockListener).onError(statusCaptor.capture());
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat(statusCaptor.getValue().getDescription())
+        .isEqualTo("No traffic director provided by bootstrap");
+  }
+
+  @Test
   public void resolve_failToBootstrap() {
     Bootstrapper bootstrapper = new Bootstrapper() {
       @Override
-      BootstrapInfo readBootstrap() throws Exception {
+      public BootstrapInfo readBootstrap() throws IOException {
         throw new IOException("Fail to read bootstrap file");
       }
     };

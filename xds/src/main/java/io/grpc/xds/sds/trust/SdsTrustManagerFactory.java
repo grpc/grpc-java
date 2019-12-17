@@ -16,7 +16,6 @@
 
 package io.grpc.xds.sds.trust;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
@@ -54,19 +53,27 @@ public final class SdsTrustManagerFactory extends SimpleTrustManagerFactory {
   public SdsTrustManagerFactory(CertificateValidationContext certificateValidationContext)
       throws CertificateException, IOException, CertStoreException {
     checkNotNull(certificateValidationContext, "certificateValidationContext");
-    String certsFile = getTrustedCaFromCertContext(certificateValidationContext);
-    checkState(!Strings.isNullOrEmpty(certsFile),
-        "trustedCa.file-name in certificateValidationContext cannot be empty");
     createSdsX509TrustManager(
-        CertificateUtils.toX509Certificates(new File(certsFile)), certificateValidationContext);
+        getTrustedCaFromCertContext(certificateValidationContext), certificateValidationContext);
   }
 
-  private static String getTrustedCaFromCertContext(
-      CertificateValidationContext certificateValidationContext) {
-    checkArgument(
-        certificateValidationContext.getTrustedCa().getSpecifierCase() == SpecifierCase.FILENAME,
-        "filename expected");
-    return certificateValidationContext.getTrustedCa().getFilename();
+  private static X509Certificate[] getTrustedCaFromCertContext(
+      CertificateValidationContext certificateValidationContext)
+      throws CertificateException, IOException {
+    final SpecifierCase specifierCase =
+        certificateValidationContext.getTrustedCa().getSpecifierCase();
+    if (specifierCase == SpecifierCase.FILENAME) {
+      String certsFile = certificateValidationContext.getTrustedCa().getFilename();
+      checkState(
+          !Strings.isNullOrEmpty(certsFile),
+          "trustedCa.file-name in certificateValidationContext cannot be empty");
+      return CertificateUtils.toX509Certificates(new File(certsFile));
+    } else if (specifierCase == SpecifierCase.INLINE_BYTES) {
+      return CertificateUtils.toX509Certificates(
+          certificateValidationContext.getTrustedCa().getInlineBytes().newInput());
+    } else {
+      throw new IllegalArgumentException("Not supported: " + specifierCase);
+    }
   }
 
   private void createSdsX509TrustManager(

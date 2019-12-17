@@ -33,3 +33,7 @@ popd
 readonly MVN_ARTIFACT_DIR="${MVN_ARTIFACT_DIR:-$GRPC_JAVA_DIR/mvn-artifacts}"
 mkdir -p "$MVN_ARTIFACT_DIR"
 cp -r "$LOCAL_MVN_TEMP"/* "$MVN_ARTIFACT_DIR"/
+
+# for aarch64 platform
+sudo apt-get install -y g++-aarch64-linux-gnu
+SKIP_TESTS=true ARCH=aarch_64 "$GRPC_JAVA_DIR"/buildscripts/kokoro/unix.sh

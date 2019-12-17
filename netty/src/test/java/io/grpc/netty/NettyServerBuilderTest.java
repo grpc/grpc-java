@@ -94,7 +94,7 @@ public class NettyServerBuilderTest {
   @Test
   public void failIfMaxInboundMetadataSizeNonPositive() {
     thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("maxInboundMetadataSize must be > 0");
+    thrown.expectMessage("maxInboundMetadataSize must be positive");
 
     builder.maxInboundMetadataSize(0);
   }

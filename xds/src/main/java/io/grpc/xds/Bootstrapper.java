@@ -23,6 +23,8 @@ import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
 import io.envoyproxy.envoy.api.v2.core.Locality;
 import io.envoyproxy.envoy.api.v2.core.Node;
+import io.grpc.Internal;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.JsonUtil;
 import java.io.IOException;
@@ -35,131 +37,108 @@ import java.util.List;
 import java.util.Map;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Loads configuration information to bootstrap gRPC's integration of xDS protocol.
  */
-@ThreadSafe
-abstract class Bootstrapper {
+@Internal
+public abstract class Bootstrapper {
 
   private static final String BOOTSTRAP_PATH_SYS_ENV_VAR = "GRPC_XDS_BOOTSTRAP";
 
-  static Bootstrapper newInsatnce() {
-    return new FileBasedBootstrapper();
+  private static final Bootstrapper DEFAULT_INSTANCE = new Bootstrapper() {
+    @Override
+    public BootstrapInfo readBootstrap() throws IOException {
+      String filePath = System.getenv(BOOTSTRAP_PATH_SYS_ENV_VAR);
+      if (filePath == null) {
+        throw
+            new IOException("Environment variable " + BOOTSTRAP_PATH_SYS_ENV_VAR + " not defined.");
+      }
+      return parseConfig(
+          new String(Files.readAllBytes(Paths.get(filePath)), StandardCharsets.UTF_8));
+    }
+  };
+
+  public static Bootstrapper getInstance() {
+    return DEFAULT_INSTANCE;
   }
 
   /**
    * Returns configurations from bootstrap.
    */
-  abstract BootstrapInfo readBootstrap() throws Exception;
-
-  private static final class FileBasedBootstrapper extends Bootstrapper {
-
-    private static volatile Exception failToBootstrapException;
-    private static volatile BootstrapInfo bootstrapInfo;
-
-    @Override
-    BootstrapInfo readBootstrap() throws Exception {
-      if (bootstrapInfo == null && failToBootstrapException == null) {
-        synchronized (FileBasedBootstrapper.class) {
-          if (bootstrapInfo == null && failToBootstrapException == null) {
-            try {
-              String filePath = System.getenv(BOOTSTRAP_PATH_SYS_ENV_VAR);
-              if (filePath == null) {
-                throw
-                    new IOException("Environment variable " + BOOTSTRAP_PATH_SYS_ENV_VAR
-                        + " not found.");
-              }
-              bootstrapInfo =
-                  parseConfig(new String(Files.readAllBytes(Paths.get(filePath)),
-                      StandardCharsets.UTF_8));
-            } catch (Exception e) {
-              failToBootstrapException = e;
-            }
-          }
-        }
-      }
-      if (failToBootstrapException != null) {
-        throw new IOException(failToBootstrapException);
-      }
-      return bootstrapInfo;
-    }
-  }
+  public abstract BootstrapInfo readBootstrap() throws IOException;
 
   @VisibleForTesting
   static BootstrapInfo parseConfig(String rawData) throws IOException {
     @SuppressWarnings("unchecked")
     Map<String, ?> rawBootstrap = (Map<String, ?>) JsonParser.parse(rawData);
 
-    Map<String, ?> rawServerConfig = JsonUtil.getObject(rawBootstrap, "xds_server");
-    if (rawServerConfig == null) {
-      throw new IOException("Invalid bootstrap: 'xds_server' does not exist.");
+    List<ServerInfo> servers = new ArrayList<>();
+    List<?> rawServerConfigs = JsonUtil.getList(rawBootstrap, "xds_servers");
+    if (rawServerConfigs == null) {
+      throw new IOException("Invalid bootstrap: 'xds_servers' does not exist.");
     }
-    // Field "server_uri" is required.
-    String serverUri = JsonUtil.getString(rawServerConfig, "server_uri");
-    if (serverUri == null) {
-      throw new IOException("Invalid bootstrap: 'xds_server : server_uri' does not exist.");
-    }
-    List<ChannelCreds> channelCredsOptions = new ArrayList<>();
-    List<?> rawChannelCredsList = JsonUtil.getList(rawServerConfig, "channel_creds");
-    // List of channel creds is optional.
-    if (rawChannelCredsList != null) {
-      List<Map<String, ?>> channelCredsList = JsonUtil.checkObjectList(rawChannelCredsList);
-      for (Map<String, ?> channelCreds : channelCredsList) {
-        String type = JsonUtil.getString(channelCreds, "type");
-        if (type == null) {
-          throw new IOException("Invalid bootstrap: 'channel_creds' contains unknown type.");
+    List<Map<String, ?>> serverConfigList = JsonUtil.checkObjectList(rawServerConfigs);
+    for (Map<String, ?> serverConfig : serverConfigList) {
+      String serverUri = JsonUtil.getString(serverConfig, "server_uri");
+      if (serverUri == null) {
+        throw new IOException("Invalid bootstrap: 'xds_servers' contains unknown server.");
+      }
+      List<ChannelCreds> channelCredsOptions = new ArrayList<>();
+      List<?> rawChannelCredsList = JsonUtil.getList(serverConfig, "channel_creds");
+      // List of channel creds is optional.
+      if (rawChannelCredsList != null) {
+        List<Map<String, ?>> channelCredsList = JsonUtil.checkObjectList(rawChannelCredsList);
+        for (Map<String, ?> channelCreds : channelCredsList) {
+          String type = JsonUtil.getString(channelCreds, "type");
+          if (type == null) {
+            throw new IOException("Invalid bootstrap: 'xds_servers' contains server with "
+                + "unknown type 'channel_creds'.");
+          }
+          ChannelCreds creds = new ChannelCreds(type, JsonUtil.getObject(channelCreds, "config"));
+          channelCredsOptions.add(creds);
         }
-        ChannelCreds creds = new ChannelCreds(type, JsonUtil.getObject(channelCreds, "config"));
-        channelCredsOptions.add(creds);
       }
+      servers.add(new ServerInfo(serverUri, channelCredsOptions));
     }
 
-    Map<String, ?> rawNode = JsonUtil.getObject(rawBootstrap, "node");
-    if (rawNode == null) {
-      throw new IOException("Invalid bootstrap: 'node' does not exist.");
-    }
-    // Fields in "node" are not checked.
     Node.Builder nodeBuilder = Node.newBuilder();
-    String id = JsonUtil.getString(rawNode, "id");
-    if (id != null) {
-      nodeBuilder.setId(id);
-    }
-    String cluster = JsonUtil.getString(rawNode, "cluster");
-    if (cluster != null) {
-      nodeBuilder.setCluster(cluster);
-    }
-    Map<String, ?> metadata = JsonUtil.getObject(rawNode, "metadata");
-    if (metadata != null) {
-      Struct.Builder structBuilder = Struct.newBuilder();
-      for (Map.Entry<String, ?> entry : metadata.entrySet()) {
-        structBuilder.putFields(entry.getKey(), convertToValue(entry.getValue()));
+    Map<String, ?> rawNode = JsonUtil.getObject(rawBootstrap, "node");
+    if (rawNode != null) {
+      String id = JsonUtil.getString(rawNode, "id");
+      if (id != null) {
+        nodeBuilder.setId(id);
       }
-      nodeBuilder.setMetadata(structBuilder);
-    }
-    Map<String, ?> rawLocality = JsonUtil.getObject(rawNode, "locality");
-    if (rawLocality != null) {
-      Locality.Builder localityBuilder = Locality.newBuilder();
-      String region = JsonUtil.getString(rawLocality, "region");
-      if (region == null) {
-        throw new IOException("Invalid bootstrap: malformed 'node : locality'.");
+      String cluster = JsonUtil.getString(rawNode, "cluster");
+      if (cluster != null) {
+        nodeBuilder.setCluster(cluster);
       }
-      localityBuilder.setRegion(region);
-      if (rawLocality.containsKey("zone")) {
-        localityBuilder.setZone(JsonUtil.getString(rawLocality, "zone"));
+      Map<String, ?> metadata = JsonUtil.getObject(rawNode, "metadata");
+      if (metadata != null) {
+        Struct.Builder structBuilder = Struct.newBuilder();
+        for (Map.Entry<String, ?> entry : metadata.entrySet()) {
+          structBuilder.putFields(entry.getKey(), convertToValue(entry.getValue()));
+        }
+        nodeBuilder.setMetadata(structBuilder);
       }
-      if (rawLocality.containsKey("sub_zone")) {
-        localityBuilder.setSubZone(JsonUtil.getString(rawLocality, "sub_zone"));
+      Map<String, ?> rawLocality = JsonUtil.getObject(rawNode, "locality");
+      if (rawLocality != null) {
+        Locality.Builder localityBuilder = Locality.newBuilder();
+        if (rawLocality.containsKey("region")) {
+          localityBuilder.setRegion(JsonUtil.getString(rawLocality, "region"));
+        }
+        if (rawLocality.containsKey("zone")) {
+          localityBuilder.setZone(JsonUtil.getString(rawLocality, "zone"));
+        }
+        if (rawLocality.containsKey("sub_zone")) {
+          localityBuilder.setSubZone(JsonUtil.getString(rawLocality, "sub_zone"));
+        }
+        nodeBuilder.setLocality(localityBuilder);
       }
-      nodeBuilder.setLocality(localityBuilder);
     }
-    String buildVersion = JsonUtil.getString(rawNode, "build_version");
-    if (buildVersion != null) {
-      nodeBuilder.setBuildVersion(buildVersion);
-    }
+    nodeBuilder.setBuildVersion(GrpcUtil.getGrpcBuildVersion());
 
-    return new BootstrapInfo(serverUri, channelCredsOptions, nodeBuilder.build());
+    return new BootstrapInfo(servers, nodeBuilder.build());
   }
 
   /**
@@ -229,40 +208,56 @@ abstract class Bootstrapper {
   }
 
   /**
+   * Data class containing xDS server information, such as server URI and channel credential
+   * options to be used for communication.
+   */
+  @Immutable
+  static class ServerInfo {
+    private final String serverUri;
+    private final List<ChannelCreds> channelCredsList;
+
+    @VisibleForTesting
+    ServerInfo(String serverUri, List<ChannelCreds> channelCredsList) {
+      this.serverUri = serverUri;
+      this.channelCredsList = channelCredsList;
+    }
+
+    String getServerUri() {
+      return serverUri;
+    }
+
+    List<ChannelCreds> getChannelCredentials() {
+      return Collections.unmodifiableList(channelCredsList);
+    }
+  }
+
+  /**
    * Data class containing the results of reading bootstrap.
    */
   @Immutable
-  static class BootstrapInfo {
-    private final String serverUri;
-    private final List<ChannelCreds> channelCredsList;
+  public static class BootstrapInfo {
+    private List<ServerInfo> servers;
     private final Node node;
 
     @VisibleForTesting
-    BootstrapInfo(String serverUri, List<ChannelCreds> channelCredsList, Node node) {
-      this.serverUri = serverUri;
-      this.channelCredsList = channelCredsList;
+    BootstrapInfo(List<ServerInfo> servers, Node node) {
+      this.servers = servers;
       this.node = node;
     }
 
     /**
-     * Returns the URI the traffic director to be connected to.
+     * Returns the list of xDS servers to be connected to.
      */
-    String getServerUri() {
-      return serverUri;
+    List<ServerInfo> getServers() {
+      return Collections.unmodifiableList(servers);
     }
 
     /**
      * Returns the node identifier to be included in xDS requests.
      */
-    Node getNode() {
+    public Node getNode() {
       return node;
     }
 
-    /**
-     * Returns the credentials to use when communicating with the xDS server.
-     */
-    List<ChannelCreds> getChannelCredentials() {
-      return Collections.unmodifiableList(channelCredsList);
-    }
   }
 }

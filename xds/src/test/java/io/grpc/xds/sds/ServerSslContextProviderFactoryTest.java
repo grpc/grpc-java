@@ -62,7 +62,7 @@ public class ServerSslContextProviderFactoryTest {
     } catch (UnsupportedOperationException expected) {
       assertThat(expected)
           .hasMessageThat()
-          .isEqualTo("DownstreamTlsContext using SDS not supported");
+          .isEqualTo("DownstreamTlsContext to have all filenames or all SdsConfig");
     }
   }
 
@@ -81,7 +81,7 @@ public class ServerSslContextProviderFactoryTest {
     } catch (UnsupportedOperationException expected) {
       assertThat(expected)
           .hasMessageThat()
-          .isEqualTo("DownstreamTlsContext using SDS not supported");
+          .isEqualTo("DownstreamTlsContext to have all filenames or all SdsConfig");
     }
   }
 }

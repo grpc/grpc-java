@@ -28,14 +28,12 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import io.grpc.ConnectivityState;
-import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.ResolvedAddresses;
-import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
@@ -72,15 +70,30 @@ interface LocalityStore {
 
   void reset();
 
-  void updateLocalityStore(ImmutableMap<Locality, LocalityLbEndpoints> localityInfoMap);
+  void updateLocalityStore(Map<Locality, LocalityLbEndpoints> localityInfoMap);
 
-  void updateDropPercentage(ImmutableList<DropOverload> dropOverloads);
-
-  void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState);
+  void updateDropPercentage(List<DropOverload> dropOverloads);
 
   void updateOobMetricsReportInterval(long reportIntervalNano);
 
-  LoadStatsStore getLoadStatsStore();
+  @VisibleForTesting
+  abstract class LocalityStoreFactory {
+    private static final LocalityStoreFactory DEFAULT_INSTANCE =
+        new LocalityStoreFactory() {
+          @Override
+          LocalityStore newLocalityStore(
+              Helper helper, LoadBalancerRegistry lbRegistry, LoadStatsStore loadStatsStore) {
+            return new LocalityStoreImpl(helper, lbRegistry, loadStatsStore);
+          }
+        };
+
+    static LocalityStoreFactory getInstance() {
+      return DEFAULT_INSTANCE;
+    }
+
+    abstract LocalityStore newLocalityStore(
+        Helper helper, LoadBalancerRegistry lbRegistry, LoadStatsStore loadStatsStore);
+  }
 
   final class LocalityStoreImpl implements LocalityStore {
     private static final String ROUND_ROBIN = "round_robin";
@@ -97,12 +110,13 @@ interface LocalityStore {
     private final Map<Locality, LocalityLbInfo> localityMap = new HashMap<>();
     // Most current set of localities instructed by traffic director
     private Set<Locality> localities = ImmutableSet.of();
-    private ImmutableList<DropOverload> dropOverloads = ImmutableList.of();
+    private List<DropOverload> dropOverloads = ImmutableList.of();
     private long metricsReportIntervalNano = -1;
 
-    LocalityStoreImpl(Helper helper, LoadBalancerRegistry lbRegistry) {
+    LocalityStoreImpl(
+        Helper helper, LoadBalancerRegistry lbRegistry, LoadStatsStore loadStatsStore) {
       this(helper, pickerFactoryImpl, lbRegistry, ThreadSafeRandom.ThreadSafeRandomImpl.instance,
-          new LoadStatsStoreImpl(), OrcaPerRequestUtil.getInstance(), OrcaOobUtil.getInstance());
+          loadStatsStore, OrcaPerRequestUtil.getInstance(), OrcaOobUtil.getInstance());
     }
 
     @VisibleForTesting
@@ -132,13 +146,13 @@ interface LocalityStore {
 
     private static final class DroppablePicker extends SubchannelPicker {
 
-      final ImmutableList<DropOverload> dropOverloads;
+      final List<DropOverload> dropOverloads;
       final SubchannelPicker delegate;
       final ThreadSafeRandom random;
       final LoadStatsStore loadStatsStore;
 
       DroppablePicker(
-          ImmutableList<DropOverload> dropOverloads, SubchannelPicker delegate,
+          List<DropOverload> dropOverloads, SubchannelPicker delegate,
           ThreadSafeRandom random, LoadStatsStore loadStatsStore) {
         this.dropOverloads = dropOverloads;
         this.delegate = delegate;
@@ -176,16 +190,6 @@ interface LocalityStore {
           }
         };
 
-    // This is triggered by xdsLoadbalancer.handleSubchannelState
-    @Override
-    public void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
-      // delegate to the childBalancer who manages this subchannel
-      for (LocalityLbInfo localityLbInfo : localityMap.values()) {
-        // This will probably trigger childHelper.updateBalancingState
-        localityLbInfo.childBalancer.handleSubchannelState(subchannel, newState);
-      }
-    }
-
     @Override
     public void reset() {
       for (Locality locality : localityMap.keySet()) {
@@ -204,28 +208,15 @@ interface LocalityStore {
     // This is triggered by EDS response.
     @Override
     public void updateLocalityStore(
-        final ImmutableMap<Locality, LocalityLbEndpoints> localityInfoMap) {
+        final Map<Locality, LocalityLbEndpoints> localityInfoMap) {
 
       Set<Locality> newLocalities = localityInfoMap.keySet();
       // TODO: put endPointWeights into attributes for WRR.
       for (Locality locality : newLocalities) {
         if (localityMap.containsKey(locality)) {
-          final LocalityLbInfo localityLbInfo = localityMap.get(locality);
-          LocalityLbEndpoints localityInfo = localityInfoMap.get(locality);
-          final List<EquivalentAddressGroup> eags = new ArrayList<>();
-          for (LbEndpoint endpoint: localityInfo.getEndpoints()) {
-            eags.add(endpoint.getAddress());
-          }
-          // In extreme case handleResolvedAddresses() may trigger updateBalancingState()
-          // immediately, so execute handleResolvedAddresses() after all the setup in this method is
-          // complete.
-          helper.getSynchronizationContext().execute(new Runnable() {
-            @Override
-            public void run() {
-              localityLbInfo.childBalancer.handleResolvedAddresses(
-                  ResolvedAddresses.newBuilder().setAddresses(eags).build());
-            }
-          });
+          LocalityLbInfo localityLbInfo = localityMap.get(locality);
+          LocalityLbEndpoints localityLbEndpoints = localityInfoMap.get(locality);
+          handleEagsOnChildBalancer(helper, localityLbInfo, localityLbEndpoints, locality);
         }
       }
 
@@ -265,7 +256,7 @@ interface LocalityStore {
     }
 
     @Override
-    public void updateDropPercentage(ImmutableList<DropOverload> dropOverloads) {
+    public void updateDropPercentage(List<DropOverload> dropOverloads) {
       this.dropOverloads = checkNotNull(dropOverloads, "dropOverloads");
     }
 
@@ -292,11 +283,6 @@ interface LocalityStore {
       localityLbInfo.delayedDeletionTimer = helper.getSynchronizationContext().schedule(
           new DeletionTask(), DELAYED_DELETION_TIMEOUT_MINUTES,
           TimeUnit.MINUTES, helper.getScheduledExecutorService());
-    }
-
-    @Override
-    public LoadStatsStore getLoadStatsStore() {
-      return loadStatsStore;
     }
 
     @Override
@@ -586,33 +572,48 @@ interface LocalityStore {
         updatePriorityState(currentPriority);
       }
 
-      private void initLocality(final Locality locality) {
+      private void initLocality(Locality locality) {
         ChildHelper childHelper =
             new ChildHelper(locality, loadStatsStore.getLocalityCounter(locality),
                 orcaOobUtil);
-        final LocalityLbInfo localityLbInfo =
+        LocalityLbInfo localityLbInfo =
             new LocalityLbInfo(
                 loadBalancerProvider.newLoadBalancer(childHelper),
                 childHelper);
         localityMap.put(locality, localityLbInfo);
+        LocalityLbEndpoints localityLbEndpoints = localityInfoMap.get(locality);
+        handleEagsOnChildBalancer(childHelper, localityLbInfo, localityLbEndpoints, locality);
+      }
+    }
 
-        LocalityLbEndpoints localityInfo = localityInfoMap.get(locality);
-        final List<EquivalentAddressGroup> eags = new ArrayList<>();
-        for (LbEndpoint endpoint: localityInfo.getEndpoints()) {
+    private static void handleEagsOnChildBalancer(
+        Helper childHelper, final LocalityLbInfo localityLbInfo,
+        final LocalityLbEndpoints localityLbEndpoints, final Locality locality) {
+      final List<EquivalentAddressGroup> eags = new ArrayList<>();
+      for (LbEndpoint endpoint : localityLbEndpoints.getEndpoints()) {
+        if (endpoint.isHealthy()) {
           eags.add(endpoint.getAddress());
         }
-        // In extreme case handleResolvedAddresses() may trigger updateBalancingState() immediately,
-        // so execute handleResolvedAddresses() after all the setup in the caller is complete.
-        helper.getSynchronizationContext().execute(new Runnable() {
-          @Override
-          public void run() {
-            // TODO: put endPointWeights into attributes for WRR.
+      }
+      // In extreme case handleResolvedAddresses() may trigger updateBalancingState()
+      // immediately, so execute handleResolvedAddresses() after all the setup in the caller is
+      // complete.
+      childHelper.getSynchronizationContext().execute(new Runnable() {
+        @Override
+        public void run() {
+          if (eags.isEmpty()
+              && !localityLbInfo.childBalancer.canHandleEmptyAddressListFromNameResolution()) {
+            localityLbInfo.childBalancer.handleNameResolutionError(
+                Status.UNAVAILABLE.withDescription(
+                    "No healthy address available from EDS update '" + localityLbEndpoints
+                        + "' for locality '" + locality + "'"));
+          } else {
             localityLbInfo.childBalancer
                 .handleResolvedAddresses(ResolvedAddresses.newBuilder()
                     .setAddresses(eags).build());
           }
-        });
-      }
+        }
+      });
     }
   }
 }

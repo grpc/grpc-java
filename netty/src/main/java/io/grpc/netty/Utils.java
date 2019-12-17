@@ -34,6 +34,8 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.netty.GrpcHttp2HeadersUtils.GrpcHttp2InboundHeaders;
 import io.grpc.netty.NettySocketSupport.NativeSocketOptions;
+import io.netty.buffer.ByteBufAllocator;
+import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelConfig;
 import io.netty.channel.ChannelFactory;
@@ -47,6 +49,7 @@ import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.http2.Http2Exception;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.util.AsciiString;
+import io.netty.util.NettyRuntime;
 import io.netty.util.concurrent.DefaultThreadFactory;
 import java.io.IOException;
 import java.lang.reflect.Constructor;
@@ -83,6 +86,38 @@ class Utils {
   public static final Resource<EventLoopGroup> DEFAULT_BOSS_EVENT_LOOP_GROUP;
   public static final Resource<EventLoopGroup> DEFAULT_WORKER_EVENT_LOOP_GROUP;
 
+  // This class is initialized on first use, thus provides delayed allocator creation.
+  private static final class ByteBufAllocatorHolder {
+    private static final ByteBufAllocator allocator;
+
+    static {
+      if (Boolean.parseBoolean(
+              System.getProperty("io.grpc.netty.useCustomAllocator", "false"))) {
+        int maxOrder;
+        if (System.getProperty("io.netty.allocator.maxOrder") == null) {
+          // See the implementation of PooledByteBufAllocator.  DEFAULT_MAX_ORDER in there is
+          // 11, which makes chunk size to be 8192 << 11 = 16 MiB.  We want the chunk size to be
+          // 2MiB, thus reducing the maxOrder to 8.
+          maxOrder = 8;
+        } else {
+          maxOrder = PooledByteBufAllocator.defaultMaxOrder();
+        }
+        allocator = new PooledByteBufAllocator(
+            PooledByteBufAllocator.defaultPreferDirect(),
+            PooledByteBufAllocator.defaultNumHeapArena(),
+            PooledByteBufAllocator.defaultNumDirectArena(),
+            PooledByteBufAllocator.defaultPageSize(),
+            maxOrder,
+            PooledByteBufAllocator.defaultTinyCacheSize(),
+            PooledByteBufAllocator.defaultSmallCacheSize(),
+            PooledByteBufAllocator.defaultNormalCacheSize(),
+            PooledByteBufAllocator.defaultUseCacheForAllThreads());
+      } else {
+        allocator = ByteBufAllocator.DEFAULT;
+      }
+    }
+  }
+
   public static final ChannelFactory<? extends ServerChannel> DEFAULT_SERVER_CHANNEL_FACTORY;
   public static final Class<? extends Channel> DEFAULT_CLIENT_CHANNEL_TYPE;
 
@@ -107,6 +142,10 @@ class Utils {
       DEFAULT_WORKER_EVENT_LOOP_GROUP = NIO_WORKER_EVENT_LOOP_GROUP;
       EPOLL_EVENT_LOOP_GROUP_CONSTRUCTOR = null;
     }
+  }
+
+  public static ByteBufAllocator getByteBufAllocator() {
+    return ByteBufAllocatorHolder.allocator;
   }
 
   public static Metadata convertHeaders(Http2Headers http2Headers) {
@@ -334,7 +373,16 @@ class Utils {
     DefaultEventLoopGroupResource(
         int numEventLoops, String name, EventLoopGroupType eventLoopGroupType) {
       this.name = name;
-      this.numEventLoops = numEventLoops;
+      // See the implementation of MultithreadEventLoopGroup.  DEFAULT_EVENT_LOOP_THREADS there
+      // defaults to NettyRuntime.availableProcessors() * 2.  We don't think we need that many
+      // threads.  The overhead of a thread includes file descriptors and at least one chunk
+      // allocation from PooledByteBufAllocator.  Here we reduce the default number of threads by
+      // half.
+      if (numEventLoops == 0 && System.getProperty("io.netty.eventLoopThreads") == null) {
+        this.numEventLoops = NettyRuntime.availableProcessors();
+      } else {
+        this.numEventLoops = numEventLoops;
+      }
       this.eventLoopGroupType = eventLoopGroupType;
     }
 

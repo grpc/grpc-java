@@ -18,6 +18,7 @@ package io.grpc.netty;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_AGE_NANOS_DISABLED;
+import static io.netty.channel.ChannelOption.ALLOCATOR;
 import static io.netty.channel.ChannelOption.SO_BACKLOG;
 import static io.netty.channel.ChannelOption.SO_KEEPALIVE;
 
@@ -87,7 +88,8 @@ class NettyServer implements InternalServer, InternalWithLogId {
   private final long maxConnectionAgeGraceInNanos;
   private final boolean permitKeepAliveWithoutCalls;
   private final long permitKeepAliveTimeInNanos;
-  private final ReferenceCounted eventLoopReferenceCounter = new EventLoopReferenceCounter();
+  private final ReferenceCounted sharedResourceReferenceCounter =
+      new SharedResourceReferenceCounter();
   private final List<? extends ServerStreamTracer.Factory> streamTracerFactories;
   private final TransportTracer.Factory transportTracerFactory;
   private final InternalChannelz channelz;
@@ -155,6 +157,8 @@ class NettyServer implements InternalServer, InternalWithLogId {
     listener = checkNotNull(serverListener, "serverListener");
 
     ServerBootstrap b = new ServerBootstrap();
+    b.option(ALLOCATOR, Utils.getByteBufAllocator());
+    b.childOption(ALLOCATOR, Utils.getByteBufAllocator());
     b.group(bossGroup, workerGroup);
     b.channelFactory(channelFactory);
     // For non-socket based channel, the option will be ignored.
@@ -210,7 +214,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
           }
           // `channel` shutdown can race with `ch` initialization, so this is only safe to increment
           // inside the lock.
-          eventLoopReferenceCounter.retain();
+          sharedResourceReferenceCounter.retain();
           transportListener = listener.transportCreated(transport);
         }
 
@@ -224,7 +228,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
           public void operationComplete(ChannelFuture future) throws Exception {
             if (!done) {
               done = true;
-              eventLoopReferenceCounter.release();
+              sharedResourceReferenceCounter.release();
             }
           }
         }
@@ -278,10 +282,11 @@ class NettyServer implements InternalServer, InternalWithLogId {
         if (stats != null) {
           channelz.removeListenSocket(stats);
         }
+        sharedResourceReferenceCounter.release();
+        protocolNegotiator.close();
         synchronized (NettyServer.this) {
           listener.serverShutdown();
         }
-        eventLoopReferenceCounter.release();
       }
     });
     try {
@@ -305,7 +310,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
         .toString();
   }
 
-  class EventLoopReferenceCounter extends AbstractReferenceCounted {
+  class SharedResourceReferenceCounter extends AbstractReferenceCounted {
     @Override
     protected void deallocate() {
       try {

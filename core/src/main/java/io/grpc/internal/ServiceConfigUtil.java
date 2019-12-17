@@ -48,8 +48,6 @@ public final class ServiceConfigUtil {
   private static final String SERVICE_CONFIG_METHOD_CONFIG_KEY = "methodConfig";
   private static final String SERVICE_CONFIG_LOAD_BALANCING_POLICY_KEY = "loadBalancingPolicy";
   private static final String SERVICE_CONFIG_LOAD_BALANCING_CONFIG_KEY = "loadBalancingConfig";
-  // TODO(chengyuanzhang): delete this key after shifting to use bootstrap.
-  private static final String XDS_CONFIG_BALANCER_NAME_KEY = "balancerName";
   private static final String XDS_CONFIG_CHILD_POLICY_KEY = "childPolicy";
   private static final String XDS_CONFIG_FALLBACK_POLICY_KEY = "fallbackPolicy";
   private static final String XDS_CONFIG_EDS_SERVICE_NAME = "edsServiceName";
@@ -363,7 +361,6 @@ public final class ServiceConfigUtil {
       "loadBalancingConfig": [
         {"xds" :
           {
-            "balancerName": "balancer1",
             "childPolicy": [...],
             "fallbackPolicy": [...],
           }
@@ -418,14 +415,6 @@ public final class ServiceConfigUtil {
       result.add(unwrapLoadBalancingConfig(rawChildPolicy));
     }
     return Collections.unmodifiableList(result);
-  }
-
-  /**
-   * Extracts the loadbalancer name from xds loadbalancer config.
-   */
-  // TODO(chengyuanzhang): delete after shifting to use bootstrap.
-  public static String getBalancerNameFromXdsConfig(Map<String, ?> rawXdsConfig) {
-    return JsonUtil.getString(rawXdsConfig, XDS_CONFIG_BALANCER_NAME_KEY);
   }
 
   /**

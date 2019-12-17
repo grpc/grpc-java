@@ -22,13 +22,19 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import com.google.common.collect.Lists;
+import com.google.common.io.ByteStreams;
 import io.grpc.Metadata.Key;
 import io.grpc.internal.GrpcUtil;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.Locale;
@@ -59,9 +65,59 @@ public class MetadataTest {
     }
   };
 
+  private static class FishStreamMarsaller implements Metadata.BinaryStreamMarshaller<Fish> {
+    @Override
+    public InputStream toStream(Fish fish) {
+      return new ByteArrayInputStream(FISH_MARSHALLER.toBytes(fish));
+    }
+
+    @Override
+    public Fish parseStream(InputStream stream) {
+      try {
+        return FISH_MARSHALLER.parseBytes(ByteStreams.toByteArray(stream));
+      } catch (IOException ioe) {
+        throw new AssertionError();
+      }
+    }
+  }
+
+  private static final Metadata.BinaryStreamMarshaller<Fish> FISH_STREAM_MARSHALLER =
+      new FishStreamMarsaller();
+
+  /** A pattern commonly used to avoid unnecessary serialization of immutable objects. */
+  private static final class FakeFishStream extends InputStream {
+    final Fish fish;
+
+    FakeFishStream(Fish fish) {
+      this.fish = fish;
+    }
+
+    @Override
+    public int read() throws IOException {
+      throw new IOException("Not actually a stream");
+    }
+  }
+
+  private static final Metadata.BinaryStreamMarshaller<Fish> IMMUTABLE_FISH_MARSHALLER =
+      new Metadata.BinaryStreamMarshaller<Fish>() {
+    @Override
+    public InputStream toStream(Fish fish) {
+      return new FakeFishStream(fish);
+    }
+
+    @Override
+    public Fish parseStream(InputStream stream) {
+      return ((FakeFishStream) stream).fish;
+    }
+  };
+
   private static final String LANCE = "lance";
   private static final byte[] LANCE_BYTES = LANCE.getBytes(US_ASCII);
   private static final Metadata.Key<Fish> KEY = Metadata.Key.of("test-bin", FISH_MARSHALLER);
+  private static final Metadata.Key<Fish> KEY_STREAMED =
+      Key.of("streamed-bin", FISH_STREAM_MARSHALLER);
+  private static final Metadata.Key<Fish> KEY_IMMUTABLE =
+      Key.of("immutable-bin", IMMUTABLE_FISH_MARSHALLER);
 
   @Test
   public void noPseudoHeaders() {
@@ -334,6 +390,95 @@ public class MetadataTest {
     }
   }
 
+  @Test
+  public void streamedValue() {
+    Fish salmon = new Fish("salmon");
+    Metadata h = new Metadata();
+    h.put(KEY_STREAMED, salmon);
+    assertEquals(salmon, h.get(KEY_STREAMED));
+  }
+
+  @Test
+  public void streamedValueDifferentKey() {
+    Fish salmon = new Fish("salmon");
+    Metadata h = new Metadata();
+    h.put(KEY_STREAMED, salmon);
+
+    // Get using a different key instance (but the same marshaller).
+    Fish fish = h.get(copyKey(KEY_STREAMED, FISH_STREAM_MARSHALLER));
+    assertEquals(salmon, fish);
+  }
+
+  @Test
+  public void streamedValueDifferentMarshaller() {
+    Fish salmon = new Fish("salmon");
+    Metadata h = new Metadata();
+    h.put(KEY_STREAMED, salmon);
+
+    // Get using a different marshaller instance.
+    Fish fish = h.get(copyKey(KEY_STREAMED, new FishStreamMarsaller()));
+    assertEquals(salmon, fish);
+  }
+
+  @Test
+  public void serializeParseMetadataWithStreams() {
+    Metadata h = new Metadata();
+    Fish salmon = new Fish("salmon");
+    h.put(KEY_STREAMED, salmon);
+
+    Metadata parsed = new Metadata(h.serialize());
+    assertEquals(salmon, parsed.get(KEY_STREAMED));
+  }
+
+  @Test
+  public void immutableMarshaller() {
+    Metadata h = new Metadata(KEY.asciiName(), LANCE_BYTES);
+    Fish salmon = new Fish("salmon");
+    h.put(KEY_IMMUTABLE, salmon);
+    assertSame(salmon, h.get(KEY_IMMUTABLE));
+    // Even though the key differs, the marshaller can chose to avoid serialization.
+    assertSame(salmon, h.get(copyKey(KEY_IMMUTABLE, IMMUTABLE_FISH_MARSHALLER)));
+  }
+
+  @Test
+  public void partialSerialization() {
+    Metadata h = new Metadata(KEY.asciiName(), LANCE_BYTES);
+    Fish salmon = new Fish("salmon");
+    h.put(KEY_STREAMED, salmon);
+    h.put(KEY_IMMUTABLE, salmon);
+
+    Object[] serialized = InternalMetadata.serializePartial(h);
+    assertEquals(6, serialized.length);
+    assertEquals("test-bin", new String((byte[]) serialized[0], US_ASCII));
+    assertArrayEquals(LANCE_BYTES, (byte[]) serialized[1]);
+
+    assertEquals("streamed-bin", new String((byte[]) serialized[2], US_ASCII));
+    assertEquals(salmon, FISH_STREAM_MARSHALLER.parseStream((InputStream) serialized[3]));
+    assertNotSame(salmon, FISH_STREAM_MARSHALLER.parseStream((InputStream) serialized[3]));
+
+    assertEquals("immutable-bin", new String((byte[]) serialized[4], US_ASCII));
+    assertSame(salmon, IMMUTABLE_FISH_MARSHALLER.parseStream((InputStream) serialized[5]));
+  }
+
+  @Test
+  public void createFromPartial() {
+    Metadata h = new Metadata(KEY.asciiName(), LANCE_BYTES);
+    Fish salmon = new Fish("salmon");
+    h.put(KEY_STREAMED, salmon);
+    h.put(KEY_IMMUTABLE, salmon);
+
+    Fish anotherSalmon = new Fish("salmon");
+
+    Object[] partial = InternalMetadata.serializePartial(h);
+    partial[3] = InternalMetadata.parsedValue(FISH_STREAM_MARSHALLER, anotherSalmon);
+    partial[5] = InternalMetadata.parsedValue(IMMUTABLE_FISH_MARSHALLER, anotherSalmon);
+
+    Metadata h2 = new Metadata(3, partial);
+    assertEquals(new Fish(LANCE), h2.get(KEY));
+    assertEquals(anotherSalmon, h2.get(KEY_STREAMED));
+    assertSame(anotherSalmon, h2.get(KEY_IMMUTABLE));
+  }
+
   private static final class Fish {
     private String name;
 
@@ -365,5 +510,9 @@ public class MetadataTest {
     public String toString() {
       return "Fish(" + name + ")";
     }
+  }
+
+  private static <T> Key<T> copyKey(Key<T> key, Metadata.BinaryStreamMarshaller<T> marshaller) {
+    return Key.of(key.originalName(), marshaller);
   }
 }

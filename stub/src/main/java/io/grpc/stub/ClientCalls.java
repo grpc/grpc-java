@@ -366,7 +366,8 @@ public final class ClientCalls {
     @Override
     public void setOnReadyHandler(Runnable onReadyHandler) {
       if (frozen) {
-        throw new IllegalStateException("Cannot alter onReadyHandler after call started");
+        throw new IllegalStateException(
+            "Cannot alter onReadyHandler after call started. Use ClientResponseObserver");
       }
       this.onReadyHandler = onReadyHandler;
     }
@@ -374,7 +375,8 @@ public final class ClientCalls {
     @Override
     public void disableAutoInboundFlowControl() {
       if (frozen) {
-        throw new IllegalStateException("Cannot disable auto flow control call started");
+        throw new IllegalStateException(
+            "Cannot disable auto flow control after call started. Use ClientResponseObserver");
       }
       autoFlowControlEnabled = false;
     }
@@ -704,4 +706,14 @@ public final class ClientCalls {
       LockSupport.unpark(waiter); // no-op if null
     }
   }
+
+  enum StubType {
+    BLOCKING, FUTURE, ASYNC
+  }
+
+  /**
+   * Internal {@link CallOptions.Key} to indicate stub types.
+   */
+  static final CallOptions.Key<StubType> STUB_TYPE_OPTION =
+      CallOptions.Key.create("internal-stub-type");
 }

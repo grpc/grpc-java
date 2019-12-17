@@ -36,6 +36,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import com.google.common.net.InetAddresses;
 import com.google.common.testing.FakeTicker;
+import io.grpc.ChannelLogger;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.HttpConnectProxiedSocketAddress;
 import io.grpc.NameResolver;
@@ -115,6 +116,7 @@ public class DnsNameResolverTest {
       .setProxyDetector(GrpcUtil.DEFAULT_PROXY_DETECTOR)
       .setSynchronizationContext(syncContext)
       .setServiceConfigParser(mock(ServiceConfigParser.class))
+      .setChannelLogger(mock(ChannelLogger.class))
       .build();
 
   private final DnsNameResolverProvider provider = new DnsNameResolverProvider();
@@ -175,6 +177,7 @@ public class DnsNameResolverTest {
             .setProxyDetector(proxyDetector)
             .setSynchronizationContext(syncContext)
             .setServiceConfigParser(mock(ServiceConfigParser.class))
+            .setChannelLogger(mock(ChannelLogger.class))
             .build();
     return newResolver(name, stopwatch, isAndroid, args);
   }
@@ -331,6 +334,7 @@ public class DnsNameResolverTest {
             .setProxyDetector(GrpcUtil.NOOP_PROXY_DETECTOR)
             .setSynchronizationContext(syncContext)
             .setServiceConfigParser(mock(ServiceConfigParser.class))
+            .setChannelLogger(mock(ChannelLogger.class))
             .setOffloadExecutor(
                 new Executor() {
                   @Override

@@ -20,6 +20,7 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 
+import io.grpc.ChannelLogger;
 import io.grpc.InternalServiceProviders;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.ServiceConfigParser;
@@ -46,6 +47,7 @@ public class XdsNameResolverProviderTest {
       .setProxyDetector(GrpcUtil.NOOP_PROXY_DETECTOR)
       .setSynchronizationContext(syncContext)
       .setServiceConfigParser(mock(ServiceConfigParser.class))
+      .setChannelLogger(mock(ChannelLogger.class))
       .build();
 
   private XdsNameResolverProvider provider = new XdsNameResolverProvider();

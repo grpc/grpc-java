@@ -305,22 +305,6 @@ public class OkHttpChannelBuilder extends
     return this;
   }
 
-  /**
-   * Equivalent to using {@link #negotiationType} with {@code PLAINTEXT}.
-   *
-   * @deprecated use {@link #usePlaintext()} instead.
-   */
-  @Override
-  @Deprecated
-  public final OkHttpChannelBuilder usePlaintext(boolean skipNegotiation) {
-    if (skipNegotiation) {
-      negotiationType(io.grpc.okhttp.NegotiationType.PLAINTEXT);
-    } else {
-      throw new IllegalArgumentException("Plaintext negotiation not currently supported");
-    }
-    return this;
-  }
-
   /** Sets the negotiation type for the HTTP/2 connection to plaintext. */
   @Override
   public final OkHttpChannelBuilder usePlaintext() {

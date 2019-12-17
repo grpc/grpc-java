@@ -17,6 +17,7 @@
 package io.grpc.netty;
 
 import static io.grpc.internal.GrpcUtil.KEEPALIVE_TIME_NANOS_DISABLED;
+import static io.netty.channel.ChannelOption.ALLOCATOR;
 import static io.netty.channel.ChannelOption.SO_KEEPALIVE;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -225,6 +226,7 @@ class NettyClientTransport implements ConnectionClientTransport {
     ChannelHandler negotiationHandler = negotiator.newHandler(handler);
 
     Bootstrap b = new Bootstrap();
+    b.option(ALLOCATOR, Utils.getByteBufAllocator());
     b.attr(LOGGER_KEY, channelLogger);
     b.group(eventLoop);
     b.channelFactory(channelFactory);
