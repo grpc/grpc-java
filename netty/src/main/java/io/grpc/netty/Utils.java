@@ -92,7 +92,7 @@ class Utils {
 
     static {
       if (Boolean.parseBoolean(
-              System.getProperty("io.grpc.netty.useCustomAllocator", "false"))) {
+              System.getProperty("io.grpc.netty.useCustomAllocator", "true"))) {
         int maxOrder;
         if (System.getProperty("io.netty.allocator.maxOrder") == null) {
           // See the implementation of PooledByteBufAllocator.  DEFAULT_MAX_ORDER in there is
