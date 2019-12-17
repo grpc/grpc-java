@@ -668,7 +668,6 @@ public class LookasideLbTest {
               localityLbEndpoints.getLocality()),
           EnvoyProtoData.LocalityLbEndpoints.fromEnvoyProtoLocalityLbEndpoints(
               localityLbEndpoints));
-
     }
     return endpointUpdateBuilder.build();
   }
