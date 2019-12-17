@@ -86,41 +86,37 @@ class Utils {
   public static final Resource<EventLoopGroup> DEFAULT_BOSS_EVENT_LOOP_GROUP;
   public static final Resource<EventLoopGroup> DEFAULT_WORKER_EVENT_LOOP_GROUP;
 
-  public static final Resource<ByteBufAllocator> BYTE_BUF_ALLOCATOR =
-      new Resource<ByteBufAllocator>() {
-        @Override
-        public ByteBufAllocator create() {
-          if (Boolean.parseBoolean(
-                  System.getProperty("io.grpc.netty.useCustomAllocator", "false"))) {
-            int maxOrder;
-            if (System.getProperty("io.netty.allocator.maxOrder") == null) {
-              // See the implementation of PooledByteBufAllocator.  DEFAULT_MAX_ORDER in there is
-              // 11, which makes chunk size to be 8192 << 11 = 16 MiB.  We want the chunk size to be
-              // 2MiB, thus reducing the maxOrder to 8.
-              maxOrder = 8;
-            } else {
-              maxOrder = PooledByteBufAllocator.defaultMaxOrder();
-            }
-            return new PooledByteBufAllocator(
-                PooledByteBufAllocator.defaultPreferDirect(),
-                PooledByteBufAllocator.defaultNumHeapArena(),
-                PooledByteBufAllocator.defaultNumDirectArena(),
-                PooledByteBufAllocator.defaultPageSize(),
-                maxOrder,
-                PooledByteBufAllocator.defaultTinyCacheSize(),
-                PooledByteBufAllocator.defaultSmallCacheSize(),
-                PooledByteBufAllocator.defaultNormalCacheSize(),
-                PooledByteBufAllocator.defaultUseCacheForAllThreads());
-          } else {
-            return ByteBufAllocator.DEFAULT;
-          }
-        }
+  // This class is initialized on first use, thus provides delayed allocator creation.
+  private static final class ByteBufAllocatorHolder {
+    private static final ByteBufAllocator allocator;
 
-        @Override
-        public void close(ByteBufAllocator allocator) {
-          // PooledByteBufAllocator doesn't provide a shutdown method.  Leaving it to GC.
+    static {
+      if (Boolean.parseBoolean(
+              System.getProperty("io.grpc.netty.useCustomAllocator", "false"))) {
+        int maxOrder;
+        if (System.getProperty("io.netty.allocator.maxOrder") == null) {
+          // See the implementation of PooledByteBufAllocator.  DEFAULT_MAX_ORDER in there is
+          // 11, which makes chunk size to be 8192 << 11 = 16 MiB.  We want the chunk size to be
+          // 2MiB, thus reducing the maxOrder to 8.
+          maxOrder = 8;
+        } else {
+          maxOrder = PooledByteBufAllocator.defaultMaxOrder();
         }
-      };
+        allocator = new PooledByteBufAllocator(
+            PooledByteBufAllocator.defaultPreferDirect(),
+            PooledByteBufAllocator.defaultNumHeapArena(),
+            PooledByteBufAllocator.defaultNumDirectArena(),
+            PooledByteBufAllocator.defaultPageSize(),
+            maxOrder,
+            PooledByteBufAllocator.defaultTinyCacheSize(),
+            PooledByteBufAllocator.defaultSmallCacheSize(),
+            PooledByteBufAllocator.defaultNormalCacheSize(),
+            PooledByteBufAllocator.defaultUseCacheForAllThreads());
+      } else {
+        allocator = ByteBufAllocator.DEFAULT;
+      }
+    }
+  }
 
   public static final ChannelFactory<? extends ServerChannel> DEFAULT_SERVER_CHANNEL_FACTORY;
   public static final Class<? extends Channel> DEFAULT_CLIENT_CHANNEL_TYPE;
@@ -146,6 +142,10 @@ class Utils {
       DEFAULT_WORKER_EVENT_LOOP_GROUP = NIO_WORKER_EVENT_LOOP_GROUP;
       EPOLL_EVENT_LOOP_GROUP_CONSTRUCTOR = null;
     }
+  }
+
+  public static ByteBufAllocator getByteBufAllocator() {
+    return ByteBufAllocatorHolder.allocator;
   }
 
   public static Metadata convertHeaders(Http2Headers http2Headers) {
