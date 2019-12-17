@@ -35,7 +35,6 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SharedResourcePool;
-import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.ChannelFactory;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
@@ -80,8 +79,6 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
       SharedResourcePool.forResource(Utils.DEFAULT_BOSS_EVENT_LOOP_GROUP);
   private static final ObjectPool<? extends EventLoopGroup> DEFAULT_WORKER_EVENT_LOOP_GROUP_POOL =
       SharedResourcePool.forResource(Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP);
-  private static final ObjectPool<ByteBufAllocator> ALLOCATOR_POOL =
-      SharedResourcePool.forResource(Utils.BYTE_BUF_ALLOCATOR);
 
   private final List<SocketAddress> listenAddresses = new ArrayList<>();
 
@@ -544,7 +541,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
     for (SocketAddress listenAddress : listenAddresses) {
       NettyServer transportServer = new NettyServer(
           listenAddress, channelFactory, channelOptions, bossEventLoopGroupPool,
-          workerEventLoopGroupPool, ALLOCATOR_POOL, negotiator, streamTracerFactories,
+          workerEventLoopGroupPool, negotiator, streamTracerFactories,
           getTransportTracerFactory(), maxConcurrentCallsPerConnection, flowControlWindow,
           maxMessageSize, maxHeaderListSize, keepAliveTimeInNanos, keepAliveTimeoutInNanos,
           maxConnectionIdleInNanos, maxConnectionAgeInNanos, maxConnectionAgeGraceInNanos,

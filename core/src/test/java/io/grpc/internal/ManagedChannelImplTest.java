@@ -3477,7 +3477,7 @@ public class ManagedChannelImplTest {
         CallOptions.DEFAULT.withDeadlineAfter(5, TimeUnit.SECONDS));
     ListenableFuture<Void> future2 = ClientCalls.futureUnaryCall(call2, null);
 
-    timer.forwardTime(1234, TimeUnit.SECONDS);
+    timer.forwardTime(5, TimeUnit.SECONDS);
 
     executor.runDueTasks();
     try {
@@ -3488,6 +3488,9 @@ public class ManagedChannelImplTest {
     }
 
     mychannel.shutdownNow();
+    // Now for Deadline_exceeded, stream shutdown is delayed, calling shutdownNow() on a open stream
+    // will add a task to executor. Cleaning that task here.
+    executor.runDueTasks();
   }
 
   @Deprecated

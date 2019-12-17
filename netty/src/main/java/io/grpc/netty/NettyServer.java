@@ -38,7 +38,6 @@ import io.grpc.internal.ServerListener;
 import io.grpc.internal.ServerTransportListener;
 import io.grpc.internal.TransportTracer;
 import io.netty.bootstrap.ServerBootstrap;
-import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFactory;
 import io.netty.channel.ChannelFuture;
@@ -75,10 +74,8 @@ class NettyServer implements InternalServer, InternalWithLogId {
   private final int maxStreamsPerConnection;
   private final ObjectPool<? extends EventLoopGroup> bossGroupPool;
   private final ObjectPool<? extends EventLoopGroup> workerGroupPool;
-  private final ObjectPool<? extends ByteBufAllocator> allocatorPool;
   private EventLoopGroup bossGroup;
   private EventLoopGroup workerGroup;
-  private ByteBufAllocator allocator;
   private ServerListener listener;
   private Channel channel;
   private final int flowControlWindow;
@@ -105,7 +102,6 @@ class NettyServer implements InternalServer, InternalWithLogId {
       Map<ChannelOption<?>, ?> channelOptions,
       ObjectPool<? extends EventLoopGroup> bossGroupPool,
       ObjectPool<? extends EventLoopGroup> workerGroupPool,
-      ObjectPool<? extends ByteBufAllocator> allocatorPool,
       ProtocolNegotiator protocolNegotiator,
       List<? extends ServerStreamTracer.Factory> streamTracerFactories,
       TransportTracer.Factory transportTracerFactory,
@@ -121,10 +117,8 @@ class NettyServer implements InternalServer, InternalWithLogId {
     this.channelOptions = new HashMap<ChannelOption<?>, Object>(channelOptions);
     this.bossGroupPool = checkNotNull(bossGroupPool, "bossGroupPool");
     this.workerGroupPool = checkNotNull(workerGroupPool, "workerGroupPool");
-    this.allocatorPool = checkNotNull(allocatorPool, "allocatorPool");
     this.bossGroup = bossGroupPool.getObject();
     this.workerGroup = workerGroupPool.getObject();
-    this.allocator = allocatorPool.getObject();
     this.protocolNegotiator = checkNotNull(protocolNegotiator, "protocolNegotiator");
     this.streamTracerFactories = checkNotNull(streamTracerFactories, "streamTracerFactories");
     this.transportTracerFactory = transportTracerFactory;
@@ -163,8 +157,8 @@ class NettyServer implements InternalServer, InternalWithLogId {
     listener = checkNotNull(serverListener, "serverListener");
 
     ServerBootstrap b = new ServerBootstrap();
-    b.option(ALLOCATOR, allocator);
-    b.childOption(ALLOCATOR, allocator);
+    b.option(ALLOCATOR, Utils.getByteBufAllocator());
+    b.childOption(ALLOCATOR, Utils.getByteBufAllocator());
     b.group(bossGroup, workerGroup);
     b.channelFactory(channelFactory);
     // For non-socket based channel, the option will be ignored.
@@ -331,13 +325,6 @@ class NettyServer implements InternalServer, InternalWithLogId {
           }
         } finally {
           workerGroup = null;
-          try  {
-            if (allocator != null) {
-              allocatorPool.returnObject(allocator);
-            }
-          } finally {
-            allocator = null;
-          }
         }
       }
     }
