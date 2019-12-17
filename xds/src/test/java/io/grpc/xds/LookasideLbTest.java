@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.envoyproxy.envoy.api.v2.core.HealthStatus.HEALTHY;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
@@ -39,16 +40,11 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
 import com.google.protobuf.Any;
-import com.google.protobuf.UInt32Value;
 import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment;
 import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy.DropOverload;
 import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
-import io.envoyproxy.envoy.api.v2.core.Address;
-import io.envoyproxy.envoy.api.v2.core.HealthStatus;
 import io.envoyproxy.envoy.api.v2.core.Node;
-import io.envoyproxy.envoy.api.v2.core.SocketAddress;
-import io.envoyproxy.envoy.api.v2.endpoint.Endpoint;
 import io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint;
 import io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints;
 import io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceImplBase;
@@ -312,7 +308,7 @@ public class LookasideLbTest {
             ImmutableList.of(
                 buildLocalityLbEndpoints("region1", "zone1", "subzone1",
                     ImmutableList.of(
-                        buildLbEndpoint("192.168.0.1", 8080, HealthStatus.HEALTHY, 2)),
+                        buildLbEndpoint("192.168.0.1", 8080, HEALTHY, 2)),
                     1, 0)),
             ImmutableList.of(buildDropOverload("throttle", 1000)));
     receiveEndpointUpdate(clusterLoadAssignment);
@@ -346,7 +342,7 @@ public class LookasideLbTest {
             ImmutableList.of(
                 buildLocalityLbEndpoints("region1", "zone1", "subzone1",
                     ImmutableList.of(
-                        buildLbEndpoint("192.168.0.1", 8080, HealthStatus.HEALTHY, 2)),
+                        buildLbEndpoint("192.168.0.1", 8080, HEALTHY, 2)),
                     1, 0)),
             ImmutableList.<DropOverload>of());
     receiveEndpointUpdate(clusterLoadAssignment);
@@ -369,7 +365,7 @@ public class LookasideLbTest {
             ImmutableList.of(
                 buildLocalityLbEndpoints("region2", "zone2", "subzone2",
                     ImmutableList.of(
-                        buildLbEndpoint("192.168.0.2", 8080, HealthStatus.HEALTHY, 2)),
+                        buildLbEndpoint("192.168.0.2", 8080, HEALTHY, 2)),
                     1, 0)),
             ImmutableList.<DropOverload>of());
     receiveEndpointUpdate(clusterLoadAssignment);
@@ -396,7 +392,7 @@ public class LookasideLbTest {
             ImmutableList.of(
                 buildLocalityLbEndpoints("region3", "zone3", "subzone3",
                     ImmutableList.of(
-                        buildLbEndpoint("192.168.0.3", 8080, HealthStatus.HEALTHY, 2)),
+                        buildLbEndpoint("192.168.0.3", 8080, HEALTHY, 2)),
                     1, 0)),
             ImmutableList.<DropOverload>of());
     receiveEndpointUpdate(clusterLoadAssignment);
@@ -424,7 +420,7 @@ public class LookasideLbTest {
             ImmutableList.of(
                 buildLocalityLbEndpoints("region4", "zone4", "subzone4",
                     ImmutableList.of(
-                        buildLbEndpoint("192.168.0.4", 8080, HealthStatus.HEALTHY, 2)),
+                        buildLbEndpoint("192.168.0.4", 8080, HEALTHY, 2)),
                     1, 0)),
             ImmutableList.<DropOverload>of());
     receiveEndpointUpdate(clusterLoadAssignment);
@@ -450,7 +446,7 @@ public class LookasideLbTest {
             ImmutableList.of(
                 buildLocalityLbEndpoints("region5", "zone5", "subzone5",
                     ImmutableList.of(
-                        buildLbEndpoint("192.168.0.5", 8080, HealthStatus.HEALTHY, 2)),
+                        buildLbEndpoint("192.168.0.5", 8080, HEALTHY, 2)),
                     1, 0)),
             ImmutableList.<DropOverload>of());
     receiveEndpointUpdate(clusterLoadAssignment);
@@ -490,7 +486,7 @@ public class LookasideLbTest {
             ImmutableList.of(
                 buildLocalityLbEndpoints("region1", "zone1", "subzone1",
                     ImmutableList.of(
-                        buildLbEndpoint("192.168.0.1", 8080, HealthStatus.HEALTHY, 2)),
+                        buildLbEndpoint("192.168.0.1", 8080, HEALTHY, 2)),
                     1, 0)),
             ImmutableList.<DropOverload>of());
     receiveEndpointUpdate(clusterLoadAssignment);
@@ -503,8 +499,8 @@ public class LookasideLbTest {
             ImmutableList.of(
                 buildLocalityLbEndpoints("region1", "zone1", "subzone1",
                     ImmutableList.of(
-                        buildLbEndpoint("192.168.0.1", 8080, HealthStatus.HEALTHY, 2),
-                        buildLbEndpoint("192.168.0.2", 8080, HealthStatus.HEALTHY, 2)),
+                        buildLbEndpoint("192.168.0.1", 8080, HEALTHY, 2),
+                        buildLbEndpoint("192.168.0.2", 8080, HEALTHY, 2)),
                     1, 0)),
             ImmutableList.<DropOverload>of());
     receiveEndpointUpdate(clusterLoadAssignment);
@@ -522,19 +518,34 @@ public class LookasideLbTest {
         ImmutableList.of(
             buildLocalityLbEndpoints("region1", "zone1", "subzone1",
                 ImmutableList.of(
-                    buildLbEndpoint("192.168.0.1", 8080, HealthStatus.HEALTHY, 2)),
+                    buildLbEndpoint("192.168.0.1", 8080, HEALTHY, 2)),
                 1, 0)),
         ImmutableList.<DropOverload>of());
     receiveEndpointUpdate(clusterLoadAssignment);
 
     verify(edsUpdateCallback, never()).onAllDrop();
+    assertThat(childBalancers).hasSize(1);
+    verify(childBalancers.get("subzone1")).handleResolvedAddresses(
+        argThat(RoundRobinBackendsMatcher.builder().addHostAndPort("192.168.0.1", 8080).build()));
+    assertThat(childHelpers).hasSize(1);
+    Helper childHelper = childHelpers.get("subzone1");
+
+    final Subchannel subchannel = mock(Subchannel.class);
+    SubchannelPicker picker = new SubchannelPicker() {
+      @Override
+      public PickResult pickSubchannel(PickSubchannelArgs args) {
+        return PickResult.withSubchannel(subchannel);
+      }
+    };
+    childHelper.updateBalancingState(READY, picker);
+    assertLatestSubchannelPicker(subchannel);
 
     clusterLoadAssignment = buildClusterLoadAssignment(
         "edsServiceName1",
         ImmutableList.of(
             buildLocalityLbEndpoints("region1", "zone1", "subzone1",
                 ImmutableList.of(
-                    buildLbEndpoint("192.168.0.1", 8080, HealthStatus.HEALTHY, 2)),
+                    buildLbEndpoint("192.168.0.1", 8080, HEALTHY, 2)),
                 1, 0)),
         ImmutableList.of(
             buildDropOverload("cat_1", 3),
@@ -543,8 +554,10 @@ public class LookasideLbTest {
     receiveEndpointUpdate(clusterLoadAssignment);
 
     verify(edsUpdateCallback).onAllDrop();
-
-    // TODO: verify picker.
+    verify(helper, atLeastOnce()).updateBalancingState(eq(READY), pickerCaptor.capture());
+    SubchannelPicker pickerExpectedDropAll = pickerCaptor.getValue();
+    assertThat(pickerExpectedDropAll.pickSubchannel(mock(PickSubchannelArgs.class)).isDrop())
+        .isTrue();
 
     verify(edsUpdateCallback, never()).onError();
   }
@@ -554,82 +567,62 @@ public class LookasideLbTest {
     setUpWithBootstrap();
     handleResolvedAddresses(new XdsConfig(null, null, "edsServiceName1", null));
 
-    io.envoyproxy.envoy.api.v2.core.Locality localityProto1 =
-        io.envoyproxy.envoy.api.v2.core.Locality
-            .newBuilder()
-            .setRegion("region1")
-            .setZone("zone1")
-            .setSubZone("subzone1")
-            .build();
-    LbEndpoint endpoint11 = LbEndpoint.newBuilder()
-        .setEndpoint(Endpoint.newBuilder()
-            .setAddress(Address.newBuilder()
-                .setSocketAddress(SocketAddress.newBuilder()
-                    .setAddress("addr11").setPortValue(11))))
-        .setLoadBalancingWeight(UInt32Value.of(11))
-        .build();
-    LbEndpoint endpoint12 = LbEndpoint.newBuilder()
-        .setEndpoint(Endpoint.newBuilder()
-            .setAddress(Address.newBuilder()
-                .setSocketAddress(SocketAddress.newBuilder()
-                    .setAddress("addr12").setPortValue(12))))
-        .setLoadBalancingWeight(UInt32Value.of(12))
-        .build();
-    io.envoyproxy.envoy.api.v2.core.Locality localityProto2 =
-        io.envoyproxy.envoy.api.v2.core.Locality
-            .newBuilder()
-            .setRegion("region2")
-            .setZone("zone2")
-            .setSubZone("subzone2")
-            .build();
-    LbEndpoint endpoint21 = LbEndpoint.newBuilder()
-        .setEndpoint(Endpoint.newBuilder()
-            .setAddress(Address.newBuilder()
-                .setSocketAddress(SocketAddress.newBuilder()
-                    .setAddress("addr21").setPortValue(21))))
-        .setLoadBalancingWeight(UInt32Value.of(21))
-        .build();
-    LbEndpoint endpoint22 = LbEndpoint.newBuilder()
-        .setEndpoint(Endpoint.newBuilder()
-            .setAddress(Address.newBuilder()
-                .setSocketAddress(SocketAddress.newBuilder()
-                    .setAddress("addr22").setPortValue(22))))
-        .setLoadBalancingWeight(UInt32Value.of(22))
-        .build();
-    io.envoyproxy.envoy.api.v2.core.Locality localityProto3 =
-        io.envoyproxy.envoy.api.v2.core.Locality
-            .newBuilder()
-            .setRegion("region3")
-            .setZone("zone3")
-            .setSubZone("subzone3")
-            .build();
-    LbEndpoint endpoint3 = LbEndpoint.newBuilder()
-        .setEndpoint(Endpoint.newBuilder()
-            .setAddress(Address.newBuilder()
-                .setSocketAddress(SocketAddress.newBuilder()
-                    .setAddress("addr31").setPortValue(31))))
-        .setLoadBalancingWeight(UInt32Value.of(31))
-        .build();
-    ClusterLoadAssignment clusterLoadAssignment = ClusterLoadAssignment.newBuilder()
-        .setClusterName("edsServiceName1")
-        .addEndpoints(io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints.newBuilder()
-            .setLocality(localityProto1)
-            .addLbEndpoints(endpoint11)
-            .addLbEndpoints(endpoint12)
-            .setLoadBalancingWeight(UInt32Value.of(1)))
-        .addEndpoints(io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints.newBuilder()
-            .setLocality(localityProto2)
-            .addLbEndpoints(endpoint21)
-            .addLbEndpoints(endpoint22)
-            .setLoadBalancingWeight(UInt32Value.of(2)))
-        .addEndpoints(io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints.newBuilder()
-            .setLocality(localityProto3)
-            .addLbEndpoints(endpoint3)
-            .setLoadBalancingWeight(UInt32Value.of(0)))
-        .build();
+    LbEndpoint endpoint11 = buildLbEndpoint("addr11.example.com", 8011, HEALTHY, 11);
+    LbEndpoint endpoint12 = buildLbEndpoint("addr12.example.com", 8012, HEALTHY, 12);
+    LocalityLbEndpoints localityLbEndpoints1 = buildLocalityLbEndpoints(
+        "region1", "zone1", "subzone1",
+        ImmutableList.of(endpoint11, endpoint12),
+        1,
+        0);
+
+    LbEndpoint endpoint21 = buildLbEndpoint("addr21.example.com", 8021, HEALTHY, 21);
+    LbEndpoint endpoint22 = buildLbEndpoint("addr22.example.com", 8022, HEALTHY, 22);
+    LocalityLbEndpoints localityLbEndpoints2 = buildLocalityLbEndpoints(
+        "region2", "zone2", "subzone2",
+        ImmutableList.of(endpoint21, endpoint22),
+        2,
+        0);
+
+    LbEndpoint endpoint31 = buildLbEndpoint("addr31.example.com", 8031, HEALTHY, 31);
+    LocalityLbEndpoints localityLbEndpoints3 = buildLocalityLbEndpoints(
+        "region3", "zone3", "subzone3",
+        ImmutableList.of(endpoint31),
+        3,
+        0);
+
+    ClusterLoadAssignment clusterLoadAssignment = buildClusterLoadAssignment(
+        "edsServiceName1",
+        ImmutableList.of(localityLbEndpoints1, localityLbEndpoints2, localityLbEndpoints3),
+        ImmutableList.<DropOverload>of());
     receiveEndpointUpdate(clusterLoadAssignment);
 
-    // TODO: verify child helpers handleResolvedAddressGroups, verify picker update.
+    assertThat(childBalancers).hasSize(3);
+    verify(childBalancers.get("subzone1")).handleResolvedAddresses(
+        argThat(RoundRobinBackendsMatcher.builder()
+            .addHostAndPort("addr11.example.com", 8011)
+            .addHostAndPort("addr12.example.com", 8012)
+            .build()));
+    verify(childBalancers.get("subzone2")).handleResolvedAddresses(
+        argThat(RoundRobinBackendsMatcher.builder()
+            .addHostAndPort("addr21.example.com", 8021)
+            .addHostAndPort("addr22.example.com", 8022)
+            .build()));
+    verify(childBalancers.get("subzone3")).handleResolvedAddresses(
+        argThat(RoundRobinBackendsMatcher.builder()
+            .addHostAndPort("addr31.example.com", 8031)
+            .build()));
+    assertThat(childHelpers).hasSize(3);
+    Helper childHelper2 = childHelpers.get("subzone2");
+    final Subchannel subchannel = mock(Subchannel.class);
+    SubchannelPicker picker = new SubchannelPicker() {
+      @Override
+      public PickResult pickSubchannel(PickSubchannelArgs args) {
+        return PickResult.withSubchannel(subchannel);
+      }
+    };
+    verify(helper, never()).updateBalancingState(eq(READY), any(SubchannelPicker.class));
+    childHelper2.updateBalancingState(READY, picker);
+    assertLatestSubchannelPicker(subchannel);
 
     verify(edsUpdateCallback, never()).onError();
   }
@@ -661,7 +654,7 @@ public class LookasideLbTest {
    * clusterName, localityLbEndpointsMap and dropPolicies, is extracted from ClusterLoadAssignment,
    * and all other data is ignored.
    */
-  private static EndpointUpdate getEndpointUpdatefromClusterAssignment(
+  private static EndpointUpdate getEndpointUpdateFromClusterAssignment(
       ClusterLoadAssignment clusterLoadAssignment) {
     EndpointUpdate.Builder endpointUpdateBuilder = EndpointUpdate.newBuilder();
     endpointUpdateBuilder.setClusterName(clusterLoadAssignment.getClusterName());
@@ -702,7 +695,7 @@ public class LookasideLbTest {
               getNextNonce()));
     } else if (withXdsClientPoolAttributes) {
       endpointWatchers.get(clusterLoadAssignment.getClusterName())
-          .onEndpointChanged(getEndpointUpdatefromClusterAssignment(clusterLoadAssignment));
+          .onEndpointChanged(getEndpointUpdateFromClusterAssignment(clusterLoadAssignment));
     }
   }
 
