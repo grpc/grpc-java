@@ -29,6 +29,7 @@ import io.grpc.netty.InternalProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.netty.NettyChannelBuilder;
+import io.grpc.xds.XdsAttributes;
 import io.grpc.xds.sds.SslContextProvider;
 import io.grpc.xds.sds.TlsContextManager;
 import io.netty.channel.ChannelHandler;
@@ -109,7 +110,7 @@ public final class SdsProtocolNegotiators {
   @VisibleForTesting
   static final class ClientSdsProtocolNegotiator implements ProtocolNegotiator {
 
-    // TODO (sanjaypujare) integrate with xDS client to get upstreamTlsContext from CDS
+    // TODO (sanjaypujare) remove once we get this from CDS & don't need for testing
     UpstreamTlsContext upstreamTlsContext;
 
     ClientSdsProtocolNegotiator(UpstreamTlsContext upstreamTlsContext) {
@@ -123,12 +124,16 @@ public final class SdsProtocolNegotiators {
 
     @Override
     public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
-      // once CDS is implemented we will retrieve upstreamTlsContext as follows:
-      // grpcHandler.getEagAttributes().get(XdsAttributes.ATTR_UPSTREAM_TLS_CONTEXT);
-      if (isTlsContextEmpty(upstreamTlsContext)) {
+      // check if UpstreamTlsContext was passed via attributes
+      UpstreamTlsContext localUpstreamTlsContext =
+          grpcHandler.getEagAttributes().get(XdsAttributes.ATTR_UPSTREAM_TLS_CONTEXT);
+      if (localUpstreamTlsContext == null) {
+        localUpstreamTlsContext = upstreamTlsContext;
+      }
+      if (isTlsContextEmpty(localUpstreamTlsContext)) {
         return InternalProtocolNegotiators.plaintext().newHandler(grpcHandler);
       }
-      return new ClientSdsHandler(grpcHandler, upstreamTlsContext);
+      return new ClientSdsHandler(grpcHandler, localUpstreamTlsContext);
     }
 
     private static boolean isTlsContextEmpty(UpstreamTlsContext upstreamTlsContext) {
