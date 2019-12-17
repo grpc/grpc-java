@@ -832,6 +832,9 @@ final class XdsClientImpl extends XdsClient {
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
+          if (closed) {
+            return;
+          }
           responseReceived = true;
           String typeUrl = response.getTypeUrl();
           // Nonce in each response is echoed back in the following ACK/NACK request. It is
