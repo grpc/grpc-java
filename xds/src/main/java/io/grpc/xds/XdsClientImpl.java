@@ -884,11 +884,11 @@ final class XdsClientImpl extends XdsClient {
     }
 
     private void handleStreamClosed(Status error) {
-      logger.log(Level.INFO, error.getDescription(), error.getCause());
       checkArgument(!error.isOk(), "unexpected OK status");
       if (closed) {
         return;
       }
+      logger.log(Level.INFO, error.getDescription(), error.getCause());
       closed = true;
       cleanUp();
       if (responseReceived || retryBackoffPolicy == null) {
