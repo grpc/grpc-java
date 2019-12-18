@@ -321,11 +321,10 @@ public class LookasideLbTest {
         // Note that this test approach can not verify anything about how localityStore will use the
         // helper in the arguments to delegate updates from localityStore to the EDS balancer, and
         // can not verify anything about how loadStatsStore updates localities and drop information.
-        // To cover the gap, the some non-exhaustive tests like
+        // To cover the gap, some non-exhaustive tests like
         // handleAllDropUpdates_pickersAreDropped(),
         // handleLocalityAssignmentUpdates_pickersUpdatedFromChildBalancer() and
-        // handleEndpointUpdates_loadStatsReport() are added to verify
-        // some very basic behaviors.
+        // handleEndpointUpdates_loadStatsReport() are added to verify some very basic behaviors.
         LocalityStore localityStore = mock(LocalityStore.class);
         localityStores.add(localityStore);
         return localityStore;
