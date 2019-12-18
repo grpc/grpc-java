@@ -72,6 +72,7 @@ import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.Bootstrapper.ChannelCreds;
 import io.grpc.xds.Bootstrapper.ServerInfo;
+import io.grpc.xds.LocalityStore.LocalityStoreFactory;
 import io.grpc.xds.LookasideLb.EndpointUpdateCallback;
 import io.grpc.xds.XdsClient.EndpointUpdate;
 import io.grpc.xds.XdsClient.EndpointWatcher;
@@ -135,6 +136,8 @@ public class LookasideLbTest {
   private final Map<String, Helper> childHelpers = new HashMap<>();
   // Child balancers keyed by locality names.
   private final Map<String, LoadBalancer> childBalancers = new HashMap<>();
+  // LocalityStores created by fake localityStoreFactory.
+  private final ArrayDeque<LocalityStore> localityStores = new ArrayDeque<>();
 
   @Mock
   private Helper helper;
@@ -151,6 +154,7 @@ public class LookasideLbTest {
   private ManagedChannel bootstrapChannel;
   private RefCountedXdsClientObjectPool xdsClientPoolFromResolveAddresses;
   private XdsClient xdsClientFromResolvedAddresses;
+  private LocalityStoreFactory localityStoreFactory = LocalityStoreFactory.getInstance();
 
   @Before
   public void setUp() {
@@ -206,6 +210,7 @@ public class LookasideLbTest {
     }
   }
 
+  // For EDS-only usecase.
   private void setUpWithBootstrap() throws Exception {
     withBootstrap = true;
     Bootstrapper bootstrapper = mock(Bootstrapper.class);
@@ -248,7 +253,7 @@ public class LookasideLbTest {
     };
 
     lookasideLb = new LookasideLb(
-        helper, edsUpdateCallback, lbRegistry, bootstrapper, channelFactory);
+        helper, edsUpdateCallback, lbRegistry, localityStoreFactory, bootstrapper, channelFactory);
   }
 
   private void setUpWithXdsClientPoolAttributes() {
@@ -279,12 +284,30 @@ public class LookasideLbTest {
     xdsClientFromResolvedAddresses = xdsClientPoolFromResolveAddresses.getObject();
 
     lookasideLb = new LookasideLb(
-        helper, edsUpdateCallback, lbRegistry, mock(Bootstrapper.class),
+        helper, edsUpdateCallback, lbRegistry, localityStoreFactory, mock(Bootstrapper.class),
         mock(XdsChannelFactory.class));
   }
 
+  private void setUpFakeLocalityStoreFactory() {
+    localityStoreFactory = new LocalityStoreFactory() {
+      @Override
+      LocalityStore newLocalityStore(Helper helper, LoadBalancerRegistry lbRegistry,
+          LoadStatsStore loadStatsStore) {
+        // Note that this test approach can not verify anything about how localityStore will use the
+        // helper in the arguments and about how updates of the helper from localityStore will be
+        // delegated to the helper of the EDS balancer.
+        // To cover the gap, the other tests handleAllDropUpdates_pickersAreDropped() and
+        // handleLocalityAssignmentUpdates_pickersUpdatedFromChildBalancer() will verify some very
+        // basic behaviors on how updates of states and picker from localityStore will be delegated.
+        LocalityStore localityStore = mock(LocalityStore.class);
+        localityStores.add(localityStore);
+        return localityStore;
+      }
+    };
+  }
+
   @Test
-  public void handleNameResolutionErrorBeforeAndAfterEdsWorkding_withXdsClientRefAttributes() {
+  public void handleNameResolutionErrorBeforeAndAfterEdsWorkding_withXdsClientPoolAttributes() {
     setUpWithXdsClientPoolAttributes();
     handleNameResolutionErrorBeforeAndAfterEdsWorkding();
   }
@@ -321,7 +344,7 @@ public class LookasideLbTest {
   }
 
   @Test
-  public void handleEdsServiceNameChangeInXdsConfig_switchGracefully_withXdsClientRefAttributes() {
+  public void handleEdsServiceNameChangeInXdsConfig_switchGracefully_withXdsClientPoolAttributes() {
     setUpWithXdsClientPoolAttributes();
     handleEdsServiceNameChangeInXdsConfig();
   }
@@ -474,7 +497,7 @@ public class LookasideLbTest {
   }
 
   @Test
-  public void firstAndSecondEdsResponseReceived() throws Exception {
+  public void firstAndSecondEdsResponseReceived_onWorkingCalledOnce() throws Exception {
     setUpWithBootstrap();
     handleResolvedAddresses(new XdsConfig(null, null, "edsServiceName1", null));
 
@@ -509,7 +532,7 @@ public class LookasideLbTest {
   }
 
   @Test
-  public void handleAllDropUpdates() throws Exception {
+  public void handleAllDropUpdates_pickersAreDropped() throws Exception {
     setUpWithBootstrap();
     handleResolvedAddresses(new XdsConfig(null, null, "edsServiceName1", null));
 
@@ -563,7 +586,7 @@ public class LookasideLbTest {
   }
 
   @Test
-  public void handleLocalityAssignmentUpdates() throws Exception {
+  public void handleLocalityAssignmentUpdates_pickersUpdatedFromChildBalancer() throws Exception {
     setUpWithBootstrap();
     handleResolvedAddresses(new XdsConfig(null, null, "edsServiceName1", null));
 
@@ -627,6 +650,85 @@ public class LookasideLbTest {
     verify(edsUpdateCallback, never()).onError();
   }
 
+  // Uses a fake LocalityStoreFactory that creates a mock LocalityStore, and verifies interaction
+  // between the EDS balancer and LocalityStore.
+  @Test
+  public void handleEndpointUpdates_delegateUpdatesToLocalityStore_withBootstrap()
+      throws Exception {
+    setUpFakeLocalityStoreFactory();
+    setUpWithBootstrap();
+    handleEndpointUpdates_delegateUpdatesToLocalityStore();
+  }
+
+  // Uses a fake LocalityStoreFactory that creates a mock LocalityStore, and verifies interaction
+  // between the EDS balancer and LocalityStore.
+  @Test
+  public void handleEndpointUpdates_delegateUpdatesToLocalityStore_withXdsClientPoolAttributes()
+      throws Exception {
+    setUpFakeLocalityStoreFactory();
+    setUpWithXdsClientPoolAttributes();
+    handleEndpointUpdates_delegateUpdatesToLocalityStore();
+  }
+
+  private void handleEndpointUpdates_delegateUpdatesToLocalityStore() {
+    handleResolvedAddresses(new XdsConfig(null, null, "edsServiceName1", null));
+    assertThat(localityStores).hasSize(1);
+    LocalityStore localityStore = localityStores.peekLast();
+
+    ClusterLoadAssignment clusterLoadAssignment = buildClusterLoadAssignment(
+        "edsServiceName1",
+        ImmutableList.of(
+            buildLocalityLbEndpoints("region1", "zone1", "subzone1",
+                ImmutableList.of(
+                    buildLbEndpoint("192.168.0.1", 8080, HEALTHY, 2)),
+                1, 0)),
+        ImmutableList.of(
+            buildDropOverload("cat_1", 3),
+            buildDropOverload("cat_2", 456)));
+    receiveEndpointUpdate(clusterLoadAssignment);
+    EndpointUpdate endpointUpdate = getEndpointUpdateFromClusterAssignment(clusterLoadAssignment);
+    verify(localityStore).updateDropPercentage(endpointUpdate.getDropPolicies());
+    verify(localityStore).updateLocalityStore(endpointUpdate.getLocalityLbEndpointsMap());
+
+    clusterLoadAssignment = buildClusterLoadAssignment(
+        "edsServiceName1",
+        ImmutableList.of(
+            buildLocalityLbEndpoints("region1", "zone1", "subzone1",
+                ImmutableList.of(
+                    buildLbEndpoint("192.168.0.1", 8080, HEALTHY, 2),
+                    buildLbEndpoint("192.168.0.1", 8088, HEALTHY, 2)),
+                1, 0)),
+        ImmutableList.of(
+            buildDropOverload("cat_1", 3),
+            buildDropOverload("cat_3", 4)));
+    receiveEndpointUpdate(clusterLoadAssignment);
+
+    endpointUpdate = getEndpointUpdateFromClusterAssignment(clusterLoadAssignment);
+    verify(localityStore).updateDropPercentage(endpointUpdate.getDropPolicies());
+    verify(localityStore).updateLocalityStore(endpointUpdate.getLocalityLbEndpointsMap());
+
+    // Change cluster name.
+    handleResolvedAddresses(new XdsConfig(null, null, "edsServiceName2", null));
+    assertThat(localityStores).hasSize(2);
+    localityStore = localityStores.peekLast();
+
+    clusterLoadAssignment = buildClusterLoadAssignment(
+        "edsServiceName2",
+        ImmutableList.of(
+            buildLocalityLbEndpoints("region2", "zone2", "subzone2",
+                ImmutableList.of(
+                    buildLbEndpoint("192.168.0.2", 8080, HEALTHY, 2),
+                    buildLbEndpoint("192.168.0.2", 8088, HEALTHY, 2)),
+                1, 0)),
+        ImmutableList.of(
+            buildDropOverload("cat_1", 3),
+            buildDropOverload("cat_3", 4)));
+    receiveEndpointUpdate(clusterLoadAssignment);
+    endpointUpdate = getEndpointUpdateFromClusterAssignment(clusterLoadAssignment);
+    verify(localityStore).updateDropPercentage(endpointUpdate.getDropPolicies());
+    verify(localityStore).updateLocalityStore(endpointUpdate.getLocalityLbEndpointsMap());
+  }
+
   @Ignore // FIXME(zdapeng): Enable test once endpoint watcher timeout is implemented.
   @Test
   public void verifyErrorPropagation_withBootstrap() throws Exception {
@@ -639,7 +741,7 @@ public class LookasideLbTest {
   }
 
   @Test
-  public void verifyErrorPropagation_withXdsClientRefAttributes() {
+  public void verifyErrorPropagation_withXdsClientPoolAttributes() {
     setUpWithXdsClientPoolAttributes();
     handleResolvedAddresses(new XdsConfig(null, null, "edsServiceName1", null));
 

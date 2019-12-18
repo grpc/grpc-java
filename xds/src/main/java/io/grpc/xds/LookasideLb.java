@@ -39,7 +39,7 @@ import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
-import io.grpc.xds.LocalityStore.LocalityStoreImpl;
+import io.grpc.xds.LocalityStore.LocalityStoreFactory;
 import io.grpc.xds.XdsClient.EndpointUpdate;
 import io.grpc.xds.XdsClient.EndpointWatcher;
 import io.grpc.xds.XdsClient.RefCountedXdsClientObjectPool;
@@ -60,6 +60,7 @@ final class LookasideLb extends LoadBalancer {
   private final EndpointUpdateCallback endpointUpdateCallback;
   private final GracefulSwitchLoadBalancer switchingLoadBalancer;
   private final LoadBalancerRegistry lbRegistry;
+  private final LocalityStoreFactory localityStoreFactory;
   private final Bootstrapper bootstrapper;
   private final XdsChannelFactory channelFactory;
   private final Helper lookasideLbHelper;
@@ -86,6 +87,7 @@ final class LookasideLb extends LoadBalancer {
         checkNotNull(lookasideLbHelper, "lookasideLbHelper"),
         checkNotNull(endpointUpdateCallback, "endpointUpdateCallback"),
         LoadBalancerRegistry.getDefaultRegistry(),
+        LocalityStoreFactory.getInstance(),
         Bootstrapper.getInstance(),
         XdsChannelFactory.getInstance());
   }
@@ -95,12 +97,14 @@ final class LookasideLb extends LoadBalancer {
       Helper lookasideLbHelper,
       EndpointUpdateCallback endpointUpdateCallback,
       LoadBalancerRegistry lbRegistry,
+      LocalityStoreFactory localityStoreFactory,
       Bootstrapper bootstrapper,
       XdsChannelFactory channelFactory) {
     this.lookasideLbHelper = lookasideLbHelper;
     this.channelLogger = lookasideLbHelper.getChannelLogger();
     this.endpointUpdateCallback = endpointUpdateCallback;
     this.lbRegistry = lbRegistry;
+    this.localityStoreFactory = localityStoreFactory;
     this.switchingLoadBalancer = new GracefulSwitchLoadBalancer(lookasideLbHelper);
     this.bootstrapper = bootstrapper;
     this.channelFactory = channelFactory;
@@ -380,7 +384,7 @@ final class LookasideLb extends LoadBalancer {
 
         LoadStatsStore loadStatsStore = new LoadStatsStoreImpl();
         addLoadStatsStore(clusterServiceName, loadStatsStore);
-        localityStore = new LocalityStoreImpl(helper, lbRegistry, loadStatsStore);
+        localityStore = localityStoreFactory.newLocalityStore(helper, lbRegistry, loadStatsStore);
 
         endpointWatcher = new EndpointWatcherImpl(localityStore);
         xdsClient.watchEndpointData(clusterServiceName, endpointWatcher);
