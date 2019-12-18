@@ -44,12 +44,17 @@ import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment;
 import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy.DropOverload;
 import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
+import io.envoyproxy.envoy.api.v2.core.Locality;
 import io.envoyproxy.envoy.api.v2.core.Node;
+import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
 import io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint;
 import io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints;
+import io.envoyproxy.envoy.api.v2.endpoint.UpstreamLocalityStats;
 import io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceImplBase;
 import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
+import io.grpc.ClientStreamTracer;
+import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
@@ -62,6 +67,7 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
+import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.inprocess.InProcessChannelBuilder;
@@ -138,6 +144,8 @@ public class LookasideLbTest {
   private final Map<String, LoadBalancer> childBalancers = new HashMap<>();
   // LocalityStores created by fake localityStoreFactory.
   private final ArrayDeque<LocalityStore> localityStores = new ArrayDeque<>();
+  // LoadReportClients created by xdsClientFromResolvedAddresses.
+  private final ArrayDeque<LoadReportClient> loadReportClients = new ArrayDeque<>();
 
   @Mock
   private Helper helper;
@@ -256,6 +264,7 @@ public class LookasideLbTest {
         helper, edsUpdateCallback, lbRegistry, localityStoreFactory, bootstrapper, channelFactory);
   }
 
+  // For non EDS-only usecase.
   private void setUpWithXdsClientPoolAttributes() {
     withXdsClientPoolAttributes = true;
     XdsClientFactory xdsClientFactory = new XdsClientFactory() {
@@ -276,6 +285,21 @@ public class LookasideLbTest {
           }
 
           @Override
+          LoadReportClient reportClientStats(String clusterName, String serverUri) {
+            // Not to verify clusterName because currently clusterName is actually cluster service
+            // name.
+            assertThat(serverUri).isEqualTo("");
+            LoadReportClient loadReportClient = mock(LoadReportClient.class);
+            loadReportClients.add(loadReportClient);
+            return loadReportClient;
+          }
+
+          @Override
+          void cancelClientStatsReport(String clusterName) {
+            loadReportClients.poll();
+          }
+
+          @Override
           void shutdown() {}
         };
       }
@@ -288,17 +312,20 @@ public class LookasideLbTest {
         mock(XdsChannelFactory.class));
   }
 
+  // Sets up a fake LocalityStoreFactory to verify interactions with LocalityStore APIs.
   private void setUpFakeLocalityStoreFactory() {
     localityStoreFactory = new LocalityStoreFactory() {
       @Override
       LocalityStore newLocalityStore(Helper helper, LoadBalancerRegistry lbRegistry,
           LoadStatsStore loadStatsStore) {
         // Note that this test approach can not verify anything about how localityStore will use the
-        // helper in the arguments and about how updates of the helper from localityStore will be
-        // delegated to the helper of the EDS balancer.
-        // To cover the gap, the other tests handleAllDropUpdates_pickersAreDropped() and
-        // handleLocalityAssignmentUpdates_pickersUpdatedFromChildBalancer() will verify some very
-        // basic behaviors on how updates of states and picker from localityStore will be delegated.
+        // helper in the arguments to delegate updates from localityStore to the EDS balancer, and
+        // can not verify anything about how loadStatsStore updates localities and drop information.
+        // To cover the gap, the some non-exhaustive tests like
+        // handleAllDropUpdates_pickersAreDropped(),
+        // handleLocalityAssignmentUpdates_pickersUpdatedFromChildBalancer() and
+        // handleEndpointUpdates_loadStatsReport() are added to verify
+        // some very basic behaviors.
         LocalityStore localityStore = mock(LocalityStore.class);
         localityStores.add(localityStore);
         return localityStore;
@@ -663,8 +690,7 @@ public class LookasideLbTest {
   // Uses a fake LocalityStoreFactory that creates a mock LocalityStore, and verifies interaction
   // between the EDS balancer and LocalityStore.
   @Test
-  public void handleEndpointUpdates_delegateUpdatesToLocalityStore_withXdsClientPoolAttributes()
-      throws Exception {
+  public void handleEndpointUpdates_delegateUpdatesToLocalityStore_withXdsClientPoolAttributes() {
     setUpFakeLocalityStoreFactory();
     setUpWithXdsClientPoolAttributes();
     handleEndpointUpdates_delegateUpdatesToLocalityStore();
@@ -727,6 +753,105 @@ public class LookasideLbTest {
     endpointUpdate = getEndpointUpdateFromClusterAssignment(clusterLoadAssignment);
     verify(localityStore).updateDropPercentage(endpointUpdate.getDropPolicies());
     verify(localityStore).updateLocalityStore(endpointUpdate.getLocalityLbEndpointsMap());
+  }
+
+  // Test with fake a LoadReportClient.
+  @Test
+  public void handleEndpointUpdates_loadStatsReport() {
+    setUpWithXdsClientPoolAttributes();
+
+    handleResolvedAddresses(new XdsConfig(null, null, "edsServiceName1", null));
+    assertThat(loadReportClients).isEmpty();
+
+    handleResolvedAddresses(new XdsConfig(null, null, "edsServiceName1", ""));
+    assertThat(loadReportClients).hasSize(1);
+    LoadReportClient loadReportClient = loadReportClients.peekLast();
+    ArgumentCaptor<LoadStatsStore> loadStatsStoreCaptor = ArgumentCaptor.forClass(null);
+    verify(loadReportClient).addLoadStatsStore(
+        eq("edsServiceName1"), loadStatsStoreCaptor.capture());
+    LoadStatsStore loadStatsStore = loadStatsStoreCaptor.getValue();
+
+    ClusterLoadAssignment clusterLoadAssignment = buildClusterLoadAssignment(
+        "edsServiceName1",
+        ImmutableList.of(
+            buildLocalityLbEndpoints("region1", "zone1", "subzone1",
+                ImmutableList.of(
+                    buildLbEndpoint("192.168.0.1", 8080, HEALTHY, 2)),
+                1, 0)),
+        ImmutableList.<DropOverload>of());
+    receiveEndpointUpdate(clusterLoadAssignment);
+
+    assertThat(childHelpers).hasSize(1);
+    Helper childHelper = childHelpers.get("subzone1");
+    final Subchannel subchannel = mock(Subchannel.class);
+    SubchannelPicker picker = new SubchannelPicker() {
+      @Override
+      public PickResult pickSubchannel(PickSubchannelArgs args) {
+        return PickResult.withSubchannel(subchannel);
+      }
+    };
+    childHelper.updateBalancingState(READY, picker);
+    assertLatestSubchannelPicker(subchannel);
+    PickResult pickResult = pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class));
+    ClientStreamTracer streamTracer = pickResult.getStreamTracerFactory().newClientStreamTracer(
+        StreamInfo.newBuilder().build(), new Metadata());
+    streamTracer.streamClosed(Status.OK);
+    // Simulate loadReportClient send load report.
+    ClusterStats clusterStats = loadStatsStore.generateLoadReport();
+    assertThat(clusterStats.getUpstreamLocalityStatsCount()).isEqualTo(1);
+    UpstreamLocalityStats upstreamLocalityStats = clusterStats.getUpstreamLocalityStats(0);
+    Locality locality = upstreamLocalityStats.getLocality();
+    assertThat(EnvoyProtoData.Locality.fromEnvoyProtoLocality(locality))
+        .isEqualTo(new EnvoyProtoData.Locality("region1", "zone1", "subzone1"));
+    assertThat(upstreamLocalityStats.getTotalSuccessfulRequests()).isEqualTo(1);
+
+    // Disable load stats report.
+    handleResolvedAddresses(new XdsConfig(null, null, "edsServiceName1", null));
+    assertThat(loadReportClients).isEmpty();
+    // Send more loads while load report disabled.
+    assertLatestConnectivityState(READY);
+    pickResult = pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class));
+    streamTracer = pickResult.getStreamTracerFactory().newClientStreamTracer(
+        StreamInfo.newBuilder().build(), new Metadata());
+    streamTracer.streamClosed(Status.OK);
+    streamTracer = pickResult.getStreamTracerFactory().newClientStreamTracer(
+        StreamInfo.newBuilder().build(), new Metadata());
+    streamTracer.streamClosed(Status.OK);
+
+    // Re-enable load stats report.
+    handleResolvedAddresses(new XdsConfig(null, null, "edsServiceName1", ""));
+    assertThat(loadReportClients).hasSize(1);
+    loadReportClient = loadReportClients.peekLast();
+    verify(loadReportClient).addLoadStatsStore(
+        eq("edsServiceName1"), loadStatsStoreCaptor.capture());
+    loadStatsStore = loadStatsStoreCaptor.getValue();
+    // Simulate loadReportClient send load report.
+    clusterStats = loadStatsStore.generateLoadReport();
+    assertThat(clusterStats.getUpstreamLocalityStatsCount()).isEqualTo(1);
+    upstreamLocalityStats = clusterStats.getUpstreamLocalityStats(0);
+    assertThat(upstreamLocalityStats.getTotalSuccessfulRequests()).isEqualTo(2);
+    assertThat(clusterStats.getDroppedRequestsCount()).isEqualTo(0);
+
+    // Update endpoints with all drop.
+    clusterLoadAssignment = buildClusterLoadAssignment(
+        "edsServiceName1",
+        ImmutableList.of(
+            buildLocalityLbEndpoints("region1", "zone1", "subzone1",
+                ImmutableList.of(
+                    buildLbEndpoint("192.168.0.2", 8080, HEALTHY, 2),
+                    buildLbEndpoint("192.168.0.2", 8088, HEALTHY, 2)),
+                1, 0)),
+        ImmutableList.of(
+            buildDropOverload("cat_1", 3),
+            buildDropOverload("cat_3", 1_000_001)));
+    receiveEndpointUpdate(clusterLoadAssignment);
+
+    assertLatestConnectivityState(READY);
+    pickResult = pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class));
+    assertThat(pickResult.isDrop()).isTrue();
+    // Simulate loadReportClient send load report.
+    clusterStats = loadStatsStore.generateLoadReport();
+    assertThat(clusterStats.getDroppedRequestsCount()).isEqualTo(1);
   }
 
   @Ignore // FIXME(zdapeng): Enable test once endpoint watcher timeout is implemented.
