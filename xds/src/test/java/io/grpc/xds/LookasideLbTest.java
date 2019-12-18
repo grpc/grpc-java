@@ -911,30 +911,21 @@ public class LookasideLbTest {
     lookasideLb.handleResolvedAddresses(resolvedAddressBuilder.build());
   }
 
+  private int versionIno;
+  private int nonce;
+
   private void receiveEndpointUpdate(ClusterLoadAssignment clusterLoadAssignment) {
     if (withBootstrap) {
       responseObservers.peekLast().onNext(
           buildDiscoveryResponse(
-              getNextVersionInfo(),
+              String.valueOf(versionIno++),
               ImmutableList.of(Any.pack(clusterLoadAssignment)),
               XdsClientImpl.ADS_TYPE_URL_EDS,
-              getNextNonce()));
+              String.valueOf(nonce++)));
     } else if (withXdsClientPoolAttributes) {
       endpointWatchers.get(clusterLoadAssignment.getClusterName())
           .onEndpointChanged(getEndpointUpdateFromClusterAssignment(clusterLoadAssignment));
     }
-  }
-
-  int versionIno;
-
-  private String getNextVersionInfo() {
-    return String.valueOf(versionIno++);
-  }
-
-  int nonce;
-
-  private String getNextNonce() {
-    return String.valueOf(nonce++);
   }
 
   private void assertLatestConnectivityState(ConnectivityState expectedState) {
