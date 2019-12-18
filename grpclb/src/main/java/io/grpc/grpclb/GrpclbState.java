@@ -581,7 +581,11 @@ final class GrpclbState {
         return;
       }
 
-      if (typeCase != LoadBalanceResponseTypeCase.SERVER_LIST) {
+      if (typeCase == LoadBalanceResponseTypeCase.FALLBACK_RESPONSE) {
+        useFallbackBackends();
+        maybeUpdatePicker();
+        return;
+      } else if (typeCase != LoadBalanceResponseTypeCase.SERVER_LIST) {
         logger.log(ChannelLogLevel.WARNING, "Ignoring unexpected response type: {0}", typeCase);
         return;
       }
