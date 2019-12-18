@@ -905,7 +905,7 @@ public class LookasideLbTest {
         .setLoadBalancingPolicyConfig(xdsConfig);
     if (withXdsClientPoolAttributes) {
       resolvedAddressBuilder.setAttributes(
-          Attributes.newBuilder().set(XdsAttributes.XDS_CLIENT_REF,
+          Attributes.newBuilder().set(XdsAttributes.XDS_CLIENT_POOL,
               xdsClientPoolFromResolveAddresses).build());
     }
     lookasideLb.handleResolvedAddresses(resolvedAddressBuilder.build());

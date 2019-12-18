@@ -152,6 +152,7 @@ final class XdsClientImpl extends XdsClient {
 
   @Override
   void shutdown() {
+    logger.log(Level.INFO, "Shutting down XdsClient");
     channel.shutdown();
     if (adsStream != null) {
       adsStream.close(Status.CANCELLED.withDescription("shutdown").asException());
@@ -699,11 +700,11 @@ final class XdsClientImpl extends XdsClient {
         errorMessage = "Cluster without any locality endpoint.";
         break;
       }
+      
       // The policy.disable_overprovisioning field must be set to true.
-      if (!assignment.getPolicy().getDisableOverprovisioning()) {
-        errorMessage = "Cluster requires overprovisioning.";
-        break;
-      }
+      // TODO(chengyuanzhang): temporarily not requiring this field to be set, should push
+      //  server implementors to do this or TBD with design.
+
       for (io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints localityLbEndpoints
           : assignment.getEndpointsList()) {
         // The lb_endpoints field for LbEndpoint must contain at least one entry.
@@ -832,6 +833,9 @@ final class XdsClientImpl extends XdsClient {
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
+          if (closed) {
+            return;
+          }
           responseReceived = true;
           String typeUrl = response.getTypeUrl();
           // Nonce in each response is echoed back in the following ACK/NACK request. It is
@@ -881,11 +885,11 @@ final class XdsClientImpl extends XdsClient {
     }
 
     private void handleStreamClosed(Status error) {
-      logger.log(Level.INFO, error.getDescription(), error.getCause());
       checkArgument(!error.isOk(), "unexpected OK status");
       if (closed) {
         return;
       }
+      logger.log(Level.FINE, error.getDescription(), error.getCause());
       closed = true;
       cleanUp();
       if (responseReceived || retryBackoffPolicy == null) {

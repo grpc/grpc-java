@@ -77,7 +77,7 @@ import org.mockito.MockitoAnnotations;
 @RunWith(JUnit4.class)
 public class CdsLoadBalancerTest {
 
-  private final RefCountedXdsClientObjectPool xdsClientRef = new RefCountedXdsClientObjectPool(
+  private final RefCountedXdsClientObjectPool xdsClientPool = new RefCountedXdsClientObjectPool(
       new XdsClientFactory() {
         @Override
         XdsClient createXdsClient() {
@@ -159,7 +159,7 @@ public class CdsLoadBalancerTest {
         .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
         .setAttributes(Attributes.newBuilder()
             .set(ATTR_LOAD_BALANCING_CONFIG, lbConfig)
-            .set(XdsAttributes.XDS_CLIENT_REF, xdsClientRef)
+            .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
             .build())
         .build();
 
@@ -177,7 +177,7 @@ public class CdsLoadBalancerTest {
         .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
         .setAttributes(Attributes.newBuilder()
             .set(ATTR_LOAD_BALANCING_CONFIG, lbConfig1)
-            .set(XdsAttributes.XDS_CLIENT_REF, xdsClientRef)
+            .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
             .build())
         .build();
     cdsLoadBalancer.handleResolvedAddresses(resolvedAddresses1);
@@ -217,7 +217,7 @@ public class CdsLoadBalancerTest {
         .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
         .setAttributes(Attributes.newBuilder()
             .set(ATTR_LOAD_BALANCING_CONFIG, lbConfig1)
-            .set(XdsAttributes.XDS_CLIENT_REF, xdsClientRef)
+            .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
             .build())
         .build();
     cdsLoadBalancer.handleResolvedAddresses(resolvedAddresses1);
@@ -247,8 +247,8 @@ public class CdsLoadBalancerTest {
         null);
     ResolvedAddresses resolvedAddressesFoo = resolvedAddressesCaptor1.getValue();
     assertThat(resolvedAddressesFoo.getLoadBalancingPolicyConfig()).isEqualTo(expectedXdsConfig);
-    assertThat(resolvedAddressesFoo.getAttributes().get(XdsAttributes.XDS_CLIENT_REF))
-        .isSameInstanceAs(xdsClientRef);
+    assertThat(resolvedAddressesFoo.getAttributes().get(XdsAttributes.XDS_CLIENT_POOL))
+        .isSameInstanceAs(xdsClientPool);
 
     SubchannelPicker picker1 = mock(SubchannelPicker.class);
     edsLbHelper1.updateBalancingState(ConnectivityState.READY, picker1);
@@ -261,7 +261,7 @@ public class CdsLoadBalancerTest {
         .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
         .setAttributes(Attributes.newBuilder()
             .set(ATTR_LOAD_BALANCING_CONFIG, lbConfig2)
-            .set(XdsAttributes.XDS_CLIENT_REF, xdsClientRef)
+            .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
             .build())
         .build();
     cdsLoadBalancer.handleResolvedAddresses(resolvedAddresses2);
@@ -293,8 +293,8 @@ public class CdsLoadBalancerTest {
         "lrsBar.googleapis.com");
     ResolvedAddresses resolvedAddressesBar = resolvedAddressesCaptor2.getValue();
     assertThat(resolvedAddressesBar.getLoadBalancingPolicyConfig()).isEqualTo(expectedXdsConfig);
-    assertThat(resolvedAddressesBar.getAttributes().get(XdsAttributes.XDS_CLIENT_REF))
-        .isSameInstanceAs(xdsClientRef);
+    assertThat(resolvedAddressesBar.getAttributes().get(XdsAttributes.XDS_CLIENT_POOL))
+        .isSameInstanceAs(xdsClientPool);
 
     SubchannelPicker picker2 = mock(SubchannelPicker.class);
     edsLbHelper2.updateBalancingState(ConnectivityState.CONNECTING, picker2);
@@ -325,7 +325,7 @@ public class CdsLoadBalancerTest {
     cdsLoadBalancer.shutdown();
     verify(edsLoadBalancer2).shutdown();
     verify(xdsClient).cancelClusterDataWatch("bar.googleapis.com", clusterWatcher2);
-    assertThat(xdsClientRef.xdsClient).isNull();
+    assertThat(xdsClientPool.xdsClient).isNull();
   }
 
   @Test
@@ -341,7 +341,7 @@ public class CdsLoadBalancerTest {
              .setAttributes(
                  Attributes.newBuilder()
                      .set(ATTR_LOAD_BALANCING_CONFIG, lbConfig1)
-                     .set(XdsAttributes.XDS_CLIENT_REF, xdsClientRef)
+                     .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
                      .build())
              .build();
     cdsLoadBalancer.handleResolvedAddresses(resolvedAddresses1);
@@ -376,7 +376,7 @@ public class CdsLoadBalancerTest {
     ArrayList<EquivalentAddressGroup> eagList = new ArrayList<>();
     eagList.add(new EquivalentAddressGroup(new InetSocketAddress("foo.com", 8080)));
     eagList.add(new EquivalentAddressGroup(InetSocketAddress.createUnresolved("localhost", 8081),
-        Attributes.newBuilder().set(XdsAttributes.XDS_CLIENT_REF, xdsClientRef).build()));
+        Attributes.newBuilder().set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool).build()));
     LoadBalancer.CreateSubchannelArgs createSubchannelArgs =
         LoadBalancer.CreateSubchannelArgs.newBuilder()
             .setAddresses(eagList)
@@ -398,15 +398,15 @@ public class CdsLoadBalancerTest {
     capturedUpstreamTlsContext =
         capturedEag.getAttributes().get(XdsAttributes.ATTR_UPSTREAM_TLS_CONTEXT);
     assertThat(capturedUpstreamTlsContext).isSameInstanceAs(upstreamTlsContext);
-    assertThat(capturedEag.getAttributes().get(XdsAttributes.XDS_CLIENT_REF))
-        .isSameInstanceAs(xdsClientRef);
+    assertThat(capturedEag.getAttributes().get(XdsAttributes.XDS_CLIENT_POOL))
+        .isSameInstanceAs(xdsClientPool);
 
     LoadBalancer edsLoadBalancer1 = edsLoadBalancers.poll();
 
     cdsLoadBalancer.shutdown();
     verify(edsLoadBalancer1).shutdown();
     verify(xdsClient).cancelClusterDataWatch("foo.googleapis.com", clusterWatcher1);
-    assertThat(xdsClientRef.xdsClient).isNull();
+    assertThat(xdsClientPool.xdsClient).isNull();
   }
 
   @Test
@@ -418,7 +418,7 @@ public class CdsLoadBalancerTest {
         .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
         .setAttributes(Attributes.newBuilder()
             .set(ATTR_LOAD_BALANCING_CONFIG, lbConfig)
-            .set(XdsAttributes.XDS_CLIENT_REF, xdsClientRef)
+            .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
             .build())
         .build();
     cdsLoadBalancer.handleResolvedAddresses(resolvedAddresses);
@@ -470,7 +470,7 @@ public class CdsLoadBalancerTest {
         .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
         .setAttributes(Attributes.newBuilder()
             .set(ATTR_LOAD_BALANCING_CONFIG, lbConfig)
-            .set(XdsAttributes.XDS_CLIENT_REF, xdsClientRef)
+            .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
             .build())
         .build();
     cdsLoadBalancer.handleResolvedAddresses(resolvedAddresses1);
