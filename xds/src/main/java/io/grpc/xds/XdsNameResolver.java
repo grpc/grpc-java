@@ -155,7 +155,7 @@ final class XdsNameResolver extends NameResolver {
         Attributes attrs =
             Attributes.newBuilder()
                 .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, config)
-                .set(XdsAttributes.XDS_CLIENT_REF, xdsClientPool)
+                .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
                 .build();
         ResolutionResult result =
             ResolutionResult.newBuilder()

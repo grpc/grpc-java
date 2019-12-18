@@ -78,7 +78,7 @@ final class LookasideLb extends LoadBalancer {
   @Nullable
   private EndpointWatcher endpointWatcher;
   @Nullable
-  private ObjectPool<XdsClient> xdsClientRef;
+  private ObjectPool<XdsClient> xdsClientPool;
   @Nullable
   XdsClient xdsClient;
   // Only for EDS-only case.
@@ -154,21 +154,21 @@ final class LookasideLb extends LoadBalancer {
       newXdsConfig = (XdsConfig) cfg.getConfig();
     }
 
-    if (xdsClientRef == null) {
-      // Init xdsClientRef and xdsClient.
+    if (xdsClientPool == null) {
+      // Init xdsClientPool and xdsClient.
       // There are two usecases:
       // 1. The EDS-only:
       //    The name resolver resolves a ResolvedAddresses with an XdsConfig. Use the bootstrap
       //    information to create a channel.
       // 2. Non EDS-only usecase:
-      //    XDS_CLIENT_REF attribute is available from ResolvedAddresses either from
+      //    XDS_CLIENT_POOL attribute is available from ResolvedAddresses either from
       //    XdsNameResolver or CDS policy.
       //
       // We assume XdsConfig switching happens only within one usecase, and there is no switching
       // between different usecases.
 
-      xdsClientRef = attributes.get(XdsAttributes.XDS_CLIENT_REF);
-      if (xdsClientRef == null) { // This is the EDS-only usecase.
+      xdsClientPool = attributes.get(XdsAttributes.XDS_CLIENT_POOL);
+      if (xdsClientPool == null) { // This is the EDS-only usecase.
         final BootstrapInfo bootstrapInfo;
         try {
           bootstrapInfo = bootstrapper.readBootstrap();
@@ -193,7 +193,7 @@ final class LookasideLb extends LoadBalancer {
         channel = initLbChannel(
             lookasideLbHelper, serverInfo.getServerUri(),
             serverInfo.getChannelCredentials());
-        xdsClientRef = new RefCountedXdsClientObjectPool(new XdsClientFactory() {
+        xdsClientPool = new RefCountedXdsClientObjectPool(new XdsClientFactory() {
           @Override
           XdsClient createXdsClient() {
             // TODO(zdapeng): Replace XdsComms2 with XdsClientImpl.
@@ -203,7 +203,7 @@ final class LookasideLb extends LoadBalancer {
           }
         });
       }
-      xdsClient = xdsClientRef.getObject();
+      xdsClient = xdsClientPool.getObject();
     }
 
     // Note: childPolicy change will be handled in LocalityStore, to be implemented.
@@ -256,8 +256,8 @@ final class LookasideLb extends LoadBalancer {
   public void shutdown() {
     channelLogger.log(ChannelLogLevel.DEBUG, "EDS load balancer is shutting down");
     switchingLoadBalancer.shutdown();
-    if (xdsClientRef != null) {
-      xdsClientRef.returnObject(xdsClient);
+    if (xdsClientPool != null) {
+      xdsClientPool.returnObject(xdsClient);
     }
   }
 
