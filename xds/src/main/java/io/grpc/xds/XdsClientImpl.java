@@ -152,6 +152,7 @@ final class XdsClientImpl extends XdsClient {
 
   @Override
   void shutdown() {
+    logger.log(Level.FINE, "Shutting down XdsClient");
     channel.shutdown();
     if (adsStream != null) {
       adsStream.close(Status.CANCELLED.withDescription("shutdown").asException());
