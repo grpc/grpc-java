@@ -5,6 +5,6 @@ java_library(
     runtime_deps = [
         "//netty",
         "@io_netty_netty_tcnative_boringssl_static//jar",
-        "@io_netty_netty_transport_native_epoll//jar",
+        "@io_netty_netty_transport_native_epoll_linux_x86_64//jar",
     ],
 )

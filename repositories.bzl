@@ -3,6 +3,48 @@
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("@bazel_tools//tools/build_defs/repo:jvm.bzl", "jvm_maven_import_external")
 
+# For use with maven_install's artifacts.
+# maven_install(
+#     ...
+#     artifacts = [
+#         # Your own deps
+#     ] + IO_GRPC_GRPC_JAVA_ARTIFACTS,
+# )
+IO_GRPC_GRPC_JAVA_ARTIFACTS = [
+    "com.google.android:annotations:4.1.1.4",
+    "com.google.api.grpc:proto-google-common-protos:1.17.0",
+    "com.google.auth:google-auth-library-credentials:0.19.0",
+    "com.google.auth:google-auth-library-oauth2-http:0.19.0",
+    "com.google.code.findbugs:jsr305:3.0.2",
+    "com.google.code.gson:gson:jar:2.8.6",
+    "com.google.errorprone:error_prone_annotations:2.3.3",
+    "com.google.guava:failureaccess:1.0.1",
+    "com.google.guava:guava:28.1-android",
+    "com.google.j2objc:j2objc-annotations:1.3",
+    "com.google.truth:truth:1.0",
+    "com.squareup.okhttp:okhttp:2.5.0",
+    "com.squareup.okio:okio:1.13.0",
+    "io.netty:netty-buffer:4.1.42.Final",
+    "io.netty:netty-codec-http2:4.1.42.Final",
+    "io.netty:netty-codec-http:4.1.42.Final",
+    "io.netty:netty-codec-socks:4.1.42.Final",
+    "io.netty:netty-codec:4.1.42.Final",
+    "io.netty:netty-common:4.1.42.Final",
+    "io.netty:netty-handler-proxy:4.1.42.Final",
+    "io.netty:netty-handler:4.1.42.Final",
+    "io.netty:netty-resolver:4.1.42.Final",
+    "io.netty:netty-tcnative-boringssl-static:2.0.26.Final",
+    "io.netty:netty-transport-native-epoll:jar:linux-x86_64:4.1.42.Final",
+    "io.netty:netty-transport:4.1.42.Final",
+    "io.opencensus:opencensus-api:0.24.0",
+    "io.opencensus:opencensus-contrib-grpc-metrics:0.24.0",
+    "io.perfmark:perfmark-api:0.19.0",
+    "javax.annotation:javax.annotation-api:1.2",
+    "junit:junit:4.12",
+    "org.apache.commons:commons-lang3:3.5",
+    "org.codehaus.mojo:animal-sniffer-annotations:1.18",
+]
+
 # For use with maven_install's override_targets.
 # maven_install(
 #     ...
@@ -22,6 +64,9 @@ load("@bazel_tools//tools/build_defs/repo:jvm.bzl", "jvm_maven_import_external")
 #         "your.target:artifact": "@//third_party/artifact",
 #     )
 IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS = {
+    "com.google.protobuf:protobuf-java": "@com_google_protobuf//:protobuf_java",
+    "com.google.protobuf:protobuf-java-util": "@com_google_protobuf//:protobuf_java_util",
+    "com.google.protobuf:protobuf-javalite": "@com_google_protobuf_javalite//:protobuf_java_lite",
     "io.grpc:grpc-alts": "@io_grpc_grpc_java//alts",
     "io.grpc:grpc-api": "@io_grpc_grpc_java//api",
     "io.grpc:grpc-auth": "@io_grpc_grpc_java//auth",
@@ -39,6 +84,13 @@ IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS = {
 
 def grpc_java_repositories():
     """Imports dependencies for grpc-java."""
+    if not native.existing_rule("com_google_protobuf"):
+        com_google_protobuf()
+    if not native.existing_rule("com_google_protobuf_javalite"):
+        com_google_protobuf_javalite()
+    if not native.existing_rule("io_grpc_grpc_proto"):
+        io_grpc_grpc_proto()
+
     if not native.existing_rule("com_google_android_annotations"):
         com_google_android_annotations()
     if not native.existing_rule("com_google_api_grpc_proto_google_common_protos"):
@@ -59,14 +111,8 @@ def grpc_java_repositories():
         com_google_guava_failureaccess()
     if not native.existing_rule("com_google_j2objc_j2objc_annotations"):
         com_google_j2objc_j2objc_annotations()
-    if not native.existing_rule("com_google_protobuf"):
-        com_google_protobuf()
-    if not native.existing_rule("com_google_protobuf_javalite"):
-        com_google_protobuf_javalite()
     if not native.existing_rule("com_google_truth_truth"):
         com_google_truth_truth()
-    if not native.existing_rule("io_grpc_grpc_proto"):
-        io_grpc_grpc_proto()
     if not native.existing_rule("com_squareup_okhttp_okhttp"):
         com_squareup_okhttp_okhttp()
     if not native.existing_rule("com_squareup_okio_okio"):
@@ -93,8 +139,8 @@ def grpc_java_repositories():
         io_netty_netty_tcnative_boringssl_static()
     if not native.existing_rule("io_netty_netty_transport"):
         io_netty_netty_transport()
-    if not native.existing_rule("io_netty_netty_transport_native_epoll"):
-        io_netty_netty_transport_native_epoll()
+    if not native.existing_rule("io_netty_netty_transport_native_epoll_linux_x86_64"):
+        io_netty_netty_transport_native_epoll_linux_x86_64()
     if not native.existing_rule("io_opencensus_opencensus_api"):
         io_opencensus_opencensus_api()
     if not native.existing_rule("io_opencensus_opencensus_contrib_grpc_metrics"):
@@ -368,9 +414,9 @@ def io_netty_netty_transport():
         licenses = ["notice"],  # Apache 2.0
     )
 
-def io_netty_netty_transport_native_epoll():
+def io_netty_netty_transport_native_epoll_linux_x86_64():
     jvm_maven_import_external(
-        name = "io_netty_netty_transport_native_epoll",
+        name = "io_netty_netty_transport_native_epoll_linux_x86_64",
         artifact = "io.netty:netty-transport-native-epoll:jar:linux-x86_64:4.1.42.Final",
         server_urls = ["https://repo.maven.apache.org/maven2/"],
         artifact_sha256 = "7bdf3003d5b60b061b494e62d1bafc420caf800efb743b14ec01ceaef1d3fa3e",

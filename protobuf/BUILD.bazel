@@ -12,6 +12,5 @@ java_library(
         "@com_google_guava_guava//jar",
         "@com_google_j2objc_j2objc_annotations//jar",
         "@com_google_protobuf//:protobuf_java",
-        "@com_google_protobuf//:protobuf_java_util",
     ],
 )
