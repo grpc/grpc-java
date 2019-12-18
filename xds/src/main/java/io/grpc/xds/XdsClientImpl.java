@@ -152,6 +152,7 @@ final class XdsClientImpl extends XdsClient {
 
   @Override
   void shutdown() {
+    logger.log(Level.INFO, "Shutting down XdsClient");
     channel.shutdown();
     if (adsStream != null) {
       adsStream.close(Status.CANCELLED.withDescription("shutdown").asException());
@@ -884,11 +885,11 @@ final class XdsClientImpl extends XdsClient {
     }
 
     private void handleStreamClosed(Status error) {
-      logger.log(Level.INFO, error.getDescription(), error.getCause());
       checkArgument(!error.isOk(), "unexpected OK status");
       if (closed) {
         return;
       }
+      logger.log(Level.FINE, error.getDescription(), error.getCause());
       closed = true;
       cleanUp();
       if (responseReceived || retryBackoffPolicy == null) {
