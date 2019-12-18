@@ -1,10 +1,11 @@
 workspace(name = "examples")
 
-# For released versions, use the tagged git-repository:
-# git_repository(
+# For released versions, use release tag:
+# http_repository(
 #     name = "io_grpc_grpc_java",
-#     remote = "https://github.com/grpc/grpc-java.git",
-#     tag = "<TAG>",
+#     sha256 = "<SHA>",
+#     strip_prefix = "grpc-java-<TAG>",
+#     url = "https://github.com/grpc/grpc-java/archive/<TAG>.zip",
 # )
 local_repository(
     name = "io_grpc_grpc_java",
