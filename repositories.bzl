@@ -165,7 +165,7 @@ def com_google_android_annotations():
     jvm_maven_import_external(
         name = "com_google_android_annotations",
         artifact = "com.google.android:annotations:4.1.1.4",
-        server_urls = ["http://central.maven.org/maven2"],
+        server_urls = ["https://repo.maven.apache.org/maven2/"],
         artifact_sha256 = "ba734e1e84c09d615af6a09d33034b4f0442f8772dec120efb376d86a565ae15",
         licenses = ["notice"],  # Apache 2.0
     )
@@ -174,7 +174,7 @@ def com_google_api_grpc_google_common_protos():
     jvm_maven_import_external(
         name = "com_google_api_grpc_proto_google_common_protos",
         artifact = "com.google.api.grpc:proto-google-common-protos:1.12.0",
-        server_urls = ["http://central.maven.org/maven2"],
+        server_urls = ["https://repo.maven.apache.org/maven2/"],
         artifact_sha256 = "bd60cd7a423b00fb824c27bdd0293aaf4781be1daba6ed256311103fb4b84108",
         licenses = ["notice"],  # Apache 2.0
     )
@@ -183,7 +183,7 @@ def com_google_auth_google_auth_library_credentials():
     jvm_maven_import_external(
         name = "com_google_auth_google_auth_library_credentials",
         artifact = "com.google.auth:google-auth-library-credentials:0.19.0",
-        server_urls = ["http://central.maven.org/maven2"],
+        server_urls = ["https://repo.maven.apache.org/maven2/"],
         artifact_sha256 = "3f81ea05795abc40daf36f4c427487a738489f7cc0f515b7930f838ed301165a",
         licenses = ["notice"],  # BSD 3-clause
     )
@@ -192,7 +192,7 @@ def com_google_auth_google_auth_library_oauth2_http():
     jvm_maven_import_external(
         name = "com_google_auth_google_auth_library_oauth2_http",
         artifact = "com.google.auth:google-auth-library-oauth2-http:0.19.0",
-        server_urls = ["http://central.maven.org/maven2"],
+        server_urls = ["https://repo.maven.apache.org/maven2/"],
         artifact_sha256 = "51992d58ec0f903fb521412f677bd09d83895609a0198d4a9ae65a3d88e2aa4a",
         licenses = ["notice"],  # BSD 3-clause
     )
@@ -201,7 +201,7 @@ def com_google_code_findbugs_jsr305():
     jvm_maven_import_external(
         name = "com_google_code_findbugs_jsr305",
         artifact = "com.google.code.findbugs:jsr305:3.0.2",
-        server_urls = ["http://central.maven.org/maven2"],
+        server_urls = ["https://repo.maven.apache.org/maven2/"],
         artifact_sha256 = "766ad2a0783f2687962c8ad74ceecc38a28b9f72a2d085ee438b7813e928d0c7",
         licenses = ["notice"],  # Apache 2.0
     )
@@ -210,7 +210,7 @@ def com_google_code_gson():
     jvm_maven_import_external(
         name = "com_google_code_gson_gson",
         artifact = "com.google.code.gson:gson:jar:2.8.6",
-        server_urls = ["http://central.maven.org/maven2"],
+        server_urls = ["https://repo.maven.apache.org/maven2/"],
         artifact_sha256 = "c8fb4839054d280b3033f800d1f5a97de2f028eb8ba2eb458ad287e536f3f25f",
         licenses = ["notice"],  # Apache 2.0
     )
@@ -219,7 +219,7 @@ def com_google_errorprone_error_prone_annotations():
     jvm_maven_import_external(
         name = "com_google_errorprone_error_prone_annotations",
         artifact = "com.google.errorprone:error_prone_annotations:2.3.3",
-        server_urls = ["http://central.maven.org/maven2"],
+        server_urls = ["https://repo.maven.apache.org/maven2/"],
         artifact_sha256 = "ec59f1b702d9afc09e8c3929f5c42777dec623a6ea2731ac694332c7d7680f5a",
         licenses = ["notice"],  # Apache 2.0
     )
@@ -228,7 +228,7 @@ def com_google_guava():
     jvm_maven_import_external(
         name = "com_google_guava_guava",
         artifact = "com.google.guava:guava:28.1-android",
-        server_urls = ["http://central.maven.org/maven2"],
+        server_urls = ["https://repo.maven.apache.org/maven2/"],
         artifact_sha256 = "e112ce92c0f0733965eede73d94589c59a72128b06b08bba5ebe2f9ea672ef60",
         licenses = ["notice"],  # Apache 2.0
     )
@@ -238,7 +238,7 @@ def com_google_guava_failureaccess():
     jvm_maven_import_external(
         name = "com_google_guava_failureaccess",
         artifact = "com.google.guava:failureaccess:1.0.1",
-        server_urls = ["http://central.maven.org/maven2"],
+        server_urls = ["https://repo.maven.apache.org/maven2/"],
         artifact_sha256 = "a171ee4c734dd2da837e4b16be9df4661afab72a41adaf31eb84dfdaf936ca26",
         licenses = ["notice"],  # Apache 2.0
     )
@@ -247,7 +247,7 @@ def com_google_j2objc_j2objc_annotations():
     jvm_maven_import_external(
         name = "com_google_j2objc_j2objc_annotations",
         artifact = "com.google.j2objc:j2objc-annotations:1.3",
-        server_urls = ["http://central.maven.org/maven2"],
+        server_urls = ["https://repo.maven.apache.org/maven2/"],
         artifact_sha256 = "21af30c92267bd6122c0e0b4d20cccb6641a37eaf956c6540ec471d584e64a7b",
         licenses = ["notice"],  # Apache 2.0
     )
@@ -276,7 +276,7 @@ def com_google_truth_truth():
     jvm_maven_import_external(
         name = "com_google_truth_truth",
         artifact = "com.google.truth:truth:1.0",
-        server_urls = ["http://central.maven.org/maven2"],
+        server_urls = ["https://repo.maven.apache.org/maven2/"],
         artifact_sha256 = "edaa12f3b581fcf1c07311e94af8766919c4f3d904b00d3503147b99bf5b4004",
         licenses = ["notice"],  # Apache 2.0
     )
@@ -285,7 +285,7 @@ def com_squareup_okhttp():
     jvm_maven_import_external(
         name = "com_squareup_okhttp_okhttp",
         artifact = "com.squareup.okhttp:okhttp:2.5.0",
-        server_urls = ["http://central.maven.org/maven2"],
+        server_urls = ["https://repo.maven.apache.org/maven2/"],
         artifact_sha256 = "1cc716e29539adcda677949508162796daffedb4794cbf947a6f65e696f0381c",
         licenses = ["notice"],  # Apache 2.0
     )
@@ -294,7 +294,7 @@ def com_squareup_okio():
     jvm_maven_import_external(
         name = "com_squareup_okio_okio",
         artifact = "com.squareup.okio:okio:1.13.0",
-        server_urls = ["http://central.maven.org/maven2"],
+        server_urls = ["https://repo.maven.apache.org/maven2/"],
         artifact_sha256 = "734269c3ebc5090e3b23566db558f421f0b4027277c79ad5d176b8ec168bb850",
         licenses = ["notice"],  # Apache 2.0
     )
@@ -311,7 +311,7 @@ def io_netty_buffer():
     jvm_maven_import_external(
         name = "io_netty_netty_buffer",
         artifact = "io.netty:netty-buffer:4.1.42.Final",
-        server_urls = ["http://central.maven.org/maven2"],
+        server_urls = ["https://repo.maven.apache.org/maven2/"],
         artifact_sha256 = "7b0171a4e8bcd573e08d9f2bba053c67b557ab5012106a5982ccbae5743814c0",
         licenses = ["notice"],  # Apache 2.0
     )
@@ -320,7 +320,7 @@ def io_netty_codec():
     jvm_maven_import_external(
         name = "io_netty_netty_codec",
         artifact = "io.netty:netty-codec:4.1.42.Final",
-        server_urls = ["http://central.maven.org/maven2"],
+        server_urls = ["https://repo.maven.apache.org/maven2/"],
         artifact_sha256 = "e96ced697fb7df589da7c20c995e01f75a9cb246be242bbc4cd3b4af424ff189",
         licenses = ["notice"],  # Apache 2.0
     )
@@ -329,7 +329,7 @@ def io_netty_codec_http():
     jvm_maven_import_external(
         name = "io_netty_netty_codec_http",
         artifact = "io.netty:netty-codec-http:4.1.42.Final",
-        server_urls = ["http://central.maven.org/maven2"],
+        server_urls = ["https://repo.maven.apache.org/maven2/"],
         artifact_sha256 = "eb349c0f1b249af7c7a8fbbd1c761d65d9bc230880cd8d37feab9e8278292625",
         licenses = ["notice"],  # Apache 2.0
     )
@@ -338,7 +338,7 @@ def io_netty_codec_http2():
     jvm_maven_import_external(
         name = "io_netty_netty_codec_http2",
         artifact = "io.netty:netty-codec-http2:4.1.42.Final",
-        server_urls = ["http://central.maven.org/maven2"],
+        server_urls = ["https://repo.maven.apache.org/maven2/"],
         artifact_sha256 = "8bac9625eb68635396eb0c13c9cc0b22bde7c83d0cd2dae3fe9b6f9cf929e372",
         licenses = ["notice"],  # Apache 2.0
     )
@@ -347,7 +347,7 @@ def io_netty_codec_socks():
     jvm_maven_import_external(
         name = "io_netty_netty_codec_socks",
         artifact = "io.netty:netty-codec-socks:4.1.42.Final",
-        server_urls = ["http://central.maven.org/maven2"],
+        server_urls = ["https://repo.maven.apache.org/maven2/"],
         artifact_sha256 = "7f14b3a95ee9aa5a26f66af668690578a81a883683ac1c4ca9e9afdf4d4c7894",
         licenses = ["notice"],  # Apache 2.0
     )
@@ -356,7 +356,7 @@ def io_netty_common():
     jvm_maven_import_external(
         name = "io_netty_netty_common",
         artifact = "io.netty:netty-common:4.1.42.Final",
-        server_urls = ["http://central.maven.org/maven2"],
+        server_urls = ["https://repo.maven.apache.org/maven2/"],
         artifact_sha256 = "3d0a918d78292eeca02a7bb2188daa4e5053b6e29b71e6308309033e121242b5",
         licenses = ["notice"],  # Apache 2.0
     )
@@ -365,7 +365,7 @@ def io_netty_handler():
     jvm_maven_import_external(
         name = "io_netty_netty_handler",
         artifact = "io.netty:netty-handler:4.1.42.Final",
-        server_urls = ["http://central.maven.org/maven2"],
+        server_urls = ["https://repo.maven.apache.org/maven2/"],
         artifact_sha256 = "11eda86500c33b9d386719b5419f513fd9c097d13894f25dd0c75b610d636e03",
         licenses = ["notice"],  # Apache 2.0
     )
@@ -374,7 +374,7 @@ def io_netty_handler_proxy():
     jvm_maven_import_external(
         name = "io_netty_netty_handler_proxy",
         artifact = "io.netty:netty-handler-proxy:4.1.42.Final",
-        server_urls = ["http://central.maven.org/maven2"],
+        server_urls = ["https://repo.maven.apache.org/maven2/"],
         artifact_sha256 = "25f22da21c29ab0d3b6b889412351bcfc5f9ccd42e07d2d5513d5c4eb571f343",
         licenses = ["notice"],  # Apache 2.0
     )
@@ -383,7 +383,7 @@ def io_netty_resolver():
     jvm_maven_import_external(
         name = "io_netty_netty_resolver",
         artifact = "io.netty:netty-resolver:4.1.42.Final",
-        server_urls = ["http://central.maven.org/maven2"],
+        server_urls = ["https://repo.maven.apache.org/maven2/"],
         artifact_sha256 = "89768242b6b7cce9bd9f5945ad21d1b4bae515c6b1bf03a8af5d1899779cebc9",
         licenses = ["notice"],  # Apache 2.0
     )
@@ -392,7 +392,7 @@ def io_netty_tcnative_boringssl_static():
     jvm_maven_import_external(
         name = "io_netty_netty_tcnative_boringssl_static",
         artifact = "io.netty:netty-tcnative-boringssl-static:2.0.26.Final",
-        server_urls = ["http://central.maven.org/maven2"],
+        server_urls = ["https://repo.maven.apache.org/maven2/"],
         artifact_sha256 = "5f074a4b112bf7d087331e33d2da720745c5bda047b34b64bd70aaaae4de24c6",
         licenses = ["notice"],  # Apache 2.0
     )
@@ -401,7 +401,7 @@ def io_netty_transport():
     jvm_maven_import_external(
         name = "io_netty_netty_transport",
         artifact = "io.netty:netty-transport:4.1.42.Final",
-        server_urls = ["http://central.maven.org/maven2"],
+        server_urls = ["https://repo.maven.apache.org/maven2/"],
         artifact_sha256 = "dfa817a156ea263aa9ad8364a2e226527665c9722aca40a7945f228c2c14f1da",
         licenses = ["notice"],  # Apache 2.0
     )
@@ -410,7 +410,7 @@ def io_netty_transport_native_epoll():
     jvm_maven_import_external(
         name = "io_netty_netty_transport_native_epoll",
         artifact = "io.netty:netty-transport-native-epoll:jar:linux-x86_64:4.1.42.Final",
-        server_urls = ["http://central.maven.org/maven2"],
+        server_urls = ["https://repo.maven.apache.org/maven2/"],
         artifact_sha256 = "7bdf3003d5b60b061b494e62d1bafc420caf800efb743b14ec01ceaef1d3fa3e",
         licenses = ["notice"],  # Apache 2.0
     )
@@ -419,7 +419,7 @@ def io_opencensus_api():
     jvm_maven_import_external(
         name = "io_opencensus_opencensus_api",
         artifact = "io.opencensus:opencensus-api:0.24.0",
-        server_urls = ["http://central.maven.org/maven2"],
+        server_urls = ["https://repo.maven.apache.org/maven2/"],
         artifact_sha256 = "f561b1cc2673844288e596ddf5bb6596868a8472fd2cb8993953fc5c034b2352",
         licenses = ["notice"],  # Apache 2.0
     )
@@ -428,7 +428,7 @@ def io_opencensus_grpc_metrics():
     jvm_maven_import_external(
         name = "io_opencensus_opencensus_contrib_grpc_metrics",
         artifact = "io.opencensus:opencensus-contrib-grpc-metrics:0.24.0",
-        server_urls = ["http://central.maven.org/maven2"],
+        server_urls = ["https://repo.maven.apache.org/maven2/"],
         artifact_sha256 = "875582e093f11950ad3f4a50b5fee33a008023f7d1e47820a1bef05d23b9ed42",
         licenses = ["notice"],  # Apache 2.0
     )
@@ -437,7 +437,7 @@ def io_perfmark():
     jvm_maven_import_external(
         name = "io_perfmark_perfmark_api",
         artifact = "io.perfmark:perfmark-api:0.19.0",
-        server_urls = ["http://central.maven.org/maven2"],
+        server_urls = ["https://repo.maven.apache.org/maven2/"],
         artifact_sha256 = "b734ba2149712409a44eabdb799f64768578fee0defe1418bb108fe32ea43e1a",
         licenses = ["notice"],  # Apache 2.0
     )
@@ -447,7 +447,7 @@ def javax_annotation():
     jvm_maven_import_external(
         name = "javax_annotation_javax_annotation_api",
         artifact = "javax.annotation:javax.annotation-api:1.2",
-        server_urls = ["http://central.maven.org/maven2"],
+        server_urls = ["https://repo.maven.apache.org/maven2/"],
         artifact_sha256 = "5909b396ca3a2be10d0eea32c74ef78d816e1b4ead21de1d78de1f890d033e04",
         licenses = ["reciprocal"],  # CDDL License
     )
@@ -456,7 +456,7 @@ def junit_junit():
     jvm_maven_import_external(
         name = "junit_junit",
         artifact = "junit:junit:4.12",
-        server_urls = ["http://central.maven.org/maven2"],
+        server_urls = ["https://repo.maven.apache.org/maven2/"],
         artifact_sha256 = "59721f0805e223d84b90677887d9ff567dc534d7c502ca903c0c2b17f05c116a",
         licenses = ["notice"],  # EPL 1.0
     )
@@ -465,7 +465,7 @@ def org_apache_commons_lang3():
     jvm_maven_import_external(
         name = "org_apache_commons_commons_lang3",
         artifact = "org.apache.commons:commons-lang3:3.5",
-        server_urls = ["http://central.maven.org/maven2"],
+        server_urls = ["https://repo.maven.apache.org/maven2/"],
         artifact_sha256 = "8ac96fc686512d777fca85e144f196cd7cfe0c0aec23127229497d1a38ff651c",
         licenses = ["notice"],  # Apache 2.0
     )
@@ -474,7 +474,7 @@ def org_codehaus_mojo_animal_sniffer_annotations():
     jvm_maven_import_external(
         name = "org_codehaus_mojo_animal_sniffer_annotations",
         artifact = "org.codehaus.mojo:animal-sniffer-annotations:1.18",
-        server_urls = ["http://central.maven.org/maven2"],
+        server_urls = ["https://repo.maven.apache.org/maven2/"],
         artifact_sha256 = "47f05852b48ee9baefef80fa3d8cea60efa4753c0013121dd7fe5eef2e5c729d",
         licenses = ["notice"],  # MIT
     )
