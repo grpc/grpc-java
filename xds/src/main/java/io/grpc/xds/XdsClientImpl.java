@@ -152,7 +152,7 @@ final class XdsClientImpl extends XdsClient {
 
   @Override
   void shutdown() {
-    logger.log(Level.FINE, "Shutting down XdsClient");
+    logger.log(Level.INFO, "Shutting down XdsClient");
     channel.shutdown();
     if (adsStream != null) {
       adsStream.close(Status.CANCELLED.withDescription("shutdown").asException());
@@ -889,7 +889,7 @@ final class XdsClientImpl extends XdsClient {
       if (closed) {
         return;
       }
-      logger.log(Level.INFO, error.getDescription(), error.getCause());
+      logger.log(Level.FINE, error.getDescription(), error.getCause());
       closed = true;
       cleanUp();
       if (responseReceived || retryBackoffPolicy == null) {
