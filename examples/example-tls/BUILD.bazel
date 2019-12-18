@@ -24,7 +24,7 @@ java_library(
         ["src/main/java/**/*.java"],
     ),
     runtime_deps = [
-        "@io_netty_netty_tcnative_boringssl_static//jar",
+        "@maven//:io_netty_netty_tcnative_boringssl_static",
     ],
     deps = [
         ":helloworld_java_grpc",
@@ -33,7 +33,7 @@ java_library(
         "@io_grpc_grpc_java//netty",
         "@io_grpc_grpc_java//protobuf",
         "@io_grpc_grpc_java//stub",
-        "@io_netty_netty_handler//jar",
+        "@maven//:io_netty_netty_handler",
     ],
 )
 
