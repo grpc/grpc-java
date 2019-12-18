@@ -37,115 +37,77 @@ IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS = {
     "io.grpc:grpc-testing": "@io_grpc_grpc_java//testing",
 }
 
-def grpc_java_repositories(
-        omit_com_google_android_annotations = False,
-        omit_com_google_api_grpc_google_common_protos = False,
-        omit_com_google_auth_google_auth_library_credentials = False,
-        omit_com_google_auth_google_auth_library_oauth2_http = False,
-        omit_com_google_code_findbugs_jsr305 = False,
-        omit_com_google_code_gson = False,
-        omit_com_google_errorprone_error_prone_annotations = False,
-        omit_com_google_guava = False,
-        omit_com_google_guava_failureaccess = False,
-        omit_com_google_j2objc_j2objc_annotations = False,
-        omit_com_google_protobuf = False,
-        omit_com_google_protobuf_java = False,
-        omit_com_google_protobuf_javalite = False,
-        omit_com_google_truth_truth = False,
-        omit_com_squareup_okhttp = False,
-        omit_com_squareup_okio = False,
-        omit_io_grpc_grpc_proto = False,
-        omit_io_netty_buffer = False,
-        omit_io_netty_common = False,
-        omit_io_netty_transport = False,
-        omit_io_netty_transport_native_epoll = False,
-        omit_io_netty_codec = False,
-        omit_io_netty_codec_socks = False,
-        omit_io_netty_codec_http = False,
-        omit_io_netty_codec_http2 = False,
-        omit_io_netty_handler = False,
-        omit_io_netty_handler_proxy = False,
-        omit_io_netty_resolver = False,
-        omit_io_netty_tcnative_boringssl_static = False,
-        omit_io_opencensus_api = False,
-        omit_io_opencensus_grpc_metrics = False,
-        omit_io_perfmark = False,
-        omit_javax_annotation = False,
-        omit_junit_junit = False,
-        omit_org_apache_commons_lang3 = False,
-        omit_org_codehaus_mojo_animal_sniffer_annotations = False):
+def grpc_java_repositories():
     """Imports dependencies for grpc-java."""
-    if not omit_com_google_android_annotations:
+    if not native.existing_rule("com_google_android_annotations"):
         com_google_android_annotations()
-    if not omit_com_google_api_grpc_google_common_protos:
-        com_google_api_grpc_google_common_protos()
-    if not omit_com_google_auth_google_auth_library_credentials:
+    if not native.existing_rule("com_google_api_grpc_proto_google_common_protos"):
+        com_google_api_grpc_proto_google_common_protos()
+    if not native.existing_rule("com_google_auth_google_auth_library_credentials"):
         com_google_auth_google_auth_library_credentials()
-    if not omit_com_google_auth_google_auth_library_oauth2_http:
+    if not native.existing_rule("com_google_auth_google_auth_library_oauth2_http"):
         com_google_auth_google_auth_library_oauth2_http()
-    if not omit_com_google_code_findbugs_jsr305:
+    if not native.existing_rule("com_google_code_findbugs_jsr305"):
         com_google_code_findbugs_jsr305()
-    if not omit_com_google_code_gson:
-        com_google_code_gson()
-    if not omit_com_google_errorprone_error_prone_annotations:
+    if not native.existing_rule("com_google_code_gson_gson"):
+        com_google_code_gson_gson()
+    if not native.existing_rule("com_google_errorprone_error_prone_annotations"):
         com_google_errorprone_error_prone_annotations()
-    if not omit_com_google_guava:
-        com_google_guava()
-    if not omit_com_google_guava_failureaccess:
+    if not native.existing_rule("com_google_guava_guava"):
+        com_google_guava_guava()
+    if not native.existing_rule("com_google_guava_failureaccess"):
         com_google_guava_failureaccess()
-    if not omit_com_google_j2objc_j2objc_annotations:
+    if not native.existing_rule("com_google_j2objc_j2objc_annotations"):
         com_google_j2objc_j2objc_annotations()
-    if not omit_com_google_protobuf:
+    if not native.existing_rule("com_google_protobuf"):
         com_google_protobuf()
-    if omit_com_google_protobuf_java:
-        fail("omit_com_google_protobuf_java is no longer supported and must be not be passed to grpc_java_repositories()")
-    if not omit_com_google_protobuf_javalite:
+    if not native.existing_rule("com_google_protobuf_javalite"):
         com_google_protobuf_javalite()
-    if not omit_com_google_truth_truth:
+    if not native.existing_rule("com_google_truth_truth"):
         com_google_truth_truth()
-    if not omit_com_squareup_okhttp:
-        com_squareup_okhttp()
-    if not omit_com_squareup_okio:
-        com_squareup_okio()
-    if not omit_io_grpc_grpc_proto:
+    if not native.existing_rule("io_grpc_grpc_proto"):
         io_grpc_grpc_proto()
-    if not omit_io_netty_buffer:
-        io_netty_buffer()
-    if not omit_io_netty_common:
-        io_netty_common()
-    if not omit_io_netty_transport:
-        io_netty_transport()
-    if not omit_io_netty_transport_native_epoll:
-        io_netty_transport_native_epoll()
-    if not omit_io_netty_codec:
-        io_netty_codec()
-    if not omit_io_netty_codec_socks:
-        io_netty_codec_socks()
-    if not omit_io_netty_codec_http:
-        io_netty_codec_http()
-    if not omit_io_netty_codec_http2:
-        io_netty_codec_http2()
-    if not omit_io_netty_handler:
-        io_netty_handler()
-    if not omit_io_netty_handler_proxy:
-        io_netty_handler_proxy()
-    if not omit_io_netty_resolver:
-        io_netty_resolver()
-    if not omit_io_netty_tcnative_boringssl_static:
-        io_netty_tcnative_boringssl_static()
-    if not omit_io_opencensus_api:
-        io_opencensus_api()
-    if not omit_io_opencensus_grpc_metrics:
-        io_opencensus_grpc_metrics()
-    if not omit_io_perfmark:
-        io_perfmark()
-    if not omit_javax_annotation:
-        javax_annotation()
-    if not omit_junit_junit:
+    if not native.existing_rule("com_squareup_okhttp_okhttp"):
+        com_squareup_okhttp_okhttp()
+    if not native.existing_rule("com_squareup_okio_okio"):
+        com_squareup_okio_okio()
+    if not native.existing_rule("io_netty_netty_buffer"):
+        io_netty_netty_buffer()
+    if not native.existing_rule("io_netty_netty_codec"):
+        io_netty_netty_codec()
+    if not native.existing_rule("io_netty_netty_codec_http"):
+        io_netty_netty_codec_http()
+    if not native.existing_rule("io_netty_netty_codec_http2"):
+        io_netty_netty_codec_http2()
+    if not native.existing_rule("io_netty_netty_codec_socks"):
+        io_netty_netty_codec_socks()
+    if not native.existing_rule("io_netty_netty_common"):
+        io_netty_netty_common()
+    if not native.existing_rule("io_netty_netty_handler"):
+        io_netty_netty_handler()
+    if not native.existing_rule("io_netty_netty_handler_proxy"):
+        io_netty_netty_handler_proxy()
+    if not native.existing_rule("io_netty_netty_resolver"):
+        io_netty_netty_resolver()
+    if not native.existing_rule("io_netty_netty_tcnative_boringssl_static"):
+        io_netty_netty_tcnative_boringssl_static()
+    if not native.existing_rule("io_netty_netty_transport"):
+        io_netty_netty_transport()
+    if not native.existing_rule("io_netty_netty_transport_native_epoll"):
+        io_netty_netty_transport_native_epoll()
+    if not native.existing_rule("io_opencensus_opencensus_api"):
+        io_opencensus_opencensus_api()
+    if not native.existing_rule("io_opencensus_opencensus_contrib_grpc_metrics"):
+        io_opencensus_opencensus_contrib_grpc_metrics()
+    if not native.existing_rule("io_perfmark_perfmark_api"):
+        io_perfmark_perfmark_api()
+    if not native.existing_rule("javax_annotation_javax_annotation_api"):
+        javax_annotation_javax_annotation_api()
+    if not native.existing_rule("junit_junit"):
         junit_junit()
-    if not omit_org_apache_commons_lang3:
-        org_apache_commons_lang3()
-    if not omit_org_codehaus_mojo_animal_sniffer_annotations:
+    if not native.existing_rule("org_apache_commons_commons_lang3"):
+        org_apache_commons_commons_lang3()
+    if not native.existing_rule("org_codehaus_mojo_animal_sniffer_annotations"):
         org_codehaus_mojo_animal_sniffer_annotations()
 
     native.bind(
@@ -170,7 +132,7 @@ def com_google_android_annotations():
         licenses = ["notice"],  # Apache 2.0
     )
 
-def com_google_api_grpc_google_common_protos():
+def com_google_api_grpc_proto_google_common_protos():
     jvm_maven_import_external(
         name = "com_google_api_grpc_proto_google_common_protos",
         artifact = "com.google.api.grpc:proto-google-common-protos:1.17.0",
@@ -206,7 +168,7 @@ def com_google_code_findbugs_jsr305():
         licenses = ["notice"],  # Apache 2.0
     )
 
-def com_google_code_gson():
+def com_google_code_gson_gson():
     jvm_maven_import_external(
         name = "com_google_code_gson_gson",
         artifact = "com.google.code.gson:gson:jar:2.8.6",
@@ -224,7 +186,7 @@ def com_google_errorprone_error_prone_annotations():
         licenses = ["notice"],  # Apache 2.0
     )
 
-def com_google_guava():
+def com_google_guava_guava():
     jvm_maven_import_external(
         name = "com_google_guava_guava",
         artifact = "com.google.guava:guava:28.1-android",
@@ -281,7 +243,7 @@ def com_google_truth_truth():
         licenses = ["notice"],  # Apache 2.0
     )
 
-def com_squareup_okhttp():
+def com_squareup_okhttp_okhttp():
     jvm_maven_import_external(
         name = "com_squareup_okhttp_okhttp",
         artifact = "com.squareup.okhttp:okhttp:2.5.0",
@@ -290,7 +252,7 @@ def com_squareup_okhttp():
         licenses = ["notice"],  # Apache 2.0
     )
 
-def com_squareup_okio():
+def com_squareup_okio_okio():
     jvm_maven_import_external(
         name = "com_squareup_okio_okio",
         artifact = "com.squareup.okio:okio:1.13.0",
@@ -307,7 +269,7 @@ def io_grpc_grpc_proto():
         urls = ["https://github.com/grpc/grpc-proto/archive/435d723289d348e1bc420d420b364369d565182a.zip"],
     )
 
-def io_netty_buffer():
+def io_netty_netty_buffer():
     jvm_maven_import_external(
         name = "io_netty_netty_buffer",
         artifact = "io.netty:netty-buffer:4.1.42.Final",
@@ -316,7 +278,7 @@ def io_netty_buffer():
         licenses = ["notice"],  # Apache 2.0
     )
 
-def io_netty_codec():
+def io_netty_netty_codec():
     jvm_maven_import_external(
         name = "io_netty_netty_codec",
         artifact = "io.netty:netty-codec:4.1.42.Final",
@@ -325,7 +287,7 @@ def io_netty_codec():
         licenses = ["notice"],  # Apache 2.0
     )
 
-def io_netty_codec_http():
+def io_netty_netty_codec_http():
     jvm_maven_import_external(
         name = "io_netty_netty_codec_http",
         artifact = "io.netty:netty-codec-http:4.1.42.Final",
@@ -334,7 +296,7 @@ def io_netty_codec_http():
         licenses = ["notice"],  # Apache 2.0
     )
 
-def io_netty_codec_http2():
+def io_netty_netty_codec_http2():
     jvm_maven_import_external(
         name = "io_netty_netty_codec_http2",
         artifact = "io.netty:netty-codec-http2:4.1.42.Final",
@@ -343,7 +305,7 @@ def io_netty_codec_http2():
         licenses = ["notice"],  # Apache 2.0
     )
 
-def io_netty_codec_socks():
+def io_netty_netty_codec_socks():
     jvm_maven_import_external(
         name = "io_netty_netty_codec_socks",
         artifact = "io.netty:netty-codec-socks:4.1.42.Final",
@@ -352,7 +314,7 @@ def io_netty_codec_socks():
         licenses = ["notice"],  # Apache 2.0
     )
 
-def io_netty_common():
+def io_netty_netty_common():
     jvm_maven_import_external(
         name = "io_netty_netty_common",
         artifact = "io.netty:netty-common:4.1.42.Final",
@@ -361,7 +323,7 @@ def io_netty_common():
         licenses = ["notice"],  # Apache 2.0
     )
 
-def io_netty_handler():
+def io_netty_netty_handler():
     jvm_maven_import_external(
         name = "io_netty_netty_handler",
         artifact = "io.netty:netty-handler:4.1.42.Final",
@@ -370,7 +332,7 @@ def io_netty_handler():
         licenses = ["notice"],  # Apache 2.0
     )
 
-def io_netty_handler_proxy():
+def io_netty_netty_handler_proxy():
     jvm_maven_import_external(
         name = "io_netty_netty_handler_proxy",
         artifact = "io.netty:netty-handler-proxy:4.1.42.Final",
@@ -379,7 +341,7 @@ def io_netty_handler_proxy():
         licenses = ["notice"],  # Apache 2.0
     )
 
-def io_netty_resolver():
+def io_netty_netty_resolver():
     jvm_maven_import_external(
         name = "io_netty_netty_resolver",
         artifact = "io.netty:netty-resolver:4.1.42.Final",
@@ -388,7 +350,7 @@ def io_netty_resolver():
         licenses = ["notice"],  # Apache 2.0
     )
 
-def io_netty_tcnative_boringssl_static():
+def io_netty_netty_tcnative_boringssl_static():
     jvm_maven_import_external(
         name = "io_netty_netty_tcnative_boringssl_static",
         artifact = "io.netty:netty-tcnative-boringssl-static:2.0.26.Final",
@@ -397,7 +359,7 @@ def io_netty_tcnative_boringssl_static():
         licenses = ["notice"],  # Apache 2.0
     )
 
-def io_netty_transport():
+def io_netty_netty_transport():
     jvm_maven_import_external(
         name = "io_netty_netty_transport",
         artifact = "io.netty:netty-transport:4.1.42.Final",
@@ -406,7 +368,7 @@ def io_netty_transport():
         licenses = ["notice"],  # Apache 2.0
     )
 
-def io_netty_transport_native_epoll():
+def io_netty_netty_transport_native_epoll():
     jvm_maven_import_external(
         name = "io_netty_netty_transport_native_epoll",
         artifact = "io.netty:netty-transport-native-epoll:jar:linux-x86_64:4.1.42.Final",
@@ -415,7 +377,7 @@ def io_netty_transport_native_epoll():
         licenses = ["notice"],  # Apache 2.0
     )
 
-def io_opencensus_api():
+def io_opencensus_opencensus_api():
     jvm_maven_import_external(
         name = "io_opencensus_opencensus_api",
         artifact = "io.opencensus:opencensus-api:0.24.0",
@@ -424,7 +386,7 @@ def io_opencensus_api():
         licenses = ["notice"],  # Apache 2.0
     )
 
-def io_opencensus_grpc_metrics():
+def io_opencensus_opencensus_contrib_grpc_metrics():
     jvm_maven_import_external(
         name = "io_opencensus_opencensus_contrib_grpc_metrics",
         artifact = "io.opencensus:opencensus-contrib-grpc-metrics:0.24.0",
@@ -433,7 +395,7 @@ def io_opencensus_grpc_metrics():
         licenses = ["notice"],  # Apache 2.0
     )
 
-def io_perfmark():
+def io_perfmark_perfmark_api():
     jvm_maven_import_external(
         name = "io_perfmark_perfmark_api",
         artifact = "io.perfmark:perfmark-api:0.19.0",
@@ -442,7 +404,7 @@ def io_perfmark():
         licenses = ["notice"],  # Apache 2.0
     )
 
-def javax_annotation():
+def javax_annotation_javax_annotation_api():
     # Use //stub:javax_annotation for neverlink=1 support.
     jvm_maven_import_external(
         name = "javax_annotation_javax_annotation_api",
@@ -461,7 +423,7 @@ def junit_junit():
         licenses = ["notice"],  # EPL 1.0
     )
 
-def org_apache_commons_lang3():
+def org_apache_commons_commons_lang3():
     jvm_maven_import_external(
         name = "org_apache_commons_commons_lang3",
         artifact = "org.apache.commons:commons-lang3:3.5",
