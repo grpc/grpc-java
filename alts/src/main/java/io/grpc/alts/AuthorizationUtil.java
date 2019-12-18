@@ -20,7 +20,7 @@ import io.grpc.ServerCall;
 import io.grpc.Status;
 import io.grpc.alts.internal.AltsAuthContext;
 import io.grpc.alts.internal.AltsProtocolNegotiator;
-import java.util.List;
+import java.util.Collection;
 
 /** Utility class for ALTS client authorization. */
 public final class AuthorizationUtil {
@@ -33,7 +33,7 @@ public final class AuthorizationUtil {
    * an error otherwise.
    */
   public static Status clientAuthorizationCheck(
-      ServerCall<?, ?> call, List<String> expectedServiceAccounts) {
+      ServerCall<?, ?> call, Collection<String> expectedServiceAccounts) {
     AltsAuthContext altsContext =
         (AltsAuthContext) call.getAttributes().get(AltsProtocolNegotiator.AUTH_CONTEXT_KEY);
     if (altsContext == null) {
