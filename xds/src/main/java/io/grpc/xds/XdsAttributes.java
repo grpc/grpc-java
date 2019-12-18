@@ -76,8 +76,8 @@ public final class XdsAttributes {
       Attributes.Key.create("io.grpc.xds.XdsAttributes.downstreamTlsContext");
 
   @NameResolver.ResolutionResultAttr
-  static final Attributes.Key<ObjectPool<XdsClient>> XDS_CLIENT_REF =
-      Attributes.Key.create("io.grpc.xds.XdsAttributes.xdsClientRef");
+  static final Attributes.Key<ObjectPool<XdsClient>> XDS_CLIENT_POOL =
+      Attributes.Key.create("io.grpc.xds.XdsAttributes.xdsClientPool");
 
   private XdsAttributes() {}
 }

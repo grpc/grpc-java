@@ -223,7 +223,7 @@ public class XdsNameResolverTest {
   }
 
   @Test
-  public void resolve_passXdsClientRefInResult() {
+  public void resolve_passxdsClientPoolInResult() {
     xdsNameResolver.start(mockListener);
     assertThat(responseObservers).hasSize(1);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
@@ -236,7 +236,7 @@ public class XdsNameResolverTest {
     ArgumentCaptor<ResolutionResult> resolutionResultCaptor = ArgumentCaptor.forClass(null);
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
-    ObjectPool<XdsClient> xdsClientPool = result.getAttributes().get(XdsAttributes.XDS_CLIENT_REF);
+    ObjectPool<XdsClient> xdsClientPool = result.getAttributes().get(XdsAttributes.XDS_CLIENT_POOL);
     assertThat(xdsClientPool).isNotNull();
   }
 

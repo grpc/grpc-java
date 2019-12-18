@@ -284,8 +284,8 @@ public class LookasideLbTest {
         return mock(XdsClient.class);
       }
     };
-    ObjectPool<XdsClient> xdsClientRef = new RefCountedXdsClientObjectPool(xdsClientFactory);
-    XdsClient xdsClientFromResolver = xdsClientRef.getObject();
+    ObjectPool<XdsClient> xdsClientPool = new RefCountedXdsClientObjectPool(xdsClientFactory);
+    XdsClient xdsClientFromResolver = xdsClientPool.getObject();
 
     String lbConfigRaw =
         "{'childPolicy' : [{'supported1' : {}}], 'edsServiceName' : 'edsServiceName1'}"
@@ -296,7 +296,7 @@ public class LookasideLbTest {
         .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
         .setAttributes(Attributes.newBuilder()
             .set(ATTR_LOAD_BALANCING_CONFIG, lbConfig)
-            .set(XdsAttributes.XDS_CLIENT_REF, xdsClientRef)
+            .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
             .build())
         .build();
 
@@ -340,8 +340,8 @@ public class LookasideLbTest {
         return mock(XdsClient.class);
       }
     };
-    ObjectPool<XdsClient> xdsClientRef = new RefCountedXdsClientObjectPool(xdsClientFactory);
-    XdsClient xdsClientFromResolver = xdsClientRef.getObject();
+    ObjectPool<XdsClient> xdsClientPool = new RefCountedXdsClientObjectPool(xdsClientFactory);
+    XdsClient xdsClientFromResolver = xdsClientPool.getObject();
 
     String lbConfigRaw =
         "{'childPolicy' : [{'supported1' : {}}], 'edsServiceName' : 'edsServiceName1'}"
@@ -352,7 +352,7 @@ public class LookasideLbTest {
         .setAddresses(eags)
         .setAttributes(Attributes.newBuilder()
             .set(ATTR_LOAD_BALANCING_CONFIG, lbConfig)
-            .set(XdsAttributes.XDS_CLIENT_REF, xdsClientRef)
+            .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
             .build())
         .build();
     lookasideLb.handleResolvedAddresses(resolvedAddresses);
@@ -374,7 +374,7 @@ public class LookasideLbTest {
         .setAddresses(eags)
         .setAttributes(Attributes.newBuilder()
             .set(ATTR_LOAD_BALANCING_CONFIG, lbConfig)
-            .set(XdsAttributes.XDS_CLIENT_REF, xdsClientRef)
+            .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
             .build())
         .build();
     lookasideLb.handleResolvedAddresses(resolvedAddresses);
@@ -397,7 +397,7 @@ public class LookasideLbTest {
         .setAddresses(eags)
         .setAttributes(Attributes.newBuilder()
             .set(ATTR_LOAD_BALANCING_CONFIG, lbConfig)
-            .set(XdsAttributes.XDS_CLIENT_REF, xdsClientRef)
+            .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
             .build())
         .build();
     lookasideLb.handleResolvedAddresses(resolvedAddresses);
@@ -425,7 +425,7 @@ public class LookasideLbTest {
         .setAddresses(eags)
         .setAttributes(Attributes.newBuilder()
             .set(ATTR_LOAD_BALANCING_CONFIG, lbConfig)
-            .set(XdsAttributes.XDS_CLIENT_REF, xdsClientRef)
+            .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
             .build())
         .build();
     lookasideLb.handleResolvedAddresses(resolvedAddresses);
@@ -447,7 +447,7 @@ public class LookasideLbTest {
         .setAddresses(eags)
         .setAttributes(Attributes.newBuilder()
             .set(ATTR_LOAD_BALANCING_CONFIG, lbConfig)
-            .set(XdsAttributes.XDS_CLIENT_REF, xdsClientRef)
+            .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
             .build())
         .build();
     lookasideLb.handleResolvedAddresses(resolvedAddresses);
@@ -472,7 +472,7 @@ public class LookasideLbTest {
     lookasideLb.shutdown();
     verify(localityStore5).reset();
 
-    xdsClientRef.returnObject(xdsClientFromResolver);
+    xdsClientPool.returnObject(xdsClientFromResolver);
   }
 
   @Test
@@ -512,15 +512,15 @@ public class LookasideLbTest {
   }
 
   @Test
-  public void handleResolvedAddress_withXdsClientRefAttributes() throws Exception {
+  public void handleResolvedAddress_withxdsClientPoolAttributes() throws Exception {
     XdsClientFactory xdsClientFactory = new XdsClientFactory() {
       @Override
       XdsClient createXdsClient() {
         return mock(XdsClient.class);
       }
     };
-    ObjectPool<XdsClient> xdsClientRef = new RefCountedXdsClientObjectPool(xdsClientFactory);
-    XdsClient xdsClientFromResolver = xdsClientRef.getObject();
+    ObjectPool<XdsClient> xdsClientPool = new RefCountedXdsClientObjectPool(xdsClientFactory);
+    XdsClient xdsClientFromResolver = xdsClientPool.getObject();
 
     String lbConfigRaw =
         "{'childPolicy' : [{'supported1' : {}}], 'edsServiceName' : 'edsServiceName1'}"
@@ -531,7 +531,7 @@ public class LookasideLbTest {
         .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
         .setAttributes(Attributes.newBuilder()
             .set(ATTR_LOAD_BALANCING_CONFIG, lbConfig)
-            .set(XdsAttributes.XDS_CLIENT_REF, xdsClientRef)
+            .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
             .build())
         .build();
 
@@ -551,7 +551,7 @@ public class LookasideLbTest {
     verify(helper).updateBalancingState(READY, picker);
 
     // Mimic resolver shutdown
-    xdsClientRef.returnObject(xdsClientFromResolver);
+    xdsClientPool.returnObject(xdsClientFromResolver);
     verify(xdsClientFromResolver, never()).shutdown();
     lookasideLb.shutdown();
     verify(xdsClientFromResolver).cancelEndpointDataWatch("edsServiceName1", endpointWatcher);
