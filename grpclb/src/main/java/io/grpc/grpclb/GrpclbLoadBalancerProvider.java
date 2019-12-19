@@ -83,15 +83,17 @@ public final class GrpclbLoadBalancerProvider extends LoadBalancerProvider {
     if (rawChildPolicies == null) {
       return ConfigOrError.fromConfig(DEFAULT_MODE);
     }
+
     List<LbConfig> childPolicies =
         ServiceConfigUtil.unwrapLoadBalancingConfigList(checkObjectList(rawChildPolicies));
     for (LbConfig childPolicy : childPolicies) {
       String childPolicyName = childPolicy.getPolicyName();
+      String target = (String) childPolicy.getRawConfigValue().get("targetName");
       switch (childPolicyName) {
         case "round_robin":
-          return ConfigOrError.fromConfig(Mode.ROUND_ROBIN);
+          return ConfigOrError.fromConfig(GrpclbConfig.create(Mode.ROUND_ROBIN, target));
         case "pick_first":
-          return ConfigOrError.fromConfig(Mode.PICK_FIRST);
+          return ConfigOrError.fromConfig(GrpclbConfig.create(Mode.PICK_FIRST, target));
         default:
           // TODO(zhangkun83): maybe log?
       }
@@ -100,10 +102,8 @@ public final class GrpclbLoadBalancerProvider extends LoadBalancerProvider {
   }
 
   /**
-   * Gets a list from an object for the given key.  Copy of
-   * {@link io.grpc.internal.ServiceConfigUtil#getList}.
+   * Gets a list from an object for the given key.
    */
-  @SuppressWarnings("unchecked")
   @Nullable
   private static List<?> getList(Map<String, ?> obj, String key) {
     assert key != null;
@@ -118,9 +118,6 @@ public final class GrpclbLoadBalancerProvider extends LoadBalancerProvider {
     return (List<?>) value;
   }
 
-  /**
-   * Copy of {@link io.grpc.internal.ServiceConfigUtil#checkObjectList}.
-   */
   @SuppressWarnings("unchecked")
   private static List<Map<String, ?>> checkObjectList(List<?> rawList) {
     for (int i = 0; i < rawList.size(); i++) {

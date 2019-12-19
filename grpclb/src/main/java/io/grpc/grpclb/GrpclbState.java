@@ -141,7 +141,7 @@ final class GrpclbState {
   @Nullable
   private LbStream lbStream;
   private Map<List<EquivalentAddressGroup>, Subchannel> subchannels = Collections.emptyMap();
-  private final Mode mode;
+  private final GrpclbConfig config;
 
   // Has the same size as the round-robin list from the balancer.
   // A drop entry from the round-robin list becomes a DropEntry here.
@@ -153,22 +153,27 @@ final class GrpclbState {
       new RoundRobinPicker(Collections.<DropEntry>emptyList(), Arrays.asList(BUFFER_ENTRY));
 
   GrpclbState(
-      Mode mode,
+      GrpclbConfig config,
       Helper helper,
       SubchannelPool subchannelPool,
       TimeProvider time,
       Stopwatch stopwatch,
       BackoffPolicy.Provider backoffPolicyProvider) {
-    this.mode = checkNotNull(mode, "mode");
+    this.config = checkNotNull(config, "config");
     this.helper = checkNotNull(helper, "helper");
     this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
     this.subchannelPool =
-        mode == Mode.ROUND_ROBIN ? checkNotNull(subchannelPool, "subchannelPool") : null;
+        config.getMode() == Mode.ROUND_ROBIN
+            ? checkNotNull(subchannelPool, "subchannelPool") : null;
     this.time = checkNotNull(time, "time provider");
     this.stopwatch = checkNotNull(stopwatch, "stopwatch");
     this.timerService = checkNotNull(helper.getScheduledExecutorService(), "timerService");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
-    this.serviceName = checkNotNull(helper.getAuthority(), "helper returns null authority");
+    if (config.getTarget() != null) {
+      this.serviceName = config.getTarget();
+    } else {
+      this.serviceName = checkNotNull(helper.getAuthority(), "helper returns null authority");
+    }
     this.logger = checkNotNull(helper.getChannelLogger(), "logger");
   }
 
@@ -182,7 +187,7 @@ final class GrpclbState {
       }
       return;
     }
-    if (mode == Mode.ROUND_ROBIN && newState.getState() == IDLE) {
+    if (config.getMode() == Mode.ROUND_ROBIN && newState.getState() == IDLE) {
       subchannel.requestConnection();
     }
     subchannel.getAttributes().get(STATE_INFO).set(newState);
@@ -327,7 +332,7 @@ final class GrpclbState {
 
   void shutdown() {
     shutdownLbComm();
-    switch (mode) {
+    switch (config.getMode()) {
       case ROUND_ROBIN:
         // We close the subchannels through subchannelPool instead of helper just for convenience of
         // testing.
@@ -343,7 +348,7 @@ final class GrpclbState {
         }
         break;
       default:
-        throw new AssertionError("Missing case for " + mode);
+        throw new AssertionError("Missing case for " + config.getMode());
     }
     subchannels = Collections.emptyMap();
     cancelFallbackTimer();
@@ -384,7 +389,7 @@ final class GrpclbState {
         new HashMap<>();
     List<BackendEntry> newBackendList = new ArrayList<>();
 
-    switch (mode) {
+    switch (config.getMode()) {
       case ROUND_ROBIN:
         for (BackendAddressGroup backendAddr : newBackendAddrList) {
           EquivalentAddressGroup eag = backendAddr.getAddresses();
@@ -447,7 +452,7 @@ final class GrpclbState {
             new BackendEntry(subchannel, new TokenAttachingTracerFactory(loadRecorder)));
         break;
       default:
-        throw new AssertionError("Missing case for " + mode);
+        throw new AssertionError("Missing case for " + config.getMode());
     }
 
     dropList = Collections.unmodifiableList(newDropList);
@@ -687,7 +692,7 @@ final class GrpclbState {
   private void maybeUpdatePicker() {
     List<RoundRobinEntry> pickList;
     ConnectivityState state;
-    switch (mode) {
+    switch (config.getMode()) {
       case ROUND_ROBIN:
         pickList = new ArrayList<>(backendList.size());
         Status error = null;
@@ -745,7 +750,7 @@ final class GrpclbState {
         }
         break;
       default:
-        throw new AssertionError("Missing case for " + mode);
+        throw new AssertionError("Missing case for " + config.getMode());
     }
     maybeUpdatePicker(state, new RoundRobinPicker(dropList, pickList));
   }

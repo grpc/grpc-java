@@ -22,7 +22,7 @@ import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
-import static io.grpc.grpclb.GrpclbLoadBalancer.retrieveModeFromLbConfig;
+import static io.grpc.grpclb.GrpclbLoadBalancer.retrieveGrpcLbConfig;
 import static io.grpc.grpclb.GrpclbState.BUFFER_ENTRY;
 import static io.grpc.grpclb.GrpclbState.DROP_PICK_RESULT;
 import static org.junit.Assert.assertEquals;
@@ -2017,43 +2017,48 @@ public class GrpclbLoadBalancerTest {
   public void retrieveModeFromLbConfig_pickFirst() throws Exception {
     String lbConfig = "{\"childPolicy\" : [{\"pick_first\" : {}}, {\"round_robin\" : {}}]}";
 
-    Mode mode = retrieveModeFromLbConfig(parseJsonObject(lbConfig), channelLogger);
+    GrpclbConfig config = retrieveGrpcLbConfig(parseJsonObject(lbConfig), channelLogger);
     assertThat(logs).isEmpty();
-    assertThat(mode).isEqualTo(Mode.PICK_FIRST);
+    assertThat(config.getMode()).isEqualTo(Mode.PICK_FIRST);
+    assertThat(config.getTarget()).isNull();
   }
 
   @Test
   public void retrieveModeFromLbConfig_roundRobin() throws Exception {
     String lbConfig = "{\"childPolicy\" : [{\"round_robin\" : {}}, {\"pick_first\" : {}}]}";
 
-    Mode mode = retrieveModeFromLbConfig(parseJsonObject(lbConfig), channelLogger);
+    GrpclbConfig config = retrieveGrpcLbConfig(parseJsonObject(lbConfig), channelLogger);
     assertThat(logs).isEmpty();
-    assertThat(mode).isEqualTo(Mode.ROUND_ROBIN);
+    assertThat(config.getMode()).isEqualTo(Mode.ROUND_ROBIN);
+    assertThat(config.getTarget()).isNull();
   }
 
   @Test
   public void retrieveModeFromLbConfig_nullConfigUseRoundRobin() throws Exception {
-    Mode mode = retrieveModeFromLbConfig(null, channelLogger);
+    GrpclbConfig config = retrieveGrpcLbConfig(null, channelLogger);
     assertThat(logs).isEmpty();
-    assertThat(mode).isEqualTo(Mode.ROUND_ROBIN);
+    assertThat(config.getMode()).isEqualTo(Mode.ROUND_ROBIN);
+    assertThat(config.getTarget()).isNull();
   }
 
   @Test
   public void retrieveModeFromLbConfig_emptyConfigUseRoundRobin() throws Exception {
     String lbConfig = "{}";
 
-    Mode mode = retrieveModeFromLbConfig(parseJsonObject(lbConfig), channelLogger);
+    GrpclbConfig config = retrieveGrpcLbConfig(parseJsonObject(lbConfig), channelLogger);
     assertThat(logs).isEmpty();
-    assertThat(mode).isEqualTo(Mode.ROUND_ROBIN);
+    assertThat(config.getMode()).isEqualTo(Mode.ROUND_ROBIN);
+    assertThat(config.getTarget()).isNull();
   }
 
   @Test
   public void retrieveModeFromLbConfig_emptyChildPolicyUseRoundRobin() throws Exception {
     String lbConfig = "{\"childPolicy\" : []}";
 
-    Mode mode = retrieveModeFromLbConfig(parseJsonObject(lbConfig), channelLogger);
+    GrpclbConfig config = retrieveGrpcLbConfig(parseJsonObject(lbConfig), channelLogger);
     assertThat(logs).isEmpty();
-    assertThat(mode).isEqualTo(Mode.ROUND_ROBIN);
+    assertThat(config.getMode()).isEqualTo(Mode.ROUND_ROBIN);
+    assertThat(config.getTarget()).isNull();
   }
 
   @Test
@@ -2061,27 +2066,41 @@ public class GrpclbLoadBalancerTest {
       throws Exception {
     String lbConfig = "{\"childPolicy\" : [ {\"nonono\" : {}} ]}";
 
-    Mode mode = retrieveModeFromLbConfig(parseJsonObject(lbConfig), channelLogger);
+    GrpclbConfig config = retrieveGrpcLbConfig(parseJsonObject(lbConfig), channelLogger);
     assertThat(logs).containsExactly("DEBUG: grpclb ignoring unsupported child policy nonono");
-    assertThat(mode).isEqualTo(Mode.ROUND_ROBIN);
+    assertThat(config.getMode()).isEqualTo(Mode.ROUND_ROBIN);
+    assertThat(config.getTarget()).isNull();
   }
 
   @Test
   public void retrieveModeFromLbConfig_skipUnsupportedChildPolicy() throws Exception {
     String lbConfig = "{\"childPolicy\" : [ {\"nono\" : {}}, {\"pick_first\" : {} } ]}";
 
-    Mode mode = retrieveModeFromLbConfig(parseJsonObject(lbConfig), channelLogger);
+    GrpclbConfig config = retrieveGrpcLbConfig(parseJsonObject(lbConfig), channelLogger);
     assertThat(logs).containsExactly("DEBUG: grpclb ignoring unsupported child policy nono");
-    assertThat(mode).isEqualTo(Mode.PICK_FIRST);
+    assertThat(config.getMode()).isEqualTo(Mode.PICK_FIRST);
+    assertThat(config.getTarget()).isNull();
+  }
+
+  @Test
+  public void retrieveModeFromLbConfig_skipUnsupportedChildPolicyWithTarget() throws Exception {
+    String lbConfig = "{\"childPolicy\" : "
+        + "[ {\"nono\" : {}}, {\"pick_first\" : {\"targetName\": \"foo.google.com\"} } ]}";
+
+    GrpclbConfig config = retrieveGrpcLbConfig(parseJsonObject(lbConfig), channelLogger);
+    assertThat(logs).containsExactly("DEBUG: grpclb ignoring unsupported child policy nono");
+    assertThat(config.getMode()).isEqualTo(Mode.PICK_FIRST);
+    assertThat(config.getTarget()).isEqualTo("foo.google.com");
   }
 
   @Test
   public void retrieveModeFromLbConfig_badConfigDefaultToRoundRobin() throws Exception {
     String lbConfig = "{\"childPolicy\" : {}}";
 
-    Mode mode = retrieveModeFromLbConfig(parseJsonObject(lbConfig), channelLogger);
+    GrpclbConfig config = retrieveGrpcLbConfig(parseJsonObject(lbConfig), channelLogger);
     assertThat(logs).containsExactly("WARNING: Bad grpclb config, using ROUND_ROBIN");
-    assertThat(mode).isEqualTo(Mode.ROUND_ROBIN);
+    assertThat(config.getMode()).isEqualTo(Mode.ROUND_ROBIN);
+    assertThat(config.getTarget()).isNull();
   }
 
   @SuppressWarnings("deprecation")

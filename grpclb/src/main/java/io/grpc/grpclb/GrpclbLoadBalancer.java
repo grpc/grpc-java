@@ -58,7 +58,7 @@ class GrpclbLoadBalancer extends LoadBalancer {
   private final SubchannelPool subchannelPool;
   private final BackoffPolicy.Provider backoffPolicyProvider;
 
-  private Mode mode = Mode.ROUND_ROBIN;
+  private GrpclbConfig config = GrpclbConfig.create(Mode.ROUND_ROBIN);
 
   // All mutable states in this class are mutated ONLY from Channel Executor
   @Nullable
@@ -107,10 +107,10 @@ class GrpclbLoadBalancer extends LoadBalancer {
     newLbAddressGroups = Collections.unmodifiableList(newLbAddressGroups);
     newBackendServers = Collections.unmodifiableList(newBackendServers);
     Map<String, ?> rawLbConfigValue = attributes.get(ATTR_LOAD_BALANCING_CONFIG);
-    Mode newMode = retrieveModeFromLbConfig(rawLbConfigValue, helper.getChannelLogger());
-    if (!mode.equals(newMode)) {
-      mode = newMode;
-      helper.getChannelLogger().log(ChannelLogLevel.INFO, "Mode: " + newMode);
+    GrpclbConfig newConfig = retrieveGrpcLbConfig(rawLbConfigValue, helper.getChannelLogger());
+    if (!config.equals(newConfig)) {
+      config = newConfig;
+      helper.getChannelLogger().log(ChannelLogLevel.INFO, "Config: " + newConfig);
       recreateStates();
     }
     grpclbState.handleAddresses(newLbAddressGroups, newBackendServers);
@@ -124,25 +124,27 @@ class GrpclbLoadBalancer extends LoadBalancer {
   }
 
   @VisibleForTesting
-  static Mode retrieveModeFromLbConfig(
+  static GrpclbConfig retrieveGrpcLbConfig(
       @Nullable Map<String, ?> rawLbConfigValue, ChannelLogger channelLogger) {
+    if (rawLbConfigValue == null) {
+      return GrpclbConfig.create(DEFAULT_MODE);
+    }
     try {
-      if (rawLbConfigValue == null) {
-        return DEFAULT_MODE;
-      }
       List<?> rawChildPolicies = getList(rawLbConfigValue, "childPolicy");
       if (rawChildPolicies == null) {
-        return DEFAULT_MODE;
+        return GrpclbConfig.create(DEFAULT_MODE);
       }
       List<LbConfig> childPolicies =
           ServiceConfigUtil.unwrapLoadBalancingConfigList(checkObjectList(rawChildPolicies));
+
       for (LbConfig childPolicy : childPolicies) {
         String childPolicyName = childPolicy.getPolicyName();
+        String target = (String) childPolicy.getRawConfigValue().get("targetName");
         switch (childPolicyName) {
           case "round_robin":
-            return Mode.ROUND_ROBIN;
+            return GrpclbConfig.create(Mode.ROUND_ROBIN, target);
           case "pick_first":
-            return Mode.PICK_FIRST;
+            return GrpclbConfig.create(Mode.PICK_FIRST, target);
           default:
             channelLogger.log(
                 ChannelLogLevel.DEBUG,
@@ -154,7 +156,7 @@ class GrpclbLoadBalancer extends LoadBalancer {
       logger.log(
           Level.WARNING, "Bad grpclb config: " + rawLbConfigValue + ", using " + DEFAULT_MODE, e);
     }
-    return DEFAULT_MODE;
+    return GrpclbConfig.create(DEFAULT_MODE);
   }
 
   private void resetStates() {
@@ -167,8 +169,8 @@ class GrpclbLoadBalancer extends LoadBalancer {
   private void recreateStates() {
     resetStates();
     checkState(grpclbState == null, "Should've been cleared");
-    grpclbState = new GrpclbState(mode, helper, subchannelPool, time, stopwatch,
-        backoffPolicyProvider);
+    grpclbState =
+        new GrpclbState(config, helper, subchannelPool, time, stopwatch, backoffPolicyProvider);
   }
 
   @Override
@@ -191,8 +193,7 @@ class GrpclbLoadBalancer extends LoadBalancer {
 
   // TODO(carl-mastrangelo): delete getList and checkObjectList once apply is complete for SVCCFG.
   /**
-   * Gets a list from an object for the given key.  Copy of
-   * {@link io.grpc.internal.ServiceConfigUtil#getList}.
+   * Gets a list from an object for the given key.
    */
   @SuppressWarnings("unchecked")
   @Nullable
@@ -209,9 +210,6 @@ class GrpclbLoadBalancer extends LoadBalancer {
     return (List<?>) value;
   }
 
-  /**
-   * Copy of {@link io.grpc.internal.ServiceConfigUtil#checkObjectList}.
-   */
   @SuppressWarnings("unchecked")
   private static List<Map<String, ?>> checkObjectList(List<?> rawList) {
     for (int i = 0; i < rawList.size(); i++) {
