@@ -69,6 +69,14 @@ import javax.annotation.Nullable;
 final class XdsClientImpl extends XdsClient {
   private static final Logger logger = Logger.getLogger(XdsClientImpl.class.getName());
 
+  // Longest time to wait, since the subscription to some resource, for concluding its absence.
+  @VisibleForTesting
+  static final int INITIAL_RESOURCE_FETCH_TIMEOUT_SEC = 15;
+
+  // Reserved value for special usage, as a placeholder in EDS cache for endpoints not exist.
+  private static final EndpointUpdate ENDPOINTS_NOT_FOUND =
+      EndpointUpdate.newBuilder().setClusterName("endpoints not found").build();
+
   @VisibleForTesting
   static final String ADS_TYPE_URL_LDS = "type.googleapis.com/envoy.api.v2.Listener";
   @VisibleForTesting
@@ -112,6 +120,12 @@ final class XdsClientImpl extends XdsClient {
 
   // Load reporting clients, with each responsible for reporting loads of a single cluster.
   private final Map<String, LoadReportClientImpl> lrsClients = new HashMap<>();
+
+  // Resource fetch timers are used to conclude absence of resources. Each timer is activated when
+  // subscription for the resource starts and disarmed on first update for the resource.
+
+  // Timers for concluding EDS resources not found.
+  private final Map<String, ReschedulableTaskHandle> edsRespTimers = new HashMap<>();
 
   @Nullable
   private AdsStream adsStream;
@@ -163,6 +177,10 @@ final class XdsClientImpl extends XdsClient {
     if (rpcRetryTimer != null) {
       rpcRetryTimer.cancel();
     }
+    for (ReschedulableTaskHandle handle :edsRespTimers.values()) {
+      handle.cancel();
+    }
+    edsRespTimers.clear();
   }
 
   @Override
@@ -263,17 +281,31 @@ final class XdsClientImpl extends XdsClient {
     // If local cache contains endpoint information for the cluster to be watched, notify
     // the watcher immediately.
     if (clusterNamesToEndpointUpdates.containsKey(clusterName)) {
-      watcher.onEndpointChanged(clusterNamesToEndpointUpdates.get(clusterName));
-    }
-    if (rpcRetryTimer != null && rpcRetryTimer.isPending()) {
-      // Currently in retry backoff.
+      EndpointUpdate endpointsInfo = clusterNamesToEndpointUpdates.get(clusterName);
+      if (endpointsInfo.equals(ENDPOINTS_NOT_FOUND)) {
+        watcher.onError(
+            Status.NOT_FOUND
+                .withDescription(
+                    "Endpoint resource for cluster [" + clusterName + "] not found."));
+      } else {
+        watcher.onEndpointChanged(endpointsInfo);
+      }
       return;
     }
+
     if (needRequest) {
+      ReschedulableTaskHandle timeoutHandle =
+          new EdsResourceFetchTimeoutTask(clusterName).toTaskHandle();
+      edsRespTimers.put(clusterName, timeoutHandle);
+      if (rpcRetryTimer != null && rpcRetryTimer.isPending()) {
+        // Currently in retry backoff.
+        return;
+      }
       if (adsStream == null) {
         startRpcStream();
       }
       adsStream.sendXdsRequest(ADS_TYPE_URL_EDS, endpointWatchers.keySet());
+      timeoutHandle.schedule(INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     }
   }
 
@@ -291,6 +323,11 @@ final class XdsClientImpl extends XdsClient {
       endpointWatchers.remove(clusterName);
       // Remove the corresponding EDS cache entry.
       clusterNamesToEndpointUpdates.remove(clusterName);
+      // Cancel and delete response timer waiting for the corresponding resource.
+      if (edsRespTimers.containsKey(clusterName)) {
+        edsRespTimers.get(clusterName).cancel();
+        edsRespTimers.remove(clusterName);
+      }
       // No longer interested in this cluster, send an updated EDS request to unsubscribe
       // this resource.
       if (rpcRetryTimer != null && rpcRetryTimer.isPending()) {
@@ -755,8 +792,16 @@ final class XdsClientImpl extends XdsClient {
 
     // Notify watchers waiting for updates of endpoint information received in this EDS response.
     for (Map.Entry<String, EndpointUpdate> entry : endpointUpdates.entrySet()) {
-      for (EndpointWatcher watcher : endpointWatchers.get(entry.getKey())) {
-        watcher.onEndpointChanged(entry.getValue());
+      String clusterName = entry.getKey();
+      // Cancel and delete response timeout timer.
+      if (edsRespTimers.containsKey(clusterName)) {
+        edsRespTimers.get(clusterName).cancel();
+        edsRespTimers.remove(clusterName);
+      }
+      if (endpointWatchers.containsKey(clusterName)) {
+        for (EndpointWatcher watcher : endpointWatchers.get(clusterName)) {
+          watcher.onEndpointChanged(entry.getValue());
+        }
       }
     }
   }
@@ -774,6 +819,9 @@ final class XdsClientImpl extends XdsClient {
       }
       if (!endpointWatchers.isEmpty()) {
         adsStream.sendXdsRequest(ADS_TYPE_URL_EDS, endpointWatchers.keySet());
+        for (ReschedulableTaskHandle handle: edsRespTimers.values()) {
+          handle.schedule(INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+        }
       }
     }
   }
@@ -922,6 +970,9 @@ final class XdsClientImpl extends XdsClient {
 
     private void cleanUp() {
       if (adsStream == this) {
+        for (ReschedulableTaskHandle handle : edsRespTimers.values()) {
+          handle.cancel();
+        }
         adsStream = null;
       }
     }
@@ -1039,6 +1090,63 @@ final class XdsClientImpl extends XdsClient {
               .build();
       requestWriter.onNext(request);
       logger.log(Level.FINE, "Sent NACK request {0}", request);
+    }
+  }
+
+  /**
+   * A task handle that can schedule, cancel and reschedule the task for multiple times.
+   */
+  private final class ReschedulableTaskHandle {
+    private final Runnable task;
+    @Nullable
+    private ScheduledHandle scheduledHandle;
+
+    ReschedulableTaskHandle(Runnable task) {
+      this.task = task;
+    }
+
+    void schedule(long delay, TimeUnit unit) {
+      checkState(scheduledHandle == null || !scheduledHandle.isPending(),
+          "Task already scheduled and not finished.");
+      scheduledHandle = syncContext.schedule(task, delay, unit, timeService);
+    }
+
+    void cancel() {
+      if (scheduledHandle != null) {
+        scheduledHandle.cancel();
+      }
+    }
+  }
+
+  private abstract class ResourceFetchTimeoutTask implements Runnable {
+    protected final String resourceName;
+
+    ResourceFetchTimeoutTask(String resourceName) {
+      this.resourceName = resourceName;
+    }
+
+    ReschedulableTaskHandle toTaskHandle() {
+      return new ReschedulableTaskHandle(this);
+    }
+  }
+
+  @VisibleForTesting
+  final class EdsResourceFetchTimeoutTask extends ResourceFetchTimeoutTask {
+
+    EdsResourceFetchTimeoutTask(String resourceName) {
+      super(resourceName);
+    }
+
+    @Override
+    public void run() {
+      edsRespTimers.remove(resourceName);
+      clusterNamesToEndpointUpdates.put(resourceName, ENDPOINTS_NOT_FOUND);
+      for (EndpointWatcher wat : endpointWatchers.get(resourceName)) {
+        wat.onError(
+            Status.NOT_FOUND
+                .withDescription(
+                    "Endpoint resource for cluster [" + resourceName + "] not found."));
+      }
     }
   }
 

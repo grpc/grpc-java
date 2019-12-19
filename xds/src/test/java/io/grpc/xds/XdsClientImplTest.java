@@ -75,6 +75,7 @@ import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
+import io.grpc.internal.FakeClock.ScheduledTask;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.Bootstrapper.ChannelCreds;
@@ -96,6 +97,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Queue;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.After;
@@ -126,6 +128,15 @@ public class XdsClientImplTest {
         @Override
         public boolean shouldAccept(Runnable command) {
           return command.toString().contains(XdsClientImpl.RpcRetryTask.class.getSimpleName());
+        }
+      };
+
+  private static final FakeClock.TaskFilter EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER =
+      new FakeClock.TaskFilter() {
+        @Override
+        public boolean shouldAccept(Runnable command) {
+          return command.toString()
+              .contains(XdsClientImpl.EdsResourceFetchTimeoutTask.class.getSimpleName());
         }
       };
 
@@ -1486,8 +1497,8 @@ public class XdsClientImplTest {
    * Client receives an EDS response that does not contain a ClusterLoadAssignment for the
    * requested resource while each received ClusterLoadAssignment is valid.
    * The EDS response is ACKed.
-   * Endpoint watchers are NOT notified with an error (EDS protocol is incremental, responses
-   * not containing requested resources does not indicate absence).
+   * After the resource fetch timeout expires, watchers waiting for the resource is notified
+   * with a resource not found error.
    */
   @Test
   public void edsResponseWithoutMatchingResource() {
@@ -1499,6 +1510,7 @@ public class XdsClientImplTest {
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster-foo.googleapis.com",
             XdsClientImpl.ADS_TYPE_URL_EDS, "")));
+    assertThat(fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
 
     // Management server sends back an EDS response without ClusterLoadAssignment for the requested
     // cluster.
@@ -1528,7 +1540,13 @@ public class XdsClientImplTest {
         .onNext(eq(buildDiscoveryRequest(NODE, "0", "cluster-foo.googleapis.com",
             XdsClientImpl.ADS_TYPE_URL_EDS, "0000")));
 
-    verifyZeroInteractions(endpointWatcher);
+    verify(endpointWatcher, never()).onEndpointChanged(any(EndpointUpdate.class));
+    verify(endpointWatcher, never()).onError(any(Status.class));
+    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
+    verify(endpointWatcher).onError(statusCaptor.capture());
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.NOT_FOUND);
+    assertThat(fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
 
   /**
@@ -1545,6 +1563,10 @@ public class XdsClientImplTest {
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster-foo.googleapis.com",
             XdsClientImpl.ADS_TYPE_URL_EDS, "")));
+    ScheduledTask edsRespTimeoutTask =
+        Iterables.getOnlyElement(
+            fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER));
+    assertThat(edsRespTimeoutTask.isCancelled()).isFalse();
 
     // Management server sends back an EDS response with ClusterLoadAssignment for the requested
     // cluster.
@@ -1574,6 +1596,8 @@ public class XdsClientImplTest {
         buildDiscoveryResponse("0", clusterLoadAssignments,
             XdsClientImpl.ADS_TYPE_URL_EDS, "0000");
     responseObserver.onNext(response);
+
+    assertThat(edsRespTimeoutTask.isCancelled()).isTrue();
 
     // Client sent an ACK EDS request.
     verify(requestObserver)
@@ -1622,6 +1646,8 @@ public class XdsClientImplTest {
                     ImmutableList.of("cluster-foo.googleapis.com", "cluster-bar.googleapis.com"),
                     XdsClientImpl.ADS_TYPE_URL_EDS, "")));
 
+    assertThat(fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(2);
+
     // Management server sends back an EDS response contains ClusterLoadAssignment for only one of
     // requested cluster.
     List<Any> clusterLoadAssignments = ImmutableList.of(
@@ -1637,6 +1663,8 @@ public class XdsClientImplTest {
         buildDiscoveryResponse("0", clusterLoadAssignments,
             XdsClientImpl.ADS_TYPE_URL_EDS, "0000");
     responseObserver.onNext(response);
+
+    assertThat(fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
 
     // Client sent an ACK EDS request.
     verify(requestObserver)
@@ -1727,6 +1755,8 @@ public class XdsClientImplTest {
         .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster-foo.googleapis.com",
             XdsClientImpl.ADS_TYPE_URL_EDS, "")));
 
+    assertThat(fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
+
     // Management server sends back an EDS response containing ClusterLoadAssignments for
     // some cluster not requested.
     List<Any> clusterLoadAssignments = ImmutableList.of(
@@ -1742,6 +1772,8 @@ public class XdsClientImplTest {
         buildDiscoveryResponse("0", clusterLoadAssignments,
             XdsClientImpl.ADS_TYPE_URL_EDS, "0000");
     responseObserver.onNext(response);
+
+    assertThat(fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
 
     // Client sent an ACK EDS request.
     verify(requestObserver)
@@ -1781,10 +1813,14 @@ public class XdsClientImplTest {
                         2, true)), 1, 0));
 
     verifyNoMoreInteractions(requestObserver);
+    assertThat(fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
 
+  /**
+   * Basic operations of adding/canceling endpoint data watchers.
+   */
   @Test
-  public void addRemoveEndpointWatchersFreely() {
+  public void addRemoveEndpointWatchers() {
     EndpointWatcher watcher1 = mock(EndpointWatcher.class);
     xdsClient.watchEndpointData("cluster-foo.googleapis.com", watcher1);
 
@@ -1985,8 +2021,78 @@ public class XdsClientImplTest {
                     XdsClientImpl.ADS_TYPE_URL_EDS, "0003")));
   }
 
+  @Test
+  public void addRemoveEndpointWatcherWhileInitialResourceFetchInProgress() {
+    EndpointWatcher watcher1 = mock(EndpointWatcher.class);
+    xdsClient.watchEndpointData("cluster-foo.googleapis.com", watcher1);
+
+    // Streaming RPC starts after a first watcher is added.
+    StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
+
+    // Client sends an EDS request to management server.
+    verify(requestObserver)
+        .onNext(
+            argThat(
+                new DiscoveryRequestMatcher("", "cluster-foo.googleapis.com",
+                    XdsClientImpl.ADS_TYPE_URL_EDS, "")));
+    assertThat(fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
+
+    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC - 1, TimeUnit.SECONDS);
+
+    EndpointWatcher watcher2 = mock(EndpointWatcher.class);
+    EndpointWatcher watcher3 = mock(EndpointWatcher.class);
+    EndpointWatcher watcher4 = mock(EndpointWatcher.class);
+    xdsClient.watchEndpointData("cluster-foo.googleapis.com", watcher2);
+    xdsClient.watchEndpointData("cluster-bar.googleapis.com", watcher3);
+    xdsClient.watchEndpointData("cluster-bar.googleapis.com", watcher4);
+
+    // Client sends a new EDS request for updating the latest resource subscription.
+    verify(requestObserver)
+        .onNext(
+            argThat(
+                new DiscoveryRequestMatcher("",
+                    ImmutableList.of("cluster-foo.googleapis.com", "cluster-bar.googleapis.com"),
+                    XdsClientImpl.ADS_TYPE_URL_EDS, "")));
+    assertThat(fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(2);
+
+    fakeClock.forwardTime(1, TimeUnit.SECONDS);
+    assertThat(fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
+
+    // EDS resource "cluster-foo.googleapis.com" is known to be absent.
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
+    verify(watcher1).onError(statusCaptor.capture());
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.NOT_FOUND);
+    verify(watcher2).onError(statusCaptor.capture());
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.NOT_FOUND);
+
+    // The absence result is known immediately.
+    EndpointWatcher watcher5 = mock(EndpointWatcher.class);
+    xdsClient.watchEndpointData("cluster-foo.googleapis.com", watcher5);
+
+    verify(watcher5).onError(statusCaptor.capture());
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.NOT_FOUND);
+
+    assertThat(fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
+    ScheduledTask timeoutTask = Iterables.getOnlyElement(fakeClock.getPendingTasks());
+
+    // Cancel watchers while discovery for resource "cluster-bar.googleapis.com" is still
+    // in progress.
+    xdsClient.cancelEndpointDataWatch("cluster-bar.googleapis.com", watcher3);
+    assertThat(timeoutTask.isCancelled()).isFalse();
+    xdsClient.cancelEndpointDataWatch("cluster-bar.googleapis.com", watcher4);
+
+    // Client sends an EDS request for resource subscription update (Omitted).
+
+    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+
+    assertThat(fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
+    assertThat(timeoutTask.isCancelled()).isTrue();
+
+    verifyZeroInteractions(watcher3, watcher4);
+  }
+
   /**
-   * RPC stream closed and retry during the period of first tiem resolving service config
+   * RPC stream closed and retry during the period of first time resolving service config
    * (LDS/RDS only).
    */
   @Test
@@ -2462,6 +2568,74 @@ public class XdsClientImplTest {
         backoffPolicy2);
   }
 
+  @Test
+  public void streamClosedAndRetryReschedulesInitialResourceFetchTimer() {
+    InOrder inOrder =
+        Mockito.inOrder(mockedDiscoveryService, backoffPolicyProvider, backoffPolicy1,
+            backoffPolicy2);
+    xdsClient.watchEndpointData("cluster-foo.googleapis.com", endpointWatcher);
+
+    ArgumentCaptor<StreamObserver<DiscoveryResponse>> responseObserverCaptor =
+        ArgumentCaptor.forClass(null);
+    inOrder.verify(mockedDiscoveryService)
+        .streamAggregatedResources(responseObserverCaptor.capture());
+    StreamObserver<DiscoveryResponse> responseObserver =
+        responseObserverCaptor.getValue();  // same as responseObservers.poll()
+    StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
+
+    verify(requestObserver)
+        .onNext(
+            argThat(
+                new DiscoveryRequestMatcher("", "cluster-foo.googleapis.com",
+                    XdsClientImpl.ADS_TYPE_URL_EDS, "")));
+    ScheduledTask edsRespTimeoutTask =
+        Iterables.getOnlyElement(
+            fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER));
+    assertThat(edsRespTimeoutTask.isCancelled()).isFalse();
+    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC - 1, TimeUnit.SECONDS);
+
+    // RPC stream is broken while the initial fetch for the resource is not complete.
+    responseObserver.onError(Status.UNAVAILABLE.asException());
+    assertThat(edsRespTimeoutTask.isCancelled()).isTrue();
+    inOrder.verify(backoffPolicyProvider).get();
+    inOrder.verify(backoffPolicy1).nextBackoffNanos();
+    assertThat(fakeClock.getPendingTasks(RPC_RETRY_TASK_FILTER)).hasSize(1);
+
+    // Retry after backoff.
+    fakeClock.forwardNanos(10L);
+    inOrder.verify(mockedDiscoveryService)
+        .streamAggregatedResources(responseObserverCaptor.capture());
+    responseObserver = responseObserverCaptor.getValue();
+
+    // Timer is rescheduled as the client restarts the resource fetch for the resource for
+    // the first time.
+    edsRespTimeoutTask =
+        Iterables.getOnlyElement(
+            fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER));
+    assertThat(edsRespTimeoutTask.isCancelled()).isFalse();
+    assertThat(edsRespTimeoutTask.getDelay(TimeUnit.SECONDS))
+        .isEqualTo(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC);
+
+    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
+    verify(endpointWatcher).onError(statusCaptor.capture());
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.NOT_FOUND);
+
+    // RPC stream is broken again after client concludes the requested resource is absent.
+    responseObserver.onError(Status.UNAVAILABLE.asException());
+
+    inOrder.verify(backoffPolicy1).nextBackoffNanos();
+    assertThat(fakeClock.getPendingTasks(RPC_RETRY_TASK_FILTER)).hasSize(1);
+
+    fakeClock.forwardNanos(100L);
+    inOrder.verify(mockedDiscoveryService)
+        .streamAggregatedResources(responseObserverCaptor.capture());
+
+    // Resource fetch after retry is no longer an initial fetch for the resource, client
+    // already knows its absence.
+    assertThat(fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
+  }
+
   /**
    * Tests sending a streaming LRS RPC for each cluster to report loads for.
    */
@@ -2562,8 +2736,6 @@ public class XdsClientImplTest {
     assertThat(XdsClientImpl.matchHostName("foo-.com", pattern)).isTrue();
     assertThat(XdsClientImpl.matchHostName("foo-bar", pattern)).isTrue();
   }
-
-
 
   private static LoadStatsRequest buildInitialLoadStatsRequest(String clusterName) {
     return
