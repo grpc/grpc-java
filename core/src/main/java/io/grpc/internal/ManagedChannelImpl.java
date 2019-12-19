@@ -253,8 +253,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private ResolutionState lastResolutionState = ResolutionState.NO_RESOLUTION;
   // Must be mutated and read from constructor or syncContext
   // used for channel tracing when value changed
-  @Nullable
-  private ServiceConfigHolder lastServiceConfig;
+  private ServiceConfigHolder lastServiceConfig = EMPTY_SERVICE_CONFIG;
   @Nullable
   private final ServiceConfigHolder defaultServiceConfig;
   // Must be mutated and read from constructor or syncContext
@@ -504,7 +503,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
         final Context context) {
       checkState(retryEnabled, "retry should be enabled");
       final Throttle throttle;
-      if (lastServiceConfig != null && lastServiceConfig.maybeGetConfig() != null) {
+      if (lastServiceConfig.maybeGetConfig() != null) {
         throttle = lastServiceConfig.maybeGetConfig().getRetryThrottling();
       } else {
         throttle = null;
@@ -686,8 +685,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
   // May only be called in constructor or syncContext
   private void handleServiceConfigUpdate() {
     serviceConfigUpdated = true;
-    serviceConfigInterceptor
-        .handleUpdate(lastServiceConfig == null ? null : lastServiceConfig.maybeGetConfig());
+    serviceConfigInterceptor.handleUpdate(lastServiceConfig.maybeGetConfig());
   }
 
   @VisibleForTesting
@@ -1357,7 +1355,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
                   ChannelLogLevel.INFO,
                   "Service config from name resolver discarded by channel settings");
             }
-            effectiveServiceConfig = defaultServiceConfig;
+            effectiveServiceConfig = defaultServiceConfig == null ? EMPTY_SERVICE_CONFIG : defaultServiceConfig;
             attrs = attrs.toBuilder().discard(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG).build();
           } else {
             // Try to use config if returned from name resolver
@@ -1409,7 +1407,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
           if (NameResolverListener.this.helper == ManagedChannelImpl.this.lbHelper) {
             Attributes effectiveAttrs = attrs;
             if (effectiveServiceConfig != validServiceConfig
-                && effectiveServiceConfig != null
                 && !effectiveServiceConfig.rawServiceConfig.isEmpty()) {
               effectiveAttrs = attrs.toBuilder()
                   .set(
@@ -1418,8 +1415,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
                   .build();
             }
 
-            Object loadBalancingPolicyConfig =
-                effectiveServiceConfig == null ? null : effectiveServiceConfig.parsed.getConfig();
+            Object loadBalancingPolicyConfig = effectiveServiceConfig.parsed.getConfig();
             Status handleResult = helper.lb.tryHandleResolvedAddresses(
                 ResolvedAddresses.newBuilder()
                     .setAddresses(servers)
