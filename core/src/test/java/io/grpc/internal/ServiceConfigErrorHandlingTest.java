@@ -136,7 +136,8 @@ public class ServiceConfigErrorHandlingTest {
         @Override
         public ConfigOrError parseLoadBalancingPolicyConfig(
             Map<String, ?> rawLoadBalancingPolicyConfig) {
-          return ConfigOrError.fromConfig(new PolicySelection(this, nextLbConfig.get()));
+          return ConfigOrError.fromConfig(
+              new PolicySelection(this, rawLoadBalancingPolicyConfig, nextLbConfig.get()));
         }
       }));
 
@@ -403,7 +404,7 @@ public class ServiceConfigErrorHandlingTest {
     assertThat(resolvedAddresses.getAddresses()).containsExactly(addressGroup);
     assertThat(getLbPolicyConfig(resolvedAddresses)).isNull();
     assertThat(resolvedAddresses.getAttributes().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG))
-        .isNull();
+        .isEmpty();
     verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
 
     assertThat(channel.getState(false)).isNotEqualTo(ConnectivityState.TRANSIENT_FAILURE);

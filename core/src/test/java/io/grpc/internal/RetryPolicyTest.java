@@ -69,7 +69,7 @@ public class RetryPolicyTest {
               serviceConfig,
               /* retryEnabled= */ true,
               /* maxRetryAttemptsLimit = */ 4,
-              /* maxHedgedAttemptsLimit = */34,
+              /* maxHedgedAttemptsLimit = */ 3,
               null);
       serviceConfigInterceptor.handleUpdate(managedChannelServiceConfig);
 

@@ -306,20 +306,24 @@ final class DnsNameResolver extends NameResolver {
 
       ResolutionResult.Builder resultBuilder = ResolutionResult.newBuilder().setAddresses(servers);
       if (!resolutionResults.txtRecords.isEmpty()) {
-        ConfigOrError serviceConfig =
+        ConfigOrError rawServiceConfig =
             parseServiceConfig(resolutionResults.txtRecords, random, getLocalHostname());
-        if (serviceConfig != null) {
-          if (serviceConfig.getError() == null) {
-            @SuppressWarnings("unchecked")
-            Map<String, ?> rawConfig = (Map<String, ?>) serviceConfig.getConfig();
-            ConfigOrError parsecConfig = serviceConfigParser.parseServiceConfig(rawConfig);
-            resultBuilder
-                .setAttributes(
-                    Attributes.newBuilder()
-                        .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, rawConfig)
-                        .build())
-                .setServiceConfig(parsecConfig);
+        if (rawServiceConfig != null) {
+          if (rawServiceConfig.getError() != null) {
+            savedListener.onError(rawServiceConfig.getError());
+            return;
           }
+
+          @SuppressWarnings("unchecked")
+          Map<String, ?> verifiedRawServiceConfig = (Map<String, ?>) rawServiceConfig.getConfig();
+          ConfigOrError parsedServiceConfig =
+              serviceConfigParser.parseServiceConfig(verifiedRawServiceConfig);
+          resultBuilder
+              .setAttributes(
+                  Attributes.newBuilder()
+                      .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, verifiedRawServiceConfig)
+                      .build())
+              .setServiceConfig(parsedServiceConfig);
         }
       } else {
         logger.log(Level.FINE, "No TXT records found for {0}", new Object[]{host});

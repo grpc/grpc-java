@@ -16,7 +16,6 @@
 
 package io.grpc.internal;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Verify.verify;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -30,6 +29,7 @@ import io.grpc.internal.ManagedChannelServiceConfig.MethodInfo;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.CheckForNull;
+import javax.annotation.Nullable;
 
 /**
  * Modifies RPCs in conformance with a Service Config.
@@ -50,17 +50,8 @@ final class ServiceConfigInterceptor implements ClientInterceptor {
     this.retryEnabled = retryEnabled;
   }
 
-  void handleUpdate(Object serviceConfig) {
-    if (serviceConfig == null) {
-      managedChannelServiceConfig.set(null);
-    } else {
-      checkArgument(
-          serviceConfig instanceof ManagedChannelServiceConfig,
-          "Expected service config type: %s, but got %s",
-          ManagedChannelServiceConfig.class,
-          serviceConfig.getClass());
-      managedChannelServiceConfig.set((ManagedChannelServiceConfig) serviceConfig);
-    }
+  void handleUpdate(@Nullable ManagedChannelServiceConfig serviceConfig) {
+    managedChannelServiceConfig.set(serviceConfig);
     initComplete = true;
   }
 

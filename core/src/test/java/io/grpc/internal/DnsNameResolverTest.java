@@ -24,7 +24,6 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -147,8 +146,6 @@ public class DnsNameResolverTest {
   private String networkaddressCacheTtlPropertyValue;
   @Mock
   private RecordFetcher recordFetcher;
-  @Mock
-  private ServiceConfigParser mockServiceConfigParser;
 
   private DnsNameResolver newResolver(String name, int defaultPort) {
     return newResolver(
@@ -179,7 +176,7 @@ public class DnsNameResolverTest {
             .setDefaultPort(defaultPort)
             .setProxyDetector(proxyDetector)
             .setSynchronizationContext(syncContext)
-            .setServiceConfigParser(mockServiceConfigParser)
+            .setServiceConfigParser(mock(ServiceConfigParser.class))
             .setChannelLogger(mock(ChannelLogger.class))
             .build();
     return newResolver(name, stopwatch, isAndroid, args);
@@ -684,15 +681,15 @@ public class DnsNameResolverTest {
     final InetSocketAddress proxyAddress =
         new InetSocketAddress(InetAddress.getByName("10.0.0.1"), 1000);
     ProxyDetector alwaysDetectProxy = new ProxyDetector() {
-        @Override
-        public HttpConnectProxiedSocketAddress proxyFor(SocketAddress targetAddress) {
-          return HttpConnectProxiedSocketAddress.newBuilder()
-              .setTargetAddress((InetSocketAddress) targetAddress)
-              .setProxyAddress(proxyAddress)
-              .setUsername("username")
-              .setPassword("password").build();
-        }
-      };
+      @Override
+      public HttpConnectProxiedSocketAddress proxyFor(SocketAddress targetAddress) {
+        return HttpConnectProxiedSocketAddress.newBuilder()
+            .setTargetAddress((InetSocketAddress) targetAddress)
+            .setProxyAddress(proxyAddress)
+            .setUsername("username")
+            .setPassword("password").build();
+      }
+    };
     DnsNameResolver resolver =
         newResolver(name, port, alwaysDetectProxy, Stopwatch.createUnstarted());
     AddressResolver mockAddressResolver = mock(AddressResolver.class);
@@ -1075,8 +1072,7 @@ public class DnsNameResolverTest {
 
   @Test
   public void parseServiceConfig_capturesParseError() {
-    DnsNameResolver resolver = newResolver("localhost", DEFAULT_PORT);
-    ConfigOrError result = resolver.parseServiceConfig(
+    ConfigOrError result = DnsNameResolver.parseServiceConfig(
         Arrays.asList("grpc_config=bogus"), new Random(), "localhost");
 
     assertThat(result).isNotNull();
@@ -1086,8 +1082,7 @@ public class DnsNameResolverTest {
 
   @Test
   public void parseServiceConfig_capturesChoiceError() {
-    DnsNameResolver resolver = newResolver("localhost", DEFAULT_PORT);
-    ConfigOrError result = resolver.parseServiceConfig(
+    ConfigOrError result = DnsNameResolver.parseServiceConfig(
         Arrays.asList("grpc_config=[{\"hi\":{}}]"), new Random(), "localhost");
 
     assertThat(result).isNotNull();
@@ -1097,20 +1092,15 @@ public class DnsNameResolverTest {
 
   @Test
   public void parseServiceConfig_noChoiceIsNull() {
-    DnsNameResolver resolver = newResolver("localhost", DEFAULT_PORT);
-    ConfigOrError result = resolver.parseServiceConfig(
+    ConfigOrError result = DnsNameResolver.parseServiceConfig(
         Arrays.asList("grpc_config=[]"), new Random(), "localhost");
 
     assertThat(result).isNull();
   }
 
   @Test
-  @SuppressWarnings("unchecked")
   public void parseServiceConfig_matches() {
-    DnsNameResolver resolver = newResolver("localhost", DEFAULT_PORT);
-    when(mockServiceConfigParser.parseServiceConfig(any(Map.class)))
-        .thenReturn(ConfigOrError.fromConfig(ImmutableMap.of()));
-    ConfigOrError result = resolver.parseServiceConfig(
+    ConfigOrError result = DnsNameResolver.parseServiceConfig(
         Arrays.asList("grpc_config=[{\"serviceConfig\":{}}]"), new Random(), "localhost");
 
     assertThat(result).isNotNull();

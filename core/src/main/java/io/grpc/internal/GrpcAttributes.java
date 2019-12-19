@@ -30,7 +30,7 @@ public final class GrpcAttributes {
   /**
    * Attribute key for service config.
    */
-  @Deprecated
+  // @Deprecated TODO bring it back but it is annoying for now
   @NameResolver.ResolutionResultAttr
   public static final Attributes.Key<Map<String, ?>> NAME_RESOLVER_SERVICE_CONFIG =
       Attributes.Key.create("service-config");

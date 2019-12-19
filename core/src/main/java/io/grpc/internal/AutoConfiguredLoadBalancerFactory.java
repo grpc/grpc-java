@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
+import com.google.common.base.Objects;
 import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
@@ -115,14 +116,12 @@ public final class AutoConfiguredLoadBalancerFactory {
       List<EquivalentAddressGroup> servers = resolvedAddresses.getAddresses();
       Attributes attributes = resolvedAddresses.getAttributes();
 
-      Object lbPolicyConfig = resolvedAddresses.getLoadBalancingPolicyConfig();
-      ManagedChannelServiceConfig mcsc = (ManagedChannelServiceConfig) lbPolicyConfig;
+      PolicySelection policySelection =
+          (PolicySelection) resolvedAddresses.getLoadBalancingPolicyConfig();
       ResolvedPolicySelection resolvedSelection;
 
       try {
-        PolicySelection policySelection =
-            mcsc != null ? (PolicySelection) mcsc.getLoadBalancingConfig() : null;
-        resolvedSelection = pickLoadBalancerProvider(servers, policySelection);
+        resolvedSelection = resolveLoadBalancerProvider(servers, policySelection);
       } catch (PolicyException e) {
         Status s = Status.INTERNAL.withDescription(e.getMessage());
         helper.updateBalancingState(ConnectivityState.TRANSIENT_FAILURE, new FailingPicker(s));
@@ -200,23 +199,16 @@ public final class AutoConfiguredLoadBalancerFactory {
     }
 
     /**
-     * Picks a load balancer based on given criteria.  In order of preference:
-     *
-     * <ol>
-     *   <li>User provided lb on the channel.  This is a degenerate case and not handled here.
-     *       This options is deprecated.</li>
-     *   <li>Policy from "loadBalancingConfig" if present.  This is not covered here.</li>
-     *   <li>The policy from "loadBalancingPolicy" if present</li>
-     *   <li>"grpclb" if any gRPC LB balancer addresses are present</li>
-     *   <li>"pick_first" if the service config choice does not specify</li>
-     * </ol>
+     * Resolves a load balancer based on given criteria.  If policySelection is {@code null} and
+     * given servers contains any gRPC LB addresses, it will fall back to "grpclb". If no gRPC LB
+     * addresses are not present, it will fall back to {@link #defaultPolicy}.
      *
      * @param servers The list of servers reported
      * @param policySelection the selected policy from raw service config
-     * @return the new load balancer factory, never null
+     * @return the resolved policy selection
      */
     @VisibleForTesting
-    ResolvedPolicySelection pickLoadBalancerProvider(
+    ResolvedPolicySelection resolveLoadBalancerProvider(
         List<EquivalentAddressGroup> servers, @Nullable PolicySelection policySelection)
         throws PolicyException {
       // Check for balancer addresses
@@ -257,11 +249,13 @@ public final class AutoConfiguredLoadBalancerFactory {
               new PolicySelection(
                   getProviderOrThrow(
                       "round_robin", "received balancer addresses but grpclb runtime is missing"),
+                  /* rawConfig = */ null,
                   /* config= */ null),
               backendAddrs);
         }
         return new ResolvedPolicySelection(
-            new PolicySelection(grpclbProvider, /* config= */ null), servers);
+            new PolicySelection(
+                grpclbProvider, /* rawConfig= */ null, /* config= */ null), servers);
       }
       // No balancer address this time.  If balancer address shows up later, we want to make sure
       // the warning is logged one more time.
@@ -270,7 +264,9 @@ public final class AutoConfiguredLoadBalancerFactory {
       // No config nor balancer address. Use default.
       return new ResolvedPolicySelection(
           new PolicySelection(
-              getProviderOrThrow(defaultPolicy, "using default policy"), /* config= */ null),
+              getProviderOrThrow(defaultPolicy, "using default policy"),
+              /* rawConfig= */ null,
+              /* config= */ null),
           servers);
     }
   }
@@ -292,10 +288,18 @@ public final class AutoConfiguredLoadBalancerFactory {
    * means, it ignores LoadBalancer policies after the first available one even if any of them are
    * invalid.
    *
+   * <p>Order of policy preference:
+   *
+   * <ol>
+   *    <li>Policy from "loadBalancingConfig" if present</li>
+   *    <li>The policy from deprecated "loadBalancingPolicy" if present</li>
+   * </ol>
+   * </p>
+   *
    * <p>Unlike a normal {@link LoadBalancer.Factory}, this accepts a full service config rather than
    * the LoadBalancingConfig.
    *
-   * @return null if no selection could be made.
+   * @return the parsed {@link PolicySelection}, or {@code null} if no selection could be made.
    */
   @Nullable
   ConfigOrError parseLoadBalancerPolicy(Map<String, ?> serviceConfig, ChannelLogger channelLogger) {
@@ -321,6 +325,7 @@ public final class AutoConfiguredLoadBalancerFactory {
             }
             return ConfigOrError.fromConfig(new PolicySelection(
                 provider,
+                serviceConfig,
                 provider.parseLoadBalancingPolicyConfig(lbConfig.getRawConfigValue())));
           }
         }
@@ -347,19 +352,42 @@ public final class AutoConfiguredLoadBalancerFactory {
   @VisibleForTesting
   static final class PolicySelection {
     final LoadBalancerProvider provider;
+    @Nullable final Map<String, ?> rawConfig;
     @Nullable final ConfigOrError config;
 
     PolicySelection(
         LoadBalancerProvider provider,
+        @Nullable Map<String, ?> rawConfig,
         @Nullable ConfigOrError config) {
       this.provider = checkNotNull(provider, "provider");
+      this.rawConfig = rawConfig;
       this.config = config;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      PolicySelection that = (PolicySelection) o;
+      return Objects.equal(provider, that.provider)
+          && Objects.equal(rawConfig, that.rawConfig)
+          && Objects.equal(config, that.config);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hashCode(provider, rawConfig, config);
     }
 
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(this)
           .add("provider", provider)
+          .add("rawConfig", rawConfig)
           .add("config", config)
           .toString();
     }
@@ -370,7 +398,7 @@ public final class AutoConfiguredLoadBalancerFactory {
     final PolicySelection policySelection;
     final List<EquivalentAddressGroup> serverList;
 
-    public ResolvedPolicySelection(
+    ResolvedPolicySelection(
         PolicySelection policySelection, List<EquivalentAddressGroup> serverList) {
       this.policySelection = checkNotNull(policySelection, "policySelection");
       this.serverList = Collections.unmodifiableList(checkNotNull(serverList, "serverList"));

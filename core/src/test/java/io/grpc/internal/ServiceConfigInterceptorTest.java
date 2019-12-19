@@ -91,12 +91,7 @@ public class ServiceConfigInterceptorTest {
     JsonObj methodConfig = new JsonObj("name", new JsonList(name), "waitForReady", true);
     JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
     ManagedChannelServiceConfig parsedServiceConfig =
-        ManagedChannelServiceConfig.fromServiceConfig(
-            serviceConfig,
-            /* retryEnabled= */ true,
-            /* maxRetryAttemptsLimit= */ 3,
-            /* maxHedgedAttemptsLimit= */ 4,
-            /* loadBalancingConfig= */ null);
+        createManagedChannelServiceConfig(serviceConfig);
 
     interceptor.handleUpdate(parsedServiceConfig);
 
@@ -104,6 +99,21 @@ public class ServiceConfigInterceptorTest {
 
     verify(channel).newCall(eq(methodDescriptor), callOptionsCap.capture());
     assertThat(callOptionsCap.getValue().isWaitForReady()).isTrue();
+  }
+
+  @Test
+  public void handleNullConfig() {
+    JsonObj name = new JsonObj("service", "service");
+    JsonObj methodConfig = new JsonObj("name", new JsonList(name), "waitForReady", true);
+    JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
+
+    interceptor.handleUpdate(createManagedChannelServiceConfig(serviceConfig));
+    interceptor.handleUpdate(null);
+
+    interceptor.interceptCall(methodDescriptor, CallOptions.DEFAULT.withoutWaitForReady(), channel);
+
+    verify(channel).newCall(eq(methodDescriptor), callOptionsCap.capture());
+    assertThat(callOptionsCap.getValue().isWaitForReady()).isFalse();
   }
 
   @Test
@@ -124,12 +134,7 @@ public class ServiceConfigInterceptorTest {
     JsonObj methodConfig = new JsonObj("name", new JsonList(name), "maxRequestMessageBytes", 1d);
     JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
     ManagedChannelServiceConfig parsedServiceConfig =
-        ManagedChannelServiceConfig.fromServiceConfig(
-            serviceConfig,
-            /* retryEnabled= */ true,
-            /* maxRetryAttemptsLimit= */ 3,
-            /* maxHedgedAttemptsLimit= */ 4,
-            /* loadBalancingConfig= */ null);
+        createManagedChannelServiceConfig(serviceConfig);
 
     interceptor.handleUpdate(parsedServiceConfig);
 
@@ -145,12 +150,7 @@ public class ServiceConfigInterceptorTest {
     JsonObj methodConfig = new JsonObj("name", new JsonList(name), "maxRequestMessageBytes", 10d);
     JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
     ManagedChannelServiceConfig parsedServiceConfig =
-        ManagedChannelServiceConfig.fromServiceConfig(
-            serviceConfig,
-            /* retryEnabled= */ true,
-            /* maxRetryAttemptsLimit= */ 3,
-            /* maxHedgedAttemptsLimit= */ 4,
-            /* loadBalancingConfig= */ null);
+        createManagedChannelServiceConfig(serviceConfig);
 
     interceptor.handleUpdate(parsedServiceConfig);
 
@@ -167,12 +167,7 @@ public class ServiceConfigInterceptorTest {
     JsonObj methodConfig = new JsonObj("name", new JsonList(name), "maxRequestMessageBytes", 5d);
     JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
     ManagedChannelServiceConfig parsedServiceConfig =
-        ManagedChannelServiceConfig.fromServiceConfig(
-            serviceConfig,
-            /* retryEnabled= */ true,
-            /* maxRetryAttemptsLimit= */ 3,
-            /* maxHedgedAttemptsLimit= */ 4,
-            /* loadBalancingConfig= */ null);
+        createManagedChannelServiceConfig(serviceConfig);
 
     interceptor.handleUpdate(parsedServiceConfig);
 
@@ -189,12 +184,7 @@ public class ServiceConfigInterceptorTest {
     JsonObj methodConfig = new JsonObj("name", new JsonList(name), "maxResponseMessageBytes", 1d);
     JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
     ManagedChannelServiceConfig parsedServiceConfig =
-        ManagedChannelServiceConfig.fromServiceConfig(
-            serviceConfig,
-            /* retryEnabled= */ true,
-            /* maxRetryAttemptsLimit= */ 3,
-            /* maxHedgedAttemptsLimit= */ 4,
-            /* loadBalancingConfig= */ null);
+        createManagedChannelServiceConfig(serviceConfig);
 
     interceptor.handleUpdate(parsedServiceConfig);
 
@@ -210,12 +200,7 @@ public class ServiceConfigInterceptorTest {
     JsonObj methodConfig = new JsonObj("name", new JsonList(name), "maxResponseMessageBytes", 5d);
     JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
     ManagedChannelServiceConfig parsedServiceConfig =
-        ManagedChannelServiceConfig.fromServiceConfig(
-            serviceConfig,
-            /* retryEnabled= */ true,
-            /* maxRetryAttemptsLimit= */ 3,
-            /* maxHedgedAttemptsLimit= */ 4,
-            /* loadBalancingConfig= */ null);
+        createManagedChannelServiceConfig(serviceConfig);
 
     interceptor.handleUpdate(parsedServiceConfig);
 
@@ -232,12 +217,7 @@ public class ServiceConfigInterceptorTest {
     JsonObj methodConfig = new JsonObj("name", new JsonList(name), "maxResponseMessageBytes", 10d);
     JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
     ManagedChannelServiceConfig parsedServiceConfig =
-        ManagedChannelServiceConfig.fromServiceConfig(
-            serviceConfig,
-            /* retryEnabled= */ true,
-            /* maxRetryAttemptsLimit= */ 3,
-            /* maxHedgedAttemptsLimit= */ 4,
-            /* loadBalancingConfig= */ null);
+        createManagedChannelServiceConfig(serviceConfig);
 
     interceptor.handleUpdate(parsedServiceConfig);
 
@@ -254,12 +234,7 @@ public class ServiceConfigInterceptorTest {
     JsonObj methodConfig = new JsonObj("name", new JsonList(name), "waitForReady", false);
     JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
     ManagedChannelServiceConfig parsedServiceConfig =
-        ManagedChannelServiceConfig.fromServiceConfig(
-            serviceConfig,
-            /* retryEnabled= */ true,
-            /* maxRetryAttemptsLimit= */ 3,
-            /* maxHedgedAttemptsLimit= */ 4,
-            /* loadBalancingConfig= */ null);
+        createManagedChannelServiceConfig(serviceConfig);
 
     interceptor.handleUpdate(parsedServiceConfig);
 
@@ -280,12 +255,7 @@ public class ServiceConfigInterceptorTest {
 
     JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig1, methodConfig2));
     ManagedChannelServiceConfig parsedServiceConfig =
-        ManagedChannelServiceConfig.fromServiceConfig(
-            serviceConfig,
-            /* retryEnabled= */ true,
-            /* maxRetryAttemptsLimit= */ 3,
-            /* maxHedgedAttemptsLimit= */ 4,
-            /* loadBalancingConfig= */ null);
+        createManagedChannelServiceConfig(serviceConfig);
 
     interceptor.handleUpdate(parsedServiceConfig);
 
@@ -301,12 +271,7 @@ public class ServiceConfigInterceptorTest {
     JsonObj methodConfig = new JsonObj("name", new JsonList(name), "timeout", "100000s");
     JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
     ManagedChannelServiceConfig parsedServiceConfig =
-        ManagedChannelServiceConfig.fromServiceConfig(
-            serviceConfig,
-            /* retryEnabled= */ true,
-            /* maxRetryAttemptsLimit= */ 3,
-            /* maxHedgedAttemptsLimit= */ 4,
-            /* loadBalancingConfig= */ null);
+        createManagedChannelServiceConfig(serviceConfig);
 
     interceptor.handleUpdate(parsedServiceConfig);
 
@@ -326,12 +291,7 @@ public class ServiceConfigInterceptorTest {
     JsonObj methodConfig = new JsonObj("name", new JsonList(name), "timeout", "1s");
     JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
     ManagedChannelServiceConfig parsedServiceConfig =
-        ManagedChannelServiceConfig.fromServiceConfig(
-            serviceConfig,
-            /* retryEnabled= */ true,
-            /* maxRetryAttemptsLimit= */ 3,
-            /* maxHedgedAttemptsLimit= */ 4,
-            /* loadBalancingConfig= */ null);
+        createManagedChannelServiceConfig(serviceConfig);
 
     interceptor.handleUpdate(parsedServiceConfig);
 
@@ -353,12 +313,7 @@ public class ServiceConfigInterceptorTest {
     thrown.expectMessage("missing service");
 
     ManagedChannelServiceConfig parsedServiceConfig =
-        ManagedChannelServiceConfig.fromServiceConfig(
-            serviceConfig,
-            /* retryEnabled= */ true,
-            /* maxRetryAttemptsLimit= */ 3,
-            /* maxHedgedAttemptsLimit= */ 4,
-            /* loadBalancingConfig= */ null);
+        createManagedChannelServiceConfig(serviceConfig);
 
     interceptor.handleUpdate(parsedServiceConfig);
   }
@@ -374,12 +329,7 @@ public class ServiceConfigInterceptorTest {
     thrown.expectMessage("Duplicate method");
 
     ManagedChannelServiceConfig parsedServiceConfig =
-        ManagedChannelServiceConfig.fromServiceConfig(
-            serviceConfig,
-            /* retryEnabled= */ true,
-            /* maxRetryAttemptsLimit= */ 3,
-            /* maxHedgedAttemptsLimit= */ 4,
-            /* loadBalancingConfig= */ null);
+        createManagedChannelServiceConfig(serviceConfig);
 
     interceptor.handleUpdate(parsedServiceConfig);
   }
@@ -393,12 +343,7 @@ public class ServiceConfigInterceptorTest {
     thrown.expectMessage("no names in method config");
 
     ManagedChannelServiceConfig parsedServiceConfig =
-        ManagedChannelServiceConfig.fromServiceConfig(
-            serviceConfig,
-            /* retryEnabled= */ true,
-            /* maxRetryAttemptsLimit= */ 3,
-            /* maxHedgedAttemptsLimit= */ 4,
-            /* loadBalancingConfig= */ null);
+        createManagedChannelServiceConfig(serviceConfig);
 
     interceptor.handleUpdate(parsedServiceConfig);
   }
@@ -414,12 +359,7 @@ public class ServiceConfigInterceptorTest {
     thrown.expectMessage("Duplicate service");
 
     ManagedChannelServiceConfig parsedServiceConfig =
-        ManagedChannelServiceConfig.fromServiceConfig(
-            serviceConfig,
-            /* retryEnabled= */ true,
-            /* maxRetryAttemptsLimit= */ 3,
-            /* maxHedgedAttemptsLimit= */ 4,
-            /* loadBalancingConfig= */ null);
+        createManagedChannelServiceConfig(serviceConfig);
 
     interceptor.handleUpdate(parsedServiceConfig);
   }
@@ -436,12 +376,7 @@ public class ServiceConfigInterceptorTest {
     thrown.expectMessage("Duplicate service");
 
     ManagedChannelServiceConfig parsedServiceConfig =
-        ManagedChannelServiceConfig.fromServiceConfig(
-            serviceConfig,
-            /* retryEnabled= */ true,
-            /* maxRetryAttemptsLimit= */ 3,
-            /* maxHedgedAttemptsLimit= */ 4,
-            /* loadBalancingConfig= */ null);
+        createManagedChannelServiceConfig(serviceConfig);
 
     interceptor.handleUpdate(parsedServiceConfig);
   }
@@ -456,19 +391,9 @@ public class ServiceConfigInterceptorTest {
     JsonObj methodConfig2 = new JsonObj("name", new JsonList(name2));
     JsonObj serviceConfig2 = new JsonObj("methodConfig", new JsonList(methodConfig2));
     ManagedChannelServiceConfig parsedServiceConfig1 =
-        ManagedChannelServiceConfig.fromServiceConfig(
-            serviceConfig1,
-            /* retryEnabled= */ true,
-            /* maxRetryAttemptsLimit= */ 3,
-            /* maxHedgedAttemptsLimit= */ 4,
-            /* loadBalancingConfig= */ null);
+        createManagedChannelServiceConfig(serviceConfig1);
     ManagedChannelServiceConfig parsedServiceConfig2 =
-        ManagedChannelServiceConfig.fromServiceConfig(
-            serviceConfig2,
-            /* retryEnabled= */ true,
-            /* maxRetryAttemptsLimit= */ 3,
-            /* maxHedgedAttemptsLimit= */ 4,
-            /* loadBalancingConfig= */ null);
+        createManagedChannelServiceConfig(serviceConfig2);
 
     interceptor.handleUpdate(parsedServiceConfig1);
 
@@ -488,12 +413,7 @@ public class ServiceConfigInterceptorTest {
     JsonObj methodConfig = new JsonObj("name", new JsonList(name1, name2));
     JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
     ManagedChannelServiceConfig parsedServiceConfig =
-        ManagedChannelServiceConfig.fromServiceConfig(
-            serviceConfig,
-            /* retryEnabled= */ true,
-            /* maxRetryAttemptsLimit= */ 3,
-            /* maxHedgedAttemptsLimit= */ 4,
-            /* loadBalancingConfig= */ null);
+        createManagedChannelServiceConfig(serviceConfig);
 
     interceptor.handleUpdate(parsedServiceConfig);
 
@@ -504,7 +424,6 @@ public class ServiceConfigInterceptorTest {
     assertThat(interceptor.managedChannelServiceConfig.get().getServiceMap()).containsExactly(
         "service2", new MethodInfo(methodConfig, false, 1, 1));
   }
-
 
   @Test
   public void methodInfo_validateDeadline() {
@@ -526,7 +445,6 @@ public class ServiceConfigInterceptorTest {
     assertThat(info.timeoutNanos).isEqualTo(Long.MAX_VALUE);
   }
 
-
   @Test
   public void methodInfo_badMaxRequestSize() {
     JsonObj name = new JsonObj("service", "service");
@@ -547,6 +465,17 @@ public class ServiceConfigInterceptorTest {
     thrown.expectMessage("exceeds bounds");
 
     new MethodInfo(methodConfig, false, 1, 1);
+  }
+
+  private static ManagedChannelServiceConfig createManagedChannelServiceConfig(
+      JsonObj rawServiceConfig) {
+    // current tests doesn't use any other values except rawServiceConfig, so provide dummy values.
+    return ManagedChannelServiceConfig.fromServiceConfig(
+        rawServiceConfig,
+        /* retryEnabled= */ true,
+        /* maxRetryAttemptsLimit= */ 3,
+        /* maxHedgedAttemptsLimit= */ 4,
+        /* loadBalancingConfig= */ null);
   }
 
   private static final class NoopMarshaller implements MethodDescriptor.Marshaller<Void> {
