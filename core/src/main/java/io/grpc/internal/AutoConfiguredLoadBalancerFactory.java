@@ -17,7 +17,6 @@
 package io.grpc.internal;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
@@ -117,16 +116,13 @@ public final class AutoConfiguredLoadBalancerFactory {
       Attributes attributes = resolvedAddresses.getAttributes();
 
       Object lbPolicyConfig = resolvedAddresses.getLoadBalancingPolicyConfig();
-      checkState(
-          lbPolicyConfig == null || lbPolicyConfig instanceof ManagedChannelServiceConfig,
-          "Expected to have LoadBalancingPolicyConfig type %s, but got %s",
-          ManagedChannelServiceConfig.class,
-          lbPolicyConfig != null ? lbPolicyConfig.getClass() : "null");
       ManagedChannelServiceConfig mcsc = (ManagedChannelServiceConfig) lbPolicyConfig;
       ResolvedPolicySelection resolvedSelection;
 
       try {
-        resolvedSelection = pickLoadBalancerProvider(servers, mcsc);
+        PolicySelection policySelection =
+            mcsc != null ? (PolicySelection) mcsc.getLoadBalancingConfig() : null;
+        resolvedSelection = pickLoadBalancerProvider(servers, policySelection);
       } catch (PolicyException e) {
         Status s = Status.INTERNAL.withDescription(e.getMessage());
         helper.updateBalancingState(ConnectivityState.TRANSIENT_FAILURE, new FailingPicker(s));
@@ -148,13 +144,10 @@ public final class AutoConfiguredLoadBalancerFactory {
             ChannelLogLevel.INFO, "Load balancer changed from {0} to {1}",
             old.getClass().getSimpleName(), delegate.getClass().getSimpleName());
       }
-      PolicySelection policySelection =
-          mcsc != null ? (PolicySelection) mcsc.getLoadBalancingConfig() : null;
-      ConfigOrError lbConfig = null;
-      if (policySelection != null) {
+      ConfigOrError lbConfig = selection.config;
+      if (lbConfig != null) {
         helper.getChannelLogger().log(
             ChannelLogLevel.DEBUG, "Load-balancing config: {0}", selection.config);
-        lbConfig = policySelection.config;
       }
 
       LoadBalancer delegate = getDelegate();
@@ -219,12 +212,12 @@ public final class AutoConfiguredLoadBalancerFactory {
      * </ol>
      *
      * @param servers The list of servers reported
-     * @param mcsc the parsed {@link ManagedChannelServiceConfig}
+     * @param policySelection the selected policy from raw service config
      * @return the new load balancer factory, never null
      */
     @VisibleForTesting
     ResolvedPolicySelection pickLoadBalancerProvider(
-        List<EquivalentAddressGroup> servers, @Nullable ManagedChannelServiceConfig mcsc)
+        List<EquivalentAddressGroup> servers, @Nullable PolicySelection policySelection)
         throws PolicyException {
       // Check for balancer addresses
       boolean haveBalancerAddress = false;
@@ -237,13 +230,10 @@ public final class AutoConfiguredLoadBalancerFactory {
         }
       }
 
-      if (mcsc != null && mcsc.getLoadBalancingConfig() != null) {
-        PolicySelection policy = (PolicySelection) mcsc.getLoadBalancingConfig();
-        if (policy.provider != null) {
-          String policyName = policy.provider.getPolicyName();
-          return new ResolvedPolicySelection(
-              policy, policyName.equals(GRPCLB_POLICY_NAME) ? servers : backendAddrs);
-        }
+      if (policySelection != null) {
+        String policyName = policySelection.provider.getPolicyName();
+        return new ResolvedPolicySelection(
+            policySelection, policyName.equals(GRPCLB_POLICY_NAME) ? servers : backendAddrs);
       }
 
       if (haveBalancerAddress) {

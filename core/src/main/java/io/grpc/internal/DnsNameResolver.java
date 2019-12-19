@@ -309,15 +309,16 @@ final class DnsNameResolver extends NameResolver {
         ConfigOrError serviceConfig =
             parseServiceConfig(resolutionResults.txtRecords, random, getLocalHostname());
         if (serviceConfig != null) {
-          resultBuilder.setServiceConfig(serviceConfig);
           if (serviceConfig.getError() == null) {
             @SuppressWarnings("unchecked")
-            Map<String, ?> config = (Map<String, ?>) serviceConfig.getConfig();
+            Map<String, ?> rawConfig = (Map<String, ?>) serviceConfig.getConfig();
+            ConfigOrError parsecConfig = serviceConfigParser.parseServiceConfig(rawConfig);
             resultBuilder
                 .setAttributes(
                     Attributes.newBuilder()
-                        .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, config)
-                        .build());
+                        .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, rawConfig)
+                        .build())
+                .setServiceConfig(parsecConfig);
           }
         }
       } else {
@@ -328,7 +329,7 @@ final class DnsNameResolver extends NameResolver {
   }
 
   @Nullable
-  ConfigOrError parseServiceConfig(
+  static ConfigOrError parseServiceConfig(
       List<String> rawTxtRecords, Random random, String localHostname) {
     List<Map<String, ?>> possibleServiceConfigChoices;
     try {
@@ -337,8 +338,8 @@ final class DnsNameResolver extends NameResolver {
       return ConfigOrError.fromError(
           Status.UNKNOWN.withDescription("failed to parse TXT records").withCause(e));
     }
+    Map<String, ?> possibleServiceConfig = null;
     for (Map<String, ?> possibleServiceConfigChoice : possibleServiceConfigChoices) {
-      Map<String, ?> possibleServiceConfig;
       try {
         possibleServiceConfig =
             maybeChooseServiceConfig(possibleServiceConfigChoice, random, localHostname);
@@ -347,10 +348,13 @@ final class DnsNameResolver extends NameResolver {
             Status.UNKNOWN.withDescription("failed to pick service config choice").withCause(e));
       }
       if (possibleServiceConfig != null) {
-        return serviceConfigParser.parseServiceConfig(possibleServiceConfig);
+        break;
       }
     }
-    return null;
+    if (possibleServiceConfig == null) {
+      return null;
+    }
+    return ConfigOrError.fromConfig(possibleServiceConfig);
   }
 
   private void resolve() {
