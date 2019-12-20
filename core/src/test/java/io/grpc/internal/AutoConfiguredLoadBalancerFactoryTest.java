@@ -764,7 +764,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
   }
 
   @Test
-  public void parseLoadBalancerConfig_policyShouldBeIgnoredEvenIfInvalidConfigExists()
+  public void parseLoadBalancerConfig_policyShouldBeIgnoredEvenIfUnknownPolicyExists()
       throws Exception {
     Map<String, ?> serviceConfig =
         parseConfig(
@@ -788,8 +788,8 @@ public class AutoConfiguredLoadBalancerFactoryTest {
                 + "{\"round_robin\": {} } ] }");
     ConfigOrError parsed = lbf.parseLoadBalancerPolicy(serviceConfig, channelLogger);
     assertThat(parsed).isNotNull();
-    assertThat(parsed.getConfig()).isNotNull();
-    assertThat(((PolicySelection) parsed.getConfig()).config.getError()).isNotNull();
+    assertThat(parsed.getConfig()).isNull();
+    assertThat(parsed.getError()).isEqualTo(Status.UNKNOWN);
   }
 
   @Test

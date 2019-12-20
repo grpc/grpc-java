@@ -323,10 +323,13 @@ public final class AutoConfiguredLoadBalancerFactory {
                   ChannelLogLevel.DEBUG,
                   "{0} specified by Service Config are not available", policiesTried);
             }
-            return ConfigOrError.fromConfig(new PolicySelection(
-                provider,
-                serviceConfig,
-                provider.parseLoadBalancingPolicyConfig(lbConfig.getRawConfigValue())));
+            ConfigOrError parsedLbPolicyConfig =
+                provider.parseLoadBalancingPolicyConfig(lbConfig.getRawConfigValue());
+            if (parsedLbPolicyConfig.getError() != null) {
+              return parsedLbPolicyConfig;
+            }
+            return ConfigOrError.fromConfig(
+                new PolicySelection(provider, serviceConfig, parsedLbPolicyConfig));
           }
         }
         return ConfigOrError.fromError(
