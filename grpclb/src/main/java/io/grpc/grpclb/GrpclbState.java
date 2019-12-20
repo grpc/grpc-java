@@ -582,6 +582,7 @@ final class GrpclbState {
       }
 
       if (typeCase == LoadBalanceResponseTypeCase.FALLBACK_RESPONSE) {
+        cancelFallbackTimer();
         useFallbackBackends();
         maybeUpdatePicker();
         return;

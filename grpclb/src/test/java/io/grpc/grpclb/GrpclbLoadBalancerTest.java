@@ -2087,7 +2087,9 @@ public class GrpclbLoadBalancerTest {
   @Test
   public void grpclbWorking_lbSendsFallbackMessage() {
     InOrder inOrder = inOrder(helper, subchannelPool);
-    List<EquivalentAddressGroup> grpclbResolutionList = createResolvedServerAddresses(true, true);
+    List<EquivalentAddressGroup> grpclbResolutionList =
+        createResolvedServerAddresses(true, true, false, false);
+    List<EquivalentAddressGroup> fallbackEags = grpclbResolutionList.subList(2, 4);
     Attributes grpclbResolutionAttrs = Attributes.EMPTY;
     deliverResolvedAddresses(grpclbResolutionList, grpclbResolutionAttrs);
 
@@ -2113,9 +2115,9 @@ public class GrpclbLoadBalancerTest {
             .build()));
 
     // Simulate receiving LB response
-    List<ServerEntry> backends1 = Arrays.asList(
-        new ServerEntry("127.0.0.1", 2000, "token0001"),
-        new ServerEntry("127.0.0.1", 2010, "token0002"));
+    ServerEntry backend1a = new ServerEntry("127.0.0.1", 2000, "token0001");
+    ServerEntry backend1b = new ServerEntry("127.0.0.1", 2010, "token0002");
+    List<ServerEntry> backends1 = Arrays.asList(backend1a, backend1b);
     inOrder.verify(helper, never())
         .updateBalancingState(any(ConnectivityState.class), any(SubchannelPicker.class));
     logs.clear();
@@ -2125,22 +2127,23 @@ public class GrpclbLoadBalancerTest {
     lbResponseObserver.onNext(buildLbResponse(backends1));
 
     inOrder.verify(subchannelPool).takeOrCreateSubchannel(
-        eq(new EquivalentAddressGroup(backends1.get(0).addr, LB_BACKEND_ATTRS)),
+        eq(new EquivalentAddressGroup(backend1a.addr, LB_BACKEND_ATTRS)),
         any(Attributes.class));
     inOrder.verify(subchannelPool).takeOrCreateSubchannel(
-        eq(new EquivalentAddressGroup(backends1.get(1).addr, LB_BACKEND_ATTRS)),
+        eq(new EquivalentAddressGroup(backend1b.addr, LB_BACKEND_ATTRS)),
         any(Attributes.class));
 
     assertEquals(2, mockSubchannels.size());
     Subchannel subchannel1 = mockSubchannels.poll();
     Subchannel subchannel2 = mockSubchannels.poll();
+
     verify(subchannel1).requestConnection();
     verify(subchannel2).requestConnection();
     assertEquals(
-        new EquivalentAddressGroup(backends1.get(0).addr, LB_BACKEND_ATTRS),
+        new EquivalentAddressGroup(backend1a.addr, LB_BACKEND_ATTRS),
         subchannel1.getAddresses());
     assertEquals(
-        new EquivalentAddressGroup(backends1.get(1).addr, LB_BACKEND_ATTRS),
+        new EquivalentAddressGroup(backend1b.addr, LB_BACKEND_ATTRS),
         subchannel2.getAddresses());
 
     deliverSubchannelState(subchannel1, ConnectivityStateInfo.forNonError(CONNECTING));
@@ -2201,27 +2204,27 @@ public class GrpclbLoadBalancerTest {
     verify(subchannelPool)
         .returnSubchannel(eq(subchannel2), eq(ConnectivityStateInfo.forNonError(READY)));
 
-    // verify fallback (no backends)
-    fallbackTestVerifyUseOfFallbackBackendLists(
-        inOrder, Collections.<EquivalentAddressGroup>emptyList());
+    // verify fallback
+    fallbackTestVerifyUseOfFallbackBackendLists(inOrder, fallbackEags);
 
     assertFalse(oobChannel.isShutdown());
     verify(lbRequestObserver, never()).onCompleted();
 
     // exit fall back by providing two new backends
-    List<ServerEntry> backends2 = Arrays.asList(
-        new ServerEntry("127.0.0.1", 8000, "token1001"),
-        new ServerEntry("127.0.0.1", 8010, "token1002"));
+    ServerEntry backend2a = new ServerEntry("127.0.0.1", 8000, "token1001");
+    ServerEntry backend2b = new ServerEntry("127.0.0.1", 8010, "token1002");
+    List<ServerEntry> backends2 = Arrays.asList(backend2a, backend2b);
+
     inOrder.verify(helper, never())
         .updateBalancingState(any(ConnectivityState.class), any(SubchannelPicker.class));
     logs.clear();
     lbResponseObserver.onNext(buildLbResponse(backends2));
 
     inOrder.verify(subchannelPool).takeOrCreateSubchannel(
-        eq(new EquivalentAddressGroup(backends2.get(0).addr, LB_BACKEND_ATTRS)),
+        eq(new EquivalentAddressGroup(backend2a.addr, LB_BACKEND_ATTRS)),
         any(Attributes.class));
     inOrder.verify(subchannelPool).takeOrCreateSubchannel(
-        eq(new EquivalentAddressGroup(backends2.get(1).addr, LB_BACKEND_ATTRS)),
+        eq(new EquivalentAddressGroup(backend2b.addr, LB_BACKEND_ATTRS)),
         any(Attributes.class));
 
     assertEquals(2, mockSubchannels.size());
@@ -2230,19 +2233,19 @@ public class GrpclbLoadBalancerTest {
     verify(subchannel3).requestConnection();
     verify(subchannel4).requestConnection();
     assertEquals(
-        new EquivalentAddressGroup(backends2.get(0).addr, LB_BACKEND_ATTRS),
+        new EquivalentAddressGroup(backend2a.addr, LB_BACKEND_ATTRS),
         subchannel3.getAddresses());
     assertEquals(
-        new EquivalentAddressGroup(backends2.get(1).addr, LB_BACKEND_ATTRS),
+        new EquivalentAddressGroup(backend2b.addr, LB_BACKEND_ATTRS),
         subchannel4.getAddresses());
 
     deliverSubchannelState(subchannel3, ConnectivityStateInfo.forNonError(CONNECTING));
     deliverSubchannelState(subchannel4, ConnectivityStateInfo.forNonError(CONNECTING));
 
     inOrder.verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
-    RoundRobinPicker picker3 = (RoundRobinPicker) pickerCaptor.getValue();
-    assertThat(picker3.dropList).containsExactly(null, null);
-    assertThat(picker3.pickList).containsExactly(BUFFER_ENTRY);
+    RoundRobinPicker picker6 = (RoundRobinPicker) pickerCaptor.getValue();
+    assertThat(picker6.dropList).containsExactly(null, null);
+    assertThat(picker6.pickList).containsExactly(BUFFER_ENTRY);
     inOrder.verifyNoMoreInteractions();
 
     assertThat(logs).containsExactly(
@@ -2263,9 +2266,9 @@ public class GrpclbLoadBalancerTest {
             + " drops=[null, null]");
     logs.clear();
 
-    RoundRobinPicker picker4 = (RoundRobinPicker) pickerCaptor.getValue();
-    assertThat(picker4.dropList).containsExactly(null, null);
-    assertThat(picker4.pickList).containsExactly(
+    RoundRobinPicker picker3 = (RoundRobinPicker) pickerCaptor.getValue();
+    assertThat(picker3.dropList).containsExactly(null, null);
+    assertThat(picker3.pickList).containsExactly(
         new BackendEntry(subchannel3, getLoadRecorder(), "token1001"));
 
     deliverSubchannelState(subchannel4, ConnectivityStateInfo.forNonError(READY));
@@ -2277,9 +2280,9 @@ public class GrpclbLoadBalancerTest {
             + " drops=[null, null]");
     logs.clear();
 
-    RoundRobinPicker picker5 = (RoundRobinPicker) pickerCaptor.getValue();
-    assertThat(picker5.dropList).containsExactly(null, null);
-    assertThat(picker5.pickList).containsExactly(
+    RoundRobinPicker picker4 = (RoundRobinPicker) pickerCaptor.getValue();
+    assertThat(picker4.dropList).containsExactly(null, null);
+    assertThat(picker4.pickList).containsExactly(
         new BackendEntry(subchannel3, getLoadRecorder(), "token1001"),
         new BackendEntry(subchannel4, getLoadRecorder(), "token1002"))
         .inOrder();
