@@ -1963,7 +1963,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     ERROR
   }
 
-  // TODO(jihuncho) remove this class when AutoConfiguredLoadBalancerFactory doesn't require raw
+  // TODO(creamsoup) remove this class when AutoConfiguredLoadBalancerFactory doesn't require raw
   //  service config.
   private static final class ServiceConfigHolder {
     Map<String, ?> rawServiceConfig;

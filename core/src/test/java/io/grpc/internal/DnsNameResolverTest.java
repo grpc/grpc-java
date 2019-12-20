@@ -681,15 +681,15 @@ public class DnsNameResolverTest {
     final InetSocketAddress proxyAddress =
         new InetSocketAddress(InetAddress.getByName("10.0.0.1"), 1000);
     ProxyDetector alwaysDetectProxy = new ProxyDetector() {
-      @Override
-      public HttpConnectProxiedSocketAddress proxyFor(SocketAddress targetAddress) {
-        return HttpConnectProxiedSocketAddress.newBuilder()
-            .setTargetAddress((InetSocketAddress) targetAddress)
-            .setProxyAddress(proxyAddress)
-            .setUsername("username")
-            .setPassword("password").build();
-      }
-    };
+        @Override
+        public HttpConnectProxiedSocketAddress proxyFor(SocketAddress targetAddress) {
+          return HttpConnectProxiedSocketAddress.newBuilder()
+              .setTargetAddress((InetSocketAddress) targetAddress)
+              .setProxyAddress(proxyAddress)
+              .setUsername("username")
+              .setPassword("password").build();
+        }
+      };
     DnsNameResolver resolver =
         newResolver(name, port, alwaysDetectProxy, Stopwatch.createUnstarted());
     AddressResolver mockAddressResolver = mock(AddressResolver.class);
