@@ -372,12 +372,12 @@ public class XdsNameResolverTest {
   }
 
   /**
-   * Builds an LDS DiscoveryResponse containing the mapping of given host name (with port if any)
-   * to the given cluster name directly in-line. Clients receiving this response is able to
-   * resolve cluster name for the given hostname:port immediately.
+   * Builds an LDS DiscoveryResponse containing the mapping of given host name (with port if any) to
+   * the given cluster name directly in-line. Clients receiving this response is able to resolve
+   * cluster name for the given hostname:port immediately.
    */
-  private DiscoveryResponse buildLdsResponseForCluster(String versionInfo,
-      String hostName, int port, String clusterName, String nonce) {
+  private static DiscoveryResponse buildLdsResponseForCluster(
+      String versionInfo, String hostName, int port, String clusterName, String nonce) {
     String ldsResourceName = port == -1 ? hostName : hostName + ":" + port;
     List<Any> listeners = ImmutableList.of(
         Any.pack(buildListener(ldsResourceName,
@@ -394,12 +394,12 @@ public class XdsNameResolverTest {
   }
 
   /**
-   * Builds an LDS DiscoveryResponse containing the mapping of given host name (with port if any)
-   * to the given RDS resource name. Clients receiving this response is able to send an RDS
-   * request for resolving the cluster name for the given hostname:port.
+   * Builds an LDS DiscoveryResponse containing the mapping of given host name (with port if any) to
+   * the given RDS resource name. Clients receiving this response is able to send an RDS request for
+   * resolving the cluster name for the given hostname:port.
    */
-  private DiscoveryResponse buildLdsResponseForRdsResource(String versionInfo,
-      String hostName, int port, String routeConfigName, String nonce) {
+  private static DiscoveryResponse buildLdsResponseForRdsResource(
+      String versionInfo, String hostName, int port, String routeConfigName, String nonce) {
     String ldsResourceName = port == -1 ? hostName : hostName + ":" + port;
     Rds rdsConfig =
         Rds.newBuilder()
@@ -416,11 +416,15 @@ public class XdsNameResolverTest {
   }
 
   /**
-   * Builds an RDS DiscoveryResponse containing the mapping of given route config name to the
-   * given cluster name under.
+   * Builds an RDS DiscoveryResponse containing the mapping of given route config name to the given
+   * cluster name under.
    */
-  private DiscoveryResponse buildRdsResponseForCluster(String versionInfo,
-      String routeConfigName, String hostName, String clusterName, String nonce) {
+  private static DiscoveryResponse buildRdsResponseForCluster(
+      String versionInfo,
+      String routeConfigName,
+      String hostName,
+      String clusterName,
+      String nonce) {
     List<Any> routeConfigs = ImmutableList.of(
         Any.pack(
             buildRouteConfiguration(
