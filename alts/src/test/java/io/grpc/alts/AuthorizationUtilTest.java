@@ -42,7 +42,7 @@ public final class AuthorizationUtilTest {
     Status status =
         AuthorizationUtil.clientAuthorizationCheck(
             new FakeServerCall(null), Lists.newArrayList("Alice"));
-    assertThat(status.getCode()).isEqualTo(Status.Code.NOT_FOUND);
+    assertThat(status.getCode()).isEqualTo(Status.Code.PERMISSION_DENIED);
     assertThat(status.getDescription()).startsWith("Peer ALTS AuthContext not found");
     status =
         AuthorizationUtil.clientAuthorizationCheck(

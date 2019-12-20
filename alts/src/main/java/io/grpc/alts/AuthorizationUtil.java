@@ -37,7 +37,7 @@ public final class AuthorizationUtil {
     AltsAuthContext altsContext =
         (AltsAuthContext) call.getAttributes().get(AltsProtocolNegotiator.AUTH_CONTEXT_KEY);
     if (altsContext == null) {
-      return Status.NOT_FOUND.withDescription("Peer ALTS AuthContext not found");
+      return Status.PERMISSION_DENIED.withDescription("Peer ALTS AuthContext not found");
     }
     if (expectedServiceAccounts.contains(altsContext.getPeerServiceAccount())) {
       return Status.OK;
