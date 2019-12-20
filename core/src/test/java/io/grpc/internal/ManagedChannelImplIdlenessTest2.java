@@ -86,10 +86,10 @@ import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
 /**
- * Unit tests for {@link ManagedChannelImpl}'s idle mode.
+ * Unit tests for {@link ManagedChannelImpl2}'s idle mode.
  */
 @RunWith(JUnit4.class)
-public class ManagedChannelImplIdlenessTest {
+public class ManagedChannelImplIdlenessTest2 {
   @Rule
   public final MockitoRule mocks = MockitoJUnit.rule();
   private final FakeClock timer = new FakeClock();
@@ -99,7 +99,7 @@ public class ManagedChannelImplIdlenessTest {
   private static final String USER_AGENT = "fakeagent";
   private static final long IDLE_TIMEOUT_SECONDS = 30;
   private static final String MOCK_POLICY_NAME = "mock_lb";
-  private ManagedChannelImpl channel;
+  private ManagedChannelImpl2 channel;
 
   private final MethodDescriptor<String, Integer> method =
       MethodDescriptor.<String, Integer>newBuilder()
@@ -179,7 +179,7 @@ public class ManagedChannelImplIdlenessTest {
         .idleTimeout(IDLE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         .userAgent(USER_AGENT);
     builder.executorPool = executorPool;
-    channel = new ManagedChannelImpl(
+    channel = new ManagedChannelImpl2(
         builder, mockTransportFactory, new FakeBackoffPolicyProvider(),
         oobExecutorPool, timer.getStopwatchSupplier(),
         Collections.<ClientInterceptor>emptyList(),

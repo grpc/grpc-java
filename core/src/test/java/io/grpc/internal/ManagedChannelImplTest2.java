@@ -102,10 +102,10 @@ import io.grpc.ServerMethodDefinition;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StringMarshaller;
-import io.grpc.internal.AutoConfiguredLoadBalancerFactory.PolicySelection;
+import io.grpc.internal.AutoConfiguredLoadBalancerFactory2.PolicySelection;
 import io.grpc.internal.ClientTransportFactory.ClientTransportOptions;
 import io.grpc.internal.InternalSubchannel.TransportLogger;
-import io.grpc.internal.ManagedChannelImpl.ScParser;
+import io.grpc.internal.ManagedChannelImpl2.ScParser;
 import io.grpc.internal.TestUtils.MockClientTransportInfo;
 import io.grpc.stub.ClientCalls;
 import io.grpc.testing.TestMethodDescriptors;
@@ -151,9 +151,9 @@ import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 import org.mockito.stubbing.Answer;
 
-/** Unit tests for {@link ManagedChannelImpl}. */
+/** Unit tests for {@link ManagedChannelImpl2}. */
 @RunWith(JUnit4.class)
-public class ManagedChannelImplTest {
+public class ManagedChannelImplTest2 {
   private static final int DEFAULT_PORT = 447;
 
   private static final MethodDescriptor<String, Integer> method =
@@ -201,7 +201,7 @@ public class ManagedChannelImplTest {
         @Override
         public boolean shouldAccept(Runnable command) {
           return command.toString().contains(
-              ManagedChannelImpl.DelayedNameResolverRefresh.class.getName());
+              ManagedChannelImpl2.DelayedNameResolverRefresh.class.getName());
         }
       };
 
@@ -210,7 +210,7 @@ public class ManagedChannelImplTest {
   @Rule public final ExpectedException thrown = ExpectedException.none();
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
-  private ManagedChannelImpl channel;
+  private ManagedChannelImpl2 channel;
   private Helper helper;
   @Captor
   private ArgumentCaptor<Status> statusCaptor;
@@ -280,7 +280,7 @@ public class ManagedChannelImplTest {
   private void createChannel(ClientInterceptor... interceptors) {
     checkState(channel == null);
 
-    channel = new ManagedChannelImpl(
+    channel = new ManagedChannelImpl2(
         channelBuilder, mockTransportFactory, new FakeBackoffPolicyProvider(),
         balancerRpcExecutorPool, timer.getStopwatchSupplier(), Arrays.asList(interceptors),
         timer.getTimeProvider());
@@ -295,7 +295,7 @@ public class ManagedChannelImplTest {
             channel.exitIdleMode();
           }
         });
-      if (channelBuilder.idleTimeoutMillis != ManagedChannelImpl.IDLE_TIMEOUT_MILLIS_DISABLE) {
+      if (channelBuilder.idleTimeoutMillis != ManagedChannelImpl2.IDLE_TIMEOUT_MILLIS_DISABLE) {
         numExpectedTasks += 1;
       }
 
@@ -377,7 +377,7 @@ public class ManagedChannelImplTest {
       public void close() throws SecurityException {
       }
     };
-    Logger logger = Logger.getLogger(ManagedChannelImpl.class.getName());
+    Logger logger = Logger.getLogger(ManagedChannelImpl2.class.getName());
     try {
       logger.addHandler(handler);
       helper.createSubchannel(addressGroup, Attributes.EMPTY);
@@ -538,7 +538,7 @@ public class ManagedChannelImplTest {
     assertTrue(
         channelz.containsSubchannel(subchannel.getInstrumentedInternalSubchannel().getLogId()));
     shutdownSafely(helper, subchannel);
-    timer.forwardTime(ManagedChannelImpl.SUBCHANNEL_SHUTDOWN_DELAY_SECONDS, TimeUnit.SECONDS);
+    timer.forwardTime(ManagedChannelImpl2.SUBCHANNEL_SHUTDOWN_DELAY_SECONDS, TimeUnit.SECONDS);
     timer.runDueTasks();
     assertFalse(
         channelz.containsSubchannel(subchannel.getInstrumentedInternalSubchannel().getLogId()));
@@ -686,7 +686,7 @@ public class ManagedChannelImplTest {
       assertTrue(nameResolverFactory.resolvers.get(0).shutdown);
       // call should have been aborted by delayed transport
       executor.runDueTasks();
-      verify(mockCallListener).onClose(same(ManagedChannelImpl.SHUTDOWN_NOW_STATUS),
+      verify(mockCallListener).onClose(same(ManagedChannelImpl2.SHUTDOWN_NOW_STATUS),
           any(Metadata.class));
     } else {
       // LoadBalancer and NameResolver are still running.
@@ -709,16 +709,16 @@ public class ManagedChannelImplTest {
 
     if (shutdownNow) {
       // Channel shutdownNow() all subchannels after shutting down LoadBalancer
-      verify(mockTransport).shutdownNow(ManagedChannelImpl.SHUTDOWN_NOW_STATUS);
+      verify(mockTransport).shutdownNow(ManagedChannelImpl2.SHUTDOWN_NOW_STATUS);
     } else {
       verify(mockTransport, never()).shutdownNow(any(Status.class));
     }
     // LoadBalancer should shutdown the subchannel
     shutdownSafely(helper, subchannel);
     if (shutdownNow) {
-      verify(mockTransport).shutdown(same(ManagedChannelImpl.SHUTDOWN_NOW_STATUS));
+      verify(mockTransport).shutdown(same(ManagedChannelImpl2.SHUTDOWN_NOW_STATUS));
     } else {
-      verify(mockTransport).shutdown(same(ManagedChannelImpl.SHUTDOWN_STATUS));
+      verify(mockTransport).shutdown(same(ManagedChannelImpl2.SHUTDOWN_STATUS));
     }
 
     // Killing the remaining real transport will terminate the channel
@@ -876,7 +876,7 @@ public class ManagedChannelImplTest {
     // Clean up as much as possible to allow the channel to terminate.
     shutdownSafely(helper, subchannel);
     timer.forwardNanos(
-        TimeUnit.SECONDS.toNanos(ManagedChannelImpl.SUBCHANNEL_SHUTDOWN_DELAY_SECONDS));
+        TimeUnit.SECONDS.toNanos(ManagedChannelImpl2.SUBCHANNEL_SHUTDOWN_DELAY_SECONDS));
   }
 
   @Test
@@ -970,7 +970,7 @@ public class ManagedChannelImplTest {
         new FakeNameResolverFactory.Builder(expectedUri).build();
     Map<String, Object> rawServiceConfig =
         parseConfig("{\"loadBalancingConfig\": [ {\"mock_lb\": { \"setting1\": \"high\" } } ] }");
-    ManagedChannelServiceConfig parsedServiceConfig =
+    ManagedChannelServiceConfig2 parsedServiceConfig =
         createManagedChannelServiceConfig(rawServiceConfig, null);
     nameResolverFactory.nextConfigOrError.set(ConfigOrError.fromConfig(parsedServiceConfig));
     nameResolverFactory.nextRawServiceConfig.set(rawServiceConfig);
@@ -998,7 +998,7 @@ public class ManagedChannelImplTest {
     String rawLbConfig = "{ \"setting1\": \"high\" }";
     Map<String, Object> rawServiceConfig =
         parseConfig("{\"loadBalancingConfig\": [ {\"mock_lb\": " + rawLbConfig + " } ] }");
-    ManagedChannelServiceConfig parsedServiceConfig =
+    ManagedChannelServiceConfig2 parsedServiceConfig =
         createManagedChannelServiceConfig(
             rawServiceConfig,
             new PolicySelection(
@@ -1368,11 +1368,11 @@ public class ManagedChannelImplTest {
 
     // shutdown() has a delay
     shutdownSafely(helper, sub1);
-    timer.forwardTime(ManagedChannelImpl.SUBCHANNEL_SHUTDOWN_DELAY_SECONDS - 1, TimeUnit.SECONDS);
+    timer.forwardTime(ManagedChannelImpl2.SUBCHANNEL_SHUTDOWN_DELAY_SECONDS - 1, TimeUnit.SECONDS);
     shutdownSafely(helper, sub1);
     verify(transportInfo1.transport, never()).shutdown(any(Status.class));
     timer.forwardTime(1, TimeUnit.SECONDS);
-    verify(transportInfo1.transport).shutdown(same(ManagedChannelImpl.SUBCHANNEL_SHUTDOWN_STATUS));
+    verify(transportInfo1.transport).shutdown(same(ManagedChannelImpl2.SUBCHANNEL_SHUTDOWN_STATUS));
 
     // ... but not after Channel is terminating
     verify(mockLoadBalancer, never()).shutdown();
@@ -1381,14 +1381,14 @@ public class ManagedChannelImplTest {
     verify(transportInfo2.transport, never()).shutdown(any(Status.class));
 
     shutdownSafely(helper, sub2);
-    verify(transportInfo2.transport).shutdown(same(ManagedChannelImpl.SHUTDOWN_STATUS));
+    verify(transportInfo2.transport).shutdown(same(ManagedChannelImpl2.SHUTDOWN_STATUS));
 
     // Cleanup
     transportInfo1.listener.transportShutdown(Status.UNAVAILABLE);
     transportInfo1.listener.transportTerminated();
     transportInfo2.listener.transportShutdown(Status.UNAVAILABLE);
     transportInfo2.listener.transportTerminated();
-    timer.forwardTime(ManagedChannelImpl.SUBCHANNEL_SHUTDOWN_DELAY_SECONDS, TimeUnit.SECONDS);
+    timer.forwardTime(ManagedChannelImpl2.SUBCHANNEL_SHUTDOWN_DELAY_SECONDS, TimeUnit.SECONDS);
   }
 
   @Test
@@ -1856,12 +1856,12 @@ public class ManagedChannelImplTest {
 
   @Test
   public void uriPattern() {
-    assertTrue(ManagedChannelImpl.URI_PATTERN.matcher("a:/").matches());
-    assertTrue(ManagedChannelImpl.URI_PATTERN.matcher("Z019+-.:/!@ #~ ").matches());
-    assertFalse(ManagedChannelImpl.URI_PATTERN.matcher("a/:").matches()); // "/:" not matched
-    assertFalse(ManagedChannelImpl.URI_PATTERN.matcher("0a:/").matches()); // '0' not matched
-    assertFalse(ManagedChannelImpl.URI_PATTERN.matcher("a,:/").matches()); // ',' not matched
-    assertFalse(ManagedChannelImpl.URI_PATTERN.matcher(" a:/").matches()); // space not matched
+    assertTrue(ManagedChannelImpl2.URI_PATTERN.matcher("a:/").matches());
+    assertTrue(ManagedChannelImpl2.URI_PATTERN.matcher("Z019+-.:/!@ #~ ").matches());
+    assertFalse(ManagedChannelImpl2.URI_PATTERN.matcher("a/:").matches()); // "/:" not matched
+    assertFalse(ManagedChannelImpl2.URI_PATTERN.matcher("0a:/").matches()); // '0' not matched
+    assertFalse(ManagedChannelImpl2.URI_PATTERN.matcher("a,:/").matches()); // ',' not matched
+    assertFalse(ManagedChannelImpl2.URI_PATTERN.matcher(" a:/").matches()); // space not matched
   }
 
   /**
@@ -2797,7 +2797,7 @@ public class ManagedChannelImplTest {
         Attributes.newBuilder()
             .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, new HashMap<String, Object>())
             .build();
-    ManagedChannelServiceConfig mcsc1 = createManagedChannelServiceConfig(
+    ManagedChannelServiceConfig2 mcsc1 = createManagedChannelServiceConfig(
         ImmutableMap.<String, Object>of(),
         new PolicySelection(
             mockLoadBalancerProvider, ImmutableMap.of("foo", "bar"), null));
@@ -2841,7 +2841,7 @@ public class ManagedChannelImplTest {
             new EquivalentAddressGroup(
                 Arrays.asList(new SocketAddress() {}, new SocketAddress() {}))))
         .setAttributes(attributes)
-        .setServiceConfig(ConfigOrError.fromConfig(ManagedChannelServiceConfig.empty()))
+        .setServiceConfig(ConfigOrError.fromConfig(ManagedChannelServiceConfig2.empty()))
         .build();
     nameResolverFactory.resolvers.get(0).listener.onResult(resolutionResult3);
     assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 1);
@@ -3200,7 +3200,7 @@ public class ManagedChannelImplTest {
         new FakeNameResolverFactory.Builder(expectedUri)
             .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
             .build();
-    ManagedChannelServiceConfig managedChannelServiceConfig =
+    ManagedChannelServiceConfig2 managedChannelServiceConfig =
         createManagedChannelServiceConfig(rawServiceConfig, null);
     nameResolverFactory.nextRawServiceConfig.set(rawServiceConfig);
     nameResolverFactory.nextConfigOrError.set(
@@ -3314,7 +3314,7 @@ public class ManagedChannelImplTest {
         new FakeNameResolverFactory.Builder(expectedUri)
             .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
             .build();
-    ManagedChannelServiceConfig managedChannelServiceConfig =
+    ManagedChannelServiceConfig2 managedChannelServiceConfig =
         createManagedChannelServiceConfig(rawServiceConfig, null);
     nameResolverFactory.nextRawServiceConfig.set(rawServiceConfig);
     nameResolverFactory.nextConfigOrError.set(
@@ -3455,8 +3455,8 @@ public class ManagedChannelImplTest {
 
       CustomBuilder() {
         super(TARGET);
-        this.executorPool = ManagedChannelImplTest.this.executorPool;
-        this.channelz = ManagedChannelImplTest.this.channelz;
+        this.executorPool = ManagedChannelImplTest2.this.executorPool;
+        this.channelz = ManagedChannelImplTest2.this.channelz;
       }
 
       @Override
@@ -3486,7 +3486,7 @@ public class ManagedChannelImplTest {
         new PolicySelection(
             mockLoadBalancerProvider, rawServiceConfig, ConfigOrError.fromConfig(fakeLbConfig));
     mockLoadBalancerProvider.parseLoadBalancingPolicyConfig(rawServiceConfig);
-    ManagedChannelServiceConfig managedChannelServiceConfig =
+    ManagedChannelServiceConfig2 managedChannelServiceConfig =
         createManagedChannelServiceConfig(rawServiceConfig, lbConfigs);
     factory.resolver.listener.onResult(
         ResolutionResult.newBuilder()
@@ -3640,8 +3640,8 @@ public class ManagedChannelImplTest {
     boolean retryEnabled = false;
     int maxRetryAttemptsLimit = 2;
     int maxHedgedAttemptsLimit = 3;
-    AutoConfiguredLoadBalancerFactory autoConfiguredLoadBalancerFactory =
-        new AutoConfiguredLoadBalancerFactory("pick_first");
+    AutoConfiguredLoadBalancerFactory2 autoConfiguredLoadBalancerFactory =
+        new AutoConfiguredLoadBalancerFactory2("pick_first");
 
     ScParser parser = new ScParser(
         retryEnabled,
@@ -3653,7 +3653,7 @@ public class ManagedChannelImplTest {
     ConfigOrError coe = parser.parseServiceConfig(ImmutableMap.<String, Object>of());
 
     assertThat(coe.getError()).isNull();
-    ManagedChannelServiceConfig cfg = (ManagedChannelServiceConfig) coe.getConfig();
+    ManagedChannelServiceConfig2 cfg = (ManagedChannelServiceConfig2) coe.getConfig();
     assertThat(cfg.getServiceMap()).isEmpty();
     assertThat(cfg.getServiceMethodMap()).isEmpty();
   }
@@ -3663,8 +3663,8 @@ public class ManagedChannelImplTest {
     boolean retryEnabled = false;
     int maxRetryAttemptsLimit = 2;
     int maxHedgedAttemptsLimit = 3;
-    AutoConfiguredLoadBalancerFactory autoConfiguredLoadBalancerFactory =
-        new AutoConfiguredLoadBalancerFactory("pick_first");
+    AutoConfiguredLoadBalancerFactory2 autoConfiguredLoadBalancerFactory =
+        new AutoConfiguredLoadBalancerFactory2("pick_first");
 
     ScParser parser = new ScParser(
         retryEnabled,
@@ -3687,8 +3687,8 @@ public class ManagedChannelImplTest {
     boolean retryEnabled = false;
     int maxRetryAttemptsLimit = 2;
     int maxHedgedAttemptsLimit = 3;
-    AutoConfiguredLoadBalancerFactory autoConfiguredLoadBalancerFactory =
-        new AutoConfiguredLoadBalancerFactory("pick_first");
+    AutoConfiguredLoadBalancerFactory2 autoConfiguredLoadBalancerFactory =
+        new AutoConfiguredLoadBalancerFactory2("pick_first");
 
     ScParser parser = new ScParser(
         retryEnabled,
@@ -3701,7 +3701,7 @@ public class ManagedChannelImplTest {
         parser.parseServiceConfig(ImmutableMap.of("loadBalancingConfig", ImmutableList.of()));
 
     assertThat(coe.getError()).isNull();
-    ManagedChannelServiceConfig cfg = (ManagedChannelServiceConfig) coe.getConfig();
+    ManagedChannelServiceConfig2 cfg = (ManagedChannelServiceConfig2) coe.getConfig();
     assertThat(cfg.getLoadBalancingConfig()).isNull();
   }
 
@@ -3719,7 +3719,7 @@ public class ManagedChannelImplTest {
           parseConfig("{\"methodConfig\":[{"
               + "\"name\":[{\"service\":\"SimpleService1\"}],"
               + "\"waitForReady\":true}]}");
-      ManagedChannelServiceConfig managedChannelServiceConfig =
+      ManagedChannelServiceConfig2 managedChannelServiceConfig =
           createManagedChannelServiceConfig(rawServiceConfig, null);
       nameResolverFactory.nextRawServiceConfig.set(rawServiceConfig);
       nameResolverFactory.nextConfigOrError.set(
@@ -3755,7 +3755,7 @@ public class ManagedChannelImplTest {
       channelBuilder.defaultServiceConfig(defaultServiceConfig);
 
       Map<String, Object> rawServiceConfig = new HashMap<>();
-      ManagedChannelServiceConfig managedChannelServiceConfig =
+      ManagedChannelServiceConfig2 managedChannelServiceConfig =
           createManagedChannelServiceConfig(rawServiceConfig, null);
       nameResolverFactory.nextRawServiceConfig.set(rawServiceConfig);
       nameResolverFactory.nextConfigOrError.set(
@@ -3790,7 +3790,7 @@ public class ManagedChannelImplTest {
           parseConfig("{\"methodConfig\":[{"
               + "\"name\":[{\"service\":\"SimpleService1\"}],"
               + "\"waitForReady\":true}]}");
-      ManagedChannelServiceConfig managedChannelServiceConfig =
+      ManagedChannelServiceConfig2 managedChannelServiceConfig =
           createManagedChannelServiceConfig(rawServiceConfig, null);
       nameResolverFactory.nextRawServiceConfig.set(rawServiceConfig);
       nameResolverFactory.nextConfigOrError.set(
@@ -3849,7 +3849,7 @@ public class ManagedChannelImplTest {
           parseConfig("{\"methodConfig\":[{"
               + "\"name\":[{\"service\":\"SimpleService2\"}],"
               + "\"waitForReady\":false}]}");
-      ManagedChannelServiceConfig managedChannelServiceConfig =
+      ManagedChannelServiceConfig2 managedChannelServiceConfig =
           createManagedChannelServiceConfig(rawServiceConfig, null);
       nameResolverFactory.nextRawServiceConfig.set(rawServiceConfig);
       nameResolverFactory.nextConfigOrError.set(
@@ -3911,7 +3911,7 @@ public class ManagedChannelImplTest {
       channelBuilder.nameResolverFactory(nameResolverFactory);
 
       Map<String, Object> rawServiceConfig = Collections.emptyMap();
-      ManagedChannelServiceConfig managedChannelServiceConfig =
+      ManagedChannelServiceConfig2 managedChannelServiceConfig =
           createManagedChannelServiceConfig(rawServiceConfig, null);
       nameResolverFactory.nextRawServiceConfig.set(rawServiceConfig);
       nameResolverFactory.nextConfigOrError.set(
@@ -4252,10 +4252,10 @@ public class ManagedChannelImplTest {
     return (Map<String, Object>) JsonParser.parse(json);
   }
 
-  private static ManagedChannelServiceConfig createManagedChannelServiceConfig(
+  private static ManagedChannelServiceConfig2 createManagedChannelServiceConfig(
       Map<String, Object> rawServiceConfig, PolicySelection policySelection) {
     // Provides dummy variable for retry related params (not used in this test class)
-    return ManagedChannelServiceConfig
+    return ManagedChannelServiceConfig2
         .fromServiceConfig(rawServiceConfig, true, 3, 4, policySelection);
   }
 }

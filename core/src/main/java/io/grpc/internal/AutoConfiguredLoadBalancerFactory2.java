@@ -47,20 +47,20 @@ import java.util.Map;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
-public final class AutoConfiguredLoadBalancerFactory {
+public final class AutoConfiguredLoadBalancerFactory2 {
   private static final Logger logger =
-      Logger.getLogger(AutoConfiguredLoadBalancerFactory.class.getName());
+      Logger.getLogger(AutoConfiguredLoadBalancerFactory2.class.getName());
   private static final String GRPCLB_POLICY_NAME = "grpclb";
 
   private final LoadBalancerRegistry registry;
   private final String defaultPolicy;
 
-  public AutoConfiguredLoadBalancerFactory(String defaultPolicy) {
+  public AutoConfiguredLoadBalancerFactory2(String defaultPolicy) {
     this(LoadBalancerRegistry.getDefaultRegistry(), defaultPolicy);
   }
 
   @VisibleForTesting
-  AutoConfiguredLoadBalancerFactory(LoadBalancerRegistry registry, String defaultPolicy) {
+  AutoConfiguredLoadBalancerFactory2(LoadBalancerRegistry registry, String defaultPolicy) {
     this.registry = checkNotNull(registry, "registry");
     this.defaultPolicy = checkNotNull(defaultPolicy, "defaultPolicy");
   }

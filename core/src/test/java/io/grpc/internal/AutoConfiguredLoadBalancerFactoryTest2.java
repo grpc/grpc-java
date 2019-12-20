@@ -55,10 +55,10 @@ import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.grpclb.GrpclbLoadBalancerProvider;
-import io.grpc.internal.AutoConfiguredLoadBalancerFactory.AutoConfiguredLoadBalancer;
-import io.grpc.internal.AutoConfiguredLoadBalancerFactory.PolicyException;
-import io.grpc.internal.AutoConfiguredLoadBalancerFactory.PolicySelection;
-import io.grpc.internal.AutoConfiguredLoadBalancerFactory.ResolvedPolicySelection;
+import io.grpc.internal.AutoConfiguredLoadBalancerFactory2.AutoConfiguredLoadBalancer;
+import io.grpc.internal.AutoConfiguredLoadBalancerFactory2.PolicyException;
+import io.grpc.internal.AutoConfiguredLoadBalancerFactory2.PolicySelection;
+import io.grpc.internal.AutoConfiguredLoadBalancerFactory2.ResolvedPolicySelection;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import java.net.SocketAddress;
 import java.util.ArrayList;
@@ -81,11 +81,11 @@ import org.mockito.ArgumentCaptor;
  * Unit tests for {@link AutoConfiguredLoadBalancerFactory}.
  */
 @RunWith(JUnit4.class)
-public class AutoConfiguredLoadBalancerFactoryTest {
+public class AutoConfiguredLoadBalancerFactoryTest2 {
   private static final LoadBalancerRegistry defaultRegistry =
       LoadBalancerRegistry.getDefaultRegistry();
-  private final AutoConfiguredLoadBalancerFactory lbf =
-      new AutoConfiguredLoadBalancerFactory(GrpcUtil.DEFAULT_LB_POLICY);
+  private final AutoConfiguredLoadBalancerFactory2 lbf =
+      new AutoConfiguredLoadBalancerFactory2(GrpcUtil.DEFAULT_LB_POLICY);
 
   private final ChannelLogger channelLogger = mock(ChannelLogger.class);
   private final LoadBalancer testLbBalancer = mock(LoadBalancer.class);
@@ -135,7 +135,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
 
   @Test
   public void defaultIsConfigurable() {
-    AutoConfiguredLoadBalancer lb = new AutoConfiguredLoadBalancerFactory("test_lb")
+    AutoConfiguredLoadBalancer lb = new AutoConfiguredLoadBalancerFactory2("test_lb")
         .newLoadBalancer(new TestHelper());
 
     assertThat(lb.getDelegateProvider()).isSameInstanceAs(testLbBalancerProvider);
@@ -321,7 +321,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
                 new SocketAddress(){},
                 Attributes.newBuilder().set(GrpcAttributes.ATTR_LB_ADDR_AUTHORITY, "ok").build()));
     Helper helper = new TestHelper();
-    AutoConfiguredLoadBalancer lb = new AutoConfiguredLoadBalancerFactory(
+    AutoConfiguredLoadBalancer lb = new AutoConfiguredLoadBalancerFactory2(
             registry, GrpcUtil.DEFAULT_LB_POLICY).newLoadBalancer(helper);
 
     Status handleResult = lb.tryHandleResolvedAddresses(
@@ -408,7 +408,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
   @Test
   public void decideLoadBalancerProvider_noBalancerAddresses_noServiceConfig_customDefault()
       throws Exception {
-    AutoConfiguredLoadBalancer lb = new AutoConfiguredLoadBalancerFactory("test_lb")
+    AutoConfiguredLoadBalancer lb = new AutoConfiguredLoadBalancerFactory2("test_lb")
         .newLoadBalancer(new TestHelper());
     PolicySelection policySelection = null;
     List<EquivalentAddressGroup> servers =
@@ -539,7 +539,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     LoadBalancerProvider fakeRoundRobinProvider =
         new FakeLoadBalancerProvider("round_robin", testLbBalancer, null);
     registry.register(fakeRoundRobinProvider);
-    AutoConfiguredLoadBalancer lb = new AutoConfiguredLoadBalancerFactory(
+    AutoConfiguredLoadBalancer lb = new AutoConfiguredLoadBalancerFactory2(
         registry, GrpcUtil.DEFAULT_LB_POLICY).newLoadBalancer(new TestHelper());
     List<EquivalentAddressGroup> servers =
         Arrays.asList(
@@ -571,7 +571,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     LoadBalancerRegistry registry = new LoadBalancerRegistry();
     registry.register(new PickFirstLoadBalancerProvider());
     registry.register(new FakeLoadBalancerProvider("round_robin", testLbBalancer, null));
-    AutoConfiguredLoadBalancer lb = new AutoConfiguredLoadBalancerFactory(
+    AutoConfiguredLoadBalancer lb = new AutoConfiguredLoadBalancerFactory2(
         registry, GrpcUtil.DEFAULT_LB_POLICY).newLoadBalancer(new TestHelper());
     List<EquivalentAddressGroup> servers =
         Collections.singletonList(
@@ -654,7 +654,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     };
 
     AutoConfiguredLoadBalancer lb =
-        new AutoConfiguredLoadBalancerFactory(GrpcUtil.DEFAULT_LB_POLICY).newLoadBalancer(helper);
+        new AutoConfiguredLoadBalancerFactory2(GrpcUtil.DEFAULT_LB_POLICY).newLoadBalancer(helper);
     Status handleResult = lb.tryHandleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers)

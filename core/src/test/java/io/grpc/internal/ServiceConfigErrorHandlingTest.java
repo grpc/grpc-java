@@ -93,7 +93,7 @@ public class ServiceConfigErrorHandlingTest {
         @Override
         public boolean shouldAccept(Runnable command) {
           return command.toString().contains(
-              ManagedChannelImpl.DelayedNameResolverRefresh.class.getName());
+              ManagedChannelImpl2.DelayedNameResolverRefresh.class.getName());
         }
       };
 
@@ -102,7 +102,7 @@ public class ServiceConfigErrorHandlingTest {
   @Rule public final ExpectedException thrown = ExpectedException.none();
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
-  private ManagedChannelImpl channel;
+  private ManagedChannelImpl2 channel;
   private final AtomicReference<Status> nextLbPolicyConfigError = new AtomicReference<>();
 
   private FakeLoadBalancer mockLoadBalancer =
@@ -157,7 +157,7 @@ public class ServiceConfigErrorHandlingTest {
     checkState(channel == null);
 
     channel =
-        new ManagedChannelImpl(
+        new ManagedChannelImpl2(
             channelBuilder,
             mockTransportFactory,
             new FakeBackoffPolicyProvider(),
@@ -175,7 +175,7 @@ public class ServiceConfigErrorHandlingTest {
         channel.exitIdleMode();
       }
     });
-    if (channelBuilder.idleTimeoutMillis != ManagedChannelImpl.IDLE_TIMEOUT_MILLIS_DISABLE) {
+    if (channelBuilder.idleTimeoutMillis != ManagedChannelImpl2.IDLE_TIMEOUT_MILLIS_DISABLE) {
       numExpectedTasks += 1;
     }
 

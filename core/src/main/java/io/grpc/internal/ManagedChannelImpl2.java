@@ -22,8 +22,8 @@ import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
-import static io.grpc.internal.ServiceConfigInterceptor.HEDGING_POLICY_KEY;
-import static io.grpc.internal.ServiceConfigInterceptor.RETRY_POLICY_KEY;
+import static io.grpc.internal.ServiceConfigInterceptor2.HEDGING_POLICY_KEY;
+import static io.grpc.internal.ServiceConfigInterceptor2.RETRY_POLICY_KEY;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
@@ -71,7 +71,7 @@ import io.grpc.ProxyDetector;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
-import io.grpc.internal.AutoConfiguredLoadBalancerFactory.AutoConfiguredLoadBalancer;
+import io.grpc.internal.AutoConfiguredLoadBalancerFactory2.AutoConfiguredLoadBalancer;
 import io.grpc.internal.ClientCallImpl.ClientTransportProvider;
 import io.grpc.internal.RetriableStream.ChannelBufferMeter;
 import io.grpc.internal.RetriableStream.Throttle;
@@ -103,9 +103,9 @@ import javax.annotation.concurrent.ThreadSafe;
 
 /** A communication channel for making outgoing RPCs. */
 @ThreadSafe
-final class ManagedChannelImpl extends ManagedChannel implements
+final class ManagedChannelImpl2 extends ManagedChannel implements
     InternalInstrumented<ChannelStats> {
-  static final Logger logger = Logger.getLogger(ManagedChannelImpl.class.getName());
+  static final Logger logger = Logger.getLogger(ManagedChannelImpl2.class.getName());
 
   // Matching this pattern means the target string is a URI target or at least intended to be one.
   // A URI target must be an absolute hierarchical URI.
@@ -133,14 +133,14 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private static final ServiceConfigHolder EMPTY_SERVICE_CONFIG =
       new ServiceConfigHolder(
           Collections.<String, Object>emptyMap(),
-          ManagedChannelServiceConfig.empty());
+          ManagedChannelServiceConfig2.empty());
 
   private final InternalLogId logId;
   private final String target;
   private final NameResolverRegistry nameResolverRegistry;
   private final NameResolver.Factory nameResolverFactory;
   private final NameResolver.Args nameResolverArgs;
-  private final AutoConfiguredLoadBalancerFactory loadBalancerFactory;
+  private final AutoConfiguredLoadBalancerFactory2 loadBalancerFactory;
   private final ClientTransportFactory transportFactory;
   private final RestrictedScheduledExecutor scheduledExecutor;
   private final Executor executor;
@@ -175,7 +175,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
   private final ConnectivityStateManager channelStateManager = new ConnectivityStateManager();
 
-  private final ServiceConfigInterceptor serviceConfigInterceptor;
+  private final ServiceConfigInterceptor2 serviceConfigInterceptor;
 
   private final BackoffPolicy.Provider backoffPolicyProvider;
 
@@ -551,7 +551,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
   private final Rescheduler idleTimer;
 
-  ManagedChannelImpl(
+  ManagedChannelImpl2(
       AbstractManagedChannelImplBuilder<?> builder,
       ClientTransportFactory clientTransportFactory,
       BackoffPolicy.Provider backoffPolicyProvider,
@@ -577,7 +577,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     ProxyDetector proxyDetector =
         builder.proxyDetector != null ? builder.proxyDetector : GrpcUtil.DEFAULT_PROXY_DETECTOR;
     this.retryEnabled = builder.retryEnabled && !builder.temporarilyDisableRetry;
-    this.loadBalancerFactory = new AutoConfiguredLoadBalancerFactory(builder.defaultLbPolicy);
+    this.loadBalancerFactory = new AutoConfiguredLoadBalancerFactory2(builder.defaultLbPolicy);
     this.offloadExecutorHolder =
         new ExecutorHolder(
             checkNotNull(builder.offloadExecutorPool, "offloadExecutorPool"));
@@ -613,7 +613,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     this.delayedTransport.start(delayedTransportListener);
     this.backoffPolicyProvider = backoffPolicyProvider;
 
-    serviceConfigInterceptor = new ServiceConfigInterceptor(retryEnabled);
+    serviceConfigInterceptor = new ServiceConfigInterceptor2(retryEnabled);
     if (builder.defaultServiceConfig != null) {
       ConfigOrError parsedDefaultServiceConfig =
           serviceConfigParser.parseServiceConfig(builder.defaultServiceConfig);
@@ -624,7 +624,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       this.defaultServiceConfig =
           new ServiceConfigHolder(
               builder.defaultServiceConfig,
-              (ManagedChannelServiceConfig) parsedDefaultServiceConfig.getConfig());
+              (ManagedChannelServiceConfig2) parsedDefaultServiceConfig.getConfig());
       this.lastServiceConfig = this.defaultServiceConfig;
     } else {
       this.defaultServiceConfig = null;
@@ -736,7 +736,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
    * cancelled.
    */
   @Override
-  public ManagedChannelImpl shutdown() {
+  public ManagedChannelImpl2 shutdown() {
     channelLogger.log(ChannelLogLevel.DEBUG, "shutdown() called");
     if (!shutdown.compareAndSet(false, true)) {
       return this;
@@ -774,7 +774,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
    * return {@code false} immediately after this method returns.
    */
   @Override
-  public ManagedChannelImpl shutdownNow() {
+  public ManagedChannelImpl2 shutdownNow() {
     channelLogger.log(ChannelLogLevel.DEBUG, "shutdownNow() called");
     shutdown();
     uncommittedRetriableStreamsRegistry.onShutdownNow(SHUTDOWN_NOW_STATUS);
@@ -1107,7 +1107,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
             @Override
             public void onSubchannelState(ConnectivityStateInfo newState) {
               // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
-              if (LbHelperImpl.this != ManagedChannelImpl.this.lbHelper) {
+              if (LbHelperImpl.this != ManagedChannelImpl2.this.lbHelper) {
                 return;
               }
               lb.handleSubchannelState(subchannel, newState);
@@ -1266,7 +1266,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
     @Override
     public String getAuthority() {
-      return ManagedChannelImpl.this.authority();
+      return ManagedChannelImpl2.this.authority();
     }
 
     @Deprecated
@@ -1338,7 +1338,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
             validServiceConfig = configOrError.getConfig() == null
                 ? null
                 : new ServiceConfigHolder(
-                    rawServiceConfig, (ManagedChannelServiceConfig) configOrError.getConfig());
+                    rawServiceConfig, (ManagedChannelServiceConfig2) configOrError.getConfig());
             serviceConfigError = configOrError.getError();
           }
 
@@ -1398,7 +1398,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
           }
 
           // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
-          if (NameResolverListener.this.helper == ManagedChannelImpl.this.lbHelper) {
+          if (NameResolverListener.this.helper == ManagedChannelImpl2.this.lbHelper) {
             Attributes effectiveAttrs = attrs;
             if (effectiveServiceConfig != validServiceConfig) {
               effectiveAttrs = attrs.toBuilder()
@@ -1454,7 +1454,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
         lastResolutionState = ResolutionState.ERROR;
       }
       // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
-      if (NameResolverListener.this.helper != ManagedChannelImpl.this.lbHelper) {
+      if (NameResolverListener.this.helper != ManagedChannelImpl2.this.lbHelper) {
         return;
       }
 
@@ -1900,14 +1900,14 @@ final class ManagedChannelImpl extends ManagedChannel implements
     private final boolean retryEnabled;
     private final int maxRetryAttemptsLimit;
     private final int maxHedgedAttemptsLimit;
-    private final AutoConfiguredLoadBalancerFactory autoLoadBalancerFactory;
+    private final AutoConfiguredLoadBalancerFactory2 autoLoadBalancerFactory;
     private final ChannelLogger channelLogger;
 
     ScParser(
         boolean retryEnabled,
         int maxRetryAttemptsLimit,
         int maxHedgedAttemptsLimit,
-        AutoConfiguredLoadBalancerFactory autoLoadBalancerFactory,
+        AutoConfiguredLoadBalancerFactory2 autoLoadBalancerFactory,
         ChannelLogger channelLogger) {
       this.retryEnabled = retryEnabled;
       this.maxRetryAttemptsLimit = maxRetryAttemptsLimit;
@@ -1931,7 +1931,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
           loadBalancingPolicySelection = choiceFromLoadBalancer.getConfig();
         }
         return ConfigOrError.fromConfig(
-            ManagedChannelServiceConfig.fromServiceConfig(
+            ManagedChannelServiceConfig2.fromServiceConfig(
                 rawServiceConfig,
                 retryEnabled,
                 maxRetryAttemptsLimit,
@@ -1968,10 +1968,10 @@ final class ManagedChannelImpl extends ManagedChannel implements
   //  service config.
   private static final class ServiceConfigHolder {
     Map<String, ?> rawServiceConfig;
-    ManagedChannelServiceConfig managedChannelServiceConfig;
+    ManagedChannelServiceConfig2 managedChannelServiceConfig;
 
     ServiceConfigHolder(
-        Map<String, ?> rawServiceConfig, ManagedChannelServiceConfig managedChannelServiceConfig) {
+        Map<String, ?> rawServiceConfig, ManagedChannelServiceConfig2 managedChannelServiceConfig) {
       this.rawServiceConfig = checkNotNull(rawServiceConfig, "rawServiceConfig");
       this.managedChannelServiceConfig =
           checkNotNull(managedChannelServiceConfig, "managedChannelServiceConfig");

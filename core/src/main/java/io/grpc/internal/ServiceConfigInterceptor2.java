@@ -25,7 +25,7 @@ import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.Deadline;
 import io.grpc.MethodDescriptor;
-import io.grpc.internal.ManagedChannelServiceConfig.MethodInfo;
+import io.grpc.internal.ManagedChannelServiceConfig2.MethodInfo;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.CheckForNull;
@@ -34,11 +34,11 @@ import javax.annotation.Nullable;
 /**
  * Modifies RPCs in conformance with a Service Config.
  */
-final class ServiceConfigInterceptor implements ClientInterceptor {
+final class ServiceConfigInterceptor2 implements ClientInterceptor {
 
   // Map from method name to MethodInfo
   @VisibleForTesting
-  final AtomicReference<ManagedChannelServiceConfig> managedChannelServiceConfig =
+  final AtomicReference<ManagedChannelServiceConfig2> managedChannelServiceConfig =
       new AtomicReference<>();
 
   private final boolean retryEnabled;
@@ -46,11 +46,11 @@ final class ServiceConfigInterceptor implements ClientInterceptor {
   // Setting this to true and observing this equal to true are run in different threads.
   private volatile boolean initComplete;
 
-  ServiceConfigInterceptor(boolean retryEnabled) {
+  ServiceConfigInterceptor2(boolean retryEnabled) {
     this.retryEnabled = retryEnabled;
   }
 
-  void handleUpdate(@Nullable ManagedChannelServiceConfig serviceConfig) {
+  void handleUpdate(@Nullable ManagedChannelServiceConfig2 serviceConfig) {
     managedChannelServiceConfig.set(serviceConfig);
     initComplete = true;
   }
@@ -173,7 +173,7 @@ final class ServiceConfigInterceptor implements ClientInterceptor {
 
   @CheckForNull
   private MethodInfo getMethodInfo(MethodDescriptor<?, ?> method) {
-    ManagedChannelServiceConfig mcsc = managedChannelServiceConfig.get();
+    ManagedChannelServiceConfig2 mcsc = managedChannelServiceConfig.get();
     MethodInfo info = null;
     if (mcsc != null) {
       info = mcsc.getServiceMethodMap().get(method.getFullMethodName());

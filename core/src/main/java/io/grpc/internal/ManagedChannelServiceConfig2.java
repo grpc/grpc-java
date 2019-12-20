@@ -32,10 +32,10 @@ import java.util.Map;
 import javax.annotation.Nullable;
 
 /**
- * {@link ManagedChannelServiceConfig} is a fully parsed and validated representation of service
+ * {@link ManagedChannelServiceConfig2} is a fully parsed and validated representation of service
  * configuration data.
  */
-final class ManagedChannelServiceConfig {
+final class ManagedChannelServiceConfig2 {
 
   private final Map<String, MethodInfo> serviceMethodMap;
   private final Map<String, MethodInfo> serviceMap;
@@ -44,7 +44,7 @@ final class ManagedChannelServiceConfig {
   @Nullable
   private final Object loadBalancingConfig;
 
-  ManagedChannelServiceConfig(
+  ManagedChannelServiceConfig2(
       Map<String, MethodInfo> serviceMethodMap,
       Map<String, MethodInfo> serviceMap,
       @Nullable Throttle retryThrottling,
@@ -55,10 +55,10 @@ final class ManagedChannelServiceConfig {
     this.loadBalancingConfig = loadBalancingConfig;
   }
 
-  /** Returns an empty {@link ManagedChannelServiceConfig}. */
-  static ManagedChannelServiceConfig empty() {
+  /** Returns an empty {@link ManagedChannelServiceConfig2}. */
+  static ManagedChannelServiceConfig2 empty() {
     return
-        new ManagedChannelServiceConfig(
+        new ManagedChannelServiceConfig2(
             new HashMap<String, MethodInfo>(),
             new HashMap<String, MethodInfo>(),
             /* retryThrottling= */ null,
@@ -68,7 +68,7 @@ final class ManagedChannelServiceConfig {
   /**
    * Parses the Channel level config values (e.g. excludes load balancing)
    */
-  static ManagedChannelServiceConfig fromServiceConfig(
+  static ManagedChannelServiceConfig2 fromServiceConfig(
       Map<String, ?> serviceConfig,
       boolean retryEnabled,
       int maxRetryAttemptsLimit,
@@ -88,7 +88,7 @@ final class ManagedChannelServiceConfig {
 
     if (methodConfigs == null) {
       // this is surprising, but possible.
-      return new ManagedChannelServiceConfig(
+      return new ManagedChannelServiceConfig2(
           serviceMethodMap, serviceMap, retryThrottling, loadBalancingConfig);
     }
 
@@ -122,7 +122,7 @@ final class ManagedChannelServiceConfig {
       }
     }
 
-    return new ManagedChannelServiceConfig(
+    return new ManagedChannelServiceConfig2(
         serviceMethodMap, serviceMap, retryThrottling, loadBalancingConfig);
   }
 
@@ -159,7 +159,7 @@ final class ManagedChannelServiceConfig {
     if (o == null || getClass() != o.getClass()) {
       return false;
     }
-    ManagedChannelServiceConfig that = (ManagedChannelServiceConfig) o;
+    ManagedChannelServiceConfig2 that = (ManagedChannelServiceConfig2) o;
     return Objects.equal(serviceMethodMap, that.serviceMethodMap)
         && Objects.equal(serviceMap, that.serviceMap)
         && Objects.equal(retryThrottling, that.retryThrottling)
