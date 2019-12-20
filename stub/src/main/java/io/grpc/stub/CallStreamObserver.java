@@ -19,20 +19,25 @@ package io.grpc.stub;
 import io.grpc.ExperimentalApi;
 
 /**
- * A refinement of StreamObserver provided by the GRPC runtime to the application that allows for
- * more complex interactions with call behavior.
+ * A refinement of StreamObserver provided by the GRPC runtime to the application (the client or
+ * the server) that allows for more complex interactions with call behavior.
  *
- * <p>In any call there are logically two {@link StreamObserver} implementations:
+ * <p>In any call there are logically three {@link StreamObserver} implementations:
  * <ul>
- *   <li>'inbound' - which the GRPC runtime calls when it receives messages from the
- *   remote peer. This is implemented by the application.
+ *   <li>'inbound' - which the GRPC runtime calls when it receives messages from the server. This
+ *   is implemented by the client application.
  *   </li>
- *   <li>'outbound' - which the GRPC runtime provides to the application which it uses to
- *   send messages to the remote peer.
+ *   <li>'outbound', client-side - which the GRPC runtime provides to the client application and the
+ *   client uses this {@code StreamObserver} to send messages to the server.
+ *   </li>
+ *   <li>'outbound', server-side - which the GRPC runtime provides to the server application and
+ *   the server uses this {@code StreamObserver} to send messages (responses) to the client.
  *   </li>
  * </ul>
  *
- * <p>Implementations of this class represent the 'outbound' message stream.
+ * <p>Implementations of this class represent the 'outbound' message streams. The client-side
+ * one is {@link ClientCallStreamObserver} and the service-side one is
+ * {@link ServerCallStreamObserver}.
  *
  * <p>Like {@code StreamObserver}, implementations are not required to be thread-safe; if multiple
  * threads will be writing to an instance concurrently, the application must synchronize its calls.
