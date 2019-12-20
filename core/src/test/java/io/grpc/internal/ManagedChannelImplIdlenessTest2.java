@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 The gRPC Authors
+ * Copyright 2016 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 
 package io.grpc.internal;
 
+import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static org.junit.Assert.assertEquals;
@@ -88,7 +89,7 @@ import org.mockito.junit.MockitoRule;
  * Unit tests for {@link ManagedChannelImpl}'s idle mode.
  */
 @RunWith(JUnit4.class)
-public class ManagedChannelImplIdlenessTest2 {
+public class ManagedChannelImplIdlenessTest {
   @Rule
   public final MockitoRule mocks = MockitoJUnit.rule();
   private final FakeClock timer = new FakeClock();
@@ -233,9 +234,12 @@ public class ManagedChannelImplIdlenessTest2 {
             .setAttributes(Attributes.EMPTY)
             .build();
     nameResolverListenerCaptor.getValue().onResult(resolutionResult);
-    verify(mockLoadBalancer).handleResolvedAddresses(
-        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(Attributes.EMPTY)
-            .build());
+
+    ArgumentCaptor<ResolvedAddresses> resolvedAddressCaptor =
+        ArgumentCaptor.forClass(ResolvedAddresses.class);
+    verify(mockLoadBalancer).handleResolvedAddresses(resolvedAddressCaptor.capture());
+    assertThat(resolvedAddressCaptor.getValue().getAddresses())
+        .containsExactlyElementsIn(servers);
   }
 
   @Test

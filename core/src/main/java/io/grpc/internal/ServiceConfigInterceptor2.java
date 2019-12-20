@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 The gRPC Authors
+ * Copyright 2018 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,8 +26,6 @@ import io.grpc.ClientInterceptor;
 import io.grpc.Deadline;
 import io.grpc.MethodDescriptor;
 import io.grpc.internal.ManagedChannelServiceConfig.MethodInfo;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.CheckForNull;
@@ -36,38 +34,24 @@ import javax.annotation.Nullable;
 /**
  * Modifies RPCs in conformance with a Service Config.
  */
-final class ServiceConfigInterceptor2 implements ClientInterceptor {
+final class ServiceConfigInterceptor implements ClientInterceptor {
 
   // Map from method name to MethodInfo
   @VisibleForTesting
-  final AtomicReference<ManagedChannelServiceConfig> managedChannelServiceConfig
-      = new AtomicReference<>();
+  final AtomicReference<ManagedChannelServiceConfig> managedChannelServiceConfig =
+      new AtomicReference<>();
 
   private final boolean retryEnabled;
-  private final int maxRetryAttemptsLimit;
-  private final int maxHedgedAttemptsLimit;
 
   // Setting this to true and observing this equal to true are run in different threads.
   private volatile boolean initComplete;
 
-  ServiceConfigInterceptor2(
-      boolean retryEnabled, int maxRetryAttemptsLimit, int maxHedgedAttemptsLimit) {
+  ServiceConfigInterceptor(boolean retryEnabled) {
     this.retryEnabled = retryEnabled;
-    this.maxRetryAttemptsLimit = maxRetryAttemptsLimit;
-    this.maxHedgedAttemptsLimit = maxHedgedAttemptsLimit;
   }
 
-  void handleUpdate(@Nullable Map<String, ?> serviceConfig) {
-    // TODO(carl-mastrangelo): delete this.
-    ManagedChannelServiceConfig conf;
-    if (serviceConfig == null) {
-      conf = new ManagedChannelServiceConfig(
-          new HashMap<String, MethodInfo>(), new HashMap<String, MethodInfo>(), null, null);
-    } else {
-      conf = ManagedChannelServiceConfig.fromServiceConfig(
-          serviceConfig, retryEnabled, maxRetryAttemptsLimit, maxHedgedAttemptsLimit, null);
-    }
-    managedChannelServiceConfig.set(conf);
+  void handleUpdate(@Nullable ManagedChannelServiceConfig serviceConfig) {
+    managedChannelServiceConfig.set(serviceConfig);
     initComplete = true;
   }
 
