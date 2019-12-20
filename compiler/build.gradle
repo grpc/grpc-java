@@ -51,7 +51,10 @@ model {
         }
         gcc(Gcc) {
             target("ppcle_64")
-            target("aarch_64")
+            target("aarch_64") {
+                cppCompiler.executable = 'aarch64-linux-gnu-g++'
+                linker.executable = 'aarch64-linux-gnu-g++'
+            }
             target("s390_64")
         }
         clang(Clang) {

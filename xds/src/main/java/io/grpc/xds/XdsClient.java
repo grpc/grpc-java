@@ -16,12 +16,21 @@
 
 package io.grpc.xds;
 
+import static com.google.common.base.Preconditions.checkArgument;
+
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+// TODO(sanjaypujare): remove dependency on envoy data types.
+import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
+import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.Status;
+import io.grpc.alts.GoogleDefaultChannelBuilder;
 import io.grpc.internal.ObjectPool;
+import io.grpc.xds.Bootstrapper.ChannelCreds;
+import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
@@ -92,14 +101,17 @@ abstract class XdsClient {
     private final String lbPolicy;
     private final boolean enableLrs;
     private final String lrsServerName;
+    private final UpstreamTlsContext upstreamTlsContext;
 
     private ClusterUpdate(String clusterName, String edsServiceName, String lbPolicy,
-        boolean enableLrs, @Nullable String lrsServerName) {
+        boolean enableLrs, @Nullable String lrsServerName,
+        @Nullable UpstreamTlsContext upstreamTlsContext) {
       this.clusterName = clusterName;
       this.edsServiceName = edsServiceName;
       this.lbPolicy = lbPolicy;
       this.enableLrs = enableLrs;
       this.lrsServerName = lrsServerName;
+      this.upstreamTlsContext = upstreamTlsContext;
     }
 
     String getClusterName() {
@@ -137,6 +149,12 @@ abstract class XdsClient {
       return lrsServerName;
     }
 
+    /** Returns the {@link UpstreamTlsContext} for this cluster if present, else null. */
+    @Nullable
+    UpstreamTlsContext getUpstreamTlsContext() {
+      return upstreamTlsContext;
+    }
+
     static Builder newBuilder() {
       return new Builder();
     }
@@ -148,6 +166,8 @@ abstract class XdsClient {
       private boolean enableLrs;
       @Nullable
       private String lrsServerName;
+      @Nullable
+      private UpstreamTlsContext upstreamTlsContext;
 
       // Use ClusterUpdate.newBuilder().
       private Builder() {
@@ -178,6 +198,11 @@ abstract class XdsClient {
         return this;
       }
 
+      Builder setUpstreamTlsContext(UpstreamTlsContext upstreamTlsContext) {
+        this.upstreamTlsContext = upstreamTlsContext;
+        return this;
+      }
+
       ClusterUpdate build() {
         Preconditions.checkState(clusterName != null, "clusterName is not set");
         Preconditions.checkState(lbPolicy != null, "lbPolicy is not set");
@@ -187,7 +212,7 @@ abstract class XdsClient {
                 + "OR lrsServerName is set while LRS is not enabled");
         return
             new ClusterUpdate(clusterName, edsServiceName == null ? clusterName : edsServiceName,
-                lbPolicy, enableLrs, lrsServerName);
+                lbPolicy, enableLrs, lrsServerName, upstreamTlsContext);
       }
     }
   }
@@ -378,10 +403,9 @@ abstract class XdsClient {
 
   /**
    * Starts reporting client load stats to a remote server for the given cluster.
-   *
-   * @param loadStatsStore  a in-memory data store containing loads recorded by gRPC client.
    */
-  void reportClientStats(String clusterName, String serverUri, LoadStatsStore loadStatsStore) {
+  LoadReportClient reportClientStats(String clusterName, String serverUri) {
+    throw new UnsupportedOperationException();
   }
 
   /**
@@ -450,5 +474,46 @@ abstract class XdsClient {
 
       return null;
     }
+  }
+
+  /**
+   * Factory for creating channels to xDS severs.
+   */
+  abstract static class XdsChannelFactory {
+    private static final XdsChannelFactory DEFAULT_INSTANCE = new XdsChannelFactory() {
+
+      /**
+       * Creates a channel to the first server in the given list.
+       */
+      @Override
+      ManagedChannel createChannel(List<ServerInfo> servers) {
+        checkArgument(!servers.isEmpty(), "No management server provided.");
+        ServerInfo serverInfo = servers.get(0);
+        String serverUri = serverInfo.getServerUri();
+        List<ChannelCreds> channelCredsList = serverInfo.getChannelCredentials();
+        ManagedChannel ch = null;
+        // Use the first supported channel credentials configuration.
+        // Currently, only "google_default" is supported.
+        for (ChannelCreds creds : channelCredsList) {
+          if (creds.getType().equals("google_default")) {
+            ch = GoogleDefaultChannelBuilder.forTarget(serverUri).build();
+            break;
+          }
+        }
+        if (ch == null) {
+          ch = ManagedChannelBuilder.forTarget(serverUri).build();
+        }
+        return ch;
+      }
+    };
+
+    static XdsChannelFactory getInstance() {
+      return DEFAULT_INSTANCE;
+    }
+
+    /**
+     * Creates a channel to one of the provided management servers.
+     */
+    abstract ManagedChannel createChannel(List<ServerInfo> servers);
   }
 }

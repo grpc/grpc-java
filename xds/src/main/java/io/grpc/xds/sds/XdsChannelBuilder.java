@@ -37,7 +37,7 @@ public final class XdsChannelBuilder extends ForwardingChannelBuilder<XdsChannel
 
   private final NettyChannelBuilder delegate;
 
-  // TODO (sanjaypujare) integrate with xDS client to get upstreamTlsContext from CDS
+  // TODO (sanjaypujare) remove once we get this from CDS & don't need for testing
   @Nullable private UpstreamTlsContext upstreamTlsContext;
 
   private XdsChannelBuilder(NettyChannelBuilder delegate) {

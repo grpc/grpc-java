@@ -22,6 +22,7 @@ import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
+import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.rpc.Code;
@@ -41,17 +42,16 @@ import io.envoyproxy.envoy.config.filter.network.http_connection_manager.v2.Http
 import io.envoyproxy.envoy.config.filter.network.http_connection_manager.v2.Rds;
 import io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc;
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
-import io.grpc.alts.GoogleDefaultChannelBuilder;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.stub.StreamObserver;
-import io.grpc.xds.Bootstrapper.ChannelCreds;
+import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
+import io.grpc.xds.LoadReportClient.LoadReportCallback;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -84,18 +84,12 @@ final class XdsClientImpl extends XdsClient {
   private final SynchronizationContext syncContext;
   private final ScheduledExecutorService timeService;
   private final BackoffPolicy.Provider backoffPolicyProvider;
-  private final Stopwatch stopwatch;
+  private final Supplier<Stopwatch> stopwatchSupplier;
+  private final Stopwatch adsStreamRetryStopwatch;
   // The node identifier to be included in xDS requests. Management server only requires the
   // first request to carry the node identifier on a stream. It should be identical if present
   // more than once.
   private final Node node;
-
-  // Cached data for RDS responses, keyed by RouteConfiguration names.
-  // LDS responses indicate absence of RouteConfigurations and RDS responses indicate presence
-  // of RouteConfigurations.
-  // Optimization: only cache clusterName field in the RouteConfiguration messages of RDS
-  // responses.
-  private final Map<String, String> routeConfigNamesToClusterNames = new HashMap<>();
 
   // Cached data for CDS responses, keyed by cluster names.
   // Optimization: cache ClusterUpdate, which contains only information needed by gRPC, instead
@@ -116,6 +110,9 @@ final class XdsClientImpl extends XdsClient {
   // watchers can watch endpoints in the same cluster.
   private final Map<String, Set<EndpointWatcher>> endpointWatchers = new HashMap<>();
 
+  // Load reporting clients, with each responsible for reporting loads of a single cluster.
+  private final Map<String, LoadReportClientImpl> lrsClients = new HashMap<>();
+
   @Nullable
   private AdsStream adsStream;
   @Nullable
@@ -135,47 +132,33 @@ final class XdsClientImpl extends XdsClient {
   private String ldsResourceName;
 
   XdsClientImpl(
-      // URI of the management server to be connected to.
-      String serverUri,
-      Node node,
-      // List of channel credential configurations for the channel to management server.
-      // Should pick the first supported one.
-      List<ChannelCreds> channelCredsList,
-      SynchronizationContext syncContext,
-      ScheduledExecutorService timeService,
-      BackoffPolicy.Provider backoffPolicyProvider,
-      Stopwatch stopwatch) {
-    this(
-        buildChannel(checkNotNull(serverUri, "serverUri"),
-            checkNotNull(channelCredsList, "channelCredsList")),
-        node,
-        syncContext,
-        timeService,
-        backoffPolicyProvider,
-        stopwatch);
-  }
-
-  @VisibleForTesting
-  XdsClientImpl(
-      ManagedChannel channel,
+      List<ServerInfo> servers,  // list of management servers
+      XdsChannelFactory channelFactory,
       Node node,
       SynchronizationContext syncContext,
       ScheduledExecutorService timeService,
       BackoffPolicy.Provider backoffPolicyProvider,
-      Stopwatch stopwatch) {
-    this.channel = checkNotNull(channel, "channel");
+      Supplier<Stopwatch> stopwatchSupplier) {
+    this.channel =
+        checkNotNull(channelFactory, "channelFactory")
+            .createChannel(checkNotNull(servers, "servers"));
     this.node = checkNotNull(node, "node");
     this.syncContext = checkNotNull(syncContext, "syncContext");
     this.timeService = checkNotNull(timeService, "timeService");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
-    this.stopwatch = checkNotNull(stopwatch, "stopwatch");
+    this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatch");
+    adsStreamRetryStopwatch = stopwatchSupplier.get();
   }
 
   @Override
   void shutdown() {
+    logger.log(Level.INFO, "Shutting down XdsClient");
     channel.shutdown();
     if (adsStream != null) {
       adsStream.close(Status.CANCELLED.withDescription("shutdown").asException());
+    }
+    for (LoadReportClientImpl lrsClient : lrsClients.values()) {
+      lrsClient.stopLoadReporting();
     }
     if (rpcRetryTimer != null) {
       rpcRetryTimer.cancel();
@@ -192,7 +175,7 @@ final class XdsClientImpl extends XdsClient {
     } else {
       ldsResourceName = hostName + ":" + port;
     }
-    if (rpcRetryTimer != null) {
+    if (rpcRetryTimer != null && rpcRetryTimer.isPending()) {
       // Currently in retry backoff.
       return;
     }
@@ -221,7 +204,7 @@ final class XdsClientImpl extends XdsClient {
     if (clusterNamesToClusterUpdates.containsKey(clusterName)) {
       watcher.onClusterChanged(clusterNamesToClusterUpdates.get(clusterName));
     }
-    if (rpcRetryTimer != null) {
+    if (rpcRetryTimer != null && rpcRetryTimer.isPending()) {
       // Currently in retry backoff.
       return;
     }
@@ -252,7 +235,7 @@ final class XdsClientImpl extends XdsClient {
       }
       // No longer interested in this cluster, send an updated CDS request to unsubscribe
       // this resource.
-      if (rpcRetryTimer != null) {
+      if (rpcRetryTimer != null && rpcRetryTimer.isPending()) {
         // Currently in retry backoff.
         return;
       }
@@ -282,7 +265,7 @@ final class XdsClientImpl extends XdsClient {
     if (clusterNamesToEndpointUpdates.containsKey(clusterName)) {
       watcher.onEndpointChanged(clusterNamesToEndpointUpdates.get(clusterName));
     }
-    if (rpcRetryTimer != null) {
+    if (rpcRetryTimer != null && rpcRetryTimer.isPending()) {
       // Currently in retry backoff.
       return;
     }
@@ -310,7 +293,7 @@ final class XdsClientImpl extends XdsClient {
       clusterNamesToEndpointUpdates.remove(clusterName);
       // No longer interested in this cluster, send an updated EDS request to unsubscribe
       // this resource.
-      if (rpcRetryTimer != null) {
+      if (rpcRetryTimer != null && rpcRetryTimer.isPending()) {
         // Currently in retry backoff.
         return;
       }
@@ -318,23 +301,38 @@ final class XdsClientImpl extends XdsClient {
     }
   }
 
-  /**
-   * Builds a channel to the given server URI with the first supported channel creds config.
-   */
-  private static ManagedChannel buildChannel(String serverUri,List<ChannelCreds> channelCredsList) {
-    ManagedChannel ch = null;
-    // Use the first supported channel credentials configuration.
-    // Currently, only "google_default" is supported.
-    for (ChannelCreds creds : channelCredsList) {
-      if (creds.getType().equals("google_default")) {
-        ch = GoogleDefaultChannelBuilder.forTarget(serverUri).build();
-        break;
-      }
+  @Override
+  LoadReportClient reportClientStats(String clusterName, String serverUri) {
+    checkNotNull(serverUri, "serverUri");
+    checkArgument(serverUri.equals(""),
+        "Currently only support empty serverUri, which defaults to the same "
+            + "management server this client talks to.");
+    if (!lrsClients.containsKey(clusterName)) {
+      LoadReportClientImpl lrsClient =
+          new LoadReportClientImpl(
+              channel,
+              clusterName,
+              node,
+              syncContext,
+              timeService,
+              backoffPolicyProvider,
+              stopwatchSupplier);
+      lrsClient.startLoadReporting(
+          new LoadReportCallback() {
+            @Override
+            public void onReportResponse(long reportIntervalNano) {}
+          });
+      lrsClients.put(clusterName, lrsClient);
     }
-    if (ch == null) {
-      ch = ManagedChannelBuilder.forTarget(serverUri).build();
+    return lrsClients.get(clusterName);
+  }
+
+  @Override
+  void cancelClientStatsReport(String clusterName) {
+    LoadReportClientImpl lrsClient = lrsClients.remove(clusterName);
+    if (lrsClient != null) {
+      lrsClient.stopLoadReporting();
     }
-    return ch;
   }
 
   /**
@@ -347,7 +345,7 @@ final class XdsClientImpl extends XdsClient {
         AggregatedDiscoveryServiceGrpc.newStub(channel);
     adsStream = new AdsStream(stub);
     adsStream.start();
-    stopwatch.reset().start();
+    adsStreamRetryStopwatch.reset().start();
   }
 
   /**
@@ -375,14 +373,12 @@ final class XdsClientImpl extends XdsClient {
       return;
     }
 
-    // Unpack HttpConnectionManager messages
+    // Unpack HttpConnectionManager messages.
     HttpConnectionManager requestedHttpConnManager = null;
-    List<HttpConnectionManager> httpConnectionManagers = new ArrayList<>();
     try {
       for (Listener listener : listeners) {
         HttpConnectionManager hm =
             listener.getApiListener().getApiListener().unpack(HttpConnectionManager.class);
-        httpConnectionManagers.add(hm);
         if (listener.getName().equals(ldsResourceName)) {
           requestedHttpConnManager = hm;
         }
@@ -394,33 +390,17 @@ final class XdsClientImpl extends XdsClient {
     }
 
     String errorMessage = null;
-    // All RouteConfigurations referenced by this LDS response, either in in-lined
-    // RouteConfiguration message or in RDS config.
-    Set<String> routeConfigs = new HashSet<>();
-    for (HttpConnectionManager hm : httpConnectionManagers) {
-      // The HttpConnectionManager message must either provide the RouteConfiguration directly
-      // in-line or tell the client to use RDS to obtain it.
-      if (hm.hasRouteConfig()) {
-        routeConfigs.add(hm.getRouteConfig().getName());
-      } else if (hm.hasRds()) {
-        Rds rds = hm.getRds();
-        if (!rds.getConfigSource().hasAds()) {
-          errorMessage = "For using RDS, it must be set to use ADS.";
-          break;
-        }
-        routeConfigs.add(rds.getRouteConfigName());
-      } else {
-        errorMessage = "HttpConnectionManager message must either provide the "
-            + "RouteConfiguration directly in-line or tell the client to use RDS to obtain it.";
-        break;
-      }
-    }
-
     // Field clusterName found in the in-lined RouteConfiguration, if exists.
     String clusterName = null;
-    // RouteConfiguration name to be used as the resource name for RDS request.
+    // RouteConfiguration name to be used as the resource name for RDS request, if exists.
     String rdsRouteConfigName = null;
-    if (errorMessage == null && requestedHttpConnManager != null) {
+    // Process the requested Listener if exists, either extract cluster information from in-lined
+    // RouteConfiguration message or send an RDS request for dynamic resolution.
+    if (requestedHttpConnManager != null) {
+      // The HttpConnectionManager message must either provide the RouteConfiguration directly
+      // in-line or tell the client to use RDS to obtain it.
+      // TODO(chengyuanzhang): if both route_config and rds are set, it should be either invalid
+      //  data or one supersedes the other. TBD.
       if (requestedHttpConnManager.hasRouteConfig()) {
         RouteConfiguration rc = requestedHttpConnManager.getRouteConfig();
         clusterName = processRouteConfig(rc);
@@ -430,9 +410,15 @@ final class XdsClientImpl extends XdsClient {
         }
       } else if (requestedHttpConnManager.hasRds()) {
         Rds rds = requestedHttpConnManager.getRds();
-        rdsRouteConfigName = rds.getRouteConfigName();
+        if (!rds.getConfigSource().hasAds()) {
+          errorMessage = "For using RDS, it must be set to use ADS.";
+        } else {
+          rdsRouteConfigName = rds.getRouteConfigName();
+        }
+      } else {
+        errorMessage = "HttpConnectionManager message must either provide the "
+            + "RouteConfiguration directly in-line or tell the client to use RDS to obtain it.";
       }
-      // Else impossible as we have already validated all HttpConnectionManager messages.
     }
 
     if (errorMessage != null) {
@@ -442,32 +428,13 @@ final class XdsClientImpl extends XdsClient {
     adsStream.sendAckRequest(ADS_TYPE_URL_LDS, ImmutableList.of(ldsResourceName),
         ldsResponse.getVersionInfo());
 
-    // Remove RDS cache entries for RouteConfigurations not referenced by this LDS response.
-    // LDS responses represents the state of the world, RouteConfigurations not referenced
-    // by this LDS response are those no longer exist.
-    routeConfigNamesToClusterNames.keySet().retainAll(routeConfigs);
-
-    // Process the requested Listener if exists, either extract cluster information from in-lined
-    // RouteConfiguration message or send an RDS request for dynamic resolution.
     if (clusterName != null) {
       // Found clusterName in the in-lined RouteConfiguration.
       ConfigUpdate configUpdate = ConfigUpdate.newBuilder().setClusterName(clusterName).build();
       configWatcher.onConfigChanged(configUpdate);
     } else if (rdsRouteConfigName != null) {
-      // Update the RDS resource we wish to request. An RDS request may not be necessary, but
-      // we need to keep what we request updated in case of notifying watcher upon receiving
-      // an RDS response for updating the requested resource.
-      adsStream.rdsResourceName = rdsRouteConfigName;
-      // First look up the RDS cache to see if we had received an RDS response containing the
-      // desired RouteConfiguration previously. Otherwise, send an RDS request for dynamic
-      // resolution.
-      if (routeConfigNamesToClusterNames.containsKey(rdsRouteConfigName)) {
-        ConfigUpdate configUpdate =
-            ConfigUpdate.newBuilder()
-                .setClusterName(routeConfigNamesToClusterNames.get(rdsRouteConfigName))
-                .build();
-        configWatcher.onConfigChanged(configUpdate);
-      } else {
+      // Send an RDS request if the resource to request has changed.
+      if (!rdsRouteConfigName.equals(adsStream.rdsResourceName)) {
         adsStream.sendXdsRequest(ADS_TYPE_URL_RDS, ImmutableList.of(rdsRouteConfigName));
       }
     } else {
@@ -490,10 +457,13 @@ final class XdsClientImpl extends XdsClient {
         "Never requested for RDS resources, management server is doing something wrong");
 
     // Unpack RouteConfiguration messages.
-    List<RouteConfiguration> routeConfigs = new ArrayList<>(rdsResponse.getResourcesCount());
+    RouteConfiguration requestedRouteConfig = null;
     try {
       for (com.google.protobuf.Any res : rdsResponse.getResourcesList()) {
-        routeConfigs.add(res.unpack(RouteConfiguration.class));
+        RouteConfiguration rc = res.unpack(RouteConfiguration.class);
+        if (rc.getName().equals(adsStream.rdsResourceName)) {
+          requestedRouteConfig = rc;
+        }
       }
     } catch (InvalidProtocolBufferException e) {
       adsStream.sendNackRequest(ADS_TYPE_URL_RDS, ImmutableList.of(adsStream.rdsResourceName),
@@ -501,30 +471,25 @@ final class XdsClientImpl extends XdsClient {
       return;
     }
 
-    // Validate and cache information from each RouteConfiguration message.
-    Map<String, String> clusterNames = new HashMap<>();
-    for (RouteConfiguration routeConfig : routeConfigs) {
-      String clusterName = processRouteConfig(routeConfig);
+    // Resolved cluster name for the requested resource, if exists.
+    String clusterName = null;
+    if (requestedRouteConfig != null) {
+      clusterName = processRouteConfig(requestedRouteConfig);
       if (clusterName == null) {
         adsStream.sendNackRequest(ADS_TYPE_URL_RDS, ImmutableList.of(adsStream.rdsResourceName),
             "Cannot find a valid cluster name in VirtualHost inside "
                 + "RouteConfiguration with domains matching: " + hostName + ".");
         return;
       }
-      clusterNames.put(routeConfig.getName(), clusterName);
     }
-    routeConfigNamesToClusterNames.putAll(clusterNames);
 
     adsStream.sendAckRequest(ADS_TYPE_URL_RDS, ImmutableList.of(adsStream.rdsResourceName),
         rdsResponse.getVersionInfo());
 
     // Notify the ConfigWatcher if this RDS response contains the most recently requested
     // RDS resource.
-    if (clusterNames.containsKey(adsStream.rdsResourceName)) {
-      ConfigUpdate configUpdate =
-          ConfigUpdate.newBuilder()
-              .setClusterName(clusterNames.get(adsStream.rdsResourceName))
-              .build();
+    if (clusterName != null) {
+      ConfigUpdate configUpdate = ConfigUpdate.newBuilder().setClusterName(clusterName).build();
       configWatcher.onConfigChanged(configUpdate);
     }
     // Do not notify an error to the ConfigWatcher. RDS protocol is incremental, not receiving
@@ -655,6 +620,9 @@ final class XdsClientImpl extends XdsClient {
       } else {
         updateBuilder.setEnableLrs(false);
       }
+      if (cluster.hasTlsContext()) {
+        updateBuilder.setUpstreamTlsContext(cluster.getTlsContext());
+      }
       clusterUpdates.put(clusterName, updateBuilder.build());
     }
     if (errorMessage != null) {
@@ -732,11 +700,11 @@ final class XdsClientImpl extends XdsClient {
         errorMessage = "Cluster without any locality endpoint.";
         break;
       }
+      
       // The policy.disable_overprovisioning field must be set to true.
-      if (!assignment.getPolicy().getDisableOverprovisioning()) {
-        errorMessage = "Cluster requires overprovisioning.";
-        break;
-      }
+      // TODO(chengyuanzhang): temporarily not requiring this field to be set, should push
+      //  server implementors to do this or TBD with design.
+
       for (io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints localityLbEndpoints
           : assignment.getEndpointsList()) {
         // The lb_endpoints field for LbEndpoint must contain at least one entry.
@@ -865,6 +833,9 @@ final class XdsClientImpl extends XdsClient {
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
+          if (closed) {
+            return;
+          }
           responseReceived = true;
           String typeUrl = response.getTypeUrl();
           // Nonce in each response is echoed back in the following ACK/NACK request. It is
@@ -914,11 +885,11 @@ final class XdsClientImpl extends XdsClient {
     }
 
     private void handleStreamClosed(Status error) {
-      logger.log(Level.INFO, error.getDescription(), error.getCause());
       checkArgument(!error.isOk(), "unexpected OK status");
       if (closed) {
         return;
       }
+      logger.log(Level.FINE, error.getDescription(), error.getCause());
       closed = true;
       cleanUp();
       if (responseReceived || retryBackoffPolicy == null) {
@@ -931,7 +902,8 @@ final class XdsClientImpl extends XdsClient {
         delayNanos =
             Math.max(
                 0,
-                retryBackoffPolicy.nextBackoffNanos() - stopwatch.elapsed(TimeUnit.NANOSECONDS));
+                retryBackoffPolicy.nextBackoffNanos()
+                    - adsStreamRetryStopwatch.elapsed(TimeUnit.NANOSECONDS));
       }
       logger.log(Level.FINE, "{0} stream closed, retry in {1} ns", new Object[]{this, delayNanos});
       rpcRetryTimer =
@@ -993,6 +965,7 @@ final class XdsClientImpl extends XdsClient {
               .setResponseNonce(nonce)
               .build();
       requestWriter.onNext(request);
+      logger.log(Level.FINE, "Sent DiscoveryRequest {0}", request);
     }
 
     /**
@@ -1026,6 +999,7 @@ final class XdsClientImpl extends XdsClient {
               .setResponseNonce(nonce)
               .build();
       requestWriter.onNext(request);
+      logger.log(Level.FINE, "Sent ACK request {0}", request);
     }
 
     /**
@@ -1064,6 +1038,7 @@ final class XdsClientImpl extends XdsClient {
                       .setMessage(message))
               .build();
       requestWriter.onNext(request);
+      logger.log(Level.FINE, "Sent NACK request {0}", request);
     }
   }
 

@@ -52,7 +52,7 @@ public class SdsSslContextProviderTest {
   public void setUp() throws Exception {
     serverMock = mock(TestSdsServer.ServerMock.class);
     server = new TestSdsServer(serverMock);
-    server.startServer(/* name= */ "inproc", /* useUds= */ false);
+    server.startServer(/* name= */ "inproc", /* useUds= */ false, /* useInterceptor= */ false);
 
     node = Node.newBuilder().setId("sds-client-temp-test1").build();
   }

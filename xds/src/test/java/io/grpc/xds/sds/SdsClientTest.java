@@ -64,11 +64,11 @@ import org.mockito.stubbing.Answer;
 @RunWith(JUnit4.class)
 public class SdsClientTest {
 
-  private static final String SERVER_0_PEM_FILE = "server0.pem";
-  private static final String SERVER_0_KEY_FILE = "server0.key";
-  private static final String SERVER_1_PEM_FILE = "server1.pem";
-  private static final String SERVER_1_KEY_FILE = "server1.key";
-  private static final String CA_PEM_FILE = "ca.pem";
+  static final String SERVER_0_PEM_FILE = "server0.pem";
+  static final String SERVER_0_KEY_FILE = "server0.key";
+  static final String SERVER_1_PEM_FILE = "server1.pem";
+  static final String SERVER_1_KEY_FILE = "server1.key";
+  static final String CA_PEM_FILE = "ca.pem";
 
   private TestSdsServer.ServerMock serverMock;
   private TestSdsServer server;
@@ -108,7 +108,7 @@ public class SdsClientTest {
   public void setUp() throws IOException {
     serverMock = mock(TestSdsServer.ServerMock.class);
     server = new TestSdsServer(serverMock);
-    server.startServer("inproc", false);
+    server.startServer("inproc", /* useUds= */ false, /* useInterceptor= */ false);
     ConfigSource configSource = buildConfigSource("inproc", "inproc");
     sdsSecretConfig =
         SdsSecretConfig.newBuilder().setSdsConfig(configSource).setName("name1").build();

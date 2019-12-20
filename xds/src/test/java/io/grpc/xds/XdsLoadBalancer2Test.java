@@ -40,7 +40,7 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
-import io.grpc.xds.LookasideLb.EdsUpdateCallback;
+import io.grpc.xds.LookasideLb.EndpointUpdateCallback;
 import io.grpc.xds.XdsLoadBalancer2.LookasideLbFactory;
 import java.util.ArrayList;
 import java.util.List;
@@ -75,7 +75,7 @@ public class XdsLoadBalancer2Test {
   @Mock
   private Helper helper;
   private LoadBalancer xdsLoadBalancer;
-  private EdsUpdateCallback edsUpdateCallback;
+  private EndpointUpdateCallback edsUpdateCallback;
 
   private Helper lookasideLbHelper;
   private final List<LoadBalancer> lookasideLbs = new ArrayList<>();
@@ -90,7 +90,7 @@ public class XdsLoadBalancer2Test {
     LookasideLbFactory lookasideLbFactory = new LookasideLbFactory() {
       @Override
       public LoadBalancer newLoadBalancer(
-          Helper helper, EdsUpdateCallback edsUpdateCallback) {
+          Helper helper, EndpointUpdateCallback edsUpdateCallback) {
         // just return a mock and record the input and output
         lookasideLbHelper = helper;
         XdsLoadBalancer2Test.this.edsUpdateCallback = edsUpdateCallback;

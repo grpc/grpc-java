@@ -41,7 +41,7 @@ android {
 protobuf {
     protoc { artifact = 'com.google.protobuf:protoc:3.11.0' }
     plugins {
-        grpc { artifact = 'io.grpc:protoc-gen-grpc-java:1.26.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+        grpc { artifact = 'io.grpc:protoc-gen-grpc-java:1.27.0-SNAPSHOT' // CURRENT_GRPC_VERSION
         }
     }
     generateProtoTasks {
@@ -72,11 +72,11 @@ dependencies {
     implementation 'junit:junit:4.12'
 
     // You need to build grpc-java to obtain the grpc libraries below.
-    implementation 'io.grpc:grpc-auth:1.26.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-    implementation 'io.grpc:grpc-okhttp:1.26.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-    implementation 'io.grpc:grpc-protobuf-lite:1.26.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-    implementation 'io.grpc:grpc-stub:1.26.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-    implementation 'io.grpc:grpc-testing:1.26.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+    implementation 'io.grpc:grpc-auth:1.27.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+    implementation 'io.grpc:grpc-okhttp:1.27.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+    implementation 'io.grpc:grpc-protobuf-lite:1.27.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+    implementation 'io.grpc:grpc-stub:1.27.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+    implementation 'io.grpc:grpc-testing:1.27.0-SNAPSHOT' // CURRENT_GRPC_VERSION
 
     androidTestImplementation 'androidx.test:rules:1.1.0-alpha1'
     androidTestImplementation 'androidx.test:runner:1.1.0-alpha1'

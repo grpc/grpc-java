@@ -28,7 +28,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * <p>DO NOT MOCK: Customizing options doesn't work properly in mocks. Use InProcessChannelBuilder
  * to create a real channel suitable for testing. It is also possible to mock Channel instead.
  *
- * @since 1.25.0
+ * @since 1.26.0
  */
 @ThreadSafe
 @CheckReturnValue
@@ -42,7 +42,7 @@ public abstract class AbstractBlockingStub<S extends AbstractBlockingStub<S>>
   /**
    * Returns a new blocking stub with the given channel for the provided method configurations.
    *
-   * @since 1.25.0
+   * @since 1.26.0
    * @param factory the factory to create a blocking stub
    * @param channel the channel that this stub will use to do communications
    */
@@ -54,7 +54,7 @@ public abstract class AbstractBlockingStub<S extends AbstractBlockingStub<S>>
   /**
    * Returns a new blocking stub with the given channel for the provided method configurations.
    *
-   * @since 1.25.0
+   * @since 1.26.0
    * @param factory the factory to create a blocking stub
    * @param channel the channel that this stub will use to do communications
    * @param callOptions the runtime call options to be applied to every call on this stub

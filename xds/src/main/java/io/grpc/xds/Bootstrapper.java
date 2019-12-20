@@ -73,28 +73,33 @@ public abstract class Bootstrapper {
     @SuppressWarnings("unchecked")
     Map<String, ?> rawBootstrap = (Map<String, ?>) JsonParser.parse(rawData);
 
-    Map<String, ?> rawServerConfig = JsonUtil.getObject(rawBootstrap, "xds_server");
-    if (rawServerConfig == null) {
-      throw new IOException("Invalid bootstrap: 'xds_server' does not exist.");
+    List<ServerInfo> servers = new ArrayList<>();
+    List<?> rawServerConfigs = JsonUtil.getList(rawBootstrap, "xds_servers");
+    if (rawServerConfigs == null) {
+      throw new IOException("Invalid bootstrap: 'xds_servers' does not exist.");
     }
-    // Field "server_uri" is required.
-    String serverUri = JsonUtil.getString(rawServerConfig, "server_uri");
-    if (serverUri == null) {
-      throw new IOException("Invalid bootstrap: 'xds_server : server_uri' does not exist.");
-    }
-    List<ChannelCreds> channelCredsOptions = new ArrayList<>();
-    List<?> rawChannelCredsList = JsonUtil.getList(rawServerConfig, "channel_creds");
-    // List of channel creds is optional.
-    if (rawChannelCredsList != null) {
-      List<Map<String, ?>> channelCredsList = JsonUtil.checkObjectList(rawChannelCredsList);
-      for (Map<String, ?> channelCreds : channelCredsList) {
-        String type = JsonUtil.getString(channelCreds, "type");
-        if (type == null) {
-          throw new IOException("Invalid bootstrap: 'channel_creds' contains unknown type.");
-        }
-        ChannelCreds creds = new ChannelCreds(type, JsonUtil.getObject(channelCreds, "config"));
-        channelCredsOptions.add(creds);
+    List<Map<String, ?>> serverConfigList = JsonUtil.checkObjectList(rawServerConfigs);
+    for (Map<String, ?> serverConfig : serverConfigList) {
+      String serverUri = JsonUtil.getString(serverConfig, "server_uri");
+      if (serverUri == null) {
+        throw new IOException("Invalid bootstrap: 'xds_servers' contains unknown server.");
       }
+      List<ChannelCreds> channelCredsOptions = new ArrayList<>();
+      List<?> rawChannelCredsList = JsonUtil.getList(serverConfig, "channel_creds");
+      // List of channel creds is optional.
+      if (rawChannelCredsList != null) {
+        List<Map<String, ?>> channelCredsList = JsonUtil.checkObjectList(rawChannelCredsList);
+        for (Map<String, ?> channelCreds : channelCredsList) {
+          String type = JsonUtil.getString(channelCreds, "type");
+          if (type == null) {
+            throw new IOException("Invalid bootstrap: 'xds_servers' contains server with "
+                + "unknown type 'channel_creds'.");
+          }
+          ChannelCreds creds = new ChannelCreds(type, JsonUtil.getObject(channelCreds, "config"));
+          channelCredsOptions.add(creds);
+        }
+      }
+      servers.add(new ServerInfo(serverUri, channelCredsOptions));
     }
 
     Node.Builder nodeBuilder = Node.newBuilder();
@@ -133,7 +138,7 @@ public abstract class Bootstrapper {
     }
     nodeBuilder.setBuildVersion(GrpcUtil.getGrpcBuildVersion());
 
-    return new BootstrapInfo(serverUri, channelCredsOptions, nodeBuilder.build());
+    return new BootstrapInfo(servers, nodeBuilder.build());
   }
 
   /**
@@ -203,26 +208,48 @@ public abstract class Bootstrapper {
   }
 
   /**
+   * Data class containing xDS server information, such as server URI and channel credential
+   * options to be used for communication.
+   */
+  @Immutable
+  static class ServerInfo {
+    private final String serverUri;
+    private final List<ChannelCreds> channelCredsList;
+
+    @VisibleForTesting
+    ServerInfo(String serverUri, List<ChannelCreds> channelCredsList) {
+      this.serverUri = serverUri;
+      this.channelCredsList = channelCredsList;
+    }
+
+    String getServerUri() {
+      return serverUri;
+    }
+
+    List<ChannelCreds> getChannelCredentials() {
+      return Collections.unmodifiableList(channelCredsList);
+    }
+  }
+
+  /**
    * Data class containing the results of reading bootstrap.
    */
   @Immutable
   public static class BootstrapInfo {
-    private final String serverUri;
-    private final List<ChannelCreds> channelCredsList;
+    private List<ServerInfo> servers;
     private final Node node;
 
     @VisibleForTesting
-    BootstrapInfo(String serverUri, List<ChannelCreds> channelCredsList, Node node) {
-      this.serverUri = serverUri;
-      this.channelCredsList = channelCredsList;
+    BootstrapInfo(List<ServerInfo> servers, Node node) {
+      this.servers = servers;
       this.node = node;
     }
 
     /**
-     * Returns the URI the traffic director to be connected to.
+     * Returns the list of xDS servers to be connected to.
      */
-    String getServerUri() {
-      return serverUri;
+    List<ServerInfo> getServers() {
+      return Collections.unmodifiableList(servers);
     }
 
     /**
@@ -232,11 +259,5 @@ public abstract class Bootstrapper {
       return node;
     }
 
-    /**
-     * Returns the credentials to use when communicating with the xDS server.
-     */
-    List<ChannelCreds> getChannelCredentials() {
-      return Collections.unmodifiableList(channelCredsList);
-    }
   }
 }

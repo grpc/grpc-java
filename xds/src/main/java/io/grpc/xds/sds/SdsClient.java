@@ -39,6 +39,7 @@ import io.envoyproxy.envoy.api.v2.core.GrpcService.GoogleGrpc;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.service.discovery.v2.SecretDiscoveryServiceGrpc;
 import io.envoyproxy.envoy.service.discovery.v2.SecretDiscoveryServiceGrpc.SecretDiscoveryServiceStub;
+import io.grpc.CallCredentials;
 import io.grpc.Internal;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
@@ -78,6 +79,7 @@ final class SdsClient {
   private final SdsSecretConfig sdsSecretConfig;
   private final Node clientNode;
   private final Executor watcherExecutor;
+  private final CallCredentials callCredentials;
   private EventLoopGroup eventLoopGroup;
   private ManagedChannel channel;
   private SecretDiscoveryServiceStub secretDiscoveryServiceStub;
@@ -101,7 +103,12 @@ final class SdsClient {
         ManagedChannel channel =
             InProcessChannelBuilder.forName(targetUri).executor(channelExecutor).build();
         return new SdsClient(
-            sdsSecretConfig, node, watcherExecutor, channel, /* eventLoopGroup= */ null);
+            sdsSecretConfig,
+            node,
+            watcherExecutor,
+            channel,
+            /* eventLoopGroup= */ null,
+            channelInfo.callCredentials);
       }
       NettyChannelBuilder builder;
       EventLoopGroup eventLoopGroup = null;
@@ -120,7 +127,13 @@ final class SdsClient {
         builder = builder.executor(channelExecutor);
       }
       ManagedChannel channel = builder.build();
-      return new SdsClient(sdsSecretConfig, node, watcherExecutor, channel, eventLoopGroup);
+      return new SdsClient(
+          sdsSecretConfig,
+          node,
+          watcherExecutor,
+          channel,
+          eventLoopGroup,
+          channelInfo.callCredentials);
     }
 
     @VisibleForTesting
@@ -140,12 +153,7 @@ final class SdsClient {
           grpcService.hasGoogleGrpc() && !grpcService.hasEnvoyGrpc(),
           "only GoogleGrpc expected in GrpcService");
       GoogleGrpc googleGrpc = grpcService.getGoogleGrpc();
-      // for now don't support any credentials
-      checkArgument(
-          !googleGrpc.hasChannelCredentials()
-              && googleGrpc.getCallCredentialsCount() == 0
-              && Strings.isNullOrEmpty(googleGrpc.getCredentialsFactoryName()),
-          "No credentials supported in GoogleGrpc");
+      CallCredentials callCredentials = getVerifiedCredentials(googleGrpc);
       String targetUri = googleGrpc.getTargetUri();
       String channelType = null;
       if (googleGrpc.hasConfig()) {
@@ -154,7 +162,37 @@ final class SdsClient {
         channelType = value.getStringValue();
       }
       checkArgument(!Strings.isNullOrEmpty(targetUri), "targetUri in GoogleGrpc is empty!");
-      return new ChannelInfo(targetUri, channelType);
+      return new ChannelInfo(targetUri, channelType, callCredentials);
+    }
+
+    private static CallCredentials getVerifiedCredentials(GoogleGrpc googleGrpc) {
+      final String credentialsFactoryName = googleGrpc.getCredentialsFactoryName();
+      if (credentialsFactoryName.isEmpty()) {
+        // without factory name, no creds expected
+        checkArgument(
+            !googleGrpc.hasChannelCredentials() && googleGrpc.getCallCredentialsCount() == 0,
+            "No credentials supported in GoogleGrpc");
+        logger.warning("No CallCredentials specified.");
+        return null;
+      }
+      checkArgument(
+          credentialsFactoryName.equals(FileBasedPluginCredential.PLUGIN_NAME),
+          "factory name should be %s", FileBasedPluginCredential.PLUGIN_NAME);
+      if (googleGrpc.hasChannelCredentials()) {
+        checkArgument(
+            googleGrpc.getChannelCredentials().hasLocalCredentials(),
+            "only GoogleLocalCredentials supported");
+      }
+      if (googleGrpc.getCallCredentialsCount() > 0) {
+        checkArgument(
+            googleGrpc.getCallCredentialsCount() == 1,
+            "Exactly one CallCredential expected in GoogleGrpc");
+        GoogleGrpc.CallCredentials callCreds = googleGrpc.getCallCredentials(0);
+        checkArgument(callCreds.hasFromPlugin(), "only plugin credential supported");
+        return new FileBasedPluginCredential(callCreds.getFromPlugin());
+      }
+      logger.warning("No CallCredentials specified.");
+      return null;
     }
   }
 
@@ -162,10 +200,12 @@ final class SdsClient {
   static final class ChannelInfo {
     @VisibleForTesting final String targetUri;
     @VisibleForTesting final String channelType;
+    @VisibleForTesting final CallCredentials callCredentials;
 
-    private ChannelInfo(String targetUri, String channelType) {
+    private ChannelInfo(String targetUri, String channelType, CallCredentials callCredentials) {
       this.targetUri = targetUri;
       this.channelType = channelType;
+      this.callCredentials = callCredentials;
     }
   }
 
@@ -174,7 +214,8 @@ final class SdsClient {
       Node node,
       Executor watcherExecutor,
       ManagedChannel channel,
-      EventLoopGroup eventLoopGroup) {
+      EventLoopGroup eventLoopGroup,
+      CallCredentials callCredentials) {
     checkNotNull(sdsSecretConfig, "sdsSecretConfig");
     checkNotNull(node, "node");
     this.sdsSecretConfig = sdsSecretConfig;
@@ -183,6 +224,7 @@ final class SdsClient {
     this.eventLoopGroup = eventLoopGroup;
     checkNotNull(channel, "channel");
     this.channel = channel;
+    this.callCredentials = callCredentials;
   }
 
   /**
@@ -192,6 +234,10 @@ final class SdsClient {
   void start() {
     if (requestObserver == null) {
       secretDiscoveryServiceStub = SecretDiscoveryServiceGrpc.newStub(channel);
+      if (callCredentials != null) {
+        secretDiscoveryServiceStub =
+            secretDiscoveryServiceStub.withCallCredentials(callCredentials);
+      }
       responseObserver = new ResponseObserver();
       requestObserver = secretDiscoveryServiceStub.streamSecrets(responseObserver);
     }

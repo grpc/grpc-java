@@ -107,7 +107,6 @@ public class XdsLoadBalancerProviderTest {
   @Test
   public void selectChildPolicy() throws Exception {
     String rawLbConfig = "{"
-        + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
         + "\"childPolicy\" : [{\"unsupported_1\" : {}}, {\"supported_1\" : {\"key\" : \"val\"}},"
         + "{\"supported_2\" : {\"key\" : \"val\"}}],"
         + "\"fallbackPolicy\" : [{\"lbPolicy3\" : {\"key\" : \"val\"}}, {\"lbPolicy4\" : {}}]"
@@ -126,7 +125,6 @@ public class XdsLoadBalancerProviderTest {
   @Test
   public void selectFallBackPolicy() throws Exception {
     String rawLbConfig = "{"
-        + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
         + "\"childPolicy\" : [{\"lbPolicy3\" : {\"key\" : \"val\"}}, {\"lbPolicy4\" : {}}],"
         + "\"fallbackPolicy\" : [{\"unsupported\" : {}}, {\"supported_1\" : {\"key\" : \"val\"}},"
         + "{\"supported_2\" : {\"key\" : \"val\"}}]"
@@ -143,7 +141,6 @@ public class XdsLoadBalancerProviderTest {
   @Test
   public void selectFallBackPolicy_roundRobinIsDefault() throws Exception {
     String rawLbConfig = "{"
-        + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
         + "\"childPolicy\" : [{\"lbPolicy3\" : {\"key\" : \"val\"}}, {\"lbPolicy4\" : {}}]"
         + "}";
     LbConfig expectedFallbackPolicy = ServiceConfigUtil.unwrapLoadBalancingConfig(
@@ -158,7 +155,6 @@ public class XdsLoadBalancerProviderTest {
   @Test
   public void parseLoadBalancingConfigPolicy() throws Exception {
     String rawLbConfig = "{"
-        + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
         + "\"childPolicy\" : [{\"lbPolicy3\" : {\"key\" : \"val\"}}, {\"supported_1\" : {}}],"
         + "\"fallbackPolicy\" : [{\"unsupported\" : {}}, {\"round_robin\" : {\"key\" : \"val\"}},"
         + "{\"supported_2\" : {\"key\" : \"val\"}}],"
@@ -173,7 +169,6 @@ public class XdsLoadBalancerProviderTest {
     assertThat(configOrError.getConfig()).isInstanceOf(XdsConfig.class);
     assertThat(configOrError.getConfig()).isEqualTo(
         new XdsConfig(
-            "dns:///balancer.example.com:8080",
             ServiceConfigUtil.unwrapLoadBalancingConfig(
                 checkObject(JsonParser.parse("{\"supported_1\" : {}}"))),
             ServiceConfigUtil.unwrapLoadBalancingConfig(
