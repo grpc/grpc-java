@@ -25,6 +25,7 @@ import com.google.common.collect.ImmutableList;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.Status.Code;
@@ -157,10 +158,14 @@ final class XdsNameResolver extends NameResolver {
                 .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, config)
                 .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
                 .build();
+        ConfigOrError xdsServiceConfig =
+            XdsLoadBalancerProvider
+                .parseLoadBalancingConfigPolicy(config, LoadBalancerRegistry.getDefaultRegistry());
         ResolutionResult result =
             ResolutionResult.newBuilder()
                 .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
                 .setAttributes(attrs)
+                .setServiceConfig(xdsServiceConfig)
                 .build();
         listener.onResult(result);
       }
