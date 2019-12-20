@@ -17,6 +17,7 @@
 package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.LoadBalancer.ATTR_LOAD_BALANCING_CONFIG;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.AdditionalAnswers.delegatesTo;
@@ -248,9 +249,9 @@ public class AutoConfiguredLoadBalancerFactoryTest {
   @Test
   @SuppressWarnings("unchecked")
   public void handleResolvedAddressGroups_propagateLbConfigToDelegate() throws Exception {
-    Map<String, ?> serviceConfig =
+    Map<String, ?> rawServiceConfig =
         parseConfig("{\"loadBalancingConfig\": [ {\"test_lb\": { \"setting1\": \"high\" } } ] }");
-    ConfigOrError lbConfigs = lbf.parseLoadBalancerPolicy(serviceConfig, channelLogger);
+    ConfigOrError lbConfigs = lbf.parseLoadBalancerPolicy(rawServiceConfig, channelLogger);
     assertThat(lbConfigs.getConfig()).isNotNull();
 
     final List<EquivalentAddressGroup> servers =
@@ -271,15 +272,17 @@ public class AutoConfiguredLoadBalancerFactoryTest {
         ArgumentCaptor.forClass(ResolvedAddresses.class);
     verify(testLbBalancer).handleResolvedAddresses(resultCaptor.capture());
     assertThat(resultCaptor.getValue().getAddresses()).containsExactlyElementsIn(servers).inOrder();
+    assertThat(resultCaptor.getValue().getAttributes().get(ATTR_LOAD_BALANCING_CONFIG))
+        .isEqualTo(rawServiceConfig);
     verify(testLbBalancer, atLeast(0)).canHandleEmptyAddressListFromNameResolution();
     ArgumentCaptor<Map<String, ?>> lbConfigCaptor = ArgumentCaptor.forClass(Map.class);
     verify(testLbBalancerProvider).parseLoadBalancingPolicyConfig(lbConfigCaptor.capture());
     assertThat(lbConfigCaptor.getValue()).containsExactly("setting1", "high");
     verifyNoMoreInteractions(testLbBalancer);
 
-    serviceConfig =
+    rawServiceConfig =
         parseConfig("{\"loadBalancingConfig\": [ {\"test_lb\": { \"setting1\": \"low\" } } ] }");
-    lbConfigs = lbf.parseLoadBalancerPolicy(serviceConfig, channelLogger);
+    lbConfigs = lbf.parseLoadBalancerPolicy(rawServiceConfig, channelLogger);
 
     handleResult = lb.tryHandleResolvedAddresses(
         ResolvedAddresses.newBuilder()
@@ -292,6 +295,8 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     verify(testLbBalancer, times(2)).handleResolvedAddresses(resultCaptor.capture());
     assertThat(handleResult.getCode()).isEqualTo(Status.Code.OK);
     assertThat(resultCaptor.getValue().getAddresses()).containsExactlyElementsIn(servers).inOrder();
+    assertThat(resultCaptor.getValue().getAttributes().get(ATTR_LOAD_BALANCING_CONFIG))
+        .isEqualTo(rawServiceConfig);
     verify(testLbBalancerProvider, times(2))
         .parseLoadBalancingPolicyConfig(lbConfigCaptor.capture());
     assertThat(lbConfigCaptor.getValue()).containsExactly("setting1", "low");
@@ -361,9 +366,10 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     Helper helper = new TestHelper();
     AutoConfiguredLoadBalancer lb = lbf.newLoadBalancer(helper);
 
-    Map<String, ?> serviceConfig =
+    Map<String, ?> rawServiceConfig =
         parseConfig("{\"loadBalancingConfig\": [ {\"test_lb2\": { \"setting1\": \"high\" } } ] }");
-    ConfigOrError lbConfigs = lbf.parseLoadBalancerPolicy(serviceConfig, helper.getChannelLogger());
+    ConfigOrError lbConfigs =
+        lbf.parseLoadBalancerPolicy(rawServiceConfig, helper.getChannelLogger());
     Status handleResult = lb.tryHandleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
@@ -379,6 +385,8 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     assertThat(resultCaptor.getValue().getAddresses()).isEmpty();
     assertThat(resultCaptor.getValue().getLoadBalancingPolicyConfig())
         .isEqualTo(nextParsedConfigOrError2.get());
+    assertThat(resultCaptor.getValue().getAttributes().get(ATTR_LOAD_BALANCING_CONFIG))
+        .isEqualTo(rawServiceConfig);
   }
 
   @Test
