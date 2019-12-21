@@ -87,6 +87,7 @@ import org.mockito.junit.MockitoRule;
 /**
  * Unit tests for {@link ManagedChannelImpl}'s idle mode.
  */
+@Deprecated  // migrate to ManagedChannelImplIdlenessTest2
 @RunWith(JUnit4.class)
 public class ManagedChannelImplIdlenessTest {
   @Rule

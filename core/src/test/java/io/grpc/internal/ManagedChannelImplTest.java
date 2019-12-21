@@ -152,8 +152,8 @@ import org.mockito.junit.MockitoRule;
 import org.mockito.stubbing.Answer;
 
 /** Unit tests for {@link ManagedChannelImpl}. */
+@Deprecated // to be migrated to ManagedChannelImplTest2
 @RunWith(JUnit4.class)
-@SuppressWarnings("deprecation")
 public class ManagedChannelImplTest {
   private static final int DEFAULT_PORT = 447;
 

@@ -78,7 +78,9 @@ import org.mockito.ArgumentCaptor;
 /**
  * Unit tests for {@link AutoConfiguredLoadBalancerFactory}.
  */
+@Deprecated // to be migrate to AutoConfiguredLoadBalancerFactoryTest2
 @RunWith(JUnit4.class)
+@SuppressWarnings("deprecation")
 public class AutoConfiguredLoadBalancerFactoryTest {
   private static final LoadBalancerRegistry defaultRegistry =
       LoadBalancerRegistry.getDefaultRegistry();
