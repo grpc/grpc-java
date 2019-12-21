@@ -45,6 +45,7 @@ import java.util.Map;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
+@SuppressWarnings("deprecation") // migrate to AutoConfiguredLoadBalancerFactory2 is required
 public final class AutoConfiguredLoadBalancerFactory {
   private static final Logger logger =
       Logger.getLogger(AutoConfiguredLoadBalancerFactory.class.getName());

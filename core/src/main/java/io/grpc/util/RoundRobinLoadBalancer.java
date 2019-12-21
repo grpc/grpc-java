@@ -85,6 +85,7 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
   }
 
   @Override
+  @SuppressWarnings("deprecation")
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     List<EquivalentAddressGroup> servers = resolvedAddresses.getAddresses();
     Attributes attributes = resolvedAddresses.getAttributes();

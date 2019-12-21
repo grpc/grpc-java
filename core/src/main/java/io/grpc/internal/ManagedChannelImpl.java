@@ -1302,7 +1302,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     public void onResult(final ResolutionResult resolutionResult) {
       final class NamesResolved implements Runnable {
 
-        @SuppressWarnings("ReferenceEquality")
+        @SuppressWarnings({"ReferenceEquality", "deprecation"})
         @Override
         public void run() {
           List<EquivalentAddressGroup> servers = resolutionResult.getAddresses();

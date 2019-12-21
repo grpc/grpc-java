@@ -237,6 +237,7 @@ final class DnsNameResolver extends NameResolver {
     }
 
     @VisibleForTesting
+    @SuppressWarnings("deprecation") // can migrate after service config error handling is finished
     void resolveInternal() {
       InetSocketAddress destination =
           InetSocketAddress.createUnresolved(host, port);
