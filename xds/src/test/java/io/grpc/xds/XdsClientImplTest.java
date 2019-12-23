@@ -76,6 +76,7 @@ import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.FakeClock.ScheduledTask;
+import io.grpc.internal.FakeClock.TaskFilter;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.Bootstrapper.ChannelCreds;
@@ -128,6 +129,15 @@ public class XdsClientImplTest {
         @Override
         public boolean shouldAccept(Runnable command) {
           return command.toString().contains(XdsClientImpl.RpcRetryTask.class.getSimpleName());
+        }
+      };
+
+  private static final FakeClock.TaskFilter RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER =
+      new TaskFilter() {
+        @Override
+        public boolean shouldAccept(Runnable command) {
+          return command.toString()
+              .contains(XdsClientImpl.RdsResourceFetchTimeoutTask.class.getSimpleName());
         }
       };
 
@@ -449,8 +459,8 @@ public class XdsClientImplTest {
    * Client receives an RDS response (after a previous LDS request-response) that does not contain a
    * RouteConfiguration for the requested resource while each received RouteConfiguration is valid.
    * The RDS response is ACKed.
-   * The config watcher is NOT notified with an error (RDS protocol is incremental, responses
-   * not containing requested resources does not indicate absence).
+   * After the resource fetch timeout expires, watcher waiting for the resource is notified
+   * with a resource not found error.
    */
   @Test
   public void rdsResponseWithoutMatchingResource() {
@@ -488,6 +498,8 @@ public class XdsClientImplTest {
         .onNext(eq(buildDiscoveryRequest(NODE, "", "route-foo.googleapis.com",
             XdsClientImpl.ADS_TYPE_URL_RDS, "")));
 
+    assertThat(fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
+
     // Management server should only sends RouteConfiguration messages with at least one
     // VirtualHost with domains matching requested hostname. Otherwise, it is invalid data.
     List<Any> routeConfigs = ImmutableList.of(
@@ -513,6 +525,11 @@ public class XdsClientImplTest {
 
     verify(configWatcher, never()).onConfigChanged(any(ConfigUpdate.class));
     verify(configWatcher, never()).onError(any(Status.class));
+    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
+    verify(configWatcher).onError(statusCaptor.capture());
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.NOT_FOUND);
+    assertThat(fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
 
   /**
@@ -544,6 +561,8 @@ public class XdsClientImplTest {
 
     // Client sends an ACK LDS request and an RDS request for "route-foo.googleapis.com". (Omitted)
 
+    assertThat(fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
+
     // Management server should only sends RouteConfiguration messages with at least one
     // VirtualHost with domains matching requested hostname. Otherwise, it is invalid data.
     List<Any> routeConfigs = ImmutableList.of(
@@ -564,6 +583,8 @@ public class XdsClientImplTest {
     response = buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0000");
     responseObserver.onNext(response);
 
+    assertThat(fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
+
     // Client sent an ACK RDS request.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "0", "route-foo.googleapis.com",
@@ -579,7 +600,7 @@ public class XdsClientImplTest {
    * RouteConfiguration message for the requested resource. But the RouteConfiguration message
    * is invalid as it does not contain any VirtualHost with domains matching the requested
    * hostname.
-   * The LDS response is NACKed, as if the XdsClient has not received this response.
+   * The RDS response is NACKed, as if the XdsClient has not received this response.
    * The config watcher is NOT notified with an error.
    */
   @Test
@@ -605,6 +626,8 @@ public class XdsClientImplTest {
     responseObserver.onNext(response);
 
     // Client sends an ACK LDS request and an RDS request for "route-foo.googleapis.com". (Omitted)
+
+    assertThat(fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
 
     List<Any> routeConfigs = ImmutableList.of(
         Any.pack(
@@ -633,6 +656,11 @@ public class XdsClientImplTest {
 
     verify(configWatcher, never()).onConfigChanged(any(ConfigUpdate.class));
     verify(configWatcher, never()).onError(any(Status.class));
+    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
+    verify(configWatcher).onError(statusCaptor.capture());
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.NOT_FOUND);
+    assertThat(fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
 
   /**
@@ -640,7 +668,7 @@ public class XdsClientImplTest {
    * RouteConfiguration message for the requested resource. But the RouteConfiguration message
    * is invalid as the VirtualHost with domains matching the requested hostname contains invalid
    * data, its RouteAction message is absent.
-   * The LDS response is NACKed, as if the XdsClient has not received this response.
+   * The RDS response is NACKed, as if the XdsClient has not received this response.
    * The config watcher is NOT notified with an error.
    */
   @Test
@@ -666,6 +694,8 @@ public class XdsClientImplTest {
     responseObserver.onNext(response);
 
     // Client sends an ACK LDS request and an RDS request for "route-foo.googleapis.com". (Omitted)
+
+    assertThat(fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
 
     // A VirtualHost with a Route that contains only redirect configuration.
     VirtualHost virtualHost =
@@ -695,6 +725,11 @@ public class XdsClientImplTest {
 
     verify(configWatcher, never()).onConfigChanged(any(ConfigUpdate.class));
     verify(configWatcher, never()).onError(any(Status.class));
+    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
+    verify(configWatcher).onError(statusCaptor.capture());
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.NOT_FOUND);
+    assertThat(fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
 
   /**
@@ -896,6 +931,13 @@ public class XdsClientImplTest {
         .onNext(eq(buildDiscoveryRequest(NODE, "", "route-foo.googleapis.com",
             XdsClientImpl.ADS_TYPE_URL_RDS, "")));
 
+    ScheduledTask rdsRespTimer =
+        Iterables.getOnlyElement(
+            fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER));
+    assertThat(rdsRespTimer.isCancelled()).isFalse();
+
+    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC - 2, TimeUnit.SECONDS);
+
     // Management server sends back an RDS response that does not contain RouteConfiguration
     // for the requested resource.
     List<Any> routeConfigs = ImmutableList.of(
@@ -915,6 +957,9 @@ public class XdsClientImplTest {
 
     // Client waits for future RDS responses silently.
     verifyNoMoreInteractions(configWatcher);
+    assertThat(rdsRespTimer.isCancelled()).isFalse();
+
+    fakeClock.forwardTime(1, TimeUnit.SECONDS);
 
     // Management server sends back another RDS response containing the RouteConfiguration
     // for the requested resource.
@@ -940,6 +985,7 @@ public class XdsClientImplTest {
     verify(configWatcher).onConfigChanged(configUpdateCaptor.capture());
     assertThat(configUpdateCaptor.getValue().getClusterName())
         .isEqualTo("another-cluster.googleapis.com");
+    assertThat(rdsRespTimer.isCancelled()).isTrue();
   }
 
   /**
@@ -1024,6 +1070,85 @@ public class XdsClientImplTest {
     assertThat(error.getCode()).isEqualTo(Code.NOT_FOUND);
     assertThat(error.getDescription())
         .isEqualTo("Listener for requested resource [foo.googleapis.com:8080] does not exist");
+  }
+
+  /**
+   * Management server sends another LDS response for updating the RDS resource to be requested
+   * while client is currently requesting for a previously given RDS resource name.
+   */
+  @Test
+  public void updateRdsRequestResourceWhileInitialResourceFetchInProgress() {
+    xdsClient.watchConfigData(HOSTNAME, PORT, configWatcher);
+    StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
+    StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
+
+    // Management sends back an LDS response telling client to do RDS.
+    Rds rdsConfig =
+        Rds.newBuilder()
+            // Must set to use ADS.
+            .setConfigSource(
+                ConfigSource.newBuilder().setAds(AggregatedConfigSource.getDefaultInstance()))
+            .setRouteConfigName("route-foo.googleapis.com")
+            .build();
+
+    List<Any> listeners = ImmutableList.of(
+        Any.pack(buildListener("foo.googleapis.com:8080", /* matching resource */
+            Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build())))
+    );
+    DiscoveryResponse response =
+        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS, "0000");
+    responseObserver.onNext(response);
+
+    // Client sends an (first) RDS request.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest(NODE, "", "route-foo.googleapis.com",
+            XdsClientImpl.ADS_TYPE_URL_RDS, "")));
+
+    ScheduledTask rdsRespTimer =
+        Iterables.getOnlyElement(
+            fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER));
+    assertThat(rdsRespTimer.isCancelled()).isFalse();
+
+    // Management sends back another LDS response updating the Listener information to use
+    // another resource name for doing RDS.
+    rdsConfig =
+        Rds.newBuilder()
+            // Must set to use ADS.
+            .setConfigSource(
+                ConfigSource.newBuilder().setAds(AggregatedConfigSource.getDefaultInstance()))
+            .setRouteConfigName("route-bar.googleapis.com")
+            .build();
+
+    listeners = ImmutableList.of(
+        Any.pack(buildListener("foo.googleapis.com:8080", /* matching resource */
+            Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build())))
+    );
+    response = buildDiscoveryResponse("1", listeners, XdsClientImpl.ADS_TYPE_URL_LDS, "0001");
+    responseObserver.onNext(response);
+
+    // Client sent a new RDS request with updated resource name.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest(NODE, "", "route-bar.googleapis.com",
+            XdsClientImpl.ADS_TYPE_URL_RDS, "")));
+
+    assertThat(rdsRespTimer.isCancelled()).isTrue();
+    rdsRespTimer =
+        Iterables.getOnlyElement(
+            fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER));
+    assertThat(rdsRespTimer.isCancelled()).isFalse();
+
+    // Management server sends back an RDS response containing RouteConfiguration requested.
+    List<Any> routeConfigs = ImmutableList.of(
+        Any.pack(
+            buildRouteConfiguration(
+                "route-bar.googleapis.com",
+                ImmutableList.of(
+                    buildVirtualHost(ImmutableList.of("foo.googleapis.com"),
+                        "cluster.googleapis.com")))));
+    response = buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0000");
+    responseObserver.onNext(response);
+
+    assertThat(rdsRespTimer.isCancelled()).isTrue();
   }
 
   /**
@@ -2573,7 +2698,7 @@ public class XdsClientImplTest {
     InOrder inOrder =
         Mockito.inOrder(mockedDiscoveryService, backoffPolicyProvider, backoffPolicy1,
             backoffPolicy2);
-    xdsClient.watchEndpointData("cluster-foo.googleapis.com", endpointWatcher);
+    xdsClient.watchConfigData(HOSTNAME, PORT, configWatcher);
 
     ArgumentCaptor<StreamObserver<DiscoveryResponse>> responseObserverCaptor =
         ArgumentCaptor.forClass(null);
@@ -2581,13 +2706,85 @@ public class XdsClientImplTest {
         .streamAggregatedResources(responseObserverCaptor.capture());
     StreamObserver<DiscoveryResponse> responseObserver =
         responseObserverCaptor.getValue();  // same as responseObservers.poll()
+
+    // Management sends back an LDS response telling client to do RDS.
+    Rds rdsConfig =
+        Rds.newBuilder()
+            // Must set to use ADS.
+            .setConfigSource(
+                ConfigSource.newBuilder().setAds(AggregatedConfigSource.getDefaultInstance()))
+            .setRouteConfigName("route-foo.googleapis.com")
+            .build();
+
+    List<Any> listeners = ImmutableList.of(
+        Any.pack(buildListener("foo.googleapis.com:8080", /* matching resource */
+            Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build())))
+    );
+    DiscoveryResponse response =
+        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS, "0000");
+    responseObserver.onNext(response);
+
+    // Client sent an RDS request for resource "route-foo.googleapis.com" (Omitted).
+
+    ScheduledTask rdsRespTimer =
+        Iterables.getOnlyElement(
+            fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER));
+    assertThat(rdsRespTimer.isCancelled()).isFalse();
+    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC - 1, TimeUnit.SECONDS);
+
+    // RPC stream is broken while the initial fetch for the resource is not complete.
+    responseObserver.onError(Status.UNAVAILABLE.asException());
+    assertThat(rdsRespTimer.isCancelled()).isTrue();
+
+    // Reset backoff and retry immediately.
+    inOrder.verify(backoffPolicyProvider).get();
+    fakeClock.runDueTasks();
+    inOrder.verify(mockedDiscoveryService)
+        .streamAggregatedResources(responseObserverCaptor.capture());
+    responseObserver = responseObserverCaptor.getValue();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
 
-    verify(requestObserver)
-        .onNext(
-            argThat(
-                new DiscoveryRequestMatcher("", "cluster-foo.googleapis.com",
-                    XdsClientImpl.ADS_TYPE_URL_EDS, "")));
+    // Client resumed requests and management server sends back LDS resources again.
+    verify(requestObserver).onNext(
+        eq(buildDiscoveryRequest(NODE, "", "foo.googleapis.com:8080",
+            XdsClientImpl.ADS_TYPE_URL_LDS, "")));
+    responseObserver.onNext(response);
+
+    // Client sent an RDS request for resource "route-foo.googleapis.com" (Omitted).
+
+    rdsRespTimer =
+        Iterables.getOnlyElement(
+            fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER));
+    assertThat(rdsRespTimer.getDelay(TimeUnit.SECONDS))
+        .isEqualTo(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC);
+
+    // Management server sends back an RDS response containing the RouteConfiguration
+    // for the requested resource.
+    List<Any> routeConfigs = ImmutableList.of(
+        Any.pack(
+            buildRouteConfiguration(
+                "route-foo.googleapis.com",
+                ImmutableList.of(
+                    buildVirtualHost(ImmutableList.of("foo.googleapis.com"),
+                        "cluster-foo.googleapis.com")))));
+    response = buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0000");
+    responseObserver.onNext(response);
+
+    assertThat(rdsRespTimer.isCancelled()).isTrue();
+
+    // Resets RPC stream again.
+    responseObserver.onError(Status.UNAVAILABLE.asException());
+    // Reset backoff and retry immediately.
+    inOrder.verify(backoffPolicyProvider).get();
+    fakeClock.runDueTasks();
+    inOrder.verify(mockedDiscoveryService)
+        .streamAggregatedResources(responseObserverCaptor.capture());
+    responseObserver = responseObserverCaptor.getValue();
+
+    // Client/server resumed LDS/RDS request/response (Omitted).
+
+    // Start watching endpoint data.
+    xdsClient.watchEndpointData("cluster-foo.googleapis.com", endpointWatcher);
     ScheduledTask edsRespTimeoutTask =
         Iterables.getOnlyElement(
             fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER));
@@ -2597,12 +2794,11 @@ public class XdsClientImplTest {
     // RPC stream is broken while the initial fetch for the resource is not complete.
     responseObserver.onError(Status.UNAVAILABLE.asException());
     assertThat(edsRespTimeoutTask.isCancelled()).isTrue();
-    inOrder.verify(backoffPolicyProvider).get();
-    inOrder.verify(backoffPolicy1).nextBackoffNanos();
+    inOrder.verify(backoffPolicy2).nextBackoffNanos();
     assertThat(fakeClock.getPendingTasks(RPC_RETRY_TASK_FILTER)).hasSize(1);
 
     // Retry after backoff.
-    fakeClock.forwardNanos(10L);
+    fakeClock.forwardNanos(20L);
     inOrder.verify(mockedDiscoveryService)
         .streamAggregatedResources(responseObserverCaptor.capture());
     responseObserver = responseObserverCaptor.getValue();
@@ -2624,10 +2820,10 @@ public class XdsClientImplTest {
     // RPC stream is broken again after client concludes the requested resource is absent.
     responseObserver.onError(Status.UNAVAILABLE.asException());
 
-    inOrder.verify(backoffPolicy1).nextBackoffNanos();
+    inOrder.verify(backoffPolicy2).nextBackoffNanos();
     assertThat(fakeClock.getPendingTasks(RPC_RETRY_TASK_FILTER)).hasSize(1);
 
-    fakeClock.forwardNanos(100L);
+    fakeClock.forwardNanos(200L);
     inOrder.verify(mockedDiscoveryService)
         .streamAggregatedResources(responseObserverCaptor.capture());
 

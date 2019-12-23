@@ -127,6 +127,10 @@ final class XdsClientImpl extends XdsClient {
   // Timers for concluding EDS resources not found.
   private final Map<String, ReschedulableTaskHandle> edsRespTimers = new HashMap<>();
 
+  // Timer for concluding the currently requesting RDS resource not found.
+  @Nullable
+  private ReschedulableTaskHandle rdsRespTimer;
+
   @Nullable
   private AdsStream adsStream;
   @Nullable
@@ -176,6 +180,10 @@ final class XdsClientImpl extends XdsClient {
     }
     if (rpcRetryTimer != null) {
       rpcRetryTimer.cancel();
+    }
+    if (rdsRespTimer != null) {
+      rdsRespTimer.cancel();
+      rdsRespTimer = null;
     }
     for (ReschedulableTaskHandle handle :edsRespTimers.values()) {
       handle.cancel();
@@ -473,6 +481,12 @@ final class XdsClientImpl extends XdsClient {
       // Send an RDS request if the resource to request has changed.
       if (!rdsRouteConfigName.equals(adsStream.rdsResourceName)) {
         adsStream.sendXdsRequest(ADS_TYPE_URL_RDS, ImmutableList.of(rdsRouteConfigName));
+        // Cancel the timer for fetching the previous RDS resource.
+        if (rdsRespTimer != null) {
+          rdsRespTimer.cancel();
+        }
+        rdsRespTimer = new RdsResourceFetchTimeoutTask(rdsRouteConfigName).toTaskHandle();
+        rdsRespTimer.schedule(INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
       }
     } else {
       // The requested Listener does not exist.
@@ -526,11 +540,13 @@ final class XdsClientImpl extends XdsClient {
     // Notify the ConfigWatcher if this RDS response contains the most recently requested
     // RDS resource.
     if (clusterName != null) {
+      if (rdsRespTimer != null) {
+        rdsRespTimer.cancel();
+        rdsRespTimer = null;
+      }
       ConfigUpdate configUpdate = ConfigUpdate.newBuilder().setClusterName(clusterName).build();
       configWatcher.onConfigChanged(configUpdate);
     }
-    // Do not notify an error to the ConfigWatcher. RDS protocol is incremental, not receiving
-    // requested RouteConfiguration in this response does not imply absence.
   }
 
   /**
@@ -813,6 +829,9 @@ final class XdsClientImpl extends XdsClient {
       startRpcStream();
       if (configWatcher != null) {
         adsStream.sendXdsRequest(ADS_TYPE_URL_LDS, ImmutableList.of(ldsResourceName));
+        if (rdsRespTimer != null) {
+          rdsRespTimer.schedule(INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+        }
       }
       if (!clusterWatchers.isEmpty()) {
         adsStream.sendXdsRequest(ADS_TYPE_URL_CDS, clusterWatchers.keySet());
@@ -970,6 +989,9 @@ final class XdsClientImpl extends XdsClient {
 
     private void cleanUp() {
       if (adsStream == this) {
+        if (rdsRespTimer != null) {
+          rdsRespTimer.cancel();
+        }
         for (ReschedulableTaskHandle handle : edsRespTimers.values()) {
           handle.cancel();
         }
@@ -1127,6 +1149,22 @@ final class XdsClientImpl extends XdsClient {
 
     ReschedulableTaskHandle toTaskHandle() {
       return new ReschedulableTaskHandle(this);
+    }
+  }
+
+  @VisibleForTesting
+  final class RdsResourceFetchTimeoutTask extends ResourceFetchTimeoutTask {
+
+    RdsResourceFetchTimeoutTask(String resourceName) {
+      super(resourceName);
+    }
+
+    @Override
+    public void run() {
+      rdsRespTimer = null;
+      configWatcher.onError(Status.NOT_FOUND
+          .withDescription(
+              "RouteConfiguration resource for route [" + resourceName + "] not found."));
     }
   }
 
