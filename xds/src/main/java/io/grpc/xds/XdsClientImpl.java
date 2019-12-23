@@ -73,6 +73,13 @@ final class XdsClientImpl extends XdsClient {
   @VisibleForTesting
   static final int INITIAL_RESOURCE_FETCH_TIMEOUT_SEC = 15;
 
+  // Reserved value for special usage, as a placeholder in CDS cache for cluster not exist.
+  private static final ClusterUpdate CLUSTER_NOT_FOUND =
+      ClusterUpdate.newBuilder()
+          .setClusterName("cluster not found")
+          .setLbPolicy("lb policy not found")
+          .build();
+
   // Reserved value for special usage, as a placeholder in EDS cache for endpoints not exist.
   private static final EndpointUpdate ENDPOINTS_NOT_FOUND =
       EndpointUpdate.newBuilder().setClusterName("endpoints not found").build();
@@ -123,6 +130,9 @@ final class XdsClientImpl extends XdsClient {
 
   // Resource fetch timers are used to conclude absence of resources. Each timer is activated when
   // subscription for the resource starts and disarmed on first update for the resource.
+
+  // Timers for concluding CDS resources not found.
+  private final Map<String, ReschedulableTaskHandle> cdsRespTimers = new HashMap<>();
 
   // Timers for concluding EDS resources not found.
   private final Map<String, ReschedulableTaskHandle> edsRespTimers = new HashMap<>();
@@ -185,6 +195,10 @@ final class XdsClientImpl extends XdsClient {
       rdsRespTimer.cancel();
       rdsRespTimer = null;
     }
+    for (ReschedulableTaskHandle handle : cdsRespTimers.values()) {
+      handle.cancel();
+    }
+    cdsRespTimers.clear();
     for (ReschedulableTaskHandle handle :edsRespTimers.values()) {
       handle.cancel();
     }
@@ -228,17 +242,31 @@ final class XdsClientImpl extends XdsClient {
     watchers.add(watcher);
     // If local cache contains cluster information to be watched, notify the watcher immediately.
     if (clusterNamesToClusterUpdates.containsKey(clusterName)) {
-      watcher.onClusterChanged(clusterNamesToClusterUpdates.get(clusterName));
-    }
-    if (rpcRetryTimer != null && rpcRetryTimer.isPending()) {
-      // Currently in retry backoff.
+      ClusterUpdate clusterInfo = clusterNamesToClusterUpdates.get(clusterName);
+      if (clusterInfo.equals(CLUSTER_NOT_FOUND)) {
+        watcher.onError(
+            Status.NOT_FOUND
+                .withDescription(
+                    "Cluster resource [" + clusterName + "] not found."));
+      } else {
+        watcher.onClusterChanged(clusterInfo);
+      }
       return;
     }
+
     if (needRequest) {
+      ReschedulableTaskHandle timeoutHandle =
+          new CdsResourceFetchTimeoutTask(clusterName).toTaskHandle();
+      cdsRespTimers.put(clusterName, timeoutHandle);
+      if (rpcRetryTimer != null && rpcRetryTimer.isPending()) {
+        // Currently in retry backoff.
+        return;
+      }
       if (adsStream == null) {
         startRpcStream();
       }
       adsStream.sendXdsRequest(ADS_TYPE_URL_CDS, clusterWatchers.keySet());
+      timeoutHandle.schedule(INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     }
   }
 
@@ -254,6 +282,14 @@ final class XdsClientImpl extends XdsClient {
     if (watchers.isEmpty()) {
       logger.log(Level.FINE, "Stop watching cluster {0}", clusterName);
       clusterWatchers.remove(clusterName);
+      // Remove the corresponding CDS entry.
+      clusterNamesToClusterUpdates.remove(clusterName);
+      // Cancel and delete response timer waiting for the corresponding resource.
+      if (cdsRespTimers.containsKey(clusterName)) {
+        cdsRespTimers.get(clusterName).cancel();
+        cdsRespTimers.remove(clusterName);
+      }
+
       // If unsubscribe the last resource, do NOT send a CDS request for an empty resource list.
       // This is a workaround for CDS protocol resource unsubscribe.
       if (clusterWatchers.isEmpty()) {
@@ -692,18 +728,28 @@ final class XdsClientImpl extends XdsClient {
     // Remove EDS cache entries for ClusterLoadAssignments not referenced by this CDS response.
     clusterNamesToEndpointUpdates.keySet().retainAll(edsServices);
 
-    // Notify watchers if clusters interested in present. Otherwise, notify with an error.
+    // Disarm initial fetch timers for received resources.
+    for (String clusterName : clusterUpdates.keySet()) {
+      if (cdsRespTimers.containsKey(clusterName)) {
+        cdsRespTimers.get(clusterName).cancel();
+        cdsRespTimers.remove(clusterName);
+      }
+    }
+
+    // Notify watchers if clusters interested in present in this CDS response.
     for (Map.Entry<String, Set<ClusterWatcher>> entry : clusterWatchers.entrySet()) {
-      if (clusterUpdates.containsKey(entry.getKey())) {
-        ClusterUpdate clusterUpdate = clusterUpdates.get(entry.getKey());
+      String clusterName = entry.getKey();
+      if (clusterUpdates.containsKey(clusterName)) {
+        ClusterUpdate clusterUpdate = clusterUpdates.get(clusterName);
         for (ClusterWatcher watcher : entry.getValue()) {
           watcher.onClusterChanged(clusterUpdate);
         }
-      } else {
+      } else if (!cdsRespTimers.containsKey(clusterName)) {
+        // Update for previously present resource being removed.
         for (ClusterWatcher watcher : entry.getValue()) {
           watcher.onError(
-              Status.NOT_FOUND.withDescription(
-                  "Requested cluster [" + entry.getKey() + "] does not exist"));
+              Status.NOT_FOUND
+                  .withDescription("Cluster resource [" + clusterName + "] not found."));
         }
       }
     }
@@ -835,6 +881,9 @@ final class XdsClientImpl extends XdsClient {
       }
       if (!clusterWatchers.isEmpty()) {
         adsStream.sendXdsRequest(ADS_TYPE_URL_CDS, clusterWatchers.keySet());
+        for (ReschedulableTaskHandle handle : cdsRespTimers.values()) {
+          handle.schedule(INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+        }
       }
       if (!endpointWatchers.isEmpty()) {
         adsStream.sendXdsRequest(ADS_TYPE_URL_EDS, endpointWatchers.keySet());
@@ -991,6 +1040,9 @@ final class XdsClientImpl extends XdsClient {
       if (adsStream == this) {
         if (rdsRespTimer != null) {
           rdsRespTimer.cancel();
+        }
+        for (ReschedulableTaskHandle handle : cdsRespTimers.values()) {
+          handle.cancel();
         }
         for (ReschedulableTaskHandle handle : edsRespTimers.values()) {
           handle.cancel();
@@ -1165,6 +1217,25 @@ final class XdsClientImpl extends XdsClient {
       configWatcher.onError(Status.NOT_FOUND
           .withDescription(
               "RouteConfiguration resource for route [" + resourceName + "] not found."));
+    }
+  }
+
+  @VisibleForTesting
+  final class CdsResourceFetchTimeoutTask extends ResourceFetchTimeoutTask {
+
+    CdsResourceFetchTimeoutTask(String resourceName) {
+      super(resourceName);
+    }
+
+    @Override
+    public void run() {
+      cdsRespTimers.remove(resourceName);
+      clusterNamesToClusterUpdates.put(resourceName, CLUSTER_NOT_FOUND);
+      for (ClusterWatcher wat : clusterWatchers.get(resourceName)) {
+        wat.onError(
+            Status.NOT_FOUND
+                .withDescription("Cluster resource [" + resourceName + "] not found."));
+      }
     }
   }
 

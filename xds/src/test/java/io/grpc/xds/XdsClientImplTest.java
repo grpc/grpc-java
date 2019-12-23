@@ -141,6 +141,15 @@ public class XdsClientImplTest {
         }
       };
 
+  private static final FakeClock.TaskFilter CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER =
+      new TaskFilter() {
+        @Override
+        public boolean shouldAccept(Runnable command) {
+          return command.toString()
+              .contains(XdsClientImpl.CdsResourceFetchTimeoutTask.class.getSimpleName());
+        }
+      };
+
   private static final FakeClock.TaskFilter EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER =
       new FakeClock.TaskFilter() {
         @Override
@@ -1154,7 +1163,7 @@ public class XdsClientImplTest {
   /**
    * Client receives an CDS response that does not contain a Cluster for the requested resource
    * while each received Cluster is valid. The CDS response is ACKed. Cluster watchers are notified
-   * with an error for resource not found.
+   * with an error for resource not found after initial resource fetch timeout has expired.
    */
   @Test
   public void cdsResponseWithoutMatchingResource() {
@@ -1166,6 +1175,7 @@ public class XdsClientImplTest {
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster-foo.googleapis.com",
             XdsClientImpl.ADS_TYPE_URL_CDS, "")));
+    assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
 
     // Management server sends back a CDS response without Cluster for the requested resource.
     List<Any> clusters = ImmutableList.of(
@@ -1179,13 +1189,14 @@ public class XdsClientImplTest {
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "0", "cluster-foo.googleapis.com",
             XdsClientImpl.ADS_TYPE_URL_CDS, "0000")));
+    verify(clusterWatcher, never()).onClusterChanged(any(ClusterUpdate.class));
+    verify(clusterWatcher, never()).onError(any(Status.class));
 
+    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     ArgumentCaptor<Status> errorStatusCaptor = ArgumentCaptor.forClass(null);
     verify(clusterWatcher).onError(errorStatusCaptor.capture());
     Status error = errorStatusCaptor.getValue();
     assertThat(error.getCode()).isEqualTo(Code.NOT_FOUND);
-    assertThat(error.getDescription())
-        .isEqualTo("Requested cluster [cluster-foo.googleapis.com] does not exist");
   }
 
   /**
@@ -1202,6 +1213,9 @@ public class XdsClientImplTest {
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster-foo.googleapis.com",
             XdsClientImpl.ADS_TYPE_URL_CDS, "")));
+    ScheduledTask cdsRespTimer =
+        Iterables.getOnlyElement(
+            fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER));
 
     // Management server sends back a CDS response without Cluster for the requested resource.
     List<Any> clusters = ImmutableList.of(
@@ -1216,6 +1230,7 @@ public class XdsClientImplTest {
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "0", "cluster-foo.googleapis.com",
             XdsClientImpl.ADS_TYPE_URL_CDS, "0000")));
+    assertThat(cdsRespTimer.isCancelled()).isTrue();
 
     ArgumentCaptor<ClusterUpdate> clusterUpdateCaptor = ArgumentCaptor.forClass(null);
     verify(clusterWatcher).onClusterChanged(clusterUpdateCaptor.capture());
@@ -1301,6 +1316,7 @@ public class XdsClientImplTest {
                 new DiscoveryRequestMatcher("",
                     ImmutableList.of("cluster-foo.googleapis.com", "cluster-bar.googleapis.com"),
                     XdsClientImpl.ADS_TYPE_URL_CDS, "")));
+    assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(2);
 
     // Management server sends back a CDS response contains Cluster for only one of
     // requested cluster.
@@ -1310,6 +1326,7 @@ public class XdsClientImplTest {
         buildDiscoveryResponse("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS, "0000");
     responseObserver.onNext(response);
 
+    assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
     // Client sent an ACK CDS request.
     verify(requestObserver)
         .onNext(
@@ -1339,13 +1356,16 @@ public class XdsClientImplTest {
     assertThat(clusterUpdate2.getLbPolicy()).isEqualTo("round_robin");
     assertThat(clusterUpdate2.isEnableLrs()).isEqualTo(false);
 
-    // The other watcher gets an error notification for cluster not found.
+    verify(watcher3, never()).onClusterChanged(any(ClusterUpdate.class));
+    verify(watcher3, never()).onError(any(Status.class));
+
+    // The other watcher gets an error notification for cluster not found after its timer expired.
+    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     ArgumentCaptor<Status> errorStatusCaptor = ArgumentCaptor.forClass(null);
     verify(watcher3).onError(errorStatusCaptor.capture());
     Status error = errorStatusCaptor.getValue();
     assertThat(error.getCode()).isEqualTo(Code.NOT_FOUND);
-    assertThat(error.getDescription())
-        .isEqualTo("Requested cluster [cluster-bar.googleapis.com] does not exist");
+    assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
 
     // Management server sends back another CDS response contains Clusters for all
     // requested clusters.
@@ -1415,6 +1435,7 @@ public class XdsClientImplTest {
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster-foo.googleapis.com",
             XdsClientImpl.ADS_TYPE_URL_CDS, "")));
+    assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
 
     // Management server sends back an CDS response with Cluster for the requested
     // cluster.
@@ -1437,6 +1458,7 @@ public class XdsClientImplTest {
         .isEqualTo("cluster-foo.googleapis.com");  // default to cluster name
     assertThat(clusterUpdate1.getLbPolicy()).isEqualTo("round_robin");
     assertThat(clusterUpdate1.isEnableLrs()).isEqualTo(false);
+    assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
 
     // Another cluster watcher interested in the same cluster is added.
     ClusterWatcher watcher2 = mock(ClusterWatcher.class);
@@ -1454,10 +1476,14 @@ public class XdsClientImplTest {
     assertThat(clusterUpdate2.isEnableLrs()).isEqualTo(false);
 
     verifyNoMoreInteractions(requestObserver);
+    assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
 
+  /**
+   * Basic operations of adding/canceling cluster data watchers.
+   */
   @Test
-  public void addRemoveClusterWatchersFreely() {
+  public void addRemoveClusterWatchers() {
     ClusterWatcher watcher1 = mock(ClusterWatcher.class);
     xdsClient.watchClusterData("cluster-foo.googleapis.com", watcher1);
 
@@ -1583,6 +1609,7 @@ public class XdsClientImplTest {
     // A new cluster watcher is added to watch cluster foo again.
     ClusterWatcher watcher3 = mock(ClusterWatcher.class);
     xdsClient.watchClusterData("cluster-foo.googleapis.com", watcher3);
+    verify(watcher3, never()).onClusterChanged(any(ClusterUpdate.class));
 
     // A CDS request is sent to indicate subscription of "cluster-foo.googleapis.com" only.
     verify(requestObserver)
@@ -1616,6 +1643,118 @@ public class XdsClientImplTest {
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "3", "cluster-foo.googleapis.com",
             XdsClientImpl.ADS_TYPE_URL_CDS, "0003")));
+  }
+
+  @Test
+  public void addRemoveClusterWatcherWhileInitialResourceFetchInProgress() {
+    ClusterWatcher watcher1 = mock(ClusterWatcher.class);
+    xdsClient.watchClusterData("cluster-foo.googleapis.com", watcher1);
+
+    // Streaming RPC starts after a first watcher is added.
+    StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
+
+    // Client sends an EDS request to management server.
+    verify(requestObserver)
+        .onNext(
+            argThat(
+                new DiscoveryRequestMatcher("", "cluster-foo.googleapis.com",
+                    XdsClientImpl.ADS_TYPE_URL_CDS, "")));
+    assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
+
+    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC - 1, TimeUnit.SECONDS);
+
+    ClusterWatcher watcher2 = mock(ClusterWatcher.class);
+    ClusterWatcher watcher3 = mock(ClusterWatcher.class);
+    ClusterWatcher watcher4 = mock(ClusterWatcher.class);
+    xdsClient.watchClusterData("cluster-foo.googleapis.com", watcher2);
+    xdsClient.watchClusterData("cluster-bar.googleapis.com", watcher3);
+    xdsClient.watchClusterData("cluster-bar.googleapis.com", watcher4);
+
+    // Client sends a new CDS request for updating the latest resource subscription.
+    verify(requestObserver)
+        .onNext(
+            argThat(
+                new DiscoveryRequestMatcher("",
+                    ImmutableList.of("cluster-foo.googleapis.com", "cluster-bar.googleapis.com"),
+                    XdsClientImpl.ADS_TYPE_URL_CDS, "")));
+    assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(2);
+
+    fakeClock.forwardTime(1, TimeUnit.SECONDS);
+    assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
+
+    // CDS resource "cluster-foo.googleapis.com" is known to be absent.
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
+    verify(watcher1).onError(statusCaptor.capture());
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.NOT_FOUND);
+    verify(watcher2).onError(statusCaptor.capture());
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.NOT_FOUND);
+
+    // The absence result is known immediately.
+    ClusterWatcher watcher5 = mock(ClusterWatcher.class);
+    xdsClient.watchClusterData("cluster-foo.googleapis.com", watcher5);
+
+    verify(watcher5).onError(statusCaptor.capture());
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.NOT_FOUND);
+
+    assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
+    ScheduledTask timeoutTask = Iterables.getOnlyElement(fakeClock.getPendingTasks());
+
+    // Cancel watchers while discovery for resource "cluster-bar.googleapis.com" is still
+    // in progress.
+    xdsClient.cancelClusterDataWatch("cluster-bar.googleapis.com", watcher3);
+    assertThat(timeoutTask.isCancelled()).isFalse();
+    xdsClient.cancelClusterDataWatch("cluster-bar.googleapis.com", watcher4);
+
+    // Client sends a CDS request for resource subscription update (Omitted).
+
+    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+
+    assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
+    assertThat(timeoutTask.isCancelled()).isTrue();
+
+    verifyZeroInteractions(watcher3, watcher4);
+  }
+
+  @Test
+  public void cdsUpdateForClusterBeingRemoved() {
+    xdsClient.watchClusterData("cluster-foo.googleapis.com", clusterWatcher);
+    StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
+    StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
+
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster-foo.googleapis.com",
+            XdsClientImpl.ADS_TYPE_URL_CDS, "")));
+    assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
+
+    // Management server sends back a CDS response containing requested resource.
+    List<Any> clusters = ImmutableList.of(
+        Any.pack(buildCluster("cluster-foo.googleapis.com", null, true)));
+    DiscoveryResponse response =
+        buildDiscoveryResponse("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS, "0000");
+    responseObserver.onNext(response);
+
+    // Client sent an ACK CDS request (Omitted).
+
+    ArgumentCaptor<ClusterUpdate> clusterUpdateCaptor = ArgumentCaptor.forClass(null);
+    verify(clusterWatcher).onClusterChanged(clusterUpdateCaptor.capture());
+    ClusterUpdate clusterUpdate = clusterUpdateCaptor.getValue();
+    assertThat(clusterUpdate.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
+    assertThat(clusterUpdate.getEdsServiceName())
+        .isEqualTo("cluster-foo.googleapis.com");  // default to cluster name
+    assertThat(clusterUpdate.getLbPolicy()).isEqualTo("round_robin");
+    assertThat(clusterUpdate.isEnableLrs()).isEqualTo(true);
+    assertThat(clusterUpdate.getLrsServerName()).isEqualTo("");
+    assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
+
+    // No cluster is available.
+    response =
+        buildDiscoveryResponse("1", ImmutableList.<Any>of(),
+            XdsClientImpl.ADS_TYPE_URL_CDS, "0001");
+    responseObserver.onNext(response);
+
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
+    verify(clusterWatcher).onError(statusCaptor.capture());
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.NOT_FOUND);
   }
 
   /**
