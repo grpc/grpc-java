@@ -430,7 +430,9 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         stream.id() == OkHttpClientStream.ABSENT_ID, "StreamId already assigned");
     streams.put(nextStreamId, stream);
     setInUse(stream);
-    stream.transportState().start(nextStreamId);
+    /* This access should be guarded by 'stream.transportState().lock'; instead found: 'this.lock' */ stream
+        .transportState()
+        .start(nextStreamId);
     // For unary and server streaming, there will be a data frame soon, no need to flush the header.
     if ((stream.getType() != MethodType.UNARY && stream.getType() != MethodType.SERVER_STREAMING)
         || stream.useGet()) {
@@ -1136,7 +1138,9 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         PerfMark.event("OkHttpClientTransport$ClientFrameHandler.data",
             stream.transportState().tag());
         synchronized (lock) {
-          stream.transportState().transportDataReceived(buf, inFinished);
+          /* This access should be guarded by 'stream.transportState().lock'; instead found: 'OkHttpClientTransport.this.lock' */ stream
+              .transportState()
+              .transportDataReceived(buf, inFinished);
         }
       }
 
@@ -1186,7 +1190,9 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
           if (failedStatus == null) {
             PerfMark.event("OkHttpClientTransport$ClientFrameHandler.headers",
                 stream.transportState().tag());
-            stream.transportState().transportHeadersReceived(headerBlock, inFinished);
+            /* This access should be guarded by 'stream.transportState().lock'; instead found: 'OkHttpClientTransport.this.lock' */ stream
+                .transportState()
+                .transportHeadersReceived(headerBlock, inFinished);
           } else {
             if (!inFinished) {
               frameWriter.rstStream(streamId, ErrorCode.CANCEL);
