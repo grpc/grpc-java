@@ -1111,7 +1111,9 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       }
     }
 
-    /** Handle an HTTP2 DATA frame. */
+    /**
+     * Handle an HTTP2 DATA frame.
+     */
     @SuppressWarnings("GuardedBy")
     @Override
     public void data(boolean inFinished, int streamId, BufferedSource in, int length)
@@ -1154,11 +1156,12 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       }
     }
 
-    /** Handle HTTP2 HEADER and CONTINUATION frames. */
+    /**
+     * Handle HTTP2 HEADER and CONTINUATION frames.
+     */
     @SuppressWarnings("GuardedBy")
     @Override
-    public void headers(
-        boolean outFinished,
+    public void headers(boolean outFinished,
         boolean inFinished,
         int streamId,
         int associatedStreamId,
