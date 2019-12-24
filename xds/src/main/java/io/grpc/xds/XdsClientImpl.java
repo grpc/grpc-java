@@ -137,6 +137,10 @@ final class XdsClientImpl extends XdsClient {
   // Timers for concluding EDS resources not found.
   private final Map<String, ReschedulableTaskHandle> edsRespTimers = new HashMap<>();
 
+  // Timer for concluding the currently requesting LDS resource not found.
+  @Nullable
+  private ReschedulableTaskHandle ldsRespTimer;
+
   // Timer for concluding the currently requesting RDS resource not found.
   @Nullable
   private ReschedulableTaskHandle rdsRespTimer;
@@ -223,6 +227,8 @@ final class XdsClientImpl extends XdsClient {
       startRpcStream();
     }
     adsStream.sendXdsRequest(ADS_TYPE_URL_LDS, ImmutableList.of(ldsResourceName));
+    ldsRespTimer = new LdsResourceFetchTimeoutTask(ldsResourceName).toTaskHandle();
+    ldsRespTimer.schedule(INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
   }
 
   @Override
@@ -509,6 +515,12 @@ final class XdsClientImpl extends XdsClient {
     adsStream.sendAckRequest(ADS_TYPE_URL_LDS, ImmutableList.of(ldsResourceName),
         ldsResponse.getVersionInfo());
 
+    if (clusterName != null || rdsRouteConfigName != null) {
+      if (ldsRespTimer != null) {
+        ldsRespTimer.cancel();
+        ldsRespTimer = null;
+      }
+    }
     if (clusterName != null) {
       // Found clusterName in the in-lined RouteConfiguration.
       ConfigUpdate configUpdate = ConfigUpdate.newBuilder().setClusterName(clusterName).build();
@@ -525,10 +537,13 @@ final class XdsClientImpl extends XdsClient {
         rdsRespTimer.schedule(INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
       }
     } else {
-      // The requested Listener does not exist.
-      configWatcher.onError(
-          Status.NOT_FOUND.withDescription(
-              "Listener for requested resource [" + ldsResourceName + "] does not exist"));
+      // The requested Listener does not present in this LDS response.
+      if (ldsRespTimer == null) {
+        configWatcher.onError(
+            Status.NOT_FOUND.withDescription(
+                "Listener resource for listener [" + ldsResourceName + "] does not exist"));
+      }
+
     }
   }
 
@@ -875,8 +890,8 @@ final class XdsClientImpl extends XdsClient {
       startRpcStream();
       if (configWatcher != null) {
         adsStream.sendXdsRequest(ADS_TYPE_URL_LDS, ImmutableList.of(ldsResourceName));
-        if (rdsRespTimer != null) {
-          rdsRespTimer.schedule(INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+        if (ldsRespTimer != null) {
+          ldsRespTimer.schedule(INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
         }
       }
       if (!clusterWatchers.isEmpty()) {
@@ -1038,6 +1053,9 @@ final class XdsClientImpl extends XdsClient {
 
     private void cleanUp() {
       if (adsStream == this) {
+        if (ldsRespTimer != null) {
+          ldsRespTimer.cancel();
+        }
         if (rdsRespTimer != null) {
           rdsRespTimer.cancel();
         }
@@ -1201,6 +1219,22 @@ final class XdsClientImpl extends XdsClient {
 
     ReschedulableTaskHandle toTaskHandle() {
       return new ReschedulableTaskHandle(this);
+    }
+  }
+
+  @VisibleForTesting
+  final class LdsResourceFetchTimeoutTask extends ResourceFetchTimeoutTask {
+
+    LdsResourceFetchTimeoutTask(String resourceName) {
+      super(resourceName);
+    }
+
+    @Override
+    public void run() {
+      ldsRespTimer = null;
+      configWatcher.onError(
+          Status.NOT_FOUND
+              .withDescription("Listener resource for listener [" + resourceName + "] not found."));
     }
   }
 

@@ -132,6 +132,15 @@ public class XdsClientImplTest {
         }
       };
 
+  private static final FakeClock.TaskFilter LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER =
+      new TaskFilter() {
+        @Override
+        public boolean shouldAccept(Runnable command) {
+          return command.toString()
+              .contains(XdsClientImpl.LdsResourceFetchTimeoutTask.class.getSimpleName());
+        }
+      };
+
   private static final FakeClock.TaskFilter RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER =
       new TaskFilter() {
         @Override
@@ -303,7 +312,7 @@ public class XdsClientImplTest {
   /**
    * Client receives an LDS response that does not contain a Listener for the requested resource.
    * The LDS response is ACKed.
-   * The config watcher is notified with an error.
+   * The config watcher is notified with an error after its response timer expires.
    */
   @Test
   public void ldsResponseWithoutMatchingResource() {
@@ -315,6 +324,8 @@ public class XdsClientImplTest {
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "foo.googleapis.com:8080",
             XdsClientImpl.ADS_TYPE_URL_LDS, "")));
+
+    assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
 
     List<Any> listeners = ImmutableList.of(
         Any.pack(buildListener("bar.googleapis.com",
@@ -344,14 +355,14 @@ public class XdsClientImplTest {
         .onNext(eq(buildDiscoveryRequest(NODE, "0", "foo.googleapis.com:8080",
             XdsClientImpl.ADS_TYPE_URL_LDS, "0000")));
 
+    verify(configWatcher, never()).onConfigChanged(any(ConfigUpdate.class));
+    verify(configWatcher, never()).onError(any(Status.class));
+    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     ArgumentCaptor<Status> errorStatusCaptor = ArgumentCaptor.forClass(null);
     verify(configWatcher).onError(errorStatusCaptor.capture());
     Status error = errorStatusCaptor.getValue();
     assertThat(error.getCode()).isEqualTo(Code.NOT_FOUND);
-    assertThat(error.getDescription())
-        .isEqualTo("Listener for requested resource [foo.googleapis.com:8080] does not exist");
-
-    verifyNoMoreInteractions(requestObserver);
+    assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
 
   /**
@@ -359,7 +370,7 @@ public class XdsClientImplTest {
    * that listener. But the RouteConfiguration message is invalid as it does not contain any
    * VirtualHost with domains matching the requested hostname.
    * The LDS response is NACKed, as if the XdsClient has not received this response.
-   * The config watcher is NOT notified with an error.
+   * The config watcher is notified with an error after its response timer expires..
    */
   @Test
   public void failToFindVirtualHostInLdsResponseInLineRouteConfig() {
@@ -371,6 +382,7 @@ public class XdsClientImplTest {
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "foo.googleapis.com:8080",
             XdsClientImpl.ADS_TYPE_URL_LDS, "")));
+    assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
 
     RouteConfiguration routeConfig =
         buildRouteConfiguration(
@@ -396,7 +408,13 @@ public class XdsClientImplTest {
 
     verify(configWatcher, never()).onConfigChanged(any(ConfigUpdate.class));
     verify(configWatcher, never()).onError(any(Status.class));
-    verifyNoMoreInteractions(requestObserver);
+
+    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    ArgumentCaptor<Status> errorStatusCaptor = ArgumentCaptor.forClass(null);
+    verify(configWatcher).onError(errorStatusCaptor.capture());
+    Status error = errorStatusCaptor.getValue();
+    assertThat(error.getCode()).isEqualTo(Code.NOT_FOUND);
+    assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
 
   /**
@@ -415,6 +433,10 @@ public class XdsClientImplTest {
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "foo.googleapis.com:8080",
             XdsClientImpl.ADS_TYPE_URL_LDS, "")));
+    ScheduledTask ldsRespTimer =
+        Iterables.getOnlyElement(
+            fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER));
+    assertThat(ldsRespTimer.isCancelled()).isFalse();
 
     List<Any> listeners = ImmutableList.of(
         Any.pack(buildListener("bar.googleapis.com",
@@ -451,6 +473,8 @@ public class XdsClientImplTest {
     DiscoveryResponse response =
         buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS, "0000");
     responseObserver.onNext(response);
+
+    assertThat(ldsRespTimer.isCancelled()).isTrue();
 
     // Client sends an ACK request.
     verify(requestObserver)
@@ -890,6 +914,16 @@ public class XdsClientImplTest {
     verify(configWatcher, times(4)).onConfigChanged(configUpdateCaptor.capture());
     assertThat(configUpdateCaptor.getValue().getClusterName())
         .isEqualTo("an-updated-cluster.googleapis.com");
+
+    // Management server sends back an LDS response indicating all Listener resources are removed.
+    response =
+        buildDiscoveryResponse("3", ImmutableList.<Any>of(),
+            XdsClientImpl.ADS_TYPE_URL_LDS, "0003");
+    responseObserver.onNext(response);
+
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
+    verify(configWatcher).onError(statusCaptor.capture());
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.NOT_FOUND);
   }
 
   // TODO(chengyuanzhang): tests for timeout waiting for responses for incremental
@@ -1077,8 +1111,6 @@ public class XdsClientImplTest {
     verify(configWatcher).onError(errorStatusCaptor.capture());
     Status error = errorStatusCaptor.getValue();
     assertThat(error.getCode()).isEqualTo(Code.NOT_FOUND);
-    assertThat(error.getDescription())
-        .isEqualTo("Listener for requested resource [foo.googleapis.com:8080] does not exist");
   }
 
   /**
