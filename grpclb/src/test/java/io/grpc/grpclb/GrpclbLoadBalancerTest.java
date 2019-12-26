@@ -2183,7 +2183,6 @@ public class GrpclbLoadBalancerTest {
     assertThat(config.getTarget()).isEqualTo("foo.google.com");
   }
 
-
   @SuppressWarnings("deprecation")
   private void deliverSubchannelState(
       final Subchannel subchannel, final ConnectivityStateInfo newState) {
