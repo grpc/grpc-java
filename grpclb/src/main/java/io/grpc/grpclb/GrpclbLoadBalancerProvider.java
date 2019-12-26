@@ -38,7 +38,9 @@ import javax.annotation.Nullable;
  */
 @Internal
 public final class GrpclbLoadBalancerProvider extends LoadBalancerProvider {
+
   private static final Mode DEFAULT_MODE = Mode.ROUND_ROBIN;
+  static final String TARGET_NAME = "targetName";
 
   @Override
   public boolean isAvailable() {
@@ -77,18 +79,22 @@ public final class GrpclbLoadBalancerProvider extends LoadBalancerProvider {
   ConfigOrError parseLoadBalancingConfigPolicyInternal(
       Map<String, ?> rawLoadBalancingPolicyConfig) {
     if (rawLoadBalancingPolicyConfig == null) {
-      return ConfigOrError.fromConfig(DEFAULT_MODE);
+      return ConfigOrError.fromConfig(GrpclbConfig.create(DEFAULT_MODE));
+    }
+    Object rawTarget = rawLoadBalancingPolicyConfig.get(GrpclbLoadBalancerProvider.TARGET_NAME);
+    String target = null;
+    if (rawTarget instanceof String) {
+      target = (String) rawTarget;
     }
     List<?> rawChildPolicies = getList(rawLoadBalancingPolicyConfig, "childPolicy");
     if (rawChildPolicies == null) {
-      return ConfigOrError.fromConfig(DEFAULT_MODE);
+      return ConfigOrError.fromConfig(GrpclbConfig.create(DEFAULT_MODE, target));
     }
 
     List<LbConfig> childPolicies =
         ServiceConfigUtil.unwrapLoadBalancingConfigList(checkObjectList(rawChildPolicies));
     for (LbConfig childPolicy : childPolicies) {
       String childPolicyName = childPolicy.getPolicyName();
-      String target = (String) childPolicy.getRawConfigValue().get("targetName");
       switch (childPolicyName) {
         case "round_robin":
           return ConfigOrError.fromConfig(GrpclbConfig.create(Mode.ROUND_ROBIN, target));
@@ -98,7 +104,7 @@ public final class GrpclbLoadBalancerProvider extends LoadBalancerProvider {
           // TODO(zhangkun83): maybe log?
       }
     }
-    return ConfigOrError.fromConfig(DEFAULT_MODE);
+    return ConfigOrError.fromConfig(GrpclbConfig.create(DEFAULT_MODE, target));
   }
 
   /**

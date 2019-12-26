@@ -2014,6 +2014,76 @@ public class GrpclbLoadBalancerTest {
   }
 
   @Test
+  public void switchTargetName() throws Exception {
+    InOrder inOrder = inOrder(helper);
+
+    String lbConfig = "{\"targetName\": \"foo.google.com\"}";
+    List<EquivalentAddressGroup> grpclbResolutionList = createResolvedServerAddresses(true);
+    Attributes grpclbResolutionAttrs = Attributes.newBuilder().set(
+        LoadBalancer.ATTR_LOAD_BALANCING_CONFIG, parseJsonObject(lbConfig)).build();
+
+    deliverResolvedAddresses(grpclbResolutionList, grpclbResolutionAttrs);
+
+    assertEquals(1, fakeOobChannels.size());
+    ManagedChannel oobChannel = fakeOobChannels.poll();
+    verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
+    StreamObserver<LoadBalanceResponse> lbResponseObserver = lbResponseObserverCaptor.getValue();
+    assertEquals(1, lbRequestObservers.size());
+    StreamObserver<LoadBalanceRequest> lbRequestObserver = lbRequestObservers.poll();
+    verify(lbRequestObserver).onNext(
+        eq(LoadBalanceRequest.newBuilder().setInitialRequest(
+            InitialLoadBalanceRequest.newBuilder().setName("foo.google.com").build())
+            .build()));
+
+    // Simulate receiving LB response
+    List<ServerEntry> backends1 = Arrays.asList(
+        new ServerEntry("127.0.0.1", 2000, "token0001"),
+        new ServerEntry("127.0.0.1", 2010, "token0002"));
+    inOrder.verify(helper, never())
+        .updateBalancingState(any(ConnectivityState.class), any(SubchannelPicker.class));
+    lbResponseObserver.onNext(buildInitialResponse());
+    lbResponseObserver.onNext(buildLbResponse(backends1));
+
+    // default ROUND_ROBIN: create one subchannel per server
+    verify(subchannelPool).takeOrCreateSubchannel(
+        eq(new EquivalentAddressGroup(backends1.get(0).addr, LB_BACKEND_ATTRS)),
+        any(Attributes.class));
+    verify(subchannelPool).takeOrCreateSubchannel(
+        eq(new EquivalentAddressGroup(backends1.get(1).addr, LB_BACKEND_ATTRS)),
+        any(Attributes.class));
+    inOrder.verify(helper).updateBalancingState(eq(CONNECTING), any(SubchannelPicker.class));
+    assertEquals(2, mockSubchannels.size());
+    Subchannel subchannel1 = mockSubchannels.poll();
+    Subchannel subchannel2 = mockSubchannels.poll();
+    verify(subchannelPool, never())
+        .returnSubchannel(any(Subchannel.class), any(ConnectivityStateInfo.class));
+
+    // Switch to different targetName
+    lbConfig = "{\"targetName\": \"bar.google.com\"}";
+    grpclbResolutionAttrs = Attributes.newBuilder().set(
+        LoadBalancer.ATTR_LOAD_BALANCING_CONFIG, parseJsonObject(lbConfig)).build();
+    List<EquivalentAddressGroup> newGrpclbResolutionList = createResolvedServerAddresses(true);
+    deliverResolvedAddresses(newGrpclbResolutionList, grpclbResolutionAttrs);
+
+    // GrpclbState will be shutdown, and a new one will be created
+    assertThat(oobChannel.isShutdown()).isTrue();
+    verify(subchannelPool)
+        .returnSubchannel(same(subchannel1), eq(ConnectivityStateInfo.forNonError(IDLE)));
+    verify(subchannelPool)
+        .returnSubchannel(same(subchannel2), eq(ConnectivityStateInfo.forNonError(IDLE)));
+
+    // verify new LB stream is created with updated targetName
+    assertEquals(1, fakeOobChannels.size());
+    verify(mockLbService, times(2)).balanceLoad(lbResponseObserverCaptor.capture());
+    assertEquals(1, lbRequestObservers.size());
+    lbRequestObserver = lbRequestObservers.poll();
+    verify(lbRequestObserver).onNext(
+        eq(LoadBalanceRequest.newBuilder().setInitialRequest(
+            InitialLoadBalanceRequest.newBuilder().setName("bar.google.com").build())
+            .build()));
+  }
+
+  @Test
   public void retrieveModeFromLbConfig_pickFirst() throws Exception {
     String lbConfig = "{\"childPolicy\" : [{\"pick_first\" : {}}, {\"round_robin\" : {}}]}";
 
@@ -2084,8 +2154,8 @@ public class GrpclbLoadBalancerTest {
 
   @Test
   public void retrieveModeFromLbConfig_skipUnsupportedChildPolicyWithTarget() throws Exception {
-    String lbConfig = "{\"childPolicy\" : "
-        + "[ {\"nono\" : {}}, {\"pick_first\" : {\"targetName\": \"foo.google.com\"} } ]}";
+    String lbConfig = "{\"childPolicy\" : [ {\"nono\" : {}}, {\"pick_first\" : {}} ],"
+        + "\"targetName\": \"foo.google.com\"}";
 
     GrpclbConfig config = retrieveGrpcLbConfig(parseJsonObject(lbConfig), channelLogger);
     assertThat(logs).containsExactly("DEBUG: grpclb ignoring unsupported child policy nono");
@@ -2102,6 +2172,17 @@ public class GrpclbLoadBalancerTest {
     assertThat(config.getMode()).isEqualTo(Mode.ROUND_ROBIN);
     assertThat(config.getTarget()).isNull();
   }
+
+  @Test
+  public void retrieveModeFromLbConfig_badConfigDefaultToRoundRobinWithTarget() throws Exception {
+    String lbConfig = "{\"childPolicy\" : {}, \"targetName\": \"foo.google.com\"}";
+
+    GrpclbConfig config = retrieveGrpcLbConfig(parseJsonObject(lbConfig), channelLogger);
+    assertThat(logs).containsExactly("WARNING: Bad grpclb config, using ROUND_ROBIN");
+    assertThat(config.getMode()).isEqualTo(Mode.ROUND_ROBIN);
+    assertThat(config.getTarget()).isEqualTo("foo.google.com");
+  }
+
 
   @SuppressWarnings("deprecation")
   private void deliverSubchannelState(

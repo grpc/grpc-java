@@ -129,17 +129,27 @@ class GrpclbLoadBalancer extends LoadBalancer {
     if (rawLbConfigValue == null) {
       return GrpclbConfig.create(DEFAULT_MODE);
     }
+
+    Object rawTarget = rawLbConfigValue.get(GrpclbLoadBalancerProvider.TARGET_NAME);
+    String target = null;
+    if (rawTarget == null || rawTarget instanceof String) {
+      target = (String) rawTarget;
+    } else {
+      channelLogger.log(
+          ChannelLogLevel.WARNING,
+          "Invalid targetName value type: %s, ignoring it",
+          rawTarget.getClass());
+    }
     try {
       List<?> rawChildPolicies = getList(rawLbConfigValue, "childPolicy");
       if (rawChildPolicies == null) {
-        return GrpclbConfig.create(DEFAULT_MODE);
+        return GrpclbConfig.create(DEFAULT_MODE, target);
       }
       List<LbConfig> childPolicies =
           ServiceConfigUtil.unwrapLoadBalancingConfigList(checkObjectList(rawChildPolicies));
 
       for (LbConfig childPolicy : childPolicies) {
         String childPolicyName = childPolicy.getPolicyName();
-        String target = (String) childPolicy.getRawConfigValue().get("targetName");
         switch (childPolicyName) {
           case "round_robin":
             return GrpclbConfig.create(Mode.ROUND_ROBIN, target);
@@ -156,7 +166,7 @@ class GrpclbLoadBalancer extends LoadBalancer {
       logger.log(
           Level.WARNING, "Bad grpclb config: " + rawLbConfigValue + ", using " + DEFAULT_MODE, e);
     }
-    return GrpclbConfig.create(DEFAULT_MODE);
+    return GrpclbConfig.create(DEFAULT_MODE, target);
   }
 
   private void resetStates() {
