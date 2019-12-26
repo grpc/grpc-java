@@ -130,7 +130,7 @@ class GrpclbLoadBalancer extends LoadBalancer {
       return GrpclbConfig.create(DEFAULT_MODE);
     }
 
-    Object rawTarget = rawLbConfigValue.get(GrpclbLoadBalancerProvider.TARGET_NAME);
+    Object rawTarget = rawLbConfigValue.get(GrpclbLoadBalancerProvider.SERVICE_CONFIG_TARGET_NAME);
     String target = null;
     if (rawTarget == null || rawTarget instanceof String) {
       target = (String) rawTarget;
