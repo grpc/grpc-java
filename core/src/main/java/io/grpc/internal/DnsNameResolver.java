@@ -149,6 +149,7 @@ final class DnsNameResolver extends NameResolver {
   /** True if using an executor resource that should be released after use. */
   private final boolean usingExecutorResource;
   private final boolean enableSrv;
+  private final ServiceConfigParser serviceConfigParser;
 
   private boolean resolving;
 
@@ -164,7 +165,7 @@ final class DnsNameResolver extends NameResolver {
       Stopwatch stopwatch,
       boolean isAndroid,
       boolean enableSrv) {
-    Preconditions.checkNotNull(args, "args");
+    checkNotNull(args, "args");
     // TODO: if a DNS server is provided as nsAuthority, use it.
     // https://www.captechconsulting.com/blogs/accessing-the-dusty-corners-of-dns-with-java
     this.executorResource = executorResource;
@@ -180,14 +181,14 @@ final class DnsNameResolver extends NameResolver {
     } else {
       port = nameUri.getPort();
     }
-    this.proxyDetector = Preconditions.checkNotNull(args.getProxyDetector(), "proxyDetector");
+    this.proxyDetector = checkNotNull(args.getProxyDetector(), "proxyDetector");
     this.cacheTtlNanos = getNetworkAddressCacheTtlNanos(isAndroid);
-    this.stopwatch = Preconditions.checkNotNull(stopwatch, "stopwatch");
-    this.syncContext =
-        Preconditions.checkNotNull(args.getSynchronizationContext(), "syncContext");
+    this.stopwatch = checkNotNull(stopwatch, "stopwatch");
+    this.syncContext = checkNotNull(args.getSynchronizationContext(), "syncContext");
     this.executor = args.getOffloadExecutor();
     this.usingExecutorResource = executor == null;
     this.enableSrv = enableSrv;
+    this.serviceConfigParser = checkNotNull(args.getServiceConfigParser(), "serviceConfigParser");
   }
 
   @Override
@@ -201,7 +202,7 @@ final class DnsNameResolver extends NameResolver {
     if (usingExecutorResource) {
       executor = SharedResourceHolder.get(executorResource);
     }
-    this.listener = Preconditions.checkNotNull(listener, "listener");
+    this.listener = checkNotNull(listener, "listener");
     resolve();
   }
 
@@ -215,7 +216,7 @@ final class DnsNameResolver extends NameResolver {
     private final Listener2 savedListener;
 
     Resolve(Listener2 savedListener) {
-      this.savedListener = Preconditions.checkNotNull(savedListener, "savedListener");
+      this.savedListener = checkNotNull(savedListener, "savedListener");
     }
 
     @Override
@@ -236,6 +237,7 @@ final class DnsNameResolver extends NameResolver {
     }
 
     @VisibleForTesting
+    @SuppressWarnings("deprecation") // can migrate after service config error handling is finished
     void resolveInternal() {
       InetSocketAddress destination =
           InetSocketAddress.createUnresolved(host, port);
@@ -303,26 +305,31 @@ final class DnsNameResolver extends NameResolver {
         return;
       }
 
-      Attributes.Builder attrs = Attributes.newBuilder();
+      ResolutionResult.Builder resultBuilder = ResolutionResult.newBuilder().setAddresses(servers);
       if (!resolutionResults.txtRecords.isEmpty()) {
-        ConfigOrError serviceConfig =
+        ConfigOrError rawServiceConfig =
             parseServiceConfig(resolutionResults.txtRecords, random, getLocalHostname());
-        if (serviceConfig != null) {
-          if (serviceConfig.getError() != null) {
-            savedListener.onError(serviceConfig.getError());
+        if (rawServiceConfig != null) {
+          if (rawServiceConfig.getError() != null) {
+            savedListener.onError(rawServiceConfig.getError());
             return;
-          } else {
-            @SuppressWarnings("unchecked")
-            Map<String, ?> config = (Map<String, ?>) serviceConfig.getConfig();
-            attrs.set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, config);
           }
+
+          @SuppressWarnings("unchecked")
+          Map<String, ?> verifiedRawServiceConfig = (Map<String, ?>) rawServiceConfig.getConfig();
+          ConfigOrError parsedServiceConfig =
+              serviceConfigParser.parseServiceConfig(verifiedRawServiceConfig);
+          resultBuilder
+              .setAttributes(
+                  Attributes.newBuilder()
+                      .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, verifiedRawServiceConfig)
+                      .build())
+              .setServiceConfig(parsedServiceConfig);
         }
       } else {
         logger.log(Level.FINE, "No TXT records found for {0}", new Object[]{host});
       }
-      ResolutionResult resolutionResult =
-          ResolutionResult.newBuilder().setAddresses(servers).setAttributes(attrs.build()).build();
-      savedListener.onResult(resolutionResult);
+      savedListener.onResult(resultBuilder.build());
     }
   }
 

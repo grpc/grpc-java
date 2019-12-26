@@ -24,6 +24,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.junit.Assume.assumeTrue;
 import static org.mockito.Mockito.mock;
 
 import com.google.common.util.concurrent.MoreExecutors;
@@ -481,6 +482,19 @@ public class AbstractManagedChannelImplBuilderTest {
 
     builder.disableServiceConfigLookUp();
     assertThat(builder.lookUpServiceConfig).isFalse();
+  }
+
+  @Test
+  public void enableServiceConfigErrorHandling() {
+    String propertyValue = System.getProperty(
+        AbstractManagedChannelImplBuilder.ENABLE_SERVICE_CONFIG_ERROR_HANDLING_PROPERTY);
+    assumeTrue(propertyValue == null);
+
+    Builder builder = new Builder("target");
+    assertThat(builder.enableServiceConfigErrorHandling).isFalse();
+
+    builder.enableServiceConfigErrorHandling();
+    assertThat(builder.enableServiceConfigErrorHandling).isTrue();
   }
 
   static class Builder extends AbstractManagedChannelImplBuilder<Builder> {

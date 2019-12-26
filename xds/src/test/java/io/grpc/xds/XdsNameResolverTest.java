@@ -73,6 +73,8 @@ import org.mockito.junit.MockitoRule;
 
 /** Unit tests for {@link XdsNameResolver}. */
 @RunWith(JUnit4.class)
+// TODO(creamsoup) use parsed service config
+@SuppressWarnings("deprecation")
 public class XdsNameResolverTest {
   private static final String HOST_NAME = "foo.googleapis.com";
   private static final int PORT = 443;
