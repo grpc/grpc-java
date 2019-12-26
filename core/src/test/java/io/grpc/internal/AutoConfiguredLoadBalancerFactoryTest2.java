@@ -81,6 +81,8 @@ import org.mockito.ArgumentCaptor;
  * Unit tests for {@link AutoConfiguredLoadBalancerFactory}.
  */
 @RunWith(JUnit4.class)
+// TODO(creamsoup) remove backward compatible check when fully migrated
+@SuppressWarnings("deprecation")
 public class AutoConfiguredLoadBalancerFactoryTest2 {
   private static final LoadBalancerRegistry defaultRegistry =
       LoadBalancerRegistry.getDefaultRegistry();

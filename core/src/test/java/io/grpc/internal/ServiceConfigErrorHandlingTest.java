@@ -69,6 +69,8 @@ import org.mockito.junit.MockitoRule;
 
 /** Unit tests for ServiceConfig error handling. */
 @RunWith(JUnit4.class)
+// TODO(creamsoup) remove backward compatible check when fully migrated
+@SuppressWarnings("deprecation")
 public class ServiceConfigErrorHandlingTest {
 
   private static final int DEFAULT_PORT = 447;

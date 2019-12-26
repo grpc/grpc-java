@@ -109,6 +109,8 @@ import org.mockito.junit.MockitoRule;
  * Tests for {@link LookasideLb}.
  */
 @RunWith(JUnit4.class)
+// TODO(creamsoup) use parsed service config
+@SuppressWarnings("deprecation")
 public class LookasideLbTest {
 
   private static final String SERVICE_AUTHORITY = "test authority";
