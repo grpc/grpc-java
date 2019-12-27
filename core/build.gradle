@@ -15,7 +15,8 @@ evaluationDependsOn(project(':grpc-api').path)
 dependencies {
     compile project(':grpc-api'),
             libraries.gson,
-            libraries.android_annotations
+            libraries.android_annotations,
+            libraries.errorprone // to avoid using perfmark's dependency
     compile (libraries.perfmark) {
         exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
     }
