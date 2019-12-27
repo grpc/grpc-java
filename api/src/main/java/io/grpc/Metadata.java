@@ -614,6 +614,7 @@ public final class Metadata {
   }
 
   /** Marshaller for metadata values that are serialized to an InputStream. */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6575")
   public interface BinaryStreamMarshaller<T> {
     /**
      * Serializes a metadata value to an {@link InputStream}.
@@ -685,6 +686,7 @@ public final class Metadata {
      * @param name Must contain only the valid key characters as defined in the class comment. Must
      *     end with {@link #BINARY_HEADER_SUFFIX}.
      */
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6575")
     public static <T> Key<T> of(String name, BinaryStreamMarshaller<T> marshaller) {
       return new LazyStreamBinaryKey<>(name, marshaller);
     }
