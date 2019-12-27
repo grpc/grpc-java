@@ -1,0 +1,44 @@
+plugins {
+    id "java"
+    id "maven-publish"
+}
+
+description = 'gRPC: Census'
+
+evaluationDependsOn(project(':grpc-api').path)
+
+dependencies {
+    compile project(':grpc-api'),
+            libraries.gson,
+            libraries.android_annotations,
+            libraries.perfmark
+    compile (libraries.opencensus_api) {
+        // prefer 3.0.2 from libraries instead of 3.0.1
+        exclude group: 'com.google.code.findbugs', module: 'jsr305'
+        // prefer 20.0 from libraries instead of 19.0
+        exclude group: 'com.google.guava', module: 'guava'
+        // we'll always be more up-to-date
+        exclude group: 'io.grpc', module: 'grpc-context'
+    }
+    compile (libraries.opencensus_contrib_grpc_metrics) {
+        // prefer 3.0.2 from libraries instead of 3.0.1
+        exclude group: 'com.google.code.findbugs', module: 'jsr305'
+        // we'll always be more up-to-date
+        exclude group: 'io.grpc', module: 'grpc-context'
+        // prefer 20.0 from libraries instead of 19.0
+        exclude group: 'com.google.guava', module: 'guava'
+    }
+
+    testCompile project(':grpc-context').sourceSets.test.output,
+            project(':grpc-api').sourceSets.test.output,
+            project(':grpc-core').sourceSets.test.output,
+            project(':grpc-testing'),
+            libraries.guava_testlib,
+            libraries.opencensus_impl
+}
+
+javadoc {
+    exclude 'io/grpc/internal/**'
+    // Disabled until kinda stable.
+    exclude 'io/grpc/perfmark/**'
+}
