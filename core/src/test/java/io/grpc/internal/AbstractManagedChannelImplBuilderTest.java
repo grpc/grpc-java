@@ -486,24 +486,26 @@ public class AbstractManagedChannelImplBuilderTest {
   static class Builder extends AbstractManagedChannelImplBuilder<Builder> {
     Builder(String target) {
       super(target);
-      overrideCensusStatsModule(
+      CensusStatsModule censusStats =
           new CensusStatsModule(
               new FakeTagger(),
               new FakeTagContextBinarySerializer(),
               new FakeStatsRecorder(),
               GrpcUtil.STOPWATCH_SUPPLIER,
-              true, true, true, true));
+              true, true, true, true);
+      setCensusStatsInterceptor(censusStats.getClientInterceptor());
     }
 
     Builder(SocketAddress directServerAddress, String authority) {
       super(directServerAddress, authority);
-      overrideCensusStatsModule(
+      CensusStatsModule censusStats =
           new CensusStatsModule(
               new FakeTagger(),
               new FakeTagContextBinarySerializer(),
               new FakeStatsRecorder(),
               GrpcUtil.STOPWATCH_SUPPLIER,
-              true, true, true, true));
+              true, true, true, true);
+      setCensusStatsInterceptor(censusStats.getClientInterceptor());
     }
 
     @Override

@@ -176,7 +176,7 @@ public abstract class AbstractManagedChannelImplBuilder
   private boolean tracingEnabled = true;
 
   @Nullable
-  private CensusStatsModule censusStatsOverride;
+  private ClientInterceptor censusStatsInterceptor;
 
   protected AbstractManagedChannelImplBuilder(String target) {
     this.target = Preconditions.checkNotNull(target, "target");
@@ -368,11 +368,11 @@ public abstract class AbstractManagedChannelImplBuilder
   }
 
   /**
-   * Override the default stats implementation.
+   * Sets a {@link ClientInterceptor} that overrides the default stats interceptor implementation.
    */
   @VisibleForTesting
-  protected final T overrideCensusStatsModule(CensusStatsModule censusStats) {
-    this.censusStatsOverride = censusStats;
+  protected final T setCensusStatsInterceptor(ClientInterceptor statsInterceptor) {
+    this.censusStatsInterceptor = statsInterceptor;
     return thisT();
   }
 
@@ -535,15 +535,16 @@ public abstract class AbstractManagedChannelImplBuilder
     temporarilyDisableRetry = false;
     if (statsEnabled) {
       temporarilyDisableRetry = true;
-      CensusStatsModule censusStats = this.censusStatsOverride;
-      if (censusStats == null) {
-        censusStats = new CensusStatsModule(
+      ClientInterceptor statsInterceptor = this.censusStatsInterceptor;
+      if (statsInterceptor == null) {
+        CensusStatsModule censusStats = new CensusStatsModule(
             GrpcUtil.STOPWATCH_SUPPLIER, true, recordStartedRpcs, recordFinishedRpcs,
             recordRealTimeMetrics);
+        statsInterceptor = censusStats.getClientInterceptor();
       }
       // First interceptor runs last (see ClientInterceptors.intercept()), so that no
       // other interceptor can override the tracer factory we set in CallOptions.
-      effectiveInterceptors.add(0, censusStats.getClientInterceptor());
+      effectiveInterceptors.add(0, statsInterceptor);
     }
     if (tracingEnabled) {
       temporarilyDisableRetry = true;

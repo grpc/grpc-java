@@ -91,13 +91,14 @@ public class AbstractServerImplBuilderTest {
 
   static class Builder extends AbstractServerImplBuilder<Builder> {
     Builder() {
-      overrideCensusStatsModule(
+      CensusStatsModule censusStats =
           new CensusStatsModule(
               new FakeTagger(),
               new FakeTagContextBinarySerializer(),
               new FakeStatsRecorder(),
               GrpcUtil.STOPWATCH_SUPPLIER,
-              true, true, true, true));
+              true, true, true, true);
+      setCensusStreamTracerFactory(censusStats.getServerTracerFactory());
     }
 
     @Override

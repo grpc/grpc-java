@@ -25,7 +25,7 @@ public final class TestingAccessor {
    */
   public static void setStatsImplementation(
       AbstractManagedChannelImplBuilder<?> builder, CensusStatsModule censusStats) {
-    builder.overrideCensusStatsModule(censusStats);
+    builder.setCensusStatsInterceptor(censusStats.getClientInterceptor());
   }
 
   /**
@@ -33,7 +33,7 @@ public final class TestingAccessor {
    */
   public static void setStatsImplementation(
       AbstractServerImplBuilder<?> builder, CensusStatsModule censusStats) {
-    builder.overrideCensusStatsModule(censusStats);
+    builder.setCensusStreamTracerFactory(censusStats.getServerTracerFactory());
   }
 
   private TestingAccessor() {

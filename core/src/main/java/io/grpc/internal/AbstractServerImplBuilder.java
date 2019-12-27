@@ -80,7 +80,7 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
   CompressorRegistry compressorRegistry = DEFAULT_COMPRESSOR_REGISTRY;
   long handshakeTimeoutMillis = DEFAULT_HANDSHAKE_TIMEOUT_MILLIS;
   Deadline.Ticker ticker = Deadline.getSystemTicker();
-  @Nullable private CensusStatsModule censusStatsOverride;
+  @Nullable private ServerStreamTracer.Factory censusStatsStreamTracerFactory;
   private boolean statsEnabled = true;
   private boolean recordStartedRpcs = true;
   private boolean recordFinishedRpcs = true;
@@ -166,11 +166,12 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
   }
 
   /**
-   * Override the default stats implementation.
+   * Sets a {@link ServerStreamTracer.Factory} that overrides the default stats interceptor
+   * implementation.
    */
-  @VisibleForTesting
-  protected final T overrideCensusStatsModule(@Nullable CensusStatsModule censusStats) {
-    this.censusStatsOverride = censusStats;
+  protected final T setCensusStreamTracerFactory(
+      @Nullable ServerStreamTracer.Factory censusStatsStreamTracerFactory) {
+    this.censusStatsStreamTracerFactory = censusStatsStreamTracerFactory;
     return thisT();
   }
 
@@ -241,13 +242,14 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
   final List<? extends ServerStreamTracer.Factory> getTracerFactories() {
     ArrayList<ServerStreamTracer.Factory> tracerFactories = new ArrayList<>();
     if (statsEnabled) {
-      CensusStatsModule censusStats = censusStatsOverride;
-      if (censusStats == null) {
-        censusStats = new CensusStatsModule(
+      ServerStreamTracer.Factory censusStatsTracerFactory = this.censusStatsStreamTracerFactory;
+      if (censusStatsTracerFactory == null) {
+        CensusStatsModule censusStats = new CensusStatsModule(
             GrpcUtil.STOPWATCH_SUPPLIER, true, recordStartedRpcs, recordFinishedRpcs,
             recordRealTimeMetrics);
+        censusStatsTracerFactory = censusStats.getServerTracerFactory();
       }
-      tracerFactories.add(censusStats.getServerTracerFactory());
+      tracerFactories.add(censusStatsTracerFactory);
     }
     if (tracingEnabled) {
       CensusTracingModule censusTracing =
