@@ -68,6 +68,7 @@ import javax.annotation.Nullable;
  * starts earlier than the ServerCall.  Therefore, only one tracer is created per stream/call and
  * it's the tracer that reports the summary to Census.
  */
+@VisibleForTesting
 public final class CensusStatsModule {
   private static final Logger logger = Logger.getLogger(CensusStatsModule.class.getName());
   private static final double NANOS_PER_MILLI = TimeUnit.MILLISECONDS.toNanos(1);
@@ -662,7 +663,7 @@ public final class CensusStatsModule {
   }
 
   @VisibleForTesting
-  final class ServerTracerFactory extends ServerStreamTracer.Factory {
+  public final class ServerTracerFactory extends ServerStreamTracer.Factory {
     @Override
     public ServerStreamTracer newServerStreamTracer(String fullMethodName, Metadata headers) {
       TagContext parentCtx = headers.get(statsHeader);
@@ -680,7 +681,7 @@ public final class CensusStatsModule {
   }
 
   @VisibleForTesting
-  final class StatsClientInterceptor implements ClientInterceptor {
+  public final class StatsClientInterceptor implements ClientInterceptor {
     @Override
     public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
         MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
