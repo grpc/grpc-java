@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Supplier;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.BinaryLog;
 import io.grpc.BindableService;
@@ -38,6 +39,8 @@ import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerStreamTracer;
 import io.grpc.ServerTransportFilter;
 import io.opencensus.trace.Tracing;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -244,12 +247,32 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
     if (statsEnabled) {
       ServerStreamTracer.Factory censusStatsTracerFactory = this.censusStatsStreamTracerFactory;
       if (censusStatsTracerFactory == null) {
-        CensusStatsModule censusStats = new CensusStatsModule(
-            GrpcUtil.STOPWATCH_SUPPLIER, true, recordStartedRpcs, recordFinishedRpcs,
-            recordRealTimeMetrics);
-        censusStatsTracerFactory = censusStats.getServerTracerFactory();
+        try {
+          Class<?> censusStatsAccessor = Class.forName("io.grpc.census.CensusStatsAccessor");
+          Method getServerStreamTracerFactoryMethod =
+              censusStatsAccessor.getDeclaredMethod(
+                  "getServerStreamTracerFactory",
+                  Supplier.class,
+                  boolean.class,
+                  boolean.class,
+                  boolean.class, boolean.class);
+          censusStatsTracerFactory =
+              (ServerStreamTracer.Factory) getServerStreamTracerFactoryMethod
+                  .invoke(
+                      null,
+                      GrpcUtil.STOPWATCH_SUPPLIER,
+                      true,
+                      recordStartedRpcs,
+                      recordFinishedRpcs,
+                      recordRealTimeMetrics);
+        } catch (ClassNotFoundException | NoSuchMethodException | IllegalAccessException
+            | InvocationTargetException e) {
+          // Do nothing.
+        }
       }
-      tracerFactories.add(censusStatsTracerFactory);
+      if (censusStatsTracerFactory != null) {
+        tracerFactories.add(censusStatsTracerFactory);
+      }
     }
     if (tracingEnabled) {
       CensusTracingModule censusTracing =

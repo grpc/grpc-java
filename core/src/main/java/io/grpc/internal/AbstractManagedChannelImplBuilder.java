@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Supplier;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.Attributes;
 import io.grpc.BinaryLog;
@@ -34,6 +35,8 @@ import io.grpc.NameResolver;
 import io.grpc.NameResolverRegistry;
 import io.grpc.ProxyDetector;
 import io.opencensus.trace.Tracing;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -537,14 +540,34 @@ public abstract class AbstractManagedChannelImplBuilder
       temporarilyDisableRetry = true;
       ClientInterceptor statsInterceptor = this.censusStatsInterceptor;
       if (statsInterceptor == null) {
-        CensusStatsModule censusStats = new CensusStatsModule(
-            GrpcUtil.STOPWATCH_SUPPLIER, true, recordStartedRpcs, recordFinishedRpcs,
-            recordRealTimeMetrics);
-        statsInterceptor = censusStats.getClientInterceptor();
+        try {
+          Class<?> censusStatsAccessor = Class.forName("io.grpc.census.CensusStatsAccessor");
+          Method getClientInterceptroMethod =
+              censusStatsAccessor.getDeclaredMethod(
+                  "getClientInterceptor",
+                  Supplier.class,
+                  boolean.class,
+                  boolean.class,
+                  boolean.class, boolean.class);
+          statsInterceptor =
+              (ClientInterceptor) getClientInterceptroMethod
+                  .invoke(
+                      null,
+                      GrpcUtil.STOPWATCH_SUPPLIER,
+                      true,
+                      recordStartedRpcs,
+                      recordFinishedRpcs,
+                      recordRealTimeMetrics);
+        } catch (ClassNotFoundException | NoSuchMethodException | IllegalAccessException
+            | InvocationTargetException e) {
+          // Do nothing.
+        }
       }
-      // First interceptor runs last (see ClientInterceptors.intercept()), so that no
-      // other interceptor can override the tracer factory we set in CallOptions.
-      effectiveInterceptors.add(0, statsInterceptor);
+      if (statsInterceptor != null) {
+        // First interceptor runs last (see ClientInterceptors.intercept()), so that no
+        // other interceptor can override the tracer factory we set in CallOptions.
+        effectiveInterceptors.add(0, statsInterceptor);
+      }
     }
     if (tracingEnabled) {
       temporarilyDisableRetry = true;
