@@ -31,5 +31,6 @@ java_library(
     deps = [
         "//api",
         "//core:internal",
+        "//census",
     ],
 )
