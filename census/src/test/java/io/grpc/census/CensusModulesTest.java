@@ -57,7 +57,7 @@ import io.grpc.ServerCallHandler;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
-import io.grpc.internal.DeprecatedCensusConstants;
+import io.grpc.census.internal.DeprecatedCensusConstants;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.ServerCallInfoImpl;
 import io.grpc.internal.testing.StatsTestUtils;
