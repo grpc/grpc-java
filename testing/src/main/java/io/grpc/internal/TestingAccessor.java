@@ -16,6 +16,9 @@
 
 package io.grpc.internal;
 
+import io.grpc.census.CensusStatsAccessor;
+import io.grpc.census.CensusStatsModule;
+
 /**
  * Test helper that allows accessing package-private stuff.
  */
@@ -25,7 +28,7 @@ public final class TestingAccessor {
    */
   public static void setStatsImplementation(
       AbstractManagedChannelImplBuilder<?> builder, CensusStatsModule censusStats) {
-    builder.setCensusStatsInterceptor(censusStats.getClientInterceptor());
+    builder.setCensusStatsInterceptor(CensusStatsAccessor.getClientInterceptor(censusStats));
   }
 
   /**
@@ -33,7 +36,8 @@ public final class TestingAccessor {
    */
   public static void setStatsImplementation(
       AbstractServerImplBuilder<?> builder, CensusStatsModule censusStats) {
-    builder.setCensusStreamTracerFactory(censusStats.getServerTracerFactory());
+    builder.setCensusStreamTracerFactory(
+        CensusStatsAccessor.getServerStreamTracerFactory(censusStats));
   }
 
   private TestingAccessor() {

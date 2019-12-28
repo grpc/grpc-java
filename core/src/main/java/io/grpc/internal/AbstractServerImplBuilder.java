@@ -38,7 +38,6 @@ import io.grpc.ServerMethodDefinition;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerStreamTracer;
 import io.grpc.ServerTransportFilter;
-import io.opencensus.trace.Tracing;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -275,10 +274,20 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
       }
     }
     if (tracingEnabled) {
-      CensusTracingModule censusTracing =
-          new CensusTracingModule(Tracing.getTracer(),
-              Tracing.getPropagationComponent().getBinaryFormat());
-      tracerFactories.add(censusTracing.getServerTracerFactory());
+      ServerStreamTracer.Factory tracingStreamTracerFactory = null;
+      try {
+        Class<?> censusTracingAccessor = Class.forName("io.grpc.census.CensusTracingAccessor");
+        Method getServerStreamTracerFactoryMethod =
+            censusTracingAccessor.getDeclaredMethod("getServerStreamTracerFactory");
+        tracingStreamTracerFactory =
+            (ServerStreamTracer.Factory) getServerStreamTracerFactoryMethod.invoke(null);
+      } catch (ClassNotFoundException | NoSuchMethodException | IllegalAccessException
+          | InvocationTargetException e) {
+        // Do nothing.
+      }
+      if (tracingStreamTracerFactory != null) {
+        tracerFactories.add(tracingStreamTracerFactory);
+      }
     }
     tracerFactories.addAll(streamTracerFactories);
     tracerFactories.trimToSize();

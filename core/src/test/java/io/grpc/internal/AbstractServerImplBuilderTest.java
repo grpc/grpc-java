@@ -21,6 +21,9 @@ import static org.junit.Assert.assertEquals;
 
 import io.grpc.Metadata;
 import io.grpc.ServerStreamTracer;
+import io.grpc.census.CensusStatsAccessor;
+import io.grpc.census.CensusStatsModule;
+import io.grpc.census.CensusTracingModule;
 import io.grpc.internal.testing.StatsTestUtils.FakeStatsRecorder;
 import io.grpc.internal.testing.StatsTestUtils.FakeTagContextBinarySerializer;
 import io.grpc.internal.testing.StatsTestUtils.FakeTagger;
@@ -98,7 +101,7 @@ public class AbstractServerImplBuilderTest {
               new FakeStatsRecorder(),
               GrpcUtil.STOPWATCH_SUPPLIER,
               true, true, true, true);
-      setCensusStreamTracerFactory(censusStats.getServerTracerFactory());
+      setCensusStreamTracerFactory(CensusStatsAccessor.getServerStreamTracerFactory(censusStats));
     }
 
     @Override

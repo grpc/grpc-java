@@ -34,7 +34,6 @@ import io.grpc.ManagedChannelBuilder;
 import io.grpc.NameResolver;
 import io.grpc.NameResolverRegistry;
 import io.grpc.ProxyDetector;
-import io.opencensus.trace.Tracing;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.SocketAddress;
@@ -571,10 +570,19 @@ public abstract class AbstractManagedChannelImplBuilder
     }
     if (tracingEnabled) {
       temporarilyDisableRetry = true;
-      CensusTracingModule censusTracing =
-          new CensusTracingModule(Tracing.getTracer(),
-              Tracing.getPropagationComponent().getBinaryFormat());
-      effectiveInterceptors.add(0, censusTracing.getClientInterceptor());
+      ClientInterceptor tracingInterceptor = null;
+      try {
+        Class<?> censusTracingAccessor = Class.forName("io.grpc.census.CensusTracingAccessor");
+        Method getClientInterceptroMethod =
+            censusTracingAccessor.getDeclaredMethod("getClientInterceptor");
+        tracingInterceptor = (ClientInterceptor) getClientInterceptroMethod.invoke(null);
+      } catch (ClassNotFoundException | NoSuchMethodException | IllegalAccessException
+          | InvocationTargetException e) {
+        // Do nothing.
+      }
+      if (tracingInterceptor != null) {
+        effectiveInterceptors.add(0, tracingInterceptor);
+      }
     }
     return effectiveInterceptors;
   }

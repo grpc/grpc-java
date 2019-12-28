@@ -35,6 +35,9 @@ import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
 import io.grpc.MethodDescriptor;
 import io.grpc.NameResolver;
+import io.grpc.census.CensusStatsAccessor;
+import io.grpc.census.CensusStatsModule;
+import io.grpc.census.CensusTracingModule;
 import io.grpc.internal.testing.StatsTestUtils.FakeStatsRecorder;
 import io.grpc.internal.testing.StatsTestUtils.FakeTagContextBinarySerializer;
 import io.grpc.internal.testing.StatsTestUtils.FakeTagger;
@@ -493,7 +496,7 @@ public class AbstractManagedChannelImplBuilderTest {
               new FakeStatsRecorder(),
               GrpcUtil.STOPWATCH_SUPPLIER,
               true, true, true, true);
-      setCensusStatsInterceptor(censusStats.getClientInterceptor());
+      setCensusStatsInterceptor(CensusStatsAccessor.getClientInterceptor(censusStats));
     }
 
     Builder(SocketAddress directServerAddress, String authority) {
@@ -505,7 +508,7 @@ public class AbstractManagedChannelImplBuilderTest {
               new FakeStatsRecorder(),
               GrpcUtil.STOPWATCH_SUPPLIER,
               true, true, true, true);
-      setCensusStatsInterceptor(censusStats.getClientInterceptor());
+      setCensusStatsInterceptor(CensusStatsAccessor.getClientInterceptor(censusStats));
     }
 
     @Override

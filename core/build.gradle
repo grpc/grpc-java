@@ -37,6 +37,8 @@ dependencies {
             libraries.guava_testlib,
             libraries.opencensus_impl
 
+    testRuntimeOnly project(':grpc-census')
+
     jmh project(':grpc-testing')
 
     signature "org.codehaus.mojo.signature:java17:1.0@signature"
