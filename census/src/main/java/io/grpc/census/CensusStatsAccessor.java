@@ -47,6 +47,13 @@ public class CensusStatsAccessor {
             recordStartedRpcs,
             recordFinishedRpcs,
             recordRealTimeMetrics);
+    return getClientInterceptor(censusStats);
+  }
+
+  /**
+   * Returns a {@link ClientInterceptor} with custom stats implementation.
+   */
+  public static ClientInterceptor getClientInterceptor(CensusStatsModule censusStats) {
     return censusStats.getClientInterceptor();
   }
 
@@ -66,6 +73,14 @@ public class CensusStatsAccessor {
             recordStartedRpcs,
             recordFinishedRpcs,
             recordRealTimeMetrics);
+    return getServerStreamTracerFactory(censusStats);
+  }
+
+  /**
+   * Returns a {@link ServerStreamTracer.Factory} with custom stats implementation.
+   */
+  public static ServerStreamTracer.Factory getServerStreamTracerFactory(
+      CensusStatsModule censusStats) {
     return censusStats.getServerTracerFactory();
   }
 }
