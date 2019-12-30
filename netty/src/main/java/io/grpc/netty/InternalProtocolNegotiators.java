@@ -159,7 +159,7 @@ public final class InternalProtocolNegotiators {
 
   public static ChannelHandler clientTlsHandler(
       ChannelHandler next, SslContext sslContext, String authority) {
-    return new ClientTlsHandler(next, sslContext, authority);
+    return new ClientTlsHandler(next, sslContext, authority, null);
   }
 
   public static class ProtocolNegotiationHandler

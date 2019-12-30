@@ -657,4 +657,11 @@ public abstract class AbstractManagedChannelImplBuilder
     T thisT = (T) this;
     return thisT;
   }
+
+  /**
+   * Returns the internal offload executor pool for offloading tasks.
+   */
+  protected ObjectPool<? extends Executor> getOffloadExecutorPool() {
+    return this.offloadExecutorPool;
+  }
 }
