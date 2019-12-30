@@ -173,9 +173,9 @@ def com_google_android_annotations():
 def com_google_api_grpc_google_common_protos():
     jvm_maven_import_external(
         name = "com_google_api_grpc_proto_google_common_protos",
-        artifact = "com.google.api.grpc:proto-google-common-protos:1.12.0",
+        artifact = "com.google.api.grpc:proto-google-common-protos:1.17.0",
         server_urls = ["https://repo.maven.apache.org/maven2/"],
-        artifact_sha256 = "bd60cd7a423b00fb824c27bdd0293aaf4781be1daba6ed256311103fb4b84108",
+        artifact_sha256 = "ad25472c73ee470606fb500b376ae5a97973d5406c2f5c3b7d07fb25b4648b65",
         licenses = ["notice"],  # Apache 2.0
     )
 

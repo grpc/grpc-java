@@ -119,7 +119,7 @@ subprojects {
             hpack: 'com.twitter:hpack:0.10.1',
             javax_annotation: 'javax.annotation:javax.annotation-api:1.2',
             jsr305: 'com.google.code.findbugs:jsr305:3.0.2',
-            google_api_protos: 'com.google.api.grpc:proto-google-common-protos:1.12.0',
+            google_api_protos: 'com.google.api.grpc:proto-google-common-protos:1.17.0',
             google_auth_credentials: "com.google.auth:google-auth-library-credentials:${googleauthVersion}",
             google_auth_oauth2_http: "com.google.auth:google-auth-library-oauth2-http:${googleauthVersion}",
             okhttp: 'com.squareup.okhttp:okhttp:2.5.0',

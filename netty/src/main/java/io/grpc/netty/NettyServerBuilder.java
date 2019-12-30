@@ -533,8 +533,9 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
 
     ProtocolNegotiator negotiator = protocolNegotiator;
     if (negotiator == null) {
-      negotiator = sslContext != null ? ProtocolNegotiators.serverTls(sslContext) :
-          ProtocolNegotiators.serverPlaintext();
+      negotiator = sslContext != null
+          ? ProtocolNegotiators.serverTls(sslContext, this.getExecutorPool())
+          : ProtocolNegotiators.serverPlaintext();
     }
 
     List<NettyServer> transportServers = new ArrayList<>(listenAddresses.size());

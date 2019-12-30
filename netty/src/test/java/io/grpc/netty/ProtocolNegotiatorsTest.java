@@ -246,7 +246,7 @@ public class ProtocolNegotiatorsTest {
 
   @Test
   public void tlsHandler_handlerAddedAddsSslHandler() throws Exception {
-    ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext);
+    ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext, null);
 
     pipeline.addLast(handler);
 
@@ -255,7 +255,7 @@ public class ProtocolNegotiatorsTest {
 
   @Test
   public void tlsHandler_userEventTriggeredNonSslEvent() throws Exception {
-    ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext);
+    ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext, null);
     pipeline.addLast(handler);
     channelHandlerCtx = pipeline.context(handler);
     Object nonSslEvent = new Object();
@@ -276,7 +276,7 @@ public class ProtocolNegotiatorsTest {
       }
     };
 
-    ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext);
+    ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext, null);
     pipeline.addLast(handler);
 
     final AtomicReference<Throwable> error = new AtomicReference<>();
@@ -303,7 +303,7 @@ public class ProtocolNegotiatorsTest {
 
   @Test
   public void tlsHandler_userEventTriggeredSslEvent_handshakeFailure() throws Exception {
-    ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext);
+    ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext, null);
     pipeline.addLast(handler);
     channelHandlerCtx = pipeline.context(handler);
     Object sslEvent = new SslHandshakeCompletionEvent(new RuntimeException("bad"));
@@ -335,7 +335,7 @@ public class ProtocolNegotiatorsTest {
       }
     };
 
-    ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext);
+    ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext, null);
     pipeline.addLast(handler);
 
     pipeline.replace(SslHandler.class, null, goodSslHandler);
@@ -358,7 +358,7 @@ public class ProtocolNegotiatorsTest {
       }
     };
 
-    ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext);
+    ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext, null);
     pipeline.addLast(handler);
 
     pipeline.replace(SslHandler.class, null, goodSslHandler);
@@ -374,7 +374,7 @@ public class ProtocolNegotiatorsTest {
 
   @Test
   public void engineLog() {
-    ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext);
+    ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext, null);
     pipeline.addLast(handler);
     channelHandlerCtx = pipeline.context(handler);
 
@@ -618,8 +618,7 @@ public class ProtocolNegotiatorsTest {
     SslContext serverSslContext =
         GrpcSslContexts.configure(SslContextBuilder.forServer(cert.key(), cert.cert())).build();
     FakeGrpcHttp2ConnectionHandler gh = FakeGrpcHttp2ConnectionHandler.newHandler();
-
-    ClientTlsProtocolNegotiator pn = new ClientTlsProtocolNegotiator(clientSslContext);
+    ClientTlsProtocolNegotiator pn = new ClientTlsProtocolNegotiator(clientSslContext, null);
     WriteBufferingAndExceptionHandler clientWbaeh =
         new WriteBufferingAndExceptionHandler(pn.newHandler(gh));
 
@@ -656,6 +655,7 @@ public class ProtocolNegotiatorsTest {
     }
     c.close();
     s.close();
+    pn.close();
 
     assertThat(gh.securityInfo).isNotNull();
     assertThat(gh.securityInfo.tls).isNotNull();
