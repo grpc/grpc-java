@@ -362,7 +362,7 @@ public final class Http2 implements Variant {
         throws IOException {
       if (length != 4) throw ioException("TYPE_WINDOW_UPDATE length !=4: %s", length);
       long increment = (source.readInt() & 0x7fffffffL);
-      if (increment == 0) throw ioException("windowSizeIncrement was 0", increment);
+      if (increment == 0) throw ioException("windowSizeIncrement was 0");
       handler.windowUpdate(streamId, increment);
     }
 
