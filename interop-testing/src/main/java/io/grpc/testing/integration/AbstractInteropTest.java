@@ -291,6 +291,8 @@ public abstract class AbstractInteropTest {
           return tracer;
         }
       };
+
+  @SuppressWarnings("UnnecessaryAnonymousClass") // grpc-java targets Java 7 (no method references)
   private final ClientInterceptor tracerSetupInterceptor = new ClientInterceptor() {
         @Override
         public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
