@@ -40,6 +40,7 @@ class WriteQueue {
   /**
    * {@link Runnable} used to schedule work onto the tail of the event loop.
    */
+  @SuppressWarnings("UnnecessaryAnonymousClass") // grpc-java targets Java 7 (no method references)
   private final Runnable later = new Runnable() {
     @Override
     public void run() {

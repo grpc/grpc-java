@@ -36,6 +36,8 @@ final class Http2ControlFrameLimitEncoder extends DecoratingHttp2ConnectionEncod
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(Http2ControlFrameLimitEncoder.class);
 
     private final int maxOutstandingControlFrames;
+
+    @SuppressWarnings("UnnecessaryAnonymousClass") // grpc-java targets Java 7 (no method references)
     private final ChannelFutureListener outstandingControlFramesListener = new ChannelFutureListener() {
         @Override
         public void operationComplete(ChannelFuture future) {
