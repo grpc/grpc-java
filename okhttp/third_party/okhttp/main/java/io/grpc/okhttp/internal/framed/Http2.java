@@ -19,6 +19,7 @@
 
 package io.grpc.okhttp.internal.framed;
 
+import com.google.errorprone.annotations.FormatMethod;
 import io.grpc.okhttp.internal.Protocol;
 import java.io.IOException;
 import java.util.List;
@@ -586,10 +587,12 @@ public final class Http2 implements Variant {
     }
   }
 
+  @FormatMethod
   private static IllegalArgumentException illegalArgument(String message, Object... args) {
     throw new IllegalArgumentException(format(message, args));
   }
 
+  @FormatMethod
   private static IOException ioException(String message, Object... args) throws IOException {
     throw new IOException(format(message, args));
   }
