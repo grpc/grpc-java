@@ -395,7 +395,6 @@ final class BinlogHelper {
   public ClientInterceptor getClientInterceptor(final long callId) {
     return new ClientInterceptor() {
       boolean trailersOnlyResponse = true;
-
       @Override
       public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
           final MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
@@ -409,10 +408,8 @@ final class BinlogHelper {
         return new SimpleForwardingClientCall<ReqT, RespT>(next.newCall(method, callOptions)) {
           @Override
           public void start(final ClientCall.Listener<RespT> responseListener, Metadata headers) {
-            final Duration timeout =
-                deadline == null
-                    ? null
-                    : Durations.fromNanos(deadline.timeRemaining(TimeUnit.NANOSECONDS));
+            final Duration timeout = deadline == null ? null
+                : Durations.fromNanos(deadline.timeRemaining(TimeUnit.NANOSECONDS));
             writer.logClientHeader(
                 seq.getAndIncrement(),
                 methodName,
@@ -450,8 +447,8 @@ final class BinlogHelper {
 
                   @Override
                   public void onClose(Status status, Metadata trailers) {
-                    SocketAddress peer =
-                        trailersOnlyResponse ? getPeerSocket(getAttributes()) : null;
+                    SocketAddress peer = trailersOnlyResponse
+                        ? getPeerSocket(getAttributes()) : null;
                     writer.logTrailer(
                         seq.getAndIncrement(),
                         status,
@@ -479,13 +476,19 @@ final class BinlogHelper {
 
           @Override
           public void halfClose() {
-            writer.logHalfClose(seq.getAndIncrement(), GrpcLogEntry.Logger.LOGGER_CLIENT, callId);
+            writer.logHalfClose(
+                seq.getAndIncrement(),
+                GrpcLogEntry.Logger.LOGGER_CLIENT,
+                callId);
             super.halfClose();
           }
 
           @Override
           public void cancel(String message, Throwable cause) {
-            writer.logCancel(seq.getAndIncrement(), GrpcLogEntry.Logger.LOGGER_CLIENT, callId);
+            writer.logCancel(
+                seq.getAndIncrement(),
+                GrpcLogEntry.Logger.LOGGER_CLIENT,
+                callId);
             super.cancel(message, cause);
           }
         };
@@ -505,10 +508,8 @@ final class BinlogHelper {
         String methodName = call.getMethodDescriptor().getFullMethodName();
         String authority = call.getAuthority();
         Deadline deadline = Context.current().getDeadline();
-        final Duration timeout =
-            deadline == null
-                ? null
-                : Durations.fromNanos(deadline.timeRemaining(TimeUnit.NANOSECONDS));
+        final Duration timeout = deadline == null ? null
+            : Durations.fromNanos(deadline.timeRemaining(TimeUnit.NANOSECONDS));
 
         writer.logClientHeader(
             seq.getAndIncrement(),
@@ -519,43 +520,42 @@ final class BinlogHelper {
             GrpcLogEntry.Logger.LOGGER_SERVER,
             callId,
             peer);
-        ServerCall<ReqT, RespT> wCall =
-            new SimpleForwardingServerCall<ReqT, RespT>(call) {
-              @Override
-              public void sendMessage(RespT message) {
-                writer.logRpcMessage(
-                    seq.getAndIncrement(),
-                    EventType.EVENT_TYPE_SERVER_MESSAGE,
-                    call.getMethodDescriptor().getResponseMarshaller(),
-                    message,
-                    GrpcLogEntry.Logger.LOGGER_SERVER,
-                    callId);
-                super.sendMessage(message);
-              }
+        ServerCall<ReqT, RespT> wCall = new SimpleForwardingServerCall<ReqT, RespT>(call) {
+          @Override
+          public void sendMessage(RespT message) {
+            writer.logRpcMessage(
+                seq.getAndIncrement(),
+                EventType.EVENT_TYPE_SERVER_MESSAGE,
+                call.getMethodDescriptor().getResponseMarshaller(),
+                message,
+                GrpcLogEntry.Logger.LOGGER_SERVER,
+                callId);
+            super.sendMessage(message);
+          }
 
-              @Override
-              public void sendHeaders(Metadata headers) {
-                writer.logServerHeader(
-                    seq.getAndIncrement(),
-                    headers,
-                    GrpcLogEntry.Logger.LOGGER_SERVER,
-                    callId,
-                    /*peerAddress=*/ null);
-                super.sendHeaders(headers);
-              }
+          @Override
+          public void sendHeaders(Metadata headers) {
+            writer.logServerHeader(
+                seq.getAndIncrement(),
+                headers,
+                GrpcLogEntry.Logger.LOGGER_SERVER,
+                callId,
+                /*peerAddress=*/ null);
+            super.sendHeaders(headers);
+          }
 
-              @Override
-              public void close(Status status, Metadata trailers) {
-                writer.logTrailer(
-                    seq.getAndIncrement(),
-                    status,
-                    trailers,
-                    GrpcLogEntry.Logger.LOGGER_SERVER,
-                    callId,
-                    /*peerAddress=*/ null);
-                super.close(status, trailers);
-              }
-            };
+          @Override
+          public void close(Status status, Metadata trailers) {
+            writer.logTrailer(
+                seq.getAndIncrement(),
+                status,
+                trailers,
+                GrpcLogEntry.Logger.LOGGER_SERVER,
+                callId,
+                /*peerAddress=*/ null);
+            super.close(status, trailers);
+          }
+        };
 
         return new SimpleForwardingServerCallListener<ReqT>(next.startCall(wCall, headers)) {
           @Override
@@ -572,13 +572,19 @@ final class BinlogHelper {
 
           @Override
           public void onHalfClose() {
-            writer.logHalfClose(seq.getAndIncrement(), GrpcLogEntry.Logger.LOGGER_SERVER, callId);
+            writer.logHalfClose(
+                seq.getAndIncrement(),
+                GrpcLogEntry.Logger.LOGGER_SERVER,
+                callId);
             super.onHalfClose();
           }
 
           @Override
           public void onCancel() {
-            writer.logCancel(seq.getAndIncrement(), GrpcLogEntry.Logger.LOGGER_SERVER, callId);
+            writer.logCancel(
+                seq.getAndIncrement(),
+                GrpcLogEntry.Logger.LOGGER_SERVER,
+                callId);
             super.onCancel();
           }
         };
