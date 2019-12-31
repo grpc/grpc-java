@@ -279,6 +279,10 @@ subprojects {
             }
         }
 
+        compileJava {
+            // This project targets Java 7 (no method references)
+            options.errorprone.check("UnnecessaryAnonymousClass", CheckSeverity.OFF)
+        }
         compileTestJava {
             // LinkedList doesn't hurt much in tests and has lots of usages
             options.errorprone.check("JdkObsolete", CheckSeverity.OFF)

@@ -122,8 +122,6 @@ class ProxyDetectorImpl implements ProxyDetector {
   // $ sudo tail -f /var/log/squid/access.log
 
   private static final Logger log = Logger.getLogger(ProxyDetectorImpl.class.getName());
-
-  @SuppressWarnings("UnnecessaryAnonymousClass") // grpc-java targets Java 7 (no method references)
   private static final AuthenticationProvider DEFAULT_AUTHENTICATOR = new AuthenticationProvider() {
     @Override
     public PasswordAuthentication requestPasswordAuthentication(
@@ -142,8 +140,6 @@ class ProxyDetectorImpl implements ProxyDetector {
           host, addr, port, protocol, prompt, scheme, url, Authenticator.RequestorType.PROXY);
     }
   };
-
-  @SuppressWarnings("UnnecessaryAnonymousClass") // grpc-java targets Java 7 (no method references)
   private static final Supplier<ProxySelector> DEFAULT_PROXY_SELECTOR =
       new Supplier<ProxySelector>() {
         @Override

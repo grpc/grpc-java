@@ -28,7 +28,6 @@ import javax.annotation.CheckForNull;
  * Monitors connection idle time; shutdowns the connection if the max connection idle is reached.
  */
 abstract class MaxConnectionIdleManager {
-  @SuppressWarnings("UnnecessaryAnonymousClass") // grpc-java targets Java 7 (no method references)
   private static final Ticker systemTicker = new Ticker() {
     @Override
     public long nanoTime() {
