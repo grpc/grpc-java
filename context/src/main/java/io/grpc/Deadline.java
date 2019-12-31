@@ -169,7 +169,6 @@ public final class Deadline implements Comparable<Deadline> {
    * {@link TimeUnit#convert}. If there is no time remaining, the returned duration is how
    * long ago the deadline expired.
    */
-  @SuppressWarnings("PreferJavaTimeOverload") // Duration class not available in Java 7
   public long timeRemaining(TimeUnit unit) {
     final long nowNanos = ticker.nanoTime();
     if (!expired && deadlineNanos - nowNanos <= 0) {
