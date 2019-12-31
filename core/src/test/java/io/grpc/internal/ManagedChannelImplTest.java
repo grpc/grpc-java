@@ -603,7 +603,7 @@ public class ManagedChannelImplTest {
   }
 
   private void subtestCallsAndShutdown(boolean shutdownNow, boolean shutdownNowAfterShutdown) {
-    FakeNameResolverFactory nameResolverFactory =
+    ManagedChannelImplTest.FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri).build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
     createChannel();
@@ -739,7 +739,7 @@ public class ManagedChannelImplTest {
 
   @Test
   public void noMoreCallbackAfterLoadBalancerShutdown() {
-    FakeNameResolverFactory nameResolverFactory =
+    ManagedChannelImplTest.FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri)
             .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
             .build();
@@ -884,7 +884,7 @@ public class ManagedChannelImplTest {
   @Test
   public void nameResolutionFailed() {
     Status error = Status.UNAVAILABLE.withCause(new Throwable("fake name resolution error"));
-    FakeNameResolverFactory nameResolverFactory =
+    ManagedChannelImplTest.FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri)
             .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
             .setError(error)
@@ -892,7 +892,8 @@ public class ManagedChannelImplTest {
     channelBuilder.nameResolverFactory(nameResolverFactory);
     // Name resolution is started as soon as channel is created.
     createChannel();
-    FakeNameResolverFactory.FakeNameResolver resolver = nameResolverFactory.resolvers.get(0);
+    ManagedChannelImplTest.FakeNameResolverFactory.FakeNameResolver resolver =
+        nameResolverFactory.resolvers.get(0);
     verify(mockLoadBalancer).handleNameResolutionError(same(error));
     assertEquals(1, timer.numPendingTasks(NAME_RESOLVER_REFRESH_TASK_FILTER));
 
@@ -931,8 +932,10 @@ public class ManagedChannelImplTest {
   public void nameResolutionFailed_delayedTransportShutdownCancelsBackoff() {
     Status error = Status.UNAVAILABLE.withCause(new Throwable("fake name resolution error"));
 
-    FakeNameResolverFactory nameResolverFactory =
-        new FakeNameResolverFactory.Builder(expectedUri).setError(error).build();
+    ManagedChannelImplTest.FakeNameResolverFactory nameResolverFactory =
+        new ManagedChannelImplTest.FakeNameResolverFactory.Builder(expectedUri)
+            .setError(error)
+            .build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
     // Name resolution is started as soon as channel is created.
     createChannel();
@@ -968,8 +971,8 @@ public class ManagedChannelImplTest {
     String errorDescription = "NameResolver returned no usable address";
 
     // Pass a FakeNameResolverFactory with an empty list and LB config
-    FakeNameResolverFactory nameResolverFactory =
-        new FakeNameResolverFactory.Builder(expectedUri).build();
+    ManagedChannelImplTest.FakeNameResolverFactory nameResolverFactory =
+        new ManagedChannelImplTest.FakeNameResolverFactory.Builder(expectedUri).build();
     Map<String, Object> serviceConfig =
         parseConfig("{\"loadBalancingConfig\": [ {\"mock_lb\": { \"setting1\": \"high\" } } ] }");
     Attributes serviceConfigAttrs =
@@ -996,8 +999,8 @@ public class ManagedChannelImplTest {
     when(mockLoadBalancer.canHandleEmptyAddressListFromNameResolution()).thenReturn(true);
 
     // Pass a FakeNameResolverFactory with an empty list and LB config
-    FakeNameResolverFactory nameResolverFactory =
-        new FakeNameResolverFactory.Builder(expectedUri).build();
+    ManagedChannelImplTest.FakeNameResolverFactory nameResolverFactory =
+        new ManagedChannelImplTest.FakeNameResolverFactory.Builder(expectedUri).build();
     Map<String, Object> serviceConfig =
         parseConfig("{\"loadBalancingConfig\": [ {\"mock_lb\": { \"setting1\": \"high\" } } ] }");
     Attributes serviceConfigAttrs =
@@ -1028,8 +1031,8 @@ public class ManagedChannelImplTest {
   public void loadBalancerThrowsInHandleResolvedAddresses() {
     RuntimeException ex = new RuntimeException("simulated");
     // Delay the success of name resolution until allResolved() is called
-    FakeNameResolverFactory nameResolverFactory =
-        new FakeNameResolverFactory.Builder(expectedUri)
+    ManagedChannelImplTest.FakeNameResolverFactory nameResolverFactory =
+        new ManagedChannelImplTest.FakeNameResolverFactory.Builder(expectedUri)
             .setResolvedAtStart(false)
             .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
             .build();
@@ -1049,8 +1052,10 @@ public class ManagedChannelImplTest {
   @Test
   public void nameResolvedAfterChannelShutdown() {
     // Delay the success of name resolution until allResolved() is called.
-    FakeNameResolverFactory nameResolverFactory =
-        new FakeNameResolverFactory.Builder(expectedUri).setResolvedAtStart(false).build();
+    ManagedChannelImplTest.FakeNameResolverFactory nameResolverFactory =
+        new ManagedChannelImplTest.FakeNameResolverFactory.Builder(expectedUri)
+            .setResolvedAtStart(false)
+            .build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
     createChannel();
 
@@ -1084,8 +1089,8 @@ public class ManagedChannelImplTest {
     InOrder inOrder = inOrder(mockLoadBalancer, subchannelStateListener);
 
     List<SocketAddress> resolvedAddrs = Arrays.asList(badAddress, goodAddress);
-    FakeNameResolverFactory nameResolverFactory =
-        new FakeNameResolverFactory.Builder(expectedUri)
+    ManagedChannelImplTest.FakeNameResolverFactory nameResolverFactory =
+        new ManagedChannelImplTest.FakeNameResolverFactory.Builder(expectedUri)
             .setServers(Collections.singletonList(new EquivalentAddressGroup(resolvedAddrs)))
             .build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
@@ -1228,8 +1233,8 @@ public class ManagedChannelImplTest {
 
     List<SocketAddress> resolvedAddrs = Arrays.asList(addr1, addr2);
 
-    FakeNameResolverFactory nameResolverFactory =
-        new FakeNameResolverFactory.Builder(expectedUri)
+    ManagedChannelImplTest.FakeNameResolverFactory nameResolverFactory =
+        new ManagedChannelImplTest.FakeNameResolverFactory.Builder(expectedUri)
             .setServers(Collections.singletonList(new EquivalentAddressGroup(resolvedAddrs)))
             .build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
@@ -1800,8 +1805,8 @@ public class ManagedChannelImplTest {
 
   private void subtestNameResolutionRefreshWhenConnectionFailed(
       boolean isOobChannel, boolean isIdle) {
-    FakeNameResolverFactory nameResolverFactory =
-        new FakeNameResolverFactory.Builder(expectedUri)
+    ManagedChannelImplTest.FakeNameResolverFactory nameResolverFactory =
+        new ManagedChannelImplTest.FakeNameResolverFactory.Builder(expectedUri)
             .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
             .build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
@@ -1818,7 +1823,8 @@ public class ManagedChannelImplTest {
     MockClientTransportInfo transportInfo = transports.poll();
     assertNotNull(transportInfo);
 
-    FakeNameResolverFactory.FakeNameResolver resolver = nameResolverFactory.resolvers.remove(0);
+    ManagedChannelImplTest.FakeNameResolverFactory.FakeNameResolver resolver =
+        nameResolverFactory.resolvers.remove(0);
 
     if (isIdle) {
       channel.enterIdle();
@@ -2039,7 +2045,9 @@ public class ManagedChannelImplTest {
   @Test
   public void getState_loadBalancerSupportsChannelState() {
     channelBuilder.nameResolverFactory(
-        new FakeNameResolverFactory.Builder(expectedUri).setResolvedAtStart(false).build());
+        new ManagedChannelImplTest.FakeNameResolverFactory.Builder(expectedUri)
+            .setResolvedAtStart(false)
+            .build());
     createChannel();
     assertEquals(IDLE, channel.getState(false));
 
@@ -2050,7 +2058,9 @@ public class ManagedChannelImplTest {
   @Test
   public void getState_withRequestConnect() {
     channelBuilder.nameResolverFactory(
-        new FakeNameResolverFactory.Builder(expectedUri).setResolvedAtStart(false).build());
+        new ManagedChannelImplTest.FakeNameResolverFactory.Builder(expectedUri)
+            .setResolvedAtStart(false)
+            .build());
     requestConnection = false;
     createChannel();
 
@@ -2073,7 +2083,9 @@ public class ManagedChannelImplTest {
   @Test
   public void getState_withRequestConnect_IdleWithLbRunning() {
     channelBuilder.nameResolverFactory(
-        new FakeNameResolverFactory.Builder(expectedUri).setResolvedAtStart(false).build());
+        new ManagedChannelImplTest.FakeNameResolverFactory.Builder(expectedUri)
+            .setResolvedAtStart(false)
+            .build());
     createChannel();
     verify(mockLoadBalancerProvider).newLoadBalancer(any(Helper.class));
 
@@ -2096,7 +2108,9 @@ public class ManagedChannelImplTest {
     };
 
     channelBuilder.nameResolverFactory(
-        new FakeNameResolverFactory.Builder(expectedUri).setResolvedAtStart(false).build());
+        new ManagedChannelImplTest.FakeNameResolverFactory.Builder(expectedUri)
+            .setResolvedAtStart(false)
+            .build());
     createChannel();
     assertEquals(IDLE, channel.getState(false));
 
@@ -2129,7 +2143,9 @@ public class ManagedChannelImplTest {
     };
 
     channelBuilder.nameResolverFactory(
-        new FakeNameResolverFactory.Builder(expectedUri).setResolvedAtStart(false).build());
+        new ManagedChannelImplTest.FakeNameResolverFactory.Builder(expectedUri)
+            .setResolvedAtStart(false)
+            .build());
     createChannel();
     assertEquals(IDLE, channel.getState(false));
     channel.notifyWhenStateChanged(IDLE, onStateChanged);
@@ -2187,15 +2203,16 @@ public class ManagedChannelImplTest {
   private void subtestPanic(ConnectivityState initialState) {
     assertNotEquals("We don't test panic mode if it's already SHUTDOWN", SHUTDOWN, initialState);
     long idleTimeoutMillis = 2000L;
-    FakeNameResolverFactory nameResolverFactory =
-        new FakeNameResolverFactory.Builder(expectedUri).build();
+    ManagedChannelImplTest.FakeNameResolverFactory nameResolverFactory =
+        new ManagedChannelImplTest.FakeNameResolverFactory.Builder(expectedUri).build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
     channelBuilder.idleTimeout(idleTimeoutMillis, TimeUnit.MILLISECONDS);
     createChannel();
 
     verify(mockLoadBalancerProvider).newLoadBalancer(any(Helper.class));
     assertThat(nameResolverFactory.resolvers).hasSize(1);
-    FakeNameResolverFactory.FakeNameResolver resolver = nameResolverFactory.resolvers.remove(0);
+    ManagedChannelImplTest.FakeNameResolverFactory.FakeNameResolver resolver =
+        nameResolverFactory.resolvers.remove(0);
 
     final Throwable panicReason = new Exception("Simulated uncaught exception");
     if (initialState == IDLE) {
@@ -2360,7 +2377,7 @@ public class ManagedChannelImplTest {
     long idleTimeoutMillis = 1000L;
     channelBuilder.idleTimeout(idleTimeoutMillis, TimeUnit.MILLISECONDS);
     channelBuilder.nameResolverFactory(
-        new FakeNameResolverFactory.Builder(expectedUri)
+        new ManagedChannelImplTest.FakeNameResolverFactory.Builder(expectedUri)
             .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
             .build());
     createChannel();
@@ -2441,8 +2458,8 @@ public class ManagedChannelImplTest {
 
   @Test
   public void enterIdle_exitsIdleIfDelayedStreamPending() {
-    FakeNameResolverFactory nameResolverFactory =
-        new FakeNameResolverFactory.Builder(expectedUri)
+    ManagedChannelImplTest.FakeNameResolverFactory nameResolverFactory =
+        new ManagedChannelImplTest.FakeNameResolverFactory.Builder(expectedUri)
             .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
             .build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
@@ -2562,7 +2579,9 @@ public class ManagedChannelImplTest {
   @Test
   public void updateBalancingStateWithShutdownShouldBeIgnored() {
     channelBuilder.nameResolverFactory(
-        new FakeNameResolverFactory.Builder(expectedUri).setResolvedAtStart(false).build());
+        new ManagedChannelImplTest.FakeNameResolverFactory.Builder(expectedUri)
+            .setResolvedAtStart(false)
+            .build());
     createChannel();
     assertEquals(IDLE, channel.getState(false));
 
@@ -2578,12 +2597,13 @@ public class ManagedChannelImplTest {
 
   @Test
   public void balancerRefreshNameResolution() {
-    FakeNameResolverFactory nameResolverFactory =
-        new FakeNameResolverFactory.Builder(expectedUri).build();
+    ManagedChannelImplTest.FakeNameResolverFactory nameResolverFactory =
+        new ManagedChannelImplTest.FakeNameResolverFactory.Builder(expectedUri).build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
     createChannel();
 
-    FakeNameResolverFactory.FakeNameResolver resolver = nameResolverFactory.resolvers.get(0);
+    ManagedChannelImplTest.FakeNameResolverFactory.FakeNameResolver resolver =
+        nameResolverFactory.resolvers.get(0);
     int initialRefreshCount = resolver.refreshCalled;
     refreshNameResolutionSafely(helper);
     assertEquals(initialRefreshCount + 1, resolver.refreshCalled);
@@ -2593,12 +2613,15 @@ public class ManagedChannelImplTest {
   public void resetConnectBackoff() {
     // Start with a name resolution failure to trigger backoff attempts
     Status error = Status.UNAVAILABLE.withCause(new Throwable("fake name resolution error"));
-    FakeNameResolverFactory nameResolverFactory =
-        new FakeNameResolverFactory.Builder(expectedUri).setError(error).build();
+    ManagedChannelImplTest.FakeNameResolverFactory nameResolverFactory =
+        new ManagedChannelImplTest.FakeNameResolverFactory.Builder(expectedUri)
+            .setError(error)
+            .build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
     // Name resolution is started as soon as channel is created.
     createChannel();
-    FakeNameResolverFactory.FakeNameResolver resolver = nameResolverFactory.resolvers.get(0);
+    ManagedChannelImplTest.FakeNameResolverFactory.FakeNameResolver resolver =
+        nameResolverFactory.resolvers.get(0);
     verify(mockLoadBalancer).handleNameResolutionError(same(error));
 
     FakeClock.ScheduledTask nameResolverBackoff = getNameResolverRefresh();
@@ -2621,13 +2644,14 @@ public class ManagedChannelImplTest {
 
   @Test
   public void resetConnectBackoff_noOpWithoutPendingResolverBackoff() {
-    FakeNameResolverFactory nameResolverFactory =
-        new FakeNameResolverFactory.Builder(expectedUri)
+    ManagedChannelImplTest.FakeNameResolverFactory nameResolverFactory =
+        new ManagedChannelImplTest.FakeNameResolverFactory.Builder(expectedUri)
             .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
             .build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
     createChannel();
-    FakeNameResolverFactory.FakeNameResolver nameResolver = nameResolverFactory.resolvers.get(0);
+    ManagedChannelImplTest.FakeNameResolverFactory.FakeNameResolver nameResolver =
+        nameResolverFactory.resolvers.get(0);
     assertEquals(0, nameResolver.refreshCalled);
 
     channel.resetConnectBackoff();
@@ -2637,8 +2661,8 @@ public class ManagedChannelImplTest {
 
   @Test
   public void resetConnectBackoff_noOpWhenChannelShutdown() {
-    FakeNameResolverFactory nameResolverFactory =
-        new FakeNameResolverFactory.Builder(expectedUri).build();
+    ManagedChannelImplTest.FakeNameResolverFactory nameResolverFactory =
+        new ManagedChannelImplTest.FakeNameResolverFactory.Builder(expectedUri).build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
     createChannel();
 
@@ -2646,21 +2670,23 @@ public class ManagedChannelImplTest {
     assertTrue(channel.isShutdown());
     channel.resetConnectBackoff();
 
-    FakeNameResolverFactory.FakeNameResolver nameResolver = nameResolverFactory.resolvers.get(0);
+    ManagedChannelImplTest.FakeNameResolverFactory.FakeNameResolver nameResolver =
+        nameResolverFactory.resolvers.get(0);
     assertEquals(0, nameResolver.refreshCalled);
   }
 
   @Test
   public void resetConnectBackoff_noOpWhenNameResolverNotStarted() {
-    FakeNameResolverFactory nameResolverFactory =
-        new FakeNameResolverFactory.Builder(expectedUri).build();
+    ManagedChannelImplTest.FakeNameResolverFactory nameResolverFactory =
+        new ManagedChannelImplTest.FakeNameResolverFactory.Builder(expectedUri).build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
     requestConnection = false;
     createChannel();
 
     channel.resetConnectBackoff();
 
-    FakeNameResolverFactory.FakeNameResolver nameResolver = nameResolverFactory.resolvers.get(0);
+    ManagedChannelImplTest.FakeNameResolverFactory.FakeNameResolver nameResolver =
+        nameResolverFactory.resolvers.get(0);
     assertEquals(0, nameResolver.refreshCalled);
   }
 
@@ -2714,8 +2740,10 @@ public class ManagedChannelImplTest {
     channelBuilder.maxTraceEvents(10);
 
     Status error = Status.UNAVAILABLE.withDescription("simulated error");
-    FakeNameResolverFactory nameResolverFactory =
-        new FakeNameResolverFactory.Builder(expectedUri).setError(error).build();
+    ManagedChannelImplTest.FakeNameResolverFactory nameResolverFactory =
+        new ManagedChannelImplTest.FakeNameResolverFactory.Builder(expectedUri)
+            .setError(error)
+            .build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
     createChannel();
 
@@ -2730,8 +2758,8 @@ public class ManagedChannelImplTest {
   public void channelTracing_nameResolvedEvent() throws Exception {
     timer.forwardNanos(1234);
     channelBuilder.maxTraceEvents(10);
-    FakeNameResolverFactory nameResolverFactory =
-        new FakeNameResolverFactory.Builder(expectedUri)
+    ManagedChannelImplTest.FakeNameResolverFactory nameResolverFactory =
+        new ManagedChannelImplTest.FakeNameResolverFactory.Builder(expectedUri)
             .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
             .build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
@@ -2750,8 +2778,10 @@ public class ManagedChannelImplTest {
     channelBuilder.maxTraceEvents(10);
     List<EquivalentAddressGroup> servers = new ArrayList<>();
     servers.add(new EquivalentAddressGroup(socketAddress));
-    FakeNameResolverFactory nameResolverFactory =
-        new FakeNameResolverFactory.Builder(expectedUri).setServers(servers).build();
+    ManagedChannelImplTest.FakeNameResolverFactory nameResolverFactory =
+        new ManagedChannelImplTest.FakeNameResolverFactory.Builder(expectedUri)
+            .setServers(servers)
+            .build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
     createChannel();
 
@@ -2790,8 +2820,10 @@ public class ManagedChannelImplTest {
     channelBuilder.maxTraceEvents(10);
     List<EquivalentAddressGroup> servers = new ArrayList<>();
     servers.add(new EquivalentAddressGroup(socketAddress));
-    FakeNameResolverFactory nameResolverFactory =
-        new FakeNameResolverFactory.Builder(expectedUri).setServers(servers).build();
+    ManagedChannelImplTest.FakeNameResolverFactory nameResolverFactory =
+        new ManagedChannelImplTest.FakeNameResolverFactory.Builder(expectedUri)
+            .setServers(servers)
+            .build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
     createChannel();
 
@@ -3192,8 +3224,8 @@ public class ManagedChannelImplTest {
     Attributes attributesWithRetryPolicy = Attributes
         .newBuilder().set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig).build();
 
-    FakeNameResolverFactory nameResolverFactory =
-        new FakeNameResolverFactory.Builder(expectedUri)
+    ManagedChannelImplTest.FakeNameResolverFactory nameResolverFactory =
+        new ManagedChannelImplTest.FakeNameResolverFactory.Builder(expectedUri)
             .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
             .build();
     nameResolverFactory.nextResolvedAttributes.set(attributesWithRetryPolicy);
@@ -3301,8 +3333,8 @@ public class ManagedChannelImplTest {
     Attributes attributesWithRetryPolicy = Attributes
         .newBuilder().set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig).build();
 
-    FakeNameResolverFactory nameResolverFactory =
-        new FakeNameResolverFactory.Builder(expectedUri)
+    ManagedChannelImplTest.FakeNameResolverFactory nameResolverFactory =
+        new ManagedChannelImplTest.FakeNameResolverFactory.Builder(expectedUri)
             .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
             .build();
     nameResolverFactory.nextResolvedAttributes.set(attributesWithRetryPolicy);
@@ -3680,9 +3712,10 @@ public class ManagedChannelImplTest {
   public void disableServiceConfigLookUp_noDefaultConfig() throws Exception {
     LoadBalancerRegistry.getDefaultRegistry().register(mockLoadBalancerProvider);
     try {
-      FakeNameResolverFactory nameResolverFactory =
-          new FakeNameResolverFactory.Builder(expectedUri)
-              .setServers(ImmutableList.of(addressGroup)).build();
+      ManagedChannelImplTest.FakeNameResolverFactory nameResolverFactory =
+          new ManagedChannelImplTest.FakeNameResolverFactory.Builder(expectedUri)
+              .setServers(ImmutableList.of(addressGroup))
+              .build();
       channelBuilder.nameResolverFactory(nameResolverFactory);
       channelBuilder.disableServiceConfigLookUp();
 
@@ -3714,9 +3747,10 @@ public class ManagedChannelImplTest {
   public void disableServiceConfigLookUp_withDefaultConfig() throws Exception {
     LoadBalancerRegistry.getDefaultRegistry().register(mockLoadBalancerProvider);
     try {
-      FakeNameResolverFactory nameResolverFactory =
-          new FakeNameResolverFactory.Builder(expectedUri)
-              .setServers(ImmutableList.of(addressGroup)).build();
+      ManagedChannelImplTest.FakeNameResolverFactory nameResolverFactory =
+          new ManagedChannelImplTest.FakeNameResolverFactory.Builder(expectedUri)
+              .setServers(ImmutableList.of(addressGroup))
+              .build();
       channelBuilder.nameResolverFactory(nameResolverFactory);
       channelBuilder.disableServiceConfigLookUp();
       Map<String, Object> defaultServiceConfig =
@@ -3752,9 +3786,10 @@ public class ManagedChannelImplTest {
   public void enableServiceConfigLookUp_noDefaultConfig() throws Exception {
     LoadBalancerRegistry.getDefaultRegistry().register(mockLoadBalancerProvider);
     try {
-      FakeNameResolverFactory nameResolverFactory =
-          new FakeNameResolverFactory.Builder(expectedUri)
-              .setServers(ImmutableList.of(addressGroup)).build();
+      ManagedChannelImplTest.FakeNameResolverFactory nameResolverFactory =
+          new ManagedChannelImplTest.FakeNameResolverFactory.Builder(expectedUri)
+              .setServers(ImmutableList.of(addressGroup))
+              .build();
       channelBuilder.nameResolverFactory(nameResolverFactory);
 
       Map<String, Object> serviceConfig =
@@ -3806,9 +3841,10 @@ public class ManagedChannelImplTest {
   public void enableServiceConfigLookUp_withDefaultConfig() throws Exception {
     LoadBalancerRegistry.getDefaultRegistry().register(mockLoadBalancerProvider);
     try {
-      FakeNameResolverFactory nameResolverFactory =
-          new FakeNameResolverFactory.Builder(expectedUri)
-              .setServers(ImmutableList.of(addressGroup)).build();
+      ManagedChannelImplTest.FakeNameResolverFactory nameResolverFactory =
+          new ManagedChannelImplTest.FakeNameResolverFactory.Builder(expectedUri)
+              .setServers(ImmutableList.of(addressGroup))
+              .build();
       channelBuilder.nameResolverFactory(nameResolverFactory);
       Map<String, Object> defaultServiceConfig =
           parseConfig("{\"methodConfig\":[{"
@@ -3845,9 +3881,10 @@ public class ManagedChannelImplTest {
       throws Exception {
     LoadBalancerRegistry.getDefaultRegistry().register(mockLoadBalancerProvider);
     try {
-      FakeNameResolverFactory nameResolverFactory =
-          new FakeNameResolverFactory.Builder(expectedUri)
-              .setServers(ImmutableList.of(addressGroup)).build();
+      ManagedChannelImplTest.FakeNameResolverFactory nameResolverFactory =
+          new ManagedChannelImplTest.FakeNameResolverFactory.Builder(expectedUri)
+              .setServers(ImmutableList.of(addressGroup))
+              .build();
       channelBuilder.nameResolverFactory(nameResolverFactory);
       Map<String, Object> defaultServiceConfig =
           parseConfig("{\"methodConfig\":[{"
@@ -3876,9 +3913,10 @@ public class ManagedChannelImplTest {
   public void enableServiceConfigLookUp_resolverReturnsNoConfig_noDefaultConfig() {
     LoadBalancerRegistry.getDefaultRegistry().register(mockLoadBalancerProvider);
     try {
-      FakeNameResolverFactory nameResolverFactory =
-          new FakeNameResolverFactory.Builder(expectedUri)
-              .setServers(ImmutableList.of(addressGroup)).build();
+      ManagedChannelImplTest.FakeNameResolverFactory nameResolverFactory =
+          new ManagedChannelImplTest.FakeNameResolverFactory.Builder(expectedUri)
+              .setServers(ImmutableList.of(addressGroup))
+              .build();
       channelBuilder.nameResolverFactory(nameResolverFactory);
 
       Attributes serviceConfigAttrs = Attributes.EMPTY;
@@ -3899,9 +3937,10 @@ public class ManagedChannelImplTest {
 
   @Test
   public void useDefaultImmediatelyIfDisableLookUp() throws Exception {
-    FakeNameResolverFactory nameResolverFactory =
-        new FakeNameResolverFactory.Builder(expectedUri)
-            .setServers(ImmutableList.of(addressGroup)).build();
+    ManagedChannelImplTest.FakeNameResolverFactory nameResolverFactory =
+        new ManagedChannelImplTest.FakeNameResolverFactory.Builder(expectedUri)
+            .setServers(ImmutableList.of(addressGroup))
+            .build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
     channelBuilder.disableServiceConfigLookUp();
     Map<String, Object> defaultServiceConfig =
@@ -3925,9 +3964,10 @@ public class ManagedChannelImplTest {
 
   @Test
   public void notUseDefaultImmediatelyIfEnableLookUp() throws Exception {
-    FakeNameResolverFactory nameResolverFactory =
-        new FakeNameResolverFactory.Builder(expectedUri)
-            .setServers(ImmutableList.of(addressGroup)).build();
+    ManagedChannelImplTest.FakeNameResolverFactory nameResolverFactory =
+        new ManagedChannelImplTest.FakeNameResolverFactory.Builder(expectedUri)
+            .setServers(ImmutableList.of(addressGroup))
+            .build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
     Map<String, Object> defaultServiceConfig =
         parseConfig("{\"methodConfig\":[{"
@@ -4094,8 +4134,9 @@ public class ManagedChannelImplTest {
         return this;
       }
 
-      FakeNameResolverFactory build() {
-        return new FakeNameResolverFactory(expectedUri, servers, resolvedAtStart, error);
+      ManagedChannelImplTest.FakeNameResolverFactory build() {
+        return new ManagedChannelImplTest.FakeNameResolverFactory(
+            expectedUri, servers, resolvedAtStart, error);
       }
     }
   }

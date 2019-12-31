@@ -286,6 +286,7 @@ subprojects {
         compileTestJava {
             // LinkedList doesn't hurt much in tests and has lots of usages
             options.errorprone.check("JdkObsolete", CheckSeverity.OFF)
+            options.errorprone.check("UnnecessaryAnonymousClass", CheckSeverity.OFF)
         }
     }
 
