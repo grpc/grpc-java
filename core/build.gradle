@@ -59,3 +59,12 @@ animalsniffer {
         sourceSets.test
     ]
 }
+
+import net.ltgt.gradle.errorprone.CheckSeverity
+
+plugins.withId("java") {
+    compileJmhJava {
+        // This project targets Java 7 (no method references)
+        options.errorprone.check("UnnecessaryAnonymousClass", CheckSeverity.OFF)
+    }
+}
