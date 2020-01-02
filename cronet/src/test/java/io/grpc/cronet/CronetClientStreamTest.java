@@ -94,6 +94,7 @@ public final class CronetClientStreamTest {
     }
 
     @Override
+    @SuppressWarnings("GuardedBy")
     public void run() {
       assertTrue(stream != null);
       stream.transportState().start(factory);
