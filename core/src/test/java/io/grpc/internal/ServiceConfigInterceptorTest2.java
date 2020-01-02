@@ -308,12 +308,11 @@ public class ServiceConfigInterceptorTest2 {
     JsonObj name = new JsonObj("method", "method");
     JsonObj methodConfig = new JsonObj("name", new JsonList(name));
     JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
+    ManagedChannelServiceConfig2 parsedServiceConfig =
+        createManagedChannelServiceConfig(serviceConfig);
 
     thrown.expect(IllegalArgumentException.class);
     thrown.expectMessage("missing service");
-
-    ManagedChannelServiceConfig2 parsedServiceConfig =
-        createManagedChannelServiceConfig(serviceConfig);
 
     interceptor.handleUpdate(parsedServiceConfig);
   }
@@ -324,12 +323,11 @@ public class ServiceConfigInterceptorTest2 {
     JsonObj name2 = new JsonObj("service", "service", "method", "method");
     JsonObj methodConfig = new JsonObj("name", new JsonList(name1, name2));
     JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
+    ManagedChannelServiceConfig2 parsedServiceConfig =
+        createManagedChannelServiceConfig(serviceConfig);
 
     thrown.expect(IllegalArgumentException.class);
     thrown.expectMessage("Duplicate method");
-
-    ManagedChannelServiceConfig2 parsedServiceConfig =
-        createManagedChannelServiceConfig(serviceConfig);
 
     interceptor.handleUpdate(parsedServiceConfig);
   }
@@ -338,12 +336,11 @@ public class ServiceConfigInterceptorTest2 {
   public void handleUpdate_failsOnEmptyName() {
     JsonObj methodConfig = new JsonObj();
     JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
+    ManagedChannelServiceConfig2 parsedServiceConfig =
+        createManagedChannelServiceConfig(serviceConfig);
 
     thrown.expect(IllegalArgumentException.class);
     thrown.expectMessage("no names in method config");
-
-    ManagedChannelServiceConfig2 parsedServiceConfig =
-        createManagedChannelServiceConfig(serviceConfig);
 
     interceptor.handleUpdate(parsedServiceConfig);
   }
@@ -354,12 +351,11 @@ public class ServiceConfigInterceptorTest2 {
     JsonObj name2 = new JsonObj("service", "service");
     JsonObj methodConfig = new JsonObj("name", new JsonList(name1, name2));
     JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
+    ManagedChannelServiceConfig2 parsedServiceConfig =
+        createManagedChannelServiceConfig(serviceConfig);
 
     thrown.expect(IllegalArgumentException.class);
     thrown.expectMessage("Duplicate service");
-
-    ManagedChannelServiceConfig2 parsedServiceConfig =
-        createManagedChannelServiceConfig(serviceConfig);
 
     interceptor.handleUpdate(parsedServiceConfig);
   }
@@ -371,12 +367,11 @@ public class ServiceConfigInterceptorTest2 {
     JsonObj methodConfig1 = new JsonObj("name", new JsonList(name1));
     JsonObj methodConfig2 = new JsonObj("name", new JsonList(name2));
     JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig1, methodConfig2));
+    ManagedChannelServiceConfig2 parsedServiceConfig =
+        createManagedChannelServiceConfig(serviceConfig);
 
     thrown.expect(IllegalArgumentException.class);
     thrown.expectMessage("Duplicate service");
-
-    ManagedChannelServiceConfig2 parsedServiceConfig =
-        createManagedChannelServiceConfig(serviceConfig);
 
     interceptor.handleUpdate(parsedServiceConfig);
   }
