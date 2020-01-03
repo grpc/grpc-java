@@ -73,10 +73,6 @@ final class XdsClientImpl extends XdsClient {
   @VisibleForTesting
   static final int INITIAL_RESOURCE_FETCH_TIMEOUT_SEC = 15;
 
-  // Reserved value for special usage, as a placeholder in EDS cache for endpoints not exist.
-  private static final EndpointUpdate ENDPOINTS_NOT_FOUND =
-      EndpointUpdate.newBuilder().setClusterName("endpoints not found").build();
-
   @VisibleForTesting
   static final String ADS_TYPE_URL_LDS = "type.googleapis.com/envoy.api.v2.Listener";
   @VisibleForTesting
@@ -112,6 +108,9 @@ final class XdsClientImpl extends XdsClient {
   // Optimization: cache EndpointUpdate, which contains only information needed by gRPC, instead
   // of whole ClusterLoadAssignment messages to reduce memory usage.
   private final Map<String, EndpointUpdate> clusterNamesToEndpointUpdates = new HashMap<>();
+
+  // Cached EDS resources that are known to be absent.
+  private final Set<String> absentEdsResources = new HashSet<>();
 
   // Cluster watchers waiting for cluster information updates. Multiple cluster watchers
   // can watch on information for the same cluster.
@@ -326,16 +325,15 @@ final class XdsClientImpl extends XdsClient {
     watchers.add(watcher);
     // If local cache contains endpoint information for the cluster to be watched, notify
     // the watcher immediately.
+    if (absentEdsResources.contains(clusterName)) {
+      watcher.onError(
+          Status.NOT_FOUND
+              .withDescription(
+                  "Endpoint resource for cluster [" + clusterName + "] not found."));
+      return;
+    }
     if (clusterNamesToEndpointUpdates.containsKey(clusterName)) {
-      EndpointUpdate endpointsInfo = clusterNamesToEndpointUpdates.get(clusterName);
-      if (endpointsInfo.equals(ENDPOINTS_NOT_FOUND)) {
-        watcher.onError(
-            Status.NOT_FOUND
-                .withDescription(
-                    "Endpoint resource for cluster [" + clusterName + "] not found."));
-      } else {
-        watcher.onEndpointChanged(endpointsInfo);
-      }
+      watcher.onEndpointChanged(clusterNamesToEndpointUpdates.get(clusterName));
       return;
     }
 
@@ -368,6 +366,7 @@ final class XdsClientImpl extends XdsClient {
       logger.log(Level.FINE, "Stop watching endpoints in cluster {0}", clusterName);
       endpointWatchers.remove(clusterName);
       // Remove the corresponding EDS cache entry.
+      absentEdsResources.remove(clusterName);
       clusterNamesToEndpointUpdates.remove(clusterName);
       // Cancel and delete response timer waiting for the corresponding resource.
       if (edsRespTimers.containsKey(clusterName)) {
@@ -744,6 +743,11 @@ final class XdsClientImpl extends XdsClient {
     clusterNamesToClusterUpdates.putAll(clusterUpdates);
 
     // Remove EDS cache entries for ClusterLoadAssignments not referenced by this CDS response.
+    for (String clusterName : clusterNamesToEndpointUpdates.keySet()) {
+      if (!edsServices.contains(clusterName)) {
+        absentEdsResources.add(clusterName);
+      }
+    }
     clusterNamesToEndpointUpdates.keySet().retainAll(edsServices);
 
     // Disarm initial fetch timers for received resources.
@@ -869,6 +873,7 @@ final class XdsClientImpl extends XdsClient {
 
     // Update local EDS cache by inserting updated endpoint information.
     clusterNamesToEndpointUpdates.putAll(endpointUpdates);
+    absentEdsResources.removeAll(endpointUpdates.keySet());
 
     // Notify watchers waiting for updates of endpoint information received in this EDS response.
     for (Map.Entry<String, EndpointUpdate> entry : endpointUpdates.entrySet()) {
@@ -1286,7 +1291,7 @@ final class XdsClientImpl extends XdsClient {
     @Override
     public void run() {
       edsRespTimers.remove(resourceName);
-      clusterNamesToEndpointUpdates.put(resourceName, ENDPOINTS_NOT_FOUND);
+      absentEdsResources.add(resourceName);
       for (EndpointWatcher wat : endpointWatchers.get(resourceName)) {
         wat.onError(
             Status.NOT_FOUND
