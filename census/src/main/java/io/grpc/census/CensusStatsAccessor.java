@@ -25,7 +25,7 @@ import io.grpc.ServerStreamTracer;
  * Accessor for getting {@link ClientInterceptor} or {@link ServerStreamTracer.Factory} with
  * default Census stats implementation.
  */
-public class CensusStatsAccessor {
+public final class CensusStatsAccessor {
 
   // Prevent instantiation.
   private CensusStatsAccessor() {

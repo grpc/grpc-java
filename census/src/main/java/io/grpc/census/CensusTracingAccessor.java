@@ -24,7 +24,7 @@ import io.opencensus.trace.Tracing;
  * Accessor for getting {@link ClientInterceptor} or {@link ServerStreamTracer.Factory} with
  * default Census tracing implementation.
  */
-public class CensusTracingAccessor {
+public final class CensusTracingAccessor {
 
   // Prevent instantiation.
   private CensusTracingAccessor() {
