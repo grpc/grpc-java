@@ -478,29 +478,20 @@ final class DnsNameResolver extends NameResolver {
 
   @Nullable
   private static final Double getPercentageFromChoice(Map<String, ?> serviceConfigChoice) {
-    if (!serviceConfigChoice.containsKey(SERVICE_CONFIG_CHOICE_PERCENTAGE_KEY)) {
-      return null;
-    }
-    return JsonUtil.getDouble(serviceConfigChoice, SERVICE_CONFIG_CHOICE_PERCENTAGE_KEY);
+    return JsonUtil.getNumber(serviceConfigChoice, SERVICE_CONFIG_CHOICE_PERCENTAGE_KEY);
   }
 
   @Nullable
   private static final List<String> getClientLanguagesFromChoice(
       Map<String, ?> serviceConfigChoice) {
-    if (!serviceConfigChoice.containsKey(SERVICE_CONFIG_CHOICE_CLIENT_LANGUAGE_KEY)) {
-      return null;
-    }
-    return JsonUtil.checkStringList(
-        JsonUtil.getList(serviceConfigChoice, SERVICE_CONFIG_CHOICE_CLIENT_LANGUAGE_KEY));
+    return JsonUtil.getListOfStrings(
+        serviceConfigChoice, SERVICE_CONFIG_CHOICE_CLIENT_LANGUAGE_KEY);
   }
 
   @Nullable
   private static final List<String> getHostnamesFromChoice(Map<String, ?> serviceConfigChoice) {
-    if (!serviceConfigChoice.containsKey(SERVICE_CONFIG_CHOICE_CLIENT_HOSTNAME_KEY)) {
-      return null;
-    }
-    return JsonUtil.checkStringList(
-        JsonUtil.getList(serviceConfigChoice, SERVICE_CONFIG_CHOICE_CLIENT_HOSTNAME_KEY));
+    return JsonUtil.getListOfStrings(
+        serviceConfigChoice, SERVICE_CONFIG_CHOICE_CLIENT_HOSTNAME_KEY);
   }
 
   /**
