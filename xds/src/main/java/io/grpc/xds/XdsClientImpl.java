@@ -73,13 +73,6 @@ final class XdsClientImpl extends XdsClient {
   @VisibleForTesting
   static final int INITIAL_RESOURCE_FETCH_TIMEOUT_SEC = 15;
 
-  // Reserved value for special usage, as a placeholder in CDS cache for cluster not exist.
-  private static final ClusterUpdate CLUSTER_NOT_FOUND =
-      ClusterUpdate.newBuilder()
-          .setClusterName("cluster not found")
-          .setLbPolicy("lb policy not found")
-          .build();
-
   // Reserved value for special usage, as a placeholder in EDS cache for endpoints not exist.
   private static final EndpointUpdate ENDPOINTS_NOT_FOUND =
       EndpointUpdate.newBuilder().setClusterName("endpoints not found").build();
@@ -110,6 +103,9 @@ final class XdsClientImpl extends XdsClient {
   // Optimization: cache ClusterUpdate, which contains only information needed by gRPC, instead
   // of whole Cluster messages to reduce memory usage.
   private final Map<String, ClusterUpdate> clusterNamesToClusterUpdates = new HashMap<>();
+
+  // Cached CDS resources that are known to be absent.
+  private final Set<String> absentCdsResources = new HashSet<>();
 
   // Cached data for EDS responses, keyed by cluster names.
   // CDS responses indicate absence of clusters and EDS responses indicate presence of clusters.
@@ -247,16 +243,15 @@ final class XdsClientImpl extends XdsClient {
     }
     watchers.add(watcher);
     // If local cache contains cluster information to be watched, notify the watcher immediately.
+    if (absentCdsResources.contains(clusterName)) {
+      watcher.onError(
+          Status.NOT_FOUND
+              .withDescription(
+                  "Cluster resource [" + clusterName + "] not found."));
+      return;
+    }
     if (clusterNamesToClusterUpdates.containsKey(clusterName)) {
-      ClusterUpdate clusterInfo = clusterNamesToClusterUpdates.get(clusterName);
-      if (clusterInfo.equals(CLUSTER_NOT_FOUND)) {
-        watcher.onError(
-            Status.NOT_FOUND
-                .withDescription(
-                    "Cluster resource [" + clusterName + "] not found."));
-      } else {
-        watcher.onClusterChanged(clusterInfo);
-      }
+      watcher.onClusterChanged(clusterNamesToClusterUpdates.get(clusterName));
       return;
     }
 
@@ -289,6 +284,7 @@ final class XdsClientImpl extends XdsClient {
       logger.log(Level.FINE, "Stop watching cluster {0}", clusterName);
       clusterWatchers.remove(clusterName);
       // Remove the corresponding CDS entry.
+      absentCdsResources.remove(clusterName);
       clusterNamesToClusterUpdates.remove(clusterName);
       // Cancel and delete response timer waiting for the corresponding resource.
       if (cdsRespTimers.containsKey(clusterName)) {
@@ -737,6 +733,13 @@ final class XdsClientImpl extends XdsClient {
         cdsResponse.getVersionInfo());
 
     // Update local CDS cache with data in this response.
+    absentCdsResources.removeAll(clusterUpdates.keySet());
+    for (String clusterName : clusterNamesToClusterUpdates.keySet()) {
+      if (!clusterUpdates.containsKey(clusterName)) {
+        // Some previously existing resource no longer exists.
+        absentCdsResources.add(clusterName);
+      }
+    }
     clusterNamesToClusterUpdates.clear();
     clusterNamesToClusterUpdates.putAll(clusterUpdates);
 
@@ -1264,7 +1267,7 @@ final class XdsClientImpl extends XdsClient {
     @Override
     public void run() {
       cdsRespTimers.remove(resourceName);
-      clusterNamesToClusterUpdates.put(resourceName, CLUSTER_NOT_FOUND);
+      absentCdsResources.add(resourceName);
       for (ClusterWatcher wat : clusterWatchers.get(resourceName)) {
         wat.onError(
             Status.NOT_FOUND
