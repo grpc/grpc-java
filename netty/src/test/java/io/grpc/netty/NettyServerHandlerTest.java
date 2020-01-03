@@ -28,7 +28,6 @@ import static io.grpc.netty.Utils.CONTENT_TYPE_HEADER;
 import static io.grpc.netty.Utils.HTTP_METHOD;
 import static io.grpc.netty.Utils.TE_HEADER;
 import static io.grpc.netty.Utils.TE_TRAILERS;
-import static io.netty.handler.codec.http2.Http2CodecUtil.DEFAULT_PRIORITY_WEIGHT;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -435,8 +434,14 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         .status("" + 415)
         .set(CONTENT_TYPE_HEADER, "text/plain; encoding=utf-8");
 
-    verifyWrite().writeHeaders(eq(ctx()), eq(STREAM_ID), eq(responseHeaders), eq(0),
-        eq(DEFAULT_PRIORITY_WEIGHT), eq(false), eq(0), eq(false), any(ChannelPromise.class));
+    verifyWrite()
+        .writeHeaders(
+            eq(ctx()),
+            eq(STREAM_ID),
+            eq(responseHeaders),
+            eq(0),
+            eq(false),
+            any(ChannelPromise.class));
   }
 
   @Test
@@ -454,8 +459,14 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         .status("" + 405)
         .set(CONTENT_TYPE_HEADER, "text/plain; encoding=utf-8");
 
-    verifyWrite().writeHeaders(eq(ctx()), eq(STREAM_ID), eq(responseHeaders), eq(0),
-        eq(DEFAULT_PRIORITY_WEIGHT), eq(false), eq(0), eq(false), any(ChannelPromise.class));
+    verifyWrite()
+        .writeHeaders(
+            eq(ctx()),
+            eq(STREAM_ID),
+            eq(responseHeaders),
+            eq(0),
+            eq(false),
+            any(ChannelPromise.class));
   }
 
   @Test
@@ -472,8 +483,14 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         .status("" + 404)
         .set(CONTENT_TYPE_HEADER, "text/plain; encoding=utf-8");
 
-    verifyWrite().writeHeaders(eq(ctx()), eq(STREAM_ID), eq(responseHeaders), eq(0),
-        eq(DEFAULT_PRIORITY_WEIGHT), eq(false), eq(0), eq(false), any(ChannelPromise.class));
+    verifyWrite()
+        .writeHeaders(
+            eq(ctx()),
+            eq(STREAM_ID),
+            eq(responseHeaders),
+            eq(0),
+            eq(false),
+            any(ChannelPromise.class));
   }
 
   @Test
@@ -491,8 +508,14 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         .status("" + 404)
         .set(CONTENT_TYPE_HEADER, "text/plain; encoding=utf-8");
 
-    verifyWrite().writeHeaders(eq(ctx()), eq(STREAM_ID), eq(responseHeaders), eq(0),
-        eq(DEFAULT_PRIORITY_WEIGHT), eq(false), eq(0), eq(false), any(ChannelPromise.class));
+    verifyWrite()
+        .writeHeaders(
+            eq(ctx()),
+            eq(STREAM_ID),
+            eq(responseHeaders),
+            eq(0),
+            eq(false),
+            any(ChannelPromise.class));
   }
 
   @Test

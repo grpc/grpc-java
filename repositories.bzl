@@ -24,18 +24,18 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.truth:truth:1.0",
     "com.squareup.okhttp:okhttp:2.5.0",
     "com.squareup.okio:okio:1.13.0",
-    "io.netty:netty-buffer:4.1.42.Final",
-    "io.netty:netty-codec-http2:4.1.42.Final",
-    "io.netty:netty-codec-http:4.1.42.Final",
-    "io.netty:netty-codec-socks:4.1.42.Final",
-    "io.netty:netty-codec:4.1.42.Final",
-    "io.netty:netty-common:4.1.42.Final",
-    "io.netty:netty-handler-proxy:4.1.42.Final",
-    "io.netty:netty-handler:4.1.42.Final",
-    "io.netty:netty-resolver:4.1.42.Final",
+    "io.netty:netty-buffer:4.1.45.Final",
+    "io.netty:netty-codec-http2:4.1.45.Final",
+    "io.netty:netty-codec-http:4.1.45.Final",
+    "io.netty:netty-codec-socks:4.1.45.Final",
+    "io.netty:netty-codec:4.1.45.Final",
+    "io.netty:netty-common:4.1.45.Final",
+    "io.netty:netty-handler-proxy:4.1.45.Final",
+    "io.netty:netty-handler:4.1.45.Final",
+    "io.netty:netty-resolver:4.1.45.Final",
     "io.netty:netty-tcnative-boringssl-static:2.0.26.Final",
-    "io.netty:netty-transport-native-epoll:jar:linux-x86_64:4.1.42.Final",
-    "io.netty:netty-transport:4.1.42.Final",
+    "io.netty:netty-transport-native-epoll:jar:linux-x86_64:4.1.45.Final",
+    "io.netty:netty-transport:4.1.45.Final",
     "io.opencensus:opencensus-api:0.24.0",
     "io.opencensus:opencensus-contrib-grpc-metrics:0.24.0",
     "io.perfmark:perfmark-api:0.19.0",
@@ -327,7 +327,7 @@ def io_netty_netty_buffer():
 def io_netty_netty_codec():
     jvm_maven_import_external(
         name = "io_netty_netty_codec",
-        artifact = "io.netty:netty-codec:4.1.42.Final",
+        artifact = "io.netty:netty-codec:4.1.45.Final",
         server_urls = ["https://repo.maven.apache.org/maven2/"],
         artifact_sha256 = "e96ced697fb7df589da7c20c995e01f75a9cb246be242bbc4cd3b4af424ff189",
         licenses = ["notice"],  # Apache 2.0
@@ -336,7 +336,7 @@ def io_netty_netty_codec():
 def io_netty_netty_codec_http():
     jvm_maven_import_external(
         name = "io_netty_netty_codec_http",
-        artifact = "io.netty:netty-codec-http:4.1.42.Final",
+        artifact = "io.netty:netty-codec-http:4.1.45.Final",
         server_urls = ["https://repo.maven.apache.org/maven2/"],
         artifact_sha256 = "eb349c0f1b249af7c7a8fbbd1c761d65d9bc230880cd8d37feab9e8278292625",
         licenses = ["notice"],  # Apache 2.0
@@ -345,7 +345,7 @@ def io_netty_netty_codec_http():
 def io_netty_netty_codec_http2():
     jvm_maven_import_external(
         name = "io_netty_netty_codec_http2",
-        artifact = "io.netty:netty-codec-http2:4.1.42.Final",
+        artifact = "io.netty:netty-codec-http2:4.1.45.Final",
         server_urls = ["https://repo.maven.apache.org/maven2/"],
         artifact_sha256 = "8bac9625eb68635396eb0c13c9cc0b22bde7c83d0cd2dae3fe9b6f9cf929e372",
         licenses = ["notice"],  # Apache 2.0
@@ -354,7 +354,7 @@ def io_netty_netty_codec_http2():
 def io_netty_netty_codec_socks():
     jvm_maven_import_external(
         name = "io_netty_netty_codec_socks",
-        artifact = "io.netty:netty-codec-socks:4.1.42.Final",
+        artifact = "io.netty:netty-codec-socks:4.1.45.Final",
         server_urls = ["https://repo.maven.apache.org/maven2/"],
         artifact_sha256 = "7f14b3a95ee9aa5a26f66af668690578a81a883683ac1c4ca9e9afdf4d4c7894",
         licenses = ["notice"],  # Apache 2.0
@@ -363,7 +363,7 @@ def io_netty_netty_codec_socks():
 def io_netty_netty_common():
     jvm_maven_import_external(
         name = "io_netty_netty_common",
-        artifact = "io.netty:netty-common:4.1.42.Final",
+        artifact = "io.netty:netty-common:4.1.45.Final",
         server_urls = ["https://repo.maven.apache.org/maven2/"],
         artifact_sha256 = "3d0a918d78292eeca02a7bb2188daa4e5053b6e29b71e6308309033e121242b5",
         licenses = ["notice"],  # Apache 2.0
@@ -372,7 +372,7 @@ def io_netty_netty_common():
 def io_netty_netty_handler():
     jvm_maven_import_external(
         name = "io_netty_netty_handler",
-        artifact = "io.netty:netty-handler:4.1.42.Final",
+        artifact = "io.netty:netty-handler:4.1.45.Final",
         server_urls = ["https://repo.maven.apache.org/maven2/"],
         artifact_sha256 = "11eda86500c33b9d386719b5419f513fd9c097d13894f25dd0c75b610d636e03",
         licenses = ["notice"],  # Apache 2.0
@@ -381,7 +381,7 @@ def io_netty_netty_handler():
 def io_netty_netty_handler_proxy():
     jvm_maven_import_external(
         name = "io_netty_netty_handler_proxy",
-        artifact = "io.netty:netty-handler-proxy:4.1.42.Final",
+        artifact = "io.netty:netty-handler-proxy:4.1.45.Final",
         server_urls = ["https://repo.maven.apache.org/maven2/"],
         artifact_sha256 = "25f22da21c29ab0d3b6b889412351bcfc5f9ccd42e07d2d5513d5c4eb571f343",
         licenses = ["notice"],  # Apache 2.0
@@ -390,7 +390,7 @@ def io_netty_netty_handler_proxy():
 def io_netty_netty_resolver():
     jvm_maven_import_external(
         name = "io_netty_netty_resolver",
-        artifact = "io.netty:netty-resolver:4.1.42.Final",
+        artifact = "io.netty:netty-resolver:4.1.45.Final",
         server_urls = ["https://repo.maven.apache.org/maven2/"],
         artifact_sha256 = "89768242b6b7cce9bd9f5945ad21d1b4bae515c6b1bf03a8af5d1899779cebc9",
         licenses = ["notice"],  # Apache 2.0
@@ -408,7 +408,7 @@ def io_netty_netty_tcnative_boringssl_static():
 def io_netty_netty_transport():
     jvm_maven_import_external(
         name = "io_netty_netty_transport",
-        artifact = "io.netty:netty-transport:4.1.42.Final",
+        artifact = "io.netty:netty-transport:4.1.45.Final",
         server_urls = ["https://repo.maven.apache.org/maven2/"],
         artifact_sha256 = "dfa817a156ea263aa9ad8364a2e226527665c9722aca40a7945f228c2c14f1da",
         licenses = ["notice"],  # Apache 2.0
@@ -417,7 +417,7 @@ def io_netty_netty_transport():
 def io_netty_netty_transport_native_epoll_linux_x86_64():
     jvm_maven_import_external(
         name = "io_netty_netty_transport_native_epoll_linux_x86_64",
-        artifact = "io.netty:netty-transport-native-epoll:jar:linux-x86_64:4.1.42.Final",
+        artifact = "io.netty:netty-transport-native-epoll:jar:linux-x86_64:4.1.45.Final",
         server_urls = ["https://repo.maven.apache.org/maven2/"],
         artifact_sha256 = "7bdf3003d5b60b061b494e62d1bafc420caf800efb743b14ec01ceaef1d3fa3e",
         licenses = ["notice"],  # Apache 2.0
