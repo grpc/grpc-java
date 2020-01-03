@@ -127,6 +127,7 @@ public class OkHttpClientStreamTest {
   }
 
   @Test
+  @SuppressWarnings("GuardedBy")
   public void cancel_started() {
     stream.start(new BaseClientStreamListener());
     stream.transportState().start(1234);
@@ -145,6 +146,7 @@ public class OkHttpClientStreamTest {
   }
 
   @Test
+  @SuppressWarnings("GuardedBy")
   public void start_alreadyCancelled() {
     stream.start(new BaseClientStreamListener());
     stream.cancel(Status.CANCELLED);
@@ -155,6 +157,7 @@ public class OkHttpClientStreamTest {
   }
 
   @Test
+  @SuppressWarnings("GuardedBy")
   public void start_userAgentRemoved() throws IOException {
     Metadata metaData = new Metadata();
     metaData.put(GrpcUtil.USER_AGENT_KEY, "misbehaving-application");
@@ -171,6 +174,7 @@ public class OkHttpClientStreamTest {
   }
 
   @Test
+  @SuppressWarnings("GuardedBy")
   public void start_headerFieldOrder() throws IOException {
     Metadata metaData = new Metadata();
     metaData.put(GrpcUtil.USER_AGENT_KEY, "misbehaving-application");
@@ -194,6 +198,7 @@ public class OkHttpClientStreamTest {
   }
 
   @Test
+  @SuppressWarnings("GuardedBy")
   public void start_headerPlaintext() throws IOException {
     Metadata metaData = new Metadata();
     metaData.put(GrpcUtil.USER_AGENT_KEY, "misbehaving-application");
@@ -218,6 +223,7 @@ public class OkHttpClientStreamTest {
   }
 
   @Test
+  @SuppressWarnings("GuardedBy")
   public void getUnaryRequest() throws IOException {
     MethodDescriptor<?, ?> getMethod = MethodDescriptor.<Void, Void>newBuilder()
         .setType(MethodDescriptor.MethodType.UNARY)

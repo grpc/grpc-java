@@ -36,7 +36,6 @@ import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.ServerCall;
-import io.grpc.ServerCall.Listener;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.ServerMethodDefinition;
@@ -127,7 +126,7 @@ public class BinaryLogProviderTest {
           MethodDescriptor<RequestT, ResponseT> methodDescriptor, CallOptions callOptions) {
         return new NoopClientCall<RequestT, ResponseT>() {
           @Override
-          public void start(Listener<ResponseT> responseListener, Metadata headers) {
+          public void start(ClientCall.Listener<ResponseT> responseListener, Metadata headers) {
             listener.set(responseListener);
           }
 
@@ -211,7 +210,7 @@ public class BinaryLogProviderTest {
             method,
             new ServerCallHandler<String, Integer>() {
               @Override
-              public Listener<String> startCall(
+              public ServerCall.Listener<String> startCall(
                   ServerCall<String, Integer> call, Metadata headers) {
                 throw new UnsupportedOperationException();
               }
@@ -310,7 +309,7 @@ public class BinaryLogProviderTest {
       assertSame(BinaryLogProvider.BYTEARRAY_MARSHALLER, method.getResponseMarshaller());
       return new SimpleForwardingClientCall<ReqT, RespT>(next.newCall(method, callOptions)) {
         @Override
-        public void start(Listener<RespT> responseListener, Metadata headers) {
+        public void start(ClientCall.Listener<RespT> responseListener, Metadata headers) {
           super.start(
               new SimpleForwardingClientCallListener<RespT>(responseListener) {
                 @Override

@@ -16,7 +16,10 @@ dependencies {
     compile project(':grpc-api'),
             libraries.gson,
             libraries.android_annotations,
-            libraries.perfmark
+            libraries.errorprone // prefer our version to perfmark's 2.3.3
+    compile (libraries.perfmark) {
+        exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
+    }
     compile (libraries.opencensus_api) {
         // prefer our own versions instead of opencensus-api's dependency
         exclude group: 'com.google.code.findbugs', module: 'jsr305'
@@ -55,4 +58,13 @@ animalsniffer {
         sourceSets.main,
         sourceSets.test
     ]
+}
+
+import net.ltgt.gradle.errorprone.CheckSeverity
+
+plugins.withId("java") {
+    compileJmhJava {
+        // This project targets Java 7 (no method references)
+        options.errorprone.check("UnnecessaryAnonymousClass", CheckSeverity.OFF)
+    }
 }

@@ -17,7 +17,7 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.auth:google-auth-library-oauth2-http:0.19.0",
     "com.google.code.findbugs:jsr305:3.0.2",
     "com.google.code.gson:gson:jar:2.8.6",
-    "com.google.errorprone:error_prone_annotations:2.3.3",
+    "com.google.errorprone:error_prone_annotations:2.3.4",
     "com.google.guava:failureaccess:1.0.1",
     "com.google.guava:guava:28.1-android",
     "com.google.j2objc:j2objc-annotations:1.3",
@@ -226,9 +226,9 @@ def com_google_code_gson_gson():
 def com_google_errorprone_error_prone_annotations():
     jvm_maven_import_external(
         name = "com_google_errorprone_error_prone_annotations",
-        artifact = "com.google.errorprone:error_prone_annotations:2.3.3",
+        artifact = "com.google.errorprone:error_prone_annotations:2.3.4",
         server_urls = ["https://repo.maven.apache.org/maven2/"],
-        artifact_sha256 = "ec59f1b702d9afc09e8c3929f5c42777dec623a6ea2731ac694332c7d7680f5a",
+        artifact_sha256 = "baf7d6ea97ce606c53e11b6854ba5f2ce7ef5c24dddf0afa18d1260bd25b002c",
         licenses = ["notice"],  # Apache 2.0
     )
 

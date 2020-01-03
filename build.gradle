@@ -113,7 +113,7 @@ subprojects {
         libraries = [
             android_annotations: "com.google.android:annotations:4.1.1.4",
             animalsniffer_annotations: "org.codehaus.mojo:animal-sniffer-annotations:1.18",
-            errorprone: "com.google.errorprone:error_prone_annotations:2.3.3",
+            errorprone: "com.google.errorprone:error_prone_annotations:2.3.4",
             gson: "com.google.code.gson:gson:2.8.6",
             guava: "com.google.guava:guava:${guavaVersion}",
             hpack: 'com.twitter:hpack:0.10.1',
@@ -263,7 +263,7 @@ subprojects {
 
         if (rootProject.properties.get('errorProne', true)) {
             dependencies {
-                errorprone 'com.google.errorprone:error_prone_core:2.3.3'
+                errorprone 'com.google.errorprone:error_prone_core:2.3.4'
                 errorproneJavac 'com.google.errorprone:javac:9+181-r4173-1'
 
                 annotationProcessor 'com.google.guava:guava-beta-checker:1.0'
@@ -279,9 +279,17 @@ subprojects {
             }
         }
 
+        compileJava {
+            // This project targets Java 7 (no method references)
+            options.errorprone.check("UnnecessaryAnonymousClass", CheckSeverity.OFF)
+            // This project targets Java 7 (no time.Duration class)
+            options.errorprone.check("PreferJavaTimeOverload", CheckSeverity.OFF)
+        }
         compileTestJava {
             // LinkedList doesn't hurt much in tests and has lots of usages
             options.errorprone.check("JdkObsolete", CheckSeverity.OFF)
+            options.errorprone.check("UnnecessaryAnonymousClass", CheckSeverity.OFF)
+            options.errorprone.check("PreferJavaTimeOverload", CheckSeverity.OFF)
         }
     }
 

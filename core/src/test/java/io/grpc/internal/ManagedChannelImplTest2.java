@@ -3437,7 +3437,7 @@ public class ManagedChannelImplTest2 {
       public void shutdown() {}
     }
 
-    final class FakeNameResolverFactory extends NameResolver.Factory {
+    final class FakeNameResolverFactory2 extends NameResolver.Factory {
       FakeNameResolver resolver;
 
       @Nullable
@@ -3452,7 +3452,7 @@ public class ManagedChannelImplTest2 {
       }
     }
 
-    FakeNameResolverFactory factory = new FakeNameResolverFactory();
+    FakeNameResolverFactory2 factory = new FakeNameResolverFactory2();
     final class CustomBuilder extends AbstractManagedChannelImplBuilder<CustomBuilder> {
 
       CustomBuilder() {
