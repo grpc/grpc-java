@@ -1141,11 +1141,9 @@ public class CensusModulesTest {
   @Test
   public void generateTraceSpanName() {
     assertEquals(
-        "Sent.io.grpc.Foo", CensusTracingModule
-            .generateTraceSpanName(false, "io.grpc/Foo"));
+        "Sent.io.grpc.Foo", CensusTracingModule.generateTraceSpanName(false, "io.grpc/Foo"));
     assertEquals(
-        "Recv.io.grpc.Bar", CensusTracingModule
-            .generateTraceSpanName(true, "io.grpc/Bar"));
+        "Recv.io.grpc.Bar", CensusTracingModule.generateTraceSpanName(true, "io.grpc/Bar"));
   }
 
   private static void assertNoServerContent(StatsTestUtils.MetricsRecord record) {
