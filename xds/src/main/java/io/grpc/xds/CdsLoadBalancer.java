@@ -65,7 +65,7 @@ public final class CdsLoadBalancer extends LoadBalancer {
   @Nullable
   private ClusterWatcher clusterWatcher;
   @Nullable
-  private ObjectPool<XdsClient> xdsClientRef;
+  private ObjectPool<XdsClient> xdsClientPool;
   @Nullable
   private XdsClient xdsClient;
 
@@ -85,17 +85,17 @@ public final class CdsLoadBalancer extends LoadBalancer {
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     channelLogger.log(ChannelLogLevel.DEBUG, "Received ResolvedAddresses {0}", resolvedAddresses);
     Attributes attributes = resolvedAddresses.getAttributes();
-    if (xdsClientRef == null) {
-      xdsClientRef = resolvedAddresses.getAttributes().get(XdsAttributes.XDS_CLIENT_REF);
-      if (xdsClientRef == null) {
+    if (xdsClientPool == null) {
+      xdsClientPool = resolvedAddresses.getAttributes().get(XdsAttributes.XDS_CLIENT_POOL);
+      if (xdsClientPool == null) {
         // TODO(zdapeng): create a new xdsClient from bootstrap if no one exists.
         helper.updateBalancingState(
             TRANSIENT_FAILURE,
             new ErrorPicker(Status.UNAVAILABLE.withDescription(
-                "XDS_CLIENT_REF attributes not available from resolve addresses")));
+                "XDS_CLIENT_POOL attributes not available from resolve addresses")));
         return;
       }
-      xdsClient = xdsClientRef.getObject();
+      xdsClient = xdsClientPool.getObject();
     }
 
     Map<String, ?> newRawLbConfig = attributes.get(ATTR_LOAD_BALANCING_CONFIG);
@@ -153,8 +153,8 @@ public final class CdsLoadBalancer extends LoadBalancer {
     channelLogger.log(ChannelLogLevel.DEBUG, "CDS load balancer is shutting down");
 
     switchingLoadBalancer.shutdown();
-    if (xdsClientRef != null) {
-      xdsClientRef.returnObject(xdsClient);
+    if (xdsClientPool != null) {
+      xdsClientPool.returnObject(xdsClient);
     }
   }
 

@@ -17,11 +17,13 @@
 package io.grpc.netty;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 
 import io.grpc.ManagedChannel;
 import io.grpc.netty.InternalNettyChannelBuilder.OverrideAuthorityChecker;
+import io.grpc.netty.NettyTestUtil.TrackingObjectPoolForTest;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFactory;
 import io.netty.channel.EventLoopGroup;
@@ -143,18 +145,20 @@ public class NettyChannelBuilderTest {
   public void createProtocolNegotiatorByType_plaintext() {
     ProtocolNegotiator negotiator = NettyChannelBuilder.createProtocolNegotiatorByType(
         NegotiationType.PLAINTEXT,
-        noSslContext);
+        noSslContext, null);
     // just check that the classes are the same, and that negotiator is not null.
     assertTrue(negotiator instanceof ProtocolNegotiators.PlaintextProtocolNegotiator);
+    negotiator.close();
   }
 
   @Test
   public void createProtocolNegotiatorByType_plaintextUpgrade() {
     ProtocolNegotiator negotiator = NettyChannelBuilder.createProtocolNegotiatorByType(
         NegotiationType.PLAINTEXT_UPGRADE,
-        noSslContext);
+        noSslContext, null);
     // just check that the classes are the same, and that negotiator is not null.
     assertTrue(negotiator instanceof ProtocolNegotiators.PlaintextUpgradeProtocolNegotiator);
+    negotiator.close();
   }
 
   @Test
@@ -162,7 +166,21 @@ public class NettyChannelBuilderTest {
     thrown.expect(NullPointerException.class);
     NettyChannelBuilder.createProtocolNegotiatorByType(
         NegotiationType.TLS,
-        noSslContext);
+        noSslContext, null);
+  }
+
+  @Test
+  public void createProtocolNegotiatorByType_tlsWithExecutor() throws Exception {
+    TrackingObjectPoolForTest executorPool = new TrackingObjectPoolForTest();
+    assertEquals(false, executorPool.isInUse());
+    SslContext localSslContext = GrpcSslContexts.forClient().build();
+    ProtocolNegotiator negotiator = NettyChannelBuilder.createProtocolNegotiatorByType(
+        NegotiationType.TLS,
+        localSslContext, executorPool);
+    assertEquals(true, executorPool.isInUse());
+    assertNotNull(negotiator);
+    negotiator.close();
+    assertEquals(false, executorPool.isInUse());
   }
 
   @Test

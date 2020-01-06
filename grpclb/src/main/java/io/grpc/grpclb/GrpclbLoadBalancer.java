@@ -89,6 +89,7 @@ class GrpclbLoadBalancer extends LoadBalancer {
   }
 
   @Override
+  @SuppressWarnings("deprecation")  // TODO(creamsoup) migrate to use parsed service config
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     List<EquivalentAddressGroup> updatedServers = resolvedAddresses.getAddresses();
     Attributes attributes = resolvedAddresses.getAttributes();

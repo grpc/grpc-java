@@ -51,6 +51,7 @@ import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.CheckReturnValue;
@@ -398,7 +399,8 @@ public final class NettyChannelBuilder
           throw new RuntimeException(ex);
         }
       }
-      negotiator = createProtocolNegotiatorByType(negotiationType, localSslContext);
+      negotiator = createProtocolNegotiatorByType(negotiationType, localSslContext,
+          this.getOffloadExecutorPool());
     }
 
     return new NettyTransportFactory(
@@ -441,14 +443,15 @@ public final class NettyChannelBuilder
   @CheckReturnValue
   static ProtocolNegotiator createProtocolNegotiatorByType(
       NegotiationType negotiationType,
-      SslContext sslContext) {
+      SslContext sslContext,
+      ObjectPool<? extends Executor> executorPool) {
     switch (negotiationType) {
       case PLAINTEXT:
         return ProtocolNegotiators.plaintext();
       case PLAINTEXT_UPGRADE:
         return ProtocolNegotiators.plaintextUpgrade();
       case TLS:
-        return ProtocolNegotiators.tls(sslContext);
+        return ProtocolNegotiators.tls(sslContext, executorPool);
       default:
         throw new IllegalArgumentException("Unsupported negotiationType: " + negotiationType);
     }

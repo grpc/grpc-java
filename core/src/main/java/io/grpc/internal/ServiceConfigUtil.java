@@ -19,7 +19,6 @@ package io.grpc.internal;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.base.Verify.verify;
-import static com.google.common.math.LongMath.checkedAdd;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
@@ -27,7 +26,6 @@ import com.google.common.base.Objects;
 import com.google.common.base.VerifyException;
 import io.grpc.Status;
 import io.grpc.internal.RetriableStream.Throttle;
-import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -35,7 +33,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
 /**
@@ -45,37 +42,6 @@ import javax.annotation.Nullable;
  */
 public final class ServiceConfigUtil {
 
-  private static final String SERVICE_CONFIG_METHOD_CONFIG_KEY = "methodConfig";
-  private static final String SERVICE_CONFIG_LOAD_BALANCING_POLICY_KEY = "loadBalancingPolicy";
-  private static final String SERVICE_CONFIG_LOAD_BALANCING_CONFIG_KEY = "loadBalancingConfig";
-  private static final String XDS_CONFIG_CHILD_POLICY_KEY = "childPolicy";
-  private static final String XDS_CONFIG_FALLBACK_POLICY_KEY = "fallbackPolicy";
-  private static final String XDS_CONFIG_EDS_SERVICE_NAME = "edsServiceName";
-  private static final String XDS_CONFIG_LRS_SERVER_NAME = "lrsLoadReportingServerName";
-  private static final String SERVICE_CONFIG_STICKINESS_METADATA_KEY = "stickinessMetadataKey";
-  private static final String METHOD_CONFIG_NAME_KEY = "name";
-  private static final String METHOD_CONFIG_TIMEOUT_KEY = "timeout";
-  private static final String METHOD_CONFIG_WAIT_FOR_READY_KEY = "waitForReady";
-  private static final String METHOD_CONFIG_MAX_REQUEST_MESSAGE_BYTES_KEY =
-      "maxRequestMessageBytes";
-  private static final String METHOD_CONFIG_MAX_RESPONSE_MESSAGE_BYTES_KEY =
-      "maxResponseMessageBytes";
-  private static final String METHOD_CONFIG_RETRY_POLICY_KEY = "retryPolicy";
-  private static final String METHOD_CONFIG_HEDGING_POLICY_KEY = "hedgingPolicy";
-  private static final String NAME_SERVICE_KEY = "service";
-  private static final String NAME_METHOD_KEY = "method";
-  private static final String RETRY_POLICY_MAX_ATTEMPTS_KEY = "maxAttempts";
-  private static final String RETRY_POLICY_INITIAL_BACKOFF_KEY = "initialBackoff";
-  private static final String RETRY_POLICY_MAX_BACKOFF_KEY = "maxBackoff";
-  private static final String RETRY_POLICY_BACKOFF_MULTIPLIER_KEY = "backoffMultiplier";
-  private static final String RETRY_POLICY_RETRYABLE_STATUS_CODES_KEY = "retryableStatusCodes";
-  private static final String HEDGING_POLICY_MAX_ATTEMPTS_KEY = "maxAttempts";
-  private static final String HEDGING_POLICY_HEDGING_DELAY_KEY = "hedgingDelay";
-  private static final String HEDGING_POLICY_NON_FATAL_STATUS_CODES_KEY = "nonFatalStatusCodes";
-
-  private static final long DURATION_SECONDS_MIN = -315576000000L;
-  private static final long DURATION_SECONDS_MAX = 315576000000L;
-
   private ServiceConfigUtil() {}
 
   /**
@@ -83,9 +49,7 @@ public final class ServiceConfigUtil {
    */
   @Nullable
   public static String getHealthCheckedServiceName(@Nullable Map<String, ?> serviceConfig) {
-    String healthCheckKey = "healthCheckConfig";
-    String serviceNameKey = "serviceName";
-    if (serviceConfig == null || !serviceConfig.containsKey(healthCheckKey)) {
+    if (serviceConfig == null) {
       return null;
     }
 
@@ -97,8 +61,8 @@ public final class ServiceConfigUtil {
       }
     }
     */
-    Map<String, ?> healthCheck = JsonUtil.getObject(serviceConfig, healthCheckKey);
-    if (!healthCheck.containsKey(serviceNameKey)) {
+    Map<String, ?> healthCheck = JsonUtil.getObject(serviceConfig, "healthCheckConfig");
+    if (healthCheck == null) {
       return null;
     }
     return JsonUtil.getString(healthCheck, "serviceName");
@@ -106,8 +70,7 @@ public final class ServiceConfigUtil {
 
   @Nullable
   static Throttle getThrottlePolicy(@Nullable Map<String, ?> serviceConfig) {
-    String retryThrottlingKey = "retryThrottling";
-    if (serviceConfig == null || !serviceConfig.containsKey(retryThrottlingKey)) {
+    if (serviceConfig == null) {
       return null;
     }
 
@@ -130,11 +93,14 @@ public final class ServiceConfigUtil {
     }
     */
 
-    Map<String, ?> throttling = JsonUtil.getObject(serviceConfig, retryThrottlingKey);
+    Map<String, ?> throttling = JsonUtil.getObject(serviceConfig, "retryThrottling");
+    if (throttling == null) {
+      return null;
+    }
 
     // TODO(dapengzhang0): check if this is null.
-    float maxTokens = JsonUtil.getDouble(throttling, "maxTokens").floatValue();
-    float tokenRatio = JsonUtil.getDouble(throttling, "tokenRatio").floatValue();
+    float maxTokens = JsonUtil.getNumber(throttling, "maxTokens").floatValue();
+    float tokenRatio = JsonUtil.getNumber(throttling, "tokenRatio").floatValue();
     checkState(maxTokens > 0f, "maxToken should be greater than zero");
     checkState(tokenRatio > 0f, "tokenRatio should be greater than zero");
     return new Throttle(maxTokens, tokenRatio);
@@ -142,44 +108,30 @@ public final class ServiceConfigUtil {
 
   @Nullable
   static Integer getMaxAttemptsFromRetryPolicy(Map<String, ?> retryPolicy) {
-    if (!retryPolicy.containsKey(RETRY_POLICY_MAX_ATTEMPTS_KEY)) {
-      return null;
-    }
-    return JsonUtil.getDouble(retryPolicy, RETRY_POLICY_MAX_ATTEMPTS_KEY).intValue();
+    return JsonUtil.getNumberAsInteger(retryPolicy, "maxAttempts");
   }
 
   @Nullable
   static Long getInitialBackoffNanosFromRetryPolicy(Map<String, ?> retryPolicy) {
-    if (!retryPolicy.containsKey(RETRY_POLICY_INITIAL_BACKOFF_KEY)) {
-      return null;
-    }
-    String rawInitialBackoff = JsonUtil.getString(retryPolicy, RETRY_POLICY_INITIAL_BACKOFF_KEY);
-    try {
-      return parseDuration(rawInitialBackoff);
-    } catch (ParseException e) {
-      throw new RuntimeException(e);
-    }
+    return JsonUtil.getStringAsDuration(retryPolicy, "initialBackoff");
   }
 
   @Nullable
   static Long getMaxBackoffNanosFromRetryPolicy(Map<String, ?> retryPolicy) {
-    if (!retryPolicy.containsKey(RETRY_POLICY_MAX_BACKOFF_KEY)) {
-      return null;
-    }
-    String rawMaxBackoff = JsonUtil.getString(retryPolicy, RETRY_POLICY_MAX_BACKOFF_KEY);
-    try {
-      return parseDuration(rawMaxBackoff);
-    } catch (ParseException e) {
-      throw new RuntimeException(e);
-    }
+    return JsonUtil.getStringAsDuration(retryPolicy, "maxBackoff");
   }
 
   @Nullable
   static Double getBackoffMultiplierFromRetryPolicy(Map<String, ?> retryPolicy) {
-    if (!retryPolicy.containsKey(RETRY_POLICY_BACKOFF_MULTIPLIER_KEY)) {
+    return JsonUtil.getNumber(retryPolicy, "backoffMultiplier");
+  }
+
+  private static Set<Status.Code> getListOfStatusCodesAsSet(Map<String, ?> obj, String key) {
+    List<?> statuses = JsonUtil.getList(obj, key);
+    if (statuses == null) {
       return null;
     }
-    return JsonUtil.getDouble(retryPolicy, RETRY_POLICY_BACKOFF_MULTIPLIER_KEY);
+    return getStatusCodesFromList(statuses);
   }
 
   private static Set<Status.Code> getStatusCodesFromList(List<?> statuses) {
@@ -209,92 +161,58 @@ public final class ServiceConfigUtil {
   }
 
   static Set<Status.Code> getRetryableStatusCodesFromRetryPolicy(Map<String, ?> retryPolicy) {
-    verify(
-        retryPolicy.containsKey(RETRY_POLICY_RETRYABLE_STATUS_CODES_KEY),
-        "%s is required in retry policy", RETRY_POLICY_RETRYABLE_STATUS_CODES_KEY);
-    Set<Status.Code> codes =
-        getStatusCodesFromList(
-            JsonUtil.getList(retryPolicy, RETRY_POLICY_RETRYABLE_STATUS_CODES_KEY));
-    verify(!codes.isEmpty(), "%s must not be empty", RETRY_POLICY_RETRYABLE_STATUS_CODES_KEY);
-    verify(
-        !codes.contains(Status.Code.OK),
-        "%s must not contain OK", RETRY_POLICY_RETRYABLE_STATUS_CODES_KEY);
+    String retryableStatusCodesKey = "retryableStatusCodes";
+    Set<Status.Code> codes = getListOfStatusCodesAsSet(retryPolicy, retryableStatusCodesKey);
+    verify(codes != null, "%s is required in retry policy", retryableStatusCodesKey);
+    verify(!codes.isEmpty(), "%s must not be empty", retryableStatusCodesKey);
+    verify(!codes.contains(Status.Code.OK), "%s must not contain OK", retryableStatusCodesKey);
     return codes;
   }
 
   @Nullable
   static Integer getMaxAttemptsFromHedgingPolicy(Map<String, ?> hedgingPolicy) {
-    if (!hedgingPolicy.containsKey(HEDGING_POLICY_MAX_ATTEMPTS_KEY)) {
-      return null;
-    }
-    return JsonUtil.getDouble(hedgingPolicy, HEDGING_POLICY_MAX_ATTEMPTS_KEY).intValue();
+    return JsonUtil.getNumberAsInteger(hedgingPolicy, "maxAttempts");
   }
 
   @Nullable
   static Long getHedgingDelayNanosFromHedgingPolicy(Map<String, ?> hedgingPolicy) {
-    if (!hedgingPolicy.containsKey(HEDGING_POLICY_HEDGING_DELAY_KEY)) {
-      return null;
-    }
-    String rawHedgingDelay = JsonUtil.getString(hedgingPolicy, HEDGING_POLICY_HEDGING_DELAY_KEY);
-    try {
-      return parseDuration(rawHedgingDelay);
-    } catch (ParseException e) {
-      throw new RuntimeException(e);
-    }
+    return JsonUtil.getStringAsDuration(hedgingPolicy, "hedgingDelay");
   }
 
   static Set<Status.Code> getNonFatalStatusCodesFromHedgingPolicy(Map<String, ?> hedgingPolicy) {
-    if (!hedgingPolicy.containsKey(HEDGING_POLICY_NON_FATAL_STATUS_CODES_KEY)) {
+    String nonFatalStatusCodesKey = "nonFatalStatusCodes";
+    Set<Status.Code> codes = getListOfStatusCodesAsSet(hedgingPolicy, nonFatalStatusCodesKey);
+    if (codes == null) {
       return Collections.unmodifiableSet(EnumSet.noneOf(Status.Code.class));
     }
-    Set<Status.Code> codes =
-        getStatusCodesFromList(
-            JsonUtil.getList(hedgingPolicy, HEDGING_POLICY_NON_FATAL_STATUS_CODES_KEY));
-    verify(
-        !codes.contains(Status.Code.OK),
-        "%s must not contain OK", HEDGING_POLICY_NON_FATAL_STATUS_CODES_KEY);
+    verify(!codes.contains(Status.Code.OK), "%s must not contain OK", nonFatalStatusCodesKey);
     return codes;
   }
 
   @Nullable
   static String getServiceFromName(Map<String, ?> name) {
-    if (!name.containsKey(NAME_SERVICE_KEY)) {
-      return null;
-    }
-    return JsonUtil.getString(name, NAME_SERVICE_KEY);
+    return JsonUtil.getString(name, "service");
   }
 
   @Nullable
   static String getMethodFromName(Map<String, ?> name) {
-    if (!name.containsKey(NAME_METHOD_KEY)) {
-      return null;
-    }
-    return JsonUtil.getString(name, NAME_METHOD_KEY);
+    return JsonUtil.getString(name, "method");
   }
 
   @Nullable
   static Map<String, ?> getRetryPolicyFromMethodConfig(Map<String, ?> methodConfig) {
-    if (!methodConfig.containsKey(METHOD_CONFIG_RETRY_POLICY_KEY)) {
-      return null;
-    }
-    return JsonUtil.getObject(methodConfig, METHOD_CONFIG_RETRY_POLICY_KEY);
+    return JsonUtil.getObject(methodConfig, "retryPolicy");
   }
 
   @Nullable
   static Map<String, ?> getHedgingPolicyFromMethodConfig(Map<String, ?> methodConfig) {
-    if (!methodConfig.containsKey(METHOD_CONFIG_HEDGING_POLICY_KEY)) {
-      return null;
-    }
-    return JsonUtil.getObject(methodConfig, METHOD_CONFIG_HEDGING_POLICY_KEY);
+    return JsonUtil.getObject(methodConfig, "hedgingPolicy");
   }
 
   @Nullable
   static List<Map<String, ?>> getNameListFromMethodConfig(
       Map<String, ?> methodConfig) {
-    if (!methodConfig.containsKey(METHOD_CONFIG_NAME_KEY)) {
-      return null;
-    }
-    return JsonUtil.checkObjectList(JsonUtil.getList(methodConfig, METHOD_CONFIG_NAME_KEY));
+    return JsonUtil.getListOfObjects(methodConfig, "name");
   }
 
   /**
@@ -304,50 +222,28 @@ public final class ServiceConfigUtil {
    */
   @Nullable
   static Long getTimeoutFromMethodConfig(Map<String, ?> methodConfig) {
-    if (!methodConfig.containsKey(METHOD_CONFIG_TIMEOUT_KEY)) {
-      return null;
-    }
-    String rawTimeout = JsonUtil.getString(methodConfig, METHOD_CONFIG_TIMEOUT_KEY);
-    try {
-      return parseDuration(rawTimeout);
-    } catch (ParseException e) {
-      throw new RuntimeException(e);
-    }
+    return JsonUtil.getStringAsDuration(methodConfig, "timeout");
   }
 
   @Nullable
   static Boolean getWaitForReadyFromMethodConfig(Map<String, ?> methodConfig) {
-    if (!methodConfig.containsKey(METHOD_CONFIG_WAIT_FOR_READY_KEY)) {
-      return null;
-    }
-    return JsonUtil.getBoolean(methodConfig, METHOD_CONFIG_WAIT_FOR_READY_KEY);
+    return JsonUtil.getBoolean(methodConfig, "waitForReady");
   }
 
   @Nullable
   static Integer getMaxRequestMessageBytesFromMethodConfig(Map<String, ?> methodConfig) {
-    if (!methodConfig.containsKey(METHOD_CONFIG_MAX_REQUEST_MESSAGE_BYTES_KEY)) {
-      return null;
-    }
-    return JsonUtil.getDouble(methodConfig, METHOD_CONFIG_MAX_REQUEST_MESSAGE_BYTES_KEY).intValue();
+    return JsonUtil.getNumberAsInteger(methodConfig, "maxRequestMessageBytes");
   }
 
   @Nullable
   static Integer getMaxResponseMessageBytesFromMethodConfig(Map<String, ?> methodConfig) {
-    if (!methodConfig.containsKey(METHOD_CONFIG_MAX_RESPONSE_MESSAGE_BYTES_KEY)) {
-      return null;
-    }
-    return JsonUtil.getDouble(methodConfig, METHOD_CONFIG_MAX_RESPONSE_MESSAGE_BYTES_KEY)
-        .intValue();
+    return JsonUtil.getNumberAsInteger(methodConfig, "maxResponseMessageBytes");
   }
 
   @Nullable
   static List<Map<String, ?>> getMethodConfigFromServiceConfig(
       Map<String, ?> serviceConfig) {
-    if (!serviceConfig.containsKey(SERVICE_CONFIG_METHOD_CONFIG_KEY)) {
-      return null;
-    }
-    return JsonUtil
-        .checkObjectList(JsonUtil.getList(serviceConfig, SERVICE_CONFIG_METHOD_CONFIG_KEY));
+    return JsonUtil.getListOfObjects(serviceConfig, "methodConfig");
   }
 
   /**
@@ -371,17 +267,15 @@ public final class ServiceConfigUtil {
     }
     */
     List<Map<String, ?>> lbConfigs = new ArrayList<>();
-    if (serviceConfig.containsKey(SERVICE_CONFIG_LOAD_BALANCING_CONFIG_KEY)) {
-      List<?> configs = JsonUtil.getList(serviceConfig, SERVICE_CONFIG_LOAD_BALANCING_CONFIG_KEY);
-      for (Map<String, ?> config : JsonUtil.checkObjectList(configs)) {
-        lbConfigs.add(config);
-      }
+    String loadBalancingConfigKey = "loadBalancingConfig";
+    if (serviceConfig.containsKey(loadBalancingConfigKey)) {
+      lbConfigs.addAll(JsonUtil.getListOfObjects(
+          serviceConfig, loadBalancingConfigKey));
     }
     if (lbConfigs.isEmpty()) {
       // No LoadBalancingConfig found.  Fall back to the deprecated LoadBalancingPolicy
-      if (serviceConfig.containsKey(SERVICE_CONFIG_LOAD_BALANCING_POLICY_KEY)) {
-        // TODO(zhangkun83): check if this is null.
-        String policy = JsonUtil.getString(serviceConfig, SERVICE_CONFIG_LOAD_BALANCING_POLICY_KEY);
+      String policy = JsonUtil.getString(serviceConfig, "loadBalancingPolicy");
+      if (policy != null) {
         // Convert the policy to a config, so that the caller can handle them in the same way.
         policy = policy.toLowerCase(Locale.ROOT);
         Map<String, ?> fakeConfig = Collections.singletonMap(policy, Collections.emptyMap());
@@ -410,6 +304,9 @@ public final class ServiceConfigUtil {
    * Given a JSON list of LoadBalancingConfigs, and convert it into a list of LbConfig.
    */
   public static List<LbConfig> unwrapLoadBalancingConfigList(List<Map<String, ?>> list) {
+    if (list == null) {
+      return null;
+    }
     ArrayList<LbConfig> result = new ArrayList<>();
     for (Map<String, ?> rawChildPolicy : list) {
       result.add(unwrapLoadBalancingConfig(rawChildPolicy));
@@ -422,7 +319,7 @@ public final class ServiceConfigUtil {
    */
   @Nullable
   public static String getEdsServiceNameFromXdsConfig(Map<String, ?> rawXdsConfig) {
-    return JsonUtil.getString(rawXdsConfig, XDS_CONFIG_EDS_SERVICE_NAME);
+    return JsonUtil.getString(rawXdsConfig, "edsServiceName");
   }
 
   /**
@@ -430,7 +327,7 @@ public final class ServiceConfigUtil {
    */
   @Nullable
   public static String getLrsServerNameFromXdsConfig(Map<String, ?> rawXdsConfig) {
-    return JsonUtil.getString(rawXdsConfig, XDS_CONFIG_LRS_SERVER_NAME);
+    return JsonUtil.getString(rawXdsConfig, "lrsLoadReportingServerName");
   }
 
   /**
@@ -438,11 +335,8 @@ public final class ServiceConfigUtil {
    */
   @Nullable
   public static List<LbConfig> getChildPolicyFromXdsConfig(Map<String, ?> rawXdsConfig) {
-    List<?> rawChildPolicies = JsonUtil.getList(rawXdsConfig, XDS_CONFIG_CHILD_POLICY_KEY);
-    if (rawChildPolicies != null) {
-      return unwrapLoadBalancingConfigList(JsonUtil.checkObjectList(rawChildPolicies));
-    }
-    return null;
+    return unwrapLoadBalancingConfigList(
+        JsonUtil.getListOfObjects(rawXdsConfig, "childPolicy"));
   }
 
   /**
@@ -450,11 +344,8 @@ public final class ServiceConfigUtil {
    */
   @Nullable
   public static List<LbConfig> getFallbackPolicyFromXdsConfig(Map<String, ?> rawXdsConfig) {
-    List<?> rawFallbackPolicies = JsonUtil.getList(rawXdsConfig, XDS_CONFIG_FALLBACK_POLICY_KEY);
-    if (rawFallbackPolicies != null) {
-      return unwrapLoadBalancingConfigList(JsonUtil.checkObjectList(rawFallbackPolicies));
-    }
-    return null;
+    return unwrapLoadBalancingConfigList(
+        JsonUtil.getListOfObjects(rawXdsConfig, "fallbackPolicy"));
   }
 
   /**
@@ -463,141 +354,7 @@ public final class ServiceConfigUtil {
   @Nullable
   public static String getStickinessMetadataKeyFromServiceConfig(
       Map<String, ?> serviceConfig) {
-    if (!serviceConfig.containsKey(SERVICE_CONFIG_STICKINESS_METADATA_KEY)) {
-      return null;
-    }
-    return JsonUtil.getString(serviceConfig, SERVICE_CONFIG_STICKINESS_METADATA_KEY);
-  }
-
-  /**
-   * Parse from a string to produce a duration.  Copy of
-   * {@link com.google.protobuf.util.Durations#parse}.
-   *
-   * @return A Duration parsed from the string.
-   * @throws ParseException if parsing fails.
-   */
-  private static long parseDuration(String value) throws ParseException {
-    // Must ended with "s".
-    if (value.isEmpty() || value.charAt(value.length() - 1) != 's') {
-      throw new ParseException("Invalid duration string: " + value, 0);
-    }
-    boolean negative = false;
-    if (value.charAt(0) == '-') {
-      negative = true;
-      value = value.substring(1);
-    }
-    String secondValue = value.substring(0, value.length() - 1);
-    String nanoValue = "";
-    int pointPosition = secondValue.indexOf('.');
-    if (pointPosition != -1) {
-      nanoValue = secondValue.substring(pointPosition + 1);
-      secondValue = secondValue.substring(0, pointPosition);
-    }
-    long seconds = Long.parseLong(secondValue);
-    int nanos = nanoValue.isEmpty() ? 0 : parseNanos(nanoValue);
-    if (seconds < 0) {
-      throw new ParseException("Invalid duration string: " + value, 0);
-    }
-    if (negative) {
-      seconds = -seconds;
-      nanos = -nanos;
-    }
-    try {
-      return normalizedDuration(seconds, nanos);
-    } catch (IllegalArgumentException e) {
-      throw new ParseException("Duration value is out of range.", 0);
-    }
-  }
-
-  /**
-   * Copy of {@link com.google.protobuf.util.Timestamps#parseNanos}.
-   */
-  private static int parseNanos(String value) throws ParseException {
-    int result = 0;
-    for (int i = 0; i < 9; ++i) {
-      result = result * 10;
-      if (i < value.length()) {
-        if (value.charAt(i) < '0' || value.charAt(i) > '9') {
-          throw new ParseException("Invalid nanoseconds.", 0);
-        }
-        result += value.charAt(i) - '0';
-      }
-    }
-    return result;
-  }
-
-  private static final long NANOS_PER_SECOND = TimeUnit.SECONDS.toNanos(1);
-
-  /**
-   * Copy of {@link com.google.protobuf.util.Durations#normalizedDuration}.
-   */
-  @SuppressWarnings("NarrowingCompoundAssignment")
-  private static long normalizedDuration(long seconds, int nanos) {
-    if (nanos <= -NANOS_PER_SECOND || nanos >= NANOS_PER_SECOND) {
-      seconds = checkedAdd(seconds, nanos / NANOS_PER_SECOND);
-      nanos %= NANOS_PER_SECOND;
-    }
-    if (seconds > 0 && nanos < 0) {
-      nanos += NANOS_PER_SECOND; // no overflow since nanos is negative (and we're adding)
-      seconds--; // no overflow since seconds is positive (and we're decrementing)
-    }
-    if (seconds < 0 && nanos > 0) {
-      nanos -= NANOS_PER_SECOND; // no overflow since nanos is positive (and we're subtracting)
-      seconds++; // no overflow since seconds is negative (and we're incrementing)
-    }
-    if (!durationIsValid(seconds, nanos)) {
-      throw new IllegalArgumentException(String.format(
-          "Duration is not valid. See proto definition for valid values. "
-              + "Seconds (%s) must be in range [-315,576,000,000, +315,576,000,000]. "
-              + "Nanos (%s) must be in range [-999,999,999, +999,999,999]. "
-              + "Nanos must have the same sign as seconds", seconds, nanos));
-    }
-    return saturatedAdd(TimeUnit.SECONDS.toNanos(seconds), nanos);
-  }
-
-  /**
-   * Returns true if the given number of seconds and nanos is a valid {@code Duration}. The {@code
-   * seconds} value must be in the range [-315,576,000,000, +315,576,000,000]. The {@code nanos}
-   * value must be in the range [-999,999,999, +999,999,999].
-   *
-   * <p><b>Note:</b> Durations less than one second are represented with a 0 {@code seconds} field
-   * and a positive or negative {@code nanos} field. For durations of one second or more, a non-zero
-   * value for the {@code nanos} field must be of the same sign as the {@code seconds} field.
-   *
-   * <p>Copy of {@link com.google.protobuf.util.Duration#isValid}.</p>
-   */
-  private static boolean durationIsValid(long seconds, int nanos) {
-    if (seconds < DURATION_SECONDS_MIN || seconds > DURATION_SECONDS_MAX) {
-      return false;
-    }
-    if (nanos < -999999999L || nanos >= NANOS_PER_SECOND) {
-      return false;
-    }
-    if (seconds < 0 || nanos < 0) {
-      if (seconds > 0 || nanos > 0) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  /**
-   * Returns the sum of {@code a} and {@code b} unless it would overflow or underflow in which case
-   * {@code Long.MAX_VALUE} or {@code Long.MIN_VALUE} is returned, respectively.
-   *
-   * <p>Copy of {@link com.google.common.math.LongMath#saturatedAdd}.</p>
-   *
-   */
-  @SuppressWarnings("ShortCircuitBoolean")
-  private static long saturatedAdd(long a, long b) {
-    long naiveSum = a + b;
-    if ((a ^ b) < 0 | (a ^ naiveSum) >= 0) {
-      // If a and b have different signs or a has the same sign as the result then there was no
-      // overflow, return.
-      return naiveSum;
-    }
-    // we did over/under flow, if the sign is negative we should return MAX otherwise MIN
-    return Long.MAX_VALUE + ((naiveSum >>> (Long.SIZE - 1)) ^ 1);
+    return JsonUtil.getString(serviceConfig, "stickinessMetadataKey");
   }
 
   /**

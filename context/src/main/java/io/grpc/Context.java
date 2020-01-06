@@ -326,6 +326,19 @@ public class Context {
    *   });
    * </pre>
    *
+   * <p>Note that multiple calls to {@link #withValue} can be chained together.
+   * That is,
+   *
+   * <pre>
+   * context.withValues(K1, V1, K2, V2);
+   * // is the same as
+   * context.withValue(K1, V1).withValue(K2, V2);
+   * </pre>
+   *
+   * <p>Nonetheless, {@link Context} should not be treated like a general purpose
+   * map with a large number of keys and values — combine multiple related items
+   * together into a single key instead of separating them. But if the items
+   * are unrelated, have separate keys for them.
    */
   public <V> Context withValue(Key<V> k1, V v1) {
     PersistentHashArrayMappedTrie<Key<?>, Object> newKeyValueEntries = keyValueEntries.put(k1, v1);
@@ -355,6 +368,20 @@ public class Context {
   /**
    * Create a new context with the given key value set. The new context will cascade cancellation
    * from its parent.
+   *
+   * <p>For more than 4 key-value pairs, note that multiple calls to
+   * {@link #withValue} can be chained together. That is,
+   *
+   * <pre>
+   * context.withValues(K1, V1, K2, V2);
+   * // is the same as
+   * context.withValue(K1, V1).withValue(K2, V2);
+   * </pre>
+   *
+   * <p>Nonetheless, {@link Context} should not be treated like a general purpose
+   * map with a large number of keys and values — combine multiple related items
+   * together into a single key instead of separating them. But if the items
+   * are unrelated, have separate keys for them.
    */
   public <V1, V2, V3, V4> Context withValues(Key<V1> k1, V1 v1, Key<V2> k2, V2 v2,
       Key<V3> k3, V3 v3, Key<V4> k4, V4 v4) {
