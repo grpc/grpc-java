@@ -274,7 +274,7 @@ public final class XdsTestClient {
         watcher = new XdsStatsWatcher(startId, endId);
         watchers.add(watcher);
       }
-      LoadBalancerStatsResponse response = watcher.waitForRpcStats(req.getTimeout().getSeconds());
+      LoadBalancerStatsResponse response = watcher.waitForRpcStats(req.getTimeoutSec());
       synchronized (lock) {
         watchers.remove(watcher);
       }
@@ -302,7 +302,11 @@ public final class XdsTestClient {
       synchronized (lock) {
         if (startId <= requestId && requestId < endId) {
           if (serverId != null) {
-            rpcsByPeer.put(serverId, rpcsByPeer.getOrDefault(serverId, 0) + 1);
+            if (rpcsByPeer.containsKey(serverId)) {
+              rpcsByPeer.put(serverId, rpcsByPeer.get(serverId) + 1);
+            } else {
+              rpcsByPeer.put(serverId, 1);
+            }
           } else {
             noRemotePeer += 1;
           }

@@ -20,8 +20,6 @@ package grpc.testing;
 
 option java_package = "io.grpc.testing.integration";
 
-import "google/protobuf/duration.proto";
-
 // TODO(jihuncho): Use well-known types once all languages are synced.
 message BoolValue {
   // The bool value.
@@ -167,7 +165,7 @@ message ReconnectInfo {
 
 message LoadBalancerStatsRequest {
   int32 num_rpcs = 1;
-  google.protobuf.Duration timeout = 2;
+  int32 timeout_sec = 2;
 }
 
 message LoadBalancerStatsResponse {
