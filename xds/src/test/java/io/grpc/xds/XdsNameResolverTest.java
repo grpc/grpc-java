@@ -263,9 +263,9 @@ public class XdsNameResolverTest {
     List<Map<String, ?>> rawLbConfigs =
         (List<Map<String, ?>>) serviceConfig.get("loadBalancingConfig");
     Map<String, ?> lbConfig = Iterables.getOnlyElement(rawLbConfigs);
-    assertThat(lbConfig.keySet()).containsExactly("experimental_cds");
+    assertThat(lbConfig.keySet()).containsExactly("cds_experimental");
     @SuppressWarnings("unchecked")
-    Map<String, ?> rawConfigValues = (Map<String, ?>) lbConfig.get("experimental_cds");
+    Map<String, ?> rawConfigValues = (Map<String, ?>) lbConfig.get("cds_experimental");
     assertThat(rawConfigValues).containsExactly("cluster", clusterName);
   }
 
@@ -308,8 +308,8 @@ public class XdsNameResolverTest {
     List<Map<String, ?>> rawLbConfigs =
         (List<Map<String, ?>>) serviceConfig.get("loadBalancingConfig");
     Map<String, ?> lbConfig = Iterables.getOnlyElement(rawLbConfigs);
-    assertThat(lbConfig.keySet()).containsExactly("experimental_cds");
-    Map<String, ?> rawConfigValues = (Map<String, ?>) lbConfig.get("experimental_cds");
+    assertThat(lbConfig.keySet()).containsExactly("cds_experimental");
+    Map<String, ?> rawConfigValues = (Map<String, ?>) lbConfig.get("cds_experimental");
     assertThat(rawConfigValues).containsExactly("cluster", "cluster-foo.googleapis.com");
 
     // Simulate receiving another LDS response that tells client to do RDS.
@@ -331,8 +331,8 @@ public class XdsNameResolverTest {
     serviceConfig = result.getAttributes().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
     rawLbConfigs = (List<Map<String, ?>>) serviceConfig.get("loadBalancingConfig");
     lbConfig = Iterables.getOnlyElement(rawLbConfigs);
-    assertThat(lbConfig.keySet()).containsExactly("experimental_cds");
-    rawConfigValues = (Map<String, ?>) lbConfig.get("experimental_cds");
+    assertThat(lbConfig.keySet()).containsExactly("cds_experimental");
+    rawConfigValues = (Map<String, ?>) lbConfig.get("cds_experimental");
     assertThat(rawConfigValues).containsExactly("cluster", "cluster-blade.googleapis.com");
   }
 
@@ -367,9 +367,9 @@ public class XdsNameResolverTest {
     List<Map<String, ?>> rawLbConfigs =
         (List<Map<String, ?>>) serviceConfig.get("loadBalancingConfig");
     Map<String, ?> lbConfig = Iterables.getOnlyElement(rawLbConfigs);
-    assertThat(lbConfig.keySet()).containsExactly("experimental_cds");
+    assertThat(lbConfig.keySet()).containsExactly("cds_experimental");
     @SuppressWarnings("unchecked")
-    Map<String, ?> rawConfigValues = (Map<String, ?>) lbConfig.get("experimental_cds");
+    Map<String, ?> rawConfigValues = (Map<String, ?>) lbConfig.get("cds_experimental");
     assertThat(rawConfigValues).containsExactly("cluster", "cluster-foo.googleapis.com");
   }
 
