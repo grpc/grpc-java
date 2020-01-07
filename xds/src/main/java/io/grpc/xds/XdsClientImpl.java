@@ -759,7 +759,6 @@ final class XdsClientImpl extends XdsClient {
     }
     clusterNamesToEndpointUpdates.keySet().retainAll(edsServices);
 
-    // Disarm initial fetch timers for received resources.
     for (String clusterName : clusterUpdates.keySet()) {
       if (cdsRespTimers.containsKey(clusterName)) {
         cdsRespTimers.get(clusterName).cancel();
