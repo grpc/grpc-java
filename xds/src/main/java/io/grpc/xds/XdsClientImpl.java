@@ -127,18 +127,18 @@ final class XdsClientImpl extends XdsClient {
   // subscription for the resource starts and disarmed on first update for the resource.
 
   // Timers for concluding CDS resources not found.
-  private final Map<String, ReschedulableTaskHandle> cdsRespTimers = new HashMap<>();
+  private final Map<String, ScheduledHandle> cdsRespTimers = new HashMap<>();
 
   // Timers for concluding EDS resources not found.
-  private final Map<String, ReschedulableTaskHandle> edsRespTimers = new HashMap<>();
+  private final Map<String, ScheduledHandle> edsRespTimers = new HashMap<>();
 
   // Timer for concluding the currently requesting LDS resource not found.
   @Nullable
-  private ReschedulableTaskHandle ldsRespTimer;
+  private ScheduledHandle ldsRespTimer;
 
   // Timer for concluding the currently requesting RDS resource not found.
   @Nullable
-  private ReschedulableTaskHandle rdsRespTimer;
+  private ScheduledHandle rdsRespTimer;
 
   @Nullable
   private AdsStream adsStream;
@@ -194,11 +194,11 @@ final class XdsClientImpl extends XdsClient {
       rdsRespTimer.cancel();
       rdsRespTimer = null;
     }
-    for (ReschedulableTaskHandle handle : cdsRespTimers.values()) {
+    for (ScheduledHandle handle : cdsRespTimers.values()) {
       handle.cancel();
     }
     cdsRespTimers.clear();
-    for (ReschedulableTaskHandle handle :edsRespTimers.values()) {
+    for (ScheduledHandle handle :edsRespTimers.values()) {
       handle.cancel();
     }
     edsRespTimers.clear();
@@ -222,8 +222,11 @@ final class XdsClientImpl extends XdsClient {
       startRpcStream();
     }
     adsStream.sendXdsRequest(ADS_TYPE_URL_LDS, ImmutableList.of(ldsResourceName));
-    ldsRespTimer = new LdsResourceFetchTimeoutTask(ldsResourceName).toTaskHandle();
-    ldsRespTimer.schedule(INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    ldsRespTimer =
+        syncContext
+            .schedule(
+                new LdsResourceFetchTimeoutTask(ldsResourceName),
+                INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS, timeService);
   }
 
   @Override
@@ -255,9 +258,6 @@ final class XdsClientImpl extends XdsClient {
     }
 
     if (needRequest) {
-      ReschedulableTaskHandle timeoutHandle =
-          new CdsResourceFetchTimeoutTask(clusterName).toTaskHandle();
-      cdsRespTimers.put(clusterName, timeoutHandle);
       if (rpcRetryTimer != null && rpcRetryTimer.isPending()) {
         // Currently in retry backoff.
         return;
@@ -266,7 +266,12 @@ final class XdsClientImpl extends XdsClient {
         startRpcStream();
       }
       adsStream.sendXdsRequest(ADS_TYPE_URL_CDS, clusterWatchers.keySet());
-      timeoutHandle.schedule(INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+      ScheduledHandle timeoutHandle =
+          syncContext
+              .schedule(
+                  new CdsResourceFetchTimeoutTask(clusterName),
+                  INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS, timeService);
+      cdsRespTimers.put(clusterName, timeoutHandle);
     }
   }
 
@@ -338,9 +343,6 @@ final class XdsClientImpl extends XdsClient {
     }
 
     if (needRequest) {
-      ReschedulableTaskHandle timeoutHandle =
-          new EdsResourceFetchTimeoutTask(clusterName).toTaskHandle();
-      edsRespTimers.put(clusterName, timeoutHandle);
       if (rpcRetryTimer != null && rpcRetryTimer.isPending()) {
         // Currently in retry backoff.
         return;
@@ -349,7 +351,11 @@ final class XdsClientImpl extends XdsClient {
         startRpcStream();
       }
       adsStream.sendXdsRequest(ADS_TYPE_URL_EDS, endpointWatchers.keySet());
-      timeoutHandle.schedule(INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+      ScheduledHandle timeoutHandle =
+          syncContext
+              .schedule(new EdsResourceFetchTimeoutTask(clusterName),
+                  INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS, timeService);
+      edsRespTimers.put(clusterName, timeoutHandle);
     }
   }
 
@@ -528,8 +534,11 @@ final class XdsClientImpl extends XdsClient {
         if (rdsRespTimer != null) {
           rdsRespTimer.cancel();
         }
-        rdsRespTimer = new RdsResourceFetchTimeoutTask(rdsRouteConfigName).toTaskHandle();
-        rdsRespTimer.schedule(INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+        rdsRespTimer =
+            syncContext
+                .schedule(
+                    new RdsResourceFetchTimeoutTask(rdsRouteConfigName),
+                    INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS, timeService);
       }
     } else {
       // The requested Listener does not present in this LDS response.
@@ -898,20 +907,32 @@ final class XdsClientImpl extends XdsClient {
       startRpcStream();
       if (configWatcher != null) {
         adsStream.sendXdsRequest(ADS_TYPE_URL_LDS, ImmutableList.of(ldsResourceName));
-        if (ldsRespTimer != null) {
-          ldsRespTimer.schedule(INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
-        }
+        ldsRespTimer =
+            syncContext
+                .schedule(
+                    new LdsResourceFetchTimeoutTask(ldsResourceName),
+                    INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS, timeService);
       }
       if (!clusterWatchers.isEmpty()) {
         adsStream.sendXdsRequest(ADS_TYPE_URL_CDS, clusterWatchers.keySet());
-        for (ReschedulableTaskHandle handle : cdsRespTimers.values()) {
-          handle.schedule(INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+        for (String clusterName : clusterWatchers.keySet()) {
+          ScheduledHandle timeoutHandle =
+              syncContext
+                  .schedule(
+                      new CdsResourceFetchTimeoutTask(clusterName),
+                      INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS, timeService);
+          cdsRespTimers.put(clusterName, timeoutHandle);
         }
       }
       if (!endpointWatchers.isEmpty()) {
         adsStream.sendXdsRequest(ADS_TYPE_URL_EDS, endpointWatchers.keySet());
-        for (ReschedulableTaskHandle handle: edsRespTimers.values()) {
-          handle.schedule(INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+        for (String clusterName : endpointWatchers.keySet()) {
+          ScheduledHandle timeoutHandle =
+              syncContext
+                  .schedule(
+                      new EdsResourceFetchTimeoutTask(clusterName),
+                      INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS, timeService);
+          edsRespTimers.put(clusterName, timeoutHandle);
         }
       }
     }
@@ -1061,18 +1082,27 @@ final class XdsClientImpl extends XdsClient {
 
     private void cleanUp() {
       if (adsStream == this) {
+        clusterNamesToClusterUpdates.clear();
+        absentCdsResources.clear();
+        clusterNamesToEndpointUpdates.clear();
+        absentEdsResources.clear();
+
         if (ldsRespTimer != null) {
           ldsRespTimer.cancel();
+          ldsRespTimer = null;
         }
         if (rdsRespTimer != null) {
           rdsRespTimer.cancel();
+          rdsRespTimer = null;
         }
-        for (ReschedulableTaskHandle handle : cdsRespTimers.values()) {
+        for (ScheduledHandle handle : cdsRespTimers.values()) {
           handle.cancel();
         }
-        for (ReschedulableTaskHandle handle : edsRespTimers.values()) {
+        cdsRespTimers.clear();
+        for (ScheduledHandle handle : edsRespTimers.values()) {
           handle.cancel();
         }
+        edsRespTimers.clear();
         adsStream = null;
       }
     }
@@ -1193,40 +1223,11 @@ final class XdsClientImpl extends XdsClient {
     }
   }
 
-  /**
-   * A task handle that can schedule, cancel and reschedule the task for multiple times.
-   */
-  private final class ReschedulableTaskHandle {
-    private final Runnable task;
-    @Nullable
-    private ScheduledHandle scheduledHandle;
-
-    ReschedulableTaskHandle(Runnable task) {
-      this.task = task;
-    }
-
-    void schedule(long delay, TimeUnit unit) {
-      checkState(scheduledHandle == null || !scheduledHandle.isPending(),
-          "Task already scheduled and not finished.");
-      scheduledHandle = syncContext.schedule(task, delay, unit, timeService);
-    }
-
-    void cancel() {
-      if (scheduledHandle != null) {
-        scheduledHandle.cancel();
-      }
-    }
-  }
-
-  private abstract class ResourceFetchTimeoutTask implements Runnable {
+  private abstract static class ResourceFetchTimeoutTask implements Runnable {
     protected final String resourceName;
 
     ResourceFetchTimeoutTask(String resourceName) {
       this.resourceName = resourceName;
-    }
-
-    ReschedulableTaskHandle toTaskHandle() {
-      return new ReschedulableTaskHandle(this);
     }
   }
 
