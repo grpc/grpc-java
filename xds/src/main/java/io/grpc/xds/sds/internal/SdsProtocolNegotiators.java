@@ -154,19 +154,16 @@ public final class SdsProtocolNegotiators {
 
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) {
-      logger.finest("ctx.name=" + ctx.name() + ", msg=" + msg);
       reads.add(msg);
     }
 
     @Override
     public void channelReadComplete(ChannelHandlerContext ctx) {
-      logger.finest("ctx.name=" + ctx.name() + ", reads.size=" + reads.size());
       readComplete = true;
     }
 
     @Override
     public void handlerRemoved(ChannelHandlerContext ctx) throws Exception {
-      logger.finest("ctx.name=" + ctx.name() + ", reads.size=" + reads.size());
       for (Object msg : reads) {
         super.channelRead(ctx, msg);
       }

@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkState;
 
 import io.envoyproxy.envoy.api.v2.auth.CertificateValidationContext;
 import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
+import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext.CombinedCertificateValidationContext;
 import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.auth.SdsSecretConfig;
 import io.envoyproxy.envoy.api.v2.auth.Secret;
@@ -103,11 +104,11 @@ final class SdsSslContextProvider<K> extends SslContextProvider<K>
     SdsSecretConfig validationContextSdsConfig = null;
     CertificateValidationContext staticCertValidationContext = null;
     if (commonTlsContext.hasCombinedValidationContext()) {
-      CommonTlsContext.CombinedCertificateValidationContext combinedValidationContext
-          = commonTlsContext.getCombinedValidationContext();
+      CombinedCertificateValidationContext combinedValidationContext =
+          commonTlsContext.getCombinedValidationContext();
       if (combinedValidationContext.hasValidationContextSdsSecretConfig()) {
-        validationContextSdsConfig
-           = combinedValidationContext.getValidationContextSdsSecretConfig();
+        validationContextSdsConfig =
+           combinedValidationContext.getValidationContextSdsSecretConfig();
       }
       if (combinedValidationContext.hasDefaultValidationContext()) {
         staticCertValidationContext = combinedValidationContext.getDefaultValidationContext();
@@ -153,7 +154,8 @@ final class SdsSslContextProvider<K> extends SslContextProvider<K>
         node,
         certSdsConfig,
         validationContextSdsConfig,
-        null, watcherExecutor,
+        null,
+        watcherExecutor,
         channelExecutor,
         true,
         downstreamTlsContext);
@@ -223,8 +225,7 @@ final class SdsSslContextProvider<K> extends SslContextProvider<K>
       CertificateValidationContext localCertValidationContext =
               mergeStaticAndDynamicCertContexts();
       if (server) {
-        logger.log(
-                Level.FINEST, "for server");
+        logger.log(Level.FINEST, "for server");
         sslContextBuilder =
             GrpcSslContexts.forServer(
                 tlsCertificate.getCertificateChain().getInlineBytes().newInput(),
@@ -236,8 +237,7 @@ final class SdsSslContextProvider<K> extends SslContextProvider<K>
           sslContextBuilder.trustManager(new SdsTrustManagerFactory(localCertValidationContext));
         }
       } else {
-        logger.log(
-                Level.FINEST, "for client");
+        logger.log(Level.FINEST, "for client");
         sslContextBuilder =
             GrpcSslContexts.forClient()
                 .trustManager(new SdsTrustManagerFactory(localCertValidationContext));

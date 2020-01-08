@@ -23,6 +23,7 @@ import static com.google.common.base.Preconditions.checkState;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.protobuf.Any;
+import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
 import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
@@ -281,8 +282,9 @@ final class SdsClient {
         new Runnable() {
           @Override
           public void run() {
-            Throwable exceptionSeen = processSecretsFromDiscoveryResponse(response);
-            if (exceptionSeen != null) {
+            try {
+              processSecretsFromDiscoveryResponse(response);
+            } catch (Throwable exceptionSeen) {
               sendNack(exceptionSeen);
               return;
             }
@@ -338,23 +340,15 @@ final class SdsClient {
     }
   }
 
-  private Throwable processSecretsFromDiscoveryResponse(DiscoveryResponse response) {
+  private void processSecretsFromDiscoveryResponse(DiscoveryResponse response)
+      throws InvalidProtocolBufferException {
     List<Any> resources = response.getResourcesList();
     checkState(resources.size() == 1, "exactly one resource expected");
-    Throwable exceptionSeen = null;
-    for (Any any : resources) {
-      final String typeUrl = any.getTypeUrl();
-      checkState(SECRET_TYPE_URL.equals(typeUrl), "wrong value for typeUrl %s", typeUrl);
-      Secret secret = null;
-      try {
-        secret = Secret.parseFrom(any.getValue());
-        processSecret(secret);
-      } catch (Throwable throwable) {
-        exceptionSeen = throwable;
-        logger.log(Level.SEVERE, "exception while processing secret", throwable);
-      }
-    }
-    return exceptionSeen;
+    Any any = resources.get(0);
+    final String typeUrl = any.getTypeUrl();
+    checkState(SECRET_TYPE_URL.equals(typeUrl), "wrong value for typeUrl %s", typeUrl);
+    Secret secret = Secret.parseFrom(any.getValue());
+    processSecret(secret);
   }
 
   private void processSecret(Secret secret) {
@@ -380,7 +374,11 @@ final class SdsClient {
           new Runnable() {
             @Override
             public void run() {
-              processSecretsFromDiscoveryResponse(lastResponse);
+              try {
+                processSecretsFromDiscoveryResponse(lastResponse);
+              } catch (Throwable throwable) {
+                logger.log(Level.SEVERE, "from watcherExecutor.execute", throwable);
+              }
             }
           });
     }
