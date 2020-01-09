@@ -43,6 +43,7 @@ import io.envoyproxy.envoy.api.v2.core.GrpcService;
 import io.envoyproxy.envoy.api.v2.core.GrpcService.GoogleGrpc;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.grpc.Status;
+import io.grpc.Status.Code;
 import io.grpc.internal.testing.TestUtils;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -261,7 +262,7 @@ public class SdsClientTest {
     assertThat(server.lastNack.getVersionInfo()).isEmpty();
     assertThat(server.lastNack.getResponseNonce()).isEmpty();
     com.google.rpc.Status errorDetail = server.lastNack.getErrorDetail();
-    assertThat(errorDetail.getCode()).isEqualTo(Status.Code.INTERNAL.value());
+    assertThat(errorDetail.getCode()).isEqualTo(Code.UNKNOWN.value());
     assertThat(errorDetail.getMessage()).isEqualTo("Secret not updated");
   }
 
