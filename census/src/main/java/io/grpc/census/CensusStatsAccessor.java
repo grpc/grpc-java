@@ -27,6 +27,13 @@ import io.grpc.ServerStreamTracer;
  */
 public final class CensusStatsAccessor {
 
+  private static final Supplier<Stopwatch> STOPWATCH_SUPPLIER = new Supplier<Stopwatch>() {
+    @Override
+    public Stopwatch get() {
+      return Stopwatch.createUnstarted();
+    }
+  };
+
   // Prevent instantiation.
   private CensusStatsAccessor() {
   }
@@ -35,19 +42,17 @@ public final class CensusStatsAccessor {
    * Returns a {@link ClientInterceptor} with default stats implementation.
    */
   public static ClientInterceptor getClientInterceptor(
-      Supplier<Stopwatch> stopwatchSupplier,
-      boolean propagateTags,
       boolean recordStartedRpcs,
       boolean recordFinishedRpcs,
       boolean recordRealTimeMetrics) {
     CensusStatsModule censusStats =
         new CensusStatsModule(
-            stopwatchSupplier,
-            propagateTags,
+            STOPWATCH_SUPPLIER,
+            true, /* propagateTags */
             recordStartedRpcs,
             recordFinishedRpcs,
             recordRealTimeMetrics);
-    return getClientInterceptor(censusStats);
+    return censusStats.getClientInterceptor();
   }
 
   /**
@@ -61,19 +66,17 @@ public final class CensusStatsAccessor {
    * Returns a {@link ServerStreamTracer.Factory} with default stats implementation.
    */
   public static ServerStreamTracer.Factory getServerStreamTracerFactory(
-      Supplier<Stopwatch> stopwatchSupplier,
-      boolean propagateTags,
       boolean recordStartedRpcs,
       boolean recordFinishedRpcs,
       boolean recordRealTimeMetrics) {
     CensusStatsModule censusStats =
         new CensusStatsModule(
-            stopwatchSupplier,
-            propagateTags,
+            STOPWATCH_SUPPLIER,
+            true, /* propagateTags */
             recordStartedRpcs,
             recordFinishedRpcs,
             recordRealTimeMetrics);
-    return getServerStreamTracerFactory(censusStats);
+    return censusStats.getServerTracerFactory();
   }
 
   /**

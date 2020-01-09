@@ -20,7 +20,6 @@ import static com.google.common.base.Preconditions.checkArgument;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
-import com.google.common.base.Supplier;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.Attributes;
 import io.grpc.BinaryLog;
@@ -574,16 +573,13 @@ public abstract class AbstractManagedChannelImplBuilder
           Method getClientInterceptroMethod =
               censusStatsAccessor.getDeclaredMethod(
                   "getClientInterceptor",
-                  Supplier.class,
                   boolean.class,
                   boolean.class,
-                  boolean.class, boolean.class);
+                  boolean.class);
           statsInterceptor =
               (ClientInterceptor) getClientInterceptroMethod
                   .invoke(
                       null,
-                      GrpcUtil.STOPWATCH_SUPPLIER,
-                      true,
                       recordStartedRpcs,
                       recordFinishedRpcs,
                       recordRealTimeMetrics);

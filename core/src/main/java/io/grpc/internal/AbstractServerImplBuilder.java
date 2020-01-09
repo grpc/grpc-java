@@ -20,7 +20,6 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Supplier;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.BinaryLog;
 import io.grpc.BindableService;
@@ -251,16 +250,13 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
           Method getServerStreamTracerFactoryMethod =
               censusStatsAccessor.getDeclaredMethod(
                   "getServerStreamTracerFactory",
-                  Supplier.class,
                   boolean.class,
                   boolean.class,
-                  boolean.class, boolean.class);
+                  boolean.class);
           censusStatsTracerFactory =
               (ServerStreamTracer.Factory) getServerStreamTracerFactoryMethod
                   .invoke(
                       null,
-                      GrpcUtil.STOPWATCH_SUPPLIER,
-                      true,
                       recordStartedRpcs,
                       recordFinishedRpcs,
                       recordRealTimeMetrics);
