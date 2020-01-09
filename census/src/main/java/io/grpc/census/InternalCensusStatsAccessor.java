@@ -63,8 +63,9 @@ public final class InternalCensusStatsAccessor {
   /**
    * Returns a {@link ClientInterceptor} with custom stats implementation.
    */
-  public static ClientInterceptor getClientInterceptor(Tagger tagger,
-      final TagContextBinarySerializer tagCtxSerializer,
+  public static ClientInterceptor getClientInterceptor(
+      Tagger tagger,
+      TagContextBinarySerializer tagCtxSerializer,
       StatsRecorder statsRecorder,
       Supplier<Stopwatch> stopwatchSupplier,
       boolean propagateTags,
@@ -100,7 +101,7 @@ public final class InternalCensusStatsAccessor {
    */
   public static ServerStreamTracer.Factory getServerStreamTracerFactory(
       Tagger tagger,
-      final TagContextBinarySerializer tagCtxSerializer,
+      TagContextBinarySerializer tagCtxSerializer,
       StatsRecorder statsRecorder,
       Supplier<Stopwatch> stopwatchSupplier,
       boolean propagateTags,

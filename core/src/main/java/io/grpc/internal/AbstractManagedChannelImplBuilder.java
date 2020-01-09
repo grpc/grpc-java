@@ -558,14 +558,14 @@ public abstract class AbstractManagedChannelImplBuilder
       try {
         Class<?> censusStatsAccessor =
             Class.forName("io.grpc.census.InternalCensusStatsAccessor");
-        Method getClientInterceptroMethod =
+        Method getClientInterceptorMethod =
             censusStatsAccessor.getDeclaredMethod(
                 "getClientInterceptor",
                 boolean.class,
                 boolean.class,
                 boolean.class);
         statsInterceptor =
-            (ClientInterceptor) getClientInterceptroMethod
+            (ClientInterceptor) getClientInterceptorMethod
                 .invoke(
                     null,
                     recordStartedRpcs,
