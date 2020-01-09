@@ -289,22 +289,6 @@ final class LookasideLb extends LoadBalancer {
     loadReportClient = null;
   }
 
-  /** Adds the given loadStatsStore for the given clusterServiceName. */
-  private void addLoadStatsStore(String clusterServiceName, LoadStatsStore loadStatsStore) {
-    loadStatsStoreMap.put(clusterServiceName, loadStatsStore);
-    if (isReportingStats()) {
-      loadReportClient.addLoadStatsStore(clusterServiceName, loadStatsStore);
-    }
-  }
-
-  /** Adds the loadStatsStore for the given clusterServiceName. */
-  private void removeLoadStatsStore(String clusterServiceName) {
-    loadStatsStoreMap.remove(clusterServiceName);
-    if (isReportingStats()) {
-      loadReportClient.removeLoadStatsStore(clusterServiceName);
-    }
-  }
-
   /**
    * A load balancer factory that provides a load balancer for a given cluster service name.
    */
@@ -383,7 +367,10 @@ final class LookasideLb extends LoadBalancer {
         }
 
         LoadStatsStore loadStatsStore = new LoadStatsStoreImpl();
-        addLoadStatsStore(clusterServiceName, loadStatsStore);
+        loadStatsStoreMap.put(clusterServiceName, loadStatsStore);
+        if (isReportingStats()) {
+          loadReportClient.addLoadStatsStore(clusterServiceName, loadStatsStore);
+        }
         localityStore = localityStoreFactory.newLocalityStore(helper, lbRegistry, loadStatsStore);
 
         endpointWatcher = new EndpointWatcherImpl(localityStore);
@@ -397,7 +384,10 @@ final class LookasideLb extends LoadBalancer {
       @Override
       public void shutdown() {
         if (endpointWatcher != null) {
-          removeLoadStatsStore(clusterServiceName);
+          loadStatsStoreMap.remove(clusterServiceName);
+          if (isReportingStats()) {
+            loadReportClient.removeLoadStatsStore(clusterServiceName);
+          }
           localityStore.reset();
           xdsClient.cancelEndpointDataWatch(clusterServiceName, endpointWatcher);
         }
