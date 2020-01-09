@@ -24,7 +24,7 @@ dependencies {
             project(':grpc-protobuf'),
             project(':grpc-stub'),
             project(':grpc-testing'),
-	    project(':grpc-xds'),
+            project(':grpc-xds'),
             libraries.google_auth_oauth2_http,
             libraries.junit,
             libraries.truth

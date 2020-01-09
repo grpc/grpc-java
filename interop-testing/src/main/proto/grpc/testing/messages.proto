@@ -170,5 +170,5 @@ message LoadBalancerStatsRequest {
 
 message LoadBalancerStatsResponse {
   map<string, int32> rpcs_by_peer = 1;
-  int32 num_without_peer = 2;
+  int32 num_failures = 2;
 }

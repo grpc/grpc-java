@@ -24,9 +24,13 @@ import io.grpc.testing.integration.Messages.SimpleResponse;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /** Interop test server that implements the xDS testing service. */
 public final class XdsTestServer {
+  private static Logger logger = Logger.getLogger(XdsTestServer.class.getName());
+
   private int port = 8080;
   private String serverId = "java_server";
   private Server server;
@@ -120,16 +124,14 @@ public final class XdsTestServer {
   }
 
   private class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
-    private final String host;
+    private String host = "";
 
     private TestServiceImpl() {
-      String tmpHost;
       try {
-        tmpHost = InetAddress.getLocalHost().getHostName();
+        host = InetAddress.getLocalHost().getHostName();
       } catch (UnknownHostException e) {
-        tmpHost = "failed to get host " + e;
+        logger.log(Level.WARNING, "Failed to get host", e);
       }
-      host = tmpHost;
     }
 
     @Override
