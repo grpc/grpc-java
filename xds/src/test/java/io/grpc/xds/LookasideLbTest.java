@@ -266,7 +266,7 @@ public class LookasideLbTest {
         helper, edsUpdateCallback, lbRegistry, localityStoreFactory, bootstrapper, channelFactory);
   }
 
-  // For non EDS-only usecase.
+  // For non-EDS-only usecase.
   private void setUpWithXdsClientPoolAttributes() {
     withXdsClientPoolAttributes = true;
     XdsClientFactory xdsClientFactory = new XdsClientFactory() {
