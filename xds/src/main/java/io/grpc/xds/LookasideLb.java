@@ -70,8 +70,9 @@ final class LookasideLb extends LoadBalancer {
   // Most recent XdsConfig.
   @Nullable
   private XdsConfig xdsConfig;
+  // Most recent EndpointWatcher.
   @Nullable
-  private EndpointWatcherImpl endpointWatcher;
+  private EndpointWatcher endpointWatcher;
   @Nullable
   private ObjectPool<XdsClient> xdsClientPool;
   @Nullable
@@ -329,6 +330,7 @@ final class LookasideLb extends LoadBalancer {
      */
     final class ClusterEndpointsBalancer extends LoadBalancer {
       final Helper helper;
+      final EndpointWatcherImpl endpointWatcher;
       final LocalityStore localityStore;
 
       ClusterEndpointsBalancer(Helper helper) {
@@ -341,12 +343,13 @@ final class LookasideLb extends LoadBalancer {
         }
         localityStore = localityStoreFactory.newLocalityStore(helper, lbRegistry, loadStatsStore);
 
-        EndpointWatcherImpl newEndpointWatcher = new EndpointWatcherImpl(localityStore);
-        xdsClient.watchEndpointData(clusterServiceName, newEndpointWatcher);
-        if (endpointWatcher != null) {
-          xdsClient.cancelEndpointDataWatch(oldClusterServiceName, endpointWatcher);
+        endpointWatcher = new EndpointWatcherImpl(localityStore);
+        xdsClient.watchEndpointData(clusterServiceName, endpointWatcher);
+        if (LookasideLb.this.endpointWatcher != null) {
+          xdsClient.cancelEndpointDataWatch(
+              oldClusterServiceName, LookasideLb.this.endpointWatcher);
         }
-        endpointWatcher = newEndpointWatcher;
+        LookasideLb.this.endpointWatcher = endpointWatcher;
       }
 
       // TODO(zddapeng): In handleResolvedAddresses() handle child policy change if any.
