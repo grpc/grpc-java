@@ -19,13 +19,18 @@ package io.grpc.census;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import io.grpc.ClientInterceptor;
+import io.grpc.Internal;
 import io.grpc.ServerStreamTracer;
+import io.opencensus.stats.StatsRecorder;
+import io.opencensus.tags.Tagger;
+import io.opencensus.tags.propagation.TagContextBinarySerializer;
 
 /**
  * Accessor for getting {@link ClientInterceptor} or {@link ServerStreamTracer.Factory} with
  * default Census stats implementation.
  */
-public final class CensusStatsAccessor {
+@Internal
+public final class InternalCensusStatsAccessor {
 
   private static final Supplier<Stopwatch> STOPWATCH_SUPPLIER = new Supplier<Stopwatch>() {
     @Override
@@ -35,7 +40,7 @@ public final class CensusStatsAccessor {
   };
 
   // Prevent instantiation.
-  private CensusStatsAccessor() {
+  private InternalCensusStatsAccessor() {
   }
 
   /**
@@ -58,7 +63,18 @@ public final class CensusStatsAccessor {
   /**
    * Returns a {@link ClientInterceptor} with custom stats implementation.
    */
-  public static ClientInterceptor getClientInterceptor(CensusStatsModule censusStats) {
+  public static ClientInterceptor getClientInterceptor(Tagger tagger,
+      final TagContextBinarySerializer tagCtxSerializer,
+      StatsRecorder statsRecorder,
+      Supplier<Stopwatch> stopwatchSupplier,
+      boolean propagateTags,
+      boolean recordStartedRpcs,
+      boolean recordFinishedRpcs,
+      boolean recordRealTimeMetrics) {
+    CensusStatsModule censusStats =
+        new CensusStatsModule(
+            tagger, tagCtxSerializer, statsRecorder, stopwatchSupplier,
+            propagateTags, recordStartedRpcs, recordFinishedRpcs, recordRealTimeMetrics);
     return censusStats.getClientInterceptor();
   }
 
@@ -83,7 +99,18 @@ public final class CensusStatsAccessor {
    * Returns a {@link ServerStreamTracer.Factory} with custom stats implementation.
    */
   public static ServerStreamTracer.Factory getServerStreamTracerFactory(
-      CensusStatsModule censusStats) {
+      Tagger tagger,
+      final TagContextBinarySerializer tagCtxSerializer,
+      StatsRecorder statsRecorder,
+      Supplier<Stopwatch> stopwatchSupplier,
+      boolean propagateTags,
+      boolean recordStartedRpcs,
+      boolean recordFinishedRpcs,
+      boolean recordRealTimeMetrics) {
+    CensusStatsModule censusStats =
+        new CensusStatsModule(
+            tagger, tagCtxSerializer, statsRecorder, stopwatchSupplier,
+            propagateTags, recordStartedRpcs, recordFinishedRpcs, recordRealTimeMetrics);
     return censusStats.getServerTracerFactory();
   }
 }

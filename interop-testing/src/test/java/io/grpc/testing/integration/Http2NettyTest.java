@@ -71,8 +71,8 @@ public class Http2NettyTest extends AbstractInteropTest {
               .trustManager(TestUtils.loadX509Cert("ca.pem"))
               .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE)
               .build());
-      io.grpc.internal.TestingAccessor.setStatsImplementation(
-          builder, createClientCensusStatsModule());
+      io.grpc.internal.TestingAccessor.setCensusStatsInterceptor(
+          builder, createCensusStatsClientInterceptor());
       return builder.build();
     } catch (Exception ex) {
       throw new RuntimeException(ex);

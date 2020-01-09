@@ -165,8 +165,8 @@ public class TransportCompressionTest extends AbstractInteropTest {
           }
         })
         .usePlaintext();
-    io.grpc.internal.TestingAccessor.setStatsImplementation(
-        builder, createClientCensusStatsModule());
+    io.grpc.internal.TestingAccessor.setCensusStatsInterceptor(
+        builder, createCensusStatsClientInterceptor());
     return builder.build();
   }
 

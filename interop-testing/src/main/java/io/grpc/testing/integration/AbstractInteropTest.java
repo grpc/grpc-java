@@ -61,7 +61,7 @@ import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.auth.MoreCallCredentials;
-import io.grpc.census.CensusStatsModule;
+import io.grpc.census.InternalCensusStatsAccessor;
 import io.grpc.census.internal.DeprecatedCensusConstants;
 import io.grpc.internal.AbstractServerImplBuilder;
 import io.grpc.internal.GrpcUtil;
@@ -240,15 +240,14 @@ public abstract class AbstractInteropTest {
         .addStreamTracerFactory(serverStreamTracerFactory);
     if (builder instanceof AbstractServerImplBuilder) {
       customCensusModulePresent = true;
+      ServerStreamTracer.Factory censusTracerFactory =
+          InternalCensusStatsAccessor
+              .getServerStreamTracerFactory(
+                  tagger, tagContextBinarySerializer, serverStatsRecorder,
+                  GrpcUtil.STOPWATCH_SUPPLIER,
+                  true, true, true, false /* real-time metrics */);
       AbstractServerImplBuilder<?> sb = (AbstractServerImplBuilder<?>) builder;
-      io.grpc.internal.TestingAccessor.setStatsImplementation(
-          sb,
-          new CensusStatsModule(
-              tagger,
-              tagContextBinarySerializer,
-              serverStatsRecorder,
-              GrpcUtil.STOPWATCH_SUPPLIER,
-              true, true, true, false /* real-time metrics */));
+      io.grpc.internal.TestingAccessor.setCensusStreamTracerFactory(sb, censusTracerFactory);
     }
     if (metricsExpected()) {
       assertThat(builder).isInstanceOf(AbstractServerImplBuilder.class);
@@ -353,10 +352,13 @@ public abstract class AbstractInteropTest {
     return null;
   }
 
-  protected final CensusStatsModule createClientCensusStatsModule() {
-    return new CensusStatsModule(
-        tagger, tagContextBinarySerializer, clientStatsRecorder, GrpcUtil.STOPWATCH_SUPPLIER,
-        true, true, true, false /* real-time metrics */);
+  protected final ClientInterceptor createCensusStatsClientInterceptor() {
+    return
+        InternalCensusStatsAccessor
+            .getClientInterceptor(
+                tagger, tagContextBinarySerializer, clientStatsRecorder,
+                GrpcUtil.STOPWATCH_SUPPLIER,
+                true, true, true, false /* real-time metrics */);
   }
 
   /**

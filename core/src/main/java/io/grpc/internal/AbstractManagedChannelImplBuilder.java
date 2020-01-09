@@ -569,7 +569,8 @@ public abstract class AbstractManagedChannelImplBuilder
       ClientInterceptor statsInterceptor = this.censusStatsInterceptor;
       if (statsInterceptor == null) {
         try {
-          Class<?> censusStatsAccessor = Class.forName("io.grpc.census.CensusStatsAccessor");
+          Class<?> censusStatsAccessor =
+              Class.forName("io.grpc.census.InternalCensusStatsAccessor");
           Method getClientInterceptroMethod =
               censusStatsAccessor.getDeclaredMethod(
                   "getClientInterceptor",
@@ -598,7 +599,8 @@ public abstract class AbstractManagedChannelImplBuilder
       temporarilyDisableRetry = true;
       ClientInterceptor tracingInterceptor = null;
       try {
-        Class<?> censusTracingAccessor = Class.forName("io.grpc.census.CensusTracingAccessor");
+        Class<?> censusTracingAccessor =
+            Class.forName("io.grpc.census.InternalCensusTracingAccessor");
         Method getClientInterceptroMethod =
             censusTracingAccessor.getDeclaredMethod("getClientInterceptor");
         tracingInterceptor = (ClientInterceptor) getClientInterceptroMethod.invoke(null);

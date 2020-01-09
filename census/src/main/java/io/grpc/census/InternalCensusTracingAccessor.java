@@ -17,6 +17,7 @@
 package io.grpc.census;
 
 import io.grpc.ClientInterceptor;
+import io.grpc.Internal;
 import io.grpc.ServerStreamTracer;
 import io.opencensus.trace.Tracing;
 
@@ -24,10 +25,11 @@ import io.opencensus.trace.Tracing;
  * Accessor for getting {@link ClientInterceptor} or {@link ServerStreamTracer.Factory} with
  * default Census tracing implementation.
  */
-public final class CensusTracingAccessor {
+@Internal
+public final class InternalCensusTracingAccessor {
 
   // Prevent instantiation.
-  private CensusTracingAccessor() {
+  private InternalCensusTracingAccessor() {
   }
 
   /**
@@ -51,5 +53,4 @@ public final class CensusTracingAccessor {
             Tracing.getPropagationComponent().getBinaryFormat());
     return censusTracing.getServerTracerFactory();
   }
-
 }

@@ -246,7 +246,8 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
       ServerStreamTracer.Factory censusStatsTracerFactory = this.censusStatsStreamTracerFactory;
       if (censusStatsTracerFactory == null) {
         try {
-          Class<?> censusStatsAccessor = Class.forName("io.grpc.census.CensusStatsAccessor");
+          Class<?> censusStatsAccessor =
+              Class.forName("io.grpc.census.InternalCensusStatsAccessor");
           Method getServerStreamTracerFactoryMethod =
               censusStatsAccessor.getDeclaredMethod(
                   "getServerStreamTracerFactory",
@@ -272,7 +273,8 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
     if (tracingEnabled) {
       ServerStreamTracer.Factory tracingStreamTracerFactory = null;
       try {
-        Class<?> censusTracingAccessor = Class.forName("io.grpc.census.CensusTracingAccessor");
+        Class<?> censusTracingAccessor =
+            Class.forName("io.grpc.census.InternalCensusTracingAccessor");
         Method getServerStreamTracerFactoryMethod =
             censusTracingAccessor.getDeclaredMethod("getServerStreamTracerFactory");
         tracingStreamTracerFactory =

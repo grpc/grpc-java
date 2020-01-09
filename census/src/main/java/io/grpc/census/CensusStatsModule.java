@@ -30,7 +30,6 @@ import io.grpc.ClientStreamTracer;
 import io.grpc.Context;
 import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
 import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener;
-import io.grpc.Internal;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerStreamTracer;
@@ -69,8 +68,7 @@ import javax.annotation.Nullable;
  * starts earlier than the ServerCall.  Therefore, only one tracer is created per stream/call and
  * it's the tracer that reports the summary to Census.
  */
-@Internal
-public final class CensusStatsModule {
+final class CensusStatsModule {
   private static final Logger logger = Logger.getLogger(CensusStatsModule.class.getName());
   private static final double NANOS_PER_MILLI = TimeUnit.MILLISECONDS.toNanos(1);
 
@@ -101,7 +99,7 @@ public final class CensusStatsModule {
   /**
    * Creates a {@link CensusStatsModule} with the given OpenCensus implementation.
    */
-  public CensusStatsModule(
+  CensusStatsModule(
       final Tagger tagger,
       final TagContextBinarySerializer tagCtxSerializer,
       StatsRecorder statsRecorder, Supplier<Stopwatch> stopwatchSupplier,
@@ -664,7 +662,7 @@ public final class CensusStatsModule {
   }
 
   @VisibleForTesting
-  public final class ServerTracerFactory extends ServerStreamTracer.Factory {
+  final class ServerTracerFactory extends ServerStreamTracer.Factory {
     @Override
     public ServerStreamTracer newServerStreamTracer(String fullMethodName, Metadata headers) {
       TagContext parentCtx = headers.get(statsHeader);
@@ -682,7 +680,7 @@ public final class CensusStatsModule {
   }
 
   @VisibleForTesting
-  public final class StatsClientInterceptor implements ClientInterceptor {
+  final class StatsClientInterceptor implements ClientInterceptor {
     @Override
     public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
         MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {

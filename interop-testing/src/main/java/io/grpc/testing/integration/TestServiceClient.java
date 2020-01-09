@@ -450,8 +450,8 @@ public class TestServiceClient {
         }
         builder = okBuilder;
       }
-      io.grpc.internal.TestingAccessor.setStatsImplementation(
-          builder, createClientCensusStatsModule());
+      io.grpc.internal.TestingAccessor.setCensusStatsInterceptor(
+          builder, createCensusStatsClientInterceptor());
       return builder.build();
     }
 
