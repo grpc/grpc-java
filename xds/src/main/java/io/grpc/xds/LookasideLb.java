@@ -333,38 +333,15 @@ final class LookasideLb extends LoadBalancer {
      */
     final class ClusterEndpointsBalancer extends LoadBalancer {
       final Helper helper;
+      final EndpointWatcherImpl endpointWatcher;
 
       // All fields become non-null once handleResolvedAddresses() successfully.
       // All fields are assigned at most once.
       @Nullable
       LocalityStore localityStore;
-      @Nullable
-      EndpointWatcherImpl endpointWatcher;
 
       ClusterEndpointsBalancer(Helper helper) {
         this.helper = helper;
-      }
-
-      @Override
-      public void handleNameResolutionError(Status error) {
-        // Go into TRANSIENT_FAILURE if we have not yet received any endpoint update. Otherwise,
-        // we keep running with the data we had previously.
-        if (endpointWatcher == null || !endpointWatcher.firstEndpointUpdateReceived) {
-          helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
-        }
-      }
-
-      @Override
-      public boolean canHandleEmptyAddressListFromNameResolution() {
-        return true;
-      }
-
-      @Override
-      public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-        if (endpointWatcher != null) {
-          // TODO(zddapeng): Handle child policy changed if any.
-          return;
-        }
 
         LoadStatsStore loadStatsStore = new LoadStatsStoreImpl();
         loadStatsStoreMap.put(clusterServiceName, loadStatsStore);
@@ -381,16 +358,30 @@ final class LookasideLb extends LoadBalancer {
         LookasideLb.this.endpointWatcher = endpointWatcher;
       }
 
+      // TODO(zddapeng): In handleResolvedAddresses() handle child policy change if any.
+
+      @Override
+      public void handleNameResolutionError(Status error) {
+        // Go into TRANSIENT_FAILURE if we have not yet received any endpoint update. Otherwise,
+        // we keep running with the data we had previously.
+        if (!endpointWatcher.firstEndpointUpdateReceived) {
+          helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
+        }
+      }
+
+      @Override
+      public boolean canHandleEmptyAddressListFromNameResolution() {
+        return true;
+      }
+
       @Override
       public void shutdown() {
-        if (endpointWatcher != null) {
-          loadStatsStoreMap.remove(clusterServiceName);
-          if (isReportingStats()) {
-            loadReportClient.removeLoadStatsStore(clusterServiceName);
-          }
-          localityStore.reset();
-          xdsClient.cancelEndpointDataWatch(clusterServiceName, endpointWatcher);
+        loadStatsStoreMap.remove(clusterServiceName);
+        if (isReportingStats()) {
+          loadReportClient.removeLoadStatsStore(clusterServiceName);
         }
+        localityStore.reset();
+        xdsClient.cancelEndpointDataWatch(clusterServiceName, endpointWatcher);
       }
     }
   }
