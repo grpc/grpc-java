@@ -178,21 +178,21 @@ public class SdsSslContextProviderTest {
   @Test
   public void testProviderForClient_withSubjectAltNames() throws IOException {
     when(serverMock.getSecretFor(/* name= */ "cert1"))
-            .thenReturn(getOneTlsCertSecret(/* name= */ "cert1", CLIENT_KEY_FILE, CLIENT_PEM_FILE));
+        .thenReturn(getOneTlsCertSecret(/* name= */ "cert1", CLIENT_KEY_FILE, CLIENT_PEM_FILE));
     when(serverMock.getSecretFor("valid1"))
-            .thenReturn(getOneCertificateValidationContextSecret(/* name= */ "valid1",
+        .thenReturn(getOneCertificateValidationContextSecret(/* name= */ "valid1",
             CA_PEM_FILE));
 
     SdsSslContextProvider<?> provider =
-          getSdsSslContextProvider(
-              /* server= */ false,
-              /* certName= */ "cert1",
-              /* validationContextName= */ "valid1",
-              Arrays.asList(
-                      "spiffe://grpc-sds-testing.svc.id.goog/ns/default/sa/bob"));
+        getSdsSslContextProvider(
+            /* server= */ false,
+            /* certName= */ "cert1",
+            /* validationContextName= */ "valid1",
+            Arrays.asList(
+                "spiffe://grpc-sds-testing.svc.id.goog/ns/default/sa/bob"));
 
     SecretVolumeSslContextProviderTest.TestCallback testCallback =
-            SecretVolumeSslContextProviderTest.getValueThruCallback(provider);
+        SecretVolumeSslContextProviderTest.getValueThruCallback(provider);
     doChecksOnSslContext(false, testCallback.updatedSslContext);
   }
 }
