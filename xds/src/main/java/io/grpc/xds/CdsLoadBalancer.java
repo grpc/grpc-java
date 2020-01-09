@@ -48,7 +48,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nullable;
 
 /**
- * Load balancer for experimental_cds LB policy.
+ * Load balancer for cds_experimental LB policy.
  */
 public final class CdsLoadBalancer extends LoadBalancer {
   private final ChannelLogger channelLogger;

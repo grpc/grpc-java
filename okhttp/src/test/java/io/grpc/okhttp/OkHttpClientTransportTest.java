@@ -2127,7 +2127,7 @@ public class OkHttpClientTransportTest {
     // The wait is safe; nextFrame is called in a loop and can have spurious wakeups
     @SuppressWarnings("WaitNotInLoop")
     @Override
-    public boolean nextFrame(Handler handler) throws IOException {
+    public boolean nextFrame(FrameReader.Handler handler) throws IOException {
       Result result;
       try {
         result = nextResults.take();

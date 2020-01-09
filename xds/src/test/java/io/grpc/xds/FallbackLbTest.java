@@ -53,6 +53,8 @@ import org.mockito.ArgumentCaptor;
  * Tests for {@link FallbackLb}.
  */
 @RunWith(JUnit4.class)
+// TODO(creamsoup) use parsed service config
+@SuppressWarnings("deprecation")
 public class FallbackLbTest {
 
   private final LoadBalancerProvider fallbackProvider1 = new LoadBalancerProvider() {

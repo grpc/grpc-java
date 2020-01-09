@@ -40,6 +40,8 @@ import io.netty.handler.ssl.SslContext;
 import io.netty.util.AsciiString;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
@@ -48,6 +50,8 @@ import javax.annotation.Nullable;
  */
 @Internal
 public final class SdsProtocolNegotiators {
+
+  private static final Logger logger = Logger.getLogger(SdsProtocolNegotiators.class.getName());
 
   private static final AsciiString SCHEME = AsciiString.of("https");
 
@@ -167,6 +171,12 @@ public final class SdsProtocolNegotiators {
         super.channelReadComplete(ctx);
       }
     }
+
+    @Override
+    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+      logger.log(Level.SEVERE, "exceptionCaught", cause);
+      ctx.fireExceptionCaught(cause);
+    }
   }
 
   @VisibleForTesting
@@ -205,6 +215,10 @@ public final class SdsProtocolNegotiators {
 
             @Override
             public void updateSecret(SslContext sslContext) {
+              logger.log(
+                  Level.FINEST,
+                  "ClientSdsHandler.updateSecret authority={0}, ctx.name={1}",
+                  new Object[]{grpcHandler.getAuthority(), ctx.name()});
               ChannelHandler handler =
                   InternalProtocolNegotiators.tls(sslContext).newHandler(grpcHandler);
 
@@ -220,6 +234,13 @@ public final class SdsProtocolNegotiators {
             }
           },
           ctx.executor());
+    }
+
+    @Override
+    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause)
+        throws Exception {
+      logger.log(Level.SEVERE, "exceptionCaught", cause);
+      ctx.fireExceptionCaught(cause);
     }
   }
 

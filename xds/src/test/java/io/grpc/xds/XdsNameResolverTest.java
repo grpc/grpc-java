@@ -73,6 +73,8 @@ import org.mockito.junit.MockitoRule;
 
 /** Unit tests for {@link XdsNameResolver}. */
 @RunWith(JUnit4.class)
+// TODO(creamsoup) use parsed service config
+@SuppressWarnings("deprecation")
 public class XdsNameResolverTest {
   private static final String HOST_NAME = "foo.googleapis.com";
   private static final int PORT = 443;
@@ -261,9 +263,9 @@ public class XdsNameResolverTest {
     List<Map<String, ?>> rawLbConfigs =
         (List<Map<String, ?>>) serviceConfig.get("loadBalancingConfig");
     Map<String, ?> lbConfig = Iterables.getOnlyElement(rawLbConfigs);
-    assertThat(lbConfig.keySet()).containsExactly("experimental_cds");
+    assertThat(lbConfig.keySet()).containsExactly("cds_experimental");
     @SuppressWarnings("unchecked")
-    Map<String, ?> rawConfigValues = (Map<String, ?>) lbConfig.get("experimental_cds");
+    Map<String, ?> rawConfigValues = (Map<String, ?>) lbConfig.get("cds_experimental");
     assertThat(rawConfigValues).containsExactly("cluster", clusterName);
   }
 
@@ -306,8 +308,8 @@ public class XdsNameResolverTest {
     List<Map<String, ?>> rawLbConfigs =
         (List<Map<String, ?>>) serviceConfig.get("loadBalancingConfig");
     Map<String, ?> lbConfig = Iterables.getOnlyElement(rawLbConfigs);
-    assertThat(lbConfig.keySet()).containsExactly("experimental_cds");
-    Map<String, ?> rawConfigValues = (Map<String, ?>) lbConfig.get("experimental_cds");
+    assertThat(lbConfig.keySet()).containsExactly("cds_experimental");
+    Map<String, ?> rawConfigValues = (Map<String, ?>) lbConfig.get("cds_experimental");
     assertThat(rawConfigValues).containsExactly("cluster", "cluster-foo.googleapis.com");
 
     // Simulate receiving another LDS response that tells client to do RDS.
@@ -329,8 +331,8 @@ public class XdsNameResolverTest {
     serviceConfig = result.getAttributes().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
     rawLbConfigs = (List<Map<String, ?>>) serviceConfig.get("loadBalancingConfig");
     lbConfig = Iterables.getOnlyElement(rawLbConfigs);
-    assertThat(lbConfig.keySet()).containsExactly("experimental_cds");
-    rawConfigValues = (Map<String, ?>) lbConfig.get("experimental_cds");
+    assertThat(lbConfig.keySet()).containsExactly("cds_experimental");
+    rawConfigValues = (Map<String, ?>) lbConfig.get("cds_experimental");
     assertThat(rawConfigValues).containsExactly("cluster", "cluster-blade.googleapis.com");
   }
 
@@ -365,19 +367,19 @@ public class XdsNameResolverTest {
     List<Map<String, ?>> rawLbConfigs =
         (List<Map<String, ?>>) serviceConfig.get("loadBalancingConfig");
     Map<String, ?> lbConfig = Iterables.getOnlyElement(rawLbConfigs);
-    assertThat(lbConfig.keySet()).containsExactly("experimental_cds");
+    assertThat(lbConfig.keySet()).containsExactly("cds_experimental");
     @SuppressWarnings("unchecked")
-    Map<String, ?> rawConfigValues = (Map<String, ?>) lbConfig.get("experimental_cds");
+    Map<String, ?> rawConfigValues = (Map<String, ?>) lbConfig.get("cds_experimental");
     assertThat(rawConfigValues).containsExactly("cluster", "cluster-foo.googleapis.com");
   }
 
   /**
-   * Builds an LDS DiscoveryResponse containing the mapping of given host name (with port if any)
-   * to the given cluster name directly in-line. Clients receiving this response is able to
-   * resolve cluster name for the given hostname:port immediately.
+   * Builds an LDS DiscoveryResponse containing the mapping of given host name (with port if any) to
+   * the given cluster name directly in-line. Clients receiving this response is able to resolve
+   * cluster name for the given hostname:port immediately.
    */
-  private DiscoveryResponse buildLdsResponseForCluster(String versionInfo,
-      String hostName, int port, String clusterName, String nonce) {
+  private static DiscoveryResponse buildLdsResponseForCluster(
+      String versionInfo, String hostName, int port, String clusterName, String nonce) {
     String ldsResourceName = port == -1 ? hostName : hostName + ":" + port;
     List<Any> listeners = ImmutableList.of(
         Any.pack(buildListener(ldsResourceName,
@@ -394,12 +396,12 @@ public class XdsNameResolverTest {
   }
 
   /**
-   * Builds an LDS DiscoveryResponse containing the mapping of given host name (with port if any)
-   * to the given RDS resource name. Clients receiving this response is able to send an RDS
-   * request for resolving the cluster name for the given hostname:port.
+   * Builds an LDS DiscoveryResponse containing the mapping of given host name (with port if any) to
+   * the given RDS resource name. Clients receiving this response is able to send an RDS request for
+   * resolving the cluster name for the given hostname:port.
    */
-  private DiscoveryResponse buildLdsResponseForRdsResource(String versionInfo,
-      String hostName, int port, String routeConfigName, String nonce) {
+  private static DiscoveryResponse buildLdsResponseForRdsResource(
+      String versionInfo, String hostName, int port, String routeConfigName, String nonce) {
     String ldsResourceName = port == -1 ? hostName : hostName + ":" + port;
     Rds rdsConfig =
         Rds.newBuilder()
@@ -416,11 +418,15 @@ public class XdsNameResolverTest {
   }
 
   /**
-   * Builds an RDS DiscoveryResponse containing the mapping of given route config name to the
-   * given cluster name under.
+   * Builds an RDS DiscoveryResponse containing the mapping of given route config name to the given
+   * cluster name under.
    */
-  private DiscoveryResponse buildRdsResponseForCluster(String versionInfo,
-      String routeConfigName, String hostName, String clusterName, String nonce) {
+  private static DiscoveryResponse buildRdsResponseForCluster(
+      String versionInfo,
+      String routeConfigName,
+      String hostName,
+      String clusterName,
+      String nonce) {
     List<Any> routeConfigs = ImmutableList.of(
         Any.pack(
             buildRouteConfiguration(

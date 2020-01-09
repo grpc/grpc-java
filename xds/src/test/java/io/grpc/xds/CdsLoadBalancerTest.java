@@ -75,6 +75,8 @@ import org.mockito.MockitoAnnotations;
  * Tests for {@link CdsLoadBalancer}.
  */
 @RunWith(JUnit4.class)
+// TODO(creamsoup) use parsed service config
+@SuppressWarnings("deprecation")
 public class CdsLoadBalancerTest {
 
   private final RefCountedXdsClientObjectPool xdsClientPool = new RefCountedXdsClientObjectPool(

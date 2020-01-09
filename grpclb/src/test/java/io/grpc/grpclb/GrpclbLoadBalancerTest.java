@@ -1822,6 +1822,7 @@ public class GrpclbLoadBalancerTest {
     subtestShutdownWithoutSubchannel("pick_first");
   }
 
+  @SuppressWarnings("deprecation")  // TODO(creamsoup) use parsed object
   private void subtestShutdownWithoutSubchannel(String childPolicy) throws Exception {
     String lbConfig = "{\"childPolicy\" : [ {\"" + childPolicy + "\" : {}} ]}";
     List<EquivalentAddressGroup> grpclbResolutionList = createResolvedServerAddresses(true);

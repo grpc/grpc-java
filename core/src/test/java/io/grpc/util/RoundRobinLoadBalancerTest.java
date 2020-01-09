@@ -453,6 +453,7 @@ public class RoundRobinLoadBalancerTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")  // migrate to parsed object
   public void stickinessEnabled_withoutStickyHeader() {
     Map<String, Object> serviceConfig = new HashMap<>();
     serviceConfig.put("stickinessMetadataKey", "my-sticky-key");
@@ -486,6 +487,7 @@ public class RoundRobinLoadBalancerTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")  // migrate to parsed object
   public void stickinessEnabled_withStickyHeader() {
     Map<String, String> serviceConfig = new HashMap<>();
     serviceConfig.put("stickinessMetadataKey", "my-sticky-key");
@@ -517,6 +519,7 @@ public class RoundRobinLoadBalancerTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")  // migrate to parsed object
   public void stickinessEnabled_withDifferentStickyHeaders() {
     Map<String, String> serviceConfig = new HashMap<>();
     serviceConfig.put("stickinessMetadataKey", "my-sticky-key");
@@ -563,6 +566,7 @@ public class RoundRobinLoadBalancerTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")  // migrate to parsed object
   public void stickiness_goToTransientFailure_pick_backToReady() {
     Map<String, String> serviceConfig = new HashMap<>();
     serviceConfig.put("stickinessMetadataKey", "my-sticky-key");
@@ -611,6 +615,7 @@ public class RoundRobinLoadBalancerTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")  // migrate to parsed object
   public void stickiness_goToTransientFailure_backToReady_pick() {
     Map<String, String> serviceConfig = new HashMap<>();
     serviceConfig.put("stickinessMetadataKey", "my-sticky-key");
@@ -665,6 +670,7 @@ public class RoundRobinLoadBalancerTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")  // migrate to parsed object
   public void stickiness_oneSubchannelShutdown() {
     Map<String, String> serviceConfig = new HashMap<>();
     serviceConfig.put("stickinessMetadataKey", "my-sticky-key");
@@ -722,6 +728,7 @@ public class RoundRobinLoadBalancerTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")  // migrate to parsed object
   public void stickiness_resolveTwice_metadataKeyChanged() {
     Map<String, String> serviceConfig1 = new HashMap<>();
     serviceConfig1.put("stickinessMetadataKey", "my-sticky-key1");
@@ -743,6 +750,7 @@ public class RoundRobinLoadBalancerTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")  // migrate to parsed object
   public void stickiness_resolveTwice_metadataKeyUnChanged() {
     Map<String, String> serviceConfig1 = new HashMap<>();
     serviceConfig1.put("stickinessMetadataKey", "my-sticky-key1");

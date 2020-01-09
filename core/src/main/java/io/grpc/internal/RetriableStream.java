@@ -121,6 +121,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     this.throttle = throttle;
   }
 
+  @SuppressWarnings("GuardedBy")
   @Nullable // null if already committed
   @CheckReturnValue
   private Runnable commit(final Substream winningSubstream) {
@@ -138,6 +139,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
       final Future<?> retryFuture;
       if (scheduledRetry != null) {
+        // TODO(b/145386688): This access should be guarded by 'this.scheduledRetry.lock'; instead
+        // found: 'this.lock'
         retryFuture = scheduledRetry.markCancelled();
         scheduledRetry = null;
       } else {
@@ -146,6 +149,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       // cancel the scheduled hedging if it is scheduled prior to the commitment
       final Future<?> hedgingFuture;
       if (scheduledHedging != null) {
+        // TODO(b/145386688): This access should be guarded by 'this.scheduledHedging.lock'; instead
+        // found: 'this.lock'
         hedgingFuture = scheduledHedging.markCancelled();
         scheduledHedging = null;
       } else {
@@ -338,6 +343,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     drain(substream);
   }
 
+  @SuppressWarnings("GuardedBy")
   private void pushbackHedging(@Nullable Integer delayMillis) {
     if (delayMillis == null) {
       return;
@@ -356,6 +362,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
         return;
       }
 
+      // TODO(b/145386688): This access should be guarded by 'this.scheduledHedging.lock'; instead
+      // found: 'this.lock'
       futureToBeCancelled = scheduledHedging.markCancelled();
       scheduledHedging = future = new FutureCanceller(lock);
     }
@@ -381,6 +389,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     public void run() {
       callExecutor.execute(
           new Runnable() {
+            @SuppressWarnings("GuardedBy")
             @Override
             public void run() {
               // It's safe to read state.hedgingAttemptCount here.
@@ -392,6 +401,9 @@ abstract class RetriableStream<ReqT> implements ClientStream {
               FutureCanceller future = null;
 
               synchronized (lock) {
+                // TODO(b/145386688): This access should be guarded by
+                // 'HedgingRunnable.this.scheduledHedgingRef.lock'; instead found:
+                // 'RetriableStream.this.lock'
                 if (scheduledHedgingRef.isCancelled()) {
                   cancelled = true;
                 } else {
@@ -695,10 +707,13 @@ abstract class RetriableStream<ReqT> implements ClientStream {
         && !state.hedgingFrozen;
   }
 
+  @SuppressWarnings("GuardedBy")
   private void freezeHedging() {
     Future<?> futureToBeCancelled = null;
     synchronized (lock) {
       if (scheduledHedging != null) {
+        // TODO(b/145386688): This access should be guarded by 'this.scheduledHedging.lock'; instead
+        // found: 'this.lock'
         futureToBeCancelled = scheduledHedging.markCancelled();
         scheduledHedging = null;
       }

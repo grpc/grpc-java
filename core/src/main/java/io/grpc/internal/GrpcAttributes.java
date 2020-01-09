@@ -29,7 +29,10 @@ import java.util.Map;
 public final class GrpcAttributes {
   /**
    * Attribute key for service config.
+   *
+   * <p>Deprecated: all users should migrate to parsed config {@link ManagedChannelServiceConfig}.
    */
+  @Deprecated
   @NameResolver.ResolutionResultAttr
   public static final Attributes.Key<Map<String, ?>> NAME_RESOLVER_SERVICE_CONFIG =
       Attributes.Key.create("service-config");
