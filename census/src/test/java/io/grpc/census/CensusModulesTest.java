@@ -1259,7 +1259,7 @@ public class CensusModulesTest {
         });
   }
 
-  private static class CallInfo<ReqT, RespT> extends ServerCallInfo {
+  private static class CallInfo<ReqT, RespT> extends ServerCallInfo<ReqT, RespT> {
     private final MethodDescriptor<ReqT, RespT> methodDescriptor;
     private final Attributes attributes;
     private final String authority;
@@ -1274,7 +1274,7 @@ public class CensusModulesTest {
     }
 
     @Override
-    public MethodDescriptor getMethodDescriptor() {
+    public MethodDescriptor<ReqT, RespT> getMethodDescriptor() {
       return methodDescriptor;
     }
 
