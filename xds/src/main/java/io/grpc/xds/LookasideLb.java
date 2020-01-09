@@ -70,9 +70,8 @@ final class LookasideLb extends LoadBalancer {
   // Most recent XdsConfig.
   @Nullable
   private XdsConfig xdsConfig;
-  // Most recent EndpointWatcher.
   @Nullable
-  private EndpointWatcher endpointWatcher;
+  private EndpointWatcherImpl endpointWatcher;
   @Nullable
   private ObjectPool<XdsClient> xdsClientPool;
   @Nullable
@@ -296,8 +295,6 @@ final class LookasideLb extends LoadBalancer {
     final String clusterServiceName;
     @Nullable
     final String oldClusterServiceName;
-    @Nullable
-    final EndpointWatcher oldEndpointWatcher;
 
     ClusterEndpointsBalancerFactory(String clusterServiceName) {
       this.clusterServiceName = clusterServiceName;
@@ -306,7 +303,6 @@ final class LookasideLb extends LoadBalancer {
       } else {
         oldClusterServiceName = null;
       }
-      oldEndpointWatcher = endpointWatcher;
     }
 
     @Override
@@ -333,12 +329,7 @@ final class LookasideLb extends LoadBalancer {
      */
     final class ClusterEndpointsBalancer extends LoadBalancer {
       final Helper helper;
-      final EndpointWatcherImpl endpointWatcher;
-
-      // All fields become non-null once handleResolvedAddresses() successfully.
-      // All fields are assigned at most once.
-      @Nullable
-      LocalityStore localityStore;
+      final LocalityStore localityStore;
 
       ClusterEndpointsBalancer(Helper helper) {
         this.helper = helper;
@@ -350,12 +341,12 @@ final class LookasideLb extends LoadBalancer {
         }
         localityStore = localityStoreFactory.newLocalityStore(helper, lbRegistry, loadStatsStore);
 
-        endpointWatcher = new EndpointWatcherImpl(localityStore);
-        xdsClient.watchEndpointData(clusterServiceName, endpointWatcher);
-        if (oldEndpointWatcher != null && oldClusterServiceName != null) {
-          xdsClient.cancelEndpointDataWatch(oldClusterServiceName, oldEndpointWatcher);
+        EndpointWatcherImpl newEndpointWatcher = new EndpointWatcherImpl(localityStore);
+        xdsClient.watchEndpointData(clusterServiceName, newEndpointWatcher);
+        if (endpointWatcher != null) {
+          xdsClient.cancelEndpointDataWatch(oldClusterServiceName, endpointWatcher);
         }
-        LookasideLb.this.endpointWatcher = endpointWatcher;
+        endpointWatcher = newEndpointWatcher;
       }
 
       // TODO(zddapeng): In handleResolvedAddresses() handle child policy change if any.
