@@ -195,7 +195,7 @@ final class SdsSslContextProvider<K> extends SslContextProvider<K>
     if (secretUpdate.hasTlsCertificate()) {
       checkState(
           secretUpdate.getName().equals(certSdsConfig.getName()), "tlsCert names don't match");
-      logger.log(Level.FINEST, "onSecretChanged certSdsConfig.name=" + certSdsConfig.getName());
+      logger.log(Level.FINEST, "onSecretChanged certSdsConfig.name={0}", certSdsConfig.getName());
       tlsCertificate = secretUpdate.getTlsCertificate();
       if (certificateValidationContext != null || validationContextSdsConfig == null) {
         updateSslContext();
@@ -206,8 +206,8 @@ final class SdsSslContextProvider<K> extends SslContextProvider<K>
           "validationContext names don't match");
       logger.log(
           Level.FINEST,
-          "onSecretChanged validationContextSdsConfig.name="
-              + validationContextSdsConfig.getName());
+          "onSecretChanged validationContextSdsConfig.name={0}",
+          validationContextSdsConfig.getName());
       certificateValidationContext = secretUpdate.getValidationContext();
       if (tlsCertificate != null || certSdsConfig == null) {
         updateSslContext();

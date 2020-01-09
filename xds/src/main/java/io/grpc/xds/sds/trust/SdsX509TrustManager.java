@@ -25,11 +25,9 @@ import java.net.Socket;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateParsingException;
 import java.security.cert.X509Certificate;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
-import java.util.logging.Logger;
 import javax.annotation.Nullable;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.X509ExtendedTrustManager;
@@ -40,7 +38,6 @@ import javax.net.ssl.X509TrustManager;
  * SANs (subject-alternate-names) against the list in CertificateValidationContext.
  */
 final class SdsX509TrustManager extends X509ExtendedTrustManager implements X509TrustManager {
-  private static final Logger logger = Logger.getLogger(SdsX509TrustManager.class.getName());
 
   // ref: io.grpc.okhttp.internal.OkHostnameVerifier and
   // sun.security.x509.GeneralNameInterface
@@ -53,7 +50,6 @@ final class SdsX509TrustManager extends X509ExtendedTrustManager implements X509
 
   SdsX509TrustManager(@Nullable CertificateValidationContext certContext,
       X509ExtendedTrustManager delegate) {
-    logger.finest("certContext=" + certContext + ", delegate=" + delegate);
     checkNotNull(delegate, "delegate");
     this.certContext = certContext;
     this.delegate = delegate;
@@ -260,8 +256,6 @@ final class SdsX509TrustManager extends X509ExtendedTrustManager implements X509
   @Override
   public void checkServerTrusted(X509Certificate[] chain, String authType, Socket socket)
       throws CertificateException {
-    logger.finest("chain=" + Arrays.toString(chain) + ", authType=" + authType
-        + ", socket=" + socket);
     delegate.checkServerTrusted(chain, authType, socket);
     verifySubjectAltNameInChain(chain);
   }
@@ -269,8 +263,6 @@ final class SdsX509TrustManager extends X509ExtendedTrustManager implements X509
   @Override
   public void checkServerTrusted(X509Certificate[] chain, String authType, SSLEngine sslEngine)
       throws CertificateException {
-    logger.finest("chain=" + Arrays.toString(chain) + ", authType=" + authType
-        + ", SSLEngine=" + sslEngine);
     delegate.checkServerTrusted(chain, authType, sslEngine);
     verifySubjectAltNameInChain(chain);
   }
@@ -278,7 +270,6 @@ final class SdsX509TrustManager extends X509ExtendedTrustManager implements X509
   @Override
   public void checkServerTrusted(X509Certificate[] chain, String authType)
       throws CertificateException {
-    logger.finest("chain=" + Arrays.toString(chain) + ", authType=" + authType);
     delegate.checkServerTrusted(chain, authType);
     verifySubjectAltNameInChain(chain);
   }

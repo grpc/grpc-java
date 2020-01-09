@@ -217,10 +217,8 @@ public final class SdsProtocolNegotiators {
             public void updateSecret(SslContext sslContext) {
               logger.log(
                   Level.FINEST,
-                  "ClientSdsHandler.updateSecret authority="
-                      + grpcHandler.getAuthority()
-                      + ", ctx.name="
-                      + ctx.name());
+                  "ClientSdsHandler.updateSecret authority={0}, ctx.name={1}",
+                  new Object[]{grpcHandler.getAuthority(), ctx.name()});
               ChannelHandler handler =
                   InternalProtocolNegotiators.tls(sslContext).newHandler(grpcHandler);
 

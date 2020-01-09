@@ -239,7 +239,7 @@ final class SdsClient {
       }
       responseObserver = new ResponseObserver();
       requestObserver = secretDiscoveryServiceStub.streamSecrets(responseObserver);
-      logger.log(Level.FINEST, "Stream created for " + sdsSecretConfig);
+      logger.log(Level.FINEST, "Stream created for {0}", sdsSecretConfig);
     }
   }
 
@@ -261,7 +261,7 @@ final class SdsClient {
 
     @Override
     public void onNext(DiscoveryResponse discoveryResponse) {
-      logger.log(Level.FINEST, "response=" + discoveryResponse);
+      logger.log(Level.FINEST, "response={0}", discoveryResponse);
       processDiscoveryResponse(discoveryResponse);
     }
 
@@ -319,7 +319,7 @@ final class SdsClient {
             .setNode(clientNode);
 
     DiscoveryRequest req = builder.build();
-    logger.log(Level.FINEST, "Sending NACK req=" + req);
+    logger.log(Level.FINEST, "Sending NACK req={0}", req);
     requestObserver.onNext(req);
   }
 
@@ -427,12 +427,12 @@ final class SdsClient {
   private void sendDiscoveryRequestOnStream() {
     String nonce = "";
     String versionInfo = "";
-    String requestType = "Sending initial req=";
+    String requestType = "Sending initial req={0}";
 
     if (lastResponse != null) {
       nonce = lastResponse.getNonce();
       versionInfo = lastResponse.getVersionInfo();
-      requestType = "Sending ACK req=";
+      requestType = "Sending ACK req={0}";
     }
     DiscoveryRequest.Builder builder =
         DiscoveryRequest.newBuilder()
@@ -443,7 +443,7 @@ final class SdsClient {
             .setNode(clientNode);
 
     DiscoveryRequest req = builder.build();
-    logger.log(Level.FINEST, requestType + req);
+    logger.log(Level.FINEST, requestType, req);
     requestObserver.onNext(req);
   }
 }

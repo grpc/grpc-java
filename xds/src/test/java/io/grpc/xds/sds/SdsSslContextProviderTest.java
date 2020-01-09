@@ -65,8 +65,8 @@ public class SdsSslContextProviderTest {
 
   /** Helper method to build SdsSslContextProvider from given names. */
   private SdsSslContextProvider<?> getSdsSslContextProvider(
-          boolean server, String certName, String validationContextName,
-          Iterable<String> verifySubjectAltNames) throws IOException {
+      boolean server, String certName, String validationContextName,
+      Iterable<String> verifySubjectAltNames) throws IOException {
 
     CommonTlsContext commonTlsContext =
         CommonTlsContextTestsUtil.buildCommonTlsContextWithAdditionalValues(

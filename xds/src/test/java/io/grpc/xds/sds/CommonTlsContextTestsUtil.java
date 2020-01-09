@@ -97,12 +97,12 @@ public class CommonTlsContextTestsUtil {
 
   /** takes additional values and creates CombinedCertificateValidationContext as needed. */
   static CommonTlsContext buildCommonTlsContextWithAdditionalValues(
-          String certName,
-          String certTargetUri,
-          String validationContextName,
-          String validationContextTargetUri,
-          Iterable<String> verifySubjectAltNames,
-          String channelType) {
+      String certName,
+      String certTargetUri,
+      String validationContextName,
+      String validationContextTargetUri,
+      Iterable<String> verifySubjectAltNames,
+      String channelType) {
 
     CommonTlsContext.Builder builder = CommonTlsContext.newBuilder();
 
@@ -111,15 +111,15 @@ public class CommonTlsContextTestsUtil {
       builder.addTlsCertificateSdsSecretConfigs(sdsSecretConfig);
     }
     sdsSecretConfig =
-            buildSdsSecretConfig(validationContextName, validationContextTargetUri, channelType);
+        buildSdsSecretConfig(validationContextName, validationContextTargetUri, channelType);
     CertificateValidationContext certValidationContext =
-            verifySubjectAltNames == null ? null
-                    : CertificateValidationContext.newBuilder()
-                    .addAllVerifySubjectAltName(verifySubjectAltNames).build();
+        verifySubjectAltNames == null ? null
+            : CertificateValidationContext.newBuilder()
+                .addAllVerifySubjectAltName(verifySubjectAltNames).build();
 
     if (sdsSecretConfig != null && certValidationContext != null) {
       CombinedCertificateValidationContext.Builder combinedBuilder =
-              CombinedCertificateValidationContext.newBuilder()
+          CombinedCertificateValidationContext.newBuilder()
               .setDefaultValidationContext(certValidationContext)
               .setValidationContextSdsSecretConfig(sdsSecretConfig);
       builder.setCombinedValidationContext(combinedBuilder);
