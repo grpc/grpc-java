@@ -290,7 +290,7 @@ final class LookasideLb extends LoadBalancer {
   }
 
   /**
-   * A load balancer factory that provides a load balancer for a given cluster service name.
+   * A load balancer factory that provides a load balancer for a given cluster service.
    */
   private final class ClusterEndpointsBalancerFactory extends LoadBalancer.Factory {
     final String clusterServiceName;
