@@ -56,10 +56,10 @@ import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerStreamTracer;
+import io.grpc.ServerStreamTracer.ServerCallInfo;
 import io.grpc.Status;
 import io.grpc.census.internal.DeprecatedCensusConstants;
 import io.grpc.internal.FakeClock;
-import io.grpc.internal.ServerCallInfoImpl;
 import io.grpc.internal.testing.StatsTestUtils;
 import io.grpc.internal.testing.StatsTestUtils.FakeStatsRecorder;
 import io.grpc.internal.testing.StatsTestUtils.FakeTagContextBinarySerializer;
@@ -98,6 +98,7 @@ import java.util.List;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
+import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -1047,7 +1048,7 @@ public class CensusModulesTest {
     assertSame(spyServerSpan, ContextUtils.getValue(filteredContext));
 
     serverStreamTracer.serverCallStarted(
-        new ServerCallInfoImpl<>(method, Attributes.EMPTY, null));
+        new CallInfo<>(method, Attributes.EMPTY, null));
 
     verify(spyServerSpan, never()).end(any(EndSpanOptions.class));
 
@@ -1090,7 +1091,7 @@ public class CensusModulesTest {
     serverStreamTracer.filterContext(Context.ROOT);
 
     serverStreamTracer.serverCallStarted(
-        new ServerCallInfoImpl<>(sampledMethod, Attributes.EMPTY, null));
+        new CallInfo<>(sampledMethod, Attributes.EMPTY, null));
 
     serverStreamTracer.streamClosed(Status.CANCELLED);
 
@@ -1256,5 +1257,36 @@ public class CensusModulesTest {
             return ((AggregationData.MeanData) arg).getCount();
           }
         });
+  }
+
+  private static class CallInfo<ReqT, RespT> extends ServerCallInfo {
+    private final MethodDescriptor<ReqT, RespT> methodDescriptor;
+    private final Attributes attributes;
+    private final String authority;
+
+    CallInfo(
+        MethodDescriptor<ReqT, RespT> methodDescriptor,
+        Attributes attributes,
+        @Nullable String authority) {
+      this.methodDescriptor = methodDescriptor;
+      this.attributes = attributes;
+      this.authority = authority;
+    }
+
+    @Override
+    public MethodDescriptor getMethodDescriptor() {
+      return methodDescriptor;
+    }
+
+    @Override
+    public Attributes getAttributes() {
+      return attributes;
+    }
+
+    @Nullable
+    @Override
+    public String getAuthority() {
+      return authority;
+    }
   }
 }

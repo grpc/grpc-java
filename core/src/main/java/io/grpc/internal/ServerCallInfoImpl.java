@@ -16,7 +16,6 @@
 
 package io.grpc.internal;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Objects;
 import io.grpc.Attributes;
 import io.grpc.MethodDescriptor;
@@ -26,17 +25,12 @@ import javax.annotation.Nullable;
 /**
  * An implementation of {@link ServerCallInfo}.
  */
-@VisibleForTesting
-public final class ServerCallInfoImpl<ReqT, RespT> extends ServerCallInfo<ReqT, RespT> {
+final class ServerCallInfoImpl<ReqT, RespT> extends ServerCallInfo<ReqT, RespT> {
   private final MethodDescriptor<ReqT, RespT> methodDescriptor;
   private final Attributes attributes;
   private final String authority;
 
-  /**
-   * Creates a {@link ServerCallInfo} with some basic call information.
-   */
-  @VisibleForTesting
-  public ServerCallInfoImpl(
+  ServerCallInfoImpl(
       MethodDescriptor<ReqT, RespT> methodDescriptor,
       Attributes attributes,
       @Nullable String authority) {
