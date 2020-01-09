@@ -37,6 +37,7 @@ dependencies {
 }
 
 javadoc {
+    failOnError false  // no public or protected classes found to document
     exclude 'io/grpc/census/internal/**'
     exclude 'io/grpc/census/Internal*'
 }
