@@ -21,7 +21,7 @@ package io.grpc.internal;
  */
 public final class TestingAccessor {
   /**
-   * Disable or enable census stats features.
+   * Disable or enable client side census stats features.
    */
   public static void setStatsEnabled(
       AbstractManagedChannelImplBuilder<?> builder, boolean statsEnabled) {
@@ -29,12 +29,12 @@ public final class TestingAccessor {
   }
 
   /**
-   * Disable or enable census tracing features.
+   * Disable or enable server side census stats features.
    */
-  public static void setTracingEnabled(
+  public static void setStatsEnabled(
       AbstractServerImplBuilder<?> builder,
-      boolean tracingEnabled) {
-    builder.setTracingEnabled(tracingEnabled);
+      boolean statsEnabled) {
+    builder.setStatsEnabled(statsEnabled);
   }
 
   private TestingAccessor() {
