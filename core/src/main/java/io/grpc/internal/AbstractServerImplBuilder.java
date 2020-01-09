@@ -81,7 +81,6 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
   CompressorRegistry compressorRegistry = DEFAULT_COMPRESSOR_REGISTRY;
   long handshakeTimeoutMillis = DEFAULT_HANDSHAKE_TIMEOUT_MILLIS;
   Deadline.Ticker ticker = Deadline.getSystemTicker();
-  @Nullable private ServerStreamTracer.Factory censusStatsStreamTracerFactory;
   private boolean statsEnabled = true;
   private boolean recordStartedRpcs = true;
   private boolean recordFinishedRpcs = true;
@@ -166,16 +165,6 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
     return thisT();
   }
 
-  /**
-   * Sets a {@link ServerStreamTracer.Factory} that overrides the default stats interceptor
-   * implementation.
-   */
-  protected final T setCensusStreamTracerFactory(
-      @Nullable ServerStreamTracer.Factory censusStatsStreamTracerFactory) {
-    this.censusStatsStreamTracerFactory = censusStatsStreamTracerFactory;
-    return thisT();
-  }
-
   @VisibleForTesting
   public final T setTransportTracerFactory(TransportTracer.Factory transportTracerFactory) {
     this.transportTracerFactory = transportTracerFactory;
@@ -243,28 +232,26 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
   final List<? extends ServerStreamTracer.Factory> getTracerFactories() {
     ArrayList<ServerStreamTracer.Factory> tracerFactories = new ArrayList<>();
     if (statsEnabled) {
-      ServerStreamTracer.Factory censusStatsTracerFactory = this.censusStatsStreamTracerFactory;
-      if (censusStatsTracerFactory == null) {
-        try {
-          Class<?> censusStatsAccessor =
-              Class.forName("io.grpc.census.InternalCensusStatsAccessor");
-          Method getServerStreamTracerFactoryMethod =
-              censusStatsAccessor.getDeclaredMethod(
-                  "getServerStreamTracerFactory",
-                  boolean.class,
-                  boolean.class,
-                  boolean.class);
-          censusStatsTracerFactory =
-              (ServerStreamTracer.Factory) getServerStreamTracerFactoryMethod
-                  .invoke(
-                      null,
-                      recordStartedRpcs,
-                      recordFinishedRpcs,
-                      recordRealTimeMetrics);
-        } catch (ClassNotFoundException | NoSuchMethodException | IllegalAccessException
-            | InvocationTargetException e) {
-          // Do nothing.
-        }
+      ServerStreamTracer.Factory censusStatsTracerFactory = null;
+      try {
+        Class<?> censusStatsAccessor =
+            Class.forName("io.grpc.census.InternalCensusStatsAccessor");
+        Method getServerStreamTracerFactoryMethod =
+            censusStatsAccessor.getDeclaredMethod(
+                "getServerStreamTracerFactory",
+                boolean.class,
+                boolean.class,
+                boolean.class);
+        censusStatsTracerFactory =
+            (ServerStreamTracer.Factory) getServerStreamTracerFactoryMethod
+                .invoke(
+                    null,
+                    recordStartedRpcs,
+                    recordFinishedRpcs,
+                    recordRealTimeMetrics);
+      } catch (ClassNotFoundException | NoSuchMethodException | IllegalAccessException
+          | InvocationTargetException e) {
+        // Do nothing.
       }
       if (censusStatsTracerFactory != null) {
         tracerFactories.add(censusStatsTracerFactory);

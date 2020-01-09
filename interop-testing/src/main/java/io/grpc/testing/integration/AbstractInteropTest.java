@@ -247,7 +247,7 @@ public abstract class AbstractInteropTest {
                   GrpcUtil.STOPWATCH_SUPPLIER,
                   true, true, true, false /* real-time metrics */);
       AbstractServerImplBuilder<?> sb = (AbstractServerImplBuilder<?>) builder;
-      io.grpc.internal.TestingAccessor.setCensusStreamTracerFactory(sb, censusTracerFactory);
+      sb.addStreamTracerFactory(censusTracerFactory);
     }
     if (metricsExpected()) {
       assertThat(builder).isInstanceOf(AbstractServerImplBuilder.class);

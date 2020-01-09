@@ -185,9 +185,6 @@ public abstract class AbstractManagedChannelImplBuilder
   private boolean recordRealTimeMetrics = false;
   private boolean tracingEnabled = true;
 
-  @Nullable
-  private ClientInterceptor censusStatsInterceptor;
-
   protected AbstractManagedChannelImplBuilder(String target) {
     this.target = Preconditions.checkNotNull(target, "target");
     this.directServerAddress = null;
@@ -377,15 +374,6 @@ public abstract class AbstractManagedChannelImplBuilder
     return thisT();
   }
 
-  /**
-   * Sets a {@link ClientInterceptor} that overrides the default stats interceptor implementation.
-   */
-  @VisibleForTesting
-  protected final T setCensusStatsInterceptor(ClientInterceptor statsInterceptor) {
-    this.censusStatsInterceptor = statsInterceptor;
-    return thisT();
-  }
-
   @Override
   public T proxyDetector(@Nullable ProxyDetector proxyDetector) {
     this.proxyDetector = proxyDetector;
@@ -566,28 +554,26 @@ public abstract class AbstractManagedChannelImplBuilder
     temporarilyDisableRetry = false;
     if (statsEnabled) {
       temporarilyDisableRetry = true;
-      ClientInterceptor statsInterceptor = this.censusStatsInterceptor;
-      if (statsInterceptor == null) {
-        try {
-          Class<?> censusStatsAccessor =
-              Class.forName("io.grpc.census.InternalCensusStatsAccessor");
-          Method getClientInterceptroMethod =
-              censusStatsAccessor.getDeclaredMethod(
-                  "getClientInterceptor",
-                  boolean.class,
-                  boolean.class,
-                  boolean.class);
-          statsInterceptor =
-              (ClientInterceptor) getClientInterceptroMethod
-                  .invoke(
-                      null,
-                      recordStartedRpcs,
-                      recordFinishedRpcs,
-                      recordRealTimeMetrics);
-        } catch (ClassNotFoundException | NoSuchMethodException | IllegalAccessException
-            | InvocationTargetException e) {
-          // Do nothing.
-        }
+      ClientInterceptor statsInterceptor = null;
+      try {
+        Class<?> censusStatsAccessor =
+            Class.forName("io.grpc.census.InternalCensusStatsAccessor");
+        Method getClientInterceptroMethod =
+            censusStatsAccessor.getDeclaredMethod(
+                "getClientInterceptor",
+                boolean.class,
+                boolean.class,
+                boolean.class);
+        statsInterceptor =
+            (ClientInterceptor) getClientInterceptroMethod
+                .invoke(
+                    null,
+                    recordStartedRpcs,
+                    recordFinishedRpcs,
+                    recordRealTimeMetrics);
+      } catch (ClassNotFoundException | NoSuchMethodException | IllegalAccessException
+          | InvocationTargetException e) {
+        // Do nothing.
       }
       if (statsInterceptor != null) {
         // First interceptor runs last (see ClientInterceptors.intercept()), so that no

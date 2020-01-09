@@ -18,6 +18,7 @@ evaluationDependsOn(project(':grpc-context').path)
 dependencies {
     compile project(':grpc-alts'),
             project(':grpc-auth'),
+            project(':grpc-census'),
             project(':grpc-core'),
             project(':grpc-netty'),
             project(':grpc-okhttp'),
