@@ -259,7 +259,7 @@ final class SdsX509TrustManager extends X509ExtendedTrustManager implements X509
   public void checkServerTrusted(X509Certificate[] chain, String authType, Socket socket)
       throws CertificateException {
     if (socket instanceof SSLSocket) {
-      SSLSocket sslSocket = (SSLSocket)socket;
+      SSLSocket sslSocket = (SSLSocket) socket;
       SSLParameters sslParams = sslSocket.getSSLParameters();
       if (sslParams != null) {
         sslParams.setEndpointIdentificationAlgorithm(null);

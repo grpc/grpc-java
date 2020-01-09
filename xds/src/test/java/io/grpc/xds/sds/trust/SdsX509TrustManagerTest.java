@@ -18,21 +18,21 @@ package io.grpc.xds.sds.trust;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;
+import static org.mockito.Mockito.CALLS_REAL_METHODS;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.envoyproxy.envoy.api.v2.auth.CertificateValidationContext;
 import io.grpc.internal.testing.TestUtils;
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.security.cert.CertStoreException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
-import javax.net.ssl.HandshakeCompletedListener;
 import javax.net.ssl.SSLEngine;
-import javax.net.ssl.SSLEngineResult;
-import javax.net.ssl.SSLEngineResult.HandshakeStatus;
-import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLParameters;
 import javax.net.ssl.SSLSession;
 import javax.net.ssl.SSLSocket;
@@ -258,16 +258,17 @@ public class SdsX509TrustManagerTest {
   @Test
   public void checkServerTrustedSslEngine()
       throws CertificateException, IOException, CertStoreException {
-    SSLEngine sslEngine = buildTrustManagerAndGetSslEngine();
+    TestSslEngine sslEngine = buildTrustManagerAndGetSslEngine();
     X509Certificate[] serverCerts =
         CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
     trustManager.checkServerTrusted(serverCerts, "ECDHE_ECDSA", sslEngine);
+    verify(sslEngine, times(1)).getHandshakeSession();
   }
 
   @Test
   public void checkServerTrustedSslEngine_untrustedServer_expectException()
       throws CertificateException, IOException, CertStoreException {
-    SSLEngine sslEngine = buildTrustManagerAndGetSslEngine();
+    TestSslEngine sslEngine = buildTrustManagerAndGetSslEngine();
     X509Certificate[] badServerCert =
         CertificateUtils.toX509Certificates(TestUtils.loadCert(BAD_SERVER_PEM_FILE));
     try {
@@ -277,21 +278,24 @@ public class SdsX509TrustManagerTest {
       assertThat(expected).hasMessageThat()
           .endsWith("unable to find valid certification path to requested target");
     }
+    verify(sslEngine, times(1)).getHandshakeSession();
   }
 
   @Test
   public void checkServerTrustedSslSocket()
       throws CertificateException, IOException, CertStoreException {
-    SSLSocket sslSocket = buildTrustManagerAndGetSslSocket();
+    TestSslSocket sslSocket = buildTrustManagerAndGetSslSocket();
     X509Certificate[] serverCerts =
         CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
     trustManager.checkServerTrusted(serverCerts, "ECDHE_ECDSA", sslSocket);
+    verify(sslSocket, times(1)).isConnected();
+    verify(sslSocket, times(1)).getHandshakeSession();
   }
 
   @Test
   public void checkServerTrustedSslSocket_untrustedServer_expectException()
       throws CertificateException, IOException, CertStoreException {
-    SSLSocket sslSocket = buildTrustManagerAndGetSslSocket();
+    TestSslSocket sslSocket = buildTrustManagerAndGetSslSocket();
     X509Certificate[] badServerCert =
         CertificateUtils.toX509Certificates(TestUtils.loadCert(BAD_SERVER_PEM_FILE));
     try {
@@ -301,276 +305,28 @@ public class SdsX509TrustManagerTest {
       assertThat(expected).hasMessageThat()
           .endsWith("unable to find valid certification path to requested target");
     }
+    verify(sslSocket, times(1)).isConnected();
+    verify(sslSocket, times(1)).getHandshakeSession();
   }
 
-  private SSLEngine buildTrustManagerAndGetSslEngine()
+  private TestSslEngine buildTrustManagerAndGetSslEngine()
       throws CertificateException, IOException, CertStoreException {
     SSLParameters sslParams = buildTrustManagerAndGetSslParameters();
-    SSLEngine sslEngine =  new SSLEngine() {
-      @Override
-      public SSLEngineResult wrap(ByteBuffer[] byteBuffers, int i, int i1, ByteBuffer byteBuffer)
-          throws SSLException {
-        return null;
-      }
 
-      @Override
-      public SSLEngineResult unwrap(ByteBuffer byteBuffer, ByteBuffer[] byteBuffers, int i, int i1)
-          throws SSLException {
-        return null;
-      }
-
-      @Override
-      public Runnable getDelegatedTask() {
-        return null;
-      }
-
-      @Override
-      public void closeInbound() throws SSLException {
-
-      }
-
-      @Override
-      public boolean isInboundDone() {
-        return false;
-      }
-
-      @Override
-      public void closeOutbound() {
-
-      }
-
-      @Override
-      public boolean isOutboundDone() {
-        return false;
-      }
-
-      @Override
-      public String[] getSupportedCipherSuites() {
-        return new String[0];
-      }
-
-      @Override
-      public String[] getEnabledCipherSuites() {
-        return new String[0];
-      }
-
-      @Override
-      public void setEnabledCipherSuites(String[] strings) {
-
-      }
-
-      @Override
-      public String[] getSupportedProtocols() {
-        return new String[0];
-      }
-
-      @Override
-      public String[] getEnabledProtocols() {
-        return new String[0];
-      }
-
-      @Override
-      public void setEnabledProtocols(String[] strings) {
-
-      }
-
-      @Override
-      public SSLSession getSession() {
-        return mockSession;
-      }
-
-      @Override
-      public void beginHandshake() throws SSLException {
-
-      }
-
-      @Override
-      public HandshakeStatus getHandshakeStatus() {
-        return null;
-      }
-
-      @Override
-      public void setUseClientMode(boolean b) {
-
-      }
-
-      @Override
-      public boolean getUseClientMode() {
-        return false;
-      }
-
-      @Override
-      public void setNeedClientAuth(boolean b) {
-
-      }
-
-      @Override
-      public boolean getNeedClientAuth() {
-        return false;
-      }
-
-      @Override
-      public void setWantClientAuth(boolean b) {
-
-      }
-
-      @Override
-      public boolean getWantClientAuth() {
-        return false;
-      }
-
-      @Override
-      public void setEnableSessionCreation(boolean b) {
-
-      }
-
-      @Override
-      public boolean getEnableSessionCreation() {
-        return false;
-      }
-
-      @Override
-      public SSLSession getHandshakeSession() {
-        return mockSession;
-      }
-
-      @Override
-      public SSLParameters getSSLParameters() {
-        return sslParameters;
-      }
-
-      @Override
-      public void setSSLParameters(SSLParameters sslParameters) {
-        this.sslParameters = sslParameters;
-      }
-
-      private SSLParameters sslParameters;
-    };
+    TestSslEngine sslEngine = mock(TestSslEngine.class, CALLS_REAL_METHODS);
     sslEngine.setSSLParameters(sslParams);
+    doReturn(mockSession).when(sslEngine).getHandshakeSession();
     return sslEngine;
   }
 
-  private SSLSocket buildTrustManagerAndGetSslSocket()
+  private TestSslSocket buildTrustManagerAndGetSslSocket()
       throws CertificateException, IOException, CertStoreException {
     SSLParameters sslParams = buildTrustManagerAndGetSslParameters();
 
-    SSLSocket sslSocket = new SSLSocket() {
-      @Override
-      public String[] getSupportedCipherSuites() {
-        return new String[0];
-      }
-
-      @Override
-      public String[] getEnabledCipherSuites() {
-        return new String[0];
-      }
-
-      @Override
-      public void setEnabledCipherSuites(String[] strings) {
-
-      }
-
-      @Override
-      public String[] getSupportedProtocols() {
-        return new String[0];
-      }
-
-      @Override
-      public String[] getEnabledProtocols() {
-        return new String[0];
-      }
-
-      @Override
-      public void setEnabledProtocols(String[] strings) {
-
-      }
-
-      @Override
-      public SSLSession getSession() {
-        return mockSession;
-      }
-
-      @Override
-      public SSLSession getHandshakeSession() {
-        return mockSession;
-      }
-
-      @Override
-      public void addHandshakeCompletedListener(
-          HandshakeCompletedListener handshakeCompletedListener) {
-
-      }
-
-      @Override
-      public void removeHandshakeCompletedListener(
-          HandshakeCompletedListener handshakeCompletedListener) {
-
-      }
-
-      @Override
-      public void startHandshake() throws IOException {
-
-      }
-
-      @Override
-      public void setUseClientMode(boolean b) {
-
-      }
-
-      @Override
-      public boolean getUseClientMode() {
-        return false;
-      }
-
-      @Override
-      public void setNeedClientAuth(boolean b) {
-
-      }
-
-      @Override
-      public boolean getNeedClientAuth() {
-        return false;
-      }
-
-      @Override
-      public void setWantClientAuth(boolean b) {
-
-      }
-
-      @Override
-      public boolean getWantClientAuth() {
-        return false;
-      }
-
-      @Override
-      public void setEnableSessionCreation(boolean b) {
-
-      }
-
-      @Override
-      public boolean getEnableSessionCreation() {
-        return false;
-      }
-
-      @Override
-      public boolean isConnected() {
-        return true;
-      }
-
-      @Override
-      public SSLParameters getSSLParameters() {
-        return sslParameters;
-      }
-
-      @Override
-      public void setSSLParameters(SSLParameters sslParameters) {
-        this.sslParameters = sslParameters;
-      }
-
-      private SSLParameters sslParameters;
-
-    };
+    TestSslSocket sslSocket = mock(TestSslSocket.class, CALLS_REAL_METHODS);
     sslSocket.setSSLParameters(sslParams);
+    doReturn(true).when(sslSocket).isConnected();
+    doReturn(mockSession).when(sslSocket).getHandshakeSession();
     return sslSocket;
   }
 
@@ -585,5 +341,35 @@ public class SdsX509TrustManagerTest {
     SSLParameters sslParams = new SSLParameters();
     sslParams.setEndpointIdentificationAlgorithm("HTTPS");
     return sslParams;
+  }
+
+  private abstract static class TestSslSocket extends SSLSocket {
+
+    @Override
+    public SSLParameters getSSLParameters() {
+      return sslParameters;
+    }
+
+    @Override
+    public void setSSLParameters(SSLParameters sslParameters) {
+      this.sslParameters = sslParameters;
+    }
+
+    private SSLParameters sslParameters;
+  }
+
+  private abstract static class TestSslEngine extends SSLEngine {
+
+    @Override
+    public SSLParameters getSSLParameters() {
+      return sslParameters;
+    }
+
+    @Override
+    public void setSSLParameters(SSLParameters sslParameters) {
+      this.sslParameters = sslParameters;
+    }
+
+    private SSLParameters sslParameters;
   }
 }
