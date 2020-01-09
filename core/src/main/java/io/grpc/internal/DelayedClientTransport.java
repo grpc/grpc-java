@@ -294,12 +294,10 @@ final class DelayedClientTransport implements ManagedClientTransport {
         if (callOptions.getExecutor() != null) {
           executor = callOptions.getExecutor();
         }
-        executor.execute(new Runnable() {
-            @Override
-            public void run() {
-              stream.createRealStream(transport);
-            }
-          });
+        Runnable runnable = stream.createRealStream(transport);
+        if (runnable != null) {
+          executor.execute(runnable);
+        }
         toRemove.add(stream);
       }  // else: stay pending
     }
@@ -346,7 +344,8 @@ final class DelayedClientTransport implements ManagedClientTransport {
       this.args = args;
     }
 
-    private void createRealStream(ClientTransport transport) {
+    /** Runnable may be null. */
+    private Runnable createRealStream(ClientTransport transport) {
       ClientStream realStream;
       Context origContext = context.attach();
       try {
@@ -355,7 +354,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
       } finally {
         context.detach(origContext);
       }
-      setStream(realStream);
+      return setStream(realStream);
     }
 
     @Override
