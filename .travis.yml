@@ -18,6 +18,7 @@ before_install:
   - echo "checkstyle.ignoreFailures=false" >> $HOME/.gradle/gradle.properties
   - echo "failOnWarnings=true" >> $HOME/.gradle/gradle.properties
   - echo "errorProne=true" >> $HOME/.gradle/gradle.properties
+  - echo "skipAndroid=true" >> $HOME/.gradle/gradle.properties
 
 install:
   - ./gradlew assemble syncGeneratedSources publishToMavenLocal
