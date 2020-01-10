@@ -113,3 +113,41 @@ use the one that has been built by your own, by adding this property to
 ```
 protoc=/path/to/protoc
 ```
+
+How to install Android SDK
+---------------------------
+This section is only necessary if you are building modules depending on Android 
+(e.g., `cronet`). Non-Android users only need to use `skipAndroid=true` as 
+discussed above.
+
+### Install via Android Studio (GUI)
+Download and install Android Studio from [Android Developer site](https://developer.android.com/studio).
+You can find the configuration for Android SDK at:
+```
+Preferences -> System Settings -> Android SDK
+```
+Select the version of Android SDK to be installed and click `apply`. The location
+of Android SDK being installed is shown at `Android SDK Location` at the same panel.
+The default is `$HOME/Library/Android/sdk` for Mac OS and `$HOME/Android/Sdk` for Linux. 
+You can change this to a custom location.
+
+### Install via Android SDK Manager
+Go to [Android SDK](https://developer.android.com/studio) and navigate to __Command line tools only__.
+Download and unzip the package for your build machine OS into somewhere easy to find 
+(e.g., `$HOME/Android/sdk`). This will be your Android SDK home directory. 
+The Android SDK Manager tool is in `tools/bin/sdkmanager`.
+
+Run the `sdkmanager` tool:
+```
+$ tools/bin/sdkmanager --update
+$ tools/bin/sdkmanager "platforms;android-28"
+```
+This installs Android SDK 28 into `platforms/android-28` of your Android SDK home directory.
+More usage of `sdkmanager` can be found at [Android User Guide](https://developer.android.com/studio/command-line/sdkmanager).
+
+
+After Android SDK is installed, you need to set the `ANDROID_HOME` environment variable to your
+Android SDK home directory:
+```
+$ export ANDROID_HOME=<path-to-your-android-sdk>
+```
