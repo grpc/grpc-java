@@ -31,7 +31,7 @@ import io.grpc.xds.sds.ReferenceCountingSslContextProviderMap.SslContextProvider
  * ReferenceCountingSslContextProviderMap}.
  */
 @Internal
-public final class TlsContextManager {
+public final class TlsContextManager implements TlsContextManagerInterface {
 
   private static TlsContextManager instance;
 
@@ -61,6 +61,7 @@ public final class TlsContextManager {
   }
 
   /** Creates a SslContextProvider. Used for retrieving a server-side SslContext. */
+  @Override
   public SslContextProvider<DownstreamTlsContext> findOrCreateServerSslContextProvider(
       DownstreamTlsContext downstreamTlsContext) {
     checkNotNull(downstreamTlsContext, "downstreamTlsContext");
@@ -68,6 +69,7 @@ public final class TlsContextManager {
   }
 
   /** Creates a SslContextProvider. Used for retrieving a client-side SslContext. */
+  @Override
   public SslContextProvider<UpstreamTlsContext> findOrCreateClientSslContextProvider(
       UpstreamTlsContext upstreamTlsContext) {
     checkNotNull(upstreamTlsContext, "upstreamTlsContext");
@@ -83,6 +85,7 @@ public final class TlsContextManager {
    * <p>Caller must not release a reference more than once. It's advised that you clear the
    * reference to the instance with the null returned by this method.
    */
+  @Override
   public SslContextProvider<UpstreamTlsContext> releaseClientSslContextProvider(
       SslContextProvider<UpstreamTlsContext> sslContextProvider) {
     checkNotNull(sslContextProvider, "sslContextProvider");
@@ -98,6 +101,7 @@ public final class TlsContextManager {
    * <p>Caller must not release a reference more than once. It's advised that you clear the
    * reference to the instance with the null returned by this method.
    */
+  @Override
   public SslContextProvider<DownstreamTlsContext> releaseServerSslContextProvider(
       SslContextProvider<DownstreamTlsContext> sslContextProvider) {
     checkNotNull(sslContextProvider, "sslContextProvider");

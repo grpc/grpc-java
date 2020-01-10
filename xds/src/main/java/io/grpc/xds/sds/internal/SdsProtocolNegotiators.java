@@ -207,7 +207,7 @@ public final class SdsProtocolNegotiators {
       final BufferReadsHandler bufferReads = new BufferReadsHandler();
       ctx.pipeline().addBefore(ctx.name(), null, bufferReads);
 
-      SslContextProvider<UpstreamTlsContext> sslContextProvider =
+      final SslContextProvider<UpstreamTlsContext> sslContextProvider =
           TlsContextManager.getInstance().findOrCreateClientSslContextProvider(upstreamTlsContext);
 
       sslContextProvider.addCallback(
@@ -226,6 +226,7 @@ public final class SdsProtocolNegotiators {
               ctx.pipeline().addAfter(ctx.name(), null, handler);
               fireProtocolNegotiationEvent(ctx);
               ctx.pipeline().remove(bufferReads);
+              TlsContextManager.getInstance().releaseClientSslContextProvider(sslContextProvider);
             }
 
             @Override
@@ -303,7 +304,7 @@ public final class SdsProtocolNegotiators {
       final BufferReadsHandler bufferReads = new BufferReadsHandler();
       ctx.pipeline().addBefore(ctx.name(), null, bufferReads);
 
-      SslContextProvider<DownstreamTlsContext> sslContextProvider =
+      final SslContextProvider<DownstreamTlsContext> sslContextProvider =
           TlsContextManager.getInstance()
               .findOrCreateServerSslContextProvider(downstreamTlsContext);
 
@@ -319,6 +320,7 @@ public final class SdsProtocolNegotiators {
               ctx.pipeline().addAfter(ctx.name(), null, handler);
               fireProtocolNegotiationEvent(ctx);
               ctx.pipeline().remove(bufferReads);
+              TlsContextManager.getInstance().releaseServerSslContextProvider(sslContextProvider);
             }
 
             @Override
