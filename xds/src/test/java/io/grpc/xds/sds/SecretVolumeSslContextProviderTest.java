@@ -395,10 +395,11 @@ public class SecretVolumeSslContextProviderTest {
         getSslContextSecretVolumeSecretProvider(server, pemFile, keyFile, caFile);
 
     SslContext sslContext = provider.buildSslContextFromSecrets();
-    doChecksOnSslContext(server, sslContext);
+    doChecksOnSslContext(server, sslContext, /* expectedApnProtos= */ null);
   }
 
-  static void doChecksOnSslContext(boolean server, SslContext sslContext) {
+  static void doChecksOnSslContext(boolean server, SslContext sslContext,
+      List<String> expectedApnProtos) {
     if (server) {
       assertThat(sslContext.isServer()).isTrue();
     } else {
@@ -406,7 +407,11 @@ public class SecretVolumeSslContextProviderTest {
     }
     List<String> apnProtos = sslContext.applicationProtocolNegotiator().protocols();
     assertThat(apnProtos).isNotNull();
-    assertThat(apnProtos).contains("h2");
+    if (expectedApnProtos != null) {
+      assertThat(apnProtos).isEqualTo(expectedApnProtos);
+    } else {
+      assertThat(apnProtos).contains("h2");
+    }
   }
 
   /**
@@ -544,7 +549,7 @@ public class SecretVolumeSslContextProviderTest {
             true, SERVER_1_PEM_FILE, SERVER_1_KEY_FILE, CA_PEM_FILE);
 
     TestCallback testCallback = getValueThruCallback(provider);
-    doChecksOnSslContext(true, testCallback.updatedSslContext);
+    doChecksOnSslContext(true, testCallback.updatedSslContext, /* expectedApnProtos= */ null);
   }
 
   @Test
@@ -554,7 +559,7 @@ public class SecretVolumeSslContextProviderTest {
             false, CLIENT_PEM_FILE, CLIENT_KEY_FILE, CA_PEM_FILE);
 
     TestCallback testCallback = getValueThruCallback(provider);
-    doChecksOnSslContext(false, testCallback.updatedSslContext);
+    doChecksOnSslContext(false, testCallback.updatedSslContext, /* expectedApnProtos= */ null);
   }
 
   // note this test generates stack-trace but can be safely ignored

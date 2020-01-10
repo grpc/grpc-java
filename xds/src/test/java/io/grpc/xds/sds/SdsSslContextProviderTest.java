@@ -66,7 +66,7 @@ public class SdsSslContextProviderTest {
   /** Helper method to build SdsSslContextProvider from given names. */
   private SdsSslContextProvider<?> getSdsSslContextProvider(
       boolean server, String certName, String validationContextName,
-      Iterable<String> verifySubjectAltNames) throws IOException {
+      Iterable<String> verifySubjectAltNames, Iterable<String> alpnProtocols) throws IOException {
 
     CommonTlsContext commonTlsContext =
         CommonTlsContextTestsUtil.buildCommonTlsContextWithAdditionalValues(
@@ -75,6 +75,7 @@ public class SdsSslContextProviderTest {
             validationContextName,
             /* validationContextTargetUri= */ "inproc",
             verifySubjectAltNames,
+            alpnProtocols,
             /* channelType= */ "inproc");
 
     return server
@@ -98,11 +99,11 @@ public class SdsSslContextProviderTest {
         .thenReturn(getOneCertificateValidationContextSecret(/* name= */ "valid1", CA_PEM_FILE));
 
     SdsSslContextProvider<?> provider =
-        getSdsSslContextProvider(/* server= */ true, "cert1", "valid1", null);
+        getSdsSslContextProvider(/* server= */ true, "cert1", "valid1", null, null);
     SecretVolumeSslContextProviderTest.TestCallback testCallback =
         SecretVolumeSslContextProviderTest.getValueThruCallback(provider);
 
-    doChecksOnSslContext(true, testCallback.updatedSslContext);
+    doChecksOnSslContext(true, testCallback.updatedSslContext, /* expectedApnProtos= */ null);
   }
 
   @Test
@@ -117,11 +118,12 @@ public class SdsSslContextProviderTest {
             /* server= */ false,
             /* certName= */ "cert1",
             /* validationContextName= */ "valid1",
-            /* verifySubjectAltNames= */ null);
+            /* verifySubjectAltNames= */ null,
+            /* alpnProtocols= */ null);
     SecretVolumeSslContextProviderTest.TestCallback testCallback =
         SecretVolumeSslContextProviderTest.getValueThruCallback(provider);
 
-    doChecksOnSslContext(false, testCallback.updatedSslContext);
+    doChecksOnSslContext(false, testCallback.updatedSslContext, /* expectedApnProtos= */ null);
   }
 
   @Test
@@ -132,11 +134,11 @@ public class SdsSslContextProviderTest {
     SdsSslContextProvider<?> provider =
         getSdsSslContextProvider(
             /* server= */ true, /* certName= */ "cert1", /* validationContextName= */ null,
-            /* verifySubjectAltNames= */ null);
+            /* verifySubjectAltNames= */ null, /* alpnProtocols= */ null);
     SecretVolumeSslContextProviderTest.TestCallback testCallback =
         SecretVolumeSslContextProviderTest.getValueThruCallback(provider);
 
-    doChecksOnSslContext(true, testCallback.updatedSslContext);
+    doChecksOnSslContext(true, testCallback.updatedSslContext, /* expectedApnProtos= */ null);
   }
 
   @Test
@@ -147,11 +149,11 @@ public class SdsSslContextProviderTest {
     SdsSslContextProvider<?> provider =
         getSdsSslContextProvider(
             /* server= */ false, /* certName= */ null, /* validationContextName= */ "valid1",
-            /* verifySubjectAltNames= */ null);
+            /* verifySubjectAltNames= */ null, null);
     SecretVolumeSslContextProviderTest.TestCallback testCallback =
         SecretVolumeSslContextProviderTest.getValueThruCallback(provider);
 
-    doChecksOnSslContext(false, testCallback.updatedSslContext);
+    doChecksOnSslContext(false, testCallback.updatedSslContext, /* expectedApnProtos= */ null);
   }
 
   @Test
@@ -162,7 +164,7 @@ public class SdsSslContextProviderTest {
     SdsSslContextProvider<?> provider =
         getSdsSslContextProvider(
             /* server= */ true, /* certName= */ null, /* validationContextName= */ "valid1",
-            /* verifySubjectAltNames= */ null);
+            /* verifySubjectAltNames= */ null, /* alpnProtocols= */ null);
     SecretVolumeSslContextProviderTest.TestCallback testCallback =
         SecretVolumeSslContextProviderTest.getValueThruCallback(provider);
 
@@ -189,10 +191,53 @@ public class SdsSslContextProviderTest {
             /* certName= */ "cert1",
             /* validationContextName= */ "valid1",
             Arrays.asList(
-                "spiffe://grpc-sds-testing.svc.id.goog/ns/default/sa/bob"));
+                "spiffe://grpc-sds-testing.svc.id.goog/ns/default/sa/bob"),
+            /* alpnProtocols= */ null);
 
     SecretVolumeSslContextProviderTest.TestCallback testCallback =
         SecretVolumeSslContextProviderTest.getValueThruCallback(provider);
-    doChecksOnSslContext(false, testCallback.updatedSslContext);
+    doChecksOnSslContext(false, testCallback.updatedSslContext, /* expectedApnProtos= */ null);
+  }
+
+  @Test
+  public void testProviderForClient_withAlpnProtocols() throws IOException {
+    when(serverMock.getSecretFor(/* name= */ "cert1"))
+        .thenReturn(getOneTlsCertSecret(/* name= */ "cert1", CLIENT_KEY_FILE, CLIENT_PEM_FILE));
+    when(serverMock.getSecretFor("valid1"))
+        .thenReturn(getOneCertificateValidationContextSecret(/* name= */ "valid1", CA_PEM_FILE));
+
+    SdsSslContextProvider<?> provider =
+        getSdsSslContextProvider(
+            /* server= */ false,
+            /* certName= */ "cert1",
+            /* validationContextName= */ "valid1",
+            /* verifySubjectAltNames= */ null,
+            /* alpnProtocols= */ Arrays.asList("managed-mtls", "h2"));
+    SecretVolumeSslContextProviderTest.TestCallback testCallback =
+        SecretVolumeSslContextProviderTest.getValueThruCallback(provider);
+
+    doChecksOnSslContext(
+        false, testCallback.updatedSslContext, Arrays.asList("managed-mtls", "h2"));
+  }
+
+  @Test
+  public void testProviderForServer_withAlpnProtocols() throws IOException {
+    when(serverMock.getSecretFor(/* name= */ "cert1"))
+        .thenReturn(getOneTlsCertSecret(/* name= */ "cert1", SERVER_1_KEY_FILE, SERVER_1_PEM_FILE));
+    when(serverMock.getSecretFor(/* name= */ "valid1"))
+        .thenReturn(getOneCertificateValidationContextSecret(/* name= */ "valid1", CA_PEM_FILE));
+
+    SdsSslContextProvider<?> provider =
+        getSdsSslContextProvider(
+            /* server= */ true,
+            /* certName= */ "cert1",
+            /* validationContextName= */ "valid1",
+            /* verifySubjectAltNames= */ null,
+            /* alpnProtocols= */ Arrays.asList("managed-mtls", "h2"));
+    SecretVolumeSslContextProviderTest.TestCallback testCallback =
+        SecretVolumeSslContextProviderTest.getValueThruCallback(provider);
+
+    doChecksOnSslContext(
+        true, testCallback.updatedSslContext, Arrays.asList("managed-mtls", "h2"));
   }
 }
