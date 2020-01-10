@@ -57,6 +57,9 @@ import javax.annotation.Nullable;
 public final class XdsTestClient {
   private static Logger logger = Logger.getLogger(XdsTestClient.class.getName());
 
+  private final Set<XdsStatsWatcher> watchers = new HashSet<>();
+  private final Object lock = new Object();
+
   private int numChannels = 1;
   private boolean printResponse = false;
   private int qps = 1;
@@ -64,6 +67,8 @@ public final class XdsTestClient {
   private String server = "localhost:8080";
   private int statsPort = 8081;
   private Server statsServer;
+  private long currentRequestId;
+  private ListeningScheduledExecutorService exec;
 
   /**
    * The main application allowing this client to be launched from the command line.
@@ -157,13 +162,11 @@ public final class XdsTestClient {
       for (int i = 0; i < numChannels; i++) {
         chans.add(NettyChannelBuilder.forTarget(server).usePlaintext().build());
       }
-      ListeningScheduledExecutorService exec =
-          MoreExecutors.listeningDecorator(Executors.newSingleThreadScheduledExecutor());
+      exec = MoreExecutors.listeningDecorator(Executors.newSingleThreadScheduledExecutor());
       try {
         runQps(chans, exec);
         success = true;
       } finally {
-        exec.shutdownNow();
         for (ManagedChannel chan : chans) {
           chan.shutdownNow();
         }
@@ -171,21 +174,21 @@ public final class XdsTestClient {
     } catch (Throwable t) {
       logger.log(Level.SEVERE, "Error running client", t);
     }
-
-    statsServer.shutdownNow();
     System.exit(success ? 0 : 1);
   }
 
-  private void stop() throws Exception {
-    statsServer.shutdownNow();
-    if (!statsServer.awaitTermination(5, TimeUnit.SECONDS)) {
-      System.err.println("Timed out waiting for server shutdown");
+  private void stop() throws InterruptedException {
+    if (statsServer != null) {
+      statsServer.shutdownNow();
+      if (!statsServer.awaitTermination(5, TimeUnit.SECONDS)) {
+        System.err.println("Timed out waiting for server shutdown");
+      }
+    }
+    if (exec != null) {
+      exec.shutdownNow();
     }
   }
 
-  private final Set<XdsStatsWatcher> watchers = new HashSet<>();
-  private final Object lock = new Object();
-  private long currentRequestId;
 
   private void runQps(final List<ManagedChannel> chans, ListeningScheduledExecutorService exec)
       throws InterruptedException, ExecutionException, TimeoutException {
