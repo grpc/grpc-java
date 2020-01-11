@@ -487,10 +487,10 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
       logger.addHandler(handler);
       enqueue(newCreateStreamCommand(grpcHeaders, streamTransportState));
       channelRead(goAwayFrame(0, 11 /* Enhance your calm */,
-            Unpooled.copiedBuffer("this is a test", UTF_8)));
+          Unpooled.copiedBuffer("this is a test", UTF_8)));
       assertNotNull(logRef.get());
       assertTrue(MessageFormat.format(logRef.get().getMessage(), logRef.get().getParameters())
-              .contains("Debug data: this is a test"));
+          .contains("Debug data: this is a test"));
     } finally {
       logger.removeHandler(handler);
     }
