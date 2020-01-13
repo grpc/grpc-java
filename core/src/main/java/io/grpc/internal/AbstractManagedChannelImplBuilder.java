@@ -46,6 +46,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
@@ -56,6 +58,9 @@ import javax.annotation.Nullable;
 public abstract class AbstractManagedChannelImplBuilder
         <T extends AbstractManagedChannelImplBuilder<T>> extends ManagedChannelBuilder<T> {
   private static final String DIRECT_ADDRESS_SCHEME = "directaddress";
+
+  private static final Logger log =
+      Logger.getLogger(AbstractManagedChannelImplBuilder.class.getName());
 
   public static ManagedChannelBuilder<?> forAddress(String name, int port) {
     throw new UnsupportedOperationException("Subclass failed to hide static factory");
@@ -573,7 +578,7 @@ public abstract class AbstractManagedChannelImplBuilder
                     recordRealTimeMetrics);
       } catch (ClassNotFoundException | NoSuchMethodException | IllegalAccessException
           | InvocationTargetException e) {
-        // Do nothing.
+        log.log(Level.FINE, "Unable to apply census stats", e);
       }
       if (statsInterceptor != null) {
         // First interceptor runs last (see ClientInterceptors.intercept()), so that no
@@ -592,7 +597,7 @@ public abstract class AbstractManagedChannelImplBuilder
         tracingInterceptor = (ClientInterceptor) getClientInterceptroMethod.invoke(null);
       } catch (ClassNotFoundException | NoSuchMethodException | IllegalAccessException
           | InvocationTargetException e) {
-        // Do nothing.
+        log.log(Level.FINE, "Unable to apply census tracing", e);
       }
       if (tracingInterceptor != null) {
         effectiveInterceptors.add(0, tracingInterceptor);

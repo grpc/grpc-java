@@ -44,6 +44,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
@@ -53,6 +55,8 @@ import javax.annotation.Nullable;
  */
 public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuilder<T>>
         extends ServerBuilder<T> {
+
+  private static final Logger log = Logger.getLogger(AbstractServerImplBuilder.class.getName());
 
   public static ServerBuilder<?> forPort(int port) {
     throw new UnsupportedOperationException("Subclass failed to hide static factory");
@@ -251,7 +255,7 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
                     recordRealTimeMetrics);
       } catch (ClassNotFoundException | NoSuchMethodException | IllegalAccessException
           | InvocationTargetException e) {
-        // Do nothing.
+        log.log(Level.FINE, "Unable to apply census stats", e);
       }
       if (censusStatsTracerFactory != null) {
         tracerFactories.add(censusStatsTracerFactory);
@@ -268,7 +272,7 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
             (ServerStreamTracer.Factory) getServerStreamTracerFactoryMethod.invoke(null);
       } catch (ClassNotFoundException | NoSuchMethodException | IllegalAccessException
           | InvocationTargetException e) {
-        // Do nothing.
+        log.log(Level.FINE, "Unable to apply census tracing", e);
       }
       if (tracingStreamTracerFactory != null) {
         tracerFactories.add(tracingStreamTracerFactory);
