@@ -156,7 +156,6 @@ public final class XdsTestClient {
 
   private void run() {
     statsServer = NettyServerBuilder.forPort(statsPort).addService(new XdsStatsImpl()).build();
-    boolean success = false;
     try {
       statsServer.start();
       for (int i = 0; i < numChannels; i++) {
@@ -164,11 +163,10 @@ public final class XdsTestClient {
       }
       exec = MoreExecutors.listeningDecorator(Executors.newSingleThreadScheduledExecutor());
       runQps();
-      success = true;
     } catch (Throwable t) {
       logger.log(Level.SEVERE, "Error running client", t);
+      System.exit(1);
     }
-    System.exit(success ? 0 : 1);
   }
 
   private void stop() throws InterruptedException {
