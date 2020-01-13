@@ -190,18 +190,6 @@ final class XdsClientImpl extends XdsClient {
     if (rpcRetryTimer != null) {
       rpcRetryTimer.cancel();
     }
-    if (rdsRespTimer != null) {
-      rdsRespTimer.cancel();
-      rdsRespTimer = null;
-    }
-    for (ScheduledHandle handle : cdsRespTimers.values()) {
-      handle.cancel();
-    }
-    cdsRespTimers.clear();
-    for (ScheduledHandle handle :edsRespTimers.values()) {
-      handle.cancel();
-    }
-    edsRespTimers.clear();
   }
 
   @Override
