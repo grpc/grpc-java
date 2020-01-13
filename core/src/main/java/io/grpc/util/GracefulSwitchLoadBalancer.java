@@ -36,9 +36,18 @@ import javax.annotation.concurrent.NotThreadSafe;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5999")
 @NotThreadSafe // Must be accessed in SynchronizationContext
 public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
-  private static final LoadBalancer NOOP_BALANCER = new LoadBalancer() {
+  private final LoadBalancer defaultBalancer = new LoadBalancer() {
     @Override
-    public void handleNameResolutionError(Status error) {}
+    public void handleNameResolutionError(final Status error) {
+      helper.updateBalancingState(
+          ConnectivityState.TRANSIENT_FAILURE,
+          new SubchannelPicker() {
+            @Override
+            public PickResult pickSubchannel(PickSubchannelArgs args) {
+              return PickResult.withError(error);
+            }
+          });
+    }
 
     @Override
     public void shutdown() {}
@@ -64,9 +73,9 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
   // The current fields are guaranteed to be set after the initial swapTo().
   // The pending fields are cleared when it becomes current.
   @Nullable private LoadBalancer.Factory currentBalancerFactory;
-  private LoadBalancer currentLb = NOOP_BALANCER;
+  private LoadBalancer currentLb = defaultBalancer;
   @Nullable private LoadBalancer.Factory pendingBalancerFactory;
-  private LoadBalancer pendingLb = NOOP_BALANCER;
+  private LoadBalancer pendingLb = defaultBalancer;
   private ConnectivityState pendingState;
   private SubchannelPicker pendingPicker;
 
@@ -87,7 +96,7 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
       return;
     }
     pendingLb.shutdown();
-    pendingLb = NOOP_BALANCER;
+    pendingLb = defaultBalancer;
     pendingBalancerFactory = null;
     pendingState = ConnectivityState.CONNECTING;
     pendingPicker = BUFFER_PICKER;
@@ -115,7 +124,7 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
           }
         } else if (lb == currentLb) {
           currentLbIsReady = newState == ConnectivityState.READY;
-          if (!currentLbIsReady && pendingLb != NOOP_BALANCER) {
+          if (!currentLbIsReady && pendingLb != defaultBalancer) {
             swap(); // current policy exits READY, so swap
           } else {
             helper.updateBalancingState(newState, newPicker);
@@ -138,13 +147,13 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
     currentLb.shutdown();
     currentLb = pendingLb;
     currentBalancerFactory = pendingBalancerFactory;
-    pendingLb = NOOP_BALANCER;
+    pendingLb = defaultBalancer;
     pendingBalancerFactory = null;
   }
 
   @Override
   protected LoadBalancer delegate() {
-    return pendingLb == NOOP_BALANCER ? currentLb : pendingLb;
+    return pendingLb == defaultBalancer ? currentLb : pendingLb;
   }
 
   @Override
