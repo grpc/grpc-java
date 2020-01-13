@@ -159,8 +159,8 @@ public class LookasideLbTest {
   ArgumentCaptor<SubchannelPicker> pickerCaptor;
 
   private LoadBalancer lookasideLb;
-  private boolean withBootstrap;
-  private boolean withXdsClientPoolAttributes;
+  // Simulating a CDS to EDS flow.
+  private boolean isFullFlow;
   private ManagedChannel bootstrapChannel;
   private RefCountedXdsClientObjectPool xdsClientPoolFromResolveAddresses;
   private XdsClient xdsClientFromResolvedAddresses;
@@ -209,12 +209,10 @@ public class LookasideLbTest {
       verify(childBalancer).shutdown();
     }
 
-    if (withBootstrap) {
-      assert !withXdsClientPoolAttributes;
+    if (bootstrapChannel != null) {
       assertThat(bootstrapChannel.isShutdown()).isTrue();
     }
-    if (withXdsClientPoolAttributes) {
-      assert !withBootstrap;
+    if (isFullFlow) {
       xdsClientPoolFromResolveAddresses.returnObject(xdsClientFromResolvedAddresses);
       assertThat(xdsClientPoolFromResolveAddresses.xdsClient).isNull();
     }
@@ -222,7 +220,6 @@ public class LookasideLbTest {
 
   // For EDS-only usecase.
   private void setUpWithBootstrap() throws Exception {
-    withBootstrap = true;
     Bootstrapper bootstrapper = mock(Bootstrapper.class);
     AggregatedDiscoveryServiceImplBase serviceImpl = new AggregatedDiscoveryServiceImplBase() {
       @Override
@@ -268,7 +265,7 @@ public class LookasideLbTest {
 
   // For non-EDS-only usecase.
   private void setUpWithXdsClientPoolAttributes() {
-    withXdsClientPoolAttributes = true;
+    isFullFlow = true;
     XdsClientFactory xdsClientFactory = new XdsClientFactory() {
       @Override
       XdsClient createXdsClient() {
@@ -904,7 +901,7 @@ public class LookasideLbTest {
     ResolvedAddresses.Builder resolvedAddressBuilder = ResolvedAddresses.newBuilder()
         .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
         .setLoadBalancingPolicyConfig(xdsConfig);
-    if (withXdsClientPoolAttributes) {
+    if (isFullFlow) {
       resolvedAddressBuilder.setAttributes(
           Attributes.newBuilder().set(XdsAttributes.XDS_CLIENT_POOL,
               xdsClientPoolFromResolveAddresses).build());
@@ -916,16 +913,16 @@ public class LookasideLbTest {
   private int nonce;
 
   private void receiveEndpointUpdate(ClusterLoadAssignment clusterLoadAssignment) {
-    if (withBootstrap) {
+    if (isFullFlow) {
+      endpointWatchers.get(clusterLoadAssignment.getClusterName())
+          .onEndpointChanged(getEndpointUpdateFromClusterAssignment(clusterLoadAssignment));
+    } else {
       responseObservers.peekLast().onNext(
           buildDiscoveryResponse(
               String.valueOf(versionIno++),
               ImmutableList.of(Any.pack(clusterLoadAssignment)),
               XdsClientImpl.ADS_TYPE_URL_EDS,
               String.valueOf(nonce++)));
-    } else if (withXdsClientPoolAttributes) {
-      endpointWatchers.get(clusterLoadAssignment.getClusterName())
-          .onEndpointChanged(getEndpointUpdateFromClusterAssignment(clusterLoadAssignment));
     }
   }
 
