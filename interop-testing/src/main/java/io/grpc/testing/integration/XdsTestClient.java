@@ -59,6 +59,7 @@ public final class XdsTestClient {
 
   private final Set<XdsStatsWatcher> watchers = new HashSet<>();
   private final Object lock = new Object();
+  private final List<ManagedChannel> channels = new ArrayList<>();
 
   private int numChannels = 1;
   private boolean printResponse = false;
@@ -158,19 +159,12 @@ public final class XdsTestClient {
     boolean success = false;
     try {
       statsServer.start();
-      List<ManagedChannel> chans = new ArrayList<>();
       for (int i = 0; i < numChannels; i++) {
-        chans.add(NettyChannelBuilder.forTarget(server).usePlaintext().build());
+        channels.add(NettyChannelBuilder.forTarget(server).usePlaintext().build());
       }
       exec = MoreExecutors.listeningDecorator(Executors.newSingleThreadScheduledExecutor());
-      try {
-        runQps(chans, exec);
-        success = true;
-      } finally {
-        for (ManagedChannel chan : chans) {
-          chan.shutdownNow();
-        }
-      }
+      runQps();
+      success = true;
     } catch (Throwable t) {
       logger.log(Level.SEVERE, "Error running client", t);
     }
@@ -184,14 +178,16 @@ public final class XdsTestClient {
         System.err.println("Timed out waiting for server shutdown");
       }
     }
+    for (ManagedChannel channel : channels) {
+      channel.shutdownNow();
+    }
     if (exec != null) {
       exec.shutdownNow();
     }
   }
 
 
-  private void runQps(final List<ManagedChannel> chans, ListeningScheduledExecutorService exec)
-      throws InterruptedException, ExecutionException, TimeoutException {
+  private void runQps() throws InterruptedException, ExecutionException, TimeoutException {
     final SettableFuture<Void> failure = SettableFuture.create();
     final class PeriodicRpc implements Runnable {
       final AtomicLong messageIds = new AtomicLong();
@@ -207,7 +203,7 @@ public final class XdsTestClient {
         }
 
         SimpleRequest request = SimpleRequest.newBuilder().setFillServerId(true).build();
-        ManagedChannel channel = chans.get((int) (requestId % chans.size()));
+        ManagedChannel channel = channels.get((int) (requestId % channels.size()));
         final ClientCall<SimpleRequest, SimpleResponse> call =
             channel.newCall(
                 TestServiceGrpc.getUnaryCallMethod(),
