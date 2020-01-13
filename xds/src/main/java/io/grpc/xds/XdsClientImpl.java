@@ -353,7 +353,8 @@ final class XdsClientImpl extends XdsClient {
       adsStream.sendXdsRequest(ADS_TYPE_URL_EDS, endpointWatchers.keySet());
       ScheduledHandle timeoutHandle =
           syncContext
-              .schedule(new EdsResourceFetchTimeoutTask(clusterName),
+              .schedule(
+                  new EdsResourceFetchTimeoutTask(clusterName),
                   INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS, timeService);
       edsRespTimers.put(clusterName, timeoutHandle);
     }
