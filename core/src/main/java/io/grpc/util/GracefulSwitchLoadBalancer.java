@@ -38,6 +38,13 @@ import javax.annotation.concurrent.NotThreadSafe;
 public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
   private final LoadBalancer defaultBalancer = new LoadBalancer() {
     @Override
+    public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+      throw new IllegalStateException(
+          "GracefulSwitchLoadBalancer must switch to a load balancing policy before handling"
+              + " ResolvedAddresses");
+    }
+
+    @Override
     public void handleNameResolutionError(final Status error) {
       helper.updateBalancingState(
           ConnectivityState.TRANSIENT_FAILURE,
