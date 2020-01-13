@@ -70,6 +70,7 @@ IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS = {
     "io.grpc:grpc-alts": "@io_grpc_grpc_java//alts",
     "io.grpc:grpc-api": "@io_grpc_grpc_java//api",
     "io.grpc:grpc-auth": "@io_grpc_grpc_java//auth",
+    "io.grpc:grpc-census": "@io_grpc_grpc_java//census",
     "io.grpc:grpc-context": "@io_grpc_grpc_java//context",
     "io.grpc:grpc-core": "@io_grpc_grpc_java//core:core_maven",
     "io.grpc:grpc-grpclb": "@io_grpc_grpc_java//grpclb",

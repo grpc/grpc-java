@@ -73,6 +73,7 @@ dependencies {
 
     // You need to build grpc-java to obtain the grpc libraries below.
     implementation 'io.grpc:grpc-auth:1.27.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+    implementation 'io.grpc:grpc-census:1.27.0-SNAPSHOT' // CURRENT_GRPC_VERSION
     implementation 'io.grpc:grpc-okhttp:1.27.0-SNAPSHOT' // CURRENT_GRPC_VERSION
     implementation 'io.grpc:grpc-protobuf-lite:1.27.0-SNAPSHOT' // CURRENT_GRPC_VERSION
     implementation 'io.grpc:grpc-stub:1.27.0-SNAPSHOT' // CURRENT_GRPC_VERSION
