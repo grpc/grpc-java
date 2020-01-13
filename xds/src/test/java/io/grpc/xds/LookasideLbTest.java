@@ -37,7 +37,6 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
 import com.google.protobuf.Any;
 import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment;
@@ -88,11 +87,10 @@ import io.grpc.xds.XdsClient.XdsClientFactory;
 import io.grpc.xds.XdsLoadBalancerProvider.XdsConfig;
 import java.net.InetSocketAddress;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import org.junit.After;
 import org.junit.Before;
@@ -944,15 +942,15 @@ public class LookasideLbTest {
    */
   private static class RoundRobinBackendsMatcher implements ArgumentMatcher<ResolvedAddresses> {
 
-    final Set<java.net.SocketAddress> socketAddresses;
+    final List<java.net.SocketAddress> socketAddresses;
 
-    RoundRobinBackendsMatcher(Set<java.net.SocketAddress> socketAddresses) {
+    RoundRobinBackendsMatcher(List<java.net.SocketAddress> socketAddresses) {
       this.socketAddresses = socketAddresses;
     }
 
     @Override
     public boolean matches(ResolvedAddresses argument) {
-      Set<java.net.SocketAddress> backends = new HashSet<>();
+      List<java.net.SocketAddress> backends = new ArrayList<>();
       for (EquivalentAddressGroup eag : argument.getAddresses()) {
         backends.add(Iterables.getOnlyElement(eag.getAddresses()));
       }
@@ -964,16 +962,15 @@ public class LookasideLbTest {
     }
 
     static final class Builder {
-      final ImmutableSet.Builder<java.net.SocketAddress> socketAddressesBuilder =
-          ImmutableSet.builder();
+      final List<java.net.SocketAddress> socketAddresses = new ArrayList<>();
 
       Builder addHostAndPort(String host, int port) {
-        socketAddressesBuilder.add(new InetSocketAddress(host, port));
+        socketAddresses.add(new InetSocketAddress(host, port));
         return this;
       }
 
       RoundRobinBackendsMatcher build() {
-        return new RoundRobinBackendsMatcher(socketAddressesBuilder.build());
+        return new RoundRobinBackendsMatcher(socketAddresses);
       }
     }
   }
