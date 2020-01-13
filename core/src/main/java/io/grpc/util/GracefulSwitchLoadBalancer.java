@@ -32,6 +32,10 @@ import javax.annotation.concurrent.NotThreadSafe;
  * A load balancer that gracefully swaps to a new lb policy. If the channel is currently in a state
  * other than READY, the new policy will be swapped into place immediately.  Otherwise, the channel
  * will keep using the old policy until the new policy reports READY or the old policy exits READY.
+ *
+ * <p>The balancer must {@link #switchTo(Factory) switch to} a policy prior to {@link
+ * LoadBalancer#handleResolvedAddresses(ResolvedAddresses) handling resolved addresses} for the
+ * first time.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5999")
 @NotThreadSafe // Must be accessed in SynchronizationContext
