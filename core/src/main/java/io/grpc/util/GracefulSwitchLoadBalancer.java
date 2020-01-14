@@ -32,13 +32,39 @@ import javax.annotation.concurrent.NotThreadSafe;
  * A load balancer that gracefully swaps to a new lb policy. If the channel is currently in a state
  * other than READY, the new policy will be swapped into place immediately.  Otherwise, the channel
  * will keep using the old policy until the new policy reports READY or the old policy exits READY.
+ *
+ * <p>The balancer must {@link #switchTo(Factory) switch to} a policy prior to {@link
+ * LoadBalancer#handleResolvedAddresses(ResolvedAddresses) handling resolved addresses} for the
+ * first time.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5999")
 @NotThreadSafe // Must be accessed in SynchronizationContext
 public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
-  private static final LoadBalancer NOOP_BALANCER = new LoadBalancer() {
+  private final LoadBalancer defaultBalancer = new LoadBalancer() {
     @Override
-    public void handleNameResolutionError(Status error) {}
+    public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+      //  Most LB policies using this class will receive child policy configuration within the
+      //  service config, so they are naturally calling switchTo() just before
+      //  handleResolvedAddresses(), within their own handleResolvedAddresses(). If switchTo() is
+      //  not called immediately after construction that does open up potential for bugs in the
+      //  parent policies, where they fail to call switchTo(). So we will use the exception to try
+      //  to notice those bugs quickly, as it will fail very loudly.
+      throw new IllegalStateException(
+          "GracefulSwitchLoadBalancer must switch to a load balancing policy before handling"
+              + " ResolvedAddresses");
+    }
+
+    @Override
+    public void handleNameResolutionError(final Status error) {
+      helper.updateBalancingState(
+          ConnectivityState.TRANSIENT_FAILURE,
+          new SubchannelPicker() {
+            @Override
+            public PickResult pickSubchannel(PickSubchannelArgs args) {
+              return PickResult.withError(error);
+            }
+          });
+    }
 
     @Override
     public void shutdown() {}
@@ -64,9 +90,9 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
   // The current fields are guaranteed to be set after the initial swapTo().
   // The pending fields are cleared when it becomes current.
   @Nullable private LoadBalancer.Factory currentBalancerFactory;
-  private LoadBalancer currentLb = NOOP_BALANCER;
+  private LoadBalancer currentLb = defaultBalancer;
   @Nullable private LoadBalancer.Factory pendingBalancerFactory;
-  private LoadBalancer pendingLb = NOOP_BALANCER;
+  private LoadBalancer pendingLb = defaultBalancer;
   private ConnectivityState pendingState;
   private SubchannelPicker pendingPicker;
 
@@ -87,7 +113,7 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
       return;
     }
     pendingLb.shutdown();
-    pendingLb = NOOP_BALANCER;
+    pendingLb = defaultBalancer;
     pendingBalancerFactory = null;
     pendingState = ConnectivityState.CONNECTING;
     pendingPicker = BUFFER_PICKER;
@@ -115,7 +141,7 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
           }
         } else if (lb == currentLb) {
           currentLbIsReady = newState == ConnectivityState.READY;
-          if (!currentLbIsReady && pendingLb != NOOP_BALANCER) {
+          if (!currentLbIsReady && pendingLb != defaultBalancer) {
             swap(); // current policy exits READY, so swap
           } else {
             helper.updateBalancingState(newState, newPicker);
@@ -138,13 +164,13 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
     currentLb.shutdown();
     currentLb = pendingLb;
     currentBalancerFactory = pendingBalancerFactory;
-    pendingLb = NOOP_BALANCER;
+    pendingLb = defaultBalancer;
     pendingBalancerFactory = null;
   }
 
   @Override
   protected LoadBalancer delegate() {
-    return pendingLb == NOOP_BALANCER ? currentLb : pendingLb;
+    return pendingLb == defaultBalancer ? currentLb : pendingLb;
   }
 
   @Override
