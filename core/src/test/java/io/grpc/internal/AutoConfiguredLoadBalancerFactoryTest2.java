@@ -386,7 +386,7 @@ public class AutoConfiguredLoadBalancerFactoryTest2 {
     verify(testLbBalancer2).handleResolvedAddresses(resultCaptor.capture());
     assertThat(resultCaptor.getValue().getAddresses()).isEmpty();
     assertThat(resultCaptor.getValue().getLoadBalancingPolicyConfig())
-        .isEqualTo(nextParsedConfigOrError2.get());
+        .isEqualTo(nextParsedConfigOrError2.get().getConfig());
     assertThat(resultCaptor.getValue().getAttributes().get(ATTR_LOAD_BALANCING_CONFIG))
         .isEqualTo(rawServiceConfig);
   }

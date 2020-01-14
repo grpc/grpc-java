@@ -167,7 +167,7 @@ public final class AutoConfiguredLoadBalancerFactory2 {
             ResolvedAddresses.newBuilder()
                 .setAddresses(resolvedSelection.serverList)
                 .setAttributes(attributes)
-                .setLoadBalancingPolicyConfig(lbConfig)
+                .setLoadBalancingPolicyConfig(lbConfig != null ? lbConfig.getConfig() : null)
                 .build());
         return Status.OK;
       }

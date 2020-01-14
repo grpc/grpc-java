@@ -249,6 +249,7 @@ final class ManagedChannelImpl2 extends ManagedChannel implements
   private final ChannelLogger channelLogger;
   private final InternalChannelz channelz;
 
+  private final ScParser serviceConfigParser;
   // Must be mutated and read from syncContext
   // a flag for doing channel tracing when flipped
   private ResolutionState lastResolutionState = ResolutionState.NO_RESOLUTION;
@@ -582,7 +583,7 @@ final class ManagedChannelImpl2 extends ManagedChannel implements
         new ExecutorHolder(
             checkNotNull(builder.offloadExecutorPool, "offloadExecutorPool"));
     this.nameResolverRegistry = builder.nameResolverRegistry;
-    ScParser serviceConfigParser =
+    this.serviceConfigParser =
         new ScParser(
             retryEnabled,
             builder.maxRetryAttempts,
@@ -1332,9 +1333,13 @@ final class ManagedChannelImpl2 extends ManagedChannel implements
           ConfigOrError configOrError = resolutionResult.getServiceConfig();
           ServiceConfigHolder validServiceConfig = null;
           Status serviceConfigError = null;
+          Map<String, ?> rawServiceConfig =
+              resolutionResult.getAttributes().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
+          if (configOrError == null && rawServiceConfig != null) {
+            // use service config json in deprecated attributes
+            configOrError = serviceConfigParser.parseServiceConfig(rawServiceConfig);
+          }
           if (configOrError != null) {
-            Map<String, ?> rawServiceConfig =
-                resolutionResult.getAttributes().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
             validServiceConfig = configOrError.getConfig() == null
                 ? null
                 : new ServiceConfigHolder(
