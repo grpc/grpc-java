@@ -41,8 +41,8 @@ import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509ExtendedTrustManager;
 
 /**
- * Factory class used by providers of {@link io.grpc.xds.sds.TlsContextManager} to provide a {@link
- * SdsX509TrustManager} for trust and SAN checks.
+ * Factory class used by providers of {@link io.grpc.xds.sds.TlsContextManagerImpl} to provide a
+ * {@link SdsX509TrustManager} for trust and SAN checks.
  */
 @Internal
 public final class SdsTrustManagerFactory extends SimpleTrustManagerFactory {

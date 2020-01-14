@@ -426,7 +426,7 @@ public class SecretVolumeSslContextProviderTest {
   /**
    * Helper method to build UpstreamTlsContext for above tests. Called from other classes as well.
    */
-  static UpstreamTlsContext buildUpstreamTlsContextFromFilenames(
+  public static UpstreamTlsContext buildUpstreamTlsContextFromFilenames(
       String privateKey, String certChain, String trustCa) {
     return buildUpstreamTlsContext(
         buildCommonTlsContextFromFilenames(privateKey, certChain, trustCa));
