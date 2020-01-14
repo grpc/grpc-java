@@ -33,7 +33,8 @@ import io.grpc.ManagedChannelBuilder;
 import io.grpc.NameResolver;
 import io.grpc.NameResolverRegistry;
 import io.grpc.ProxyDetector;
-import io.opencensus.trace.Tracing;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -45,6 +46,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
@@ -55,6 +58,9 @@ import javax.annotation.Nullable;
 public abstract class AbstractManagedChannelImplBuilder
         <T extends AbstractManagedChannelImplBuilder<T>> extends ManagedChannelBuilder<T> {
   private static final String DIRECT_ADDRESS_SCHEME = "directaddress";
+
+  private static final Logger log =
+      Logger.getLogger(AbstractManagedChannelImplBuilder.class.getName());
 
   public static ManagedChannelBuilder<?> forAddress(String name, int port) {
     throw new UnsupportedOperationException("Subclass failed to hide static factory");
@@ -183,9 +189,6 @@ public abstract class AbstractManagedChannelImplBuilder
   private boolean recordFinishedRpcs = true;
   private boolean recordRealTimeMetrics = false;
   private boolean tracingEnabled = true;
-
-  @Nullable
-  private CensusStatsModule censusStatsOverride;
 
   protected AbstractManagedChannelImplBuilder(String target) {
     this.target = Preconditions.checkNotNull(target, "target");
@@ -376,15 +379,6 @@ public abstract class AbstractManagedChannelImplBuilder
     return thisT();
   }
 
-  /**
-   * Override the default stats implementation.
-   */
-  @VisibleForTesting
-  protected final T overrideCensusStatsModule(CensusStatsModule censusStats) {
-    this.censusStatsOverride = censusStats;
-    return thisT();
-  }
-
   @Override
   public T proxyDetector(@Nullable ProxyDetector proxyDetector) {
     this.proxyDetector = proxyDetector;
@@ -565,22 +559,49 @@ public abstract class AbstractManagedChannelImplBuilder
     temporarilyDisableRetry = false;
     if (statsEnabled) {
       temporarilyDisableRetry = true;
-      CensusStatsModule censusStats = this.censusStatsOverride;
-      if (censusStats == null) {
-        censusStats = new CensusStatsModule(
-            GrpcUtil.STOPWATCH_SUPPLIER, true, recordStartedRpcs, recordFinishedRpcs,
-            recordRealTimeMetrics);
+      ClientInterceptor statsInterceptor = null;
+      try {
+        Class<?> censusStatsAccessor =
+            Class.forName("io.grpc.census.InternalCensusStatsAccessor");
+        Method getClientInterceptorMethod =
+            censusStatsAccessor.getDeclaredMethod(
+                "getClientInterceptor",
+                boolean.class,
+                boolean.class,
+                boolean.class);
+        statsInterceptor =
+            (ClientInterceptor) getClientInterceptorMethod
+                .invoke(
+                    null,
+                    recordStartedRpcs,
+                    recordFinishedRpcs,
+                    recordRealTimeMetrics);
+      } catch (ClassNotFoundException | NoSuchMethodException | IllegalAccessException
+          | InvocationTargetException e) {
+        log.log(Level.FINE, "Unable to apply census stats", e);
       }
-      // First interceptor runs last (see ClientInterceptors.intercept()), so that no
-      // other interceptor can override the tracer factory we set in CallOptions.
-      effectiveInterceptors.add(0, censusStats.getClientInterceptor());
+      if (statsInterceptor != null) {
+        // First interceptor runs last (see ClientInterceptors.intercept()), so that no
+        // other interceptor can override the tracer factory we set in CallOptions.
+        effectiveInterceptors.add(0, statsInterceptor);
+      }
     }
     if (tracingEnabled) {
       temporarilyDisableRetry = true;
-      CensusTracingModule censusTracing =
-          new CensusTracingModule(Tracing.getTracer(),
-              Tracing.getPropagationComponent().getBinaryFormat());
-      effectiveInterceptors.add(0, censusTracing.getClientInterceptor());
+      ClientInterceptor tracingInterceptor = null;
+      try {
+        Class<?> censusTracingAccessor =
+            Class.forName("io.grpc.census.InternalCensusTracingAccessor");
+        Method getClientInterceptroMethod =
+            censusTracingAccessor.getDeclaredMethod("getClientInterceptor");
+        tracingInterceptor = (ClientInterceptor) getClientInterceptroMethod.invoke(null);
+      } catch (ClassNotFoundException | NoSuchMethodException | IllegalAccessException
+          | InvocationTargetException e) {
+        log.log(Level.FINE, "Unable to apply census tracing", e);
+      }
+      if (tracingInterceptor != null) {
+        effectiveInterceptors.add(0, tracingInterceptor);
+      }
     }
     return effectiveInterceptors;
   }

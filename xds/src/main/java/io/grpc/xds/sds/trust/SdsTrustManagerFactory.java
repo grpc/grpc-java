@@ -19,6 +19,7 @@ package io.grpc.xds.sds.trust;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import io.envoyproxy.envoy.api.v2.auth.CertificateValidationContext;
 import io.envoyproxy.envoy.api.v2.core.DataSource.SpecifierCase;
@@ -53,7 +54,7 @@ public final class SdsTrustManagerFactory extends SimpleTrustManagerFactory {
   public SdsTrustManagerFactory(CertificateValidationContext certificateValidationContext)
       throws CertificateException, IOException, CertStoreException {
     checkNotNull(certificateValidationContext, "certificateValidationContext");
-    createSdsX509TrustManager(
+    sdsX509TrustManager = createSdsX509TrustManager(
         getTrustedCaFromCertContext(certificateValidationContext), certificateValidationContext);
   }
 
@@ -76,7 +77,8 @@ public final class SdsTrustManagerFactory extends SimpleTrustManagerFactory {
     }
   }
 
-  private void createSdsX509TrustManager(
+  @VisibleForTesting
+  static SdsX509TrustManager createSdsX509TrustManager(
       X509Certificate[] certs, CertificateValidationContext certContext) throws CertStoreException {
     TrustManagerFactory tmf = null;
     try {
@@ -109,7 +111,7 @@ public final class SdsTrustManagerFactory extends SimpleTrustManagerFactory {
     if (myDelegate == null) {
       throw new CertStoreException("Native X509 TrustManager not found.");
     }
-    sdsX509TrustManager = new SdsX509TrustManager(certContext, myDelegate);
+    return new SdsX509TrustManager(certContext, myDelegate);
   }
 
   @Override

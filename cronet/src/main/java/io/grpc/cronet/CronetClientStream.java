@@ -47,10 +47,8 @@ import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Queue;
 import java.util.concurrent.Executor;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
@@ -258,7 +256,7 @@ class CronetClientStream extends AbstractClientStream {
   class TransportState extends Http2ClientStreamTransportState {
     private final Object lock;
     @GuardedBy("lock")
-    private Queue<PendingData> pendingData = new LinkedList<PendingData>();
+    private Collection<PendingData> pendingData = new ArrayList<PendingData>();
     @GuardedBy("lock")
     private boolean streamReady;
     @GuardedBy("lock")

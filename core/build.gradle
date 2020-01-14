@@ -20,25 +20,14 @@ dependencies {
     compile (libraries.perfmark) {
         exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
     }
-    compile (libraries.opencensus_api) {
-        // prefer our own versions instead of opencensus-api's dependency
-        exclude group: 'com.google.code.findbugs', module: 'jsr305'
-        exclude group: 'com.google.guava', module: 'guava'
-        exclude group: 'io.grpc', module: 'grpc-context'
-    }
-    compile (libraries.opencensus_contrib_grpc_metrics) {
-        // prefer our own versions instead of opencensus-contrib's dependency
-        exclude group: 'com.google.code.findbugs', module: 'jsr305'
-        exclude group: 'io.grpc', module: 'grpc-context'
-        exclude group: 'com.google.guava', module: 'guava'
-    }
 
     testCompile project(':grpc-context').sourceSets.test.output,
             project(':grpc-api').sourceSets.test.output,
             project(':grpc-testing'),
             project(':grpc-grpclb'),
-            libraries.guava_testlib,
-            libraries.opencensus_impl
+            libraries.guava_testlib
+    
+    testRuntimeOnly project(':grpc-census')
 
     jmh project(':grpc-testing')
 

@@ -102,6 +102,7 @@ public class CommonTlsContextTestsUtil {
       String validationContextName,
       String validationContextTargetUri,
       Iterable<String> verifySubjectAltNames,
+      Iterable<String> alpnNames,
       String channelType) {
 
     CommonTlsContext.Builder builder = CommonTlsContext.newBuilder();
@@ -127,6 +128,9 @@ public class CommonTlsContextTestsUtil {
       builder.setValidationContextSdsSecretConfig(sdsSecretConfig);
     } else if (certValidationContext != null) {
       builder.setValidationContext(certValidationContext);
+    }
+    if (alpnNames != null) {
+      builder.addAllAlpnProtocols(alpnNames);
     }
     return builder.build();
   }

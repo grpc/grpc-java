@@ -31,6 +31,7 @@ import io.envoyproxy.envoy.api.v2.core.Node;
 import io.grpc.Status;
 import io.grpc.netty.GrpcSslContexts;
 import io.grpc.xds.sds.trust.SdsTrustManagerFactory;
+import io.netty.handler.ssl.ApplicationProtocolConfig;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import java.io.IOException;
@@ -108,7 +109,7 @@ final class SdsSslContextProvider<K> extends SslContextProvider<K>
           commonTlsContext.getCombinedValidationContext();
       if (combinedValidationContext.hasValidationContextSdsSecretConfig()) {
         validationContextSdsConfig =
-           combinedValidationContext.getValidationContextSdsSecretConfig();
+            combinedValidationContext.getValidationContextSdsSecretConfig();
       }
       if (combinedValidationContext.hasDefaultValidationContext()) {
         staticCertValidationContext = combinedValidationContext.getDefaultValidationContext();
@@ -223,7 +224,7 @@ final class SdsSslContextProvider<K> extends SslContextProvider<K>
     try {
       SslContextBuilder sslContextBuilder;
       CertificateValidationContext localCertValidationContext =
-              mergeStaticAndDynamicCertContexts();
+          mergeStaticAndDynamicCertContexts();
       if (server) {
         logger.log(Level.FINEST, "for server");
         sslContextBuilder =
@@ -247,6 +248,16 @@ final class SdsSslContextProvider<K> extends SslContextProvider<K>
               tlsCertificate.getPrivateKey().getInlineBytes().newInput(),
               tlsCertificate.hasPassword() ? tlsCertificate.getPassword().getInlineString() : null);
         }
+      }
+      CommonTlsContext commonTlsContext = getCommonTlsContext();
+      if (commonTlsContext != null && commonTlsContext.getAlpnProtocolsCount() > 0) {
+        List<String> alpnList = commonTlsContext.getAlpnProtocolsList();
+        ApplicationProtocolConfig apn = new ApplicationProtocolConfig(
+            ApplicationProtocolConfig.Protocol.ALPN,
+            ApplicationProtocolConfig.SelectorFailureBehavior.NO_ADVERTISE,
+            ApplicationProtocolConfig.SelectedListenerFailureBehavior.ACCEPT,
+            alpnList);
+        sslContextBuilder.applicationProtocolConfig(apn);
       }
       SslContext sslContextCopy = sslContextBuilder.build();
       sslContext = sslContextCopy;

@@ -19,7 +19,9 @@ package io.grpc.util;
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.READY;
+import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.util.GracefulSwitchLoadBalancer.BUFFER_PICKER;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
@@ -33,6 +35,7 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
+import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
@@ -51,6 +54,7 @@ import org.junit.Test;
 import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 
 /**
@@ -469,6 +473,16 @@ public class GracefulSwitchLoadBalancerTest {
     verify(lb0).shutdown();
 
     verifyNoMoreInteractions(lb0, lb1);
+  }
+
+  @Test
+  public void transientFailureOnInitialResolutionError() {
+    gracefulSwitchLb.handleNameResolutionError(Status.DATA_LOSS);
+    ArgumentCaptor<SubchannelPicker> pickerCaptor = ArgumentCaptor.forClass(null);
+    verify(mockHelper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+    SubchannelPicker picker = pickerCaptor.getValue();
+    assertThat(picker.pickSubchannel(mock(PickSubchannelArgs.class)).getStatus().getCode())
+        .isEqualTo(Status.Code.DATA_LOSS);
   }
 
   @Deprecated

@@ -18,6 +18,9 @@ package io.grpc.xds.sds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
+import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
+import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.grpc.Internal;
 import io.netty.handler.ssl.SslContext;
 import java.util.concurrent.Executor;
@@ -54,6 +57,15 @@ public abstract class SslContextProvider<K> {
 
   K getSource() {
     return source;
+  }
+
+  CommonTlsContext getCommonTlsContext() {
+    if (source instanceof UpstreamTlsContext) {
+      return ((UpstreamTlsContext) source).getCommonTlsContext();
+    } else if (source instanceof DownstreamTlsContext) {
+      return ((DownstreamTlsContext) source).getCommonTlsContext();
+    }
+    return null;
   }
 
   /** Closes this provider and releases any resources. */

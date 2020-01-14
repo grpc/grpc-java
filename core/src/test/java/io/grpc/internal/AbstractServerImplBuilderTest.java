@@ -21,9 +21,6 @@ import static org.junit.Assert.assertEquals;
 
 import io.grpc.Metadata;
 import io.grpc.ServerStreamTracer;
-import io.grpc.internal.testing.StatsTestUtils.FakeStatsRecorder;
-import io.grpc.internal.testing.StatsTestUtils.FakeTagContextBinarySerializer;
-import io.grpc.internal.testing.StatsTestUtils.FakeTagger;
 import java.io.File;
 import java.util.List;
 import org.junit.Test;
@@ -51,8 +48,10 @@ public class AbstractServerImplBuilderTest {
     List<? extends ServerStreamTracer.Factory> factories = builder.getTracerFactories();
 
     assertEquals(3, factories.size());
-    assertThat(factories.get(0)).isInstanceOf(CensusStatsModule.ServerTracerFactory.class);
-    assertThat(factories.get(1)).isInstanceOf(CensusTracingModule.ServerTracerFactory.class);
+    assertThat(factories.get(0).getClass().getName())
+        .isEqualTo("io.grpc.census.CensusStatsModule$ServerTracerFactory");
+    assertThat(factories.get(1).getClass().getName())
+        .isEqualTo("io.grpc.census.CensusTracingModule$ServerTracerFactory");
     assertThat(factories.get(2)).isSameInstanceAs(DUMMY_USER_TRACER);
   }
 
@@ -64,7 +63,8 @@ public class AbstractServerImplBuilderTest {
     List<? extends ServerStreamTracer.Factory> factories = builder.getTracerFactories();
 
     assertEquals(2, factories.size());
-    assertThat(factories.get(0)).isInstanceOf(CensusTracingModule.ServerTracerFactory.class);
+    assertThat(factories.get(0).getClass().getName())
+        .isEqualTo("io.grpc.census.CensusTracingModule$ServerTracerFactory");
     assertThat(factories.get(1)).isSameInstanceAs(DUMMY_USER_TRACER);
   }
 
@@ -76,7 +76,8 @@ public class AbstractServerImplBuilderTest {
     List<? extends ServerStreamTracer.Factory> factories = builder.getTracerFactories();
 
     assertEquals(2, factories.size());
-    assertThat(factories.get(0)).isInstanceOf(CensusStatsModule.ServerTracerFactory.class);
+    assertThat(factories.get(0).getClass().getName())
+        .isEqualTo("io.grpc.census.CensusStatsModule$ServerTracerFactory");
     assertThat(factories.get(1)).isSameInstanceAs(DUMMY_USER_TRACER);
   }
 
@@ -90,15 +91,6 @@ public class AbstractServerImplBuilderTest {
   }
 
   static class Builder extends AbstractServerImplBuilder<Builder> {
-    Builder() {
-      overrideCensusStatsModule(
-          new CensusStatsModule(
-              new FakeTagger(),
-              new FakeTagContextBinarySerializer(),
-              new FakeStatsRecorder(),
-              GrpcUtil.STOPWATCH_SUPPLIER,
-              true, true, true, true));
-    }
 
     @Override
     protected List<io.grpc.internal.InternalServer> buildTransportServers(
