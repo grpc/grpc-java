@@ -25,6 +25,7 @@ dependencies {
             project(':grpc-protobuf'),
             project(':grpc-stub'),
             project(':grpc-testing'),
+            project(':grpc-xds'),
             libraries.google_auth_oauth2_http,
             libraries.junit,
             libraries.truth
@@ -112,6 +113,20 @@ task grpclb_long_lived_affinity_test_client(type: CreateStartScripts) {
     ]
 }
 
+task xds_test_client(type: CreateStartScripts) {
+    mainClassName = "io.grpc.testing.integration.XdsTestClient"
+    applicationName = "xds-test-client"
+    outputDir = new File(project.buildDir, 'tmp')
+    classpath = jar.outputs.files + configurations.runtime
+}
+
+task xds_test_server(type: CreateStartScripts) {
+    mainClassName = "io.grpc.testing.integration.XdsTestServer"
+    applicationName = "xds-test-server"
+    outputDir = new File(project.buildDir, 'tmp')
+    classpath = jar.outputs.files + configurations.runtime
+}
+
 applicationDistribution.into("bin") {
     from(test_client)
     from(test_server)
@@ -119,6 +134,8 @@ applicationDistribution.into("bin") {
     from(stresstest_client)
     from(http2_client)
     from(grpclb_long_lived_affinity_test_client)
+    from(xds_test_client)
+    from(xds_test_server)
     fileMode = 0755
 }
 
