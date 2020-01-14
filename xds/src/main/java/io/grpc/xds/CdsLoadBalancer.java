@@ -42,7 +42,7 @@ import io.grpc.xds.XdsLoadBalancerProvider.XdsConfig;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import io.grpc.xds.sds.SslContextProvider;
 import io.grpc.xds.sds.TlsContextManager;
-import io.grpc.xds.sds.TlsContextManagerInterface;
+import io.grpc.xds.sds.TlsContextManagerImpl;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -58,7 +58,7 @@ public final class CdsLoadBalancer extends LoadBalancer {
   private final LoadBalancerRegistry lbRegistry;
   private final GracefulSwitchLoadBalancer switchingLoadBalancer;
   private final Helper helper;
-  private final TlsContextManagerInterface tlsContextManager;
+  private final TlsContextManager tlsContextManager;
 
   // The following fields become non-null once handleResolvedAddresses() successfully.
 
@@ -74,12 +74,12 @@ public final class CdsLoadBalancer extends LoadBalancer {
   private XdsClient xdsClient;
 
   CdsLoadBalancer(Helper helper) {
-    this(helper, LoadBalancerRegistry.getDefaultRegistry(), TlsContextManager.getInstance());
+    this(helper, LoadBalancerRegistry.getDefaultRegistry(), TlsContextManagerImpl.getInstance());
   }
 
   @VisibleForTesting
   CdsLoadBalancer(Helper helper, LoadBalancerRegistry lbRegistry,
-      TlsContextManagerInterface tlsContextManager) {
+      TlsContextManager tlsContextManager) {
     this.helper = helper;
     this.channelLogger = helper.getChannelLogger();
     this.lbRegistry = lbRegistry;

@@ -60,7 +60,7 @@ import io.grpc.xds.XdsClient.XdsClientFactory;
 import io.grpc.xds.XdsLoadBalancerProvider.XdsConfig;
 import io.grpc.xds.sds.SecretVolumeSslContextProviderTest;
 import io.grpc.xds.sds.SslContextProvider;
-import io.grpc.xds.sds.TlsContextManagerInterface;
+import io.grpc.xds.sds.TlsContextManager;
 import java.net.InetSocketAddress;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -145,7 +145,7 @@ public class CdsLoadBalancerTest {
   private XdsClient xdsClient;
 
   @Mock
-  private TlsContextManagerInterface mockTlsContextManager;
+  private TlsContextManager mockTlsContextManager;
 
   @Before
   public void setUp() {
