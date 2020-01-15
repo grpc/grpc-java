@@ -24,7 +24,8 @@ dependencies {
     compile (libraries.google_auth_oauth2_http) {
         // prefer our own versions instead of google-auth-oauth2-http's dependency
         exclude group: 'com.google.guava', module: 'guava'
-        exclude group: 'io.opencensus', module: 'opencensus-api'
+        // we'll always be more up-to-date
+        exclude group: 'io.grpc', module: 'grpc-context'
     }
     compileOnly libraries.javax_annotation
     runtime project(':grpc-grpclb')
