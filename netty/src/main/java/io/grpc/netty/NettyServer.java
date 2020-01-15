@@ -251,19 +251,10 @@ class NettyServer implements InternalServer, InternalWithLogId {
       throw new IOException("Failed to bind", future.cause());
     }
     channel = future.channel();
-    Future<?> channelzFuture = channel.eventLoop().submit(new Runnable() {
-      @Override
-      public void run() {
-        InternalInstrumented<SocketStats> listenSocket = new ListenSocket(channel);
-        listenSocketStats.set(listenSocket);
-        channelz.addListenSocket(listenSocket);
-      }
-    });
-    try {
-      channelzFuture.await();
-    } catch (InterruptedException ex) {
-      throw new RuntimeException("Interrupted while registering listen socket to channelz", ex);
-    }
+
+    InternalInstrumented<SocketStats> listenSocket = new ListenSocket(channel);
+    listenSocketStats.set(listenSocket);
+    channelz.addListenSocket(listenSocket);
   }
 
   @Override
