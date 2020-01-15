@@ -184,12 +184,40 @@ final class XdsClientImpl extends XdsClient {
     if (adsStream != null) {
       adsStream.close(Status.CANCELLED.withDescription("shutdown").asException());
     }
+    cleanUpResources();
     for (LoadReportClientImpl lrsClient : lrsClients.values()) {
       lrsClient.stopLoadReporting();
     }
     if (rpcRetryTimer != null) {
       rpcRetryTimer.cancel();
     }
+  }
+
+  /**
+   * Purge cache for resources and cancel resource fetch timers.
+   */
+  private void cleanUpResources() {
+    clusterNamesToClusterUpdates.clear();
+    absentCdsResources.clear();
+    clusterNamesToEndpointUpdates.clear();
+    absentEdsResources.clear();
+
+    if (ldsRespTimer != null) {
+      ldsRespTimer.cancel();
+      ldsRespTimer = null;
+    }
+    if (rdsRespTimer != null) {
+      rdsRespTimer.cancel();
+      rdsRespTimer = null;
+    }
+    for (ScheduledHandle handle : cdsRespTimers.values()) {
+      handle.cancel();
+    }
+    cdsRespTimers.clear();
+    for (ScheduledHandle handle : edsRespTimers.values()) {
+      handle.cancel();
+    }
+    edsRespTimers.clear();
   }
 
   @Override
@@ -1040,6 +1068,7 @@ final class XdsClientImpl extends XdsClient {
       logger.log(Level.FINE, error.getDescription(), error.getCause());
       closed = true;
       cleanUp();
+      cleanUpResources();
       if (responseReceived || retryBackoffPolicy == null) {
         // Reset the backoff sequence if had received a response, or backoff sequence
         // has never been initialized.
@@ -1070,27 +1099,6 @@ final class XdsClientImpl extends XdsClient {
 
     private void cleanUp() {
       if (adsStream == this) {
-        clusterNamesToClusterUpdates.clear();
-        absentCdsResources.clear();
-        clusterNamesToEndpointUpdates.clear();
-        absentEdsResources.clear();
-
-        if (ldsRespTimer != null) {
-          ldsRespTimer.cancel();
-          ldsRespTimer = null;
-        }
-        if (rdsRespTimer != null) {
-          rdsRespTimer.cancel();
-          rdsRespTimer = null;
-        }
-        for (ScheduledHandle handle : cdsRespTimers.values()) {
-          handle.cancel();
-        }
-        cdsRespTimers.clear();
-        for (ScheduledHandle handle : edsRespTimers.values()) {
-          handle.cancel();
-        }
-        edsRespTimers.clear();
         adsStream = null;
       }
     }
