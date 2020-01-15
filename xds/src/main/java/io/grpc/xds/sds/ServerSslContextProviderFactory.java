@@ -19,6 +19,7 @@ package io.grpc.xds.sds;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
 import io.grpc.xds.Bootstrapper;
 import io.grpc.xds.sds.ReferenceCountingSslContextProviderMap.SslContextProviderFactory;
@@ -46,7 +47,10 @@ final class ServerSslContextProviderFactory
         return SdsSslContextProvider.getProviderForServer(
             downstreamTlsContext,
             Bootstrapper.getInstance().readBootstrap().getNode(),
-            Executors.newSingleThreadExecutor(),
+            Executors.newSingleThreadExecutor(new ThreadFactoryBuilder()
+                .setNameFormat("server-sds-sslcontext-provider-%d")
+                .setDaemon(true)
+                .build()),
             /* channelExecutor= */ null);
       } catch (IOException ioe) {
         throw new RuntimeException(ioe);
