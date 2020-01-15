@@ -51,6 +51,6 @@ public final class HostnameGreeter extends GreeterGrpc.GreeterImplBase {
       ex.printStackTrace();
     }
     // Strange. Well, let's make an identifier for ourselves.
-    return "" + new Random().nextInt();
+    return "generated-" + new Random().nextInt();
   }
 }

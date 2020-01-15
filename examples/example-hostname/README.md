@@ -5,7 +5,7 @@ The hostname example is a Hello World server whose response includes its
 hostname. It also supports health and reflection services. This makes it a good
 server to test infrastructure, like load balancing.
 
-The example require grpc-java to already be built. You are strongly encouraged
+The example requires grpc-java to already be built. You are strongly encouraged
 to check out a git release tag, since there will already be a build of grpc
 available. Otherwise you must follow [COMPILING](../../COMPILING.md).
 
