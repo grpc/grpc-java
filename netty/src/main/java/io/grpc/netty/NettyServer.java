@@ -249,6 +249,10 @@ class NettyServer implements InternalServer, InternalWithLogId {
       throw new IOException("Failed to bind", future.cause());
     }
     channel = future.channel();
+
+    // We should never throw any Exception after this point to abide by the contract of
+    // ServerListener.serverShutdown()
+
     try {
       channel.eventLoop().execute(new Runnable() {
         @Override
