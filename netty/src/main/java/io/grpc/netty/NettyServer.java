@@ -250,8 +250,8 @@ class NettyServer implements InternalServer, InternalWithLogId {
     }
     channel = future.channel();
 
-    // We should never throw any Exception after this point to abide by the contract of
-    // ServerListener.serverShutdown()
+    // We should never throw any Exception below while the channel is open to abide by the contract
+    // of ServerListener.serverShutdown() method.
 
     try {
       channel.eventLoop().execute(new Runnable() {
@@ -262,7 +262,13 @@ class NettyServer implements InternalServer, InternalWithLogId {
         }
       });
     } catch (RuntimeException e) {
-      log.log(Level.WARNING, "Error while starting server", e);
+      try {
+        channel.close();
+      } catch (RuntimeException closeError) {
+        e.addSuppressed(closeError);
+      }
+      channel = null;
+      throw e;
     }
   }
 
