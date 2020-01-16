@@ -56,7 +56,6 @@ import java.net.SocketAddress;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -93,9 +92,8 @@ class NettyServer implements InternalServer, InternalWithLogId {
   private final List<? extends ServerStreamTracer.Factory> streamTracerFactories;
   private final TransportTracer.Factory transportTracerFactory;
   private final InternalChannelz channelz;
-  // Only modified in event loop but safe to read any time. Set at startup and unset at shutdown.
-  private final AtomicReference<InternalInstrumented<SocketStats>> listenSocketStats =
-      new AtomicReference<>();
+  // Only modified in event loop but safe to read any time.
+  private volatile InternalInstrumented<SocketStats> listenSocketStats;
 
   NettyServer(
       SocketAddress address, ChannelFactory<? extends ServerChannel> channelFactory,
@@ -149,7 +147,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
 
   @Override
   public InternalInstrumented<SocketStats> getListenSocketStats() {
-    return listenSocketStats.get();
+    return listenSocketStats;
   }
 
   @Override
@@ -251,19 +249,13 @@ class NettyServer implements InternalServer, InternalWithLogId {
       throw new IOException("Failed to bind", future.cause());
     }
     channel = future.channel();
-    Future<?> channelzFuture = channel.eventLoop().submit(new Runnable() {
+    channel.eventLoop().execute(new Runnable() {
       @Override
       public void run() {
-        InternalInstrumented<SocketStats> listenSocket = new ListenSocket(channel);
-        listenSocketStats.set(listenSocket);
-        channelz.addListenSocket(listenSocket);
+        listenSocketStats = new ListenSocket(channel);
+        channelz.addListenSocket(listenSocketStats);
       }
     });
-    try {
-      channelzFuture.await();
-    } catch (InterruptedException ex) {
-      throw new RuntimeException("Interrupted while registering listen socket to channelz", ex);
-    }
   }
 
   @Override
@@ -278,7 +270,8 @@ class NettyServer implements InternalServer, InternalWithLogId {
         if (!future.isSuccess()) {
           log.log(Level.WARNING, "Error shutting down server", future.cause());
         }
-        InternalInstrumented<SocketStats> stats = listenSocketStats.getAndSet(null);
+        InternalInstrumented<SocketStats> stats = listenSocketStats;
+        listenSocketStats = null;
         if (stats != null) {
           channelz.removeListenSocket(stats);
         }
