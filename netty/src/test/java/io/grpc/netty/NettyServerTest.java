@@ -247,7 +247,8 @@ public class NettyServerTest {
     Socket socket = new Socket();
     socket.connect(ns.getListenSocketAddress(), /* timeout= */ 8000);
     socket.close();
-    countDownLatch.await(); // SocketStats won't be available until binding complete.
+    // SocketStats won't be available until the event loop task of adding SocketStats complete.
+    countDownLatch.await();
     InternalInstrumented<SocketStats> listenSocket = ns.getListenSocketStats();
     assertSame(listenSocket, channelz.getSocket(id(listenSocket)));
 
