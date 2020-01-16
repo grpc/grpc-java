@@ -145,7 +145,7 @@ class Utils {
     } else {
       maxOrder = PooledByteBufAllocator.defaultMaxOrder();
     }
-    allocator = new PooledByteBufAllocator(
+    return new PooledByteBufAllocator(
         preferDirect,
         PooledByteBufAllocator.defaultNumHeapArena(),
         // Assuming neither gRPC nor netty are using allocator.directBuffer() to request
