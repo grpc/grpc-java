@@ -772,6 +772,16 @@ final class XdsClientImpl extends XdsClient {
     for (String clusterName : clusterNamesToEndpointUpdates.keySet()) {
       if (!edsServices.contains(clusterName)) {
         absentEdsResources.add(clusterName);
+        // Notify EDS resource removal to watchers.
+        if (endpointWatchers.containsKey(clusterName)) {
+          Set<EndpointWatcher> watchers = endpointWatchers.get(clusterName);
+          for (EndpointWatcher watcher : watchers) {
+            watcher.onError(
+                Status.NOT_FOUND
+                    .withDescription(
+                        "Endpoint resource for cluster [" + clusterName + "] is deleted."));
+          }
+        }
       }
     }
     clusterNamesToEndpointUpdates.keySet().retainAll(edsServices);

@@ -2387,6 +2387,61 @@ public class XdsClientImplTest {
     verifyZeroInteractions(watcher3, watcher4);
   }
 
+  @Test
+  public void cdsUpdateForEdsServiceNameChange() {
+    xdsClient.watchClusterData("cluster-foo.googleapis.com", clusterWatcher);
+    StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
+
+    // Management server sends back a CDS response containing requested resource.
+    List<Any> clusters = ImmutableList.of(
+        Any.pack(buildCluster("cluster-foo.googleapis.com", "cluster-foo:service-bar", false)));
+    DiscoveryResponse response =
+        buildDiscoveryResponse("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS, "0000");
+    responseObserver.onNext(response);
+
+    xdsClient.watchEndpointData("cluster-foo:service-bar", endpointWatcher);
+
+    // Management server sends back an EDS response for resource "cluster-foo:service-bar".
+    List<Any> clusterLoadAssignments = ImmutableList.of(
+        Any.pack(buildClusterLoadAssignment("cluster-foo:service-bar",
+            ImmutableList.of(
+                buildLocalityLbEndpoints("region1", "zone1", "subzone1",
+                    ImmutableList.of(
+                        buildLbEndpoint("192.168.0.1", 8080, HealthStatus.HEALTHY, 2)),
+                    1, 0)),
+            ImmutableList.<Policy.DropOverload>of())));
+    response =
+        buildDiscoveryResponse("0", clusterLoadAssignments,
+            XdsClientImpl.ADS_TYPE_URL_EDS, "0000");
+    responseObserver.onNext(response);
+
+    ArgumentCaptor<EndpointUpdate> endpointUpdateCaptor = ArgumentCaptor.forClass(null);
+    verify(endpointWatcher).onEndpointChanged(endpointUpdateCaptor.capture());
+    EndpointUpdate endpointUpdate = endpointUpdateCaptor.getValue();
+    assertThat(endpointUpdate.getClusterName()).isEqualTo("cluster-foo:service-bar");
+    assertThat(endpointUpdate.getDropPolicies()).isEmpty();
+    assertThat(endpointUpdate.getLocalityLbEndpointsMap())
+        .containsExactly(
+            new Locality("region1", "zone1", "subzone1"),
+            new LocalityLbEndpoints(
+                ImmutableList.of(
+                    new LbEndpoint("192.168.0.1", 8080,
+                        2, true)), 1, 0));
+
+    // Management server sends another CDS response for removing cluster service
+    // "cluster-foo:service-blade" with replacement of "cluster-foo:service-blade".
+    clusters = ImmutableList.of(
+        Any.pack(buildCluster("cluster-foo.googleapis.com", "cluster-foo:service-blade", false)));
+    response =
+        buildDiscoveryResponse("1", clusters, XdsClientImpl.ADS_TYPE_URL_CDS, "0001");
+    responseObserver.onNext(response);
+
+    // Watcher get notification for endpoint resource "cluster-foo:service-bar" being deleted.
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
+    verify(endpointWatcher).onError(statusCaptor.capture());
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.NOT_FOUND);
+  }
+
   /**
    * RPC stream closed and retry during the period of first time resolving service config
    * (LDS/RDS only).
