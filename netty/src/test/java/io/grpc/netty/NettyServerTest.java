@@ -228,9 +228,11 @@ public class NettyServerTest {
         true, 0, // ignore
         channelz);
     final SettableFuture<Void> shutdownCompleted = SettableFuture.create();
+    final CountDownLatch countDownLatch = new CountDownLatch(1);
     ns.start(new ServerListener() {
       @Override
       public ServerTransportListener transportCreated(ServerTransport transport) {
+        countDownLatch.countDown();
         return new NoopServerTransportListener();
       }
 
@@ -239,8 +241,13 @@ public class NettyServerTest {
         shutdownCompleted.set(null);
       }
     });
+
     assertThat(((InetSocketAddress) ns.getListenSocketAddress()).getPort()).isGreaterThan(0);
 
+    Socket socket = new Socket();
+    socket.connect(ns.getListenSocketAddress(), /* timeout= */ 8000);
+    socket.close();
+    countDownLatch.await(); // SocketStats won't be available until binding complete.
     InternalInstrumented<SocketStats> listenSocket = ns.getListenSocketStats();
     assertSame(listenSocket, channelz.getSocket(id(listenSocket)));
 
