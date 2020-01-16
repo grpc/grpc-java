@@ -65,6 +65,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Future;
 import java.util.concurrent.FutureTask;
@@ -112,6 +113,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
   /** Service encapsulating something similar to an accept() socket. */
   private final List<? extends InternalServer> transportServers;
   private final Object lock = new Object();
+  private final CountDownLatch startComplete = new CountDownLatch(1);
   @GuardedBy("lock") private boolean transportServersTerminated;
   /** {@code transportServer} and services encapsulating something similar to a TCP connection. */
   @GuardedBy("lock") private final Set<ServerTransport> transports = new HashSet<>();
@@ -144,7 +146,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
         Preconditions.checkNotNull(builder.fallbackRegistry, "fallbackRegistry");
     Preconditions.checkNotNull(transportServers, "transportServers");
     Preconditions.checkArgument(!transportServers.isEmpty(), "no servers provided");
-    this.transportServers = new ArrayList<>(transportServers);
+    this.transportServers = Collections.unmodifiableList(new ArrayList<>(transportServers));
     this.logId =
         InternalLogId.allocate("Server", String.valueOf(getListenSocketsIgnoringLifecycle()));
     // Fork from the passed in context so that it does not propagate cancellation, it only
@@ -177,19 +179,25 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
     synchronized (lock) {
       checkState(!started, "Already started");
       checkState(!shutdown, "Shutting down");
-      // Start and wait for any ports to actually be bound.
-
-      ServerListenerImpl listener = new ServerListenerImpl();
-      for (InternalServer ts : transportServers) {
-        ts.start(listener);
-        activeTransportServers++;
-      }
       executor = Preconditions.checkNotNull(executorPool.getObject(), "executor");
       started = true;
-      return this;
     }
-  }
 
+    // Start and wait for any ports to actually be bound.
+    ServerListenerImpl listener = new ServerListenerImpl();
+    try {
+      for (InternalServer ts : transportServers) {
+        ts.start(listener);
+        synchronized (lock) {
+          activeTransportServers++;
+        }
+      }
+    } finally {
+      startComplete.countDown();
+    }
+
+    return this;
+  }
 
   @Override
   public int getPort() {
@@ -269,11 +277,24 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
       }
     }
     if (shutdownTransportServers) {
+      awaitStartComplete();
       for (InternalServer ts : transportServers) {
         ts.shutdown();
       }
     }
     return this;
+  }
+
+  private void awaitStartComplete() {
+    boolean startCompleted = false;
+    try {
+      startCompleted = startComplete.await(30, TimeUnit.SECONDS);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+    }
+    if (!startCompleted) {
+      log.log(Level.WARNING, "Server was not starting properly, resources may leak");
+    }
   }
 
   @Override
@@ -388,6 +409,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
     public void serverShutdown() {
       ArrayList<ServerTransport> copiedTransports;
       Status shutdownNowStatusCopy;
+      awaitStartComplete();
       synchronized (lock) {
         activeTransportServers--;
         if (activeTransportServers != 0) {

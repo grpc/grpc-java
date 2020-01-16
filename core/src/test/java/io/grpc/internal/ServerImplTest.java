@@ -420,7 +420,6 @@ public class ServerImplTest {
     } catch (IOException e) {
       assertSame(ex, e);
     }
-    verifyNoMoreInteractions(executorPool);
   }
 
   @Test
