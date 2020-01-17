@@ -858,7 +858,7 @@ public class LookasideLbTest {
     handleResolvedAddresses(new XdsConfig(null, null, "edsServiceName1", null));
 
     verify(edsUpdateCallback, never()).onError();
-    fakeClock.forwardNanos(TimeUnit.SECONDS.toNanos(20));
+    fakeClock.forwardTime(20, TimeUnit.SECONDS);
     verify(edsUpdateCallback).onError();
   }
 
