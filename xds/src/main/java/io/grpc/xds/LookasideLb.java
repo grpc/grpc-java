@@ -252,13 +252,9 @@ final class LookasideLb extends LoadBalancer {
   @Override
   public void handleNameResolutionError(Status error) {
     channelLogger.log(ChannelLogLevel.ERROR, "Name resolution error: {0}", error);
-    // Go into TRANSIENT_FAILURE if we have not yet received any endpoint update. Otherwise,
-    // we keep running with the data we had previously.
-    if (endpointWatcher == null) {
-      lookasideLbHelper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
-    } else {
-      switchingLoadBalancer.handleNameResolutionError(error);
-    }
+    // This will go into TRANSIENT_FAILURE if we have not yet received any endpoint update and
+    // otherwise keep running with the data we had previously.
+    switchingLoadBalancer.handleNameResolutionError(error);
   }
 
   @Override
