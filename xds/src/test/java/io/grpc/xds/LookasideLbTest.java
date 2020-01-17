@@ -163,6 +163,8 @@ public class LookasideLbTest {
   private RefCountedXdsClientObjectPool xdsClientPoolFromResolveAddresses;
   private XdsClient xdsClientFromResolvedAddresses;
   private LocalityStoreFactory localityStoreFactory = LocalityStoreFactory.getInstance();
+  private int versionIno;
+  private int nonce;
 
   @Before
   public void setUp() {
@@ -905,9 +907,6 @@ public class LookasideLbTest {
     }
     lookasideLb.handleResolvedAddresses(resolvedAddressBuilder.build());
   }
-
-  private int versionIno;
-  private int nonce;
 
   private void receiveEndpointUpdate(ClusterLoadAssignment clusterLoadAssignment) {
     if (isFullFlow) {
