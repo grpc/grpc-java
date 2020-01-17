@@ -43,6 +43,7 @@ import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.ConfigOrError;
+import io.grpc.NameResolver.ServiceConfigParser;
 import io.grpc.Status;
 import java.net.SocketAddress;
 import java.net.URI;
@@ -152,8 +153,6 @@ public class ServiceConfigErrorHandlingTest {
   @Mock
   private Executor blockingExecutor;
   private ChannelBuilder channelBuilder;
-
-
 
   private void createChannel(ClientInterceptor... interceptors) {
     checkState(channel == null);
@@ -489,6 +488,34 @@ public class ServiceConfigErrorHandlingTest {
     assertThat(channel.getState(false)).isEqualTo(ConnectivityState.IDLE);
   }
 
+  @Test
+  public void serviceConfigUsingAttributes() throws Exception {
+    FakeNameResolverFactory nameResolverFactory =
+        new FakeNameResolverFactory.Builder(expectedUri)
+            .setServers(ImmutableList.of(addressGroup))
+            .setEnableServiceConfigParsing(false)
+            .build();
+    channelBuilder.nameResolverFactory(nameResolverFactory);
+
+    Map<String, Object> rawServiceConfig =
+        parseJson("{\"loadBalancingConfig\": [{\"mock_lb\": {\"check\": \"1st raw config\"}}]}");
+    nameResolverFactory.nextRawServiceConfig.set(rawServiceConfig);
+
+    createChannel();
+
+    ArgumentCaptor<ResolvedAddresses> resultCaptor =
+        ArgumentCaptor.forClass(ResolvedAddresses.class);
+    verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
+    ResolvedAddresses resolvedAddresses = resultCaptor.getValue();
+    assertThat(resolvedAddresses.getAddresses()).containsExactly(addressGroup);
+    assertThat(resolvedAddresses.getLoadBalancingPolicyConfig()).isEqualTo("1st raw config");
+    assertThat(resolvedAddresses.getAttributes().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG))
+        .isEqualTo(rawServiceConfig);
+    verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
+
+    assertThat(channel.getState(false)).isNotEqualTo(ConnectivityState.TRANSIENT_FAILURE);
+  }
+
   private static final class ChannelBuilder
       extends AbstractManagedChannelImplBuilder<ChannelBuilder> {
 
@@ -525,14 +552,17 @@ public class ServiceConfigErrorHandlingTest {
     final boolean resolvedAtStart;
     final ArrayList<FakeNameResolver> resolvers = new ArrayList<>();
     final AtomicReference<Map<String, ?>> nextRawServiceConfig = new AtomicReference<>();
+    final boolean enableServiceConfigParsing;
 
     FakeNameResolverFactory(
         URI expectedUri,
         List<EquivalentAddressGroup> servers,
-        boolean resolvedAtStart) {
+        boolean resolvedAtStart,
+        boolean enableServiceConfigParsing) {
       this.expectedUri = expectedUri;
       this.servers = servers;
       this.resolvedAtStart = resolvedAtStart;
+      this.enableServiceConfigParsing = enableServiceConfigParsing;
     }
 
     @Override
@@ -541,7 +571,17 @@ public class ServiceConfigErrorHandlingTest {
         return null;
       }
       assertEquals(DEFAULT_PORT, args.getDefaultPort());
-      FakeNameResolver resolver = new FakeNameResolver(args.getServiceConfigParser());
+      FakeNameResolver resolver;
+      if (enableServiceConfigParsing) {
+        resolver = new FakeNameResolver(args.getServiceConfigParser());
+      } else {
+        resolver = new FakeNameResolver(new ServiceConfigParser() {
+          @Override
+          public ConfigOrError parseServiceConfig(Map<String, ?> rawServiceConfig) {
+            return null;
+          }
+        });
+      }
       resolvers.add(resolver);
       return resolver;
     }
@@ -613,6 +653,7 @@ public class ServiceConfigErrorHandlingTest {
       final URI expectedUri;
       List<EquivalentAddressGroup> servers = ImmutableList.of();
       boolean resolvedAtStart = true;
+      boolean enableServiceConfigParsing = true;
 
       Builder(URI expectedUri) {
         this.expectedUri = expectedUri;
@@ -623,8 +664,14 @@ public class ServiceConfigErrorHandlingTest {
         return this;
       }
 
+      Builder setEnableServiceConfigParsing(boolean enableServiceConfigParsing) {
+        this.enableServiceConfigParsing = enableServiceConfigParsing;
+        return this;
+      }
+
       FakeNameResolverFactory build() {
-        return new FakeNameResolverFactory(expectedUri, servers, resolvedAtStart);
+        return new FakeNameResolverFactory(
+            expectedUri, servers, resolvedAtStart, enableServiceConfigParsing);
       }
     }
   }
