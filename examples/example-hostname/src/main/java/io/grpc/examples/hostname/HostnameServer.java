@@ -38,6 +38,10 @@ public final class HostnameServer {
         port = Integer.parseInt(args[0]);
       } catch (NumberFormatException ex) {
         System.err.println("Usage: [port [hostname]]");
+        System.err.println("");
+        System.err.println("  port      The listen port. Defaults to " + port);
+        System.err.println("  hostname  The name clients will see in greet responses. ");
+        System.err.println("            Defaults to the machine's hostname");
         System.exit(1);
       }
     }
