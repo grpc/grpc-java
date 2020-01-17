@@ -179,21 +179,50 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
     synchronized (lock) {
       checkState(!started, "Already started");
       checkState(!shutdown, "Shutting down");
+      activeTransportServers = transportServers.size();
       executor = Preconditions.checkNotNull(executorPool.getObject(), "executor");
       started = true;
     }
 
     // Start and wait for any ports to actually be bound.
     ServerListenerImpl listener = new ServerListenerImpl();
+    int unstarted = transportServers.size();
     try {
       for (InternalServer ts : transportServers) {
         ts.start(listener);
-        synchronized (lock) {
-          activeTransportServers++;
-        }
+        unstarted--;
       }
     } finally {
       startComplete.countDown();
+
+      // Adjust number of active transport servers if there is any unstarted servers.
+      List<ServerTransport> transportsToCleanUp = null;
+      Status shutdownNowStatusCopy = null;
+      synchronized (lock) {
+        if (unstarted != 0) {
+          activeTransportServers -= unstarted;
+          if (activeTransportServers == 0) {
+            // transports collection can be modified during shutdown(), even if we hold the lock,
+            // due to reentrancy.
+            transportsToCleanUp = new ArrayList<>(transports);
+            shutdownNowStatusCopy = shutdownNowStatus;
+            serverShutdownCallbackInvoked = true;
+          }
+        }
+      }
+      if (transportsToCleanUp != null) {
+        for (ServerTransport transport : transportsToCleanUp) {
+          if (shutdownNowStatusCopy == null) {
+            transport.shutdown();
+          } else {
+            transport.shutdownNow(shutdownNowStatusCopy);
+          }
+        }
+        synchronized (lock) {
+          transportServersTerminated = true;
+          checkForTermination();
+        }
+      }
     }
 
     return this;
@@ -277,24 +306,22 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
       }
     }
     if (shutdownTransportServers) {
-      awaitStartComplete();
+      boolean startCompleted = false;
+      try {
+        startCompleted = startComplete.await(30, TimeUnit.SECONDS);
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+      }
+      if (!startCompleted) {
+        log.log(
+            Level.WARNING,
+            "Server is shutdown while it was not starting properly, resources may leak");
+      }
       for (InternalServer ts : transportServers) {
         ts.shutdown();
       }
     }
     return this;
-  }
-
-  private void awaitStartComplete() {
-    boolean startCompleted = false;
-    try {
-      startCompleted = startComplete.await(30, TimeUnit.SECONDS);
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-    }
-    if (!startCompleted) {
-      log.log(Level.WARNING, "Server was not starting properly, resources may leak");
-    }
   }
 
   @Override
@@ -409,7 +436,6 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
     public void serverShutdown() {
       ArrayList<ServerTransport> copiedTransports;
       Status shutdownNowStatusCopy;
-      awaitStartComplete();
       synchronized (lock) {
         activeTransportServers--;
         if (activeTransportServers != 0) {
