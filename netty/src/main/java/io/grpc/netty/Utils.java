@@ -125,7 +125,7 @@ class Utils {
   public static ByteBufAllocator getByteBufAllocator(boolean forceHeapBuffer) {
     if (Boolean.parseBoolean(
             System.getProperty("io.grpc.netty.useCustomAllocator", "true"))) {
-      if (forceHeapBuffer || PooledByteBufAllocator.defaultPreferDirect()) {
+      if (forceHeapBuffer || !PooledByteBufAllocator.defaultPreferDirect()) {
         return ByteBufAllocatorPreferHeapHolder.allocator;
       } else {
         return ByteBufAllocatorPreferDirectHolder.allocator;
