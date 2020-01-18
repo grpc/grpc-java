@@ -67,6 +67,7 @@ import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
+import io.grpc.internal.ObjectPool;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
@@ -75,9 +76,7 @@ import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.LocalityStore.LocalityStoreFactory;
 import io.grpc.xds.LookasideLb.EndpointUpdateCallback;
 import io.grpc.xds.XdsClient.EndpointUpdate;
-import io.grpc.xds.XdsClient.RefCountedXdsClientObjectPool;
 import io.grpc.xds.XdsClient.XdsChannelFactory;
-import io.grpc.xds.XdsClient.XdsClientFactory;
 import io.grpc.xds.XdsLoadBalancerProvider.XdsConfig;
 import java.net.InetSocketAddress;
 import java.util.ArrayDeque;
@@ -164,9 +163,7 @@ public class LookasideLbTest {
   public boolean isFullFlow;
   private ManagedChannel bootstrapChannel;
   @Nullable
-  private RefCountedXdsClientObjectPool xdsClientPoolFromResolveAddresses;
-  @Nullable
-  private XdsClient xdsClientFromResolvedAddresses;
+  private FakeXdsClientPool xdsClientPoolFromResolveAddresses;
   private LocalityStoreFactory localityStoreFactory = LocalityStoreFactory.getInstance();
   private int versionIno;
   private int nonce;
@@ -240,17 +237,11 @@ public class LookasideLbTest {
     doReturn(bootstrapInfo).when(bootstrapper).readBootstrap();
 
     if (isFullFlow) {
-      XdsClientFactory xdsClientFactory = new XdsClientFactory() {
-        @Override
-        XdsClient createXdsClient() {
-          return new XdsClientImpl(
+      xdsClientPoolFromResolveAddresses = new FakeXdsClientPool(
+          new XdsClientImpl(
               serverList, channelFactory, Node.getDefaultInstance(), syncContext,
               fakeClock.getScheduledExecutorService(), mock(BackoffPolicy.Provider.class),
-              fakeClock.getStopwatchSupplier());
-        }
-      };
-      xdsClientPoolFromResolveAddresses = new RefCountedXdsClientObjectPool(xdsClientFactory);
-      xdsClientFromResolvedAddresses = xdsClientPoolFromResolveAddresses.getObject();
+              fakeClock.getStopwatchSupplier()));
     }
 
     lookasideLb = new LookasideLb(
@@ -266,8 +257,8 @@ public class LookasideLbTest {
     }
 
     if (isFullFlow) {
-      xdsClientPoolFromResolveAddresses.returnObject(xdsClientFromResolvedAddresses);
-      assertThat(xdsClientPoolFromResolveAddresses.xdsClient).isNull();
+      assertThat(xdsClientPoolFromResolveAddresses.timesGetObjectCalled)
+          .isEqualTo(xdsClientPoolFromResolveAddresses.timesReturnObjectCalled);
     }
 
     assertThat(bootstrapChannel.isShutdown()).isTrue();
@@ -275,7 +266,7 @@ public class LookasideLbTest {
 
   @Test
   public void handleNameResolutionErrorBeforeAndAfterEdsWorkding() {
-    handleResolvedAddresses(new XdsConfig(null, null, "edsServiceName1", null));
+    deliverResolvedAddresses(new XdsConfig(null, null, "edsServiceName1", null));
 
     // handleResolutionError() before receiving any endpoint update.
     lookasideLb.handleNameResolutionError(Status.DATA_LOSS.withDescription("fake status"));
@@ -303,7 +294,7 @@ public class LookasideLbTest {
   public void handleEdsServiceNameChangeInXdsConfig() {
     assertThat(childHelpers).isEmpty();
 
-    handleResolvedAddresses(new XdsConfig(null, null, "edsServiceName1", null));
+    deliverResolvedAddresses(new XdsConfig(null, null, "edsServiceName1", null));
     ClusterLoadAssignment clusterLoadAssignment =
         buildClusterLoadAssignment("edsServiceName1",
             ImmutableList.of(
@@ -323,7 +314,7 @@ public class LookasideLbTest {
     assertLatestConnectivityState(CONNECTING);
 
     // Change edsServicename to edsServiceName2.
-    handleResolvedAddresses(new XdsConfig(null, null, "edsServiceName2", null));
+    deliverResolvedAddresses(new XdsConfig(null, null, "edsServiceName2", null));
     // The old balancer was not READY, so it will be shutdown immediately.
     verify(childBalancer1).shutdown();
 
@@ -353,7 +344,7 @@ public class LookasideLbTest {
     assertLatestSubchannelPicker(subchannel2);
 
     // Change edsServiceName to edsServiceName3.
-    handleResolvedAddresses(new XdsConfig(null, null, "edsServiceName3", null));
+    deliverResolvedAddresses(new XdsConfig(null, null, "edsServiceName3", null));
     clusterLoadAssignment =
         buildClusterLoadAssignment("edsServiceName3",
             ImmutableList.of(
@@ -379,7 +370,7 @@ public class LookasideLbTest {
     assertLatestConnectivityState(CONNECTING);
 
     // Change edsServiceName to edsServiceName4.
-    handleResolvedAddresses(new XdsConfig(null, null, "edsServiceName4", null));
+    deliverResolvedAddresses(new XdsConfig(null, null, "edsServiceName4", null));
     verify(childBalancer3).shutdown();
 
     clusterLoadAssignment =
@@ -407,7 +398,7 @@ public class LookasideLbTest {
     assertLatestSubchannelPicker(subchannel4);
 
     // Change edsServiceName to edsServiceName5.
-    handleResolvedAddresses(new XdsConfig(null, null, "edsServiceName5", null));
+    deliverResolvedAddresses(new XdsConfig(null, null, "edsServiceName5", null));
     clusterLoadAssignment =
         buildClusterLoadAssignment("edsServiceName5",
             ImmutableList.of(
@@ -442,7 +433,7 @@ public class LookasideLbTest {
 
   @Test
   public void firstAndSecondEdsResponseReceived_onWorkingCalledOnce() {
-    handleResolvedAddresses(new XdsConfig(null, null, "edsServiceName1", null));
+    deliverResolvedAddresses(new XdsConfig(null, null, "edsServiceName1", null));
 
     verify(edsUpdateCallback, never()).onWorking();
 
@@ -476,7 +467,7 @@ public class LookasideLbTest {
 
   @Test
   public void handleAllDropUpdates_pickersAreDropped() {
-    handleResolvedAddresses(new XdsConfig(null, null, "edsServiceName1", null));
+    deliverResolvedAddresses(new XdsConfig(null, null, "edsServiceName1", null));
 
     ClusterLoadAssignment clusterLoadAssignment = buildClusterLoadAssignment(
         "edsServiceName1",
@@ -529,7 +520,7 @@ public class LookasideLbTest {
 
   @Test
   public void handleLocalityAssignmentUpdates_pickersUpdatedFromChildBalancer() {
-    handleResolvedAddresses(new XdsConfig(null, null, "edsServiceName1", null));
+    deliverResolvedAddresses(new XdsConfig(null, null, "edsServiceName1", null));
 
     LbEndpoint endpoint11 = buildLbEndpoint("addr11.example.com", 8011, HEALTHY, 11);
     LbEndpoint endpoint12 = buildLbEndpoint("addr12.example.com", 8012, HEALTHY, 12);
@@ -615,7 +606,7 @@ public class LookasideLbTest {
     lookasideLb = new LookasideLb(
         helper, edsUpdateCallback, lbRegistry, localityStoreFactory, bootstrapper, channelFactory);
 
-    handleResolvedAddresses(new XdsConfig(null, null, "edsServiceName1", null));
+    deliverResolvedAddresses(new XdsConfig(null, null, "edsServiceName1", null));
     assertThat(localityStores).hasSize(1);
     LocalityStore localityStore = localityStores.peekLast();
 
@@ -652,7 +643,7 @@ public class LookasideLbTest {
     verify(localityStore).updateLocalityStore(endpointUpdate.getLocalityLbEndpointsMap());
 
     // Change cluster name.
-    handleResolvedAddresses(new XdsConfig(null, null, "edsServiceName2", null));
+    deliverResolvedAddresses(new XdsConfig(null, null, "edsServiceName2", null));
     assertThat(localityStores).hasSize(2);
     localityStore = localityStores.peekLast();
 
@@ -676,7 +667,7 @@ public class LookasideLbTest {
   @Ignore // FIXME(zdapeng): Enable test once endpoint watcher timeout is implemented.
   @Test
   public void verifyErrorPropagation() {
-    handleResolvedAddresses(new XdsConfig(null, null, "edsServiceName1", null));
+    deliverResolvedAddresses(new XdsConfig(null, null, "edsServiceName1", null));
 
     verify(edsUpdateCallback, never()).onError();
     fakeClock.forwardTime(20, TimeUnit.SECONDS);
@@ -706,7 +697,7 @@ public class LookasideLbTest {
     return endpointUpdateBuilder.build();
   }
 
-  private void handleResolvedAddresses(XdsConfig xdsConfig) {
+  private void deliverResolvedAddresses(XdsConfig xdsConfig) {
     ResolvedAddresses.Builder resolvedAddressBuilder = ResolvedAddresses.newBuilder()
         .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
         .setLoadBalancingPolicyConfig(xdsConfig);
@@ -743,7 +734,8 @@ public class LookasideLbTest {
   /**
    * Matcher of ResolvedAddresses for round robin load balancer based on the set of backends.
    */
-  private static class RoundRobinBackendsMatcher implements ArgumentMatcher<ResolvedAddresses> {
+  private static final class RoundRobinBackendsMatcher
+      implements ArgumentMatcher<ResolvedAddresses> {
 
     final List<java.net.SocketAddress> socketAddresses;
 
@@ -775,6 +767,39 @@ public class LookasideLbTest {
       RoundRobinBackendsMatcher build() {
         return new RoundRobinBackendsMatcher(socketAddresses);
       }
+    }
+  }
+
+  /**
+   * A fake ObjectPool of XdsClient that keeps track of invocation times of getObject() and
+   * returnObject().
+   */
+  private static final class FakeXdsClientPool implements ObjectPool<XdsClient> {
+    final XdsClient xdsClient;
+    int timesGetObjectCalled;
+    int timesReturnObjectCalled;
+
+    FakeXdsClientPool(XdsClient xdsClient) {
+      this.xdsClient = xdsClient;
+    }
+
+    @Override
+    public XdsClient getObject() {
+      timesGetObjectCalled++;
+      return xdsClient;
+    }
+
+    @Override
+    public XdsClient returnObject(Object object) {
+      timesReturnObjectCalled++;
+      assertThat(timesReturnObjectCalled).isAtMost(timesGetObjectCalled);
+
+      // Just for cleaning up the test.
+      if (timesGetObjectCalled == timesReturnObjectCalled) {
+        xdsClient.shutdown();
+      }
+
+      return null;
     }
   }
 }
