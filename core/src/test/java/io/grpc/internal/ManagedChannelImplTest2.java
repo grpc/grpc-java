@@ -1006,7 +1006,7 @@ public class ManagedChannelImplTest2 {
             new PolicySelection(
                 mockLoadBalancerProvider,
                 parseConfig(rawLbConfig),
-                ConfigOrError.fromConfig(new Object())));
+                new Object()));
     nameResolverFactory.nextConfigOrError.set(ConfigOrError.fromConfig(parsedServiceConfig));
     nameResolverFactory.nextRawServiceConfig.set(rawServiceConfig);
     channelBuilder.nameResolverFactory(nameResolverFactory);
@@ -3486,7 +3486,7 @@ public class ManagedChannelImplTest2 {
     Object fakeLbConfig = new Object();
     PolicySelection lbConfigs =
         new PolicySelection(
-            mockLoadBalancerProvider, rawServiceConfig, ConfigOrError.fromConfig(fakeLbConfig));
+            mockLoadBalancerProvider, rawServiceConfig, fakeLbConfig);
     mockLoadBalancerProvider.parseLoadBalancingPolicyConfig(rawServiceConfig);
     ManagedChannelServiceConfig2 managedChannelServiceConfig =
         createManagedChannelServiceConfig(rawServiceConfig, lbConfigs);
