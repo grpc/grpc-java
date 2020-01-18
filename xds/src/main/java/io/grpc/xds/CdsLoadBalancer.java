@@ -40,6 +40,9 @@ import io.grpc.xds.XdsClient.ClusterUpdate;
 import io.grpc.xds.XdsClient.ClusterWatcher;
 import io.grpc.xds.XdsLoadBalancerProvider.XdsConfig;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
+import io.grpc.xds.sds.SslContextProvider;
+import io.grpc.xds.sds.TlsContextManager;
+import io.grpc.xds.sds.TlsContextManagerImpl;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -55,6 +58,7 @@ public final class CdsLoadBalancer extends LoadBalancer {
   private final LoadBalancerRegistry lbRegistry;
   private final GracefulSwitchLoadBalancer switchingLoadBalancer;
   private final Helper helper;
+  private final TlsContextManager tlsContextManager;
 
   // The following fields become non-null once handleResolvedAddresses() successfully.
 
@@ -70,15 +74,17 @@ public final class CdsLoadBalancer extends LoadBalancer {
   private XdsClient xdsClient;
 
   CdsLoadBalancer(Helper helper) {
-    this(helper, LoadBalancerRegistry.getDefaultRegistry());
+    this(helper, LoadBalancerRegistry.getDefaultRegistry(), TlsContextManagerImpl.getInstance());
   }
 
   @VisibleForTesting
-  CdsLoadBalancer(Helper helper, LoadBalancerRegistry lbRegistry) {
+  CdsLoadBalancer(Helper helper, LoadBalancerRegistry lbRegistry,
+      TlsContextManager tlsContextManager) {
     this.helper = helper;
     this.channelLogger = helper.getChannelLogger();
     this.lbRegistry = lbRegistry;
     this.switchingLoadBalancer = new GracefulSwitchLoadBalancer(helper);
+    this.tlsContextManager = tlsContextManager;
   }
 
   @Override
@@ -236,22 +242,23 @@ public final class CdsLoadBalancer extends LoadBalancer {
 
   private static final class EdsLoadBalancingHelper extends ForwardingLoadBalancerHelper {
     private final Helper delegate;
-    private final AtomicReference<UpstreamTlsContext> upstreamTlsContext;
+    private final AtomicReference<SslContextProvider<UpstreamTlsContext>> sslContextProvider;
 
-    EdsLoadBalancingHelper(Helper helper, AtomicReference<UpstreamTlsContext> upstreamTlsContext) {
+    EdsLoadBalancingHelper(Helper helper,
+        AtomicReference<SslContextProvider<UpstreamTlsContext>> sslContextProvider) {
       this.delegate = helper;
-      this.upstreamTlsContext = upstreamTlsContext;
+      this.sslContextProvider = sslContextProvider;
     }
 
     @Override
     public Subchannel createSubchannel(CreateSubchannelArgs createSubchannelArgs) {
-      if (upstreamTlsContext.get() != null) {
+      if (sslContextProvider.get() != null) {
         createSubchannelArgs =
             createSubchannelArgs
                 .toBuilder()
                 .setAddresses(
                     addUpstreamTlsContext(createSubchannelArgs.getAddresses(),
-                        upstreamTlsContext.get()))
+                        sslContextProvider.get().getSource()))
                 .build();
       }
       return delegate.createSubchannel(createSubchannelArgs);
@@ -295,7 +302,8 @@ public final class CdsLoadBalancer extends LoadBalancer {
     LoadBalancer edsBalancer;
 
     ClusterWatcherImpl(Helper helper, ResolvedAddresses resolvedAddresses) {
-      this.helper = new EdsLoadBalancingHelper(helper, new AtomicReference<UpstreamTlsContext>());
+      this.helper = new EdsLoadBalancingHelper(helper,
+          new AtomicReference<SslContextProvider<UpstreamTlsContext>>());
       this.resolvedAddresses = resolvedAddresses;
     }
 
@@ -312,8 +320,7 @@ public final class CdsLoadBalancer extends LoadBalancer {
           /* fallbackPolicy = */ null,
           /* edsServiceName = */ newUpdate.getEdsServiceName(),
           /* lrsServerName = */ newUpdate.getLrsServerName());
-      UpstreamTlsContext upstreamTlsContext = newUpdate.getUpstreamTlsContext();
-      helper.upstreamTlsContext.set(upstreamTlsContext);
+      updateSslContextProvider(newUpdate.getUpstreamTlsContext());
       if (edsBalancer == null) {
         edsBalancer = lbRegistry.getProvider(XDS_POLICY_NAME).newLoadBalancer(helper);
       }
@@ -325,6 +332,27 @@ public final class CdsLoadBalancer extends LoadBalancer {
                       .build())
               .setLoadBalancingPolicyConfig(edsConfig)
           .build());
+    }
+
+    /** For new UpstreamTlsContext value, release old SslContextProvider. */
+    private void updateSslContextProvider(UpstreamTlsContext newUpstreamTlsContext) {
+      SslContextProvider<UpstreamTlsContext> oldSslContextProvider =
+          helper.sslContextProvider.get();
+      if (oldSslContextProvider != null) {
+        UpstreamTlsContext oldUpstreamTlsContext = oldSslContextProvider.getSource();
+
+        if (oldUpstreamTlsContext.equals(newUpstreamTlsContext)) {
+          return;
+        }
+        tlsContextManager.releaseClientSslContextProvider(oldSslContextProvider);
+      }
+      if (newUpstreamTlsContext != null) {
+        SslContextProvider<UpstreamTlsContext> newSslContextProvider =
+            tlsContextManager.findOrCreateClientSslContextProvider(newUpstreamTlsContext);
+        helper.sslContextProvider.set(newSslContextProvider);
+      } else {
+        helper.sslContextProvider.set(null);
+      }
     }
 
     @Override

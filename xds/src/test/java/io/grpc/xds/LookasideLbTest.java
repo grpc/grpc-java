@@ -89,7 +89,6 @@ import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -664,12 +663,12 @@ public class LookasideLbTest {
     verify(localityStore).updateLocalityStore(endpointUpdate.getLocalityLbEndpointsMap());
   }
 
-  @Ignore // FIXME(zdapeng): Enable test once endpoint watcher timeout is implemented.
   @Test
   public void verifyErrorPropagation() {
     deliverResolvedAddresses(new XdsConfig(null, null, "edsServiceName1", null));
 
     verify(edsUpdateCallback, never()).onError();
+    // Forwarding 20 seconds so that the xds client will deem EDS resource not available.
     fakeClock.forwardTime(20, TimeUnit.SECONDS);
     verify(edsUpdateCallback).onError();
   }

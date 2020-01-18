@@ -55,7 +55,7 @@ public abstract class SslContextProvider<K> {
     this.server = server;
   }
 
-  K getSource() {
+  public K getSource() {
     return source;
   }
 

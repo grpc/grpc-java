@@ -31,7 +31,7 @@ import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.xds.XdsAttributes;
 import io.grpc.xds.sds.SslContextProvider;
-import io.grpc.xds.sds.TlsContextManager;
+import io.grpc.xds.sds.TlsContextManagerImpl;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerAdapter;
 import io.netty.channel.ChannelHandlerContext;
@@ -207,8 +207,9 @@ public final class SdsProtocolNegotiators {
       final BufferReadsHandler bufferReads = new BufferReadsHandler();
       ctx.pipeline().addBefore(ctx.name(), null, bufferReads);
 
-      SslContextProvider<UpstreamTlsContext> sslContextProvider =
-          TlsContextManager.getInstance().findOrCreateClientSslContextProvider(upstreamTlsContext);
+      final SslContextProvider<UpstreamTlsContext> sslContextProvider =
+          TlsContextManagerImpl.getInstance()
+              .findOrCreateClientSslContextProvider(upstreamTlsContext);
 
       sslContextProvider.addCallback(
           new SslContextProvider.Callback() {
@@ -226,6 +227,8 @@ public final class SdsProtocolNegotiators {
               ctx.pipeline().addAfter(ctx.name(), null, handler);
               fireProtocolNegotiationEvent(ctx);
               ctx.pipeline().remove(bufferReads);
+              TlsContextManagerImpl.getInstance()
+                  .releaseClientSslContextProvider(sslContextProvider);
             }
 
             @Override
@@ -303,8 +306,8 @@ public final class SdsProtocolNegotiators {
       final BufferReadsHandler bufferReads = new BufferReadsHandler();
       ctx.pipeline().addBefore(ctx.name(), null, bufferReads);
 
-      SslContextProvider<DownstreamTlsContext> sslContextProvider =
-          TlsContextManager.getInstance()
+      final SslContextProvider<DownstreamTlsContext> sslContextProvider =
+          TlsContextManagerImpl.getInstance()
               .findOrCreateServerSslContextProvider(downstreamTlsContext);
 
       sslContextProvider.addCallback(
@@ -319,6 +322,8 @@ public final class SdsProtocolNegotiators {
               ctx.pipeline().addAfter(ctx.name(), null, handler);
               fireProtocolNegotiationEvent(ctx);
               ctx.pipeline().remove(bufferReads);
+              TlsContextManagerImpl.getInstance()
+                  .releaseServerSslContextProvider(sslContextProvider);
             }
 
             @Override
