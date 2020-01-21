@@ -507,7 +507,6 @@ abstract class XdsClient {
 
         return channelBuilder
             .keepAliveTime(5, TimeUnit.MINUTES)
-            .keepAliveTimeout(20, TimeUnit.SECONDS)
             .build();
       }
     };
