@@ -576,8 +576,14 @@ public abstract class AbstractManagedChannelImplBuilder
                     recordStartedRpcs,
                     recordFinishedRpcs,
                     recordRealTimeMetrics);
-      } catch (ClassNotFoundException | NoSuchMethodException | IllegalAccessException
-          | InvocationTargetException e) {
+      } catch (ClassNotFoundException e) {
+        // Replace these separate catch statements with multicatch when Android min-API >= 19
+        log.log(Level.FINE, "Unable to apply census stats", e);
+      } catch (NoSuchMethodException e) {
+        log.log(Level.FINE, "Unable to apply census stats", e);
+      } catch (IllegalAccessException e) {
+        log.log(Level.FINE, "Unable to apply census stats", e);
+      } catch (InvocationTargetException e) {
         log.log(Level.FINE, "Unable to apply census stats", e);
       }
       if (statsInterceptor != null) {
@@ -595,9 +601,15 @@ public abstract class AbstractManagedChannelImplBuilder
         Method getClientInterceptroMethod =
             censusTracingAccessor.getDeclaredMethod("getClientInterceptor");
         tracingInterceptor = (ClientInterceptor) getClientInterceptroMethod.invoke(null);
-      } catch (ClassNotFoundException | NoSuchMethodException | IllegalAccessException
-          | InvocationTargetException e) {
-        log.log(Level.FINE, "Unable to apply census tracing", e);
+      } catch (ClassNotFoundException e) {
+        // Replace these separate catch statements with multicatch when Android min-API >= 19
+        log.log(Level.FINE, "Unable to apply census stats", e);
+      } catch (NoSuchMethodException e) {
+        log.log(Level.FINE, "Unable to apply census stats", e);
+      } catch (IllegalAccessException e) {
+        log.log(Level.FINE, "Unable to apply census stats", e);
+      } catch (InvocationTargetException e) {
+        log.log(Level.FINE, "Unable to apply census stats", e);
       }
       if (tracingInterceptor != null) {
         effectiveInterceptors.add(0, tracingInterceptor);
