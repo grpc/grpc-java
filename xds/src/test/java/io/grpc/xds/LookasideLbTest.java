@@ -155,6 +155,7 @@ public class LookasideLbTest {
   @Parameter
   public boolean isFullFlow;
   private ManagedChannel channel;
+  // Response observer on server side.
   private StreamObserver<DiscoveryResponse> responseObserver;
   @Nullable
   private FakeXdsClientPool xdsClientPoolFromResolveAddresses;
