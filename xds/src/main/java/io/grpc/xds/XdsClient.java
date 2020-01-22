@@ -40,6 +40,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
 /**
@@ -491,19 +492,22 @@ abstract class XdsClient {
         ServerInfo serverInfo = servers.get(0);
         String serverUri = serverInfo.getServerUri();
         List<ChannelCreds> channelCredsList = serverInfo.getChannelCredentials();
-        ManagedChannel ch = null;
+        ManagedChannelBuilder<?> channelBuilder = null;
         // Use the first supported channel credentials configuration.
         // Currently, only "google_default" is supported.
         for (ChannelCreds creds : channelCredsList) {
           if (creds.getType().equals("google_default")) {
-            ch = GoogleDefaultChannelBuilder.forTarget(serverUri).build();
+            channelBuilder = GoogleDefaultChannelBuilder.forTarget(serverUri);
             break;
           }
         }
-        if (ch == null) {
-          ch = ManagedChannelBuilder.forTarget(serverUri).build();
+        if (channelBuilder == null) {
+          channelBuilder = ManagedChannelBuilder.forTarget(serverUri);
         }
-        return ch;
+
+        return channelBuilder
+            .keepAliveTime(5, TimeUnit.MINUTES)
+            .build();
       }
     };
 
