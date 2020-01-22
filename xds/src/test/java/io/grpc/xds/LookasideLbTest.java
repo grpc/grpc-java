@@ -106,8 +106,6 @@ import org.mockito.junit.MockitoRule;
  * Tests for {@link LookasideLb}.
  */
 @RunWith(Parameterized.class)
-// TODO(creamsoup) use parsed service config
-@SuppressWarnings("deprecation")
 public class LookasideLbTest {
 
   private static final String SERVICE_AUTHORITY = "test.authority.example.com";
@@ -126,7 +124,6 @@ public class LookasideLbTest {
       });
   private final FakeClock fakeClock = new FakeClock();
 
-  // Monitor responseObservers on the server that the bootstrapChannel connects to.
   private final ArrayDeque<StreamObserver<DiscoveryResponse>> responseObservers =
       new ArrayDeque<>();
 
@@ -703,7 +700,7 @@ public class LookasideLbTest {
     ResolvedAddresses.Builder resolvedAddressBuilder = ResolvedAddresses.newBuilder()
         .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
         .setLoadBalancingPolicyConfig(xdsConfig);
-    if (xdsClientPoolFromResolveAddresses != null) {
+    if (isFullFlow) {
       resolvedAddressBuilder.setAttributes(
           Attributes.newBuilder().set(XdsAttributes.XDS_CLIENT_POOL,
               xdsClientPoolFromResolveAddresses).build());
