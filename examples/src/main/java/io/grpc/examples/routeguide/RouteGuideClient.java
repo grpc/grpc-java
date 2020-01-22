@@ -18,6 +18,7 @@ package io.grpc.examples.routeguide;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.Message;
+import io.grpc.Channel;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Status;
@@ -40,27 +41,16 @@ import java.util.logging.Logger;
 public class RouteGuideClient {
   private static final Logger logger = Logger.getLogger(RouteGuideClient.class.getName());
 
-  private final ManagedChannel channel;
   private final RouteGuideBlockingStub blockingStub;
   private final RouteGuideStub asyncStub;
 
   private Random random = new Random();
   private TestHelper testHelper;
 
-  /** Construct client for accessing RouteGuide server at {@code host:port}. */
-  public RouteGuideClient(String host, int port) {
-    this(ManagedChannelBuilder.forAddress(host, port).usePlaintext());
-  }
-
   /** Construct client for accessing RouteGuide server using the existing channel. */
-  public RouteGuideClient(ManagedChannelBuilder<?> channelBuilder) {
-    channel = channelBuilder.build();
+  public RouteGuideClient(Channel channel) {
     blockingStub = RouteGuideGrpc.newBlockingStub(channel);
     asyncStub = RouteGuideGrpc.newStub(channel);
-  }
-
-  public void shutdown() throws InterruptedException {
-    channel.shutdown().awaitTermination(5, TimeUnit.SECONDS);
   }
 
   /**
@@ -250,6 +240,17 @@ public class RouteGuideClient {
 
   /** Issues several different requests and then exits. */
   public static void main(String[] args) throws InterruptedException {
+    String target = "localhost:8980";
+    if (args.length > 0) {
+      if ("--help".equals(args[0])) {
+        System.err.println("Usage: [target]");
+        System.err.println("");
+        System.err.println("  target  The server to connect to. Defaults to " + target);
+        System.exit(1);
+      }
+      target = args[0];
+    }
+
     List<Feature> features;
     try {
       features = RouteGuideUtil.parseFeatures(RouteGuideUtil.getDefaultFeaturesFile());
@@ -258,8 +259,9 @@ public class RouteGuideClient {
       return;
     }
 
-    RouteGuideClient client = new RouteGuideClient("localhost", 8980);
+    ManagedChannel channel = ManagedChannelBuilder.forTarget(target).usePlaintext().build();
     try {
+      RouteGuideClient client = new RouteGuideClient(channel);
       // Looking for a valid feature
       client.getFeature(409146138, -746188906);
 
@@ -279,7 +281,7 @@ public class RouteGuideClient {
         client.warning("routeChat can not finish within 1 minutes");
       }
     } finally {
-      client.shutdown();
+      channel.shutdownNow().awaitTermination(5, TimeUnit.SECONDS);
     }
   }
 
