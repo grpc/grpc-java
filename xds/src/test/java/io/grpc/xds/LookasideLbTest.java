@@ -258,6 +258,9 @@ public class LookasideLbTest {
     if (isFullFlow) {
       assertThat(xdsClientPoolFromResolveAddresses.timesGetObjectCalled)
           .isEqualTo(xdsClientPoolFromResolveAddresses.timesReturnObjectCalled);
+
+      // Just for cleaning up the test.
+      xdsClientPoolFromResolveAddresses.xdsClient.shutdown();
     }
 
     assertThat(bootstrapChannel.isShutdown()).isTrue();
@@ -783,21 +786,15 @@ public class LookasideLbTest {
     }
 
     @Override
-    public XdsClient getObject() {
+    public synchronized XdsClient getObject() {
       timesGetObjectCalled++;
       return xdsClient;
     }
 
     @Override
-    public XdsClient returnObject(Object object) {
+    public synchronized XdsClient returnObject(Object object) {
       timesReturnObjectCalled++;
       assertThat(timesReturnObjectCalled).isAtMost(timesGetObjectCalled);
-
-      // Just for cleaning up the test.
-      if (timesGetObjectCalled == timesReturnObjectCalled) {
-        xdsClient.shutdown();
-      }
-
       return null;
     }
   }
