@@ -124,9 +124,6 @@ public class LookasideLbTest {
       });
   private final FakeClock fakeClock = new FakeClock();
 
-  private final ArrayDeque<StreamObserver<DiscoveryResponse>> responseObservers =
-      new ArrayDeque<>();
-
   private final LoadBalancerRegistry lbRegistry = new LoadBalancerRegistry();
 
   // Child helpers keyed by locality names.
@@ -138,7 +135,7 @@ public class LookasideLbTest {
     ManagedChannel createChannel(List<ServerInfo> servers) {
       assertThat(Iterables.getOnlyElement(servers).getServerUri())
           .isEqualTo("trafficdirector.googleapis.com");
-      return bootstrapChannel;
+      return channel;
     }
   };
 
@@ -157,7 +154,8 @@ public class LookasideLbTest {
   // Simulating a CDS to EDS flow, otherwise EDS only.
   @Parameter
   public boolean isFullFlow;
-  private ManagedChannel bootstrapChannel;
+  private ManagedChannel channel;
+  private StreamObserver<DiscoveryResponse> responseObserver;
   @Nullable
   private FakeXdsClientPool xdsClientPoolFromResolveAddresses;
   private LocalityStoreFactory localityStoreFactory = LocalityStoreFactory.getInstance();
@@ -207,7 +205,7 @@ public class LookasideLbTest {
       @Override
       public StreamObserver<DiscoveryRequest> streamAggregatedResources(
           final StreamObserver<DiscoveryResponse> responseObserver) {
-        responseObservers.offer(responseObserver);
+        LookasideLbTest.this.responseObserver = responseObserver;
         @SuppressWarnings("unchecked")
         StreamObserver<DiscoveryRequest> requestObserver = mock(StreamObserver.class);
         return requestObserver;
@@ -221,7 +219,7 @@ public class LookasideLbTest {
             .addService(serviceImpl)
             .build()
             .start());
-    bootstrapChannel = cleanupRule.register(
+    channel = cleanupRule.register(
         InProcessChannelBuilder
             .forName(serverName)
             .directExecutor()
@@ -260,7 +258,7 @@ public class LookasideLbTest {
       xdsClientPoolFromResolveAddresses.xdsClient.shutdown();
     }
 
-    assertThat(bootstrapChannel.isShutdown()).isTrue();
+    assertThat(channel.isShutdown()).isTrue();
   }
 
   @Test
@@ -709,7 +707,7 @@ public class LookasideLbTest {
   }
 
   private void receiveEndpointUpdate(ClusterLoadAssignment clusterLoadAssignment) {
-    responseObservers.peekLast().onNext(
+    responseObserver.onNext(
           buildDiscoveryResponse(
               String.valueOf(versionIno++),
               ImmutableList.of(Any.pack(clusterLoadAssignment)),
