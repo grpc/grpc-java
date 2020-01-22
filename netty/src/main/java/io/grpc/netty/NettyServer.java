@@ -73,6 +73,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
   private final int maxStreamsPerConnection;
   private final ObjectPool<? extends EventLoopGroup> bossGroupPool;
   private final ObjectPool<? extends EventLoopGroup> workerGroupPool;
+  private final boolean forceHeapBuffer;
   private EventLoopGroup bossGroup;
   private EventLoopGroup workerGroup;
   private ServerListener listener;
@@ -100,6 +101,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
       Map<ChannelOption<?>, ?> channelOptions,
       ObjectPool<? extends EventLoopGroup> bossGroupPool,
       ObjectPool<? extends EventLoopGroup> workerGroupPool,
+      boolean forceHeapBuffer,
       ProtocolNegotiator protocolNegotiator,
       List<? extends ServerStreamTracer.Factory> streamTracerFactories,
       TransportTracer.Factory transportTracerFactory,
@@ -115,6 +117,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
     this.channelOptions = new HashMap<ChannelOption<?>, Object>(channelOptions);
     this.bossGroupPool = checkNotNull(bossGroupPool, "bossGroupPool");
     this.workerGroupPool = checkNotNull(workerGroupPool, "workerGroupPool");
+    this.forceHeapBuffer = forceHeapBuffer;
     this.bossGroup = bossGroupPool.getObject();
     this.workerGroup = workerGroupPool.getObject();
     this.protocolNegotiator = checkNotNull(protocolNegotiator, "protocolNegotiator");
@@ -155,8 +158,8 @@ class NettyServer implements InternalServer, InternalWithLogId {
     listener = checkNotNull(serverListener, "serverListener");
 
     ServerBootstrap b = new ServerBootstrap();
-    b.option(ALLOCATOR, Utils.getByteBufAllocator());
-    b.childOption(ALLOCATOR, Utils.getByteBufAllocator());
+    b.option(ALLOCATOR, Utils.getByteBufAllocator(forceHeapBuffer));
+    b.childOption(ALLOCATOR, Utils.getByteBufAllocator(forceHeapBuffer));
     b.group(bossGroup, workerGroup);
     b.channelFactory(channelFactory);
     // For non-socket based channel, the option will be ignored.

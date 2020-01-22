@@ -87,35 +87,13 @@ class Utils {
   public static final Resource<EventLoopGroup> DEFAULT_WORKER_EVENT_LOOP_GROUP;
 
   // This class is initialized on first use, thus provides delayed allocator creation.
-  private static final class ByteBufAllocatorHolder {
-    private static final ByteBufAllocator allocator;
+  private static final class ByteBufAllocatorPreferDirectHolder {
+    private static final ByteBufAllocator allocator = createByteBufAllocator(true);
+  }
 
-    static {
-      if (Boolean.parseBoolean(
-              System.getProperty("io.grpc.netty.useCustomAllocator", "true"))) {
-        int maxOrder;
-        if (System.getProperty("io.netty.allocator.maxOrder") == null) {
-          // See the implementation of PooledByteBufAllocator.  DEFAULT_MAX_ORDER in there is
-          // 11, which makes chunk size to be 8192 << 11 = 16 MiB.  We want the chunk size to be
-          // 2MiB, thus reducing the maxOrder to 8.
-          maxOrder = 8;
-        } else {
-          maxOrder = PooledByteBufAllocator.defaultMaxOrder();
-        }
-        allocator = new PooledByteBufAllocator(
-            PooledByteBufAllocator.defaultPreferDirect(),
-            PooledByteBufAllocator.defaultNumHeapArena(),
-            PooledByteBufAllocator.defaultNumDirectArena(),
-            PooledByteBufAllocator.defaultPageSize(),
-            maxOrder,
-            PooledByteBufAllocator.defaultTinyCacheSize(),
-            PooledByteBufAllocator.defaultSmallCacheSize(),
-            PooledByteBufAllocator.defaultNormalCacheSize(),
-            PooledByteBufAllocator.defaultUseCacheForAllThreads());
-      } else {
-        allocator = ByteBufAllocator.DEFAULT;
-      }
-    }
+  // This class is initialized on first use, thus provides delayed allocator creation.
+  private static final class ByteBufAllocatorPreferHeapHolder {
+    private static final ByteBufAllocator allocator = createByteBufAllocator(false);
   }
 
   public static final ChannelFactory<? extends ServerChannel> DEFAULT_SERVER_CHANNEL_FACTORY;
@@ -144,8 +122,42 @@ class Utils {
     }
   }
 
-  public static ByteBufAllocator getByteBufAllocator() {
-    return ByteBufAllocatorHolder.allocator;
+  public static ByteBufAllocator getByteBufAllocator(boolean forceHeapBuffer) {
+    if (Boolean.parseBoolean(
+            System.getProperty("io.grpc.netty.useCustomAllocator", "true"))) {
+      if (forceHeapBuffer || !PooledByteBufAllocator.defaultPreferDirect()) {
+        return ByteBufAllocatorPreferHeapHolder.allocator;
+      } else {
+        return ByteBufAllocatorPreferDirectHolder.allocator;
+      }
+    } else {
+      return ByteBufAllocator.DEFAULT;
+    }
+  }
+
+  private static ByteBufAllocator createByteBufAllocator(boolean preferDirect) {
+    int maxOrder;
+    if (System.getProperty("io.netty.allocator.maxOrder") == null) {
+      // See the implementation of PooledByteBufAllocator.  DEFAULT_MAX_ORDER in there is
+      // 11, which makes chunk size to be 8192 << 11 = 16 MiB.  We want the chunk size to be
+      // 2MiB, thus reducing the maxOrder to 8.
+      maxOrder = 8;
+    } else {
+      maxOrder = PooledByteBufAllocator.defaultMaxOrder();
+    }
+    return new PooledByteBufAllocator(
+        preferDirect,
+        PooledByteBufAllocator.defaultNumHeapArena(),
+        // Assuming neither gRPC nor netty are using allocator.directBuffer() to request
+        // specifically for direct buffers, which is true as I just checked, setting arenas to 0
+        // will make sure no direct buffer is ever created.
+        preferDirect ? PooledByteBufAllocator.defaultNumDirectArena() : 0,
+        PooledByteBufAllocator.defaultPageSize(),
+        maxOrder,
+        PooledByteBufAllocator.defaultTinyCacheSize(),
+        PooledByteBufAllocator.defaultSmallCacheSize(),
+        PooledByteBufAllocator.defaultNormalCacheSize(),
+        PooledByteBufAllocator.defaultUseCacheForAllThreads());
   }
 
   public static Metadata convertHeaders(Http2Headers http2Headers) {

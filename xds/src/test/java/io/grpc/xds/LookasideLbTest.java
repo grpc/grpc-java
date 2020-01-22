@@ -666,9 +666,12 @@ public class LookasideLbTest {
   public void verifyErrorPropagation() {
     deliverResolvedAddresses(new XdsConfig(null, null, "edsServiceName1", null));
 
+    verify(helper, never()).updateBalancingState(
+        eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
     verify(edsUpdateCallback, never()).onError();
     // Forwarding 20 seconds so that the xds client will deem EDS resource not available.
     fakeClock.forwardTime(20, TimeUnit.SECONDS);
+    verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
     verify(edsUpdateCallback).onError();
   }
 

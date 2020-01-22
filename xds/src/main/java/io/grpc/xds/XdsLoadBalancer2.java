@@ -28,6 +28,7 @@ import io.grpc.Status;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.xds.LookasideLb.EndpointUpdateCallback;
+import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.CheckForNull;
 import javax.annotation.Nullable;
@@ -118,6 +119,10 @@ final class XdsLoadBalancer2 extends LoadBalancer {
 
         @Override
         public void run() {
+          helper.updateBalancingState(
+              ConnectivityState.TRANSIENT_FAILURE,
+              new ErrorPicker(Status.UNAVAILABLE.withDescription(
+                  "Channel is not ready when timeout for entering fallback mode happens")));
           useFallbackPolicy();
         }
       }
