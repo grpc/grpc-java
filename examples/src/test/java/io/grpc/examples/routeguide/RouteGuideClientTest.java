@@ -40,7 +40,6 @@ import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
-import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -96,14 +95,9 @@ public class RouteGuideClientTest {
     // Use a mutable service registry for later registering the service impl for each test case.
     grpcCleanup.register(InProcessServerBuilder.forName(serverName)
         .fallbackHandlerRegistry(serviceRegistry).directExecutor().build().start());
-    client =
-        new RouteGuideClient(InProcessChannelBuilder.forName(serverName).directExecutor());
+    client = new RouteGuideClient(grpcCleanup.register(
+        InProcessChannelBuilder.forName(serverName).directExecutor().build()));
     client.setTestHelper(testHelper);
-  }
-
-  @After
-  public void tearDown() throws Exception {
-    client.shutdown();
   }
 
   /**
