@@ -502,6 +502,7 @@ final class LookasideLb extends LoadBalancer {
     @Override
     public void onError(Status error) {
       channelLogger.log(ChannelLogLevel.ERROR, "EDS load balancer received an error: {0}",  error);
+      lookasideLbHelper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
       endpointUpdateCallback.onError();
     }
   }

@@ -19,6 +19,9 @@ package io.grpc.xds;
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.READY;
+import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
@@ -144,7 +147,9 @@ public class XdsLoadBalancer2Test {
     fakeClock.forwardTime(9, TimeUnit.SECONDS);
     edsUpdateCallback.onWorking();
     verifyNotInFallbackMode();
+
     fakeClock.forwardTime(1, TimeUnit.SECONDS);
+    verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
     verifyInFallbackMode();
 
     SubchannelPicker subchannelPicker = mock(SubchannelPicker.class);

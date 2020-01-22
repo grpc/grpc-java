@@ -787,8 +787,11 @@ public class LookasideLbTest {
   public void verifyRpcErrorPropagation() {
     lookasideLb.handleResolvedAddresses(defaultResolvedAddress);
 
+    verify(helper, never()).updateBalancingState(
+        eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
     verify(edsUpdateCallback, never()).onError();
     serverResponseWriter.onError(new RuntimeException());
+    verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
     verify(edsUpdateCallback).onError();
   }
 
