@@ -1294,8 +1294,8 @@ public class XdsClientImplTest {
     assertThat(clusterUpdate.getEdsServiceName())
         .isEqualTo("eds-cluster-foo.googleapis.com");
     assertThat(clusterUpdate.getLbPolicy()).isEqualTo("round_robin");
-    assertThat(clusterUpdate.isEnableLrs()).isEqualTo(true);
-    assertThat(clusterUpdate.getLrsServerName()).isEqualTo("");
+    assertThat(clusterUpdate.isEnableLrs()).isTrue();
+    assertThat(clusterUpdate.getLrsServerName()).isEmpty();
   }
 
   /**
@@ -1446,7 +1446,7 @@ public class XdsClientImplTest {
         .isEqualTo("eds-cluster-bar.googleapis.com");
     assertThat(clusterUpdate3.getLbPolicy()).isEqualTo("round_robin");
     assertThat(clusterUpdate3.isEnableLrs()).isEqualTo(true);
-    assertThat(clusterUpdate3.getLrsServerName()).isEqualTo("");
+    assertThat(clusterUpdate3.getLrsServerName()).isEmpty();
   }
 
   /**
@@ -1596,7 +1596,7 @@ public class XdsClientImplTest {
         .isEqualTo("eds-cluster-bar.googleapis.com");
     assertThat(clusterUpdate2.getLbPolicy()).isEqualTo("round_robin");
     assertThat(clusterUpdate2.isEnableLrs()).isEqualTo(true);
-    assertThat(clusterUpdate2.getLrsServerName()).isEqualTo("");
+    assertThat(clusterUpdate2.getLrsServerName()).isEmpty();
 
     // Cancel one of the watcher.
     xdsClient.cancelClusterDataWatch("cluster-foo.googleapis.com", watcher1);
@@ -1667,7 +1667,7 @@ public class XdsClientImplTest {
         .isEqualTo("cluster-foo.googleapis.com");  // default to cluster name
     assertThat(clusterUpdate3.getLbPolicy()).isEqualTo("round_robin");
     assertThat(clusterUpdate3.isEnableLrs()).isEqualTo(true);
-    assertThat(clusterUpdate2.getLrsServerName()).isEqualTo("");
+    assertThat(clusterUpdate2.getLrsServerName()).isEmpty();
 
     verifyNoMoreInteractions(watcher1, watcher2);
 
@@ -1775,7 +1775,7 @@ public class XdsClientImplTest {
         .isEqualTo("cluster-foo.googleapis.com");  // default to cluster name
     assertThat(clusterUpdate.getLbPolicy()).isEqualTo("round_robin");
     assertThat(clusterUpdate.isEnableLrs()).isEqualTo(true);
-    assertThat(clusterUpdate.getLrsServerName()).isEqualTo("");
+    assertThat(clusterUpdate.getLrsServerName()).isEmpty();
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
 
     // No cluster is available.
