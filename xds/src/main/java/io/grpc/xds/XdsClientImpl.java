@@ -1077,6 +1077,19 @@ final class XdsClientImpl extends XdsClient {
       }
       logger.log(Level.FINE, error.getDescription(), error.getCause());
       closed = true;
+      if (configWatcher != null) {
+        configWatcher.onError(error);
+      }
+      for (Set<ClusterWatcher> watchers : clusterWatchers.values()) {
+        for (ClusterWatcher watcher : watchers) {
+          watcher.onError(error);
+        }
+      }
+      for (Set<EndpointWatcher> watchers : endpointWatchers.values()) {
+        for (EndpointWatcher watcher : watchers) {
+          watcher.onError(error);
+        }
+      }
       cleanUp();
       cleanUpResources();
       if (responseReceived || retryBackoffPolicy == null) {

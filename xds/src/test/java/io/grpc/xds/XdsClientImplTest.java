@@ -103,6 +103,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -2919,6 +2920,7 @@ public class XdsClientImplTest {
         backoffPolicy2);
   }
 
+  @Ignore
   @Test
   public void streamClosedAndRetryReschedulesAllResourceFetchTimer() {
     InOrder inOrder =
