@@ -16,10 +16,12 @@
 
 package io.grpc.xds;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.MoreObjects;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
@@ -58,10 +60,13 @@ final class XdsLoadBalancer2 extends LoadBalancer {
     }
 
     @Override
-    public void onError() {
+    public void onError(Status error) {
+      checkArgument(!error.isOk(), "Error code must not be OK");
       if (!adsWorked) {
         // start Fallback-at-Startup immediately
-        useFallbackPolicy();
+        useFallbackPolicy(error.augmentDescription(
+            "No endpoint update had been received when encountering this error from the main LB"
+                + " policy. The balancer entered fallback mode because of this error."));
       } else if (childPolicyHasBeenReady) {
         // TODO: schedule a timer for Fallback-After-Startup
       } // else: the Fallback-at-Startup timer is still pending, noop and wait
@@ -118,7 +123,8 @@ final class XdsLoadBalancer2 extends LoadBalancer {
 
         @Override
         public void run() {
-          useFallbackPolicy();
+          useFallbackPolicy(Status.UNAVAILABLE.withDescription(
+              "Channel was not ready when timeout for entering fallback mode happened."));
         }
       }
 
@@ -176,7 +182,7 @@ final class XdsLoadBalancer2 extends LoadBalancer {
     }
   }
 
-  private void useFallbackPolicy() {
+  private void useFallbackPolicy(Status fallbackReason) {
     if (isInFallbackMode()) {
       return;
     }
@@ -184,7 +190,7 @@ final class XdsLoadBalancer2 extends LoadBalancer {
     helper.getChannelLogger().log(
         ChannelLogLevel.INFO, "Using XDS fallback policy");
 
-    FallbackLbHelper fallbackLbHelper = new FallbackLbHelper();
+    FallbackLbHelper fallbackLbHelper = new FallbackLbHelper(fallbackReason);
     fallbackLb = fallbackLbFactory.newLoadBalancer(fallbackLbHelper);
     fallbackLbHelper.balancer = fallbackLb;
     fallbackLb.handleResolvedAddresses(resolvedAddresses);
@@ -223,7 +229,12 @@ final class XdsLoadBalancer2 extends LoadBalancer {
   }
 
   private final class FallbackLbHelper extends ForwardingLoadBalancerHelper {
+    final Status fallbackReason;
     LoadBalancer balancer;
+
+    FallbackLbHelper(Status fallbackReason) {
+      this.fallbackReason = fallbackReason;
+    }
 
     @Override
     protected Helper delegate() {
@@ -231,16 +242,45 @@ final class XdsLoadBalancer2 extends LoadBalancer {
     }
 
     @Override
-    public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
+    public void updateBalancingState(ConnectivityState newState, final SubchannelPicker newPicker) {
       checkNotNull(balancer, "balancer not set yet");
       if (balancer != fallbackLb) {
         // ignore updates from a misbehaving shutdown fallback balancer
         return;
       }
+
+      SubchannelPicker picker = newPicker;
+      if (newState == ConnectivityState.TRANSIENT_FAILURE) {
+        // Augment picker with the fallbackReason.
+        picker = new SubchannelPicker() {
+          @Override
+          public PickResult pickSubchannel(PickSubchannelArgs args) {
+            PickResult pickResult = newPicker.pickSubchannel(args);
+            Status status = pickResult.getStatus();
+            if (status.isOk()) { // This is true in some round robin case or drop case.
+              return pickResult;
+            }
+            if (status.getCause() != null) {
+              status.getCause().addSuppressed(fallbackReason.asRuntimeException());
+            } else {
+              status = status.withCause(fallbackReason.asRuntimeException());
+            }
+            return PickResult.withError(status);
+          }
+
+          @Override
+          public String toString() {
+            return MoreObjects.toStringHelper("FallbackErrorPicker")
+                .add("fallbackReason", fallbackReason)
+                .add("picker", newPicker)
+                .toString();
+          }
+        };
+      }
       helper.getChannelLogger().log(
           ChannelLogLevel.INFO,
-          "Picker updated - state: {0}, picker: {1}", newState, newPicker);
-      super.updateBalancingState(newState, newPicker);
+          "Picker updated - state: {0}, picker: {1}", newState, picker);
+      super.updateBalancingState(newState, picker);
     }
   }
 

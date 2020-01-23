@@ -460,7 +460,7 @@ public class LookasideLbTest {
             ImmutableList.<DropOverload>of());
     receiveEndpointUpdate(clusterLoadAssignment);
     verify(edsUpdateCallback, times(1)).onWorking();
-    verify(edsUpdateCallback, never()).onError();
+    verify(edsUpdateCallback, never()).onError(any(Status.class));
   }
 
   @Test
@@ -513,7 +513,7 @@ public class LookasideLbTest {
     assertThat(pickerExpectedDropAll.pickSubchannel(mock(PickSubchannelArgs.class)).isDrop())
         .isTrue();
 
-    verify(edsUpdateCallback, never()).onError();
+    verify(edsUpdateCallback, never()).onError(any(Status.class));
   }
 
   @Test
@@ -577,7 +577,7 @@ public class LookasideLbTest {
     childHelper2.updateBalancingState(READY, picker);
     assertLatestSubchannelPicker(subchannel);
 
-    verify(edsUpdateCallback, never()).onError();
+    verify(edsUpdateCallback, never()).onError(any(Status.class));
   }
 
   // Uses a fake LocalityStoreFactory that creates a mock LocalityStore, and verifies interaction
@@ -666,10 +666,10 @@ public class LookasideLbTest {
   public void verifyErrorPropagation() {
     deliverResolvedAddresses(new XdsConfig(null, null, "edsServiceName1", null));
 
-    verify(edsUpdateCallback, never()).onError();
+    verify(edsUpdateCallback, never()).onError(any(Status.class));
     // Forwarding 20 seconds so that the xds client will deem EDS resource not available.
     fakeClock.forwardTime(20, TimeUnit.SECONDS);
-    verify(edsUpdateCallback).onError();
+    verify(edsUpdateCallback).onError(any(Status.class));
   }
 
   /**

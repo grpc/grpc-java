@@ -383,7 +383,7 @@ final class LookasideLb extends LoadBalancer {
 
     void onWorking();
 
-    void onError();
+    void onError(Status error);
 
     void onAllDrop();
   }
@@ -437,7 +437,7 @@ final class LookasideLb extends LoadBalancer {
     @Override
     public void onError(Status error) {
       channelLogger.log(ChannelLogLevel.ERROR, "EDS load balancer received an error: {0}",  error);
-      endpointUpdateCallback.onError();
+      endpointUpdateCallback.onError(error);
     }
   }
 }

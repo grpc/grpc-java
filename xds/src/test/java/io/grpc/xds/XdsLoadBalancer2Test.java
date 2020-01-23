@@ -189,7 +189,7 @@ public class XdsLoadBalancer2Test {
     verifyNotInFallbackMode();
     assertThat(fakeClock.getPendingTasks()).hasSize(1);
 
-    edsUpdateCallback.onError();
+    edsUpdateCallback.onError(Status.UNAUTHENTICATED);
     verifyInFallbackMode();
 
     assertThat(fallbackLbs).hasSize(1);
@@ -200,7 +200,7 @@ public class XdsLoadBalancer2Test {
     verifyNotInFallbackMode();
     assertThat(fakeClock.getPendingTasks()).hasSize(1);
     edsUpdateCallback.onWorking();
-    edsUpdateCallback.onError();
+    edsUpdateCallback.onError(Status.UNAUTHENTICATED);
     verifyNotInFallbackMode();
 
     fakeClock.forwardTime(10, TimeUnit.SECONDS);
@@ -221,7 +221,7 @@ public class XdsLoadBalancer2Test {
         .build();
     xdsLoadBalancer.handleResolvedAddresses(resolvedAddresses);
 
-    edsUpdateCallback.onError();
+    edsUpdateCallback.onError(Status.UNAUTHENTICATED);
     LoadBalancer fallbackLb =  Iterables.getLast(fallbackLbs);
     verify(fallbackLb).handleResolvedAddresses(same(resolvedAddresses));
   }
