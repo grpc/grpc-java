@@ -18,7 +18,6 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
-import static java.util.logging.Level.FINEST;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
@@ -29,34 +28,29 @@ import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerRegistry;
-import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
-import io.grpc.alts.GoogleDefaultChannelBuilder;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
-import io.grpc.xds.Bootstrapper.ChannelCreds;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
-import io.grpc.xds.LoadReportClient.LoadReportCallback;
-import io.grpc.xds.LoadReportClientImpl.LoadReportClientFactory;
 import io.grpc.xds.LocalityStore.LocalityStoreFactory;
 import io.grpc.xds.XdsClient.EndpointUpdate;
 import io.grpc.xds.XdsClient.EndpointWatcher;
 import io.grpc.xds.XdsClient.RefCountedXdsClientObjectPool;
+import io.grpc.xds.XdsClient.XdsChannelFactory;
 import io.grpc.xds.XdsClient.XdsClientFactory;
 import io.grpc.xds.XdsLoadBalancerProvider.XdsConfig;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /** Lookaside load balancer that handles EDS config. */
@@ -67,9 +61,11 @@ final class LookasideLb extends LoadBalancer {
   private final GracefulSwitchLoadBalancer switchingLoadBalancer;
   private final LoadBalancerRegistry lbRegistry;
   private final LocalityStoreFactory localityStoreFactory;
-  private final LoadReportClientFactory loadReportClientFactory;
   private final Bootstrapper bootstrapper;
+  private final XdsChannelFactory channelFactory;
   private final Helper lookasideLbHelper;
+  // Cache for load stats stores for each service in cluster keyed by cluster service names.
+  private final Map<String, LoadStatsStore> loadStatsStoreMap = new HashMap<>();
 
   // Most recent XdsConfig.
   @Nullable
@@ -80,11 +76,11 @@ final class LookasideLb extends LoadBalancer {
   @Nullable
   private ObjectPool<XdsClient> xdsClientPool;
   @Nullable
-  XdsClient xdsClient;
-  // Only for EDS-only case.
-  // TODO(zdapeng): Stop using it once XdsClientImpl is used.
+  private XdsClient xdsClient;
   @Nullable
-  ManagedChannel channel;
+  private LoadReportClient loadReportClient;
+  @Nullable
+  private String clusterName;
 
   LookasideLb(Helper lookasideLbHelper, EndpointUpdateCallback endpointUpdateCallback) {
     this(
@@ -92,8 +88,8 @@ final class LookasideLb extends LoadBalancer {
         checkNotNull(endpointUpdateCallback, "endpointUpdateCallback"),
         LoadBalancerRegistry.getDefaultRegistry(),
         LocalityStoreFactory.getInstance(),
-        LoadReportClientFactory.getInstance(),
-        Bootstrapper.getInstance());
+        Bootstrapper.getInstance(),
+        XdsChannelFactory.getInstance());
   }
 
   @VisibleForTesting
@@ -102,16 +98,16 @@ final class LookasideLb extends LoadBalancer {
       EndpointUpdateCallback endpointUpdateCallback,
       LoadBalancerRegistry lbRegistry,
       LocalityStoreFactory localityStoreFactory,
-      LoadReportClientFactory loadReportClientFactory,
-      Bootstrapper bootstrapper) {
+      Bootstrapper bootstrapper,
+      XdsChannelFactory channelFactory) {
     this.lookasideLbHelper = lookasideLbHelper;
     this.channelLogger = lookasideLbHelper.getChannelLogger();
     this.endpointUpdateCallback = endpointUpdateCallback;
     this.lbRegistry = lbRegistry;
-    this.switchingLoadBalancer = new GracefulSwitchLoadBalancer(lookasideLbHelper);
     this.localityStoreFactory = localityStoreFactory;
-    this.loadReportClientFactory = loadReportClientFactory;
+    this.switchingLoadBalancer = new GracefulSwitchLoadBalancer(lookasideLbHelper);
     this.bootstrapper = bootstrapper;
+    this.channelFactory = channelFactory;
   }
 
   @Override
@@ -131,7 +127,7 @@ final class LookasideLb extends LoadBalancer {
       }
       newXdsConfig = (XdsConfig) lbConfig;
     } else {
-      // In the future, in all cases xdsConfig can be gotten directly by
+      // In the future, in all cases xdsConfig can be obtained directly by
       // resolvedAddresses.getLoadBalancingPolicyConfig().
       Map<String, ?> newRawLbConfig = attributes.get(ATTR_LOAD_BALANCING_CONFIG);
       if (newRawLbConfig == null) {
@@ -157,10 +153,10 @@ final class LookasideLb extends LoadBalancer {
     if (xdsClientPool == null) {
       // Init xdsClientPool and xdsClient.
       // There are two usecases:
-      // 1. The EDS-only:
+      // 1. EDS-only:
       //    The name resolver resolves a ResolvedAddresses with an XdsConfig. Use the bootstrap
       //    information to create a channel.
-      // 2. Non EDS-only usecase:
+      // 2. Non EDS-only:
       //    XDS_CLIENT_POOL attribute is available from ResolvedAddresses either from
       //    XdsNameResolver or CDS policy.
       //
@@ -179,7 +175,8 @@ final class LookasideLb extends LoadBalancer {
           return;
         }
 
-        List<ServerInfo> serverList = bootstrapInfo.getServers();
+        final List<ServerInfo> serverList = bootstrapInfo.getServers();
+        final Node node = bootstrapInfo.getNode();
         if (serverList.isEmpty()) {
           lookasideLbHelper.updateBalancingState(
               TRANSIENT_FAILURE,
@@ -188,40 +185,59 @@ final class LookasideLb extends LoadBalancer {
                       .withDescription("No traffic director provided by bootstrap")));
           return;
         }
-        // Currently we only support using the first server from bootstrap.
-        ServerInfo serverInfo = serverList.get(0);
-        channel = initLbChannel(
-            lookasideLbHelper, serverInfo.getServerUri(),
-            serverInfo.getChannelCredentials());
-        xdsClientPool = new RefCountedXdsClientObjectPool(new XdsClientFactory() {
+        XdsClientFactory xdsClientFactory = new XdsClientFactory() {
           @Override
           XdsClient createXdsClient() {
-            // TODO(zdapeng): Replace XdsComms2 with XdsClientImpl.
-            return new XdsComms2(
-                channel, lookasideLbHelper, new ExponentialBackoffPolicy.Provider(),
-                GrpcUtil.STOPWATCH_SUPPLIER, bootstrapInfo.getNode());
+            return
+                new XdsClientImpl(
+                    serverList,
+                    channelFactory,
+                    node,
+                    lookasideLbHelper.getSynchronizationContext(),
+                    lookasideLbHelper.getScheduledExecutorService(),
+                    new ExponentialBackoffPolicy.Provider(),
+                    GrpcUtil.STOPWATCH_SUPPLIER);
           }
-        });
+        };
+        xdsClientPool = new RefCountedXdsClientObjectPool(xdsClientFactory);
       }
       xdsClient = xdsClientPool.getObject();
+    }
+
+    // The edsServiceName field is null in legacy gRPC client with EDS: use target authority for
+    // querying endpoints, but in the future we expect this to be explicitly given by EDS config.
+    // We assume if edsServiceName is null, it will always be null in later resolver updates;
+    // and if edsServiceName is not null, it will always be not null.
+    String clusterServiceName = newXdsConfig.edsServiceName;
+    if (clusterServiceName == null) {
+      clusterServiceName = lookasideLbHelper.getAuthority();
+    }
+    if (clusterName == null) {
+      // TODO(zdapeng): Use the correct cluster name. Currently load reporting will be broken if
+      //     edsServiceName is changed because we are using edsServiceName for the cluster name.
+      clusterName = clusterServiceName;
+    }
+
+    boolean shouldReportStats = newXdsConfig.lrsServerName != null;
+    if (shouldReportStats && !isReportingStats()) {
+      // Start load reporting. This may be a restarting after previously stopping the load
+      // reporting, so need to re-add all the pre-existing loadStatsStores to the new
+      // loadReportClient.
+      loadReportClient = xdsClient.reportClientStats(clusterName, newXdsConfig.lrsServerName);
+      for (Map.Entry<String, LoadStatsStore> entry : loadStatsStoreMap.entrySet()) {
+        loadReportClient.addLoadStatsStore(entry.getKey(), entry.getValue());
+      }
+    }
+    if (!shouldReportStats && isReportingStats()) {
+      cancelClientStatsReport();
     }
 
     // Note: childPolicy change will be handled in LocalityStore, to be implemented.
     // If edsServiceName in XdsConfig is changed, do a graceful switch.
     if (xdsConfig == null
         || !Objects.equals(newXdsConfig.edsServiceName, xdsConfig.edsServiceName)) {
-      String edsServiceName = newXdsConfig.edsServiceName;
-
-      // The edsServiceName field is null in legacy gRPC client with EDS: use target authority for
-      // querying endpoints, but in the future we expect this to be explicitly given by EDS config.
-      // We assume if edsServiceName is null, it will always be null in later resolver updates;
-      // and if edsServiceName is not null, it will always be not null.
-      if (edsServiceName == null) {
-        edsServiceName = lookasideLbHelper.getAuthority();
-      }
-
       LoadBalancer.Factory clusterEndpointsLoadBalancerFactory =
-          new ClusterEndpointsBalancerFactory(edsServiceName);
+          new ClusterEndpointsBalancerFactory(clusterServiceName);
       switchingLoadBalancer.switchTo(clusterEndpointsLoadBalancerFactory);
     }
     resolvedAddresses = resolvedAddresses.toBuilder()
@@ -229,22 +245,16 @@ final class LookasideLb extends LoadBalancer {
         .setLoadBalancingPolicyConfig(newXdsConfig)
         .build();
     switchingLoadBalancer.handleResolvedAddresses(resolvedAddresses);
-    this.xdsConfig = newXdsConfig;
 
-    // TODO(zdapeng): If lrsServerName in XdsConfig is changed, call xdsClient.reportClientStats()
-    //     and/or xdsClient.cancelClientStatsReport().
+    this.xdsConfig = newXdsConfig;
   }
 
   @Override
   public void handleNameResolutionError(Status error) {
     channelLogger.log(ChannelLogLevel.ERROR, "Name resolution error: {0}", error);
-    // Go into TRANSIENT_FAILURE if we have not yet received any endpoint update. Otherwise,
-    // we keep running with the data we had previously.
-    if (endpointWatcher == null) {
-      lookasideLbHelper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
-    } else {
-      switchingLoadBalancer.handleNameResolutionError(error);
-    }
+    // This will go into TRANSIENT_FAILURE if we have not yet received any endpoint update and
+    // otherwise keep running with the data we had previously.
+    switchingLoadBalancer.handleNameResolutionError(error);
   }
 
   @Override
@@ -256,63 +266,40 @@ final class LookasideLb extends LoadBalancer {
   public void shutdown() {
     channelLogger.log(ChannelLogLevel.DEBUG, "EDS load balancer is shutting down");
     switchingLoadBalancer.shutdown();
-    if (xdsClientPool != null) {
-      xdsClientPool.returnObject(xdsClient);
+    if (isReportingStats()) {
+      cancelClientStatsReport();
+    }
+    if (xdsClient != null) {
+      xdsClient = xdsClientPool.returnObject(xdsClient);
     }
   }
 
-  private static ManagedChannel initLbChannel(
-      Helper helper,
-      String serverUri,
-      List<ChannelCreds> channelCredsList) {
-    ManagedChannel channel = null;
-    try {
-      channel = helper.createResolvingOobChannel(serverUri);
-    } catch (UnsupportedOperationException uoe) {
-      // Temporary solution until createResolvingOobChannel is implemented.
-      // FIXME (https://github.com/grpc/grpc-java/issues/5495)
-      Logger logger = Logger.getLogger(LookasideLb.class.getName());
-      if (logger.isLoggable(FINEST)) {
-        logger.log(
-            FINEST,
-            "createResolvingOobChannel() not supported by the helper: " + helper,
-            uoe);
-        logger.log(FINEST, "creating oob channel for target {0}", serverUri);
-      }
+  /** Whether the client stats for the cluster is currently reported to the traffic director. */
+  private boolean isReportingStats() {
+    return loadReportClient != null;
+  }
 
-      // Use the first supported channel credentials configuration.
-      // Currently, only "google_default" is supported.
-      for (ChannelCreds creds : channelCredsList) {
-        if (creds.getType().equals("google_default")) {
-          channel = GoogleDefaultChannelBuilder.forTarget(serverUri).build();
-          break;
-        }
-      }
-      if (channel == null) {
-        channel = ManagedChannelBuilder.forTarget(serverUri).build();
-      }
-    }
-    return channel;
+  /** Stops to report client stats for the cluster. */
+  private void cancelClientStatsReport() {
+    xdsClient.cancelClientStatsReport(clusterName);
+    loadReportClient = null;
   }
 
   /**
-   * A load balancer factory that provides a load balancer for a given cluster.
+   * A load balancer factory that provides a load balancer for a given cluster service.
    */
   private final class ClusterEndpointsBalancerFactory extends LoadBalancer.Factory {
-    final String edsServiceName;
+    final String clusterServiceName;
     @Nullable
-    final String oldEdsServiceName;
-    @Nullable
-    final EndpointWatcher oldEndpointWatcher;
+    final String oldClusterServiceName;
 
-    ClusterEndpointsBalancerFactory(String edsServiceName) {
-      this.edsServiceName = edsServiceName;
+    ClusterEndpointsBalancerFactory(String clusterServiceName) {
+      this.clusterServiceName = clusterServiceName;
       if (xdsConfig != null) {
-        oldEdsServiceName = xdsConfig.edsServiceName;
+        oldClusterServiceName = xdsConfig.edsServiceName;
       } else {
-        oldEdsServiceName = null;
+        oldClusterServiceName = null;
       }
-      oldEndpointWatcher = endpointWatcher;
     }
 
     @Override
@@ -326,12 +313,12 @@ final class LookasideLb extends LoadBalancer {
         return false;
       }
       ClusterEndpointsBalancerFactory that = (ClusterEndpointsBalancerFactory) o;
-      return edsServiceName.equals(that.edsServiceName);
+      return clusterServiceName.equals(that.clusterServiceName);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hash(super.hashCode(), edsServiceName);
+      return Objects.hash(super.hashCode(), clusterServiceName);
     }
 
     /**
@@ -339,25 +326,35 @@ final class LookasideLb extends LoadBalancer {
      */
     final class ClusterEndpointsBalancer extends LoadBalancer {
       final Helper helper;
-
-      // All fields become non-null once handleResolvedAddresses() successfully.
-      // All fields are assigned at most once.
-      @Nullable
-      LocalityStore localityStore;
-      @Nullable
-      LoadReportClient lrsClient;
-      @Nullable
-      EndpointWatcherImpl endpointWatcher;
+      final EndpointWatcherImpl endpointWatcher;
+      final LocalityStore localityStore;
 
       ClusterEndpointsBalancer(Helper helper) {
         this.helper = helper;
+
+        LoadStatsStore loadStatsStore = new LoadStatsStoreImpl();
+        loadStatsStoreMap.put(clusterServiceName, loadStatsStore);
+        if (isReportingStats()) {
+          loadReportClient.addLoadStatsStore(clusterServiceName, loadStatsStore);
+        }
+        localityStore = localityStoreFactory.newLocalityStore(helper, lbRegistry, loadStatsStore);
+
+        endpointWatcher = new EndpointWatcherImpl(localityStore);
+        xdsClient.watchEndpointData(clusterServiceName, endpointWatcher);
+        if (LookasideLb.this.endpointWatcher != null) {
+          xdsClient.cancelEndpointDataWatch(
+              oldClusterServiceName, LookasideLb.this.endpointWatcher);
+        }
+        LookasideLb.this.endpointWatcher = endpointWatcher;
       }
+
+      // TODO(zddapeng): In handleResolvedAddresses() handle child policy change if any.
 
       @Override
       public void handleNameResolutionError(Status error) {
         // Go into TRANSIENT_FAILURE if we have not yet received any endpoint update. Otherwise,
         // we keep running with the data we had previously.
-        if (endpointWatcher == null || !endpointWatcher.firstEndpointUpdateReceived) {
+        if (!endpointWatcher.firstEndpointUpdateReceived) {
           helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
         }
       }
@@ -368,69 +365,13 @@ final class LookasideLb extends LoadBalancer {
       }
 
       @Override
-      public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-        if (endpointWatcher != null) {
-          // TODO(zddapeng): Handle child policy changed if any.
-          return;
-        }
-
-        LoadStatsStore loadStatsStore = new LoadStatsStoreImpl();
-        localityStore = localityStoreFactory.newLocalityStore(helper, lbRegistry, loadStatsStore);
-        LoadReportCallback lrsCallback =
-            new LoadReportCallback() {
-              @Override
-              public void onReportResponse(long reportIntervalNano) {
-                localityStore.updateOobMetricsReportInterval(reportIntervalNano);
-              }
-            };
-
-        // TODO(zdapeng): Use XdsClient to do Lrs directly.
-        // For now create an LRS Client.
-        if (channel != null) {
-          lrsClient =
-              loadReportClientFactory.createLoadReportClient(
-                  channel,
-                  helper.getAuthority(),
-                  Node.getDefaultInstance(),
-                  helper.getSynchronizationContext(),
-                  helper.getScheduledExecutorService(),
-                  new ExponentialBackoffPolicy.Provider(),
-                  GrpcUtil.STOPWATCH_SUPPLIER);
-          lrsClient.addLoadStatsStore(edsServiceName, loadStatsStore);
-        } else {
-          lrsClient = new LoadReportClient() {
-            @Override
-            public void startLoadReporting(LoadReportCallback callback) {}
-
-            @Override
-            public void stopLoadReporting() {}
-
-            @Override
-            public void addLoadStatsStore(
-                String clusterServiceName, LoadStatsStore loadStatsStore) {
-            }
-
-            @Override
-            public void removeLoadStatsStore(String clusterServiceName) {
-            }
-          };
-        }
-
-        endpointWatcher = new EndpointWatcherImpl(lrsClient, lrsCallback, localityStore);
-        xdsClient.watchEndpointData(edsServiceName, endpointWatcher);
-        if (oldEndpointWatcher != null && oldEdsServiceName != null) {
-          xdsClient.cancelEndpointDataWatch(oldEdsServiceName, oldEndpointWatcher);
-        }
-        LookasideLb.this.endpointWatcher = endpointWatcher;
-      }
-
-      @Override
       public void shutdown() {
-        if (endpointWatcher != null) {
-          lrsClient.stopLoadReporting();
-          localityStore.reset();
-          xdsClient.cancelEndpointDataWatch(edsServiceName, endpointWatcher);
+        loadStatsStoreMap.remove(clusterServiceName);
+        if (isReportingStats()) {
+          loadReportClient.removeLoadStatsStore(clusterServiceName);
         }
+        localityStore.reset();
+        xdsClient.cancelEndpointDataWatch(clusterServiceName, endpointWatcher);
       }
     }
   }
@@ -449,15 +390,10 @@ final class LookasideLb extends LoadBalancer {
 
   private final class EndpointWatcherImpl implements EndpointWatcher {
 
-    final LoadReportClient lrsClient;
-    final LoadReportCallback lrsCallback;
     final LocalityStore localityStore;
     boolean firstEndpointUpdateReceived;
 
-    EndpointWatcherImpl(
-        LoadReportClient lrsClient, LoadReportCallback lrsCallback, LocalityStore localityStore) {
-      this.lrsClient = lrsClient;
-      this.lrsCallback = lrsCallback;
+    EndpointWatcherImpl(LocalityStore localityStore) {
       this.localityStore = localityStore;
     }
 
@@ -471,7 +407,6 @@ final class LookasideLb extends LoadBalancer {
       if (!firstEndpointUpdateReceived) {
         firstEndpointUpdateReceived = true;
         endpointUpdateCallback.onWorking();
-        lrsClient.startLoadReporting(lrsCallback);
       }
 
       List<DropOverload> dropOverloads = endpointUpdate.getDropPolicies();

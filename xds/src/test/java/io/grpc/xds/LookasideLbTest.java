@@ -17,47 +17,46 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.envoyproxy.envoy.api.v2.core.HealthStatus.HEALTHY;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
-import static io.grpc.LoadBalancer.ATTR_LOAD_BALANCING_CONFIG;
+import static io.grpc.xds.XdsClientTestHelper.buildClusterLoadAssignment;
+import static io.grpc.xds.XdsClientTestHelper.buildDiscoveryResponse;
+import static io.grpc.xds.XdsClientTestHelper.buildDropOverload;
+import static io.grpc.xds.XdsClientTestHelper.buildLbEndpoint;
+import static io.grpc.xds.XdsClientTestHelper.buildLocalityLbEndpoints;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
-import com.google.common.base.Stopwatch;
-import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import com.google.protobuf.Any;
-import com.google.protobuf.UInt32Value;
 import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment;
-import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy;
+import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy.DropOverload;
 import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
-import io.envoyproxy.envoy.api.v2.core.Address;
 import io.envoyproxy.envoy.api.v2.core.Node;
-import io.envoyproxy.envoy.api.v2.core.SocketAddress;
-import io.envoyproxy.envoy.api.v2.endpoint.Endpoint;
 import io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint;
+import io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints;
 import io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceImplBase;
-import io.envoyproxy.envoy.type.FractionalPercent;
-import io.envoyproxy.envoy.type.FractionalPercent.DenominatorType;
 import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
+import io.grpc.LoadBalancer.PickResult;
+import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.ResolvedAddresses;
+import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
@@ -68,39 +67,37 @@ import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
-import io.grpc.internal.JsonParser;
 import io.grpc.internal.ObjectPool;
-import io.grpc.internal.testing.StreamRecorder;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.Bootstrapper.ChannelCreds;
 import io.grpc.xds.Bootstrapper.ServerInfo;
-import io.grpc.xds.EnvoyProtoData.DropOverload;
-import io.grpc.xds.EnvoyProtoData.Locality;
-import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
-import io.grpc.xds.LoadReportClient.LoadReportCallback;
-import io.grpc.xds.LoadReportClientImpl.LoadReportClientFactory;
 import io.grpc.xds.LocalityStore.LocalityStoreFactory;
 import io.grpc.xds.LookasideLb.EndpointUpdateCallback;
 import io.grpc.xds.XdsClient.EndpointUpdate;
-import io.grpc.xds.XdsClient.EndpointWatcher;
-import io.grpc.xds.XdsClient.RefCountedXdsClientObjectPool;
-import io.grpc.xds.XdsClient.XdsClientFactory;
+import io.grpc.xds.XdsClient.XdsChannelFactory;
+import io.grpc.xds.XdsLoadBalancerProvider.XdsConfig;
+import java.net.InetSocketAddress;
 import java.util.ArrayDeque;
-import java.util.Deque;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import javax.annotation.Nullable;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameter;
+import org.junit.runners.Parameterized.Parameters;
 import org.mockito.ArgumentCaptor;
-import org.mockito.ArgumentMatchers;
+import org.mockito.ArgumentMatcher;
 import org.mockito.Captor;
-import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
@@ -108,12 +105,10 @@ import org.mockito.junit.MockitoRule;
 /**
  * Tests for {@link LookasideLb}.
  */
-@RunWith(JUnit4.class)
-// TODO(creamsoup) use parsed service config
-@SuppressWarnings("deprecation")
+@RunWith(Parameterized.class)
 public class LookasideLbTest {
 
-  private static final String SERVICE_AUTHORITY = "test authority";
+  private static final String SERVICE_AUTHORITY = "test.authority.example.com";
 
   @Rule
   public final MockitoRule mockitoRule = MockitoJUnit.rule();
@@ -127,17 +122,22 @@ public class LookasideLbTest {
           throw new AssertionError(e);
         }
       });
-  private final StreamRecorder<DiscoveryRequest> streamRecorder = StreamRecorder.create();
-
-  private final DiscoveryResponse edsResponse =
-      DiscoveryResponse.newBuilder()
-          .addResources(Any.pack(ClusterLoadAssignment.getDefaultInstance()))
-          .setTypeUrl("type.googleapis.com/envoy.api.v2.ClusterLoadAssignment")
-          .build();
-  private final Deque<Helper> helpers = new ArrayDeque<>();
-  private final Deque<LocalityStore> localityStores = new ArrayDeque<>();
-  private final Deque<LoadReportClient> loadReportClients = new ArrayDeque<>();
   private final FakeClock fakeClock = new FakeClock();
+
+  private final LoadBalancerRegistry lbRegistry = new LoadBalancerRegistry();
+
+  // Child helpers keyed by locality names.
+  private final Map<String, Helper> childHelpers = new HashMap<>();
+  // Child balancers keyed by locality names.
+  private final Map<String, LoadBalancer> childBalancers = new HashMap<>();
+  private final XdsChannelFactory channelFactory = new XdsChannelFactory() {
+    @Override
+    ManagedChannel createChannel(List<ServerInfo> servers) {
+      assertThat(Iterables.getOnlyElement(servers).getServerUri())
+          .isEqualTo("trafficdirector.googleapis.com");
+      return channel;
+    }
+  };
 
   @Mock
   private Helper helper;
@@ -146,92 +146,36 @@ public class LookasideLbTest {
   @Mock
   private Bootstrapper bootstrapper;
   @Captor
-  private ArgumentCaptor<ImmutableMap<Locality, LocalityLbEndpoints>>
-      localityEndpointsMappingCaptor;
+  ArgumentCaptor<ConnectivityState> connectivityStateCaptor;
+  @Captor
+  ArgumentCaptor<SubchannelPicker> pickerCaptor;
 
-  private ManagedChannel channel;
-  private ManagedChannel channel2;
-  private StreamObserver<DiscoveryResponse> serverResponseWriter;
   private LoadBalancer lookasideLb;
-  private ResolvedAddresses defaultResolvedAddress;
+  // Simulating a CDS to EDS flow, otherwise EDS only.
+  @Parameter
+  public boolean isFullFlow;
+  private ManagedChannel channel;
+  // Response observer on server side.
+  private StreamObserver<DiscoveryResponse> responseObserver;
+  @Nullable
+  private FakeXdsClientPool xdsClientPoolFromResolveAddresses;
+  private LocalityStoreFactory localityStoreFactory = LocalityStoreFactory.getInstance();
+  private int versionIno;
+  private int nonce;
+
+  @Parameters
+  public static Collection<Boolean> isFullFlow() {
+    return ImmutableList.of(false, true );
+  }
 
   @Before
   public void setUp() throws Exception {
-    AggregatedDiscoveryServiceImplBase serviceImpl = new AggregatedDiscoveryServiceImplBase() {
-      @Override
-      public StreamObserver<DiscoveryRequest> streamAggregatedResources(
-          final StreamObserver<DiscoveryResponse> responseObserver) {
-        serverResponseWriter = responseObserver;
-
-        return new StreamObserver<DiscoveryRequest>() {
-
-          @Override
-          public void onNext(DiscoveryRequest value) {
-            streamRecorder.onNext(value);
-          }
-
-          @Override
-          public void onError(Throwable t) {
-            streamRecorder.onError(t);
-          }
-
-          @Override
-          public void onCompleted() {
-            streamRecorder.onCompleted();
-            responseObserver.onCompleted();
-          }
-        };
-      }
-    };
-
-    String serverName = InProcessServerBuilder.generateName();
-    cleanupRule.register(
-        InProcessServerBuilder
-            .forName(serverName)
-            .directExecutor()
-            .addService(serviceImpl)
-            .build()
-            .start());
-    channel = cleanupRule.register(
-        InProcessChannelBuilder
-            .forName(serverName)
-            .directExecutor()
-            .build());
-    channel2 = cleanupRule.register(
-        InProcessChannelBuilder
-            .forName(serverName)
-            .directExecutor()
-            .build());
-
     doReturn(SERVICE_AUTHORITY).when(helper).getAuthority();
     doReturn(syncContext).when(helper).getSynchronizationContext();
     doReturn(mock(ChannelLogger.class)).when(helper).getChannelLogger();
-    doReturn(channel, channel2).when(helper).createResolvingOobChannel(anyString());
     doReturn(fakeClock.getScheduledExecutorService()).when(helper).getScheduledExecutorService();
 
-    LocalityStoreFactory localityStoreFactory = new LocalityStoreFactory() {
-      @Override
-      public LocalityStore newLocalityStore(
-          Helper helper, LoadBalancerRegistry lbRegistry, LoadStatsStore loadStatsStore) {
-        helpers.add(helper);
-        LocalityStore localityStore = mock(LocalityStore.class);
-        localityStores.add(localityStore);
-        return localityStore;
-      }
-    };
-
-    LoadReportClientFactory loadReportClientFactory = new LoadReportClientFactory() {
-      @Override
-      LoadReportClient createLoadReportClient(ManagedChannel channel, String clusterName,
-          Node node, SynchronizationContext syncContext, ScheduledExecutorService timeService,
-          BackoffPolicy.Provider backoffPolicyProvider, Supplier<Stopwatch> stopwatchSupplier) {
-        LoadReportClient loadReportClient = mock(LoadReportClient.class);
-        loadReportClients.add(loadReportClient);
-        return loadReportClient;
-      }
-    };
-
-    LoadBalancerRegistry lbRegistry = new LoadBalancerRegistry();
+    // Register a fake round robin balancer provider.
     lbRegistry.register(new LoadBalancerProvider() {
       @Override
       public boolean isAvailable() {
@@ -245,80 +189,97 @@ public class LookasideLbTest {
 
       @Override
       public String getPolicyName() {
-        return "supported1";
+        return "round_robin";
       }
 
       @Override
       public LoadBalancer newLoadBalancer(Helper helper) {
-        return mock(LoadBalancer.class);
+        String localityName = helper.getAuthority();
+        childHelpers.put(localityName, helper);
+        LoadBalancer balancer = mock(LoadBalancer.class);
+        childBalancers.put(localityName, balancer);
+        return balancer;
       }
     });
 
-    List<ServerInfo> serverList =
+    AggregatedDiscoveryServiceImplBase serviceImpl = new AggregatedDiscoveryServiceImplBase() {
+      @Override
+      public StreamObserver<DiscoveryRequest> streamAggregatedResources(
+          final StreamObserver<DiscoveryResponse> responseObserver) {
+        LookasideLbTest.this.responseObserver = responseObserver;
+        @SuppressWarnings("unchecked")
+        StreamObserver<DiscoveryRequest> requestObserver = mock(StreamObserver.class);
+        return requestObserver;
+      }
+    };
+    String serverName = InProcessServerBuilder.generateName();
+    cleanupRule.register(
+        InProcessServerBuilder
+            .forName(serverName)
+            .directExecutor()
+            .addService(serviceImpl)
+            .build()
+            .start());
+    channel = cleanupRule.register(
+        InProcessChannelBuilder
+            .forName(serverName)
+            .directExecutor()
+            .build());
+    final List<ServerInfo> serverList =
         ImmutableList.of(
             new ServerInfo("trafficdirector.googleapis.com", ImmutableList.<ChannelCreds>of()));
     BootstrapInfo bootstrapInfo = new BootstrapInfo(serverList, Node.getDefaultInstance());
     doReturn(bootstrapInfo).when(bootstrapper).readBootstrap();
 
+    if (isFullFlow) {
+      xdsClientPoolFromResolveAddresses = new FakeXdsClientPool(
+          new XdsClientImpl(
+              serverList, channelFactory, Node.getDefaultInstance(), syncContext,
+              fakeClock.getScheduledExecutorService(), mock(BackoffPolicy.Provider.class),
+              fakeClock.getStopwatchSupplier()));
+    }
+
     lookasideLb = new LookasideLb(
-        helper, edsUpdateCallback, lbRegistry, localityStoreFactory, loadReportClientFactory,
-        bootstrapper);
+        helper, edsUpdateCallback, lbRegistry, localityStoreFactory, bootstrapper, channelFactory);
+  }
 
-    String lbConfigRaw11 = "{}";
-    @SuppressWarnings("unchecked")
-    Map<String, ?> lbConfig11 = (Map<String, ?>) JsonParser.parse(lbConfigRaw11);
-    defaultResolvedAddress = ResolvedAddresses.newBuilder()
-        .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
-        .setAttributes(Attributes.newBuilder().set(ATTR_LOAD_BALANCING_CONFIG, lbConfig11).build())
-        .build();
+  @After
+  public void tearDown() {
+    lookasideLb.shutdown();
+
+    for (LoadBalancer childBalancer : childBalancers.values()) {
+      verify(childBalancer).shutdown();
+    }
+
+    if (isFullFlow) {
+      assertThat(xdsClientPoolFromResolveAddresses.timesGetObjectCalled)
+          .isEqualTo(xdsClientPoolFromResolveAddresses.timesReturnObjectCalled);
+
+      // Just for cleaning up the test.
+      xdsClientPoolFromResolveAddresses.xdsClient.shutdown();
+    }
+
+    assertThat(channel.isShutdown()).isTrue();
   }
 
   @Test
-  public void canHandleEmptyAddressListFromNameResolution() {
-    assertThat(lookasideLb.canHandleEmptyAddressListFromNameResolution()).isTrue();
-  }
-
-  @Test
-  public void handleNameResolutionErrorBeforeAndAfterEdsWorkding() throws Exception {
-    XdsClientFactory xdsClientFactory = new XdsClientFactory() {
-      @Override
-      XdsClient createXdsClient() {
-        return mock(XdsClient.class);
-      }
-    };
-    ObjectPool<XdsClient> xdsClientPool = new RefCountedXdsClientObjectPool(xdsClientFactory);
-    XdsClient xdsClientFromResolver = xdsClientPool.getObject();
-
-    String lbConfigRaw =
-        "{'childPolicy' : [{'supported1' : {}}], 'edsServiceName' : 'edsServiceName1'}"
-            .replace("'", "\"");
-    @SuppressWarnings("unchecked")
-    Map<String, ?> lbConfig = (Map<String, ?>) JsonParser.parse(lbConfigRaw);
-    ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
-        .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
-        .setAttributes(Attributes.newBuilder()
-            .set(ATTR_LOAD_BALANCING_CONFIG, lbConfig)
-            .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
-            .build())
-        .build();
-
-    lookasideLb.handleResolvedAddresses(resolvedAddresses);
-
-    assertThat(helpers).hasSize(1);
-    assertThat(localityStores).hasSize(1);
-    ArgumentCaptor<EndpointWatcher> endpointWatcherCaptor =
-        ArgumentCaptor.forClass(EndpointWatcher.class);
-    verify(xdsClientFromResolver).watchEndpointData(
-        eq("edsServiceName1"), endpointWatcherCaptor.capture());
-    EndpointWatcher endpointWatcher = endpointWatcherCaptor.getValue();
+  public void handleNameResolutionErrorBeforeAndAfterEdsWorkding() {
+    deliverResolvedAddresses(new XdsConfig(null, null, "edsServiceName1", null));
 
     // handleResolutionError() before receiving any endpoint update.
     lookasideLb.handleNameResolutionError(Status.DATA_LOSS.withDescription("fake status"));
     verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
 
     // Endpoint update received.
-    endpointWatcher.onEndpointChanged(
-        EndpointUpdate.newBuilder().setClusterName("edsServiceName1").build());
+    ClusterLoadAssignment clusterLoadAssignment =
+        buildClusterLoadAssignment("edsServiceName1",
+            ImmutableList.of(
+                buildLocalityLbEndpoints("region1", "zone1", "subzone1",
+                    ImmutableList.of(
+                        buildLbEndpoint("192.168.0.1", 8080, HEALTHY, 2)),
+                    1, 0)),
+            ImmutableList.of(buildDropOverload("throttle", 1000)));
+    receiveEndpointUpdate(clusterLoadAssignment);
 
     // handleResolutionError() after receiving endpoint update.
     lookasideLb.handleNameResolutionError(Status.DATA_LOSS.withDescription("fake status"));
@@ -327,488 +288,513 @@ public class LookasideLbTest {
         eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
   }
 
-  @SuppressWarnings("unchecked")
   @Test
-  public void handleEdsServiceNameChangeInXdsConfig_swtichGracefully()
-      throws Exception {
-    assertThat(helpers).isEmpty();
-    assertThat(localityStores).isEmpty();
-    assertThat(loadReportClients).isEmpty();
+  public void handleEdsServiceNameChangeInXdsConfig() {
+    assertThat(childHelpers).isEmpty();
 
-    List<EquivalentAddressGroup> eags = ImmutableList.of();
-    XdsClientFactory xdsClientFactory = new XdsClientFactory() {
-      @Override
-      XdsClient createXdsClient() {
-        return mock(XdsClient.class);
-      }
-    };
-    ObjectPool<XdsClient> xdsClientPool = new RefCountedXdsClientObjectPool(xdsClientFactory);
-    XdsClient xdsClientFromResolver = xdsClientPool.getObject();
+    deliverResolvedAddresses(new XdsConfig(null, null, "edsServiceName1", null));
+    ClusterLoadAssignment clusterLoadAssignment =
+        buildClusterLoadAssignment("edsServiceName1",
+            ImmutableList.of(
+                buildLocalityLbEndpoints("region1", "zone1", "subzone1",
+                    ImmutableList.of(
+                        buildLbEndpoint("192.168.0.1", 8080, HEALTHY, 2)),
+                    1, 0)),
+            ImmutableList.<DropOverload>of());
+    receiveEndpointUpdate(clusterLoadAssignment);
+    assertThat(childHelpers).hasSize(1);
+    Helper childHelper1 = childHelpers.get("subzone1");
+    LoadBalancer childBalancer1 = childBalancers.get("subzone1");
+    verify(childBalancer1).handleResolvedAddresses(
+        argThat(RoundRobinBackendsMatcher.builder().addHostAndPort("192.168.0.1", 8080).build()));
 
-    String lbConfigRaw =
-        "{'childPolicy' : [{'supported1' : {}}], 'edsServiceName' : 'edsServiceName1'}"
-            .replace("'", "\"");
-    @SuppressWarnings("unchecked")
-    Map<String, ?> lbConfig = (Map<String, ?>) JsonParser.parse(lbConfigRaw);
-    ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
-        .setAddresses(eags)
-        .setAttributes(Attributes.newBuilder()
-            .set(ATTR_LOAD_BALANCING_CONFIG, lbConfig)
-            .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
-            .build())
-        .build();
-    lookasideLb.handleResolvedAddresses(resolvedAddresses);
-
-    assertThat(helpers).hasSize(1);
-    assertThat(localityStores).hasSize(1);
-    Helper helper1 = helpers.peekLast();
-    LocalityStore localityStore1 = localityStores.peekLast();
-
-    SubchannelPicker picker1 = mock(SubchannelPicker.class);
-    helper1.updateBalancingState(CONNECTING, picker1);
-    verify(helper).updateBalancingState(CONNECTING, picker1);
+    childHelper1.updateBalancingState(CONNECTING, mock(SubchannelPicker.class));
+    assertLatestConnectivityState(CONNECTING);
 
     // Change edsServicename to edsServiceName2.
-    lbConfigRaw = "{'childPolicy' : [{'supported1' : {}}], 'edsServiceName' : 'edsServiceName2'}"
-        .replace("'", "\"");
-    lbConfig = (Map<String, ?>) JsonParser.parse(lbConfigRaw);
-    resolvedAddresses = ResolvedAddresses.newBuilder()
-        .setAddresses(eags)
-        .setAttributes(Attributes.newBuilder()
-            .set(ATTR_LOAD_BALANCING_CONFIG, lbConfig)
-            .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
-            .build())
-        .build();
-    lookasideLb.handleResolvedAddresses(resolvedAddresses);
-    assertThat(helpers).hasSize(2);
-    assertThat(localityStores).hasSize(2);
-    Helper helper2 = helpers.peekLast();
-    LocalityStore localityStore2 = localityStores.peekLast();
-    SubchannelPicker picker2 = mock(SubchannelPicker.class);
-    helper2.updateBalancingState(CONNECTING, picker2);
-    verify(helper).updateBalancingState(CONNECTING, picker2);
-    verify(localityStore1).reset();
-    helper2.updateBalancingState(READY, picker2);
-    verify(helper).updateBalancingState(READY, picker2);
+    deliverResolvedAddresses(new XdsConfig(null, null, "edsServiceName2", null));
+    // The old balancer was not READY, so it will be shutdown immediately.
+    verify(childBalancer1).shutdown();
 
-    // Change edsServiceName to edsServiceName3.
-    lbConfigRaw =  "{'childPolicy' : [{'supported1' : {}}], 'edsServiceName' : 'edsServiceName3'}"
-        .replace("'", "\"");
-    lbConfig = (Map<String, ?>) JsonParser.parse(lbConfigRaw);
-    resolvedAddresses = ResolvedAddresses.newBuilder()
-        .setAddresses(eags)
-        .setAttributes(Attributes.newBuilder()
-            .set(ATTR_LOAD_BALANCING_CONFIG, lbConfig)
-            .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
-            .build())
-        .build();
-    lookasideLb.handleResolvedAddresses(resolvedAddresses);
+    clusterLoadAssignment =
+        buildClusterLoadAssignment("edsServiceName2",
+            ImmutableList.of(
+                buildLocalityLbEndpoints("region2", "zone2", "subzone2",
+                    ImmutableList.of(
+                        buildLbEndpoint("192.168.0.2", 8080, HEALTHY, 2)),
+                    1, 0)),
+            ImmutableList.<DropOverload>of());
+    receiveEndpointUpdate(clusterLoadAssignment);
+    assertThat(childHelpers).hasSize(2);
+    Helper childHelper2 = childHelpers.get("subzone2");
+    LoadBalancer childBalancer2 = childBalancers.get("subzone2");
+    verify(childBalancer2).handleResolvedAddresses(
+        argThat(RoundRobinBackendsMatcher.builder().addHostAndPort("192.168.0.2", 8080).build()));
 
-    assertThat(helpers).hasSize(3);
-    assertThat(localityStores).hasSize(3);
-    Helper helper3 = helpers.peekLast();
-    LocalityStore localityStore3 = localityStores.peekLast();
-
-    SubchannelPicker picker3 = mock(SubchannelPicker.class);
-    helper3.updateBalancingState(CONNECTING, picker3);
-    verify(helper, never()).updateBalancingState(CONNECTING, picker3);
-    verify(localityStore2, never()).reset();
-    picker2 = mock(SubchannelPicker.class);
-    helper2.updateBalancingState(CONNECTING, picker2);
-    // The old balancer becomes not READY, so the new balancer will update picker immediately.
-    verify(helper).updateBalancingState(CONNECTING, picker3);
-    verify(localityStore2).reset();
-
-    // Change edsServiceName to edsServiceName4.
-    lbConfigRaw =  "{'childPolicy' : [{'supported1' : {}}], 'edsServiceName' : 'edsServiceName4'}"
-        .replace("'", "\"");
-    lbConfig = (Map<String, ?>) JsonParser.parse(lbConfigRaw);
-    resolvedAddresses = ResolvedAddresses.newBuilder()
-        .setAddresses(eags)
-        .setAttributes(Attributes.newBuilder()
-            .set(ATTR_LOAD_BALANCING_CONFIG, lbConfig)
-            .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
-            .build())
-        .build();
-    lookasideLb.handleResolvedAddresses(resolvedAddresses);
-
-    assertThat(helpers).hasSize(4);
-    assertThat(localityStores).hasSize(4);
-    Helper helper4 = helpers.peekLast();
-    LocalityStore localityStore4 = localityStores.peekLast();
-    verify(localityStore3).reset();
-    SubchannelPicker picker4 = mock(SubchannelPicker.class);
-    helper4.updateBalancingState(READY, picker4);
-    verify(helper).updateBalancingState(READY, picker4);
-
-    // Change edsServiceName to edsServiceName5.
-    lbConfigRaw =  "{'childPolicy' : [{'supported1' : {}}], 'edsServiceName' : 'edsServiceName5'}"
-        .replace("'", "\"");
-    lbConfig = (Map<String, ?>) JsonParser.parse(lbConfigRaw);
-    resolvedAddresses = ResolvedAddresses.newBuilder()
-        .setAddresses(eags)
-        .setAttributes(Attributes.newBuilder()
-            .set(ATTR_LOAD_BALANCING_CONFIG, lbConfig)
-            .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
-            .build())
-        .build();
-    lookasideLb.handleResolvedAddresses(resolvedAddresses);
-
-    assertThat(helpers).hasSize(5);
-    assertThat(localityStores).hasSize(5);
-
-    Helper helper5 = helpers.peekLast();
-    LocalityStore localityStore5 = localityStores.peekLast();
-    SubchannelPicker picker5 = mock(SubchannelPicker.class);
-    helper5.updateBalancingState(CONNECTING, picker5);
-    // The old balancer was READY, so the new balancer will gracefully switch and not update
-    // non-READY picker.
-    verify(helper, never()).updateBalancingState(any(ConnectivityState.class), eq(picker5));
-    verify(localityStore4, never()).reset();
-
-    helper5.updateBalancingState(READY, picker5);
-    verify(helper).updateBalancingState(READY, picker5);
-    verify(localityStore4).reset();
-
-    verify(localityStore5, never()).reset();
-    lookasideLb.shutdown();
-    verify(localityStore5).reset();
-
-    xdsClientPool.returnObject(xdsClientFromResolver);
-  }
-
-  @Test
-  public void handleResolvedAddress_withBootstrap() throws Exception {
-    List<ServerInfo> serverList =
-        ImmutableList.of(
-            new ServerInfo("trafficdirector.googleapis.com", ImmutableList.<ChannelCreds>of()));
-    BootstrapInfo bootstrapInfo = new BootstrapInfo(serverList, Node.getDefaultInstance());
-    doReturn(bootstrapInfo).when(bootstrapper).readBootstrap();
-
-    String lbConfigRaw =
-        "{'childPolicy' : [{'supported1' : {}}], 'edsServiceName' : 'edsServiceName1'}"
-            .replace("'", "\"");
-    @SuppressWarnings("unchecked")
-    Map<String, ?> lbConfig = (Map<String, ?>) JsonParser.parse(lbConfigRaw);
-    ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
-        .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
-        .setAttributes(Attributes.newBuilder()
-            .set(ATTR_LOAD_BALANCING_CONFIG, lbConfig)
-            .build())
-        .build();
-
-    verify(helper, never()).createResolvingOobChannel(anyString());
-    lookasideLb.handleResolvedAddresses(resolvedAddresses);
-    verify(helper).createResolvingOobChannel("trafficdirector.googleapis.com");
-
-    assertThat(helpers).hasSize(1);
-    assertThat(localityStores).hasSize(1);
-    Helper helper1 = helpers.peekLast();
-    LocalityStore localityStore1 = localityStores.peekLast();
-    SubchannelPicker picker = mock(SubchannelPicker.class);
-    helper1.updateBalancingState(READY, picker);
-    verify(helper).updateBalancingState(READY, picker);
-
-    lookasideLb.shutdown();
-    verify(localityStore1).reset();
-  }
-
-  @Test
-  public void handleResolvedAddress_withxdsClientPoolAttributes() throws Exception {
-    XdsClientFactory xdsClientFactory = new XdsClientFactory() {
+    final Subchannel subchannel2 = mock(Subchannel.class);
+    SubchannelPicker picker2 = new SubchannelPicker() {
       @Override
-      XdsClient createXdsClient() {
-        return mock(XdsClient.class);
+      public PickResult pickSubchannel(PickSubchannelArgs args) {
+        return PickResult.withSubchannel(subchannel2);
       }
     };
-    ObjectPool<XdsClient> xdsClientPool = new RefCountedXdsClientObjectPool(xdsClientFactory);
-    XdsClient xdsClientFromResolver = xdsClientPool.getObject();
+    childHelper2.updateBalancingState(READY, picker2);
+    assertLatestSubchannelPicker(subchannel2);
 
-    String lbConfigRaw =
-        "{'childPolicy' : [{'supported1' : {}}], 'edsServiceName' : 'edsServiceName1'}"
-            .replace("'", "\"");
-    @SuppressWarnings("unchecked")
-    Map<String, ?> lbConfig = (Map<String, ?>) JsonParser.parse(lbConfigRaw);
-    ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
-        .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
-        .setAttributes(Attributes.newBuilder()
-            .set(ATTR_LOAD_BALANCING_CONFIG, lbConfig)
-            .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
-            .build())
-        .build();
+    // Change edsServiceName to edsServiceName3.
+    deliverResolvedAddresses(new XdsConfig(null, null, "edsServiceName3", null));
+    clusterLoadAssignment =
+        buildClusterLoadAssignment("edsServiceName3",
+            ImmutableList.of(
+                buildLocalityLbEndpoints("region3", "zone3", "subzone3",
+                    ImmutableList.of(
+                        buildLbEndpoint("192.168.0.3", 8080, HEALTHY, 2)),
+                    1, 0)),
+            ImmutableList.<DropOverload>of());
+    receiveEndpointUpdate(clusterLoadAssignment);
 
-    lookasideLb.handleResolvedAddresses(resolvedAddresses);
+    assertThat(childHelpers).hasSize(3);
+    Helper childHelper3 = childHelpers.get("subzone3");
+    LoadBalancer childBalancer3 = childBalancers.get("subzone3");
 
-    assertThat(helpers).hasSize(1);
-    assertThat(localityStores).hasSize(1);
-    ArgumentCaptor<EndpointWatcher> endpointWatcherCaptor =
-        ArgumentCaptor.forClass(EndpointWatcher.class);
-    verify(xdsClientFromResolver).watchEndpointData(
-        eq("edsServiceName1"), endpointWatcherCaptor.capture());
-    EndpointWatcher endpointWatcher = endpointWatcherCaptor.getValue();
+    childHelper3.updateBalancingState(CONNECTING, mock(SubchannelPicker.class));
+    // The new balancer is not READY while the old one is still READY.
+    verify(childBalancer2, never()).shutdown();
+    assertLatestSubchannelPicker(subchannel2);
 
-    Helper helper1 = helpers.peekLast();
-    SubchannelPicker picker = mock(SubchannelPicker.class);
-    helper1.updateBalancingState(READY, picker);
-    verify(helper).updateBalancingState(READY, picker);
+    childHelper2.updateBalancingState(CONNECTING, mock(SubchannelPicker.class));
+    // The old balancer becomes not READY, so the new balancer will update picker immediately.
+    verify(childBalancer2).shutdown();
+    assertLatestConnectivityState(CONNECTING);
 
-    // Mimic resolver shutdown
-    xdsClientPool.returnObject(xdsClientFromResolver);
-    verify(xdsClientFromResolver, never()).shutdown();
-    lookasideLb.shutdown();
-    verify(xdsClientFromResolver).cancelEndpointDataWatch("edsServiceName1", endpointWatcher);
-    verify(xdsClientFromResolver).shutdown();
+    // Change edsServiceName to edsServiceName4.
+    deliverResolvedAddresses(new XdsConfig(null, null, "edsServiceName4", null));
+    verify(childBalancer3).shutdown();
+
+    clusterLoadAssignment =
+        buildClusterLoadAssignment("edsServiceName4",
+            ImmutableList.of(
+                buildLocalityLbEndpoints("region4", "zone4", "subzone4",
+                    ImmutableList.of(
+                        buildLbEndpoint("192.168.0.4", 8080, HEALTHY, 2)),
+                    1, 0)),
+            ImmutableList.<DropOverload>of());
+    receiveEndpointUpdate(clusterLoadAssignment);
+
+    assertThat(childHelpers).hasSize(4);
+    Helper childHelper4 = childHelpers.get("subzone4");
+    LoadBalancer childBalancer4 = childBalancers.get("subzone4");
+
+    final Subchannel subchannel4 = mock(Subchannel.class);
+    SubchannelPicker picker4 = new SubchannelPicker() {
+      @Override
+      public PickResult pickSubchannel(PickSubchannelArgs args) {
+        return PickResult.withSubchannel(subchannel4);
+      }
+    };
+    childHelper4.updateBalancingState(READY, picker4);
+    assertLatestSubchannelPicker(subchannel4);
+
+    // Change edsServiceName to edsServiceName5.
+    deliverResolvedAddresses(new XdsConfig(null, null, "edsServiceName5", null));
+    clusterLoadAssignment =
+        buildClusterLoadAssignment("edsServiceName5",
+            ImmutableList.of(
+                buildLocalityLbEndpoints("region5", "zone5", "subzone5",
+                    ImmutableList.of(
+                        buildLbEndpoint("192.168.0.5", 8080, HEALTHY, 2)),
+                    1, 0)),
+            ImmutableList.<DropOverload>of());
+    receiveEndpointUpdate(clusterLoadAssignment);
+
+    assertThat(childHelpers).hasSize(5);
+    Helper childHelper5 = childHelpers.get("subzone5");
+    LoadBalancer childBalancer5 = childBalancers.get("subzone5");
+    childHelper5.updateBalancingState(CONNECTING, mock(SubchannelPicker.class));
+    // The old balancer was READY, so the new balancer will gracefully switch and not update
+    // non-READY picker.
+    verify(childBalancer4, never()).shutdown();
+    assertLatestSubchannelPicker(subchannel4);
+
+    final Subchannel subchannel5 = mock(Subchannel.class);
+    SubchannelPicker picker5 = new SubchannelPicker() {
+      @Override
+      public PickResult pickSubchannel(PickSubchannelArgs args) {
+        return PickResult.withSubchannel(subchannel5);
+      }
+    };
+    childHelper5.updateBalancingState(READY, picker5);
+    verify(childBalancer4).shutdown();
+    assertLatestSubchannelPicker(subchannel5);
+    verify(childBalancer5, never()).shutdown();
   }
 
   @Test
-  public void firstAndSecondEdsResponseReceived() {
-    lookasideLb.handleResolvedAddresses(defaultResolvedAddress);
+  public void firstAndSecondEdsResponseReceived_onWorkingCalledOnce() {
+    deliverResolvedAddresses(new XdsConfig(null, null, "edsServiceName1", null));
 
     verify(edsUpdateCallback, never()).onWorking();
-    LoadReportClient loadReportClient = Iterables.getOnlyElement(loadReportClients);
-    verify(loadReportClient, never()).startLoadReporting(any(LoadReportCallback.class));
 
     // first EDS response
-    serverResponseWriter.onNext(edsResponse);
+    ClusterLoadAssignment clusterLoadAssignment =
+        buildClusterLoadAssignment("edsServiceName1",
+            ImmutableList.of(
+                buildLocalityLbEndpoints("region1", "zone1", "subzone1",
+                    ImmutableList.of(
+                        buildLbEndpoint("192.168.0.1", 8080, HEALTHY, 2)),
+                    1, 0)),
+            ImmutableList.<DropOverload>of());
+    receiveEndpointUpdate(clusterLoadAssignment);
+
     verify(edsUpdateCallback).onWorking();
-    ArgumentCaptor<LoadReportCallback> loadReportCallbackCaptor =
-        ArgumentCaptor.forClass(LoadReportCallback.class);
-    verify(loadReportClient).startLoadReporting(loadReportCallbackCaptor.capture());
-    LoadReportCallback loadReportCallback = loadReportCallbackCaptor.getValue();
 
     // second EDS response
-    serverResponseWriter.onNext(edsResponse);
+    clusterLoadAssignment =
+        buildClusterLoadAssignment("edsServiceName1",
+            ImmutableList.of(
+                buildLocalityLbEndpoints("region1", "zone1", "subzone1",
+                    ImmutableList.of(
+                        buildLbEndpoint("192.168.0.1", 8080, HEALTHY, 2),
+                        buildLbEndpoint("192.168.0.2", 8080, HEALTHY, 2)),
+                    1, 0)),
+            ImmutableList.<DropOverload>of());
+    receiveEndpointUpdate(clusterLoadAssignment);
     verify(edsUpdateCallback, times(1)).onWorking();
-    verify(loadReportClient, times(1)).startLoadReporting(any(LoadReportCallback.class));
-
-    LocalityStore localityStore = Iterables.getOnlyElement(localityStores);
-    verify(localityStore, never()).updateOobMetricsReportInterval(anyLong());
-    loadReportCallback.onReportResponse(1234);
-    verify(localityStore).updateOobMetricsReportInterval(1234);
-
     verify(edsUpdateCallback, never()).onError();
-
-    lookasideLb.shutdown();
   }
 
   @Test
-  public void handleDropUpdates() {
-    lookasideLb.handleResolvedAddresses(defaultResolvedAddress);
+  public void handleAllDropUpdates_pickersAreDropped() {
+    deliverResolvedAddresses(new XdsConfig(null, null, "edsServiceName1", null));
 
-    LocalityStore localityStore = Iterables.getOnlyElement(localityStores);
-    verify(localityStore, never()).updateDropPercentage(
-        ArgumentMatchers.<ImmutableList<DropOverload>>any());
-
-    serverResponseWriter.onNext(edsResponse);
-    verify(localityStore).updateDropPercentage(eq(ImmutableList.<DropOverload>of()));
-
-    ClusterLoadAssignment clusterLoadAssignment = ClusterLoadAssignment.newBuilder()
-        .setPolicy(Policy.newBuilder()
-            .addDropOverloads(Policy.DropOverload.newBuilder()
-                .setCategory("cat_1").setDropPercentage(FractionalPercent.newBuilder()
-                    .setDenominator(DenominatorType.HUNDRED)
-                    .setNumerator(3)
-                    .build())
-                .build())
-
-            .addDropOverloads(Policy.DropOverload.newBuilder()
-                .setCategory("cat_2").setDropPercentage(FractionalPercent.newBuilder()
-                    .setDenominator(DenominatorType.TEN_THOUSAND)
-                    .setNumerator(45)
-                    .build())
-                .build())
-            .addDropOverloads(Policy.DropOverload.newBuilder()
-                .setCategory("cat_3").setDropPercentage(FractionalPercent.newBuilder()
-                    .setDenominator(DenominatorType.MILLION)
-                    .setNumerator(6789)
-                    .build())
-                .build())
-            .build())
-        .build();
-    serverResponseWriter.onNext(
-        DiscoveryResponse.newBuilder()
-            .addResources(Any.pack(clusterLoadAssignment))
-            .setTypeUrl("type.googleapis.com/envoy.api.v2.ClusterLoadAssignment")
-            .build());
+    ClusterLoadAssignment clusterLoadAssignment = buildClusterLoadAssignment(
+        "edsServiceName1",
+        ImmutableList.of(
+            buildLocalityLbEndpoints("region1", "zone1", "subzone1",
+                ImmutableList.of(
+                    buildLbEndpoint("192.168.0.1", 8080, HEALTHY, 2)),
+                1, 0)),
+        ImmutableList.<DropOverload>of());
+    receiveEndpointUpdate(clusterLoadAssignment);
 
     verify(edsUpdateCallback, never()).onAllDrop();
-    verify(localityStore).updateDropPercentage(ImmutableList.of(
-        new DropOverload("cat_1", 300_00),
-        new DropOverload("cat_2", 45_00),
-        new DropOverload("cat_3", 6789)));
+    assertThat(childBalancers).hasSize(1);
+    verify(childBalancers.get("subzone1")).handleResolvedAddresses(
+        argThat(RoundRobinBackendsMatcher.builder().addHostAndPort("192.168.0.1", 8080).build()));
+    assertThat(childHelpers).hasSize(1);
+    Helper childHelper = childHelpers.get("subzone1");
 
+    final Subchannel subchannel = mock(Subchannel.class);
+    SubchannelPicker picker = new SubchannelPicker() {
+      @Override
+      public PickResult pickSubchannel(PickSubchannelArgs args) {
+        return PickResult.withSubchannel(subchannel);
+      }
+    };
+    childHelper.updateBalancingState(READY, picker);
+    assertLatestSubchannelPicker(subchannel);
 
-    clusterLoadAssignment = ClusterLoadAssignment.newBuilder()
-        .setPolicy(Policy.newBuilder()
-            .addDropOverloads(Policy.DropOverload.newBuilder()
-                .setCategory("cat_1").setDropPercentage(FractionalPercent.newBuilder()
-                    .setDenominator(DenominatorType.HUNDRED)
-                    .setNumerator(3)
-                    .build())
-                .build())
-            .addDropOverloads(Policy.DropOverload.newBuilder()
-                .setCategory("cat_2").setDropPercentage(FractionalPercent.newBuilder()
-                    .setDenominator(DenominatorType.HUNDRED)
-                    .setNumerator(101)
-                    .build())
-                .build())
-            .addDropOverloads(Policy.DropOverload.newBuilder()
-                .setCategory("cat_3").setDropPercentage(FractionalPercent.newBuilder()
-                    .setDenominator(DenominatorType.HUNDRED)
-                    .setNumerator(23)
-                    .build())
-                .build())
-            .build())
-        .build();
-    serverResponseWriter.onNext(
-        DiscoveryResponse.newBuilder()
-            .addResources(Any.pack(clusterLoadAssignment))
-            .setTypeUrl("type.googleapis.com/envoy.api.v2.ClusterLoadAssignment")
-            .build());
+    clusterLoadAssignment = buildClusterLoadAssignment(
+        "edsServiceName1",
+        ImmutableList.of(
+            buildLocalityLbEndpoints("region1", "zone1", "subzone1",
+                ImmutableList.of(
+                    buildLbEndpoint("192.168.0.1", 8080, HEALTHY, 2)),
+                1, 0)),
+        ImmutableList.of(
+            buildDropOverload("cat_1", 3),
+            buildDropOverload("cat_2", 1_000_001),
+            buildDropOverload("cat_3", 4)));
+    receiveEndpointUpdate(clusterLoadAssignment);
 
     verify(edsUpdateCallback).onAllDrop();
-    verify(localityStore).updateDropPercentage(ImmutableList.of(
-        new DropOverload("cat_1", 300_00),
-        new DropOverload("cat_2", 100_00_00)));
+    verify(helper, atLeastOnce()).updateBalancingState(eq(READY), pickerCaptor.capture());
+    SubchannelPicker pickerExpectedDropAll = pickerCaptor.getValue();
+    assertThat(pickerExpectedDropAll.pickSubchannel(mock(PickSubchannelArgs.class)).isDrop())
+        .isTrue();
 
     verify(edsUpdateCallback, never()).onError();
-
-    lookasideLb.shutdown();
   }
 
   @Test
-  public void handleLocalityAssignmentUpdates() {
-    lookasideLb.handleResolvedAddresses(defaultResolvedAddress);
+  public void handleLocalityAssignmentUpdates_pickersUpdatedFromChildBalancer() {
+    deliverResolvedAddresses(new XdsConfig(null, null, "edsServiceName1", null));
 
-    io.envoyproxy.envoy.api.v2.core.Locality localityProto1 =
-        io.envoyproxy.envoy.api.v2.core.Locality
-            .newBuilder()
-            .setRegion("region1")
-            .setZone("zone1")
-            .setSubZone("subzone1")
-            .build();
-    LbEndpoint endpoint11 = LbEndpoint.newBuilder()
-        .setEndpoint(Endpoint.newBuilder()
-            .setAddress(Address.newBuilder()
-                .setSocketAddress(SocketAddress.newBuilder()
-                    .setAddress("addr11").setPortValue(11))))
-        .setLoadBalancingWeight(UInt32Value.of(11))
-        .build();
-    LbEndpoint endpoint12 = LbEndpoint.newBuilder()
-        .setEndpoint(Endpoint.newBuilder()
-            .setAddress(Address.newBuilder()
-                .setSocketAddress(SocketAddress.newBuilder()
-                    .setAddress("addr12").setPortValue(12))))
-        .setLoadBalancingWeight(UInt32Value.of(12))
-        .build();
-    io.envoyproxy.envoy.api.v2.core.Locality localityProto2 =
-        io.envoyproxy.envoy.api.v2.core.Locality
-            .newBuilder()
-            .setRegion("region2")
-            .setZone("zone2")
-            .setSubZone("subzone2")
-            .build();
-    LbEndpoint endpoint21 = LbEndpoint.newBuilder()
-        .setEndpoint(Endpoint.newBuilder()
-            .setAddress(Address.newBuilder()
-                .setSocketAddress(SocketAddress.newBuilder()
-                    .setAddress("addr21").setPortValue(21))))
-        .setLoadBalancingWeight(UInt32Value.of(21))
-        .build();
-    LbEndpoint endpoint22 = LbEndpoint.newBuilder()
-        .setEndpoint(Endpoint.newBuilder()
-            .setAddress(Address.newBuilder()
-                .setSocketAddress(SocketAddress.newBuilder()
-                    .setAddress("addr22").setPortValue(22))))
-        .setLoadBalancingWeight(UInt32Value.of(22))
-        .build();
-    io.envoyproxy.envoy.api.v2.core.Locality localityProto3 =
-        io.envoyproxy.envoy.api.v2.core.Locality
-            .newBuilder()
-            .setRegion("region3")
-            .setZone("zone3")
-            .setSubZone("subzone3")
-            .build();
-    LbEndpoint endpoint3 = LbEndpoint.newBuilder()
-        .setEndpoint(Endpoint.newBuilder()
-            .setAddress(Address.newBuilder()
-                .setSocketAddress(SocketAddress.newBuilder()
-                    .setAddress("addr31").setPortValue(31))))
-        .setLoadBalancingWeight(UInt32Value.of(31))
-        .build();
-    ClusterLoadAssignment clusterLoadAssignment = ClusterLoadAssignment.newBuilder()
-        .addEndpoints(io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints.newBuilder()
-            .setLocality(localityProto1)
-            .addLbEndpoints(endpoint11)
-            .addLbEndpoints(endpoint12)
-            .setLoadBalancingWeight(UInt32Value.of(1)))
-        .addEndpoints(io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints.newBuilder()
-            .setLocality(localityProto2)
-            .addLbEndpoints(endpoint21)
-            .addLbEndpoints(endpoint22)
-            .setLoadBalancingWeight(UInt32Value.of(2)))
-        .addEndpoints(io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints.newBuilder()
-            .setLocality(localityProto3)
-            .addLbEndpoints(endpoint3)
-            .setLoadBalancingWeight(UInt32Value.of(0)))
-        .build();
-    serverResponseWriter.onNext(
-        DiscoveryResponse.newBuilder()
-            .addResources(Any.pack(clusterLoadAssignment))
-            .setTypeUrl("type.googleapis.com/envoy.api.v2.ClusterLoadAssignment")
-            .build());
+    LbEndpoint endpoint11 = buildLbEndpoint("addr11.example.com", 8011, HEALTHY, 11);
+    LbEndpoint endpoint12 = buildLbEndpoint("addr12.example.com", 8012, HEALTHY, 12);
+    LocalityLbEndpoints localityLbEndpoints1 = buildLocalityLbEndpoints(
+        "region1", "zone1", "subzone1",
+        ImmutableList.of(endpoint11, endpoint12),
+        1,
+        0);
 
-    Locality locality1 = Locality.fromEnvoyProtoLocality(localityProto1);
-    LocalityLbEndpoints localityInfo1 = new LocalityLbEndpoints(
-        ImmutableList.of(
-            EnvoyProtoData.LbEndpoint.fromEnvoyProtoLbEndpoint(endpoint11),
-            EnvoyProtoData.LbEndpoint.fromEnvoyProtoLbEndpoint(endpoint12)),
-        1, 0);
-    LocalityLbEndpoints localityInfo2 = new LocalityLbEndpoints(
-        ImmutableList.of(
-            EnvoyProtoData.LbEndpoint.fromEnvoyProtoLbEndpoint(endpoint21),
-            EnvoyProtoData.LbEndpoint.fromEnvoyProtoLbEndpoint(endpoint22)),
-        2, 0);
-    Locality locality2 = Locality.fromEnvoyProtoLocality(localityProto2);
+    LbEndpoint endpoint21 = buildLbEndpoint("addr21.example.com", 8021, HEALTHY, 21);
+    LbEndpoint endpoint22 = buildLbEndpoint("addr22.example.com", 8022, HEALTHY, 22);
+    LocalityLbEndpoints localityLbEndpoints2 = buildLocalityLbEndpoints(
+        "region2", "zone2", "subzone2",
+        ImmutableList.of(endpoint21, endpoint22),
+        2,
+        0);
 
-    LocalityStore localityStore = Iterables.getOnlyElement(localityStores);
-    InOrder inOrder = inOrder(localityStore);
-    inOrder.verify(localityStore).updateDropPercentage(ImmutableList.<DropOverload>of());
-    inOrder.verify(localityStore).updateLocalityStore(localityEndpointsMappingCaptor.capture());
-    assertThat(localityEndpointsMappingCaptor.getValue()).containsExactly(
-        locality1, localityInfo1, locality2, localityInfo2).inOrder();
+    LbEndpoint endpoint31 = buildLbEndpoint("addr31.example.com", 8031, HEALTHY, 31);
+    LocalityLbEndpoints localityLbEndpoints3 = buildLocalityLbEndpoints(
+        "region3", "zone3", "subzone3",
+        ImmutableList.of(endpoint31),
+        3,
+        0);
+
+    ClusterLoadAssignment clusterLoadAssignment = buildClusterLoadAssignment(
+        "edsServiceName1",
+        ImmutableList.of(localityLbEndpoints1, localityLbEndpoints2, localityLbEndpoints3),
+        ImmutableList.<DropOverload>of());
+    receiveEndpointUpdate(clusterLoadAssignment);
+
+    assertThat(childBalancers).hasSize(3);
+    verify(childBalancers.get("subzone1")).handleResolvedAddresses(
+        argThat(RoundRobinBackendsMatcher.builder()
+            .addHostAndPort("addr11.example.com", 8011)
+            .addHostAndPort("addr12.example.com", 8012)
+            .build()));
+    verify(childBalancers.get("subzone2")).handleResolvedAddresses(
+        argThat(RoundRobinBackendsMatcher.builder()
+            .addHostAndPort("addr21.example.com", 8021)
+            .addHostAndPort("addr22.example.com", 8022)
+            .build()));
+    verify(childBalancers.get("subzone3")).handleResolvedAddresses(
+        argThat(RoundRobinBackendsMatcher.builder()
+            .addHostAndPort("addr31.example.com", 8031)
+            .build()));
+    assertThat(childHelpers).hasSize(3);
+    Helper childHelper2 = childHelpers.get("subzone2");
+    final Subchannel subchannel = mock(Subchannel.class);
+    SubchannelPicker picker = new SubchannelPicker() {
+      @Override
+      public PickResult pickSubchannel(PickSubchannelArgs args) {
+        return PickResult.withSubchannel(subchannel);
+      }
+    };
+    verify(helper, never()).updateBalancingState(eq(READY), any(SubchannelPicker.class));
+    childHelper2.updateBalancingState(READY, picker);
+    assertLatestSubchannelPicker(subchannel);
 
     verify(edsUpdateCallback, never()).onError();
+  }
 
-    lookasideLb.shutdown();
+  // Uses a fake LocalityStoreFactory that creates a mock LocalityStore, and verifies interaction
+  // between the EDS balancer and LocalityStore.
+  @Test
+  public void handleEndpointUpdates_delegateUpdatesToLocalityStore() {
+    final ArrayDeque<LocalityStore> localityStores = new ArrayDeque<>();
+    localityStoreFactory = new LocalityStoreFactory() {
+      @Override
+      LocalityStore newLocalityStore(Helper helper, LoadBalancerRegistry lbRegistry,
+          LoadStatsStore loadStatsStore) {
+        // Note that this test approach can not verify anything about how localityStore will use the
+        // helper in the arguments to delegate updates from localityStore to the EDS balancer, and
+        // can not verify anything about how loadStatsStore updates localities and drop information.
+        // To cover the gap, some non-exhaustive tests like
+        // handleAllDropUpdates_pickersAreDropped() and
+        // handleLocalityAssignmentUpdates_pickersUpdatedFromChildBalancer()are added to verify some
+        // very basic behaviors.
+        LocalityStore localityStore = mock(LocalityStore.class);
+        localityStores.add(localityStore);
+        return localityStore;
+      }
+    };
+    lookasideLb = new LookasideLb(
+        helper, edsUpdateCallback, lbRegistry, localityStoreFactory, bootstrapper, channelFactory);
+
+    deliverResolvedAddresses(new XdsConfig(null, null, "edsServiceName1", null));
+    assertThat(localityStores).hasSize(1);
+    LocalityStore localityStore = localityStores.peekLast();
+
+    ClusterLoadAssignment clusterLoadAssignment = buildClusterLoadAssignment(
+        "edsServiceName1",
+        ImmutableList.of(
+            buildLocalityLbEndpoints("region1", "zone1", "subzone1",
+                ImmutableList.of(
+                    buildLbEndpoint("192.168.0.1", 8080, HEALTHY, 2)),
+                1, 0)),
+        ImmutableList.of(
+            buildDropOverload("cat_1", 3),
+            buildDropOverload("cat_2", 456)));
+    receiveEndpointUpdate(clusterLoadAssignment);
+    EndpointUpdate endpointUpdate = getEndpointUpdateFromClusterAssignment(clusterLoadAssignment);
+    verify(localityStore).updateDropPercentage(endpointUpdate.getDropPolicies());
+    verify(localityStore).updateLocalityStore(endpointUpdate.getLocalityLbEndpointsMap());
+
+    clusterLoadAssignment = buildClusterLoadAssignment(
+        "edsServiceName1",
+        ImmutableList.of(
+            buildLocalityLbEndpoints("region1", "zone1", "subzone1",
+                ImmutableList.of(
+                    buildLbEndpoint("192.168.0.1", 8080, HEALTHY, 2),
+                    buildLbEndpoint("192.168.0.1", 8088, HEALTHY, 2)),
+                1, 0)),
+        ImmutableList.of(
+            buildDropOverload("cat_1", 3),
+            buildDropOverload("cat_3", 4)));
+    receiveEndpointUpdate(clusterLoadAssignment);
+
+    endpointUpdate = getEndpointUpdateFromClusterAssignment(clusterLoadAssignment);
+    verify(localityStore).updateDropPercentage(endpointUpdate.getDropPolicies());
+    verify(localityStore).updateLocalityStore(endpointUpdate.getLocalityLbEndpointsMap());
+
+    // Change cluster name.
+    deliverResolvedAddresses(new XdsConfig(null, null, "edsServiceName2", null));
+    assertThat(localityStores).hasSize(2);
+    localityStore = localityStores.peekLast();
+
+    clusterLoadAssignment = buildClusterLoadAssignment(
+        "edsServiceName2",
+        ImmutableList.of(
+            buildLocalityLbEndpoints("region2", "zone2", "subzone2",
+                ImmutableList.of(
+                    buildLbEndpoint("192.168.0.2", 8080, HEALTHY, 2),
+                    buildLbEndpoint("192.168.0.2", 8088, HEALTHY, 2)),
+                1, 0)),
+        ImmutableList.of(
+            buildDropOverload("cat_1", 3),
+            buildDropOverload("cat_3", 4)));
+    receiveEndpointUpdate(clusterLoadAssignment);
+    endpointUpdate = getEndpointUpdateFromClusterAssignment(clusterLoadAssignment);
+    verify(localityStore).updateDropPercentage(endpointUpdate.getDropPolicies());
+    verify(localityStore).updateLocalityStore(endpointUpdate.getLocalityLbEndpointsMap());
   }
 
   @Test
-  public void verifyRpcErrorPropagation() {
-    lookasideLb.handleResolvedAddresses(defaultResolvedAddress);
+  public void verifyErrorPropagation() {
+    deliverResolvedAddresses(new XdsConfig(null, null, "edsServiceName1", null));
 
     verify(helper, never()).updateBalancingState(
         eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
     verify(edsUpdateCallback, never()).onError();
-    serverResponseWriter.onError(new RuntimeException());
+    // Forwarding 20 seconds so that the xds client will deem EDS resource not available.
+    fakeClock.forwardTime(20, TimeUnit.SECONDS);
     verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
     verify(edsUpdateCallback).onError();
   }
 
-  @Test
-  public void shutdown() {
-    lookasideLb.handleResolvedAddresses(defaultResolvedAddress);
+  /**
+   * Converts ClusterLoadAssignment data to {@link EndpointUpdate}. All the needed data, that is
+   * clusterName, localityLbEndpointsMap and dropPolicies, is extracted from ClusterLoadAssignment,
+   * and all other data is ignored.
+   */
+  private static EndpointUpdate getEndpointUpdateFromClusterAssignment(
+      ClusterLoadAssignment clusterLoadAssignment) {
+    EndpointUpdate.Builder endpointUpdateBuilder = EndpointUpdate.newBuilder();
+    endpointUpdateBuilder.setClusterName(clusterLoadAssignment.getClusterName());
+    for (DropOverload dropOverload : clusterLoadAssignment.getPolicy().getDropOverloadsList()) {
+      endpointUpdateBuilder.addDropPolicy(
+          EnvoyProtoData.DropOverload.fromEnvoyProtoDropOverload(dropOverload));
+    }
+    for (LocalityLbEndpoints localityLbEndpoints : clusterLoadAssignment.getEndpointsList()) {
+      endpointUpdateBuilder.addLocalityLbEndpoints(
+          EnvoyProtoData.Locality.fromEnvoyProtoLocality(
+              localityLbEndpoints.getLocality()),
+          EnvoyProtoData.LocalityLbEndpoints.fromEnvoyProtoLocalityLbEndpoints(
+              localityLbEndpoints));
+    }
+    return endpointUpdateBuilder.build();
+  }
 
-    LocalityStore localityStore = Iterables.getOnlyElement(localityStores);
-    LoadReportClient loadReportClient = Iterables.getOnlyElement(loadReportClients);
-    verify(localityStore, never()).reset();
-    verify(loadReportClient, never()).stopLoadReporting();
-    assertThat(channel.isShutdown()).isFalse();
+  private void deliverResolvedAddresses(XdsConfig xdsConfig) {
+    ResolvedAddresses.Builder resolvedAddressBuilder = ResolvedAddresses.newBuilder()
+        .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+        .setLoadBalancingPolicyConfig(xdsConfig);
+    if (isFullFlow) {
+      resolvedAddressBuilder.setAttributes(
+          Attributes.newBuilder().set(XdsAttributes.XDS_CLIENT_POOL,
+              xdsClientPoolFromResolveAddresses).build());
+    }
+    lookasideLb.handleResolvedAddresses(resolvedAddressBuilder.build());
+  }
 
-    lookasideLb.shutdown();
+  private void receiveEndpointUpdate(ClusterLoadAssignment clusterLoadAssignment) {
+    responseObserver.onNext(
+          buildDiscoveryResponse(
+              String.valueOf(versionIno++),
+              ImmutableList.of(Any.pack(clusterLoadAssignment)),
+              XdsClientImpl.ADS_TYPE_URL_EDS,
+              String.valueOf(nonce++)));
+  }
 
-    verify(localityStore).reset();
-    verify(loadReportClient).stopLoadReporting();
-    assertThat(channel.isShutdown()).isTrue();
+  private void assertLatestConnectivityState(ConnectivityState expectedState) {
+    verify(helper, atLeastOnce()).updateBalancingState(
+        connectivityStateCaptor.capture(), pickerCaptor.capture());
+    assertThat(connectivityStateCaptor.getValue()).isEqualTo(expectedState);
+  }
+
+  private void assertLatestSubchannelPicker(Subchannel expectedSubchannelToPick) {
+    assertLatestConnectivityState(READY);
+    assertThat(
+            pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class)).getSubchannel())
+        .isEqualTo(expectedSubchannelToPick);
+  }
+
+  /**
+   * Matcher of ResolvedAddresses for round robin load balancer based on the set of backends.
+   */
+  private static final class RoundRobinBackendsMatcher
+      implements ArgumentMatcher<ResolvedAddresses> {
+
+    final List<java.net.SocketAddress> socketAddresses;
+
+    RoundRobinBackendsMatcher(List<java.net.SocketAddress> socketAddresses) {
+      this.socketAddresses = socketAddresses;
+    }
+
+    @Override
+    public boolean matches(ResolvedAddresses argument) {
+      List<java.net.SocketAddress> backends = new ArrayList<>();
+      for (EquivalentAddressGroup eag : argument.getAddresses()) {
+        backends.add(Iterables.getOnlyElement(eag.getAddresses()));
+      }
+      return socketAddresses.equals(backends);
+    }
+
+    static Builder builder() {
+      return new Builder();
+    }
+
+    static final class Builder {
+      final List<java.net.SocketAddress> socketAddresses = new ArrayList<>();
+
+      Builder addHostAndPort(String host, int port) {
+        socketAddresses.add(new InetSocketAddress(host, port));
+        return this;
+      }
+
+      RoundRobinBackendsMatcher build() {
+        return new RoundRobinBackendsMatcher(socketAddresses);
+      }
+    }
+  }
+
+  /**
+   * A fake ObjectPool of XdsClient that keeps track of invocation times of getObject() and
+   * returnObject().
+   */
+  private static final class FakeXdsClientPool implements ObjectPool<XdsClient> {
+    final XdsClient xdsClient;
+    int timesGetObjectCalled;
+    int timesReturnObjectCalled;
+
+    FakeXdsClientPool(XdsClient xdsClient) {
+      this.xdsClient = xdsClient;
+    }
+
+    @Override
+    public synchronized XdsClient getObject() {
+      timesGetObjectCalled++;
+      return xdsClient;
+    }
+
+    @Override
+    public synchronized XdsClient returnObject(Object object) {
+      timesReturnObjectCalled++;
+      assertThat(timesReturnObjectCalled).isAtMost(timesGetObjectCalled);
+      return null;
+    }
   }
 }
