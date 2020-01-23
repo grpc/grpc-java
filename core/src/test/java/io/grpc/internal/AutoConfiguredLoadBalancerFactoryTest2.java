@@ -386,7 +386,7 @@ public class AutoConfiguredLoadBalancerFactoryTest2 {
     verify(testLbBalancer2).handleResolvedAddresses(resultCaptor.capture());
     assertThat(resultCaptor.getValue().getAddresses()).isEmpty();
     assertThat(resultCaptor.getValue().getLoadBalancingPolicyConfig())
-        .isEqualTo(nextParsedConfigOrError2.get());
+        .isEqualTo(nextParsedConfigOrError2.get().getConfig());
     assertThat(resultCaptor.getValue().getAttributes().get(ATTR_LOAD_BALANCING_CONFIG))
         .isEqualTo(rawServiceConfig);
   }
@@ -687,7 +687,7 @@ public class AutoConfiguredLoadBalancerFactoryTest2 {
     verify(channelLogger).log(
         eq(ChannelLogLevel.DEBUG),
         eq("Load-balancing config: {0}"),
-        eq(testLbParsedConfig));
+        eq(testLbParsedConfig.getConfig()));
     verifyNoMoreInteractions(channelLogger);
 
     testLbParsedConfig = ConfigOrError.fromConfig("bar");
@@ -703,7 +703,7 @@ public class AutoConfiguredLoadBalancerFactoryTest2 {
     verify(channelLogger).log(
         eq(ChannelLogLevel.DEBUG),
         eq("Load-balancing config: {0}"),
-        eq(testLbParsedConfig));
+        eq(testLbParsedConfig.getConfig()));
     verifyNoMoreInteractions(channelLogger);
 
     servers = Collections.singletonList(new EquivalentAddressGroup(
@@ -815,7 +815,7 @@ public class AutoConfiguredLoadBalancerFactoryTest2 {
     ConfigOrError parsed = lbf.parseLoadBalancerPolicy(serviceConfig, channelLogger);
     assertThat(parsed).isNotNull();
     assertThat(parsed.getConfig()).isNotNull();
-    assertThat(((PolicySelection) parsed.getConfig()).config.getConfig()).isNotNull();
+    assertThat(((PolicySelection) parsed.getConfig()).config).isNotNull();
   }
 
   @Test
@@ -827,7 +827,7 @@ public class AutoConfiguredLoadBalancerFactoryTest2 {
     ConfigOrError parsed = lbf.parseLoadBalancerPolicy(serviceConfig, channelLogger);
     assertThat(parsed).isNotNull();
     assertThat(parsed.getConfig()).isNotNull();
-    assertThat(((PolicySelection) parsed.getConfig()).config.getConfig()).isNotNull();
+    assertThat(((PolicySelection) parsed.getConfig()).config).isNotNull();
     verify(channelLogger).log(
         eq(ChannelLogLevel.DEBUG),
         eq("{0} specified by Service Config are not available"),

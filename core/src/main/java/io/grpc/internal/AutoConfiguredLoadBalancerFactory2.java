@@ -149,7 +149,7 @@ public final class AutoConfiguredLoadBalancerFactory2 {
             ChannelLogLevel.INFO, "Load balancer changed from {0} to {1}",
             old.getClass().getSimpleName(), delegate.getClass().getSimpleName());
       }
-      ConfigOrError lbConfig = selection.config;
+      Object lbConfig = selection.config;
       if (lbConfig != null) {
         helper.getChannelLogger().log(
             ChannelLogLevel.DEBUG, "Load-balancing config: {0}", selection.config);
@@ -337,7 +337,7 @@ public final class AutoConfiguredLoadBalancerFactory2 {
               return parsedLbPolicyConfig;
             }
             return ConfigOrError.fromConfig(
-                new PolicySelection(provider, serviceConfig, parsedLbPolicyConfig));
+                new PolicySelection(provider, serviceConfig, parsedLbPolicyConfig.getConfig()));
           }
         }
         return ConfigOrError.fromError(
@@ -364,12 +364,12 @@ public final class AutoConfiguredLoadBalancerFactory2 {
   static final class PolicySelection {
     final LoadBalancerProvider provider;
     @Nullable final Map<String, ?> rawConfig;
-    @Nullable final ConfigOrError config;
+    @Nullable final Object config;
 
     PolicySelection(
         LoadBalancerProvider provider,
         @Nullable Map<String, ?> rawConfig,
-        @Nullable ConfigOrError config) {
+        @Nullable Object config) {
       this.provider = checkNotNull(provider, "provider");
       this.rawConfig = rawConfig;
       this.config = config;
