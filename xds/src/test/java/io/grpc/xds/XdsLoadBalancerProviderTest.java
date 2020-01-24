@@ -123,36 +123,6 @@ public class XdsLoadBalancerProviderTest {
   }
 
   @Test
-  public void selectFallBackPolicy() throws Exception {
-    String rawLbConfig = "{"
-        + "\"childPolicy\" : [{\"lbPolicy3\" : {\"key\" : \"val\"}}, {\"lbPolicy4\" : {}}],"
-        + "\"fallbackPolicy\" : [{\"unsupported\" : {}}, {\"supported_1\" : {\"key\" : \"val\"}},"
-        + "{\"supported_2\" : {\"key\" : \"val\"}}]"
-        + "}";
-    LbConfig expectedFallbackPolicy = ServiceConfigUtil.unwrapLoadBalancingConfig(
-        checkObject(JsonParser.parse("{\"supported_1\" : {\"key\" : \"val\"}}")));
-
-    LbConfig fallbackPolicy = XdsLoadBalancerProvider.selectFallbackPolicy(
-        checkObject(JsonParser.parse(rawLbConfig)), lbRegistry);
-
-    assertEquals(expectedFallbackPolicy, fallbackPolicy);
-  }
-
-  @Test
-  public void selectFallBackPolicy_roundRobinIsDefault() throws Exception {
-    String rawLbConfig = "{"
-        + "\"childPolicy\" : [{\"lbPolicy3\" : {\"key\" : \"val\"}}, {\"lbPolicy4\" : {}}]"
-        + "}";
-    LbConfig expectedFallbackPolicy = ServiceConfigUtil.unwrapLoadBalancingConfig(
-        checkObject(JsonParser.parse("{\"round_robin\" : {}}")));
-
-    LbConfig fallbackPolicy = XdsLoadBalancerProvider.selectFallbackPolicy(
-        checkObject(JsonParser.parse(rawLbConfig)), lbRegistry);
-
-    assertEquals(expectedFallbackPolicy, fallbackPolicy);
-  }
-
-  @Test
   public void parseLoadBalancingConfigPolicy() throws Exception {
     String rawLbConfig = "{"
         + "\"childPolicy\" : [{\"lbPolicy3\" : {\"key\" : \"val\"}}, {\"supported_1\" : {}}],"
@@ -171,8 +141,6 @@ public class XdsLoadBalancerProviderTest {
         new XdsConfig(
             ServiceConfigUtil.unwrapLoadBalancingConfig(
                 checkObject(JsonParser.parse("{\"supported_1\" : {}}"))),
-            ServiceConfigUtil.unwrapLoadBalancingConfig(
-                checkObject(JsonParser.parse("{\"round_robin\" : {\"key\" : \"val\"}}"))),
             "dns:///eds.service.com:8080",
             "dns:///lrs.service.com:8080")
     );

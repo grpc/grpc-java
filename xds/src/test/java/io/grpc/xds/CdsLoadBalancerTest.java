@@ -255,7 +255,6 @@ public class CdsLoadBalancerTest {
     verify(edsLoadBalancer1).handleResolvedAddresses(resolvedAddressesCaptor1.capture());
     XdsConfig expectedXdsConfig = new XdsConfig(
         new LbConfig("round_robin", ImmutableMap.<String, Object>of()),
-        null,
         "edsServiceFoo.googleapis.com",
         null);
     ResolvedAddresses resolvedAddressesFoo = resolvedAddressesCaptor1.getValue();
@@ -301,7 +300,6 @@ public class CdsLoadBalancerTest {
     verify(edsLoadBalancer2).handleResolvedAddresses(resolvedAddressesCaptor2.capture());
     expectedXdsConfig = new XdsConfig(
         new LbConfig("round_robin", ImmutableMap.<String, Object>of()),
-        null,
         "edsServiceBar.googleapis.com",
         "lrsBar.googleapis.com");
     ResolvedAddresses resolvedAddressesBar = resolvedAddressesCaptor2.getValue();
@@ -329,7 +327,6 @@ public class CdsLoadBalancerTest {
     verify(edsLoadBalancer2, times(2)).handleResolvedAddresses(resolvedAddressesCaptor2.capture());
     expectedXdsConfig = new XdsConfig(
         new LbConfig("round_robin", ImmutableMap.<String, Object>of()),
-        null,
         "edsServiceBar2.googleapis.com",
         null);
     ResolvedAddresses resolvedAddressesBar2 = resolvedAddressesCaptor2.getValue();

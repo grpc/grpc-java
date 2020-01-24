@@ -317,7 +317,6 @@ public final class CdsLoadBalancer extends LoadBalancer {
 
       final XdsConfig edsConfig = new XdsConfig(
           new LbConfig(newUpdate.getLbPolicy(), ImmutableMap.<String, Object>of()),
-          /* fallbackPolicy = */ null,
           /* edsServiceName = */ newUpdate.getEdsServiceName(),
           /* lrsServerName = */ newUpdate.getLrsServerName());
       updateSslContextProvider(newUpdate.getUpstreamTlsContext());
