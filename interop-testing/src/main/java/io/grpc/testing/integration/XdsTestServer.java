@@ -130,7 +130,8 @@ public final class XdsTestServer {
       try {
         host = InetAddress.getLocalHost().getHostName();
       } catch (UnknownHostException e) {
-        logger.log(Level.WARNING, "Failed to get host", e);
+        logger.log(Level.SEVERE, "Failed to get host", e);
+        throw new RuntimeException(e);
       }
     }
 
