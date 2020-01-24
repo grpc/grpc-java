@@ -99,13 +99,6 @@ public abstract class AbstractManagedChannelImplBuilder
   private static final long DEFAULT_RETRY_BUFFER_SIZE_IN_BYTES = 1L << 24;  // 16M
   private static final long DEFAULT_PER_RPC_BUFFER_LIMIT_IN_BYTES = 1L << 20; // 1M
 
-  @VisibleForTesting
-  static final String ENABLE_SERVICE_CONFIG_ERROR_HANDLING_PROPERTY =
-      "io.grpc.internal.ManagedChannelImpl.enableServiceConfigErrorHandling";
-  private static final boolean DEFAULT_ENABLE_SERVICE_CONFIG_ERROR_HANDLING =
-      Boolean.parseBoolean(
-          System.getProperty(ENABLE_SERVICE_CONFIG_ERROR_HANDLING_PROPERTY, "false"));
-
   ObjectPool<? extends Executor> executorPool = DEFAULT_EXECUTOR_POOL;
 
   ObjectPool<? extends Executor> offloadExecutorPool = DEFAULT_EXECUTOR_POOL;
@@ -164,8 +157,6 @@ public abstract class AbstractManagedChannelImplBuilder
 
   @Nullable
   ProxyDetector proxyDetector;
-
-  boolean enableServiceConfigErrorHandling = DEFAULT_ENABLE_SERVICE_CONFIG_ERROR_HANDLING;
 
   /**
    * Sets the maximum message size allowed for a single gRPC frame. If an inbound messages
@@ -458,16 +449,6 @@ public abstract class AbstractManagedChannelImplBuilder
   }
 
   /**
-   * Enables service config error handling implemented in {@link ManagedChannelImpl2}. By default,
-   * it is disabled unless system property {@link #ENABLE_SERVICE_CONFIG_ERROR_HANDLING_PROPERTY} is
-   * set to {@code "true"}.
-   */
-  protected T enableServiceConfigErrorHandling() {
-    this.enableServiceConfigErrorHandling = true;
-    return thisT();
-  }
-
-  /**
    * Disable or enable stats features. Enabled by default.
    *
    * <p>For the current release, calling {@code setStatsEnabled(true)} may have a side effect that
@@ -527,17 +508,6 @@ public abstract class AbstractManagedChannelImplBuilder
 
   @Override
   public ManagedChannel build() {
-    if (this.enableServiceConfigErrorHandling) {
-      return new ManagedChannelOrphanWrapper(new ManagedChannelImpl2(
-          this,
-          buildTransportFactory(),
-          // TODO(carl-mastrangelo): Allow clients to pass this in
-          new ExponentialBackoffPolicy.Provider(),
-          SharedResourcePool.forResource(GrpcUtil.SHARED_CHANNEL_EXECUTOR),
-          GrpcUtil.STOPWATCH_SUPPLIER,
-          getEffectiveInterceptors(),
-          TimeProvider.SYSTEM_TIME_PROVIDER));
-    }
     return new ManagedChannelOrphanWrapper(new ManagedChannelImpl(
         this,
         buildTransportFactory(),
