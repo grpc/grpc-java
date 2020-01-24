@@ -47,7 +47,8 @@ import java.util.Map;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
-@SuppressWarnings("deprecation") // after migrated to 2, we can deprecate it
+// TODO(creamsoup) fully deprecate LoadBalancer.ATTR_LOAD_BALANCING_CONFIG
+@SuppressWarnings("deprecation")
 public final class AutoConfiguredLoadBalancerFactory {
   private static final Logger logger =
       Logger.getLogger(AutoConfiguredLoadBalancerFactory.class.getName());
