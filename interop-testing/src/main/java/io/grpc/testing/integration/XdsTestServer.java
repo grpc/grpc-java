@@ -124,7 +124,7 @@ public final class XdsTestServer {
   }
 
   private class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
-    private String host = "";
+    private final String host;
 
     private TestServiceImpl() {
       try {
