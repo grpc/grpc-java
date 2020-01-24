@@ -151,16 +151,16 @@ public class GrpclbLoadBalancerTest {
   private SubchannelPool subchannelPool;
   private final ArrayList<String> logs = new ArrayList<>();
   private final ChannelLogger channelLogger = new ChannelLogger() {
-      @Override
-      public void log(ChannelLogLevel level, String msg) {
-        logs.add(level + ": " + msg);
-      }
+    @Override
+    public void log(ChannelLogLevel level, String msg) {
+      logs.add(level + ": " + msg);
+    }
 
-      @Override
-      public void log(ChannelLogLevel level, String template, Object... args) {
-        log(level, MessageFormat.format(template, args));
-      }
-    };
+    @Override
+    public void log(ChannelLogLevel level, String template, Object... args) {
+      log(level, MessageFormat.format(template, args));
+    }
+  };
   private SubchannelPicker currentPicker;
   private LoadBalancerGrpc.LoadBalancerImplBase mockLbService;
   @Captor
@@ -207,12 +207,12 @@ public class GrpclbLoadBalancerTest {
             StreamObserver<LoadBalanceRequest> requestObserver =
                 mock(StreamObserver.class);
             Answer<Void> closeRpc = new Answer<Void>() {
-                @Override
-                public Void answer(InvocationOnMock invocation) {
-                  responseObserver.onCompleted();
-                  return null;
-                }
-              };
+              @Override
+              public Void answer(InvocationOnMock invocation) {
+                responseObserver.onCompleted();
+                return null;
+              }
+            };
             doAnswer(closeRpc).when(requestObserver).onCompleted();
             lbRequestObservers.add(requestObserver);
             return requestObserver;
@@ -221,63 +221,63 @@ public class GrpclbLoadBalancerTest {
     fakeLbServer = InProcessServerBuilder.forName("fakeLb")
         .directExecutor().addService(mockLbService).build().start();
     doAnswer(new Answer<ManagedChannel>() {
-        @Override
-        public ManagedChannel answer(InvocationOnMock invocation) throws Throwable {
-          String authority = (String) invocation.getArguments()[1];
-          ManagedChannel channel;
-          if (failingLbAuthorities.contains(authority)) {
-            channel = InProcessChannelBuilder.forName("nonExistFakeLb").directExecutor()
-                .overrideAuthority(authority).build();
-          } else {
-            channel = InProcessChannelBuilder.forName("fakeLb").directExecutor()
-                .overrideAuthority(authority).build();
-          }
-          fakeOobChannels.add(channel);
-          oobChannelTracker.add(channel);
-          return channel;
+      @Override
+      public ManagedChannel answer(InvocationOnMock invocation) throws Throwable {
+        String authority = (String) invocation.getArguments()[1];
+        ManagedChannel channel;
+        if (failingLbAuthorities.contains(authority)) {
+          channel = InProcessChannelBuilder.forName("nonExistFakeLb").directExecutor()
+              .overrideAuthority(authority).build();
+        } else {
+          channel = InProcessChannelBuilder.forName("fakeLb").directExecutor()
+              .overrideAuthority(authority).build();
         }
-      }).when(helper).createOobChannel(any(EquivalentAddressGroup.class), any(String.class));
+        fakeOobChannels.add(channel);
+        oobChannelTracker.add(channel);
+        return channel;
+      }
+    }).when(helper).createOobChannel(any(EquivalentAddressGroup.class), any(String.class));
     doAnswer(new Answer<Subchannel>() {
-        @Override
-        public Subchannel answer(InvocationOnMock invocation) throws Throwable {
-          Subchannel subchannel = mock(Subchannel.class);
-          EquivalentAddressGroup eag = (EquivalentAddressGroup) invocation.getArguments()[0];
-          Attributes attrs = (Attributes) invocation.getArguments()[1];
-          when(subchannel.getAllAddresses()).thenReturn(Arrays.asList(eag));
-          when(subchannel.getAttributes()).thenReturn(attrs);
-          mockSubchannels.add(subchannel);
-          pooledSubchannelTracker.add(subchannel);
-          return subchannel;
-        }
-      }).when(subchannelPool).takeOrCreateSubchannel(
-          any(EquivalentAddressGroup.class), any(Attributes.class));
+      @Override
+      public Subchannel answer(InvocationOnMock invocation) throws Throwable {
+        Subchannel subchannel = mock(Subchannel.class);
+        EquivalentAddressGroup eag = (EquivalentAddressGroup) invocation.getArguments()[0];
+        Attributes attrs = (Attributes) invocation.getArguments()[1];
+        when(subchannel.getAllAddresses()).thenReturn(Arrays.asList(eag));
+        when(subchannel.getAttributes()).thenReturn(attrs);
+        mockSubchannels.add(subchannel);
+        pooledSubchannelTracker.add(subchannel);
+        return subchannel;
+      }
+    }).when(subchannelPool).takeOrCreateSubchannel(
+        any(EquivalentAddressGroup.class), any(Attributes.class));
     doAnswer(new Answer<Subchannel>() {
-        @Override
-        public Subchannel answer(InvocationOnMock invocation) throws Throwable {
-          Subchannel subchannel = mock(Subchannel.class);
-          List<EquivalentAddressGroup> eagList =
-              (List<EquivalentAddressGroup>) invocation.getArguments()[0];
-          Attributes attrs = (Attributes) invocation.getArguments()[1];
-          when(subchannel.getAllAddresses()).thenReturn(eagList);
-          when(subchannel.getAttributes()).thenReturn(attrs);
-          mockSubchannels.add(subchannel);
-          unpooledSubchannelTracker.add(subchannel);
-          return subchannel;
-        }
-        // TODO(zhangkun83): remove the deprecation suppression on this method once migrated to
-        // the new createSubchannel().
-      }).when(helper).createSubchannel(any(List.class), any(Attributes.class));
+      @Override
+      public Subchannel answer(InvocationOnMock invocation) throws Throwable {
+        Subchannel subchannel = mock(Subchannel.class);
+        List<EquivalentAddressGroup> eagList =
+            (List<EquivalentAddressGroup>) invocation.getArguments()[0];
+        Attributes attrs = (Attributes) invocation.getArguments()[1];
+        when(subchannel.getAllAddresses()).thenReturn(eagList);
+        when(subchannel.getAttributes()).thenReturn(attrs);
+        mockSubchannels.add(subchannel);
+        unpooledSubchannelTracker.add(subchannel);
+        return subchannel;
+      }
+      // TODO(zhangkun83): remove the deprecation suppression on this method once migrated to
+      // the new createSubchannel().
+    }).when(helper).createSubchannel(any(List.class), any(Attributes.class));
     when(helper.getSynchronizationContext()).thenReturn(syncContext);
     when(helper.getScheduledExecutorService()).thenReturn(fakeClock.getScheduledExecutorService());
     when(helper.getChannelLogger()).thenReturn(channelLogger);
     doAnswer(new Answer<Void>() {
-        @Override
-        public Void answer(InvocationOnMock invocation) throws Throwable {
-          currentPicker = (SubchannelPicker) invocation.getArguments()[1];
-          return null;
-        }
-      }).when(helper).updateBalancingState(
-          any(ConnectivityState.class), any(SubchannelPicker.class));
+      @Override
+      public Void answer(InvocationOnMock invocation) throws Throwable {
+        currentPicker = (SubchannelPicker) invocation.getArguments()[1];
+        return null;
+      }
+    }).when(helper).updateBalancingState(
+        any(ConnectivityState.class), any(SubchannelPicker.class));
     when(helper.getAuthority()).thenReturn(SERVICE_AUTHORITY);
     when(backoffPolicy1.nextBackoffNanos()).thenReturn(10L, 100L);
     when(backoffPolicy2.nextBackoffNanos()).thenReturn(10L, 100L);
@@ -293,11 +293,11 @@ public class GrpclbLoadBalancerTest {
     try {
       if (balancer != null) {
         syncContext.execute(new Runnable() {
-            @Override
-            public void run() {
-              balancer.shutdown();
-            }
-          });
+          @Override
+          public void run() {
+            balancer.shutdown();
+          }
+        });
       }
       for (ManagedChannel channel : oobChannelTracker) {
         assertTrue(channel + " is shutdown", channel.isShutdown());
@@ -468,9 +468,11 @@ public class GrpclbLoadBalancerTest {
     when(args.getHeaders()).thenReturn(headers);
 
     long loadReportIntervalMillis = 1983;
-    List<EquivalentAddressGroup> grpclbResolutionList = createResolvedServerAddresses(true);
+    List<EquivalentAddressGroup> grpclbBalancerList = createResolvedBalancerAddresses(1);
     Attributes grpclbResolutionAttrs = Attributes.EMPTY;
-    deliverResolvedAddresses(grpclbResolutionList, grpclbResolutionAttrs);
+    deliverResolvedAddresses(
+        Collections.<EquivalentAddressGroup>emptyList(),
+        grpclbBalancerList, grpclbResolutionAttrs);
 
     // Fallback timer is started as soon as address is resolved.
     assertEquals(1, fakeClock.numPendingTasks(FALLBACK_MODE_TASK_FILTER));
@@ -485,7 +487,7 @@ public class GrpclbLoadBalancerTest {
 
     inOrder.verify(lbRequestObserver).onNext(
         eq(LoadBalanceRequest.newBuilder().setInitialRequest(
-                InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
+            InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
             .build()));
 
     // Simulate receiving LB response
@@ -593,7 +595,7 @@ public class GrpclbLoadBalancerTest {
                     .setLoadBalanceToken("token0003")
                     .setNumCalls(1)   // pick4
                     .build())
-        .build());
+            .build());
 
     PickResult pick5 = picker.pickSubchannel(args);
     assertSame(subchannel1, pick1.getSubchannel());
@@ -641,7 +643,7 @@ public class GrpclbLoadBalancerTest {
 
     inOrder.verify(lbRequestObserver).onNext(
         eq(LoadBalanceRequest.newBuilder().setInitialRequest(
-                InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
+            InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
             .build()));
 
     // Load reporting is also requested
@@ -693,9 +695,11 @@ public class GrpclbLoadBalancerTest {
     PickSubchannelArgs args = mock(PickSubchannelArgs.class);
     when(args.getHeaders()).thenReturn(headers);
 
-    List<EquivalentAddressGroup> grpclbResolutionList = createResolvedServerAddresses(true);
+    List<EquivalentAddressGroup> grpclbBalancerList = createResolvedBalancerAddresses(1);
     Attributes grpclbResolutionAttrs = Attributes.EMPTY;
-    deliverResolvedAddresses(grpclbResolutionList, grpclbResolutionAttrs);
+    deliverResolvedAddresses(
+        Collections.<EquivalentAddressGroup>emptyList(),
+        grpclbBalancerList, grpclbResolutionAttrs);
     assertEquals(1, fakeOobChannels.size());
     verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
     StreamObserver<LoadBalanceResponse> lbResponseObserver = lbResponseObserverCaptor.getValue();
@@ -731,9 +735,11 @@ public class GrpclbLoadBalancerTest {
     PickSubchannelArgs args = mock(PickSubchannelArgs.class);
     when(args.getHeaders()).thenReturn(headers);
 
-    List<EquivalentAddressGroup> grpclbResolutionList = createResolvedServerAddresses(true);
+    List<EquivalentAddressGroup> grpclbBalancerList = createResolvedBalancerAddresses(1);
     Attributes grpclbResolutionAttrs = Attributes.EMPTY;
-    deliverResolvedAddresses(grpclbResolutionList, grpclbResolutionAttrs);
+    deliverResolvedAddresses(
+        Collections.<EquivalentAddressGroup>emptyList(),
+        grpclbBalancerList, grpclbResolutionAttrs);
     assertEquals(1, fakeOobChannels.size());
     verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
     StreamObserver<LoadBalanceResponse> lbResponseObserver = lbResponseObserverCaptor.getValue();
@@ -743,7 +749,7 @@ public class GrpclbLoadBalancerTest {
 
     inOrder.verify(lbRequestObserver).onNext(
         eq(LoadBalanceRequest.newBuilder().setInitialRequest(
-                InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
+            InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
             .build()));
 
     // Simulate receiving LB response
@@ -780,8 +786,8 @@ public class GrpclbLoadBalancerTest {
         eq(LoadBalanceRequest.newBuilder()
             .setClientStats(
                 ClientStats.newBuilder(expectedReport)
-                .setTimestamp(Timestamps.fromNanos(fakeClock.getTicker().read()))
-                .build())
+                    .setTimestamp(Timestamps.fromNanos(fakeClock.getTicker().read()))
+                    .build())
             .build()));
   }
 
@@ -803,11 +809,12 @@ public class GrpclbLoadBalancerTest {
     assertThat(picker.pickList).containsExactly(new ErrorEntry(error));
 
     // Recover with a subsequent success
-    List<EquivalentAddressGroup> resolvedServers = createResolvedServerAddresses(true);
-    EquivalentAddressGroup eag = resolvedServers.get(0);
+    List<EquivalentAddressGroup> grpclbBalancerList = createResolvedBalancerAddresses(1);
+    EquivalentAddressGroup eag = grpclbBalancerList.get(0);
 
     Attributes resolutionAttrs = Attributes.EMPTY;
-    deliverResolvedAddresses(resolvedServers, resolutionAttrs);
+    deliverResolvedAddresses(
+        Collections.<EquivalentAddressGroup>emptyList(), grpclbBalancerList, resolutionAttrs);
 
     verify(helper).createOobChannel(eq(eag), eq(lbAuthority(0)));
     verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
@@ -817,11 +824,13 @@ public class GrpclbLoadBalancerTest {
   public void grpclbThenNameResolutionFails() {
     InOrder inOrder = inOrder(helper, subchannelPool);
     // Go to GRPCLB first
-    List<EquivalentAddressGroup> grpclbResolutionList = createResolvedServerAddresses(true);
+    List<EquivalentAddressGroup> grpclbBalancerList = createResolvedBalancerAddresses(1);
     Attributes grpclbResolutionAttrs = Attributes.EMPTY;
-    deliverResolvedAddresses(grpclbResolutionList, grpclbResolutionAttrs);
+    deliverResolvedAddresses(
+        Collections.<EquivalentAddressGroup>emptyList(),
+        grpclbBalancerList, grpclbResolutionAttrs);
 
-    verify(helper).createOobChannel(eq(grpclbResolutionList.get(0)), eq(lbAuthority(0)));
+    verify(helper).createOobChannel(eq(grpclbBalancerList.get(0)), eq(lbAuthority(0)));
     assertEquals(1, fakeOobChannels.size());
     ManagedChannel oobChannel = fakeOobChannels.poll();
     verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
@@ -854,59 +863,63 @@ public class GrpclbLoadBalancerTest {
 
   @Test
   public void grpclbUpdatedAddresses_avoidsReconnect() {
-    List<EquivalentAddressGroup> grpclbResolutionList =
-        createResolvedServerAddresses(true, false);
+    List<EquivalentAddressGroup> backendList = createResolvedBackendAddresses(1);
+    List<EquivalentAddressGroup> grpclbBalancerList = createResolvedBalancerAddresses(1);
     Attributes grpclbResolutionAttrs = Attributes.EMPTY;
-    deliverResolvedAddresses(grpclbResolutionList, grpclbResolutionAttrs);
+    deliverResolvedAddresses(backendList, grpclbBalancerList, grpclbResolutionAttrs);
 
-    verify(helper).createOobChannel(eq(grpclbResolutionList.get(0)), eq(lbAuthority(0)));
+    verify(helper).createOobChannel(eq(grpclbBalancerList.get(0)), eq(lbAuthority(0)));
     ManagedChannel oobChannel = fakeOobChannels.poll();
     assertEquals(1, lbRequestObservers.size());
 
-    List<EquivalentAddressGroup> grpclbResolutionList2 =
-        createResolvedServerAddresses(true, false, true);
+    List<EquivalentAddressGroup> backendList2 = createResolvedBackendAddresses(1);
+    List<EquivalentAddressGroup> grpclbBalancerList2 = createResolvedBalancerAddresses(2);
     EquivalentAddressGroup combinedEag = new EquivalentAddressGroup(Arrays.asList(
-        grpclbResolutionList2.get(0).getAddresses().get(0),
-        grpclbResolutionList2.get(2).getAddresses().get(0)),
+        grpclbBalancerList2.get(0).getAddresses().get(0),
+        grpclbBalancerList2.get(1).getAddresses().get(0)),
         lbAttributes(lbAuthority(0)));
-    deliverResolvedAddresses(grpclbResolutionList2, grpclbResolutionAttrs);
+    deliverResolvedAddresses(backendList2, grpclbBalancerList2, grpclbResolutionAttrs);
     verify(helper).updateOobChannelAddresses(eq(oobChannel), eq(combinedEag));
     assertEquals(1, lbRequestObservers.size()); // No additional RPC
   }
 
   @Test
   public void grpclbUpdatedAddresses_reconnectOnAuthorityChange() {
-    List<EquivalentAddressGroup> grpclbResolutionList =
-        createResolvedServerAddresses(true, false);
+    List<EquivalentAddressGroup> backendList = createResolvedBackendAddresses(1);
+    List<EquivalentAddressGroup> grpclbBalancerList = createResolvedBalancerAddresses(1);
     Attributes grpclbResolutionAttrs = Attributes.EMPTY;
-    deliverResolvedAddresses(grpclbResolutionList, grpclbResolutionAttrs);
+    deliverResolvedAddresses(backendList, grpclbBalancerList, grpclbResolutionAttrs);
 
-    verify(helper).createOobChannel(eq(grpclbResolutionList.get(0)), eq(lbAuthority(0)));
+    verify(helper).createOobChannel(eq(grpclbBalancerList.get(0)), eq(lbAuthority(0)));
     ManagedChannel oobChannel = fakeOobChannels.poll();
     assertEquals(1, lbRequestObservers.size());
 
     final String newAuthority = "some-new-authority";
-    List<EquivalentAddressGroup> grpclbResolutionList2 =
-        createResolvedServerAddresses(false);
-    grpclbResolutionList2.add(new EquivalentAddressGroup(
-        new FakeSocketAddress("somethingNew"), lbAttributes(newAuthority)));
-    deliverResolvedAddresses(grpclbResolutionList2, grpclbResolutionAttrs);
+    List<EquivalentAddressGroup> backendList2 = createResolvedBackendAddresses(1);
+    List<EquivalentAddressGroup> grpclbBalancerList2 =
+        Collections.singletonList(
+            new EquivalentAddressGroup(
+                new FakeSocketAddress("somethingNew"), lbAttributes(newAuthority)));
+    deliverResolvedAddresses(
+        backendList2, grpclbBalancerList2, grpclbResolutionAttrs);
     assertTrue(oobChannel.isTerminated());
-    verify(helper).createOobChannel(eq(grpclbResolutionList2.get(1)), eq(newAuthority));
+    verify(helper).createOobChannel(eq(grpclbBalancerList2.get(0)), eq(newAuthority));
     assertEquals(2, lbRequestObservers.size()); // An additional RPC
   }
 
   @Test
   public void grpclbWorking() {
     InOrder inOrder = inOrder(helper, subchannelPool);
-    List<EquivalentAddressGroup> grpclbResolutionList = createResolvedServerAddresses(true);
+    List<EquivalentAddressGroup> grpclbBalancerList = createResolvedBalancerAddresses(1);
     Attributes grpclbResolutionAttrs = Attributes.EMPTY;
-    deliverResolvedAddresses(grpclbResolutionList, grpclbResolutionAttrs);
+    deliverResolvedAddresses(
+        Collections.<EquivalentAddressGroup>emptyList(),
+        grpclbBalancerList, grpclbResolutionAttrs);
 
     // Fallback timer is started as soon as the addresses are resolved.
     assertEquals(1, fakeClock.numPendingTasks(FALLBACK_MODE_TASK_FILTER));
 
-    verify(helper).createOobChannel(eq(grpclbResolutionList.get(0)), eq(lbAuthority(0)));
+    verify(helper).createOobChannel(eq(grpclbBalancerList.get(0)), eq(lbAuthority(0)));
     assertEquals(1, fakeOobChannels.size());
     ManagedChannel oobChannel = fakeOobChannels.poll();
     verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
@@ -915,7 +928,7 @@ public class GrpclbLoadBalancerTest {
     StreamObserver<LoadBalanceRequest> lbRequestObserver = lbRequestObservers.poll();
     verify(lbRequestObserver).onNext(
         eq(LoadBalanceRequest.newBuilder().setInitialRequest(
-                InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
+            InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
             .build()));
 
     // Simulate receiving LB response
@@ -1174,13 +1187,14 @@ public class GrpclbLoadBalancerTest {
     long loadReportIntervalMillis = 1983;
     InOrder inOrder = inOrder(helper, subchannelPool);
 
-    // Create a resolution list with a mixture of balancer and backend addresses
-    List<EquivalentAddressGroup> resolutionList =
-        createResolvedServerAddresses(false, true, false);
+    // Create balancer and backend addresses
+    List<EquivalentAddressGroup> backendList = createResolvedBackendAddresses(2);
+    List<EquivalentAddressGroup> grpclbBalancerList = createResolvedBalancerAddresses(1);
     Attributes resolutionAttrs = Attributes.EMPTY;
-    deliverResolvedAddresses(resolutionList, resolutionAttrs);
+    deliverResolvedAddresses(backendList, grpclbBalancerList, resolutionAttrs);
 
-    inOrder.verify(helper).createOobChannel(eq(resolutionList.get(1)), eq(lbAuthority(0)));
+    inOrder.verify(helper)
+        .createOobChannel(eq(grpclbBalancerList.get(0)), eq(lbAuthority(0)));
 
     // Attempted to connect to balancer
     assertEquals(1, fakeOobChannels.size());
@@ -1192,7 +1206,7 @@ public class GrpclbLoadBalancerTest {
 
     verify(lbRequestObserver).onNext(
         eq(LoadBalanceRequest.newBuilder().setInitialRequest(
-                InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
+            InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
             .build()));
     lbResponseObserver.onNext(buildInitialResponse(loadReportIntervalMillis));
     // We don't care if these methods have been run.
@@ -1214,11 +1228,11 @@ public class GrpclbLoadBalancerTest {
 
       assertEquals(0, fakeClock.numPendingTasks(FALLBACK_MODE_TASK_FILTER));
       List<EquivalentAddressGroup> fallbackList =
-          Arrays.asList(resolutionList.get(0), resolutionList.get(2));
+          Arrays.asList(backendList.get(0), backendList.get(1));
       assertThat(logs).containsExactly(
           "INFO: Using fallback backends",
           "INFO: Using RR list=[[[FakeSocketAddress-fake-address-0]/{}], "
-              + "[[FakeSocketAddress-fake-address-2]/{}]], drop=[null, null]",
+              + "[[FakeSocketAddress-fake-address-1]/{}]], drop=[null, null]",
           "INFO: CONNECTING: picks=[BUFFER_ENTRY], drops=[null, null]").inOrder();
 
       // Fall back to the backends from resolver
@@ -1228,20 +1242,21 @@ public class GrpclbLoadBalancerTest {
       verify(lbRequestObserver, never()).onCompleted();
     }
 
-    ////////////////////////////////////////////////////////
-    // Name resolver sends new list without any backend addr
-    ////////////////////////////////////////////////////////
-    resolutionList = createResolvedServerAddresses(true, true);
-    deliverResolvedAddresses(resolutionList, resolutionAttrs);
+    //////////////////////////////////////////////////////////////////////
+    // Name resolver sends new resolution results without any backend addr
+    //////////////////////////////////////////////////////////////////////
+    grpclbBalancerList = createResolvedBalancerAddresses(2);
+    deliverResolvedAddresses(
+        Collections.<EquivalentAddressGroup>emptyList(),grpclbBalancerList, resolutionAttrs);
 
     // New addresses are updated to the OobChannel
     inOrder.verify(helper).updateOobChannelAddresses(
         same(oobChannel),
         eq(new EquivalentAddressGroup(
-                Arrays.asList(
-                    resolutionList.get(0).getAddresses().get(0),
-                    resolutionList.get(1).getAddresses().get(0)),
-                lbAttributes(lbAuthority(0)))));
+            Arrays.asList(
+                grpclbBalancerList.get(0).getAddresses().get(0),
+                grpclbBalancerList.get(1).getAddresses().get(0)),
+            lbAttributes(lbAuthority(0)))));
 
     if (timerExpires) {
       // Still in fallback logic, except that the backend list is empty
@@ -1249,21 +1264,22 @@ public class GrpclbLoadBalancerTest {
           inOrder, Collections.<EquivalentAddressGroup>emptyList());
     }
 
-    //////////////////////////////////////////////////
-    // Name resolver sends new list with backend addrs
-    //////////////////////////////////////////////////
-    resolutionList = createResolvedServerAddresses(true, false, false);
-    deliverResolvedAddresses(resolutionList, resolutionAttrs);
+    ////////////////////////////////////////////////////////////////
+    // Name resolver sends new resolution results with backend addrs
+    ////////////////////////////////////////////////////////////////
+    backendList = createResolvedBackendAddresses(2);
+    grpclbBalancerList = createResolvedBalancerAddresses(1);
+    deliverResolvedAddresses(backendList, grpclbBalancerList, resolutionAttrs);
 
     // New LB address is updated to the OobChannel
     inOrder.verify(helper).updateOobChannelAddresses(
         same(oobChannel),
-        eq(resolutionList.get(0)));
+        eq(grpclbBalancerList.get(0)));
 
     if (timerExpires) {
       // New backend addresses are used for fallback
       fallbackTestVerifyUseOfFallbackBackendLists(
-          inOrder, Arrays.asList(resolutionList.get(1), resolutionList.get(2)));
+          inOrder, Arrays.asList(backendList.get(0), backendList.get(1)));
     }
 
     ////////////////////////////////////////////////
@@ -1283,7 +1299,7 @@ public class GrpclbLoadBalancerTest {
       lbRequestObserver = lbRequestObservers.poll();
       verify(lbRequestObserver).onNext(
           eq(LoadBalanceRequest.newBuilder().setInitialRequest(
-                  InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
+              InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
               .build()));
     }
 
@@ -1302,8 +1318,9 @@ public class GrpclbLoadBalancerTest {
     ///////////////////////////////////////////////////////////////
     // New backend addresses from resolver outside of fallback mode
     ///////////////////////////////////////////////////////////////
-    resolutionList = createResolvedServerAddresses(true, false);
-    deliverResolvedAddresses(resolutionList, resolutionAttrs);
+    backendList = createResolvedBackendAddresses(1);
+    grpclbBalancerList = createResolvedBalancerAddresses(1);
+    deliverResolvedAddresses(backendList, grpclbBalancerList, resolutionAttrs);
     // Will not affect the round robin list at all
     inOrder.verify(helper, never())
         .updateBalancingState(any(ConnectivityState.class), any(SubchannelPicker.class));
@@ -1317,13 +1334,13 @@ public class GrpclbLoadBalancerTest {
     long loadReportIntervalMillis = 1983;
     InOrder inOrder = inOrder(helper, subchannelPool);
 
-    // Create a resolution list with a mixture of balancer and backend addresses
-    List<EquivalentAddressGroup> resolutionList =
-        createResolvedServerAddresses(false, true, false);
+    // Create balancer and backend addresses
+    List<EquivalentAddressGroup> backendList = createResolvedBackendAddresses(2);
+    List<EquivalentAddressGroup> grpclbBalancerList = createResolvedBalancerAddresses(1);
     Attributes resolutionAttrs = Attributes.EMPTY;
-    deliverResolvedAddresses(resolutionList, resolutionAttrs);
+    deliverResolvedAddresses(backendList, grpclbBalancerList, resolutionAttrs);
 
-    inOrder.verify(helper).createOobChannel(eq(resolutionList.get(1)), eq(lbAuthority(0)));
+    inOrder.verify(helper).createOobChannel(eq(grpclbBalancerList.get(0)), eq(lbAuthority(0)));
 
     // Attempted to connect to balancer
     assertThat(fakeOobChannels).hasSize(1);
@@ -1334,7 +1351,7 @@ public class GrpclbLoadBalancerTest {
 
     verify(lbRequestObserver).onNext(
         eq(LoadBalanceRequest.newBuilder().setInitialRequest(
-                InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
+            InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
             .build()));
     lbResponseObserver.onNext(buildInitialResponse(loadReportIntervalMillis));
     // We don't care if these methods have been run.
@@ -1353,7 +1370,7 @@ public class GrpclbLoadBalancerTest {
 
     // Fall back to the backends from resolver
     fallbackTestVerifyUseOfFallbackBackendLists(
-        inOrder, Arrays.asList(resolutionList.get(0), resolutionList.get(2)));
+        inOrder, Arrays.asList(backendList.get(0), backendList.get(1)));
 
     // A new stream is created
     verify(mockLbService, times(2)).balanceLoad(lbResponseObserverCaptor.capture());
@@ -1361,7 +1378,7 @@ public class GrpclbLoadBalancerTest {
     lbRequestObserver = lbRequestObservers.poll();
     verify(lbRequestObserver).onNext(
         eq(LoadBalanceRequest.newBuilder().setInitialRequest(
-                InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
+            InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
             .build()));
   }
 
@@ -1369,19 +1386,20 @@ public class GrpclbLoadBalancerTest {
   public void grpclbFallback_noBalancerAddress() {
     InOrder inOrder = inOrder(helper, subchannelPool);
 
-    // Create a resolution list with just backend addresses
-    List<EquivalentAddressGroup> resolutionList = createResolvedServerAddresses(false, false);
+    // Create just backend addresses
+    List<EquivalentAddressGroup> backendList = createResolvedBackendAddresses(2);
     Attributes resolutionAttrs = Attributes.EMPTY;
-    deliverResolvedAddresses(resolutionList, resolutionAttrs);
+    deliverResolvedAddresses(
+        backendList, Collections.<EquivalentAddressGroup>emptyList(), resolutionAttrs);
 
     assertThat(logs).containsExactly(
-          "INFO: Using fallback backends",
-          "INFO: Using RR list=[[[FakeSocketAddress-fake-address-0]/{}], "
-              + "[[FakeSocketAddress-fake-address-1]/{}]], drop=[null, null]",
-          "INFO: CONNECTING: picks=[BUFFER_ENTRY], drops=[null, null]").inOrder();
+        "INFO: Using fallback backends",
+        "INFO: Using RR list=[[[FakeSocketAddress-fake-address-0]/{}], "
+            + "[[FakeSocketAddress-fake-address-1]/{}]], drop=[null, null]",
+        "INFO: CONNECTING: picks=[BUFFER_ENTRY], drops=[null, null]").inOrder();
 
     // Fall back to the backends from resolver
-    fallbackTestVerifyUseOfFallbackBackendLists(inOrder, resolutionList);
+    fallbackTestVerifyUseOfFallbackBackendLists(inOrder, backendList);
 
     // No fallback timeout timer scheduled.
     assertEquals(0, fakeClock.numPendingTasks(FALLBACK_MODE_TASK_FILTER));
@@ -1410,13 +1428,13 @@ public class GrpclbLoadBalancerTest {
     long loadReportIntervalMillis = 1983;
     InOrder inOrder = inOrder(helper, mockLbService, subchannelPool);
 
-    // Create a resolution list with a mixture of balancer and backend addresses
-    List<EquivalentAddressGroup> resolutionList =
-        createResolvedServerAddresses(false, true, false);
+    // Create balancer and backend addresses
+    List<EquivalentAddressGroup> backendList = createResolvedBackendAddresses(2);
+    List<EquivalentAddressGroup> grpclbBalancerList = createResolvedBalancerAddresses(1);
     Attributes resolutionAttrs = Attributes.EMPTY;
-    deliverResolvedAddresses(resolutionList, resolutionAttrs);
+    deliverResolvedAddresses(backendList, grpclbBalancerList, resolutionAttrs);
 
-    inOrder.verify(helper).createOobChannel(eq(resolutionList.get(1)), eq(lbAuthority(0)));
+    inOrder.verify(helper).createOobChannel(eq(grpclbBalancerList.get(0)), eq(lbAuthority(0)));
 
     // Attempted to connect to balancer
     assertEquals(1, fakeOobChannels.size());
@@ -1428,7 +1446,7 @@ public class GrpclbLoadBalancerTest {
 
     verify(lbRequestObserver).onNext(
         eq(LoadBalanceRequest.newBuilder().setInitialRequest(
-                InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
+            InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
             .build()));
     lbResponseObserver.onNext(buildInitialResponse(loadReportIntervalMillis));
     // We don't care if these methods have been run.
@@ -1465,7 +1483,7 @@ public class GrpclbLoadBalancerTest {
     if (balancerBroken && allSubchannelsBroken) {
       // Going into fallback
       subchannels = fallbackTestVerifyUseOfFallbackBackendLists(
-          inOrder, Arrays.asList(resolutionList.get(0), resolutionList.get(2)));
+          inOrder, Arrays.asList(backendList.get(0), backendList.get(1)));
 
       // When in fallback mode, fallback timer should not be scheduled when all backend
       // connections are lost
@@ -1486,9 +1504,9 @@ public class GrpclbLoadBalancerTest {
 
     if (!(balancerBroken && allSubchannelsBroken)) {
       verify(subchannelPool, never()).takeOrCreateSubchannel(
-          eq(resolutionList.get(0)), any(Attributes.class));
+          eq(backendList.get(0)), any(Attributes.class));
       verify(subchannelPool, never()).takeOrCreateSubchannel(
-          eq(resolutionList.get(2)), any(Attributes.class));
+          eq(backendList.get(1)), any(Attributes.class));
     }
   }
 
@@ -1555,15 +1573,15 @@ public class GrpclbLoadBalancerTest {
 
   @Test
   public void grpclbMultipleAuthorities() throws Exception {
-    List<EquivalentAddressGroup> grpclbResolutionList = Arrays.asList(
+    List<EquivalentAddressGroup> backendList = Collections.singletonList(
+        new EquivalentAddressGroup(new FakeSocketAddress("not-a-lb-address")));
+    List<EquivalentAddressGroup> grpclbBalancerList = Arrays.asList(
         new EquivalentAddressGroup(
             new FakeSocketAddress("fake-address-1"),
             lbAttributes("fake-authority-1")),
         new EquivalentAddressGroup(
             new FakeSocketAddress("fake-address-2"),
             lbAttributes("fake-authority-2")),
-        new EquivalentAddressGroup(
-            new FakeSocketAddress("not-a-lb-address")),
         new EquivalentAddressGroup(
             new FakeSocketAddress("fake-address-3"),
             lbAttributes("fake-authority-1")));
@@ -1574,7 +1592,7 @@ public class GrpclbLoadBalancerTest {
         lbAttributes("fake-authority-1")); // Supporting multiple authorities would be good, one day
 
     Attributes grpclbResolutionAttrs = Attributes.EMPTY;
-    deliverResolvedAddresses(grpclbResolutionList, grpclbResolutionAttrs);
+    deliverResolvedAddresses(backendList, grpclbBalancerList, grpclbResolutionAttrs);
 
     verify(helper).createOobChannel(goldenOobChannelEag, "fake-authority-1");
   }
@@ -1588,9 +1606,11 @@ public class GrpclbLoadBalancerTest {
             .build();
     InOrder inOrder =
         inOrder(mockLbService, backoffPolicyProvider, backoffPolicy1, backoffPolicy2, helper);
-    List<EquivalentAddressGroup> grpclbResolutionList = createResolvedServerAddresses(true);
+    List<EquivalentAddressGroup> grpclbBalancerList = createResolvedBalancerAddresses(1);
     Attributes grpclbResolutionAttrs = Attributes.EMPTY;
-    deliverResolvedAddresses(grpclbResolutionList, grpclbResolutionAttrs);
+    deliverResolvedAddresses(
+        Collections.<EquivalentAddressGroup>emptyList(),
+        grpclbBalancerList, grpclbResolutionAttrs);
 
     assertEquals(1, fakeOobChannels.size());
     @SuppressWarnings("unused")
@@ -1693,11 +1713,13 @@ public class GrpclbLoadBalancerTest {
     InOrder inOrder = inOrder(helper);
 
     String lbConfig = "{\"childPolicy\" : [ {\"pick_first\" : {}} ]}";
-    List<EquivalentAddressGroup> grpclbResolutionList = createResolvedServerAddresses(true);
+    List<EquivalentAddressGroup> grpclbBalancerList = createResolvedBalancerAddresses(1);
     Attributes grpclbResolutionAttrs = Attributes.newBuilder().set(
         LoadBalancer.ATTR_LOAD_BALANCING_CONFIG, parseJsonObject(lbConfig)).build();
 
-    deliverResolvedAddresses(grpclbResolutionList, grpclbResolutionAttrs);
+    deliverResolvedAddresses(
+        Collections.<EquivalentAddressGroup>emptyList(),
+        grpclbBalancerList, grpclbResolutionAttrs);
 
     assertEquals(1, fakeOobChannels.size());
     verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
@@ -1706,7 +1728,7 @@ public class GrpclbLoadBalancerTest {
     StreamObserver<LoadBalanceRequest> lbRequestObserver = lbRequestObservers.poll();
     verify(lbRequestObserver).onNext(
         eq(LoadBalanceRequest.newBuilder().setInitialRequest(
-                InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
+            InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
             .build()));
 
     // Simulate receiving LB response
@@ -1722,8 +1744,8 @@ public class GrpclbLoadBalancerTest {
     // the new createSubchannel().
     inOrder.verify(helper).createSubchannel(
         eq(Arrays.asList(
-                new EquivalentAddressGroup(backends1.get(0).addr, eagAttrsWithToken("token0001")),
-                new EquivalentAddressGroup(backends1.get(1).addr, eagAttrsWithToken("token0002")))),
+            new EquivalentAddressGroup(backends1.get(0).addr, eagAttrsWithToken("token0001")),
+            new EquivalentAddressGroup(backends1.get(1).addr, eagAttrsWithToken("token0002")))),
         any(Attributes.class));
 
     // Initially IDLE
@@ -1779,9 +1801,9 @@ public class GrpclbLoadBalancerTest {
     assertThat(mockSubchannels).isEmpty();
     verify(subchannel).updateAddresses(
         eq(Arrays.asList(
-                new EquivalentAddressGroup(backends2.get(0).addr, eagAttrsWithToken("token0001")),
-                new EquivalentAddressGroup(backends2.get(2).addr,
-                    eagAttrsWithToken("token0004")))));
+            new EquivalentAddressGroup(backends2.get(0).addr, eagAttrsWithToken("token0001")),
+            new EquivalentAddressGroup(backends2.get(2).addr,
+                eagAttrsWithToken("token0004")))));
     inOrder.verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
     RoundRobinPicker picker4 = (RoundRobinPicker) pickerCaptor.getValue();
     assertThat(picker4.dropList).containsExactly(
@@ -1825,10 +1847,12 @@ public class GrpclbLoadBalancerTest {
   @SuppressWarnings("deprecation")  // TODO(creamsoup) use parsed object
   private void subtestShutdownWithoutSubchannel(String childPolicy) throws Exception {
     String lbConfig = "{\"childPolicy\" : [ {\"" + childPolicy + "\" : {}} ]}";
-    List<EquivalentAddressGroup> grpclbResolutionList = createResolvedServerAddresses(true);
+    List<EquivalentAddressGroup> grpclbBalancerList = createResolvedBalancerAddresses(1);
     Attributes grpclbResolutionAttrs = Attributes.newBuilder().set(
         LoadBalancer.ATTR_LOAD_BALANCING_CONFIG, parseJsonObject(lbConfig)).build();
-    deliverResolvedAddresses(grpclbResolutionList, grpclbResolutionAttrs);
+    deliverResolvedAddresses(
+        Collections.<EquivalentAddressGroup>emptyList(),
+        grpclbBalancerList, grpclbResolutionAttrs);
     verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
     assertEquals(1, lbRequestObservers.size());
     StreamObserver<LoadBalanceRequest> requestObserver = lbRequestObservers.poll();
@@ -1848,12 +1872,12 @@ public class GrpclbLoadBalancerTest {
 
     String lbConfig = "{\"childPolicy\" : [ {\"pick_first\" : {}} ]}";
 
-    // Name resolver returns a mix of balancer and backend addresses
-    List<EquivalentAddressGroup> grpclbResolutionList =
-        createResolvedServerAddresses(false, true, false);
+    // Name resolver returns balancer and backend addresses
+    List<EquivalentAddressGroup> backendList = createResolvedBackendAddresses(2);
+    List<EquivalentAddressGroup> grpclbBalancerList = createResolvedBalancerAddresses(1);
     Attributes grpclbResolutionAttrs = Attributes.newBuilder().set(
         LoadBalancer.ATTR_LOAD_BALANCING_CONFIG, parseJsonObject(lbConfig)).build();
-    deliverResolvedAddresses(grpclbResolutionList, grpclbResolutionAttrs);
+    deliverResolvedAddresses(backendList, grpclbBalancerList, grpclbResolutionAttrs);
 
     // Attempted to connect to balancer
     assertEquals(1, fakeOobChannels.size());
@@ -1868,7 +1892,7 @@ public class GrpclbLoadBalancerTest {
     // TODO(zhangkun83): remove the deprecation suppression on this method once migrated to
     // the new createSubchannel().
     inOrder.verify(helper).createSubchannel(
-        eq(Arrays.asList(grpclbResolutionList.get(0), grpclbResolutionList.get(2))),
+        eq(Arrays.asList(backendList.get(0), backendList.get(1))),
         any(Attributes.class));
 
     assertThat(mockSubchannels).hasSize(1);
@@ -1905,9 +1929,9 @@ public class GrpclbLoadBalancerTest {
     assertThat(mockSubchannels).isEmpty();
     verify(subchannel).updateAddresses(
         eq(Arrays.asList(
-                new EquivalentAddressGroup(backends1.get(0).addr, eagAttrsWithToken("token0001")),
-                new EquivalentAddressGroup(backends1.get(1).addr,
-                    eagAttrsWithToken("token0002")))));
+            new EquivalentAddressGroup(backends1.get(0).addr, eagAttrsWithToken("token0001")),
+            new EquivalentAddressGroup(backends1.get(1).addr,
+                eagAttrsWithToken("token0002")))));
     inOrder.verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
     RoundRobinPicker picker2 = (RoundRobinPicker) pickerCaptor.getValue();
     assertThat(picker2.dropList).containsExactly(null, null);
@@ -1927,11 +1951,13 @@ public class GrpclbLoadBalancerTest {
     InOrder inOrder = inOrder(helper);
 
     String lbConfig = "{\"childPolicy\" : [ {\"round_robin\" : {}} ]}";
-    List<EquivalentAddressGroup> grpclbResolutionList = createResolvedServerAddresses(true);
+    List<EquivalentAddressGroup> grpclbBalancerList = createResolvedBalancerAddresses(1);
     Attributes grpclbResolutionAttrs = Attributes.newBuilder().set(
         LoadBalancer.ATTR_LOAD_BALANCING_CONFIG, parseJsonObject(lbConfig)).build();
 
-    deliverResolvedAddresses(grpclbResolutionList, grpclbResolutionAttrs);
+    deliverResolvedAddresses(
+        Collections.<EquivalentAddressGroup>emptyList(),
+        grpclbBalancerList, grpclbResolutionAttrs);
 
     assertEquals(1, fakeOobChannels.size());
     ManagedChannel oobChannel = fakeOobChannels.poll();
@@ -1941,7 +1967,7 @@ public class GrpclbLoadBalancerTest {
     StreamObserver<LoadBalanceRequest> lbRequestObserver = lbRequestObservers.poll();
     verify(lbRequestObserver).onNext(
         eq(LoadBalanceRequest.newBuilder().setInitialRequest(
-                InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
+            InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
             .build()));
 
     // Simulate receiving LB response
@@ -1971,7 +1997,9 @@ public class GrpclbLoadBalancerTest {
     lbConfig = "{\"childPolicy\" : [ {\"pick_first\" : {}} ]}";
     grpclbResolutionAttrs = Attributes.newBuilder().set(
         LoadBalancer.ATTR_LOAD_BALANCING_CONFIG, parseJsonObject(lbConfig)).build();
-    deliverResolvedAddresses(grpclbResolutionList, grpclbResolutionAttrs);
+    deliverResolvedAddresses(
+        Collections.<EquivalentAddressGroup>emptyList(),
+        grpclbBalancerList, grpclbResolutionAttrs);
 
 
     // GrpclbState will be shutdown, and a new one will be created
@@ -1989,7 +2017,7 @@ public class GrpclbLoadBalancerTest {
     lbRequestObserver = lbRequestObservers.poll();
     verify(lbRequestObserver).onNext(
         eq(LoadBalanceRequest.newBuilder().setInitialRequest(
-                InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
+            InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
             .build()));
 
     // Simulate receiving LB response
@@ -2003,8 +2031,8 @@ public class GrpclbLoadBalancerTest {
     // the new createSubchannel().
     inOrder.verify(helper).createSubchannel(
         eq(Arrays.asList(
-                new EquivalentAddressGroup(backends1.get(0).addr, eagAttrsWithToken("token0001")),
-                new EquivalentAddressGroup(backends1.get(1).addr, eagAttrsWithToken("token0002")))),
+            new EquivalentAddressGroup(backends1.get(0).addr, eagAttrsWithToken("token0001")),
+            new EquivalentAddressGroup(backends1.get(1).addr, eagAttrsWithToken("token0002")))),
         any(Attributes.class));
 
     inOrder.verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
@@ -2088,19 +2116,18 @@ public class GrpclbLoadBalancerTest {
   @Test
   public void grpclbWorking_lbSendsFallbackMessage() {
     InOrder inOrder = inOrder(helper, subchannelPool);
-    List<EquivalentAddressGroup> grpclbResolutionList =
-        createResolvedServerAddresses(true, true, false, false);
-    List<EquivalentAddressGroup> fallbackEags = grpclbResolutionList.subList(2, 4);
+    List<EquivalentAddressGroup> backendList = createResolvedBackendAddresses(2);
+    List<EquivalentAddressGroup> grpclbBalancerList = createResolvedBalancerAddresses(2);
     Attributes grpclbResolutionAttrs = Attributes.EMPTY;
-    deliverResolvedAddresses(grpclbResolutionList, grpclbResolutionAttrs);
+    deliverResolvedAddresses(backendList, grpclbBalancerList, grpclbResolutionAttrs);
 
     // Fallback timer is started as soon as the addresses are resolved.
     assertEquals(1, fakeClock.numPendingTasks(FALLBACK_MODE_TASK_FILTER));
 
     List<SocketAddress> addrs = new ArrayList<>();
-    addrs.addAll(grpclbResolutionList.get(0).getAddresses());
-    addrs.addAll(grpclbResolutionList.get(1).getAddresses());
-    Attributes attr = grpclbResolutionList.get(0).getAttributes();
+    addrs.addAll(grpclbBalancerList.get(0).getAddresses());
+    addrs.addAll(grpclbBalancerList.get(1).getAddresses());
+    Attributes attr = grpclbBalancerList.get(0).getAttributes();
     EquivalentAddressGroup oobChannelEag = new EquivalentAddressGroup(addrs, attr);
     verify(helper).createOobChannel(eq(oobChannelEag), eq(lbAuthority(0)));
     assertEquals(1, fakeOobChannels.size());
@@ -2206,7 +2233,7 @@ public class GrpclbLoadBalancerTest {
         .returnSubchannel(eq(subchannel2), eq(ConnectivityStateInfo.forNonError(READY)));
 
     // verify fallback
-    fallbackTestVerifyUseOfFallbackBackendLists(inOrder, fallbackEags);
+    fallbackTestVerifyUseOfFallbackBackendLists(inOrder, backendList);
 
     assertFalse(oobChannel.isShutdown());
     verify(lbRequestObserver, never()).onCompleted();
@@ -2293,48 +2320,60 @@ public class GrpclbLoadBalancerTest {
   private void deliverSubchannelState(
       final Subchannel subchannel, final ConnectivityStateInfo newState) {
     syncContext.execute(new Runnable() {
-        @Override
-        public void run() {
-          // TODO(zhangkun83): remove the deprecation suppression on this method once migrated to
-          // the new API.
-          balancer.handleSubchannelState(subchannel, newState);
-        }
-      });
+      @Override
+      public void run() {
+        // TODO(zhangkun83): remove the deprecation suppression on this method once migrated to
+        // the new API.
+        balancer.handleSubchannelState(subchannel, newState);
+      }
+    });
   }
 
   private void deliverNameResolutionError(final Status error) {
     syncContext.execute(new Runnable() {
-        @Override
-        public void run() {
-          balancer.handleNameResolutionError(error);
-        }
-      });
+      @Override
+      public void run() {
+        balancer.handleNameResolutionError(error);
+      }
+    });
   }
 
   private void deliverResolvedAddresses(
-      final List<EquivalentAddressGroup> addrs, final Attributes attrs) {
+      final List<EquivalentAddressGroup> backendAddrs,
+      final List<EquivalentAddressGroup> balancerAddrs,
+      Attributes attrs) {
+    final Attributes attributes =
+        attrs.toBuilder().set(GrpclbConstants.ATTR_LB_ADDRS, balancerAddrs).build();
     syncContext.execute(new Runnable() {
-        @Override
-        public void run() {
-          balancer.handleResolvedAddresses(
-              ResolvedAddresses.newBuilder().setAddresses(addrs).setAttributes(attrs).build());
-        }
-      });
+      @Override
+      public void run() {
+        balancer.handleResolvedAddresses(
+            ResolvedAddresses.newBuilder()
+                .setAddresses(backendAddrs)
+                .setAttributes(attributes)
+                .build());
+      }
+    });
   }
 
   private GrpclbClientLoadRecorder getLoadRecorder() {
     return balancer.getGrpclbState().getLoadRecorder();
   }
 
-  private static List<EquivalentAddressGroup> createResolvedServerAddresses(boolean ... isLb) {
-    ArrayList<EquivalentAddressGroup> list = new ArrayList<>();
-    for (int i = 0; i < isLb.length; i++) {
+  private static List<EquivalentAddressGroup> createResolvedBackendAddresses(int n) {
+    List<EquivalentAddressGroup> list = new ArrayList<>();
+    for (int i = 0; i < n; i++) {
       SocketAddress addr = new FakeSocketAddress("fake-address-" + i);
-      EquivalentAddressGroup eag =
-          new EquivalentAddressGroup(
-              addr,
-              isLb[i] ? lbAttributes(lbAuthority(i)) : Attributes.EMPTY);
-      list.add(eag);
+      list.add(new EquivalentAddressGroup(addr));
+    }
+    return list;
+  }
+
+  private static List<EquivalentAddressGroup> createResolvedBalancerAddresses(int n) {
+    List<EquivalentAddressGroup> list = new ArrayList<>();
+    for (int i = 0; i < n; i++) {
+      SocketAddress addr = new FakeSocketAddress("fake-address-" + i);
+      list.add(new EquivalentAddressGroup(addr, lbAttributes(lbAuthority(i))));
     }
     return list;
   }

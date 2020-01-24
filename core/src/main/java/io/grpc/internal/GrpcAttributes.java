@@ -21,6 +21,7 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.Grpc;
 import io.grpc.NameResolver;
 import io.grpc.SecurityLevel;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -36,6 +37,9 @@ public final class GrpcAttributes {
   @NameResolver.ResolutionResultAttr
   public static final Attributes.Key<Map<String, ?>> NAME_RESOLVER_SERVICE_CONFIG =
       Attributes.Key.create("service-config");
+
+  public static final Attributes.Key<List<EquivalentAddressGroup>> ATTR_LB_ADDRS =
+      Attributes.Key.create("io.grpc.grpclb.lbAddrs");
 
   /**
    * The naming authority of a gRPC LB server address.  It is an address-group-level attribute,
