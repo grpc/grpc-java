@@ -21,7 +21,6 @@ import static io.grpc.xds.XdsClientTestHelper.buildDiscoveryResponse;
 import static io.grpc.xds.XdsClientTestHelper.buildListener;
 import static io.grpc.xds.XdsClientTestHelper.buildRouteConfiguration;
 import static io.grpc.xds.XdsClientTestHelper.buildVirtualHost;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -40,6 +39,7 @@ import io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.A
 import io.grpc.ChannelLogger;
 import io.grpc.ManagedChannel;
 import io.grpc.NameResolver;
+import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.NameResolver.ResolutionResult;
 import io.grpc.NameResolver.ServiceConfigParser;
 import io.grpc.Status;
@@ -87,7 +87,7 @@ public class XdsNameResolverTest {
   public final MockitoRule mocks = MockitoJUnit.rule();
   @Rule
   public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
-  
+
   private final SynchronizationContext syncContext = new SynchronizationContext(
       new Thread.UncaughtExceptionHandler() {
         @Override
@@ -98,7 +98,13 @@ public class XdsNameResolverTest {
 
   private final FakeClock fakeClock = new FakeClock();
   private final Queue<StreamObserver<DiscoveryResponse>> responseObservers = new ArrayDeque<>();
-  private final ServiceConfigParser serviceConfigParser = mock(ServiceConfigParser.class);
+  private final ServiceConfigParser serviceConfigParser = new ServiceConfigParser() {
+    @Override
+    public ConfigOrError parseServiceConfig(Map<String, ?> rawServiceConfig) {
+      return ConfigOrError.fromConfig(rawServiceConfig);
+    }
+  };
+
   private final NameResolver.Args args =
       NameResolver.Args.newBuilder()
           .setDefaultPort(8080)
@@ -260,7 +266,7 @@ public class XdsNameResolverTest {
     assertThat(result.getAddresses()).isEmpty();
     Map<String, ?> serviceConfig =
         result.getAttributes().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
-    verify(serviceConfigParser).parseServiceConfig(eq(serviceConfig));
+    assertThat(result.getServiceConfig().getConfig()).isEqualTo(serviceConfig);
     @SuppressWarnings("unchecked")
     List<Map<String, ?>> rawLbConfigs =
         (List<Map<String, ?>>) serviceConfig.get("loadBalancingConfig");
@@ -307,7 +313,7 @@ public class XdsNameResolverTest {
     assertThat(result.getAddresses()).isEmpty();
     Map<String, ?> serviceConfig =
         result.getAttributes().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
-    verify(serviceConfigParser).parseServiceConfig(eq(serviceConfig));
+    assertThat(result.getServiceConfig().getConfig()).isEqualTo(serviceConfig);
 
     List<Map<String, ?>> rawLbConfigs =
         (List<Map<String, ?>>) serviceConfig.get("loadBalancingConfig");
@@ -333,7 +339,7 @@ public class XdsNameResolverTest {
     result = resolutionResultCaptor.getValue();
     assertThat(result.getAddresses()).isEmpty();
     serviceConfig = result.getAttributes().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
-    verify(serviceConfigParser).parseServiceConfig(eq(serviceConfig));
+    assertThat(result.getServiceConfig().getConfig()).isEqualTo(serviceConfig);
     rawLbConfigs = (List<Map<String, ?>>) serviceConfig.get("loadBalancingConfig");
     lbConfig = Iterables.getOnlyElement(rawLbConfigs);
     assertThat(lbConfig.keySet()).containsExactly("cds_experimental");
@@ -369,7 +375,7 @@ public class XdsNameResolverTest {
     assertThat(result.getAddresses()).isEmpty();
     Map<String, ?> serviceConfig =
         result.getAttributes().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
-    verify(serviceConfigParser).parseServiceConfig(eq(serviceConfig));
+    assertThat(result.getServiceConfig().getConfig()).isEqualTo(serviceConfig);
     @SuppressWarnings("unchecked")
     List<Map<String, ?>> rawLbConfigs =
         (List<Map<String, ?>>) serviceConfig.get("loadBalancingConfig");
