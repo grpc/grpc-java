@@ -19,7 +19,10 @@ package io.grpc.xds;
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.READY;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -30,10 +33,13 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
+import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
+import io.grpc.LoadBalancer.PickResult;
+import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
@@ -51,6 +57,7 @@ import org.junit.Test;
 import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
@@ -253,11 +260,24 @@ public class XdsLoadBalancer2Test {
     verify(lookasideLb).handleNameResolutionError(same(status));
     verify(fallbackLb).handleNameResolutionError(same(status));
 
-    SubchannelPicker subchannelPicker = mock(SubchannelPicker.class);
+    ArgumentCaptor<SubchannelPicker> pickerCaptor = ArgumentCaptor.forClass(null);
+    verify(helper, atLeastOnce()).updateBalancingState(
+        any(ConnectivityState.class), pickerCaptor.capture());
+    SubchannelPicker latestPicker = pickerCaptor.getValue();
+
+    SubchannelPicker subchannelPicker = XdsSubchannelPickers.BUFFER_PICKER;
     lookasideLbHelper.updateBalancingState(CONNECTING, subchannelPicker);
-    verify(helper, never()).updateBalancingState(CONNECTING, subchannelPicker);
+    verify(helper, atLeastOnce()).updateBalancingState(
+        any(ConnectivityState.class), pickerCaptor.capture());
+    assertThat(latestPicker).isEqualTo(pickerCaptor.getValue());
     fallbackLbHelper.updateBalancingState(CONNECTING, subchannelPicker);
-    verify(helper).updateBalancingState(CONNECTING, subchannelPicker);
+    verify(helper, atLeastOnce()).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    assertThat(latestPicker).isNotEqualTo(pickerCaptor.getValue());
+    latestPicker = pickerCaptor.getValue();
+    PickSubchannelArgs pickSubchannelArgs = mock(PickSubchannelArgs.class);
+    PickResult pickResult = latestPicker.pickSubchannel(pickSubchannelArgs);
+    // PickResult.withNoResult() is expected pickResult for BUFFER_PICKER.
+    assertThat(pickResult).isEqualTo(PickResult.withNoResult());
   }
 
   private void verifyNotInFallbackMode() {

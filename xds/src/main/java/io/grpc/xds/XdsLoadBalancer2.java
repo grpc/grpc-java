@@ -51,23 +51,23 @@ final class XdsLoadBalancer2 extends LoadBalancer {
   private final EndpointUpdateCallback edsUpdateCallback = new EndpointUpdateCallback() {
     @Override
     public void onWorking() {
-      if (childPolicyHasBeenReady) {
+      if (mainPolicyHasBeenReady) {
         // cancel Fallback-After-Startup timer if there's any
         cancelFallbackTimer();
       }
 
-      adsWorked = true;
+      mainPolicyWorked = true;
     }
 
     @Override
     public void onError(Status error) {
       checkArgument(!error.isOk(), "Error code must not be OK");
-      if (!adsWorked) {
+      if (!mainPolicyWorked) {
         // start Fallback-at-Startup immediately
-        useFallbackPolicy(error.augmentDescription(
-            "No endpoint update had been received when encountering this error from the main LB"
+        useFallbackPolicy(Status.UNAVAILABLE.withCause(error.asRuntimeException()).withDescription(
+            "No endpoint update had been received when encountering an error from the main LB"
                 + " policy. The balancer entered fallback mode because of this error."));
-      } else if (childPolicyHasBeenReady) {
+      } else if (mainPolicyHasBeenReady) {
         // TODO: schedule a timer for Fallback-After-Startup
       } // else: the Fallback-at-Startup timer is still pending, noop and wait
     }
@@ -85,8 +85,8 @@ final class XdsLoadBalancer2 extends LoadBalancer {
   // Scheduled only once.  Never reset to null.
   @CheckForNull
   private ScheduledHandle fallbackTimer;
-  private boolean adsWorked;
-  private boolean childPolicyHasBeenReady;
+  private boolean mainPolicyWorked;
+  private boolean mainPolicyHasBeenReady;
 
   XdsLoadBalancer2(Helper helper) {
     this(helper, new LookasideLbFactoryImpl(), new FallbackLbFactory());
@@ -124,7 +124,7 @@ final class XdsLoadBalancer2 extends LoadBalancer {
         @Override
         public void run() {
           useFallbackPolicy(Status.UNAVAILABLE.withDescription(
-              "Channel was not ready when timeout for entering fallback mode happened."));
+              "Channel was not ready when timeout for entering fallback mode expired."));
         }
       }
 
@@ -215,9 +215,9 @@ final class XdsLoadBalancer2 extends LoadBalancer {
     public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
       if (newState == ConnectivityState.READY) {
         checkState(
-            adsWorked,
-            "channel goes to READY before the load balancer even worked");
-        childPolicyHasBeenReady = true;
+            mainPolicyWorked,
+            "Channel goes to READY before the load balancer even worked");
+        mainPolicyHasBeenReady = true;
         cancelFallback();
       }
       if (!isInFallbackMode()) {
@@ -249,34 +249,33 @@ final class XdsLoadBalancer2 extends LoadBalancer {
         return;
       }
 
-      SubchannelPicker picker = newPicker;
-      if (newState == ConnectivityState.TRANSIENT_FAILURE) {
-        // Augment picker with the fallbackReason.
-        picker = new SubchannelPicker() {
-          @Override
-          public PickResult pickSubchannel(PickSubchannelArgs args) {
-            PickResult pickResult = newPicker.pickSubchannel(args);
-            Status status = pickResult.getStatus();
-            if (status.isOk()) { // This is true in some round robin case or drop case.
-              return pickResult;
-            }
-            if (status.getCause() != null) {
-              status.getCause().addSuppressed(fallbackReason.asRuntimeException());
-            } else {
-              status = status.withCause(fallbackReason.asRuntimeException());
-            }
-            return PickResult.withError(status);
+      SubchannelPicker picker = new SubchannelPicker() {
+        @Override
+        public PickResult pickSubchannel(PickSubchannelArgs args) {
+          PickResult pickResult = newPicker.pickSubchannel(args);
+          Status status = pickResult.getStatus();
+          if (status.isOk()) {
+            return pickResult;
           }
 
-          @Override
-          public String toString() {
-            return MoreObjects.toStringHelper("FallbackErrorPicker")
-                .add("fallbackReason", fallbackReason)
-                .add("picker", newPicker)
-                .toString();
-          }
-        };
-      }
+          Exception cause = fallbackReason.asRuntimeException();
+          cause.addSuppressed(status.asRuntimeException());
+          return PickResult.withError(
+              Status.fromCode(fallbackReason.getCode())
+                  .withDescription("The main LB policy had been not working and the fallback LB"
+                      + " policy also failed.")
+                  .withCause(cause));
+        }
+
+        @Override
+        public String toString() {
+          return MoreObjects.toStringHelper("FallbackPicker")
+              .add("fallbackReason", fallbackReason)
+              .add("picker", newPicker)
+              .toString();
+        }
+      };
+
       helper.getChannelLogger().log(
           ChannelLogLevel.INFO,
           "Picker updated - state: {0}, picker: {1}", newState, picker);
