@@ -25,7 +25,6 @@ import com.google.common.collect.ImmutableList;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.Status.Code;
@@ -64,6 +63,7 @@ final class XdsNameResolver extends NameResolver {
   private final XdsChannelFactory channelFactory;
   private final SynchronizationContext syncContext;
   private final ScheduledExecutorService timeService;
+  private final ServiceConfigParser serviceConfigParser;
   private final BackoffPolicy.Provider backoffPolicyProvider;
   private final Supplier<Stopwatch> stopwatchSupplier;
   private final Bootstrapper bootstrapper;
@@ -89,6 +89,7 @@ final class XdsNameResolver extends NameResolver {
     this.channelFactory = checkNotNull(channelFactory, "channelFactory");
     this.syncContext = checkNotNull(args.getSynchronizationContext(), "syncContext");
     this.timeService = checkNotNull(args.getScheduledExecutorService(), "timeService");
+    this.serviceConfigParser = checkNotNull(args.getServiceConfigParser(), "serviceConfigParser");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
     this.bootstrapper = checkNotNull(bootstrapper, "bootstrapper");
@@ -158,14 +159,12 @@ final class XdsNameResolver extends NameResolver {
                 .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, config)
                 .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
                 .build();
-        ConfigOrError xdsServiceConfig =
-            XdsLoadBalancerProvider
-                .parseLoadBalancingConfigPolicy(config, LoadBalancerRegistry.getDefaultRegistry());
+        ConfigOrError parsedServiceConfig = serviceConfigParser.parseServiceConfig(config);
         ResolutionResult result =
             ResolutionResult.newBuilder()
                 .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
                 .setAttributes(attrs)
-                .setServiceConfig(xdsServiceConfig)
+                .setServiceConfig(parsedServiceConfig)
                 .build();
         listener.onResult(result);
       }

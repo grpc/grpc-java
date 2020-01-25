@@ -151,16 +151,16 @@ public class GrpclbLoadBalancerTest {
   private SubchannelPool subchannelPool;
   private final ArrayList<String> logs = new ArrayList<>();
   private final ChannelLogger channelLogger = new ChannelLogger() {
-    @Override
-    public void log(ChannelLogLevel level, String msg) {
-      logs.add(level + ": " + msg);
-    }
+      @Override
+      public void log(ChannelLogLevel level, String msg) {
+        logs.add(level + ": " + msg);
+      }
 
-    @Override
-    public void log(ChannelLogLevel level, String template, Object... args) {
-      log(level, MessageFormat.format(template, args));
-    }
-  };
+      @Override
+      public void log(ChannelLogLevel level, String template, Object... args) {
+        log(level, MessageFormat.format(template, args));
+      }
+    };
   private SubchannelPicker currentPicker;
   private LoadBalancerGrpc.LoadBalancerImplBase mockLbService;
   @Captor
@@ -207,12 +207,12 @@ public class GrpclbLoadBalancerTest {
             StreamObserver<LoadBalanceRequest> requestObserver =
                 mock(StreamObserver.class);
             Answer<Void> closeRpc = new Answer<Void>() {
-              @Override
-              public Void answer(InvocationOnMock invocation) {
-                responseObserver.onCompleted();
-                return null;
-              }
-            };
+                @Override
+                public Void answer(InvocationOnMock invocation) {
+                  responseObserver.onCompleted();
+                  return null;
+                }
+              };
             doAnswer(closeRpc).when(requestObserver).onCompleted();
             lbRequestObservers.add(requestObserver);
             return requestObserver;
@@ -221,63 +221,63 @@ public class GrpclbLoadBalancerTest {
     fakeLbServer = InProcessServerBuilder.forName("fakeLb")
         .directExecutor().addService(mockLbService).build().start();
     doAnswer(new Answer<ManagedChannel>() {
-      @Override
-      public ManagedChannel answer(InvocationOnMock invocation) throws Throwable {
-        String authority = (String) invocation.getArguments()[1];
-        ManagedChannel channel;
-        if (failingLbAuthorities.contains(authority)) {
-          channel = InProcessChannelBuilder.forName("nonExistFakeLb").directExecutor()
-              .overrideAuthority(authority).build();
-        } else {
-          channel = InProcessChannelBuilder.forName("fakeLb").directExecutor()
-              .overrideAuthority(authority).build();
+        @Override
+        public ManagedChannel answer(InvocationOnMock invocation) throws Throwable {
+          String authority = (String) invocation.getArguments()[1];
+          ManagedChannel channel;
+          if (failingLbAuthorities.contains(authority)) {
+            channel = InProcessChannelBuilder.forName("nonExistFakeLb").directExecutor()
+                .overrideAuthority(authority).build();
+          } else {
+            channel = InProcessChannelBuilder.forName("fakeLb").directExecutor()
+                .overrideAuthority(authority).build();
+          }
+          fakeOobChannels.add(channel);
+          oobChannelTracker.add(channel);
+          return channel;
         }
-        fakeOobChannels.add(channel);
-        oobChannelTracker.add(channel);
-        return channel;
-      }
-    }).when(helper).createOobChannel(any(EquivalentAddressGroup.class), any(String.class));
+      }).when(helper).createOobChannel(any(EquivalentAddressGroup.class), any(String.class));
     doAnswer(new Answer<Subchannel>() {
-      @Override
-      public Subchannel answer(InvocationOnMock invocation) throws Throwable {
-        Subchannel subchannel = mock(Subchannel.class);
-        EquivalentAddressGroup eag = (EquivalentAddressGroup) invocation.getArguments()[0];
-        Attributes attrs = (Attributes) invocation.getArguments()[1];
-        when(subchannel.getAllAddresses()).thenReturn(Arrays.asList(eag));
-        when(subchannel.getAttributes()).thenReturn(attrs);
-        mockSubchannels.add(subchannel);
-        pooledSubchannelTracker.add(subchannel);
-        return subchannel;
-      }
-    }).when(subchannelPool).takeOrCreateSubchannel(
-        any(EquivalentAddressGroup.class), any(Attributes.class));
+        @Override
+        public Subchannel answer(InvocationOnMock invocation) throws Throwable {
+          Subchannel subchannel = mock(Subchannel.class);
+          EquivalentAddressGroup eag = (EquivalentAddressGroup) invocation.getArguments()[0];
+          Attributes attrs = (Attributes) invocation.getArguments()[1];
+          when(subchannel.getAllAddresses()).thenReturn(Arrays.asList(eag));
+          when(subchannel.getAttributes()).thenReturn(attrs);
+          mockSubchannels.add(subchannel);
+          pooledSubchannelTracker.add(subchannel);
+          return subchannel;
+        }
+      }).when(subchannelPool).takeOrCreateSubchannel(
+          any(EquivalentAddressGroup.class), any(Attributes.class));
     doAnswer(new Answer<Subchannel>() {
-      @Override
-      public Subchannel answer(InvocationOnMock invocation) throws Throwable {
-        Subchannel subchannel = mock(Subchannel.class);
-        List<EquivalentAddressGroup> eagList =
-            (List<EquivalentAddressGroup>) invocation.getArguments()[0];
-        Attributes attrs = (Attributes) invocation.getArguments()[1];
-        when(subchannel.getAllAddresses()).thenReturn(eagList);
-        when(subchannel.getAttributes()).thenReturn(attrs);
-        mockSubchannels.add(subchannel);
-        unpooledSubchannelTracker.add(subchannel);
-        return subchannel;
-      }
-      // TODO(zhangkun83): remove the deprecation suppression on this method once migrated to
-      // the new createSubchannel().
-    }).when(helper).createSubchannel(any(List.class), any(Attributes.class));
+        @Override
+        public Subchannel answer(InvocationOnMock invocation) throws Throwable {
+          Subchannel subchannel = mock(Subchannel.class);
+          List<EquivalentAddressGroup> eagList =
+              (List<EquivalentAddressGroup>) invocation.getArguments()[0];
+          Attributes attrs = (Attributes) invocation.getArguments()[1];
+          when(subchannel.getAllAddresses()).thenReturn(eagList);
+          when(subchannel.getAttributes()).thenReturn(attrs);
+          mockSubchannels.add(subchannel);
+          unpooledSubchannelTracker.add(subchannel);
+          return subchannel;
+        }
+        // TODO(zhangkun83): remove the deprecation suppression on this method once migrated to
+        // the new createSubchannel().
+      }).when(helper).createSubchannel(any(List.class), any(Attributes.class));
     when(helper.getSynchronizationContext()).thenReturn(syncContext);
     when(helper.getScheduledExecutorService()).thenReturn(fakeClock.getScheduledExecutorService());
     when(helper.getChannelLogger()).thenReturn(channelLogger);
     doAnswer(new Answer<Void>() {
-      @Override
-      public Void answer(InvocationOnMock invocation) throws Throwable {
-        currentPicker = (SubchannelPicker) invocation.getArguments()[1];
-        return null;
-      }
-    }).when(helper).updateBalancingState(
-        any(ConnectivityState.class), any(SubchannelPicker.class));
+        @Override
+        public Void answer(InvocationOnMock invocation) throws Throwable {
+          currentPicker = (SubchannelPicker) invocation.getArguments()[1];
+          return null;
+        }
+      }).when(helper).updateBalancingState(
+          any(ConnectivityState.class), any(SubchannelPicker.class));
     when(helper.getAuthority()).thenReturn(SERVICE_AUTHORITY);
     when(backoffPolicy1.nextBackoffNanos()).thenReturn(10L, 100L);
     when(backoffPolicy2.nextBackoffNanos()).thenReturn(10L, 100L);
@@ -293,11 +293,11 @@ public class GrpclbLoadBalancerTest {
     try {
       if (balancer != null) {
         syncContext.execute(new Runnable() {
-          @Override
-          public void run() {
-            balancer.shutdown();
-          }
-        });
+            @Override
+            public void run() {
+              balancer.shutdown();
+            }
+          });
       }
       for (ManagedChannel channel : oobChannelTracker) {
         assertTrue(channel + " is shutdown", channel.isShutdown());
