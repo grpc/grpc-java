@@ -19,7 +19,6 @@ package io.grpc.xds;
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
-import static io.grpc.LoadBalancer.ATTR_LOAD_BALANCING_CONFIG;
 import static io.grpc.xds.XdsLoadBalancerProvider.XDS_POLICY_NAME;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -49,8 +48,8 @@ import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
-import io.grpc.internal.JsonParser;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
+import io.grpc.xds.CdsLoadBalancerProvider.CdsConfig;
 import io.grpc.xds.XdsClient.ClusterUpdate;
 import io.grpc.xds.XdsClient.ClusterWatcher;
 import io.grpc.xds.XdsClient.EndpointUpdate;
@@ -66,7 +65,6 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
-import java.util.Map;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -79,8 +77,6 @@ import org.mockito.MockitoAnnotations;
  * Tests for {@link CdsLoadBalancer}.
  */
 @RunWith(JUnit4.class)
-// TODO(creamsoup) use parsed service config
-@SuppressWarnings("deprecation")
 public class CdsLoadBalancerTest {
   private static final String CLIENT_PEM_FILE = "client.pem";
   private static final String CLIENT_KEY_FILE = "client.key";
@@ -164,16 +160,13 @@ public class CdsLoadBalancerTest {
   }
 
   @Test
-  public void invalidConfigType() throws Exception {
-    String lbConfigRaw = "{'cluster' : {}}".replace("'", "\"");
-    @SuppressWarnings("unchecked")
-    Map<String, ?> lbConfig = (Map<String, ?>) JsonParser.parse(lbConfigRaw);
+  public void invalidConfigType() {
     ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
         .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
         .setAttributes(Attributes.newBuilder()
-            .set(ATTR_LOAD_BALANCING_CONFIG, lbConfig)
             .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
             .build())
+        .setLoadBalancingPolicyConfig(new Object())
         .build();
 
     cdsLoadBalancer.handleResolvedAddresses(resolvedAddresses);
@@ -182,16 +175,13 @@ public class CdsLoadBalancerTest {
   }
 
   @Test
-  public void handleResolutionErrorBeforeOrAfterCdsWorking() throws Exception {
-    String lbConfigRaw1 = "{'cluster' : 'foo.googleapis.com'}".replace("'", "\"");
-    @SuppressWarnings("unchecked")
-    Map<String, ?> lbConfig1 = (Map<String, ?>) JsonParser.parse(lbConfigRaw1);
+  public void handleResolutionErrorBeforeOrAfterCdsWorking() {
     ResolvedAddresses resolvedAddresses1 = ResolvedAddresses.newBuilder()
         .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
         .setAttributes(Attributes.newBuilder()
-            .set(ATTR_LOAD_BALANCING_CONFIG, lbConfig1)
             .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
             .build())
+        .setLoadBalancingPolicyConfig(new CdsConfig("foo.googleapis.com"))
         .build();
     cdsLoadBalancer.handleResolvedAddresses(resolvedAddresses1);
     ArgumentCaptor<ClusterWatcher> clusterWatcherCaptor1 = ArgumentCaptor.forClass(null);
@@ -222,16 +212,12 @@ public class CdsLoadBalancerTest {
   @Test
   public void handleCdsConfigs() throws Exception {
     assertThat(xdsClient).isNull();
-
-    String lbConfigRaw1 = "{'cluster' : 'foo.googleapis.com'}".replace("'", "\"");
-    @SuppressWarnings("unchecked")
-    Map<String, ?> lbConfig1 = (Map<String, ?>) JsonParser.parse(lbConfigRaw1);
     ResolvedAddresses resolvedAddresses1 = ResolvedAddresses.newBuilder()
         .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
         .setAttributes(Attributes.newBuilder()
-            .set(ATTR_LOAD_BALANCING_CONFIG, lbConfig1)
             .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
             .build())
+        .setLoadBalancingPolicyConfig(new CdsConfig("foo.googleapis.com"))
         .build();
     cdsLoadBalancer.handleResolvedAddresses(resolvedAddresses1);
 
@@ -267,15 +253,12 @@ public class CdsLoadBalancerTest {
     edsLbHelper1.updateBalancingState(ConnectivityState.READY, picker1);
     verify(helper).updateBalancingState(ConnectivityState.READY, picker1);
 
-    String lbConfigRaw2 = "{'cluster' : 'bar.googleapis.com'}".replace("'", "\"");
-    @SuppressWarnings("unchecked")
-    Map<String, ?> lbConfig2 = (Map<String, ?>) JsonParser.parse(lbConfigRaw2);
     ResolvedAddresses resolvedAddresses2 = ResolvedAddresses.newBuilder()
         .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
         .setAttributes(Attributes.newBuilder()
-            .set(ATTR_LOAD_BALANCING_CONFIG, lbConfig2)
             .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
             .build())
+        .setLoadBalancingPolicyConfig(new CdsConfig("bar.googleapis.com"))
         .build();
     cdsLoadBalancer.handleResolvedAddresses(resolvedAddresses2);
 
@@ -345,18 +328,14 @@ public class CdsLoadBalancerTest {
   @SuppressWarnings({"unchecked"})
   public void handleCdsConfigs_withUpstreamTlsContext() throws Exception {
     assertThat(xdsClient).isNull();
-
-    String lbConfigRaw1 = "{'cluster' : 'foo.googleapis.com'}".replace("'", "\"");
-    @SuppressWarnings("unchecked")
-    Map<String, ?> lbConfig1 = (Map<String, ?>) JsonParser.parse(lbConfigRaw1);
     ResolvedAddresses resolvedAddresses1 =
          ResolvedAddresses.newBuilder()
              .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
              .setAttributes(
                  Attributes.newBuilder()
-                     .set(ATTR_LOAD_BALANCING_CONFIG, lbConfig1)
                      .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
                      .build())
+             .setLoadBalancingPolicyConfig(new CdsConfig("foo.googleapis.com"))
              .build();
     cdsLoadBalancer.handleResolvedAddresses(resolvedAddresses1);
 
@@ -498,15 +477,12 @@ public class CdsLoadBalancerTest {
 
   @Test
   public void clusterWatcher_onErrorCalledBeforeAndAfterOnClusterChanged() throws Exception {
-    String lbConfigRaw = "{'cluster' : 'foo.googleapis.com'}".replace("'", "\"");
-    @SuppressWarnings("unchecked")
-    Map<String, ?> lbConfig = (Map<String, ?>) JsonParser.parse(lbConfigRaw);
     ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
         .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
         .setAttributes(Attributes.newBuilder()
-            .set(ATTR_LOAD_BALANCING_CONFIG, lbConfig)
             .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
             .build())
+        .setLoadBalancingPolicyConfig(new CdsConfig("foo.googleapis.com"))
         .build();
     cdsLoadBalancer.handleResolvedAddresses(resolvedAddresses);
 
@@ -550,15 +526,12 @@ public class CdsLoadBalancerTest {
     lbRegistry.deregister(fakeXdsLoadBlancerProvider);
     lbRegistry.register(new XdsLoadBalancerProvider());
 
-    String lbConfigRaw = "{'cluster' : 'foo.googleapis.com'}".replace("'", "\"");
-    @SuppressWarnings("unchecked")
-    Map<String, ?> lbConfig = (Map<String, ?>) JsonParser.parse(lbConfigRaw);
     ResolvedAddresses resolvedAddresses1 = ResolvedAddresses.newBuilder()
         .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
         .setAttributes(Attributes.newBuilder()
-            .set(ATTR_LOAD_BALANCING_CONFIG, lbConfig)
             .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
             .build())
+        .setLoadBalancingPolicyConfig(new CdsConfig("foo.googleapis.com"))
         .build();
     cdsLoadBalancer.handleResolvedAddresses(resolvedAddresses1);
     ArgumentCaptor<ClusterWatcher> clusterWatcherCaptor = ArgumentCaptor.forClass(null);

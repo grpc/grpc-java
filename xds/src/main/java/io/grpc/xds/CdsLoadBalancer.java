@@ -23,13 +23,11 @@ import static io.grpc.xds.XdsLoadBalancerProvider.XDS_POLICY_NAME;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
-import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerRegistry;
-import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
@@ -45,7 +43,6 @@ import io.grpc.xds.sds.TlsContextManager;
 import io.grpc.xds.sds.TlsContextManagerImpl;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nullable;
@@ -90,7 +87,6 @@ public final class CdsLoadBalancer extends LoadBalancer {
   @Override
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     channelLogger.log(ChannelLogLevel.DEBUG, "Received ResolvedAddresses {0}", resolvedAddresses);
-    Attributes attributes = resolvedAddresses.getAttributes();
     if (xdsClientPool == null) {
       xdsClientPool = resolvedAddresses.getAttributes().get(XdsAttributes.XDS_CLIENT_POOL);
       if (xdsClientPool == null) {
@@ -104,25 +100,15 @@ public final class CdsLoadBalancer extends LoadBalancer {
       xdsClient = xdsClientPool.getObject();
     }
 
-    Map<String, ?> newRawLbConfig = attributes.get(ATTR_LOAD_BALANCING_CONFIG);
-    if (newRawLbConfig == null) {
-      // This will not happen when the service config error handling is implemented.
-      // For now simply go to TRANSIENT_FAILURE.
+    Object lbConfig = resolvedAddresses.getLoadBalancingPolicyConfig();
+    if (!(lbConfig instanceof CdsConfig)) {
       helper.updateBalancingState(
           TRANSIENT_FAILURE,
-          new ErrorPicker(
-              Status.UNAVAILABLE.withDescription("ATTR_LOAD_BALANCING_CONFIG not available")));
+          new ErrorPicker(Status.UNAVAILABLE.withDescription(
+              "Load balancing config '" + lbConfig + "' is not a CdsConfig")));
       return;
     }
-    ConfigOrError cfg =
-        CdsLoadBalancerProvider.parseLoadBalancingConfigPolicy(newRawLbConfig);
-    if (cfg.getError() != null) {
-      // This will not happen when the service config error handling is implemented.
-      // For now simply go to TRANSIENT_FAILURE.
-      helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(cfg.getError()));
-      return;
-    }
-    final CdsConfig newCdsConfig = (CdsConfig) cfg.getConfig();
+    CdsConfig newCdsConfig = (CdsConfig) lbConfig;
 
     // If CdsConfig is changed, do a graceful switch.
     if (!newCdsConfig.equals(cdsConfig)) {
@@ -325,13 +311,7 @@ public final class CdsLoadBalancer extends LoadBalancer {
         edsBalancer = lbRegistry.getProvider(XDS_POLICY_NAME).newLoadBalancer(helper);
       }
       edsBalancer.handleResolvedAddresses(
-          resolvedAddresses.toBuilder()
-              .setAttributes(
-                  resolvedAddresses.getAttributes().toBuilder()
-                      .discard(ATTR_LOAD_BALANCING_CONFIG)
-                      .build())
-              .setLoadBalancingPolicyConfig(edsConfig)
-          .build());
+          resolvedAddresses.toBuilder().setLoadBalancingPolicyConfig(edsConfig).build());
     }
 
     /** For new UpstreamTlsContext value, release old SslContextProvider. */
