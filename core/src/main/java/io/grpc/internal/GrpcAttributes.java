@@ -38,6 +38,7 @@ public final class GrpcAttributes {
   public static final Attributes.Key<Map<String, ?>> NAME_RESOLVER_SERVICE_CONFIG =
       Attributes.Key.create("service-config");
 
+  @NameResolver.ResolutionResultAttr
   public static final Attributes.Key<List<EquivalentAddressGroup>> ATTR_LB_ADDRS =
       Attributes.Key.create("io.grpc.grpclb.lbAddrs");
 
