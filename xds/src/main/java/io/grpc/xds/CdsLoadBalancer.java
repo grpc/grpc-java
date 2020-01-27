@@ -311,12 +311,7 @@ public final class CdsLoadBalancer extends LoadBalancer {
         edsBalancer = lbRegistry.getProvider(XDS_POLICY_NAME).newLoadBalancer(helper);
       }
       edsBalancer.handleResolvedAddresses(
-          resolvedAddresses.toBuilder()
-              .setAttributes(
-                  resolvedAddresses.getAttributes().toBuilder()
-                      .build())
-              .setLoadBalancingPolicyConfig(edsConfig)
-          .build());
+          resolvedAddresses.toBuilder().setLoadBalancingPolicyConfig(edsConfig).build());
     }
 
     /** For new UpstreamTlsContext value, release old SslContextProvider. */
