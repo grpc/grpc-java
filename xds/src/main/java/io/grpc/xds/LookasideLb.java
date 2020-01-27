@@ -28,7 +28,6 @@ import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerRegistry;
-import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.GrpcUtil;
@@ -114,41 +113,15 @@ final class LookasideLb extends LoadBalancer {
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     channelLogger.log(ChannelLogLevel.DEBUG, "Received ResolvedAddresses {0}", resolvedAddresses);
 
-    Attributes attributes = resolvedAddresses.getAttributes();
-    XdsConfig newXdsConfig;
     Object lbConfig = resolvedAddresses.getLoadBalancingPolicyConfig();
-    if (lbConfig != null) {
-      if (!(lbConfig instanceof XdsConfig)) {
-        lookasideLbHelper.updateBalancingState(
-            TRANSIENT_FAILURE,
-            new ErrorPicker(Status.UNAVAILABLE.withDescription(
-                "Load balancing config '" + lbConfig + "' is not an XdsConfig")));
-        return;
-      }
-      newXdsConfig = (XdsConfig) lbConfig;
-    } else {
-      // In the future, in all cases xdsConfig can be obtained directly by
-      // resolvedAddresses.getLoadBalancingPolicyConfig().
-      Map<String, ?> newRawLbConfig = attributes.get(ATTR_LOAD_BALANCING_CONFIG);
-      if (newRawLbConfig == null) {
-        // This will not happen when the service config error handling is implemented.
-        // For now simply go to TRANSIENT_FAILURE.
-        lookasideLbHelper.updateBalancingState(
-            TRANSIENT_FAILURE,
-            new ErrorPicker(
-                Status.UNAVAILABLE.withDescription("ATTR_LOAD_BALANCING_CONFIG not available")));
-        return;
-      }
-      ConfigOrError cfg =
-          XdsLoadBalancerProvider.parseLoadBalancingConfigPolicy(newRawLbConfig, lbRegistry);
-      if (cfg.getError() != null) {
-        // This will not happen when the service config error handling is implemented.
-        // For now simply go to TRANSIENT_FAILURE.
-        lookasideLbHelper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(cfg.getError()));
-        return;
-      }
-      newXdsConfig = (XdsConfig) cfg.getConfig();
+    if (!(lbConfig instanceof XdsConfig)) {
+      lookasideLbHelper.updateBalancingState(
+          TRANSIENT_FAILURE,
+          new ErrorPicker(Status.UNAVAILABLE.withDescription(
+              "Load balancing config '" + lbConfig + "' is not an XdsConfig")));
+      return;
     }
+    XdsConfig newXdsConfig = (XdsConfig) lbConfig;
 
     if (xdsClientPool == null) {
       // Init xdsClientPool and xdsClient.
@@ -163,6 +136,7 @@ final class LookasideLb extends LoadBalancer {
       // We assume XdsConfig switching happens only within one usecase, and there is no switching
       // between different usecases.
 
+      Attributes attributes = resolvedAddresses.getAttributes();
       xdsClientPool = attributes.get(XdsAttributes.XDS_CLIENT_POOL);
       if (xdsClientPool == null) { // This is the EDS-only usecase.
         final BootstrapInfo bootstrapInfo;
@@ -241,7 +215,6 @@ final class LookasideLb extends LoadBalancer {
       switchingLoadBalancer.switchTo(clusterEndpointsLoadBalancerFactory);
     }
     resolvedAddresses = resolvedAddresses.toBuilder()
-        .setAttributes(attributes.toBuilder().discard(ATTR_LOAD_BALANCING_CONFIG).build())
         .setLoadBalancingPolicyConfig(newXdsConfig)
         .build();
     switchingLoadBalancer.handleResolvedAddresses(resolvedAddresses);
