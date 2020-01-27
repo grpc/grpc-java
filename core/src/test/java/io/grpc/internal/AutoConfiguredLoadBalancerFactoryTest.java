@@ -275,7 +275,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     verify(testLbBalancer).handleResolvedAddresses(resultCaptor.capture());
     assertThat(resultCaptor.getValue().getAddresses()).containsExactlyElementsIn(servers).inOrder();
     assertThat(resultCaptor.getValue().getAttributes().get(ATTR_LOAD_BALANCING_CONFIG))
-        .isEqualTo(rawServiceConfig);
+        .containsExactly("setting1", "high");
     verify(testLbBalancer, atLeast(0)).canHandleEmptyAddressListFromNameResolution();
     ArgumentCaptor<Map<String, ?>> lbConfigCaptor = ArgumentCaptor.forClass(Map.class);
     verify(testLbBalancerProvider).parseLoadBalancingPolicyConfig(lbConfigCaptor.capture());
@@ -298,7 +298,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     assertThat(handleResult.getCode()).isEqualTo(Status.Code.OK);
     assertThat(resultCaptor.getValue().getAddresses()).containsExactlyElementsIn(servers).inOrder();
     assertThat(resultCaptor.getValue().getAttributes().get(ATTR_LOAD_BALANCING_CONFIG))
-        .isEqualTo(rawServiceConfig);
+        .containsExactly("setting1", "low");
     verify(testLbBalancerProvider, times(2))
         .parseLoadBalancingPolicyConfig(lbConfigCaptor.capture());
     assertThat(lbConfigCaptor.getValue()).containsExactly("setting1", "low");
@@ -388,7 +388,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     assertThat(resultCaptor.getValue().getLoadBalancingPolicyConfig())
         .isEqualTo(nextParsedConfigOrError2.get().getConfig());
     assertThat(resultCaptor.getValue().getAttributes().get(ATTR_LOAD_BALANCING_CONFIG))
-        .isEqualTo(rawServiceConfig);
+        .containsExactly("setting1", "high");
   }
 
   @Test
