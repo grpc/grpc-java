@@ -1613,9 +1613,11 @@ public class XdsClientImplTest {
     // Cancel the other watcher. All resources have been unsubscribed.
     xdsClient.cancelClusterDataWatch("cluster-bar.googleapis.com", watcher2);
 
-    // All endpoint watchers have been cancelled. Due to protocol limitation, we do not send
-    // a CDS request for updated resource names (empty) when canceling the last resource.
-    verifyNoMoreInteractions(requestObserver);
+    verify(requestObserver)
+        .onNext(
+            argThat(
+                new DiscoveryRequestMatcher("1", ImmutableList.<String>of(),
+                    XdsClientImpl.ADS_TYPE_URL_CDS, "0001")));
 
     // Management server sends back a new CDS response.
     clusters = ImmutableList.of(
@@ -1626,13 +1628,10 @@ public class XdsClientImplTest {
         buildDiscoveryResponse("2", clusters, XdsClientImpl.ADS_TYPE_URL_CDS, "0002");
     responseObserver.onNext(response);
 
-    // Due to protocol limitation, client sent an ACK CDS request, with resource_names containing
-    // the last unsubscribed resource.
     verify(requestObserver)
         .onNext(
             argThat(
-                new DiscoveryRequestMatcher("2",
-                    ImmutableList.of("cluster-bar.googleapis.com"),
+                new DiscoveryRequestMatcher("2", ImmutableList.<String>of(),
                     XdsClientImpl.ADS_TYPE_URL_CDS, "0002")));
 
     // Cancelled watchers do not receive notification.

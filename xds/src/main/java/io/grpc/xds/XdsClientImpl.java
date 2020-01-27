@@ -311,12 +311,6 @@ final class XdsClientImpl extends XdsClient {
         cdsRespTimers.get(clusterName).cancel();
         cdsRespTimers.remove(clusterName);
       }
-
-      // If unsubscribe the last resource, do NOT send a CDS request for an empty resource list.
-      // This is a workaround for CDS protocol resource unsubscribe.
-      if (clusterWatchers.isEmpty()) {
-        return;
-      }
       // No longer interested in this cluster, send an updated CDS request to unsubscribe
       // this resource.
       if (rpcRetryTimer != null && rpcRetryTimer.isPending()) {
@@ -669,8 +663,6 @@ final class XdsClientImpl extends XdsClient {
    */
   private void handleCdsResponse(DiscoveryResponse cdsResponse) {
     logger.log(Level.FINE, "Received an CDS response: {0}", cdsResponse);
-    checkState(adsStream.cdsResourceNames != null,
-        "Never requested for CDS resources, management server is doing something wrong");
     adsStream.cdsRespNonce = cdsResponse.getNonce();
 
     // Unpack Cluster messages.
@@ -680,7 +672,7 @@ final class XdsClientImpl extends XdsClient {
         clusters.add(res.unpack(Cluster.class));
       }
     } catch (InvalidProtocolBufferException e) {
-      adsStream.sendNackRequest(ADS_TYPE_URL_CDS, adsStream.cdsResourceNames,
+      adsStream.sendNackRequest(ADS_TYPE_URL_CDS, clusterWatchers.keySet(),
           "Broken CDS response");
       return;
     }
@@ -697,7 +689,7 @@ final class XdsClientImpl extends XdsClient {
       // Management server is required to always send newly requested resources, even if they
       // may have been sent previously (proactively). Thus, client does not need to cache
       // unrequested resources.
-      if (!adsStream.cdsResourceNames.contains(clusterName)) {
+      if (!clusterWatchers.keySet().contains(clusterName)) {
         continue;
       }
       ClusterUpdate.Builder updateBuilder = ClusterUpdate.newBuilder();
@@ -751,10 +743,10 @@ final class XdsClientImpl extends XdsClient {
       clusterUpdates.put(clusterName, updateBuilder.build());
     }
     if (errorMessage != null) {
-      adsStream.sendNackRequest(ADS_TYPE_URL_CDS, adsStream.cdsResourceNames, errorMessage);
+      adsStream.sendNackRequest(ADS_TYPE_URL_CDS, clusterWatchers.keySet(), errorMessage);
       return;
     }
-    adsStream.sendAckRequest(ADS_TYPE_URL_CDS, adsStream.cdsResourceNames,
+    adsStream.sendAckRequest(ADS_TYPE_URL_CDS, clusterWatchers.keySet(),
         cdsResponse.getVersionInfo());
 
     // Update local CDS cache with data in this response.
@@ -997,14 +989,6 @@ final class XdsClientImpl extends XdsClient {
     // watchers are interested in.
     @Nullable
     private String rdsResourceName;
-    // Most recently requested CDS resource names.
-    // Due to CDS protocol limitation, client does not send a CDS request for empty resource
-    // names when unsubscribing the last resource. Management server assumes it is still
-    // subscribing to the last resource, client also need to behave so to avoid data lose.
-    // Therefore, cluster names that watchers interested in cannot always represent resource names
-    // in most recently sent CDS requests.
-    @Nullable
-    private Collection<String> cdsResourceNames;
 
     private AdsStream(AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceStub stub) {
       this.stub = checkNotNull(stub, "stub");
@@ -1147,10 +1131,6 @@ final class XdsClientImpl extends XdsClient {
       } else if (typeUrl.equals(ADS_TYPE_URL_CDS)) {
         version = cdsVersion;
         nonce = cdsRespNonce;
-        // For CDS protocol resource unsubscribe workaround, keep the last unsubscribed cluster
-        // as the requested resource name for ACK requests when all all resources have
-        // been unsubscribed.
-        cdsResourceNames = ImmutableList.copyOf(resourceNames);
       } else if (typeUrl.equals(ADS_TYPE_URL_EDS)) {
         version = edsVersion;
         nonce = edsRespNonce;
