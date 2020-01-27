@@ -431,6 +431,11 @@ public final class AutoConfiguredLoadBalancerFactory {
     public PickResult pickSubchannel(PickSubchannelArgs args) {
       return PickResult.withNoResult();
     }
+
+    @Override
+    public String toString() {
+      return "Empty picker";
+    }
   }
 
   private static final class FailingPicker extends SubchannelPicker {

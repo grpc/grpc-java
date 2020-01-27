@@ -63,6 +63,11 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
             public PickResult pickSubchannel(PickSubchannelArgs args) {
               return PickResult.withError(error);
             }
+
+            @Override
+            public String toString() {
+              return "Error picker with status: " + error;
+            }
           });
     }
 

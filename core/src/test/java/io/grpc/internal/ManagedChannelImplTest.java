@@ -2862,7 +2862,7 @@ public class ManagedChannelImplTest {
     timer.forwardNanos(1234);
     updateBalancingStateSafely(helper, CONNECTING, mockPicker);
     assertThat(getStats(channel).channelTrace.events).contains(new ChannelTrace.Event.Builder()
-        .setDescription("Entering CONNECTING state")
+        .setDescription("Entering CONNECTING state with picker: mockPicker")
         .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
         .setTimestampNanos(timer.getTicker().read())
         .build());

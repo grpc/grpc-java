@@ -21,6 +21,7 @@ import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
+import com.google.common.base.MoreObjects;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
@@ -134,6 +135,11 @@ final class PickFirstLoadBalancer extends LoadBalancer {
     @Override
     public PickResult pickSubchannel(PickSubchannelArgs args) {
       return result;
+    }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(Picker.class).add("result", result).toString();
     }
   }
 

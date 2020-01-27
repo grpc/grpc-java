@@ -180,6 +180,11 @@ final class OobChannel extends ManagedChannel implements InternalInstrumented<Ch
         public PickResult pickSubchannel(PickSubchannelArgs args) {
           return result;
         }
+
+        @Override
+        public String toString() {
+          return "Subchannel picker with pick result: " + result;
+        }
       };
     delayedTransport.reprocess(subchannelPicker);
   }
@@ -259,6 +264,11 @@ final class OobChannel extends ManagedChannel implements InternalInstrumented<Ch
             @Override
             public PickResult pickSubchannel(PickSubchannelArgs args) {
               return errorResult;
+            }
+
+            @Override
+            public String toString() {
+              return "Error picker with errorResult: " + errorResult;
             }
           });
         break;

@@ -26,6 +26,7 @@ import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.base.Stopwatch;
 import com.google.protobuf.util.Durations;
@@ -1051,5 +1052,12 @@ final class GrpclbState {
       }
     }
 
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(RoundRobinPicker.class)
+          .add("dropList", dropList)
+          .add("pickList", pickList)
+          .toString();
+    }
   }
 }
