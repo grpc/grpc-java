@@ -338,7 +338,8 @@ public final class AutoConfiguredLoadBalancerFactory {
               return parsedLbPolicyConfig;
             }
             return ConfigOrError.fromConfig(
-                new PolicySelection(provider, serviceConfig, parsedLbPolicyConfig.getConfig()));
+                new PolicySelection(
+                    provider, lbConfig.getRawConfigValue(), parsedLbPolicyConfig.getConfig()));
           }
         }
         return ConfigOrError.fromError(
