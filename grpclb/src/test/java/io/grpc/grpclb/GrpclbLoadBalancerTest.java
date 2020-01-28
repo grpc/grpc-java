@@ -2356,15 +2356,17 @@ public class GrpclbLoadBalancerTest {
       final List<EquivalentAddressGroup> backendAddrs,
       final List<EquivalentAddressGroup> balancerAddrs,
       Attributes attrs) {
-    final Attributes attributes =
-        attrs.toBuilder().set(GrpclbConstants.ATTR_LB_ADDRS, balancerAddrs).build();
+    if (!balancerAddrs.isEmpty()) {
+      attrs = attrs.toBuilder().set(GrpclbConstants.ATTR_LB_ADDRS, balancerAddrs).build();
+    }
+    final Attributes finalAttrs = attrs;
     syncContext.execute(new Runnable() {
       @Override
       public void run() {
         balancer.handleResolvedAddresses(
             ResolvedAddresses.newBuilder()
                 .setAddresses(backendAddrs)
-                .setAttributes(attributes)
+                .setAttributes(finalAttrs)
                 .build());
       }
     });
