@@ -86,7 +86,8 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
           new XdsConfig(childPolicy, fallbackPolicy, edsServiceName, lrsServerName));
     } catch (RuntimeException e) {
       return ConfigOrError.fromError(
-          Status.UNKNOWN.withDescription("Failed to parse config " + e.getMessage()).withCause(e));
+          Status.fromThrowable(e).withDescription(
+              "Failed to parse XDS LB config: " + rawLoadBalancingPolicyConfig));
     }
   }
 

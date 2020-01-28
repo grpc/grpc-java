@@ -70,7 +70,8 @@ public final class GrpclbLoadBalancerProvider extends LoadBalancerProvider {
       return parseLoadBalancingConfigPolicyInternal(rawLoadBalancingConfigPolicy);
     } catch (RuntimeException e) {
       return ConfigOrError.fromError(
-          Status.INTERNAL.withDescription("can't parse config: " + e.getMessage()).withCause(e));
+          Status.fromThrowable(e).withDescription(
+              "Failed to parse GRPCLB config: " + rawLoadBalancingConfigPolicy));
     }
   }
 
