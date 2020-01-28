@@ -792,6 +792,20 @@ public class GrpclbLoadBalancerTest {
   }
 
   @Test
+  public void receiveNoBackendAndBalancerAddress() {
+    deliverResolvedAddresses(
+        Collections.<EquivalentAddressGroup>emptyList(),
+        Collections.<EquivalentAddressGroup>emptyList(),
+        Attributes.EMPTY);
+    verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+    RoundRobinPicker picker = (RoundRobinPicker) pickerCaptor.getValue();
+    assertThat(picker.dropList).isEmpty();
+    Status error = Iterables.getOnlyElement(picker.pickList).picked(new Metadata()).getStatus();
+    assertThat(error.getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat(error.getDescription()).isEqualTo("No backend or balancer addresses found");
+  }
+
+  @Test
   public void nameResolutionFailsThenRecover() {
     Status error = Status.NOT_FOUND.withDescription("www.google.com not found");
     deliverNameResolutionError(error);

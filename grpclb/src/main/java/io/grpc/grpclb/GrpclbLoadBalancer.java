@@ -92,8 +92,15 @@ class GrpclbLoadBalancer extends LoadBalancer {
   @SuppressWarnings("deprecation")  // TODO(creamsoup) migrate to use parsed service config
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     Attributes attributes = resolvedAddresses.getAttributes();
-    List<LbAddressGroup> newLbAddressGroups = new ArrayList<>();
     List<EquivalentAddressGroup> newLbAddresses = attributes.get(GrpcAttributes.ATTR_LB_ADDRS);
+    if ((newLbAddresses == null || newLbAddresses.isEmpty())
+        && resolvedAddresses.getAddresses().isEmpty()) {
+      handleNameResolutionError(
+          Status.UNAVAILABLE.withDescription("No backend or balancer addresses found"));
+      return;
+    }
+    List<LbAddressGroup> newLbAddressGroups = new ArrayList<>();
+
     if (newLbAddresses != null) {
       for (EquivalentAddressGroup lbAddr : newLbAddresses) {
         String lbAddrAuthority = lbAddr.getAttributes().get(GrpcAttributes.ATTR_LB_ADDR_AUTHORITY);

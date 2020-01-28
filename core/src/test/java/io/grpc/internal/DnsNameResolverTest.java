@@ -47,7 +47,6 @@ import io.grpc.NameResolver.ServiceConfigParser;
 import io.grpc.ProxyDetector;
 import io.grpc.StaticTestingClassLoader;
 import io.grpc.Status;
-import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.DnsNameResolver.AddressResolver;
 import io.grpc.internal.DnsNameResolver.ResolutionResults;
@@ -382,26 +381,6 @@ public class DnsNameResolverTest {
   }
 
   @Test
-  public void resolveAll_failsOnEmptyResult() {
-    DnsNameResolver nr = newResolver("dns:///addr.fake:1234", 443);
-    nr.setAddressResolver(new AddressResolver() {
-      @Override
-      public List<InetAddress> resolveAddress(String host) throws Exception {
-        return Collections.emptyList();
-      }
-    });
-
-    nr.start(mockListener);
-    assertThat(fakeExecutor.runDueTasks()).isEqualTo(1);
-
-    ArgumentCaptor<Status> ac = ArgumentCaptor.forClass(Status.class);
-    verify(mockListener).onError(ac.capture());
-    verifyNoMoreInteractions(mockListener);
-    assertThat(ac.getValue().getCode()).isEqualTo(Code.UNAVAILABLE);
-    assertThat(ac.getValue().getDescription()).contains("No DNS backend or balancer addresses");
-  }
-
-  @Test
   public void resolve_cacheForever() throws Exception {
     System.setProperty(DnsNameResolver.NETWORKADDRESS_CACHE_TTL_PROPERTY, "-1");
     final List<InetAddress> answer1 = createAddressList(2);
@@ -547,6 +526,39 @@ public class DnsNameResolverTest {
     resolver.shutdown();
 
     verify(mockResolver, times(2)).resolveAddress(anyString());
+  }
+
+  @Test
+  public void resolve_emptyResult() {
+    DnsNameResolver nr = newResolver("dns:///addr.fake:1234", 443);
+    nr.setAddressResolver(new AddressResolver() {
+      @Override
+      public List<InetAddress> resolveAddress(String host) throws Exception {
+        return Collections.emptyList();
+      }
+    });
+    nr.setResourceResolver(new ResourceResolver() {
+      @Override
+      public List<String> resolveTxt(String host) throws Exception {
+        return Collections.emptyList();
+      }
+
+      @Override
+      public List<EquivalentAddressGroup> resolveSrv(AddressResolver addressResolver, String host)
+          throws Exception {
+        return Collections.emptyList();
+      }
+    });
+
+    nr.start(mockListener);
+    assertThat(fakeExecutor.runDueTasks()).isEqualTo(1);
+
+    ArgumentCaptor<ResolutionResult> ac = ArgumentCaptor.forClass(ResolutionResult.class);
+    verify(mockListener).onResult(ac.capture());
+    verifyNoMoreInteractions(mockListener);
+    assertThat(ac.getValue().getAddresses()).isEmpty();
+    assertThat(ac.getValue().getAttributes()).isEqualTo(Attributes.EMPTY);
+    assertThat(ac.getValue().getServiceConfig()).isNull();
   }
 
   @Test

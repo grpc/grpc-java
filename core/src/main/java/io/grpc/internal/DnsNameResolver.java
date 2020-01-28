@@ -293,24 +293,19 @@ final class DnsNameResolver extends NameResolver {
             Status.UNAVAILABLE.withDescription("Unable to resolve host " + host).withCause(e));
         return;
       }
-      if (resolutionResults.addresses.isEmpty() && resolutionResults.balancerAddresses.isEmpty()) {
-        savedListener.onError(Status.UNAVAILABLE.withDescription(
-            "No DNS backend or balancer addresses found for " + host));
-        return;
-      }
       // Each address forms an EAG
       List<EquivalentAddressGroup> servers = new ArrayList<>();
       for (InetAddress inetAddr : resolutionResults.addresses) {
         servers.add(new EquivalentAddressGroup(new InetSocketAddress(inetAddr, port)));
       }
 
-      ResolutionResult.Builder resultBuilder =
-          ResolutionResult.newBuilder()
-              .setAddresses(servers)
-              .setAttributes(
-                  Attributes.newBuilder()
-                      .set(GrpcAttributes.ATTR_LB_ADDRS, resolutionResults.balancerAddresses)
-                      .build());
+      ResolutionResult.Builder resultBuilder = ResolutionResult.newBuilder().setAddresses(servers);
+      if (!resolutionResults.balancerAddresses.isEmpty()) {
+        resultBuilder.setAttributes(
+            Attributes.newBuilder()
+                .set(GrpcAttributes.ATTR_LB_ADDRS, resolutionResults.balancerAddresses)
+                .build());
+      }
       if (!resolutionResults.txtRecords.isEmpty()) {
         ConfigOrError rawServiceConfig =
             parseServiceConfig(resolutionResults.txtRecords, random, getLocalHostname());
