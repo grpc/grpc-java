@@ -41,7 +41,6 @@ import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import javax.annotation.Nullable;
@@ -329,26 +328,6 @@ public final class AutoConfiguredLoadBalancerFactory {
           .add("provider", provider)
           .add("rawConfig", rawConfig)
           .add("config", config)
-          .toString();
-    }
-  }
-
-  @VisibleForTesting
-  static final class ResolvedPolicySelection {
-    final PolicySelection policySelection;
-    final List<EquivalentAddressGroup> serverList;
-
-    ResolvedPolicySelection(
-        PolicySelection policySelection, List<EquivalentAddressGroup> serverList) {
-      this.policySelection = checkNotNull(policySelection, "policySelection");
-      this.serverList = Collections.unmodifiableList(checkNotNull(serverList, "serverList"));
-    }
-
-    @Override
-    public String toString() {
-      return MoreObjects.toStringHelper(this)
-          .add("policySelection", policySelection)
-          .add("serverList", serverList)
           .toString();
     }
   }
