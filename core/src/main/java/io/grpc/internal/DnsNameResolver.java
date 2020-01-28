@@ -300,11 +300,9 @@ final class DnsNameResolver extends NameResolver {
       }
 
       ResolutionResult.Builder resultBuilder = ResolutionResult.newBuilder().setAddresses(servers);
+      Attributes.Builder attributesBuilder = Attributes.newBuilder();
       if (!resolutionResults.balancerAddresses.isEmpty()) {
-        resultBuilder.setAttributes(
-            Attributes.newBuilder()
-                .set(GrpcAttributes.ATTR_LB_ADDRS, resolutionResults.balancerAddresses)
-                .build());
+        attributesBuilder.set(GrpcAttributes.ATTR_LB_ADDRS, resolutionResults.balancerAddresses);
       }
       if (!resolutionResults.txtRecords.isEmpty()) {
         ConfigOrError rawServiceConfig =
@@ -319,17 +317,14 @@ final class DnsNameResolver extends NameResolver {
           Map<String, ?> verifiedRawServiceConfig = (Map<String, ?>) rawServiceConfig.getConfig();
           ConfigOrError parsedServiceConfig =
               serviceConfigParser.parseServiceConfig(verifiedRawServiceConfig);
-          resultBuilder
-              .setAttributes(
-                  Attributes.newBuilder()
-                      .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, verifiedRawServiceConfig)
-                      .build())
-              .setServiceConfig(parsedServiceConfig);
+          resultBuilder.setServiceConfig(parsedServiceConfig);
+          attributesBuilder
+              .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, verifiedRawServiceConfig);
         }
       } else {
         logger.log(Level.FINE, "No TXT records found for {0}", new Object[]{host});
       }
-      savedListener.onResult(resultBuilder.build());
+      savedListener.onResult(resultBuilder.setAttributes(attributesBuilder.build()).build());
     }
   }
 
