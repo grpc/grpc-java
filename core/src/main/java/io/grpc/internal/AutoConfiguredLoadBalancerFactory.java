@@ -434,7 +434,7 @@ public final class AutoConfiguredLoadBalancerFactory {
 
     @Override
     public String toString() {
-      return "Empty picker";
+      return MoreObjects.toStringHelper(EmptyPicker.class).toString();
     }
   }
 
