@@ -76,7 +76,8 @@ public class CdsLoadBalancerProvider extends LoadBalancerProvider {
       return ConfigOrError.fromConfig(new CdsConfig(cluster));
     } catch (RuntimeException e) {
       return ConfigOrError.fromError(
-          Status.fromThrowable(e).withDescription("Failed to parse CDS LB config"));
+          Status.fromThrowable(e).withDescription(
+              "Failed to parse CDS LB config: " + rawLoadBalancingPolicyConfig));
     }
   }
 
