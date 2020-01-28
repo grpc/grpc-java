@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.MoreObjects;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.ExperimentalApi;
@@ -56,14 +57,21 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
 
     @Override
     public void handleNameResolutionError(final Status error) {
+      class ErrorPicker extends SubchannelPicker {
+        @Override
+        public PickResult pickSubchannel(PickSubchannelArgs args) {
+          return PickResult.withError(error);
+        }
+
+        @Override
+        public String toString() {
+          return MoreObjects.toStringHelper(ErrorPicker.class).add("error", error).toString();
+        }
+      }
+
       helper.updateBalancingState(
           ConnectivityState.TRANSIENT_FAILURE,
-          new SubchannelPicker() {
-            @Override
-            public PickResult pickSubchannel(PickSubchannelArgs args) {
-              return PickResult.withError(error);
-            }
-          });
+          new ErrorPicker());
     }
 
     @Override

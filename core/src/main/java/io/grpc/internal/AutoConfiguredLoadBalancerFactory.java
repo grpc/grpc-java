@@ -432,6 +432,11 @@ public final class AutoConfiguredLoadBalancerFactory {
     public PickResult pickSubchannel(PickSubchannelArgs args) {
       return PickResult.withNoResult();
     }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(EmptyPicker.class).toString();
+    }
   }
 
   private static final class FailingPicker extends SubchannelPicker {

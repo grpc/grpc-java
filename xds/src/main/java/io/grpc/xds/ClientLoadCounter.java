@@ -413,6 +413,13 @@ final class ClientLoadCounter {
         ClientStreamTracer.Factory originFactory) {
       return new LoadRecordingStreamTracerFactory(counter, originFactory);
     }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(LoadRecordingSubchannelPicker.class)
+          .add("delegate", delegate)
+          .toString();
+    }
   }
 
   /**
@@ -444,6 +451,13 @@ final class ClientLoadCounter {
     protected ClientStreamTracer.Factory wrapTracerFactory(
         ClientStreamTracer.Factory originFactory) {
       return orcaPerRequestUtil.newOrcaClientStreamTracerFactory(originFactory, listener);
+    }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(MetricsObservingSubchannelPicker.class)
+          .add("delegate", delegate)
+          .toString();
     }
   }
 }

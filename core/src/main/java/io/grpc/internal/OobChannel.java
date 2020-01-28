@@ -173,14 +173,23 @@ final class OobChannel extends ManagedChannel implements InternalInstrumented<Ch
         }
     };
 
-    subchannelPicker = new SubchannelPicker() {
-        final PickResult result = PickResult.withSubchannel(subchannelImpl);
+    final class OobSubchannelPicker extends SubchannelPicker {
+      final PickResult result = PickResult.withSubchannel(subchannelImpl);
 
-        @Override
-        public PickResult pickSubchannel(PickSubchannelArgs args) {
-          return result;
-        }
-      };
+      @Override
+      public PickResult pickSubchannel(PickSubchannelArgs args) {
+        return result;
+      }
+
+      @Override
+      public String toString() {
+        return MoreObjects.toStringHelper(OobSubchannelPicker.class)
+            .add("result", result)
+            .toString();
+      }
+    }
+
+    subchannelPicker = new OobSubchannelPicker();
     delayedTransport.reprocess(subchannelPicker);
   }
 
@@ -253,14 +262,23 @@ final class OobChannel extends ManagedChannel implements InternalInstrumented<Ch
         delayedTransport.reprocess(subchannelPicker);
         break;
       case TRANSIENT_FAILURE:
-        delayedTransport.reprocess(new SubchannelPicker() {
-            final PickResult errorResult = PickResult.withError(newState.getStatus());
+        final class OobErrorPicker extends SubchannelPicker {
+          final PickResult errorResult = PickResult.withError(newState.getStatus());
 
-            @Override
-            public PickResult pickSubchannel(PickSubchannelArgs args) {
-              return errorResult;
-            }
-          });
+          @Override
+          public PickResult pickSubchannel(PickSubchannelArgs args) {
+            return errorResult;
+          }
+
+          @Override
+          public String toString() {
+            return MoreObjects.toStringHelper(OobErrorPicker.class)
+                .add("errorResult", errorResult)
+                .toString();
+          }
+        }
+
+        delayedTransport.reprocess(new OobErrorPicker());
         break;
       default:
         // Do nothing

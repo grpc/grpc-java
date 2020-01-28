@@ -812,6 +812,13 @@ final class ManagedChannelImpl extends ManagedChannel implements
       public PickResult pickSubchannel(PickSubchannelArgs args) {
         return panicPickResult;
       }
+
+      @Override
+      public String toString() {
+        return MoreObjects.toStringHelper(PanicSubchannelPicker.class)
+            .add("panicPickResult", panicPickResult)
+            .toString();
+      }
     }
 
     updateSubchannelPicker(new PanicSubchannelPicker());
@@ -1146,7 +1153,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
           // It's not appropriate to report SHUTDOWN state from lb.
           // Ignore the case of newState == SHUTDOWN for now.
           if (newState != SHUTDOWN) {
-            channelLogger.log(ChannelLogLevel.INFO, "Entering {0} state", newState);
+            channelLogger.log(
+                ChannelLogLevel.INFO, "Entering {0} state with picker: {1}", newState, newPicker);
             channelStateManager.gotoState(newState);
           }
         }
