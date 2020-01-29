@@ -307,6 +307,38 @@ public class RoundRobinLoadBalancerTest {
     verifyNoMoreInteractions(mockHelper);
   }
 
+  @Test
+  public void stayTransientFailureUntilReady() {
+    InOrder inOrder = inOrder(mockHelper);
+    loadBalancer.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(Attributes.EMPTY)
+            .build());
+
+    inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), isA(EmptyPicker.class));
+
+    for (Subchannel sc : loadBalancer.getSubchannels()) {
+      deliverSubchannelState(
+          sc,
+          ConnectivityStateInfo
+              .forTransientFailure(Status.UNKNOWN.withDescription("connection broken")));
+    }
+    inOrder.verify(mockHelper).updateBalancingState(eq(TRANSIENT_FAILURE), isA(EmptyPicker.class));
+
+    for (Subchannel sc : loadBalancer.getSubchannels()) {
+      deliverSubchannelState(
+          sc,
+          ConnectivityStateInfo.forNonError(CONNECTING));
+    }
+    inOrder.verifyNoMoreInteractions();
+
+    Subchannel subchannel = loadBalancer.getSubchannels().iterator().next();
+    deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
+    inOrder.verify(mockHelper).updateBalancingState(eq(READY), isA(ReadyPicker.class));
+
+    verify(mockHelper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
+    verifyNoMoreInteractions(mockHelper);
+  }
+
   private Subchannel nextSubchannel(Subchannel current, List<Subchannel> allSubChannels) {
     return allSubChannels.get((allSubChannels.indexOf(current) + 1) % allSubChannels.size());
   }
