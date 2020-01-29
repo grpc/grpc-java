@@ -19,7 +19,7 @@ package io.grpc.xds;
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
-import static io.grpc.xds.XdsLoadBalancerProvider.XDS_POLICY_NAME;
+import static io.grpc.xds.EdsLoadBalancerProvider.EDS_POLICY_NAME;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
@@ -95,7 +95,7 @@ public class CdsLoadBalancerTest {
   );
 
   private final LoadBalancerRegistry lbRegistry = new LoadBalancerRegistry();
-  private final LoadBalancerProvider fakeXdsLoadBlancerProvider = new LoadBalancerProvider() {
+  private final LoadBalancerProvider fakeEdsLoadBlancerProvider = new LoadBalancerProvider() {
     @Override
     public boolean isAvailable() {
       return true;
@@ -108,7 +108,7 @@ public class CdsLoadBalancerTest {
 
     @Override
     public String getPolicyName() {
-      return XDS_POLICY_NAME;
+      return EDS_POLICY_NAME;
     }
 
     @Override
@@ -150,7 +150,7 @@ public class CdsLoadBalancerTest {
     doReturn(channelLogger).when(helper).getChannelLogger();
     doReturn(syncContext).when(helper).getSynchronizationContext();
     doReturn(fakeClock.getScheduledExecutorService()).when(helper).getScheduledExecutorService();
-    lbRegistry.register(fakeXdsLoadBlancerProvider);
+    lbRegistry.register(fakeEdsLoadBlancerProvider);
     cdsLoadBalancer = new CdsLoadBalancer(helper, lbRegistry, mockTlsContextManager);
   }
 
@@ -523,8 +523,8 @@ public class CdsLoadBalancerTest {
 
   @Test
   public void cdsBalancerIntegrateWithEdsBalancer() throws Exception {
-    lbRegistry.deregister(fakeXdsLoadBlancerProvider);
-    lbRegistry.register(new XdsLoadBalancerProvider());
+    lbRegistry.deregister(fakeEdsLoadBlancerProvider);
+    lbRegistry.register(new EdsLoadBalancerProvider());
 
     ResolvedAddresses resolvedAddresses1 = ResolvedAddresses.newBuilder()
         .setAddresses(ImmutableList.<EquivalentAddressGroup>of())

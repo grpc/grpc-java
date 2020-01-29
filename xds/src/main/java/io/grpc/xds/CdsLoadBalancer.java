@@ -18,7 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
-import static io.grpc.xds.XdsLoadBalancerProvider.XDS_POLICY_NAME;
+import static io.grpc.xds.EdsLoadBalancerProvider.EDS_POLICY_NAME;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
@@ -308,7 +308,7 @@ public final class CdsLoadBalancer extends LoadBalancer {
           /* lrsServerName = */ newUpdate.getLrsServerName());
       updateSslContextProvider(newUpdate.getUpstreamTlsContext());
       if (edsBalancer == null) {
-        edsBalancer = lbRegistry.getProvider(XDS_POLICY_NAME).newLoadBalancer(helper);
+        edsBalancer = lbRegistry.getProvider(EDS_POLICY_NAME).newLoadBalancer(helper);
       }
       edsBalancer.handleResolvedAddresses(
           resolvedAddresses.toBuilder().setLoadBalancingPolicyConfig(edsConfig).build());
