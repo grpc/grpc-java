@@ -460,7 +460,9 @@ final class XdsClientImpl extends XdsClient {
    * ACK request is sent to management server.
    */
   private void handleLdsResponse(DiscoveryResponse ldsResponse) {
-    logger.log(Level.FINE, "Received an LDS response: {0}", respPrinter.print(ldsResponse));
+    if (logger.isLoggable(Level.FINE)) {
+      logger.log(Level.FINE, "Received an LDS response: {0}", respPrinter.print(ldsResponse));
+    }
     checkState(ldsResourceName != null && configWatcher != null,
         "No LDS request was ever sent. Management server is doing something wrong");
 
@@ -573,7 +575,9 @@ final class XdsClientImpl extends XdsClient {
    * invalid data for gRPC's usage. Otherwise, an ACK request is sent to management server.
    */
   private void handleRdsResponse(DiscoveryResponse rdsResponse) {
-    logger.log(Level.FINE, "Received an RDS response: {0}", respPrinter.print(rdsResponse));
+    if (logger.isLoggable(Level.FINE)) {
+      logger.log(Level.FINE, "Received an RDS response: {0}", respPrinter.print(rdsResponse));
+    }
     checkState(adsStream.rdsResourceName != null,
         "Never requested for RDS resources, management server is doing something wrong");
 
@@ -666,7 +670,9 @@ final class XdsClientImpl extends XdsClient {
    * interested in the same clusters are added later.
    */
   private void handleCdsResponse(DiscoveryResponse cdsResponse) {
-    logger.log(Level.FINE, "Received an CDS response: {0}", respPrinter.print(cdsResponse));
+    if (logger.isLoggable(Level.FINE)) {
+      logger.log(Level.FINE, "Received an CDS response: {0}", respPrinter.print(cdsResponse));
+    }
     adsStream.cdsRespNonce = cdsResponse.getNonce();
 
     // Unpack Cluster messages.
@@ -817,7 +823,9 @@ final class XdsClientImpl extends XdsClient {
    * are added later.
    */
   private void handleEdsResponse(DiscoveryResponse edsResponse) {
-    logger.log(Level.FINE, "Received an EDS response: {0}", respPrinter.print(edsResponse));
+    if (logger.isLoggable(Level.FINE)) {
+      logger.log(Level.FINE, "Received an EDS response: {0}", respPrinter.print(edsResponse));
+    }
 
     // Unpack ClusterLoadAssignment messages.
     List<ClusterLoadAssignment> clusterLoadAssignments =
