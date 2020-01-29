@@ -699,7 +699,7 @@ final class XdsClientImpl extends XdsClient {
       // Management server is required to always send newly requested resources, even if they
       // may have been sent previously (proactively). Thus, client does not need to cache
       // unrequested resources.
-      if (!clusterWatchers.keySet().contains(clusterName)) {
+      if (!clusterWatchers.containsKey(clusterName)) {
         continue;
       }
       ClusterUpdate.Builder updateBuilder = ClusterUpdate.newBuilder();
