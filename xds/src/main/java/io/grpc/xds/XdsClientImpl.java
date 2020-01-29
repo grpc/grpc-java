@@ -1392,7 +1392,7 @@ final class XdsClientImpl extends XdsClient {
       try {
         res = printer.print(message);
       } catch (InvalidProtocolBufferException e) {
-        res = "Failed to convert message [" + message + "] to readable String. Reason: " + e;
+        res = message + " (failed to pretty-print: " + e + ")";
       }
       return res;
     }
