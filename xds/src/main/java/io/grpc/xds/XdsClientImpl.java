@@ -627,11 +627,10 @@ final class XdsClientImpl extends XdsClient {
    * Processes a RouteConfiguration message to find the name of upstream cluster that requests
    * for the given host will be routed to. Returns the clusterName if found.
    * Otherwise, returns {@code null}.
-   *
    */
   @VisibleForTesting
   @Nullable
-  static String findClusterNameInRouteConfig(RouteConfiguration config, String hostname) {
+  static String findClusterNameInRouteConfig(RouteConfiguration config, String hostName) {
     List<VirtualHost> virtualHosts = config.getVirtualHostsList();
     // Domain search order:
     //  1. Exact domain names: ``www.foo.com``.
@@ -647,7 +646,7 @@ final class XdsClientImpl extends XdsClient {
     for (VirtualHost vHost : virtualHosts) {
       for (String domain : vHost.getDomainsList()) {
         boolean selected = false;
-        if (matchHostName(hostname, domain)) { // matching
+        if (matchHostName(hostName, domain)) { // matching
           if (!domain.contains("*")) { // exact matching
             selected = true;
           } else if (domain.length() > matchingLen) { // longer matching pattern
