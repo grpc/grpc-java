@@ -73,8 +73,8 @@ import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.Bootstrapper.ChannelCreds;
 import io.grpc.xds.Bootstrapper.ServerInfo;
+import io.grpc.xds.EdsLoadBalancer.ResourceUpdateCallback;
 import io.grpc.xds.LocalityStore.LocalityStoreFactory;
-import io.grpc.xds.LookasideLb.EndpointUpdateCallback;
 import io.grpc.xds.XdsClient.EndpointUpdate;
 import io.grpc.xds.XdsClient.XdsChannelFactory;
 import io.grpc.xds.XdsLoadBalancerProvider.XdsConfig;
@@ -103,10 +103,10 @@ import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
 /**
- * Tests for {@link LookasideLb}.
+ * Tests for {@link EdsLoadBalancer}.
  */
 @RunWith(Parameterized.class)
-public class LookasideLbTest {
+public class EdsLoadBalancerTest {
 
   private static final String SERVICE_AUTHORITY = "test.authority.example.com";
 
@@ -142,7 +142,7 @@ public class LookasideLbTest {
   @Mock
   private Helper helper;
   @Mock
-  private EndpointUpdateCallback edsUpdateCallback;
+  private ResourceUpdateCallback resourceUpdateCallback;
   @Mock
   private Bootstrapper bootstrapper;
   @Captor
@@ -150,7 +150,7 @@ public class LookasideLbTest {
   @Captor
   ArgumentCaptor<SubchannelPicker> pickerCaptor;
 
-  private LoadBalancer lookasideLb;
+  private LoadBalancer edsLb;
   // Simulating a CDS to EDS flow, otherwise EDS only.
   @Parameter
   public boolean isFullFlow;
@@ -206,7 +206,7 @@ public class LookasideLbTest {
       @Override
       public StreamObserver<DiscoveryRequest> streamAggregatedResources(
           final StreamObserver<DiscoveryResponse> responseObserver) {
-        LookasideLbTest.this.responseObserver = responseObserver;
+        EdsLoadBalancerTest.this.responseObserver = responseObserver;
         @SuppressWarnings("unchecked")
         StreamObserver<DiscoveryRequest> requestObserver = mock(StreamObserver.class);
         return requestObserver;
@@ -239,13 +239,14 @@ public class LookasideLbTest {
               fakeClock.getStopwatchSupplier()));
     }
 
-    lookasideLb = new LookasideLb(
-        helper, edsUpdateCallback, lbRegistry, localityStoreFactory, bootstrapper, channelFactory);
+    edsLb = new EdsLoadBalancer(
+        helper, resourceUpdateCallback, lbRegistry, localityStoreFactory, bootstrapper,
+        channelFactory);
   }
 
   @After
   public void tearDown() {
-    lookasideLb.shutdown();
+    edsLb.shutdown();
 
     for (LoadBalancer childBalancer : childBalancers.values()) {
       verify(childBalancer).shutdown();
@@ -267,7 +268,7 @@ public class LookasideLbTest {
     deliverResolvedAddresses(new XdsConfig(null, null, "edsServiceName1", null));
 
     // handleResolutionError() before receiving any endpoint update.
-    lookasideLb.handleNameResolutionError(Status.DATA_LOSS.withDescription("fake status"));
+    edsLb.handleNameResolutionError(Status.DATA_LOSS.withDescription("fake status"));
     verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
 
     // Endpoint update received.
@@ -282,7 +283,7 @@ public class LookasideLbTest {
     receiveEndpointUpdate(clusterLoadAssignment);
 
     // handleResolutionError() after receiving endpoint update.
-    lookasideLb.handleNameResolutionError(Status.DATA_LOSS.withDescription("fake status"));
+    edsLb.handleNameResolutionError(Status.DATA_LOSS.withDescription("fake status"));
     // No more TRANSIENT_FAILURE.
     verify(helper, times(1)).updateBalancingState(
         eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
@@ -433,7 +434,7 @@ public class LookasideLbTest {
   public void firstAndSecondEdsResponseReceived_onWorkingCalledOnce() {
     deliverResolvedAddresses(new XdsConfig(null, null, "edsServiceName1", null));
 
-    verify(edsUpdateCallback, never()).onWorking();
+    verify(resourceUpdateCallback, never()).onWorking();
 
     // first EDS response
     ClusterLoadAssignment clusterLoadAssignment =
@@ -446,7 +447,7 @@ public class LookasideLbTest {
             ImmutableList.<DropOverload>of());
     receiveEndpointUpdate(clusterLoadAssignment);
 
-    verify(edsUpdateCallback).onWorking();
+    verify(resourceUpdateCallback).onWorking();
 
     // second EDS response
     clusterLoadAssignment =
@@ -459,8 +460,8 @@ public class LookasideLbTest {
                     1, 0)),
             ImmutableList.<DropOverload>of());
     receiveEndpointUpdate(clusterLoadAssignment);
-    verify(edsUpdateCallback, times(1)).onWorking();
-    verify(edsUpdateCallback, never()).onError();
+    verify(resourceUpdateCallback, times(1)).onWorking();
+    verify(resourceUpdateCallback, never()).onError();
   }
 
   @Test
@@ -477,7 +478,7 @@ public class LookasideLbTest {
         ImmutableList.<DropOverload>of());
     receiveEndpointUpdate(clusterLoadAssignment);
 
-    verify(edsUpdateCallback, never()).onAllDrop();
+    verify(resourceUpdateCallback, never()).onAllDrop();
     assertThat(childBalancers).hasSize(1);
     verify(childBalancers.get("subzone1")).handleResolvedAddresses(
         argThat(RoundRobinBackendsMatcher.builder().addHostAndPort("192.168.0.1", 8080).build()));
@@ -507,13 +508,13 @@ public class LookasideLbTest {
             buildDropOverload("cat_3", 4)));
     receiveEndpointUpdate(clusterLoadAssignment);
 
-    verify(edsUpdateCallback).onAllDrop();
+    verify(resourceUpdateCallback).onAllDrop();
     verify(helper, atLeastOnce()).updateBalancingState(eq(READY), pickerCaptor.capture());
     SubchannelPicker pickerExpectedDropAll = pickerCaptor.getValue();
     assertThat(pickerExpectedDropAll.pickSubchannel(mock(PickSubchannelArgs.class)).isDrop())
         .isTrue();
 
-    verify(edsUpdateCallback, never()).onError();
+    verify(resourceUpdateCallback, never()).onError();
   }
 
   @Test
@@ -577,7 +578,7 @@ public class LookasideLbTest {
     childHelper2.updateBalancingState(READY, picker);
     assertLatestSubchannelPicker(subchannel);
 
-    verify(edsUpdateCallback, never()).onError();
+    verify(resourceUpdateCallback, never()).onError();
   }
 
   // Uses a fake LocalityStoreFactory that creates a mock LocalityStore, and verifies interaction
@@ -601,8 +602,9 @@ public class LookasideLbTest {
         return localityStore;
       }
     };
-    lookasideLb = new LookasideLb(
-        helper, edsUpdateCallback, lbRegistry, localityStoreFactory, bootstrapper, channelFactory);
+    edsLb = new EdsLoadBalancer(
+        helper, resourceUpdateCallback, lbRegistry, localityStoreFactory, bootstrapper,
+        channelFactory);
 
     deliverResolvedAddresses(new XdsConfig(null, null, "edsServiceName1", null));
     assertThat(localityStores).hasSize(1);
@@ -666,10 +668,10 @@ public class LookasideLbTest {
   public void verifyErrorPropagation_noPreviousEndpointUpdateReceived() {
     deliverResolvedAddresses(new XdsConfig(null, null, "edsServiceName1", null));
 
-    verify(edsUpdateCallback, never()).onError();
+    verify(resourceUpdateCallback, never()).onError();
     // Forwarding 20 seconds so that the xds client will deem EDS resource not available.
     fakeClock.forwardTime(20, TimeUnit.SECONDS);
-    verify(edsUpdateCallback).onError();
+    verify(resourceUpdateCallback).onError();
     verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
   }
 
@@ -689,13 +691,13 @@ public class LookasideLbTest {
 
     verify(helper, never()).updateBalancingState(
         eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
-    verify(edsUpdateCallback, never()).onError();
+    verify(resourceUpdateCallback, never()).onError();
 
     // XdsClient stream receives an error.
     responseObserver.onError(new RuntimeException("fake error"));
     verify(helper, never()).updateBalancingState(
         eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
-    verify(edsUpdateCallback).onError();
+    verify(resourceUpdateCallback).onError();
   }
 
   /**
@@ -730,7 +732,7 @@ public class LookasideLbTest {
           Attributes.newBuilder().set(XdsAttributes.XDS_CLIENT_POOL,
               xdsClientPoolFromResolveAddresses).build());
     }
-    lookasideLb.handleResolvedAddresses(resolvedAddressBuilder.build());
+    edsLb.handleResolvedAddresses(resolvedAddressBuilder.build());
   }
 
   private void receiveEndpointUpdate(ClusterLoadAssignment clusterLoadAssignment) {

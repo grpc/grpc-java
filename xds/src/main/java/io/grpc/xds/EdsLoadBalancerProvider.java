@@ -22,7 +22,7 @@ import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver.ConfigOrError;
-import io.grpc.xds.LookasideLb.EndpointUpdateCallback;
+import io.grpc.xds.EdsLoadBalancer.ResourceUpdateCallback;
 import java.util.Map;
 
 /**
@@ -52,9 +52,9 @@ public class EdsLoadBalancerProvider extends LoadBalancerProvider {
 
   @Override
   public LoadBalancer newLoadBalancer(Helper helper) {
-    return new LookasideLb(
+    return new EdsLoadBalancer(
         helper,
-        new EndpointUpdateCallback() {
+        new ResourceUpdateCallback() {
           @Override
           public void onWorking() {}
 
