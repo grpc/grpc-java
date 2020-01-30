@@ -508,7 +508,7 @@ final class XdsClientImpl extends XdsClient {
       //  data or one supersedes the other. TBD.
       if (requestedHttpConnManager.hasRouteConfig()) {
         RouteConfiguration rc = requestedHttpConnManager.getRouteConfig();
-        clusterName = processRouteConfig(rc);
+        clusterName = findClusterNameInRouteConfig(rc, hostName);
         if (clusterName == null) {
           errorMessage = "Cannot find a valid cluster name in VirtualHost inside "
               + "RouteConfiguration with domains matching: " + hostName + ".";
@@ -599,7 +599,7 @@ final class XdsClientImpl extends XdsClient {
     // Resolved cluster name for the requested resource, if exists.
     String clusterName = null;
     if (requestedRouteConfig != null) {
-      clusterName = processRouteConfig(requestedRouteConfig);
+      clusterName = findClusterNameInRouteConfig(requestedRouteConfig, hostName);
       if (clusterName == null) {
         adsStream.sendNackRequest(ADS_TYPE_URL_RDS, ImmutableList.of(adsStream.rdsResourceName),
             "Cannot find a valid cluster name in VirtualHost inside "
@@ -624,21 +624,39 @@ final class XdsClientImpl extends XdsClient {
   }
 
   /**
-   * Processes RouteConfiguration message (from an resource information in an LDS or RDS
-   * response), which may contain a VirtualHost with domains matching the "xds:"
-   * URI hostname directly in-line. Returns the clusterName found in that VirtualHost
-   * message. Returns {@code null} if such a clusterName cannot be resolved.
+   * Processes a RouteConfiguration message to find the name of upstream cluster that requests
+   * for the given host will be routed to. Returns the clusterName if found.
+   * Otherwise, returns {@code null}.
    *
-   * <p>Note we only validate VirtualHosts with domains matching the "xds:" URI hostname.
    */
+  @VisibleForTesting
   @Nullable
-  private String processRouteConfig(RouteConfiguration config) {
+  static String findClusterNameInRouteConfig(RouteConfiguration config, String hostname) {
     List<VirtualHost> virtualHosts = config.getVirtualHostsList();
-    int matchingLen = -1;  // longest length of wildcard pattern that matches host name
+    // Domain search order:
+    //  1. Exact domain names: ``www.foo.com``.
+    //  2. Suffix domain wildcards: ``*.foo.com`` or ``*-bar.foo.com``.
+    //  3. Prefix domain wildcards: ``foo.*`` or ``foo-*``.
+    //  4. Special wildcard ``*`` matching any domain.
+    //
+    //  The longest wildcards match first.
+    //  Assuming only a single virtual host in the entire route configuration can match
+    //  on ``*`` and a domain must be unique across all virtual hosts.
+    int matchingLen = -1; // longest length of wildcard pattern that matches host name
     VirtualHost targetVirtualHost = null;  // target VirtualHost with longest matched domain
     for (VirtualHost vHost : virtualHosts) {
       for (String domain : vHost.getDomainsList()) {
-        if (matchHostName(hostName, domain) && domain.length() > matchingLen) {
+        boolean selected = false;
+        if (matchHostName(hostname, domain)) { // matching
+          if (!domain.contains("*")) { // exact matching
+            selected = true;
+          } else if (domain.length() > matchingLen) { // longer matching pattern
+            selected = true;
+          } else if (domain.length() == matchingLen && domain.startsWith("*")) { // suffix matching
+            selected = true;
+          }
+        }
+        if (selected) {
           matchingLen = domain.length();
           targetVirtualHost = vHost;
         }
@@ -649,13 +667,15 @@ final class XdsClientImpl extends XdsClient {
     // hostname in original "xds:" URI.
     if (targetVirtualHost != null) {
       // The client will look only at the last route in the list (the default route),
-      // whose match field must be empty and whose route field must be set.
+      // whose match field must contain a prefix field whose value is empty string
+      // and whose route field must be set.
       List<Route> routes = targetVirtualHost.getRoutesList();
       if (!routes.isEmpty()) {
         Route route = routes.get(routes.size() - 1);
-        // TODO(chengyuanzhang): check the match field must be empty.
-        if (route.hasRoute()) {
-          return route.getRoute().getCluster();
+        if (route.getMatch().getPrefix().equals("")) {
+          if (route.hasRoute()) {
+            return route.getRoute().getCluster();
+          }
         }
       }
     }
