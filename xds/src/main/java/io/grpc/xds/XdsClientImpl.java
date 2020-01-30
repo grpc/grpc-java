@@ -670,6 +670,9 @@ final class XdsClientImpl extends XdsClient {
 
     // Proceed with the virtual host that has longest wildcard matched domain name with the
     // hostname in original "xds:" URI.
+    // Note we would consider upstream cluster not found if the virtual host is not configured
+    // correctly for gRPC, even if there exist other virtual hosts with (lower priority)
+    // matching domains.
     if (targetVirtualHost != null) {
       // The client will look only at the last route in the list (the default route),
       // whose match field must contain a prefix field whose value is empty string
