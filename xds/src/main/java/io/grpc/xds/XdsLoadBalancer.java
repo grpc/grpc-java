@@ -27,7 +27,7 @@ import io.grpc.LoadBalancer;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.util.ForwardingLoadBalancerHelper;
-import io.grpc.xds.LookasideLb.EndpointUpdateCallback;
+import io.grpc.xds.EdsLoadBalancer.ResourceUpdateCallback;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.CheckForNull;
 import javax.annotation.Nullable;
@@ -36,33 +36,32 @@ import javax.annotation.Nullable;
  * A {@link LoadBalancer} that uses the XDS protocol.
  *
  * <p>This class manages fallback handling. The logic for child policy handling and fallback policy
- * handling is provided by LookasideLb and FallbackLb.
+ * handling is provided by EdsLoadBalancer and FallbackLb.
  */
-// TODO(zdapeng): migrate name to XdsLoadBlancer
-final class XdsLoadBalancer2 extends LoadBalancer {
+final class XdsLoadBalancer extends LoadBalancer {
 
   private static final long FALLBACK_TIMEOUT_MS = TimeUnit.SECONDS.toMillis(10); // same as grpclb
 
   private final Helper helper;
-  private final LoadBalancer lookasideLb;
+  private final LoadBalancer primaryLb;
   private final LoadBalancer.Factory fallbackLbFactory;
-  private final EndpointUpdateCallback edsUpdateCallback = new EndpointUpdateCallback() {
+  private final ResourceUpdateCallback resourceUpdateCallback = new ResourceUpdateCallback() {
     @Override
     public void onWorking() {
-      if (childPolicyHasBeenReady) {
+      if (primaryPolicyHasBeenReady) {
         // cancel Fallback-After-Startup timer if there's any
         cancelFallbackTimer();
       }
 
-      adsWorked = true;
+      primaryPolicyWorked = true;
     }
 
     @Override
     public void onError() {
-      if (!adsWorked) {
+      if (!primaryPolicyWorked) {
         // start Fallback-at-Startup immediately
         useFallbackPolicy();
-      } else if (childPolicyHasBeenReady) {
+      } else if (primaryPolicyHasBeenReady) {
         // TODO: schedule a timer for Fallback-After-Startup
       } // else: the Fallback-at-Startup timer is still pending, noop and wait
     }
@@ -80,21 +79,21 @@ final class XdsLoadBalancer2 extends LoadBalancer {
   // Scheduled only once.  Never reset to null.
   @CheckForNull
   private ScheduledHandle fallbackTimer;
-  private boolean adsWorked;
-  private boolean childPolicyHasBeenReady;
+  private boolean primaryPolicyWorked;
+  private boolean primaryPolicyHasBeenReady;
 
-  XdsLoadBalancer2(Helper helper) {
-    this(helper, new LookasideLbFactoryImpl(), new FallbackLbFactory());
+  XdsLoadBalancer(Helper helper) {
+    this(helper, new EdsLoadBalancerFactory(), new FallbackLbFactory());
   }
 
   @VisibleForTesting
-  XdsLoadBalancer2(
+  XdsLoadBalancer(
       Helper helper,
-      LookasideLbFactory lookasideLbFactory,
+      PrimaryLbFactory primaryLbFactory,
       LoadBalancer.Factory fallbackLbFactory) {
     this.helper = helper;
-    this.lookasideLb = lookasideLbFactory.newLoadBalancer(new LookasideLbHelper(),
-        edsUpdateCallback);
+    this.primaryLb = primaryLbFactory.newLoadBalancer(
+        new PrimaryLbHelper(), resourceUpdateCallback);
     this.fallbackLbFactory = fallbackLbFactory;
   }
 
@@ -127,12 +126,12 @@ final class XdsLoadBalancer2 extends LoadBalancer {
           helper.getScheduledExecutorService());
     }
 
-    lookasideLb.handleResolvedAddresses(resolvedAddresses);
+    primaryLb.handleResolvedAddresses(resolvedAddresses);
   }
 
   @Override
   public void handleNameResolutionError(Status error) {
-    lookasideLb.handleNameResolutionError(error);
+    primaryLb.handleNameResolutionError(error);
     if (isInFallbackMode()) {
       fallbackLb.handleNameResolutionError(error);
     }
@@ -140,7 +139,7 @@ final class XdsLoadBalancer2 extends LoadBalancer {
 
   @Override
   public void requestConnection() {
-    lookasideLb.requestConnection();
+    primaryLb.requestConnection();
     if (isInFallbackMode()) {
       fallbackLb.requestConnection();
     }
@@ -150,7 +149,7 @@ final class XdsLoadBalancer2 extends LoadBalancer {
   public void shutdown() {
     helper.getChannelLogger().log(
         ChannelLogLevel.INFO, "Shutting down XDS balancer");
-    lookasideLb.shutdown();
+    primaryLb.shutdown();
     cancelFallback();
   }
 
@@ -198,7 +197,7 @@ final class XdsLoadBalancer2 extends LoadBalancer {
     return fallbackLb != null;
   }
 
-  private final class LookasideLbHelper extends ForwardingLoadBalancerHelper {
+  private final class PrimaryLbHelper extends ForwardingLoadBalancerHelper {
 
     @Override
     protected Helper delegate() {
@@ -209,9 +208,9 @@ final class XdsLoadBalancer2 extends LoadBalancer {
     public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
       if (newState == ConnectivityState.READY) {
         checkState(
-            adsWorked,
+            primaryPolicyWorked,
             "channel goes to READY before the load balancer even worked");
-        childPolicyHasBeenReady = true;
+        primaryPolicyHasBeenReady = true;
         cancelFallback();
       }
       if (!isInFallbackMode()) {
@@ -244,17 +243,18 @@ final class XdsLoadBalancer2 extends LoadBalancer {
     }
   }
 
-  /** Factory of a look-aside load balancer. The interface itself is for convenience in test. */
+  /** Factory of load balancer for the primary policy.*/
+  // The interface itself is for convenience in test.
   @VisibleForTesting
-  interface LookasideLbFactory {
-    LoadBalancer newLoadBalancer(Helper helper, EndpointUpdateCallback edsUpdateCallback);
+  interface PrimaryLbFactory {
+    LoadBalancer newLoadBalancer(Helper helper, ResourceUpdateCallback resourceUpdateCallback);
   }
 
-  private static final class LookasideLbFactoryImpl implements LookasideLbFactory {
+  private static final class EdsLoadBalancerFactory implements PrimaryLbFactory {
     @Override
     public LoadBalancer newLoadBalancer(
-        Helper lookasideLbHelper, EndpointUpdateCallback edsUpdateCallback) {
-      return new LookasideLb(lookasideLbHelper, edsUpdateCallback);
+        Helper edsLbHelper, ResourceUpdateCallback resourceUpdateCallback) {
+      return new EdsLoadBalancer(edsLbHelper, resourceUpdateCallback);
     }
   }
 

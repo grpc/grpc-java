@@ -63,7 +63,7 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
 
   @Override
   public LoadBalancer newLoadBalancer(Helper helper) {
-    return new XdsLoadBalancer2(helper);
+    return new XdsLoadBalancer(helper);
   }
 
   @Override

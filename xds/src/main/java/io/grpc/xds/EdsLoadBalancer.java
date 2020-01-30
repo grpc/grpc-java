@@ -52,17 +52,17 @@ import java.util.Map;
 import java.util.Objects;
 import javax.annotation.Nullable;
 
-/** Lookaside load balancer that handles EDS config. */
-final class LookasideLb extends LoadBalancer {
+/** Load balancer for the EDS LB policy. */
+final class EdsLoadBalancer extends LoadBalancer {
 
   private final ChannelLogger channelLogger;
-  private final EndpointUpdateCallback endpointUpdateCallback;
+  private final ResourceUpdateCallback resourceUpdateCallback;
   private final GracefulSwitchLoadBalancer switchingLoadBalancer;
   private final LoadBalancerRegistry lbRegistry;
   private final LocalityStoreFactory localityStoreFactory;
   private final Bootstrapper bootstrapper;
   private final XdsChannelFactory channelFactory;
-  private final Helper lookasideLbHelper;
+  private final Helper edsLbHelper;
   // Cache for load stats stores for each service in cluster keyed by cluster service names.
   private final Map<String, LoadStatsStore> loadStatsStoreMap = new HashMap<>();
 
@@ -81,10 +81,10 @@ final class LookasideLb extends LoadBalancer {
   @Nullable
   private String clusterName;
 
-  LookasideLb(Helper lookasideLbHelper, EndpointUpdateCallback endpointUpdateCallback) {
+  EdsLoadBalancer(Helper edsLbHelper, ResourceUpdateCallback resourceUpdateCallback) {
     this(
-        checkNotNull(lookasideLbHelper, "lookasideLbHelper"),
-        checkNotNull(endpointUpdateCallback, "endpointUpdateCallback"),
+        checkNotNull(edsLbHelper, "edsLbHelper"),
+        checkNotNull(resourceUpdateCallback, "resourceUpdateCallback"),
         LoadBalancerRegistry.getDefaultRegistry(),
         LocalityStoreFactory.getInstance(),
         Bootstrapper.getInstance(),
@@ -92,19 +92,19 @@ final class LookasideLb extends LoadBalancer {
   }
 
   @VisibleForTesting
-  LookasideLb(
-      Helper lookasideLbHelper,
-      EndpointUpdateCallback endpointUpdateCallback,
+  EdsLoadBalancer(
+      Helper edsLbHelper,
+      ResourceUpdateCallback resourceUpdateCallback,
       LoadBalancerRegistry lbRegistry,
       LocalityStoreFactory localityStoreFactory,
       Bootstrapper bootstrapper,
       XdsChannelFactory channelFactory) {
-    this.lookasideLbHelper = lookasideLbHelper;
-    this.channelLogger = lookasideLbHelper.getChannelLogger();
-    this.endpointUpdateCallback = endpointUpdateCallback;
+    this.edsLbHelper = edsLbHelper;
+    this.channelLogger = edsLbHelper.getChannelLogger();
+    this.resourceUpdateCallback = resourceUpdateCallback;
     this.lbRegistry = lbRegistry;
     this.localityStoreFactory = localityStoreFactory;
-    this.switchingLoadBalancer = new GracefulSwitchLoadBalancer(lookasideLbHelper);
+    this.switchingLoadBalancer = new GracefulSwitchLoadBalancer(edsLbHelper);
     this.bootstrapper = bootstrapper;
     this.channelFactory = channelFactory;
   }
@@ -115,7 +115,7 @@ final class LookasideLb extends LoadBalancer {
 
     Object lbConfig = resolvedAddresses.getLoadBalancingPolicyConfig();
     if (!(lbConfig instanceof XdsConfig)) {
-      lookasideLbHelper.updateBalancingState(
+      edsLbHelper.updateBalancingState(
           TRANSIENT_FAILURE,
           new ErrorPicker(Status.UNAVAILABLE.withDescription(
               "Load balancing config '" + lbConfig + "' is not an XdsConfig")));
@@ -143,7 +143,7 @@ final class LookasideLb extends LoadBalancer {
         try {
           bootstrapInfo = bootstrapper.readBootstrap();
         } catch (Exception e) {
-          lookasideLbHelper.updateBalancingState(
+          edsLbHelper.updateBalancingState(
               TRANSIENT_FAILURE,
               new ErrorPicker(Status.UNAVAILABLE.withCause(e)));
           return;
@@ -152,7 +152,7 @@ final class LookasideLb extends LoadBalancer {
         final List<ServerInfo> serverList = bootstrapInfo.getServers();
         final Node node = bootstrapInfo.getNode();
         if (serverList.isEmpty()) {
-          lookasideLbHelper.updateBalancingState(
+          edsLbHelper.updateBalancingState(
               TRANSIENT_FAILURE,
               new ErrorPicker(
                   Status.UNAVAILABLE
@@ -167,8 +167,8 @@ final class LookasideLb extends LoadBalancer {
                     serverList,
                     channelFactory,
                     node,
-                    lookasideLbHelper.getSynchronizationContext(),
-                    lookasideLbHelper.getScheduledExecutorService(),
+                    edsLbHelper.getSynchronizationContext(),
+                    edsLbHelper.getScheduledExecutorService(),
                     new ExponentialBackoffPolicy.Provider(),
                     GrpcUtil.STOPWATCH_SUPPLIER);
           }
@@ -184,7 +184,7 @@ final class LookasideLb extends LoadBalancer {
     // and if edsServiceName is not null, it will always be not null.
     String clusterServiceName = newXdsConfig.edsServiceName;
     if (clusterServiceName == null) {
-      clusterServiceName = lookasideLbHelper.getAuthority();
+      clusterServiceName = edsLbHelper.getAuthority();
     }
     if (clusterName == null) {
       // TODO(zdapeng): Use the correct cluster name. Currently load reporting will be broken if
@@ -314,11 +314,11 @@ final class LookasideLb extends LoadBalancer {
 
         endpointWatcher = new EndpointWatcherImpl(localityStore);
         xdsClient.watchEndpointData(clusterServiceName, endpointWatcher);
-        if (LookasideLb.this.endpointWatcher != null) {
+        if (EdsLoadBalancer.this.endpointWatcher != null) {
           xdsClient.cancelEndpointDataWatch(
-              oldClusterServiceName, LookasideLb.this.endpointWatcher);
+              oldClusterServiceName, EdsLoadBalancer.this.endpointWatcher);
         }
-        LookasideLb.this.endpointWatcher = endpointWatcher;
+        EdsLoadBalancer.this.endpointWatcher = endpointWatcher;
       }
 
       // TODO(zddapeng): In handleResolvedAddresses() handle child policy change if any.
@@ -352,7 +352,7 @@ final class LookasideLb extends LoadBalancer {
   /**
    * Callbacks for the EDS-only-with-fallback usecase. Being deprecated.
    */
-  interface EndpointUpdateCallback {
+  interface ResourceUpdateCallback {
 
     void onWorking();
 
@@ -379,7 +379,7 @@ final class LookasideLb extends LoadBalancer {
 
       if (!firstEndpointUpdateReceived) {
         firstEndpointUpdateReceived = true;
-        endpointUpdateCallback.onWorking();
+        resourceUpdateCallback.onWorking();
       }
 
       List<DropOverload> dropOverloads = endpointUpdate.getDropPolicies();
@@ -387,7 +387,7 @@ final class LookasideLb extends LoadBalancer {
       for (DropOverload dropOverload : dropOverloads) {
         dropOverloadsBuilder.add(dropOverload);
         if (dropOverload.getDropsPerMillion() == 1_000_000) {
-          endpointUpdateCallback.onAllDrop();
+          resourceUpdateCallback.onAllDrop();
           break;
         }
       }
@@ -410,12 +410,12 @@ final class LookasideLb extends LoadBalancer {
     @Override
     public void onError(Status error) {
       channelLogger.log(ChannelLogLevel.ERROR, "EDS load balancer received an error: {0}",  error);
-      endpointUpdateCallback.onError();
+      resourceUpdateCallback.onError();
       // If we get an error before getting any valid result, we should put the channel in
       // TRANSIENT_FAILURE; if they get an error after getting a valid result, we keep using the
       // previous channel state.
       if (!firstEndpointUpdateReceived) {
-        lookasideLbHelper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
+        edsLbHelper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
       }
     }
   }
