@@ -411,6 +411,12 @@ final class LookasideLb extends LoadBalancer {
     public void onError(Status error) {
       channelLogger.log(ChannelLogLevel.ERROR, "EDS load balancer received an error: {0}",  error);
       endpointUpdateCallback.onError();
+      // If we get an error before getting any valid result, we should put the channel in
+      // TRANSIENT_FAILURE; if they get an error after getting a valid result, we keep using the
+      // previous channel state.
+      if (!firstEndpointUpdateReceived) {
+        lookasideLbHelper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
+      }
     }
   }
 }

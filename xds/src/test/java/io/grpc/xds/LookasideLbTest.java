@@ -663,12 +663,38 @@ public class LookasideLbTest {
   }
 
   @Test
-  public void verifyErrorPropagation() {
+  public void verifyErrorPropagation_noPreviousEndpointUpdateReceived() {
     deliverResolvedAddresses(new XdsConfig(null, null, "edsServiceName1", null));
 
     verify(edsUpdateCallback, never()).onError();
     // Forwarding 20 seconds so that the xds client will deem EDS resource not available.
     fakeClock.forwardTime(20, TimeUnit.SECONDS);
+    verify(edsUpdateCallback).onError();
+    verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
+  }
+
+  @Test
+  public void verifyErrorPropagation_withPreviousEndpointUpdateReceived() {
+    deliverResolvedAddresses(new XdsConfig(null, null, "edsServiceName1", null));
+    // Endpoint update received.
+    ClusterLoadAssignment clusterLoadAssignment =
+        buildClusterLoadAssignment("edsServiceName1",
+            ImmutableList.of(
+                buildLocalityLbEndpoints("region1", "zone1", "subzone1",
+                    ImmutableList.of(
+                        buildLbEndpoint("192.168.0.1", 8080, HEALTHY, 2)),
+                    1, 0)),
+            ImmutableList.of(buildDropOverload("throttle", 1000)));
+    receiveEndpointUpdate(clusterLoadAssignment);
+
+    verify(helper, never()).updateBalancingState(
+        eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
+    verify(edsUpdateCallback, never()).onError();
+
+    // XdsClient stream receives an error.
+    responseObserver.onError(new RuntimeException("fake error"));
+    verify(helper, never()).updateBalancingState(
+        eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
     verify(edsUpdateCallback).onError();
   }
 
