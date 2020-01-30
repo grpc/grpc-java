@@ -1378,7 +1378,7 @@ final class XdsClientImpl extends XdsClient {
    * containing {@link com.google.protobuf.Any} fields.
    */
   @VisibleForTesting
-  static class MessagePrinter {
+  static final class MessagePrinter {
     private final JsonFormat.Printer printer;
 
     @VisibleForTesting
