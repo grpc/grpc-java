@@ -104,7 +104,6 @@ public final class GrpclbLoadBalancerProvider extends LoadBalancerProvider {
    * Gets a list from an object for the given key.  Copy of
    * {@link io.grpc.internal.ServiceConfigUtil#getList}.
    */
-  @SuppressWarnings("unchecked")
   @Nullable
   private static List<?> getList(Map<String, ?> obj, String key) {
     assert key != null;

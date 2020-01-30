@@ -276,7 +276,7 @@ final class ProtocolNegotiators {
       } else {
         nettyProxyHandler = new HttpProxyHandler(address, userName, password);
       }
-      ctx.pipeline().addBefore(ctx.name(), /* newName= */ null, nettyProxyHandler);
+      ctx.pipeline().addBefore(ctx.name(), /* name= */ null, nettyProxyHandler);
     }
 
     @Override
