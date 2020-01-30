@@ -2401,7 +2401,7 @@ public class GrpclbLoadBalancerTest {
 
   private static Attributes lbAttributes(String authority) {
     return Attributes.newBuilder()
-        .set(GrpcAttributes.ATTR_LB_ADDR_AUTHORITY, authority)
+        .set(GrpclbConstants.ATTR_LB_ADDR_AUTHORITY, authority)
         .build();
   }
 

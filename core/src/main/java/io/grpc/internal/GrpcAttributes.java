@@ -38,6 +38,12 @@ public final class GrpcAttributes {
   public static final Attributes.Key<Map<String, ?>> NAME_RESOLVER_SERVICE_CONFIG =
       Attributes.Key.create("service-config");
 
+  /**
+   * Attribute key for gRPC LB server addresses.
+   *
+   * <p>Deprecated: this will be used for grpclb specific logic, which will be moved out of core.
+   */
+  @Deprecated
   @NameResolver.ResolutionResultAttr
   public static final Attributes.Key<List<EquivalentAddressGroup>> ATTR_LB_ADDRS =
       Attributes.Key.create("io.grpc.grpclb.lbAddrs");
@@ -45,7 +51,10 @@ public final class GrpcAttributes {
   /**
    * The naming authority of a gRPC LB server address.  It is an address-group-level attribute,
    * present when the address group is a LoadBalancer.
+   *
+   * <p>Deprecated: this will be used for grpclb specific logic, which will be moved out of core.
    */
+  @Deprecated
   @EquivalentAddressGroup.Attr
   public static final Attributes.Key<String> ATTR_LB_ADDR_AUTHORITY =
       Attributes.Key.create("io.grpc.grpclb.lbAddrAuthority");

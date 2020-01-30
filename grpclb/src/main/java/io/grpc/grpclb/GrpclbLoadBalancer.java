@@ -103,7 +103,7 @@ class GrpclbLoadBalancer extends LoadBalancer {
 
     if (newLbAddresses != null) {
       for (EquivalentAddressGroup lbAddr : newLbAddresses) {
-        String lbAddrAuthority = lbAddr.getAttributes().get(GrpcAttributes.ATTR_LB_ADDR_AUTHORITY);
+        String lbAddrAuthority = lbAddr.getAttributes().get(GrpclbConstants.ATTR_LB_ADDR_AUTHORITY);
         if (lbAddrAuthority == null) {
           throw new AssertionError(
               "This is a bug: LB address " + lbAddr + " does not have an authority.");

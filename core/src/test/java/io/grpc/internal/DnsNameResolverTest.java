@@ -561,6 +561,7 @@ public class DnsNameResolverTest {
     assertThat(ac.getValue().getServiceConfig()).isNull();
   }
 
+  @SuppressWarnings("deprecation")
   @Test
   public void resolve_balancerAddrsAsAttributes() throws Exception {
     InetAddress backendAddr = InetAddress.getByAddress(new byte[] {127, 0, 0, 0});
