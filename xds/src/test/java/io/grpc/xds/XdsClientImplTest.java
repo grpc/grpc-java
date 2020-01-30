@@ -3200,12 +3200,12 @@ public class XdsClientImplTest {
 
   @Test
   public void findClusterNameInRouteConfig_exactMatchFirst() {
-    String hostname = "foo.googleapis.com";
+    String hostname = "a.googleapis.com";
     String targetClusterName = "cluster-hello.googleapis.com";
     VirtualHost vHost1 =
         VirtualHost.newBuilder()
             .setName("virtualhost01.googleapis.com")  // don't care
-            .addAllDomains(ImmutableList.of("foo.googleapis.com", "bar.googleapis.com"))
+            .addAllDomains(ImmutableList.of("a.googleapis.com", "b.googleapis.com"))
             .addRoutes(
                 Route.newBuilder()
                     .setRoute(RouteAction.newBuilder().setCluster(targetClusterName))
@@ -3238,12 +3238,12 @@ public class XdsClientImplTest {
 
   @Test
   public void findClusterNameInRouteConfig_preferSuffixDomainOverPrefixDomain() {
-    String hostname = "foo.googleapis.com";
+    String hostname = "a.googleapis.com";
     String targetClusterName = "cluster-hello.googleapis.com";
     VirtualHost vHost1 =
         VirtualHost.newBuilder()
             .setName("virtualhost01.googleapis.com")  // don't care
-            .addAllDomains(ImmutableList.of("*.googleapis.com", "bar.googleapis.com"))
+            .addAllDomains(ImmutableList.of("*.googleapis.com", "b.googleapis.com"))
             .addRoutes(
                 Route.newBuilder()
                     .setRoute(RouteAction.newBuilder().setCluster(targetClusterName))
@@ -3252,7 +3252,7 @@ public class XdsClientImplTest {
     VirtualHost vHost2 =
         VirtualHost.newBuilder()
             .setName("virtualhost02.googleapis.com")  // don't care
-            .addAllDomains(ImmutableList.of("foo.googleapis.*"))
+            .addAllDomains(ImmutableList.of("a.googleapis.*"))
             .addRoutes(
                 Route.newBuilder()
                     .setRoute(RouteAction.newBuilder().setCluster("cluster-hi.googleapis.com"))
@@ -3276,7 +3276,7 @@ public class XdsClientImplTest {
 
   @Test
   public void findClusterNameInRouteConfig_asteriskMatchAnyDomain() {
-    String hostname = "foo.googleapis.com";
+    String hostname = "a.googleapis.com";
     String targetClusterName = "cluster-hello.googleapis.com";
     VirtualHost vHost1 =
         VirtualHost.newBuilder()
@@ -3290,7 +3290,7 @@ public class XdsClientImplTest {
     VirtualHost vHost2 =
         VirtualHost.newBuilder()
             .setName("virtualhost02.googleapis.com")  // don't care
-            .addAllDomains(ImmutableList.of("bar.googleapis.com"))
+            .addAllDomains(ImmutableList.of("b.googleapis.com"))
             .addRoutes(
                 Route.newBuilder()
                     .setRoute(RouteAction.newBuilder().setCluster("cluster-hi.googleapis.com"))

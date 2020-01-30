@@ -642,13 +642,16 @@ final class XdsClientImpl extends XdsClient {
     //  Assuming only a single virtual host in the entire route configuration can match
     //  on ``*`` and a domain must be unique across all virtual hosts.
     int matchingLen = -1; // longest length of wildcard pattern that matches host name
+    boolean exactMatchFound = false;  // true if a virtual host with exactly matched domain found
     VirtualHost targetVirtualHost = null;  // target VirtualHost with longest matched domain
     for (VirtualHost vHost : virtualHosts) {
       for (String domain : vHost.getDomainsList()) {
         boolean selected = false;
         if (matchHostName(hostName, domain)) { // matching
           if (!domain.contains("*")) { // exact matching
-            selected = true;
+            exactMatchFound = true;
+            targetVirtualHost = vHost;
+            break;
           } else if (domain.length() > matchingLen) { // longer matching pattern
             selected = true;
           } else if (domain.length() == matchingLen && domain.startsWith("*")) { // suffix matching
@@ -659,6 +662,9 @@ final class XdsClientImpl extends XdsClient {
           matchingLen = domain.length();
           targetVirtualHost = vHost;
         }
+      }
+      if (exactMatchFound) {
+        break;
       }
     }
 
