@@ -498,7 +498,7 @@ public class ServerCallsTest {
     semaphore.acquire();
     clientCall.request(3);
     clientCall.halfClose();
-    latch.await(5, TimeUnit.SECONDS);
+    assertThat(latch.await(5, TimeUnit.SECONDS)).isTrue();
     // Very that number of messages produced in each onReady handler call matches the number
     // requested by the client.
     assertArrayEquals(new int[]{0, 1, 1, 2, 2, 2}, receivedMessages);
