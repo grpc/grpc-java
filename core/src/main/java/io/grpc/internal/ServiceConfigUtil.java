@@ -315,40 +315,6 @@ public final class ServiceConfigUtil {
   }
 
   /**
-   * Extract the server name to use in EDS query.
-   */
-  @Nullable
-  public static String getEdsServiceNameFromXdsConfig(Map<String, ?> rawXdsConfig) {
-    return JsonUtil.getString(rawXdsConfig, "edsServiceName");
-  }
-
-  /**
-   * Extract the LRS server name to send load reports to.
-   */
-  @Nullable
-  public static String getLrsServerNameFromXdsConfig(Map<String, ?> rawXdsConfig) {
-    return JsonUtil.getString(rawXdsConfig, "lrsLoadReportingServerName");
-  }
-
-  /**
-   * Extracts list of child policies from xds loadbalancer config.
-   */
-  @Nullable
-  public static List<LbConfig> getChildPolicyFromXdsConfig(Map<String, ?> rawXdsConfig) {
-    return unwrapLoadBalancingConfigList(
-        JsonUtil.getListOfObjects(rawXdsConfig, "childPolicy"));
-  }
-
-  /**
-   * Extracts list of fallback policies from xds loadbalancer config.
-   */
-  @Nullable
-  public static List<LbConfig> getFallbackPolicyFromXdsConfig(Map<String, ?> rawXdsConfig) {
-    return unwrapLoadBalancingConfigList(
-        JsonUtil.getListOfObjects(rawXdsConfig, "fallbackPolicy"));
-  }
-
-  /**
    * Extracts the stickiness metadata key from a service config, or {@code null}.
    */
   @Nullable
