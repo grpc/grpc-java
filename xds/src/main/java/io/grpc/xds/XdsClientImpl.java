@@ -680,7 +680,7 @@ final class XdsClientImpl extends XdsClient {
       List<Route> routes = targetVirtualHost.getRoutesList();
       if (!routes.isEmpty()) {
         Route route = routes.get(routes.size() - 1);
-        if (route.getMatch().getPrefix().equals("")) {
+        if (route.getMatch().getPrefix().isEmpty()) {
           if (route.hasRoute()) {
             return route.getRoute().getCluster();
           }
