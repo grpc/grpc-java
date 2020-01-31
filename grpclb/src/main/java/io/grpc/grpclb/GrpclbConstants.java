@@ -44,12 +44,12 @@ public final class GrpclbConstants {
 
   @SuppressWarnings("deprecation")
   @EquivalentAddressGroup.Attr
-  static final Attributes.Key<List<EquivalentAddressGroup>> ATTR_LB_ADDRS =
+  public static final Attributes.Key<List<EquivalentAddressGroup>> ATTR_LB_ADDRS =
       io.grpc.internal.GrpcAttributes.ATTR_LB_ADDRS;
 
   @SuppressWarnings("deprecation")
   @EquivalentAddressGroup.Attr
-  static final Attributes.Key<String> ATTR_LB_ADDR_AUTHORITY =
+  public static final Attributes.Key<String> ATTR_LB_ADDR_AUTHORITY =
       io.grpc.internal.GrpcAttributes.ATTR_LB_ADDR_AUTHORITY;
 
   private GrpclbConstants() { }
