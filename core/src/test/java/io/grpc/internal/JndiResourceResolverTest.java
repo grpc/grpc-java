@@ -24,7 +24,6 @@ import static org.mockito.Mockito.when;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.internal.DnsNameResolver.AddressResolver;
-import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.JndiResourceResolverFactory.JndiRecordFetcher;
 import io.grpc.internal.JndiResourceResolverFactory.JndiResourceResolver;
 import io.grpc.internal.JndiResourceResolverFactory.RecordFetcher;
@@ -81,6 +80,7 @@ public class JndiResourceResolverTest {
     assertThat(resolver.resolveTxt("service.example.com")).isEqualTo(golden);
   }
 
+  @SuppressWarnings("deprecation")
   @Test
   public void srvRecordLookup() throws Exception {
     AddressResolver addressResolver = mock(AddressResolver.class);

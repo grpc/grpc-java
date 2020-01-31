@@ -61,6 +61,7 @@ final class FallbackLb extends ForwardingLoadBalancer {
     return fallbackPolicyLb;
   }
 
+  @SuppressWarnings("deprecation")
   @Override
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     Attributes attributes = resolvedAddresses.getAttributes();
@@ -113,6 +114,8 @@ final class FallbackLb extends ForwardingLoadBalancer {
     List<EquivalentAddressGroup> servers = resolvedAddresses.getAddresses();
     // Some addresses in the list may be grpclb-v1 balancer addresses, so if the fallback policy
     // does not support grpclb-v1 balancer addresses, then we need to exclude them from the list.
+    // TODO(chengyuanzhang): delete the following logic after changing internal resolver
+    //  to not include grpclb server addresses.
     if (!newFallbackPolicyName.equals("grpclb") && !newFallbackPolicyName.equals(XDS_POLICY_NAME)) {
       ImmutableList.Builder<EquivalentAddressGroup> backends = ImmutableList.builder();
       for (EquivalentAddressGroup eag : resolvedAddresses.getAddresses()) {

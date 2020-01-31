@@ -794,7 +794,7 @@ final class GrpclbState {
     // actually used in the normal case. https://github.com/grpc/grpc-java/issues/4618 should allow
     // this to be more obvious.
     Attributes attrs = Attributes.newBuilder()
-        .set(GrpcAttributes.ATTR_LB_ADDR_AUTHORITY, authority)
+        .set(GrpclbConstants.ATTR_LB_ADDR_AUTHORITY, authority)
         .build();
     return new LbAddressGroup(flattenEquivalentAddressGroup(eags, attrs), authority);
   }

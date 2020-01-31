@@ -91,22 +91,30 @@ class GrpclbLoadBalancer extends LoadBalancer {
   @Override
   @SuppressWarnings("deprecation")  // TODO(creamsoup) migrate to use parsed service config
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-    List<EquivalentAddressGroup> updatedServers = resolvedAddresses.getAddresses();
     Attributes attributes = resolvedAddresses.getAttributes();
-    // LB addresses and backend addresses are treated separately
+    List<EquivalentAddressGroup> newLbAddresses = attributes.get(GrpcAttributes.ATTR_LB_ADDRS);
+    if ((newLbAddresses == null || newLbAddresses.isEmpty())
+        && resolvedAddresses.getAddresses().isEmpty()) {
+      handleNameResolutionError(
+          Status.UNAVAILABLE.withDescription("No backend or balancer addresses found"));
+      return;
+    }
     List<LbAddressGroup> newLbAddressGroups = new ArrayList<>();
-    List<EquivalentAddressGroup> newBackendServers = new ArrayList<>();
-    for (EquivalentAddressGroup server : updatedServers) {
-      String lbAddrAuthority = server.getAttributes().get(GrpcAttributes.ATTR_LB_ADDR_AUTHORITY);
-      if (lbAddrAuthority != null) {
-        newLbAddressGroups.add(new LbAddressGroup(server, lbAddrAuthority));
-      } else {
-        newBackendServers.add(server);
+
+    if (newLbAddresses != null) {
+      for (EquivalentAddressGroup lbAddr : newLbAddresses) {
+        String lbAddrAuthority = lbAddr.getAttributes().get(GrpclbConstants.ATTR_LB_ADDR_AUTHORITY);
+        if (lbAddrAuthority == null) {
+          throw new AssertionError(
+              "This is a bug: LB address " + lbAddr + " does not have an authority.");
+        }
+        newLbAddressGroups.add(new LbAddressGroup(lbAddr, lbAddrAuthority));
       }
     }
 
     newLbAddressGroups = Collections.unmodifiableList(newLbAddressGroups);
-    newBackendServers = Collections.unmodifiableList(newBackendServers);
+    List<EquivalentAddressGroup> newBackendServers =
+        Collections.unmodifiableList(resolvedAddresses.getAddresses());
     Map<String, ?> rawLbConfigValue = attributes.get(ATTR_LOAD_BALANCING_CONFIG);
     Mode newMode = retrieveModeFromLbConfig(rawLbConfigValue, helper.getChannelLogger());
     if (!mode.equals(newMode)) {
@@ -182,6 +190,11 @@ class GrpclbLoadBalancer extends LoadBalancer {
     if (grpclbState != null) {
       grpclbState.propagateError(error);
     }
+  }
+
+  @Override
+  public boolean canHandleEmptyAddressListFromNameResolution() {
+    return true;
   }
 
   @VisibleForTesting
