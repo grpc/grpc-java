@@ -58,6 +58,8 @@ import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
 import io.envoyproxy.envoy.api.v2.route.RedirectAction;
 import io.envoyproxy.envoy.api.v2.route.Route;
+import io.envoyproxy.envoy.api.v2.route.RouteAction;
+import io.envoyproxy.envoy.api.v2.route.RouteMatch;
 import io.envoyproxy.envoy.api.v2.route.VirtualHost;
 import io.envoyproxy.envoy.config.filter.network.http_connection_manager.v2.HttpConnectionManager;
 import io.envoyproxy.envoy.config.filter.network.http_connection_manager.v2.Rds;
@@ -3197,6 +3199,111 @@ public class XdsClientImplTest {
   }
 
   @Test
+  public void findClusterNameInRouteConfig_exactMatchFirst() {
+    String hostname = "a.googleapis.com";
+    String targetClusterName = "cluster-hello.googleapis.com";
+    VirtualHost vHost1 =
+        VirtualHost.newBuilder()
+            .setName("virtualhost01.googleapis.com")  // don't care
+            .addAllDomains(ImmutableList.of("a.googleapis.com", "b.googleapis.com"))
+            .addRoutes(
+                Route.newBuilder()
+                    .setRoute(RouteAction.newBuilder().setCluster(targetClusterName))
+                    .setMatch(RouteMatch.newBuilder().setPrefix("")))
+            .build();
+    VirtualHost vHost2 =
+        VirtualHost.newBuilder()
+            .setName("virtualhost02.googleapis.com")  // don't care
+            .addAllDomains(ImmutableList.of("*.googleapis.com"))
+            .addRoutes(
+                Route.newBuilder()
+                    .setRoute(RouteAction.newBuilder().setCluster("cluster-hi.googleapis.com"))
+                    .setMatch(RouteMatch.newBuilder().setPrefix("")))
+            .build();
+    VirtualHost vHost3 =
+        VirtualHost.newBuilder()
+            .setName("virtualhost03.googleapis.com")  // don't care
+            .addAllDomains(ImmutableList.of("*"))
+            .addRoutes(
+                Route.newBuilder()
+                    .setRoute(RouteAction.newBuilder().setCluster("cluster-hey.googleapis.com"))
+                    .setMatch(RouteMatch.newBuilder().setPrefix("")))
+            .build();
+    RouteConfiguration routeConfig =
+        buildRouteConfiguration(
+            "route-foo.googleapis.com", ImmutableList.of(vHost1, vHost2, vHost3));
+    String result = XdsClientImpl.findClusterNameInRouteConfig(routeConfig, hostname);
+    assertThat(result).isEqualTo(targetClusterName);
+  }
+
+  @Test
+  public void findClusterNameInRouteConfig_preferSuffixDomainOverPrefixDomain() {
+    String hostname = "a.googleapis.com";
+    String targetClusterName = "cluster-hello.googleapis.com";
+    VirtualHost vHost1 =
+        VirtualHost.newBuilder()
+            .setName("virtualhost01.googleapis.com")  // don't care
+            .addAllDomains(ImmutableList.of("*.googleapis.com", "b.googleapis.com"))
+            .addRoutes(
+                Route.newBuilder()
+                    .setRoute(RouteAction.newBuilder().setCluster(targetClusterName))
+                    .setMatch(RouteMatch.newBuilder().setPrefix("")))
+            .build();
+    VirtualHost vHost2 =
+        VirtualHost.newBuilder()
+            .setName("virtualhost02.googleapis.com")  // don't care
+            .addAllDomains(ImmutableList.of("a.googleapis.*"))
+            .addRoutes(
+                Route.newBuilder()
+                    .setRoute(RouteAction.newBuilder().setCluster("cluster-hi.googleapis.com"))
+                    .setMatch(RouteMatch.newBuilder().setPrefix("")))
+            .build();
+    VirtualHost vHost3 =
+        VirtualHost.newBuilder()
+            .setName("virtualhost03.googleapis.com")  // don't care
+            .addAllDomains(ImmutableList.of("*"))
+            .addRoutes(
+                Route.newBuilder()
+                    .setRoute(RouteAction.newBuilder().setCluster("cluster-hey.googleapis.com"))
+                    .setMatch(RouteMatch.newBuilder().setPrefix("")))
+            .build();
+    RouteConfiguration routeConfig =
+        buildRouteConfiguration(
+            "route-foo.googleapis.com", ImmutableList.of(vHost1, vHost2, vHost3));
+    String result = XdsClientImpl.findClusterNameInRouteConfig(routeConfig, hostname);
+    assertThat(result).isEqualTo(targetClusterName);
+  }
+
+  @Test
+  public void findClusterNameInRouteConfig_asteriskMatchAnyDomain() {
+    String hostname = "a.googleapis.com";
+    String targetClusterName = "cluster-hello.googleapis.com";
+    VirtualHost vHost1 =
+        VirtualHost.newBuilder()
+            .setName("virtualhost01.googleapis.com")  // don't care
+            .addAllDomains(ImmutableList.of("*"))
+            .addRoutes(
+                Route.newBuilder()
+                    .setRoute(RouteAction.newBuilder().setCluster(targetClusterName))
+                    .setMatch(RouteMatch.newBuilder().setPrefix("")))
+            .build();
+    VirtualHost vHost2 =
+        VirtualHost.newBuilder()
+            .setName("virtualhost02.googleapis.com")  // don't care
+            .addAllDomains(ImmutableList.of("b.googleapis.com"))
+            .addRoutes(
+                Route.newBuilder()
+                    .setRoute(RouteAction.newBuilder().setCluster("cluster-hi.googleapis.com"))
+                    .setMatch(RouteMatch.newBuilder().setPrefix("")))
+            .build();
+    RouteConfiguration routeConfig =
+        buildRouteConfiguration(
+            "route-foo.googleapis.com", ImmutableList.of(vHost1, vHost2));
+    String result = XdsClientImpl.findClusterNameInRouteConfig(routeConfig, hostname);
+    assertThat(result).isEqualTo(targetClusterName);
+  }
+
+  @Test
   public void messagePrinter_printLdsResponse() {
     MessagePrinter printer = new MessagePrinter();
     List<Any> listeners = ImmutableList.of(
@@ -3232,10 +3339,16 @@ public class XdsClientImplTest {
         + "            \"name\": \"virtualhost00.googleapis.com\",\n"
         + "            \"domains\": [\"foo.googleapis.com\", \"bar.googleapis.com\"],\n"
         + "            \"routes\": [{\n"
+        + "              \"match\": {\n"
+        + "                \"prefix\": \"\"\n"
+        + "              },\n"
         + "              \"route\": {\n"
         + "                \"cluster\": \"whatever cluster\"\n"
         + "              }\n"
         + "            }, {\n"
+        + "              \"match\": {\n"
+        + "                \"prefix\": \"\"\n"
+        + "              },\n"
         + "              \"route\": {\n"
         + "                \"cluster\": \"cluster.googleapis.com\"\n"
         + "              }\n"
@@ -3276,10 +3389,16 @@ public class XdsClientImplTest {
         + "      \"name\": \"virtualhost00.googleapis.com\",\n"
         + "      \"domains\": [\"foo.googleapis.com\", \"bar.googleapis.com\"],\n"
         + "      \"routes\": [{\n"
+        + "        \"match\": {\n"
+        + "          \"prefix\": \"\"\n"
+        + "        },\n"
         + "        \"route\": {\n"
         + "          \"cluster\": \"whatever cluster\"\n"
         + "        }\n"
         + "      }, {\n"
+        + "        \"match\": {\n"
+        + "          \"prefix\": \"\"\n"
+        + "        },\n"
         + "        \"route\": {\n"
         + "          \"cluster\": \"cluster.googleapis.com\"\n"
         + "        }\n"
