@@ -43,7 +43,6 @@ public final class GrpclbConstants {
       Attributes.Key.create("lb-token");
 
   @SuppressWarnings("deprecation")
-  @EquivalentAddressGroup.Attr
   static final Attributes.Key<List<EquivalentAddressGroup>> ATTR_LB_ADDRS =
       io.grpc.internal.GrpcAttributes.ATTR_LB_ADDRS;
 
