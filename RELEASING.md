@@ -51,6 +51,7 @@ $ VERSION_FILES=(
   examples/example-kotlin/android/helloworld/app/build.gradle
   examples/example-tls/build.gradle
   examples/example-tls/pom.xml
+  examples/example-xds/build.gradle
   )
 ```
 
