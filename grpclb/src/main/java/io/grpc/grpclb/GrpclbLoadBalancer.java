@@ -30,7 +30,6 @@ import io.grpc.LoadBalancer;
 import io.grpc.Status;
 import io.grpc.grpclb.GrpclbState.Mode;
 import io.grpc.internal.BackoffPolicy;
-import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.internal.TimeProvider;
@@ -92,7 +91,7 @@ class GrpclbLoadBalancer extends LoadBalancer {
   @SuppressWarnings("deprecation")  // TODO(creamsoup) migrate to use parsed service config
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     Attributes attributes = resolvedAddresses.getAttributes();
-    List<EquivalentAddressGroup> newLbAddresses = attributes.get(GrpcAttributes.ATTR_LB_ADDRS);
+    List<EquivalentAddressGroup> newLbAddresses = attributes.get(GrpclbConstants.ATTR_LB_ADDRS);
     if ((newLbAddresses == null || newLbAddresses.isEmpty())
         && resolvedAddresses.getAddresses().isEmpty()) {
       handleNameResolutionError(
