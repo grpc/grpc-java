@@ -20,6 +20,7 @@ import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.Internal;
 import java.util.List;
+import javax.annotation.Nullable;
 
 /**
  * Internal {@link GrpclbConstants} accessor. This is intended for usage internal to the gRPC
@@ -41,9 +42,25 @@ public class InternalGrpclbConstantsAccessor {
   }
 
   /**
+   * Populates gRPC LB address authority from attributes.
+   */
+  @Nullable
+  public static String getLbAddrAuthorityAttr(@EquivalentAddressGroup.Attr Attributes attrs) {
+    return attrs.get(GrpclbConstants.ATTR_LB_ADDR_AUTHORITY);
+  }
+
+  /**
    * Sets attribute for gRPC LB addresses.
    */
   public static Attributes setLbAddrAttr(Attributes attrs, List<EquivalentAddressGroup> lbAddrs) {
     return attrs.toBuilder().set(GrpclbConstants.ATTR_LB_ADDRS, lbAddrs).build();
+  }
+
+  /**
+   * Populates gRPC LB addresses from attributes.
+   */
+  @Nullable
+  public static List<EquivalentAddressGroup> getLbAddrAttr(Attributes attrs) {
+    return attrs.get(GrpclbConstants.ATTR_LB_ADDRS);
   }
 }
