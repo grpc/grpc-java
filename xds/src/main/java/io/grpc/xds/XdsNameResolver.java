@@ -178,6 +178,7 @@ final class XdsNameResolver extends NameResolver {
         //  a temporary solution. More design discussion needs to be done.
         if (error.getCode().equals(Code.NOT_FOUND)) {
           listener.onResult(ResolutionResult.newBuilder().build());
+          return;
         }
         listener.onError(error);
       }
