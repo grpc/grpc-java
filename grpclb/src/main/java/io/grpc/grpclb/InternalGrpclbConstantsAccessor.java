@@ -26,16 +26,16 @@ import java.util.List;
  * team. If you *really* think you need to use this, contact the gRPC team first.
  */
 @Internal
-public class InternalGrpclbConstantsAccessor {
+public final class InternalGrpclbConstantsAccessor {
 
   // Prevent instantiation.
   private InternalGrpclbConstantsAccessor() {
   }
 
-  public static Attributes.Key<List<EquivalentAddressGroup>> ATTR_LB_ADDRS =
+  public static final Attributes.Key<List<EquivalentAddressGroup>> ATTR_LB_ADDRS =
       GrpclbConstants.ATTR_LB_ADDRS;
 
   @EquivalentAddressGroup.Attr
-  public static Attributes.Key<String> ATTR_LB_ADDR_AUTHORITY =
+  public static final Attributes.Key<String> ATTR_LB_ADDR_AUTHORITY =
       GrpclbConstants.ATTR_LB_ADDR_AUTHORITY;
 }
