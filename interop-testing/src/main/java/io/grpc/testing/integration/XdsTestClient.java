@@ -146,7 +146,7 @@ public final class XdsTestClient {
               + c.qps
               + "\n  --rpc_timeout_sec=INT  Per RPC timeout seconds. Default: "
               + c.rpcTimeoutSec
-              + "\n  --wait_for_ready_BOOL  Queue RPCs until channel is ready. Default: "
+              + "\n  --wait_for_ready=BOOL  Enable wait-for-ready for outgoing RPCs. Default: "
               + c.waitForReady
               + "\n  --server=host:port     Address of server. Default: "
               + c.server
