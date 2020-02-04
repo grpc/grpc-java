@@ -22,7 +22,6 @@ popd # TODO: remove when checked in to master
 
 grpc/tools/run_tests/helper_scripts/prep_xds.sh
 python3 grpc/tools/run_tests/run_xds_tests.py \
-    --bootstrap_file=grpc/tools/run_tests/xds/bootstrap.json \
     --test_case=all \
     --project_id=grpc-testing \
     --gcp_suffix=$(date '+%s') \
