@@ -113,13 +113,12 @@ task grpclb_long_lived_affinity_test_client(type: CreateStartScripts) {
 }
 
 task xds_test_client(type: CreateStartScripts) {
+    // Use task dependsOn instead of depending on project(':grpc-xds') in configurations because
+    // grpc-xds is not published yet and we don't want grpc-interop-testin to depend on it in maven.
     dependsOn ':grpc-xds:jar'
     mainClassName = "io.grpc.testing.integration.XdsTestClient"
     applicationName = "xds-test-client"
     outputDir = new File(project.buildDir, 'tmp')
-
-    // Using output files instead of depending on project(':grpc-xds') directly because grpc-xds is
-    // not published yet and we don't want it to be a dependency of grpc-interop-testing in maven.
     classpath = startScripts.classpath + fileTree("${project(':grpc-xds').buildDir}/libs")
     doLast {
         unixScript.text = unixScript.text.replace(
