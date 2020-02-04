@@ -14,7 +14,6 @@ configurations {
 }
 
 evaluationDependsOn(project(':grpc-context').path)
-evaluationDependsOn(project(':grpc-xds').path)
 
 dependencies {
     compile project(':grpc-alts'),
@@ -36,10 +35,6 @@ dependencies {
     testCompile project(':grpc-context').sourceSets.test.output,
             libraries.mockito
     alpnagent libraries.jetty_alpn_agent
-
-    // Using source output instead of depending on project(':grpc-xds') directly because grpc-xds is
-    // not published yet and we don't want it to be a dependency of grpc-interop-testing in maven.
-    runtime project(':grpc-xds').sourceSets.main.output
 }
 
 configureProtoCompilation()
@@ -118,9 +113,13 @@ task grpclb_long_lived_affinity_test_client(type: CreateStartScripts) {
 }
 
 task xds_test_client(type: CreateStartScripts) {
+    dependsOn ':grpc-xds:jar'
     mainClassName = "io.grpc.testing.integration.XdsTestClient"
     applicationName = "xds-test-client"
     outputDir = new File(project.buildDir, 'tmp')
+
+    // Using output files instead of depending on project(':grpc-xds') directly because grpc-xds is
+    // not published yet and we don't want it to be a dependency of grpc-interop-testing in maven.
     classpath = startScripts.classpath + fileTree("${project(':grpc-xds').buildDir}/libs")
     doLast {
         unixScript.text = unixScript.text.replace(
