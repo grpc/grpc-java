@@ -18,7 +18,6 @@ package io.grpc.netty;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
-import static io.grpc.netty.GrpcSslContexts.NEXT_PROTOCOL_VERSIONS;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -190,7 +189,8 @@ final class ProtocolNegotiators {
           return;
         }
         SslHandler sslHandler = ctx.pipeline().get(SslHandler.class);
-        if (!NEXT_PROTOCOL_VERSIONS.contains(sslHandler.applicationProtocol())) {
+        if (!sslContext.applicationProtocolNegotiator().protocols().contains(
+                sslHandler.applicationProtocol())) {
           logSslEngineDetails(Level.FINE, ctx, "TLS negotiation failed for new client.", null);
           ctx.fireExceptionCaught(unavailableException(
               "Failed protocol negotiation: Unable to find compatible protocol"));
@@ -359,7 +359,8 @@ final class ProtocolNegotiators {
         SslHandshakeCompletionEvent handshakeEvent = (SslHandshakeCompletionEvent) evt;
         if (handshakeEvent.isSuccess()) {
           SslHandler handler = ctx.pipeline().get(SslHandler.class);
-          if (NEXT_PROTOCOL_VERSIONS.contains(handler.applicationProtocol())) {
+          if (sslContext.applicationProtocolNegotiator().protocols()
+              .contains(handler.applicationProtocol())) {
             // Successfully negotiated the protocol.
             logSslEngineDetails(Level.FINER, ctx, "TLS negotiation succeeded.", null);
             propagateTlsComplete(ctx, handler.engine().getSession());
