@@ -63,6 +63,7 @@ public final class XdsTestClient {
   private boolean printResponse = false;
   private int qps = 1;
   private int rpcTimeoutSec = 2;
+  private boolean waitForReady;
   private String server = "localhost:8080";
   private int statsPort = 8081;
   private Server statsServer;
@@ -119,6 +120,8 @@ public final class XdsTestClient {
         qps = Integer.valueOf(value);
       } else if ("rpc_timeout_sec".equals(key)) {
         rpcTimeoutSec = Integer.valueOf(value);
+      } else if ("wait_for_ready".equals(key)) {
+        waitForReady = Boolean.valueOf(value);
       } else if ("server".equals(key)) {
         server = value;
       } else if ("stats_port".equals(key)) {
@@ -143,6 +146,8 @@ public final class XdsTestClient {
               + c.qps
               + "\n  --rpc_timeout_sec=INT  Per RPC timeout seconds. Default: "
               + c.rpcTimeoutSec
+              + "\n  --wait_for_ready_BOOL  Queue RPCs until channel is ready. Default: "
+              + c.waitForReady
               + "\n  --server=host:port     Address of server. Default: "
               + c.server
               + "\n  --stats_port=INT       Port to expose peer distribution stats service. "
@@ -199,10 +204,13 @@ public final class XdsTestClient {
 
         SimpleRequest request = SimpleRequest.newBuilder().setFillServerId(true).build();
         ManagedChannel channel = channels.get((int) (requestId % channels.size()));
+        CallOptions callOptions =
+            CallOptions.DEFAULT.withDeadlineAfter(rpcTimeoutSec, TimeUnit.SECONDS);
+        if (waitForReady) {
+          callOptions = callOptions.withWaitForReady();
+        }
         final ClientCall<SimpleRequest, SimpleResponse> call =
-            channel.newCall(
-                TestServiceGrpc.getUnaryCallMethod(),
-                CallOptions.DEFAULT.withDeadlineAfter(rpcTimeoutSec, TimeUnit.SECONDS));
+            channel.newCall(TestServiceGrpc.getUnaryCallMethod(), callOptions);
         call.start(
             new ClientCall.Listener<SimpleResponse>() {
               private String hostname;
