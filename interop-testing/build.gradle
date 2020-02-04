@@ -25,7 +25,6 @@ dependencies {
             project(':grpc-protobuf'),
             project(':grpc-stub'),
             project(':grpc-testing'),
-            project(':grpc-xds'),
             libraries.google_auth_oauth2_http,
             libraries.junit,
             libraries.truth
@@ -114,10 +113,19 @@ task grpclb_long_lived_affinity_test_client(type: CreateStartScripts) {
 }
 
 task xds_test_client(type: CreateStartScripts) {
+    // Use task dependsOn instead of depending on project(':grpc-xds') in configurations because
+    // grpc-xds is not published yet and we don't want grpc-interop-testin to depend on it in maven.
+    dependsOn ':grpc-xds:jar'
     mainClassName = "io.grpc.testing.integration.XdsTestClient"
     applicationName = "xds-test-client"
     outputDir = new File(project.buildDir, 'tmp')
-    classpath = jar.outputs.files + configurations.runtime
+    classpath = startScripts.classpath + fileTree("${project(':grpc-xds').buildDir}/libs")
+    doLast {
+        unixScript.text = unixScript.text.replace(
+                '\$APP_HOME/lib/grpc-xds', "${project(':grpc-xds').buildDir}/libs/grpc-xds")
+        windowsScript.text = windowsScript.text.replace(
+                '%APP_HOME%\\lib\\grpc-xds', "${project(':grpc-xds').buildDir}\\libs\\grpc-xds")
+    }
 }
 
 task xds_test_server(type: CreateStartScripts) {
