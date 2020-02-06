@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.internal;
+package io.grpc.census;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 

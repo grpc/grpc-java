@@ -63,6 +63,7 @@ final class XdsNameResolver extends NameResolver {
   private final XdsChannelFactory channelFactory;
   private final SynchronizationContext syncContext;
   private final ScheduledExecutorService timeService;
+  private final ServiceConfigParser serviceConfigParser;
   private final BackoffPolicy.Provider backoffPolicyProvider;
   private final Supplier<Stopwatch> stopwatchSupplier;
   private final Bootstrapper bootstrapper;
@@ -88,6 +89,7 @@ final class XdsNameResolver extends NameResolver {
     this.channelFactory = checkNotNull(channelFactory, "channelFactory");
     this.syncContext = checkNotNull(args.getSynchronizationContext(), "syncContext");
     this.timeService = checkNotNull(args.getScheduledExecutorService(), "timeService");
+    this.serviceConfigParser = checkNotNull(args.getServiceConfigParser(), "serviceConfigParser");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
     this.bootstrapper = checkNotNull(bootstrapper, "bootstrapper");
@@ -138,7 +140,7 @@ final class XdsNameResolver extends NameResolver {
         String serviceConfig = "{\n"
             + "  \"loadBalancingConfig\": [\n"
             + "    {\n"
-            + "      \"experimental_cds\": {\n"
+            + "      \"cds_experimental\": {\n"
             + "        \"cluster\": \"" + update.getClusterName() + "\"\n"
             + "      }\n"
             + "    }\n"
@@ -157,10 +159,12 @@ final class XdsNameResolver extends NameResolver {
                 .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, config)
                 .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
                 .build();
+        ConfigOrError parsedServiceConfig = serviceConfigParser.parseServiceConfig(config);
         ResolutionResult result =
             ResolutionResult.newBuilder()
                 .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
                 .setAttributes(attrs)
+                .setServiceConfig(parsedServiceConfig)
                 .build();
         listener.onResult(result);
       }

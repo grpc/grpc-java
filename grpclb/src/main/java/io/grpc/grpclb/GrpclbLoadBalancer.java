@@ -30,7 +30,6 @@ import io.grpc.LoadBalancer;
 import io.grpc.Status;
 import io.grpc.grpclb.GrpclbState.Mode;
 import io.grpc.internal.BackoffPolicy;
-import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.internal.TimeProvider;
@@ -89,23 +88,32 @@ class GrpclbLoadBalancer extends LoadBalancer {
   }
 
   @Override
+  @SuppressWarnings("deprecation")  // TODO(creamsoup) migrate to use parsed service config
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-    List<EquivalentAddressGroup> updatedServers = resolvedAddresses.getAddresses();
     Attributes attributes = resolvedAddresses.getAttributes();
-    // LB addresses and backend addresses are treated separately
+    List<EquivalentAddressGroup> newLbAddresses = attributes.get(GrpclbConstants.ATTR_LB_ADDRS);
+    if ((newLbAddresses == null || newLbAddresses.isEmpty())
+        && resolvedAddresses.getAddresses().isEmpty()) {
+      handleNameResolutionError(
+          Status.UNAVAILABLE.withDescription("No backend or balancer addresses found"));
+      return;
+    }
     List<LbAddressGroup> newLbAddressGroups = new ArrayList<>();
-    List<EquivalentAddressGroup> newBackendServers = new ArrayList<>();
-    for (EquivalentAddressGroup server : updatedServers) {
-      String lbAddrAuthority = server.getAttributes().get(GrpcAttributes.ATTR_LB_ADDR_AUTHORITY);
-      if (lbAddrAuthority != null) {
-        newLbAddressGroups.add(new LbAddressGroup(server, lbAddrAuthority));
-      } else {
-        newBackendServers.add(server);
+
+    if (newLbAddresses != null) {
+      for (EquivalentAddressGroup lbAddr : newLbAddresses) {
+        String lbAddrAuthority = lbAddr.getAttributes().get(GrpclbConstants.ATTR_LB_ADDR_AUTHORITY);
+        if (lbAddrAuthority == null) {
+          throw new AssertionError(
+              "This is a bug: LB address " + lbAddr + " does not have an authority.");
+        }
+        newLbAddressGroups.add(new LbAddressGroup(lbAddr, lbAddrAuthority));
       }
     }
 
     newLbAddressGroups = Collections.unmodifiableList(newLbAddressGroups);
-    newBackendServers = Collections.unmodifiableList(newBackendServers);
+    List<EquivalentAddressGroup> newBackendServers =
+        Collections.unmodifiableList(resolvedAddresses.getAddresses());
     Map<String, ?> rawLbConfigValue = attributes.get(ATTR_LOAD_BALANCING_CONFIG);
     GrpclbConfig newConfig = retrieveGrpcLbConfig(rawLbConfigValue, helper.getChannelLogger());
     if (!config.equals(newConfig)) {
@@ -195,6 +203,11 @@ class GrpclbLoadBalancer extends LoadBalancer {
     }
   }
 
+  @Override
+  public boolean canHandleEmptyAddressListFromNameResolution() {
+    return true;
+  }
+
   @VisibleForTesting
   @Nullable
   GrpclbState getGrpclbState() {
@@ -205,7 +218,6 @@ class GrpclbLoadBalancer extends LoadBalancer {
   /**
    * Gets a list from an object for the given key.
    */
-  @SuppressWarnings("unchecked")
   @Nullable
   private static List<?> getList(Map<String, ?> obj, String key) {
     assert key != null;

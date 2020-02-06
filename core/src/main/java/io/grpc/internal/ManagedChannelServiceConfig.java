@@ -39,9 +39,7 @@ final class ManagedChannelServiceConfig {
 
   private final Map<String, MethodInfo> serviceMethodMap;
   private final Map<String, MethodInfo> serviceMap;
-  // TODO(notcarl/zdapeng): use retryThrottling here
   @Nullable
-  @SuppressWarnings("unused")
   private final Throttle retryThrottling;
   @Nullable
   private final Object loadBalancingConfig;
@@ -55,6 +53,16 @@ final class ManagedChannelServiceConfig {
     this.serviceMap = Collections.unmodifiableMap(new HashMap<>(serviceMap));
     this.retryThrottling = retryThrottling;
     this.loadBalancingConfig = loadBalancingConfig;
+  }
+
+  /** Returns an empty {@link ManagedChannelServiceConfig}. */
+  static ManagedChannelServiceConfig empty() {
+    return
+        new ManagedChannelServiceConfig(
+            new HashMap<String, MethodInfo>(),
+            new HashMap<String, MethodInfo>(),
+            /* retryThrottling= */ null,
+            /* loadBalancingConfig= */ null);
   }
 
   /**
@@ -136,6 +144,41 @@ final class ManagedChannelServiceConfig {
   @Nullable
   Object getLoadBalancingConfig() {
     return loadBalancingConfig;
+  }
+
+  @Nullable
+  Throttle getRetryThrottling() {
+    return retryThrottling;
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    ManagedChannelServiceConfig that = (ManagedChannelServiceConfig) o;
+    return Objects.equal(serviceMethodMap, that.serviceMethodMap)
+        && Objects.equal(serviceMap, that.serviceMap)
+        && Objects.equal(retryThrottling, that.retryThrottling)
+        && Objects.equal(loadBalancingConfig, that.loadBalancingConfig);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hashCode(serviceMethodMap, serviceMap, retryThrottling, loadBalancingConfig);
+  }
+
+  @Override
+  public String toString() {
+    return MoreObjects.toStringHelper(this)
+        .add("serviceMethodMap", serviceMethodMap)
+        .add("serviceMap", serviceMap)
+        .add("retryThrottling", retryThrottling)
+        .add("loadBalancingConfig", loadBalancingConfig)
+        .toString();
   }
 
   /**

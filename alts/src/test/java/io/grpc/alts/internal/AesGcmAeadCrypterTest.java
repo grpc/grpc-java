@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 The gRPC Authors
+ * Copyright 2020 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,21 +14,21 @@
  * limitations under the License.
  */
 
-package io.grpc.netty;
+package io.grpc.alts.internal;
 
-import static org.junit.Assert.assertTrue;
+import static com.google.common.truth.Truth.assertThat;
+import static com.google.common.truth.TruthJUnit.assume;
 
+import org.conscrypt.Conscrypt;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-/** Unit tests for {@link io.grpc.netty.GrpcSslContexts}. */
 @RunWith(JUnit4.class)
-public class GrpcSslContextsTest {
-  @Test public void selectApplicationProtocolConfig_grpcExp() {
-    assertTrue(
-        GrpcSslContexts.NEXT_PROTOCOL_VERSIONS.indexOf("grpc-exp") == -1
-            || GrpcSslContexts.NEXT_PROTOCOL_VERSIONS.indexOf("grpc-exp")
-                < GrpcSslContexts.NEXT_PROTOCOL_VERSIONS.indexOf("h2"));
+public final class AesGcmAeadCrypterTest {
+  @Test
+  public void getConscrypt_worksWhenConscryptIsAvailable() {
+    assume().that(Conscrypt.isAvailable()).isTrue();
+    assertThat(AesGcmAeadCrypter.getConscrypt()).isNotNull();
   }
 }

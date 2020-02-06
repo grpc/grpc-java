@@ -223,6 +223,7 @@ public final class AltsProtocolNegotiator {
       return SCHEME;
     }
 
+    @SuppressWarnings("deprecation")
     @Override
     public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
       ChannelHandler gnh = InternalProtocolNegotiators.grpcNegotiationHandler(grpcHandler);

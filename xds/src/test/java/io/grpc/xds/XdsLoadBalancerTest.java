@@ -40,8 +40,8 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
-import io.grpc.xds.LookasideLb.EndpointUpdateCallback;
-import io.grpc.xds.XdsLoadBalancer2.LookasideLbFactory;
+import io.grpc.xds.EdsLoadBalancer.ResourceUpdateCallback;
+import io.grpc.xds.XdsLoadBalancer.PrimaryLbFactory;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -55,9 +55,9 @@ import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
-/** Unit tests for {@link XdsLoadBalancer2}. */
+/** Unit tests for {@link XdsLoadBalancer}. */
 @RunWith(JUnit4.class)
-public class XdsLoadBalancer2Test {
+public class XdsLoadBalancerTest {
   @Rule
   public final ExpectedException thrown = ExpectedException.none();
   @Rule
@@ -75,10 +75,10 @@ public class XdsLoadBalancer2Test {
   @Mock
   private Helper helper;
   private LoadBalancer xdsLoadBalancer;
-  private EndpointUpdateCallback edsUpdateCallback;
+  private ResourceUpdateCallback resourceUpdateCallback;
 
-  private Helper lookasideLbHelper;
-  private final List<LoadBalancer> lookasideLbs = new ArrayList<>();
+  private Helper primaryLbHelper;
+  private final List<LoadBalancer> primaryLbs = new ArrayList<>();
 
   private Helper fallbackLbHelper;
   private final List<LoadBalancer> fallbackLbs = new ArrayList<>();
@@ -87,16 +87,16 @@ public class XdsLoadBalancer2Test {
 
   @Before
   public void setUp() {
-    LookasideLbFactory lookasideLbFactory = new LookasideLbFactory() {
+    PrimaryLbFactory primaryLbFactory = new PrimaryLbFactory() {
       @Override
       public LoadBalancer newLoadBalancer(
-          Helper helper, EndpointUpdateCallback edsUpdateCallback) {
+          Helper helper, ResourceUpdateCallback resourceUpdateCallback) {
         // just return a mock and record the input and output
-        lookasideLbHelper = helper;
-        XdsLoadBalancer2Test.this.edsUpdateCallback = edsUpdateCallback;
-        LoadBalancer lookasideLb = mock(LoadBalancer.class);
-        lookasideLbs.add(lookasideLb);
-        return lookasideLb;
+        primaryLbHelper = helper;
+        XdsLoadBalancerTest.this.resourceUpdateCallback = resourceUpdateCallback;
+        LoadBalancer primaryLb = mock(LoadBalancer.class);
+        primaryLbs.add(primaryLb);
+        return primaryLb;
       }
     };
     LoadBalancer.Factory fallbackLbFactory = new LoadBalancer.Factory() {
@@ -114,7 +114,7 @@ public class XdsLoadBalancer2Test {
     doReturn(mock(ChannelLogger.class)).when(helper).getChannelLogger();
 
     xdsLoadBalancer =
-        new XdsLoadBalancer2(helper, lookasideLbFactory, fallbackLbFactory);
+        new XdsLoadBalancer(helper, primaryLbFactory, fallbackLbFactory);
     xdsLoadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(ImmutableList.<EquivalentAddressGroup>of()).build());
@@ -122,10 +122,10 @@ public class XdsLoadBalancer2Test {
 
   @Test
   public void tearDown() {
-    assertThat(lookasideLbs).hasSize(1);
+    assertThat(primaryLbs).hasSize(1);
     xdsLoadBalancer.shutdown();
-    for (LoadBalancer lookasideLb : lookasideLbs) {
-      verify(lookasideLb).shutdown();
+    for (LoadBalancer primaryLb : primaryLbs) {
+      verify(primaryLb).shutdown();
     }
     for (LoadBalancer fallbackLb : fallbackLbs) {
       verify(fallbackLb).shutdown();
@@ -142,13 +142,13 @@ public class XdsLoadBalancer2Test {
   public void timeoutAtStartup_expectUseFallback_thenBackendReady_expectExitFallback() {
     verifyNotInFallbackMode();
     fakeClock.forwardTime(9, TimeUnit.SECONDS);
-    edsUpdateCallback.onWorking();
+    resourceUpdateCallback.onWorking();
     verifyNotInFallbackMode();
     fakeClock.forwardTime(1, TimeUnit.SECONDS);
     verifyInFallbackMode();
 
     SubchannelPicker subchannelPicker = mock(SubchannelPicker.class);
-    lookasideLbHelper.updateBalancingState(READY, subchannelPicker);
+    primaryLbHelper.updateBalancingState(READY, subchannelPicker);
     verify(helper).updateBalancingState(READY, subchannelPicker);
     verifyNotInFallbackMode();
 
@@ -162,9 +162,9 @@ public class XdsLoadBalancer2Test {
     verifyNotInFallbackMode();
     assertThat(fakeClock.getPendingTasks()).hasSize(1);
 
-    edsUpdateCallback.onWorking();
+    resourceUpdateCallback.onWorking();
     SubchannelPicker subchannelPicker = mock(SubchannelPicker.class);
-    lookasideLbHelper.updateBalancingState(READY, subchannelPicker);
+    primaryLbHelper.updateBalancingState(READY, subchannelPicker);
     verify(helper).updateBalancingState(READY, subchannelPicker);
     assertThat(fakeClock.getPendingTasks()).isEmpty();
     verifyNotInFallbackMode();
@@ -177,7 +177,7 @@ public class XdsLoadBalancer2Test {
     verifyNotInFallbackMode();
     assertThat(fakeClock.getPendingTasks()).hasSize(1);
 
-    edsUpdateCallback.onAllDrop();
+    resourceUpdateCallback.onAllDrop();
     assertThat(fakeClock.getPendingTasks()).isEmpty();
     verifyNotInFallbackMode();
 
@@ -185,22 +185,22 @@ public class XdsLoadBalancer2Test {
   }
 
   @Test
-  public void lookasideChannelFailsWithoutSeeingEdsResponseBeforeTimeoutAtStartup() {
+  public void primaryFailsWithoutSeeingEdsResponseBeforeTimeoutAtStartup() {
     verifyNotInFallbackMode();
     assertThat(fakeClock.getPendingTasks()).hasSize(1);
 
-    edsUpdateCallback.onError();
+    resourceUpdateCallback.onError();
     verifyInFallbackMode();
 
     assertThat(fallbackLbs).hasSize(1);
   }
 
   @Test
-  public void lookasideChannelSeeingEdsResponseThenFailsBeforeTimeoutAtStartup() {
+  public void primarySeeingEdsResponseThenFailsBeforeTimeoutAtStartup() {
     verifyNotInFallbackMode();
     assertThat(fakeClock.getPendingTasks()).hasSize(1);
-    edsUpdateCallback.onWorking();
-    edsUpdateCallback.onError();
+    resourceUpdateCallback.onWorking();
+    resourceUpdateCallback.onError();
     verifyNotInFallbackMode();
 
     fakeClock.forwardTime(10, TimeUnit.SECONDS);
@@ -221,21 +221,21 @@ public class XdsLoadBalancer2Test {
         .build();
     xdsLoadBalancer.handleResolvedAddresses(resolvedAddresses);
 
-    edsUpdateCallback.onError();
+    resourceUpdateCallback.onError();
     LoadBalancer fallbackLb =  Iterables.getLast(fallbackLbs);
     verify(fallbackLb).handleResolvedAddresses(same(resolvedAddresses));
   }
 
   private void verifyInFallbackMode() {
-    assertThat(lookasideLbs).isNotEmpty();
+    assertThat(primaryLbs).isNotEmpty();
     assertThat(fallbackLbs).isNotEmpty();
-    LoadBalancer lookasideLb =  Iterables.getLast(lookasideLbs);
+    LoadBalancer primaryLb =  Iterables.getLast(primaryLbs);
     LoadBalancer fallbackLb =  Iterables.getLast(fallbackLbs);
-    verify(lookasideLb, never()).shutdown();
+    verify(primaryLb, never()).shutdown();
     verify(fallbackLb, never()).shutdown();
 
     xdsLoadBalancer.requestConnection();
-    verify(lookasideLb, times(++requestConnectionTimes)).requestConnection();
+    verify(primaryLb, times(++requestConnectionTimes)).requestConnection();
     verify(fallbackLb).requestConnection();
 
     ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
@@ -245,16 +245,16 @@ public class XdsLoadBalancer2Test {
         .setLoadBalancingPolicyConfig(new Object())
         .build();
     xdsLoadBalancer.handleResolvedAddresses(resolvedAddresses);
-    verify(lookasideLb).handleResolvedAddresses(same(resolvedAddresses));
+    verify(primaryLb).handleResolvedAddresses(same(resolvedAddresses));
     verify(fallbackLb).handleResolvedAddresses(same(resolvedAddresses));
 
     Status status = Status.DATA_LOSS.withDescription("");
     xdsLoadBalancer.handleNameResolutionError(status);
-    verify(lookasideLb).handleNameResolutionError(same(status));
+    verify(primaryLb).handleNameResolutionError(same(status));
     verify(fallbackLb).handleNameResolutionError(same(status));
 
     SubchannelPicker subchannelPicker = mock(SubchannelPicker.class);
-    lookasideLbHelper.updateBalancingState(CONNECTING, subchannelPicker);
+    primaryLbHelper.updateBalancingState(CONNECTING, subchannelPicker);
     verify(helper, never()).updateBalancingState(CONNECTING, subchannelPicker);
     fallbackLbHelper.updateBalancingState(CONNECTING, subchannelPicker);
     verify(helper).updateBalancingState(CONNECTING, subchannelPicker);
@@ -264,10 +264,10 @@ public class XdsLoadBalancer2Test {
     for (LoadBalancer fallbackLb : fallbackLbs) {
       verify(fallbackLb).shutdown();
     }
-    LoadBalancer lookasideLb =  Iterables.getLast(lookasideLbs);
+    LoadBalancer primaryLb =  Iterables.getLast(primaryLbs);
 
     xdsLoadBalancer.requestConnection();
-    verify(lookasideLb, times(++requestConnectionTimes)).requestConnection();
+    verify(primaryLb, times(++requestConnectionTimes)).requestConnection();
 
     ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
         .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
@@ -276,14 +276,14 @@ public class XdsLoadBalancer2Test {
         .setLoadBalancingPolicyConfig(new Object())
         .build();
     xdsLoadBalancer.handleResolvedAddresses(resolvedAddresses);
-    verify(lookasideLb).handleResolvedAddresses(same(resolvedAddresses));
+    verify(primaryLb).handleResolvedAddresses(same(resolvedAddresses));
 
     Status status = Status.DATA_LOSS.withDescription("");
     xdsLoadBalancer.handleNameResolutionError(status);
-    verify(lookasideLb).handleNameResolutionError(same(status));
+    verify(primaryLb).handleNameResolutionError(same(status));
 
     SubchannelPicker subchannelPicker = mock(SubchannelPicker.class);
-    lookasideLbHelper.updateBalancingState(CONNECTING, subchannelPicker);
+    primaryLbHelper.updateBalancingState(CONNECTING, subchannelPicker);
     verify(helper).updateBalancingState(CONNECTING, subchannelPicker);
   }
 

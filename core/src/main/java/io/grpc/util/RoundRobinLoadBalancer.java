@@ -24,6 +24,7 @@ import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 
@@ -85,6 +86,7 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
   }
 
   @Override
+  @SuppressWarnings("deprecation")
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     List<EquivalentAddressGroup> servers = resolvedAddresses.getAddresses();
     Attributes attributes = resolvedAddresses.getAttributes();
@@ -427,6 +429,11 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
       return PickResult.withSubchannel(subchannel != null ? subchannel : nextSubchannel());
     }
 
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(ReadyPicker.class).add("list", list).toString();
+    }
+
     private Subchannel nextSubchannel() {
       int size = list.size();
       int i = indexUpdater.incrementAndGet(this);
@@ -474,6 +481,11 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
     boolean isEquivalentTo(RoundRobinPicker picker) {
       return picker instanceof EmptyPicker && (Objects.equal(status, ((EmptyPicker) picker).status)
           || (status.isOk() && ((EmptyPicker) picker).status.isOk()));
+    }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(EmptyPicker.class).add("status", status).toString();
     }
   }
 

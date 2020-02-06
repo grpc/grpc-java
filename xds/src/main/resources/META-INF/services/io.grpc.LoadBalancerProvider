@@ -1,2 +1,3 @@
 io.grpc.xds.CdsLoadBalancerProvider
+io.grpc.xds.EdsLoadBalancerProvider
 io.grpc.xds.XdsLoadBalancerProvider

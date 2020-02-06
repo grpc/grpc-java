@@ -39,6 +39,7 @@ import io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.A
 import io.grpc.ChannelLogger;
 import io.grpc.ManagedChannel;
 import io.grpc.NameResolver;
+import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.NameResolver.ResolutionResult;
 import io.grpc.NameResolver.ServiceConfigParser;
 import io.grpc.Status;
@@ -60,6 +61,7 @@ import java.util.ArrayDeque;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
+import java.util.concurrent.TimeUnit;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -73,6 +75,8 @@ import org.mockito.junit.MockitoRule;
 
 /** Unit tests for {@link XdsNameResolver}. */
 @RunWith(JUnit4.class)
+// TODO(creamsoup) use parsed service config
+@SuppressWarnings("deprecation")
 public class XdsNameResolverTest {
   private static final String HOST_NAME = "foo.googleapis.com";
   private static final int PORT = 443;
@@ -83,7 +87,7 @@ public class XdsNameResolverTest {
   public final MockitoRule mocks = MockitoJUnit.rule();
   @Rule
   public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
-  
+
   private final SynchronizationContext syncContext = new SynchronizationContext(
       new Thread.UncaughtExceptionHandler() {
         @Override
@@ -93,18 +97,23 @@ public class XdsNameResolverTest {
       });
 
   private final FakeClock fakeClock = new FakeClock();
+  private final Queue<StreamObserver<DiscoveryResponse>> responseObservers = new ArrayDeque<>();
+  private final ServiceConfigParser serviceConfigParser = new ServiceConfigParser() {
+    @Override
+    public ConfigOrError parseServiceConfig(Map<String, ?> rawServiceConfig) {
+      return ConfigOrError.fromConfig(rawServiceConfig);
+    }
+  };
+
   private final NameResolver.Args args =
       NameResolver.Args.newBuilder()
           .setDefaultPort(8080)
           .setProxyDetector(GrpcUtil.NOOP_PROXY_DETECTOR)
           .setSynchronizationContext(syncContext)
-          .setServiceConfigParser(mock(ServiceConfigParser.class))
+          .setServiceConfigParser(serviceConfigParser)
           .setScheduledExecutorService(fakeClock.getScheduledExecutorService())
           .setChannelLogger(mock(ChannelLogger.class))
           .build();
-
-
-  private final Queue<StreamObserver<DiscoveryResponse>> responseObservers = new ArrayDeque<>();
 
   @Mock
   private BackoffPolicy.Provider backoffPolicyProvider;
@@ -223,7 +232,7 @@ public class XdsNameResolverTest {
   }
 
   @Test
-  public void resolve_passxdsClientPoolInResult() {
+  public void resolve_passXdsClientPoolInResult() {
     xdsNameResolver.start(mockListener);
     assertThat(responseObservers).hasSize(1);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
@@ -257,13 +266,14 @@ public class XdsNameResolverTest {
     assertThat(result.getAddresses()).isEmpty();
     Map<String, ?> serviceConfig =
         result.getAttributes().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
+    assertThat(result.getServiceConfig().getConfig()).isEqualTo(serviceConfig);
     @SuppressWarnings("unchecked")
     List<Map<String, ?>> rawLbConfigs =
         (List<Map<String, ?>>) serviceConfig.get("loadBalancingConfig");
     Map<String, ?> lbConfig = Iterables.getOnlyElement(rawLbConfigs);
-    assertThat(lbConfig.keySet()).containsExactly("experimental_cds");
+    assertThat(lbConfig.keySet()).containsExactly("cds_experimental");
     @SuppressWarnings("unchecked")
-    Map<String, ?> rawConfigValues = (Map<String, ?>) lbConfig.get("experimental_cds");
+    Map<String, ?> rawConfigValues = (Map<String, ?>) lbConfig.get("cds_experimental");
     assertThat(rawConfigValues).containsExactly("cluster", clusterName);
   }
 
@@ -278,6 +288,7 @@ public class XdsNameResolverTest {
     responseObserver.onNext(
         buildLdsResponseForCluster("0", "bar.googleapis.com", 80, clusterName, "0000"));
 
+    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     ArgumentCaptor<ResolutionResult> resolutionResultCaptor = ArgumentCaptor.forClass(null);
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
@@ -302,12 +313,13 @@ public class XdsNameResolverTest {
     assertThat(result.getAddresses()).isEmpty();
     Map<String, ?> serviceConfig =
         result.getAttributes().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
+    assertThat(result.getServiceConfig().getConfig()).isEqualTo(serviceConfig);
 
     List<Map<String, ?>> rawLbConfigs =
         (List<Map<String, ?>>) serviceConfig.get("loadBalancingConfig");
     Map<String, ?> lbConfig = Iterables.getOnlyElement(rawLbConfigs);
-    assertThat(lbConfig.keySet()).containsExactly("experimental_cds");
-    Map<String, ?> rawConfigValues = (Map<String, ?>) lbConfig.get("experimental_cds");
+    assertThat(lbConfig.keySet()).containsExactly("cds_experimental");
+    Map<String, ?> rawConfigValues = (Map<String, ?>) lbConfig.get("cds_experimental");
     assertThat(rawConfigValues).containsExactly("cluster", "cluster-foo.googleapis.com");
 
     // Simulate receiving another LDS response that tells client to do RDS.
@@ -327,10 +339,11 @@ public class XdsNameResolverTest {
     result = resolutionResultCaptor.getValue();
     assertThat(result.getAddresses()).isEmpty();
     serviceConfig = result.getAttributes().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
+    assertThat(result.getServiceConfig().getConfig()).isEqualTo(serviceConfig);
     rawLbConfigs = (List<Map<String, ?>>) serviceConfig.get("loadBalancingConfig");
     lbConfig = Iterables.getOnlyElement(rawLbConfigs);
-    assertThat(lbConfig.keySet()).containsExactly("experimental_cds");
-    rawConfigValues = (Map<String, ?>) lbConfig.get("experimental_cds");
+    assertThat(lbConfig.keySet()).containsExactly("cds_experimental");
+    rawConfigValues = (Map<String, ?>) lbConfig.get("cds_experimental");
     assertThat(rawConfigValues).containsExactly("cluster", "cluster-blade.googleapis.com");
   }
 
@@ -345,6 +358,7 @@ public class XdsNameResolverTest {
         buildLdsResponseForCluster("0", "bar.googleapis.com", 80,
             "cluster-bar.googleapis.com", "0000"));
 
+    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     ArgumentCaptor<ResolutionResult> resolutionResultCaptor = ArgumentCaptor.forClass(null);
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
@@ -361,23 +375,24 @@ public class XdsNameResolverTest {
     assertThat(result.getAddresses()).isEmpty();
     Map<String, ?> serviceConfig =
         result.getAttributes().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
+    assertThat(result.getServiceConfig().getConfig()).isEqualTo(serviceConfig);
     @SuppressWarnings("unchecked")
     List<Map<String, ?>> rawLbConfigs =
         (List<Map<String, ?>>) serviceConfig.get("loadBalancingConfig");
     Map<String, ?> lbConfig = Iterables.getOnlyElement(rawLbConfigs);
-    assertThat(lbConfig.keySet()).containsExactly("experimental_cds");
+    assertThat(lbConfig.keySet()).containsExactly("cds_experimental");
     @SuppressWarnings("unchecked")
-    Map<String, ?> rawConfigValues = (Map<String, ?>) lbConfig.get("experimental_cds");
+    Map<String, ?> rawConfigValues = (Map<String, ?>) lbConfig.get("cds_experimental");
     assertThat(rawConfigValues).containsExactly("cluster", "cluster-foo.googleapis.com");
   }
 
   /**
-   * Builds an LDS DiscoveryResponse containing the mapping of given host name (with port if any)
-   * to the given cluster name directly in-line. Clients receiving this response is able to
-   * resolve cluster name for the given hostname:port immediately.
+   * Builds an LDS DiscoveryResponse containing the mapping of given host name (with port if any) to
+   * the given cluster name directly in-line. Clients receiving this response is able to resolve
+   * cluster name for the given hostname:port immediately.
    */
-  private DiscoveryResponse buildLdsResponseForCluster(String versionInfo,
-      String hostName, int port, String clusterName, String nonce) {
+  private static DiscoveryResponse buildLdsResponseForCluster(
+      String versionInfo, String hostName, int port, String clusterName, String nonce) {
     String ldsResourceName = port == -1 ? hostName : hostName + ":" + port;
     List<Any> listeners = ImmutableList.of(
         Any.pack(buildListener(ldsResourceName,
@@ -394,12 +409,12 @@ public class XdsNameResolverTest {
   }
 
   /**
-   * Builds an LDS DiscoveryResponse containing the mapping of given host name (with port if any)
-   * to the given RDS resource name. Clients receiving this response is able to send an RDS
-   * request for resolving the cluster name for the given hostname:port.
+   * Builds an LDS DiscoveryResponse containing the mapping of given host name (with port if any) to
+   * the given RDS resource name. Clients receiving this response is able to send an RDS request for
+   * resolving the cluster name for the given hostname:port.
    */
-  private DiscoveryResponse buildLdsResponseForRdsResource(String versionInfo,
-      String hostName, int port, String routeConfigName, String nonce) {
+  private static DiscoveryResponse buildLdsResponseForRdsResource(
+      String versionInfo, String hostName, int port, String routeConfigName, String nonce) {
     String ldsResourceName = port == -1 ? hostName : hostName + ":" + port;
     Rds rdsConfig =
         Rds.newBuilder()
@@ -416,11 +431,15 @@ public class XdsNameResolverTest {
   }
 
   /**
-   * Builds an RDS DiscoveryResponse containing the mapping of given route config name to the
-   * given cluster name under.
+   * Builds an RDS DiscoveryResponse containing the mapping of given route config name to the given
+   * cluster name under.
    */
-  private DiscoveryResponse buildRdsResponseForCluster(String versionInfo,
-      String routeConfigName, String hostName, String clusterName, String nonce) {
+  private static DiscoveryResponse buildRdsResponseForCluster(
+      String versionInfo,
+      String routeConfigName,
+      String hostName,
+      String clusterName,
+      String nonce) {
     List<Any> routeConfigs = ImmutableList.of(
         Any.pack(
             buildRouteConfiguration(

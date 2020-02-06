@@ -24,7 +24,6 @@ popd
 
 pushd "$GRPC_JAVA_DIR/cronet"
 ../gradlew publish \
-  --include-build "$GRPC_JAVA_DIR" \
   -Dorg.gradle.parallel=false \
   -PskipCodegen=true \
   -PrepositoryDir="$LOCAL_MVN_TEMP"

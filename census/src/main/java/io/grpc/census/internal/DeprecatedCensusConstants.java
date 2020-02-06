@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.internal;
+package io.grpc.census.internal;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.opencensus.contrib.grpc.metrics.RpcMeasureConstants;

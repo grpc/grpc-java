@@ -31,12 +31,12 @@ import java.util.Objects;
 /**
  * The provider for the "cds" balancing policy.  This class should not be directly referenced in
  * code.  The policy should be accessed through {@link io.grpc.LoadBalancerRegistry#getProvider}
- * with the name "cds" (currently "experimental_cds").
+ * with the name "cds" (currently "cds_experimental").
  */
 @Internal
 public class CdsLoadBalancerProvider extends LoadBalancerProvider {
 
-  static final String CDS_POLICY_NAME = "experimental_cds";
+  static final String CDS_POLICY_NAME = "cds_experimental";
   private static final String CLUSTER_KEY = "cluster";
 
   @Override
@@ -76,7 +76,8 @@ public class CdsLoadBalancerProvider extends LoadBalancerProvider {
       return ConfigOrError.fromConfig(new CdsConfig(cluster));
     } catch (RuntimeException e) {
       return ConfigOrError.fromError(
-          Status.UNKNOWN.withDescription("Failed to parse config " + e.getMessage()).withCause(e));
+          Status.fromThrowable(e).withDescription(
+              "Failed to parse CDS LB config: " + rawLoadBalancingPolicyConfig));
     }
   }
 

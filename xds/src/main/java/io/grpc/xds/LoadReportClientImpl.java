@@ -342,36 +342,4 @@ final class LoadReportClientImpl implements LoadReportClient {
       }
     }
   }
-
-  /**
-   * Factory class for creating {@link LoadReportClient} instances.
-   */
-  // TODO(chengyuanzhang): eliminate this factory after migrating EDS load balancer to
-  //  use XdsClient.
-  abstract static class LoadReportClientFactory {
-
-    private static final LoadReportClientFactory DEFAULT_INSTANCE =
-        new LoadReportClientFactory() {
-          @Override
-          LoadReportClient createLoadReportClient(
-              ManagedChannel channel,
-              String clusterName,
-              Node node,
-              SynchronizationContext syncContext,
-              ScheduledExecutorService timeService,
-              BackoffPolicy.Provider backoffPolicyProvider,
-              Supplier<Stopwatch> stopwatchSupplier) {
-            return new LoadReportClientImpl(channel, clusterName, node, syncContext, timeService,
-                backoffPolicyProvider, stopwatchSupplier);
-          }
-        };
-
-    static LoadReportClientFactory getInstance() {
-      return DEFAULT_INSTANCE;
-    }
-
-    abstract LoadReportClient createLoadReportClient(ManagedChannel channel, String clusterName,
-        Node node, SynchronizationContext syncContext, ScheduledExecutorService timeService,
-        BackoffPolicy.Provider backoffPolicyProvider, Supplier<Stopwatch> stopwatchSupplier);
-  }
 }
