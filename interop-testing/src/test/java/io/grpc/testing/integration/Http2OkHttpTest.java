@@ -33,7 +33,6 @@ import io.grpc.okhttp.OkHttpChannelBuilder;
 import io.grpc.okhttp.internal.Platform;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.integration.EmptyProtos.Empty;
-import io.netty.handler.ssl.OpenSsl;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslProvider;
@@ -68,7 +67,7 @@ public class Http2OkHttpTest extends AbstractInteropTest {
     // Starts the server with HTTPS.
     try {
       SslProvider sslProvider = SslContext.defaultServerProvider();
-      if (sslProvider == SslProvider.OPENSSL && !OpenSsl.isAlpnSupported()) {
+      if (sslProvider == SslProvider.OPENSSL && !SslProvider.isAlpnSupported(SslProvider.OPENSSL)) {
         // OkHttp only supports Jetty ALPN on OpenJDK. So if OpenSSL doesn't support ALPN, then we
         // are forced to use Jetty ALPN for Netty instead of OpenSSL.
         sslProvider = SslProvider.JDK;
