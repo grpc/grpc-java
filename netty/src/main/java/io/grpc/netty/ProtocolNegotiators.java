@@ -52,6 +52,7 @@ import io.netty.handler.ssl.OpenSslEngine;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.ssl.SslHandshakeCompletionEvent;
+import io.netty.handler.ssl.SslProvider;
 import io.netty.util.AsciiString;
 import io.netty.util.Attribute;
 import io.netty.util.AttributeMap;
@@ -555,7 +556,7 @@ final class ProtocolNegotiators {
       builder.append("    OpenSSL, ");
       builder.append("Version: 0x").append(Integer.toHexString(OpenSsl.version()));
       builder.append(" (").append(OpenSsl.versionString()).append("), ");
-      builder.append("ALPN supported: ").append(OpenSsl.isAlpnSupported());
+      builder.append("ALPN supported: ").append(SslProvider.isAlpnSupported(SslProvider.OPENSSL));
     } else if (JettyTlsUtil.isJettyAlpnConfigured()) {
       builder.append("    Jetty ALPN");
     } else if (JettyTlsUtil.isJettyNpnConfigured()) {
