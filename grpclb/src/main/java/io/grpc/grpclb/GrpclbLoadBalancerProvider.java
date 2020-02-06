@@ -83,10 +83,7 @@ public final class GrpclbLoadBalancerProvider extends LoadBalancerProvider {
     }
     Object rawTarget =
         rawLoadBalancingPolicyConfig.get(GrpclbLoadBalancerProvider.SERVICE_CONFIG_TARGET_NAME);
-    String target = null;
-    if (rawTarget instanceof String) {
-      target = (String) rawTarget;
-    }
+    String target = (String) rawTarget;
     List<?> rawChildPolicies = getList(rawLoadBalancingPolicyConfig, "childPolicy");
     if (rawChildPolicies == null) {
       return ConfigOrError.fromConfig(GrpclbConfig.create(DEFAULT_MODE, target));
