@@ -27,6 +27,7 @@ import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
+import io.grpc.internal.JsonUtil;
 import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import java.util.List;
@@ -63,7 +64,7 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
 
   @Override
   public LoadBalancer newLoadBalancer(Helper helper) {
-    return new XdsLoadBalancer2(helper);
+    return new XdsLoadBalancer(helper);
   }
 
   @Override
@@ -78,23 +79,23 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
     try {
       LbConfig childPolicy = selectChildPolicy(rawLoadBalancingPolicyConfig, registry);
       LbConfig fallbackPolicy = selectFallbackPolicy(rawLoadBalancingPolicyConfig, registry);
-      String edsServiceName =
-          ServiceConfigUtil.getEdsServiceNameFromXdsConfig(rawLoadBalancingPolicyConfig);
+      String edsServiceName = JsonUtil.getString(rawLoadBalancingPolicyConfig, "edsServiceName");
       String lrsServerName =
-          ServiceConfigUtil.getLrsServerNameFromXdsConfig(rawLoadBalancingPolicyConfig);
+          JsonUtil.getString(rawLoadBalancingPolicyConfig, "lrsLoadReportingServerName");
       return ConfigOrError.fromConfig(
           new XdsConfig(childPolicy, fallbackPolicy, edsServiceName, lrsServerName));
     } catch (RuntimeException e) {
       return ConfigOrError.fromError(
-          Status.UNKNOWN.withDescription("Failed to parse config " + e.getMessage()).withCause(e));
+          Status.fromThrowable(e).withDescription(
+              "Failed to parse XDS LB config: " + rawLoadBalancingPolicyConfig));
     }
   }
 
   @VisibleForTesting
   static LbConfig selectFallbackPolicy(
       Map<String, ?> rawLoadBalancingPolicyConfig, LoadBalancerRegistry lbRegistry) {
-    List<LbConfig> fallbackConfigs =
-        ServiceConfigUtil.getFallbackPolicyFromXdsConfig(rawLoadBalancingPolicyConfig);
+    List<LbConfig> fallbackConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
+        JsonUtil.getListOfObjects(rawLoadBalancingPolicyConfig, "fallbackPolicy"));
     LbConfig fallbackPolicy = selectSupportedLbPolicy(fallbackConfigs, lbRegistry);
     return fallbackPolicy == null ? DEFAULT_FALLBACK_POLICY : fallbackPolicy;
   }
@@ -103,8 +104,8 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
   @VisibleForTesting
   static LbConfig selectChildPolicy(
       Map<String, ?> rawLoadBalancingPolicyConfig, LoadBalancerRegistry lbRegistry) {
-    List<LbConfig> childConfigs =
-        ServiceConfigUtil.getChildPolicyFromXdsConfig(rawLoadBalancingPolicyConfig);
+    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
+        JsonUtil.getListOfObjects(rawLoadBalancingPolicyConfig, "childPolicy"));
     return selectSupportedLbPolicy(childConfigs, lbRegistry);
   }
 

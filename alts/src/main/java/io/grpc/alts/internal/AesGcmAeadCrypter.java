@@ -18,6 +18,7 @@ package io.grpc.alts.internal;
 
 import static com.google.common.base.Preconditions.checkArgument;
 
+import com.google.common.annotations.VisibleForTesting;
 import io.grpc.internal.ConscryptLoader;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
@@ -110,7 +111,8 @@ final class AesGcmAeadCrypter implements AeadCrypter {
     return KEY_LENGTH;
   }
 
-  private static Provider getConscrypt() {
+  @VisibleForTesting
+  static Provider getConscrypt() {
     if (!ConscryptLoader.isPresent()) {
       return null;
     }
@@ -129,7 +131,7 @@ final class AesGcmAeadCrypter implements AeadCrypter {
       return null;
     }
     try {
-      Cipher.getInstance(AES_GCM, CONSCRYPT);
+      Cipher.getInstance(AES_GCM, provider);
     } catch (SecurityException t) {
       // Pre-Java 7u121/Java 8u111 fails with SecurityException:
       //   JCE cannot authenticate the provider Conscrypt

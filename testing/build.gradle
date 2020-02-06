@@ -14,6 +14,15 @@ dependencies {
             project(':grpc-stub'),
             libraries.junit
 
+    compile (libraries.opencensus_api) {
+        // prefer 3.0.2 from libraries instead of 3.0.1
+        exclude group: 'com.google.code.findbugs', module: 'jsr305'
+        // prefer 20.0 from libraries instead of 19.0
+        exclude group: 'com.google.guava', module: 'guava'
+        // we'll always be more up-to-date
+        exclude group: 'io.grpc', module: 'grpc-context'
+    }
+
     testCompile (libraries.mockito) {
         // prefer our own versions instead of mockito's dependency
         exclude group: 'org.hamcrest', module: 'hamcrest-core'

@@ -26,6 +26,7 @@ import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.base.Stopwatch;
 import com.google.protobuf.util.Durations;
@@ -581,7 +582,12 @@ final class GrpclbState {
         return;
       }
 
-      if (typeCase != LoadBalanceResponseTypeCase.SERVER_LIST) {
+      if (typeCase == LoadBalanceResponseTypeCase.FALLBACK_RESPONSE) {
+        cancelFallbackTimer();
+        useFallbackBackends();
+        maybeUpdatePicker();
+        return;
+      } else if (typeCase != LoadBalanceResponseTypeCase.SERVER_LIST) {
         logger.log(ChannelLogLevel.WARNING, "Ignoring unexpected response type: {0}", typeCase);
         return;
       }
@@ -788,7 +794,7 @@ final class GrpclbState {
     // actually used in the normal case. https://github.com/grpc/grpc-java/issues/4618 should allow
     // this to be more obvious.
     Attributes attrs = Attributes.newBuilder()
-        .set(GrpcAttributes.ATTR_LB_ADDR_AUTHORITY, authority)
+        .set(GrpclbConstants.ATTR_LB_ADDR_AUTHORITY, authority)
         .build();
     return new LbAddressGroup(flattenEquivalentAddressGroup(eags, attrs), authority);
   }
@@ -1046,5 +1052,12 @@ final class GrpclbState {
       }
     }
 
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(RoundRobinPicker.class)
+          .add("dropList", dropList)
+          .add("pickList", pickList)
+          .toString();
+    }
   }
 }

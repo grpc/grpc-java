@@ -38,9 +38,9 @@ public class InProcessTest extends AbstractInteropTest {
   @Override
   protected ManagedChannel createChannel() {
     InProcessChannelBuilder builder = InProcessChannelBuilder.forName(SERVER_NAME);
-    io.grpc.internal.TestingAccessor.setStatsImplementation(
-        builder, createClientCensusStatsModule());
-    return builder.build();
+    // Disable the default census stats interceptor, use testing interceptor instead.
+    io.grpc.internal.TestingAccessor.setStatsEnabled(builder, false);
+    return builder.intercept(createCensusStatsClientInterceptor()).build();
   }
 
   @Override

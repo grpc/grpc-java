@@ -1,0 +1,43 @@
+plugins {
+    id 'application' // Provide convenience executables for trying out the examples.
+    id 'java'
+}
+
+repositories {
+    maven { // The google mirror is less flaky than mavenCentral()
+        url "https://maven-central.storage-download.googleapis.com/repos/central/data/" }
+    mavenCentral()
+    mavenLocal()
+}
+
+sourceCompatibility = 1.7
+targetCompatibility = 1.7
+
+// IMPORTANT: You probably want the non-SNAPSHOT version of gRPC. Make sure you
+// are looking at a tagged version of the example and not "master"!
+
+// Feel free to delete the comment at the next line. It is just for safely
+// updating the version in our release process.
+def grpcVersion = '1.28.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+
+dependencies {
+    // This example's client is the same as the helloworld client. We depend on the helloworld
+    // client's code here
+    implementation ':examples'
+    // The only change necessary is an extra runtime dependency on io.grpc:grpc-xds
+    runtimeOnly "io.grpc:grpc-xds:${grpcVersion}"
+}
+
+startScripts.enabled = false
+
+task helloWorldClient(type: CreateStartScripts) {
+    mainClassName = 'io.grpc.examples.helloworld.HelloWorldClient'
+    applicationName = 'xds-hello-world-client'
+    outputDir = new File(project.buildDir, 'tmp')
+    classpath = startScripts.classpath
+}
+
+applicationDistribution.into('bin') {
+    from(helloWorldClient)
+    fileMode = 0755
+}

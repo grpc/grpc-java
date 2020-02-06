@@ -21,19 +21,20 @@ package io.grpc.internal;
  */
 public final class TestingAccessor {
   /**
-   * Sets a custom stats implementation for tests.
+   * Disable or enable client side census stats features.
    */
-  public static void setStatsImplementation(
-      AbstractManagedChannelImplBuilder<?> builder, CensusStatsModule censusStats) {
-    builder.overrideCensusStatsModule(censusStats);
+  public static void setStatsEnabled(
+      AbstractManagedChannelImplBuilder<?> builder, boolean statsEnabled) {
+    builder.setStatsEnabled(statsEnabled);
   }
 
   /**
-   * Sets a custom stats implementation for tests.
+   * Disable or enable server side census stats features.
    */
-  public static void setStatsImplementation(
-      AbstractServerImplBuilder<?> builder, CensusStatsModule censusStats) {
-    builder.overrideCensusStatsModule(censusStats);
+  public static void setStatsEnabled(
+      AbstractServerImplBuilder<?> builder,
+      boolean statsEnabled) {
+    builder.setStatsEnabled(statsEnabled);
   }
 
   private TestingAccessor() {

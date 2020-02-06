@@ -268,7 +268,7 @@ class NettyClientHandler extends AbstractNettyHandler {
         if (errorCode == Http2Error.ENHANCE_YOUR_CALM.code()) {
           String data = new String(debugDataBytes, UTF_8);
           logger.log(
-              Level.WARNING, "Received GOAWAY with ENHANCE_YOUR_CALM. Debug data: {1}", data);
+              Level.WARNING, "Received GOAWAY with ENHANCE_YOUR_CALM. Debug data: {0}", data);
           if ("too_many_pings".equals(data)) {
             tooManyPingsRunnable.run();
           }

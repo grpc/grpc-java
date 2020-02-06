@@ -36,6 +36,7 @@ GRADLE_FLAGS+=" -PtargetArch=$ARCH"
 GRADLE_FLAGS+=" -Pcheckstyle.ignoreFailures=false"
 GRADLE_FLAGS+=" -PfailOnWarnings=true"
 GRADLE_FLAGS+=" -PerrorProne=true"
+GRADLE_FLAGS+=" -PskipAndroid=true"
 GRADLE_FLAGS+=" -Dorg.gradle.parallel=true"
 export GRADLE_OPTS="-Xmx512m"
 
@@ -63,8 +64,15 @@ if [[ -z "${SKIP_TESTS:-}" ]]; then
   # --batch-mode reduces log spam
   mvn clean verify --batch-mode
   popd
+  pushd examples/example-hostname
+  ../gradlew build $GRADLE_FLAGS
+  mvn verify --batch-mode
+  popd
   pushd examples/example-tls
   mvn clean verify --batch-mode
+  popd
+  pushd examples/example-xds
+  ../gradlew build $GRADLE_FLAGS
   popd
   # TODO(zpencer): also build the GAE examples
 fi

@@ -13,11 +13,11 @@ load("@bazel_tools//tools/build_defs/repo:jvm.bzl", "jvm_maven_import_external")
 IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.android:annotations:4.1.1.4",
     "com.google.api.grpc:proto-google-common-protos:1.17.0",
-    "com.google.auth:google-auth-library-credentials:0.19.0",
-    "com.google.auth:google-auth-library-oauth2-http:0.19.0",
+    "com.google.auth:google-auth-library-credentials:0.20.0",
+    "com.google.auth:google-auth-library-oauth2-http:0.20.0",
     "com.google.code.findbugs:jsr305:3.0.2",
     "com.google.code.gson:gson:jar:2.8.6",
-    "com.google.errorprone:error_prone_annotations:2.3.3",
+    "com.google.errorprone:error_prone_annotations:2.3.4",
     "com.google.guava:failureaccess:1.0.1",
     "com.google.guava:guava:28.1-android",
     "com.google.j2objc:j2objc-annotations:1.3",
@@ -70,6 +70,7 @@ IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS = {
     "io.grpc:grpc-alts": "@io_grpc_grpc_java//alts",
     "io.grpc:grpc-api": "@io_grpc_grpc_java//api",
     "io.grpc:grpc-auth": "@io_grpc_grpc_java//auth",
+    "io.grpc:grpc-census": "@io_grpc_grpc_java//census",
     "io.grpc:grpc-context": "@io_grpc_grpc_java//context",
     "io.grpc:grpc-core": "@io_grpc_grpc_java//core:core_maven",
     "io.grpc:grpc-grpclb": "@io_grpc_grpc_java//grpclb",
@@ -190,18 +191,18 @@ def com_google_api_grpc_proto_google_common_protos():
 def com_google_auth_google_auth_library_credentials():
     jvm_maven_import_external(
         name = "com_google_auth_google_auth_library_credentials",
-        artifact = "com.google.auth:google-auth-library-credentials:0.19.0",
+        artifact = "com.google.auth:google-auth-library-credentials:0.20.0",
         server_urls = ["https://repo.maven.apache.org/maven2/"],
-        artifact_sha256 = "3f81ea05795abc40daf36f4c427487a738489f7cc0f515b7930f838ed301165a",
+        artifact_sha256 = "8a415273a5dae5c8f9080134e53b9592dc171ca5d13127488c910177c5903bd6",
         licenses = ["notice"],  # BSD 3-clause
     )
 
 def com_google_auth_google_auth_library_oauth2_http():
     jvm_maven_import_external(
         name = "com_google_auth_google_auth_library_oauth2_http",
-        artifact = "com.google.auth:google-auth-library-oauth2-http:0.19.0",
+        artifact = "com.google.auth:google-auth-library-oauth2-http:0.20.0",
         server_urls = ["https://repo.maven.apache.org/maven2/"],
-        artifact_sha256 = "51992d58ec0f903fb521412f677bd09d83895609a0198d4a9ae65a3d88e2aa4a",
+        artifact_sha256 = "43e96e8c07285c2887042eda4e35ca96522ef361f6c1843f469039d9ccdc8f8a",
         licenses = ["notice"],  # BSD 3-clause
     )
 
@@ -226,9 +227,9 @@ def com_google_code_gson_gson():
 def com_google_errorprone_error_prone_annotations():
     jvm_maven_import_external(
         name = "com_google_errorprone_error_prone_annotations",
-        artifact = "com.google.errorprone:error_prone_annotations:2.3.3",
+        artifact = "com.google.errorprone:error_prone_annotations:2.3.4",
         server_urls = ["https://repo.maven.apache.org/maven2/"],
-        artifact_sha256 = "ec59f1b702d9afc09e8c3929f5c42777dec623a6ea2731ac694332c7d7680f5a",
+        artifact_sha256 = "baf7d6ea97ce606c53e11b6854ba5f2ce7ef5c24dddf0afa18d1260bd25b002c",
         licenses = ["notice"],  # Apache 2.0
     )
 

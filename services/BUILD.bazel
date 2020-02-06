@@ -64,6 +64,23 @@ java_library(
     ],
 )
 
+java_library(
+    name = "health",
+    srcs = [
+        "src/main/java/io/grpc/services/HealthServiceImpl.java",
+        "src/main/java/io/grpc/services/HealthStatusManager.java",
+    ],
+    deps = [
+        ":_health_java_grpc",
+        "//api",
+        "//context",
+        "//stub",
+        "@com_google_code_findbugs_jsr305//jar",
+        "@com_google_guava_guava//jar",
+        "@io_grpc_grpc_proto//:health_java_proto",
+    ],
+)
+
 # These shouldn't be here, but this is better than having
 # a circular dependency on grpc-proto and grpc-java.
 
@@ -79,4 +96,11 @@ java_grpc_library(
     srcs = ["@io_grpc_grpc_proto//:channelz_proto"],
     visibility = ["//visibility:private"],
     deps = ["@io_grpc_grpc_proto//:channelz_java_proto"],
+)
+
+java_grpc_library(
+    name = "_health_java_grpc",
+    srcs = ["@io_grpc_grpc_proto//:health_proto"],
+    visibility = ["//visibility:private"],
+    deps = ["@io_grpc_grpc_proto//:health_java_proto"],
 )

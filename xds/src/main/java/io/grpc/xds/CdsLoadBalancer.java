@@ -18,18 +18,16 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
-import static io.grpc.xds.XdsLoadBalancerProvider.XDS_POLICY_NAME;
+import static io.grpc.xds.EdsLoadBalancerProvider.EDS_POLICY_NAME;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
-import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerRegistry;
-import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
@@ -40,21 +38,24 @@ import io.grpc.xds.XdsClient.ClusterUpdate;
 import io.grpc.xds.XdsClient.ClusterWatcher;
 import io.grpc.xds.XdsLoadBalancerProvider.XdsConfig;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
+import io.grpc.xds.sds.SslContextProvider;
+import io.grpc.xds.sds.TlsContextManager;
+import io.grpc.xds.sds.TlsContextManagerImpl;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nullable;
 
 /**
- * Load balancer for experimental_cds LB policy.
+ * Load balancer for cds_experimental LB policy.
  */
 public final class CdsLoadBalancer extends LoadBalancer {
   private final ChannelLogger channelLogger;
   private final LoadBalancerRegistry lbRegistry;
   private final GracefulSwitchLoadBalancer switchingLoadBalancer;
   private final Helper helper;
+  private final TlsContextManager tlsContextManager;
 
   // The following fields become non-null once handleResolvedAddresses() successfully.
 
@@ -70,21 +71,22 @@ public final class CdsLoadBalancer extends LoadBalancer {
   private XdsClient xdsClient;
 
   CdsLoadBalancer(Helper helper) {
-    this(helper, LoadBalancerRegistry.getDefaultRegistry());
+    this(helper, LoadBalancerRegistry.getDefaultRegistry(), TlsContextManagerImpl.getInstance());
   }
 
   @VisibleForTesting
-  CdsLoadBalancer(Helper helper, LoadBalancerRegistry lbRegistry) {
+  CdsLoadBalancer(Helper helper, LoadBalancerRegistry lbRegistry,
+      TlsContextManager tlsContextManager) {
     this.helper = helper;
     this.channelLogger = helper.getChannelLogger();
     this.lbRegistry = lbRegistry;
     this.switchingLoadBalancer = new GracefulSwitchLoadBalancer(helper);
+    this.tlsContextManager = tlsContextManager;
   }
 
   @Override
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     channelLogger.log(ChannelLogLevel.DEBUG, "Received ResolvedAddresses {0}", resolvedAddresses);
-    Attributes attributes = resolvedAddresses.getAttributes();
     if (xdsClientPool == null) {
       xdsClientPool = resolvedAddresses.getAttributes().get(XdsAttributes.XDS_CLIENT_POOL);
       if (xdsClientPool == null) {
@@ -98,25 +100,15 @@ public final class CdsLoadBalancer extends LoadBalancer {
       xdsClient = xdsClientPool.getObject();
     }
 
-    Map<String, ?> newRawLbConfig = attributes.get(ATTR_LOAD_BALANCING_CONFIG);
-    if (newRawLbConfig == null) {
-      // This will not happen when the service config error handling is implemented.
-      // For now simply go to TRANSIENT_FAILURE.
+    Object lbConfig = resolvedAddresses.getLoadBalancingPolicyConfig();
+    if (!(lbConfig instanceof CdsConfig)) {
       helper.updateBalancingState(
           TRANSIENT_FAILURE,
-          new ErrorPicker(
-              Status.UNAVAILABLE.withDescription("ATTR_LOAD_BALANCING_CONFIG not available")));
+          new ErrorPicker(Status.UNAVAILABLE.withDescription(
+              "Load balancing config '" + lbConfig + "' is not a CdsConfig")));
       return;
     }
-    ConfigOrError cfg =
-        CdsLoadBalancerProvider.parseLoadBalancingConfigPolicy(newRawLbConfig);
-    if (cfg.getError() != null) {
-      // This will not happen when the service config error handling is implemented.
-      // For now simply go to TRANSIENT_FAILURE.
-      helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(cfg.getError()));
-      return;
-    }
-    final CdsConfig newCdsConfig = (CdsConfig) cfg.getConfig();
+    CdsConfig newCdsConfig = (CdsConfig) lbConfig;
 
     // If CdsConfig is changed, do a graceful switch.
     if (!newCdsConfig.equals(cdsConfig)) {
@@ -236,22 +228,23 @@ public final class CdsLoadBalancer extends LoadBalancer {
 
   private static final class EdsLoadBalancingHelper extends ForwardingLoadBalancerHelper {
     private final Helper delegate;
-    private final AtomicReference<UpstreamTlsContext> upstreamTlsContext;
+    private final AtomicReference<SslContextProvider<UpstreamTlsContext>> sslContextProvider;
 
-    EdsLoadBalancingHelper(Helper helper, AtomicReference<UpstreamTlsContext> upstreamTlsContext) {
+    EdsLoadBalancingHelper(Helper helper,
+        AtomicReference<SslContextProvider<UpstreamTlsContext>> sslContextProvider) {
       this.delegate = helper;
-      this.upstreamTlsContext = upstreamTlsContext;
+      this.sslContextProvider = sslContextProvider;
     }
 
     @Override
     public Subchannel createSubchannel(CreateSubchannelArgs createSubchannelArgs) {
-      if (upstreamTlsContext.get() != null) {
+      if (sslContextProvider.get() != null) {
         createSubchannelArgs =
             createSubchannelArgs
                 .toBuilder()
                 .setAddresses(
                     addUpstreamTlsContext(createSubchannelArgs.getAddresses(),
-                        upstreamTlsContext.get()))
+                        sslContextProvider.get().getSource()))
                 .build();
       }
       return delegate.createSubchannel(createSubchannelArgs);
@@ -295,7 +288,8 @@ public final class CdsLoadBalancer extends LoadBalancer {
     LoadBalancer edsBalancer;
 
     ClusterWatcherImpl(Helper helper, ResolvedAddresses resolvedAddresses) {
-      this.helper = new EdsLoadBalancingHelper(helper, new AtomicReference<UpstreamTlsContext>());
+      this.helper = new EdsLoadBalancingHelper(helper,
+          new AtomicReference<SslContextProvider<UpstreamTlsContext>>());
       this.resolvedAddresses = resolvedAddresses;
     }
 
@@ -312,19 +306,33 @@ public final class CdsLoadBalancer extends LoadBalancer {
           /* fallbackPolicy = */ null,
           /* edsServiceName = */ newUpdate.getEdsServiceName(),
           /* lrsServerName = */ newUpdate.getLrsServerName());
-      UpstreamTlsContext upstreamTlsContext = newUpdate.getUpstreamTlsContext();
-      helper.upstreamTlsContext.set(upstreamTlsContext);
+      updateSslContextProvider(newUpdate.getUpstreamTlsContext());
       if (edsBalancer == null) {
-        edsBalancer = lbRegistry.getProvider(XDS_POLICY_NAME).newLoadBalancer(helper);
+        edsBalancer = lbRegistry.getProvider(EDS_POLICY_NAME).newLoadBalancer(helper);
       }
       edsBalancer.handleResolvedAddresses(
-          resolvedAddresses.toBuilder()
-              .setAttributes(
-                  resolvedAddresses.getAttributes().toBuilder()
-                      .discard(ATTR_LOAD_BALANCING_CONFIG)
-                      .build())
-              .setLoadBalancingPolicyConfig(edsConfig)
-          .build());
+          resolvedAddresses.toBuilder().setLoadBalancingPolicyConfig(edsConfig).build());
+    }
+
+    /** For new UpstreamTlsContext value, release old SslContextProvider. */
+    private void updateSslContextProvider(UpstreamTlsContext newUpstreamTlsContext) {
+      SslContextProvider<UpstreamTlsContext> oldSslContextProvider =
+          helper.sslContextProvider.get();
+      if (oldSslContextProvider != null) {
+        UpstreamTlsContext oldUpstreamTlsContext = oldSslContextProvider.getSource();
+
+        if (oldUpstreamTlsContext.equals(newUpstreamTlsContext)) {
+          return;
+        }
+        tlsContextManager.releaseClientSslContextProvider(oldSslContextProvider);
+      }
+      if (newUpstreamTlsContext != null) {
+        SslContextProvider<UpstreamTlsContext> newSslContextProvider =
+            tlsContextManager.findOrCreateClientSslContextProvider(newUpstreamTlsContext);
+        helper.sslContextProvider.set(newSslContextProvider);
+      } else {
+        helper.sslContextProvider.set(null);
+      }
     }
 
     @Override
