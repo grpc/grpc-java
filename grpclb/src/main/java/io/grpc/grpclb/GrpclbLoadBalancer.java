@@ -22,7 +22,6 @@ import static com.google.common.base.Preconditions.checkState;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import io.grpc.Attributes;
-import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
@@ -30,15 +29,10 @@ import io.grpc.LoadBalancer;
 import io.grpc.Status;
 import io.grpc.grpclb.GrpclbState.Mode;
 import io.grpc.internal.BackoffPolicy;
-import io.grpc.internal.ServiceConfigUtil;
-import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.internal.TimeProvider;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
@@ -48,8 +42,6 @@ import javax.annotation.Nullable;
  * or round-robin balancer.
  */
 class GrpclbLoadBalancer extends LoadBalancer {
-  private static final Mode DEFAULT_MODE = Mode.ROUND_ROBIN;
-  private static final Logger logger = Logger.getLogger(GrpclbLoadBalancer.class.getName());
 
   private final Helper helper;
   private final TimeProvider time;
@@ -88,7 +80,6 @@ class GrpclbLoadBalancer extends LoadBalancer {
   }
 
   @Override
-  @SuppressWarnings("deprecation")  // TODO(creamsoup) migrate to use parsed service config
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     Attributes attributes = resolvedAddresses.getAttributes();
     List<EquivalentAddressGroup> newLbAddresses = attributes.get(GrpclbConstants.ATTR_LB_ADDRS);
@@ -114,8 +105,7 @@ class GrpclbLoadBalancer extends LoadBalancer {
     newLbAddressGroups = Collections.unmodifiableList(newLbAddressGroups);
     List<EquivalentAddressGroup> newBackendServers =
         Collections.unmodifiableList(resolvedAddresses.getAddresses());
-    Map<String, ?> rawLbConfigValue = attributes.get(ATTR_LOAD_BALANCING_CONFIG);
-    GrpclbConfig newConfig = retrieveGrpcLbConfig(rawLbConfigValue, helper.getChannelLogger());
+    GrpclbConfig newConfig = (GrpclbConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
     if (!config.equals(newConfig)) {
       config = newConfig;
       helper.getChannelLogger().log(ChannelLogLevel.INFO, "Config: " + newConfig);
@@ -129,52 +119,6 @@ class GrpclbLoadBalancer extends LoadBalancer {
     if (grpclbState != null) {
       grpclbState.requestConnection();
     }
-  }
-
-  @VisibleForTesting
-  static GrpclbConfig retrieveGrpcLbConfig(
-      @Nullable Map<String, ?> rawLbConfigValue, ChannelLogger channelLogger) {
-    if (rawLbConfigValue == null) {
-      return GrpclbConfig.create(DEFAULT_MODE);
-    }
-
-    Object rawTarget = rawLbConfigValue.get(GrpclbLoadBalancerProvider.SERVICE_CONFIG_TARGET_NAME);
-    String target = null;
-    if (rawTarget == null || rawTarget instanceof String) {
-      target = (String) rawTarget;
-    } else {
-      channelLogger.log(
-          ChannelLogLevel.WARNING,
-          "Invalid targetName value type: %s, ignoring it",
-          rawTarget.getClass());
-    }
-    try {
-      List<?> rawChildPolicies = getList(rawLbConfigValue, "childPolicy");
-      if (rawChildPolicies == null) {
-        return GrpclbConfig.create(DEFAULT_MODE, target);
-      }
-      List<LbConfig> childPolicies =
-          ServiceConfigUtil.unwrapLoadBalancingConfigList(checkObjectList(rawChildPolicies));
-
-      for (LbConfig childPolicy : childPolicies) {
-        String childPolicyName = childPolicy.getPolicyName();
-        switch (childPolicyName) {
-          case "round_robin":
-            return GrpclbConfig.create(Mode.ROUND_ROBIN, target);
-          case "pick_first":
-            return GrpclbConfig.create(Mode.PICK_FIRST, target);
-          default:
-            channelLogger.log(
-                ChannelLogLevel.DEBUG,
-                "grpclb ignoring unsupported child policy " + childPolicyName);
-        }
-      }
-    } catch (RuntimeException e) {
-      channelLogger.log(ChannelLogLevel.WARNING, "Bad grpclb config, using " + DEFAULT_MODE);
-      logger.log(
-          Level.WARNING, "Bad grpclb config: " + rawLbConfigValue + ", using " + DEFAULT_MODE, e);
-    }
-    return GrpclbConfig.create(DEFAULT_MODE, target);
   }
 
   private void resetStates() {
@@ -212,34 +156,5 @@ class GrpclbLoadBalancer extends LoadBalancer {
   @Nullable
   GrpclbState getGrpclbState() {
     return grpclbState;
-  }
-
-  // TODO(carl-mastrangelo): delete getList and checkObjectList once apply is complete for SVCCFG.
-  /**
-   * Gets a list from an object for the given key.
-   */
-  @Nullable
-  private static List<?> getList(Map<String, ?> obj, String key) {
-    assert key != null;
-    if (!obj.containsKey(key)) {
-      return null;
-    }
-    Object value = obj.get(key);
-    if (!(value instanceof List)) {
-      throw new ClassCastException(
-          String.format("value '%s' for key '%s' in %s is not List", value, key, obj));
-    }
-    return (List<?>) value;
-  }
-
-  @SuppressWarnings("unchecked")
-  private static List<Map<String, ?>> checkObjectList(List<?> rawList) {
-    for (int i = 0; i < rawList.size(); i++) {
-      if (!(rawList.get(i) instanceof Map)) {
-        throw new ClassCastException(
-            String.format("value %s for idx %d in %s is not object", rawList.get(i), i, rawList));
-      }
-    }
-    return (List<Map<String, ?>>) rawList;
   }
 }

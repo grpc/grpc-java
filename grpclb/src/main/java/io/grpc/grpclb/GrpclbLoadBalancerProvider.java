@@ -92,18 +92,24 @@ public final class GrpclbLoadBalancerProvider extends LoadBalancerProvider {
 
     List<LbConfig> childPolicies =
         ServiceConfigUtil.unwrapLoadBalancingConfigList(checkObjectList(rawChildPolicies));
-    for (LbConfig childPolicy : childPolicies) {
-      String childPolicyName = childPolicy.getPolicyName();
-      switch (childPolicyName) {
-        case "round_robin":
-          return ConfigOrError.fromConfig(GrpclbConfig.create(Mode.ROUND_ROBIN, target));
-        case "pick_first":
-          return ConfigOrError.fromConfig(GrpclbConfig.create(Mode.PICK_FIRST, target));
-        default:
-          // TODO(zhangkun83): maybe log?
+    if (childPolicies != null) {
+      for (LbConfig childPolicy : childPolicies) {
+        String childPolicyName = childPolicy.getPolicyName();
+        switch (childPolicyName) {
+          case "round_robin":
+            return ConfigOrError.fromConfig(GrpclbConfig.create(Mode.ROUND_ROBIN, target));
+          case "pick_first":
+            return ConfigOrError.fromConfig(GrpclbConfig.create(Mode.PICK_FIRST, target));
+          default:
+            return ConfigOrError.fromError(
+                Status
+                    .INVALID_ARGUMENT
+                    .withDescription("Unknown grpclb childPolicy: " + childPolicyName));
+        }
       }
     }
-    return ConfigOrError.fromConfig(GrpclbConfig.create(DEFAULT_MODE, target));
+    return ConfigOrError
+        .fromError(Status.INVALID_ARGUMENT.withDescription("childPolicy must be provided"));
   }
 
   /**
