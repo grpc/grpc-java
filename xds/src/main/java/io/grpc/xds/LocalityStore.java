@@ -47,9 +47,10 @@ import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.LbEndpoint;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
-import io.grpc.xds.InterLocalityPicker.WeightedChildPicker;
 import io.grpc.xds.OrcaOobUtil.OrcaReportingConfig;
 import io.grpc.xds.OrcaOobUtil.OrcaReportingHelperWrapper;
+import io.grpc.xds.RandomWeightedPicker.WeightedChildPicker;
+import io.grpc.xds.RandomWeightedPicker.WeightedPickerFactory;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -100,7 +101,7 @@ interface LocalityStore {
     private static final long DELAYED_DELETION_TIMEOUT_MINUTES = 15L;
 
     private final Helper helper;
-    private final PickerFactory pickerFactory;
+    private final WeightedPickerFactory pickerFactory;
     private final LoadBalancerProvider loadBalancerProvider;
     private final ThreadSafeRandom random;
     private final LoadStatsStore loadStatsStore;
@@ -115,14 +116,20 @@ interface LocalityStore {
 
     LocalityStoreImpl(
         Helper helper, LoadBalancerRegistry lbRegistry, LoadStatsStore loadStatsStore) {
-      this(helper, pickerFactoryImpl, lbRegistry, ThreadSafeRandom.ThreadSafeRandomImpl.instance,
-          loadStatsStore, OrcaPerRequestUtil.getInstance(), OrcaOobUtil.getInstance());
+      this(
+          helper,
+          WeightedPickerFactory.RANDOM_PICKER_FACTORY,
+          lbRegistry,
+          ThreadSafeRandom.ThreadSafeRandomImpl.instance,
+          loadStatsStore,
+          OrcaPerRequestUtil.getInstance(),
+          OrcaOobUtil.getInstance());
     }
 
     @VisibleForTesting
     LocalityStoreImpl(
         Helper helper,
-        PickerFactory pickerFactory,
+        WeightedPickerFactory pickerFactory,
         LoadBalancerRegistry lbRegistry,
         ThreadSafeRandom random,
         LoadStatsStore loadStatsStore,
@@ -137,11 +144,6 @@ interface LocalityStore {
       this.loadStatsStore = checkNotNull(loadStatsStore, "loadStatsStore");
       this.orcaPerRequestUtil = checkNotNull(orcaPerRequestUtil, "orcaPerRequestUtil");
       this.orcaOobUtil = checkNotNull(orcaOobUtil, "orcaOobUtil");
-    }
-
-    @VisibleForTesting // Introduced for testing only.
-    interface PickerFactory {
-      SubchannelPicker picker(List<WeightedChildPicker> childPickers);
     }
 
     private static final class DroppablePicker extends SubchannelPicker {
@@ -181,14 +183,6 @@ interface LocalityStore {
             .toString();
       }
     }
-
-    private static final PickerFactory pickerFactoryImpl =
-        new PickerFactory() {
-          @Override
-          public SubchannelPicker picker(List<WeightedChildPicker> childPickers) {
-            return new InterLocalityPicker(childPickers);
-          }
-        };
 
     @Override
     public void reset() {

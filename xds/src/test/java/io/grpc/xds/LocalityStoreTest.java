@@ -67,13 +67,13 @@ import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.LbEndpoint;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
-import io.grpc.xds.InterLocalityPicker.WeightedChildPicker;
 import io.grpc.xds.LocalityStore.LocalityStoreImpl;
-import io.grpc.xds.LocalityStore.LocalityStoreImpl.PickerFactory;
 import io.grpc.xds.OrcaOobUtil.OrcaOobReportListener;
 import io.grpc.xds.OrcaOobUtil.OrcaReportingConfig;
 import io.grpc.xds.OrcaOobUtil.OrcaReportingHelperWrapper;
 import io.grpc.xds.OrcaPerRequestUtil.OrcaPerRequestReportListener;
+import io.grpc.xds.RandomWeightedPicker.WeightedChildPicker;
+import io.grpc.xds.RandomWeightedPicker.WeightedPickerFactory;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.net.InetSocketAddress;
 import java.util.Collection;
@@ -107,7 +107,7 @@ public class LocalityStoreTest {
   @Rule
   public final MockitoRule mockitoRule = MockitoJUnit.rule();
 
-  private static final class FakePickerFactory implements PickerFactory {
+  private static final class FakePickerFactory implements WeightedPickerFactory {
     int totalReadyLocalities;
     int nextIndex;
     List<WeightedChildPicker> perLocalitiesPickers;

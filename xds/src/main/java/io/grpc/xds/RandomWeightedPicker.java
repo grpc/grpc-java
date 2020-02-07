@@ -27,7 +27,7 @@ import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import java.util.List;
 
-final class InterLocalityPicker extends SubchannelPicker {
+final class RandomWeightedPicker extends SubchannelPicker {
 
   private final List<WeightedChildPicker> weightedChildPickers;
   private final ThreadSafeRandom random;
@@ -62,12 +62,12 @@ final class InterLocalityPicker extends SubchannelPicker {
     }
   }
 
-  InterLocalityPicker(List<WeightedChildPicker> weightedChildPickers) {
+  RandomWeightedPicker(List<WeightedChildPicker> weightedChildPickers) {
     this(weightedChildPickers, ThreadSafeRandom.ThreadSafeRandomImpl.instance);
   }
 
   @VisibleForTesting
-  InterLocalityPicker(List<WeightedChildPicker> weightedChildPickers, ThreadSafeRandom random) {
+  RandomWeightedPicker(List<WeightedChildPicker> weightedChildPickers, ThreadSafeRandom random) {
     checkNotNull(weightedChildPickers, "weightedChildPickers in null");
     checkArgument(!weightedChildPickers.isEmpty(), "weightedChildPickers is empty");
 
@@ -115,5 +115,18 @@ final class InterLocalityPicker extends SubchannelPicker {
         .add("weightedChildPickers", weightedChildPickers)
         .add("totalWeight", totalWeight)
         .toString();
+  }
+
+  /** Factory that creates a SubchannelPicker for a given list of weighted child pickers. */
+  interface WeightedPickerFactory {
+    WeightedPickerFactory RANDOM_PICKER_FACTORY =
+        new WeightedPickerFactory() {
+          @Override
+          public SubchannelPicker picker(List<WeightedChildPicker> childPickers) {
+            return new RandomWeightedPicker(childPickers);
+          }
+        };
+
+    SubchannelPicker picker(List<WeightedChildPicker> childPickers);
   }
 }
