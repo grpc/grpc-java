@@ -87,13 +87,14 @@ public class GrpclbLoadBalancerProviderTest {
     ConfigOrError configOrError =
         provider.parseLoadBalancingPolicyConfig(parseJsonObject(lbConfig));
 
-    assertThat(configOrError.getError()).isNotNull();
-    assertThat(configOrError.getError().getDescription())
-        .contains("childPolicy must be provided");
+    assertThat(configOrError.getConfig()).isNotNull();
+    GrpclbConfig config = (GrpclbConfig) configOrError.getConfig();
+    assertThat(config.getMode()).isEqualTo(Mode.ROUND_ROBIN);
+    assertThat(config.getTarget()).isNull();
   }
 
   @Test
-  public void retrieveModeFromLbConfig_unsupportedChildPolicyUseRoundRobin()
+  public void retrieveModeFromLbConfig_unsupportedChildPolicy()
       throws Exception {
     String lbConfig = "{\"childPolicy\" : [ {\"nonono\" : {}} ]}";
 
@@ -102,7 +103,7 @@ public class GrpclbLoadBalancerProviderTest {
 
     assertThat(configOrError.getError()).isNotNull();
     assertThat(configOrError.getError().getDescription())
-        .contains("Unknown grpclb childPolicy: nonono");
+        .contains("None of [nonono] specified child policies are available.");
   }
 
   @Test
@@ -112,9 +113,10 @@ public class GrpclbLoadBalancerProviderTest {
     ConfigOrError configOrError =
         provider.parseLoadBalancingPolicyConfig(parseJsonObject(lbConfig));
 
-    assertThat(configOrError.getError()).isNotNull();
-    assertThat(configOrError.getError().getDescription())
-        .contains("Unknown grpclb childPolicy: nono");
+    assertThat(configOrError.getConfig()).isNotNull();
+    GrpclbConfig config = (GrpclbConfig) configOrError.getConfig();
+    assertThat(config.getMode()).isEqualTo(Mode.PICK_FIRST);
+    assertThat(config.getTarget()).isNull();
   }
 
   @Test
@@ -125,13 +127,14 @@ public class GrpclbLoadBalancerProviderTest {
     ConfigOrError configOrError =
         provider.parseLoadBalancingPolicyConfig(parseJsonObject(lbConfig));
 
-    assertThat(configOrError.getError()).isNotNull();
-    assertThat(configOrError.getError().getDescription())
-        .contains("Unknown grpclb childPolicy: nono");
+    assertThat(configOrError.getConfig()).isNotNull();
+    GrpclbConfig config = (GrpclbConfig) configOrError.getConfig();
+    assertThat(config.getMode()).isEqualTo(Mode.PICK_FIRST);
+    assertThat(config.getTarget()).isEqualTo("foo.google.com");
   }
 
   @Test
-  public void retrieveModeFromLbConfig_badConfigDefaultToRoundRobin() throws Exception {
+  public void retrieveModeFromLbConfig_wrongChildPolicyType() throws Exception {
     String lbConfig = "{\"childPolicy\" : {}}";
 
     ConfigOrError configOrError =
@@ -142,7 +145,7 @@ public class GrpclbLoadBalancerProviderTest {
   }
 
   @Test
-  public void retrieveModeFromLbConfig_badConfigDefaultToRoundRobinWithTarget() throws Exception {
+  public void retrieveModeFromLbConfig_wrongChildPolicyTypeWithTarget() throws Exception {
     String lbConfig = "{\"childPolicy\" : {}, \"targetName\": \"foo.google.com\"}";
 
     ConfigOrError configOrError =

@@ -27,6 +27,7 @@ import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.internal.TimeProvider;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import javax.annotation.Nullable;
@@ -86,30 +87,33 @@ public final class GrpclbLoadBalancerProvider extends LoadBalancerProvider {
         rawLoadBalancingPolicyConfig.get(GrpclbLoadBalancerProvider.SERVICE_CONFIG_TARGET_NAME);
     String target = (String) rawTarget;
     List<?> rawChildPolicies = getList(rawLoadBalancingPolicyConfig, "childPolicy");
-    if (rawChildPolicies == null) {
+
+    List<LbConfig> childPolicies =
+        rawChildPolicies == null
+            ? null
+            : ServiceConfigUtil.unwrapLoadBalancingConfigList(checkObjectList(rawChildPolicies));
+
+    if (childPolicies == null || childPolicies.isEmpty()) {
       return ConfigOrError.fromConfig(GrpclbConfig.create(DEFAULT_MODE, target));
     }
 
-    List<LbConfig> childPolicies =
-        ServiceConfigUtil.unwrapLoadBalancingConfigList(checkObjectList(rawChildPolicies));
-    if (childPolicies != null) {
-      for (LbConfig childPolicy : childPolicies) {
-        String childPolicyName = childPolicy.getPolicyName();
-        switch (childPolicyName) {
-          case "round_robin":
-            return ConfigOrError.fromConfig(GrpclbConfig.create(Mode.ROUND_ROBIN, target));
-          case "pick_first":
-            return ConfigOrError.fromConfig(GrpclbConfig.create(Mode.PICK_FIRST, target));
-          default:
-            return ConfigOrError.fromError(
-                Status
-                    .INVALID_ARGUMENT
-                    .withDescription("Unknown grpclb childPolicy: " + childPolicyName));
-        }
+    List<String> policiesTried = new ArrayList<>();
+    for (LbConfig childPolicy : childPolicies) {
+      String childPolicyName = childPolicy.getPolicyName();
+      switch (childPolicyName) {
+        case "round_robin":
+          return ConfigOrError.fromConfig(GrpclbConfig.create(Mode.ROUND_ROBIN, target));
+        case "pick_first":
+          return ConfigOrError.fromConfig(GrpclbConfig.create(Mode.PICK_FIRST, target));
+        default:
+          policiesTried.add(childPolicyName);
       }
     }
-    return ConfigOrError
-        .fromError(Status.INVALID_ARGUMENT.withDescription("childPolicy must be provided"));
+    return ConfigOrError.fromError(
+        Status
+            .INVALID_ARGUMENT
+            .withDescription(
+                "None of " + policiesTried + " specified child policies are available."));
   }
 
   /**
