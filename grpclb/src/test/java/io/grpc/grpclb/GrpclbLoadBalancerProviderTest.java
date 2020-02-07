@@ -40,7 +40,7 @@ public class GrpclbLoadBalancerProviderTest {
     assertThat(configOrError.getConfig()).isNotNull();
     GrpclbConfig config = (GrpclbConfig) configOrError.getConfig();
     assertThat(config.getMode()).isEqualTo(Mode.PICK_FIRST);
-    assertThat(config.getTarget()).isNull();
+    assertThat(config.getServiceName()).isNull();
   }
 
   @Test
@@ -53,7 +53,7 @@ public class GrpclbLoadBalancerProviderTest {
     assertThat(configOrError.getConfig()).isNotNull();
     GrpclbConfig config = (GrpclbConfig) configOrError.getConfig();
     assertThat(config.getMode()).isEqualTo(Mode.ROUND_ROBIN);
-    assertThat(config.getTarget()).isNull();
+    assertThat(config.getServiceName()).isNull();
   }
 
   @Test
@@ -64,7 +64,7 @@ public class GrpclbLoadBalancerProviderTest {
     assertThat(configOrError.getConfig()).isNotNull();
     GrpclbConfig config = (GrpclbConfig) configOrError.getConfig();
     assertThat(config.getMode()).isEqualTo(Mode.ROUND_ROBIN);
-    assertThat(config.getTarget()).isNull();
+    assertThat(config.getServiceName()).isNull();
   }
 
   @Test
@@ -77,7 +77,7 @@ public class GrpclbLoadBalancerProviderTest {
     assertThat(configOrError.getConfig()).isNotNull();
     GrpclbConfig config = (GrpclbConfig) configOrError.getConfig();
     assertThat(config.getMode()).isEqualTo(Mode.ROUND_ROBIN);
-    assertThat(config.getTarget()).isNull();
+    assertThat(config.getServiceName()).isNull();
   }
 
   @Test
@@ -90,7 +90,7 @@ public class GrpclbLoadBalancerProviderTest {
     assertThat(configOrError.getConfig()).isNotNull();
     GrpclbConfig config = (GrpclbConfig) configOrError.getConfig();
     assertThat(config.getMode()).isEqualTo(Mode.ROUND_ROBIN);
-    assertThat(config.getTarget()).isNull();
+    assertThat(config.getServiceName()).isNull();
   }
 
   @Test
@@ -116,13 +116,13 @@ public class GrpclbLoadBalancerProviderTest {
     assertThat(configOrError.getConfig()).isNotNull();
     GrpclbConfig config = (GrpclbConfig) configOrError.getConfig();
     assertThat(config.getMode()).isEqualTo(Mode.PICK_FIRST);
-    assertThat(config.getTarget()).isNull();
+    assertThat(config.getServiceName()).isNull();
   }
 
   @Test
   public void retrieveModeFromLbConfig_skipUnsupportedChildPolicyWithTarget() throws Exception {
     String lbConfig = "{\"childPolicy\" : [ {\"nono\" : {}}, {\"pick_first\" : {}} ],"
-        + "\"targetName\": \"foo.google.com\"}";
+        + "\"serviceName\": \"foo.google.com\"}";
 
     ConfigOrError configOrError =
         provider.parseLoadBalancingPolicyConfig(parseJsonObject(lbConfig));
@@ -130,7 +130,7 @@ public class GrpclbLoadBalancerProviderTest {
     assertThat(configOrError.getConfig()).isNotNull();
     GrpclbConfig config = (GrpclbConfig) configOrError.getConfig();
     assertThat(config.getMode()).isEqualTo(Mode.PICK_FIRST);
-    assertThat(config.getTarget()).isEqualTo("foo.google.com");
+    assertThat(config.getServiceName()).isEqualTo("foo.google.com");
   }
 
   @Test
@@ -146,7 +146,7 @@ public class GrpclbLoadBalancerProviderTest {
 
   @Test
   public void retrieveModeFromLbConfig_wrongChildPolicyTypeWithTarget() throws Exception {
-    String lbConfig = "{\"childPolicy\" : {}, \"targetName\": \"foo.google.com\"}";
+    String lbConfig = "{\"childPolicy\" : {}, \"serviceName\": \"foo.google.com\"}";
 
     ConfigOrError configOrError =
         provider.parseLoadBalancingPolicyConfig(parseJsonObject(lbConfig));

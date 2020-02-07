@@ -170,8 +170,8 @@ final class GrpclbState {
     this.stopwatch = checkNotNull(stopwatch, "stopwatch");
     this.timerService = checkNotNull(helper.getScheduledExecutorService(), "timerService");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
-    if (config.getTarget() != null) {
-      this.serviceName = config.getTarget();
+    if (config.getServiceName() != null) {
+      this.serviceName = config.getServiceName();
     } else {
       this.serviceName = checkNotNull(helper.getAuthority(), "helper returns null authority");
     }

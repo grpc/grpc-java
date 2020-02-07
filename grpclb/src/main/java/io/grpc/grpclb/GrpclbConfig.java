@@ -27,19 +27,19 @@ final class GrpclbConfig {
 
   private final Mode mode;
   @Nullable
-  private final String target;
+  private final String serviceName;
 
-  private GrpclbConfig(Mode mode, @Nullable String target) {
+  private GrpclbConfig(Mode mode, @Nullable String serviceName) {
     this.mode = checkNotNull(mode, "mode");
-    this.target = target;
+    this.serviceName = serviceName;
   }
 
   static GrpclbConfig create(Mode mode) {
     return create(mode, null);
   }
 
-  static GrpclbConfig create(Mode mode, @Nullable String targetName) {
-    return new GrpclbConfig(mode, targetName);
+  static GrpclbConfig create(Mode mode, @Nullable String serviceName) {
+    return new GrpclbConfig(mode, serviceName);
   }
 
   Mode getMode() {
@@ -47,13 +47,13 @@ final class GrpclbConfig {
   }
 
   /**
-   * If specified, it overrides the name of the target to be sent to the balancer. if not, the
+   * If specified, it overrides the name of the sevice name to be sent to the balancer. if not, the
    * target to be sent to the balancer will continue to be obtained from the target URI passed
    * to the gRPC client channel.
    */
   @Nullable
-  String getTarget() {
-    return target;
+  String getServiceName() {
+    return serviceName;
   }
 
   @Override
@@ -65,19 +65,19 @@ final class GrpclbConfig {
       return false;
     }
     GrpclbConfig that = (GrpclbConfig) o;
-    return mode == that.mode && Objects.equal(target, that.target);
+    return mode == that.mode && Objects.equal(serviceName, that.serviceName);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(mode, target);
+    return Objects.hashCode(mode, serviceName);
   }
 
   @Override
   public String toString() {
     return MoreObjects.toStringHelper(this)
         .add("mode", mode)
-        .add("target", target)
+        .add("serviceName", serviceName)
         .toString();
   }
 }

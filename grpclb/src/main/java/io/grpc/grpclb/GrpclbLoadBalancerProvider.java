@@ -41,7 +41,7 @@ import javax.annotation.Nullable;
 public final class GrpclbLoadBalancerProvider extends LoadBalancerProvider {
 
   private static final Mode DEFAULT_MODE = Mode.ROUND_ROBIN;
-  private static final String SERVICE_CONFIG_TARGET_NAME = "targetName";
+  private static final String SERVICE_CONFIG_SERVICE_NAME = "serviceName";
 
   @Override
   public boolean isAvailable() {
@@ -83,9 +83,9 @@ public final class GrpclbLoadBalancerProvider extends LoadBalancerProvider {
     if (rawLoadBalancingPolicyConfig == null) {
       return ConfigOrError.fromConfig(GrpclbConfig.create(DEFAULT_MODE));
     }
-    Object rawTarget =
-        rawLoadBalancingPolicyConfig.get(GrpclbLoadBalancerProvider.SERVICE_CONFIG_TARGET_NAME);
-    String target = (String) rawTarget;
+    Object rawServiceName =
+        rawLoadBalancingPolicyConfig.get(GrpclbLoadBalancerProvider.SERVICE_CONFIG_SERVICE_NAME);
+    String serviceName = (String) rawServiceName;
     List<?> rawChildPolicies = getList(rawLoadBalancingPolicyConfig, "childPolicy");
 
     List<LbConfig> childPolicies =
@@ -94,7 +94,7 @@ public final class GrpclbLoadBalancerProvider extends LoadBalancerProvider {
             : ServiceConfigUtil.unwrapLoadBalancingConfigList(checkObjectList(rawChildPolicies));
 
     if (childPolicies == null || childPolicies.isEmpty()) {
-      return ConfigOrError.fromConfig(GrpclbConfig.create(DEFAULT_MODE, target));
+      return ConfigOrError.fromConfig(GrpclbConfig.create(DEFAULT_MODE, serviceName));
     }
 
     List<String> policiesTried = new ArrayList<>();
@@ -102,9 +102,9 @@ public final class GrpclbLoadBalancerProvider extends LoadBalancerProvider {
       String childPolicyName = childPolicy.getPolicyName();
       switch (childPolicyName) {
         case "round_robin":
-          return ConfigOrError.fromConfig(GrpclbConfig.create(Mode.ROUND_ROBIN, target));
+          return ConfigOrError.fromConfig(GrpclbConfig.create(Mode.ROUND_ROBIN, serviceName));
         case "pick_first":
-          return ConfigOrError.fromConfig(GrpclbConfig.create(Mode.PICK_FIRST, target));
+          return ConfigOrError.fromConfig(GrpclbConfig.create(Mode.PICK_FIRST, serviceName));
         default:
           policiesTried.add(childPolicyName);
       }

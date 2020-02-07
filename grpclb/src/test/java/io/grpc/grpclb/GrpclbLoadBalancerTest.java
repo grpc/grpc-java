@@ -2059,10 +2059,10 @@ public class GrpclbLoadBalancerTest {
 
   @SuppressWarnings("deprecation")
   @Test
-  public void switchTargetName() throws Exception {
+  public void switchServiceName() throws Exception {
     InOrder inOrder = inOrder(helper);
 
-    String lbConfig = "{\"targetName\": \"foo.google.com\"}";
+    String lbConfig = "{\"serviceName\": \"foo.google.com\"}";
     List<EquivalentAddressGroup> grpclbBalancerList = createResolvedBalancerAddresses(1);
     Attributes grpclbResolutionAttrs = Attributes.newBuilder()
         .set(LoadBalancer.ATTR_LOAD_BALANCING_CONFIG, parseJsonObject(lbConfig))
@@ -2105,8 +2105,8 @@ public class GrpclbLoadBalancerTest {
     verify(subchannelPool, never())
         .returnSubchannel(any(Subchannel.class), any(ConnectivityStateInfo.class));
 
-    // Switch to different targetName
-    lbConfig = "{\"targetName\": \"bar.google.com\"}";
+    // Switch to different serviceName
+    lbConfig = "{\"serviceName\": \"bar.google.com\"}";
     grpclbResolutionAttrs = Attributes.newBuilder().set(
         LoadBalancer.ATTR_LOAD_BALANCING_CONFIG, parseJsonObject(lbConfig)).build();
     List<EquivalentAddressGroup> newGrpclbResolutionList = createResolvedBalancerAddresses(1);
