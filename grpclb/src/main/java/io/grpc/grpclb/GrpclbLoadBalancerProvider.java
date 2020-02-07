@@ -41,7 +41,7 @@ import javax.annotation.Nullable;
 public final class GrpclbLoadBalancerProvider extends LoadBalancerProvider {
 
   private static final Mode DEFAULT_MODE = Mode.ROUND_ROBIN;
-  static final String SERVICE_CONFIG_TARGET_NAME = "targetName";
+  private static final String SERVICE_CONFIG_TARGET_NAME = "targetName";
 
   @Override
   public boolean isAvailable() {
