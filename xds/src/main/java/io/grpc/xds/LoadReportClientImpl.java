@@ -35,10 +35,10 @@ import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.stub.StreamObserver;
-import java.util.Collections;
 import java.util.HashMap;
-import java.util.List;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
@@ -164,6 +164,8 @@ final class LoadReportClientImpl implements LoadReportClient {
 
   private class LrsStream implements StreamObserver<LoadStatsResponse> {
 
+    // Cluster services to report loads for, instructed by LRS responses.
+    final Set<String> clusterServiceNames = new HashSet<>();
     final LoadReportingServiceGrpc.LoadReportingServiceStub stub;
     final Stopwatch reportStopwatch;
     StreamObserver<LoadStatsRequest> lrsRequestWriter;
@@ -171,13 +173,6 @@ final class LoadReportClientImpl implements LoadReportClient {
     boolean closed;
     long loadReportIntervalNano = -1;
     ScheduledHandle loadReportTimer;
-
-    // Name of cluster service to report loads for, instructed by LRS responses.
-    // Currently we expect a gRPC client only talks to a single service per cluster. But we
-    // could support switching cluster services, for which loads for a cluster may
-    // spread to multiple services.
-    @Nullable
-    String clusterServiceName;
 
     LrsStream(LoadReportingServiceGrpc.LoadReportingServiceStub stub, Stopwatch stopwatch) {
       this.stub = checkNotNull(stub, "stub");
@@ -232,17 +227,21 @@ final class LoadReportClientImpl implements LoadReportClient {
       long interval = reportStopwatch.elapsed(TimeUnit.NANOSECONDS);
       reportStopwatch.reset().start();
       LoadStatsRequest.Builder requestBuilder = LoadStatsRequest.newBuilder().setNode(node);
-      if (loadStatsStoreMap.containsKey(clusterServiceName)) {
-        LoadStatsStore loadStatsStore = loadStatsStoreMap.get(clusterServiceName);
-        ClusterStats report =
-            loadStatsStore.generateLoadReport()
-                .toBuilder()
-                .setClusterName(clusterServiceName)
-                .setLoadReportInterval(Durations.fromNanos(interval))
-                .build();
-        requestBuilder.addClusterStats(report);
+      for (String serviceName : clusterServiceNames) {
+        if (loadStatsStoreMap.containsKey(serviceName)) {
+          LoadStatsStore loadStatsStore = loadStatsStoreMap.get(serviceName);
+          ClusterStats report =
+              loadStatsStore.generateLoadReport()
+                  .toBuilder()
+                  .setClusterName(serviceName)
+                  .setLoadReportInterval(Durations.fromNanos(interval))
+                  .build();
+          requestBuilder.addClusterStats(report);
+        }
       }
-      lrsRequestWriter.onNext(requestBuilder.build());
+      LoadStatsRequest request = requestBuilder.build();
+      lrsRequestWriter.onNext(request);
+      logger.log(Level.FINE, "Sent LoadStatsRequest\n{0}", request);
       scheduleNextLoadReport();
     }
 
@@ -272,17 +271,8 @@ final class LoadReportClientImpl implements LoadReportClient {
       }
       loadReportIntervalNano = Durations.toNanos(response.getLoadReportingInterval());
       callback.onReportResponse(loadReportIntervalNano);
-      List<String> serviceList = Collections.unmodifiableList(response.getClustersList());
-      // For current gRPC use case, we expect traffic director only request client to report
-      // loads for a single service per cluster (which is the cluster service gRPC client talks
-      // to). We could support reporting loads for multiple services per cluster that gRPC
-      // client sends loads to due to service switching.
-      if (serviceList.size() != 1) {
-        logger.log(Level.FINE, "Received clusters: {0}, expect exactly one",
-            serviceList);
-        return;
-      }
-      clusterServiceName = serviceList.get(0);
+      clusterServiceNames.clear();
+      clusterServiceNames.addAll(response.getClustersList());
       scheduleNextLoadReport();
     }
 
