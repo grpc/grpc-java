@@ -264,7 +264,7 @@ final class XdsClientImpl extends XdsClient {
       return;
     }
     watchers.add(watcher);
-    // If local cache contains cluster information to be watched, notify the watcher immediately.
+    // If local cache doesn't contain cluster information to be watched, notify the watcher immediately.
     if (absentCdsResources.contains(clusterName)) {
       watcher.onError(
           Status.NOT_FOUND
