@@ -106,7 +106,7 @@ class GrpclbLoadBalancer extends LoadBalancer {
     List<EquivalentAddressGroup> newBackendServers =
         Collections.unmodifiableList(resolvedAddresses.getAddresses());
     GrpclbConfig newConfig = (GrpclbConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
-    if (!config.equals(newConfig)) {
+    if (config == null || !config.equals(newConfig)) {
       config = newConfig;
       helper.getChannelLogger().log(ChannelLogLevel.INFO, "Config: " + newConfig);
       recreateStates();

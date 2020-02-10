@@ -41,7 +41,6 @@ import javax.annotation.Nullable;
 public final class GrpclbLoadBalancerProvider extends LoadBalancerProvider {
 
   private static final Mode DEFAULT_MODE = Mode.ROUND_ROBIN;
-  private static final String SERVICE_CONFIG_SERVICE_NAME = "serviceName";
 
   @Override
   public boolean isAvailable() {
@@ -83,8 +82,7 @@ public final class GrpclbLoadBalancerProvider extends LoadBalancerProvider {
     if (rawLoadBalancingPolicyConfig == null) {
       return ConfigOrError.fromConfig(GrpclbConfig.create(DEFAULT_MODE));
     }
-    Object rawServiceName =
-        rawLoadBalancingPolicyConfig.get(GrpclbLoadBalancerProvider.SERVICE_CONFIG_SERVICE_NAME);
+    Object rawServiceName = rawLoadBalancingPolicyConfig.get("serviceName");
     String serviceName = (String) rawServiceName;
     List<?> rawChildPolicies = getList(rawLoadBalancingPolicyConfig, "childPolicy");
 
