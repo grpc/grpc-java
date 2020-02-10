@@ -16,10 +16,6 @@ popd
 
 git clone https://github.com/ericgribkoff/grpc.git
 
-pushd grpc # TODO: remove when checked in to master
-git checkout run_xds_tests # TODO: remove when checked in to master
-popd # TODO: remove when checked in to master
-
 grpc/tools/run_tests/helper_scripts/prep_xds.sh
 python3 grpc/tools/run_tests/run_xds_tests.py \
     --test_case=all \
