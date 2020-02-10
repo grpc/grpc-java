@@ -180,7 +180,7 @@ final class XdsNameResolver extends NameResolver {
           listener.onResult(ResolutionResult.newBuilder().build());
           return;
         }
-        listener.onError(error);
+        listener.onError(Status.UNAVAILABLE.withDescription(error.getDescription()));
       }
     });
   }
