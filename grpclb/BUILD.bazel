@@ -1,4 +1,3 @@
-load("@rules_proto//proto:defs.bzl", "proto_library")
 load("//:java_grpc_library.bzl", "java_grpc_library")
 
 java_library(
@@ -9,7 +8,6 @@ java_library(
     visibility = ["//visibility:public"],
     deps = [
         ":load_balancer_java_grpc",
-        ":load_balancer_java_proto",
         "//api",
         "//core:internal",
         "//core:util",
@@ -18,25 +16,12 @@ java_library(
         "@com_google_guava_guava//jar",
         "@com_google_j2objc_j2objc_annotations//jar",
         "@com_google_protobuf//:protobuf_java_util",
+        "@io_grpc_grpc_proto//:grpclb_load_balancer_java_proto",
     ],
-)
-
-proto_library(
-    name = "load_balancer_proto",
-    srcs = ["src/main/proto/grpc/lb/v1/load_balancer.proto"],
-    deps = [
-        "@com_google_protobuf//:duration_proto",
-        "@com_google_protobuf//:timestamp_proto",
-    ],
-)
-
-java_proto_library(
-    name = "load_balancer_java_proto",
-    deps = [":load_balancer_proto"],
 )
 
 java_grpc_library(
     name = "load_balancer_java_grpc",
-    srcs = [":load_balancer_proto"],
-    deps = [":load_balancer_java_proto"],
+    srcs = ["@io_grpc_grpc_proto//:grpclb_load_balancer_proto"],
+    deps = ["@io_grpc_grpc_proto//:grpclb_load_balancer_java_proto"],
 )
