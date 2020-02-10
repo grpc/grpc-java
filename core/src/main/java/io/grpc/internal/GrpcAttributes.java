@@ -22,22 +22,11 @@ import io.grpc.Grpc;
 import io.grpc.NameResolver;
 import io.grpc.SecurityLevel;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Special attributes that are only useful to gRPC.
  */
 public final class GrpcAttributes {
-  /**
-   * Attribute key for service config.
-   *
-   * <p>Deprecated: all users should migrate to parsed config {@link ManagedChannelServiceConfig}.
-   */
-  @Deprecated
-  @NameResolver.ResolutionResultAttr
-  public static final Attributes.Key<Map<String, ?>> NAME_RESOLVER_SERVICE_CONFIG =
-      Attributes.Key.create("service-config");
-
   /**
    * Attribute key for gRPC LB server addresses.
    *

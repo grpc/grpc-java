@@ -30,7 +30,6 @@ import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.BackoffPolicy;
-import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.ObjectPool;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
@@ -156,7 +155,6 @@ final class XdsNameResolver extends NameResolver {
         }
         Attributes attrs =
             Attributes.newBuilder()
-                .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, config)
                 .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
                 .build();
         ConfigOrError parsedServiceConfig = serviceConfigParser.parseServiceConfig(config);

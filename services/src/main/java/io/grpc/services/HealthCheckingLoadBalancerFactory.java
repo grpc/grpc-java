@@ -49,13 +49,10 @@ import io.grpc.health.v1.HealthCheckResponse;
 import io.grpc.health.v1.HealthCheckResponse.ServingStatus;
 import io.grpc.health.v1.HealthGrpc;
 import io.grpc.internal.BackoffPolicy;
-import io.grpc.internal.GrpcAttributes;
-import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.util.ForwardingLoadBalancer;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.ForwardingSubchannel;
 import java.util.HashSet;
-import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
@@ -182,10 +179,8 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
 
     @Override
     public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-      Map<String, ?> serviceConfig =
-          resolvedAddresses.getAttributes().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
-      String serviceName = ServiceConfigUtil.getHealthCheckedServiceName(serviceConfig);
-      helper.setHealthCheckedService(serviceName);
+      // NOTE: merge HCLB to use own attr will fix this.
+      helper.setHealthCheckedService(null);
       super.handleResolvedAddresses(resolvedAddresses);
     }
 
