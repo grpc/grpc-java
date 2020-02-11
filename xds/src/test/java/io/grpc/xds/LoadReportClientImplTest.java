@@ -307,8 +307,9 @@ public class LoadReportClientImplTest {
     assertEquals(0, fakeClock.numPendingTasks(LRS_RPC_RETRY_TASK_FILTER));
 
     // Balancer sends a response asking for loads of some cluster service.
+    String serviceName = "namespace-foo:service-blade";
     responseObserver
-        .onNext(buildLrsResponse(ImmutableList.of("namespace-foo:service-blade"), 0));
+        .onNext(buildLrsResponse(ImmutableList.of(serviceName), 0));
 
     // Then breaks the RPC
     responseObserver.onError(Status.UNAVAILABLE.asException());
@@ -339,6 +340,17 @@ public class LoadReportClientImplTest {
     requestObserver = lrsRequestObservers.poll();
     verify(requestObserver).onNext(eq(EXPECTED_INITIAL_REQ));
     assertEquals(0, fakeClock.numPendingTasks(LRS_RPC_RETRY_TASK_FILTER));
+
+    // Load reporting back to normal.
+    responseObserver = lrsResponseObserverCaptor.getValue();
+    ClusterStats stats = generateServiceLoadStats();
+    when(loadStatsStore1.generateLoadReport()).thenReturn(stats);
+    lrsClient.addLoadStatsStore(serviceName, loadStatsStore1);
+    responseObserver
+        .onNext(buildLrsResponse(ImmutableList.of(serviceName), 10));
+    fakeClock.forwardNanos(10);
+    verify(requestObserver)
+        .onNext(argThat(new LoadStatsRequestMatcher(ImmutableMap.of(serviceName, stats), 10)));
 
     // Wrapping up
     verify(backoffPolicyProvider, times(2)).get();
