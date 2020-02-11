@@ -43,13 +43,15 @@ import javax.annotation.Nullable;
  */
 class GrpclbLoadBalancer extends LoadBalancer {
 
+  private static final GrpclbConfig DEFAULT_CONFIG = GrpclbConfig.create(Mode.ROUND_ROBIN);
+
   private final Helper helper;
   private final TimeProvider time;
   private final Stopwatch stopwatch;
   private final SubchannelPool subchannelPool;
   private final BackoffPolicy.Provider backoffPolicyProvider;
 
-  private GrpclbConfig config = GrpclbConfig.create(Mode.ROUND_ROBIN);
+  private GrpclbConfig config = DEFAULT_CONFIG;
 
   // All mutable states in this class are mutated ONLY from Channel Executor
   @Nullable
@@ -106,7 +108,10 @@ class GrpclbLoadBalancer extends LoadBalancer {
     List<EquivalentAddressGroup> newBackendServers =
         Collections.unmodifiableList(resolvedAddresses.getAddresses());
     GrpclbConfig newConfig = (GrpclbConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
-    if (config == null || !config.equals(newConfig)) {
+    if (newConfig == null) {
+      newConfig = DEFAULT_CONFIG;
+    }
+    if (!config.equals(newConfig)) {
       config = newConfig;
       helper.getChannelLogger().log(ChannelLogLevel.INFO, "Config: " + newConfig);
       recreateStates();

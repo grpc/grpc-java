@@ -2057,6 +2057,95 @@ public class GrpclbLoadBalancerTest {
     return LB_BACKEND_ATTRS.toBuilder().set(GrpclbConstants.TOKEN_ATTRIBUTE_KEY, token).build();
   }
 
+  @Test
+  @SuppressWarnings("deprecation")
+  public void switchMode_nullLbPolicy() throws Exception {
+    InOrder inOrder = inOrder(helper);
+
+    final List<EquivalentAddressGroup> grpclbBalancerList = createResolvedBalancerAddresses(1);
+    deliverResolvedAddresses(
+        Collections.<EquivalentAddressGroup>emptyList(),
+        grpclbBalancerList,
+        Attributes.EMPTY,
+        /* grpclbConfig= */ null);
+
+    assertEquals(1, fakeOobChannels.size());
+    ManagedChannel oobChannel = fakeOobChannels.poll();
+    verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
+    StreamObserver<LoadBalanceResponse> lbResponseObserver = lbResponseObserverCaptor.getValue();
+    assertEquals(1, lbRequestObservers.size());
+    StreamObserver<LoadBalanceRequest> lbRequestObserver = lbRequestObservers.poll();
+    verify(lbRequestObserver).onNext(
+        eq(LoadBalanceRequest.newBuilder().setInitialRequest(
+            InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
+            .build()));
+
+    // Simulate receiving LB response
+    List<ServerEntry> backends1 = Arrays.asList(
+        new ServerEntry("127.0.0.1", 2000, "token0001"),
+        new ServerEntry("127.0.0.1", 2010, "token0002"));
+    inOrder.verify(helper, never())
+        .updateBalancingState(any(ConnectivityState.class), any(SubchannelPicker.class));
+    lbResponseObserver.onNext(buildInitialResponse());
+    lbResponseObserver.onNext(buildLbResponse(backends1));
+
+    // ROUND_ROBIN: create one subchannel per server
+    verify(subchannelPool).takeOrCreateSubchannel(
+        eq(new EquivalentAddressGroup(backends1.get(0).addr, LB_BACKEND_ATTRS)),
+        any(Attributes.class));
+    verify(subchannelPool).takeOrCreateSubchannel(
+        eq(new EquivalentAddressGroup(backends1.get(1).addr, LB_BACKEND_ATTRS)),
+        any(Attributes.class));
+    inOrder.verify(helper).updateBalancingState(eq(CONNECTING), any(SubchannelPicker.class));
+    assertEquals(2, mockSubchannels.size());
+    Subchannel subchannel1 = mockSubchannels.poll();
+    Subchannel subchannel2 = mockSubchannels.poll();
+    verify(subchannelPool, never())
+        .returnSubchannel(any(Subchannel.class), any(ConnectivityStateInfo.class));
+
+    // Switch to PICK_FIRST
+    deliverResolvedAddresses(
+        Collections.<EquivalentAddressGroup>emptyList(),
+        grpclbBalancerList,
+        Attributes.EMPTY,
+        GrpclbConfig.create(Mode.PICK_FIRST));
+
+    // GrpclbState will be shutdown, and a new one will be created
+    assertThat(oobChannel.isShutdown()).isTrue();
+    verify(subchannelPool)
+        .returnSubchannel(same(subchannel1), eq(ConnectivityStateInfo.forNonError(IDLE)));
+    verify(subchannelPool)
+        .returnSubchannel(same(subchannel2), eq(ConnectivityStateInfo.forNonError(IDLE)));
+
+    // A new LB stream is created
+    assertEquals(1, fakeOobChannels.size());
+    verify(mockLbService, times(2)).balanceLoad(lbResponseObserverCaptor.capture());
+    lbResponseObserver = lbResponseObserverCaptor.getValue();
+    assertEquals(1, lbRequestObservers.size());
+    lbRequestObserver = lbRequestObservers.poll();
+    verify(lbRequestObserver).onNext(
+        eq(LoadBalanceRequest.newBuilder().setInitialRequest(
+            InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
+            .build()));
+
+    // Simulate receiving LB response
+    inOrder.verify(helper, never())
+        .updateBalancingState(any(ConnectivityState.class), any(SubchannelPicker.class));
+    lbResponseObserver.onNext(buildInitialResponse());
+    lbResponseObserver.onNext(buildLbResponse(backends1));
+
+    // PICK_FIRST Subchannel
+    // TODO(zhangkun83): remove the deprecation suppression on this method once migrated to
+    // the new createSubchannel().
+    inOrder.verify(helper).createSubchannel(
+        eq(Arrays.asList(
+            new EquivalentAddressGroup(backends1.get(0).addr, eagAttrsWithToken("token0001")),
+            new EquivalentAddressGroup(backends1.get(1).addr, eagAttrsWithToken("token0002")))),
+        any(Attributes.class));
+
+    inOrder.verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
+  }
+
   @SuppressWarnings("deprecation")
   @Test
   public void switchServiceName() throws Exception {
@@ -2359,10 +2448,10 @@ public class GrpclbLoadBalancerTest {
 
   @SuppressWarnings("deprecation")  // TODO(creamsoup) migrate test cases to use GrpclbConfig.
   private void deliverResolvedAddresses(
-      final List<EquivalentAddressGroup> backendAddrs,
-      final List<EquivalentAddressGroup> balancerAddrs,
+      List<EquivalentAddressGroup> backendAddrs,
+      List<EquivalentAddressGroup> balancerAddrs,
       Attributes attrs) {
-    final GrpclbConfig grpclbConfig;
+    GrpclbConfig grpclbConfig;
     Map<String, ?> lbJsonMap = attrs.get(LoadBalancer.ATTR_LOAD_BALANCING_CONFIG);
     if (lbJsonMap != null) {
       grpclbConfig = (GrpclbConfig) grpclbLoadBalancerProvider
@@ -2370,17 +2459,23 @@ public class GrpclbLoadBalancerTest {
     } else {
       grpclbConfig = GrpclbConfig.create(Mode.ROUND_ROBIN);
     }
-    if (!balancerAddrs.isEmpty()) {
-      attrs = attrs.toBuilder().set(GrpclbConstants.ATTR_LB_ADDRS, balancerAddrs).build();
-    }
-    final Attributes finalAttrs = attrs;
+    deliverResolvedAddresses(backendAddrs, balancerAddrs, attrs, grpclbConfig);
+  }
+
+  private void deliverResolvedAddresses(
+      final List<EquivalentAddressGroup> backendAddrs,
+      List<EquivalentAddressGroup> balancerAddrs,
+      Attributes attributes,
+      final GrpclbConfig grpclbConfig) {
+    final Attributes attrs =
+        attributes.toBuilder().set(GrpclbConstants.ATTR_LB_ADDRS, balancerAddrs).build();
     syncContext.execute(new Runnable() {
       @Override
       public void run() {
         balancer.handleResolvedAddresses(
             ResolvedAddresses.newBuilder()
                 .setAddresses(backendAddrs)
-                .setAttributes(finalAttrs)
+                .setAttributes(attrs)
                 .setLoadBalancingPolicyConfig(grpclbConfig)
                 .build());
       }
