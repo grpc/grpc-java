@@ -24,12 +24,13 @@ import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.grpclb.GrpclbState.Mode;
 import io.grpc.internal.ExponentialBackoffPolicy;
+import io.grpc.internal.JsonUtil;
 import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.internal.TimeProvider;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import javax.annotation.Nullable;
 
 /**
  * The provider for the "grpclb" balancing policy.  This class should not be directly referenced in
@@ -38,6 +39,7 @@ import javax.annotation.Nullable;
  */
 @Internal
 public final class GrpclbLoadBalancerProvider extends LoadBalancerProvider {
+
   private static final Mode DEFAULT_MODE = Mode.ROUND_ROBIN;
 
   @Override
@@ -78,57 +80,37 @@ public final class GrpclbLoadBalancerProvider extends LoadBalancerProvider {
   ConfigOrError parseLoadBalancingConfigPolicyInternal(
       Map<String, ?> rawLoadBalancingPolicyConfig) {
     if (rawLoadBalancingPolicyConfig == null) {
-      return ConfigOrError.fromConfig(DEFAULT_MODE);
+      return ConfigOrError.fromConfig(GrpclbConfig.create(DEFAULT_MODE));
     }
-    List<?> rawChildPolicies = getList(rawLoadBalancingPolicyConfig, "childPolicy");
-    if (rawChildPolicies == null) {
-      return ConfigOrError.fromConfig(DEFAULT_MODE);
+    String serviceName = JsonUtil.getString(rawLoadBalancingPolicyConfig, "serviceName");
+    List<?> rawChildPolicies = JsonUtil.getList(rawLoadBalancingPolicyConfig, "childPolicy");
+    List<LbConfig> childPolicies = null;
+    if (rawChildPolicies != null) {
+      childPolicies =
+          ServiceConfigUtil
+              .unwrapLoadBalancingConfigList(JsonUtil.checkObjectList(rawChildPolicies));
     }
-    List<LbConfig> childPolicies =
-        ServiceConfigUtil.unwrapLoadBalancingConfigList(checkObjectList(rawChildPolicies));
+
+    if (childPolicies == null || childPolicies.isEmpty()) {
+      return ConfigOrError.fromConfig(GrpclbConfig.create(DEFAULT_MODE, serviceName));
+    }
+
+    List<String> policiesTried = new ArrayList<>();
     for (LbConfig childPolicy : childPolicies) {
       String childPolicyName = childPolicy.getPolicyName();
       switch (childPolicyName) {
         case "round_robin":
-          return ConfigOrError.fromConfig(Mode.ROUND_ROBIN);
+          return ConfigOrError.fromConfig(GrpclbConfig.create(Mode.ROUND_ROBIN, serviceName));
         case "pick_first":
-          return ConfigOrError.fromConfig(Mode.PICK_FIRST);
+          return ConfigOrError.fromConfig(GrpclbConfig.create(Mode.PICK_FIRST, serviceName));
         default:
-          // TODO(zhangkun83): maybe log?
+          policiesTried.add(childPolicyName);
       }
     }
-    return ConfigOrError.fromConfig(DEFAULT_MODE);
-  }
-
-  /**
-   * Gets a list from an object for the given key.  Copy of
-   * {@link io.grpc.internal.ServiceConfigUtil#getList}.
-   */
-  @Nullable
-  private static List<?> getList(Map<String, ?> obj, String key) {
-    assert key != null;
-    if (!obj.containsKey(key)) {
-      return null;
-    }
-    Object value = obj.get(key);
-    if (!(value instanceof List)) {
-      throw new ClassCastException(
-          String.format("value '%s' for key '%s' in %s is not List", value, key, obj));
-    }
-    return (List<?>) value;
-  }
-
-  /**
-   * Copy of {@link io.grpc.internal.ServiceConfigUtil#checkObjectList}.
-   */
-  @SuppressWarnings("unchecked")
-  private static List<Map<String, ?>> checkObjectList(List<?> rawList) {
-    for (int i = 0; i < rawList.size(); i++) {
-      if (!(rawList.get(i) instanceof Map)) {
-        throw new ClassCastException(
-            String.format("value %s for idx %d in %s is not object", rawList.get(i), i, rawList));
-      }
-    }
-    return (List<Map<String, ?>>) rawList;
+    return ConfigOrError.fromError(
+        Status
+            .INVALID_ARGUMENT
+            .withDescription(
+                "None of " + policiesTried + " specified child policies are available."));
   }
 }
