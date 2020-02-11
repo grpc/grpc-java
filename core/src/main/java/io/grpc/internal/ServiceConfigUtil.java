@@ -315,15 +315,6 @@ public final class ServiceConfigUtil {
   }
 
   /**
-   * Extracts the stickiness metadata key from a service config, or {@code null}.
-   */
-  @Nullable
-  public static String getStickinessMetadataKeyFromServiceConfig(
-      Map<String, ?> serviceConfig) {
-    return JsonUtil.getString(serviceConfig, "stickinessMetadataKey");
-  }
-
-  /**
    * A LoadBalancingConfig that includes the policy name (the key) and its raw config value (parsed
    * JSON).
    */
