@@ -189,7 +189,7 @@ public class LoadReportClientImplTest {
   }
 
   @Test
-  public void normalOperations() {
+  public void typicalWorkflow() {
     verify(mockLoadReportingService).streamLoadStats(lrsResponseObserverCaptor.capture());
     StreamObserver<LoadStatsResponse> responseObserver = lrsResponseObserverCaptor.getValue();
     StreamObserver<LoadStatsRequest> requestObserver =
