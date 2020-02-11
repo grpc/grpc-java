@@ -27,20 +27,13 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
-
 import io.grpc.Attributes;
-import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
-import io.grpc.LoadBalancer.SubchannelStateListener;
-import io.grpc.Metadata;
-import io.grpc.Metadata.Key;
 import io.grpc.NameResolver;
 import io.grpc.Status;
-import io.grpc.internal.GrpcAttributes;
-import io.grpc.internal.ServiceConfigUtil;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -48,15 +41,10 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Queue;
 import java.util.Random;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 
 /**
  * A {@link LoadBalancer} that provides round-robin load-balancing over the {@link
@@ -66,8 +54,6 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
   @VisibleForTesting
   static final Attributes.Key<Ref<ConnectivityStateInfo>> STATE_INFO =
       Attributes.Key.create("state-info");
-  // package-private to avoid synthetic access
-  static final Attributes.Key<Ref<Subchannel>> STICKY_REF = Attributes.Key.create("sticky-ref");
 
   private final Helper helper;
   private final Map<EquivalentAddressGroup, Subchannel> subchannels =
@@ -77,39 +63,17 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
   private ConnectivityState currentState;
   private RoundRobinPicker currentPicker = new EmptyPicker(EMPTY_OK);
 
-  @Nullable
-  private StickinessState stickinessState;
-
   RoundRobinLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
     this.random = new Random();
   }
 
   @Override
-  @SuppressWarnings("deprecation")
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     List<EquivalentAddressGroup> servers = resolvedAddresses.getAddresses();
-    Attributes attributes = resolvedAddresses.getAttributes();
     Set<EquivalentAddressGroup> currentAddrs = subchannels.keySet();
     Map<EquivalentAddressGroup, EquivalentAddressGroup> latestAddrs = stripAttrs(servers);
     Set<EquivalentAddressGroup> removedAddrs = setsDifference(currentAddrs, latestAddrs.keySet());
-
-    Map<String, ?> serviceConfig = attributes.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
-    if (serviceConfig != null) {
-      String stickinessMetadataKey =
-          ServiceConfigUtil.getStickinessMetadataKeyFromServiceConfig(serviceConfig);
-      if (stickinessMetadataKey != null) {
-        if (stickinessMetadataKey.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
-          helper.getChannelLogger().log(
-              ChannelLogLevel.WARNING,
-              "Binary stickiness header is not supported. The header \"{0}\" will be ignored",
-              stickinessMetadataKey);
-        } else if (stickinessState == null
-            || !stickinessState.key.name().equals(stickinessMetadataKey)) {
-          stickinessState = new StickinessState(stickinessMetadataKey);
-        }
-      }
-    }
 
     for (Map.Entry<EquivalentAddressGroup, EquivalentAddressGroup> latestEntry :
         latestAddrs.entrySet()) {
@@ -133,11 +97,6 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
           .set(STATE_INFO,
               new Ref<>(ConnectivityStateInfo.forNonError(IDLE)));
 
-      Ref<Subchannel> stickyRef = null;
-      if (stickinessState != null) {
-        subchannelAttrs.set(STICKY_REF, stickyRef = new Ref<>(null));
-      }
-
       final Subchannel subchannel = checkNotNull(
           helper.createSubchannel(CreateSubchannelArgs.newBuilder()
               .setAddresses(originalAddressGroup)
@@ -150,9 +109,6 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
             processSubchannelState(subchannel, state);
           }
         });
-      if (stickyRef != null) {
-        stickyRef.value = subchannel;
-      }
       subchannels.put(strippedAddressGroup, subchannel);
       subchannel.requestConnection();
     }
@@ -183,9 +139,6 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
     if (subchannels.get(stripAttrs(subchannel.getAddresses())) != subchannel) {
       return;
     }
-    if (stateInfo.getState() == SHUTDOWN && stickinessState != null) {
-      stickinessState.remove(subchannel);
-    }
     if (stateInfo.getState() == IDLE) {
       subchannel.requestConnection();
     }
@@ -197,9 +150,6 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
     subchannel.shutdown();
     getSubchannelStateInfoRef(subchannel).value =
         ConnectivityStateInfo.forNonError(SHUTDOWN);
-    if (stickinessState != null) {
-      stickinessState.remove(subchannel);
-    }
   }
 
   @Override
@@ -241,7 +191,7 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
       // initialize the Picker to a random start index to ensure that a high frequency of Picker
       // churn does not skew subchannel selection.
       int startIndex = random.nextInt(activeList.size());
-      updateBalancingState(READY, new ReadyPicker(activeList, startIndex, stickinessState));
+      updateBalancingState(READY, new ReadyPicker(activeList, startIndex));
     }
   }
 
@@ -305,90 +255,6 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
     return aCopy;
   }
 
-  Map<String, Ref<Subchannel>> getStickinessMapForTest() {
-    if (stickinessState == null) {
-      return null;
-    }
-    return stickinessState.stickinessMap;
-  }
-
-  /**
-   * Holds stickiness related states: The stickiness key, a registry mapping stickiness values to
-   * the associated Subchannel Ref, and a map from Subchannel to Subchannel Ref.
-   */
-  @VisibleForTesting
-  static final class StickinessState {
-    static final int MAX_ENTRIES = 1000;
-
-    final Key<String> key;
-    final ConcurrentMap<String, Ref<Subchannel>> stickinessMap =
-        new ConcurrentHashMap<>();
-
-    final Queue<String> evictionQueue = new ConcurrentLinkedQueue<>();
-
-    StickinessState(@Nonnull String stickinessKey) {
-      this.key = Key.of(stickinessKey, Metadata.ASCII_STRING_MARSHALLER);
-    }
-
-    /**
-     * Returns the subchannel associated to the stickiness value if available in both the
-     * registry and the round robin list, otherwise associates the given subchannel with the
-     * stickiness key in the registry and returns the given subchannel.
-     */
-    @Nonnull
-    Subchannel maybeRegister(
-        String stickinessValue, @Nonnull Subchannel subchannel) {
-      final Ref<Subchannel> newSubchannelRef = subchannel.getAttributes().get(STICKY_REF);
-      while (true) {
-        Ref<Subchannel> existingSubchannelRef =
-            stickinessMap.putIfAbsent(stickinessValue, newSubchannelRef);
-        if (existingSubchannelRef == null) {
-          // new entry
-          addToEvictionQueue(stickinessValue);
-          return subchannel;
-        } else {
-          // existing entry
-          Subchannel existingSubchannel = existingSubchannelRef.value;
-          if (existingSubchannel != null && isReady(existingSubchannel)) {
-            return existingSubchannel;
-          }
-        }
-        // existingSubchannelRef is not null but no longer valid, replace it
-        if (stickinessMap.replace(stickinessValue, existingSubchannelRef, newSubchannelRef)) {
-          return subchannel;
-        }
-        // another thread concurrently removed or updated the entry, try again
-      }
-    }
-
-    private void addToEvictionQueue(String value) {
-      String oldValue;
-      while (stickinessMap.size() >= MAX_ENTRIES && (oldValue = evictionQueue.poll()) != null) {
-        stickinessMap.remove(oldValue);
-      }
-      evictionQueue.add(value);
-    }
-
-    /**
-     * Unregister the subchannel from StickinessState.
-     */
-    void remove(Subchannel subchannel) {
-      subchannel.getAttributes().get(STICKY_REF).value = null;
-    }
-
-    /**
-     * Gets the subchannel associated with the stickiness value if there is.
-     */
-    @Nullable
-    Subchannel getSubchannel(String stickinessValue) {
-      Ref<Subchannel> subchannelRef = stickinessMap.get(stickinessValue);
-      if (subchannelRef != null) {
-        return subchannelRef.value;
-      }
-      return null;
-    }
-  }
-  
   // Only subclasses are ReadyPicker or EmptyPicker
   private abstract static class RoundRobinPicker extends SubchannelPicker {
     abstract boolean isEquivalentTo(RoundRobinPicker picker);
@@ -400,33 +266,18 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
         AtomicIntegerFieldUpdater.newUpdater(ReadyPicker.class, "index");
 
     private final List<Subchannel> list; // non-empty
-    @Nullable
-    private final RoundRobinLoadBalancer.StickinessState stickinessState;
     @SuppressWarnings("unused")
     private volatile int index;
 
-    ReadyPicker(List<Subchannel> list, int startIndex,
-        @Nullable RoundRobinLoadBalancer.StickinessState stickinessState) {
+    ReadyPicker(List<Subchannel> list, int startIndex) {
       Preconditions.checkArgument(!list.isEmpty(), "empty list");
       this.list = list;
-      this.stickinessState = stickinessState;
       this.index = startIndex - 1;
     }
 
     @Override
     public PickResult pickSubchannel(PickSubchannelArgs args) {
-      Subchannel subchannel = null;
-      if (stickinessState != null) {
-        String stickinessValue = args.getHeaders().get(stickinessState.key);
-        if (stickinessValue != null) {
-          subchannel = stickinessState.getSubchannel(stickinessValue);
-          if (subchannel == null || !RoundRobinLoadBalancer.isReady(subchannel)) {
-            subchannel = stickinessState.maybeRegister(stickinessValue, nextSubchannel());
-          }
-        }
-      }
-
-      return PickResult.withSubchannel(subchannel != null ? subchannel : nextSubchannel());
+      return PickResult.withSubchannel(nextSubchannel());
     }
 
     @Override
@@ -457,9 +308,8 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
       }
       ReadyPicker other = (ReadyPicker) picker;
       // the lists cannot contain duplicate subchannels
-      return other == this || (stickinessState == other.stickinessState
-          && list.size() == other.list.size()
-          && new HashSet<>(list).containsAll(other.list));
+      return other == this
+          || (list.size() == other.list.size() && new HashSet<>(list).containsAll(other.list));
     }
   }
 
