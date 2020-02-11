@@ -24,13 +24,13 @@ import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.grpclb.GrpclbState.Mode;
 import io.grpc.internal.ExponentialBackoffPolicy;
+import io.grpc.internal.JsonUtil;
 import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.internal.TimeProvider;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import javax.annotation.Nullable;
 
 /**
  * The provider for the "grpclb" balancing policy.  This class should not be directly referenced in
@@ -82,14 +82,14 @@ public final class GrpclbLoadBalancerProvider extends LoadBalancerProvider {
     if (rawLoadBalancingPolicyConfig == null) {
       return ConfigOrError.fromConfig(GrpclbConfig.create(DEFAULT_MODE));
     }
-    Object rawServiceName = rawLoadBalancingPolicyConfig.get("serviceName");
-    String serviceName = (String) rawServiceName;
-    List<?> rawChildPolicies = getList(rawLoadBalancingPolicyConfig, "childPolicy");
-
-    List<LbConfig> childPolicies =
-        rawChildPolicies == null
-            ? null
-            : ServiceConfigUtil.unwrapLoadBalancingConfigList(checkObjectList(rawChildPolicies));
+    String serviceName = JsonUtil.getString(rawLoadBalancingPolicyConfig, "serviceName");
+    List<?> rawChildPolicies = JsonUtil.getList(rawLoadBalancingPolicyConfig, "childPolicy");
+    List<LbConfig> childPolicies = null;
+    if (rawChildPolicies != null) {
+      childPolicies =
+          ServiceConfigUtil
+              .unwrapLoadBalancingConfigList(JsonUtil.checkObjectList(rawChildPolicies));
+    }
 
     if (childPolicies == null || childPolicies.isEmpty()) {
       return ConfigOrError.fromConfig(GrpclbConfig.create(DEFAULT_MODE, serviceName));
@@ -112,33 +112,5 @@ public final class GrpclbLoadBalancerProvider extends LoadBalancerProvider {
             .INVALID_ARGUMENT
             .withDescription(
                 "None of " + policiesTried + " specified child policies are available."));
-  }
-
-  /**
-   * Gets a list from an object for the given key.
-   */
-  @Nullable
-  private static List<?> getList(Map<String, ?> obj, String key) {
-    assert key != null;
-    if (!obj.containsKey(key)) {
-      return null;
-    }
-    Object value = obj.get(key);
-    if (!(value instanceof List)) {
-      throw new ClassCastException(
-          String.format("value '%s' for key '%s' in %s is not List", value, key, obj));
-    }
-    return (List<?>) value;
-  }
-
-  @SuppressWarnings("unchecked")
-  private static List<Map<String, ?>> checkObjectList(List<?> rawList) {
-    for (int i = 0; i < rawList.size(); i++) {
-      if (!(rawList.get(i) instanceof Map)) {
-        throw new ClassCastException(
-            String.format("value %s for idx %d in %s is not object", rawList.get(i), i, rawList));
-      }
-    }
-    return (List<Map<String, ?>>) rawList;
   }
 }
