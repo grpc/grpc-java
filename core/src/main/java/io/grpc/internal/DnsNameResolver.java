@@ -315,6 +315,12 @@ final class DnsNameResolver extends NameResolver {
 
           @SuppressWarnings("unchecked")
           Map<String, ?> verifiedRawServiceConfig = (Map<String, ?>) rawServiceConfig.getConfig();
+          Map<String, ?> healthCheckedService =
+              ServiceConfigUtil.getHealthCheckedService(verifiedRawServiceConfig);
+          if (healthCheckedService != null) {
+            attributesBuilder
+                .set(RESOLUTION_RESULT_ATTR_HEALTH_CHECKING_CONFIG, healthCheckedService);
+          }
           ConfigOrError parsedServiceConfig =
               serviceConfigParser.parseServiceConfig(verifiedRawServiceConfig);
           resultBuilder.setServiceConfig(parsedServiceConfig);
