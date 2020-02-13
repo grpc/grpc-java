@@ -16,6 +16,7 @@
 
 package io.grpc.xds;
 
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 
 /**
@@ -48,21 +49,26 @@ interface LoadReportClient {
   void stopLoadReporting();
 
   /**
-   * Provides this LoadReportClient source of load stats data for the given cluster service.
-   * If requested, data from the given {@code loadStatsStore} is periodically queried and
-   * sent to traffic director by this LoadReportClient.
+   * Provides this LoadReportClient source of load stats data for the given
+   * cluster:cluster_service. If requested, data from the given {@code loadStatsStore} is
+   * periodically queried and sent to traffic director by this LoadReportClient.
    *
-   * @param clusterServiceName name of the cluster service.
-   * @param loadStatsStore storage of load stats.
+   * <p>Currently we expect load stats data for all clusters to report loads for are provided
+   * before load reporting starts (so that LRS initial request tells management server clusters
+   * it is reporting loads for). Design TBD for reporting loads for extra clusters after load
+   * reporting has started.
+   *
+   * <p>Note: currently clusterServiceName is always unset.
    */
-  void addLoadStatsStore(String clusterServiceName, LoadStatsStore loadStatsStore);
+  void addLoadStatsStore(
+      String clusterName, @Nullable String clusterServiceName, LoadStatsStore loadStatsStore);
 
   /**
-   * Stops providing load stats data for the given cluster service.
+   * Stops providing load stats data for the given cluster:cluster_service.
    *
-   * @param clusterServiceName name of the cluster service.
+   * <p>Note: currently clusterServiceName is always unset.
    */
-  void removeLoadStatsStore(String clusterServiceName);
+  void removeLoadStatsStore(String clusterName, @Nullable String clusterServiceName);
 
   /**
    * Callbacks for passing information received from client load reporting responses to xDS load

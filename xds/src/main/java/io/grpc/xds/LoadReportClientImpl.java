@@ -35,8 +35,10 @@ import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.stub.StreamObserver;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
@@ -55,7 +57,6 @@ final class LoadReportClientImpl implements LoadReportClient {
   // TODO(chengyuanzhang): use channel logger once XdsClientImpl migrates to use channel logger.
   private static final Logger logger = Logger.getLogger(XdsClientImpl.class.getName());
 
-  private final String clusterName;
   private final ManagedChannel channel;
   private final Node node;
   private final SynchronizationContext syncContext;
@@ -64,7 +65,9 @@ final class LoadReportClientImpl implements LoadReportClient {
   private final Stopwatch retryStopwatch;
   private final BackoffPolicy.Provider backoffPolicyProvider;
 
-  // Sources of load stats data for each service in cluster.
+  // Sources of load stats data for each cluster.
+  // FIXME(chengyuanzhang): this should be Map<String, Map<String, LoadStatsStore>> as each
+  //  ClusterStats is keyed by cluster:cluster_service. Currently, cluster_service is always unset.
   private final Map<String, LoadStatsStore> loadStatsStoreMap = new HashMap<>();
   private boolean started;
 
@@ -77,15 +80,14 @@ final class LoadReportClientImpl implements LoadReportClient {
   @Nullable
   private LoadReportCallback callback;
 
-  LoadReportClientImpl(ManagedChannel channel,
-      String clusterName,
+  LoadReportClientImpl(
+      ManagedChannel channel,
       Node node,
       SynchronizationContext syncContext,
       ScheduledExecutorService scheduledExecutorService,
       BackoffPolicy.Provider backoffPolicyProvider,
       Supplier<Stopwatch> stopwatchSupplier) {
     this.channel = checkNotNull(channel, "channel");
-    this.clusterName = checkNotNull(clusterName, "clusterName");
     this.node = checkNotNull(node, "node");
     this.syncContext = checkNotNull(syncContext, "syncContext");
     this.timerService = checkNotNull(scheduledExecutorService, "timeService");
@@ -121,13 +123,25 @@ final class LoadReportClientImpl implements LoadReportClient {
   }
 
   @Override
-  public void addLoadStatsStore(String clusterServiceName, LoadStatsStore loadStatsStore) {
-    loadStatsStoreMap.put(clusterServiceName, loadStatsStore);
+  public void addLoadStatsStore(
+      String clusterName, @Nullable String clusterServiceName, LoadStatsStore loadStatsStore) {
+    checkState(
+        !loadStatsStoreMap.containsKey(clusterName),
+        "load stats for cluster " + clusterName + " already exists");
+    // FIXME(chengyuanzhang): relax this restriction after design is fleshed out.
+    checkState(
+        !started,
+        "load stats for all clusters to report loads for should be provided before "
+            + "load reporting has started");
+    loadStatsStoreMap.put(clusterName, loadStatsStore);
   }
 
   @Override
-  public void removeLoadStatsStore(String clusterServiceName) {
-    loadStatsStoreMap.remove(clusterServiceName);
+  public void removeLoadStatsStore(String clusterName, @Nullable String clusterServiceName) {
+    checkState(
+        loadStatsStoreMap.containsKey(clusterName),
+        "load stats for cluster " + clusterName + " does not exist");
+    loadStatsStoreMap.remove(clusterName);
   }
 
   @VisibleForTesting
@@ -164,8 +178,8 @@ final class LoadReportClientImpl implements LoadReportClient {
 
   private class LrsStream implements StreamObserver<LoadStatsResponse> {
 
-    // Cluster services to report loads for, instructed by LRS responses.
-    final Set<String> clusterServiceNames = new HashSet<>();
+    // Cluster to report loads for asked by management server.
+    final Set<String> clusterNames = new HashSet<>();
     final LoadReportingServiceGrpc.LoadReportingServiceStub stub;
     final Stopwatch reportStopwatch;
     StreamObserver<LoadStatsRequest> lrsRequestWriter;
@@ -182,10 +196,15 @@ final class LoadReportClientImpl implements LoadReportClient {
     void start() {
       lrsRequestWriter = stub.withWaitForReady().streamLoadStats(this);
       reportStopwatch.reset().start();
+      // Tells management server which clusters the client is reporting loads for.
+      List<ClusterStats> clusterStatsList = new ArrayList<>();
+      for (String clusterName : loadStatsStoreMap.keySet()) {
+        clusterStatsList.add(ClusterStats.newBuilder().setClusterName(clusterName).build());
+      }
       LoadStatsRequest initRequest =
           LoadStatsRequest.newBuilder()
               .setNode(node)
-              .addClusterStats(ClusterStats.newBuilder().setClusterName(clusterName))
+              .addAllClusterStats(clusterStatsList)
               .build();
       lrsRequestWriter.onNext(initRequest);
       logger.log(Level.FINE, "Initial LRS request sent: {0}", initRequest);
@@ -227,13 +246,12 @@ final class LoadReportClientImpl implements LoadReportClient {
       long interval = reportStopwatch.elapsed(TimeUnit.NANOSECONDS);
       reportStopwatch.reset().start();
       LoadStatsRequest.Builder requestBuilder = LoadStatsRequest.newBuilder().setNode(node);
-      for (String serviceName : clusterServiceNames) {
-        if (loadStatsStoreMap.containsKey(serviceName)) {
-          LoadStatsStore loadStatsStore = loadStatsStoreMap.get(serviceName);
+      for (String name : clusterNames) {
+        if (loadStatsStoreMap.containsKey(name)) {
+          LoadStatsStore loadStatsStore = loadStatsStoreMap.get(name);
           ClusterStats report =
               loadStatsStore.generateLoadReport()
                   .toBuilder()
-                  .setClusterName(serviceName)
                   .setLoadReportInterval(Durations.fromNanos(interval))
                   .build();
           requestBuilder.addClusterStats(report);
@@ -271,8 +289,8 @@ final class LoadReportClientImpl implements LoadReportClient {
       }
       loadReportIntervalNano = Durations.toNanos(response.getLoadReportingInterval());
       callback.onReportResponse(loadReportIntervalNano);
-      clusterServiceNames.clear();
-      clusterServiceNames.addAll(response.getClustersList());
+      clusterNames.clear();
+      clusterNames.addAll(response.getClustersList());
       scheduleNextLoadReport();
     }
 
