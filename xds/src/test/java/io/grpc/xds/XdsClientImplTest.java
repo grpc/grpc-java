@@ -3105,7 +3105,7 @@ public class XdsClientImplTest {
 
     xdsClient.cancelClientStatsReport(clusterName, null);
     assertThat(lrsCall.cancelled).isTrue();
-    // See more test on LoadReportClientImplTest.java
+    // See more test on LoadReportClientTest.java
   }
 
   // Simulates the use case of watching clusters/endpoints based on service config resolved by

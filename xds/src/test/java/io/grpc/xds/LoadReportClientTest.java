@@ -75,17 +75,17 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 /**
- * Unit tests for {@link LoadReportClientImpl}.
+ * Unit tests for {@link LoadReportClient}.
  */
 @RunWith(JUnit4.class)
-public class LoadReportClientImplTest {
+public class LoadReportClientTest {
   private static final Node NODE = Node.newBuilder().setId("LRS test").build();
   private static final FakeClock.TaskFilter LOAD_REPORTING_TASK_FILTER =
       new FakeClock.TaskFilter() {
         @Override
         public boolean shouldAccept(Runnable command) {
           return command.toString()
-              .contains(LoadReportClientImpl.LoadReportingTask.class.getSimpleName());
+              .contains(LoadReportClient.LoadReportingTask.class.getSimpleName());
         }
       };
   private static final FakeClock.TaskFilter LRS_RPC_RETRY_TASK_FILTER =
@@ -93,7 +93,7 @@ public class LoadReportClientImplTest {
         @Override
         public boolean shouldAccept(Runnable command) {
           return command.toString()
-              .contains(LoadReportClientImpl.LrsRpcRetryTask.class.getSimpleName());
+              .contains(LoadReportClient.LrsRpcRetryTask.class.getSimpleName());
         }
       };
 
@@ -128,7 +128,7 @@ public class LoadReportClientImplTest {
 
   private LoadReportingServiceGrpc.LoadReportingServiceImplBase mockLoadReportingService;
   private ManagedChannel channel;
-  private LoadReportClientImpl lrsClient;
+  private LoadReportClient lrsClient;
 
   @SuppressWarnings("unchecked")
   @Before
@@ -166,7 +166,7 @@ public class LoadReportClientImplTest {
     when(backoffPolicy2.nextBackoffNanos())
         .thenReturn(TimeUnit.SECONDS.toNanos(1L), TimeUnit.SECONDS.toNanos(10L));
     lrsClient =
-        new LoadReportClientImpl(
+        new LoadReportClient(
             channel,
             NODE, syncContext,
             fakeClock.getScheduledExecutorService(),

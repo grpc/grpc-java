@@ -410,7 +410,7 @@ final class XdsClientImpl extends XdsClient {
     checkState(lrsClient == null,
         "load reporting has already started, cannot change clusters to report loads for");
     lrsClient =
-        new LoadReportClientImpl(
+        new LoadReportClient(
             channel,
             node,
             syncContext,
