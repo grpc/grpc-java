@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import com.google.common.base.Preconditions;
+import io.grpc.Internal;
 import io.grpc.NameResolver.Args;
 import io.grpc.NameResolverProvider;
 import io.grpc.internal.ExponentialBackoffPolicy;
@@ -35,6 +36,7 @@ import java.net.URI;
  * through {@link io.grpc.NameResolverRegistry#asFactory#newNameResolver(URI, Args)} with the URI
  * scheme "xds-experimental".
  */
+@Internal
 public final class XdsNameResolverProvider extends NameResolverProvider {
 
   private static final String SCHEME = "xds-experimental";

@@ -50,7 +50,7 @@ import javax.annotation.Nullable;
 /**
  * Load balancer for cds_experimental LB policy.
  */
-public final class CdsLoadBalancer extends LoadBalancer {
+final class CdsLoadBalancer extends LoadBalancer {
   private final ChannelLogger channelLogger;
   private final LoadBalancerRegistry lbRegistry;
   private final GracefulSwitchLoadBalancer switchingLoadBalancer;
