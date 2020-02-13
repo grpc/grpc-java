@@ -44,6 +44,7 @@ import org.junit.runners.JUnit4;
 /** Unit tests for {@link LoadStatsStore}. */
 @RunWith(JUnit4.class)
 public class LoadStatsStoreImplTest {
+  private static final String CLUSTER_NAME = "cluster-test.googleapis.com";
   private static final Locality LOCALITY1 =
       new Locality("test_region1", "test_zone", "test_subzone");
   private static final Locality LOCALITY2 =
@@ -56,7 +57,8 @@ public class LoadStatsStoreImplTest {
   public void setUp() {
     localityLoadCounters = new ConcurrentHashMap<>();
     dropCounters = new ConcurrentHashMap<>();
-    loadStatsStore = new LoadStatsStoreImpl(localityLoadCounters, dropCounters);
+    loadStatsStore =
+        new LoadStatsStoreImpl(CLUSTER_NAME, null, localityLoadCounters, dropCounters);
   }
 
   private static List<EndpointLoadMetricStats> buildEndpointLoadMetricStatsList(
@@ -103,6 +105,7 @@ public class LoadStatsStoreImplTest {
       @Nullable List<UpstreamLocalityStats> upstreamLocalityStatsList,
       @Nullable List<DroppedRequests> droppedRequestsList) {
     ClusterStats.Builder clusterStatsBuilder = ClusterStats.newBuilder();
+    clusterStatsBuilder.setClusterName(CLUSTER_NAME);
     if (upstreamLocalityStatsList != null) {
       clusterStatsBuilder.addAllUpstreamLocalityStats(upstreamLocalityStatsList);
     }

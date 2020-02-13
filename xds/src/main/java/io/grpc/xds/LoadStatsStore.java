@@ -21,14 +21,14 @@ import io.grpc.xds.EnvoyProtoData.Locality;
 import javax.annotation.Nullable;
 
 /**
- * Interface for client side load stats store. An {@code LoadStatsStore} maintains load stats for
- * a service cluster (i.e., GSLB service) exposed by traffic director from a gRPC client's
- * perspective, including dropped calls instructed by traffic director. Load stats for endpoints
- * (i.e., Google backends) are aggregated in locality granularity (i.e., Google cluster) while the
- * numbers of dropped calls are aggregated in cluster granularity.
+ * Interface for client side load stats store. An {@code LoadStatsStore} maintains load stats per
+ * cluster:cluster_service exposed by traffic director from a gRPC client's perspective,
+ * including dropped calls. Load stats for endpoints (i.e., Google backends) are aggregated in
+ * locality granularity (i.e., Google cluster) while the numbers of dropped calls are aggregated
+ * in cluster:cluster_service granularity.
  *
- * <p>An {@code LoadStatsStore} lives the same span of lifecycle as a cluster and
- * only tracks loads for localities exposed by remote traffic director. A proper usage should be
+ * <p>An {@code LoadStatsStore} only tracks loads for localities exposed by remote traffic
+ * director. A proper usage should be
  *
  * <ol>
  *   <li>Let {@link LoadStatsStore} track the locality newly exposed by traffic director by
@@ -41,10 +41,6 @@ import javax.annotation.Nullable;
  *
  * <p>No locality information is needed for recording dropped calls since they are aggregated in
  * cluster granularity.
- *
- * <p>Note implementations should only be responsible for keeping track of loads and generating
- * load reports with load data, any load reporting information should be opaque to {@code
- * LoadStatsStore} and be set outside.
  */
 interface LoadStatsStore {
 
@@ -61,7 +57,7 @@ interface LoadStatsStore {
    * reporting.
    *
    * <p>This method is not thread-safe and should be called from the same synchronized context
-   * used by {@link XdsClient}.
+   * used by {@link LoadReportClient}.
    */
   ClusterStats generateLoadReport();
 
@@ -70,10 +66,10 @@ interface LoadStatsStore {
    * endpoints in added localities will be recorded and included in generated load reports.
    *
    * <p>This method needs to be called at locality updates only for newly assigned localities in
-   * balancer discovery responses before recording loads for those localities.
+   * endpoint discovery responses before recording loads for those localities.
    *
    * <p>This method is not thread-safe and should be called from the same synchronized context
-   * used by {@link XdsClient}.
+   * used by {@link LoadReportClient}.
    */
   void addLocality(Locality locality);
 
@@ -88,7 +84,7 @@ interface LoadStatsStore {
    * waste and keep including zero-load upstream locality stats in generated load reports.
    *
    * <p>This method is not thread-safe and should be called from the same synchronized context
-   * used by {@link XdsClient}.
+   * used by {@link LoadReportClient}.
    */
   void removeLocality(Locality locality);
 
