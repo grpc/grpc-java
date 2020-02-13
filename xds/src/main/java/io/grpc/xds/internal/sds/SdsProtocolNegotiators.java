@@ -45,7 +45,7 @@ import javax.annotation.Nullable;
  * Provides client and server side gRPC {@link ProtocolNegotiator}s that use SDS to provide the SSL
  * context.
  */
-public final class SdsProtocolNegotiators {
+final class SdsProtocolNegotiators {
 
   private static final Logger logger = Logger.getLogger(SdsProtocolNegotiators.class.getName());
 
