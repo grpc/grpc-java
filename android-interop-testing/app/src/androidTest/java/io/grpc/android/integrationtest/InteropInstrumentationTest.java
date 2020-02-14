@@ -68,11 +68,7 @@ public class InteropInstrumentationTest {
     if (useTls) {
       try {
         ProviderInstaller.installIfNeeded(InstrumentationRegistry.getTargetContext());
-      } catch (GooglePlayServicesRepairableException e) {
-        // The provider is helpful, but it is possible to succeed without it.
-        // Hope that the system-provided libraries are new enough.
-        Log.i(LOG_TAG, "Failed installing security provider", e);
-      } catch (GooglePlayServicesNotAvailableException e) {
+      } catch (GooglePlayServicesRepairableException | GooglePlayServicesNotAvailableException e) {
         // The provider is helpful, but it is possible to succeed without it.
         // Hope that the system-provided libraries are new enough.
         Log.i(LOG_TAG, "Failed installing security provider", e);
