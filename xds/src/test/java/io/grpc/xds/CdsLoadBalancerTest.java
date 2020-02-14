@@ -264,7 +264,6 @@ public class CdsLoadBalancerTest {
 
     ArgumentCaptor<ClusterWatcher> clusterWatcherCaptor2 = ArgumentCaptor.forClass(null);
     verify(xdsClient).watchClusterData(eq("bar.googleapis.com"), clusterWatcherCaptor2.capture());
-    verify(xdsClient).cancelClusterDataWatch("foo.googleapis.com", clusterWatcher1);
 
     ClusterWatcher clusterWatcher2 = clusterWatcherCaptor2.getValue();
     clusterWatcher2.onClusterChanged(
@@ -301,6 +300,7 @@ public class CdsLoadBalancerTest {
     edsLbHelper2.updateBalancingState(ConnectivityState.READY, picker2);
     verify(helper).updateBalancingState(ConnectivityState.READY, picker2);
     verify(edsLoadBalancer1).shutdown();
+    verify(xdsClient).cancelClusterDataWatch("foo.googleapis.com", clusterWatcher1);
 
     clusterWatcher2.onClusterChanged(
         ClusterUpdate.newBuilder()
