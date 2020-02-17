@@ -344,7 +344,8 @@ final class EnvoyProtoData {
     private final String addressPrefix;
     private final int prefixLen;
 
-    public CidrRange(String addressPrefix, int prefixLen) {
+    @VisibleForTesting
+    CidrRange(String addressPrefix, int prefixLen) {
       this.addressPrefix = addressPrefix;
       this.prefixLen = prefixLen;
     }
@@ -398,7 +399,7 @@ final class EnvoyProtoData {
     private final List<CidrRange> prefixRanges;
     private final List<String> applicationProtocols;
 
-    public FilterChainMatch(int destinationPort,
+    private FilterChainMatch(int destinationPort,
         List<CidrRange> prefixRanges, List<String> applicationProtocols) {
       this.destinationPort = destinationPort;
       this.prefixRanges = prefixRanges;
@@ -417,8 +418,8 @@ final class EnvoyProtoData {
       }
       return new FilterChainMatch(
           proto.getDestinationPort().getValue(),
-          prefixRanges,
-          applicationProtocols);
+          Collections.unmodifiableList(prefixRanges),
+          Collections.unmodifiableList(applicationProtocols));
     }
 
     public int getDestinationPort() {
@@ -471,7 +472,7 @@ final class EnvoyProtoData {
     private final io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext downstreamTlsContext;
 
 
-    public FilterChain(FilterChainMatch filterChainMatch,
+    private FilterChain(FilterChainMatch filterChainMatch,
         io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext downstreamTlsContext) {
       this.filterChainMatch = filterChainMatch;
       this.downstreamTlsContext = downstreamTlsContext;
@@ -530,7 +531,7 @@ final class EnvoyProtoData {
     private final String address;
     private final List<FilterChain> filterChains;
 
-    public Listener(String name, String address,
+    private Listener(String name, String address,
         List<FilterChain> filterChains) {
       this.name = name;
       this.address = address;
@@ -562,7 +563,7 @@ final class EnvoyProtoData {
       return new Listener(
           proto.getName(),
           fromEnvoyProtoAddress(proto.getAddress()),
-          filterChains);
+          Collections.unmodifiableList(filterChains));
     }
 
     public String getName() {

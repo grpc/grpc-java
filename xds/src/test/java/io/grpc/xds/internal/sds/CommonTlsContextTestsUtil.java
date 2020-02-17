@@ -117,7 +117,7 @@ public class CommonTlsContextTestsUtil {
   }
 
   /**
-   * Helper method to build DownstreamTlsContext for above tests. Called from other classes as well.
+   * Helper method to build DownstreamTlsContext for multiple test classes.
    */
   static DownstreamTlsContext buildDownstreamTlsContext(CommonTlsContext commonTlsContext) {
     DownstreamTlsContext downstreamTlsContext =
