@@ -71,5 +71,4 @@ public class EnvoyProtoDataTest {
   }
 
   // TODO(chengyuanzhang): add test for other data types.
-
 }
