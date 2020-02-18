@@ -37,6 +37,7 @@ import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.net.URI;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
@@ -46,6 +47,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Objects;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.Executor;
@@ -63,7 +65,7 @@ import javax.annotation.Nullable;
  *
  * @see DnsNameResolverProvider
  */
-final class DnsNameResolver extends NameResolver {
+public class DnsNameResolver extends NameResolver {
 
   private static final Logger logger = Logger.getLogger(DnsNameResolver.class.getName());
 
@@ -114,8 +116,8 @@ final class DnsNameResolver extends NameResolver {
   static boolean enableJndi = Boolean.parseBoolean(JNDI_PROPERTY);
   @VisibleForTesting
   static boolean enableJndiLocalhost = Boolean.parseBoolean(JNDI_LOCALHOST_PROPERTY);
-  @VisibleForTesting
-  static boolean enableTxt = Boolean.parseBoolean(JNDI_TXT_PROPERTY);
+
+  protected static boolean enableTxt = Boolean.parseBoolean(JNDI_TXT_PROPERTY);
 
   private static final ResourceResolverFactory resourceResolverFactory =
       getResourceResolverFactory(DnsNameResolver.class.getClassLoader());
@@ -142,7 +144,7 @@ final class DnsNameResolver extends NameResolver {
 
   // Following fields must be accessed from syncContext
   private final Stopwatch stopwatch;
-  private ResolutionResults cachedResolutionResults;
+  protected boolean resolved;
   private boolean shutdown;
   private Executor executor;
 
@@ -157,7 +159,7 @@ final class DnsNameResolver extends NameResolver {
   // from any thread.
   private NameResolver.Listener2 listener;
 
-  DnsNameResolver(
+  protected DnsNameResolver(
       @Nullable String nsAuthority,
       String name,
       Args args,
@@ -196,6 +198,10 @@ final class DnsNameResolver extends NameResolver {
     return authority;
   }
 
+  protected String getHost() {
+    return host;
+  }
+
   @Override
   public void start(Listener2 listener) {
     Preconditions.checkState(this.listener == null, "already started");
@@ -212,6 +218,161 @@ final class DnsNameResolver extends NameResolver {
     resolve();
   }
 
+  protected List<EquivalentAddressGroup> resolveAddresses() {
+    List<? extends InetAddress> addresses;
+    Exception addressesException = null;
+    try {
+      addresses = addressResolver.resolveAddress(host);
+    } catch (Exception e) {
+      addressesException = e;
+      Throwables.throwIfUnchecked(e);
+      throw new RuntimeException(e);
+    } finally {
+      if (addressesException != null) {
+        logger.log(Level.FINE, "Address resolution failure", addressesException);
+      }
+    }
+    // Each address forms an EAG
+    List<EquivalentAddressGroup> servers = new ArrayList<>(addresses.size());
+    for (InetAddress inetAddr : addresses) {
+      servers.add(new EquivalentAddressGroup(new InetSocketAddress(inetAddr, port)));
+    }
+    return Collections.unmodifiableList(servers);
+  }
+
+  @Nullable
+  protected ConfigOrError resolveServiceConfig() {
+    List<String> txtRecords = Collections.emptyList();
+    if (shouldUseJndi(enableJndi, enableJndiLocalhost, host)) {
+      ResourceResolver resourceResolver = getResourceResolver();
+      if (resourceResolver != null) {
+        try {
+          txtRecords = resourceResolver.resolveTxt(SERVICE_CONFIG_NAME_PREFIX + host);
+        } catch (Exception e) {
+          logger.log(Level.FINE, "ServiceConfig resolution failure", e);
+        }
+      }
+    }
+    if (!txtRecords.isEmpty()) {
+      ConfigOrError rawServiceConfig = parseServiceConfig(txtRecords, random, getLocalHostname());
+      if (rawServiceConfig != null) {
+        if (rawServiceConfig.getError() != null) {
+          return ConfigOrError.fromConfig(rawServiceConfig.getError());
+        }
+
+        @SuppressWarnings("unchecked")
+        Map<String, ?> verifiedRawServiceConfig = (Map<String, ?>) rawServiceConfig.getConfig();
+        return serviceConfigParser.parseServiceConfig(verifiedRawServiceConfig);
+      }
+    }
+    return null;
+  }
+
+  @SuppressWarnings("deprecation")
+  protected List<EquivalentAddressGroup> resolveBalancerAddresses() {
+    List<SrvRecord> srvRecords = Collections.emptyList();
+    Exception srvRecordsException = null;
+    if (shouldUseJndi(enableJndi, enableJndiLocalhost, host)) {
+      ResourceResolver resourceResolver = getResourceResolver();
+      if (resourceResolver != null) {
+        try {
+          srvRecords = resourceResolver.resolveSrv(GRPCLB_NAME_PREFIX + host);
+        } catch (Exception e) {
+          srvRecordsException = e;
+        }
+      }
+    }
+    List<EquivalentAddressGroup> balancerAddresses = new ArrayList<>(srvRecords.size());
+    Exception balancerAddressesException = null;
+    Level level = Level.WARNING;
+    for (SrvRecord record : srvRecords) {
+      try {
+        // Strip trailing dot for appearance's sake. It _should_ be fine either way, but most
+        // people expect to see it without the dot.
+        String authority = record.host.substring(0, record.host.length() - 1);
+        // But we want to use the trailing dot for the IP lookup. The dot makes the name absolute
+        // instead of relative and so will avoid the search list like that in resolv.conf.
+        List<? extends InetAddress> addrs = addressResolver.resolveAddress(record.host);
+        List<SocketAddress> sockAddrs = new ArrayList<>(addrs.size());
+        for (InetAddress addr : addrs) {
+          sockAddrs.add(new InetSocketAddress(addr, record.port));
+        }
+        Attributes attrs =
+            Attributes.newBuilder()
+                .set(GrpcAttributes.ATTR_LB_ADDR_AUTHORITY, authority)
+                .build();
+        balancerAddresses.add(
+            new EquivalentAddressGroup(Collections.unmodifiableList(sockAddrs), attrs));
+      } catch (Exception e) {
+        logger.log(level, "Can't find address for SRV record " + record, e);
+        if (balancerAddressesException == null) {
+          balancerAddressesException = e;
+          level = Level.FINE;
+        }
+      }
+    }
+    if (srvRecordsException != null
+        || (balancerAddressesException != null && balancerAddresses.isEmpty())) {
+      logger.log(Level.FINE, "Balancer resolution failure", srvRecordsException);
+    }
+    return Collections.unmodifiableList(balancerAddresses);
+  }
+
+  @Nullable
+  private EquivalentAddressGroup detectProxy() throws IOException {
+    InetSocketAddress destination =
+        InetSocketAddress.createUnresolved(host, port);
+    ProxiedSocketAddress proxiedAddr = proxyDetector.proxyFor(destination);
+    if (proxiedAddr != null) {
+      return new EquivalentAddressGroup(proxiedAddr);
+    }
+    return null;
+  }
+
+  /**
+   * Main logic of name resolution. Returns {@code true} if resolution happens successfully.
+   */
+  @VisibleForTesting
+  @SuppressWarnings("deprecation") // can migrate after service config error handling is finished
+  protected boolean doResolve(Listener2 listener) {
+    List<EquivalentAddressGroup> servers = Collections.emptyList();
+    List<EquivalentAddressGroup> balancerAddrs = Collections.emptyList();
+    Exception addressException = null;
+    try {
+      servers = resolveAddresses();
+    } catch (Exception e) {
+      addressException = e;
+    }
+    if (enableSrv) {
+      balancerAddrs = resolveBalancerAddresses();
+    }
+    if (addressException != null && balancerAddrs.isEmpty()) {
+      listener.onError(
+          Status.UNAVAILABLE
+              .withDescription("Unable to resolve host " + host)
+              .withCause(addressException));
+      return false;
+    }
+    ResolutionResult.Builder resultBuilder = ResolutionResult.newBuilder();
+    resultBuilder.setAddresses(servers);
+    if (!balancerAddrs.isEmpty()) {
+      resultBuilder.setAttributes(
+          Attributes.newBuilder()
+              .set(GrpcAttributes.ATTR_LB_ADDRS, balancerAddrs)
+              .build());
+    }
+    if (enableTxt) {
+      ConfigOrError serviceConfig = resolveServiceConfig();
+      if (serviceConfig != null) {
+        resultBuilder.setServiceConfig(serviceConfig);
+      } else {
+        logger.log(Level.FINE, "No TXT records found for {0}", new Object[]{host});
+      }
+    }
+    listener.onResult(resultBuilder.build());
+    return true;
+  }
+
   private final class Resolve implements Runnable {
     private final Listener2 savedListener;
 
@@ -224,107 +385,41 @@ final class DnsNameResolver extends NameResolver {
       if (logger.isLoggable(Level.FINER)) {
         logger.finer("Attempting DNS resolution of " + host);
       }
+      EquivalentAddressGroup proxiedAddr;
+      boolean resolutionSucceed = false;
       try {
-        resolveInternal();
-      } finally {
-        syncContext.execute(new Runnable() {
-            @Override
-            public void run() {
-              resolving = false;
-            }
-          });
-      }
-    }
-
-    @VisibleForTesting
-    @SuppressWarnings("deprecation") // can migrate after service config error handling is finished
-    void resolveInternal() {
-      InetSocketAddress destination =
-          InetSocketAddress.createUnresolved(host, port);
-      ProxiedSocketAddress proxiedAddr;
-      try {
-        proxiedAddr = proxyDetector.proxyFor(destination);
+        proxiedAddr = detectProxy();
+        if (proxiedAddr != null) {
+          if (logger.isLoggable(Level.FINER)) {
+            logger.finer("Using proxy address " + proxiedAddr);
+          }
+          ResolutionResult resolutionResult =
+              ResolutionResult.newBuilder()
+                  .setAddresses(Collections.singletonList(proxiedAddr))
+                  .setAttributes(Attributes.EMPTY)
+                  .build();
+          listener.onResult(resolutionResult);
+          return;
+        }
+        resolutionSucceed = doResolve(savedListener);
       } catch (IOException e) {
-        savedListener.onError(
+        listener.onError(
             Status.UNAVAILABLE.withDescription("Unable to resolve host " + host).withCause(e));
-        return;
-      }
-      if (proxiedAddr != null) {
-        if (logger.isLoggable(Level.FINER)) {
-          logger.finer("Using proxy address " + proxiedAddr);
-        }
-        EquivalentAddressGroup server = new EquivalentAddressGroup(proxiedAddr);
-        ResolutionResult resolutionResult =
-            ResolutionResult.newBuilder()
-                .setAddresses(Collections.singletonList(server))
-                .setAttributes(Attributes.EMPTY)
-                .build();
-        savedListener.onResult(resolutionResult);
-        return;
-      }
-
-      ResolutionResults resolutionResults;
-      try {
-        ResourceResolver resourceResolver = null;
-        if (shouldUseJndi(enableJndi, enableJndiLocalhost, host)) {
-          resourceResolver = getResourceResolver();
-        }
-        final ResolutionResults results = resolveAll(
-            addressResolver,
-            resourceResolver,
-            enableSrv,
-            enableTxt,
-            host);
-        resolutionResults = results;
+      } finally {
+        final boolean succeed = resolutionSucceed;
         syncContext.execute(new Runnable() {
-            @Override
-            public void run() {
-              cachedResolutionResults = results;
+          @Override
+          public void run() {
+            if (succeed) {
+              resolved = true;
               if (cacheTtlNanos > 0) {
                 stopwatch.reset().start();
               }
             }
-          });
-        if (logger.isLoggable(Level.FINER)) {
-          logger.finer("Found DNS results " + resolutionResults + " for " + host);
-        }
-      } catch (Exception e) {
-        savedListener.onError(
-            Status.UNAVAILABLE.withDescription("Unable to resolve host " + host).withCause(e));
-        return;
-      }
-      // Each address forms an EAG
-      List<EquivalentAddressGroup> servers = new ArrayList<>();
-      for (InetAddress inetAddr : resolutionResults.addresses) {
-        servers.add(new EquivalentAddressGroup(new InetSocketAddress(inetAddr, port)));
-      }
-
-      ResolutionResult.Builder resultBuilder = ResolutionResult.newBuilder().setAddresses(servers);
-      Attributes.Builder attributesBuilder = Attributes.newBuilder();
-      if (!resolutionResults.balancerAddresses.isEmpty()) {
-        attributesBuilder.set(GrpcAttributes.ATTR_LB_ADDRS, resolutionResults.balancerAddresses);
-      }
-      if (!resolutionResults.txtRecords.isEmpty()) {
-        ConfigOrError rawServiceConfig =
-            parseServiceConfig(resolutionResults.txtRecords, random, getLocalHostname());
-        if (rawServiceConfig != null) {
-          if (rawServiceConfig.getError() != null) {
-            savedListener.onError(rawServiceConfig.getError());
-            return;
+            resolving = false;
           }
-
-          @SuppressWarnings("unchecked")
-          Map<String, ?> verifiedRawServiceConfig = (Map<String, ?>) rawServiceConfig.getConfig();
-          ConfigOrError parsedServiceConfig =
-              serviceConfigParser.parseServiceConfig(verifiedRawServiceConfig);
-          resultBuilder.setServiceConfig(parsedServiceConfig);
-          attributesBuilder
-              .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, verifiedRawServiceConfig);
-        }
-      } else {
-        logger.log(Level.FINE, "No TXT records found for {0}", new Object[]{host});
+        });
       }
-      savedListener.onResult(resultBuilder.setAttributes(attributesBuilder.build()).build());
     }
   }
 
@@ -366,7 +461,7 @@ final class DnsNameResolver extends NameResolver {
   }
 
   private boolean cacheRefreshRequired() {
-    return cachedResolutionResults == null
+    return !resolved
         || cacheTtlNanos == 0
         || (cacheTtlNanos > 0 && stopwatch.elapsed(TimeUnit.NANOSECONDS) > cacheTtlNanos);
   }
@@ -384,69 +479,6 @@ final class DnsNameResolver extends NameResolver {
 
   final int getPort() {
     return port;
-  }
-
-  @VisibleForTesting
-  static ResolutionResults resolveAll(
-      AddressResolver addressResolver,
-      @Nullable ResourceResolver resourceResolver,
-      boolean requestSrvRecords,
-      boolean requestTxtRecords,
-      String name) {
-    List<? extends InetAddress> addresses = Collections.emptyList();
-    Exception addressesException = null;
-    List<EquivalentAddressGroup> balancerAddresses = Collections.emptyList();
-    Exception balancerAddressesException = null;
-    List<String> txtRecords = Collections.emptyList();
-    Exception txtRecordsException = null;
-
-    try {
-      addresses = addressResolver.resolveAddress(name);
-    } catch (Exception e) {
-      addressesException = e;
-    }
-    if (resourceResolver != null) {
-      if (requestSrvRecords) {
-        try {
-          balancerAddresses =
-              resourceResolver.resolveSrv(addressResolver, GRPCLB_NAME_PREFIX + name);
-        } catch (Exception e) {
-          balancerAddressesException = e;
-        }
-      }
-      if (requestTxtRecords) {
-        boolean balancerLookupFailedOrNotAttempted =
-            !requestSrvRecords || balancerAddressesException != null;
-        boolean dontResolveTxt =
-            (addressesException != null) && balancerLookupFailedOrNotAttempted;
-        // Only do the TXT record lookup if one of the above address resolutions succeeded.
-        if (!dontResolveTxt) {
-          try {
-            txtRecords = resourceResolver.resolveTxt(SERVICE_CONFIG_NAME_PREFIX + name);
-          } catch (Exception e) {
-            txtRecordsException = e;
-          }
-        }
-      }
-    }
-    try {
-      if (addressesException != null
-          && (balancerAddressesException != null || balancerAddresses.isEmpty())) {
-        Throwables.throwIfUnchecked(addressesException);
-        throw new RuntimeException(addressesException);
-      }
-    } finally {
-      if (addressesException != null) {
-        logger.log(Level.FINE, "Address resolution failure", addressesException);
-      }
-      if (balancerAddressesException != null) {
-        logger.log(Level.FINE, "Balancer resolution failure", balancerAddressesException);
-      }
-      if (txtRecordsException != null) {
-        logger.log(Level.FINE, "ServiceConfig resolution failure", txtRecordsException);
-      }
-    }
-    return new ResolutionResults(addresses, txtRecords, balancerAddresses);
   }
 
   /**
@@ -574,31 +606,41 @@ final class DnsNameResolver extends NameResolver {
   }
 
   /**
-   * Describes the results from a DNS query.
+   * Describes a parsed SRV record.
    */
-  @VisibleForTesting
-  static final class ResolutionResults {
-    final List<? extends InetAddress> addresses;
-    final List<String> txtRecords;
-    final List<EquivalentAddressGroup> balancerAddresses;
+  static final class SrvRecord {
+    final String host;
+    final int port;
 
-    ResolutionResults(
-        List<? extends InetAddress> addresses,
-        List<String> txtRecords,
-        List<EquivalentAddressGroup> balancerAddresses) {
-      this.addresses = Collections.unmodifiableList(checkNotNull(addresses, "addresses"));
-      this.txtRecords = Collections.unmodifiableList(checkNotNull(txtRecords, "txtRecords"));
-      this.balancerAddresses =
-          Collections.unmodifiableList(checkNotNull(balancerAddresses, "balancerAddresses"));
+    SrvRecord(String host, int port) {
+      this.host = host;
+      this.port = port;
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(host, port);
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+      if (this == obj) {
+        return true;
+      }
+      if (obj == null || getClass() != obj.getClass()) {
+        return false;
+      }
+      SrvRecord that = (SrvRecord) obj;
+      return port == that.port && host.equals(that.host);
     }
 
     @Override
     public String toString() {
-      return MoreObjects.toStringHelper(this)
-          .add("addresses", addresses)
-          .add("txtRecords", txtRecords)
-          .add("balancerAddresses", balancerAddresses)
-          .toString();
+      return
+          MoreObjects.toStringHelper(this)
+              .add("host", host)
+              .add("port", port)
+              .toString();
     }
   }
 
@@ -653,8 +695,7 @@ final class DnsNameResolver extends NameResolver {
   interface ResourceResolver {
     List<String> resolveTxt(String host) throws Exception;
 
-    List<EquivalentAddressGroup> resolveSrv(
-        AddressResolver addressResolver, String host) throws Exception;
+    List<SrvRecord> resolveSrv(String host) throws Exception;
   }
 
   @Nullable

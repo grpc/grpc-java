@@ -21,16 +21,10 @@ import static org.junit.Assert.assertEquals;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import io.grpc.Attributes;
-import io.grpc.EquivalentAddressGroup;
-import io.grpc.internal.DnsNameResolver.AddressResolver;
+import io.grpc.internal.DnsNameResolver.SrvRecord;
 import io.grpc.internal.JndiResourceResolverFactory.JndiRecordFetcher;
 import io.grpc.internal.JndiResourceResolverFactory.JndiResourceResolver;
 import io.grpc.internal.JndiResourceResolverFactory.RecordFetcher;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
-import java.net.SocketAddress;
-import java.net.UnknownHostException;
 import java.util.Arrays;
 import java.util.List;
 import org.junit.Assume;
@@ -83,33 +77,15 @@ public class JndiResourceResolverTest {
   @SuppressWarnings("deprecation")
   @Test
   public void srvRecordLookup() throws Exception {
-    AddressResolver addressResolver = mock(AddressResolver.class);
-    when(addressResolver.resolveAddress("foo.example.com."))
-        .thenReturn(Arrays.asList(InetAddress.getByName("127.1.2.3")));
-    when(addressResolver.resolveAddress("bar.example.com."))
-        .thenReturn(Arrays.asList(
-            InetAddress.getByName("127.3.2.1"), InetAddress.getByName("::1")));
-    when(addressResolver.resolveAddress("unknown.example.com."))
-        .thenThrow(new UnknownHostException("unknown.example.com."));
     RecordFetcher recordFetcher = mock(RecordFetcher.class);
     when(recordFetcher.getAllRecords("SRV", "dns:///service.example.com"))
         .thenReturn(Arrays.asList(
-            "0 0 314 foo.example.com.", "0 0 42 bar.example.com.", "0 0 1 unknown.example.com."));
+            "0 0 314 foo.example.com.", "0 0 42 bar.example.com.", "0 0 1 discard.example.com"));
 
-    List<EquivalentAddressGroup> golden = Arrays.asList(
-        new EquivalentAddressGroup(
-            Arrays.<SocketAddress>asList(new InetSocketAddress("127.1.2.3", 314)),
-            Attributes.newBuilder()
-              .set(GrpcAttributes.ATTR_LB_ADDR_AUTHORITY, "foo.example.com")
-              .build()),
-        new EquivalentAddressGroup(
-            Arrays.<SocketAddress>asList(
-                new InetSocketAddress("127.3.2.1", 42),
-                new InetSocketAddress("::1", 42)),
-            Attributes.newBuilder()
-              .set(GrpcAttributes.ATTR_LB_ADDR_AUTHORITY, "bar.example.com")
-              .build()));
+    List<SrvRecord> golden = Arrays.asList(
+        new SrvRecord("foo.example.com.", 314),
+        new SrvRecord("bar.example.com.", 42));
     JndiResourceResolver resolver = new JndiResourceResolver(recordFetcher);
-    assertThat(resolver.resolveSrv(addressResolver, "service.example.com")).isEqualTo(golden);
+    assertThat(resolver.resolveSrv("service.example.com")).isEqualTo(golden);
   }
 }
