@@ -25,7 +25,6 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -79,7 +78,6 @@ import java.util.regex.Pattern;
 import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.DisableOnDebug;
@@ -548,48 +546,6 @@ public class DnsNameResolverTest {
     assertThat(ac.getValue().getAddresses()).isEmpty();
     assertThat(ac.getValue().getAttributes()).isEqualTo(Attributes.EMPTY);
     assertThat(ac.getValue().getServiceConfig()).isNull();
-  }
-
-  @SuppressWarnings("deprecation")
-  @Test
-  @Ignore
-  public void resolve_balancerAddrsAsAttributes() throws Exception {
-    InetAddress backendAddr = InetAddress.getByAddress(new byte[] {127, 0, 0, 0});
-    InetAddress lbAddr = InetAddress.getByAddress(new byte[] {10, 1, 0, 0});
-    String balancerName = "foo.example.com.";  // original name in SRV record
-    EquivalentAddressGroup balancerAddr =
-        new EquivalentAddressGroup(
-            new InetSocketAddress(lbAddr, 8080) {},
-            Attributes.newBuilder()
-                .set(GrpcAttributes.ATTR_LB_ADDR_AUTHORITY, "foo.example.com")
-                .build());
-    SrvRecord srvRecord = new SrvRecord("foo.example.com.", 8080);
-    String name = "foo.googleapis.com";
-
-    AddressResolver mockAddressResolver = mock(AddressResolver.class);
-    when(mockAddressResolver.resolveAddress(eq(name)))
-        .thenReturn(Collections.singletonList(backendAddr));
-    when(mockAddressResolver.resolveAddress(eq(balancerName)))
-        .thenReturn(Collections.singletonList(lbAddr));
-    ResourceResolver mockResourceResolver = mock(ResourceResolver.class);
-    when(mockResourceResolver.resolveTxt(anyString())).thenReturn(Collections.<String>emptyList());
-    when(mockResourceResolver.resolveSrv(anyString()))
-        .thenReturn(Collections.singletonList(srvRecord));
-
-    DnsNameResolver resolver = newResolver(name, 81);
-    resolver.setAddressResolver(mockAddressResolver);
-    resolver.setResourceResolver(mockResourceResolver);
-
-    resolver.start(mockListener);
-    assertEquals(1, fakeExecutor.runDueTasks());
-    verify(mockListener).onResult(resultCaptor.capture());
-    ResolutionResult result = resultCaptor.getValue();
-    InetSocketAddress resolvedBackendAddr =
-        (InetSocketAddress) Iterables.getOnlyElement(
-            Iterables.getOnlyElement(result.getAddresses()).getAddresses());
-    assertThat(resolvedBackendAddr.getAddress()).isEqualTo(backendAddr);
-    assertThat(result.getAttributes().get(GrpcAttributes.ATTR_LB_ADDRS))
-        .containsExactly(balancerAddr);
   }
 
   @Test
