@@ -19,7 +19,6 @@ package io.grpc.grpclb;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
 import io.grpc.InternalServiceProviders;
-import io.grpc.NameResolver;
 import io.grpc.NameResolver.Args;
 import io.grpc.NameResolverProvider;
 import io.grpc.internal.GrpcUtil;
@@ -51,7 +50,7 @@ final class SecretGrpclbNameResolverProvider {
     private static final String SCHEME = "dns";
 
     @Override
-    public NameResolver newNameResolver(URI targetUri, Args args) {
+    public GrpclbNameResolver newNameResolver(URI targetUri, Args args) {
       if (SCHEME.equals(targetUri.getScheme())) {
         String targetPath = Preconditions.checkNotNull(targetUri.getPath(), "targetPath");
         Preconditions.checkArgument(
