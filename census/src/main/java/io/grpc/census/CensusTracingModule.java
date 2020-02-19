@@ -238,7 +238,6 @@ final class CensusTracingModule {
                   generateTraceSpanName(false, method.getFullMethodName()),
                   parentSpan)
               .setRecordEvents(true)
-              .setSpanKind(Span.Kind.CLIENT)
               .startSpan();
     }
 
@@ -309,7 +308,6 @@ final class CensusTracingModule {
                   generateTraceSpanName(true, fullMethodName),
                   remoteSpan)
               .setRecordEvents(true)
-              .setSpanKind(Span.Kind.SERVER)
               .startSpan();
     }
 
