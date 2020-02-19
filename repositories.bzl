@@ -22,7 +22,7 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.guava:guava:28.1-android",
     "com.google.j2objc:j2objc-annotations:1.3",
     "com.google.truth:truth:1.0",
-    "com.squareup.okhttp:okhttp:2.5.0",
+    "com.squareup.okhttp:okhttp:2.7.4",
     "com.squareup.okio:okio:1.13.0",
     "io.netty:netty-buffer:4.1.45.Final",
     "io.netty:netty-codec-http2:4.1.45.Final",
@@ -293,7 +293,7 @@ def com_google_truth_truth():
 def com_squareup_okhttp_okhttp():
     jvm_maven_import_external(
         name = "com_squareup_okhttp_okhttp",
-        artifact = "com.squareup.okhttp:okhttp:2.5.0",
+        artifact = "com.squareup.okhttp:okhttp:2.7.4",
         server_urls = ["https://repo.maven.apache.org/maven2/"],
         artifact_sha256 = "1cc716e29539adcda677949508162796daffedb4794cbf947a6f65e696f0381c",
         licenses = ["notice"],  # Apache 2.0
