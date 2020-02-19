@@ -24,7 +24,7 @@ import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.Status;
-import io.grpc.xds.InterLocalityPicker.WeightedChildPicker;
+import io.grpc.xds.RandomWeightedPicker.WeightedChildPicker;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -38,10 +38,10 @@ import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
 /**
- * Tests for {@link InterLocalityPicker}.
+ * Tests for {@link RandomWeightedPicker}.
  */
 @RunWith(JUnit4.class)
-public class InterLocalityPickerTest {
+public class RandomWeightedPickerTest {
   @Rule
   public final ExpectedException thrown = ExpectedException.none();
 
@@ -105,7 +105,7 @@ public class InterLocalityPickerTest {
     List<WeightedChildPicker> emptyList = new ArrayList<>();
 
     thrown.expect(IllegalArgumentException.class);
-    new InterLocalityPicker(emptyList);
+    new RandomWeightedPicker(emptyList);
   }
 
   @Test
@@ -121,7 +121,7 @@ public class InterLocalityPickerTest {
     WeightedChildPicker weightedChildPicker2 = new WeightedChildPicker(0, childPicker2);
     WeightedChildPicker weightedChildPicker3 = new WeightedChildPicker(10, childPicker3);
 
-    InterLocalityPicker xdsPicker = new InterLocalityPicker(
+    RandomWeightedPicker xdsPicker = new RandomWeightedPicker(
         Arrays.asList(
             weightedChildPicker0,
             weightedChildPicker1,
@@ -157,7 +157,7 @@ public class InterLocalityPickerTest {
     WeightedChildPicker weightedChildPicker2 = new WeightedChildPicker(0, childPicker2);
     WeightedChildPicker weightedChildPicker3 = new WeightedChildPicker(0, childPicker3);
 
-    InterLocalityPicker xdsPicker = new InterLocalityPicker(
+    RandomWeightedPicker xdsPicker = new RandomWeightedPicker(
         Arrays.asList(
             weightedChildPicker0,
             weightedChildPicker1,
