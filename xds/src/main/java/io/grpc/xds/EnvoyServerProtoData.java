@@ -20,6 +20,7 @@ import com.google.common.annotations.VisibleForTesting;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import javax.annotation.Nullable;
 
 /**
  * Defines gRPC data types for Envoy protobuf messages used in xDS protocol on the server side,
@@ -219,6 +220,7 @@ final class EnvoyServerProtoData {
    */
   static final class Listener {
     private final String name;
+    @Nullable
     private final String address;
     private final List<FilterChain> filterChains;
 
@@ -229,7 +231,8 @@ final class EnvoyServerProtoData {
       this.filterChains = filterChains;
     }
 
-    static String fromEnvoyProtoAddress(io.envoyproxy.envoy.api.v2.core.Address proto) {
+    private static String convertEnvoyAddressToString(
+        io.envoyproxy.envoy.api.v2.core.Address proto) {
       if (proto.hasSocketAddress()) {
         io.envoyproxy.envoy.api.v2.core.SocketAddress socketAddress = proto.getSocketAddress();
         String address = socketAddress.getAddress();
@@ -253,7 +256,7 @@ final class EnvoyServerProtoData {
       }
       return new Listener(
           proto.getName(),
-          fromEnvoyProtoAddress(proto.getAddress()),
+          convertEnvoyAddressToString(proto.getAddress()),
           Collections.unmodifiableList(filterChains));
     }
 
