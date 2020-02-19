@@ -66,9 +66,6 @@ final class EdsLoadBalancer extends LoadBalancer {
   // Most recent XdsConfig.
   @Nullable
   private XdsConfig xdsConfig;
-  // Most recent EndpointWatcher.
-  @Nullable
-  private EndpointWatcher endpointWatcher;
   @Nullable
   private ObjectPool<XdsClient> xdsClientPool;
   @Nullable
@@ -195,11 +192,7 @@ final class EdsLoadBalancer extends LoadBalancer {
           new ClusterEndpointsBalancerFactory(clusterServiceName);
       switchingLoadBalancer.switchTo(clusterEndpointsLoadBalancerFactory);
     }
-    resolvedAddresses = resolvedAddresses.toBuilder()
-        .setLoadBalancingPolicyConfig(newXdsConfig)
-        .build();
     switchingLoadBalancer.handleResolvedAddresses(resolvedAddresses);
-
     this.xdsConfig = newXdsConfig;
   }
 
@@ -230,16 +223,9 @@ final class EdsLoadBalancer extends LoadBalancer {
    */
   private final class ClusterEndpointsBalancerFactory extends LoadBalancer.Factory {
     final String clusterServiceName;
-    @Nullable
-    final String oldClusterServiceName;
 
     ClusterEndpointsBalancerFactory(String clusterServiceName) {
       this.clusterServiceName = clusterServiceName;
-      if (xdsConfig != null) {
-        oldClusterServiceName = xdsConfig.edsServiceName;
-      } else {
-        oldClusterServiceName = null;
-      }
     }
 
     @Override
@@ -280,11 +266,6 @@ final class EdsLoadBalancer extends LoadBalancer {
 
         endpointWatcher = new EndpointWatcherImpl(localityStore);
         xdsClient.watchEndpointData(clusterServiceName, endpointWatcher);
-        if (EdsLoadBalancer.this.endpointWatcher != null) {
-          xdsClient.cancelEndpointDataWatch(
-              oldClusterServiceName, EdsLoadBalancer.this.endpointWatcher);
-        }
-        EdsLoadBalancer.this.endpointWatcher = endpointWatcher;
       }
 
       @Override

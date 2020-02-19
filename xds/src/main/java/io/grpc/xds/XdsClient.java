@@ -34,6 +34,7 @@ import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
+import io.grpc.xds.EnvoyServerProtoData.Listener;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -59,13 +60,20 @@ abstract class XdsClient {
    */
   static final class ConfigUpdate {
     private final String clusterName;
+    private final Listener listener;
 
-    private ConfigUpdate(String clusterName) {
+    private ConfigUpdate(String clusterName, @Nullable Listener listener) {
       this.clusterName = clusterName;
+      this.listener = listener;
     }
 
     String getClusterName() {
       return clusterName;
+    }
+
+    @Nullable
+    public Listener getListener() {
+      return listener;
     }
 
     static Builder newBuilder() {
@@ -74,6 +82,7 @@ abstract class XdsClient {
 
     static final class Builder {
       private String clusterName;
+      @Nullable private Listener listener;
 
       // Use ConfigUpdate.newBuilder().
       private Builder() {
@@ -84,9 +93,14 @@ abstract class XdsClient {
         return this;
       }
 
+      Builder setListener(Listener listener) {
+        this.listener = listener;
+        return this;
+      }
+
       ConfigUpdate build() {
         Preconditions.checkState(clusterName != null, "clusterName is not set");
-        return new ConfigUpdate(clusterName);
+        return new ConfigUpdate(clusterName, listener);
       }
     }
   }
