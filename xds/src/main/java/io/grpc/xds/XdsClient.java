@@ -62,7 +62,7 @@ abstract class XdsClient {
     private final String clusterName;
     private final Listener listener;
 
-    private ConfigUpdate(String clusterName, Listener listener) {
+    private ConfigUpdate(String clusterName, @Nullable Listener listener) {
       this.clusterName = clusterName;
       this.listener = listener;
     }
@@ -71,6 +71,7 @@ abstract class XdsClient {
       return clusterName;
     }
 
+    @Nullable
     public Listener getListener() {
       return listener;
     }
@@ -81,7 +82,7 @@ abstract class XdsClient {
 
     static final class Builder {
       private String clusterName;
-      private Listener listener;
+      @Nullable private Listener listener;
 
       // Use ConfigUpdate.newBuilder().
       private Builder() {
