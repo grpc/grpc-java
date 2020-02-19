@@ -79,6 +79,7 @@ import java.util.regex.Pattern;
 import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.DisableOnDebug;
@@ -157,7 +158,7 @@ public class DnsNameResolverTest {
   private DnsNameResolver newResolver(String name, int defaultPort, boolean isAndroid) {
     return newResolver(
         name, defaultPort, GrpcUtil.NOOP_PROXY_DETECTOR, Stopwatch.createUnstarted(),
-        isAndroid, false);
+        isAndroid);
   }
 
   private DnsNameResolver newResolver(
@@ -165,7 +166,7 @@ public class DnsNameResolverTest {
       int defaultPort,
       ProxyDetector proxyDetector,
       Stopwatch stopwatch) {
-    return newResolver(name, defaultPort, proxyDetector, stopwatch, false, false);
+    return newResolver(name, defaultPort, proxyDetector, stopwatch, false);
   }
 
   private DnsNameResolver newResolver(
@@ -173,8 +174,7 @@ public class DnsNameResolverTest {
       final int defaultPort,
       final ProxyDetector proxyDetector,
       Stopwatch stopwatch,
-      boolean isAndroid,
-      boolean enableSrv) {
+      boolean isAndroid) {
     NameResolver.Args args =
         NameResolver.Args.newBuilder()
             .setDefaultPort(defaultPort)
@@ -183,32 +183,20 @@ public class DnsNameResolverTest {
             .setServiceConfigParser(mock(ServiceConfigParser.class))
             .setChannelLogger(mock(ChannelLogger.class))
             .build();
-    return newResolver(name, stopwatch, isAndroid, args, enableSrv);
-  }
-
-  private DnsNameResolver newResolver(
-      String name, Stopwatch stopwatch, boolean isAndroid, NameResolver.Args args) {
-    return newResolver(name, stopwatch, isAndroid, args, /* enableSrv= */ false);
+    return newResolver(name, stopwatch, isAndroid, args);
   }
 
   private DnsNameResolver newResolver(
       String name,
       Stopwatch stopwatch,
       boolean isAndroid,
-      NameResolver.Args args,
-      boolean enableSrv) {
+      NameResolver.Args args) {
     DnsNameResolver dnsResolver =
         new DnsNameResolver(
-            null, name, args, fakeExecutorResource, stopwatch, isAndroid, enableSrv);
+            null, name, args, fakeExecutorResource, stopwatch, isAndroid);
     // By default, using the mocked ResourceResolver to avoid I/O
     dnsResolver.setResourceResolver(new JndiResourceResolver(recordFetcher));
     return dnsResolver;
-  }
-
-  private DnsNameResolver newSrvEnabledResolver(String name, int defaultPort) {
-    return newResolver(
-        name, defaultPort, GrpcUtil.NOOP_PROXY_DETECTOR, Stopwatch.createUnstarted(),
-        false, true);
   }
 
   @Before
@@ -564,6 +552,7 @@ public class DnsNameResolverTest {
 
   @SuppressWarnings("deprecation")
   @Test
+  @Ignore
   public void resolve_balancerAddrsAsAttributes() throws Exception {
     InetAddress backendAddr = InetAddress.getByAddress(new byte[] {127, 0, 0, 0});
     InetAddress lbAddr = InetAddress.getByAddress(new byte[] {10, 1, 0, 0});
@@ -587,7 +576,7 @@ public class DnsNameResolverTest {
     when(mockResourceResolver.resolveSrv(anyString()))
         .thenReturn(Collections.singletonList(srvRecord));
 
-    DnsNameResolver resolver = newSrvEnabledResolver(name, 81);
+    DnsNameResolver resolver = newResolver(name, 81);
     resolver.setAddressResolver(mockAddressResolver);
     resolver.setResourceResolver(mockResourceResolver);
 
@@ -612,7 +601,7 @@ public class DnsNameResolverTest {
         .thenReturn(Collections.singletonList(backendAddr));
     String name = "foo.googleapis.com";
 
-    DnsNameResolver resolver = newSrvEnabledResolver(name, 81);
+    DnsNameResolver resolver = newResolver(name, 81);
     resolver.setAddressResolver(mockAddressResolver);
     resolver.setResourceResolver(null);
     resolver.start(mockListener);
@@ -630,14 +619,12 @@ public class DnsNameResolverTest {
 
   @Test
   public void resolveAll_nullResourceResolver_addressFailure() throws Exception {
-    final String hostname = "addr.fake";
-
     AddressResolver mockAddressResolver = mock(AddressResolver.class);
     when(mockAddressResolver.resolveAddress(anyString()))
         .thenThrow(new IOException("no addr"));
     String name = "foo.googleapis.com";
 
-    DnsNameResolver resolver = newSrvEnabledResolver(name, 81);
+    DnsNameResolver resolver = newResolver(name, 81);
     resolver.setAddressResolver(mockAddressResolver);
     resolver.setResourceResolver(null);
     resolver.start(mockListener);

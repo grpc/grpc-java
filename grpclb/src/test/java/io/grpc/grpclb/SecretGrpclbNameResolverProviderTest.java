@@ -17,8 +17,6 @@
 package io.grpc.grpclb;
 
 import static com.google.common.truth.Truth.assertThat;
-import static io.grpc.internal.BaseDnsNameResolverProvider.ENABLE_GRPCLB_PROPERTY_NAME;
-import static org.junit.Assume.assumeTrue;
 
 import io.grpc.internal.DnsNameResolverProvider;
 import org.junit.Test;
@@ -36,15 +34,5 @@ public class SecretGrpclbNameResolverProviderTest {
 
     assertThat(defaultDnsNameResolver.priority())
         .isLessThan(grpclbDnsNameResolver.priority());
-  }
-
-  @Test
-  public void isSrvEnabled_trueByDefault() {
-    assumeTrue(System.getProperty(ENABLE_GRPCLB_PROPERTY_NAME) == null);
-
-    SecretGrpclbNameResolverProvider.Provider grpclbDnsNameResolver =
-        new SecretGrpclbNameResolverProvider.Provider();
-
-    assertThat(grpclbDnsNameResolver.isSrvEnabled()).isTrue();
   }
 }

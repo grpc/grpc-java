@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
+import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Throwables;
@@ -37,7 +38,6 @@ import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.net.SocketAddress;
 import java.net.URI;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
@@ -47,7 +47,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.Objects;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.Executor;
@@ -87,8 +86,6 @@ public class DnsNameResolver extends NameResolver {
 
   // From https://github.com/grpc/proposal/blob/master/A2-service-configs-in-dns.md
   private static final String SERVICE_CONFIG_NAME_PREFIX = "_grpc_config.";
-  // From https://github.com/grpc/proposal/blob/master/A5-grpclb-in-dns.md
-  private static final String GRPCLB_NAME_PREFIX = "_grpclb._tcp.";
 
   private static final String JNDI_PROPERTY =
       System.getProperty("io.grpc.internal.DnsNameResolverProvider.enable_jndi", "true");
@@ -130,7 +127,7 @@ public class DnsNameResolver extends NameResolver {
 
   private final Random random = new Random();
 
-  private volatile AddressResolver addressResolver = JdkAddressResolver.INSTANCE;
+  protected volatile AddressResolver addressResolver = JdkAddressResolver.INSTANCE;
   private final AtomicReference<ResourceResolver> resourceResolver = new AtomicReference<>();
 
   private final String authority;
@@ -150,7 +147,6 @@ public class DnsNameResolver extends NameResolver {
 
   /** True if using an executor resource that should be released after use. */
   private final boolean usingExecutorResource;
-  private final boolean enableSrv;
   private final ServiceConfigParser serviceConfigParser;
 
   private boolean resolving;
@@ -165,8 +161,7 @@ public class DnsNameResolver extends NameResolver {
       Args args,
       Resource<Executor> executorResource,
       Stopwatch stopwatch,
-      boolean isAndroid,
-      boolean enableSrv) {
+      boolean isAndroid) {
     checkNotNull(args, "args");
     // TODO: if a DNS server is provided as nsAuthority, use it.
     // https://www.captechconsulting.com/blogs/accessing-the-dusty-corners-of-dns-with-java
@@ -189,7 +184,6 @@ public class DnsNameResolver extends NameResolver {
     this.syncContext = checkNotNull(args.getSynchronizationContext(), "syncContext");
     this.executor = args.getOffloadExecutor();
     this.usingExecutorResource = executor == null;
-    this.enableSrv = enableSrv;
     this.serviceConfigParser = checkNotNull(args.getServiceConfigParser(), "serviceConfigParser");
   }
 
@@ -243,14 +237,12 @@ public class DnsNameResolver extends NameResolver {
   @Nullable
   protected ConfigOrError resolveServiceConfig() {
     List<String> txtRecords = Collections.emptyList();
-    if (shouldUseJndi(enableJndi, enableJndiLocalhost, host)) {
-      ResourceResolver resourceResolver = getResourceResolver();
-      if (resourceResolver != null) {
-        try {
-          txtRecords = resourceResolver.resolveTxt(SERVICE_CONFIG_NAME_PREFIX + host);
-        } catch (Exception e) {
-          logger.log(Level.FINE, "ServiceConfig resolution failure", e);
-        }
+    ResourceResolver resourceResolver = getResourceResolver();
+    if (resourceResolver != null) {
+      try {
+        txtRecords = resourceResolver.resolveTxt(SERVICE_CONFIG_NAME_PREFIX + host);
+      } catch (Exception e) {
+        logger.log(Level.FINE, "ServiceConfig resolution failure", e);
       }
     }
     if (!txtRecords.isEmpty()) {
@@ -268,56 +260,6 @@ public class DnsNameResolver extends NameResolver {
     return null;
   }
 
-  @SuppressWarnings("deprecation")
-  protected List<EquivalentAddressGroup> resolveBalancerAddresses() {
-    List<SrvRecord> srvRecords = Collections.emptyList();
-    Exception srvRecordsException = null;
-    if (shouldUseJndi(enableJndi, enableJndiLocalhost, host)) {
-      ResourceResolver resourceResolver = getResourceResolver();
-      if (resourceResolver != null) {
-        try {
-          srvRecords = resourceResolver.resolveSrv(GRPCLB_NAME_PREFIX + host);
-        } catch (Exception e) {
-          srvRecordsException = e;
-        }
-      }
-    }
-    List<EquivalentAddressGroup> balancerAddresses = new ArrayList<>(srvRecords.size());
-    Exception balancerAddressesException = null;
-    Level level = Level.WARNING;
-    for (SrvRecord record : srvRecords) {
-      try {
-        // Strip trailing dot for appearance's sake. It _should_ be fine either way, but most
-        // people expect to see it without the dot.
-        String authority = record.host.substring(0, record.host.length() - 1);
-        // But we want to use the trailing dot for the IP lookup. The dot makes the name absolute
-        // instead of relative and so will avoid the search list like that in resolv.conf.
-        List<? extends InetAddress> addrs = addressResolver.resolveAddress(record.host);
-        List<SocketAddress> sockAddrs = new ArrayList<>(addrs.size());
-        for (InetAddress addr : addrs) {
-          sockAddrs.add(new InetSocketAddress(addr, record.port));
-        }
-        Attributes attrs =
-            Attributes.newBuilder()
-                .set(GrpcAttributes.ATTR_LB_ADDR_AUTHORITY, authority)
-                .build();
-        balancerAddresses.add(
-            new EquivalentAddressGroup(Collections.unmodifiableList(sockAddrs), attrs));
-      } catch (Exception e) {
-        logger.log(level, "Can't find address for SRV record " + record, e);
-        if (balancerAddressesException == null) {
-          balancerAddressesException = e;
-          level = Level.FINE;
-        }
-      }
-    }
-    if (srvRecordsException != null
-        || (balancerAddressesException != null && balancerAddresses.isEmpty())) {
-      logger.log(Level.FINE, "Balancer resolution failure", srvRecordsException);
-    }
-    return Collections.unmodifiableList(balancerAddresses);
-  }
-
   @Nullable
   private EquivalentAddressGroup detectProxy() throws IOException {
     InetSocketAddress destination =
@@ -332,35 +274,17 @@ public class DnsNameResolver extends NameResolver {
   /**
    * Main logic of name resolution. Returns {@code true} if resolution happens successfully.
    */
-  @VisibleForTesting
-  @SuppressWarnings("deprecation") // can migrate after service config error handling is finished
   protected boolean doResolve(Listener2 listener) {
-    List<EquivalentAddressGroup> servers = Collections.emptyList();
-    List<EquivalentAddressGroup> balancerAddrs = Collections.emptyList();
-    Exception addressException = null;
+    List<EquivalentAddressGroup> servers;
     try {
       servers = resolveAddresses();
     } catch (Exception e) {
-      addressException = e;
-    }
-    if (enableSrv) {
-      balancerAddrs = resolveBalancerAddresses();
-    }
-    if (addressException != null && balancerAddrs.isEmpty()) {
       listener.onError(
-          Status.UNAVAILABLE
-              .withDescription("Unable to resolve host " + host)
-              .withCause(addressException));
+          Status.UNAVAILABLE.withDescription("Unable to resolve host " + host).withCause(e));
       return false;
     }
     ResolutionResult.Builder resultBuilder = ResolutionResult.newBuilder();
     resultBuilder.setAddresses(servers);
-    if (!balancerAddrs.isEmpty()) {
-      resultBuilder.setAttributes(
-          Attributes.newBuilder()
-              .set(GrpcAttributes.ATTR_LB_ADDRS, balancerAddrs)
-              .build());
-    }
     if (enableTxt) {
       ConfigOrError serviceConfig = resolveServiceConfig();
       if (serviceConfig != null) {
@@ -608,9 +532,9 @@ public class DnsNameResolver extends NameResolver {
   /**
    * Describes a parsed SRV record.
    */
-  static final class SrvRecord {
-    final String host;
-    final int port;
+  protected static final class SrvRecord {
+    public final String host;
+    public final int port;
 
     SrvRecord(String host, int port) {
       this.host = host;
@@ -619,7 +543,7 @@ public class DnsNameResolver extends NameResolver {
 
     @Override
     public int hashCode() {
-      return Objects.hash(host, port);
+      return Objects.hashCode(host, port);
     }
 
     @Override
@@ -676,7 +600,7 @@ public class DnsNameResolver extends NameResolver {
   /**
    * AddressResolver resolves a hostname into a list of addresses.
    */
-  interface AddressResolver {
+  protected interface AddressResolver {
     List<InetAddress> resolveAddress(String host) throws Exception;
   }
 
@@ -692,19 +616,21 @@ public class DnsNameResolver extends NameResolver {
   /**
    * {@link ResourceResolver} is a Dns ResourceRecord resolver.
    */
-  interface ResourceResolver {
+  protected interface ResourceResolver {
     List<String> resolveTxt(String host) throws Exception;
 
     List<SrvRecord> resolveSrv(String host) throws Exception;
   }
 
   @Nullable
-  private ResourceResolver getResourceResolver() {
-    ResourceResolver rr;
-    if ((rr = resourceResolver.get()) == null) {
-      if (resourceResolverFactory != null) {
-        assert resourceResolverFactory.unavailabilityCause() == null;
-        rr = resourceResolverFactory.newResourceResolver();
+  protected ResourceResolver getResourceResolver() {
+    ResourceResolver rr = null;
+    if (shouldUseJndi(enableJndi, enableJndiLocalhost, host)) {
+      if ((rr = resourceResolver.get()) == null) {
+        if (resourceResolverFactory != null) {
+          assert resourceResolverFactory.unavailabilityCause() == null;
+          rr = resourceResolverFactory.newResourceResolver();
+        }
       }
     }
     return rr;
@@ -767,7 +693,8 @@ public class DnsNameResolver extends NameResolver {
   }
 
   @VisibleForTesting
-  static boolean shouldUseJndi(boolean jndiEnabled, boolean jndiLocalhostEnabled, String target) {
+  protected static boolean shouldUseJndi(
+      boolean jndiEnabled, boolean jndiLocalhostEnabled, String target) {
     if (!jndiEnabled) {
       return false;
     }
