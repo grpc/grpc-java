@@ -72,10 +72,8 @@ final class XdsClientImpl extends XdsClient {
   private static final Logger logger = Logger.getLogger(XdsClientImpl.class.getName());
 
   // Longest time to wait, since the subscription to some resource, for concluding its absence.
-  @VisibleForTesting
   static final int INITIAL_RESOURCE_FETCH_TIMEOUT_SEC = 15;
 
-  @VisibleForTesting
   static final String ADS_TYPE_URL_LDS = "type.googleapis.com/envoy.api.v2.Listener";
   @VisibleForTesting
   static final String ADS_TYPE_URL_RDS =

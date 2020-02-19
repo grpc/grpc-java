@@ -3563,13 +3563,13 @@ public class XdsClientImplTest {
    * compare with message equality. Otherwise, this matcher is handy for comparing other fields
    * only.
    */
-  private static class DiscoveryRequestMatcher implements ArgumentMatcher<DiscoveryRequest> {
+  static class DiscoveryRequestMatcher implements ArgumentMatcher<DiscoveryRequest> {
     private final String versionInfo;
     private final String typeUrl;
     private final Set<String> resourceNames;
     private final String responseNonce;
 
-    private DiscoveryRequestMatcher(String versionInfo, String resourceName, String typeUrl,
+    DiscoveryRequestMatcher(String versionInfo, String resourceName, String typeUrl,
         String responseNonce) {
       this(versionInfo, ImmutableList.of(resourceName), typeUrl, responseNonce);
     }

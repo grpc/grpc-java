@@ -85,6 +85,17 @@ class XdsClientTestHelper {
             .build();
   }
 
+  static DiscoveryRequest buildDiscoveryRequest(Node node, String versionInfo,
+      String typeUrl, String nonce) {
+    return
+        DiscoveryRequest.newBuilder()
+            .setVersionInfo(versionInfo)
+            .setNode(node)
+            .setTypeUrl(typeUrl)
+            .setResponseNonce(nonce)
+            .build();
+  }
+
   static Listener buildListener(String name, com.google.protobuf.Any apiListener) {
     return
         Listener.newBuilder()

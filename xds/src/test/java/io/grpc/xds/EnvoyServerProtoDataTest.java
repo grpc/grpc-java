@@ -120,7 +120,8 @@ public class EnvoyServerProtoDataTest {
                             .build()).build())
                     .addApplicationProtocols("managed-mtls")
                     .build())
-            .setTlsContext(CommonTlsContextTestsUtil.buildTestDownstreamTlsContext())
+            .setTlsContext(CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
+                "google-sds-config-default", "ROOTCA"))
             .addFilters(Filter.newBuilder()
                 .setName("envoy.http_connection_manager")
                 .setTypedConfig(Any.newBuilder()

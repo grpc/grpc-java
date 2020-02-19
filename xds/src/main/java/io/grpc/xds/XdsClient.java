@@ -99,7 +99,8 @@ abstract class XdsClient {
       }
 
       ConfigUpdate build() {
-        Preconditions.checkState(clusterName != null, "clusterName is not set");
+        Preconditions.checkState(clusterName != null || listener != null,
+            "clusterName or listener is not set");
         return new ConfigUpdate(clusterName, listener);
       }
     }
