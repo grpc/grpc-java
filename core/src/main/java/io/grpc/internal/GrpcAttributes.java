@@ -21,7 +21,6 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.Grpc;
 import io.grpc.NameResolver;
 import io.grpc.SecurityLevel;
-import java.util.List;
 import java.util.Map;
 
 /**

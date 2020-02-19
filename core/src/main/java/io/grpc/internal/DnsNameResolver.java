@@ -532,11 +532,12 @@ public class DnsNameResolver extends NameResolver {
   /**
    * Describes a parsed SRV record.
    */
-  protected static final class SrvRecord {
+  @VisibleForTesting
+  public static final class SrvRecord {
     public final String host;
     public final int port;
 
-    SrvRecord(String host, int port) {
+    public SrvRecord(String host, int port) {
       this.host = host;
       this.port = port;
     }
@@ -569,12 +570,12 @@ public class DnsNameResolver extends NameResolver {
   }
 
   @VisibleForTesting
-  void setAddressResolver(AddressResolver addressResolver) {
+  protected void setAddressResolver(AddressResolver addressResolver) {
     this.addressResolver = addressResolver;
   }
 
   @VisibleForTesting
-  void setResourceResolver(ResourceResolver resourceResolver) {
+  protected void setResourceResolver(ResourceResolver resourceResolver) {
     this.resourceResolver.set(resourceResolver);
   }
 
@@ -600,7 +601,8 @@ public class DnsNameResolver extends NameResolver {
   /**
    * AddressResolver resolves a hostname into a list of addresses.
    */
-  protected interface AddressResolver {
+  @VisibleForTesting
+  public interface AddressResolver {
     List<InetAddress> resolveAddress(String host) throws Exception;
   }
 
@@ -616,7 +618,8 @@ public class DnsNameResolver extends NameResolver {
   /**
    * {@link ResourceResolver} is a Dns ResourceRecord resolver.
    */
-  protected interface ResourceResolver {
+  @VisibleForTesting
+  public interface ResourceResolver {
     List<String> resolveTxt(String host) throws Exception;
 
     List<SrvRecord> resolveSrv(String host) throws Exception;

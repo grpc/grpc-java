@@ -16,6 +16,7 @@
 
 package io.grpc.grpclb;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
@@ -139,5 +140,28 @@ final class GrpclbNameResolver extends DnsNameResolver {
       logger.log(Level.FINE, "Balancer resolution failure", srvRecordsException);
     }
     return Collections.unmodifiableList(balancerAddresses);
+  }
+
+  @VisibleForTesting
+  @Override
+  protected void setAddressResolver(AddressResolver addressResolver) {
+    super.setAddressResolver(addressResolver);
+  }
+
+  @VisibleForTesting
+  @Override
+  protected void setResourceResolver(ResourceResolver resourceResolver) {
+    super.setResourceResolver(resourceResolver);
+  }
+
+  @VisibleForTesting
+  @Override
+  protected String getHost() {
+    return super.getHost();
+  }
+
+  @VisibleForTesting
+  static void setEnableTxt(boolean enableTxt) {
+    DnsNameResolver.enableTxt = enableTxt;
   }
 }
