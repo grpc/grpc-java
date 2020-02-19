@@ -80,7 +80,7 @@ public class SdsSslContextProviderTest {
 
     return server
         ? SdsSslContextProvider.getProviderForServer(
-            SecretVolumeSslContextProviderTest.buildDownstreamTlsContext(commonTlsContext),
+            CommonTlsContextTestsUtil.buildDownstreamTlsContext(commonTlsContext),
             node,
             MoreExecutors.directExecutor(),
             MoreExecutors.directExecutor())

@@ -20,9 +20,11 @@ import com.google.common.base.Strings;
 import io.envoyproxy.envoy.api.v2.auth.CertificateValidationContext;
 import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
 import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext.CombinedCertificateValidationContext;
+import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.auth.SdsSecretConfig;
 import io.envoyproxy.envoy.api.v2.auth.TlsCertificate;
 import io.envoyproxy.envoy.api.v2.core.DataSource;
+import java.util.Arrays;
 
 /** Utility class for client and server ssl provider tests. */
 public class CommonTlsContextTestsUtil {
@@ -53,27 +55,6 @@ public class CommonTlsContextTestsUtil {
               .setCertificateChain(DataSource.newBuilder().setFilename(certChain))
               .setPrivateKey(DataSource.newBuilder().setFilename(privateKey))
               .build());
-    }
-    return builder.build();
-  }
-
-  static CommonTlsContext buildCommonTlsContextFromSdsConfigsForAll(
-      String certName,
-      String certTargetUri,
-      String validationContextName,
-      String validationContextTargetUri,
-      String channelType) {
-
-    CommonTlsContext.Builder builder = CommonTlsContext.newBuilder();
-
-    SdsSecretConfig sdsSecretConfig = buildSdsSecretConfig(certName, certTargetUri, channelType);
-    if (sdsSecretConfig != null) {
-      builder.addTlsCertificateSdsSecretConfigs(sdsSecretConfig);
-    }
-    sdsSecretConfig =
-        buildSdsSecretConfig(validationContextName, validationContextTargetUri, channelType);
-    if (sdsSecretConfig != null) {
-      builder.setValidationContextSdsSecretConfig(sdsSecretConfig);
     }
     return builder.build();
   }
@@ -133,5 +114,28 @@ public class CommonTlsContextTestsUtil {
       builder.addAllAlpnProtocols(alpnNames);
     }
     return builder.build();
+  }
+
+  /**
+   * Helper method to build DownstreamTlsContext for multiple test classes.
+   */
+  static DownstreamTlsContext buildDownstreamTlsContext(CommonTlsContext commonTlsContext) {
+    DownstreamTlsContext downstreamTlsContext =
+        DownstreamTlsContext.newBuilder().setCommonTlsContext(commonTlsContext).build();
+    return downstreamTlsContext;
+  }
+
+  /** Helper method for creating DownstreamTlsContext values for tests. */
+  public static DownstreamTlsContext buildTestDownstreamTlsContext() {
+    return buildDownstreamTlsContext(
+        buildCommonTlsContextWithAdditionalValues(
+            "google-sds-config-default",
+            "unix:/var/run/sds/uds_path",
+            "ROOTCA",
+            "unix:/var/run/sds/uds_path",
+            Arrays.asList("spiffe://grpc-sds-testing.svc.id.goog/ns/default/sa/bob"),
+            Arrays.asList("managed-tls"),
+            null
+        ));
   }
 }
