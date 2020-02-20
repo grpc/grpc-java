@@ -72,6 +72,9 @@ final class EdsLoadBalancer extends LoadBalancer {
   private XdsClient xdsClient;
   @Nullable
   private String clusterName;
+  // FIXME(chengyuanzhang): should be one instance per cluster:cluster_service.
+  @Nullable
+  private LoadStatsStore loadStatsStore;
 
   EdsLoadBalancer(Helper edsLbHelper, ResourceUpdateCallback resourceUpdateCallback) {
     this(
@@ -114,6 +117,9 @@ final class EdsLoadBalancer extends LoadBalancer {
       return;
     }
     XdsConfig newXdsConfig = (XdsConfig) lbConfig;
+    if (Objects.equals(newXdsConfig, xdsConfig)) {
+      return;
+    }
 
     if (xdsClientPool == null) {
       // Init xdsClientPool and xdsClient.
@@ -182,6 +188,21 @@ final class EdsLoadBalancer extends LoadBalancer {
       // TODO(zdapeng): Use the correct cluster name. Currently load reporting will be broken if
       //     edsServiceName is changed because we are using edsServiceName for the cluster name.
       clusterName = clusterServiceName;
+      loadStatsStore = new LoadStatsStoreImpl(clusterName, null);
+    }
+
+    // FIXME(chengyuanzhang): should report loads for each cluster:cluster_service.
+    if (xdsConfig == null
+        || !Objects.equals(newXdsConfig.lrsServerName, xdsConfig.lrsServerName)) {
+      if (newXdsConfig.lrsServerName != null) {
+        if (!newXdsConfig.lrsServerName.equals("")) {
+          throw new AssertionError(
+              "Can only report load to the same management server");
+        }
+        xdsClient.reportClientStats(clusterName, null, loadStatsStore);
+      } else if (xdsConfig != null) {
+        xdsClient.cancelClientStatsReport(clusterName, null);
+      }
     }
 
     // Note: childPolicy change will be handled in LocalityStore, to be implemented.
@@ -214,6 +235,9 @@ final class EdsLoadBalancer extends LoadBalancer {
     channelLogger.log(ChannelLogLevel.DEBUG, "EDS load balancer is shutting down");
     switchingLoadBalancer.shutdown();
     if (xdsClient != null) {
+      if (xdsConfig != null && xdsConfig.lrsServerName != null) {
+        xdsClient.cancelClientStatsReport(clusterName, null);
+      }
       xdsClient = xdsClientPool.returnObject(xdsClient);
     }
   }
@@ -254,40 +278,17 @@ final class EdsLoadBalancer extends LoadBalancer {
       final Helper helper;
       final EndpointWatcherImpl endpointWatcher;
       final LocalityStore localityStore;
-      final LoadStatsStore loadStatsStore;
-      boolean isReportingLoad;
 
       ClusterEndpointsBalancer(Helper helper) {
         this.helper = helper;
 
-        // FIXME(chengyuanzhang): use cluster_name and eds_service_name as they are.
-        loadStatsStore = new LoadStatsStoreImpl(clusterName, null);
         localityStore = localityStoreFactory.newLocalityStore(helper, lbRegistry, loadStatsStore);
 
         endpointWatcher = new EndpointWatcherImpl(localityStore);
         xdsClient.watchEndpointData(clusterServiceName, endpointWatcher);
       }
 
-      @Override
-      public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-        XdsConfig config = (XdsConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
-        if (config.lrsServerName != null) {
-          if (!config.lrsServerName.equals("")) {
-            throw new AssertionError(
-                "Can only report load to the same management server");
-          }
-          if (!isReportingLoad) {
-            xdsClient.reportClientStats(clusterName, null, loadStatsStore);
-            isReportingLoad = true;
-          }
-        } else {
-          if (isReportingLoad) {
-            xdsClient.cancelClientStatsReport(clusterName, null);
-            isReportingLoad = false;
-          }
-        }
-        // TODO(zddapeng): In handleResolvedAddresses() handle child policy change if any.
-      }
+      // TODO(zddapeng): In handleResolvedAddresses() handle child policy change if any.
 
       @Override
       public void handleNameResolutionError(Status error) {
@@ -305,10 +306,6 @@ final class EdsLoadBalancer extends LoadBalancer {
 
       @Override
       public void shutdown() {
-        if (isReportingLoad) {
-          xdsClient.cancelClientStatsReport(clusterName, null);
-          isReportingLoad = false;
-        }
         localityStore.reset();
         xdsClient.cancelEndpointDataWatch(clusterServiceName, endpointWatcher);
       }
