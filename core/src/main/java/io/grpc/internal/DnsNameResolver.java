@@ -249,7 +249,7 @@ public class DnsNameResolver extends NameResolver {
       ConfigOrError rawServiceConfig = parseServiceConfig(txtRecords, random, getLocalHostname());
       if (rawServiceConfig != null) {
         if (rawServiceConfig.getError() != null) {
-          return ConfigOrError.fromConfig(rawServiceConfig.getError());
+          return ConfigOrError.fromError(rawServiceConfig.getError());
         }
 
         @SuppressWarnings("unchecked")
