@@ -740,8 +740,7 @@ final class XdsClientImpl extends XdsClient {
             + "indicate to use EDS over ADS.";
         break;
       }
-      // If the service_name field is set, that value will be used for the EDS request
-      // instead of the cluster name (default).
+      // If the service_name field is set, that value will be used for the EDS request.
       if (!edsClusterConfig.getServiceName().isEmpty()) {
         updateBuilder.setEdsServiceName(edsClusterConfig.getServiceName());
         edsServices.add(edsClusterConfig.getServiceName());
@@ -764,10 +763,7 @@ final class XdsClientImpl extends XdsClient {
               + "management server.";
           break;
         }
-        updateBuilder.setEnableLrs(true);
         updateBuilder.setLrsServerName("");
-      } else {
-        updateBuilder.setEnableLrs(false);
       }
       if (cluster.hasTlsContext()) {
         updateBuilder.setUpstreamTlsContext(cluster.getTlsContext());
