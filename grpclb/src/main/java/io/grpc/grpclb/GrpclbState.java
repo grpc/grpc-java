@@ -453,7 +453,6 @@ final class GrpclbState {
         if (subchannels.isEmpty()) {
           // TODO(zhangkun83): remove the deprecation suppression on this method once migrated to
           // the new createSubchannel().
-          // why this is not calling the doAnswer?
           subchannel = helper.createSubchannel(eagList, createSubchannelAttrs());
         } else {
           subchannel = subchannels.values().iterator().next();
