@@ -117,9 +117,6 @@ final class EdsLoadBalancer extends LoadBalancer {
       return;
     }
     XdsConfig newXdsConfig = (XdsConfig) lbConfig;
-    if (Objects.equals(newXdsConfig, xdsConfig)) {
-      return;
-    }
 
     if (xdsClientPool == null) {
       // Init xdsClientPool and xdsClient.
