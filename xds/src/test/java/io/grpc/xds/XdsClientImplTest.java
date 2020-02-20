@@ -103,7 +103,6 @@ import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -185,10 +184,9 @@ public class XdsClientImplTest {
 
   private final Queue<StreamObserver<DiscoveryResponse>> responseObservers = new ArrayDeque<>();
   private final Queue<StreamObserver<DiscoveryRequest>> requestObservers = new ArrayDeque<>();
-  private final AtomicBoolean callEnded = new AtomicBoolean(true);
-
+  private final AtomicBoolean adsEnded = new AtomicBoolean(true);
   private final Queue<LoadReportCall> loadReportCalls = new ArrayDeque<>();
-  private final AtomicInteger runningLrsCalls = new AtomicInteger();
+  private final AtomicBoolean lrsEnded = new AtomicBoolean(true);
 
   @Mock
   private AggregatedDiscoveryServiceImplBase mockedDiscoveryService;
@@ -220,13 +218,13 @@ public class XdsClientImplTest {
       @Override
       public StreamObserver<DiscoveryRequest> streamAggregatedResources(
           final StreamObserver<DiscoveryResponse> responseObserver) {
-        assertThat(callEnded.get()).isTrue();  // ensure previous call was ended
-        callEnded.set(false);
+        assertThat(adsEnded.get()).isTrue();  // ensure previous call was ended
+        adsEnded.set(false);
         Context.current().addListener(
             new CancellationListener() {
               @Override
               public void cancelled(Context context) {
-                callEnded.set(true);
+                adsEnded.set(true);
               }
             }, MoreExecutors.directExecutor());
         responseObservers.offer(responseObserver);
@@ -243,7 +241,8 @@ public class XdsClientImplTest {
       @Override
       public StreamObserver<LoadStatsRequest> streamLoadStats(
           StreamObserver<LoadStatsResponse> responseObserver) {
-        runningLrsCalls.getAndIncrement();
+        assertThat(lrsEnded.get()).isTrue();
+        lrsEnded.set(false);
         @SuppressWarnings("unchecked")
         StreamObserver<LoadStatsRequest> requestObserver = mock(StreamObserver.class);
         final LoadReportCall call = new LoadReportCall(requestObserver, responseObserver);
@@ -252,7 +251,7 @@ public class XdsClientImplTest {
               @Override
               public void cancelled(Context context) {
                 call.cancelled = true;
-                runningLrsCalls.getAndDecrement();
+                lrsEnded.set(true);
               }
             }, MoreExecutors.directExecutor());
         loadReportCalls.offer(call);
@@ -290,17 +289,13 @@ public class XdsClientImplTest {
     // least one watcher is registered.
     assertThat(responseObservers).isEmpty();
     assertThat(requestObservers).isEmpty();
-
-    // Load reporting is not initiated until being invoked to do so.
-    assertThat(loadReportCalls).isEmpty();
-    assertThat(runningLrsCalls.get()).isEqualTo(0);
   }
 
   @After
   public void tearDown() {
     xdsClient.shutdown();
-    assertThat(callEnded.get()).isTrue();
-    assertThat(runningLrsCalls.get()).isEqualTo(0);
+    assertThat(adsEnded.get()).isTrue();
+    assertThat(lrsEnded.get()).isTrue();
     assertThat(channel.isShutdown()).isTrue();
     assertThat(fakeClock.getPendingTasks()).isEmpty();
   }
@@ -3102,21 +3097,15 @@ public class XdsClientImplTest {
    */
   @Test
   public void reportLoadStatsToServer() {
-    xdsClient.reportClientStats("cluster-foo.googleapis.com", "");
-    LoadReportCall lrsCall1 = loadReportCalls.poll();
-    verify(lrsCall1.requestObserver)
-        .onNext(eq(buildInitialLoadStatsRequest("cluster-foo.googleapis.com")));
-    assertThat(lrsCall1.cancelled).isFalse();
+    LoadStatsStore loadStatsStore = mock(LoadStatsStore.class);
+    String clusterName = "cluster-foo.googleapis.com";
+    xdsClient.reportClientStats(clusterName, null, loadStatsStore);
+    LoadReportCall lrsCall = loadReportCalls.poll();
+    verify(lrsCall.requestObserver).onNext(eq(buildInitialLoadStatsRequest(clusterName)));
 
-    xdsClient.reportClientStats("cluster-bar.googleapis.com", "");
-    LoadReportCall lrsCall2 = loadReportCalls.poll();
-    verify(lrsCall2.requestObserver)
-        .onNext(eq(buildInitialLoadStatsRequest("cluster-bar.googleapis.com")));
-    assertThat(lrsCall2.cancelled).isFalse();
-
-    xdsClient.cancelClientStatsReport("cluster-bar.googleapis.com");
-    assertThat(lrsCall2.cancelled).isTrue();
-    assertThat(runningLrsCalls.get()).isEqualTo(1);
+    xdsClient.cancelClientStatsReport(clusterName, null);
+    assertThat(lrsCall.cancelled).isTrue();
+    // See more test on LoadReportClientTest.java
   }
 
   // Simulates the use case of watching clusters/endpoints based on service config resolved by

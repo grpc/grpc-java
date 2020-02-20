@@ -124,9 +124,6 @@ final class XdsClientImpl extends XdsClient {
   // watchers can watch endpoints in the same cluster.
   private final Map<String, Set<EndpointWatcher>> endpointWatchers = new HashMap<>();
 
-  // Load reporting clients, with each responsible for reporting loads of a single cluster.
-  private final Map<String, LoadReportClientImpl> lrsClients = new HashMap<>();
-
   // Resource fetch timers are used to conclude absence of resources. Each timer is activated when
   // subscription for the resource starts and disarmed on first update for the resource.
 
@@ -150,6 +147,8 @@ final class XdsClientImpl extends XdsClient {
   private BackoffPolicy retryBackoffPolicy;
   @Nullable
   private ScheduledHandle rpcRetryTimer;
+  @Nullable
+  private LoadReportClient lrsClient;
 
   // Following fields are set only after the ConfigWatcher registered. Once set, they should
   // never change.
@@ -189,8 +188,9 @@ final class XdsClientImpl extends XdsClient {
       adsStream.close(Status.CANCELLED.withDescription("shutdown").asException());
     }
     cleanUpResources();
-    for (LoadReportClientImpl lrsClient : lrsClients.values()) {
+    if (lrsClient != null) {
       lrsClient.stopLoadReporting();
+      lrsClient = null;
     }
     if (rpcRetryTimer != null) {
       rpcRetryTimer.cancel();
@@ -405,37 +405,31 @@ final class XdsClientImpl extends XdsClient {
   }
 
   @Override
-  LoadReportClient reportClientStats(String clusterName, String serverUri) {
-    checkNotNull(serverUri, "serverUri");
-    checkArgument(serverUri.equals(""),
-        "Currently only support empty serverUri, which defaults to the same "
-            + "management server this client talks to.");
-    if (!lrsClients.containsKey(clusterName)) {
-      LoadReportClientImpl lrsClient =
-          new LoadReportClientImpl(
-              channel,
-              clusterName,
-              node,
-              syncContext,
-              timeService,
-              backoffPolicyProvider,
-              stopwatchSupplier);
-      lrsClient.startLoadReporting(
-          new LoadReportCallback() {
-            @Override
-            public void onReportResponse(long reportIntervalNano) {}
-          });
-      lrsClients.put(clusterName, lrsClient);
-    }
-    return lrsClients.get(clusterName);
+  void reportClientStats(
+      String clusterName, @Nullable String clusterServiceName, LoadStatsStore loadStatsStore) {
+    checkState(lrsClient == null,
+        "load reporting has already started, cannot change clusters to report loads for");
+    lrsClient =
+        new LoadReportClient(
+            channel,
+            node,
+            syncContext,
+            timeService,
+            backoffPolicyProvider,
+            stopwatchSupplier);
+    lrsClient.addLoadStatsStore(clusterName, clusterServiceName, loadStatsStore);
+    lrsClient.startLoadReporting(new LoadReportCallback() {
+      @Override
+      public void onReportResponse(long reportIntervalNano) {}
+    });
   }
 
   @Override
-  void cancelClientStatsReport(String clusterName) {
-    LoadReportClientImpl lrsClient = lrsClients.remove(clusterName);
-    if (lrsClient != null) {
-      lrsClient.stopLoadReporting();
-    }
+  void cancelClientStatsReport(String clusterName, @Nullable String clusterServiceName) {
+    checkState(lrsClient != null, "load reporting was never started");
+    lrsClient.removeLoadStatsStore(clusterName, clusterServiceName);
+    lrsClient.stopLoadReporting();
+    lrsClient = null;
   }
 
   /**

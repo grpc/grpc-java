@@ -417,16 +417,21 @@ abstract class XdsClient {
   }
 
   /**
-   * Starts reporting client load stats to a remote server for the given cluster.
+   * Report client load stats to a remote server for the given cluster:cluster_service.
+   *
+   * <p>Note: currently we can only report loads for a single cluster:cluster_service,
+   * as the design for adding clusters to report loads for while load reporting is
+   * happening is undefined.
    */
-  LoadReportClient reportClientStats(String clusterName, String serverUri) {
+  void reportClientStats(
+      String clusterName, @Nullable String clusterServiceName, LoadStatsStore loadStatsStore) {
     throw new UnsupportedOperationException();
   }
 
   /**
-   * Stops reporting client load stats to the remote server for the given cluster.
+   * Stops reporting client load stats to the remote server for the given cluster:cluster_service.
    */
-  void cancelClientStatsReport(String clusterName) {
+  void cancelClientStatsReport(String clusterName, @Nullable String clusterServiceName) {
   }
 
   abstract static class XdsClientFactory {
