@@ -235,9 +235,10 @@ final class CensusTracingModule {
       this.span =
           censusTracer
               .spanBuilderWithExplicitParent(
-                  generateTraceSpanName(false, method.getFullMethodName()),
+                  method.getFullMethodName(),
                   parentSpan)
               .setRecordEvents(true)
+              .setSpanKind(Span.Kind.CLIENT)
               .startSpan();
     }
 
@@ -305,9 +306,10 @@ final class CensusTracingModule {
       this.span =
           censusTracer
               .spanBuilderWithRemoteParent(
-                  generateTraceSpanName(true, fullMethodName),
+                  fullMethodName,
                   remoteSpan)
               .setRecordEvents(true)
+              .setSpanKind(Span.Kind.SERVER)
               .startSpan();
     }
 
@@ -404,19 +406,4 @@ final class CensusTracingModule {
       };
     }
   }
-
-  /**
-   * Convert a full method name to a tracing span name.
-   *
-   * @param isServer {@code false} if the span is on the client-side, {@code true} if on the
-   *                 server-side
-   * @param fullMethodName the method name as returned by
-   *        {@link MethodDescriptor#getFullMethodName}.
-   */
-  @VisibleForTesting
-  static String generateTraceSpanName(boolean isServer, String fullMethodName) {
-    String prefix = isServer ? "Recv" : "Sent";
-    return prefix + "." + fullMethodName.replace('/', '.');
-  }
-
 }

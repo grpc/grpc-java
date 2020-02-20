@@ -318,11 +318,11 @@ public class CensusModulesTest {
 
     if (nonDefaultContext) {
       verify(tracer).spanBuilderWithExplicitParent(
-          eq("Sent.package1.service2.method3"), same(fakeClientParentSpan));
+          eq("package1.service2/method3"), same(fakeClientParentSpan));
       verify(spyClientSpanBuilder).setRecordEvents(eq(true));
     } else {
       verify(tracer).spanBuilderWithExplicitParent(
-          eq("Sent.package1.service2.method3"), ArgumentMatchers.<Span>isNotNull());
+          eq("package1.service2/method3"), ArgumentMatchers.<Span>isNotNull());
       verify(spyClientSpanBuilder).setRecordEvents(eq(true));
     }
     verify(spyClientSpan, never()).end(any(EndSpanOptions.class));
@@ -525,7 +525,7 @@ public class CensusModulesTest {
     Metadata headers = new Metadata();
     ClientStreamTracer clientStreamTracer = callTracer.newClientStreamTracer(STREAM_INFO, headers);
     verify(tracer).spanBuilderWithExplicitParent(
-        eq("Sent.package1.service2.method3"), ArgumentMatchers.<Span>isNull());
+        eq("package1.service2/method3"), ArgumentMatchers.<Span>isNull());
     verify(spyClientSpan, never()).end(any(EndSpanOptions.class));
 
     clientStreamTracer.outboundMessage(0);
@@ -632,7 +632,7 @@ public class CensusModulesTest {
     CensusTracingModule.ClientCallTracer callTracer =
         censusTracing.newClientCallTracer(fakeClientParentSpan, method);
     verify(tracer).spanBuilderWithExplicitParent(
-        eq("Sent.package1.service2.method3"), same(fakeClientParentSpan));
+        eq("package1.service2/method3"), same(fakeClientParentSpan));
     verify(spyClientSpanBuilder).setRecordEvents(eq(true));
 
     callTracer.callEnded(Status.DEADLINE_EXCEEDED.withDescription("3 seconds"));
@@ -808,7 +808,7 @@ public class CensusModulesTest {
     verify(mockTracingPropagationHandler).toByteArray(same(fakeClientSpanContext));
     verifyNoMoreInteractions(mockTracingPropagationHandler);
     verify(tracer).spanBuilderWithExplicitParent(
-        eq("Sent.package1.service2.method3"), same(fakeClientParentSpan));
+        eq("package1.service2/method3"), same(fakeClientParentSpan));
     verify(spyClientSpanBuilder).setRecordEvents(eq(true));
     verifyNoMoreInteractions(tracer);
     assertTrue(headers.containsKey(censusTracing.tracingHeader));
@@ -818,7 +818,7 @@ public class CensusModulesTest {
             method.getFullMethodName(), headers);
     verify(mockTracingPropagationHandler).fromByteArray(same(binarySpanContext));
     verify(tracer).spanBuilderWithRemoteParent(
-        eq("Recv.package1.service2.method3"), same(spyClientSpan.getContext()));
+        eq("package1.service2/method3"), same(spyClientSpan.getContext()));
     verify(spyServerSpanBuilder).setRecordEvents(eq(true));
 
     Context filteredContext = serverTracer.filterContext(Context.ROOT);
@@ -889,7 +889,7 @@ public class CensusModulesTest {
     censusTracing.getServerTracerFactory().newServerStreamTracer(
         method.getFullMethodName(), headers);
     verify(tracer).spanBuilderWithRemoteParent(
-        eq("Recv.package1.service2.method3"), ArgumentMatchers.<SpanContext>isNull());
+        eq("package1.service2/method3"), ArgumentMatchers.<SpanContext>isNull());
     verify(spyServerSpanBuilder).setRecordEvents(eq(true));
   }
 
@@ -1041,7 +1041,7 @@ public class CensusModulesTest {
         tracerFactory.newServerStreamTracer(method.getFullMethodName(), new Metadata());
     verifyZeroInteractions(mockTracingPropagationHandler);
     verify(tracer).spanBuilderWithRemoteParent(
-        eq("Recv.package1.service2.method3"), ArgumentMatchers.<SpanContext>isNull());
+        eq("package1.service2/method3"), ArgumentMatchers.<SpanContext>isNull());
     verify(spyServerSpanBuilder).setRecordEvents(eq(true));
 
     Context filteredContext = serverStreamTracer.filterContext(Context.ROOT);
@@ -1136,15 +1136,6 @@ public class CensusModulesTest {
       assertEquals(grpcCode.toString(), tracingStatus.getCanonicalCode().toString());
       assertEquals(grpcStatus.getDescription(), tracingStatus.getDescription());
     }
-  }
-
-
-  @Test
-  public void generateTraceSpanName() {
-    assertEquals(
-        "Sent.io.grpc.Foo", CensusTracingModule.generateTraceSpanName(false, "io.grpc/Foo"));
-    assertEquals(
-        "Recv.io.grpc.Bar", CensusTracingModule.generateTraceSpanName(true, "io.grpc/Bar"));
   }
 
   private static void assertNoServerContent(StatsTestUtils.MetricsRecord record) {
