@@ -96,14 +96,14 @@ final class LoadReportClient {
     this.retryStopwatch = stopwatchSupplier.get();
     checkNotNull(targetName, "targetName");
     checkNotNull(node, "node");
-    this.node =
-        node.toBuilder()
-            .setMetadata(
-                Struct.newBuilder()
-                    .putFields(
-                        TARGET_NAME_METADATA_KEY,
-                        Value.newBuilder().setStringValue(targetName).build()))
+    Struct metadata =
+        node.getMetadata()
+            .toBuilder()
+            .putFields(
+                TARGET_NAME_METADATA_KEY,
+                Value.newBuilder().setStringValue(targetName).build())
             .build();
+    this.node = node.toBuilder().setMetadata(metadata).build();
   }
 
   /**

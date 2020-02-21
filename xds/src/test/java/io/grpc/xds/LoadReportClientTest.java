@@ -31,7 +31,6 @@ import static org.mockito.Mockito.when;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import com.google.common.util.concurrent.MoreExecutors;
-import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
 import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.api.v2.core.Locality;
@@ -172,7 +171,8 @@ public class LoadReportClientTest {
         new LoadReportClient(
             TARGET_NAME,
             channel,
-            NODE, syncContext,
+            NODE,
+            syncContext,
             fakeClock.getScheduledExecutorService(),
             backoffPolicyProvider,
             fakeClock.getStopwatchSupplier());
@@ -420,7 +420,8 @@ public class LoadReportClientTest {
         .setNode(
             NODE.toBuilder()
                 .setMetadata(
-                    Struct.newBuilder()
+                    NODE.getMetadata()
+                        .toBuilder()
                         .putFields(
                             LoadReportClient.TARGET_NAME_METADATA_KEY,
                             Value.newBuilder().setStringValue(TARGET_NAME).build())))
