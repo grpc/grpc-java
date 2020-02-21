@@ -113,7 +113,7 @@ public class DnsNameResolver extends NameResolver {
   static boolean enableJndi = Boolean.parseBoolean(JNDI_PROPERTY);
   @VisibleForTesting
   static boolean enableJndiLocalhost = Boolean.parseBoolean(JNDI_LOCALHOST_PROPERTY);
-
+  @VisibleForTesting
   protected static boolean enableTxt = Boolean.parseBoolean(JNDI_TXT_PROPERTY);
 
   private static final ResourceResolverFactory resourceResolverFactory =
@@ -192,6 +192,7 @@ public class DnsNameResolver extends NameResolver {
     return authority;
   }
 
+  @VisibleForTesting
   protected String getHost() {
     return host;
   }
