@@ -271,7 +271,7 @@ public class EdsLoadBalancerTest {
 
   @Test
   public void handleNameResolutionErrorBeforeAndAfterEdsWorkding() {
-    deliverResolvedAddresses(new XdsConfig(CLUSTER_NAME, null, null, "edsServiceName1", null));
+    deliverResolvedAddresses(new XdsConfig(CLUSTER_NAME, null, null, null, null));
 
     // handleResolutionError() before receiving any endpoint update.
     edsLb.handleNameResolutionError(Status.DATA_LOSS.withDescription("fake status"));
@@ -279,7 +279,7 @@ public class EdsLoadBalancerTest {
 
     // Endpoint update received.
     ClusterLoadAssignment clusterLoadAssignment =
-        buildClusterLoadAssignment("edsServiceName1",
+        buildClusterLoadAssignment(CLUSTER_NAME,
             ImmutableList.of(
                 buildLocalityLbEndpoints("region1", "zone1", "subzone1",
                     ImmutableList.of(
@@ -438,13 +438,13 @@ public class EdsLoadBalancerTest {
 
   @Test
   public void firstAndSecondEdsResponseReceived_onWorkingCalledOnce() {
-    deliverResolvedAddresses(new XdsConfig(CLUSTER_NAME, null, null, "edsServiceName1", null));
+    deliverResolvedAddresses(new XdsConfig(CLUSTER_NAME, null, null, null, null));
 
     verify(resourceUpdateCallback, never()).onWorking();
 
     // first EDS response
     ClusterLoadAssignment clusterLoadAssignment =
-        buildClusterLoadAssignment("edsServiceName1",
+        buildClusterLoadAssignment(CLUSTER_NAME,
             ImmutableList.of(
                 buildLocalityLbEndpoints("region1", "zone1", "subzone1",
                     ImmutableList.of(
@@ -457,7 +457,7 @@ public class EdsLoadBalancerTest {
 
     // second EDS response
     clusterLoadAssignment =
-        buildClusterLoadAssignment("edsServiceName1",
+        buildClusterLoadAssignment(CLUSTER_NAME,
             ImmutableList.of(
                 buildLocalityLbEndpoints("region1", "zone1", "subzone1",
                     ImmutableList.of(
@@ -472,10 +472,10 @@ public class EdsLoadBalancerTest {
 
   @Test
   public void handleAllDropUpdates_pickersAreDropped() {
-    deliverResolvedAddresses(new XdsConfig(CLUSTER_NAME, null, null, "edsServiceName1", null));
+    deliverResolvedAddresses(new XdsConfig(CLUSTER_NAME, null, null, null, null));
 
     ClusterLoadAssignment clusterLoadAssignment = buildClusterLoadAssignment(
-        "edsServiceName1",
+        CLUSTER_NAME,
         ImmutableList.of(
             buildLocalityLbEndpoints("region1", "zone1", "subzone1",
                 ImmutableList.of(
@@ -502,7 +502,7 @@ public class EdsLoadBalancerTest {
     assertLatestSubchannelPicker(subchannel);
 
     clusterLoadAssignment = buildClusterLoadAssignment(
-        "edsServiceName1",
+        CLUSTER_NAME,
         ImmutableList.of(
             buildLocalityLbEndpoints("region1", "zone1", "subzone1",
                 ImmutableList.of(
@@ -525,7 +525,7 @@ public class EdsLoadBalancerTest {
 
   @Test
   public void handleLocalityAssignmentUpdates_pickersUpdatedFromChildBalancer() {
-    deliverResolvedAddresses(new XdsConfig(CLUSTER_NAME, null, null, "edsServiceName1", null));
+    deliverResolvedAddresses(new XdsConfig(CLUSTER_NAME, null, null, null, null));
 
     LbEndpoint endpoint11 = buildLbEndpoint("addr11.example.com", 8011, HEALTHY, 11);
     LbEndpoint endpoint12 = buildLbEndpoint("addr12.example.com", 8012, HEALTHY, 12);
@@ -551,7 +551,7 @@ public class EdsLoadBalancerTest {
         0);
 
     ClusterLoadAssignment clusterLoadAssignment = buildClusterLoadAssignment(
-        "edsServiceName1",
+        CLUSTER_NAME,
         ImmutableList.of(localityLbEndpoints1, localityLbEndpoints2, localityLbEndpoints3),
         ImmutableList.<DropOverload>of());
     receiveEndpointUpdate(clusterLoadAssignment);
@@ -672,7 +672,7 @@ public class EdsLoadBalancerTest {
 
   @Test
   public void verifyErrorPropagation_noPreviousEndpointUpdateReceived() {
-    deliverResolvedAddresses(new XdsConfig(CLUSTER_NAME, null, null, "edsServiceName1", null));
+    deliverResolvedAddresses(new XdsConfig(CLUSTER_NAME, null, null, null, null));
 
     verify(resourceUpdateCallback, never()).onError();
     // Forwarding 20 seconds so that the xds client will deem EDS resource not available.
@@ -683,10 +683,10 @@ public class EdsLoadBalancerTest {
 
   @Test
   public void verifyErrorPropagation_withPreviousEndpointUpdateReceived() {
-    deliverResolvedAddresses(new XdsConfig(CLUSTER_NAME, null, null, "edsServiceName1", null));
+    deliverResolvedAddresses(new XdsConfig(CLUSTER_NAME, null, null, null, null));
     // Endpoint update received.
     ClusterLoadAssignment clusterLoadAssignment =
-        buildClusterLoadAssignment("edsServiceName1",
+        buildClusterLoadAssignment(CLUSTER_NAME,
             ImmutableList.of(
                 buildLocalityLbEndpoints("region1", "zone1", "subzone1",
                     ImmutableList.of(
