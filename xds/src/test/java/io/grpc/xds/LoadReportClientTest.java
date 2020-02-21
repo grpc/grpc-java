@@ -31,6 +31,7 @@ import static org.mockito.Mockito.when;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import com.google.common.util.concurrent.MoreExecutors;
+import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
 import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.api.v2.core.Locality;
@@ -81,7 +82,16 @@ import org.mockito.MockitoAnnotations;
 @RunWith(JUnit4.class)
 public class LoadReportClientTest {
   private static final String TARGET_NAME = "lrs-test.example.com";
-  private static final Node NODE = Node.newBuilder().setId("LRS test").build();  // bootstrap node
+  // bootstrap node identifier
+  private static final Node NODE =
+      Node.newBuilder()
+          .setId("LRS test")
+          .setMetadata(
+              Struct.newBuilder()
+                  .putFields(
+                      "TRAFFICDIRECTOR_NETWORK_HOSTNAME",
+                      Value.newBuilder().setStringValue("default").build()))
+          .build();
   private static final FakeClock.TaskFilter LOAD_REPORTING_TASK_FILTER =
       new FakeClock.TaskFilter() {
         @Override
@@ -416,16 +426,20 @@ public class LoadReportClientTest {
   }
 
   private static LoadStatsRequest buildInitialRequest() {
-    return LoadStatsRequest.newBuilder()
-        .setNode(
-            NODE.toBuilder()
-                .setMetadata(
-                    NODE.getMetadata()
-                        .toBuilder()
-                        .putFields(
-                            LoadReportClient.TARGET_NAME_METADATA_KEY,
-                            Value.newBuilder().setStringValue(TARGET_NAME).build())))
-        .build();
+    return
+        LoadStatsRequest.newBuilder()
+            .setNode(
+                Node.newBuilder()
+                    .setId("LRS test")
+                    .setMetadata(
+                        Struct.newBuilder()
+                            .putFields(
+                                "TRAFFICDIRECTOR_NETWORK_HOSTNAME",
+                                Value.newBuilder().setStringValue("default").build())
+                            .putFields(
+                                LoadReportClient.TARGET_NAME_METADATA_KEY,
+                                Value.newBuilder().setStringValue(TARGET_NAME).build())))
+            .build();
   }
 
   /**
