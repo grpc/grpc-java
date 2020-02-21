@@ -1817,12 +1817,12 @@ public class GrpclbLoadBalancerTest {
   public void grpclbWorking_pickFirstMode_lbSendsEmptyAddress() throws Exception {
     InOrder inOrder = inOrder(helper);
 
-    List<EquivalentAddressGroup> grpclbBalancerList = createResolvedBalancerAddresses(1);
-    deliverResolvedAddresses(
-        Collections.<EquivalentAddressGroup>emptyList(),
-        grpclbBalancerList,
-        Attributes.EMPTY,
-        GrpclbConfig.create(Mode.PICK_FIRST));
+    String lbConfig = "{\"childPolicy\" : [ {\"pick_first\" : {}} ]}";
+    List<EquivalentAddressGroup> grpclbResolutionList = createResolvedServerAddresses(true);
+    Attributes grpclbResolutionAttrs = Attributes.newBuilder().set(
+        LoadBalancer.ATTR_LOAD_BALANCING_CONFIG, parseJsonObject(lbConfig)).build();
+
+    deliverResolvedAddresses(grpclbResolutionList, grpclbResolutionAttrs);
 
     assertEquals(1, fakeOobChannels.size());
     verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
