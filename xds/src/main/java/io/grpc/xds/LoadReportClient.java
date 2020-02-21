@@ -104,7 +104,6 @@ final class LoadReportClient {
                         TARGET_NAME_METADATA_KEY,
                         Value.newBuilder().setStringValue(targetName).build()))
             .build();
-    started = false;
   }
 
   /**
@@ -149,8 +148,8 @@ final class LoadReportClient {
     checkState(
         !loadStatsStoreMap.containsKey(clusterName)
             || !loadStatsStoreMap.get(clusterName).containsKey(clusterServiceName),
-        "load stats for cluster: " + clusterName + ", cluster service: "
-            + clusterServiceName + " already exists");
+        "load stats for cluster: %s, cluster service: %s already exists",
+        clusterName, clusterServiceName);
     if (!loadStatsStoreMap.containsKey(clusterName)) {
       loadStatsStoreMap.put(clusterName, new HashMap<String, LoadStatsStore>());
     }
@@ -165,8 +164,8 @@ final class LoadReportClient {
     checkState(
         loadStatsStoreMap.containsKey(clusterName)
             && loadStatsStoreMap.get(clusterName).containsKey(clusterServiceName),
-        "load stats for cluster: " + clusterName + ", cluster service: "
-            + clusterServiceName + " does not exist");
+        "load stats for cluster: %s, cluster service: %s does not exist",
+        clusterName, clusterServiceName);
     Map<String, LoadStatsStore> clusterLoadStatsStores = loadStatsStoreMap.get(clusterName);
     clusterLoadStatsStores.remove(clusterServiceName);
     if (clusterLoadStatsStores.isEmpty()) {

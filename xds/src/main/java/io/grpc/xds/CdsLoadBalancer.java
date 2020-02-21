@@ -282,8 +282,7 @@ public final class CdsLoadBalancer extends LoadBalancer {
 
       final XdsConfig edsConfig =
           new XdsConfig(
-              /* cluster */newUpdate.getClusterName(),
-              /* childPolicy */
+              /* cluster = */ newUpdate.getClusterName(),
               new LbConfig(newUpdate.getLbPolicy(), ImmutableMap.<String, Object>of()),
               /* fallbackPolicy = */ null,
               /* edsServiceName = */ newUpdate.getEdsServiceName(),
