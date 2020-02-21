@@ -45,6 +45,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Any;
+import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment;
 import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy;
 import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
@@ -122,6 +123,7 @@ import org.mockito.MockitoAnnotations;
 @RunWith(JUnit4.class)
 public class XdsClientImplTest {
 
+  private static final String TARGET_NAME = "foo.googleapis.com:8080";
   private static final String HOSTNAME = "foo.googleapis.com";
   private static final int PORT = 8080;
 
@@ -250,7 +252,6 @@ public class XdsClientImplTest {
             new CancellationListener() {
               @Override
               public void cancelled(Context context) {
-                call.cancelled = true;
                 lrsEnded.set(true);
               }
             }, MoreExecutors.directExecutor());
@@ -282,8 +283,14 @@ public class XdsClientImplTest {
     };
 
     xdsClient =
-        new XdsClientImpl(servers, channelFactory, NODE, syncContext,
-            fakeClock.getScheduledExecutorService(), backoffPolicyProvider,
+        new XdsClientImpl(
+            TARGET_NAME,
+            servers,
+            channelFactory,
+            NODE,
+            syncContext,
+            fakeClock.getScheduledExecutorService(),
+            backoffPolicyProvider,
             fakeClock.getStopwatchSupplier());
     // Only the connection to management server is established, no RPC request is sent until at
     // least one watcher is registered.
@@ -3081,14 +3088,31 @@ public class XdsClientImplTest {
    */
   @Test
   public void reportLoadStatsToServer() {
-    LoadStatsStore loadStatsStore = mock(LoadStatsStore.class);
     String clusterName = "cluster-foo.googleapis.com";
+    LoadStatsStore loadStatsStore = new LoadStatsStoreImpl(clusterName, null);
+    ArgumentCaptor<LoadStatsRequest> requestCaptor = ArgumentCaptor.forClass(null);
     xdsClient.reportClientStats(clusterName, null, loadStatsStore);
     LoadReportCall lrsCall = loadReportCalls.poll();
-    verify(lrsCall.requestObserver).onNext(eq(buildInitialLoadStatsRequest(clusterName)));
+    verify(lrsCall.requestObserver).onNext(requestCaptor.capture());
+    assertThat(requestCaptor.getValue().getClusterStatsCount())
+        .isEqualTo(0);  // initial request
+
+    lrsCall.responseObserver.onNext(
+        LoadStatsResponse.newBuilder()
+            .addClusters(clusterName)
+            .setLoadReportingInterval(Durations.fromNanos(1000L))
+            .build());
+    fakeClock.forwardNanos(1000L);
+    verify(lrsCall.requestObserver, times(2)).onNext(requestCaptor.capture());
+    ClusterStats report = Iterables.getOnlyElement(requestCaptor.getValue().getClusterStatsList());
+    assertThat(report.getClusterName()).isEqualTo(clusterName);
 
     xdsClient.cancelClientStatsReport(clusterName, null);
-    assertThat(lrsCall.cancelled).isTrue();
+    fakeClock.forwardNanos(1000L);
+    verify(lrsCall.requestObserver, times(3)).onNext(requestCaptor.capture());
+    assertThat(requestCaptor.getValue().getClusterStatsCount())
+        .isEqualTo(0);  // no more stats reported
+
     // See more test on LoadReportClientTest.java
   }
 
@@ -3520,14 +3544,6 @@ public class XdsClientImplTest {
     assertThat(res).isEqualTo(expectedString);
   }
 
-  private static LoadStatsRequest buildInitialLoadStatsRequest(String clusterName) {
-    return
-        LoadStatsRequest.newBuilder()
-            .setNode(NODE)
-            .addClusterStats(ClusterStats.newBuilder().setClusterName(clusterName))
-            .build();
-  }
-
   /**
    * Matcher for DiscoveryRequest without the comparison of error_details field, which is used for
    * management server debugging purposes.
@@ -3577,7 +3593,6 @@ public class XdsClientImplTest {
     private final StreamObserver<LoadStatsRequest> requestObserver;
     @SuppressWarnings("unused")
     private final StreamObserver<LoadStatsResponse> responseObserver;
-    private boolean cancelled;
 
     LoadReportCall(StreamObserver<LoadStatsRequest> requestObserver,
         StreamObserver<LoadStatsResponse> responseObserver) {

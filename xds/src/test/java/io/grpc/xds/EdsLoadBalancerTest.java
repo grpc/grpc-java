@@ -235,8 +235,13 @@ public class EdsLoadBalancerTest {
     if (isFullFlow) {
       xdsClientPoolFromResolveAddresses = new FakeXdsClientPool(
           new XdsClientImpl(
-              serverList, channelFactory, Node.getDefaultInstance(), syncContext,
-              fakeClock.getScheduledExecutorService(), mock(BackoffPolicy.Provider.class),
+              SERVICE_AUTHORITY,
+              serverList,
+              channelFactory,
+              Node.getDefaultInstance(),
+              syncContext,
+              fakeClock.getScheduledExecutorService(),
+              mock(BackoffPolicy.Provider.class),
               fakeClock.getStopwatchSupplier()));
     }
 
