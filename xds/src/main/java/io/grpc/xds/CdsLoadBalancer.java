@@ -280,11 +280,13 @@ public final class CdsLoadBalancer extends LoadBalancer {
           newUpdate.getLbPolicy().equals("round_robin"),
           "The load balancing policy in ClusterUpdate '%s' is not supported", newUpdate);
 
-      final XdsConfig edsConfig = new XdsConfig(
-          new LbConfig(newUpdate.getLbPolicy(), ImmutableMap.<String, Object>of()),
-          /* fallbackPolicy = */ null,
-          /* edsServiceName = */ newUpdate.getEdsServiceName(),
-          /* lrsServerName = */ newUpdate.getLrsServerName());
+      final XdsConfig edsConfig =
+          new XdsConfig(
+              /* cluster = */ newUpdate.getClusterName(),
+              new LbConfig(newUpdate.getLbPolicy(), ImmutableMap.<String, Object>of()),
+              /* fallbackPolicy = */ null,
+              /* edsServiceName = */ newUpdate.getEdsServiceName(),
+              /* lrsServerName = */ newUpdate.getLrsServerName());
       updateSslContextProvider(newUpdate.getUpstreamTlsContext());
       if (edsBalancer == null) {
         edsBalancer = lbRegistry.getProvider(EDS_POLICY_NAME).newLoadBalancer(helper);

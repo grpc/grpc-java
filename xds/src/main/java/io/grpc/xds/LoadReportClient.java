@@ -23,6 +23,8 @@ import static com.google.common.base.Preconditions.checkState;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
+import com.google.protobuf.Struct;
+import com.google.protobuf.Value;
 import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
@@ -35,10 +37,8 @@ import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.stub.StreamObserver;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
@@ -56,6 +56,9 @@ import javax.annotation.concurrent.NotThreadSafe;
 final class LoadReportClient {
   private static final Logger logger = Logger.getLogger(XdsClientImpl.class.getName());
 
+  @VisibleForTesting
+  static final String TARGET_NAME_METADATA_KEY = "PROXYLESS_CLIENT_HOSTNAME";
+
   private final ManagedChannel channel;
   private final Node node;
   private final SynchronizationContext syncContext;
@@ -64,10 +67,8 @@ final class LoadReportClient {
   private final Stopwatch retryStopwatch;
   private final BackoffPolicy.Provider backoffPolicyProvider;
 
-  // Sources of load stats data for each cluster.
-  // FIXME(chengyuanzhang): this should be Map<String, Map<String, LoadStatsStore>> as each
-  //  ClusterStats is keyed by cluster:cluster_service. Currently, cluster_service is always unset.
-  private final Map<String, LoadStatsStore> loadStatsStoreMap = new HashMap<>();
+  // Sources of load stats data for each cluster:cluster_service.
+  private final Map<String, Map<String, LoadStatsStore>> loadStatsStoreMap = new HashMap<>();
   private boolean started;
 
   @Nullable
@@ -80,6 +81,7 @@ final class LoadReportClient {
   private LoadReportCallback callback;
 
   LoadReportClient(
+      String targetName,
       ManagedChannel channel,
       Node node,
       SynchronizationContext syncContext,
@@ -87,13 +89,21 @@ final class LoadReportClient {
       BackoffPolicy.Provider backoffPolicyProvider,
       Supplier<Stopwatch> stopwatchSupplier) {
     this.channel = checkNotNull(channel, "channel");
-    this.node = checkNotNull(node, "node");
     this.syncContext = checkNotNull(syncContext, "syncContext");
     this.timerService = checkNotNull(scheduledExecutorService, "timeService");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
     this.retryStopwatch = stopwatchSupplier.get();
-    started = false;
+    checkNotNull(targetName, "targetName");
+    checkNotNull(node, "node");
+    Struct metadata =
+        node.getMetadata()
+            .toBuilder()
+            .putFields(
+                TARGET_NAME_METADATA_KEY,
+                Value.newBuilder().setStringValue(targetName).build())
+            .build();
+    this.node = node.toBuilder().setMetadata(metadata).build();
   }
 
   /**
@@ -101,7 +111,7 @@ final class LoadReportClient {
    * stats periodically. Calling this method on an already started {@link LoadReportClient} is
    * no-op.
    */
-  public void startLoadReporting(LoadReportCallback callback) {
+  void startLoadReporting(LoadReportCallback callback) {
     if (started) {
       return;
     }
@@ -114,7 +124,7 @@ final class LoadReportClient {
    * Terminates load reporting. Calling this method on an already stopped
    * {@link LoadReportClient} is no-op.
    */
-  public void stopLoadReporting() {
+  void stopLoadReporting() {
     if (!started) {
       return;
     }
@@ -132,37 +142,35 @@ final class LoadReportClient {
    * Provides this LoadReportClient source of load stats data for the given
    * cluster:cluster_service. If requested, data from the given loadStatsStore is
    * periodically queried and sent to traffic director by this LoadReportClient.
-   *
-   * <p>Currently we expect load stats data for all clusters to report loads for are provided
-   * before load reporting starts (so that LRS initial request tells management server clusters
-   * it is reporting loads for). Design TBD for reporting loads for extra clusters after load
-   * reporting has started.
-   *
-   * <p>Note: currently clusterServiceName is always unset.
    */
-  public void addLoadStatsStore(
+  void addLoadStatsStore(
       String clusterName, @Nullable String clusterServiceName, LoadStatsStore loadStatsStore) {
     checkState(
-        !loadStatsStoreMap.containsKey(clusterName),
-        "load stats for cluster " + clusterName + " already exists");
-    // FIXME(chengyuanzhang): relax this restriction after design is fleshed out.
-    checkState(
-        !started,
-        "load stats for all clusters to report loads for should be provided before "
-            + "load reporting has started");
-    loadStatsStoreMap.put(clusterName, loadStatsStore);
+        !loadStatsStoreMap.containsKey(clusterName)
+            || !loadStatsStoreMap.get(clusterName).containsKey(clusterServiceName),
+        "load stats for cluster: %s, cluster service: %s already exists",
+        clusterName, clusterServiceName);
+    if (!loadStatsStoreMap.containsKey(clusterName)) {
+      loadStatsStoreMap.put(clusterName, new HashMap<String, LoadStatsStore>());
+    }
+    Map<String, LoadStatsStore> clusterLoadStatsStores = loadStatsStoreMap.get(clusterName);
+    clusterLoadStatsStores.put(clusterServiceName, loadStatsStore);
   }
 
   /**
    * Stops providing load stats data for the given cluster:cluster_service.
-   *
-   * <p>Note: currently clusterServiceName is always unset.
    */
-  public void removeLoadStatsStore(String clusterName, @Nullable String clusterServiceName) {
+  void removeLoadStatsStore(String clusterName, @Nullable String clusterServiceName) {
     checkState(
-        loadStatsStoreMap.containsKey(clusterName),
-        "load stats for cluster " + clusterName + " does not exist");
-    loadStatsStoreMap.remove(clusterName);
+        loadStatsStoreMap.containsKey(clusterName)
+            && loadStatsStoreMap.get(clusterName).containsKey(clusterServiceName),
+        "load stats for cluster: %s, cluster service: %s does not exist",
+        clusterName, clusterServiceName);
+    Map<String, LoadStatsStore> clusterLoadStatsStores = loadStatsStoreMap.get(clusterName);
+    clusterLoadStatsStores.remove(clusterServiceName);
+    if (clusterLoadStatsStores.isEmpty()) {
+      loadStatsStoreMap.remove(clusterName);
+    }
   }
 
   @VisibleForTesting
@@ -217,15 +225,12 @@ final class LoadReportClient {
     void start() {
       lrsRequestWriter = stub.withWaitForReady().streamLoadStats(this);
       reportStopwatch.reset().start();
-      // Tells management server which clusters the client is reporting loads for.
-      List<ClusterStats> clusterStatsList = new ArrayList<>();
-      for (String clusterName : loadStatsStoreMap.keySet()) {
-        clusterStatsList.add(ClusterStats.newBuilder().setClusterName(clusterName).build());
-      }
+
+      // Send an initial LRS request with empty cluster stats. Management server is able to
+      // infer clusters the gRPC client sending loads to.
       LoadStatsRequest initRequest =
           LoadStatsRequest.newBuilder()
               .setNode(node)
-              .addAllClusterStats(clusterStatsList)
               .build();
       lrsRequestWriter.onNext(initRequest);
       logger.log(Level.FINE, "Initial LRS request sent: {0}", initRequest);
@@ -269,13 +274,15 @@ final class LoadReportClient {
       LoadStatsRequest.Builder requestBuilder = LoadStatsRequest.newBuilder().setNode(node);
       for (String name : clusterNames) {
         if (loadStatsStoreMap.containsKey(name)) {
-          LoadStatsStore loadStatsStore = loadStatsStoreMap.get(name);
-          ClusterStats report =
-              loadStatsStore.generateLoadReport()
-                  .toBuilder()
-                  .setLoadReportInterval(Durations.fromNanos(interval))
-                  .build();
-          requestBuilder.addClusterStats(report);
+          Map<String, LoadStatsStore> clusterLoadStatsStores = loadStatsStoreMap.get(name);
+          for (LoadStatsStore statsStore : clusterLoadStatsStores.values()) {
+            ClusterStats report =
+                statsStore.generateLoadReport()
+                    .toBuilder()
+                    .setLoadReportInterval(Durations.fromNanos(interval))
+                    .build();
+            requestBuilder.addClusterStats(report);
+          }
         }
       }
       LoadStatsRequest request = requestBuilder.build();
@@ -308,10 +315,16 @@ final class LoadReportClient {
       } else {
         logger.log(Level.FINE, "Received an LRS response: {0}", response);
       }
-      loadReportIntervalNano = Durations.toNanos(response.getLoadReportingInterval());
-      callback.onReportResponse(loadReportIntervalNano);
-      clusterNames.clear();
-      clusterNames.addAll(response.getClustersList());
+      long interval =  Durations.toNanos(response.getLoadReportingInterval());
+      if (interval != loadReportIntervalNano) {
+        loadReportIntervalNano = interval;
+        callback.onReportResponse(loadReportIntervalNano);
+      }
+      if (clusterNames.size() != response.getClustersCount()
+          || !clusterNames.containsAll(response.getClustersList())) {
+        clusterNames.clear();
+        clusterNames.addAll(response.getClustersList());
+      }
       scheduleNextLoadReport();
     }
 

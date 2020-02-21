@@ -155,6 +155,7 @@ public class XdsLoadBalancerProviderTest {
   @Test
   public void parseLoadBalancingConfigPolicy() throws Exception {
     String rawLbConfig = "{"
+        + "\"cluster\" : \"foo.googleapis.com\","
         + "\"childPolicy\" : [{\"lbPolicy3\" : {\"key\" : \"val\"}}, {\"supported_1\" : {}}],"
         + "\"fallbackPolicy\" : [{\"unsupported\" : {}}, {\"round_robin\" : {\"key\" : \"val\"}},"
         + "{\"supported_2\" : {\"key\" : \"val\"}}],"
@@ -169,6 +170,7 @@ public class XdsLoadBalancerProviderTest {
     assertThat(configOrError.getConfig()).isInstanceOf(XdsConfig.class);
     assertThat(configOrError.getConfig()).isEqualTo(
         new XdsConfig(
+            "foo.googleapis.com",
             ServiceConfigUtil.unwrapLoadBalancingConfig(
                 checkObject(JsonParser.parse("{\"supported_1\" : {}}"))),
             ServiceConfigUtil.unwrapLoadBalancingConfig(
