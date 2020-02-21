@@ -204,9 +204,6 @@ final class EdsLoadBalancer extends LoadBalancer {
     channelLogger.log(ChannelLogLevel.DEBUG, "EDS load balancer is shutting down");
     switchingLoadBalancer.shutdown();
     if (xdsClient != null) {
-      if (xdsConfig != null && xdsConfig.lrsServerName != null) {
-        xdsClient.cancelClientStatsReport(clusterName, null);
-      }
       xdsClient = xdsClientPool.returnObject(xdsClient);
     }
   }
