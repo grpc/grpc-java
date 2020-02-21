@@ -112,19 +112,22 @@ abstract class XdsClient {
    */
   static final class ClusterUpdate {
     private final String clusterName;
+    @Nullable
     private final String edsServiceName;
     private final String lbPolicy;
-    private final boolean enableLrs;
+    @Nullable
     private final String lrsServerName;
     private final UpstreamTlsContext upstreamTlsContext;
 
-    private ClusterUpdate(String clusterName, String edsServiceName, String lbPolicy,
-        boolean enableLrs, @Nullable String lrsServerName,
+    private ClusterUpdate(
+        String clusterName,
+        @Nullable String edsServiceName,
+        String lbPolicy,
+        @Nullable String lrsServerName,
         @Nullable UpstreamTlsContext upstreamTlsContext) {
       this.clusterName = clusterName;
       this.edsServiceName = edsServiceName;
       this.lbPolicy = lbPolicy;
-      this.enableLrs = enableLrs;
       this.lrsServerName = lrsServerName;
       this.upstreamTlsContext = upstreamTlsContext;
     }
@@ -136,6 +139,7 @@ abstract class XdsClient {
     /**
      * Returns the resource name for EDS requests.
      */
+    @Nullable
     String getEdsServiceName() {
       return edsServiceName;
     }
@@ -149,15 +153,8 @@ abstract class XdsClient {
     }
 
     /**
-     * Returns true if LRS is enabled.
-     */
-    boolean isEnableLrs() {
-      return enableLrs;
-    }
-
-    /**
      * Returns the server name to send client load reports to if LRS is enabled. {@code null} if
-     * {@link #isEnableLrs()} returns {@code false}.
+     * load reporting is disabled for this cluster.
      */
     @Nullable
     String getLrsServerName() {
@@ -176,9 +173,9 @@ abstract class XdsClient {
 
     static final class Builder {
       private String clusterName;
+      @Nullable
       private String edsServiceName;
       private String lbPolicy;
-      private boolean enableLrs;
       @Nullable
       private String lrsServerName;
       @Nullable
@@ -203,11 +200,6 @@ abstract class XdsClient {
         return this;
       }
 
-      Builder setEnableLrs(boolean enableLrs) {
-        this.enableLrs = enableLrs;
-        return this;
-      }
-
       Builder setLrsServerName(String lrsServerName) {
         this.lrsServerName = lrsServerName;
         return this;
@@ -221,13 +213,10 @@ abstract class XdsClient {
       ClusterUpdate build() {
         Preconditions.checkState(clusterName != null, "clusterName is not set");
         Preconditions.checkState(lbPolicy != null, "lbPolicy is not set");
-        Preconditions.checkState(
-            (enableLrs && lrsServerName != null) || (!enableLrs && lrsServerName == null),
-            "lrsServerName is not set while LRS is enabled "
-                + "OR lrsServerName is set while LRS is not enabled");
+
         return
-            new ClusterUpdate(clusterName, edsServiceName == null ? clusterName : edsServiceName,
-                lbPolicy, enableLrs, lrsServerName, upstreamTlsContext);
+            new ClusterUpdate(
+                clusterName, edsServiceName, lbPolicy, lrsServerName, upstreamTlsContext);
       }
     }
   }

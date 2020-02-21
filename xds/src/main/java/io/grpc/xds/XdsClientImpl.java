@@ -88,6 +88,8 @@ final class XdsClientImpl extends XdsClient {
 
   private final MessagePrinter respPrinter = new MessagePrinter();
 
+  // Name of the target server this gRPC client is trying to talk to.
+  private final String targetName;
   private final ManagedChannel channel;
   private final SynchronizationContext syncContext;
   private final ScheduledExecutorService timeService;
@@ -162,6 +164,7 @@ final class XdsClientImpl extends XdsClient {
   private String ldsResourceName;
 
   XdsClientImpl(
+      String targetName,
       List<ServerInfo> servers,  // list of management servers
       XdsChannelFactory channelFactory,
       Node node,
@@ -169,6 +172,7 @@ final class XdsClientImpl extends XdsClient {
       ScheduledExecutorService timeService,
       BackoffPolicy.Provider backoffPolicyProvider,
       Supplier<Stopwatch> stopwatchSupplier) {
+    this.targetName = checkNotNull(targetName, "targetName");
     this.channel =
         checkNotNull(channelFactory, "channelFactory")
             .createChannel(checkNotNull(servers, "servers"));
@@ -407,29 +411,30 @@ final class XdsClientImpl extends XdsClient {
   @Override
   void reportClientStats(
       String clusterName, @Nullable String clusterServiceName, LoadStatsStore loadStatsStore) {
-    checkState(lrsClient == null,
-        "load reporting has already started, cannot change clusters to report loads for");
-    lrsClient =
-        new LoadReportClient(
-            channel,
-            node,
-            syncContext,
-            timeService,
-            backoffPolicyProvider,
-            stopwatchSupplier);
+    if (lrsClient == null) {
+      lrsClient =
+          new LoadReportClient(
+              targetName,
+              channel,
+              node,
+              syncContext,
+              timeService,
+              backoffPolicyProvider,
+              stopwatchSupplier);
+      lrsClient.startLoadReporting(new LoadReportCallback() {
+        @Override
+        public void onReportResponse(long reportIntervalNano) {}
+      });
+    }
     lrsClient.addLoadStatsStore(clusterName, clusterServiceName, loadStatsStore);
-    lrsClient.startLoadReporting(new LoadReportCallback() {
-      @Override
-      public void onReportResponse(long reportIntervalNano) {}
-    });
   }
 
   @Override
   void cancelClientStatsReport(String clusterName, @Nullable String clusterServiceName) {
     checkState(lrsClient != null, "load reporting was never started");
     lrsClient.removeLoadStatsStore(clusterName, clusterServiceName);
-    lrsClient.stopLoadReporting();
-    lrsClient = null;
+    // TODO(chengyuanzhang): can be optimized to stop load reporting if no more loads need
+    //  to be reported.
   }
 
   /**
@@ -740,8 +745,7 @@ final class XdsClientImpl extends XdsClient {
             + "indicate to use EDS over ADS.";
         break;
       }
-      // If the service_name field is set, that value will be used for the EDS request
-      // instead of the cluster name (default).
+      // If the service_name field is set, that value will be used for the EDS request.
       if (!edsClusterConfig.getServiceName().isEmpty()) {
         updateBuilder.setEdsServiceName(edsClusterConfig.getServiceName());
         edsServices.add(edsClusterConfig.getServiceName());
@@ -764,10 +768,7 @@ final class XdsClientImpl extends XdsClient {
               + "management server.";
           break;
         }
-        updateBuilder.setEnableLrs(true);
         updateBuilder.setLrsServerName("");
-      } else {
-        updateBuilder.setEnableLrs(false);
       }
       if (cluster.hasTlsContext()) {
         updateBuilder.setUpstreamTlsContext(cluster.getTlsContext());

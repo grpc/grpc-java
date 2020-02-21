@@ -123,6 +123,7 @@ final class XdsNameResolver extends NameResolver {
       XdsClient createXdsClient() {
         return
             new XdsClientImpl(
+                authority,
                 serverList,
                 channelFactory,
                 node,
