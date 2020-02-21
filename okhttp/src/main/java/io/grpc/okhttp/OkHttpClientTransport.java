@@ -481,8 +481,8 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       synchronized (lock) {
         frameWriter = new ExceptionHandlingFrameWriter(OkHttpClientTransport.this, testFrameWriter,
             testFrameLogger);
-        outboundFlow =
-            new OutboundFlowController(OkHttpClientTransport.this, frameWriter, initialWindowSize);
+        outboundFlow = new OutboundFlowController(
+            OkHttpClientTransport.this, frameWriter, DEFAULT_WINDOW_SIZE);
       }
       serializingExecutor.execute(new Runnable() {
         @Override
@@ -508,7 +508,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
 
     synchronized (lock) {
       frameWriter = new ExceptionHandlingFrameWriter(this, rawFrameWriter);
-      outboundFlow = new OutboundFlowController(this, frameWriter, initialWindowSize);
+      outboundFlow = new OutboundFlowController(this, frameWriter, DEFAULT_WINDOW_SIZE);
     }
     final CountDownLatch latch = new CountDownLatch(1);
     // Connecting in the serializingExecutor, so that some stream operations like synStream
