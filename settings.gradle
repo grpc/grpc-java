@@ -85,3 +85,10 @@ if (settings.hasProperty('skipAndroid') && skipAndroid.toBoolean()) {
     include ":grpc-cronet"
     project(':grpc-cronet').projectDir = "$rootDir/cronet" as File
 }
+
+if (settings.hasProperty('includeRls') && includeRls.toBoolean()) {
+    println '  * Building RLS because includeRls=true'
+    include ":grpc-rls"
+    project(':grpc-rls').projectDir = "$rootDir/rls" as File
+}
+
