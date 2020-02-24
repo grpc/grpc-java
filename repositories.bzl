@@ -295,7 +295,7 @@ def com_squareup_okhttp_okhttp():
         name = "com_squareup_okhttp_okhttp",
         artifact = "com.squareup.okhttp:okhttp:2.7.4",
         server_urls = ["https://repo.maven.apache.org/maven2/"],
-        artifact_sha256 = "1cc716e29539adcda677949508162796daffedb4794cbf947a6f65e696f0381c",
+        artifact_sha256 = "c88be9af1509d5aeec9394a818c0fa08e26fad9d64ba134e6f977e0bb20cb114",
         licenses = ["notice"],  # Apache 2.0
     )
 
