@@ -34,7 +34,7 @@ import javax.annotation.concurrent.Immutable;
 /** RlsProtoData is a collection of internal representation of RouteLookupService proto messages. */
 public final class RlsProtoData {
 
-  /** A data object for RouteLookupRequest proto. */
+  /** A request object sent to route lookup service. */
   @Immutable
   public static final class RouteLookupRequest {
 
@@ -115,6 +115,7 @@ public final class RlsProtoData {
     }
   }
 
+  /** A response from route lookup service. */
   @Immutable
   public static final class RouteLookupResponse {
 
@@ -171,7 +172,7 @@ public final class RlsProtoData {
     }
   }
 
-  /** A Config object for gRPC RouteLookupService. */
+  /** A config object for gRPC RouteLookupService. */
   @Immutable
   public static final class RouteLookupConfig {
 
@@ -362,7 +363,7 @@ public final class RlsProtoData {
     }
   }
 
-  /** A RequestProcessingStrategy specify how to process a request when not already in the cache. */
+  /** RequestProcessingStrategy specifies how to process a request when not already in the cache. */
   enum RequestProcessingStrategy {
     /**
      * Query the RLS and process the request using target returned by the lookup. The target will
@@ -388,7 +389,7 @@ public final class RlsProtoData {
   }
 
   /**
-   * A NameMatcher extract a key based on a given name (e.g. header name or query parameter name).
+   * NameMatcher extract a key based on a given name (e.g. header name or query parameter name).
    * The name must match one of the names listed in the "name" field. If the "required_match" field
    * is true, one of the specified names must be present for the keybuilder to match.
    */
@@ -453,7 +454,7 @@ public final class RlsProtoData {
     }
   }
 
-  /** A GrpcKeyBuilder applies to a given gRPC service, name, and headers. */
+  /** GrpcKeyBuilder is a configuration to construct headers consumed by route lookup service. */
   static final class GrpcKeyBuilder {
 
     private final ImmutableList<Name> names;
@@ -518,10 +519,10 @@ public final class RlsProtoData {
     }
 
     /**
-     * A Name for method for given service. To match, one of the given Name fields must match; the
-     * service and method fields are specified as fixed strings. The service name is required and
-     * includes the proto package name. The method name may be omitted, in which case any method on
-     * the given service is matched.
+     * Name represents a method for a given service. To match, one of the given Name fields must
+     * match; the service and method fields are specified as fixed strings. The service name is
+     * required and includes the proto package name. The method name may be omitted, in which case
+     * any method on the given service is matched.
      */
     static final class Name {
 
