@@ -419,6 +419,7 @@ final class XdsClientImpl extends XdsClient {
     if (lrsClient == null) {
       lrsClient =
           new LoadReportClient(
+              logId,
               targetName,
               channel,
               node,
@@ -431,12 +432,20 @@ final class XdsClientImpl extends XdsClient {
         public void onReportResponse(long reportIntervalNano) {}
       });
     }
+    logger.log(
+        XdsLogLevel.INFO,
+        "Report loads for cluster: {0}, cluster_service: {1}", clusterName, clusterServiceName);
     lrsClient.addLoadStatsStore(clusterName, clusterServiceName, loadStatsStore);
   }
 
   @Override
   void cancelClientStatsReport(String clusterName, @Nullable String clusterServiceName) {
     checkState(lrsClient != null, "load reporting was never started");
+    logger.log(
+        XdsLogLevel.INFO,
+        "Stop reporting loads for cluster: {0}, cluster_service: {1}",
+        clusterName,
+        clusterServiceName);
     lrsClient.removeLoadStatsStore(clusterName, clusterServiceName);
     // TODO(chengyuanzhang): can be optimized to stop load reporting if no more loads need
     //  to be reported.
@@ -1155,8 +1164,8 @@ final class XdsClientImpl extends XdsClient {
       }
       logger.log(
           XdsLogLevel.ERROR,
-          "ADS stream closed with status {0}: {1}. Cause: {2}.",
-          error.getCode(), error.getDescription(), error.getDescription());
+          "ADS stream closed with status {0}: {1}. Cause: {2}",
+          error.getCode(), error.getDescription(), error.getCause());
       closed = true;
       if (configWatcher != null) {
         configWatcher.onError(error);
@@ -1186,7 +1195,7 @@ final class XdsClientImpl extends XdsClient {
                 retryBackoffPolicy.nextBackoffNanos()
                     - adsStreamRetryStopwatch.elapsed(TimeUnit.NANOSECONDS));
       }
-      logger.log(XdsLogLevel.DEBUG, "ADS stream retry in {0} ns", delayNanos);
+      logger.log(XdsLogLevel.INFO, "Retry ADS stream in {0} ns", delayNanos);
       rpcRetryTimer =
           syncContext.schedule(
               new RpcRetryTask(), delayNanos, TimeUnit.NANOSECONDS, timeService);
