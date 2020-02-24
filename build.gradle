@@ -125,7 +125,7 @@ subprojects {
             google_api_protos: 'com.google.api.grpc:proto-google-common-protos:1.17.0',
             google_auth_credentials: "com.google.auth:google-auth-library-credentials:${googleauthVersion}",
             google_auth_oauth2_http: "com.google.auth:google-auth-library-oauth2-http:${googleauthVersion}",
-            okhttp: 'com.squareup.okhttp:okhttp:2.5.0',
+            okhttp: 'com.squareup.okhttp:okhttp:2.7.4',
             okio: 'com.squareup.okio:okio:1.13.0',
             opencensus_api: "io.opencensus:opencensus-api:${opencensusVersion}",
             opencensus_contrib_grpc_metrics: "io.opencensus:opencensus-contrib-grpc-metrics:${opencensusVersion}",
