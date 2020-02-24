@@ -48,9 +48,9 @@ import io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint;
 import io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints;
 import io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceImplBase;
 import io.grpc.Attributes;
-import io.grpc.ChannelLogger;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
@@ -173,7 +173,6 @@ public class EdsLoadBalancerTest {
   public void setUp() throws Exception {
     doReturn(SERVICE_AUTHORITY).when(helper).getAuthority();
     doReturn(syncContext).when(helper).getSynchronizationContext();
-    doReturn(mock(ChannelLogger.class)).when(helper).getChannelLogger();
     doReturn(fakeClock.getScheduledExecutorService()).when(helper).getScheduledExecutorService();
 
     // Register a fake round robin balancer provider.
@@ -594,7 +593,10 @@ public class EdsLoadBalancerTest {
     final ArrayDeque<LocalityStore> localityStores = new ArrayDeque<>();
     localityStoreFactory = new LocalityStoreFactory() {
       @Override
-      LocalityStore newLocalityStore(Helper helper, LoadBalancerRegistry lbRegistry,
+      LocalityStore newLocalityStore(
+          InternalLogId logId,
+          Helper helper,
+          LoadBalancerRegistry lbRegistry,
           LoadStatsStore loadStatsStore) {
         // Note that this test approach can not verify anything about how localityStore will use the
         // helper in the arguments to delegate updates from localityStore to the EDS balancer, and
