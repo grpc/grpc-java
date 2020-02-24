@@ -1237,7 +1237,7 @@ void GenerateService(const ServiceDescriptor* service,
   }
   PrintImports(&printer);
 
-  // Package std::string is used to fully qualify method names.
+  // Package string is used to fully qualify method names.
   vars["Package"] = service->file()->package();
   if (!vars["Package"].empty()) {
     vars["Package"].append(".");
