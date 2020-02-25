@@ -99,4 +99,3 @@ publishing {
         }
     }
 }
-[publishMavenPublicationToMavenRepository]*.onlyIf { false }
