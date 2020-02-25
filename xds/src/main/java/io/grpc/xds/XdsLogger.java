@@ -91,7 +91,7 @@ final class XdsLogger {
    * Java logger levels.
    * <pre>
    * +---------------------+-------------------+
-   * | ChannelLogger Level | Java Logger Level |
+   * | XdsLogger Level     | Java Logger Level |
    * +---------------------+-------------------+
    * | DEBUG               | FINEST            |
    * | INFO                | FINER             |
