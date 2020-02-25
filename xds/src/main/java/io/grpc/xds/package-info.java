@@ -19,9 +19,9 @@
  *
  * <p>The package currently includes a name resolver plugin and a family of load balancer plugins.
  * A gRPC channel for a target with {@code "xds-experimental"} scheme will load the plugins and a
- * bootstrap file and communicate with an external control plane management server (e.g. Traffic
- * Director) that speaks Envoy xDS protocol to retrieve routing, load balancing, load reporting
- * configurations etc. for the channel. More features will be added.
+ * bootstrap file, and will communicate with an external control plane management server (e.g.
+ * Traffic Director) that speaks Envoy xDS protocol to retrieve routing, load balancing, load
+ * reporting configurations etc. for the channel. More features will be added.
  *
  * <p>The library is currently in an agile development phase, so API and design are subject to
  * breaking changes.
