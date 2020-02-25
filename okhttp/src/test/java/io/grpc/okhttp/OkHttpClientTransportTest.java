@@ -838,37 +838,34 @@ public class OkHttpClientTransportTest {
 
   @Test
   public void outboundFlowControl() throws Exception {
-    outboundFlowControl(INITIAL_WINDOW_SIZE);
-  }
-
-  private void outboundFlowControl(int windowSize) throws Exception {
-    startTransport(
-        DEFAULT_START_STREAM_ID, null, true, DEFAULT_MAX_MESSAGE_SIZE, windowSize, null);
+    initTransport();
     MockStreamListener listener = new MockStreamListener();
     OkHttpClientStream stream =
         clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream.start(listener);
+
+    // Outbound window always starts at 65535 until changed by Settings.INITIAL_WINDOW_SIZE
+    int initialOutboundWindowSize = 65535;
+    int messageLength = initialOutboundWindowSize / 2 + 1;
+
     // The first message should be sent out.
-    int messageLength = windowSize / 2 + 1;
     InputStream input = new ByteArrayInputStream(new byte[messageLength]);
     stream.writeMessage(input);
     stream.flush();
     verify(frameWriter, timeout(TIME_OUT_MS)).data(
         eq(false), eq(3), any(Buffer.class), eq(messageLength + HEADER_LENGTH));
 
-
     // The second message should be partially sent out.
     input = new ByteArrayInputStream(new byte[messageLength]);
     stream.writeMessage(input);
     stream.flush();
-    int partiallySentSize =
-        windowSize - messageLength - HEADER_LENGTH;
+    int partiallySentSize = initialOutboundWindowSize - messageLength - HEADER_LENGTH;
     verify(frameWriter, timeout(TIME_OUT_MS))
         .data(eq(false), eq(3), any(Buffer.class), eq(partiallySentSize));
 
     // Get more credit, the rest data should be sent out.
-    frameHandler().windowUpdate(3, windowSize);
-    frameHandler().windowUpdate(0, windowSize);
+    frameHandler().windowUpdate(3, initialOutboundWindowSize);
+    frameHandler().windowUpdate(0, initialOutboundWindowSize);
     verify(frameWriter, timeout(TIME_OUT_MS)).data(
         eq(false), eq(3), any(Buffer.class),
         eq(messageLength + HEADER_LENGTH - partiallySentSize));
@@ -876,16 +873,6 @@ public class OkHttpClientTransportTest {
     stream.cancel(Status.CANCELLED);
     listener.waitUntilStreamClosed();
     shutdownAndVerify();
-  }
-
-  @Test
-  public void outboundFlowControl_smallWindowSize() throws Exception {
-    outboundFlowControl(100);
-  }
-
-  @Test
-  public void outboundFlowControl_bigWindowSize() throws Exception {
-    outboundFlowControl(INITIAL_WINDOW_SIZE * 2);
   }
 
   @Test
