@@ -15,7 +15,16 @@
  */
 
 /**
- * The XDS loadbalancer plugin implementation.
+ * Library for gPRC proxyless service mesh using Envoy xDS protocol.
+ *
+ * <p>The package currently includes a name resolver plugin and a family of load balancer plugins.
+ * A gRPC channel for a target with {@code "xds-experimental"} scheme will load the plugins and a
+ * bootstrap file, and will communicate with an external control plane management server (e.g.
+ * Traffic Director) that speaks Envoy xDS protocol to retrieve routing, load balancing, load
+ * reporting configurations etc. for the channel. More features will be added.
+ *
+ * <p>The library is currently in an agile development phase, so API and design are subject to
+ * breaking changes.
  */
 @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/5288")
 package io.grpc.xds;

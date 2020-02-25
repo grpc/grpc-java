@@ -63,6 +63,10 @@ jar {
     classifier = 'original'
 }
 
+javadoc {
+    exclude 'io/grpc/xds/internal/**'
+}
+
 shadowJar {
     classifier = null
     dependencies {
@@ -95,4 +99,3 @@ publishing {
         }
     }
 }
-[publishMavenPublicationToMavenRepository]*.onlyIf { false }

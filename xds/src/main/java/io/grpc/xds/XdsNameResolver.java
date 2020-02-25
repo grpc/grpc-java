@@ -50,8 +50,8 @@ import javax.annotation.Nullable;
 /**
  * A {@link NameResolver} for resolving gRPC target names with "xds-experimental" scheme.
  *
- * <p>Resolving a gRPC target involves contacting the traffic director via xDS protocol to
- * retrieve service information and produce a service config to the caller.
+ * <p>Resolving a gRPC target involves contacting the control plane management server via xDS
+ * protocol to retrieve service information and produce a service config to the caller.
  *
  * @see XdsNameResolverProvider
  */
@@ -114,7 +114,7 @@ final class XdsNameResolver extends NameResolver {
     final Node node = bootstrapInfo.getNode();
     if (serverList.isEmpty()) {
       listener.onError(
-          Status.UNAVAILABLE.withDescription("No traffic director provided by bootstrap"));
+          Status.UNAVAILABLE.withDescription("No management server provided by bootstrap"));
       return;
     }
 

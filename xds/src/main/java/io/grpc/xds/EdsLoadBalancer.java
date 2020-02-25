@@ -148,7 +148,7 @@ final class EdsLoadBalancer extends LoadBalancer {
               TRANSIENT_FAILURE,
               new ErrorPicker(
                   Status.UNAVAILABLE
-                      .withDescription("No traffic director provided by bootstrap")));
+                      .withDescription("No management server provided by bootstrap")));
           return;
         }
         XdsClientFactory xdsClientFactory = new XdsClientFactory() {
