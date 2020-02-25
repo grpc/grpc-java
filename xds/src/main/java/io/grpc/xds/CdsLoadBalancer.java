@@ -93,6 +93,9 @@ public final class CdsLoadBalancer extends LoadBalancer {
     Object lbConfig = resolvedAddresses.getLoadBalancingPolicyConfig();
     checkNotNull(lbConfig, "missing CDS lb config");
     CdsConfig newCdsConfig = (CdsConfig) lbConfig;
+    logger.log(
+        XdsLogLevel.INFO,
+        "Received CDS lb config: cluster={0}", newCdsConfig.name);
 
     // If cluster is changed, do a graceful switch.
     if (!newCdsConfig.name.equals(clusterName)) {
