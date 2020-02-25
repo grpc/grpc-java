@@ -33,8 +33,7 @@ import java.net.URI;
  * slash {@code '/'}, will indicate the name to use in the VHDS query.
  *
  * <p>This class should not be directly referenced in code. The resolver should be accessed
- * through {@link io.grpc.NameResolverRegistry#asFactory#newNameResolver(URI, Args)} with the URI
- * scheme "xds-experimental".
+ * through {@link io.grpc.NameResolverRegistry} with the URI scheme "xds-experimental".
  */
 @Internal
 public final class XdsNameResolverProvider extends NameResolverProvider {
