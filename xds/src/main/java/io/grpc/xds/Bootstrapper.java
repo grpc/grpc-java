@@ -45,7 +45,7 @@ import javax.annotation.concurrent.Immutable;
 @Internal
 public abstract class Bootstrapper {
 
-  private static final String logPrefix = "bootstrap";
+  private static final String logPrefix = "xds-bootstrap";
   private static final String BOOTSTRAP_PATH_SYS_ENV_VAR = "GRPC_XDS_BOOTSTRAP";
 
   private static final Bootstrapper DEFAULT_INSTANCE = new Bootstrapper() {
