@@ -605,16 +605,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     });
     // Schedule to send connection preface & settings before any other write.
     try {
-      synchronized (lock) {
-        frameWriter.connectionPreface();
-        Settings settings = new Settings();
-        OkHttpSettingsUtil.set(settings, OkHttpSettingsUtil.INITIAL_WINDOW_SIZE, initialWindowSize);
-        frameWriter.settings(settings);
-        if (initialWindowSize > DEFAULT_WINDOW_SIZE) {
-          frameWriter.windowUpdate(
-              Utils.CONNECTION_STREAM_ID, initialWindowSize - DEFAULT_WINDOW_SIZE);
-        }
-      }
+      sendConnectionPrefaceAndSettings();
     } finally {
       latch.countDown();
     }
@@ -632,6 +623,23 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       }
     });
     return null;
+  }
+
+  /**
+   * Should only be called once when the transport is first established.
+   */
+  @VisibleForTesting
+  void sendConnectionPrefaceAndSettings() {
+    synchronized (lock) {
+      frameWriter.connectionPreface();
+      Settings settings = new Settings();
+      OkHttpSettingsUtil.set(settings, OkHttpSettingsUtil.INITIAL_WINDOW_SIZE, initialWindowSize);
+      frameWriter.settings(settings);
+      if (initialWindowSize > DEFAULT_WINDOW_SIZE) {
+        frameWriter.windowUpdate(
+                Utils.CONNECTION_STREAM_ID, initialWindowSize - DEFAULT_WINDOW_SIZE);
+      }
+    }
   }
 
   private Socket createHttpProxySocket(InetSocketAddress address, InetSocketAddress proxyAddress,

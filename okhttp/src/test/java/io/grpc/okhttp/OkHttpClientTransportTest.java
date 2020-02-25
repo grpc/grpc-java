@@ -404,6 +404,36 @@ public class OkHttpClientTransportTest {
     shutdownAndVerify();
   }
 
+  @Test
+  public void includeInitialWindowSizeInFirstSettings() throws Exception {
+    int initialWindowSize = 65535;
+    startTransport(
+            DEFAULT_START_STREAM_ID, null, true, DEFAULT_MAX_MESSAGE_SIZE, initialWindowSize, null);
+    clientTransport.sendConnectionPrefaceAndSettings();
+
+    ArgumentCaptor<Settings> settings = ArgumentCaptor.forClass(Settings.class);
+    verify(frameWriter, timeout(TIME_OUT_MS)).settings(settings.capture());
+    assertEquals(65535, settings.getValue().get(7));
+  }
+
+  /**
+   * A "large" window size is anything over 65535 (the starting size for any connection-level
+   * flow control value).
+   */
+  @Test
+  public void includeInitialWindowSizeInFirstSettings_largeWindowSize() throws Exception {
+    int initialWindowSize = 75535; // 65535 + 10000
+    startTransport(
+            DEFAULT_START_STREAM_ID, null, true, DEFAULT_MAX_MESSAGE_SIZE, initialWindowSize, null);
+    clientTransport.sendConnectionPrefaceAndSettings();
+
+    ArgumentCaptor<Settings> settings = ArgumentCaptor.forClass(Settings.class);
+    verify(frameWriter, timeout(TIME_OUT_MS)).settings(settings.capture());
+    assertEquals(75535, settings.getValue().get(7));
+
+    verify(frameWriter, timeout(TIME_OUT_MS)).windowUpdate(0, 10000);
+  }
+
   /**
    * When nextFrame throws IOException, the transport should be aborted.
    */
