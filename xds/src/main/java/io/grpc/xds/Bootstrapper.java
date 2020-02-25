@@ -86,7 +86,7 @@ public abstract class Bootstrapper {
     if (rawServerConfigs == null) {
       throw new IOException("Invalid bootstrap: 'xds_servers' does not exist.");
     }
-    logger.log(XdsLogLevel.INFO, "Configured with {0} xDS servers", servers.size());
+    logger.log(XdsLogLevel.INFO, "Configured with {0} xDS servers", rawServerConfigs.size());
     List<Map<String, ?>> serverConfigList = JsonUtil.checkObjectList(rawServerConfigs);
     for (Map<String, ?> serverConfig : serverConfigList) {
       String serverUri = JsonUtil.getString(serverConfig, "server_uri");
