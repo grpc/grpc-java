@@ -21,7 +21,7 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.guava:failureaccess:1.0.1",
     "com.google.guava:guava:28.1-android",
     "com.google.j2objc:j2objc-annotations:1.3",
-    "com.google.truth:truth:1.0",
+    "com.google.truth:truth:1.0.1",
     "com.squareup.okhttp:okhttp:2.7.4",
     "com.squareup.okio:okio:1.13.0",
     "io.netty:netty-buffer:4.1.45.Final",
@@ -40,7 +40,7 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "io.opencensus:opencensus-contrib-grpc-metrics:0.24.0",
     "io.perfmark:perfmark-api:0.19.0",
     "javax.annotation:javax.annotation-api:1.2",
-    "junit:junit:4.12",
+    "junit:junit:4.13",
     "org.apache.commons:commons-lang3:3.5",
     "org.codehaus.mojo:animal-sniffer-annotations:1.18",
 ]
@@ -284,9 +284,9 @@ def com_google_protobuf_javalite():
 def com_google_truth_truth():
     jvm_maven_import_external(
         name = "com_google_truth_truth",
-        artifact = "com.google.truth:truth:1.0",
+        artifact = "com.google.truth:truth:1.0.1",
         server_urls = ["https://repo.maven.apache.org/maven2/"],
-        artifact_sha256 = "edaa12f3b581fcf1c07311e94af8766919c4f3d904b00d3503147b99bf5b4004",
+        artifact_sha256 = "1ccf4334e7a94cf00a20a619b5462b53acf3274e00b70498bf5b28a3bc1be9b1",
         licenses = ["notice"],  # Apache 2.0
     )
 
@@ -464,9 +464,9 @@ def javax_annotation_javax_annotation_api():
 def junit_junit():
     jvm_maven_import_external(
         name = "junit_junit",
-        artifact = "junit:junit:4.12",
+        artifact = "junit:junit:4.13",
         server_urls = ["https://repo.maven.apache.org/maven2/"],
-        artifact_sha256 = "59721f0805e223d84b90677887d9ff567dc534d7c502ca903c0c2b17f05c116a",
+        artifact_sha256 = "4b8532f63bdc0e0661507f947eb324a954d1dbac631ad19c8aa9a00feed1d863",
         licenses = ["notice"],  # EPL 1.0
     )
 
