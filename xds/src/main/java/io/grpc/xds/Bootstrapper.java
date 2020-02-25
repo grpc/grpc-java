@@ -45,7 +45,7 @@ import javax.annotation.concurrent.Immutable;
 @Internal
 public abstract class Bootstrapper {
 
-  private static final String logPrefix = "xds-bootstrap";
+  private static final String LOG_PREFIX = "xds-bootstrap";
   private static final String BOOTSTRAP_PATH_SYS_ENV_VAR = "GRPC_XDS_BOOTSTRAP";
 
   private static final Bootstrapper DEFAULT_INSTANCE = new Bootstrapper() {
@@ -57,8 +57,8 @@ public abstract class Bootstrapper {
             new IOException("Environment variable " + BOOTSTRAP_PATH_SYS_ENV_VAR + " not defined.");
       }
       XdsLogger
-          .withPrefix(logPrefix)
-          .log(XdsLogLevel.INFO, "GRPC_XDS_BOOTSTRAP={0}", filePath);
+          .withPrefix(LOG_PREFIX)
+          .log(XdsLogLevel.INFO, BOOTSTRAP_PATH_SYS_ENV_VAR + "={0}", filePath);
       return parseConfig(
           new String(Files.readAllBytes(Paths.get(filePath)), StandardCharsets.UTF_8));
     }
@@ -75,7 +75,7 @@ public abstract class Bootstrapper {
 
   @VisibleForTesting
   static BootstrapInfo parseConfig(String rawData) throws IOException {
-    XdsLogger logger = XdsLogger.withPrefix(logPrefix);
+    XdsLogger logger = XdsLogger.withPrefix(LOG_PREFIX);
     logger.log(XdsLogLevel.INFO, "Reading bootstrap information");
     @SuppressWarnings("unchecked")
     Map<String, ?> rawBootstrap = (Map<String, ?>) JsonParser.parse(rawData);
