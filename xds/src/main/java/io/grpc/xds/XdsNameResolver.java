@@ -96,7 +96,7 @@ final class XdsNameResolver extends NameResolver {
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
     this.bootstrapper = checkNotNull(bootstrapper, "bootstrapper");
-    logger = XdsLogger.withLogId(InternalLogId.allocate("xds-resolver", null));
+    logger = XdsLogger.withLogId(InternalLogId.allocate("xds-resolver", name));
     logger.log(XdsLogLevel.INFO, "Created resolver for {0}", name);
   }
 

@@ -99,7 +99,7 @@ final class EdsLoadBalancer extends LoadBalancer {
     this.bootstrapper = checkNotNull(bootstrapper, "bootstrapper");
     this.channelFactory = checkNotNull(channelFactory, "channelFactory");
     this.switchingLoadBalancer = new GracefulSwitchLoadBalancer(edsLbHelper);
-    logId = InternalLogId.allocate("eds-lb", null);
+    logId = InternalLogId.allocate("eds-lb", edsLbHelper.getAuthority());
     logger = XdsLogger.withLogId(logId);
     logger.log(XdsLogLevel.INFO, "Created");
   }

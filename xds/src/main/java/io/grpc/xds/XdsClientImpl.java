@@ -173,8 +173,6 @@ final class XdsClientImpl extends XdsClient {
       ScheduledExecutorService timeService,
       BackoffPolicy.Provider backoffPolicyProvider,
       Supplier<Stopwatch> stopwatchSupplier) {
-    logId = InternalLogId.allocate("xds-client", null);
-    logger = XdsLogger.withLogId(logId);
     this.targetName = checkNotNull(targetName, "targetName");
     this.channel =
         checkNotNull(channelFactory, "channelFactory")
@@ -185,6 +183,9 @@ final class XdsClientImpl extends XdsClient {
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatch");
     adsStreamRetryStopwatch = stopwatchSupplier.get();
+    logId = InternalLogId.allocate("xds-client", targetName);
+    logger = XdsLogger.withLogId(logId);
+    logger.log(XdsLogLevel.INFO, "Created");
   }
 
   @Override

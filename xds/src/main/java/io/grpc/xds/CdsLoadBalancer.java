@@ -74,10 +74,11 @@ public final class CdsLoadBalancer extends LoadBalancer {
   @VisibleForTesting
   CdsLoadBalancer(Helper helper, LoadBalancerRegistry lbRegistry,
       TlsContextManager tlsContextManager) {
-    logger = XdsLogger.withLogId(InternalLogId.allocate("cds-lb", null));
+    checkNotNull(helper, "helper");
     this.lbRegistry = lbRegistry;
     this.switchingLoadBalancer = new GracefulSwitchLoadBalancer(helper);
     this.tlsContextManager = tlsContextManager;
+    logger = XdsLogger.withLogId(InternalLogId.allocate("cds-lb", helper.getAuthority()));
     logger.log(XdsLogLevel.INFO, "Created");
   }
 
