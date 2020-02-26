@@ -35,7 +35,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.grpc.Attributes;
-import io.grpc.ChannelLogger;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
@@ -134,8 +133,6 @@ public class CdsLoadBalancerTest {
 
   @Mock
   private Helper helper;
-  @Mock
-  private ChannelLogger channelLogger;
 
   private LoadBalancer cdsLoadBalancer;
   private XdsClient xdsClient;
@@ -147,7 +144,6 @@ public class CdsLoadBalancerTest {
   public void setUp() {
     MockitoAnnotations.initMocks(this);
 
-    doReturn(channelLogger).when(helper).getChannelLogger();
     doReturn(syncContext).when(helper).getSynchronizationContext();
     doReturn(fakeClock.getScheduledExecutorService()).when(helper).getScheduledExecutorService();
     lbRegistry.register(fakeEdsLoadBlancerProvider);
@@ -157,21 +153,6 @@ public class CdsLoadBalancerTest {
   @Test
   public void canHandleEmptyAddressListFromNameResolution() {
     assertThat(cdsLoadBalancer.canHandleEmptyAddressListFromNameResolution()).isTrue();
-  }
-
-  @Test
-  public void invalidConfigType() {
-    ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
-        .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
-        .setAttributes(Attributes.newBuilder()
-            .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
-            .build())
-        .setLoadBalancingPolicyConfig(new Object())
-        .build();
-
-    cdsLoadBalancer.handleResolvedAddresses(resolvedAddresses);
-
-    verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
   }
 
   @Test

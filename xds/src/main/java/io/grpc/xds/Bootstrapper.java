@@ -27,6 +27,7 @@ import io.grpc.Internal;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.JsonUtil;
+import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -44,6 +45,7 @@ import javax.annotation.concurrent.Immutable;
 @Internal
 public abstract class Bootstrapper {
 
+  private static final String LOG_PREFIX = "xds-bootstrap";
   private static final String BOOTSTRAP_PATH_SYS_ENV_VAR = "GRPC_XDS_BOOTSTRAP";
 
   private static final Bootstrapper DEFAULT_INSTANCE = new Bootstrapper() {
@@ -54,6 +56,9 @@ public abstract class Bootstrapper {
         throw
             new IOException("Environment variable " + BOOTSTRAP_PATH_SYS_ENV_VAR + " not defined.");
       }
+      XdsLogger
+          .withPrefix(LOG_PREFIX)
+          .log(XdsLogLevel.INFO, BOOTSTRAP_PATH_SYS_ENV_VAR + "={0}", filePath);
       return parseConfig(
           new String(Files.readAllBytes(Paths.get(filePath)), StandardCharsets.UTF_8));
     }
@@ -70,20 +75,25 @@ public abstract class Bootstrapper {
 
   @VisibleForTesting
   static BootstrapInfo parseConfig(String rawData) throws IOException {
+    XdsLogger logger = XdsLogger.withPrefix(LOG_PREFIX);
+    logger.log(XdsLogLevel.INFO, "Reading bootstrap information");
     @SuppressWarnings("unchecked")
     Map<String, ?> rawBootstrap = (Map<String, ?>) JsonParser.parse(rawData);
+    logger.log(XdsLogLevel.DEBUG, "Bootstrap configuration:\n{0}", rawBootstrap);
 
     List<ServerInfo> servers = new ArrayList<>();
     List<?> rawServerConfigs = JsonUtil.getList(rawBootstrap, "xds_servers");
     if (rawServerConfigs == null) {
       throw new IOException("Invalid bootstrap: 'xds_servers' does not exist.");
     }
+    logger.log(XdsLogLevel.INFO, "Configured with {0} xDS servers", rawServerConfigs.size());
     List<Map<String, ?>> serverConfigList = JsonUtil.checkObjectList(rawServerConfigs);
     for (Map<String, ?> serverConfig : serverConfigList) {
       String serverUri = JsonUtil.getString(serverConfig, "server_uri");
       if (serverUri == null) {
         throw new IOException("Invalid bootstrap: 'xds_servers' contains unknown server.");
       }
+      logger.log(XdsLogLevel.INFO, "xDS server URI: {0}", serverUri);
       List<ChannelCreds> channelCredsOptions = new ArrayList<>();
       List<?> rawChannelCredsList = JsonUtil.getList(serverConfig, "channel_creds");
       // List of channel creds is optional.
@@ -95,6 +105,7 @@ public abstract class Bootstrapper {
             throw new IOException("Invalid bootstrap: 'xds_servers' contains server with "
                 + "unknown type 'channel_creds'.");
           }
+          logger.log(XdsLogLevel.INFO, "Channel credentials option: {0}", type);
           ChannelCreds creds = new ChannelCreds(type, JsonUtil.getObject(channelCreds, "config"));
           channelCredsOptions.add(creds);
         }
@@ -107,16 +118,21 @@ public abstract class Bootstrapper {
     if (rawNode != null) {
       String id = JsonUtil.getString(rawNode, "id");
       if (id != null) {
+        logger.log(XdsLogLevel.INFO, "Node id: {0}", id);
         nodeBuilder.setId(id);
       }
       String cluster = JsonUtil.getString(rawNode, "cluster");
       if (cluster != null) {
+        logger.log(XdsLogLevel.INFO, "Node cluster: {0}", cluster);
         nodeBuilder.setCluster(cluster);
       }
       Map<String, ?> metadata = JsonUtil.getObject(rawNode, "metadata");
       if (metadata != null) {
         Struct.Builder structBuilder = Struct.newBuilder();
         for (Map.Entry<String, ?> entry : metadata.entrySet()) {
+          logger.log(
+              XdsLogLevel.INFO,
+              "Node metadata field {0}: {1}", entry.getKey(), entry.getValue());
           structBuilder.putFields(entry.getKey(), convertToValue(entry.getValue()));
         }
         nodeBuilder.setMetadata(structBuilder);
@@ -125,18 +141,26 @@ public abstract class Bootstrapper {
       if (rawLocality != null) {
         Locality.Builder localityBuilder = Locality.newBuilder();
         if (rawLocality.containsKey("region")) {
-          localityBuilder.setRegion(JsonUtil.getString(rawLocality, "region"));
+          String region = JsonUtil.getString(rawLocality, "region");
+          logger.log(XdsLogLevel.INFO, "Locality region: {0}", region);
+          localityBuilder.setRegion(region);
         }
         if (rawLocality.containsKey("zone")) {
-          localityBuilder.setZone(JsonUtil.getString(rawLocality, "zone"));
+          String zone = JsonUtil.getString(rawLocality, "zone");
+          logger.log(XdsLogLevel.INFO, "Locality zone: {0}", zone);
+          localityBuilder.setZone(zone);
         }
         if (rawLocality.containsKey("sub_zone")) {
-          localityBuilder.setSubZone(JsonUtil.getString(rawLocality, "sub_zone"));
+          String subZone = JsonUtil.getString(rawLocality, "sub_zone");
+          logger.log(XdsLogLevel.INFO, "Locality sub_zone: {0}", subZone);
+          localityBuilder.setSubZone(subZone);
         }
         nodeBuilder.setLocality(localityBuilder);
       }
     }
-    nodeBuilder.setBuildVersion(GrpcUtil.getGrpcBuildVersion());
+    String buildVersion = GrpcUtil.getGrpcBuildVersion();
+    logger.log(XdsLogLevel.INFO, "Build version: {0}", buildVersion);
+    nodeBuilder.setBuildVersion(buildVersion);
 
     return new BootstrapInfo(servers, nodeBuilder.build());
   }

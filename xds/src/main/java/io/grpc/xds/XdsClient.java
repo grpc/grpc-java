@@ -19,6 +19,7 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkArgument;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -35,6 +36,7 @@ import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyServerProtoData.Listener;
+import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -74,6 +76,15 @@ abstract class XdsClient {
     @Nullable
     public Listener getListener() {
       return listener;
+    }
+
+    @Override
+    public String toString() {
+      return
+          MoreObjects
+              .toStringHelper(this)
+              .add("clusterName", clusterName)
+              .toString();
     }
 
     static Builder newBuilder() {
@@ -165,6 +176,19 @@ abstract class XdsClient {
     @Nullable
     UpstreamTlsContext getUpstreamTlsContext() {
       return upstreamTlsContext;
+    }
+
+    @Override
+    public String toString() {
+      return
+          MoreObjects
+              .toStringHelper(this)
+              .add("clusterName", clusterName)
+              .add("edsServiceName", edsServiceName)
+              .add("lbPolicy", lbPolicy)
+              .add("lrsServerName", lrsServerName)
+              .add("upstreamTlsContext", upstreamTlsContext)
+              .toString();
     }
 
     static Builder newBuilder() {
@@ -282,6 +306,17 @@ abstract class XdsClient {
       return Objects.hash(clusterName, localityLbEndpointsMap, dropPolicies);
     }
 
+    @Override
+    public String toString() {
+      return
+          MoreObjects
+              .toStringHelper(this)
+              .add("clusterName", clusterName)
+              .add("localityLbEndpointsMap", localityLbEndpointsMap)
+              .add("dropPolicies", dropPolicies)
+              .toString();
+    }
+
     static final class Builder {
       private String clusterName;
       private Map<Locality, LocalityLbEndpoints> localityLbEndpointsMap = new LinkedHashMap<>();
@@ -373,8 +408,6 @@ abstract class XdsClient {
 
   /**
    * Registers a data watcher for the given cluster.
-   *
-   * <p>Adding the same watcher for the same cluster more than once is a no-op.
    */
   void watchClusterData(String clusterName, ClusterWatcher watcher) {
   }
@@ -382,16 +415,12 @@ abstract class XdsClient {
   /**
    * Unregisters the given cluster watcher, which was registered to receive updates for the
    * given cluster.
-   *
-   * <p>Cancelling a watcher that was not registered for the given cluster is a no-op.
    */
   void cancelClusterDataWatch(String clusterName, ClusterWatcher watcher) {
   }
 
   /**
    * Registers a data watcher for endpoints in the given cluster.
-   *
-   * <p>Adding the same watcher for the same cluster more than once is a no-op.
    */
   void watchEndpointData(String clusterName, EndpointWatcher watcher) {
   }
@@ -399,8 +428,6 @@ abstract class XdsClient {
   /**
    * Unregisters the given endpoints watcher, which was registered to receive updates for
    * endpoints information in the given cluster.
-   *
-   * <p>Cancelling a watcher that was not registered for the given cluster is a no-op.
    */
   void cancelEndpointDataWatch(String clusterName, EndpointWatcher watcher) {
   }
@@ -497,19 +524,23 @@ abstract class XdsClient {
       @Override
       ManagedChannel createChannel(List<ServerInfo> servers) {
         checkArgument(!servers.isEmpty(), "No management server provided.");
+        XdsLogger logger = XdsLogger.withPrefix("xds-client-channel-factory");
         ServerInfo serverInfo = servers.get(0);
         String serverUri = serverInfo.getServerUri();
+        logger.log(XdsLogLevel.INFO, "Creating channel to {0}", serverUri);
         List<ChannelCreds> channelCredsList = serverInfo.getChannelCredentials();
         ManagedChannelBuilder<?> channelBuilder = null;
         // Use the first supported channel credentials configuration.
         // Currently, only "google_default" is supported.
         for (ChannelCreds creds : channelCredsList) {
           if (creds.getType().equals("google_default")) {
+            logger.log(XdsLogLevel.INFO, "Using channel credentials: google_default");
             channelBuilder = GoogleDefaultChannelBuilder.forTarget(serverUri);
             break;
           }
         }
         if (channelBuilder == null) {
+          logger.log(XdsLogLevel.INFO, "Using default channel credentials");
           channelBuilder = ManagedChannelBuilder.forTarget(serverUri);
         }
 

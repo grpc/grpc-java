@@ -44,6 +44,7 @@ import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsRequest;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsResponse;
 import io.grpc.Context;
 import io.grpc.Context.CancellationListener;
+import io.grpc.InternalLogId;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
@@ -118,6 +119,7 @@ public class LoadReportClientTest {
           throw new AssertionError(e);
         }
       });
+  private final InternalLogId logId = InternalLogId.allocate("lrs-client-test", null);
   private final FakeClock fakeClock = new FakeClock();
   private final ArrayDeque<StreamObserver<LoadStatsRequest>> lrsRequestObservers =
       new ArrayDeque<>();
@@ -179,6 +181,7 @@ public class LoadReportClientTest {
         .thenReturn(TimeUnit.SECONDS.toNanos(1L), TimeUnit.SECONDS.toNanos(10L));
     lrsClient =
         new LoadReportClient(
+            logId,
             TARGET_NAME,
             channel,
             NODE,
