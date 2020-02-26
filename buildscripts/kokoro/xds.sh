@@ -14,7 +14,7 @@ pushd grpc-java/interop-testing
 ../gradlew installDist -x test -PskipCodegen=true -PskipAndroid=true
 popd
 
-git clone https://github.com/grpc/grpc.git
+git clone -b stats_port_flag https://github.com/ericgribkoff/grpc.git
 
 grpc/tools/run_tests/helper_scripts/prep_xds.sh
 python3 grpc/tools/run_tests/run_xds_tests.py \
