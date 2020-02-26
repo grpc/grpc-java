@@ -464,9 +464,9 @@ def javax_annotation_javax_annotation_api():
 def junit_junit():
     jvm_maven_import_external(
         name = "junit_junit",
-        artifact = "junit:junit:4.13",
+        artifact = "junit:junit:4.12",
         server_urls = ["https://repo.maven.apache.org/maven2/"],
-        artifact_sha256 = "4b8532f63bdc0e0661507f947eb324a954d1dbac631ad19c8aa9a00feed1d863",
+        artifact_sha256 = "59721f0805e223d84b90677887d9ff567dc534d7c502ca903c0c2b17f05c116a",
         licenses = ["notice"],  # EPL 1.0
     )
 
