@@ -26,3 +26,6 @@ dependencies {
 }
 
 configureProtoCompilation()
+
+// do not publish 'grpc-rls'
+[publishMavenPublicationToMavenRepository]*.onlyIf { false }
