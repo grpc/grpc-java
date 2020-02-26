@@ -258,6 +258,7 @@ public abstract class Bootstrapper {
   /**
    * Data class containing the results of reading bootstrap.
    */
+  @Internal
   @Immutable
   public static class BootstrapInfo {
     private List<ServerInfo> servers;

@@ -1939,7 +1939,8 @@ public class GrpclbLoadBalancerTest {
 
     inOrder.verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
     RoundRobinPicker errorPicker = (RoundRobinPicker) pickerCaptor.getValue();
-    assertThat(errorPicker.pickList).containsExactly(new ErrorEntry(Status.UNAVAILABLE));
+    assertThat(errorPicker.pickList)
+        .containsExactly(new ErrorEntry(GrpclbState.NO_AVAILABLE_BACKENDS_STATUS));
 
     lbResponseObserver.onNext(buildLbResponse(Collections.<ServerEntry>emptyList()));
 

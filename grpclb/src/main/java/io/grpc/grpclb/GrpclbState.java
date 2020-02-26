@@ -91,6 +91,9 @@ final class GrpclbState {
   @VisibleForTesting
   static final PickResult DROP_PICK_RESULT =
       PickResult.withDrop(Status.UNAVAILABLE.withDescription("Dropped as requested by balancer"));
+  @VisibleForTesting
+  static final Status NO_AVAILABLE_BACKENDS_STATUS =
+      Status.UNAVAILABLE.withDescription("LoadBalancer responded without any backends");
 
   @VisibleForTesting
   static final RoundRobinEntry BUFFER_ENTRY = new RoundRobinEntry() {
@@ -742,7 +745,8 @@ final class GrpclbState {
         if (backendList.isEmpty()) {
           if (lbSentEmptyBackends) {
             pickList =
-                Collections.<RoundRobinEntry>singletonList(new ErrorEntry(Status.UNAVAILABLE));
+                Collections.<RoundRobinEntry>singletonList(
+                    new ErrorEntry(NO_AVAILABLE_BACKENDS_STATUS));
             state = TRANSIENT_FAILURE;
           } else {
             pickList = Collections.singletonList(BUFFER_ENTRY);
