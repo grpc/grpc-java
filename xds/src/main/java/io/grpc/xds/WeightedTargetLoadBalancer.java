@@ -25,9 +25,8 @@ import static io.grpc.xds.XdsSubchannelPickers.BUFFER_PICKER;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
-import io.grpc.ChannelLogger;
-import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ConnectivityState;
+import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status;
@@ -37,6 +36,7 @@ import io.grpc.xds.RandomWeightedPicker.WeightedChildPicker;
 import io.grpc.xds.RandomWeightedPicker.WeightedPickerFactory;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedChildLbConfig;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedTargetConfig;
+import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -47,7 +47,7 @@ import javax.annotation.Nullable;
 /** Load balancer for weighted_target policy. */
 final class WeightedTargetLoadBalancer extends LoadBalancer {
 
-  private final ChannelLogger channelLogger;
+  private final XdsLogger logger;
   private final LoadBalancerRegistry lbRegistry;
   private final Map<String, GracefulSwitchLoadBalancer> childBalancers = new HashMap<>();
   private final Map<String, ChildHelper> childHelpers = new HashMap<>();
@@ -73,20 +73,15 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
     this.helper = helper;
     this.lbRegistry = lbRegistry;
     this.weightedPickerFactory = weightedPickerFactory;
-    channelLogger = helper.getChannelLogger();
+    logger = XdsLogger.withLogId(InternalLogId.allocate("cds-lb", helper.getAuthority()));
+    logger.log(XdsLogLevel.INFO, "Created");
   }
 
   @Override
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-    channelLogger.log(ChannelLogLevel.DEBUG, "Received ResolvedAddresses {0}", resolvedAddresses);
+    logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     Object lbConfig = resolvedAddresses.getLoadBalancingPolicyConfig();
-    if (!(lbConfig instanceof WeightedTargetConfig)) {
-      helper.updateBalancingState(
-          TRANSIENT_FAILURE,
-          new ErrorPicker(Status.UNAVAILABLE.withDescription(
-              "Load balancing config '" + lbConfig + "' is not a CdsConfig")));
-      return;
-    }
+    checkNotNull(lbConfig, "missing weighted_target lb config");
 
     WeightedTargetConfig weightedTargetConfig = (WeightedTargetConfig) lbConfig;
     Map<String, WeightedChildLbConfig> newTargets = weightedTargetConfig.targets;
@@ -132,7 +127,7 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
 
   @Override
   public void handleNameResolutionError(Status error) {
-    channelLogger.log(ChannelLogLevel.ERROR, "Name resolution error: {0}", error);
+    logger.log(XdsLogLevel.WARNING, "Received name resolution error: {0}", error);
     if (childBalancers.isEmpty()) {
       helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
     }
@@ -148,7 +143,7 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
 
   @Override
   public void shutdown() {
-    channelLogger.log(ChannelLogLevel.DEBUG, "weighted_target load balancer is shutting down");
+    logger.log(XdsLogLevel.INFO, "Shutdown");
     for (LoadBalancer childBalancer : childBalancers.values()) {
       childBalancer.shutdown();
     }
