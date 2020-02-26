@@ -21,7 +21,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
-import io.grpc.xds.XdsClient.ClusterUpdate;
 import io.grpc.xds.XdsClient.RefCountedXdsClientObjectPool;
 import io.grpc.xds.XdsClient.XdsClientFactory;
 import org.junit.Rule;
@@ -37,24 +36,6 @@ import org.junit.runners.JUnit4;
 public class XdsClientTest {
   @Rule
   public final ExpectedException thrown = ExpectedException.none();
-
-  @Test
-  public void buildClusterUpdate_defaultToClusterNameWhenEdsServiceNameNotSet() {
-    ClusterUpdate clusterUpdate1 =
-        ClusterUpdate.newBuilder()
-            .setClusterName("foo.googleapis.com")
-            .setEdsServiceName("bar.googleapis.com")
-            .setLbPolicy("round_robin")
-            .build();
-    assertThat(clusterUpdate1.getEdsServiceName()).isEqualTo("bar.googleapis.com");
-
-    ClusterUpdate clusterUpdate2 =
-        ClusterUpdate.newBuilder()
-            .setClusterName("foo.googleapis.com")
-            .setLbPolicy("round_robin")
-            .build();
-    assertThat(clusterUpdate2.getEdsServiceName()).isEqualTo("foo.googleapis.com");
-  }
 
   @Test
   public void refCountedXdsClientObjectPool_getObjectShouldMatchReturnObject() {

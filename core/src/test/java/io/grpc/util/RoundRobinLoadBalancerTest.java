@@ -25,17 +25,12 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.util.RoundRobinLoadBalancer.STATE_INFO;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isA;
-import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -59,19 +54,14 @@ import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancer.SubchannelStateListener;
-import io.grpc.Metadata;
-import io.grpc.Metadata.Key;
 import io.grpc.Status;
-import io.grpc.internal.GrpcAttributes;
 import io.grpc.util.RoundRobinLoadBalancer.EmptyPicker;
 import io.grpc.util.RoundRobinLoadBalancer.ReadyPicker;
 import io.grpc.util.RoundRobinLoadBalancer.Ref;
-import io.grpc.util.RoundRobinLoadBalancer.StickinessState;
 import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -115,7 +105,6 @@ public class RoundRobinLoadBalancerTest {
   private PickSubchannelArgs mockArgs;
 
   @Before
-  @SuppressWarnings("unchecked")
   public void setUp() {
     MockitoAnnotations.initMocks(this);
 
@@ -188,7 +177,6 @@ public class RoundRobinLoadBalancerTest {
     verifyNoMoreInteractions(mockHelper);
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void pickAfterResolvedUpdatedHosts() throws Exception {
     Subchannel removedSubchannel = mock(Subchannel.class);
@@ -268,7 +256,6 @@ public class RoundRobinLoadBalancerTest {
     verifyNoMoreInteractions(mockHelper);
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void pickAfterStateChange() throws Exception {
     InOrder inOrder = inOrder(mockHelper);
@@ -307,10 +294,6 @@ public class RoundRobinLoadBalancerTest {
     verifyNoMoreInteractions(mockHelper);
   }
 
-  private Subchannel nextSubchannel(Subchannel current, List<Subchannel> allSubChannels) {
-    return allSubChannels.get((allSubChannels.indexOf(current) + 1) % allSubChannels.size());
-  }
-
   @Test
   public void pickerRoundRobin() throws Exception {
     Subchannel subchannel = mock(Subchannel.class);
@@ -319,7 +302,7 @@ public class RoundRobinLoadBalancerTest {
 
     ReadyPicker picker = new ReadyPicker(Collections.unmodifiableList(
         Lists.newArrayList(subchannel, subchannel1, subchannel2)),
-        0 /* startIndex */, null /* stickinessState */);
+        0 /* startIndex */);
 
     assertThat(picker.getList()).containsExactly(subchannel, subchannel1, subchannel2);
 
@@ -349,7 +332,6 @@ public class RoundRobinLoadBalancerTest {
     verifyNoMoreInteractions(mockHelper);
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void nameResolutionErrorWithActiveChannels() throws Exception {
     final Subchannel readySubchannel = subchannels.values().iterator().next();
@@ -421,356 +403,10 @@ public class RoundRobinLoadBalancerTest {
     assertThat(pickers.hasNext()).isFalse();
   }
 
-  @Test
-  public void noStickinessEnabled_withStickyHeader() {
-    loadBalancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(Attributes.EMPTY)
-            .build());
-    for (Subchannel subchannel : subchannels.values()) {
-      deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
-    }
-    verify(mockHelper, times(4))
-        .updateBalancingState(any(ConnectivityState.class), pickerCaptor.capture());
-    SubchannelPicker picker = pickerCaptor.getValue();
-
-    Key<String> stickinessKey = Key.of("my-sticky-key", Metadata.ASCII_STRING_MARSHALLER);
-    Metadata headerWithStickinessValue = new Metadata();
-    headerWithStickinessValue.put(stickinessKey, "my-sticky-value");
-    doReturn(headerWithStickinessValue).when(mockArgs).getHeaders();
-
-    List<Subchannel> allSubchannels = getList(picker);
-    Subchannel sc1 = picker.pickSubchannel(mockArgs).getSubchannel();
-    Subchannel sc2 = picker.pickSubchannel(mockArgs).getSubchannel();
-    Subchannel sc3 = picker.pickSubchannel(mockArgs).getSubchannel();
-    Subchannel sc4 = picker.pickSubchannel(mockArgs).getSubchannel();
-
-    assertEquals(nextSubchannel(sc1, allSubchannels), sc2);
-    assertEquals(nextSubchannel(sc2, allSubchannels), sc3);
-    assertEquals(nextSubchannel(sc3, allSubchannels), sc1);
-    assertEquals(sc4, sc1);
-
-    assertNull(loadBalancer.getStickinessMapForTest());
-  }
-
-  @Test
-  @SuppressWarnings("deprecation")  // migrate to parsed object
-  public void stickinessEnabled_withoutStickyHeader() {
-    Map<String, Object> serviceConfig = new HashMap<>();
-    serviceConfig.put("stickinessMetadataKey", "my-sticky-key");
-    Attributes attributes = Attributes.newBuilder()
-        .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig).build();
-    loadBalancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(attributes).build());
-    for (Subchannel subchannel : subchannels.values()) {
-      deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
-    }
-    verify(mockHelper, times(4))
-        .updateBalancingState(stateCaptor.capture(), pickerCaptor.capture());
-    SubchannelPicker picker = pickerCaptor.getValue();
-
-    doReturn(new Metadata()).when(mockArgs).getHeaders();
-
-    List<Subchannel> allSubchannels = getList(picker);
-
-    Subchannel sc1 = picker.pickSubchannel(mockArgs).getSubchannel();
-    Subchannel sc2 = picker.pickSubchannel(mockArgs).getSubchannel();
-    Subchannel sc3 = picker.pickSubchannel(mockArgs).getSubchannel();
-    Subchannel sc4 = picker.pickSubchannel(mockArgs).getSubchannel();
-
-    assertEquals(nextSubchannel(sc1, allSubchannels), sc2);
-    assertEquals(nextSubchannel(sc2, allSubchannels), sc3);
-    assertEquals(nextSubchannel(sc3, allSubchannels), sc1);
-    assertEquals(sc4, sc1);
-    verify(mockArgs, times(4)).getHeaders();
-    assertNotNull(loadBalancer.getStickinessMapForTest());
-    assertThat(loadBalancer.getStickinessMapForTest()).isEmpty();
-  }
-
-  @Test
-  @SuppressWarnings("deprecation")  // migrate to parsed object
-  public void stickinessEnabled_withStickyHeader() {
-    Map<String, String> serviceConfig = new HashMap<>();
-    serviceConfig.put("stickinessMetadataKey", "my-sticky-key");
-    Attributes attributes = Attributes.newBuilder()
-        .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig).build();
-    loadBalancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(attributes).build());
-    for (Subchannel subchannel : subchannels.values()) {
-      deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
-    }
-    verify(mockHelper, times(4))
-        .updateBalancingState(stateCaptor.capture(), pickerCaptor.capture());
-    SubchannelPicker picker = pickerCaptor.getValue();
-
-    Key<String> stickinessKey = Key.of("my-sticky-key", Metadata.ASCII_STRING_MARSHALLER);
-    Metadata headerWithStickinessValue = new Metadata();
-    headerWithStickinessValue.put(stickinessKey, "my-sticky-value");
-    doReturn(headerWithStickinessValue).when(mockArgs).getHeaders();
-
-    Subchannel sc1 = picker.pickSubchannel(mockArgs).getSubchannel();
-    assertEquals(sc1, picker.pickSubchannel(mockArgs).getSubchannel());
-    assertEquals(sc1, picker.pickSubchannel(mockArgs).getSubchannel());
-    assertEquals(sc1, picker.pickSubchannel(mockArgs).getSubchannel());
-    assertEquals(sc1, picker.pickSubchannel(mockArgs).getSubchannel());
-
-    verify(mockArgs, atLeast(4)).getHeaders();
-    assertNotNull(loadBalancer.getStickinessMapForTest());
-    assertThat(loadBalancer.getStickinessMapForTest()).hasSize(1);
-  }
-
-  @Test
-  @SuppressWarnings("deprecation")  // migrate to parsed object
-  public void stickinessEnabled_withDifferentStickyHeaders() {
-    Map<String, String> serviceConfig = new HashMap<>();
-    serviceConfig.put("stickinessMetadataKey", "my-sticky-key");
-    Attributes attributes = Attributes.newBuilder()
-        .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig).build();
-    loadBalancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(attributes).build());
-    for (Subchannel subchannel : subchannels.values()) {
-      deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
-    }
-    verify(mockHelper, times(4))
-        .updateBalancingState(stateCaptor.capture(), pickerCaptor.capture());
-    SubchannelPicker picker = pickerCaptor.getValue();
-
-    Key<String> stickinessKey = Key.of("my-sticky-key", Metadata.ASCII_STRING_MARSHALLER);
-    Metadata headerWithStickinessValue1 = new Metadata();
-    headerWithStickinessValue1.put(stickinessKey, "my-sticky-value");
-
-    Metadata headerWithStickinessValue2 = new Metadata();
-    headerWithStickinessValue2.put(stickinessKey, "my-sticky-value2");
-
-    List<Subchannel> allSubchannels = getList(picker);
-
-    doReturn(headerWithStickinessValue1).when(mockArgs).getHeaders();
-    Subchannel sc1a = picker.pickSubchannel(mockArgs).getSubchannel();
-
-    doReturn(headerWithStickinessValue2).when(mockArgs).getHeaders();
-    Subchannel sc2a = picker.pickSubchannel(mockArgs).getSubchannel();
-
-    doReturn(headerWithStickinessValue1).when(mockArgs).getHeaders();
-    Subchannel sc1b = picker.pickSubchannel(mockArgs).getSubchannel();
-
-    doReturn(headerWithStickinessValue2).when(mockArgs).getHeaders();
-    Subchannel sc2b = picker.pickSubchannel(mockArgs).getSubchannel();
-
-    assertEquals(sc1a, sc1b);
-    assertEquals(sc2a, sc2b);
-    assertEquals(nextSubchannel(sc1a, allSubchannels), sc2a);
-    assertEquals(nextSubchannel(sc1b, allSubchannels), sc2b);
-
-    verify(mockArgs, atLeast(4)).getHeaders();
-    assertNotNull(loadBalancer.getStickinessMapForTest());
-    assertThat(loadBalancer.getStickinessMapForTest()).hasSize(2);
-  }
-
-  @Test
-  @SuppressWarnings("deprecation")  // migrate to parsed object
-  public void stickiness_goToTransientFailure_pick_backToReady() {
-    Map<String, String> serviceConfig = new HashMap<>();
-    serviceConfig.put("stickinessMetadataKey", "my-sticky-key");
-    Attributes attributes = Attributes.newBuilder()
-        .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig).build();
-    loadBalancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(attributes).build());
-    for (Subchannel subchannel : subchannels.values()) {
-      deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
-    }
-    verify(mockHelper, times(4))
-        .updateBalancingState(stateCaptor.capture(), pickerCaptor.capture());
-    SubchannelPicker picker = pickerCaptor.getValue();
-
-    Key<String> stickinessKey = Key.of("my-sticky-key", Metadata.ASCII_STRING_MARSHALLER);
-    Metadata headerWithStickinessValue = new Metadata();
-    headerWithStickinessValue.put(stickinessKey, "my-sticky-value");
-    doReturn(headerWithStickinessValue).when(mockArgs).getHeaders();
-
-    // first pick
-    Subchannel sc1 = picker.pickSubchannel(mockArgs).getSubchannel();
-
-    // go to transient failure
-    deliverSubchannelState(sc1, ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
-
-    verify(mockHelper, times(5))
-        .updateBalancingState(stateCaptor.capture(), pickerCaptor.capture());
-    picker = pickerCaptor.getValue();
-
-    // second pick
-    Subchannel sc2 = picker.pickSubchannel(mockArgs).getSubchannel();
-
-    // go back to ready
-    deliverSubchannelState(sc1, ConnectivityStateInfo.forNonError(READY));
-
-    verify(mockHelper, times(6))
-        .updateBalancingState(stateCaptor.capture(), pickerCaptor.capture());
-    picker = pickerCaptor.getValue();
-
-    // third pick
-    Subchannel sc3 = picker.pickSubchannel(mockArgs).getSubchannel();
-    assertEquals(sc2, sc3);
-    verify(mockArgs, atLeast(3)).getHeaders();
-    assertNotNull(loadBalancer.getStickinessMapForTest());
-    assertThat(loadBalancer.getStickinessMapForTest()).hasSize(1);
-  }
-
-  @Test
-  @SuppressWarnings("deprecation")  // migrate to parsed object
-  public void stickiness_goToTransientFailure_backToReady_pick() {
-    Map<String, String> serviceConfig = new HashMap<>();
-    serviceConfig.put("stickinessMetadataKey", "my-sticky-key");
-    Attributes attributes = Attributes.newBuilder()
-        .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig).build();
-    loadBalancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(attributes).build());
-    for (Subchannel subchannel : subchannels.values()) {
-      deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
-    }
-    verify(mockHelper, times(4))
-        .updateBalancingState(stateCaptor.capture(), pickerCaptor.capture());
-    SubchannelPicker picker = pickerCaptor.getValue();
-
-    Key<String> stickinessKey = Key.of("my-sticky-key", Metadata.ASCII_STRING_MARSHALLER);
-    Metadata headerWithStickinessValue1 = new Metadata();
-    headerWithStickinessValue1.put(stickinessKey, "my-sticky-value");
-    doReturn(headerWithStickinessValue1).when(mockArgs).getHeaders();
-
-    // first pick
-    Subchannel sc1 = picker.pickSubchannel(mockArgs).getSubchannel();
-
-    // go to transient failure
-    deliverSubchannelState(sc1, ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
-
-    Metadata headerWithStickinessValue2 = new Metadata();
-    headerWithStickinessValue2.put(stickinessKey, "my-sticky-value2");
-    doReturn(headerWithStickinessValue2).when(mockArgs).getHeaders();
-    verify(mockHelper, times(5))
-        .updateBalancingState(stateCaptor.capture(), pickerCaptor.capture());
-    picker = pickerCaptor.getValue();
-
-    // second pick with a different stickiness value
-    @SuppressWarnings("unused")
-    Subchannel sc2 = picker.pickSubchannel(mockArgs).getSubchannel();
-
-    // go back to ready
-    deliverSubchannelState(sc1, ConnectivityStateInfo.forNonError(READY));
-
-    doReturn(headerWithStickinessValue1).when(mockArgs).getHeaders();
-    verify(mockHelper, times(6))
-        .updateBalancingState(stateCaptor.capture(), pickerCaptor.capture());
-    picker = pickerCaptor.getValue();
-
-    // third pick with my-sticky-value1
-    Subchannel sc3 = picker.pickSubchannel(mockArgs).getSubchannel();
-    assertEquals(sc1, sc3);
-
-    verify(mockArgs, atLeast(3)).getHeaders();
-    assertNotNull(loadBalancer.getStickinessMapForTest());
-    assertThat(loadBalancer.getStickinessMapForTest()).hasSize(2);
-  }
-
-  @Test
-  @SuppressWarnings("deprecation")  // migrate to parsed object
-  public void stickiness_oneSubchannelShutdown() {
-    Map<String, String> serviceConfig = new HashMap<>();
-    serviceConfig.put("stickinessMetadataKey", "my-sticky-key");
-    Attributes attributes = Attributes.newBuilder()
-        .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig).build();
-    loadBalancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(attributes).build());
-    for (Subchannel subchannel : subchannels.values()) {
-      deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
-    }
-    verify(mockHelper, times(4))
-        .updateBalancingState(stateCaptor.capture(), pickerCaptor.capture());
-    SubchannelPicker picker = pickerCaptor.getValue();
-
-    Key<String> stickinessKey = Key.of("my-sticky-key", Metadata.ASCII_STRING_MARSHALLER);
-    Metadata headerWithStickinessValue = new Metadata();
-    headerWithStickinessValue.put(stickinessKey, "my-sticky-value");
-    doReturn(headerWithStickinessValue).when(mockArgs).getHeaders();
-
-    List<Subchannel> allSubchannels = Lists.newArrayList(getList(picker));
-
-    Subchannel sc1 = picker.pickSubchannel(mockArgs).getSubchannel();
-
-    // shutdown channel directly
-    deliverSubchannelState(sc1, ConnectivityStateInfo.forNonError(ConnectivityState.SHUTDOWN));
-
-    assertNull(loadBalancer.getStickinessMapForTest().get("my-sticky-value").value);
-
-    assertEquals(nextSubchannel(sc1, allSubchannels),
-                 picker.pickSubchannel(mockArgs).getSubchannel());
-    assertThat(loadBalancer.getStickinessMapForTest()).hasSize(1);
-    verify(mockArgs, atLeast(2)).getHeaders();
-
-    Subchannel sc2 = picker.pickSubchannel(mockArgs).getSubchannel();
-
-    assertEquals(sc2, loadBalancer.getStickinessMapForTest().get("my-sticky-value").value);
-
-    // shutdown channel via name resolver change
-    List<EquivalentAddressGroup> newServers = new ArrayList<>(servers);
-    newServers.remove(sc2.getAddresses());
-
-    loadBalancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder().setAddresses(newServers).setAttributes(attributes).build());
-
-    verify(sc2, times(1)).shutdown();
-
-    deliverSubchannelState(sc2, ConnectivityStateInfo.forNonError(SHUTDOWN));
-
-    assertNull(loadBalancer.getStickinessMapForTest().get("my-sticky-value").value);
-
-    assertEquals(nextSubchannel(sc2, allSubchannels),
-            picker.pickSubchannel(mockArgs).getSubchannel());
-    assertThat(loadBalancer.getStickinessMapForTest()).hasSize(1);
-    verify(mockArgs, atLeast(2)).getHeaders();
-  }
-
-  @Test
-  @SuppressWarnings("deprecation")  // migrate to parsed object
-  public void stickiness_resolveTwice_metadataKeyChanged() {
-    Map<String, String> serviceConfig1 = new HashMap<>();
-    serviceConfig1.put("stickinessMetadataKey", "my-sticky-key1");
-    Attributes attributes1 = Attributes.newBuilder()
-        .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig1).build();
-    loadBalancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(attributes1).build());
-    Map<String, ?> stickinessMap1 = loadBalancer.getStickinessMapForTest();
-
-    Map<String, String> serviceConfig2 = new HashMap<>();
-    serviceConfig2.put("stickinessMetadataKey", "my-sticky-key2");
-    Attributes attributes2 = Attributes.newBuilder()
-        .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig2).build();
-    loadBalancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(attributes2).build());
-    Map<String, ?> stickinessMap2 = loadBalancer.getStickinessMapForTest();
-
-    assertNotSame(stickinessMap1, stickinessMap2);
-  }
-
-  @Test
-  @SuppressWarnings("deprecation")  // migrate to parsed object
-  public void stickiness_resolveTwice_metadataKeyUnChanged() {
-    Map<String, String> serviceConfig1 = new HashMap<>();
-    serviceConfig1.put("stickinessMetadataKey", "my-sticky-key1");
-    Attributes attributes1 = Attributes.newBuilder()
-        .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig1).build();
-    loadBalancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(attributes1).build());
-    Map<String, ?> stickinessMap1 = loadBalancer.getStickinessMapForTest();
-
-    loadBalancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(attributes1).build());
-    Map<String, ?> stickinessMap2 = loadBalancer.getStickinessMapForTest();
-
-    assertSame(stickinessMap1, stickinessMap2);
-  }
-
   @Test(expected = IllegalArgumentException.class)
   public void readyPicker_emptyList() {
     // ready picker list must be non-empty
-    new ReadyPicker(Collections.<Subchannel>emptyList(), 0, null);
+    new ReadyPicker(Collections.<Subchannel>emptyList(), 0);
   }
 
   @Test
@@ -782,23 +418,21 @@ public class RoundRobinLoadBalancerTest {
     Iterator<Subchannel> subchannelIterator = subchannels.values().iterator();
     Subchannel sc1 = subchannelIterator.next();
     Subchannel sc2 = subchannelIterator.next();
-    StickinessState stickinessState = new StickinessState("stick-key");
-    ReadyPicker ready1 = new ReadyPicker(Arrays.asList(sc1, sc2), 0, null);
-    ReadyPicker ready2 = new ReadyPicker(Arrays.asList(sc1), 0, null);
-    ReadyPicker ready3 = new ReadyPicker(Arrays.asList(sc2, sc1), 1, null);
-    ReadyPicker ready4 = new ReadyPicker(Arrays.asList(sc1, sc2), 1, stickinessState);
-    ReadyPicker ready5 = new ReadyPicker(Arrays.asList(sc2, sc1), 0, stickinessState);
+    ReadyPicker ready1 = new ReadyPicker(Arrays.asList(sc1, sc2), 0);
+    ReadyPicker ready2 = new ReadyPicker(Arrays.asList(sc1), 0);
+    ReadyPicker ready3 = new ReadyPicker(Arrays.asList(sc2, sc1), 1);
+    ReadyPicker ready4 = new ReadyPicker(Arrays.asList(sc1, sc2), 1);
+    ReadyPicker ready5 = new ReadyPicker(Arrays.asList(sc2, sc1), 0);
 
     assertTrue(emptyOk1.isEquivalentTo(emptyOk2));
     assertFalse(emptyOk1.isEquivalentTo(emptyErr));
     assertFalse(ready1.isEquivalentTo(ready2));
     assertTrue(ready1.isEquivalentTo(ready3));
-    assertFalse(ready3.isEquivalentTo(ready4));
+    assertTrue(ready3.isEquivalentTo(ready4));
     assertTrue(ready4.isEquivalentTo(ready5));
     assertFalse(emptyOk1.isEquivalentTo(ready1));
     assertFalse(ready1.isEquivalentTo(emptyOk1));
   }
-
 
   private static List<Subchannel> getList(SubchannelPicker picker) {
     return picker instanceof ReadyPicker ? ((ReadyPicker) picker).getList() :

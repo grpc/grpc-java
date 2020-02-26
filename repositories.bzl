@@ -22,7 +22,7 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.guava:guava:28.1-android",
     "com.google.j2objc:j2objc-annotations:1.3",
     "com.google.truth:truth:1.0",
-    "com.squareup.okhttp:okhttp:2.5.0",
+    "com.squareup.okhttp:okhttp:2.7.4",
     "com.squareup.okio:okio:1.13.0",
     "io.netty:netty-buffer:4.1.45.Final",
     "io.netty:netty-codec-http2:4.1.45.Final",
@@ -293,9 +293,9 @@ def com_google_truth_truth():
 def com_squareup_okhttp_okhttp():
     jvm_maven_import_external(
         name = "com_squareup_okhttp_okhttp",
-        artifact = "com.squareup.okhttp:okhttp:2.5.0",
+        artifact = "com.squareup.okhttp:okhttp:2.7.4",
         server_urls = ["https://repo.maven.apache.org/maven2/"],
-        artifact_sha256 = "1cc716e29539adcda677949508162796daffedb4794cbf947a6f65e696f0381c",
+        artifact_sha256 = "c88be9af1509d5aeec9394a818c0fa08e26fad9d64ba134e6f977e0bb20cb114",
         licenses = ["notice"],  # Apache 2.0
     )
 
@@ -311,9 +311,9 @@ def com_squareup_okio_okio():
 def io_grpc_grpc_proto():
     http_archive(
         name = "io_grpc_grpc_proto",
-        sha256 = "9d96f861f01ed9e3d805024e72a6b218b626da2114c69c1cad5d0e967c8e23be",
-        strip_prefix = "grpc-proto-435d723289d348e1bc420d420b364369d565182a",
-        urls = ["https://github.com/grpc/grpc-proto/archive/435d723289d348e1bc420d420b364369d565182a.zip"],
+        sha256 = "e3f2bf5caa217b8a703acb52cc5a503f06545b6be7889e44ea428f29e7320e9d",
+        strip_prefix = "grpc-proto-1ff7890719cea62825beeff16d6c2c66cf51ea90",
+        urls = ["https://github.com/grpc/grpc-proto/archive/1ff7890719cea62825beeff16d6c2c66cf51ea90.zip"],
     )
 
 def io_netty_netty_buffer():

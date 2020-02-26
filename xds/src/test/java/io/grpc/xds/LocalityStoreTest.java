@@ -47,6 +47,7 @@ import io.grpc.ChannelLogger;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
@@ -134,6 +135,7 @@ public class LocalityStoreTest {
         }
       });
 
+  private final InternalLogId logId = InternalLogId.allocate("locality-store-test", null);
   private final LoadBalancerRegistry lbRegistry = new LoadBalancerRegistry();
   private final Map<String, LoadBalancer> loadBalancers = new HashMap<>();
   private final Map<String, Helper> childHelpers = new HashMap<>();
@@ -251,7 +253,7 @@ public class LocalityStoreTest {
         });
     lbRegistry.register(lbProvider);
     localityStore =
-        new LocalityStoreImpl(helper, pickerFactory, lbRegistry, random, loadStatsStore,
+        new LocalityStoreImpl(logId, helper, pickerFactory, lbRegistry, random, loadStatsStore,
             orcaPerRequestUtil, orcaOobUtil);
   }
 

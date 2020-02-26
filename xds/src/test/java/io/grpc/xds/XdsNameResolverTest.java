@@ -202,7 +202,7 @@ public class XdsNameResolverTest {
     verify(mockListener).onError(statusCaptor.capture());
     assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(statusCaptor.getValue().getDescription())
-        .isEqualTo("No traffic director provided by bootstrap");
+        .isEqualTo("No management server provided by bootstrap");
   }
 
   @Test
