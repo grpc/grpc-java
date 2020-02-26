@@ -866,6 +866,9 @@ public class OkHttpClientTransportTest {
     shutdownAndVerify();
   }
 
+  /**
+   * Outbound flow control where the initial flow control window stays at the default size of 65535.
+   */
   @Test
   public void outboundFlowControl() throws Exception {
     initTransport();
@@ -893,12 +896,98 @@ public class OkHttpClientTransportTest {
     verify(frameWriter, timeout(TIME_OUT_MS))
         .data(eq(false), eq(3), any(Buffer.class), eq(partiallySentSize));
 
-    // Get more credit, the rest data should be sent out.
+    // Get more credit so the rest of the data should be sent out.
     frameHandler().windowUpdate(3, initialOutboundWindowSize);
     frameHandler().windowUpdate(0, initialOutboundWindowSize);
     verify(frameWriter, timeout(TIME_OUT_MS)).data(
         eq(false), eq(3), any(Buffer.class),
         eq(messageLength + HEADER_LENGTH - partiallySentSize));
+
+    stream.cancel(Status.CANCELLED);
+    listener.waitUntilStreamClosed();
+    shutdownAndVerify();
+  }
+
+  /**
+   * Outbound flow control where the initial window size is reduced before a stream is started.
+   */
+  @Test
+  public void outboundFlowControl_smallWindowSize() throws Exception {
+    initTransport();
+
+    int initialOutboundWindowSize = 100;
+    setInitialWindowSize(initialOutboundWindowSize);
+
+    MockStreamListener listener = new MockStreamListener();
+    OkHttpClientStream stream =
+            clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
+    stream.start(listener);
+
+    int messageLength = 75;
+    // The first message should be sent out.
+    InputStream input = new ByteArrayInputStream(new byte[messageLength]);
+    stream.writeMessage(input);
+    stream.flush();
+    verify(frameWriter, timeout(TIME_OUT_MS)).data(
+            eq(false), eq(3), any(Buffer.class), eq(messageLength + HEADER_LENGTH));
+
+    // The second message should be partially sent out.
+    input = new ByteArrayInputStream(new byte[messageLength]);
+    stream.writeMessage(input);
+    stream.flush();
+    int partiallySentSize = initialOutboundWindowSize - messageLength - HEADER_LENGTH;
+    verify(frameWriter, timeout(TIME_OUT_MS))
+            .data(eq(false), eq(3), any(Buffer.class), eq(partiallySentSize));
+
+    // Get more credit so the rest of the data should be sent out.
+    frameHandler().windowUpdate(3, initialOutboundWindowSize);
+    verify(frameWriter, timeout(TIME_OUT_MS)).data(
+            eq(false), eq(3), any(Buffer.class),
+            eq(messageLength + HEADER_LENGTH - partiallySentSize));
+
+    stream.cancel(Status.CANCELLED);
+    listener.waitUntilStreamClosed();
+    shutdownAndVerify();
+  }
+
+  /**
+   * Outbound flow control where the initial window size is increased before a stream is started.
+   */
+  @Test
+  public void outboundFlowControl_bigWindowSize() throws Exception {
+    initTransport();
+
+    int initialOutboundWindowSize = 131070; // 65535 * 2
+    setInitialWindowSize(initialOutboundWindowSize);
+    frameHandler().windowUpdate(0, 65535);
+
+    MockStreamListener listener = new MockStreamListener();
+    OkHttpClientStream stream =
+            clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
+    stream.start(listener);
+
+    int messageLength = 100000;
+    // The first message should be sent out.
+    InputStream input = new ByteArrayInputStream(new byte[messageLength]);
+    stream.writeMessage(input);
+    stream.flush();
+    verify(frameWriter, timeout(TIME_OUT_MS)).data(
+            eq(false), eq(3), any(Buffer.class), eq(messageLength + HEADER_LENGTH));
+
+    // The second message should be partially sent out.
+    input = new ByteArrayInputStream(new byte[messageLength]);
+    stream.writeMessage(input);
+    stream.flush();
+    int partiallySentSize = initialOutboundWindowSize - messageLength - HEADER_LENGTH;
+    verify(frameWriter, timeout(TIME_OUT_MS))
+            .data(eq(false), eq(3), any(Buffer.class), eq(partiallySentSize));
+
+    // Get more credit so the rest of the data should be sent out.
+    frameHandler().windowUpdate(0, initialOutboundWindowSize);
+    frameHandler().windowUpdate(3, initialOutboundWindowSize);
+    verify(frameWriter, timeout(TIME_OUT_MS)).data(
+            eq(false), eq(3), any(Buffer.class),
+            eq(messageLength + HEADER_LENGTH - partiallySentSize));
 
     stream.cancel(Status.CANCELLED);
     listener.waitUntilStreamClosed();
