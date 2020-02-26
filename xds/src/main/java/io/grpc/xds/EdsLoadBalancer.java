@@ -414,7 +414,10 @@ final class EdsLoadBalancer extends LoadBalancer {
     public void onError(Status error) {
       logger.log(
           XdsLogLevel.WARNING,
-          "Received error from xDS client {0}: {1}", xdsClient, error.getDescription());
+          "Received error from xDS client {0}: {1}: {2}",
+          xdsClient,
+          error.getCode(),
+          error.getDescription());
       resourceUpdateCallback.onError();
       // If we get an error before getting any valid result, we should put the channel in
       // TRANSIENT_FAILURE; if they get an error after getting a valid result, we keep using the

@@ -323,7 +323,10 @@ public final class CdsLoadBalancer extends LoadBalancer {
     public void onError(Status error) {
       logger.log(
           XdsLogLevel.WARNING,
-          "Received error from xDS client {0}: {1}", xdsClient, error.getDescription());
+          "Received error from xDS client {0}: {1}: {2}",
+          xdsClient,
+          error.getCode(),
+          error.getDescription());
 
       // Go into TRANSIENT_FAILURE if we have not yet created the child
       // policy (i.e., we have not yet received valid data for the cluster). Otherwise,
