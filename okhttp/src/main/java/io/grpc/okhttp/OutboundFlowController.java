@@ -17,6 +17,7 @@
 package io.grpc.okhttp;
 
 import static io.grpc.okhttp.Utils.CONNECTION_STREAM_ID;
+import static io.grpc.okhttp.Utils.DEFAULT_WINDOW_SIZE;
 import static java.lang.Math.ceil;
 import static java.lang.Math.max;
 import static java.lang.Math.min;
@@ -38,11 +39,11 @@ class OutboundFlowController {
   private final OutboundFlowState connectionState;
 
   OutboundFlowController(
-      OkHttpClientTransport transport, FrameWriter frameWriter, int initialWindowSize) {
+      OkHttpClientTransport transport, FrameWriter frameWriter) {
     this.transport = Preconditions.checkNotNull(transport, "transport");
     this.frameWriter = Preconditions.checkNotNull(frameWriter, "frameWriter");
-    this.initialWindowSize = initialWindowSize;
-    connectionState = new OutboundFlowState(CONNECTION_STREAM_ID, initialWindowSize);
+    this.initialWindowSize = DEFAULT_WINDOW_SIZE;
+    connectionState = new OutboundFlowState(CONNECTION_STREAM_ID, DEFAULT_WINDOW_SIZE);
   }
 
   /**
