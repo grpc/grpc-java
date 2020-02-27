@@ -41,6 +41,7 @@ public class BootstrapperTest {
   @Rule public ExpectedException thrown = ExpectedException.none();
 
   @Test
+  @SuppressWarnings("deprecation")
   public void parseBootstrap_validData_singleXdsServer() throws IOException {
     String rawData = "{\n"
         + "  \"node\": {\n"
@@ -96,6 +97,7 @@ public class BootstrapperTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
   public void parseBootstrap_validData_multipleXdsServers() throws IOException {
     String rawData = "{\n"
         + "  \"node\": {\n"
@@ -160,6 +162,7 @@ public class BootstrapperTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
   public void parseBootstrap_IgnoreIrrelevantFields() throws IOException {
     String rawData = "{\n"
         + "  \"node\": {\n"
@@ -225,6 +228,7 @@ public class BootstrapperTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
   public void parseBootstrap_minimumRequiredFields() throws IOException {
     String rawData = "{\n"
         + "  \"xds_servers\": []\n"
@@ -241,6 +245,7 @@ public class BootstrapperTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
   public void parseBootstrap_minimalUsableData() throws IOException {
     String rawData = "{\n"
         + "  \"xds_servers\": [\n"
