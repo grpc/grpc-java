@@ -48,6 +48,9 @@ public abstract class Bootstrapper {
 
   private static final String LOG_PREFIX = "xds-bootstrap";
   private static final String BOOTSTRAP_PATH_SYS_ENV_VAR = "GRPC_XDS_BOOTSTRAP";
+  @VisibleForTesting
+  static final String CLIENT_FEATURE_DISABLE_OVERPROVISIONING =
+      "envoy.lb.does_not_support_overprovisioning";
 
   private static final Bootstrapper DEFAULT_INSTANCE = new Bootstrapper() {
     @Override
@@ -165,6 +168,7 @@ public abstract class Bootstrapper {
     nodeBuilder.setBuildVersion(buildVersion.toString());
     nodeBuilder.setUserAgentName(buildVersion.getUserAgent());
     nodeBuilder.setUserAgentVersion(buildVersion.getImplementationVersion());
+    nodeBuilder.addClientFeatures(CLIENT_FEATURE_DISABLE_OVERPROVISIONING);
 
     return new BootstrapInfo(servers, nodeBuilder.build());
   }

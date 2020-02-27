@@ -311,6 +311,7 @@ public class BootstrapperTest {
         Node.newBuilder()
             .setBuildVersion(buildVersion.toString())
             .setUserAgentName(buildVersion.getUserAgent())
-            .setUserAgentVersion(buildVersion.getImplementationVersion());
+            .setUserAgentVersion(buildVersion.getImplementationVersion())
+            .addClientFeatures(Bootstrapper.CLIENT_FEATURE_DISABLE_OVERPROVISIONING);
   }
 }
