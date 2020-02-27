@@ -48,6 +48,7 @@ import io.grpc.internal.InsightBuilder;
 import io.grpc.internal.ManagedClientTransport;
 import io.grpc.internal.NoopClientStream;
 import io.grpc.internal.ObjectPool;
+import io.grpc.internal.ServerListener;
 import io.grpc.internal.ServerStream;
 import io.grpc.internal.ServerStreamListener;
 import io.grpc.internal.ServerTransport;
@@ -79,6 +80,8 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
   private final int clientMaxInboundMetadataSize;
   private final String authority;
   private final String userAgent;
+  @Nullable
+  private final ServerListener optionalServerListener;
   private int serverMaxInboundMetadataSize;
   private ObjectPool<ScheduledExecutorService> serverSchedulerPool;
   private ScheduledExecutorService serverScheduler;
@@ -111,9 +114,8 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
         }
       };
 
-  public InProcessTransport(
-      String name, int maxInboundMetadataSize, String authority, String userAgent,
-      Attributes eagAttrs) {
+  private InProcessTransport(String name, int maxInboundMetadataSize, String authority,
+      String userAgent, Attributes eagAttrs, @Nullable ServerListener optionalServerListener) {
     this.name = name;
     this.clientMaxInboundMetadataSize = maxInboundMetadataSize;
     this.authority = authority;
@@ -125,21 +127,44 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
         .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, new InProcessSocketAddress(name))
         .set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, new InProcessSocketAddress(name))
         .build();
+    this.optionalServerListener = optionalServerListener;
     logId = InternalLogId.allocate(getClass(), name);
+  }
+
+  public InProcessTransport(
+      String name, int maxInboundMetadataSize, String authority, String userAgent,
+      Attributes eagAttrs) {
+    this(name, maxInboundMetadataSize, authority, userAgent, eagAttrs, null);
+  }
+
+  InProcessTransport(
+      String name, int maxInboundMetadataSize, String authority, String userAgent,
+      Attributes eagAttrs, ObjectPool<ScheduledExecutorService> serverSchedulerPool,
+      List<ServerStreamTracer.Factory> serverStreamTracerFactories,
+      ServerListener serverListener) {
+    this(name, maxInboundMetadataSize, authority, userAgent, eagAttrs, serverListener);
+    this.serverMaxInboundMetadataSize = maxInboundMetadataSize;
+    this.serverSchedulerPool = serverSchedulerPool;
+    this.serverStreamTracerFactories = serverStreamTracerFactories;
   }
 
   @CheckReturnValue
   @Override
   public synchronized Runnable start(ManagedClientTransport.Listener listener) {
     this.clientTransportListener = listener;
-    InProcessServer server = InProcessServer.findServer(name);
-    if (server != null) {
-      serverMaxInboundMetadataSize = server.getMaxInboundMetadataSize();
-      serverSchedulerPool = server.getScheduledExecutorServicePool();
+    if (optionalServerListener != null) {
       serverScheduler = serverSchedulerPool.getObject();
-      serverStreamTracerFactories = server.getStreamTracerFactories();
-      // Must be semi-initialized; past this point, can begin receiving requests
-      serverTransportListener = server.register(this);
+      serverTransportListener = optionalServerListener.transportCreated(this);
+    } else {
+      InProcessServer server = InProcessServer.findServer(name);
+      if (server != null) {
+        serverMaxInboundMetadataSize = server.getMaxInboundMetadataSize();
+        serverSchedulerPool = server.getScheduledExecutorServicePool();
+        serverScheduler = serverSchedulerPool.getObject();
+        serverStreamTracerFactories = server.getStreamTracerFactories();
+        // Must be semi-initialized; past this point, can begin receiving requests
+        serverTransportListener = server.register(this);
+      }
     }
     if (serverTransportListener == null) {
       shutdownStatus = Status.UNAVAILABLE.withDescription("Could not find server: " + name);
