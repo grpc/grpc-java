@@ -63,7 +63,7 @@ public class ChannelAndServerBuilderTest {
       if (className.contains("io.grpc.netty.shaded.io.netty")) {
         continue;
       }
-      Class<?> clazz = Class.forName(classInfo.getName(), false /*initialize*/, loader);
+      Class<?> clazz = Class.forName(className, false /*initialize*/, loader);
       if (ServerBuilder.class.isAssignableFrom(clazz) && clazz != ServerBuilder.class) {
         classes.add(new Object[]{clazz});
       } else if (ManagedChannelBuilder.class.isAssignableFrom(clazz)
