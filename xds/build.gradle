@@ -39,7 +39,7 @@ dependencies {
     testCompile project(':grpc-core').sourceSets.test.output
 
     compileOnly libraries.javax_annotation,
-            // The unshaded netty_epoll should not be a transitive dependency.
+            // At runtime use the epoll included in grpc-netty-shaded
             libraries.netty_epoll
     
     testCompile project(':grpc-testing'), 
