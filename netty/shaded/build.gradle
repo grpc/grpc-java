@@ -18,6 +18,7 @@ dependencies {
             project(':grpc-testing-proto'),
             project(':grpc-testing'),
             libraries.truth
+    shadow project(':grpc-core')
 }
 
 jar {
