@@ -33,26 +33,23 @@ import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
-import io.grpc.Status;
-import io.grpc.Status.Code;
-import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.JsonParser;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicReference;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
-import org.mockito.ArgumentCaptor;
 
 /**
  * Tests for {@link FallbackLb}.
  */
 @RunWith(JUnit4.class)
+// TODO(creamsoup) use parsed service config
+@SuppressWarnings("deprecation")
 public class FallbackLbTest {
 
   private final LoadBalancerProvider fallbackProvider1 = new LoadBalancerProvider() {
@@ -133,7 +130,6 @@ public class FallbackLbTest {
     EquivalentAddressGroup eag112 = new EquivalentAddressGroup(mock(SocketAddress.class));
     List<EquivalentAddressGroup> eags11 = ImmutableList.of(eag111, eag112);
     String lbConfigRaw11 = "{"
-        + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
         + "\"fallbackPolicy\" : [{\"fallback_1\" : { \"fallback_1_option\" : \"yes\"}}]"
         + "}";
     @SuppressWarnings("unchecked")
@@ -160,7 +156,6 @@ public class FallbackLbTest {
     EquivalentAddressGroup eag121 = new EquivalentAddressGroup(mock(SocketAddress.class));
     List<EquivalentAddressGroup> eags12 = ImmutableList.of(eag121);
     String lbConfigRaw12 = "{"
-        + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
         + "\"fallbackPolicy\" : [{\"fallback_1\" : { \"fallback_1_option\" : \"no\"}}]"
         + "}";
     @SuppressWarnings("unchecked")
@@ -185,7 +180,6 @@ public class FallbackLbTest {
     EquivalentAddressGroup eag212 = new EquivalentAddressGroup(mock(SocketAddress.class));
     List<EquivalentAddressGroup> eags21 = ImmutableList.of(eag211, eag212);
     String lbConfigRaw21 = "{"
-        + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
         + "\"fallbackPolicy\" : [{\"fallback_2\" : { \"fallback_2_option\" : \"yes\"}}]"
         + "}";
     @SuppressWarnings("unchecked")
@@ -221,7 +215,6 @@ public class FallbackLbTest {
     EquivalentAddressGroup eag221 = new EquivalentAddressGroup(mock(SocketAddress.class));
     List<EquivalentAddressGroup> eags22 = ImmutableList.of(eag221);
     String lbConfigRaw22 = "{"
-        + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
         + "\"fallbackPolicy\" : [{\"fallback_2\" : { \"fallback_2_option\" : \"no\"}}]"
         + "}";
     @SuppressWarnings("unchecked")
@@ -247,23 +240,15 @@ public class FallbackLbTest {
     verify(balancer2).shutdown();
   }
 
-
   @Test
-  public void handleBackendsEagsOnly() throws Exception {
-    EquivalentAddressGroup eag0 = new EquivalentAddressGroup(
-        ImmutableList.<SocketAddress>of(new InetSocketAddress(8080)));
-    Attributes attributes = Attributes
-        .newBuilder()
-        .set(GrpcAttributes.ATTR_LB_ADDR_AUTHORITY, "this is a balancer address")
-        .build();
+  public void propagateAddressesToFallbackPolicy() throws Exception {
     EquivalentAddressGroup eag1 = new EquivalentAddressGroup(
-        ImmutableList.<SocketAddress>of(new InetSocketAddress(8081)), attributes);
+        ImmutableList.<SocketAddress>of(new InetSocketAddress(8080)));
     EquivalentAddressGroup eag2 = new EquivalentAddressGroup(
         ImmutableList.<SocketAddress>of(new InetSocketAddress(8082)));
-    List<EquivalentAddressGroup> eags = ImmutableList.of(eag0, eag1, eag2);
+    List<EquivalentAddressGroup> eags = ImmutableList.of(eag1, eag2);
 
     String lbConfigRaw = "{"
-        + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
         + "\"fallbackPolicy\" : [{\"fallback_1\" : { \"fallback_1_option\" : \"yes\"}}]"
         + "}";
     @SuppressWarnings("unchecked")
@@ -276,100 +261,10 @@ public class FallbackLbTest {
     LoadBalancer balancer1 = balancers1.get(0);
     verify(balancer1).handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
-            .setAddresses(ImmutableList.of(eag0, eag2))
+            .setAddresses(ImmutableList.of(eag1, eag2))
             .setAttributes(
                 Attributes.newBuilder()
                     .set(ATTR_LOAD_BALANCING_CONFIG, ImmutableMap.of("fallback_1_option", "yes"))
-                    .build())
-            .build());
-  }
-
-  @Test
-  public void resolvingWithOnlyGrpclbAddresses_NoBackendAddress() throws Exception {
-    Attributes attributes = Attributes
-        .newBuilder()
-        .set(GrpcAttributes.ATTR_LB_ADDR_AUTHORITY, "this is a balancer address")
-        .build();
-    EquivalentAddressGroup eag1 = new EquivalentAddressGroup(
-        ImmutableList.<SocketAddress>of(new InetSocketAddress(8081)), attributes);
-    EquivalentAddressGroup eag2 = new EquivalentAddressGroup(
-        ImmutableList.<SocketAddress>of(new InetSocketAddress(8082)), attributes);
-    List<EquivalentAddressGroup> eags = ImmutableList.of(eag1, eag2);
-    String lbConfigRaw = "{"
-        + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
-        + "\"fallbackPolicy\" : [{\"fallback_1\" : { \"fallback_1_option\" : \"yes\"}}]"
-        + "}";
-    @SuppressWarnings("unchecked")
-    Map<String, ?> lbConfig = (Map<String, ?>) JsonParser.parse(lbConfigRaw);
-    fallbackLb.handleResolvedAddresses(ResolvedAddresses.newBuilder()
-        .setAddresses(eags)
-        .setAttributes(Attributes.newBuilder().set(ATTR_LOAD_BALANCING_CONFIG, lbConfig).build())
-        .build());
-
-    LoadBalancer balancer1 = balancers1.get(0);
-    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
-    verify(balancer1).handleNameResolutionError(statusCaptor.capture());
-    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.UNAVAILABLE);
-  }
-
-  @Test
-  public void handleGrpclbAddresses() throws Exception {
-    final AtomicReference<LoadBalancer> balancer = new AtomicReference<>();
-    LoadBalancerProvider grpclbProvider = new LoadBalancerProvider() {
-      @Override
-      public boolean isAvailable() {
-        return true;
-      }
-
-      @Override
-      public int getPriority() {
-        return 5;
-      }
-
-      @Override
-      public String getPolicyName() {
-        return "grpclb";
-      }
-
-      @Override
-      public LoadBalancer newLoadBalancer(Helper helper) {
-        balancer.set(mock(LoadBalancer.class));
-        return balancer.get();
-      }
-    };
-    LoadBalancerRegistry lbRegistry = new LoadBalancerRegistry();
-    lbRegistry.register(grpclbProvider);
-    fallbackLb = new FallbackLb(helper, lbRegistry);
-
-    EquivalentAddressGroup eag0 = new EquivalentAddressGroup(
-        ImmutableList.<SocketAddress>of(new InetSocketAddress(8080)));
-    Attributes attributes = Attributes
-        .newBuilder()
-        .set(GrpcAttributes.ATTR_LB_ADDR_AUTHORITY, "this is a balancer address")
-        .build();
-    EquivalentAddressGroup eag1 = new EquivalentAddressGroup(
-        ImmutableList.<SocketAddress>of(new InetSocketAddress(8081)), attributes);
-    EquivalentAddressGroup eag2 = new EquivalentAddressGroup(
-        ImmutableList.<SocketAddress>of(new InetSocketAddress(8082)));
-    List<EquivalentAddressGroup> eags = ImmutableList.of(eag0, eag1, eag2);
-
-    String lbConfigRaw = "{"
-        + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
-        + "\"fallbackPolicy\" : [{\"grpclb\" : { \"grpclb_option\" : \"yes\"}}]"
-        + "}";
-    @SuppressWarnings("unchecked")
-    Map<String, ?> lbConfig = (Map<String, ?>) JsonParser.parse(lbConfigRaw);
-    fallbackLb.handleResolvedAddresses(ResolvedAddresses.newBuilder()
-        .setAddresses(eags)
-        .setAttributes(Attributes.newBuilder().set(ATTR_LOAD_BALANCING_CONFIG, lbConfig).build())
-        .build());
-
-    verify(balancer.get()).handleResolvedAddresses(
-        ResolvedAddresses.newBuilder()
-            .setAddresses(eags)
-            .setAttributes(
-                Attributes.newBuilder()
-                    .set(ATTR_LOAD_BALANCING_CONFIG, ImmutableMap.of("grpclb_option", "yes"))
                     .build())
             .build());
   }

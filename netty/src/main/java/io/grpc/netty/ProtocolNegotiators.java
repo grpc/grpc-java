@@ -18,7 +18,6 @@ package io.grpc.netty;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
-import static io.grpc.netty.GrpcSslContexts.NEXT_PROTOCOL_VERSIONS;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -33,6 +32,7 @@ import io.grpc.SecurityLevel;
 import io.grpc.Status;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.ObjectPool;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandler;
@@ -52,12 +52,14 @@ import io.netty.handler.ssl.OpenSslEngine;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.ssl.SslHandshakeCompletionEvent;
+import io.netty.handler.ssl.SslProvider;
 import io.netty.util.AsciiString;
 import io.netty.util.Attribute;
 import io.netty.util.AttributeMap;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.util.Arrays;
+import java.util.concurrent.Executor;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -106,20 +108,35 @@ final class ProtocolNegotiators {
 
   /**
    * Create a server TLS handler for HTTP/2 capable of using ALPN/NPN.
+   * @param executorPool a dedicated {@link Executor} pool for time-consuming TLS tasks
    */
-  public static ProtocolNegotiator serverTls(final SslContext sslContext) {
+  public static ProtocolNegotiator serverTls(final SslContext sslContext,
+      final ObjectPool<? extends Executor> executorPool) {
     Preconditions.checkNotNull(sslContext, "sslContext");
+    final Executor executor;
+    if (executorPool != null) {
+      // The handlers here can out-live the {@link ProtocolNegotiator}.
+      // To keep their own reference to executor from executorPool, we use an extra (unused)
+      // reference here forces the executor to stay alive, which prevents it from being re-created
+      // for every connection.
+      executor = executorPool.getObject();
+    } else {
+      executor = null;
+    }
     return new ProtocolNegotiator() {
       @Override
       public ChannelHandler newHandler(GrpcHttp2ConnectionHandler handler) {
         ChannelHandler gnh = new GrpcNegotiationHandler(handler);
-        ChannelHandler sth = new ServerTlsHandler(gnh, sslContext);
+        ChannelHandler sth = new ServerTlsHandler(gnh, sslContext, executorPool);
         return new WaitUntilActiveHandler(sth);
       }
 
       @Override
-      public void close() {}
-
+      public void close() {
+        if (executorPool != null && executor != null) {
+          executorPool.returnObject(executor);
+        }
+      }
 
       @Override
       public AsciiString scheme() {
@@ -128,22 +145,37 @@ final class ProtocolNegotiators {
     };
   }
 
+  /**
+   * Create a server TLS handler for HTTP/2 capable of using ALPN/NPN.
+   */
+  public static ProtocolNegotiator serverTls(final SslContext sslContext) {
+    return serverTls(sslContext, null);
+  }
+
   static final class ServerTlsHandler extends ChannelInboundHandlerAdapter {
+    private Executor executor;
     private final ChannelHandler next;
     private final SslContext sslContext;
 
     private ProtocolNegotiationEvent pne = ProtocolNegotiationEvent.DEFAULT;
 
-    ServerTlsHandler(ChannelHandler next, SslContext sslContext) {
+    ServerTlsHandler(ChannelHandler next,
+        SslContext sslContext,
+        final ObjectPool<? extends Executor> executorPool) {
       this.sslContext = checkNotNull(sslContext, "sslContext");
       this.next = checkNotNull(next, "next");
+      if (executorPool != null) {
+        this.executor = executorPool.getObject();
+      }
     }
 
     @Override
     public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
       super.handlerAdded(ctx);
       SSLEngine sslEngine = sslContext.newEngine(ctx.alloc());
-      ctx.pipeline().addBefore(ctx.name(), null, new SslHandler(sslEngine, false));
+      ctx.pipeline().addBefore(ctx.name(), /* name= */ null, this.executor != null
+          ? new SslHandler(sslEngine, false, this.executor)
+          : new SslHandler(sslEngine, false));
     }
 
     @Override
@@ -158,7 +190,8 @@ final class ProtocolNegotiators {
           return;
         }
         SslHandler sslHandler = ctx.pipeline().get(SslHandler.class);
-        if (!NEXT_PROTOCOL_VERSIONS.contains(sslHandler.applicationProtocol())) {
+        if (!sslContext.applicationProtocolNegotiator().protocols().contains(
+                sslHandler.applicationProtocol())) {
           logSslEngineDetails(Level.FINE, ctx, "TLS negotiation failed for new client.", null);
           ctx.fireExceptionCaught(unavailableException(
               "Failed protocol negotiation: Unable to find compatible protocol"));
@@ -244,7 +277,7 @@ final class ProtocolNegotiators {
       } else {
         nettyProxyHandler = new HttpProxyHandler(address, userName, password);
       }
-      ctx.pipeline().addBefore(ctx.name(), /* newName= */ null, nettyProxyHandler);
+      ctx.pipeline().addBefore(ctx.name(), /* name= */ null, nettyProxyHandler);
     }
 
     @Override
@@ -259,11 +292,18 @@ final class ProtocolNegotiators {
 
   static final class ClientTlsProtocolNegotiator implements ProtocolNegotiator {
 
-    public ClientTlsProtocolNegotiator(SslContext sslContext) {
+    public ClientTlsProtocolNegotiator(SslContext sslContext,
+        ObjectPool<? extends Executor> executorPool) {
       this.sslContext = checkNotNull(sslContext, "sslContext");
+      this.executorPool = executorPool;
+      if (this.executorPool != null) {
+        this.executor = this.executorPool.getObject();
+      }
     }
 
     private final SslContext sslContext;
+    private final ObjectPool<? extends Executor> executorPool;
+    private Executor executor;
 
     @Override
     public AsciiString scheme() {
@@ -273,12 +313,17 @@ final class ProtocolNegotiators {
     @Override
     public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
       ChannelHandler gnh = new GrpcNegotiationHandler(grpcHandler);
-      ChannelHandler cth = new ClientTlsHandler(gnh, sslContext, grpcHandler.getAuthority());
+      ChannelHandler cth = new ClientTlsHandler(gnh, sslContext, grpcHandler.getAuthority(),
+          this.executor);
       return new WaitUntilActiveHandler(cth);
     }
 
     @Override
-    public void close() {}
+    public void close() {
+      if (this.executorPool != null && this.executor != null) {
+        this.executorPool.returnObject(this.executor);
+      }
+    }
   }
 
   static final class ClientTlsHandler extends ProtocolNegotiationHandler {
@@ -286,13 +331,16 @@ final class ProtocolNegotiators {
     private final SslContext sslContext;
     private final String host;
     private final int port;
+    private Executor executor;
 
-    ClientTlsHandler(ChannelHandler next, SslContext sslContext, String authority) {
+    ClientTlsHandler(ChannelHandler next, SslContext sslContext, String authority,
+        Executor executor) {
       super(next);
       this.sslContext = checkNotNull(sslContext, "sslContext");
       HostPort hostPort = parseAuthority(authority);
       this.host = hostPort.host;
       this.port = hostPort.port;
+      this.executor = executor;
     }
 
     @Override
@@ -301,7 +349,9 @@ final class ProtocolNegotiators {
       SSLParameters sslParams = sslEngine.getSSLParameters();
       sslParams.setEndpointIdentificationAlgorithm("HTTPS");
       sslEngine.setSSLParameters(sslParams);
-      ctx.pipeline().addBefore(ctx.name(), /* name= */ null, new SslHandler(sslEngine, false));
+      ctx.pipeline().addBefore(ctx.name(), /* name= */ null, this.executor != null
+          ? new SslHandler(sslEngine, false, this.executor)
+          : new SslHandler(sslEngine, false));
     }
 
     @Override
@@ -310,7 +360,8 @@ final class ProtocolNegotiators {
         SslHandshakeCompletionEvent handshakeEvent = (SslHandshakeCompletionEvent) evt;
         if (handshakeEvent.isSuccess()) {
           SslHandler handler = ctx.pipeline().get(SslHandler.class);
-          if (NEXT_PROTOCOL_VERSIONS.contains(handler.applicationProtocol())) {
+          if (sslContext.applicationProtocolNegotiator().protocols()
+              .contains(handler.applicationProtocol())) {
             // Successfully negotiated the protocol.
             logSslEngineDetails(Level.FINER, ctx, "TLS negotiation succeeded.", null);
             propagateTlsComplete(ctx, handler.engine().getSession());
@@ -367,9 +418,20 @@ final class ProtocolNegotiators {
    * Returns a {@link ProtocolNegotiator} that ensures the pipeline is set up so that TLS will
    * be negotiated, the {@code handler} is added and writes to the {@link io.netty.channel.Channel}
    * may happen immediately, even before the TLS Handshake is complete.
+   * @param executorPool a dedicated {@link Executor} pool for time-consuming TLS tasks
+   */
+  public static ProtocolNegotiator tls(SslContext sslContext,
+      ObjectPool<? extends Executor> executorPool) {
+    return new ClientTlsProtocolNegotiator(sslContext, executorPool);
+  }
+
+  /**
+   * Returns a {@link ProtocolNegotiator} that ensures the pipeline is set up so that TLS will
+   * be negotiated, the {@code handler} is added and writes to the {@link io.netty.channel.Channel}
+   * may happen immediately, even before the TLS Handshake is complete.
    */
   public static ProtocolNegotiator tls(SslContext sslContext) {
-    return new ClientTlsProtocolNegotiator(sslContext);
+    return tls(sslContext, null);
   }
 
   /** A tuple of (host, port). */
@@ -494,7 +556,7 @@ final class ProtocolNegotiators {
       builder.append("    OpenSSL, ");
       builder.append("Version: 0x").append(Integer.toHexString(OpenSsl.version()));
       builder.append(" (").append(OpenSsl.versionString()).append("), ");
-      builder.append("ALPN supported: ").append(OpenSsl.isAlpnSupported());
+      builder.append("ALPN supported: ").append(SslProvider.isAlpnSupported(SslProvider.OPENSSL));
     } else if (JettyTlsUtil.isJettyAlpnConfigured()) {
       builder.append("    Jetty ALPN");
     } else if (JettyTlsUtil.isJettyNpnConfigured()) {

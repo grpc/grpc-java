@@ -29,6 +29,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
@@ -50,6 +51,7 @@ import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
 import io.grpc.xds.InterLocalityPicker.WeightedChildPicker;
 import io.grpc.xds.OrcaOobUtil.OrcaReportingConfig;
 import io.grpc.xds.OrcaOobUtil.OrcaReportingHelperWrapper;
+import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -82,8 +84,11 @@ interface LocalityStore {
         new LocalityStoreFactory() {
           @Override
           LocalityStore newLocalityStore(
-              Helper helper, LoadBalancerRegistry lbRegistry, LoadStatsStore loadStatsStore) {
-            return new LocalityStoreImpl(helper, lbRegistry, loadStatsStore);
+              InternalLogId logId,
+              Helper helper,
+              LoadBalancerRegistry lbRegistry,
+              LoadStatsStore loadStatsStore) {
+            return new LocalityStoreImpl(logId, helper, lbRegistry, loadStatsStore);
           }
         };
 
@@ -92,13 +97,17 @@ interface LocalityStore {
     }
 
     abstract LocalityStore newLocalityStore(
-        Helper helper, LoadBalancerRegistry lbRegistry, LoadStatsStore loadStatsStore);
+        InternalLogId logId,
+        Helper helper,
+        LoadBalancerRegistry lbRegistry,
+        LoadStatsStore loadStatsStore);
   }
 
   final class LocalityStoreImpl implements LocalityStore {
     private static final String ROUND_ROBIN = "round_robin";
     private static final long DELAYED_DELETION_TIMEOUT_MINUTES = 15L;
 
+    private final XdsLogger logger;
     private final Helper helper;
     private final PickerFactory pickerFactory;
     private final LoadBalancerProvider loadBalancerProvider;
@@ -114,13 +123,24 @@ interface LocalityStore {
     private long metricsReportIntervalNano = -1;
 
     LocalityStoreImpl(
-        Helper helper, LoadBalancerRegistry lbRegistry, LoadStatsStore loadStatsStore) {
-      this(helper, pickerFactoryImpl, lbRegistry, ThreadSafeRandom.ThreadSafeRandomImpl.instance,
-          loadStatsStore, OrcaPerRequestUtil.getInstance(), OrcaOobUtil.getInstance());
+        InternalLogId logId,
+        Helper helper,
+        LoadBalancerRegistry lbRegistry,
+        LoadStatsStore loadStatsStore) {
+      this(
+          logId,
+          helper,
+          pickerFactoryImpl,
+          lbRegistry,
+          ThreadSafeRandom.ThreadSafeRandomImpl.instance,
+          loadStatsStore,
+          OrcaPerRequestUtil.getInstance(),
+          OrcaOobUtil.getInstance());
     }
 
     @VisibleForTesting
     LocalityStoreImpl(
+        InternalLogId logId,
         Helper helper,
         PickerFactory pickerFactory,
         LoadBalancerRegistry lbRegistry,
@@ -137,6 +157,7 @@ interface LocalityStore {
       this.loadStatsStore = checkNotNull(loadStatsStore, "loadStatsStore");
       this.orcaPerRequestUtil = checkNotNull(orcaPerRequestUtil, "orcaPerRequestUtil");
       this.orcaOobUtil = checkNotNull(orcaOobUtil, "orcaOobUtil");
+      logger = XdsLogger.withLogId(checkNotNull(logId, "logId"));
     }
 
     @VisibleForTesting // Introduced for testing only.
@@ -144,7 +165,7 @@ interface LocalityStore {
       SubchannelPicker picker(List<WeightedChildPicker> childPickers);
     }
 
-    private static final class DroppablePicker extends SubchannelPicker {
+    private final class DroppablePicker extends SubchannelPicker {
 
       final List<DropOverload> dropOverloads;
       final SubchannelPicker delegate;
@@ -165,6 +186,9 @@ interface LocalityStore {
         for (DropOverload dropOverload : dropOverloads) {
           int rand = random.nextInt(1000_000);
           if (rand < dropOverload.getDropsPerMillion()) {
+            logger.log(
+                XdsLogLevel.INFO,
+                "Drop request with category: {0}", dropOverload.getCategory());
             loadStatsStore.recordDroppedRequest(dropOverload.getCategory());
             return PickResult.withDrop(Status.UNAVAILABLE.withDescription(
                 "dropped by loadbalancer: " + dropOverload.toString()));
@@ -205,10 +229,8 @@ interface LocalityStore {
       priorityManager.reset();
     }
 
-    // This is triggered by EDS response.
     @Override
-    public void updateLocalityStore(
-        final Map<Locality, LocalityLbEndpoints> localityInfoMap) {
+    public void updateLocalityStore(final Map<Locality, LocalityLbEndpoints> localityInfoMap) {
 
       Set<Locality> newLocalities = localityInfoMap.keySet();
       // TODO: put endPointWeights into attributes for WRR.
@@ -338,16 +360,17 @@ interface LocalityStore {
      * State of a single Locality.
      */
     // TODO(zdapeng): rename it to LocalityLbState
-    static final class LocalityLbInfo {
+    private final class LocalityLbInfo {
 
+      final Locality locality;
       final LoadBalancer childBalancer;
       final ChildHelper childHelper;
 
       @Nullable
       private ScheduledHandle delayedDeletionTimer;
 
-      LocalityLbInfo(
-          LoadBalancer childBalancer, ChildHelper childHelper) {
+      LocalityLbInfo(Locality locality, LoadBalancer childBalancer, ChildHelper childHelper) {
+        this.locality = checkNotNull(locality, "locality");
         this.childBalancer = checkNotNull(childBalancer, "childBalancer");
         this.childHelper = checkNotNull(childHelper, "childHelper");
       }
@@ -358,6 +381,7 @@ interface LocalityStore {
           delayedDeletionTimer = null;
         }
         childBalancer.shutdown();
+        logger.log(XdsLogLevel.INFO, "Shut down child balancer for locality {0}", locality);
       }
 
       void reactivate() {
@@ -395,7 +419,9 @@ interface LocalityStore {
               final SubchannelPicker newPicker) {
             checkNotNull(newState, "newState");
             checkNotNull(newPicker, "newPicker");
-
+            logger.log(
+                XdsLogLevel.INFO,
+                "Update load balancing state for locality {0} to {1}", locality, newState);
             currentChildState = newState;
             currentChildPicker =
                 new LoadRecordingSubchannelPicker(counter,
@@ -459,6 +485,13 @@ interface LocalityStore {
           }
           priorityTable.get(priority).add(newLocality);
         }
+        if (logger.isLoggable(XdsLogLevel.INFO)) {
+          for (int i = 0; i < priorityTable.size(); i++) {
+            logger.log(
+                XdsLogLevel.INFO,
+                "Priority {0} contains localities: {1}", i, priorityTable.get(i));
+          }
+        }
 
         currentPriority = -1;
         failOver();
@@ -491,7 +524,7 @@ interface LocalityStore {
                 new WeightedChildPicker(localityInfoMap.get(l).getLocalityWeight(), childPicker));
           }
         }
-
+        logger.log(XdsLogLevel.INFO, "Update priority {0} state to {1}", priority, overallState);
         if (priority == currentPriority) {
           updatePicker(overallState, childPickers);
           if (overallState == READY) {
@@ -560,6 +593,7 @@ interface LocalityStore {
           class FailOverTask implements Runnable {
             @Override
             public void run() {
+              logger.log(XdsLogLevel.INFO, "Failing over to priority {0}", currentPriority + 1);
               failOverTimer = null;
               failOver();
             }
@@ -573,11 +607,13 @@ interface LocalityStore {
       }
 
       private void initLocality(Locality locality) {
+        logger.log(XdsLogLevel.INFO, "Create child balancer for locality {0}", locality);
         ChildHelper childHelper =
             new ChildHelper(locality, loadStatsStore.getLocalityCounter(locality),
                 orcaOobUtil);
         LocalityLbInfo localityLbInfo =
             new LocalityLbInfo(
+                locality,
                 loadBalancerProvider.newLoadBalancer(childHelper),
                 childHelper);
         localityMap.put(locality, localityLbInfo);

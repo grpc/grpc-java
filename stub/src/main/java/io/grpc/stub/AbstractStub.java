@@ -104,7 +104,7 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
   /**
    * Returns a new stub with the given channel for the provided method configurations.
    *
-   * @since 1.25.0
+   * @since 1.26.0
    * @param factory the factory to create a stub
    * @param channel the channel that this stub will use to do communications
    */
@@ -116,7 +116,7 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
   /**
    * Returns a new stub with the given channel for the provided method configurations.
    *
-   * @since 1.25.0
+   * @since 1.26.0
    * @param factory the factory to create a stub
    * @param channel the channel that this stub will use to do communications
    * @param callOptions the runtime call options to be applied to every call on this stub
@@ -253,7 +253,7 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
   /**
    * A factory class for stub.
    *
-   * @since 1.25.0
+   * @since 1.26.0
    */
   public interface StubFactory<T extends AbstractStub<T>> {
     T newStub(Channel channel, CallOptions callOptions);

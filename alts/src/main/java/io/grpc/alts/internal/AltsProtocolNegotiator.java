@@ -223,6 +223,7 @@ public final class AltsProtocolNegotiator {
       return SCHEME;
     }
 
+    @SuppressWarnings("deprecation")
     @Override
     public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
       ChannelHandler gnh = InternalProtocolNegotiators.grpcNegotiationHandler(grpcHandler);
@@ -297,7 +298,7 @@ public final class AltsProtocolNegotiator {
     /** Returns the cached channel to the channel pool. */
     synchronized void close() {
       if (channel != null) {
-        channelPool.returnObject(channel);
+        channel = channelPool.returnObject(channel);
       }
     }
   }

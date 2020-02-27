@@ -609,7 +609,7 @@ public class ContextTest {
         latch.countDown();
       }
     }, MoreExecutors.directExecutor());
-    latch.await(3, TimeUnit.SECONDS);
+    assertTrue("cancellation failed", latch.await(3, TimeUnit.SECONDS));
     if (error.get() != null) {
       throw error.get();
     }

@@ -31,6 +31,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 
 /**
@@ -40,19 +41,27 @@ import javax.annotation.concurrent.NotThreadSafe;
  */
 @NotThreadSafe
 final class LoadStatsStoreImpl implements LoadStatsStore {
-
+  private final String clusterName;
+  @Nullable
+  @SuppressWarnings("unused")
+  private final String clusterServiceName;
   private final ConcurrentMap<Locality, ClientLoadCounter> localityLoadCounters;
   // Cluster level dropped request counts for each category decision made by xDS load balancer.
   private final ConcurrentMap<String, AtomicLong> dropCounters;
 
-  LoadStatsStoreImpl() {
-    this(new ConcurrentHashMap<Locality, ClientLoadCounter>(),
+  LoadStatsStoreImpl(String clusterName, @Nullable String clusterServiceName) {
+    this(clusterName, clusterServiceName, new ConcurrentHashMap<Locality, ClientLoadCounter>(),
         new ConcurrentHashMap<String, AtomicLong>());
   }
 
   @VisibleForTesting
-  LoadStatsStoreImpl(ConcurrentMap<Locality, ClientLoadCounter> localityLoadCounters,
+  LoadStatsStoreImpl(
+      String clusterName,
+      @Nullable String clusterServiceName,
+      ConcurrentMap<Locality, ClientLoadCounter> localityLoadCounters,
       ConcurrentMap<String, AtomicLong> dropCounters) {
+    this.clusterName = checkNotNull(clusterName, "clusterName");
+    this.clusterServiceName = clusterServiceName;
     this.localityLoadCounters = checkNotNull(localityLoadCounters, "localityLoadCounters");
     this.dropCounters = checkNotNull(dropCounters, "dropCounters");
   }
@@ -60,6 +69,8 @@ final class LoadStatsStoreImpl implements LoadStatsStore {
   @Override
   public ClusterStats generateLoadReport() {
     ClusterStats.Builder statsBuilder = ClusterStats.newBuilder();
+    statsBuilder.setClusterName(clusterName);
+    // TODO(chengyuangzhang): also set cluster_service_name if provided.
     for (Map.Entry<Locality, ClientLoadCounter> entry : localityLoadCounters.entrySet()) {
       ClientLoadSnapshot snapshot = entry.getValue().snapshot();
       UpstreamLocalityStats.Builder localityStatsBuilder =

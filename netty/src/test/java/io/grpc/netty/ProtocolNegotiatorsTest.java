@@ -35,6 +35,7 @@ import io.grpc.InternalChannelz.Security;
 import io.grpc.SecurityLevel;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.testing.TestUtils;
+import io.grpc.netty.ProtocolNegotiators.ClientTlsHandler;
 import io.grpc.netty.ProtocolNegotiators.ClientTlsProtocolNegotiator;
 import io.grpc.netty.ProtocolNegotiators.HostPort;
 import io.grpc.netty.ProtocolNegotiators.ServerTlsHandler;
@@ -76,6 +77,7 @@ import io.netty.handler.codec.http2.Http2ConnectionEncoder;
 import io.netty.handler.codec.http2.Http2ServerUpgradeCodec;
 import io.netty.handler.codec.http2.Http2Settings;
 import io.netty.handler.proxy.ProxyConnectException;
+import io.netty.handler.ssl.ApplicationProtocolConfig;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslHandler;
@@ -85,6 +87,8 @@ import io.netty.handler.ssl.util.SelfSignedCertificate;
 import java.io.File;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -246,7 +250,7 @@ public class ProtocolNegotiatorsTest {
 
   @Test
   public void tlsHandler_handlerAddedAddsSslHandler() throws Exception {
-    ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext);
+    ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext, null);
 
     pipeline.addLast(handler);
 
@@ -255,7 +259,7 @@ public class ProtocolNegotiatorsTest {
 
   @Test
   public void tlsHandler_userEventTriggeredNonSslEvent() throws Exception {
-    ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext);
+    ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext, null);
     pipeline.addLast(handler);
     channelHandlerCtx = pipeline.context(handler);
     Object nonSslEvent = new Object();
@@ -276,7 +280,7 @@ public class ProtocolNegotiatorsTest {
       }
     };
 
-    ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext);
+    ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext, null);
     pipeline.addLast(handler);
 
     final AtomicReference<Throwable> error = new AtomicReference<>();
@@ -303,7 +307,7 @@ public class ProtocolNegotiatorsTest {
 
   @Test
   public void tlsHandler_userEventTriggeredSslEvent_handshakeFailure() throws Exception {
-    ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext);
+    ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext, null);
     pipeline.addLast(handler);
     channelHandlerCtx = pipeline.context(handler);
     Object sslEvent = new SslHandshakeCompletionEvent(new RuntimeException("bad"));
@@ -335,7 +339,7 @@ public class ProtocolNegotiatorsTest {
       }
     };
 
-    ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext);
+    ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext, null);
     pipeline.addLast(handler);
 
     pipeline.replace(SslHandler.class, null, goodSslHandler);
@@ -350,15 +354,29 @@ public class ProtocolNegotiatorsTest {
   }
 
   @Test
-  public void tlsHandler_userEventTriggeredSslEvent_supportedProtocolGrpcExp() throws Exception {
+  public void serverTlsHandler_userEventTriggeredSslEvent_supportedProtocolCustom()
+      throws Exception {
     SslHandler goodSslHandler = new SslHandler(engine, false) {
       @Override
       public String applicationProtocol() {
-        return "grpc-exp";
+        return "managed_mtls";
       }
     };
 
-    ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext);
+    File serverCert = TestUtils.loadCert("server1.pem");
+    File key = TestUtils.loadCert("server1.key");
+    List<String> alpnList = Arrays.asList("managed_mtls", "h2");
+    ApplicationProtocolConfig apn = new ApplicationProtocolConfig(
+        ApplicationProtocolConfig.Protocol.ALPN,
+        ApplicationProtocolConfig.SelectorFailureBehavior.NO_ADVERTISE,
+        ApplicationProtocolConfig.SelectedListenerFailureBehavior.ACCEPT,
+        alpnList);
+
+    sslContext = GrpcSslContexts.forServer(serverCert, key)
+        .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE)
+        .applicationProtocolConfig(apn).build();
+
+    ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext, null);
     pipeline.addLast(handler);
 
     pipeline.replace(SslHandler.class, null, goodSslHandler);
@@ -370,11 +388,154 @@ public class ProtocolNegotiatorsTest {
     assertTrue(channel.isOpen());
     ChannelHandlerContext grpcHandlerCtx = pipeline.context(grpcHandler);
     assertNotNull(grpcHandlerCtx);
+  }
+
+  @Test
+  public void serverTlsHandler_userEventTriggeredSslEvent_unsupportedProtocolCustom()
+      throws Exception {
+    SslHandler badSslHandler = new SslHandler(engine, false) {
+      @Override
+      public String applicationProtocol() {
+        return "badprotocol";
+      }
+    };
+
+    File serverCert = TestUtils.loadCert("server1.pem");
+    File key = TestUtils.loadCert("server1.key");
+    List<String> alpnList = Arrays.asList("managed_mtls", "h2");
+    ApplicationProtocolConfig apn = new ApplicationProtocolConfig(
+        ApplicationProtocolConfig.Protocol.ALPN,
+        ApplicationProtocolConfig.SelectorFailureBehavior.NO_ADVERTISE,
+        ApplicationProtocolConfig.SelectedListenerFailureBehavior.ACCEPT,
+        alpnList);
+
+    sslContext = GrpcSslContexts.forServer(serverCert, key)
+        .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE)
+        .applicationProtocolConfig(apn).build();
+    ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext, null);
+    pipeline.addLast(handler);
+
+    final AtomicReference<Throwable> error = new AtomicReference<>();
+    ChannelHandler errorCapture = new ChannelInboundHandlerAdapter() {
+      @Override
+      public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+        error.set(cause);
+      }
+    };
+
+    pipeline.addLast(errorCapture);
+
+    pipeline.replace(SslHandler.class, null, badSslHandler);
+    channelHandlerCtx = pipeline.context(handler);
+    Object sslEvent = SslHandshakeCompletionEvent.SUCCESS;
+
+    pipeline.fireUserEventTriggered(sslEvent);
+
+    // No h2 protocol was specified, so there should be an error, (normally handled by WBAEH)
+    assertThat(error.get()).hasMessageThat().contains("Unable to find compatible protocol");
+    ChannelHandlerContext grpcHandlerCtx = pipeline.context(grpcHandler);
+    assertNull(grpcHandlerCtx);
+  }
+
+  @Test
+  public void clientTlsHandler_userEventTriggeredSslEvent_supportedProtocolH2() throws Exception {
+    SslHandler goodSslHandler = new SslHandler(engine, false) {
+      @Override
+      public String applicationProtocol() {
+        return "h2";
+      }
+    };
+    DefaultEventLoopGroup elg = new DefaultEventLoopGroup(1);
+
+    ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext, "authority", elg);
+    pipeline.addLast(handler);
+    pipeline.replace(SslHandler.class, null, goodSslHandler);
+    pipeline.fireUserEventTriggered(ProtocolNegotiationEvent.DEFAULT);
+    channelHandlerCtx = pipeline.context(handler);
+    Object sslEvent = SslHandshakeCompletionEvent.SUCCESS;
+
+    pipeline.fireUserEventTriggered(sslEvent);
+
+    ChannelHandlerContext grpcHandlerCtx = pipeline.context(grpcHandler);
+    assertNotNull(grpcHandlerCtx);
+  }
+
+  @Test
+  public void clientTlsHandler_userEventTriggeredSslEvent_supportedProtocolCustom()
+      throws Exception {
+    SslHandler goodSslHandler = new SslHandler(engine, false) {
+      @Override
+      public String applicationProtocol() {
+        return "managed_mtls";
+      }
+    };
+    DefaultEventLoopGroup elg = new DefaultEventLoopGroup(1);
+
+    File clientCert = TestUtils.loadCert("client.pem");
+    File key = TestUtils.loadCert("client.key");
+    List<String> alpnList = Arrays.asList("managed_mtls", "h2");
+    ApplicationProtocolConfig apn = new ApplicationProtocolConfig(
+        ApplicationProtocolConfig.Protocol.ALPN,
+        ApplicationProtocolConfig.SelectorFailureBehavior.NO_ADVERTISE,
+        ApplicationProtocolConfig.SelectedListenerFailureBehavior.ACCEPT,
+        alpnList);
+
+    sslContext = GrpcSslContexts.forClient()
+        .keyManager(clientCert, key)
+        .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE)
+        .applicationProtocolConfig(apn).build();
+
+    ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext, "authority", elg);
+    pipeline.addLast(handler);
+    pipeline.replace(SslHandler.class, null, goodSslHandler);
+    pipeline.fireUserEventTriggered(ProtocolNegotiationEvent.DEFAULT);
+    channelHandlerCtx = pipeline.context(handler);
+    Object sslEvent = SslHandshakeCompletionEvent.SUCCESS;
+
+    pipeline.fireUserEventTriggered(sslEvent);
+
+    ChannelHandlerContext grpcHandlerCtx = pipeline.context(grpcHandler);
+    assertNotNull(grpcHandlerCtx);
+  }
+
+  @Test
+  public void clientTlsHandler_userEventTriggeredSslEvent_unsupportedProtocol() throws Exception {
+    SslHandler goodSslHandler = new SslHandler(engine, false) {
+      @Override
+      public String applicationProtocol() {
+        return "badproto";
+      }
+    };
+    DefaultEventLoopGroup elg = new DefaultEventLoopGroup(1);
+
+    ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext, "authority", elg);
+    pipeline.addLast(handler);
+
+    final AtomicReference<Throwable> error = new AtomicReference<>();
+    ChannelHandler errorCapture = new ChannelInboundHandlerAdapter() {
+      @Override
+      public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+        error.set(cause);
+      }
+    };
+
+    pipeline.addLast(errorCapture);
+    pipeline.replace(SslHandler.class, null, goodSslHandler);
+    pipeline.fireUserEventTriggered(ProtocolNegotiationEvent.DEFAULT);
+    channelHandlerCtx = pipeline.context(handler);
+    Object sslEvent = SslHandshakeCompletionEvent.SUCCESS;
+
+    pipeline.fireUserEventTriggered(sslEvent);
+
+    // Bad protocol was specified, so there should be an error, (normally handled by WBAEH)
+    assertThat(error.get()).hasMessageThat().contains("Unable to find compatible protocol");
+    ChannelHandlerContext grpcHandlerCtx = pipeline.context(grpcHandler);
+    assertNull(grpcHandlerCtx);
   }
 
   @Test
   public void engineLog() {
-    ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext);
+    ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext, null);
     pipeline.addLast(handler);
     channelHandlerCtx = pipeline.context(handler);
 
@@ -618,8 +779,7 @@ public class ProtocolNegotiatorsTest {
     SslContext serverSslContext =
         GrpcSslContexts.configure(SslContextBuilder.forServer(cert.key(), cert.cert())).build();
     FakeGrpcHttp2ConnectionHandler gh = FakeGrpcHttp2ConnectionHandler.newHandler();
-
-    ClientTlsProtocolNegotiator pn = new ClientTlsProtocolNegotiator(clientSslContext);
+    ClientTlsProtocolNegotiator pn = new ClientTlsProtocolNegotiator(clientSslContext, null);
     WriteBufferingAndExceptionHandler clientWbaeh =
         new WriteBufferingAndExceptionHandler(pn.newHandler(gh));
 
@@ -656,6 +816,7 @@ public class ProtocolNegotiatorsTest {
     }
     c.close();
     s.close();
+    pn.close();
 
     assertThat(gh.securityInfo).isNotNull();
     assertThat(gh.securityInfo.tls).isNotNull();

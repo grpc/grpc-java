@@ -19,6 +19,7 @@
 
 package io.grpc.okhttp.internal.framed;
 
+import com.google.errorprone.annotations.FormatMethod;
 import io.grpc.okhttp.internal.Protocol;
 import java.io.IOException;
 import java.util.List;
@@ -361,7 +362,7 @@ public final class Http2 implements Variant {
         throws IOException {
       if (length != 4) throw ioException("TYPE_WINDOW_UPDATE length !=4: %s", length);
       long increment = (source.readInt() & 0x7fffffffL);
-      if (increment == 0) throw ioException("windowSizeIncrement was 0", increment);
+      if (increment == 0) throw ioException("windowSizeIncrement was 0");
       handler.windowUpdate(streamId, increment);
     }
 
@@ -586,10 +587,12 @@ public final class Http2 implements Variant {
     }
   }
 
+  @FormatMethod
   private static IllegalArgumentException illegalArgument(String message, Object... args) {
     throw new IllegalArgumentException(format(message, args));
   }
 
+  @FormatMethod
   private static IOException ioException(String message, Object... args) throws IOException {
     throw new IOException(format(message, args));
   }

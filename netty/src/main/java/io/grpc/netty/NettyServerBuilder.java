@@ -35,7 +35,6 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SharedResourcePool;
-import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.ChannelFactory;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
@@ -80,8 +79,6 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
       SharedResourcePool.forResource(Utils.DEFAULT_BOSS_EVENT_LOOP_GROUP);
   private static final ObjectPool<? extends EventLoopGroup> DEFAULT_WORKER_EVENT_LOOP_GROUP_POOL =
       SharedResourcePool.forResource(Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP);
-  private static final ObjectPool<ByteBufAllocator> ALLOCATOR_POOL =
-      SharedResourcePool.forResource(Utils.BYTE_BUF_ALLOCATOR);
 
   private final List<SocketAddress> listenAddresses = new ArrayList<>();
 
@@ -92,6 +89,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
       DEFAULT_BOSS_EVENT_LOOP_GROUP_POOL;
   private ObjectPool<? extends EventLoopGroup> workerEventLoopGroupPool =
       DEFAULT_WORKER_EVENT_LOOP_GROUP_POOL;
+  private boolean forceHeapBuffer;
   private SslContext sslContext;
   private ProtocolNegotiator protocolNegotiator;
   private int maxConcurrentCallsPerConnection = Integer.MAX_VALUE;
@@ -269,6 +267,13 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
     this.workerEventLoopGroupPool =
         checkNotNull(workerEventLoopGroupPool, "workerEventLoopGroupPool");
     return this;
+  }
+
+  /**
+   * Force using heap buffer when custom allocator is enabled.
+   */
+  void setForceHeapBuffer(boolean value) {
+    forceHeapBuffer = value;
   }
 
   /**
@@ -536,15 +541,16 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
 
     ProtocolNegotiator negotiator = protocolNegotiator;
     if (negotiator == null) {
-      negotiator = sslContext != null ? ProtocolNegotiators.serverTls(sslContext) :
-          ProtocolNegotiators.serverPlaintext();
+      negotiator = sslContext != null
+          ? ProtocolNegotiators.serverTls(sslContext, this.getExecutorPool())
+          : ProtocolNegotiators.serverPlaintext();
     }
 
     List<NettyServer> transportServers = new ArrayList<>(listenAddresses.size());
     for (SocketAddress listenAddress : listenAddresses) {
       NettyServer transportServer = new NettyServer(
           listenAddress, channelFactory, channelOptions, bossEventLoopGroupPool,
-          workerEventLoopGroupPool, ALLOCATOR_POOL, negotiator, streamTracerFactories,
+          workerEventLoopGroupPool, forceHeapBuffer, negotiator, streamTracerFactories,
           getTransportTracerFactory(), maxConcurrentCallsPerConnection, flowControlWindow,
           maxMessageSize, maxHeaderListSize, keepAliveTimeInNanos, keepAliveTimeoutInNanos,
           maxConnectionIdleInNanos, maxConnectionAgeInNanos, maxConnectionAgeGraceInNanos,

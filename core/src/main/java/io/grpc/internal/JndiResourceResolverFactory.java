@@ -129,6 +129,7 @@ final class JndiResourceResolverFactory implements DnsNameResolver.ResourceResol
       return Collections.unmodifiableList(serviceConfigTxtRecords);
     }
 
+    @SuppressWarnings("deprecation")
     @Override
     public List<EquivalentAddressGroup> resolveSrv(
         AddressResolver addressResolver, String grpclbHostname) throws Exception {

@@ -18,9 +18,7 @@ package io.grpc.okhttp;
 
 import static io.grpc.okhttp.OkHttpTlsUpgrader.canonicalizeHost;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
 
-import io.grpc.okhttp.internal.Protocol;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -28,12 +26,6 @@ import org.junit.runners.JUnit4;
 /** Unit tests for {@link io.grpc.okhttp.OkHttpTlsUpgrader}. */
 @RunWith(JUnit4.class)
 public class OkHttpTlsUpgraderTest {
-  @Test public void upgrade_grpcExp() {
-    assertTrue(
-        OkHttpTlsUpgrader.TLS_PROTOCOLS.indexOf(Protocol.GRPC_EXP) == -1
-            || OkHttpTlsUpgrader.TLS_PROTOCOLS.indexOf(Protocol.GRPC_EXP)
-                < OkHttpTlsUpgrader.TLS_PROTOCOLS.indexOf(Protocol.HTTP_2));
-  }
 
   @Test public void canonicalizeHosts() {
     assertEquals("::1", canonicalizeHost("::1"));

@@ -17,8 +17,12 @@
 package io.grpc.xds;
 
 import com.google.common.base.Preconditions;
+import io.grpc.Internal;
 import io.grpc.NameResolver.Args;
 import io.grpc.NameResolverProvider;
+import io.grpc.internal.ExponentialBackoffPolicy;
+import io.grpc.internal.GrpcUtil;
+import io.grpc.xds.XdsClient.XdsChannelFactory;
 import java.net.URI;
 
 /**
@@ -29,9 +33,9 @@ import java.net.URI;
  * slash {@code '/'}, will indicate the name to use in the VHDS query.
  *
  * <p>This class should not be directly referenced in code. The resolver should be accessed
- * through {@link io.grpc.NameResolverRegistry#asFactory#newNameResolver(URI, Args)} with the URI
- * scheme "xds-experimental".
+ * through {@link io.grpc.NameResolverRegistry} with the URI scheme "xds-experimental".
  */
+@Internal
 public final class XdsNameResolverProvider extends NameResolverProvider {
 
   private static final String SCHEME = "xds-experimental";
@@ -46,7 +50,14 @@ public final class XdsNameResolverProvider extends NameResolverProvider {
           targetPath,
           targetUri);
       String name = targetPath.substring(1);
-      return new XdsNameResolver(name);
+      return
+          new XdsNameResolver(
+              name,
+              args,
+              new ExponentialBackoffPolicy.Provider(),
+              GrpcUtil.STOPWATCH_SUPPLIER,
+              XdsChannelFactory.getInstance(),
+              Bootstrapper.getInstance());
     }
     return null;
   }
