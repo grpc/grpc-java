@@ -121,16 +121,16 @@ public final class StandaloneInProcessTransportTest extends AbstractTransportTes
       serverListener.serverShutdown();
     }
 
-     @Override
-     public SocketAddress getListenSocketAddress() {
-        return new SocketAddress() {};
-     }
+    @Override
+    public SocketAddress getListenSocketAddress() {
+       return new SocketAddress() {};
+    }
 
-     @Override
-     @Nullable
-     public InternalInstrumented<SocketStats> getListenSocketStats() {
-       return null;
-     }
+    @Override
+    @Nullable
+    public InternalInstrumented<SocketStats> getListenSocketStats() {
+      return null;
+    }
   }
 
   /** Wraps the server listener to ensure we don't accept new transports after shutdown. */
