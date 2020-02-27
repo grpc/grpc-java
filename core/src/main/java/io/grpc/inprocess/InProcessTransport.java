@@ -134,7 +134,8 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
   public InProcessTransport(
       String name, int maxInboundMetadataSize, String authority, String userAgent,
       Attributes eagAttrs) {
-    this(name, maxInboundMetadataSize, authority, userAgent, eagAttrs, Optional.<ServerListener>absent());
+    this(name, maxInboundMetadataSize, authority, userAgent, eagAttrs,
+        Optional.<ServerListener>absent());
   }
 
   InProcessTransport(
