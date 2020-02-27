@@ -74,6 +74,7 @@ public abstract class Bootstrapper {
   public abstract BootstrapInfo readBootstrap() throws IOException;
 
   @VisibleForTesting
+  @SuppressWarnings("deprecation")
   static BootstrapInfo parseConfig(String rawData) throws IOException {
     XdsLogger logger = XdsLogger.withPrefix(LOG_PREFIX);
     logger.log(XdsLogLevel.INFO, "Reading bootstrap information");

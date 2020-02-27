@@ -17,8 +17,6 @@ import static io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall;
 
 /**
  * <pre>
- * [#protodoc-title: HTTP scoped routing configuration]
- * * Routing :ref:`architecture overview &lt;arch_overview_http_routing&gt;`
  * The Scoped Routes Discovery Service (SRDS) API distributes
  * :ref:`ScopedRouteConfiguration&lt;envoy_api_msg.ScopedRouteConfiguration&gt;`
  * resources. Each ScopedRouteConfiguration resource represents a "routing
@@ -177,8 +175,6 @@ public final class ScopedRoutesDiscoveryServiceGrpc {
 
   /**
    * <pre>
-   * [#protodoc-title: HTTP scoped routing configuration]
-   * * Routing :ref:`architecture overview &lt;arch_overview_http_routing&gt;`
    * The Scoped Routes Discovery Service (SRDS) API distributes
    * :ref:`ScopedRouteConfiguration&lt;envoy_api_msg.ScopedRouteConfiguration&gt;`
    * resources. Each ScopedRouteConfiguration resource represents a "routing
@@ -240,8 +236,6 @@ public final class ScopedRoutesDiscoveryServiceGrpc {
 
   /**
    * <pre>
-   * [#protodoc-title: HTTP scoped routing configuration]
-   * * Routing :ref:`architecture overview &lt;arch_overview_http_routing&gt;`
    * The Scoped Routes Discovery Service (SRDS) API distributes
    * :ref:`ScopedRouteConfiguration&lt;envoy_api_msg.ScopedRouteConfiguration&gt;`
    * resources. Each ScopedRouteConfiguration resource represents a "routing
@@ -290,8 +284,6 @@ public final class ScopedRoutesDiscoveryServiceGrpc {
 
   /**
    * <pre>
-   * [#protodoc-title: HTTP scoped routing configuration]
-   * * Routing :ref:`architecture overview &lt;arch_overview_http_routing&gt;`
    * The Scoped Routes Discovery Service (SRDS) API distributes
    * :ref:`ScopedRouteConfiguration&lt;envoy_api_msg.ScopedRouteConfiguration&gt;`
    * resources. Each ScopedRouteConfiguration resource represents a "routing
@@ -323,8 +315,6 @@ public final class ScopedRoutesDiscoveryServiceGrpc {
 
   /**
    * <pre>
-   * [#protodoc-title: HTTP scoped routing configuration]
-   * * Routing :ref:`architecture overview &lt;arch_overview_http_routing&gt;`
    * The Scoped Routes Discovery Service (SRDS) API distributes
    * :ref:`ScopedRouteConfiguration&lt;envoy_api_msg.ScopedRouteConfiguration&gt;`
    * resources. Each ScopedRouteConfiguration resource represents a "routing
