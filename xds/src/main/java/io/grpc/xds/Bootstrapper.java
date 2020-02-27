@@ -25,6 +25,7 @@ import io.envoyproxy.envoy.api.v2.core.Locality;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.grpc.Internal;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.GrpcUtil.GrpcBuildVersion;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.JsonUtil;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
@@ -159,9 +160,11 @@ public abstract class Bootstrapper {
         nodeBuilder.setLocality(localityBuilder);
       }
     }
-    String buildVersion = GrpcUtil.getGrpcBuildVersion();
+    GrpcBuildVersion buildVersion = GrpcUtil.getGrpcBuildVersion();
     logger.log(XdsLogLevel.INFO, "Build version: {0}", buildVersion);
-    nodeBuilder.setBuildVersion(buildVersion);
+    nodeBuilder.setBuildVersion(buildVersion.toString());
+    nodeBuilder.setUserAgentName(buildVersion.getUserAgent());
+    nodeBuilder.setUserAgentVersion(buildVersion.getImplementationVersion());
 
     return new BootstrapInfo(servers, nodeBuilder.build());
   }
