@@ -124,8 +124,6 @@ import org.mockito.MockitoAnnotations;
 public class XdsClientImplTest {
 
   private static final String TARGET_NAME = "foo.googleapis.com:8080";
-  private static final String HOSTNAME = "foo.googleapis.com";
-  private static final int PORT = 8080;
 
   private static final Node NODE = Node.getDefaultInstance();
   private static final FakeClock.TaskFilter RPC_RETRY_TASK_FILTER =
@@ -321,7 +319,7 @@ public class XdsClientImplTest {
    */
   @Test
   public void ldsResponseWithoutMatchingResource() {
-    xdsClient.watchConfigData(HOSTNAME, PORT, configWatcher);
+    xdsClient.watchConfigData(TARGET_NAME, configWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
 
@@ -379,7 +377,7 @@ public class XdsClientImplTest {
    */
   @Test
   public void failToFindVirtualHostInLdsResponseInLineRouteConfig() {
-    xdsClient.watchConfigData(HOSTNAME, PORT, configWatcher);
+    xdsClient.watchConfigData(TARGET_NAME, configWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
 
@@ -430,7 +428,7 @@ public class XdsClientImplTest {
    */
   @Test
   public void resolveVirtualHostInLdsResponse() {
-    xdsClient.watchConfigData(HOSTNAME, PORT, configWatcher);
+    xdsClient.watchConfigData(TARGET_NAME, configWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
 
@@ -502,7 +500,7 @@ public class XdsClientImplTest {
    */
   @Test
   public void rdsResponseWithoutMatchingResource() {
-    xdsClient.watchConfigData(HOSTNAME, PORT, configWatcher);
+    xdsClient.watchConfigData(TARGET_NAME, configWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
 
@@ -577,7 +575,7 @@ public class XdsClientImplTest {
    */
   @Test
   public void resolveVirtualHostInRdsResponse() {
-    xdsClient.watchConfigData(HOSTNAME, PORT, configWatcher);
+    xdsClient.watchConfigData(TARGET_NAME, configWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
 
@@ -643,7 +641,7 @@ public class XdsClientImplTest {
    */
   @Test
   public void failToFindVirtualHostInRdsResponse() {
-    xdsClient.watchConfigData(HOSTNAME, PORT, configWatcher);
+    xdsClient.watchConfigData(TARGET_NAME, configWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
 
@@ -711,7 +709,7 @@ public class XdsClientImplTest {
    */
   @Test
   public void matchingVirtualHostDoesNotContainRouteAction() {
-    xdsClient.watchConfigData(HOSTNAME, PORT, configWatcher);
+    xdsClient.watchConfigData(TARGET_NAME, configWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
 
@@ -777,7 +775,7 @@ public class XdsClientImplTest {
    */
   @Test
   public void notifyUpdatedResources() {
-    xdsClient.watchConfigData(HOSTNAME, PORT, configWatcher);
+    xdsClient.watchConfigData(TARGET_NAME, configWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
 
@@ -943,7 +941,7 @@ public class XdsClientImplTest {
    */
   @Test
   public void waitRdsResponsesForRequestedResource() {
-    xdsClient.watchConfigData(HOSTNAME, PORT, configWatcher);
+    xdsClient.watchConfigData(TARGET_NAME, configWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
 
@@ -1042,7 +1040,7 @@ public class XdsClientImplTest {
    */
   @Test
   public void routeConfigurationRemovedNotifiedToWatcher() {
-    xdsClient.watchConfigData(HOSTNAME, PORT, configWatcher);
+    xdsClient.watchConfigData(TARGET_NAME, configWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
 
@@ -1124,7 +1122,7 @@ public class XdsClientImplTest {
    */
   @Test
   public void updateRdsRequestResourceWhileInitialResourceFetchInProgress() {
-    xdsClient.watchConfigData(HOSTNAME, PORT, configWatcher);
+    xdsClient.watchConfigData(TARGET_NAME, configWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
 
@@ -2439,7 +2437,7 @@ public class XdsClientImplTest {
     InOrder inOrder =
         Mockito.inOrder(mockedDiscoveryService, backoffPolicyProvider, backoffPolicy1,
             backoffPolicy2);
-    xdsClient.watchConfigData(HOSTNAME, PORT, configWatcher);
+    xdsClient.watchConfigData(TARGET_NAME, configWatcher);
 
     ArgumentCaptor<StreamObserver<DiscoveryResponse>> responseObserverCaptor =
         ArgumentCaptor.forClass(null);
@@ -2595,7 +2593,7 @@ public class XdsClientImplTest {
     InOrder inOrder =
         Mockito.inOrder(mockedDiscoveryService, backoffPolicyProvider, backoffPolicy1,
             backoffPolicy2);
-    xdsClient.watchConfigData(HOSTNAME, PORT, configWatcher);
+    xdsClient.watchConfigData(TARGET_NAME, configWatcher);
 
     ArgumentCaptor<StreamObserver<DiscoveryResponse>> responseObserverCaptor =
         ArgumentCaptor.forClass(null);
@@ -2783,7 +2781,7 @@ public class XdsClientImplTest {
     InOrder inOrder =
         Mockito.inOrder(mockedDiscoveryService, backoffPolicyProvider, backoffPolicy1,
             backoffPolicy2);
-    xdsClient.watchConfigData(HOSTNAME, PORT, configWatcher);
+    xdsClient.watchConfigData(TARGET_NAME, configWatcher);
 
     ArgumentCaptor<StreamObserver<DiscoveryResponse>> responseObserverCaptor =
         ArgumentCaptor.forClass(null);
@@ -2940,7 +2938,7 @@ public class XdsClientImplTest {
     InOrder inOrder =
         Mockito.inOrder(mockedDiscoveryService, backoffPolicyProvider, backoffPolicy1,
             backoffPolicy2);
-    xdsClient.watchConfigData(HOSTNAME, PORT, configWatcher);
+    xdsClient.watchConfigData(TARGET_NAME, configWatcher);
 
     ArgumentCaptor<StreamObserver<DiscoveryResponse>> responseObserverCaptor =
         ArgumentCaptor.forClass(null);

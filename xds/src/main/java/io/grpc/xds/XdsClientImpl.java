@@ -49,6 +49,7 @@ import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.stub.StreamObserver;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
@@ -157,12 +158,13 @@ final class XdsClientImpl extends XdsClient {
   // never change.
   @Nullable
   private ConfigWatcher configWatcher;
-  // The host name portion of "xds:" URI that the gRPC client targets for.
-  @Nullable
-  private String hostName;
   // The "xds:" URI (including port suffix if present) that the gRPC client targets for.
   @Nullable
   private String ldsResourceName;
+  // The host name portion of "xds:" URI that the gRPC client targets for.
+  @Nullable
+  private String hostName;
+
 
   XdsClientImpl(
       String targetName,
@@ -233,16 +235,13 @@ final class XdsClientImpl extends XdsClient {
   }
 
   @Override
-  void watchConfigData(String hostName, int port, ConfigWatcher watcher) {
-    checkState(configWatcher == null, "watcher for %s already registered", hostName);
+  void watchConfigData(String authority, ConfigWatcher watcher) {
+    checkState(configWatcher == null, "watcher for %s already registered", authority);
+    ldsResourceName = checkNotNull(authority, "hostName");
     configWatcher = checkNotNull(watcher, "watcher");
-    this.hostName = checkNotNull(hostName, "hostName");
-    if (port == -1) {
-      ldsResourceName = hostName;
-    } else {
-      ldsResourceName = hostName + ":" + port;
-    }
     logger.log(XdsLogLevel.INFO, "Started watching config {0}", ldsResourceName);
+    // Stripe off port (if exists) for virtual host domain name matching.
+    hostName = GrpcUtil.authorityToUri(authority).getHost();
     if (rpcRetryTimer != null && rpcRetryTimer.isPending()) {
       // Currently in retry backoff.
       return;
