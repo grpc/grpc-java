@@ -28,15 +28,15 @@ import java.util.concurrent.ScheduledExecutorService;
 /**
  * Internal {@link InProcessTransport} accessor.
  *
- * This is intended for use by io.grpc.internal, and the specifically supported
- * transport packages.
+ * <p>This is intended for use by io.grpc.internal, and the specifically
+ * supported transport packages.
  */
 @Internal
 public final class InternalInProcess {
 
   private InternalInProcess() {}
 
-  /** Creates a new InProcessTransport and registers it with a server */
+  /** Creates a new InProcessTransport and registers it with a server. */
   @Internal
   public static ConnectionClientTransport createInProcessTransport(
       String name,
