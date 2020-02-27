@@ -123,7 +123,7 @@ public final class StandaloneInProcessTransportTest extends AbstractTransportTes
 
     @Override
     public SocketAddress getListenSocketAddress() {
-       return new SocketAddress() {};
+      return new SocketAddress() {};
     }
 
     @Override
