@@ -17,7 +17,6 @@
 package io.grpc.rls.internal;
 
 import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.base.Converter;
 import io.grpc.internal.JsonUtil;
@@ -29,10 +28,8 @@ import io.grpc.rls.internal.RlsProtoData.NameMatcher;
 import io.grpc.rls.internal.RlsProtoData.RequestProcessingStrategy;
 import io.grpc.rls.internal.RlsProtoData.RouteLookupConfig;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -123,7 +120,7 @@ public final class RlsProtoConverters {
       return new RouteLookupConfig(
           grpcKeyBuilders,
           lookupService,
-          /* lookupServiceTimeOutInMillis= */ timeout,
+          /* lookupServiceTimeoutInMillis= */ timeout,
           /* maxAgeInMillis= */ maxAge,
           /* staleAgeInMillis= */ staleAge,
           /* cacheSizeBytes= */ cacheSize,
