@@ -24,6 +24,7 @@ import com.google.protobuf.Value;
 import io.envoyproxy.envoy.api.v2.core.Locality;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.GrpcUtil.GrpcBuildVersion;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import java.io.IOException;
@@ -41,7 +42,6 @@ public class BootstrapperTest {
   @Rule public ExpectedException thrown = ExpectedException.none();
 
   @Test
-  @SuppressWarnings("deprecation")
   public void parseBootstrap_validData_singleXdsServer() throws IOException {
     String rawData = "{\n"
         + "  \"node\": {\n"
@@ -79,7 +79,7 @@ public class BootstrapperTest {
     assertThat(serverInfo.getChannelCredentials().get(2).getType()).isEqualTo("google_default");
     assertThat(serverInfo.getChannelCredentials().get(2).getConfig()).isNull();
     assertThat(info.getNode()).isEqualTo(
-        Node.newBuilder()
+        getNodeBuilder()
             .setId("ENVOY_NODE_ID")
             .setCluster("ENVOY_CLUSTER")
             .setLocality(
@@ -92,12 +92,10 @@ public class BootstrapperTest {
                     .putFields("TRAFFICDIRECTOR_NETWORK_NAME",
                         Value.newBuilder().setStringValue("VPC_NETWORK_NAME").build())
                     .build())
-            .setBuildVersion(GrpcUtil.getGrpcBuildVersion())
             .build());
   }
 
   @Test
-  @SuppressWarnings("deprecation")
   public void parseBootstrap_validData_multipleXdsServers() throws IOException {
     String rawData = "{\n"
         + "  \"node\": {\n"
@@ -144,7 +142,7 @@ public class BootstrapperTest {
         .isEqualTo("trafficdirector-bar.googleapis.com:443");
     assertThat(serverInfoList.get(1).getChannelCredentials()).isEmpty();
     assertThat(info.getNode()).isEqualTo(
-        Node.newBuilder()
+        getNodeBuilder()
             .setId("ENVOY_NODE_ID")
             .setCluster("ENVOY_CLUSTER")
             .setLocality(
@@ -157,12 +155,10 @@ public class BootstrapperTest {
                     .putFields("TRAFFICDIRECTOR_NETWORK_NAME",
                         Value.newBuilder().setStringValue("VPC_NETWORK_NAME").build())
                     .build())
-            .setBuildVersion(GrpcUtil.getGrpcBuildVersion())
             .build());
   }
 
   @Test
-  @SuppressWarnings("deprecation")
   public void parseBootstrap_IgnoreIrrelevantFields() throws IOException {
     String rawData = "{\n"
         + "  \"node\": {\n"
@@ -202,7 +198,7 @@ public class BootstrapperTest {
     assertThat(serverInfo.getChannelCredentials().get(2).getType()).isEqualTo("google_default");
     assertThat(serverInfo.getChannelCredentials().get(2).getConfig()).isNull();
     assertThat(info.getNode()).isEqualTo(
-        Node.newBuilder()
+        getNodeBuilder()
             .setId("ENVOY_NODE_ID")
             .setCluster("ENVOY_CLUSTER")
             .setLocality(
@@ -215,7 +211,6 @@ public class BootstrapperTest {
                     .putFields("TRAFFICDIRECTOR_NETWORK_NAME",
                         Value.newBuilder().setStringValue("VPC_NETWORK_NAME").build())
                     .build())
-            .setBuildVersion(GrpcUtil.getGrpcBuildVersion())
             .build());
   }
 
@@ -228,7 +223,6 @@ public class BootstrapperTest {
   }
 
   @Test
-  @SuppressWarnings("deprecation")
   public void parseBootstrap_minimumRequiredFields() throws IOException {
     String rawData = "{\n"
         + "  \"xds_servers\": []\n"
@@ -236,16 +230,10 @@ public class BootstrapperTest {
 
     BootstrapInfo info = Bootstrapper.parseConfig(rawData);
     assertThat(info.getServers()).isEmpty();
-    assertThat(info.getNode())
-        .isEqualTo(
-            Node.newBuilder()
-                .setBuildVersion(
-                    GrpcUtil.getGrpcBuildVersion())
-                .build());
+    assertThat(info.getNode()).isEqualTo(getNodeBuilder().build());
   }
 
   @Test
-  @SuppressWarnings("deprecation")
   public void parseBootstrap_minimalUsableData() throws IOException {
     String rawData = "{\n"
         + "  \"xds_servers\": [\n"
@@ -260,12 +248,7 @@ public class BootstrapperTest {
     ServerInfo serverInfo = Iterables.getOnlyElement(info.getServers());
     assertThat(serverInfo.getServerUri()).isEqualTo("trafficdirector.googleapis.com:443");
     assertThat(serverInfo.getChannelCredentials()).isEmpty();
-    assertThat(info.getNode())
-        .isEqualTo(
-            Node.newBuilder()
-                .setBuildVersion(
-                    GrpcUtil.getGrpcBuildVersion())
-                .build());
+    assertThat(info.getNode()).isEqualTo(getNodeBuilder().build());
   }
 
   @Test
@@ -319,5 +302,16 @@ public class BootstrapperTest {
     thrown.expect(IOException.class);
     thrown.expectMessage("Invalid bootstrap: 'xds_servers' contains unknown server.");
     Bootstrapper.parseConfig(rawData);
+  }
+
+  @SuppressWarnings("deprecation")
+  private static Node.Builder getNodeBuilder() {
+    GrpcBuildVersion buildVersion = GrpcUtil.getGrpcBuildVersion();
+    return
+        Node.newBuilder()
+            .setBuildVersion(buildVersion.toString())
+            .setUserAgentName(buildVersion.getUserAgent())
+            .setUserAgentVersion(buildVersion.getImplementationVersion())
+            .addClientFeatures(Bootstrapper.CLIENT_FEATURE_DISABLE_OVERPROVISIONING);
   }
 }
