@@ -87,13 +87,10 @@ import org.junit.rules.Timeout;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
-import org.mockito.ArgumentMatchers;
 import org.mockito.Captor;
 import org.mockito.Mock;
-import org.mockito.invocation.InvocationOnMock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
-import org.mockito.stubbing.Answer;
 
 /** Unit tests for {@link DnsNameResolver}. */
 @RunWith(JUnit4.class)
@@ -603,15 +600,12 @@ public class DnsNameResolverTest {
         .thenReturn(
             Collections.singletonList(
                 "grpc_config=[{\"clientLanguage\": [\"java\"], \"serviceConfig\": {}}]"));
-    ServiceConfigParser serviceConfigParser = mock(ServiceConfigParser.class);
-    when(serviceConfigParser.parseServiceConfig(ArgumentMatchers.<String, Object>anyMap()))
-        .thenAnswer(new Answer<ConfigOrError>() {
-          @Override
-          public ConfigOrError answer(InvocationOnMock invocation) {
-            Object[] args = invocation.getArguments();
-            return ConfigOrError.fromConfig(args[0]);
-          }
-        });
+    ServiceConfigParser serviceConfigParser = new ServiceConfigParser() {
+      @Override
+      public ConfigOrError parseServiceConfig(Map<String, ?> rawServiceConfig) {
+        return ConfigOrError.fromConfig(rawServiceConfig);
+      }
+    };
     NameResolver.Args args =
         NameResolver.Args.newBuilder()
             .setDefaultPort(DEFAULT_PORT)
