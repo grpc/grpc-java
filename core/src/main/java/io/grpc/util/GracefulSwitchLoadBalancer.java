@@ -34,7 +34,7 @@ import javax.annotation.concurrent.NotThreadSafe;
  * other than READY, the new policy will be swapped into place immediately.  Otherwise, the channel
  * will keep using the old policy until the new policy reports READY or the old policy exits READY.
  *
- * <p>The balancer must {@link #switchTo(Factory) switch to} a policy prior to {@link
+ * <p>The balancer must {@link #switchTo(LoadBalancer.Factory) switch to} a policy prior to {@link
  * LoadBalancer#handleResolvedAddresses(ResolvedAddresses) handling resolved addresses} for the
  * first time.
  */

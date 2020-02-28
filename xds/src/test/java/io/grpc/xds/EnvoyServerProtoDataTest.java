@@ -107,6 +107,7 @@ public class EnvoyServerProtoDataTest {
     return filterChain;
   }
 
+  @SuppressWarnings("deprecation")
   private static FilterChain createInFilter() {
     FilterChain filterChain =
         FilterChain.newBuilder()
