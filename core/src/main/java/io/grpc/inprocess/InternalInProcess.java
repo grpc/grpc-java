@@ -36,7 +36,12 @@ public final class InternalInProcess {
 
   private InternalInProcess() {}
 
-  /** Creates a new InProcessTransport and registers it with a server. */
+  /**
+   * Creates a new InProcessTransport.
+   *
+   * <p>When started, the transport will be registered with the given
+   * {@link ServerListener}.
+   */
   @Internal
   public static ConnectionClientTransport createInProcessTransport(
       String name,
