@@ -121,6 +121,10 @@ public abstract class LoadBalancer {
   public static final Attributes.Key<Map<String, ?>> ATTR_LOAD_BALANCING_CONFIG =
       Attributes.Key.create("io.grpc.LoadBalancer.loadBalancingConfig");
 
+  @Internal
+  @NameResolver.ResolutionResultAttr
+  public static final Attributes.Key<Map<String, ?>> ATTR_HEALTH_CHECKING_CONFIG =
+      Attributes.Key.create("health-checking-config");
   private int recursionCount;
 
   /**

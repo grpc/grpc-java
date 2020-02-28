@@ -350,11 +350,6 @@ public abstract class NameResolver {
   @Documented
   public @interface ResolutionResultAttr {}
 
-  @Internal
-  @ResolutionResultAttr
-  public static final Attributes.Key<Map<String, ?>> RESOLUTION_RESULT_ATTR_HEALTH_CHECKING_CONFIG =
-      Attributes.Key.create("health-checking-config");
-
   /**
    * A utility object passed to {@link Factory#newNameResolver(URI, NameResolver.Helper)}.
    *

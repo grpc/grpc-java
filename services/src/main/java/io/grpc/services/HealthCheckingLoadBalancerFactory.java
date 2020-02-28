@@ -40,7 +40,6 @@ import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.Metadata;
-import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
@@ -185,7 +184,7 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
       Map<String, ?> serviceConfig =
           resolvedAddresses
               .getAttributes()
-              .get(NameResolver.RESOLUTION_RESULT_ATTR_HEALTH_CHECKING_CONFIG);
+              .get(LoadBalancer.ATTR_HEALTH_CHECKING_CONFIG);
       String serviceName = ServiceConfigUtil.getHealthCheckedServiceName(serviceConfig);
       helper.setHealthCheckedService(serviceName);
       super.handleResolvedAddresses(resolvedAddresses);

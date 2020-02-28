@@ -1088,7 +1088,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     HashMap<String, Object> hcConfig = new HashMap<>();
     hcConfig.put("serviceName", serviceName);
     return Attributes.newBuilder()
-        .set(NameResolver.RESOLUTION_RESULT_ATTR_HEALTH_CHECKING_CONFIG, hcConfig)
+        .set(LoadBalancer.ATTR_HEALTH_CHECKING_CONFIG, hcConfig)
         .build();
   }
 

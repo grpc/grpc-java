@@ -42,10 +42,12 @@ public class ServiceConfigStateTest {
       Collections.<String, MethodInfo>emptyMap(),
       Collections.<String, MethodInfo>emptyMap(),
       null,
+      null,
       null);
   private final ManagedChannelServiceConfig serviceConfig2 = new ManagedChannelServiceConfig(
       Collections.<String, MethodInfo>emptyMap(),
       Collections.<String, MethodInfo>emptyMap(),
+      null,
       null,
       null);
   private final ConfigOrError config1 = ConfigOrError.fromConfig(serviceConfig1);
@@ -428,6 +430,7 @@ public class ServiceConfigStateTest {
     ManagedChannelServiceConfig serviceConfig3 = new ManagedChannelServiceConfig(
         Collections.<String, MethodInfo>emptyMap(),
         Collections.<String, MethodInfo>emptyMap(),
+        null,
         null,
         null);
     ConfigOrError config3 = ConfigOrError.fromConfig(serviceConfig3);
