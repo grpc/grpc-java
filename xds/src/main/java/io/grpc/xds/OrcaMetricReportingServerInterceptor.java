@@ -20,7 +20,6 @@ import com.github.udpa.udpa.data.orca.v1.OrcaLoadReport;
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Context;
 import io.grpc.Contexts;
-import io.grpc.ExperimentalApi;
 import io.grpc.ForwardingServerCall.SimpleForwardingServerCall;
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
@@ -41,8 +40,7 @@ import java.util.Map;
  *
  * @since 1.23.0
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/6021")
-public final class OrcaMetricReportingServerInterceptor implements ServerInterceptor {
+final class OrcaMetricReportingServerInterceptor implements ServerInterceptor {
 
   private static final OrcaMetricReportingServerInterceptor INSTANCE =
       new OrcaMetricReportingServerInterceptor();

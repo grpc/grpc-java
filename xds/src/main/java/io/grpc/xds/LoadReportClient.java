@@ -31,20 +31,20 @@ import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadReportingServiceGrpc;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsRequest;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsResponse;
+import io.grpc.InternalLogId;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.stub.StreamObserver;
+import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 
@@ -54,11 +54,10 @@ import javax.annotation.concurrent.NotThreadSafe;
  */
 @NotThreadSafe
 final class LoadReportClient {
-  private static final Logger logger = Logger.getLogger(XdsClientImpl.class.getName());
-
   @VisibleForTesting
   static final String TARGET_NAME_METADATA_KEY = "PROXYLESS_CLIENT_HOSTNAME";
 
+  private final XdsLogger logger;
   private final ManagedChannel channel;
   private final Node node;
   private final SynchronizationContext syncContext;
@@ -81,6 +80,7 @@ final class LoadReportClient {
   private LoadReportCallback callback;
 
   LoadReportClient(
+      InternalLogId logId,
       String targetName,
       ManagedChannel channel,
       Node node,
@@ -104,6 +104,8 @@ final class LoadReportClient {
                 Value.newBuilder().setStringValue(targetName).build())
             .build();
     this.node = node.toBuilder().setMetadata(metadata).build();
+    String logPrefix = checkNotNull(logId, "logId").toString().concat("-lrs-client");
+    logger = XdsLogger.withPrefix(logPrefix);
   }
 
   /**
@@ -150,6 +152,9 @@ final class LoadReportClient {
             || !loadStatsStoreMap.get(clusterName).containsKey(clusterServiceName),
         "load stats for cluster: %s, cluster service: %s already exists",
         clusterName, clusterServiceName);
+    logger.log(
+        XdsLogLevel.INFO,
+        "Add load stats for cluster: {0}, cluster_service: {1}", clusterName, clusterServiceName);
     if (!loadStatsStoreMap.containsKey(clusterName)) {
       loadStatsStoreMap.put(clusterName, new HashMap<String, LoadStatsStore>());
     }
@@ -166,6 +171,11 @@ final class LoadReportClient {
             && loadStatsStoreMap.get(clusterName).containsKey(clusterServiceName),
         "load stats for cluster: %s, cluster service: %s does not exist",
         clusterName, clusterServiceName);
+    logger.log(
+        XdsLogLevel.INFO,
+        "Remove load stats for cluster: {0}, cluster_service: {1}",
+        clusterName,
+        clusterServiceName);
     Map<String, LoadStatsStore> clusterLoadStatsStores = loadStatsStoreMap.get(clusterName);
     clusterLoadStatsStores.remove(clusterServiceName);
     if (clusterLoadStatsStores.isEmpty()) {
@@ -233,7 +243,7 @@ final class LoadReportClient {
               .setNode(node)
               .build();
       lrsRequestWriter.onNext(initRequest);
-      logger.log(Level.FINE, "Initial LRS request sent: {0}", initRequest);
+      logger.log(XdsLogLevel.DEBUG, "Initial LRS request sent:\n{0}", initRequest);
     }
 
     @Override
@@ -251,8 +261,7 @@ final class LoadReportClient {
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
-          handleStreamClosed(Status.fromThrowable(t)
-              .augmentDescription("Stream to XDS management server had an error"));
+          handleStreamClosed(Status.fromThrowable(t));
         }
       });
     }
@@ -263,7 +272,7 @@ final class LoadReportClient {
         @Override
         public void run() {
           handleStreamClosed(
-              Status.UNAVAILABLE.withDescription("Stream to XDS management server was closed"));
+              Status.UNAVAILABLE.withDescription("Closed by server"));
         }
       });
     }
@@ -287,7 +296,7 @@ final class LoadReportClient {
       }
       LoadStatsRequest request = requestBuilder.build();
       lrsRequestWriter.onNext(request);
-      logger.log(Level.FINE, "Sent LoadStatsRequest\n{0}", request);
+      logger.log(XdsLogLevel.DEBUG, "Sent LoadStatsRequest\n{0}", request);
       scheduleNextLoadReport();
     }
 
@@ -310,18 +319,22 @@ final class LoadReportClient {
       }
 
       if (!initialResponseReceived) {
-        logger.log(Level.FINE, "Received LRS initial response: {0}", response);
+        logger.log(XdsLogLevel.DEBUG, "Received LRS initial response:\n{0}", response);
         initialResponseReceived = true;
       } else {
-        logger.log(Level.FINE, "Received an LRS response: {0}", response);
+        logger.log(XdsLogLevel.DEBUG, "Received LRS response:\n{0}", response);
       }
       long interval =  Durations.toNanos(response.getLoadReportingInterval());
       if (interval != loadReportIntervalNano) {
+        logger.log(XdsLogLevel.INFO, "Update load reporting interval to {0} ns", interval);
         loadReportIntervalNano = interval;
         callback.onReportResponse(loadReportIntervalNano);
       }
       if (clusterNames.size() != response.getClustersCount()
           || !clusterNames.containsAll(response.getClustersList())) {
+        logger.log(
+            XdsLogLevel.INFO,
+            "Update load reporting clusters to {0}", response.getClustersList());
         clusterNames.clear();
         clusterNames.addAll(response.getClustersList());
       }
@@ -333,6 +346,10 @@ final class LoadReportClient {
       if (closed) {
         return;
       }
+      logger.log(
+          XdsLogLevel.ERROR,
+          "LRS stream closed with status {0}: {1}. Cause: {2}",
+          status.getCode(), status.getDescription(), status.getCause());
       closed = true;
       cleanUp();
 
@@ -350,8 +367,7 @@ final class LoadReportClient {
         delayNanos =
             lrsRpcRetryPolicy.nextBackoffNanos() - retryStopwatch.elapsed(TimeUnit.NANOSECONDS);
       }
-      logger.log(Level.FINE, "LRS stream closed, backoff in {0} second(s)",
-          TimeUnit.NANOSECONDS.toSeconds(delayNanos <= 0 ? 0 : delayNanos));
+      logger.log(XdsLogLevel.INFO, "Retry LRS stream in {0} ns", delayNanos);
       if (delayNanos <= 0) {
         startLrsRpc();
       } else {
