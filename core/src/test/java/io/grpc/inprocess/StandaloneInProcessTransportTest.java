@@ -39,7 +39,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-/** Unit tests for {@link InProcessTransport}. */
+/** Unit tests for {@link InProcessTransport} when used with a separate {@link InternalServer}. */
 @RunWith(JUnit4.class)
 public final class StandaloneInProcessTransportTest extends AbstractTransportTest {
   private static final String TRANSPORT_NAME = "perfect-for-testing";
