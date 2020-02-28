@@ -24,11 +24,11 @@ apply plugin: "digital.wup.android-maven-publish"
 apply plugin: "signing"
 
 android {
-    compileSdkVersion 27
+    compileSdkVersion 28
     defaultConfig {
         consumerProguardFiles "proguard-rules.txt"
         minSdkVersion 14
-        targetSdkVersion 27
+        targetSdkVersion 28
         versionCode 1
         versionName "1.0"
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
