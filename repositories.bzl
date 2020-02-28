@@ -19,7 +19,7 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.code.gson:gson:jar:2.8.6",
     "com.google.errorprone:error_prone_annotations:2.3.4",
     "com.google.guava:failureaccess:1.0.1",
-    "com.google.guava:guava:28.1-android",
+    "com.google.guava:guava:28.2-android",
     "com.google.j2objc:j2objc-annotations:1.3",
     "com.google.truth:truth:1.0.1",
     "com.squareup.okhttp:okhttp:2.7.4",
@@ -236,9 +236,9 @@ def com_google_errorprone_error_prone_annotations():
 def com_google_guava_guava():
     jvm_maven_import_external(
         name = "com_google_guava_guava",
-        artifact = "com.google.guava:guava:28.1-android",
+        artifact = "com.google.guava:guava:28.2-android",
         server_urls = ["https://repo.maven.apache.org/maven2/"],
-        artifact_sha256 = "e112ce92c0f0733965eede73d94589c59a72128b06b08bba5ebe2f9ea672ef60",
+        artifact_sha256 = "1faf214c94723ab9fbadfedd9af88ddc325faf669e68eab04688c3afcf59c037",
         licenses = ["notice"],  # Apache 2.0
     )
 
