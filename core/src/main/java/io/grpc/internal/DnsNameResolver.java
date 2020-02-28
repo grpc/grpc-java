@@ -645,13 +645,14 @@ public class DnsNameResolver extends NameResolver {
 
   @Nullable
   protected ResourceResolver getResourceResolver() {
-    ResourceResolver rr = null;
-    if (shouldUseJndi(enableJndi, enableJndiLocalhost, host)) {
-      if ((rr = resourceResolver.get()) == null) {
-        if (resourceResolverFactory != null) {
-          assert resourceResolverFactory.unavailabilityCause() == null;
-          rr = resourceResolverFactory.newResourceResolver();
-        }
+    if (!shouldUseJndi(enableJndi, enableJndiLocalhost, host)) {
+      return null;
+    }
+    ResourceResolver rr;
+    if ((rr = resourceResolver.get()) == null) {
+      if (resourceResolverFactory != null) {
+        assert resourceResolverFactory.unavailabilityCause() == null;
+        rr = resourceResolverFactory.newResourceResolver();
       }
     }
     return rr;
