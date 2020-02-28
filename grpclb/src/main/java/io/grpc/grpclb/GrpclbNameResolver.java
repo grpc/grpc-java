@@ -21,7 +21,6 @@ import com.google.common.base.Stopwatch;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
-import io.grpc.Status;
 import io.grpc.internal.DnsNameResolver;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import java.net.InetAddress;
@@ -59,40 +58,16 @@ final class GrpclbNameResolver extends DnsNameResolver {
   }
 
   @Override
-  protected boolean doResolve(Listener2 listener) {
-    List<EquivalentAddressGroup> servers = Collections.emptyList();
-    Exception addressException = null;
-    try {
-      servers = resolveAddresses();
-    } catch (Exception e) {
-      addressException = e;
-    }
+  protected InternalResolutionResult doResolve(boolean forceTxt) {
     List<EquivalentAddressGroup> balancerAddrs = resolveBalancerAddresses();
-    if (addressException != null && balancerAddrs.isEmpty()) {
-      listener.onError(
-          Status.UNAVAILABLE
-              .withDescription("Unable to resolve host " + getHost())
-              .withCause(addressException));
-      return false;
-    }
-    ResolutionResult.Builder resultBuilder = ResolutionResult.newBuilder();
-    resultBuilder.setAddresses(servers);
+    InternalResolutionResult result = super.doResolve(!balancerAddrs.isEmpty());
     if (!balancerAddrs.isEmpty()) {
-      resultBuilder.setAttributes(
+      result.attributes =
           Attributes.newBuilder()
               .set(GrpclbConstants.ATTR_LB_ADDRS, balancerAddrs)
-              .build());
+              .build();
     }
-    if (enableTxt) {
-      ConfigOrError serviceConfig = resolveServiceConfig();
-      if (serviceConfig != null) {
-        resultBuilder.setServiceConfig(serviceConfig);
-      } else {
-        logger.log(Level.FINE, "No TXT records found for {0}", new Object[]{getHost()});
-      }
-    }
-    listener.onResult(resultBuilder.build());
-    return true;
+    return result;
   }
 
   private List<EquivalentAddressGroup> resolveBalancerAddresses() {

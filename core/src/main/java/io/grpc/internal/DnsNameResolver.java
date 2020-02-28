@@ -213,7 +213,7 @@ public class DnsNameResolver extends NameResolver {
     resolve();
   }
 
-  protected List<EquivalentAddressGroup> resolveAddresses() {
+  private List<EquivalentAddressGroup> resolveAddresses() {
     List<? extends InetAddress> addresses;
     Exception addressesException = null;
     try {
@@ -236,7 +236,7 @@ public class DnsNameResolver extends NameResolver {
   }
 
   @Nullable
-  protected ConfigOrError resolveServiceConfig() {
+  private ConfigOrError resolveServiceConfig() {
     List<String> txtRecords = Collections.emptyList();
     ResourceResolver resourceResolver = getResourceResolver();
     if (resourceResolver != null) {
@@ -257,6 +257,8 @@ public class DnsNameResolver extends NameResolver {
         Map<String, ?> verifiedRawServiceConfig = (Map<String, ?>) rawServiceConfig.getConfig();
         return serviceConfigParser.parseServiceConfig(verifiedRawServiceConfig);
       }
+    } else {
+      logger.log(Level.FINE, "No TXT records found for {0}", new Object[]{host});
     }
     return null;
   }
@@ -273,29 +275,23 @@ public class DnsNameResolver extends NameResolver {
   }
 
   /**
-   * Main logic of name resolution. Returns {@code true} if resolution happens successfully.
+   * Main logic of name resolution.
    */
-  protected boolean doResolve(Listener2 listener) {
-    List<EquivalentAddressGroup> servers;
+  protected InternalResolutionResult doResolve(boolean forceTxt) {
+    InternalResolutionResult result = new InternalResolutionResult();
     try {
-      servers = resolveAddresses();
+      result.addresses = resolveAddresses();
     } catch (Exception e) {
-      listener.onError(
-          Status.UNAVAILABLE.withDescription("Unable to resolve host " + host).withCause(e));
-      return false;
-    }
-    ResolutionResult.Builder resultBuilder = ResolutionResult.newBuilder();
-    resultBuilder.setAddresses(servers);
-    if (enableTxt) {
-      ConfigOrError serviceConfig = resolveServiceConfig();
-      if (serviceConfig != null) {
-        resultBuilder.setServiceConfig(serviceConfig);
-      } else {
-        logger.log(Level.FINE, "No TXT records found for {0}", new Object[]{host});
+      if (!forceTxt) {
+        result.error =
+            Status.UNAVAILABLE.withDescription("Unable to resolve host " + host).withCause(e);
+        return result;
       }
     }
-    listener.onResult(resultBuilder.build());
-    return true;
+    if (enableTxt) {
+      result.config = resolveServiceConfig();
+    }
+    return result;
   }
 
   private final class Resolve implements Runnable {
@@ -310,28 +306,37 @@ public class DnsNameResolver extends NameResolver {
       if (logger.isLoggable(Level.FINER)) {
         logger.finer("Attempting DNS resolution of " + host);
       }
-      EquivalentAddressGroup proxiedAddr;
-      boolean resolutionSucceed = false;
+      InternalResolutionResult result = null;
       try {
-        proxiedAddr = detectProxy();
+        EquivalentAddressGroup proxiedAddr = detectProxy();
+        ResolutionResult.Builder resolutionResultBuilder = ResolutionResult.newBuilder();
         if (proxiedAddr != null) {
           if (logger.isLoggable(Level.FINER)) {
             logger.finer("Using proxy address " + proxiedAddr);
           }
-          ResolutionResult resolutionResult =
-              ResolutionResult.newBuilder()
-                  .setAddresses(Collections.singletonList(proxiedAddr))
-                  .setAttributes(Attributes.EMPTY)
-                  .build();
-          listener.onResult(resolutionResult);
-          return;
+          resolutionResultBuilder.setAddresses(Collections.singletonList(proxiedAddr));
+        } else {
+          result = doResolve(false);
+          if (result.error != null) {
+            savedListener.onError(result.error);
+            return;
+          }
+          if (result.addresses != null) {
+            resolutionResultBuilder.setAddresses(result.addresses);
+          }
+          if (result.config != null) {
+            resolutionResultBuilder.setServiceConfig(result.config);
+          }
+          if (result.attributes != null) {
+            resolutionResultBuilder.setAttributes(result.attributes);
+          }
         }
-        resolutionSucceed = doResolve(savedListener);
+        savedListener.onResult(resolutionResultBuilder.build());
       } catch (IOException e) {
-        listener.onError(
+        savedListener.onError(
             Status.UNAVAILABLE.withDescription("Unable to resolve host " + host).withCause(e));
       } finally {
-        final boolean succeed = resolutionSucceed;
+        final boolean succeed = result != null && result.error == null;
         syncContext.execute(new Runnable() {
           @Override
           public void run() {
@@ -528,6 +533,18 @@ public class DnsNameResolver extends NameResolver {
           "key '%s' missing in '%s'", choice, SERVICE_CONFIG_CHOICE_SERVICE_CONFIG_KEY));
     }
     return sc;
+  }
+
+  /**
+   * Used as a DNS-based name resolver's internal representation of resolution result.
+   */
+  protected static final class InternalResolutionResult {
+    private Status error;
+    private List<EquivalentAddressGroup> addresses;
+    private ConfigOrError config;
+    public Attributes attributes;
+
+    private InternalResolutionResult() {}
   }
 
   /**
