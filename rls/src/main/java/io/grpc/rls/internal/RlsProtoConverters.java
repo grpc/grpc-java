@@ -52,9 +52,9 @@ public final class RlsProtoConverters {
     protected RlsProtoData.RouteLookupRequest doForward(RouteLookupRequest routeLookupRequest) {
       return
           new RlsProtoData.RouteLookupRequest(
-              routeLookupRequest.getServer(),
-              routeLookupRequest.getPath(),
-              routeLookupRequest.getTargetType(),
+              /* server= */ routeLookupRequest.getServer(),
+              /* path= */ routeLookupRequest.getPath(),
+              /* targetType= */ routeLookupRequest.getTargetType(),
               routeLookupRequest.getKeyMapMap());
     }
 
@@ -105,8 +105,6 @@ public final class RlsProtoConverters {
       List<GrpcKeyBuilder> grpcKeyBuilders =
           GrpcKeyBuilderConverter
               .covertAll(JsonUtil.checkObjectList(JsonUtil.getList(json, "grpcKeyBuilders")));
-      checkState(!grpcKeyBuilders.isEmpty(), "At least one GrpcKeyBuilders are expected");
-      checkUniqueName(grpcKeyBuilders);
       String lookupService = JsonUtil.getString(json, "lookupService");
       long timeout =
           TimeUnit.SECONDS.toMillis(JsonUtil.getNumberAsLong(json, "lookupServiceTimeout"));
@@ -125,10 +123,10 @@ public final class RlsProtoConverters {
       return new RouteLookupConfig(
           grpcKeyBuilders,
           lookupService,
-          timeout,
-          maxAge,
-          staleAge,
-          cacheSize,
+          /* lookupServiceTimeOutInMillis= */ timeout,
+          /* maxAgeInMillis= */ maxAge,
+          /* staleAgeInMillis= */ staleAge,
+          /* cacheSizeBytes= */ cacheSize,
           validTargets,
           defaultTarget,
           strategy);
@@ -139,17 +137,6 @@ public final class RlsProtoConverters {
         return null;
       }
       return to.convert(value, from);
-    }
-
-    private static void checkUniqueName(List<GrpcKeyBuilder> grpcKeyBuilders) {
-      Set<Name> names = new HashSet<>();
-      for (GrpcKeyBuilder grpcKeyBuilder : grpcKeyBuilders) {
-        int prevSize = names.size();
-        names.addAll(grpcKeyBuilder.getNames());
-        if (names.size() != prevSize + grpcKeyBuilder.getNames().size()) {
-          throw new IllegalStateException("Names in the GrpcKeyBuilders should be unique");
-        }
-      }
     }
 
     @Override

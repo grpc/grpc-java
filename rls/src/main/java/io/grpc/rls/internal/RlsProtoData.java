@@ -24,11 +24,13 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import io.grpc.rls.internal.RlsProtoData.GrpcKeyBuilder.Name;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 
 /** RlsProtoData is a collection of internal representation of RouteLookupService proto messages. */
@@ -201,8 +203,8 @@ public final class RlsProtoData {
         List<GrpcKeyBuilder> grpcKeyBuilders,
         String lookupService,
         long lookupServiceTimeoutInMillis,
-        Long maxAgeInMillis,
-        Long staleAgeInMillis,
+        @Nullable Long maxAgeInMillis,
+        @Nullable Long staleAgeInMillis,
         long cacheSizeBytes,
         List<String> validTargets,
         String defaultTarget,
@@ -210,6 +212,7 @@ public final class RlsProtoData {
       checkState(
           !checkNotNull(grpcKeyBuilders, "grpcKeyBuilders").isEmpty(),
           "must have at least one GrpcKeyBuilder");
+      checkUniqueName(grpcKeyBuilders);
       this.grpcKeyBuilders = ImmutableList.copyOf(grpcKeyBuilders);
       // TODO(creamsoup) also check if it is URI
       checkState(
@@ -231,8 +234,9 @@ public final class RlsProtoData {
       checkArgument(cacheSizeBytes > 0, "cacheSize must be positive");
       this.cacheSizeBytes = cacheSizeBytes;
       this.validTargets = ImmutableList.copyOf(checkNotNull(validTargets, "validTargets"));
-      this.defaultTarget = defaultTarget;
+      this.defaultTarget = checkNotNull(defaultTarget, "defaultTarget");
       this.requestProcessingStrategy = requestProcessingStrategy;
+      checkNotNull(requestProcessingStrategy, "requestProcessingStrategy");
       checkState(
           (requestProcessingStrategy == RequestProcessingStrategy.SYNC_LOOKUP_CLIENT_SEES_ERROR
               || requestProcessingStrategy
@@ -360,6 +364,17 @@ public final class RlsProtoData {
           .add("defaultTarget", defaultTarget)
           .add("requestProcessingStrategy", requestProcessingStrategy)
           .toString();
+    }
+  }
+
+  private static void checkUniqueName(List<GrpcKeyBuilder> grpcKeyBuilders) {
+    Set<Name> names = new HashSet<>();
+    for (GrpcKeyBuilder grpcKeyBuilder : grpcKeyBuilders) {
+      int prevSize = names.size();
+      names.addAll(grpcKeyBuilder.getNames());
+      if (names.size() != prevSize + grpcKeyBuilder.getNames().size()) {
+        throw new IllegalStateException("Names in the GrpcKeyBuilders should be unique");
+      }
     }
   }
 
