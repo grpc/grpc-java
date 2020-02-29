@@ -45,10 +45,10 @@ public final class ServiceConfigUtil {
   private ServiceConfigUtil() {}
 
   /**
-   * Fetch the health-checked service name from service config. {@code null} if can't find one.
+   * Fetches the health-checked service config from service config. {@code null} if can't find one.
    */
   @Nullable
-  public static String getHealthCheckedServiceName(@Nullable Map<String, ?> serviceConfig) {
+  public static Map<String, ?> getHealthCheckedService(@Nullable  Map<String, ?> serviceConfig) {
     if (serviceConfig == null) {
       return null;
     }
@@ -61,11 +61,20 @@ public final class ServiceConfigUtil {
       }
     }
     */
-    Map<String, ?> healthCheck = JsonUtil.getObject(serviceConfig, "healthCheckConfig");
-    if (healthCheck == null) {
+    return JsonUtil.getObject(serviceConfig, "healthCheckConfig");
+  }
+
+  /**
+   * Fetches the health-checked service name from health-checked service config. {@code null} if
+   * can't find one.
+   */
+  @Nullable
+  public static String getHealthCheckedServiceName(
+      @Nullable Map<String, ?> healthCheckedServiceConfig) {
+    if (healthCheckedServiceConfig == null) {
       return null;
     }
-    return JsonUtil.getString(healthCheck, "serviceName");
+    return JsonUtil.getString(healthCheckedServiceConfig, "serviceName");
   }
 
   @Nullable

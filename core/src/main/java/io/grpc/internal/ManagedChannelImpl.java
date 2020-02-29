@@ -1409,11 +1409,19 @@ final class ManagedChannelImpl extends ManagedChannel implements
           if (NameResolverListener.this.helper == ManagedChannelImpl.this.lbHelper) {
             Attributes effectiveAttrs = attrs;
             if (effectiveServiceConfig != validServiceConfig) {
-              effectiveAttrs = attrs.toBuilder()
-                  .set(
-                      GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG,
-                      effectiveServiceConfig.rawServiceConfig)
-                  .build();
+              Attributes.Builder attrsBuilder = attrs.toBuilder();
+              attrsBuilder.set(
+                  GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG,
+                  effectiveServiceConfig.rawServiceConfig);
+              Map<String, ?> healthCheckingConfig =
+                  effectiveServiceConfig
+                      .managedChannelServiceConfig
+                      .getHealthCheckingConfig();
+              if (healthCheckingConfig != null) {
+                attrsBuilder
+                    .set(LoadBalancer.ATTR_HEALTH_CHECKING_CONFIG, healthCheckingConfig);
+              }
+              effectiveAttrs = attrsBuilder.build();
             }
 
             Status handleResult = helper.lb.tryHandleResolvedAddresses(
