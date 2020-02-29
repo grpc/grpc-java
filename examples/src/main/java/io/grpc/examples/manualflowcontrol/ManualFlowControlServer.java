@@ -46,8 +46,8 @@ public class ManualFlowControlServer {
         //
         // Note: the onReadyHandler's invocation is serialized on the same thread pool as the incoming StreamObserver's
         // onNext(), onError(), and onComplete() handlers. Blocking the onReadyHandler will prevent additional messages
-        // from being processed by the incoming StreamObserver. The onReadyHandler must return in a timely manor or else
-        // message processing throughput will suffer.
+        // from being processed by the incoming StreamObserver. The onReadyHandler must return in a timely manner or
+        // else message processing throughput will suffer.
         class OnReadyHandler implements Runnable {
           // Guard against spurious onReady() calls caused by a race between onNext() and onReady(). If the transport
           // toggles isReady() from false to true while onNext() is executing, but before onNext() checks isReady(),

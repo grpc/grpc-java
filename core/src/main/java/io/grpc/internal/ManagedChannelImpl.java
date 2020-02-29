@@ -1396,14 +1396,24 @@ final class ManagedChannelImpl extends ManagedChannel implements
             }
           }
 
+          Attributes effectiveAttrs = resolutionResult.getAttributes();
           // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
           if (NameResolverListener.this.helper == ManagedChannelImpl.this.lbHelper) {
+            if (effectiveServiceConfig != validServiceConfig) {
+              Map<String, ?> healthCheckingConfig =
+                  effectiveServiceConfig.getHealthCheckingConfig();
+              if (healthCheckingConfig != null) {
+                effectiveAttrs = effectiveAttrs.toBuilder()
+                    .set(LoadBalancer.ATTR_HEALTH_CHECKING_CONFIG, healthCheckingConfig)
+                    .build();
+              }
+            }
+
             Status handleResult = helper.lb.tryHandleResolvedAddresses(
                 ResolvedAddresses.newBuilder()
                     .setAddresses(servers)
-                    .setAttributes(resolutionResult.getAttributes())
-                    .setLoadBalancingPolicyConfig(
-                        effectiveServiceConfig.getLoadBalancingConfig())
+                    .setAttributes(effectiveAttrs)
+                    .setLoadBalancingPolicyConfig(effectiveServiceConfig.getLoadBalancingConfig())
                     .build());
 
             if (!handleResult.isOk()) {

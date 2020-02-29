@@ -18,6 +18,7 @@ package io.grpc.okhttp;
 
 import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.internal.GrpcUtil.TIMER_SERVICE;
+import static io.grpc.okhttp.Utils.DEFAULT_WINDOW_SIZE;
 import static io.grpc.okhttp.Utils.DEFAULT_WINDOW_UPDATE_RATIO;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -488,8 +489,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       synchronized (lock) {
         frameWriter = new ExceptionHandlingFrameWriter(OkHttpClientTransport.this, testFrameWriter,
             testFrameLogger);
-        outboundFlow =
-            new OutboundFlowController(OkHttpClientTransport.this, frameWriter, initialWindowSize);
+        outboundFlow = new OutboundFlowController(OkHttpClientTransport.this, frameWriter);
       }
       serializingExecutor.execute(new Runnable() {
         @Override
@@ -515,7 +515,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
 
     synchronized (lock) {
       frameWriter = new ExceptionHandlingFrameWriter(this, rawFrameWriter);
-      outboundFlow = new OutboundFlowController(this, frameWriter, initialWindowSize);
+      outboundFlow = new OutboundFlowController(this, frameWriter);
     }
     final CountDownLatch latch = new CountDownLatch(1);
     // Connecting in the serializingExecutor, so that some stream operations like synStream
@@ -605,11 +605,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     });
     // Schedule to send connection preface & settings before any other write.
     try {
-      synchronized (lock) {
-        frameWriter.connectionPreface();
-        Settings settings = new Settings();
-        frameWriter.settings(settings);
-      }
+      sendConnectionPrefaceAndSettings();
     } finally {
       latch.countDown();
     }
@@ -627,6 +623,23 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       }
     });
     return null;
+  }
+
+  /**
+   * Should only be called once when the transport is first established.
+   */
+  @VisibleForTesting
+  void sendConnectionPrefaceAndSettings() {
+    synchronized (lock) {
+      frameWriter.connectionPreface();
+      Settings settings = new Settings();
+      OkHttpSettingsUtil.set(settings, OkHttpSettingsUtil.INITIAL_WINDOW_SIZE, initialWindowSize);
+      frameWriter.settings(settings);
+      if (initialWindowSize > DEFAULT_WINDOW_SIZE) {
+        frameWriter.windowUpdate(
+                Utils.CONNECTION_STREAM_ID, initialWindowSize - DEFAULT_WINDOW_SIZE);
+      }
+    }
   }
 
   private Socket createHttpProxySocket(InetSocketAddress address, InetSocketAddress proxyAddress,

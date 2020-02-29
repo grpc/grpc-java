@@ -989,30 +989,21 @@ public class HealthCheckingLoadBalancerFactoryTest {
   }
 
   @Test
-  public void getHealthCheckedServiceName_nullServiceConfig() {
+  public void getHealthCheckedServiceName_nullHealthCheckConfig() {
     assertThat(ServiceConfigUtil.getHealthCheckedServiceName(null)).isNull();
   }
 
   @Test
-  public void getHealthCheckedServiceName_noHealthCheckConfig() {
-    assertThat(ServiceConfigUtil.getHealthCheckedServiceName(new HashMap<String, Void>())).isNull();
-  }
-
-  @Test
-  public void getHealthCheckedServiceName_healthCheckConfigMissingServiceName() {
-    HashMap<String, Object> serviceConfig = new HashMap<>();
+  public void getHealthCheckedServiceName_missingServiceName() {
     HashMap<String, Object> hcConfig = new HashMap<>();
-    serviceConfig.put("healthCheckConfig", hcConfig);
-    assertThat(ServiceConfigUtil.getHealthCheckedServiceName(serviceConfig)).isNull();
+    assertThat(ServiceConfigUtil.getHealthCheckedServiceName(hcConfig)).isNull();
   }
 
   @Test
   public void getHealthCheckedServiceName_healthCheckConfigHasServiceName() {
-    HashMap<String, Object> serviceConfig = new HashMap<>();
     HashMap<String, Object> hcConfig = new HashMap<>();
     hcConfig.put("serviceName", "FooService");
-    serviceConfig.put("healthCheckConfig", hcConfig);
-    assertThat(ServiceConfigUtil.getHealthCheckedServiceName(serviceConfig))
+    assertThat(ServiceConfigUtil.getHealthCheckedServiceName(hcConfig))
         .isEqualTo("FooService");
   }
 
@@ -1107,8 +1098,12 @@ public class HealthCheckingLoadBalancerFactoryTest {
     assertThat(healthImpls[0].calls).hasSize(1);
   }
 
-  private Attributes attrsWithHealthCheckService(@Nullable String unused) {
-    return Attributes.EMPTY;
+  private Attributes attrsWithHealthCheckService(@Nullable String serviceName) {
+    HashMap<String, Object> hcConfig = new HashMap<>();
+    hcConfig.put("serviceName", serviceName);
+    return Attributes.newBuilder()
+        .set(LoadBalancer.ATTR_HEALTH_CHECKING_CONFIG, hcConfig)
+        .build();
   }
 
   private HealthCheckRequest makeRequest(String service) {

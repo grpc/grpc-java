@@ -6,7 +6,7 @@ Build Environments
 We deploy GRPC to Maven Central under the following systems:
 - Ubuntu 14.04 with Docker 13.03.0 that runs CentOS 6.9
 - Windows 7 64-bit with Visual Studio
-- Mac OS X 10.12.6
+- Mac OS X 10.14.6
 
 Other systems may also work, but we haven't verified them.
 
@@ -123,6 +123,7 @@ Tagging the Release
    $ ${EDITOR:-nano -w} README.md
    $ ${EDITOR:-nano -w} documentation/android-channel-builder.md
    $ ${EDITOR:-nano -w} cronet/README.md
+   $ ${EDITOR:-nano -w} examples/example-xds/README.md
    $ git commit -a -m "Update README etc to reference $MAJOR.$MINOR.$PATCH"
    ```
 3. Change root build files to remove "-SNAPSHOT" for the next release version

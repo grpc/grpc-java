@@ -20,13 +20,13 @@ import static io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall;
  * Virtual Host Discovery Service (VHDS) is used to dynamically update the list of virtual hosts for
  * a given RouteConfiguration. If VHDS is configured a virtual host list update will be triggered
  * during the processing of an HTTP request if a route for the request cannot be resolved. The
- * :ref:`resource_names_subscribe &lt;envoy_api_msg_DeltaDiscoveryRequest.resource_names_subscribe&gt;`
+ * :ref:`resource_names_subscribe &lt;envoy_api_field_DeltaDiscoveryRequest.resource_names_subscribe&gt;`
  * field contains a list of virtual host names or aliases to track. The contents of an alias would
  * be the contents of a *host* or *authority* header used to make an http request. An xDS server
  * will match an alias to a virtual host based on the content of :ref:`domains'
- * &lt;envoy_api_msg_route.VirtualHost.domains&gt;` field. The *resource_names_unsubscribe* field contains
- * a list of virtual host names that have been :ref:`unsubscribed &lt;xds_protocol_unsubscribe&gt;`
- * from the routing table associated with the RouteConfiguration.
+ * &lt;envoy_api_field_route.VirtualHost.domains&gt;` field. The *resource_names_unsubscribe* field
+ * contains a list of virtual host names that have been :ref:`unsubscribed
+ * &lt;xds_protocol_unsubscribe&gt;` from the routing table associated with the RouteConfiguration.
  * </pre>
  */
 @javax.annotation.Generated(
@@ -119,13 +119,13 @@ public final class VirtualHostDiscoveryServiceGrpc {
    * Virtual Host Discovery Service (VHDS) is used to dynamically update the list of virtual hosts for
    * a given RouteConfiguration. If VHDS is configured a virtual host list update will be triggered
    * during the processing of an HTTP request if a route for the request cannot be resolved. The
-   * :ref:`resource_names_subscribe &lt;envoy_api_msg_DeltaDiscoveryRequest.resource_names_subscribe&gt;`
+   * :ref:`resource_names_subscribe &lt;envoy_api_field_DeltaDiscoveryRequest.resource_names_subscribe&gt;`
    * field contains a list of virtual host names or aliases to track. The contents of an alias would
    * be the contents of a *host* or *authority* header used to make an http request. An xDS server
    * will match an alias to a virtual host based on the content of :ref:`domains'
-   * &lt;envoy_api_msg_route.VirtualHost.domains&gt;` field. The *resource_names_unsubscribe* field contains
-   * a list of virtual host names that have been :ref:`unsubscribed &lt;xds_protocol_unsubscribe&gt;`
-   * from the routing table associated with the RouteConfiguration.
+   * &lt;envoy_api_field_route.VirtualHost.domains&gt;` field. The *resource_names_unsubscribe* field
+   * contains a list of virtual host names that have been :ref:`unsubscribed
+   * &lt;xds_protocol_unsubscribe&gt;` from the routing table associated with the RouteConfiguration.
    * </pre>
    */
   public static abstract class VirtualHostDiscoveryServiceImplBase implements io.grpc.BindableService {
@@ -155,13 +155,13 @@ public final class VirtualHostDiscoveryServiceGrpc {
    * Virtual Host Discovery Service (VHDS) is used to dynamically update the list of virtual hosts for
    * a given RouteConfiguration. If VHDS is configured a virtual host list update will be triggered
    * during the processing of an HTTP request if a route for the request cannot be resolved. The
-   * :ref:`resource_names_subscribe &lt;envoy_api_msg_DeltaDiscoveryRequest.resource_names_subscribe&gt;`
+   * :ref:`resource_names_subscribe &lt;envoy_api_field_DeltaDiscoveryRequest.resource_names_subscribe&gt;`
    * field contains a list of virtual host names or aliases to track. The contents of an alias would
    * be the contents of a *host* or *authority* header used to make an http request. An xDS server
    * will match an alias to a virtual host based on the content of :ref:`domains'
-   * &lt;envoy_api_msg_route.VirtualHost.domains&gt;` field. The *resource_names_unsubscribe* field contains
-   * a list of virtual host names that have been :ref:`unsubscribed &lt;xds_protocol_unsubscribe&gt;`
-   * from the routing table associated with the RouteConfiguration.
+   * &lt;envoy_api_field_route.VirtualHost.domains&gt;` field. The *resource_names_unsubscribe* field
+   * contains a list of virtual host names that have been :ref:`unsubscribed
+   * &lt;xds_protocol_unsubscribe&gt;` from the routing table associated with the RouteConfiguration.
    * </pre>
    */
   public static final class VirtualHostDiscoveryServiceStub extends io.grpc.stub.AbstractAsyncStub<VirtualHostDiscoveryServiceStub> {
@@ -190,13 +190,13 @@ public final class VirtualHostDiscoveryServiceGrpc {
    * Virtual Host Discovery Service (VHDS) is used to dynamically update the list of virtual hosts for
    * a given RouteConfiguration. If VHDS is configured a virtual host list update will be triggered
    * during the processing of an HTTP request if a route for the request cannot be resolved. The
-   * :ref:`resource_names_subscribe &lt;envoy_api_msg_DeltaDiscoveryRequest.resource_names_subscribe&gt;`
+   * :ref:`resource_names_subscribe &lt;envoy_api_field_DeltaDiscoveryRequest.resource_names_subscribe&gt;`
    * field contains a list of virtual host names or aliases to track. The contents of an alias would
    * be the contents of a *host* or *authority* header used to make an http request. An xDS server
    * will match an alias to a virtual host based on the content of :ref:`domains'
-   * &lt;envoy_api_msg_route.VirtualHost.domains&gt;` field. The *resource_names_unsubscribe* field contains
-   * a list of virtual host names that have been :ref:`unsubscribed &lt;xds_protocol_unsubscribe&gt;`
-   * from the routing table associated with the RouteConfiguration.
+   * &lt;envoy_api_field_route.VirtualHost.domains&gt;` field. The *resource_names_unsubscribe* field
+   * contains a list of virtual host names that have been :ref:`unsubscribed
+   * &lt;xds_protocol_unsubscribe&gt;` from the routing table associated with the RouteConfiguration.
    * </pre>
    */
   public static final class VirtualHostDiscoveryServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<VirtualHostDiscoveryServiceBlockingStub> {
@@ -217,13 +217,13 @@ public final class VirtualHostDiscoveryServiceGrpc {
    * Virtual Host Discovery Service (VHDS) is used to dynamically update the list of virtual hosts for
    * a given RouteConfiguration. If VHDS is configured a virtual host list update will be triggered
    * during the processing of an HTTP request if a route for the request cannot be resolved. The
-   * :ref:`resource_names_subscribe &lt;envoy_api_msg_DeltaDiscoveryRequest.resource_names_subscribe&gt;`
+   * :ref:`resource_names_subscribe &lt;envoy_api_field_DeltaDiscoveryRequest.resource_names_subscribe&gt;`
    * field contains a list of virtual host names or aliases to track. The contents of an alias would
    * be the contents of a *host* or *authority* header used to make an http request. An xDS server
    * will match an alias to a virtual host based on the content of :ref:`domains'
-   * &lt;envoy_api_msg_route.VirtualHost.domains&gt;` field. The *resource_names_unsubscribe* field contains
-   * a list of virtual host names that have been :ref:`unsubscribed &lt;xds_protocol_unsubscribe&gt;`
-   * from the routing table associated with the RouteConfiguration.
+   * &lt;envoy_api_field_route.VirtualHost.domains&gt;` field. The *resource_names_unsubscribe* field
+   * contains a list of virtual host names that have been :ref:`unsubscribed
+   * &lt;xds_protocol_unsubscribe&gt;` from the routing table associated with the RouteConfiguration.
    * </pre>
    */
   public static final class VirtualHostDiscoveryServiceFutureStub extends io.grpc.stub.AbstractFutureStub<VirtualHostDiscoveryServiceFutureStub> {

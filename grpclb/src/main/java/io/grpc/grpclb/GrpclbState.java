@@ -91,6 +91,9 @@ final class GrpclbState {
   @VisibleForTesting
   static final PickResult DROP_PICK_RESULT =
       PickResult.withDrop(Status.UNAVAILABLE.withDescription("Dropped as requested by balancer"));
+  @VisibleForTesting
+  static final Status NO_AVAILABLE_BACKENDS_STATUS =
+      Status.UNAVAILABLE.withDescription("LoadBalancer responded without any backends");
 
   @VisibleForTesting
   static final RoundRobinEntry BUFFER_ENTRY = new RoundRobinEntry() {
@@ -138,6 +141,7 @@ final class GrpclbState {
 
   @Nullable
   private ManagedChannel lbCommChannel;
+  private boolean lbSentEmptyBackends = false;
 
   @Nullable
   private LbStream lbStream;
@@ -423,6 +427,17 @@ final class GrpclbState {
         subchannels = Collections.unmodifiableMap(newSubchannelMap);
         break;
       case PICK_FIRST:
+        checkState(subchannels.size() <= 1, "Unexpected Subchannel count: %s", subchannels);
+        Subchannel subchannel;
+        if (newBackendAddrList.isEmpty()) {
+          if (subchannels.size() == 1) {
+            cancelFallbackTimer();
+            subchannel = subchannels.values().iterator().next();
+            subchannel.shutdown();
+            subchannels = Collections.emptyMap();
+          }
+          break;
+        }
         List<EquivalentAddressGroup> eagList = new ArrayList<>();
         // Because for PICK_FIRST, we create a single Subchannel for all addresses, we have to
         // attach the tokens to the EAG attributes and use TokenAttachingLoadRecorder to put them on
@@ -438,13 +453,11 @@ final class GrpclbState {
           }
           eagList.add(new EquivalentAddressGroup(origEag.getAddresses(), eagAttrs));
         }
-        Subchannel subchannel;
         if (subchannels.isEmpty()) {
           // TODO(zhangkun83): remove the deprecation suppression on this method once migrated to
           // the new createSubchannel().
           subchannel = helper.createSubchannel(eagList, createSubchannelAttrs());
         } else {
-          checkState(subchannels.size() == 1, "Unexpected Subchannel count: %s", subchannels);
           subchannel = subchannels.values().iterator().next();
           subchannel.updateAddresses(eagList);
         }
@@ -629,6 +642,7 @@ final class GrpclbState {
       }
       // Stop using fallback backends as soon as a new server list is received from the balancer.
       usingFallbackBackends = false;
+      lbSentEmptyBackends = serverList.getServersList().isEmpty();
       cancelFallbackTimer();
       useRoundRobinLists(newDropList, newBackendAddrList, loadRecorder);
       maybeUpdatePicker();
@@ -729,9 +743,16 @@ final class GrpclbState {
         break;
       case PICK_FIRST:
         if (backendList.isEmpty()) {
-          pickList = Collections.singletonList(BUFFER_ENTRY);
-          // Have not received server addresses
-          state = CONNECTING;
+          if (lbSentEmptyBackends) {
+            pickList =
+                Collections.<RoundRobinEntry>singletonList(
+                    new ErrorEntry(NO_AVAILABLE_BACKENDS_STATUS));
+            state = TRANSIENT_FAILURE;
+          } else {
+            pickList = Collections.singletonList(BUFFER_ENTRY);
+            // Have not received server addresses
+            state = CONNECTING;
+          }
         } else {
           checkState(backendList.size() == 1, "Excessive backend entries: %s", backendList);
           BackendEntry onlyEntry = backendList.get(0);
