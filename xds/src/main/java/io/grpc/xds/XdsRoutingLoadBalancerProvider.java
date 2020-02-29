@@ -98,21 +98,20 @@ public final class XdsRoutingLoadBalancerProvider extends LoadBalancerProvider {
       Map<String, ?> actions = JsonUtil.getObject(rawConfig, "action");
       if (actions == null || actions.isEmpty()) {
         return ConfigOrError.fromError(Status.INTERNAL.withDescription(
-            "No actions provided for xds_routing LB policy:\n " + rawConfig));
+            "No actions provided for xds_routing LB policy: " + rawConfig));
       }
       Map<String, ChildConfig> parsedActions = new LinkedHashMap<>();
       for (String name : actions.keySet()) {
         Map<String, ?> rawAction = JsonUtil.getObject(actions, name);
         if (rawAction == null) {
           return ConfigOrError.fromError(Status.INTERNAL.withDescription(
-              "No config for action " + name + " in xds_routing LB policy:\n " + rawConfig));
+              "No config for action " + name + " in xds_routing LB policy: " + rawConfig));
         }
-
         List<LbConfig> childConfigCandidates = ServiceConfigUtil.unwrapLoadBalancingConfigList(
             JsonUtil.getListOfObjects(rawAction, "childPolicy"));
         if (childConfigCandidates == null || childConfigCandidates.isEmpty()) {
           return ConfigOrError.fromError(Status.INTERNAL.withDescription(
-              "No child policy for action " + name + " in xds_routing LB policy:\n "
+              "No child policy for action " + name + " in xds_routing LB policy: "
                   + rawConfig));
         }
         boolean targetParsingSucceeded = false;
@@ -122,8 +121,8 @@ public final class XdsRoutingLoadBalancerProvider extends LoadBalancerProvider {
           if (lbProvider == null) {
             logger.log(
                 Level.FINEST,
-                "The policy {0} for is not available in xds_routing LB policy:\n {1}",
-                new Object[]{policyName, name});
+                "The policy for {0} is not available in xds_routing LB policy: {1}",
+                new Object[]{policyName, rawConfig});
           } else {
             ConfigOrError parsedLbPolicyConfig = lbProvider
                 .parseLoadBalancingPolicyConfig(lbConfig.getRawConfigValue());
@@ -142,7 +141,7 @@ public final class XdsRoutingLoadBalancerProvider extends LoadBalancerProvider {
         }
         if (!targetParsingSucceeded) {
           return ConfigOrError.fromError(Status.INTERNAL.withDescription(
-              "No child policy available for action " + name + " in xds_routing LB policy:\n "
+              "No child policy available for action " + name + " in xds_routing LB policy: "
                   + rawConfig));
         }
       }
@@ -150,7 +149,7 @@ public final class XdsRoutingLoadBalancerProvider extends LoadBalancerProvider {
       List<Map<String, ?>> routes = JsonUtil.getListOfObjects(rawConfig, "route");
       if (routes == null || routes.isEmpty()) {
         return ConfigOrError.fromError(Status.INTERNAL.withDescription(
-            "No routes provided for xds_routing LB policy:\n" + rawConfig));
+            "No routes provided for xds_routing LB policy: " + rawConfig));
       }
       List<Route> parsedRoutes = new ArrayList<>();
       Set<MethodName> methodNames = new HashSet<>();
@@ -159,40 +158,35 @@ public final class XdsRoutingLoadBalancerProvider extends LoadBalancerProvider {
         String actionName = JsonUtil.getString(route, "action");
         if (actionName == null) {
           return ConfigOrError.fromError(Status.INTERNAL.withDescription(
-              "No action name provided for one of the routes in xds_routing LB policy:\n"
+              "No action name provided for one of the routes in xds_routing LB policy: "
                   + rawConfig));
         }
-
         if (!parsedActions.containsKey(actionName)) {
           return ConfigOrError.fromError(Status.INTERNAL.withDescription(
-              "No action defined for route " + route + " in xds_routing LB policy:\n" + rawConfig));
+              "No action defined for route " + route + " in xds_routing LB policy: " + rawConfig));
         }
-
         Map<String, ?> methodName = JsonUtil.getObject(route, "methodName");
         if (methodName == null) {
           return ConfigOrError.fromError(Status.INTERNAL.withDescription(
-              "No methodName provided for one of the routes in xds_routing LB policy:\n"
+              "No method_name provided for one of the routes in xds_routing LB policy: "
                   + rawConfig));
         }
         String service = JsonUtil.getString(methodName, "service");
         String method = JsonUtil.getString(methodName, "method");
         if (service == null || method == null) {
           return ConfigOrError.fromError(Status.INTERNAL.withDescription(
-              "No service or method provided for one of the routes in xds_routing LB policy:\n"
+              "No service or method provided for one of the routes in xds_routing LB policy: "
                   + rawConfig));
         }
-
         MethodName parseMethodName = new MethodName(service, method);
-
         if (i == routes.size() - 1 && !parseMethodName.isDefault()) {
           return ConfigOrError.fromError(Status.INTERNAL.withDescription(
-              "The last route in routes is not the default rout in xds_routing LB policy:\n"
+              "The last route in routes is not the default route in xds_routing LB policy: "
                   + rawConfig));
         }
-
         if (methodNames.contains(parseMethodName)) {
           return ConfigOrError.fromError(Status.INTERNAL.withDescription(
-              "Duplicate methodName found in routes in xds_routing LB policy:\n" + rawConfig));
+              "Duplicate methodName found in routes in xds_routing LB policy: " + rawConfig));
         }
         methodNames.add(parseMethodName);
 
