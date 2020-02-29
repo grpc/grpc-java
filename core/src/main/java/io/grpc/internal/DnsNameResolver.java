@@ -318,8 +318,6 @@ final class DnsNameResolver extends NameResolver {
           ConfigOrError parsedServiceConfig =
               serviceConfigParser.parseServiceConfig(verifiedRawServiceConfig);
           resultBuilder.setServiceConfig(parsedServiceConfig);
-          attributesBuilder
-              .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, verifiedRawServiceConfig);
         }
       } else {
         logger.log(Level.FINE, "No TXT records found for {0}", new Object[]{host});
