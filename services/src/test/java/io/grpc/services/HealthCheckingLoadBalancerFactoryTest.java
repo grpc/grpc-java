@@ -86,7 +86,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -248,7 +247,6 @@ public class HealthCheckingLoadBalancerFactoryTest {
   }
 
   @Test
-  @Ignore("need to merge #6704")
   public void typicalWorkflow() {
     Attributes resolutionAttrs = attrsWithHealthCheckService("FooService");
     ResolvedAddresses result = ResolvedAddresses.newBuilder()
@@ -370,7 +368,6 @@ public class HealthCheckingLoadBalancerFactoryTest {
   }
 
   @Test
-  @Ignore("need to merge #6704")
   public void healthCheckDisabledWhenServiceNotImplemented() {
     Attributes resolutionAttrs = attrsWithHealthCheckService("BarService");
     ResolvedAddresses result = ResolvedAddresses.newBuilder()
@@ -440,7 +437,6 @@ public class HealthCheckingLoadBalancerFactoryTest {
   }
 
   @Test
-  @Ignore("need to merge #6704")
   public void backoffRetriesWhenServerErroneouslyClosesRpcBeforeAnyResponse() {
     Attributes resolutionAttrs = attrsWithHealthCheckService("TeeService");
     ResolvedAddresses result = ResolvedAddresses.newBuilder()
@@ -512,7 +508,6 @@ public class HealthCheckingLoadBalancerFactoryTest {
   }
 
   @Test
-  @Ignore("need to merge #6704")
   public void serverRespondResetsBackoff() {
     Attributes resolutionAttrs = attrsWithHealthCheckService("TeeService");
     ResolvedAddresses result = ResolvedAddresses.newBuilder()
@@ -606,7 +601,6 @@ public class HealthCheckingLoadBalancerFactoryTest {
   }
 
   @Test
-  @Ignore("need to merge #6704")
   public void serviceConfigHasNoHealthCheckingInitiallyButDoesLater() {
     // No service config, thus no health check.
     ResolvedAddresses result1 = ResolvedAddresses.newBuilder()
@@ -651,7 +645,6 @@ public class HealthCheckingLoadBalancerFactoryTest {
   }
 
   @Test
-  @Ignore("need to merge #6704")
   public void serviceConfigDisablesHealthCheckWhenRpcActive() {
     Attributes resolutionAttrs = attrsWithHealthCheckService("TeeService");
     ResolvedAddresses result1 = ResolvedAddresses.newBuilder()
@@ -696,7 +689,6 @@ public class HealthCheckingLoadBalancerFactoryTest {
   }
 
   @Test
-  @Ignore("need to merge #6704")
   public void serviceConfigDisablesHealthCheckWhenRetryPending() {
     Attributes resolutionAttrs = attrsWithHealthCheckService("TeeService");
     ResolvedAddresses result = ResolvedAddresses.newBuilder()
@@ -750,7 +742,6 @@ public class HealthCheckingLoadBalancerFactoryTest {
   }
 
   @Test
-  @Ignore("need to merge #6704")
   public void serviceConfigDisablesHealthCheckWhenRpcInactive() {
     Attributes resolutionAttrs = attrsWithHealthCheckService("TeeService");
     ResolvedAddresses result1 = ResolvedAddresses.newBuilder()
@@ -797,7 +788,6 @@ public class HealthCheckingLoadBalancerFactoryTest {
   }
 
   @Test
-  @Ignore("need to merge #6704")
   public void serviceConfigChangesServiceNameWhenRpcActive() {
     Attributes resolutionAttrs = attrsWithHealthCheckService("TeeService");
     ResolvedAddresses result1 = ResolvedAddresses.newBuilder()
@@ -858,7 +848,6 @@ public class HealthCheckingLoadBalancerFactoryTest {
   }
 
   @Test
-  @Ignore("need to merge #6704")
   public void serviceConfigChangesServiceNameWhenRetryPending() {
     Attributes resolutionAttrs = attrsWithHealthCheckService("TeeService");
     ResolvedAddresses result1 = ResolvedAddresses.newBuilder()
@@ -930,7 +919,6 @@ public class HealthCheckingLoadBalancerFactoryTest {
   }
 
   @Test
-  @Ignore("need to merge #6704")
   public void serviceConfigChangesServiceNameWhenRpcInactive() {
     Attributes resolutionAttrs = attrsWithHealthCheckService("TeeService");
     ResolvedAddresses result1 = ResolvedAddresses.newBuilder()
@@ -1008,7 +996,6 @@ public class HealthCheckingLoadBalancerFactoryTest {
   }
 
   @Test
-  @Ignore("need to merge #6704")
   public void balancerShutdown() {
     Attributes resolutionAttrs = attrsWithHealthCheckService("TeeService");
     ResolvedAddresses result = ResolvedAddresses.newBuilder()
@@ -1068,7 +1055,6 @@ public class HealthCheckingLoadBalancerFactoryTest {
   }
 
   @Test
-  @Ignore("need to merge #6704")
   public void util_newHealthCheckingLoadBalancer() {
     Factory hcFactory =
         new Factory() {
