@@ -33,8 +33,8 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 /**
- * RlsProtoConverters is a collection of {@link Converter} between RouteLookupService proto messages
- * to internal representation in {@link RlsProtoData}.
+ * RlsProtoConverters is a collection of {@link Converter} between RouteLookupService proto / json
+ * messages to internal representation in {@link RlsProtoData}.
  */
 public final class RlsProtoConverters {
 
