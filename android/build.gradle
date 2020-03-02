@@ -29,6 +29,7 @@ dependencies {
     implementation project(':grpc-core')
 
     testImplementation project('::grpc-okhttp')
+    testImplementation libraries.androidx_test
     testImplementation libraries.junit
     testImplementation libraries.robolectric
     testImplementation libraries.truth
