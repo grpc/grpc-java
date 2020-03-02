@@ -277,7 +277,8 @@ public class SecretVolumeSslContextProviderTest {
     TlsCertificate tlsCert = TlsCertificate.getDefaultInstance();
     try {
       SecretVolumeSslContextProvider.getProviderForServer(
-          buildDownstreamTlsContext(getCommonTlsContext(tlsCert, /* certContext= */ null)));
+          CommonTlsContextTestsUtil
+              .buildDownstreamTlsContext(getCommonTlsContext(tlsCert, /* certContext= */ null)));
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
       assertThat(expected).hasMessageThat().isEqualTo("filename expected");
@@ -297,7 +298,8 @@ public class SecretVolumeSslContextProviderTest {
             .build();
     try {
       SecretVolumeSslContextProvider.getProviderForServer(
-          buildDownstreamTlsContext(getCommonTlsContext(tlsCert, certContext)));
+          CommonTlsContextTestsUtil
+              .buildDownstreamTlsContext(getCommonTlsContext(tlsCert, certContext)));
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
       assertThat(expected.getMessage()).isEqualTo("filename expected");
@@ -419,7 +421,7 @@ public class SecretVolumeSslContextProviderTest {
    */
   static DownstreamTlsContext buildDownstreamTlsContextFromFilenames(
       String privateKey, String certChain, String trustCa) {
-    return buildDownstreamTlsContext(
+    return CommonTlsContextTestsUtil.buildDownstreamTlsContext(
         buildCommonTlsContextFromFilenames(privateKey, certChain, trustCa));
   }
 
@@ -462,15 +464,6 @@ public class SecretVolumeSslContextProviderTest {
       builder = builder.setValidationContext(certContext);
     }
     return builder.build();
-  }
-
-  /**
-   * Helper method to build DownstreamTlsContext for above tests. Called from other classes as well.
-   */
-  static DownstreamTlsContext buildDownstreamTlsContext(CommonTlsContext commonTlsContext) {
-    DownstreamTlsContext downstreamTlsContext =
-        DownstreamTlsContext.newBuilder().setCommonTlsContext(commonTlsContext).build();
-    return downstreamTlsContext;
   }
 
   /**

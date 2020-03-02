@@ -53,7 +53,7 @@ public class ServerSslContextProviderFactoryTest {
         CommonTlsContextTestsUtil.buildCommonTlsContextFromSdsConfigForTlsCertificate(
             "name", "unix:/tmp/sds/path", CA_PEM_FILE);
     DownstreamTlsContext downstreamTlsContext =
-        SecretVolumeSslContextProviderTest.buildDownstreamTlsContext(commonTlsContext);
+        CommonTlsContextTestsUtil.buildDownstreamTlsContext(commonTlsContext);
 
     try {
       SslContextProvider<DownstreamTlsContext> unused =
@@ -72,7 +72,7 @@ public class ServerSslContextProviderFactoryTest {
         CommonTlsContextTestsUtil.buildCommonTlsContextFromSdsConfigForValidationContext(
             "name", "unix:/tmp/sds/path", SERVER_KEY_FILE, SERVER_PEM_FILE);
     DownstreamTlsContext downstreamTlsContext =
-        SecretVolumeSslContextProviderTest.buildDownstreamTlsContext(commonTlsContext);
+        CommonTlsContextTestsUtil.buildDownstreamTlsContext(commonTlsContext);
 
     try {
       SslContextProvider<DownstreamTlsContext> unused =

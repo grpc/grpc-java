@@ -18,7 +18,7 @@ subprojects {
     apply plugin: "net.ltgt.errorprone"
 
     group = "io.grpc"
-    version = "1.28.0-SNAPSHOT" // CURRENT_GRPC_VERSION
+    version = "1.29.0-SNAPSHOT" // CURRENT_GRPC_VERSION
 
     repositories {
         maven { // The google mirror is less flaky than mavenCentral()
@@ -46,7 +46,7 @@ subprojects {
         javaPluginPath = "$rootDir/compiler/build/exe/java_plugin/$protocPluginBaseName$exeSuffix"
 
         nettyVersion = '4.1.45.Final'
-        guavaVersion = '28.1-android'
+        guavaVersion = '28.2-android'
         googleauthVersion = '0.20.0'
         protobufVersion = '3.11.0'
         protocVersion = protobufVersion
@@ -125,7 +125,7 @@ subprojects {
             google_api_protos: 'com.google.api.grpc:proto-google-common-protos:1.17.0',
             google_auth_credentials: "com.google.auth:google-auth-library-credentials:${googleauthVersion}",
             google_auth_oauth2_http: "com.google.auth:google-auth-library-oauth2-http:${googleauthVersion}",
-            okhttp: 'com.squareup.okhttp:okhttp:2.5.0',
+            okhttp: 'com.squareup.okhttp:okhttp:2.7.4',
             okio: 'com.squareup.okio:okio:1.13.0',
             opencensus_api: "io.opencensus:opencensus-api:${opencensusVersion}",
             opencensus_contrib_grpc_metrics: "io.opencensus:opencensus-contrib-grpc-metrics:${opencensusVersion}",
@@ -155,7 +155,7 @@ subprojects {
             // Test dependencies.
             junit: 'junit:junit:4.12',
             mockito: 'org.mockito:mockito-core:2.28.2',
-            truth: 'com.google.truth:truth:1.0',
+            truth: 'com.google.truth:truth:1.0.1',
             guava_testlib: "com.google.guava:guava-testlib:${guavaVersion}",
             robolectric: "org.robolectric:robolectric:4.3.1",
 

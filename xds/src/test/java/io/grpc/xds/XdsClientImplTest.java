@@ -45,6 +45,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Any;
+import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment;
 import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy;
 import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
@@ -103,7 +104,6 @@ import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -123,6 +123,7 @@ import org.mockito.MockitoAnnotations;
 @RunWith(JUnit4.class)
 public class XdsClientImplTest {
 
+  private static final String TARGET_NAME = "foo.googleapis.com:8080";
   private static final String HOSTNAME = "foo.googleapis.com";
   private static final int PORT = 8080;
 
@@ -185,10 +186,9 @@ public class XdsClientImplTest {
 
   private final Queue<StreamObserver<DiscoveryResponse>> responseObservers = new ArrayDeque<>();
   private final Queue<StreamObserver<DiscoveryRequest>> requestObservers = new ArrayDeque<>();
-  private final AtomicBoolean callEnded = new AtomicBoolean(true);
-
+  private final AtomicBoolean adsEnded = new AtomicBoolean(true);
   private final Queue<LoadReportCall> loadReportCalls = new ArrayDeque<>();
-  private final AtomicInteger runningLrsCalls = new AtomicInteger();
+  private final AtomicBoolean lrsEnded = new AtomicBoolean(true);
 
   @Mock
   private AggregatedDiscoveryServiceImplBase mockedDiscoveryService;
@@ -220,13 +220,13 @@ public class XdsClientImplTest {
       @Override
       public StreamObserver<DiscoveryRequest> streamAggregatedResources(
           final StreamObserver<DiscoveryResponse> responseObserver) {
-        assertThat(callEnded.get()).isTrue();  // ensure previous call was ended
-        callEnded.set(false);
+        assertThat(adsEnded.get()).isTrue();  // ensure previous call was ended
+        adsEnded.set(false);
         Context.current().addListener(
             new CancellationListener() {
               @Override
               public void cancelled(Context context) {
-                callEnded.set(true);
+                adsEnded.set(true);
               }
             }, MoreExecutors.directExecutor());
         responseObservers.offer(responseObserver);
@@ -243,7 +243,8 @@ public class XdsClientImplTest {
       @Override
       public StreamObserver<LoadStatsRequest> streamLoadStats(
           StreamObserver<LoadStatsResponse> responseObserver) {
-        runningLrsCalls.getAndIncrement();
+        assertThat(lrsEnded.get()).isTrue();
+        lrsEnded.set(false);
         @SuppressWarnings("unchecked")
         StreamObserver<LoadStatsRequest> requestObserver = mock(StreamObserver.class);
         final LoadReportCall call = new LoadReportCall(requestObserver, responseObserver);
@@ -251,8 +252,7 @@ public class XdsClientImplTest {
             new CancellationListener() {
               @Override
               public void cancelled(Context context) {
-                call.cancelled = true;
-                runningLrsCalls.getAndDecrement();
+                lrsEnded.set(true);
               }
             }, MoreExecutors.directExecutor());
         loadReportCalls.offer(call);
@@ -283,24 +283,26 @@ public class XdsClientImplTest {
     };
 
     xdsClient =
-        new XdsClientImpl(servers, channelFactory, NODE, syncContext,
-            fakeClock.getScheduledExecutorService(), backoffPolicyProvider,
+        new XdsClientImpl(
+            TARGET_NAME,
+            servers,
+            channelFactory,
+            NODE,
+            syncContext,
+            fakeClock.getScheduledExecutorService(),
+            backoffPolicyProvider,
             fakeClock.getStopwatchSupplier());
     // Only the connection to management server is established, no RPC request is sent until at
     // least one watcher is registered.
     assertThat(responseObservers).isEmpty();
     assertThat(requestObservers).isEmpty();
-
-    // Load reporting is not initiated until being invoked to do so.
-    assertThat(loadReportCalls).isEmpty();
-    assertThat(runningLrsCalls.get()).isEqualTo(0);
   }
 
   @After
   public void tearDown() {
     xdsClient.shutdown();
-    assertThat(callEnded.get()).isTrue();
-    assertThat(runningLrsCalls.get()).isEqualTo(0);
+    assertThat(adsEnded.get()).isTrue();
+    assertThat(lrsEnded.get()).isTrue();
     assertThat(channel.isShutdown()).isTrue();
     assertThat(fakeClock.getPendingTasks()).isEmpty();
   }
@@ -1271,10 +1273,9 @@ public class XdsClientImplTest {
     verify(clusterWatcher).onClusterChanged(clusterUpdateCaptor.capture());
     ClusterUpdate clusterUpdate = clusterUpdateCaptor.getValue();
     assertThat(clusterUpdate.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
-    assertThat(clusterUpdate.getEdsServiceName())
-        .isEqualTo("cluster-foo.googleapis.com");  // default to cluster name
+    assertThat(clusterUpdate.getEdsServiceName()).isNull();
     assertThat(clusterUpdate.getLbPolicy()).isEqualTo("round_robin");
-    assertThat(clusterUpdate.isEnableLrs()).isEqualTo(false);
+    assertThat(clusterUpdate.getLrsServerName()).isNull();
 
     // Management server sends back another CDS response updating the requested Cluster.
     clusters = ImmutableList.of(
@@ -1297,8 +1298,7 @@ public class XdsClientImplTest {
     assertThat(clusterUpdate.getEdsServiceName())
         .isEqualTo("eds-cluster-foo.googleapis.com");
     assertThat(clusterUpdate.getLbPolicy()).isEqualTo("round_robin");
-    assertThat(clusterUpdate.isEnableLrs()).isTrue();
-    assertThat(clusterUpdate.getLrsServerName()).isEmpty();
+    assertThat(clusterUpdate.getLrsServerName()).isEqualTo("");
   }
 
   /**
@@ -1376,20 +1376,18 @@ public class XdsClientImplTest {
     ClusterUpdate clusterUpdate1 = clusterUpdateCaptor1.getValue();
     assertThat(clusterUpdate1.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
     assertThat(clusterUpdate1.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
-    assertThat(clusterUpdate1.getEdsServiceName())
-        .isEqualTo("cluster-foo.googleapis.com");  // default to cluster name
+    assertThat(clusterUpdate1.getEdsServiceName()).isNull();
     assertThat(clusterUpdate1.getLbPolicy()).isEqualTo("round_robin");
-    assertThat(clusterUpdate1.isEnableLrs()).isEqualTo(false);
+    assertThat(clusterUpdate1.getLrsServerName()).isNull();
 
     ArgumentCaptor<ClusterUpdate> clusterUpdateCaptor2 = ArgumentCaptor.forClass(null);
     verify(watcher2).onClusterChanged(clusterUpdateCaptor2.capture());
     ClusterUpdate clusterUpdate2 = clusterUpdateCaptor2.getValue();
     assertThat(clusterUpdate2.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
     assertThat(clusterUpdate2.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
-    assertThat(clusterUpdate2.getEdsServiceName())
-        .isEqualTo("cluster-foo.googleapis.com");  // default to cluster name
+    assertThat(clusterUpdate2.getEdsServiceName()).isNull();
     assertThat(clusterUpdate2.getLbPolicy()).isEqualTo("round_robin");
-    assertThat(clusterUpdate2.isEnableLrs()).isEqualTo(false);
+    assertThat(clusterUpdate2.getLrsServerName()).isNull();
 
     verify(watcher3, never()).onClusterChanged(any(ClusterUpdate.class));
     verify(watcher3, never()).onError(any(Status.class));
@@ -1426,20 +1424,18 @@ public class XdsClientImplTest {
     clusterUpdate1 = clusterUpdateCaptor1.getValue();
     assertThat(clusterUpdate1.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
     assertThat(clusterUpdate1.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
-    assertThat(clusterUpdate1.getEdsServiceName())
-        .isEqualTo("cluster-foo.googleapis.com");  // default to cluster name
+    assertThat(clusterUpdate1.getEdsServiceName()).isNull();
     assertThat(clusterUpdate1.getLbPolicy()).isEqualTo("round_robin");
-    assertThat(clusterUpdate1.isEnableLrs()).isEqualTo(false);
+    assertThat(clusterUpdate1.getLrsServerName()).isNull();
 
     clusterUpdateCaptor2 = ArgumentCaptor.forClass(null);
     verify(watcher2, times(2)).onClusterChanged(clusterUpdateCaptor2.capture());
     clusterUpdate2 = clusterUpdateCaptor2.getValue();
     assertThat(clusterUpdate2.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
     assertThat(clusterUpdate2.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
-    assertThat(clusterUpdate2.getEdsServiceName())
-        .isEqualTo("cluster-foo.googleapis.com");  // default to cluster name
+    assertThat(clusterUpdate2.getEdsServiceName()).isNull();
     assertThat(clusterUpdate2.getLbPolicy()).isEqualTo("round_robin");
-    assertThat(clusterUpdate2.isEnableLrs()).isEqualTo(false);
+    assertThat(clusterUpdate2.getLrsServerName()).isNull();
 
     ArgumentCaptor<ClusterUpdate> clusterUpdateCaptor3 = ArgumentCaptor.forClass(null);
     verify(watcher3).onClusterChanged(clusterUpdateCaptor3.capture());
@@ -1448,8 +1444,7 @@ public class XdsClientImplTest {
     assertThat(clusterUpdate3.getEdsServiceName())
         .isEqualTo("eds-cluster-bar.googleapis.com");
     assertThat(clusterUpdate3.getLbPolicy()).isEqualTo("round_robin");
-    assertThat(clusterUpdate3.isEnableLrs()).isEqualTo(true);
-    assertThat(clusterUpdate3.getLrsServerName()).isEmpty();
+    assertThat(clusterUpdate3.getLrsServerName()).isEqualTo("");
   }
 
   /**
@@ -1489,10 +1484,9 @@ public class XdsClientImplTest {
     verify(watcher1).onClusterChanged(clusterUpdateCaptor1.capture());
     ClusterUpdate clusterUpdate1 = clusterUpdateCaptor1.getValue();
     assertThat(clusterUpdate1.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
-    assertThat(clusterUpdate1.getEdsServiceName())
-        .isEqualTo("cluster-foo.googleapis.com");  // default to cluster name
+    assertThat(clusterUpdate1.getEdsServiceName()).isNull();
     assertThat(clusterUpdate1.getLbPolicy()).isEqualTo("round_robin");
-    assertThat(clusterUpdate1.isEnableLrs()).isEqualTo(false);
+    assertThat(clusterUpdate1.getLrsServerName()).isNull();
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
 
     // Another cluster watcher interested in the same cluster is added.
@@ -1505,10 +1499,9 @@ public class XdsClientImplTest {
     verify(watcher2).onClusterChanged(clusterUpdateCaptor2.capture());
     ClusterUpdate clusterUpdate2 = clusterUpdateCaptor2.getValue();
     assertThat(clusterUpdate2.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
-    assertThat(clusterUpdate2.getEdsServiceName())
-        .isEqualTo("cluster-foo.googleapis.com");  // default to cluster name
+    assertThat(clusterUpdate2.getEdsServiceName()).isNull();
     assertThat(clusterUpdate2.getLbPolicy()).isEqualTo("round_robin");
-    assertThat(clusterUpdate2.isEnableLrs()).isEqualTo(false);
+    assertThat(clusterUpdate2.getLrsServerName()).isNull();
 
     verifyNoMoreInteractions(requestObserver);
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
@@ -1548,10 +1541,9 @@ public class XdsClientImplTest {
     verify(watcher1).onClusterChanged(clusterUpdateCaptor1.capture());
     ClusterUpdate clusterUpdate1 = clusterUpdateCaptor1.getValue();
     assertThat(clusterUpdate1.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
-    assertThat(clusterUpdate1.getEdsServiceName())
-        .isEqualTo("cluster-foo.googleapis.com");  // default to cluster name
+    assertThat(clusterUpdate1.getEdsServiceName()).isNull();
     assertThat(clusterUpdate1.getLbPolicy()).isEqualTo("round_robin");
-    assertThat(clusterUpdate1.isEnableLrs()).isEqualTo(false);
+    assertThat(clusterUpdate1.getLrsServerName()).isNull();
 
     // Add another cluster watcher for a different cluster.
     ClusterWatcher watcher2 = mock(ClusterWatcher.class);
@@ -1586,10 +1578,9 @@ public class XdsClientImplTest {
     verify(watcher1, times(2)).onClusterChanged(clusterUpdateCaptor1.capture());
     clusterUpdate1 = clusterUpdateCaptor1.getValue();
     assertThat(clusterUpdate1.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
-    assertThat(clusterUpdate1.getEdsServiceName())
-        .isEqualTo("cluster-foo.googleapis.com");  // default to cluster name
+    assertThat(clusterUpdate1.getEdsServiceName()).isNull();
     assertThat(clusterUpdate1.getLbPolicy()).isEqualTo("round_robin");
-    assertThat(clusterUpdate1.isEnableLrs()).isEqualTo(false);
+    assertThat(clusterUpdate1.getLrsServerName()).isNull();
 
     ArgumentCaptor<ClusterUpdate> clusterUpdateCaptor2 = ArgumentCaptor.forClass(null);
     verify(watcher2).onClusterChanged(clusterUpdateCaptor2.capture());
@@ -1598,8 +1589,7 @@ public class XdsClientImplTest {
     assertThat(clusterUpdate2.getEdsServiceName())
         .isEqualTo("eds-cluster-bar.googleapis.com");
     assertThat(clusterUpdate2.getLbPolicy()).isEqualTo("round_robin");
-    assertThat(clusterUpdate2.isEnableLrs()).isEqualTo(true);
-    assertThat(clusterUpdate2.getLrsServerName()).isEmpty();
+    assertThat(clusterUpdate2.getLrsServerName()).isEqualTo("");
 
     // Cancel one of the watcher.
     xdsClient.cancelClusterDataWatch("cluster-foo.googleapis.com", watcher1);
@@ -1665,11 +1655,9 @@ public class XdsClientImplTest {
     verify(watcher3).onClusterChanged(clusterUpdateCaptor3.capture());
     ClusterUpdate clusterUpdate3 = clusterUpdateCaptor3.getValue();
     assertThat(clusterUpdate3.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
-    assertThat(clusterUpdate3.getEdsServiceName())
-        .isEqualTo("cluster-foo.googleapis.com");  // default to cluster name
+    assertThat(clusterUpdate3.getEdsServiceName()).isNull();
     assertThat(clusterUpdate3.getLbPolicy()).isEqualTo("round_robin");
-    assertThat(clusterUpdate3.isEnableLrs()).isEqualTo(true);
-    assertThat(clusterUpdate2.getLrsServerName()).isEmpty();
+    assertThat(clusterUpdate2.getLrsServerName()).isEqualTo("");
 
     verifyNoMoreInteractions(watcher1, watcher2);
 
@@ -1773,11 +1761,9 @@ public class XdsClientImplTest {
     verify(clusterWatcher).onClusterChanged(clusterUpdateCaptor.capture());
     ClusterUpdate clusterUpdate = clusterUpdateCaptor.getValue();
     assertThat(clusterUpdate.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
-    assertThat(clusterUpdate.getEdsServiceName())
-        .isEqualTo("cluster-foo.googleapis.com");  // default to cluster name
+    assertThat(clusterUpdate.getEdsServiceName()).isNull();
     assertThat(clusterUpdate.getLbPolicy()).isEqualTo("round_robin");
-    assertThat(clusterUpdate.isEnableLrs()).isEqualTo(true);
-    assertThat(clusterUpdate.getLrsServerName()).isEmpty();
+    assertThat(clusterUpdate.getLrsServerName()).isEqualTo("");
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
 
     // No cluster is available.
@@ -3102,21 +3088,32 @@ public class XdsClientImplTest {
    */
   @Test
   public void reportLoadStatsToServer() {
-    xdsClient.reportClientStats("cluster-foo.googleapis.com", "");
-    LoadReportCall lrsCall1 = loadReportCalls.poll();
-    verify(lrsCall1.requestObserver)
-        .onNext(eq(buildInitialLoadStatsRequest("cluster-foo.googleapis.com")));
-    assertThat(lrsCall1.cancelled).isFalse();
+    String clusterName = "cluster-foo.googleapis.com";
+    LoadStatsStore loadStatsStore = new LoadStatsStoreImpl(clusterName, null);
+    ArgumentCaptor<LoadStatsRequest> requestCaptor = ArgumentCaptor.forClass(null);
+    xdsClient.reportClientStats(clusterName, null, loadStatsStore);
+    LoadReportCall lrsCall = loadReportCalls.poll();
+    verify(lrsCall.requestObserver).onNext(requestCaptor.capture());
+    assertThat(requestCaptor.getValue().getClusterStatsCount())
+        .isEqualTo(0);  // initial request
 
-    xdsClient.reportClientStats("cluster-bar.googleapis.com", "");
-    LoadReportCall lrsCall2 = loadReportCalls.poll();
-    verify(lrsCall2.requestObserver)
-        .onNext(eq(buildInitialLoadStatsRequest("cluster-bar.googleapis.com")));
-    assertThat(lrsCall2.cancelled).isFalse();
+    lrsCall.responseObserver.onNext(
+        LoadStatsResponse.newBuilder()
+            .addClusters(clusterName)
+            .setLoadReportingInterval(Durations.fromNanos(1000L))
+            .build());
+    fakeClock.forwardNanos(1000L);
+    verify(lrsCall.requestObserver, times(2)).onNext(requestCaptor.capture());
+    ClusterStats report = Iterables.getOnlyElement(requestCaptor.getValue().getClusterStatsList());
+    assertThat(report.getClusterName()).isEqualTo(clusterName);
 
-    xdsClient.cancelClientStatsReport("cluster-bar.googleapis.com");
-    assertThat(lrsCall2.cancelled).isTrue();
-    assertThat(runningLrsCalls.get()).isEqualTo(1);
+    xdsClient.cancelClientStatsReport(clusterName, null);
+    fakeClock.forwardNanos(1000L);
+    verify(lrsCall.requestObserver, times(3)).onNext(requestCaptor.capture());
+    assertThat(requestCaptor.getValue().getClusterStatsCount())
+        .isEqualTo(0);  // no more stats reported
+
+    // See more test on LoadReportClientTest.java
   }
 
   // Simulates the use case of watching clusters/endpoints based on service config resolved by
@@ -3547,14 +3544,6 @@ public class XdsClientImplTest {
     assertThat(res).isEqualTo(expectedString);
   }
 
-  private static LoadStatsRequest buildInitialLoadStatsRequest(String clusterName) {
-    return
-        LoadStatsRequest.newBuilder()
-            .setNode(NODE)
-            .addClusterStats(ClusterStats.newBuilder().setClusterName(clusterName))
-            .build();
-  }
-
   /**
    * Matcher for DiscoveryRequest without the comparison of error_details field, which is used for
    * management server debugging purposes.
@@ -3604,7 +3593,6 @@ public class XdsClientImplTest {
     private final StreamObserver<LoadStatsRequest> requestObserver;
     @SuppressWarnings("unused")
     private final StreamObserver<LoadStatsResponse> responseObserver;
-    private boolean cancelled;
 
     LoadReportCall(StreamObserver<LoadStatsRequest> requestObserver,
         StreamObserver<LoadStatsResponse> responseObserver) {

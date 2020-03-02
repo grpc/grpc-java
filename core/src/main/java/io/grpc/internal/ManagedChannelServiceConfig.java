@@ -43,16 +43,23 @@ final class ManagedChannelServiceConfig {
   private final Throttle retryThrottling;
   @Nullable
   private final Object loadBalancingConfig;
+  @Nullable
+  private final Map<String, ?> healthCheckingConfig;
 
   ManagedChannelServiceConfig(
       Map<String, MethodInfo> serviceMethodMap,
       Map<String, MethodInfo> serviceMap,
       @Nullable Throttle retryThrottling,
-      @Nullable Object loadBalancingConfig) {
+      @Nullable Object loadBalancingConfig,
+      @Nullable Map<String, ?> healthCheckingConfig) {
     this.serviceMethodMap = Collections.unmodifiableMap(new HashMap<>(serviceMethodMap));
     this.serviceMap = Collections.unmodifiableMap(new HashMap<>(serviceMap));
     this.retryThrottling = retryThrottling;
     this.loadBalancingConfig = loadBalancingConfig;
+    this.healthCheckingConfig =
+        healthCheckingConfig != null
+            ? Collections.unmodifiableMap(new HashMap<>(healthCheckingConfig))
+            : null;
   }
 
   /** Returns an empty {@link ManagedChannelServiceConfig}. */
@@ -62,7 +69,8 @@ final class ManagedChannelServiceConfig {
             new HashMap<String, MethodInfo>(),
             new HashMap<String, MethodInfo>(),
             /* retryThrottling= */ null,
-            /* loadBalancingConfig= */ null);
+            /* loadBalancingConfig= */ null,
+            /* healthCheckingConfig= */ null);
   }
 
   /**
@@ -80,6 +88,8 @@ final class ManagedChannelServiceConfig {
     }
     Map<String, MethodInfo> serviceMethodMap = new HashMap<>();
     Map<String, MethodInfo> serviceMap = new HashMap<>();
+    Map<String, ?> healthCheckingConfig =
+        ServiceConfigUtil.getHealthCheckedService(serviceConfig);
 
     // Try and do as much validation here before we swap out the existing configuration.  In case
     // the input is invalid, we don't want to lose the existing configuration.
@@ -88,8 +98,13 @@ final class ManagedChannelServiceConfig {
 
     if (methodConfigs == null) {
       // this is surprising, but possible.
-      return new ManagedChannelServiceConfig(
-          serviceMethodMap, serviceMap, retryThrottling, loadBalancingConfig);
+      return
+          new ManagedChannelServiceConfig(
+              serviceMethodMap,
+              serviceMap,
+              retryThrottling,
+              loadBalancingConfig,
+              healthCheckingConfig);
     }
 
     for (Map<String, ?> methodConfig : methodConfigs) {
@@ -122,8 +137,13 @@ final class ManagedChannelServiceConfig {
       }
     }
 
-    return new ManagedChannelServiceConfig(
-        serviceMethodMap, serviceMap, retryThrottling, loadBalancingConfig);
+    return
+        new ManagedChannelServiceConfig(
+            serviceMethodMap,
+            serviceMap,
+            retryThrottling,
+            loadBalancingConfig,
+            healthCheckingConfig);
   }
 
   /**
@@ -131,6 +151,11 @@ final class ManagedChannelServiceConfig {
    */
   Map<String, MethodInfo> getServiceMap() {
     return serviceMap;
+  }
+
+  @Nullable
+  Map<String, ?> getHealthCheckingConfig() {
+    return healthCheckingConfig;
   }
 
   /**

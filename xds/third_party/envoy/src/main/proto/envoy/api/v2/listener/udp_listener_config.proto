@@ -2,16 +2,19 @@ syntax = "proto3";
 
 package envoy.api.v2.listener;
 
-option java_outer_classname = "UdpListenerConfigProto";
-option java_multiple_files = true;
-option java_package = "io.envoyproxy.envoy.api.v2.listener";
-option csharp_namespace = "Envoy.Api.V2.ListenerNS";
-option ruby_package = "Envoy.Api.V2.ListenerNS";
-
 import "google/protobuf/any.proto";
 import "google/protobuf/struct.proto";
 
-// [#protodoc-title: Udp Listener Config]
+import "udpa/annotations/migrate.proto";
+
+option java_package = "io.envoyproxy.envoy.api.v2.listener";
+option java_outer_classname = "UdpListenerConfigProto";
+option java_multiple_files = true;
+option csharp_namespace = "Envoy.Api.V2.ListenerNS";
+option ruby_package = "Envoy.Api.V2.ListenerNS";
+option (udpa.annotations.file_migrate).move_to_package = "envoy.config.listener.v3";
+
+// [#protodoc-title: UDP Listener Config]
 // Listener :ref:`configuration overview <config_listeners>`
 
 message UdpListenerConfig {
@@ -23,8 +26,11 @@ message UdpListenerConfig {
   // Used to create a specific listener factory. To some factory, e.g.
   // "raw_udp_listener", config is not needed.
   oneof config_type {
-    google.protobuf.Struct config = 2;
+    google.protobuf.Struct config = 2 [deprecated = true];
 
     google.protobuf.Any typed_config = 3;
   }
+}
+
+message ActiveRawUdpListenerConfig {
 }

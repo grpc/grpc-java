@@ -35,7 +35,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.grpc.Attributes;
-import io.grpc.ChannelLogger;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
@@ -134,8 +133,6 @@ public class CdsLoadBalancerTest {
 
   @Mock
   private Helper helper;
-  @Mock
-  private ChannelLogger channelLogger;
 
   private LoadBalancer cdsLoadBalancer;
   private XdsClient xdsClient;
@@ -147,7 +144,6 @@ public class CdsLoadBalancerTest {
   public void setUp() {
     MockitoAnnotations.initMocks(this);
 
-    doReturn(channelLogger).when(helper).getChannelLogger();
     doReturn(syncContext).when(helper).getSynchronizationContext();
     doReturn(fakeClock.getScheduledExecutorService()).when(helper).getScheduledExecutorService();
     lbRegistry.register(fakeEdsLoadBlancerProvider);
@@ -157,21 +153,6 @@ public class CdsLoadBalancerTest {
   @Test
   public void canHandleEmptyAddressListFromNameResolution() {
     assertThat(cdsLoadBalancer.canHandleEmptyAddressListFromNameResolution()).isTrue();
-  }
-
-  @Test
-  public void invalidConfigType() {
-    ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
-        .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
-        .setAttributes(Attributes.newBuilder()
-            .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
-            .build())
-        .setLoadBalancingPolicyConfig(new Object())
-        .build();
-
-    cdsLoadBalancer.handleResolvedAddresses(resolvedAddresses);
-
-    verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
   }
 
   @Test
@@ -198,7 +179,6 @@ public class CdsLoadBalancerTest {
             .setClusterName("foo.googleapis.com")
             .setEdsServiceName("edsServiceFoo.googleapis.com")
             .setLbPolicy("round_robin")
-            .setEnableLrs(false)
             .build());
     verify(helper).updateBalancingState(eq(CONNECTING), any(SubchannelPicker.class));
 
@@ -230,7 +210,6 @@ public class CdsLoadBalancerTest {
             .setClusterName("foo.googleapis.com")
             .setEdsServiceName("edsServiceFoo.googleapis.com")
             .setLbPolicy("round_robin")
-            .setEnableLrs(false)
             .build());
 
     assertThat(edsLbHelpers).hasSize(1);
@@ -240,6 +219,7 @@ public class CdsLoadBalancerTest {
     ArgumentCaptor<ResolvedAddresses> resolvedAddressesCaptor1 = ArgumentCaptor.forClass(null);
     verify(edsLoadBalancer1).handleResolvedAddresses(resolvedAddressesCaptor1.capture());
     XdsConfig expectedXdsConfig = new XdsConfig(
+        "foo.googleapis.com",
         new LbConfig("round_robin", ImmutableMap.<String, Object>of()),
         null,
         "edsServiceFoo.googleapis.com",
@@ -264,7 +244,6 @@ public class CdsLoadBalancerTest {
 
     ArgumentCaptor<ClusterWatcher> clusterWatcherCaptor2 = ArgumentCaptor.forClass(null);
     verify(xdsClient).watchClusterData(eq("bar.googleapis.com"), clusterWatcherCaptor2.capture());
-    verify(xdsClient).cancelClusterDataWatch("foo.googleapis.com", clusterWatcher1);
 
     ClusterWatcher clusterWatcher2 = clusterWatcherCaptor2.getValue();
     clusterWatcher2.onClusterChanged(
@@ -272,7 +251,6 @@ public class CdsLoadBalancerTest {
             .setClusterName("bar.googleapis.com")
             .setEdsServiceName("edsServiceBar.googleapis.com")
             .setLbPolicy("round_robin")
-            .setEnableLrs(true)
             .setLrsServerName("lrsBar.googleapis.com")
             .build());
 
@@ -283,6 +261,7 @@ public class CdsLoadBalancerTest {
     ArgumentCaptor<ResolvedAddresses> resolvedAddressesCaptor2 = ArgumentCaptor.forClass(null);
     verify(edsLoadBalancer2).handleResolvedAddresses(resolvedAddressesCaptor2.capture());
     expectedXdsConfig = new XdsConfig(
+        "bar.googleapis.com",
         new LbConfig("round_robin", ImmutableMap.<String, Object>of()),
         null,
         "edsServiceBar.googleapis.com",
@@ -301,16 +280,17 @@ public class CdsLoadBalancerTest {
     edsLbHelper2.updateBalancingState(ConnectivityState.READY, picker2);
     verify(helper).updateBalancingState(ConnectivityState.READY, picker2);
     verify(edsLoadBalancer1).shutdown();
+    verify(xdsClient).cancelClusterDataWatch("foo.googleapis.com", clusterWatcher1);
 
     clusterWatcher2.onClusterChanged(
         ClusterUpdate.newBuilder()
             .setClusterName("bar.googleapis.com")
             .setEdsServiceName("edsServiceBar2.googleapis.com")
             .setLbPolicy("round_robin")
-            .setEnableLrs(false)
             .build());
     verify(edsLoadBalancer2, times(2)).handleResolvedAddresses(resolvedAddressesCaptor2.capture());
     expectedXdsConfig = new XdsConfig(
+        "bar.googleapis.com",
         new LbConfig("round_robin", ImmutableMap.<String, Object>of()),
         null,
         "edsServiceBar2.googleapis.com",
@@ -358,7 +338,6 @@ public class CdsLoadBalancerTest {
             .setClusterName("foo.googleapis.com")
             .setEdsServiceName("edsServiceFoo.googleapis.com")
             .setLbPolicy("round_robin")
-            .setEnableLrs(false)
             .setUpstreamTlsContext(upstreamTlsContext)
             .build());
 
@@ -391,7 +370,6 @@ public class CdsLoadBalancerTest {
             .setClusterName("bar.googleapis.com")
             .setEdsServiceName("eds1ServiceFoo.googleapis.com")
             .setLbPolicy("round_robin")
-            .setEnableLrs(false)
             .setUpstreamTlsContext(upstreamTlsContext)
             .build());
 
@@ -416,7 +394,6 @@ public class CdsLoadBalancerTest {
             .setClusterName("bar.googleapis.com")
             .setEdsServiceName("eds1ServiceFoo.googleapis.com")
             .setLbPolicy("round_robin")
-            .setEnableLrs(false)
             .setUpstreamTlsContext(upstreamTlsContext1)
             .build());
 
@@ -436,7 +413,6 @@ public class CdsLoadBalancerTest {
             .setClusterName("bar.googleapis.com")
             .setEdsServiceName("eds1ServiceFoo.googleapis.com")
             .setLbPolicy("round_robin")
-            .setEnableLrs(false)
             .setUpstreamTlsContext(null)
             .build());
     verify(mockTlsContextManager).releaseClientSslContextProvider(same(mockSslContextProvider1));
@@ -501,7 +477,6 @@ public class CdsLoadBalancerTest {
             .setClusterName("foo.googleapis.com")
             .setEdsServiceName("edsServiceFoo.googleapis.com")
             .setLbPolicy("round_robin")
-            .setEnableLrs(false)
             .build());
 
     assertThat(edsLbHelpers).hasSize(1);
@@ -542,7 +517,6 @@ public class CdsLoadBalancerTest {
             .setClusterName("foo.googleapis.com")
             .setEdsServiceName("edsServiceFoo.googleapis.com")
             .setLbPolicy("round_robin")
-            .setEnableLrs(false)
             .build());
 
     ArgumentCaptor<EndpointWatcher> endpointWatcherCaptor = ArgumentCaptor.forClass(null);

@@ -29,9 +29,10 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import com.google.common.util.concurrent.MoreExecutors;
+import com.google.protobuf.Struct;
+import com.google.protobuf.Value;
 import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.api.v2.core.Locality;
 import io.envoyproxy.envoy.api.v2.core.Node;
@@ -43,6 +44,7 @@ import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsRequest;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsResponse;
 import io.grpc.Context;
 import io.grpc.Context.CancellationListener;
+import io.grpc.InternalLogId;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
@@ -54,12 +56,14 @@ import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.LoadReportClient.LoadReportCallback;
 import java.util.ArrayDeque;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -74,19 +78,27 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 /**
- * Unit tests for {@link LoadReportClientImpl}.
+ * Unit tests for {@link LoadReportClient}.
  */
 @RunWith(JUnit4.class)
-public class LoadReportClientImplTest {
-
-  private static final String CLUSTER_NAME = "foo.blade.googleapis.com";
-  private static final Node NODE = Node.newBuilder().setId("LRS test").build();
+public class LoadReportClientTest {
+  private static final String TARGET_NAME = "lrs-test.example.com";
+  // bootstrap node identifier
+  private static final Node NODE =
+      Node.newBuilder()
+          .setId("LRS test")
+          .setMetadata(
+              Struct.newBuilder()
+                  .putFields(
+                      "TRAFFICDIRECTOR_NETWORK_HOSTNAME",
+                      Value.newBuilder().setStringValue("default").build()))
+          .build();
   private static final FakeClock.TaskFilter LOAD_REPORTING_TASK_FILTER =
       new FakeClock.TaskFilter() {
         @Override
         public boolean shouldAccept(Runnable command) {
           return command.toString()
-              .contains(LoadReportClientImpl.LoadReportingTask.class.getSimpleName());
+              .contains(LoadReportClient.LoadReportingTask.class.getSimpleName());
         }
       };
   private static final FakeClock.TaskFilter LRS_RPC_RETRY_TASK_FILTER =
@@ -94,14 +106,9 @@ public class LoadReportClientImplTest {
         @Override
         public boolean shouldAccept(Runnable command) {
           return command.toString()
-              .contains(LoadReportClientImpl.LrsRpcRetryTask.class.getSimpleName());
+              .contains(LoadReportClient.LrsRpcRetryTask.class.getSimpleName());
         }
       };
-  private static final LoadStatsRequest EXPECTED_INITIAL_REQ =
-      LoadStatsRequest.newBuilder()
-          .setNode(NODE)
-          .addClusterStats(ClusterStats.newBuilder().setClusterName(CLUSTER_NAME))
-          .build();
 
   @Rule
   public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
@@ -112,6 +119,7 @@ public class LoadReportClientImplTest {
           throw new AssertionError(e);
         }
       });
+  private final InternalLogId logId = InternalLogId.allocate("lrs-client-test", null);
   private final FakeClock fakeClock = new FakeClock();
   private final ArrayDeque<StreamObserver<LoadStatsRequest>> lrsRequestObservers =
       new ArrayDeque<>();
@@ -134,7 +142,7 @@ public class LoadReportClientImplTest {
 
   private LoadReportingServiceGrpc.LoadReportingServiceImplBase mockLoadReportingService;
   private ManagedChannel channel;
-  private LoadReportClientImpl lrsClient;
+  private LoadReportClient lrsClient;
 
   @SuppressWarnings("unchecked")
   @Before
@@ -172,10 +180,12 @@ public class LoadReportClientImplTest {
     when(backoffPolicy2.nextBackoffNanos())
         .thenReturn(TimeUnit.SECONDS.toNanos(1L), TimeUnit.SECONDS.toNanos(10L));
     lrsClient =
-        new LoadReportClientImpl(
+        new LoadReportClient(
+            logId,
+            TARGET_NAME,
             channel,
-            CLUSTER_NAME,
-            NODE, syncContext,
+            NODE,
+            syncContext,
             fakeClock.getScheduledExecutorService(),
             backoffPolicyProvider,
             fakeClock.getStopwatchSupplier());
@@ -194,17 +204,20 @@ public class LoadReportClientImplTest {
     StreamObserver<LoadStatsResponse> responseObserver = lrsResponseObserverCaptor.getValue();
     StreamObserver<LoadStatsRequest> requestObserver =
         Iterables.getOnlyElement(lrsRequestObservers);
-    InOrder inOrder = inOrder(requestObserver);
-    inOrder.verify(requestObserver).onNext(EXPECTED_INITIAL_REQ);
+    InOrder inOrder = inOrder(requestObserver, callback);
+    inOrder.verify(requestObserver).onNext(eq(buildInitialRequest()));
 
-    String service1 = "namespace-foo:service-blade";
-    ClusterStats rawStats1 = generateServiceLoadStats();
+    String cluster1 = "cluster-foo.googleapis.com";
+    ClusterStats rawStats1 = generateClusterLoadStats(cluster1, null);
     when(loadStatsStore1.generateLoadReport()).thenReturn(rawStats1);
-    lrsClient.addLoadStatsStore(service1, loadStatsStore1);
-    responseObserver.onNext(buildLrsResponse(ImmutableList.of(service1), 1000));
+    lrsClient.addLoadStatsStore(cluster1, null, loadStatsStore1);
+
+    // Management server asks to report loads for cluster1.
+    responseObserver.onNext(buildLrsResponse(ImmutableList.of(cluster1), 1000));
+    inOrder.verify(callback).onReportResponse(1000);
 
     ArgumentMatcher<LoadStatsRequest> expectedLoadReportMatcher =
-        new LoadStatsRequestMatcher(ImmutableMap.of(service1, rawStats1), 1000);
+        new LoadStatsRequestMatcher(ImmutableList.of(rawStats1), 1000);
     fakeClock.forwardNanos(999);
     inOrder.verifyNoMoreInteractions();
     fakeClock.forwardNanos(1);
@@ -213,45 +226,49 @@ public class LoadReportClientImplTest {
     fakeClock.forwardNanos(1000);
     inOrder.verify(requestObserver).onNext(argThat(expectedLoadReportMatcher));
 
-    // Management server updates the interval of sending load reports.
-    responseObserver.onNext(buildLrsResponse(ImmutableList.of(service1), 2000));
+    String cluster2 = "cluster-bar.googleapis.com";
+    ClusterStats rawStats2 = generateClusterLoadStats(cluster2, null);
+    when(loadStatsStore2.generateLoadReport()).thenReturn(rawStats2);
+    lrsClient.addLoadStatsStore(cluster2, null, loadStatsStore2);
+
+    // Management server updates the interval of sending load reports, while still asking for
+    // loads to cluster1 only.
+    responseObserver.onNext(buildLrsResponse(ImmutableList.of(cluster1), 2000));
+    inOrder.verify(callback).onReportResponse(2000);
 
     fakeClock.forwardNanos(1000);
     inOrder.verifyNoMoreInteractions();
 
     fakeClock.forwardNanos(1000);
     inOrder.verify(requestObserver)
-        .onNext(argThat(new LoadStatsRequestMatcher(ImmutableMap.of(service1, rawStats1), 2000)));
+        .onNext(argThat(new LoadStatsRequestMatcher(ImmutableList.of(rawStats1), 2000)));
 
-    String service2 = "namespace-bar:service-baz";
-    ClusterStats rawStats2 = generateServiceLoadStats();
-    when(loadStatsStore2.generateLoadReport()).thenReturn(rawStats2);
-    lrsClient.addLoadStatsStore(service2, loadStatsStore2);
-
-    // Management server asks to report loads for an extra cluster service.
-    responseObserver.onNext(buildLrsResponse(ImmutableList.of(service1, service2), 2000));
+    // Management server asks to report loads for cluster1 and cluster2.
+    responseObserver.onNext(buildLrsResponse(ImmutableList.of(cluster1, cluster2), 2000));
 
     fakeClock.forwardNanos(2000);
     inOrder.verify(requestObserver)
         .onNext(
             argThat(
-                new LoadStatsRequestMatcher(
-                    ImmutableMap.of(service1, rawStats1, service2, rawStats2), 2000)));
+                new LoadStatsRequestMatcher(ImmutableList.of(rawStats1, rawStats2), 2000)));
 
-    // Load reports for one of existing service is no longer wanted.
-    responseObserver.onNext(buildLrsResponse(ImmutableList.of(service2), 2000));
+    // Load reports for cluster1 is no longer wanted.
+    responseObserver.onNext(buildLrsResponse(ImmutableList.of(cluster2), 2000));
 
     fakeClock.forwardNanos(2000);
     inOrder.verify(requestObserver)
-        .onNext(argThat(new LoadStatsRequestMatcher(ImmutableMap.of(service2, rawStats2), 2000)));
+        .onNext(argThat(new LoadStatsRequestMatcher(ImmutableList.of(rawStats2), 2000)));
 
-    // Management server asks loads for a cluster service that client has no load data.
-    responseObserver.onNext(buildLrsResponse(ImmutableList.of("namespace-ham:service-spam"), 2000));
+    // Management server asks loads for a cluster that client has no load data.
+    responseObserver
+        .onNext(buildLrsResponse(ImmutableList.of("cluster-unknown.googleapis.com"), 2000));
 
     fakeClock.forwardNanos(2000);
     ArgumentCaptor<LoadStatsRequest> reportCaptor = ArgumentCaptor.forClass(null);
     inOrder.verify(requestObserver).onNext(reportCaptor.capture());
     assertThat(reportCaptor.getValue().getClusterStatsCount()).isEqualTo(0);
+
+    inOrder.verifyNoMoreInteractions();
   }
 
   @Test
@@ -263,8 +280,14 @@ public class LoadReportClientImplTest {
     assertThat(lrsRequestObservers).hasSize(1);
     StreamObserver<LoadStatsRequest> requestObserver = lrsRequestObservers.poll();
 
+    String clusterName = "cluster-foo.googleapis.com";
+    String clusterServiceName = "service-blade.googleapis.com";
+    ClusterStats stats = generateClusterLoadStats(clusterName, clusterServiceName);
+    when(loadStatsStore1.generateLoadReport()).thenReturn(stats);
+    lrsClient.addLoadStatsStore(clusterName, null, loadStatsStore1);
+
     // First balancer RPC
-    verify(requestObserver).onNext(EXPECTED_INITIAL_REQ);
+    verify(requestObserver).onNext(eq(buildInitialRequest()));
     assertEquals(0, fakeClock.numPendingTasks(LRS_RPC_RETRY_TASK_FILTER));
 
     // Balancer closes it immediately (erroneously)
@@ -284,7 +307,7 @@ public class LoadReportClientImplTest {
     responseObserver = lrsResponseObserverCaptor.getValue();
     assertThat(lrsRequestObservers).hasSize(1);
     requestObserver = lrsRequestObservers.poll();
-    verify(requestObserver).onNext(eq(EXPECTED_INITIAL_REQ));
+    verify(requestObserver).onNext(eq(buildInitialRequest()));
     assertEquals(0, fakeClock.numPendingTasks(LRS_RPC_RETRY_TASK_FILTER));
 
     // Balancer closes it with an error.
@@ -303,13 +326,12 @@ public class LoadReportClientImplTest {
     responseObserver = lrsResponseObserverCaptor.getValue();
     assertThat(lrsRequestObservers).hasSize(1);
     requestObserver = lrsRequestObservers.poll();
-    verify(requestObserver).onNext(eq(EXPECTED_INITIAL_REQ));
+    verify(requestObserver).onNext(eq(buildInitialRequest()));
     assertEquals(0, fakeClock.numPendingTasks(LRS_RPC_RETRY_TASK_FILTER));
 
-    // Balancer sends a response asking for loads of some cluster service.
-    String serviceName = "namespace-foo:service-blade";
+    // Balancer sends a response asking for loads of the cluster.
     responseObserver
-        .onNext(buildLrsResponse(ImmutableList.of(serviceName), 0));
+        .onNext(buildLrsResponse(ImmutableList.of(clusterName), 0));
 
     // Then breaks the RPC
     responseObserver.onError(Status.UNAVAILABLE.asException());
@@ -320,7 +342,7 @@ public class LoadReportClientImplTest {
     responseObserver = lrsResponseObserverCaptor.getValue();
     assertThat(lrsRequestObservers).hasSize(1);
     requestObserver = lrsRequestObservers.poll();
-    verify(requestObserver).onNext(eq(EXPECTED_INITIAL_REQ));
+    verify(requestObserver).onNext(eq(buildInitialRequest()));
 
     // Fail the retry after spending 4ns
     fakeClock.forwardNanos(4);
@@ -338,19 +360,16 @@ public class LoadReportClientImplTest {
     inOrder.verify(mockLoadReportingService).streamLoadStats(lrsResponseObserverCaptor.capture());
     assertThat(lrsRequestObservers).hasSize(1);
     requestObserver = lrsRequestObservers.poll();
-    verify(requestObserver).onNext(eq(EXPECTED_INITIAL_REQ));
+    verify(requestObserver).onNext(eq(buildInitialRequest()));
     assertEquals(0, fakeClock.numPendingTasks(LRS_RPC_RETRY_TASK_FILTER));
 
     // Load reporting back to normal.
     responseObserver = lrsResponseObserverCaptor.getValue();
-    ClusterStats stats = generateServiceLoadStats();
-    when(loadStatsStore1.generateLoadReport()).thenReturn(stats);
-    lrsClient.addLoadStatsStore(serviceName, loadStatsStore1);
     responseObserver
-        .onNext(buildLrsResponse(ImmutableList.of(serviceName), 10));
+        .onNext(buildLrsResponse(ImmutableList.of(clusterName), 10));
     fakeClock.forwardNanos(10);
     verify(requestObserver)
-        .onNext(argThat(new LoadStatsRequestMatcher(ImmutableMap.of(serviceName, stats), 10)));
+        .onNext(argThat(new LoadStatsRequestMatcher(ImmutableList.of(stats), 10)));
 
     // Wrapping up
     verify(backoffPolicyProvider, times(2)).get();
@@ -365,8 +384,14 @@ public class LoadReportClientImplTest {
     assertThat(lrsRequestObservers).hasSize(1);
     StreamObserver<LoadStatsRequest> requestObserver = lrsRequestObservers.poll();
 
+    String clusterName = "cluster-foo.googleapis.com";
+    String clusterServiceName = "service-blade.googleapis.com";
+    ClusterStats stats = generateClusterLoadStats(clusterName, clusterServiceName);
+    when(loadStatsStore1.generateLoadReport()).thenReturn(stats);
+    lrsClient.addLoadStatsStore(clusterName, null, loadStatsStore1);
+
     // First balancer RPC
-    verify(requestObserver).onNext(EXPECTED_INITIAL_REQ);
+    verify(requestObserver).onNext(eq(buildInitialRequest()));
     assertEquals(0, fakeClock.numPendingTasks(LRS_RPC_RETRY_TASK_FILTER));
 
     // Simulate receiving a response from traffic director.
@@ -394,19 +419,37 @@ public class LoadReportClientImplTest {
   }
 
   private static LoadStatsResponse buildLrsResponse(
-      List<String> clusterServiceNames, long loadReportIntervalNanos) {
+      List<String> clusterNames, long loadReportIntervalNanos) {
     return
         LoadStatsResponse
             .newBuilder()
-            .addAllClusters(clusterServiceNames)
+            .addAllClusters(clusterNames)
             .setLoadReportingInterval(Durations.fromNanos(loadReportIntervalNanos))
+            .build();
+  }
+
+  private static LoadStatsRequest buildInitialRequest() {
+    return
+        LoadStatsRequest.newBuilder()
+            .setNode(
+                Node.newBuilder()
+                    .setId("LRS test")
+                    .setMetadata(
+                        Struct.newBuilder()
+                            .putFields(
+                                "TRAFFICDIRECTOR_NETWORK_HOSTNAME",
+                                Value.newBuilder().setStringValue("default").build())
+                            .putFields(
+                                LoadReportClient.TARGET_NAME_METADATA_KEY,
+                                Value.newBuilder().setStringValue(TARGET_NAME).build())))
             .build();
   }
 
   /**
    * Generates a raw service load stats report with random data.
    */
-  private static ClusterStats generateServiceLoadStats() {
+  private static ClusterStats generateClusterLoadStats(
+      String clusterName, @Nullable String clusterServiceName) {
     long callsInProgress = ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
     long callsSucceeded = ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
     long callsFailed = ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
@@ -414,52 +457,57 @@ public class LoadReportClientImplTest {
     long numLbDrops = ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
     long numThrottleDrops = ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
 
-    return
-        ClusterStats.newBuilder()
-            .addUpstreamLocalityStats(
-                UpstreamLocalityStats.newBuilder()
-                    .setLocality(
-                        Locality.newBuilder()
-                            .setRegion("region-foo")
-                            .setZone("zone-bar")
-                            .setSubZone("subzone-baz"))
-                    .setTotalRequestsInProgress(callsInProgress)
-                    .setTotalSuccessfulRequests(callsSucceeded)
-                    .setTotalErrorRequests(callsFailed)
-                    .setTotalIssuedRequests(callsIssued))
-            .addDroppedRequests(
-                DroppedRequests.newBuilder()
-                    .setCategory("lb")
-                    .setDroppedCount(numLbDrops))
-            .addDroppedRequests(
-                DroppedRequests.newBuilder()
-                    .setCategory("throttle")
-                    .setDroppedCount(numThrottleDrops))
-            .setTotalDroppedRequests(numLbDrops + numThrottleDrops)
-            .build();
+    ClusterStats.Builder clusterStatsBuilder = ClusterStats.newBuilder();
+    clusterStatsBuilder.setClusterName(clusterName);
+    if (clusterServiceName != null) {
+      clusterStatsBuilder.setClusterServiceName(clusterServiceName);
+    }
+    clusterStatsBuilder.addUpstreamLocalityStats(
+        UpstreamLocalityStats.newBuilder()
+            .setLocality(
+                Locality.newBuilder()
+                    .setRegion("region-foo")
+                    .setZone("zone-bar")
+                    .setSubZone("subzone-baz"))
+            .setTotalRequestsInProgress(callsInProgress)
+            .setTotalSuccessfulRequests(callsSucceeded)
+            .setTotalErrorRequests(callsFailed)
+            .setTotalIssuedRequests(callsIssued))
+        .addDroppedRequests(
+            DroppedRequests.newBuilder()
+                .setCategory("lb")
+                .setDroppedCount(numLbDrops))
+        .addDroppedRequests(
+            DroppedRequests.newBuilder()
+                .setCategory("throttle")
+                .setDroppedCount(numThrottleDrops))
+        .setTotalDroppedRequests(numLbDrops + numThrottleDrops);
+    return clusterStatsBuilder.build();
   }
 
   /**
-   * For comparing LoadStatsRequest based on a collection of raw service load stats.
+   * For comparing LoadStatsRequest stats data regardless of .
    */
   private static class LoadStatsRequestMatcher implements ArgumentMatcher<LoadStatsRequest> {
     private final Map<String, ClusterStats> expectedStats = new HashMap<>();
 
-    LoadStatsRequestMatcher(Map<String, ClusterStats> serviceStats, long expectedIntervalNano) {
-      for (String serviceName : serviceStats.keySet()) {
-        // TODO(chengyuanzhang): the field to be populated should be cluster_service_name.
+    LoadStatsRequestMatcher(Collection<ClusterStats> clusterStats, long expectedIntervalNano) {
+      for (ClusterStats stats : clusterStats) {
         ClusterStats statsWithInterval =
-            serviceStats.get(serviceName)
-                .toBuilder()
-                .setClusterName(serviceName)
+            stats.toBuilder()
                 .setLoadReportInterval(Durations.fromNanos(expectedIntervalNano))
                 .build();
-        expectedStats.put(serviceName, statsWithInterval);
+        expectedStats.put(statsWithInterval.getClusterName(), statsWithInterval);
       }
     }
 
     @Override
     public boolean matches(LoadStatsRequest argument) {
+      if (!argument.getNode().getMetadata()
+          .getFieldsOrThrow(LoadReportClient.TARGET_NAME_METADATA_KEY)
+          .getStringValue().equals(TARGET_NAME)) {
+        return false;
+      }
       if (argument.getClusterStatsCount() != expectedStats.size()) {
         return false;
       }
