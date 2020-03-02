@@ -22,7 +22,6 @@ dependencies {
     compile project(':grpc-protobuf'),
             project(':grpc-stub'),
             project(':grpc-core'),
-            project(':grpc-netty'),
             project(':grpc-services'),
             project(path: ':grpc-alts', configuration: 'shadow')
     
@@ -36,7 +35,8 @@ dependencies {
         exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
     }
 
-    testCompile project(':grpc-core').sourceSets.test.output
+    testCompile project(':grpc-core').sourceSets.test.output,
+            project(':grpc-netty')
 
     compileOnly libraries.javax_annotation,
             // At runtime use the epoll included in grpc-netty-shaded
@@ -47,7 +47,11 @@ dependencies {
             libraries.guava_testlib,
             libraries.netty_epoll
 
+    // Use grpc-netty-shaded for transitive dependency.
+    compileOnly project(':grpc-netty')
     shadow project(path: ':grpc-netty-shaded', configuration: 'shadow')
+    shadow configurations.compile.getDependencies()
+    
     signature "org.codehaus.mojo.signature:java17:1.0@signature"
     testRuntime libraries.netty_tcnative
 }
@@ -91,14 +95,16 @@ publishing {
             artifacts.removeAll { it.classifier == 'original' }
 
             pom.withXml {
-                // Swap our dependency to grpc-netty-shaded. Projects depending on this via
-                // project(':grpc-xds') will still be using the non-shaded form.
-                asNode().dependencies.'*'.findAll() { dep ->
-                    dep.artifactId.text() == 'grpc-netty'
-                }.each() { netty ->
-                    netty.artifactId*.value = 'grpc-netty-shaded'
-                    netty.version*.value = "[" + netty.version.text() + "]"
+                def dependenciesNode = new Node(null, 'dependencies')
+                project.configurations.shadow.allDependencies.each { dep ->
+                    def dependencyNode = dependenciesNode.appendNode('dependency')
+                    dependencyNode.appendNode('groupId', dep.group)
+                    dependencyNode.appendNode('artifactId', dep.name)
+                    def version = (dep.name == 'grpc-netty-shaded') ? '[' + dep.version + ']' : dep.version
+                    dependencyNode.appendNode('version', version)
+                    dependencyNode.appendNode('scope', 'compile')
                 }
+                asNode().dependencies[0].replaceNode(dependenciesNode)
             }
         }
     }
