@@ -76,7 +76,6 @@ import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
-import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.JsonParser;
 import io.grpc.lb.v1.ClientStats;
 import io.grpc.lb.v1.ClientStatsPerToken;
@@ -142,7 +141,7 @@ public class GrpclbLoadBalancerTest {
         }
       };
   private static final Attributes LB_BACKEND_ATTRS =
-      Attributes.newBuilder().set(GrpcAttributes.ATTR_LB_PROVIDED_BACKEND, true).build();
+      Attributes.newBuilder().set(GrpclbConstants.ATTR_LB_PROVIDED_BACKEND, true).build();
 
   @Mock
   private Helper helper;

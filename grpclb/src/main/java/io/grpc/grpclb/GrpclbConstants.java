@@ -56,5 +56,13 @@ public final class GrpclbConstants {
   public static final Attributes.Key<String> ATTR_LB_ADDR_AUTHORITY =
       Attributes.Key.create("io.grpc.grpclb.lbAddrAuthority");
 
+  /**
+   * Whether this EquivalentAddressGroup was provided by a GRPCLB server. It would be rare for this
+   * value to be {@code false}; generally it would be better to not have the key present at all.
+   */
+  @EquivalentAddressGroup.Attr
+  public static final Attributes.Key<Boolean> ATTR_LB_PROVIDED_BACKEND =
+      Attributes.Key.create("io.grpc.grpclb.lbProvidedBackend");
+
   private GrpclbConstants() { }
 }
