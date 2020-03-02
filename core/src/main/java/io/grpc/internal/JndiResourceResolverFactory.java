@@ -19,14 +19,8 @@ package io.grpc.internal;
 import android.annotation.SuppressLint;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Verify;
-import io.grpc.Attributes;
-import io.grpc.EquivalentAddressGroup;
-import io.grpc.internal.DnsNameResolver.AddressResolver;
 import io.grpc.internal.DnsNameResolver.ResourceResolver;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
-import java.net.SocketAddress;
-import java.net.UnknownHostException;
+import io.grpc.internal.DnsNameResolver.SrvRecord;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -129,82 +123,42 @@ final class JndiResourceResolverFactory implements DnsNameResolver.ResourceResol
       return Collections.unmodifiableList(serviceConfigTxtRecords);
     }
 
-    @SuppressWarnings("deprecation")
     @Override
-    public List<EquivalentAddressGroup> resolveSrv(
-        AddressResolver addressResolver, String grpclbHostname) throws Exception {
+    public List<SrvRecord> resolveSrv(String host) throws Exception {
       if (logger.isLoggable(Level.FINER)) {
         logger.log(
-            Level.FINER, "About to query SRV records for {0}", new Object[]{grpclbHostname});
+            Level.FINER, "About to query SRV records for {0}", new Object[]{host});
       }
-      List<String> grpclbSrvRecords =
-          recordFetcher.getAllRecords("SRV", "dns:///" + grpclbHostname);
+      List<String> rawSrvRecords =
+          recordFetcher.getAllRecords("SRV", "dns:///" + host);
       if (logger.isLoggable(Level.FINER)) {
         logger.log(
-            Level.FINER, "Found {0} SRV records", new Object[]{grpclbSrvRecords.size()});
+            Level.FINER, "Found {0} SRV records", new Object[]{rawSrvRecords.size()});
       }
-      List<EquivalentAddressGroup> balancerAddresses =
-          new ArrayList<>(grpclbSrvRecords.size());
+      List<SrvRecord> srvRecords = new ArrayList<>(rawSrvRecords.size());
       Exception first = null;
       Level level = Level.WARNING;
-      for (String srvRecord : grpclbSrvRecords) {
+      for (String rawSrv : rawSrvRecords) {
         try {
-          SrvRecord record = parseSrvRecord(srvRecord);
+          String[] parts = whitespace.split(rawSrv);
+          Verify.verify(parts.length == 4, "Bad SRV Record: %s", rawSrv);
           // SRV requires the host name to be absolute
-          if (!record.host.endsWith(".")) {
-            throw new RuntimeException("Returned SRV host does not end in period: " + record.host);
+          if (!parts[3].endsWith(".")) {
+            throw new RuntimeException("Returned SRV host does not end in period: " + parts[3]);
           }
-
-          // Strip trailing dot for appearance's sake. It _should_ be fine either way, but most
-          // people expect to see it without the dot.
-          String authority = record.host.substring(0, record.host.length() - 1);
-          // But we want to use the trailing dot for the IP lookup. The dot makes the name absolute
-          // instead of relative and so will avoid the search list like that in resolv.conf.
-          List<? extends InetAddress> addrs = addressResolver.resolveAddress(record.host);
-          List<SocketAddress> sockaddrs = new ArrayList<>(addrs.size());
-          for (InetAddress addr : addrs) {
-            sockaddrs.add(new InetSocketAddress(addr, record.port));
-          }
-          Attributes attrs = Attributes.newBuilder()
-              .set(GrpcAttributes.ATTR_LB_ADDR_AUTHORITY, authority)
-              .build();
-          balancerAddresses.add(
-              new EquivalentAddressGroup(Collections.unmodifiableList(sockaddrs), attrs));
-        } catch (UnknownHostException e) {
-          logger.log(level, "Can't find address for SRV record " + srvRecord, e);
-          // TODO(carl-mastrangelo): these should be added by addSuppressed when we have Java 7.
-          if (first == null) {
-            first = e;
-            level = Level.FINE;
-          }
+          srvRecords.add(new SrvRecord(parts[3], Integer.parseInt(parts[2])));
         } catch (RuntimeException e) {
-          logger.log(level, "Failed to construct SRV record " + srvRecord, e);
+          logger.log(level, "Failed to construct SRV record " + rawSrv, e);
           if (first == null) {
             first = e;
             level = Level.FINE;
           }
         }
       }
-      if (balancerAddresses.isEmpty() && first != null) {
+      if (srvRecords.isEmpty() && first != null) {
         throw first;
       }
-      return Collections.unmodifiableList(balancerAddresses);
-    }
-
-    private static final class SrvRecord {
-      SrvRecord(String host, int port) {
-        this.host = host;
-        this.port = port;
-      }
-
-      final String host;
-      final int port;
-    }
-
-    private static SrvRecord parseSrvRecord(String rawRecord) {
-      String[] parts = whitespace.split(rawRecord);
-      Verify.verify(parts.length == 4, "Bad SRV Record: %s", rawRecord);
-      return new SrvRecord(parts[3], Integer.parseInt(parts[2]));
+      return Collections.unmodifiableList(srvRecords);
     }
 
     /**

@@ -19,24 +19,12 @@ package io.grpc.internal;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.Grpc;
-import io.grpc.NameResolver;
 import io.grpc.SecurityLevel;
-import java.util.List;
 
 /**
  * Special attributes that are only useful to gRPC.
  */
 public final class GrpcAttributes {
-  /**
-   * Attribute key for gRPC LB server addresses.
-   *
-   * <p>Deprecated: this will be used for grpclb specific logic, which will be moved out of core.
-   */
-  @Deprecated
-  @NameResolver.ResolutionResultAttr
-  public static final Attributes.Key<List<EquivalentAddressGroup>> ATTR_LB_ADDRS =
-      Attributes.Key.create("io.grpc.grpclb.lbAddrs");
-
   /**
    * The naming authority of a gRPC LB server address.  It is an address-group-level attribute,
    * present when the address group is a LoadBalancer.
