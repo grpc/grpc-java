@@ -50,9 +50,7 @@ dependencies {
     compile project(":grpc-okhttp")
     compile project(":grpc-protobuf")
     compile project(":grpc-stub")
-    compile (project(":grpc-interop-testing")) {
-        exclude group: "io.grpc", module: "grpc-netty-shaded"
-    }
+    compile project(":grpc-interop-testing")
     compile libraries.netty_tcnative
 }
 

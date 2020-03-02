@@ -38,7 +38,6 @@ dependencies {
             libraries.truth
     testRuntime libraries.netty_tcnative,
             libraries.netty_epoll
-    shadow project(path: ':grpc-netty-shaded', configuration: 'shadow')
     signature 'org.codehaus.mojo.signature:java17:1.0@signature'
 }
 

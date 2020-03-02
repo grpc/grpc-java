@@ -16,7 +16,7 @@ configurations {
 evaluationDependsOn(project(':grpc-context').path)
 
 dependencies {
-    compile project(path: ':grpc-alts', configuration: 'shadow'),
+    compile project(':grpc-alts'),
             project(':grpc-auth'),
             project(':grpc-census'),
             project(':grpc-core'),
@@ -113,13 +113,21 @@ task grpclb_long_lived_affinity_test_client(type: CreateStartScripts) {
 }
 
 task xds_test_client(type: CreateStartScripts) {
+    // Use task dependsOn instead of depending on project(':grpc-xds') in configurations because
+    // grpc-xds is not published yet and we don't want grpc-interop-testin to depend on it in maven.
+    dependsOn ':grpc-xds:shadowJar'
+    // Add all other dependencies that grpc-xds needs.
+    dependencies { compile project(':grpc-services'), libraries.netty_epoll }
     mainClassName = "io.grpc.testing.integration.XdsTestClient"
     applicationName = "xds-test-client"
-    dependencies {
-        runtime project(path: ':grpc-xds', configuration: 'shadow')
-    }
     outputDir = new File(project.buildDir, 'tmp')
-    classpath = startScripts.classpath
+    classpath = startScripts.classpath + fileTree("${project(':grpc-xds').buildDir}/libs")
+    doLast {
+        unixScript.text = unixScript.text.replace(
+                '\$APP_HOME/lib/grpc-xds', "${project(':grpc-xds').buildDir}/libs/grpc-xds")
+        windowsScript.text = windowsScript.text.replace(
+                '%APP_HOME%\\lib\\grpc-xds', "${project(':grpc-xds').buildDir}\\libs\\grpc-xds")
+    }
 }
 
 task xds_test_server(type: CreateStartScripts) {
