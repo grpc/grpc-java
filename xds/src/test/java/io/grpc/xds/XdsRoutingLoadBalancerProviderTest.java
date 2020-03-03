@@ -27,10 +27,11 @@ import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.internal.JsonParser;
-import io.grpc.xds.XdsRoutingLoadBalancerProvider.ChildConfig;
+import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.xds.XdsRoutingLoadBalancerProvider.MethodName;
 import io.grpc.xds.XdsRoutingLoadBalancerProvider.Route;
 import io.grpc.xds.XdsRoutingLoadBalancerProvider.XdsRoutingConfig;
+import java.util.HashMap;
 import java.util.Map;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -140,7 +141,10 @@ public class XdsRoutingLoadBalancerProviderTest {
                     new Route("action_foo", new MethodName("service_foo", "method_foo")),
                     new Route("action_bar", new MethodName("", ""))),
                 ImmutableMap.of(
-                    "action_foo", new ChildConfig("foo_policy", fooConfig),
-                    "action_bar", new ChildConfig("bar_policy", barConfig)))));
+                    "action_foo",
+                    new PolicySelection(lbProviderFoo, new HashMap<String, Object>(), fooConfig),
+                    "action_bar",
+                    new PolicySelection(
+                        lbProviderBar, new HashMap<String, Object>(), barConfig)))));
   }
 }
