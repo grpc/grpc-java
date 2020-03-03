@@ -25,6 +25,7 @@ import io.envoyproxy.envoy.api.v2.core.Locality;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.grpc.Internal;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.GrpcUtil.GrpcBuildVersion;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.JsonUtil;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
@@ -47,6 +48,9 @@ public abstract class Bootstrapper {
 
   private static final String LOG_PREFIX = "xds-bootstrap";
   private static final String BOOTSTRAP_PATH_SYS_ENV_VAR = "GRPC_XDS_BOOTSTRAP";
+  @VisibleForTesting
+  static final String CLIENT_FEATURE_DISABLE_OVERPROVISIONING =
+      "envoy.lb.does_not_support_overprovisioning";
 
   private static final Bootstrapper DEFAULT_INSTANCE = new Bootstrapper() {
     @Override
@@ -74,6 +78,7 @@ public abstract class Bootstrapper {
   public abstract BootstrapInfo readBootstrap() throws IOException;
 
   @VisibleForTesting
+  @SuppressWarnings("deprecation")
   static BootstrapInfo parseConfig(String rawData) throws IOException {
     XdsLogger logger = XdsLogger.withPrefix(LOG_PREFIX);
     logger.log(XdsLogLevel.INFO, "Reading bootstrap information");
@@ -158,9 +163,12 @@ public abstract class Bootstrapper {
         nodeBuilder.setLocality(localityBuilder);
       }
     }
-    String buildVersion = GrpcUtil.getGrpcBuildVersion();
+    GrpcBuildVersion buildVersion = GrpcUtil.getGrpcBuildVersion();
     logger.log(XdsLogLevel.INFO, "Build version: {0}", buildVersion);
-    nodeBuilder.setBuildVersion(buildVersion);
+    nodeBuilder.setBuildVersion(buildVersion.toString());
+    nodeBuilder.setUserAgentName(buildVersion.getUserAgent());
+    nodeBuilder.setUserAgentVersion(buildVersion.getImplementationVersion());
+    nodeBuilder.addClientFeatures(CLIENT_FEATURE_DISABLE_OVERPROVISIONING);
 
     return new BootstrapInfo(servers, nodeBuilder.build());
   }

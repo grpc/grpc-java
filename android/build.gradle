@@ -24,11 +24,11 @@ apply plugin: "digital.wup.android-maven-publish"
 apply plugin: "signing"
 
 android {
-    compileSdkVersion 27
+    compileSdkVersion 28
     defaultConfig {
         consumerProguardFiles "proguard-rules.txt"
         minSdkVersion 14
-        targetSdkVersion 27
+        targetSdkVersion 28
         versionCode 1
         versionName "1.0"
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
@@ -51,8 +51,8 @@ dependencies {
 
     testImplementation 'io.grpc:grpc-okhttp:1.29.0-SNAPSHOT' // CURRENT_GRPC_VERSION
     testImplementation 'junit:junit:4.12'
-    testImplementation 'org.robolectric:robolectric:3.7.1'
-    testImplementation 'com.google.truth:truth:1.0'
+    testImplementation 'org.robolectric:robolectric:4.3.1'
+    testImplementation 'com.google.truth:truth:1.0.1'
 }
 
 task javadocs(type: Javadoc) {

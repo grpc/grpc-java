@@ -93,6 +93,7 @@ public class SdsX509TrustManagerTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
   public void missingPeerCerts() throws CertificateException, FileNotFoundException {
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addVerifySubjectAltName("foo.com").build();
@@ -106,6 +107,7 @@ public class SdsX509TrustManagerTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
   public void emptyArrayPeerCerts() throws CertificateException, FileNotFoundException {
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addVerifySubjectAltName("foo.com").build();
@@ -119,6 +121,7 @@ public class SdsX509TrustManagerTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
   public void noSansInPeerCerts() throws CertificateException, IOException {
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addVerifySubjectAltName("foo.com").build();
@@ -134,6 +137,7 @@ public class SdsX509TrustManagerTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
   public void oneSanInPeerCertsVerifies() throws CertificateException, IOException {
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder()
@@ -146,6 +150,7 @@ public class SdsX509TrustManagerTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
   public void oneSanInPeerCertsVerifiesMultipleVerifySans()
       throws CertificateException, IOException {
     CertificateValidationContext certContext =
@@ -160,6 +165,7 @@ public class SdsX509TrustManagerTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
   public void oneSanInPeerCertsNotFoundException()
       throws CertificateException, IOException {
     CertificateValidationContext certContext =
@@ -176,6 +182,7 @@ public class SdsX509TrustManagerTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
   public void wildcardSanInPeerCertsVerifiesMultipleVerifySans()
       throws CertificateException, IOException {
     CertificateValidationContext certContext =
@@ -190,6 +197,7 @@ public class SdsX509TrustManagerTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
   public void wildcardSanInPeerCertsVerifiesMultipleVerifySans1()
       throws CertificateException, IOException {
     CertificateValidationContext certContext =
@@ -204,6 +212,7 @@ public class SdsX509TrustManagerTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
   public void wildcardSanInPeerCertsSubdomainMismatch()
       throws CertificateException, IOException {
     // 2. Asterisk (*) cannot match across domain name labels.
@@ -225,6 +234,7 @@ public class SdsX509TrustManagerTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
   public void oneIpAddressInPeerCertsVerifies() throws CertificateException, IOException {
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder()
@@ -238,6 +248,7 @@ public class SdsX509TrustManagerTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
   public void oneIpAddressInPeerCertsMismatch() throws CertificateException, IOException {
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder()

@@ -15,6 +15,7 @@ targetCompatibility = 1.7
 dependencies {
     compile project(':grpc-auth'),
             project(':grpc-core'),
+            project(':grpc-grpclb'),
             project(':grpc-netty'),
             project(':grpc-protobuf'),
             project(':grpc-stub'),
@@ -28,7 +29,6 @@ dependencies {
         exclude group: 'io.grpc', module: 'grpc-context'
     }
     compileOnly libraries.javax_annotation
-    runtime project(':grpc-grpclb')
     testCompile project(':grpc-testing'),
             project(':grpc-testing-proto'),
             libraries.guava,

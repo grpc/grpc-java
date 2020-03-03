@@ -49,7 +49,6 @@ import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
-import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
 import io.grpc.stub.StreamObserver;
@@ -264,17 +263,6 @@ public class XdsNameResolverTest {
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
     assertThat(result.getAddresses()).isEmpty();
-    Map<String, ?> serviceConfig =
-        result.getAttributes().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
-    assertThat(result.getServiceConfig().getConfig()).isEqualTo(serviceConfig);
-    @SuppressWarnings("unchecked")
-    List<Map<String, ?>> rawLbConfigs =
-        (List<Map<String, ?>>) serviceConfig.get("loadBalancingConfig");
-    Map<String, ?> lbConfig = Iterables.getOnlyElement(rawLbConfigs);
-    assertThat(lbConfig.keySet()).containsExactly("cds_experimental");
-    @SuppressWarnings("unchecked")
-    Map<String, ?> rawConfigValues = (Map<String, ?>) lbConfig.get("cds_experimental");
-    assertThat(rawConfigValues).containsExactly("cluster", clusterName);
   }
 
   @Test
@@ -293,7 +281,7 @@ public class XdsNameResolverTest {
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
     assertThat(result.getAddresses()).isEmpty();
-    assertThat(result.getAttributes().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG)).isNull();
+    assertThat(result.getServiceConfig()).isNull();
   }
 
   @Test
@@ -311,9 +299,7 @@ public class XdsNameResolverTest {
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
     assertThat(result.getAddresses()).isEmpty();
-    Map<String, ?> serviceConfig =
-        result.getAttributes().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
-    assertThat(result.getServiceConfig().getConfig()).isEqualTo(serviceConfig);
+    Map<String, ?> serviceConfig = (Map<String, ?>) result.getServiceConfig().getConfig();
 
     List<Map<String, ?>> rawLbConfigs =
         (List<Map<String, ?>>) serviceConfig.get("loadBalancingConfig");
@@ -338,8 +324,7 @@ public class XdsNameResolverTest {
     verify(mockListener, times(2)).onResult(resolutionResultCaptor.capture());
     result = resolutionResultCaptor.getValue();
     assertThat(result.getAddresses()).isEmpty();
-    serviceConfig = result.getAttributes().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
-    assertThat(result.getServiceConfig().getConfig()).isEqualTo(serviceConfig);
+    serviceConfig = (Map<String, ?>) result.getServiceConfig().getConfig();
     rawLbConfigs = (List<Map<String, ?>>) serviceConfig.get("loadBalancingConfig");
     lbConfig = Iterables.getOnlyElement(rawLbConfigs);
     assertThat(lbConfig.keySet()).containsExactly("cds_experimental");
@@ -348,6 +333,7 @@ public class XdsNameResolverTest {
   }
 
   @Test
+  @SuppressWarnings("unchecked")
   public void resolve_resourceNewlyAdded() {
     xdsNameResolver.start(mockListener);
     assertThat(responseObservers).hasSize(1);
@@ -363,7 +349,6 @@ public class XdsNameResolverTest {
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
     assertThat(result.getAddresses()).isEmpty();
-    assertThat(result.getAttributes().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG)).isNull();
 
     // Simulate receiving another LDS response that contains cluster resolution directly in-line.
     responseObserver.onNext(
@@ -373,15 +358,11 @@ public class XdsNameResolverTest {
     verify(mockListener, times(2)).onResult(resolutionResultCaptor.capture());
     result = resolutionResultCaptor.getValue();
     assertThat(result.getAddresses()).isEmpty();
-    Map<String, ?> serviceConfig =
-        result.getAttributes().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
-    assertThat(result.getServiceConfig().getConfig()).isEqualTo(serviceConfig);
-    @SuppressWarnings("unchecked")
+    Map<String, ?> serviceConfig = (Map<String, ?>) result.getServiceConfig().getConfig();
     List<Map<String, ?>> rawLbConfigs =
         (List<Map<String, ?>>) serviceConfig.get("loadBalancingConfig");
     Map<String, ?> lbConfig = Iterables.getOnlyElement(rawLbConfigs);
     assertThat(lbConfig.keySet()).containsExactly("cds_experimental");
-    @SuppressWarnings("unchecked")
     Map<String, ?> rawConfigValues = (Map<String, ?>) lbConfig.get("cds_experimental");
     assertThat(rawConfigValues).containsExactly("cluster", "cluster-foo.googleapis.com");
   }
