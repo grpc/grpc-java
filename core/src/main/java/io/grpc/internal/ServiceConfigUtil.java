@@ -24,6 +24,9 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.base.VerifyException;
+import io.grpc.LoadBalancerProvider;
+import io.grpc.LoadBalancerRegistry;
+import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.internal.RetriableStream.Throttle;
 import java.util.ArrayList;
@@ -33,6 +36,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
@@ -324,6 +329,39 @@ public final class ServiceConfigUtil {
   }
 
   /**
+   * Parses and selects a load balancing policy from a non-empty list of raw configs. If selection
+   * is successful, the returned ConfigOrError object will include a {@link
+   * ServiceConfigUtil.PolicySelection} as its config value.
+   */
+  public static ConfigOrError selectLbPolicyFromList(
+      List<LbConfig> lbConfigs, LoadBalancerRegistry lbRegistry) {
+    List<String> policiesTried = new ArrayList<>();
+    for (LbConfig lbConfig : lbConfigs) {
+      String policy = lbConfig.getPolicyName();
+      LoadBalancerProvider provider = lbRegistry.getProvider(policy);
+      if (provider == null) {
+        policiesTried.add(policy);
+      } else {
+        if (!policiesTried.isEmpty()) {
+          Logger.getLogger(ServiceConfigUtil.class.getName()).log(
+              Level.FINEST,
+              "{0} specified by Service Config are not available", policiesTried);
+        }
+        ConfigOrError parsedLbPolicyConfig =
+            provider.parseLoadBalancingPolicyConfig(lbConfig.getRawConfigValue());
+        if (parsedLbPolicyConfig.getError() != null) {
+          return parsedLbPolicyConfig;
+        }
+        return ConfigOrError.fromConfig(new PolicySelection(
+            provider, lbConfig.rawConfigValue, parsedLbPolicyConfig.getConfig()));
+      }
+    }
+    return ConfigOrError.fromError(
+        Status.UNKNOWN.withDescription(
+            "None of " + policiesTried + " specified by Service Config are available."));
+  }
+
+  /**
    * A LoadBalancingConfig that includes the policy name (the key) and its raw config value (parsed
    * JSON).
    */
@@ -364,6 +402,63 @@ public final class ServiceConfigUtil {
       return MoreObjects.toStringHelper(this)
           .add("policyName", policyName)
           .add("rawConfigValue", rawConfigValue)
+          .toString();
+    }
+  }
+
+  public static final class PolicySelection {
+    final LoadBalancerProvider provider;
+    @Deprecated
+    @Nullable
+    final Map<String, ?> rawConfig;
+    @Nullable
+    final Object config;
+
+    /** Constructs a PolicySelection with selected LB provider, a copy of raw config and the deeply
+     * parsed LB config. */
+    public PolicySelection(
+        LoadBalancerProvider provider,
+        @Nullable Map<String, ?> rawConfig,
+        @Nullable Object config) {
+      this.provider = checkNotNull(provider, "provider");
+      this.rawConfig = rawConfig;
+      this.config = config;
+    }
+
+    public LoadBalancerProvider getProvider() {
+      return provider;
+    }
+
+    @Nullable
+    public Object getConfig() {
+      return config;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      PolicySelection that = (PolicySelection) o;
+      return Objects.equal(provider, that.provider)
+          && Objects.equal(rawConfig, that.rawConfig)
+          && Objects.equal(config, that.config);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hashCode(provider, rawConfig, config);
+    }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(this)
+          .add("provider", provider)
+          .add("rawConfig", rawConfig)
+          .add("config", config)
           .toString();
     }
   }

@@ -30,6 +30,7 @@ import io.grpc.Status;
 import io.grpc.internal.JsonUtil;
 import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
+import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -37,8 +38,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
@@ -50,8 +49,6 @@ import javax.annotation.Nullable;
 public final class XdsRoutingLoadBalancerProvider extends LoadBalancerProvider {
 
   static final String XDS_ROUTING_POLICY_NAME = "xds_routing_experimental";
-  private static final Logger logger =
-      Logger.getLogger(XdsRoutingLoadBalancerProvider.class.getName());
 
   @Nullable
   private final LoadBalancerRegistry lbRegistry;
@@ -100,7 +97,7 @@ public final class XdsRoutingLoadBalancerProvider extends LoadBalancerProvider {
         return ConfigOrError.fromError(Status.INTERNAL.withDescription(
             "No actions provided for xds_routing LB policy: " + rawConfig));
       }
-      Map<String, ChildConfig> parsedActions = new LinkedHashMap<>();
+      Map<String, PolicySelection> parsedActions = new LinkedHashMap<>();
       for (String name : actions.keySet()) {
         Map<String, ?> rawAction = JsonUtil.getObject(actions, name);
         if (rawAction == null) {
@@ -114,36 +111,14 @@ public final class XdsRoutingLoadBalancerProvider extends LoadBalancerProvider {
               "No child policy for action " + name + " in xds_routing LB policy: "
                   + rawConfig));
         }
-        boolean targetParsingSucceeded = false;
-        for (LbConfig lbConfig : childConfigCandidates) {
-          String policyName = lbConfig.getPolicyName();
-          LoadBalancerProvider lbProvider = loadBalancerRegistry().getProvider(policyName);
-          if (lbProvider == null) {
-            logger.log(
-                Level.FINEST,
-                "The policy for {0} is not available in xds_routing LB policy: {1}",
-                new Object[]{policyName, rawConfig});
-          } else {
-            ConfigOrError parsedLbPolicyConfig = lbProvider
-                .parseLoadBalancingPolicyConfig(lbConfig.getRawConfigValue());
-            if (parsedLbPolicyConfig.getError() != null) {
-              // Based on service config error-handling spec, if the chosen config is found invalid
-              // while other configs that come later were valid, the gRPC config would still be
-              // considered invalid as a whole.
-              return parsedLbPolicyConfig;
-            }
-            parsedActions.put(
-                name,
-                new ChildConfig(policyName, parsedLbPolicyConfig.getConfig()));
-            targetParsingSucceeded = true;
-            break;
-          }
+
+        ConfigOrError selectedConfigOrError =
+            ServiceConfigUtil.selectLbPolicyFromList(childConfigCandidates, loadBalancerRegistry());
+        if (selectedConfigOrError.getError() != null) {
+          return selectedConfigOrError;
         }
-        if (!targetParsingSucceeded) {
-          return ConfigOrError.fromError(Status.INTERNAL.withDescription(
-              "No child policy available for action " + name + " in xds_routing LB policy: "
-                  + rawConfig));
-        }
+
+        parsedActions.put(name, (PolicySelection) selectedConfigOrError.getConfig());
       }
 
       List<Map<String, ?>> routes = JsonUtil.getListOfObjects(rawConfig, "route");
@@ -204,15 +179,14 @@ public final class XdsRoutingLoadBalancerProvider extends LoadBalancerProvider {
   static final class XdsRoutingConfig {
 
     final List<Route> routes;
-    final Map<String, ChildConfig> actions;
+    final Map<String, PolicySelection> actions;
 
     /**
      * Constructs a deeply parsed xds_routing config with the given non-empty list of routes, the
      * action of each of which is provided by the given map of actions.
      */
     @VisibleForTesting
-    XdsRoutingConfig(List<Route> routes,
-        Map<String, ChildConfig> actions) {
+    XdsRoutingConfig(List<Route> routes, Map<String, PolicySelection> actions) {
       this.routes = ImmutableList.copyOf(routes);
       this.actions = ImmutableMap.copyOf(actions);
     }
@@ -320,44 +294,6 @@ public final class XdsRoutingLoadBalancerProvider extends LoadBalancerProvider {
       return MoreObjects.toStringHelper(this)
           .add("service", service)
           .add("method", method)
-          .toString();
-    }
-  }
-
-  static final class ChildConfig {
-
-    final String policyName;
-    final Object config; // Parsed config.
-
-    @VisibleForTesting
-    ChildConfig(String policyName, Object config) {
-      this.policyName = policyName;
-      this.config = config;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (o == null || getClass() != o.getClass()) {
-        return false;
-      }
-      ChildConfig that = (ChildConfig) o;
-      return Objects.equals(policyName, that.policyName)
-          && Objects.equals(config, that.config);
-    }
-
-    @Override
-    public int hashCode() {
-      return Objects.hash(policyName, config);
-    }
-
-    @Override
-    public String toString() {
-      return MoreObjects.toStringHelper(this)
-          .add("policyName", policyName)
-          .add("config", config)
           .toString();
     }
   }
