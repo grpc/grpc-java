@@ -26,8 +26,10 @@ import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.internal.JsonParser;
-import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedPolicySeclection;
+import io.grpc.internal.ServiceConfigUtil.PolicySelection;
+import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedPolicySelection;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedTargetConfig;
+import java.util.HashMap;
 import java.util.Map;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -120,14 +122,18 @@ public class WeightedTargetLoadBalancerProviderTest {
 
     @SuppressWarnings("unchecked")
     Map<String, ?> rawLbConfigMap = (Map<String, ?>) JsonParser.parse(weightedTargetConfigJson);
-    ConfigOrError configOrError =
+    ConfigOrError parsedConfig =
         weightedTargetLoadBalancerProvider.parseLoadBalancingPolicyConfig(rawLbConfigMap);
-    assertThat(configOrError).isEqualTo(
-        ConfigOrError.fromConfig(
-            new WeightedTargetConfig(ImmutableMap.of(
-                "target_1",
-                new WeightedPolicySeclection(10, "foo_policy", fooConfig),
-                "target_2",
-                new WeightedPolicySeclection(20, "bar_policy", barConfig)))));
+    ConfigOrError expectedConfig = ConfigOrError.fromConfig(
+        new WeightedTargetConfig(ImmutableMap.of(
+            "target_1",
+            new WeightedPolicySelection(
+                10,
+                new PolicySelection(lbProviderFoo, new HashMap<String, Object>(), fooConfig)),
+            "target_2",
+            new WeightedPolicySelection(
+                20,
+                new PolicySelection(lbProviderBar, new HashMap<String, Object>(), barConfig)))));
+    assertThat(parsedConfig).isEqualTo(expectedConfig);
   }
 }

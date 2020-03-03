@@ -45,12 +45,14 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status;
+import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.xds.WeightedRandomPicker.WeightedChildPicker;
 import io.grpc.xds.WeightedRandomPicker.WeightedPickerFactory;
-import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedPolicySeclection;
+import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedPolicySelection;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedTargetConfig;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import org.junit.After;
@@ -66,20 +68,13 @@ import org.mockito.MockitoAnnotations;
 @RunWith(JUnit4.class)
 public class WeightedTargetLoadBalancerTest {
 
-  private final LoadBalancerRegistry lbRegistry = new LoadBalancerRegistry();
+  private static final Map<String, ?> EMPTY_RAW_CONFIG = Collections.emptyMap();
 
+  private final LoadBalancerRegistry lbRegistry = new LoadBalancerRegistry();
   private final List<LoadBalancer> childBalancers = new ArrayList<>();
   private final List<Helper> childHelpers = new ArrayList<>();
   private final int[] weights = new int[]{10, 20, 30, 40};
   private final Object[] configs = new Object[]{"config0", "config1", "config3", "config4"};
-  private final WeightedPolicySeclection weightedLbConfig0 =
-      new WeightedPolicySeclection(weights[0], "foo_policy", configs[0]);
-  private final WeightedPolicySeclection weightedLbConfig1 =
-      new WeightedPolicySeclection(weights[1], "bar_policy", configs[1]);
-  private final WeightedPolicySeclection weightedLbConfig2 =
-      new WeightedPolicySeclection(weights[2], "bar_policy", configs[2]);
-  private final WeightedPolicySeclection weightedLbConfig3 =
-      new WeightedPolicySeclection(weights[3], "foo_policy", configs[3]);
 
   private final LoadBalancerProvider fooLbProvider = new LoadBalancerProvider() {
     @Override
@@ -133,6 +128,15 @@ public class WeightedTargetLoadBalancerTest {
     }
   };
 
+  private final WeightedPolicySelection weightedLbConfig0 = new WeightedPolicySelection(
+      weights[0], new PolicySelection(fooLbProvider, EMPTY_RAW_CONFIG, configs[0]));
+  private final WeightedPolicySelection weightedLbConfig1 = new WeightedPolicySelection(
+      weights[1], new PolicySelection(barLbProvider, EMPTY_RAW_CONFIG, configs[1]));
+  private final WeightedPolicySelection weightedLbConfig2 = new WeightedPolicySelection(
+      weights[2],  new PolicySelection(barLbProvider, EMPTY_RAW_CONFIG, configs[2]));
+  private final WeightedPolicySelection weightedLbConfig3 = new WeightedPolicySelection(
+      weights[3], new PolicySelection(fooLbProvider, EMPTY_RAW_CONFIG, configs[3]));
+
   private final WeightedPickerFactory pickerFactory = new WeightedPickerFactory() {
     // Pick from the child picker with the given weight: weightToPick.
     @Override
@@ -174,10 +178,7 @@ public class WeightedTargetLoadBalancerTest {
     lbRegistry.register(fooLbProvider);
     lbRegistry.register(barLbProvider);
 
-    weightedTargetLb = new WeightedTargetLoadBalancer(
-        helper,
-        lbRegistry,
-        pickerFactory);
+    weightedTargetLb = new WeightedTargetLoadBalancer(helper, pickerFactory);
   }
 
   @After
@@ -194,7 +195,7 @@ public class WeightedTargetLoadBalancerTest {
     Attributes.Key<Object> fakeKey = Attributes.Key.create("fake_key");
     Object fakeValue = new Object();
 
-    Map<String, WeightedPolicySeclection> targets = ImmutableMap.of(
+    Map<String, WeightedPolicySelection> targets = ImmutableMap.of(
         // {foo, 10, config0}
         "target0", weightedLbConfig0,
         // {bar, 20, config1}
@@ -227,11 +228,19 @@ public class WeightedTargetLoadBalancerTest {
     // target0 removed. target1, target2, target3 changed weight and config. target4 added.
     int[] newWeights = new int[]{11, 22, 33, 44};
     Object[] newConfigs = new Object[]{"newConfig1", "newConfig2", "newConfig3", "newConfig4"};
-    Map<String, WeightedPolicySeclection> newTargets = ImmutableMap.of(
-        "target1", new WeightedPolicySeclection(newWeights[0], "bar_policy", newConfigs[0]),
-        "target2", new WeightedPolicySeclection(newWeights[1], "bar_policy", newConfigs[1]),
-        "target3", new WeightedPolicySeclection(newWeights[2], "foo_policy", newConfigs[2]),
-        "target4", new WeightedPolicySeclection(newWeights[3], "foo_policy", newConfigs[3]));
+    Map<String, WeightedPolicySelection> newTargets = ImmutableMap.of(
+        "target1",
+        new WeightedPolicySelection(
+            newWeights[0], new PolicySelection(barLbProvider, EMPTY_RAW_CONFIG, newConfigs[0])),
+        "target2",
+        new WeightedPolicySelection(
+            newWeights[1], new PolicySelection(barLbProvider, EMPTY_RAW_CONFIG, newConfigs[1])),
+        "target3",
+        new WeightedPolicySelection(
+            newWeights[2], new PolicySelection(fooLbProvider, EMPTY_RAW_CONFIG, newConfigs[2])),
+        "target4",
+        new WeightedPolicySelection(
+            newWeights[3], new PolicySelection(fooLbProvider, EMPTY_RAW_CONFIG, newConfigs[3])));
     weightedTargetLb.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
@@ -265,7 +274,7 @@ public class WeightedTargetLoadBalancerTest {
     assertThat(pickResult.getStatus().getCode()).isEqualTo(Status.Code.DATA_LOSS);
 
     // Child configs updated.
-    Map<String, WeightedPolicySeclection> targets = ImmutableMap.of(
+    Map<String, WeightedPolicySelection> targets = ImmutableMap.of(
         // {foo, 10, config0}
         "target0", weightedLbConfig0,
         // {bar, 20, config1}
@@ -291,7 +300,7 @@ public class WeightedTargetLoadBalancerTest {
 
   @Test
   public void balancingStateUpdatedFromChildBalancers() {
-    Map<String, WeightedPolicySeclection> targets = ImmutableMap.of(
+    Map<String, WeightedPolicySelection> targets = ImmutableMap.of(
         // {foo, 10, config0}
         "target0", weightedLbConfig0,
         // {bar, 20, config1}

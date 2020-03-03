@@ -28,13 +28,12 @@ import com.google.common.collect.ImmutableMap;
 import io.grpc.ConnectivityState;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
-import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.WeightedRandomPicker.WeightedChildPicker;
 import io.grpc.xds.WeightedRandomPicker.WeightedPickerFactory;
-import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedPolicySeclection;
+import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedPolicySelection;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedTargetConfig;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
@@ -48,26 +47,23 @@ import javax.annotation.Nullable;
 final class WeightedTargetLoadBalancer extends LoadBalancer {
 
   private final XdsLogger logger;
-  private final LoadBalancerRegistry lbRegistry;
   private final Map<String, GracefulSwitchLoadBalancer> childBalancers = new HashMap<>();
   private final Map<String, ChildHelper> childHelpers = new HashMap<>();
   private final Helper helper;
   private final WeightedPickerFactory weightedPickerFactory;
 
-  private Map<String, WeightedPolicySeclection> targets = ImmutableMap.of();
+  private Map<String, WeightedPolicySelection> targets = ImmutableMap.of();
 
-  WeightedTargetLoadBalancer(Helper helper, LoadBalancerRegistry lbRegistry) {
+  WeightedTargetLoadBalancer(Helper helper) {
     this(
         checkNotNull(helper, "helper"),
-        checkNotNull(lbRegistry, "lbRegistry"),
         WeightedRandomPicker.RANDOM_PICKER_FACTORY);
   }
 
   @VisibleForTesting
   WeightedTargetLoadBalancer(
-      Helper helper, LoadBalancerRegistry lbRegistry, WeightedPickerFactory weightedPickerFactory) {
+      Helper helper, WeightedPickerFactory weightedPickerFactory) {
     this.helper = helper;
-    this.lbRegistry = lbRegistry;
     this.weightedPickerFactory = weightedPickerFactory;
     logger = XdsLogger.withLogId(
         InternalLogId.allocate("weighted-target-lb", helper.getAuthority()));
@@ -81,19 +77,20 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
     checkNotNull(lbConfig, "missing weighted_target lb config");
 
     WeightedTargetConfig weightedTargetConfig = (WeightedTargetConfig) lbConfig;
-    Map<String, WeightedPolicySeclection> newTargets = weightedTargetConfig.targets;
+    Map<String, WeightedPolicySelection> newTargets = weightedTargetConfig.targets;
 
     for (String targetName : newTargets.keySet()) {
-      WeightedPolicySeclection weightedChildLbConfig = newTargets.get(targetName);
+      WeightedPolicySelection weightedChildLbConfig = newTargets.get(targetName);
       if (!targets.containsKey(targetName)) {
         ChildHelper childHelper = new ChildHelper();
         GracefulSwitchLoadBalancer childBalancer = new GracefulSwitchLoadBalancer(childHelper);
-        childBalancer.switchTo(lbRegistry.getProvider(weightedChildLbConfig.policyName));
+        childBalancer.switchTo(weightedChildLbConfig.policySelection.getProvider());
         childHelpers.put(targetName, childHelper);
         childBalancers.put(targetName, childBalancer);
-      } else if (!weightedChildLbConfig.policyName.equals(targets.get(targetName).policyName)) {
+      } else if (!weightedChildLbConfig.policySelection.getProvider().equals(
+          targets.get(targetName).policySelection.getProvider())) {
         childBalancers.get(targetName)
-            .switchTo(lbRegistry.getProvider(weightedChildLbConfig.policyName));
+            .switchTo(weightedChildLbConfig.policySelection.getProvider());
       }
     }
 
@@ -102,7 +99,7 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
     for (String targetName : targets.keySet()) {
       childBalancers.get(targetName).handleResolvedAddresses(
           resolvedAddresses.toBuilder()
-              .setLoadBalancingPolicyConfig(targets.get(targetName).config)
+              .setLoadBalancingPolicyConfig(targets.get(targetName).policySelection.getConfig())
               .build());
     }
 
