@@ -38,10 +38,6 @@ final class GrpclbConfig {
     return create(mode, null);
   }
 
-  static GrpclbConfig create(String serviceName) {
-    return create(Mode.ROUND_ROBIN, serviceName);
-  }
-
   static GrpclbConfig create(Mode mode, @Nullable String serviceName) {
     return new GrpclbConfig(mode, serviceName);
   }

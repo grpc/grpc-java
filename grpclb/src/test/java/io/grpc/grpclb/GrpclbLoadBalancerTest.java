@@ -2222,7 +2222,7 @@ public class GrpclbLoadBalancerTest {
     deliverResolvedAddresses(
         Collections.<EquivalentAddressGroup>emptyList(),
         grpclbBalancerList,
-        GrpclbConfig.create(serviceName));
+        GrpclbConfig.create(Mode.ROUND_ROBIN, serviceName));
 
     assertEquals(1, fakeOobChannels.size());
     ManagedChannel oobChannel = fakeOobChannels.poll();
@@ -2264,7 +2264,7 @@ public class GrpclbLoadBalancerTest {
     deliverResolvedAddresses(
         Collections.<EquivalentAddressGroup>emptyList(),
         newGrpclbResolutionList,
-        GrpclbConfig.create(serviceName));
+        GrpclbConfig.create(Mode.ROUND_ROBIN, serviceName));
 
     // GrpclbState will be shutdown, and a new one will be created
     assertThat(oobChannel.isShutdown()).isTrue();
