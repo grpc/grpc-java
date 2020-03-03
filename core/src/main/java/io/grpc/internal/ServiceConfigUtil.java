@@ -406,7 +406,6 @@ public final class ServiceConfigUtil {
     }
   }
 
-  @SuppressWarnings("deprecation")
   public static final class PolicySelection {
     final LoadBalancerProvider provider;
     @Deprecated
@@ -424,6 +423,15 @@ public final class ServiceConfigUtil {
       this.provider = checkNotNull(provider, "provider");
       this.rawConfig = rawConfig;
       this.config = config;
+    }
+
+    public LoadBalancerProvider getProvider() {
+      return provider;
+    }
+
+    @Nullable
+    public Object getConfig() {
+      return config;
     }
 
     @Override

@@ -118,9 +118,7 @@ public final class XdsRoutingLoadBalancerProvider extends LoadBalancerProvider {
           return selectedConfigOrError;
         }
 
-        parsedActions.put(
-            name,
-            (PolicySelection) selectedConfigOrError.getConfig());
+        parsedActions.put(name, (PolicySelection) selectedConfigOrError.getConfig());
       }
 
       List<Map<String, ?>> routes = JsonUtil.getListOfObjects(rawConfig, "route");
