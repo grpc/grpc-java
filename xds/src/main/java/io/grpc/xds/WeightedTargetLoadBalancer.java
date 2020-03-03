@@ -32,9 +32,9 @@ import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.GracefulSwitchLoadBalancer;
-import io.grpc.xds.RandomWeightedPicker.WeightedChildPicker;
-import io.grpc.xds.RandomWeightedPicker.WeightedPickerFactory;
-import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedChildLbConfig;
+import io.grpc.xds.WeightedRandomPicker.WeightedChildPicker;
+import io.grpc.xds.WeightedRandomPicker.WeightedPickerFactory;
+import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedPolicySeclection;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedTargetConfig;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
@@ -54,12 +54,8 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
   private final Helper helper;
   private final WeightedPickerFactory weightedPickerFactory;
 
-  private Map<String, WeightedChildLbConfig> targets = ImmutableMap.of();
+  private Map<String, WeightedPolicySeclection> targets = ImmutableMap.of();
 
-  /**
-   * Constructs a WeightedTargetLoadBalancer with the given weighted list of child balancer configs.
-   * The list must not be empty and must not contain duplicate lb configs.
-   */
   WeightedTargetLoadBalancer(Helper helper, LoadBalancerRegistry lbRegistry) {
     this(
         checkNotNull(helper, "helper"),
@@ -73,7 +69,8 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
     this.helper = helper;
     this.lbRegistry = lbRegistry;
     this.weightedPickerFactory = weightedPickerFactory;
-    logger = XdsLogger.withLogId(InternalLogId.allocate("cds-lb", helper.getAuthority()));
+    logger = XdsLogger.withLogId(
+        InternalLogId.allocate("weighted-target-lb", helper.getAuthority()));
     logger.log(XdsLogLevel.INFO, "Created");
   }
 
@@ -84,29 +81,24 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
     checkNotNull(lbConfig, "missing weighted_target lb config");
 
     WeightedTargetConfig weightedTargetConfig = (WeightedTargetConfig) lbConfig;
-    Map<String, WeightedChildLbConfig> newTargets = weightedTargetConfig.targets;
+    Map<String, WeightedPolicySeclection> newTargets = weightedTargetConfig.targets;
 
     for (String targetName : newTargets.keySet()) {
-      WeightedChildLbConfig weightedChildLbConfig = newTargets.get(targetName);
+      WeightedPolicySeclection weightedChildLbConfig = newTargets.get(targetName);
       if (!targets.containsKey(targetName)) {
-        // Create child balancers for new names.
         ChildHelper childHelper = new ChildHelper();
         GracefulSwitchLoadBalancer childBalancer = new GracefulSwitchLoadBalancer(childHelper);
         childBalancer.switchTo(lbRegistry.getProvider(weightedChildLbConfig.policyName));
         childHelpers.put(targetName, childHelper);
         childBalancers.put(targetName, childBalancer);
       } else if (!weightedChildLbConfig.policyName.equals(targets.get(targetName).policyName)) {
-        // Policy name change for the same target is not a typical usecase, but we should support
-        // it. Switch child policy.
         childBalancers.get(targetName)
             .switchTo(lbRegistry.getProvider(weightedChildLbConfig.policyName));
       }
     }
 
-    // Update new config map.
     targets = newTargets;
 
-    // Call handleResolvedAddresses() for each child balancer.
     for (String targetName : targets.keySet()) {
       childBalancers.get(targetName).handleResolvedAddresses(
           resolvedAddresses.toBuilder()
@@ -149,7 +141,7 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
     }
   }
 
-  private void updateBalancingState() {
+  private void updateOverallBalancingState() {
     List<WeightedChildPicker> childPickers = new ArrayList<>();
 
     ConnectivityState overallState = null;
@@ -205,7 +197,7 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
     public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
       currentState = newState;
       currentPicker = newPicker;
-      WeightedTargetLoadBalancer.this.updateBalancingState();
+      updateOverallBalancingState();
     }
 
     @Override

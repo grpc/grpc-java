@@ -18,7 +18,6 @@ package io.grpc.xds;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
-import com.google.common.collect.ImmutableMap;
 import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
@@ -95,7 +94,7 @@ public final class WeightedTargetLoadBalancerProvider extends LoadBalancerProvid
         return ConfigOrError.fromError(Status.INTERNAL.withDescription(
             "No targets provided for weighted_target LB policy:\n " + rawConfig));
       }
-      Map<String, WeightedChildLbConfig> parsedChildConfigs = new LinkedHashMap<>();
+      Map<String, WeightedPolicySeclection> parsedChildConfigs = new LinkedHashMap<>();
       for (String name : targets.keySet()) {
         Map<String, ?> rawWeightedTarget = JsonUtil.getObject(targets, name);
         if (rawWeightedTarget == null || rawWeightedTarget.isEmpty()) {
@@ -135,7 +134,7 @@ public final class WeightedTargetLoadBalancerProvider extends LoadBalancerProvid
             }
             parsedChildConfigs.put(
                 name,
-                new WeightedChildLbConfig(weight, policyName, parsedLbPolicyConfig.getConfig()));
+                new WeightedPolicySeclection(weight, policyName, parsedLbPolicyConfig.getConfig()));
             targetParsingSucceeded = true;
             break;
           }
@@ -154,20 +153,18 @@ public final class WeightedTargetLoadBalancerProvider extends LoadBalancerProvid
     }
   }
 
-  /** Child lb config with weight. */
-  static final class WeightedChildLbConfig {
+  static final class WeightedPolicySeclection {
 
     final int weight;
     final String policyName;
     final Object config; // Parsed config.
 
     @VisibleForTesting
-    WeightedChildLbConfig(int weight, String policyName, Object config) {
+    WeightedPolicySeclection(int weight, String policyName, Object config) {
       this.weight = weight;
       this.policyName = policyName;
       this.config = config;
     }
-
 
     @Override
     public boolean equals(Object o) {
@@ -177,7 +174,7 @@ public final class WeightedTargetLoadBalancerProvider extends LoadBalancerProvid
       if (o == null || getClass() != o.getClass()) {
         return false;
       }
-      WeightedChildLbConfig that = (WeightedChildLbConfig) o;
+      WeightedPolicySeclection that = (WeightedPolicySeclection) o;
       return weight == that.weight
           && Objects.equals(policyName, that.policyName)
           && Objects.equals(config, that.config);
@@ -201,12 +198,11 @@ public final class WeightedTargetLoadBalancerProvider extends LoadBalancerProvid
   /** The lb config for WeightedTargetLoadBalancer. */
   static final class WeightedTargetConfig {
 
-    final Map<String, WeightedChildLbConfig> targets;
+    final Map<String, WeightedPolicySeclection> targets;
 
-    /** Constructs a deeply parsed weighted_target config with the given non-empty targets map. */
     @VisibleForTesting
-    WeightedTargetConfig(Map<String, WeightedChildLbConfig> targets) {
-      this.targets = ImmutableMap.copyOf(targets);
+    WeightedTargetConfig(Map<String, WeightedPolicySeclection> targets) {
+      this.targets = targets;
     }
 
     @Override

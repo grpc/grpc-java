@@ -26,7 +26,7 @@ import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.internal.JsonParser;
-import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedChildLbConfig;
+import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedPolicySeclection;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedTargetConfig;
 import java.util.Map;
 import org.junit.Test;
@@ -126,8 +126,8 @@ public class WeightedTargetLoadBalancerProviderTest {
         ConfigOrError.fromConfig(
             new WeightedTargetConfig(ImmutableMap.of(
                 "target_1",
-                new WeightedChildLbConfig(10, "foo_policy", fooConfig),
+                new WeightedPolicySeclection(10, "foo_policy", fooConfig),
                 "target_2",
-                new WeightedChildLbConfig(20, "bar_policy", barConfig)))));
+                new WeightedPolicySeclection(20, "bar_policy", barConfig)))));
   }
 }

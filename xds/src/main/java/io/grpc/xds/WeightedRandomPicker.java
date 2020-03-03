@@ -27,7 +27,7 @@ import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import java.util.List;
 
-final class RandomWeightedPicker extends SubchannelPicker {
+final class WeightedRandomPicker extends SubchannelPicker {
 
   private final List<WeightedChildPicker> weightedChildPickers;
   private final ThreadSafeRandom random;
@@ -62,12 +62,12 @@ final class RandomWeightedPicker extends SubchannelPicker {
     }
   }
 
-  RandomWeightedPicker(List<WeightedChildPicker> weightedChildPickers) {
+  WeightedRandomPicker(List<WeightedChildPicker> weightedChildPickers) {
     this(weightedChildPickers, ThreadSafeRandom.ThreadSafeRandomImpl.instance);
   }
 
   @VisibleForTesting
-  RandomWeightedPicker(List<WeightedChildPicker> weightedChildPickers, ThreadSafeRandom random) {
+  WeightedRandomPicker(List<WeightedChildPicker> weightedChildPickers, ThreadSafeRandom random) {
     checkNotNull(weightedChildPickers, "weightedChildPickers in null");
     checkArgument(!weightedChildPickers.isEmpty(), "weightedChildPickers is empty");
 
@@ -123,7 +123,7 @@ final class RandomWeightedPicker extends SubchannelPicker {
         new WeightedPickerFactory() {
           @Override
           public SubchannelPicker picker(List<WeightedChildPicker> childPickers) {
-            return new RandomWeightedPicker(childPickers);
+            return new WeightedRandomPicker(childPickers);
           }
         };
 
