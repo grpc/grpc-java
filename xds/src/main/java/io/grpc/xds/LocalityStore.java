@@ -131,7 +131,7 @@ interface LocalityStore {
       this(
           logId,
           helper,
-          WeightedPickerFactory.RANDOM_PICKER_FACTORY,
+          WeightedRandomPicker.RANDOM_PICKER_FACTORY,
           lbRegistry,
           ThreadSafeRandom.ThreadSafeRandomImpl.instance,
           loadStatsStore,

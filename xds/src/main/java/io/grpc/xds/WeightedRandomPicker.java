@@ -119,14 +119,14 @@ final class WeightedRandomPicker extends SubchannelPicker {
 
   /** Factory that creates a SubchannelPicker for a given list of weighted child pickers. */
   interface WeightedPickerFactory {
-    WeightedPickerFactory RANDOM_PICKER_FACTORY =
-        new WeightedPickerFactory() {
-          @Override
-          public SubchannelPicker picker(List<WeightedChildPicker> childPickers) {
-            return new WeightedRandomPicker(childPickers);
-          }
-        };
-
     SubchannelPicker picker(List<WeightedChildPicker> childPickers);
   }
+
+  static final WeightedPickerFactory RANDOM_PICKER_FACTORY =
+      new WeightedPickerFactory() {
+        @Override
+        public SubchannelPicker picker(List<WeightedChildPicker> childPickers) {
+          return new WeightedRandomPicker(childPickers);
+        }
+      };
 }

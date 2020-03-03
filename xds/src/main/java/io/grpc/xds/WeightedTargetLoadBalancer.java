@@ -60,7 +60,7 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
     this(
         checkNotNull(helper, "helper"),
         checkNotNull(lbRegistry, "lbRegistry"),
-        WeightedPickerFactory.RANDOM_PICKER_FACTORY);
+        WeightedRandomPicker.RANDOM_PICKER_FACTORY);
   }
 
   @VisibleForTesting
