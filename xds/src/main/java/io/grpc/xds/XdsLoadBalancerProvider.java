@@ -16,6 +16,8 @@
 
 package io.grpc.xds;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.collect.ImmutableMap;
@@ -142,12 +144,12 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
 
     XdsConfig(
         @Nullable String cluster,
-        @Nullable PolicySelection endpointPickingPolicy,
+        PolicySelection endpointPickingPolicy,
         @Nullable PolicySelection fallbackPolicy,
         @Nullable String edsServiceName,
         @Nullable String lrsServerName) {
       this.cluster = cluster;
-      this.endpointPickingPolicy = endpointPickingPolicy;
+      this.endpointPickingPolicy = checkNotNull(endpointPickingPolicy, "endpointPickingPolicy");
       this.fallbackPolicy = fallbackPolicy;
       this.edsServiceName = edsServiceName;
       this.lrsServerName = lrsServerName;

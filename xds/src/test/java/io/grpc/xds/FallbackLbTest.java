@@ -104,6 +104,8 @@ public class FallbackLbTest {
   private final List<Helper> helpers2 = new ArrayList<>();
   private final List<LoadBalancer> balancers1 = new ArrayList<>();
   private final List<LoadBalancer> balancers2 = new ArrayList<>();
+  private final PolicySelection fakeEndpointPickingPolicy =
+      new PolicySelection(mock(LoadBalancerProvider.class), null, new Object());
 
   private LoadBalancer fallbackLb;
 
@@ -129,7 +131,11 @@ public class FallbackLbTest {
     fallbackLb.handleResolvedAddresses(ResolvedAddresses.newBuilder()
         .setAddresses(eags11)
         .setLoadBalancingPolicyConfig(new XdsConfig(
-            null, null, new PolicySelection(fallbackProvider1, null, lbConfig11), null, null))
+            null,
+            fakeEndpointPickingPolicy,
+            new PolicySelection(fallbackProvider1, null, lbConfig11),
+            null,
+            null))
         .build());
 
     assertThat(helpers1).hasSize(1);
@@ -151,7 +157,11 @@ public class FallbackLbTest {
     fallbackLb.handleResolvedAddresses(ResolvedAddresses.newBuilder()
         .setAddresses(eags12)
         .setLoadBalancingPolicyConfig(new XdsConfig(
-            null, null, new PolicySelection(fallbackProvider1, null, lbConfig12), null, null))
+            null,
+            fakeEndpointPickingPolicy,
+            new PolicySelection(fallbackProvider1, null, lbConfig12),
+            null,
+            null))
         .build());
 
     verify(balancer1).handleResolvedAddresses(ResolvedAddresses.newBuilder()
@@ -171,7 +181,11 @@ public class FallbackLbTest {
     fallbackLb.handleResolvedAddresses(ResolvedAddresses.newBuilder()
         .setAddresses(eags21)
         .setLoadBalancingPolicyConfig(new XdsConfig(
-            null, null, new PolicySelection(fallbackProvider2, null, lbConfig21), null, null))
+            null,
+            fakeEndpointPickingPolicy,
+            new PolicySelection(fallbackProvider2, null, lbConfig21),
+            null,
+            null))
         .build());
 
     verify(balancer1).shutdown();
@@ -201,7 +215,11 @@ public class FallbackLbTest {
     fallbackLb.handleResolvedAddresses(ResolvedAddresses.newBuilder()
         .setAddresses(eags22)
         .setLoadBalancingPolicyConfig(new XdsConfig(
-            null, null, new PolicySelection(fallbackProvider2, null, lbConfig22), null, null))
+            null,
+            fakeEndpointPickingPolicy,
+            new PolicySelection(fallbackProvider2, null, lbConfig22),
+            null,
+            null))
         .build());
 
     verify(balancer2).handleResolvedAddresses(ResolvedAddresses.newBuilder()
@@ -231,7 +249,11 @@ public class FallbackLbTest {
     fallbackLb.handleResolvedAddresses(ResolvedAddresses.newBuilder()
         .setAddresses(eags)
         .setLoadBalancingPolicyConfig(new XdsConfig(
-            null, null, new PolicySelection(fallbackProvider1, null, lbConfig), null, null))
+            null,
+            fakeEndpointPickingPolicy,
+            new PolicySelection(fallbackProvider1, null, lbConfig),
+            null,
+            null))
         .build());
 
     LoadBalancer balancer1 = balancers1.get(0);
