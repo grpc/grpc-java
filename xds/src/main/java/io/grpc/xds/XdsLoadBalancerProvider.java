@@ -127,8 +127,7 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
     // FIXME(chengyuanzhang): make cluster name required.
     @Nullable
     final String cluster;
-    @Nullable
-    final PolicySelection childPolicy;
+    final PolicySelection endpointPickingPolicy;
     @Nullable
     final PolicySelection fallbackPolicy;
     // Optional. Name to use in EDS query. If not present, defaults to the server name from the
@@ -143,12 +142,12 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
 
     XdsConfig(
         @Nullable String cluster,
-        @Nullable PolicySelection childPolicy,
+        @Nullable PolicySelection endpointPickingPolicy,
         @Nullable PolicySelection fallbackPolicy,
         @Nullable String edsServiceName,
         @Nullable String lrsServerName) {
       this.cluster = cluster;
-      this.childPolicy = childPolicy;
+      this.endpointPickingPolicy = endpointPickingPolicy;
       this.fallbackPolicy = fallbackPolicy;
       this.edsServiceName = edsServiceName;
       this.lrsServerName = lrsServerName;
@@ -158,7 +157,7 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
     public String toString() {
       return MoreObjects.toStringHelper(this)
           .add("cluster", cluster)
-          .add("childPolicy", childPolicy)
+          .add("endpointPickingPolicy", endpointPickingPolicy)
           .add("fallbackPolicy", fallbackPolicy)
           .add("edsServiceName", edsServiceName)
           .add("lrsServerName", lrsServerName)
@@ -172,7 +171,7 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
       }
       XdsConfig that = (XdsConfig) obj;
       return Objects.equal(this.cluster, that.cluster)
-          && Objects.equal(this.childPolicy, that.childPolicy)
+          && Objects.equal(this.endpointPickingPolicy, that.endpointPickingPolicy)
           && Objects.equal(this.fallbackPolicy, that.fallbackPolicy)
           && Objects.equal(this.edsServiceName, that.edsServiceName)
           && Objects.equal(this.lrsServerName, that.lrsServerName);
@@ -180,7 +179,8 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
 
     @Override
     public int hashCode() {
-      return Objects.hashCode(cluster, childPolicy, fallbackPolicy, edsServiceName, lrsServerName);
+      return Objects.hashCode(
+          cluster, endpointPickingPolicy, fallbackPolicy, edsServiceName, lrsServerName);
     }
   }
 }
