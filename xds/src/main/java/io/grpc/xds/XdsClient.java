@@ -353,6 +353,51 @@ abstract class XdsClient {
   }
 
   /**
+   * Updates via resource discovery RPCs using LDS. Includes {@link Listener} object containing
+   * config for security, RBAC or other server side features such as rate limit.
+   */
+  static final class ListenerUpdate {
+    private final Listener listener;
+
+    private ListenerUpdate(Listener listener) {
+      this.listener = listener;
+    }
+
+    public Listener getListener() {
+      return listener;
+    }
+
+    @Override
+    public String toString() {
+      return "ListenerUpdate{"
+          + "listener=" + listener
+          + '}';
+    }
+
+    static Builder newBuilder() {
+      return new Builder();
+    }
+
+    static final class Builder {
+      private Listener listener;
+
+      // Use ListenerUpdate.newBuilder().
+      private Builder() {
+      }
+
+      Builder setListener(Listener listener) {
+        this.listener = listener;
+        return this;
+      }
+
+      ListenerUpdate build() {
+        Preconditions.checkState(listener != null, "listener is not set");
+        return new ListenerUpdate(listener);
+      }
+    }
+  }
+
+  /**
    * Config watcher interface. To be implemented by the xDS resolver.
    */
   interface ConfigWatcher {
@@ -381,6 +426,19 @@ abstract class XdsClient {
   interface EndpointWatcher {
 
     void onEndpointChanged(EndpointUpdate update);
+
+    void onError(Status error);
+  }
+
+  /**
+   * Listener watcher interface. To be used by {@link io.grpc.xds.internal.sds.XdsServerBuilder}.
+   */
+  interface ListenerWatcher {
+
+    /**
+     * Called when receiving an update on Listener configuration.
+     */
+    void onListenerChanged(ListenerUpdate update);
 
     void onError(Status error);
   }
@@ -428,6 +486,12 @@ abstract class XdsClient {
    * endpoints information in the given cluster.
    */
   void cancelEndpointDataWatch(String clusterName, EndpointWatcher watcher) {
+  }
+
+  /**
+   * Registers a watcher for a Listener with the given port.
+   */
+  void watchListenerData(int port, ListenerWatcher watcher) {
   }
 
   /**
