@@ -21,6 +21,7 @@ dependencies {
             libraries.lang,
             libraries.protobuf,
             libraries.conscrypt
+    def nettyDependency = compile project(':grpc-netty')
     compile (libraries.google_auth_oauth2_http) {
         // prefer our own versions instead of google-auth-oauth2-http's dependency
         exclude group: 'com.google.guava', module: 'guava'
@@ -29,13 +30,10 @@ dependencies {
     }
     compileOnly libraries.javax_annotation
 
-    // Use grpc-netty-shaded for transitive dependency.
-    compileOnly project(':grpc-netty')
+    shadow configurations.compile.getDependencies().minus(nettyDependency)
     shadow project(path: ':grpc-netty-shaded', configuration: 'shadow')
-    shadow configurations.compile.getDependencies()
 
-    testCompile project(':grpc-netty'),
-            project(':grpc-testing'),
+    testCompile project(':grpc-testing'),
             project(':grpc-testing-proto'),
             libraries.guava,
             libraries.guava_testlib,
