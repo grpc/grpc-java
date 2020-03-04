@@ -16,7 +16,6 @@
 
 package io.grpc.xds;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.collect.ImmutableMap;
@@ -30,6 +29,8 @@ import io.grpc.Status;
 import io.grpc.internal.JsonUtil;
 import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
+import io.grpc.internal.ServiceConfigUtil.PolicySelection;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import javax.annotation.Nullable;
@@ -42,10 +43,7 @@ import javax.annotation.Nullable;
 @Internal
 public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
 
-  static final String XDS_POLICY_NAME = "xds_experimental";
-
-  private static final LbConfig DEFAULT_FALLBACK_POLICY =
-      new LbConfig("round_robin", ImmutableMap.<String, Void>of());
+  private static final String XDS_POLICY_NAME = "xds_experimental";
 
   @Override
   public boolean isAvailable() {
@@ -78,8 +76,38 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
       Map<String, ?> rawLoadBalancingPolicyConfig, LoadBalancerRegistry registry) {
     try {
       String cluster = JsonUtil.getString(rawLoadBalancingPolicyConfig, "cluster");
-      LbConfig childPolicy = selectChildPolicy(rawLoadBalancingPolicyConfig, registry);
-      LbConfig fallbackPolicy = selectFallbackPolicy(rawLoadBalancingPolicyConfig, registry);
+
+      LbConfig roundRobinConfig = new LbConfig("round_robin", ImmutableMap.<String, Object>of());
+      List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
+          JsonUtil.getListOfObjects(rawLoadBalancingPolicyConfig, "childPolicy"));
+      if (childConfigs == null) {
+        childConfigs = new ArrayList<>(1);
+      } else {
+        childConfigs = new ArrayList<>(childConfigs);
+      }
+      childConfigs.add(roundRobinConfig);
+      ConfigOrError childConfigOrError =
+          ServiceConfigUtil.selectLbPolicyFromList(childConfigs, registry);
+      if (childConfigOrError.getError() != null) {
+        return childConfigOrError;
+      }
+      PolicySelection childPolicy = (PolicySelection) childConfigOrError.getConfig();
+
+      List<LbConfig> fallbackConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
+          JsonUtil.getListOfObjects(rawLoadBalancingPolicyConfig, "fallbackPolicy"));
+      if (fallbackConfigs == null) {
+        fallbackConfigs = new ArrayList<>(1);
+      } else {
+        fallbackConfigs = new ArrayList<>(fallbackConfigs);
+      }
+      fallbackConfigs.add(roundRobinConfig);
+      ConfigOrError fallbackConfigOrError =
+          ServiceConfigUtil.selectLbPolicyFromList(fallbackConfigs, registry);
+      if (fallbackConfigOrError.getError() != null) {
+        return fallbackConfigOrError;
+      }
+      PolicySelection fallbackPolicy = (PolicySelection) fallbackConfigOrError.getConfig();
+
       String edsServiceName = JsonUtil.getString(rawLoadBalancingPolicyConfig, "edsServiceName");
       String lrsServerName =
           JsonUtil.getString(rawLoadBalancingPolicyConfig, "lrsLoadReportingServerName");
@@ -92,39 +120,6 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
     }
   }
 
-  @VisibleForTesting
-  static LbConfig selectFallbackPolicy(
-      Map<String, ?> rawLoadBalancingPolicyConfig, LoadBalancerRegistry lbRegistry) {
-    List<LbConfig> fallbackConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
-        JsonUtil.getListOfObjects(rawLoadBalancingPolicyConfig, "fallbackPolicy"));
-    LbConfig fallbackPolicy = selectSupportedLbPolicy(fallbackConfigs, lbRegistry);
-    return fallbackPolicy == null ? DEFAULT_FALLBACK_POLICY : fallbackPolicy;
-  }
-
-  @Nullable
-  @VisibleForTesting
-  static LbConfig selectChildPolicy(
-      Map<String, ?> rawLoadBalancingPolicyConfig, LoadBalancerRegistry lbRegistry) {
-    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
-        JsonUtil.getListOfObjects(rawLoadBalancingPolicyConfig, "childPolicy"));
-    return selectSupportedLbPolicy(childConfigs, lbRegistry);
-  }
-
-  @Nullable
-  private static LbConfig selectSupportedLbPolicy(
-      @Nullable List<LbConfig> lbConfigs, LoadBalancerRegistry lbRegistry) {
-    if (lbConfigs == null) {
-      return null;
-    }
-    for (LbConfig lbConfig : lbConfigs) {
-      String lbPolicy = lbConfig.getPolicyName();
-      if (lbRegistry.getProvider(lbPolicy) != null) {
-        return lbConfig;
-      }
-    }
-    return null;
-  }
-
   /**
    * Represents a successfully parsed and validated LoadBalancingConfig for XDS.
    */
@@ -132,11 +127,10 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
     // FIXME(chengyuanzhang): make cluster name required.
     @Nullable
     final String cluster;
-    // TODO(carl-mastrangelo): make these Object's containing the fully parsed child configs.
     @Nullable
-    final LbConfig childPolicy;
+    final PolicySelection childPolicy;
     @Nullable
-    final LbConfig fallbackPolicy;
+    final PolicySelection fallbackPolicy;
     // Optional. Name to use in EDS query. If not present, defaults to the server name from the
     // target URI.
     @Nullable
@@ -149,8 +143,8 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
 
     XdsConfig(
         @Nullable String cluster,
-        @Nullable LbConfig childPolicy,
-        @Nullable LbConfig fallbackPolicy,
+        @Nullable PolicySelection childPolicy,
+        @Nullable PolicySelection fallbackPolicy,
         @Nullable String edsServiceName,
         @Nullable String lrsServerName) {
       this.cluster = cluster;
