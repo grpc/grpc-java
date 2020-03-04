@@ -632,6 +632,7 @@ public class XdsClientImplTestForListener {
             .build();
   }
 
+  @SuppressWarnings("deprecation")
   static FilterChain buildFilterChain(FilterChainMatch filterChainMatch,
                                       DownstreamTlsContext tlsContext, Filter...filters) {
     return
