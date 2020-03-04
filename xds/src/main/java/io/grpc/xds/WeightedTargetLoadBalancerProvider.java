@@ -33,7 +33,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
@@ -45,8 +44,6 @@ import javax.annotation.Nullable;
 public final class WeightedTargetLoadBalancerProvider extends LoadBalancerProvider {
 
   static final String WEIGHTED_TARGET_POLICY_NAME = "weighted_target_experimental";
-  private static final Logger logger =
-      Logger.getLogger(WeightedTargetLoadBalancerProvider.class.getName());
 
   @Nullable
   private final LoadBalancerRegistry lbRegistry;

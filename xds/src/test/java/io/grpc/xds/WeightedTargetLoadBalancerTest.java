@@ -52,7 +52,6 @@ import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedPolicySelection;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedTargetConfig;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import org.junit.After;
@@ -67,8 +66,6 @@ import org.mockito.MockitoAnnotations;
 /** Tests for {@link WeightedTargetLoadBalancer}. */
 @RunWith(JUnit4.class)
 public class WeightedTargetLoadBalancerTest {
-
-  private static final Map<String, ?> EMPTY_RAW_CONFIG = Collections.emptyMap();
 
   private final LoadBalancerRegistry lbRegistry = new LoadBalancerRegistry();
   private final List<LoadBalancer> childBalancers = new ArrayList<>();
@@ -129,13 +126,13 @@ public class WeightedTargetLoadBalancerTest {
   };
 
   private final WeightedPolicySelection weightedLbConfig0 = new WeightedPolicySelection(
-      weights[0], new PolicySelection(fooLbProvider, EMPTY_RAW_CONFIG, configs[0]));
+      weights[0], new PolicySelection(fooLbProvider, null, configs[0]));
   private final WeightedPolicySelection weightedLbConfig1 = new WeightedPolicySelection(
-      weights[1], new PolicySelection(barLbProvider, EMPTY_RAW_CONFIG, configs[1]));
+      weights[1], new PolicySelection(barLbProvider, null, configs[1]));
   private final WeightedPolicySelection weightedLbConfig2 = new WeightedPolicySelection(
-      weights[2],  new PolicySelection(barLbProvider, EMPTY_RAW_CONFIG, configs[2]));
+      weights[2],  new PolicySelection(barLbProvider, null, configs[2]));
   private final WeightedPolicySelection weightedLbConfig3 = new WeightedPolicySelection(
-      weights[3], new PolicySelection(fooLbProvider, EMPTY_RAW_CONFIG, configs[3]));
+      weights[3], new PolicySelection(fooLbProvider, null, configs[3]));
 
   private final WeightedPickerFactory pickerFactory = new WeightedPickerFactory() {
     // Pick from the child picker with the given weight: weightToPick.
@@ -231,16 +228,16 @@ public class WeightedTargetLoadBalancerTest {
     Map<String, WeightedPolicySelection> newTargets = ImmutableMap.of(
         "target1",
         new WeightedPolicySelection(
-            newWeights[0], new PolicySelection(barLbProvider, EMPTY_RAW_CONFIG, newConfigs[0])),
+            newWeights[0], new PolicySelection(barLbProvider, null, newConfigs[0])),
         "target2",
         new WeightedPolicySelection(
-            newWeights[1], new PolicySelection(barLbProvider, EMPTY_RAW_CONFIG, newConfigs[1])),
+            newWeights[1], new PolicySelection(barLbProvider, null, newConfigs[1])),
         "target3",
         new WeightedPolicySelection(
-            newWeights[2], new PolicySelection(fooLbProvider, EMPTY_RAW_CONFIG, newConfigs[2])),
+            newWeights[2], new PolicySelection(fooLbProvider, null, newConfigs[2])),
         "target4",
         new WeightedPolicySelection(
-            newWeights[3], new PolicySelection(fooLbProvider, EMPTY_RAW_CONFIG, newConfigs[3])));
+            newWeights[3], new PolicySelection(fooLbProvider, null, newConfigs[3])));
     weightedTargetLb.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
