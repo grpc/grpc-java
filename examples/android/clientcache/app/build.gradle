@@ -56,6 +56,6 @@ dependencies {
     implementation 'javax.annotation:javax.annotation-api:1.2'
 
     testImplementation 'junit:junit:4.12'
-    testImplementation 'com.google.truth:truth:1.0'
+    testImplementation 'com.google.truth:truth:1.0.1'
     testImplementation 'io.grpc:grpc-testing:1.29.0-SNAPSHOT' // CURRENT_GRPC_VERSION
 }

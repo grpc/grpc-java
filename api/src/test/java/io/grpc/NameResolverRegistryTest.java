@@ -21,7 +21,6 @@ import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 
 import io.grpc.NameResolver.ServiceConfigParser;
-import io.grpc.internal.BaseDnsNameResolverProvider;
 import io.grpc.internal.DnsNameResolverProvider;
 import java.lang.Thread.UncaughtExceptionHandler;
 import java.net.URI;
@@ -155,10 +154,11 @@ public class NameResolverRegistryTest {
   public void baseProviders() {
     List<NameResolverProvider> providers = NameResolverRegistry.getDefaultRegistry().providers();
     assertThat(providers).hasSize(2);
-    // 2 name resolvers from grpclb and core
-    for (NameResolverProvider provider : providers) {
-      assertThat(provider).isInstanceOf(BaseDnsNameResolverProvider.class);
-    }
+    // 2 name resolvers from grpclb and core, ordered with decreasing priorities.
+    assertThat(providers.get(0).getClass().getName())
+        .isEqualTo("io.grpc.grpclb.SecretGrpclbNameResolverProvider$Provider");
+    assertThat(providers.get(1).getClass().getName())
+        .isEqualTo("io.grpc.internal.DnsNameResolverProvider");
     assertThat(NameResolverRegistry.getDefaultRegistry().asFactory().getDefaultScheme())
         .isEqualTo("dns");
   }

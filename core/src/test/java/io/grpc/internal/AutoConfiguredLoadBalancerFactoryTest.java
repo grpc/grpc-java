@@ -51,11 +51,10 @@ import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.grpclb.GrpclbLoadBalancerProvider;
 import io.grpc.internal.AutoConfiguredLoadBalancerFactory.AutoConfiguredLoadBalancer;
-import io.grpc.internal.AutoConfiguredLoadBalancerFactory.PolicySelection;
+import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -620,10 +619,6 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     assertThat(parsed).isNotNull();
     assertThat(parsed.getConfig()).isNotNull();
     assertThat(((PolicySelection) parsed.getConfig()).config).isNotNull();
-    verify(channelLogger).log(
-        eq(ChannelLogLevel.DEBUG),
-        eq("{0} specified by Service Config are not available"),
-        eq(new ArrayList<>(Collections.singletonList("magic_balancer"))));
   }
 
   @Test
