@@ -466,7 +466,7 @@ public final class ClientCalls {
   /**
    * Completes a {@link GrpcFuture} using {@link StreamObserver} events.
    */
-  private static final class UnaryStreamToFuture<ReqT, RespT> extends StartableListener<RespT> {
+  private static final class UnaryStreamToFuture<RespT> extends StartableListener<RespT> {
     private final GrpcFuture<RespT> responseFuture;
     private RespT value;
 
