@@ -162,7 +162,7 @@ public final class ClientCalls {
   public static <ReqT, RespT> Iterator<RespT> blockingServerStreamingCall(
       ClientCall<ReqT, RespT> call, ReqT req) {
     BlockingResponseStream<RespT> result = new BlockingResponseStream<>(call);
-    asyncUnaryRequestCall(call, req, result.listener(), true);
+    asyncUnaryRequestCall(call, req, result.listener());
     return result;
   }
 
@@ -179,7 +179,7 @@ public final class ClientCalls {
     ThreadlessExecutor executor = new ThreadlessExecutor();
     ClientCall<ReqT, RespT> call = channel.newCall(method, callOptions.withExecutor(executor));
     BlockingResponseStream<RespT> result = new BlockingResponseStream<>(call, executor);
-    asyncUnaryRequestCall(call, req, result.listener(), true);
+    asyncUnaryRequestCall(call, req, result.listener());
     return result;
   }
 
@@ -193,7 +193,7 @@ public final class ClientCalls {
   public static <ReqT, RespT> ListenableFuture<RespT> futureUnaryCall(
       ClientCall<ReqT, RespT> call, ReqT req) {
     GrpcFuture<RespT> responseFuture = new GrpcFuture<>(call);
-    asyncUnaryRequestCall(call, req, new UnaryStreamToFuture<>(responseFuture), false);
+    asyncUnaryRequestCall(call, req, new UnaryStreamToFuture<>(responseFuture));
     return responseFuture;
   }
 
@@ -275,16 +275,14 @@ public final class ClientCalls {
         new StreamObserverToCallListenerAdapter<>(
             responseObserver,
             new CallToStreamObserverAdapter<>(call),
-            streamingResponse),
-        streamingResponse);
+            streamingResponse));
   }
 
   private static <ReqT, RespT> void asyncUnaryRequestCall(
       ClientCall<ReqT, RespT> call,
       ReqT req,
-      ClientCall.Listener<RespT> responseListener,
-      boolean streamingResponse) {
-    startCall(call, responseListener, streamingResponse);
+      StartableListener<RespT> responseListener) {
+    startCall(call, responseListener);
     try {
       call.sendMessage(req);
       call.halfClose();
@@ -303,23 +301,19 @@ public final class ClientCalls {
     startCall(
         call,
         new StreamObserverToCallListenerAdapter<>(
-            responseObserver, adapter, streamingResponse),
-        streamingResponse);
+            responseObserver, adapter, streamingResponse));
     return adapter;
   }
 
   private static <ReqT, RespT> void startCall(
       ClientCall<ReqT, RespT> call,
-      ClientCall.Listener<RespT> responseListener,
-      boolean streamingResponse) {
+      StartableListener<RespT> responseListener) {
     call.start(responseListener, new Metadata());
-    if (streamingResponse) {
-      call.request(1);
-    } else {
-      // Initially ask for two responses from flow-control so that if a misbehaving server sends
-      // more than one responses, we can catch it and fail it in the listener.
-      call.request(2);
-    }
+    responseListener.onStart();
+  }
+
+  private abstract static class StartableListener<T> extends ClientCall.Listener<T> {
+    abstract void onStart();
   }
 
   private static final class CallToStreamObserverAdapter<T> extends ClientCallStreamObserver<T> {
@@ -398,7 +392,7 @@ public final class ClientCalls {
   }
 
   private static final class StreamObserverToCallListenerAdapter<ReqT, RespT>
-      extends ClientCall.Listener<RespT> {
+      extends StartableListener<RespT> {
     private final StreamObserver<RespT> observer;
     private final CallToStreamObserverAdapter<ReqT> adapter;
     private final boolean streamingResponse;
@@ -456,12 +450,23 @@ public final class ClientCalls {
         adapter.onReadyHandler.run();
       }
     }
+
+    @Override
+    void onStart() {
+      if (adapter.autoFlowControlEnabled) {
+        if (streamingResponse) {
+          adapter.request(1);
+        } else {
+          adapter.request(2);
+        }
+      }
+    }
   }
 
   /**
    * Completes a {@link GrpcFuture} using {@link StreamObserver} events.
    */
-  private static final class UnaryStreamToFuture<RespT> extends ClientCall.Listener<RespT> {
+  private static final class UnaryStreamToFuture<ReqT, RespT> extends StartableListener<RespT> {
     private final GrpcFuture<RespT> responseFuture;
     private RespT value;
 
@@ -497,6 +502,11 @@ public final class ClientCalls {
         responseFuture.setException(status.asRuntimeException(trailers));
       }
     }
+
+    @Override
+    void onStart() {
+      responseFuture.request(2);
+    }
   }
 
   private static final class GrpcFuture<RespT> extends AbstractFuture<RespT> {
@@ -526,6 +536,10 @@ public final class ClientCalls {
     protected String pendingToString() {
       return MoreObjects.toStringHelper(this).add("clientCall", call).toString();
     }
+
+    void request(int numMessages) {
+      call.request(numMessages);
+    }
   }
 
   /**
@@ -538,7 +552,7 @@ public final class ClientCalls {
   private static final class BlockingResponseStream<T> implements Iterator<T> {
     // Due to flow control, only needs to hold up to 2 items: 1 for value, 1 for close.
     private final BlockingQueue<Object> buffer = new ArrayBlockingQueue<>(2);
-    private final ClientCall.Listener<T> listener = new QueuingListener();
+    private final StartableListener<T> listener = new QueuingListener();
     private final ClientCall<?, T> call;
     /** May be null. */
     private final ThreadlessExecutor threadless;
@@ -556,7 +570,7 @@ public final class ClientCalls {
       this.threadless = threadless;
     }
 
-    ClientCall.Listener<T> listener() {
+    StartableListener<T> listener() {
       return listener;
     }
 
@@ -628,7 +642,7 @@ public final class ClientCalls {
       throw new UnsupportedOperationException();
     }
 
-    private final class QueuingListener extends ClientCall.Listener<T> {
+    private final class QueuingListener extends StartableListener<T> {
       // Non private to avoid synthetic class
       QueuingListener() {}
 
@@ -653,6 +667,11 @@ public final class ClientCalls {
           buffer.add(status.asRuntimeException(trailers));
         }
         done = true;
+      }
+
+      @Override
+      void onStart() {
+        call.request(1);
       }
     }
   }
