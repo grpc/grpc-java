@@ -237,7 +237,7 @@ final class XdsClientImpl extends XdsClient {
   @Override
   void watchConfigData(String authority, ConfigWatcher watcher) {
     checkState(configWatcher == null, "watcher for %s already registered", authority);
-    ldsResourceName = checkNotNull(authority, "hostName");
+    ldsResourceName = checkNotNull(authority, "authority");
     configWatcher = checkNotNull(watcher, "watcher");
     logger.log(XdsLogLevel.INFO, "Started watching config {0}", ldsResourceName);
     // Stripe off port (if exists) for virtual host domain name matching.
