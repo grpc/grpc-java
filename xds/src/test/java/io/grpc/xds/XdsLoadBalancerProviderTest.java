@@ -81,33 +81,8 @@ public class XdsLoadBalancerProviderTest {
     }
   };
 
-  private final LoadBalancerProvider roundRobinProvider = new LoadBalancerProvider() {
-    @Override
-    public boolean isAvailable() {
-      return true;
-    }
-
-    @Override
-    public int getPriority() {
-      return 5;
-    }
-
-    @Override
-    public String getPolicyName() {
-      return "round_robin";
-    }
-
-    @Override
-    public ConfigOrError parseLoadBalancingPolicyConfig(
-        Map<String, ?> rawLoadBalancingPolicyConfig) {
-      return ConfigOrError.fromConfig("no service config");
-    }
-
-    @Override
-    public LoadBalancer newLoadBalancer(Helper helper) {
-      return null;
-    }
-  };
+  private final LoadBalancerProvider roundRobinProvider =
+      LoadBalancerRegistry.getDefaultRegistry().getProvider("round_robin");
 
   @Before
   public void setUp() {
