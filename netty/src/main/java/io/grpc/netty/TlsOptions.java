@@ -20,26 +20,36 @@ import java.security.KeyStore;
 import java.security.cert.X509Certificate;
 import javax.net.ssl.SSLEngine;
 
-// TlsOptions contains different options users could choose. In a nutshell, it provides three main
-// features users could customize:
-// 1. choose different levels of peer verification by specifying |VerificationAuthType|
-// 2. provide custom peer verification check by inheriting |verifyPeerCertificate|
-// 3. change the trust CA certificate bundle by inheriting |getTrustedCerts|
+/**
+ * TlsOptions contains different options users could choose. In a nutshell, it provides three main
+ * features users could customize:
+ * 1. choose different levels of peer verification by specifying |VerificationAuthType|
+ * 2. provide custom peer verification check by inheriting |verifyPeerCertificate|
+ * 3. change the trust CA certificate bundle by inheriting |getTrustedCerts|
+ */
 public abstract class TlsOptions {
-  // VerificationAuthType contains set of verification levels users can choose to customize
-  // their checks against its peer.
-  // Note we don't have hostname check on server side. Choosing CertificateAndHostNameVerification
-  // has the same effect as choosing CertificateVerification on server side, in terms of peer
-  // endpoint check.
+  /**
+   * VerificationAuthType contains set of verification levels users can choose to customize
+   * their checks against its peer.
+   * Note we don't have hostname check on server side. Choosing CertificateAndHostNameVerification
+   * has the same effect as choosing CertificateVerification on server side, in terms of peer
+   * endpoint check.
+   */
   public enum VerificationAuthType {
-    // Default option: performs certificate verification and hostname verification.
+    /**
+     * Default option: performs certificate verification and hostname verification.
+     */
     CertificateAndHostNameVerification,
-    // Performs certificate verification, but skips hostname verification.
-    // Users are responsible for verifying peer's identity via custom check callback.
+    /**
+     * Performs certificate verification, but skips hostname verification.
+     * Users are responsible for verifying peer's identity via custom check callback.
+     */
     CertificateVerification,
-    // Skips both certificate and hostname verification.
-    // Users are responsible for verifying peer's identity and peer's certificate via custom
-    // check callback.
+    /**
+     * Skips both certificate and hostname verification.
+     * Users are responsible for verifying peer's identity and peer's certificate via custom
+     * check callback.
+     */
     SkipAllVerification,
   }
 
@@ -53,10 +63,22 @@ public abstract class TlsOptions {
     return this.verificationType;
   }
 
-  // used to perform custom peer authorization checking
+  /**
+   * sub-classes extend this function to perform custom peer identity checking.
+   * @param peerCertChain the certificate chain sent from the peer
+   * @param authType the key exchange algorithm used
+   * @param engine the engine used for this connection. This parameter can be null, which indicates
+   *     that implementations need not check the ssl parameters
+   * @throws Exception exception thrown when performing custom peer identity check
+   */
   abstract void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType,
       SSLEngine engine) throws Exception;
 
-  // used to perform trust CA certificates reloading
+  /**
+   * sub-classes extend this function to perform trust certificate bundle reloading.
+   * @return A KeyStore containing the trust certificate bundle that will be used for the following
+   *     connections.
+   * @throws Exception exception thrown when performing trust certificate bundle reloading
+   */
   abstract KeyStore getTrustedCerts() throws Exception;
 }

@@ -16,6 +16,8 @@
 
 package io.grpc.netty;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import io.grpc.netty.TlsOptions.VerificationAuthType;
 import java.net.Socket;
 import java.security.KeyStore;
@@ -27,12 +29,17 @@ import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509ExtendedTrustManager;
 
+/**
+ * ConfigurableX509TrustManager is a highly configurable class that allows users choose different
+ * level of peer checking mechanisms, as well as some customized check. It could also be used to
+ * reload trust certificate bundle client/server uses.
+ */
 public class ConfigurableX509TrustManager extends X509ExtendedTrustManager {
 
   private TlsOptions tlsOptions;
 
   public ConfigurableX509TrustManager(TlsOptions tlsOptions) {
-    this.tlsOptions = tlsOptions;
+    this.tlsOptions = checkNotNull(tlsOptions, "tlsOptions");
   }
 
   @Override
@@ -83,7 +90,7 @@ public class ConfigurableX509TrustManager extends X509ExtendedTrustManager {
         || authType == VerificationAuthType.CertificateVerification) {
       if (x509Certificates == null || x509Certificates.length == 0) {
         throw new CertificateException(
-            "Client side requires certificate but got null or empty certificates");
+            "Want certificate verification but got null or empty certificates");
       }
       KeyStore ks;
       try {
@@ -114,11 +121,18 @@ public class ConfigurableX509TrustManager extends X509ExtendedTrustManager {
             + e.getMessage());
       }
       if (isClient) {
-        String algorithm = authType == VerificationAuthType.CertificateAndHostNameVerification
-            ? "HTTPS" : "";
-        SSLParameters sslParams = sslEngine.getSSLParameters();
-        sslParams.setEndpointIdentificationAlgorithm(algorithm);
-        sslEngine.setSSLParameters(sslParams);
+        if (authType == VerificationAuthType.CertificateAndHostNameVerification
+            && (sslEngine == null || sslEngine.getSSLParameters() == null)) {
+          throw new CertificateException(
+              "SSLEngine or SSLParameters is null. Couldn't check host name");
+        }
+        if (sslEngine != null && sslEngine.getSSLParameters() != null) {
+          String algorithm = authType == VerificationAuthType.CertificateAndHostNameVerification
+              ? "HTTPS" : "";
+          SSLParameters sslParams = sslEngine.getSSLParameters();
+          sslParams.setEndpointIdentificationAlgorithm(algorithm);
+          sslEngine.setSSLParameters(sslParams);
+        }
         delegateManager.checkServerTrusted(x509Certificates, s, sslEngine);
       } else {
         delegateManager.checkClientTrusted(x509Certificates, s, sslEngine);
