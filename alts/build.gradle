@@ -16,12 +16,12 @@ dependencies {
     compile project(':grpc-auth'),
             project(':grpc-core'),
             project(':grpc-grpclb'),
-            project(':grpc-netty'),
             project(':grpc-protobuf'),
             project(':grpc-stub'),
             libraries.lang,
             libraries.protobuf,
             libraries.conscrypt
+    def nettyDependency = compile project(':grpc-netty')
     compile (libraries.google_auth_oauth2_http) {
         // prefer our own versions instead of google-auth-oauth2-http's dependency
         exclude group: 'com.google.guava', module: 'guava'
@@ -29,6 +29,10 @@ dependencies {
         exclude group: 'io.grpc', module: 'grpc-context'
     }
     compileOnly libraries.javax_annotation
+
+    shadow configurations.compile.getDependencies().minus(nettyDependency)
+    shadow project(path: ':grpc-netty-shaded', configuration: 'shadow')
+
     testCompile project(':grpc-testing'),
             project(':grpc-testing-proto'),
             libraries.guava,
@@ -81,14 +85,16 @@ publishing {
             artifacts.remove(originalJar)
 
             pom.withXml {
-                // Swap our dependency to grpc-netty-shaded. Projects depending on this via
-                // project(':grpc-alts') will still be using the non-shaded form.
-                asNode().dependencies.'*'.findAll() { dep ->
-                    dep.artifactId.text() == 'grpc-netty'
-                }.each() { netty ->
-                    netty.artifactId*.value = 'grpc-netty-shaded'
-                    netty.version*.value = "[" + netty.version.text() + "]"
+                def dependenciesNode = new Node(null, 'dependencies')
+                project.configurations.shadow.allDependencies.each { dep ->
+                    def dependencyNode = dependenciesNode.appendNode('dependency')
+                    dependencyNode.appendNode('groupId', dep.group)
+                    dependencyNode.appendNode('artifactId', dep.name)
+                    def version = (dep.name == 'grpc-netty-shaded') ? '[' + dep.version + ']' : dep.version
+                    dependencyNode.appendNode('version', version)
+                    dependencyNode.appendNode('scope', 'compile')
                 }
+                asNode().dependencies[0].replaceNode(dependenciesNode)
             }
         }
     }
