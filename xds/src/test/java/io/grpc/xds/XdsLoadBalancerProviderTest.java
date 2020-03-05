@@ -29,6 +29,7 @@ import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.xds.XdsLoadBalancerProvider.XdsConfig;
 import java.util.HashMap;
 import java.util.Map;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -51,7 +52,7 @@ public class XdsLoadBalancerProviderTest {
   @Mock
   private LoadBalancer fakeBalancer1;
 
-  private final LoadBalancerRegistry lbRegistry = new LoadBalancerRegistry();
+  private final LoadBalancerRegistry lbRegistry = LoadBalancerRegistry.getDefaultRegistry();
   private final Object lbConfig1 = new Object();
   private final LoadBalancerProvider lbProvider1 = new LoadBalancerProvider() {
     @Override
@@ -81,14 +82,15 @@ public class XdsLoadBalancerProviderTest {
     }
   };
 
-  private final LoadBalancerProvider roundRobinProvider =
-      LoadBalancerRegistry.getDefaultRegistry().getProvider("round_robin");
-
   @Before
   public void setUp() {
     MockitoAnnotations.initMocks(this);
     lbRegistry.register(lbProvider1);
-    lbRegistry.register(roundRobinProvider);
+  }
+
+  @After
+  public void tearDown() {
+    lbRegistry.deregister(lbProvider1);
   }
 
   @Test
@@ -114,7 +116,9 @@ public class XdsLoadBalancerProviderTest {
                     checkObject(JsonParser.parse("{\"supported_1\" : {}}"))).getRawConfigValue(),
                 lbConfig1),
             new PolicySelection(
-                roundRobinProvider, new HashMap<String, Object>(), "no service config"),
+                lbRegistry.getProvider("round_robin"),
+                new HashMap<String, Object>(),
+                "no service config"),
             "dns:///eds.service.com:8080",
             "dns:///lrs.service.com:8080")
     );
