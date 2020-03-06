@@ -35,9 +35,11 @@ import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
+import io.grpc.xds.EnvoyProtoData.Route;
 import io.grpc.xds.EnvoyServerProtoData.Listener;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -62,15 +64,21 @@ abstract class XdsClient {
    */
   static final class ConfigUpdate {
     private final String clusterName;
+    private final List<Route> routes;
     private final Listener listener;
 
-    private ConfigUpdate(String clusterName, @Nullable Listener listener) {
+    private ConfigUpdate(String clusterName, List<Route> routes, @Nullable Listener listener) {
       this.clusterName = clusterName;
+      this.routes = routes;
       this.listener = listener;
     }
 
     String getClusterName() {
       return clusterName;
+    }
+
+    public List<Route> getRoutes() {
+      return routes;
     }
 
     @Nullable
@@ -84,6 +92,8 @@ abstract class XdsClient {
           MoreObjects
               .toStringHelper(this)
               .add("clusterName", clusterName)
+              .add("routes", routes)
+              .add("listener", listener)
               .toString();
     }
 
@@ -92,6 +102,7 @@ abstract class XdsClient {
     }
 
     static final class Builder {
+      private final List<Route> routes = new ArrayList<>();
       private String clusterName;
       @Nullable private Listener listener;
 
@@ -104,6 +115,11 @@ abstract class XdsClient {
         return this;
       }
 
+      Builder addRoutes(Collection<Route> route) {
+        routes.addAll(route);
+        return this;
+      }
+
       Builder setListener(Listener listener) {
         this.listener = listener;
         return this;
@@ -111,7 +127,7 @@ abstract class XdsClient {
 
       ConfigUpdate build() {
         Preconditions.checkState(clusterName != null, "clusterName is not set");
-        return new ConfigUpdate(clusterName, listener);
+        return new ConfigUpdate(clusterName, Collections.unmodifiableList(routes), listener);
       }
     }
   }
