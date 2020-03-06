@@ -230,9 +230,9 @@ final class XdsClientImpl extends XdsClient {
   }
 
   @Override
-  void watchConfigData(String authority, ConfigWatcher watcher) {
-    checkState(configWatcher == null, "watcher for %s already registered", authority);
-    ldsResourceName = checkNotNull(authority, "authority");
+  void watchConfigData(String targetAuthority, ConfigWatcher watcher) {
+    checkState(configWatcher == null, "watcher for %s already registered", targetAuthority);
+    ldsResourceName = checkNotNull(targetAuthority, "targetAuthority");
     configWatcher = checkNotNull(watcher, "watcher");
     logger.log(XdsLogLevel.INFO, "Started watching config {0}", ldsResourceName);
     if (rpcRetryTimer != null && rpcRetryTimer.isPending()) {

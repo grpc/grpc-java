@@ -391,16 +391,17 @@ abstract class XdsClient {
   abstract void shutdown();
 
   /**
-   * Registers a watcher to receive {@link ConfigUpdate} for service with the given authority.
+   * Registers a watcher to receive {@link ConfigUpdate} for service with the given target
+   * authority.
    *
    * <p>Unlike watchers for cluster data and endpoint data, at most one ConfigWatcher can be
    * registered. Once it is registered, it cannot be unregistered.
    *
-   * @param authority authority of the "xds:" URI for the server name that the gRPC client
+   * @param targetAuthority authority of the "xds:" URI for the server name that the gRPC client
    *     targets for.
    * @param watcher the {@link ConfigWatcher} to receive {@link ConfigUpdate}.
    */
-  void watchConfigData(String authority, ConfigWatcher watcher) {
+  void watchConfigData(String targetAuthority, ConfigWatcher watcher) {
   }
 
   /**
