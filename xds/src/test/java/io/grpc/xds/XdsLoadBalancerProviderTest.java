@@ -97,7 +97,8 @@ public class XdsLoadBalancerProviderTest {
   public void parseLoadBalancingConfigPolicy() throws Exception {
     String rawLbConfig = "{"
         + "\"cluster\" : \"foo.googleapis.com\","
-        + "\"childPolicy\" : [{\"lbPolicy3\" : {\"key\" : \"val\"}}, {\"supported_1\" : {}}],"
+        + "\"endpointPickingPolicy\" : "
+        + "    [{\"lbPolicy3\" : {\"key\" : \"val\"}}, {\"supported_1\" : {}}],"
         + "\"fallbackPolicy\" : [],"
         + "\"edsServiceName\" : \"dns:///eds.service.com:8080\","
         + "\"lrsLoadReportingServerName\" : \"dns:///lrs.service.com:8080\""

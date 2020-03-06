@@ -80,16 +80,16 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
       String cluster = JsonUtil.getString(rawLoadBalancingPolicyConfig, "cluster");
 
       LbConfig roundRobinConfig = new LbConfig("round_robin", ImmutableMap.<String, Object>of());
-      List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
-          JsonUtil.getListOfObjects(rawLoadBalancingPolicyConfig, "childPolicy"));
-      if (childConfigs == null) {
-        childConfigs = new ArrayList<>(1);
+      List<LbConfig> endpointPickingConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
+          JsonUtil.getListOfObjects(rawLoadBalancingPolicyConfig, "endpointPickingPolicy"));
+      if (endpointPickingConfigs == null) {
+        endpointPickingConfigs = new ArrayList<>(1);
       } else {
-        childConfigs = new ArrayList<>(childConfigs);
+        endpointPickingConfigs = new ArrayList<>(endpointPickingConfigs);
       }
-      childConfigs.add(roundRobinConfig);
+      endpointPickingConfigs.add(roundRobinConfig);
       ConfigOrError childConfigOrError =
-          ServiceConfigUtil.selectLbPolicyFromList(childConfigs, registry);
+          ServiceConfigUtil.selectLbPolicyFromList(endpointPickingConfigs, registry);
       if (childConfigOrError.getError() != null) {
         return childConfigOrError;
       }
