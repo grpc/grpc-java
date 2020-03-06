@@ -157,9 +157,6 @@ final class XdsClientImpl extends XdsClient {
   // never change.
   @Nullable
   private ConfigWatcher configWatcher;
-  // The host name portion of "xds:" URI that the gRPC client targets for.
-  @Nullable
-  private String hostName;
   // The "xds:" URI (including port suffix if present) that the gRPC client targets for.
   @Nullable
   private String ldsResourceName;
@@ -233,15 +230,10 @@ final class XdsClientImpl extends XdsClient {
   }
 
   @Override
-  void watchConfigData(String hostName, int port, ConfigWatcher watcher) {
-    checkState(configWatcher == null, "watcher for %s already registered", hostName);
+  void watchConfigData(String targetAuthority, ConfigWatcher watcher) {
+    checkState(configWatcher == null, "watcher for %s already registered", targetAuthority);
+    ldsResourceName = checkNotNull(targetAuthority, "targetAuthority");
     configWatcher = checkNotNull(watcher, "watcher");
-    this.hostName = checkNotNull(hostName, "hostName");
-    if (port == -1) {
-      ldsResourceName = hostName;
-    } else {
-      ldsResourceName = hostName + ":" + port;
-    }
     logger.log(XdsLogLevel.INFO, "Started watching config {0}", ldsResourceName);
     if (rpcRetryTimer != null && rpcRetryTimer.isPending()) {
       // Currently in retry backoff.
@@ -540,11 +532,12 @@ final class XdsClientImpl extends XdsClient {
       //  data or one supersedes the other. TBD.
       if (requestedHttpConnManager.hasRouteConfig()) {
         RouteConfiguration rc = requestedHttpConnManager.getRouteConfig();
-        clusterName = findClusterNameInRouteConfig(rc, hostName);
+        clusterName = findClusterNameInRouteConfig(rc, ldsResourceName);
         if (clusterName == null) {
           errorMessage =
               "Listener " + ldsResourceName + " : cannot find a valid cluster name in any "
-                  + "virtual hosts inside RouteConfiguration with domains matching: " + hostName;
+                  + "virtual hosts inside RouteConfiguration with domains matching: "
+                  + ldsResourceName;
         }
       } else if (requestedHttpConnManager.hasRds()) {
         Rds rds = requestedHttpConnManager.getRds();
@@ -650,14 +643,14 @@ final class XdsClientImpl extends XdsClient {
     // Resolved cluster name for the requested resource, if exists.
     String clusterName = null;
     if (requestedRouteConfig != null) {
-      clusterName = findClusterNameInRouteConfig(requestedRouteConfig, hostName);
+      clusterName = findClusterNameInRouteConfig(requestedRouteConfig, ldsResourceName);
       if (clusterName == null) {
         adsStream.sendNackRequest(
             ADS_TYPE_URL_RDS, ImmutableList.of(adsStream.rdsResourceName),
             rdsResponse.getVersionInfo(),
             "RouteConfiguration " + requestedRouteConfig.getName() + ": cannot find a "
                 + "valid cluster name in any virtual hosts with domains matching: "
-                + hostName);
+                + ldsResourceName);
         return;
       }
     }
