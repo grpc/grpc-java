@@ -11,6 +11,7 @@ startScripts.enabled = false
 
 configurations {
     alpnagent
+    xdsRuntime
 }
 
 evaluationDependsOn(project(':grpc-context').path)
@@ -32,6 +33,7 @@ dependencies {
     runtime libraries.opencensus_impl,
             libraries.netty_tcnative,
             project(':grpc-grpclb')
+    xdsRuntime project(path: ':grpc-xds', configuration: 'shadow')
     testCompile project(':grpc-context').sourceSets.test.output,
             libraries.mockito
     alpnagent libraries.jetty_alpn_agent
@@ -61,8 +63,7 @@ task test_client(type: CreateStartScripts) {
         "-javaagent:JAVAAGENT_APP_HOME" + configurations.alpnagent.singleFile.name
     ]
     outputDir = new File(project.buildDir, 'tmp')
-    classpath = jar.outputs.files + configurations.runtime
-    dependencies { runtime configurations.alpnagent }
+    classpath = startScripts.classpath
     doLast {
         unixScript.text = unixScript.text.replace('JAVAAGENT_APP_HOME', '\$APP_HOME/lib/')
         windowsScript.text = windowsScript.text.replace('JAVAAGENT_APP_HOME', '%APP_HOME%\\lib\\')
@@ -73,21 +74,21 @@ task test_server(type: CreateStartScripts) {
     mainClassName = "io.grpc.testing.integration.TestServiceServer"
     applicationName = "test-server"
     outputDir = new File(project.buildDir, 'tmp')
-    classpath = jar.outputs.files + configurations.runtime
+    classpath = startScripts.classpath
 }
 
 task reconnect_test_client(type: CreateStartScripts) {
     mainClassName = "io.grpc.testing.integration.ReconnectTestClient"
     applicationName = "reconnect-test-client"
     outputDir = new File(project.buildDir, 'tmp')
-    classpath = jar.outputs.files + configurations.runtime
+    classpath = startScripts.classpath
 }
 
 task stresstest_client(type: CreateStartScripts) {
     mainClassName = "io.grpc.testing.integration.StressTestClient"
     applicationName = "stresstest-client"
     outputDir = new File(project.buildDir, 'tmp')
-    classpath = jar.outputs.files + configurations.runtime
+    classpath = startScripts.classpath
     defaultJvmOpts = [
         "-verbose:gc",
         "-XX:+PrintFlagsFinal"
@@ -98,14 +99,14 @@ task http2_client(type: CreateStartScripts) {
     mainClassName = "io.grpc.testing.integration.Http2Client"
     applicationName = "http2-client"
     outputDir = new File(project.buildDir, 'tmp')
-    classpath = jar.outputs.files + configurations.runtime
+    classpath = startScripts.classpath
 }
 
 task grpclb_long_lived_affinity_test_client(type: CreateStartScripts) {
     mainClassName = "io.grpc.testing.integration.GrpclbLongLivedAffinityTestClient"
     applicationName = "grpclb-long-lived-affinity-test-client"
     outputDir = new File(project.buildDir, 'tmp')
-    classpath = jar.outputs.files + configurations.runtime
+    classpath = startScripts.classpath
     defaultJvmOpts = [
         "-Dio.grpc.internal.DnsNameResolverProvider.enable_grpclb=true",
         "-Dio.grpc.internal.DnsNameResolverProvider.enable_service_config=true"
@@ -115,18 +116,15 @@ task grpclb_long_lived_affinity_test_client(type: CreateStartScripts) {
 task xds_test_client(type: CreateStartScripts) {
     mainClassName = "io.grpc.testing.integration.XdsTestClient"
     applicationName = "xds-test-client"
-    dependencies {
-        runtime project(path: ':grpc-xds', configuration: 'shadow')
-    }
     outputDir = new File(project.buildDir, 'tmp')
-    classpath = startScripts.classpath
+    classpath = startScripts.classpath + configurations.xdsRuntime
 }
 
 task xds_test_server(type: CreateStartScripts) {
     mainClassName = "io.grpc.testing.integration.XdsTestServer"
     applicationName = "xds-test-server"
     outputDir = new File(project.buildDir, 'tmp')
-    classpath = jar.outputs.files + configurations.runtime
+    classpath = startScripts.classpath
 }
 
 applicationDistribution.into("bin") {
@@ -139,6 +137,11 @@ applicationDistribution.into("bin") {
     from(xds_test_client)
     from(xds_test_server)
     fileMode = 0755
+}
+
+applicationDistribution.into("lib") {
+    from(configurations.alpnagent)
+    from(configurations.xdsRuntime)
 }
 
 publishing {
