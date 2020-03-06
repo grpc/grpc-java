@@ -123,7 +123,7 @@ import org.mockito.MockitoAnnotations;
 @RunWith(JUnit4.class)
 public class XdsClientImplTest {
 
-  private static final String TARGET_NAME = "foo.googleapis.com:8080";
+  private static final String TARGET_AUTHORITY = "foo.googleapis.com:8080";
 
   private static final Node NODE = Node.getDefaultInstance();
   private static final FakeClock.TaskFilter RPC_RETRY_TASK_FILTER =
@@ -282,7 +282,7 @@ public class XdsClientImplTest {
 
     xdsClient =
         new XdsClientImpl(
-            TARGET_NAME,
+            TARGET_AUTHORITY,
             servers,
             channelFactory,
             NODE,
@@ -319,13 +319,13 @@ public class XdsClientImplTest {
    */
   @Test
   public void ldsResponseWithoutMatchingResource() {
-    xdsClient.watchConfigData(TARGET_NAME, configWatcher);
+    xdsClient.watchConfigData(TARGET_AUTHORITY, configWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
 
     // Client sends an LDS request for the host name (with port) to management server.
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest(NODE, "", "foo.googleapis.com:8080",
+        .onNext(eq(buildDiscoveryRequest(NODE, "", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS, "")));
 
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
@@ -355,7 +355,7 @@ public class XdsClientImplTest {
 
     // Client sends an ACK LDS request.
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest(NODE, "0", "foo.googleapis.com:8080",
+        .onNext(eq(buildDiscoveryRequest(NODE, "0", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS, "0000")));
 
     verify(configWatcher, never()).onConfigChanged(any(ConfigUpdate.class));
@@ -377,13 +377,13 @@ public class XdsClientImplTest {
    */
   @Test
   public void failToFindVirtualHostInLdsResponseInLineRouteConfig() {
-    xdsClient.watchConfigData(TARGET_NAME, configWatcher);
+    xdsClient.watchConfigData(TARGET_AUTHORITY, configWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
 
     // Client sends an LDS request for the host name (with port) to management server.
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest(NODE, "", "foo.googleapis.com:8080",
+        .onNext(eq(buildDiscoveryRequest(NODE, "", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS, "")));
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
 
@@ -397,7 +397,7 @@ public class XdsClientImplTest {
                     "some other cluster")));
 
     List<Any> listeners = ImmutableList.of(
-        Any.pack(buildListener("foo.googleapis.com:8080", /* matching resource */
+        Any.pack(buildListener(TARGET_AUTHORITY, /* matching resource */
             Any.pack(HttpConnectionManager.newBuilder().setRouteConfig(routeConfig).build()))));
     DiscoveryResponse response =
         buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS, "0000");
@@ -406,7 +406,7 @@ public class XdsClientImplTest {
     // Client sends an NACK LDS request.
     verify(requestObserver)
         .onNext(
-            argThat(new DiscoveryRequestMatcher("", "foo.googleapis.com:8080",
+            argThat(new DiscoveryRequestMatcher("", TARGET_AUTHORITY,
                 XdsClientImpl.ADS_TYPE_URL_LDS, "0000")));
 
     verify(configWatcher, never()).onConfigChanged(any(ConfigUpdate.class));
@@ -428,13 +428,13 @@ public class XdsClientImplTest {
    */
   @Test
   public void resolveVirtualHostInLdsResponse() {
-    xdsClient.watchConfigData(TARGET_NAME, configWatcher);
+    xdsClient.watchConfigData(TARGET_AUTHORITY, configWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
 
     // Client sends an LDS request for the host name (with port) to management server.
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest(NODE, "", "foo.googleapis.com:8080",
+        .onNext(eq(buildDiscoveryRequest(NODE, "", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS, "")));
     ScheduledTask ldsRespTimer =
         Iterables.getOnlyElement(
@@ -460,14 +460,14 @@ public class XdsClientImplTest {
                                 ImmutableList.of("baz.googleapis.com"),
                                 "cluster-baz.googleapis.com"))))
                 .build()))),
-        Any.pack(buildListener("foo.googleapis.com:8080", /* matching resource */
+        Any.pack(buildListener(TARGET_AUTHORITY, /* matching resource */
             Any.pack(
                 HttpConnectionManager.newBuilder()
-                    .setRouteConfig(
+                    .setRouteConfig( // target route configuration
                         buildRouteConfiguration("route-foo.googleapis.com",
                             ImmutableList.of(
-                                buildVirtualHost(
-                                    ImmutableList.of("foo.googleapis.com", "bar.googleapis.com"),
+                                buildVirtualHost( // matching virtual host
+                                    ImmutableList.of(TARGET_AUTHORITY, "bar.googleapis.com"),
                                     "cluster.googleapis.com"),
                                 buildVirtualHost(
                                     ImmutableList.of("something does not match"),
@@ -481,7 +481,7 @@ public class XdsClientImplTest {
 
     // Client sends an ACK request.
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest(NODE, "0", "foo.googleapis.com:8080",
+        .onNext(eq(buildDiscoveryRequest(NODE, "0", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS, "0000")));
 
     ArgumentCaptor<ConfigUpdate> configUpdateCaptor = ArgumentCaptor.forClass(null);
@@ -500,13 +500,13 @@ public class XdsClientImplTest {
    */
   @Test
   public void rdsResponseWithoutMatchingResource() {
-    xdsClient.watchConfigData(TARGET_NAME, configWatcher);
+    xdsClient.watchConfigData(TARGET_AUTHORITY, configWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
 
     // Client sends an LDS request for the host name (with port) to management server.
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest(NODE, "", "foo.googleapis.com:8080",
+        .onNext(eq(buildDiscoveryRequest(NODE, "", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS, "")));
 
     Rds rdsConfig =
@@ -517,7 +517,7 @@ public class XdsClientImplTest {
             .setRouteConfigName("route-foo.googleapis.com")
             .build();
     List<Any> listeners = ImmutableList.of(
-        Any.pack(buildListener("foo.googleapis.com:8080", /* matching resource */
+        Any.pack(buildListener(TARGET_AUTHORITY, /* matching resource */
             Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build())))
     );
     DiscoveryResponse response =
@@ -526,7 +526,7 @@ public class XdsClientImplTest {
 
     // Client sends an ACK LDS request.
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest(NODE, "0", "foo.googleapis.com:8080",
+        .onNext(eq(buildDiscoveryRequest(NODE, "0", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS, "0000")));
 
     // Client sends an (first) RDS request.
@@ -543,13 +543,15 @@ public class XdsClientImplTest {
             buildRouteConfiguration(
                 "some resource name does not match route-foo.googleapis.com",
                 ImmutableList.of(
-                    buildVirtualHost(ImmutableList.of("foo.googleapis.com"),
+                    buildVirtualHost(
+                        ImmutableList.of(TARGET_AUTHORITY),
                         "whatever cluster")))),
         Any.pack(
             buildRouteConfiguration(
                 "some other resource name does not match route-foo.googleapis.com",
                 ImmutableList.of(
-                    buildVirtualHost(ImmutableList.of("foo.googleapis.com"),
+                    buildVirtualHost(
+                        ImmutableList.of(TARGET_AUTHORITY),
                         "some more whatever cluster")))));
     response = buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0000");
     responseObserver.onNext(response);
@@ -575,7 +577,7 @@ public class XdsClientImplTest {
    */
   @Test
   public void resolveVirtualHostInRdsResponse() {
-    xdsClient.watchConfigData(TARGET_NAME, configWatcher);
+    xdsClient.watchConfigData(TARGET_AUTHORITY, configWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
 
@@ -588,7 +590,7 @@ public class XdsClientImplTest {
             .build();
 
     List<Any> listeners = ImmutableList.of(
-        Any.pack(buildListener("foo.googleapis.com:8080", /* matching resource */
+        Any.pack(buildListener(TARGET_AUTHORITY, /* matching resource */
             Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build())))
     );
     DiscoveryResponse response =
@@ -604,11 +606,11 @@ public class XdsClientImplTest {
     List<Any> routeConfigs = ImmutableList.of(
         Any.pack(
             buildRouteConfiguration(
-                "route-foo.googleapis.com",
+                "route-foo.googleapis.com", // target route configuration
                 ImmutableList.of(
                     buildVirtualHost(ImmutableList.of("something does not match"),
                         "some cluster"),
-                    buildVirtualHost(ImmutableList.of("foo.googleapis.com", "bar.googleapis.com"),
+                    buildVirtualHost(ImmutableList.of(TARGET_AUTHORITY, "bar.googleapis.com:443"),
                         "cluster.googleapis.com")))),  // matching virtual host
         Any.pack(
             buildRouteConfiguration(
@@ -641,7 +643,7 @@ public class XdsClientImplTest {
    */
   @Test
   public void failToFindVirtualHostInRdsResponse() {
-    xdsClient.watchConfigData(TARGET_NAME, configWatcher);
+    xdsClient.watchConfigData(TARGET_AUTHORITY, configWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
 
@@ -654,7 +656,7 @@ public class XdsClientImplTest {
             .build();
 
     List<Any> listeners = ImmutableList.of(
-        Any.pack(buildListener("foo.googleapis.com:8080", /* matching resource */
+        Any.pack(buildListener(TARGET_AUTHORITY, /* matching resource */
             Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build())))
     );
     DiscoveryResponse response =
@@ -709,7 +711,7 @@ public class XdsClientImplTest {
    */
   @Test
   public void matchingVirtualHostDoesNotContainRouteAction() {
-    xdsClient.watchConfigData(TARGET_NAME, configWatcher);
+    xdsClient.watchConfigData(TARGET_AUTHORITY, configWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
 
@@ -722,7 +724,7 @@ public class XdsClientImplTest {
             .build();
 
     List<Any> listeners = ImmutableList.of(
-        Any.pack(buildListener("foo.googleapis.com:8080", /* matching resource */
+        Any.pack(buildListener(TARGET_AUTHORITY, /* matching resource */
             Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build())))
     );
     DiscoveryResponse response =
@@ -775,28 +777,29 @@ public class XdsClientImplTest {
    */
   @Test
   public void notifyUpdatedResources() {
-    xdsClient.watchConfigData(TARGET_NAME, configWatcher);
+    xdsClient.watchConfigData(TARGET_AUTHORITY, configWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
 
     // Client sends an LDS request for the host name (with port) to management server.
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest(NODE, "", "foo.googleapis.com:8080",
+        .onNext(eq(buildDiscoveryRequest(NODE, "", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS, "")));
 
     // Management server sends back an LDS response containing a RouteConfiguration for the
     // requested Listener directly in-line.
     RouteConfiguration routeConfig =
         buildRouteConfiguration(
-            "route-foo.googleapis.com",
+            "route-foo.googleapis.com", // target route configuration
             ImmutableList.of(
-                buildVirtualHost(ImmutableList.of("foo.googleapis.com", "bar.googleapis.com"),
+                buildVirtualHost( // matching virtual host
+                    ImmutableList.of(TARGET_AUTHORITY, "bar.googleapis.com:443"),
                     "cluster.googleapis.com"),
                 buildVirtualHost(ImmutableList.of("something does not match"),
                     "some cluster")));
 
     List<Any> listeners = ImmutableList.of(
-        Any.pack(buildListener("foo.googleapis.com:8080", /* matching resource */
+        Any.pack(buildListener(TARGET_AUTHORITY, /* matching resource */
             Any.pack(HttpConnectionManager.newBuilder().setRouteConfig(routeConfig).build())))
     );
     DiscoveryResponse response =
@@ -805,7 +808,7 @@ public class XdsClientImplTest {
 
     // Client sends an ACK LDS request.
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest(NODE, "0", "foo.googleapis.com:8080",
+        .onNext(eq(buildDiscoveryRequest(NODE, "0", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS, "0000")));
 
     // Cluster name is resolved and notified to config watcher.
@@ -818,13 +821,13 @@ public class XdsClientImplTest {
         buildRouteConfiguration(
             "another-route-foo.googleapis.com",
             ImmutableList.of(
-                buildVirtualHost(ImmutableList.of("foo.googleapis.com", "bar.googleapis.com"),
+                buildVirtualHost(ImmutableList.of(TARGET_AUTHORITY, "bar.googleapis.com:443"),
                     "another-cluster.googleapis.com"),
                 buildVirtualHost(ImmutableList.of("something does not match"),
                     "some cluster")));
 
     listeners = ImmutableList.of(
-        Any.pack(buildListener("foo.googleapis.com:8080", /* matching resource */
+        Any.pack(buildListener(TARGET_AUTHORITY, /* matching resource */
             Any.pack(HttpConnectionManager.newBuilder().setRouteConfig(routeConfig).build())))
     );
     response =
@@ -833,7 +836,7 @@ public class XdsClientImplTest {
 
     // Client sends an ACK LDS request.
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest(NODE, "1", "foo.googleapis.com:8080",
+        .onNext(eq(buildDiscoveryRequest(NODE, "1", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS, "0001")));
 
     // Updated cluster name is notified to config watcher.
@@ -853,7 +856,7 @@ public class XdsClientImplTest {
             .build();
 
     listeners = ImmutableList.of(
-        Any.pack(buildListener("foo.googleapis.com:8080", /* matching resource */
+        Any.pack(buildListener(TARGET_AUTHORITY, /* matching resource */
             Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build())))
     );
     response =
@@ -862,7 +865,7 @@ public class XdsClientImplTest {
 
     // Client sends an ACK LDS request.
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest(NODE, "2", "foo.googleapis.com:8080",
+        .onNext(eq(buildDiscoveryRequest(NODE, "2", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS, "0002")));
 
     // Client sends an (first) RDS request.
@@ -879,7 +882,7 @@ public class XdsClientImplTest {
                 ImmutableList.of(
                     buildVirtualHost(ImmutableList.of("something does not match"),
                         "some cluster"),
-                    buildVirtualHost(ImmutableList.of("foo.googleapis.com", "bar.googleapis.com"),
+                    buildVirtualHost(ImmutableList.of(TARGET_AUTHORITY, "bar.googleapis.com:443"),
                         "some-other-cluster.googleapis.com")))));
     response = buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0000");
     responseObserver.onNext(response);
@@ -902,7 +905,7 @@ public class XdsClientImplTest {
             buildRouteConfiguration(
                 "some-route-to-foo.googleapis.com",
                 ImmutableList.of(
-                    buildVirtualHost(ImmutableList.of("foo.googleapis.com", "bar.googleapis.com"),
+                    buildVirtualHost(ImmutableList.of(TARGET_AUTHORITY, "bar.googleapis.com:443"),
                         "an-updated-cluster.googleapis.com")))));
     response = buildDiscoveryResponse("1", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0001");
     responseObserver.onNext(response);
@@ -941,13 +944,13 @@ public class XdsClientImplTest {
    */
   @Test
   public void waitRdsResponsesForRequestedResource() {
-    xdsClient.watchConfigData(TARGET_NAME, configWatcher);
+    xdsClient.watchConfigData(TARGET_AUTHORITY, configWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
 
     // Client sends an LDS request for the host name (with port) to management server.
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest(NODE, "", "foo.googleapis.com:8080",
+        .onNext(eq(buildDiscoveryRequest(NODE, "", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS, "")));
 
     // Management sends back an LDS response telling client to do RDS.
@@ -960,7 +963,7 @@ public class XdsClientImplTest {
             .build();
 
     List<Any> listeners = ImmutableList.of(
-        Any.pack(buildListener("foo.googleapis.com:8080", /* matching resource */
+        Any.pack(buildListener(TARGET_AUTHORITY, /* matching resource */
             Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build())))
     );
     DiscoveryResponse response =
@@ -969,7 +972,7 @@ public class XdsClientImplTest {
 
     // Client sends an ACK LDS request.
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest(NODE, "0", "foo.googleapis.com:8080",
+        .onNext(eq(buildDiscoveryRequest(NODE, "0", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS, "0000")));
 
     // Client sends an (first) RDS request.
@@ -991,7 +994,8 @@ public class XdsClientImplTest {
             buildRouteConfiguration(
                 "some resource name does not match route-foo.googleapis.com",
                 ImmutableList.of(
-                    buildVirtualHost(ImmutableList.of("foo.googleapis.com"),
+                    buildVirtualHost(
+                        ImmutableList.of(TARGET_AUTHORITY),
                         "some more cluster")))));
     response = buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0000");
     responseObserver.onNext(response);
@@ -1012,11 +1016,13 @@ public class XdsClientImplTest {
     routeConfigs = ImmutableList.of(
         Any.pack(
             buildRouteConfiguration(
-                "route-foo.googleapis.com",
+                "route-foo.googleapis.com", // target route configuration
                 ImmutableList.of(
-                    buildVirtualHost(ImmutableList.of("something does not match"),
+                    buildVirtualHost(
+                        ImmutableList.of("something does not match"),
                         "some cluster"),
-                    buildVirtualHost(ImmutableList.of("foo.googleapis.com", "bar.googleapis.com"),
+                    buildVirtualHost( // matching virtual host
+                        ImmutableList.of(TARGET_AUTHORITY, "bar.googleapis.com:443"),
                         "another-cluster.googleapis.com")))));
     response = buildDiscoveryResponse("1", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0001");
     responseObserver.onNext(response);
@@ -1040,13 +1046,13 @@ public class XdsClientImplTest {
    */
   @Test
   public void routeConfigurationRemovedNotifiedToWatcher() {
-    xdsClient.watchConfigData(TARGET_NAME, configWatcher);
+    xdsClient.watchConfigData(TARGET_AUTHORITY, configWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
 
     // Client sends an LDS request for the host name (with port) to management server.
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest(NODE, "", "foo.googleapis.com:8080",
+        .onNext(eq(buildDiscoveryRequest(NODE, "", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS, "")));
 
     // Management sends back an LDS response telling client to do RDS.
@@ -1059,7 +1065,7 @@ public class XdsClientImplTest {
             .build();
 
     List<Any> listeners = ImmutableList.of(
-        Any.pack(buildListener("foo.googleapis.com:8080", /* matching resource */
+        Any.pack(buildListener(TARGET_AUTHORITY, /* matching resource */
             Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build())))
     );
     DiscoveryResponse response =
@@ -1068,7 +1074,7 @@ public class XdsClientImplTest {
 
     // Client sends an ACK LDS request.
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest(NODE, "0", "foo.googleapis.com:8080",
+        .onNext(eq(buildDiscoveryRequest(NODE, "0", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS, "0000")));
 
     // Client sends an (first) RDS request.
@@ -1080,9 +1086,10 @@ public class XdsClientImplTest {
     List<Any> routeConfigs = ImmutableList.of(
         Any.pack(
             buildRouteConfiguration(
-                "route-foo.googleapis.com",
+                "route-foo.googleapis.com", // target route configuration
                 ImmutableList.of(
-                    buildVirtualHost(ImmutableList.of("foo.googleapis.com"),
+                    buildVirtualHost(
+                        ImmutableList.of(TARGET_AUTHORITY), // matching virtual host
                         "cluster.googleapis.com")))));
     response = buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0000");
     responseObserver.onNext(response);
@@ -1106,7 +1113,7 @@ public class XdsClientImplTest {
 
     // Client sent an ACK LDS request.
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest(NODE, "1", "foo.googleapis.com:8080",
+        .onNext(eq(buildDiscoveryRequest(NODE, "1", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS, "0001")));
 
     // Notify config watcher with an error.
@@ -1122,7 +1129,7 @@ public class XdsClientImplTest {
    */
   @Test
   public void updateRdsRequestResourceWhileInitialResourceFetchInProgress() {
-    xdsClient.watchConfigData(TARGET_NAME, configWatcher);
+    xdsClient.watchConfigData(TARGET_AUTHORITY, configWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
 
@@ -1136,7 +1143,7 @@ public class XdsClientImplTest {
             .build();
 
     List<Any> listeners = ImmutableList.of(
-        Any.pack(buildListener("foo.googleapis.com:8080", /* matching resource */
+        Any.pack(buildListener(TARGET_AUTHORITY, /* matching resource */
             Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build())))
     );
     DiscoveryResponse response =
@@ -1164,8 +1171,10 @@ public class XdsClientImplTest {
             .build();
 
     listeners = ImmutableList.of(
-        Any.pack(buildListener("foo.googleapis.com:8080", /* matching resource */
-            Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build())))
+        Any.pack(
+            buildListener(
+                TARGET_AUTHORITY, /* matching resource */
+                Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build())))
     );
     response = buildDiscoveryResponse("1", listeners, XdsClientImpl.ADS_TYPE_URL_LDS, "0001");
     responseObserver.onNext(response);
@@ -1185,9 +1194,10 @@ public class XdsClientImplTest {
     List<Any> routeConfigs = ImmutableList.of(
         Any.pack(
             buildRouteConfiguration(
-                "route-bar.googleapis.com",
+                "route-bar.googleapis.com", // target route configuration
                 ImmutableList.of(
-                    buildVirtualHost(ImmutableList.of("foo.googleapis.com"),
+                    buildVirtualHost(
+                        ImmutableList.of(TARGET_AUTHORITY), // matching virtual host
                         "cluster.googleapis.com")))));
     response = buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0000");
     responseObserver.onNext(response);
@@ -2437,7 +2447,7 @@ public class XdsClientImplTest {
     InOrder inOrder =
         Mockito.inOrder(mockedDiscoveryService, backoffPolicyProvider, backoffPolicy1,
             backoffPolicy2);
-    xdsClient.watchConfigData(TARGET_NAME, configWatcher);
+    xdsClient.watchConfigData(TARGET_AUTHORITY, configWatcher);
 
     ArgumentCaptor<StreamObserver<DiscoveryResponse>> responseObserverCaptor =
         ArgumentCaptor.forClass(null);
@@ -2449,7 +2459,7 @@ public class XdsClientImplTest {
 
     // Client sends an LDS request for the host name (with port) to management server.
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest(NODE, "", "foo.googleapis.com:8080",
+        .onNext(eq(buildDiscoveryRequest(NODE, "", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS, "")));
 
     // Management server closes the RPC stream immediately.
@@ -2469,7 +2479,7 @@ public class XdsClientImplTest {
 
     // Client retried by sending an LDS request.
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest(NODE, "", "foo.googleapis.com:8080",
+        .onNext(eq(buildDiscoveryRequest(NODE, "", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS, "")));
 
     // Management server closes the RPC stream with an error.
@@ -2489,7 +2499,7 @@ public class XdsClientImplTest {
 
     // Client retried again by sending an LDS.
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest(NODE, "", "foo.googleapis.com:8080",
+        .onNext(eq(buildDiscoveryRequest(NODE, "", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS, "")));
 
     // Management server responses with a listener for the requested resource.
@@ -2501,7 +2511,7 @@ public class XdsClientImplTest {
             .build();
 
     List<Any> listeners = ImmutableList.of(
-        Any.pack(buildListener("foo.googleapis.com:8080", /* matching resource */
+        Any.pack(buildListener(TARGET_AUTHORITY, /* matching resource */
             Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build())))
     );
     DiscoveryResponse ldsResponse =
@@ -2510,7 +2520,7 @@ public class XdsClientImplTest {
 
     // Client sent back an ACK LDS request.
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest(NODE, "0", "foo.googleapis.com:8080",
+        .onNext(eq(buildDiscoveryRequest(NODE, "0", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS, "0000")));
 
     // Client sent an RDS request based on the received listener.
@@ -2529,7 +2539,7 @@ public class XdsClientImplTest {
     responseObserver = responseObserverCaptor.getValue();
     requestObserver = requestObservers.poll();
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest(NODE, "", "foo.googleapis.com:8080",
+        .onNext(eq(buildDiscoveryRequest(NODE, "", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS, "")));
 
     // RPC stream closed immediately
@@ -2546,7 +2556,7 @@ public class XdsClientImplTest {
     responseObserver = responseObserverCaptor.getValue();
     requestObserver = requestObservers.poll();
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest(NODE, "", "foo.googleapis.com:8080",
+        .onNext(eq(buildDiscoveryRequest(NODE, "", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS, "")));
 
     // Management server sends an LDS response.
@@ -2557,9 +2567,10 @@ public class XdsClientImplTest {
     List<Any> routeConfigs = ImmutableList.of(
         Any.pack(
             buildRouteConfiguration(
-                "route-foo.googleapis.com",
+                "route-foo.googleapis.com", // target route configuration
                 ImmutableList.of(
-                    buildVirtualHost(ImmutableList.of("foo.googleapis.com"),
+                    buildVirtualHost(
+                        ImmutableList.of(TARGET_AUTHORITY), // matching virtual host
                         "cluster.googleapis.com")))));
     DiscoveryResponse rdsResponse =
         buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0000");
@@ -2579,7 +2590,7 @@ public class XdsClientImplTest {
     fakeClock.runDueTasks();
     requestObserver = requestObservers.poll();
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest(NODE, "", "foo.googleapis.com:8080",
+        .onNext(eq(buildDiscoveryRequest(NODE, "", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS, "")));
 
     verifyNoMoreInteractions(backoffPolicyProvider, backoffPolicy1, backoffPolicy2);
@@ -2593,7 +2604,7 @@ public class XdsClientImplTest {
     InOrder inOrder =
         Mockito.inOrder(mockedDiscoveryService, backoffPolicyProvider, backoffPolicy1,
             backoffPolicy2);
-    xdsClient.watchConfigData(TARGET_NAME, configWatcher);
+    xdsClient.watchConfigData(TARGET_AUTHORITY, configWatcher);
 
     ArgumentCaptor<StreamObserver<DiscoveryResponse>> responseObserverCaptor =
         ArgumentCaptor.forClass(null);
@@ -2641,7 +2652,7 @@ public class XdsClientImplTest {
 
     // Retry resumes requests for all wanted resources.
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest(NODE, "", "foo.googleapis.com:8080",
+        .onNext(eq(buildDiscoveryRequest(NODE, "", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS, "")));
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster.googleapis.com",
@@ -2670,7 +2681,7 @@ public class XdsClientImplTest {
     responseObserver = responseObserverCaptor.getValue();
     requestObserver = requestObservers.poll();
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest(NODE, "", "foo.googleapis.com:8080",
+        .onNext(eq(buildDiscoveryRequest(NODE, "", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS, "")));
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster.googleapis.com",
@@ -2699,7 +2710,7 @@ public class XdsClientImplTest {
     responseObserver = responseObserverCaptor.getValue();
     requestObserver = requestObservers.poll();
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest(NODE, "", "foo.googleapis.com:8080",
+        .onNext(eq(buildDiscoveryRequest(NODE, "", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS, "")));
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster.googleapis.com",
@@ -2732,7 +2743,7 @@ public class XdsClientImplTest {
     requestObserver = requestObservers.poll();
 
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest(NODE, "", "foo.googleapis.com:8080",
+        .onNext(eq(buildDiscoveryRequest(NODE, "", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS, "")));
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster.googleapis.com",
@@ -2760,7 +2771,7 @@ public class XdsClientImplTest {
         .streamAggregatedResources(responseObserverCaptor.capture());
     requestObserver = requestObservers.poll();
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest(NODE, "", "foo.googleapis.com:8080",
+        .onNext(eq(buildDiscoveryRequest(NODE, "", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS, "")));
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster.googleapis.com",
@@ -2781,7 +2792,7 @@ public class XdsClientImplTest {
     InOrder inOrder =
         Mockito.inOrder(mockedDiscoveryService, backoffPolicyProvider, backoffPolicy1,
             backoffPolicy2);
-    xdsClient.watchConfigData(TARGET_NAME, configWatcher);
+    xdsClient.watchConfigData(TARGET_AUTHORITY, configWatcher);
 
     ArgumentCaptor<StreamObserver<DiscoveryResponse>> responseObserverCaptor =
         ArgumentCaptor.forClass(null);
@@ -2805,7 +2816,7 @@ public class XdsClientImplTest {
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
 
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest(NODE, "", "foo.googleapis.com:8080",
+        .onNext(eq(buildDiscoveryRequest(NODE, "", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS, "")));
 
     // Management server becomes unreachable.
@@ -2826,7 +2837,7 @@ public class XdsClientImplTest {
     requestObserver = requestObservers.poll();
 
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest(NODE, "", "foo.googleapis.com:8080",
+        .onNext(eq(buildDiscoveryRequest(NODE, "", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS, "")));
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster.googleapis.com",
@@ -2850,7 +2861,7 @@ public class XdsClientImplTest {
     requestObserver = requestObservers.poll();
 
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest(NODE, "", "foo.googleapis.com:8080",
+        .onNext(eq(buildDiscoveryRequest(NODE, "", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS, "")));
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster.googleapis.com",
@@ -2893,7 +2904,7 @@ public class XdsClientImplTest {
     responseObserver = responseObserverCaptor.getValue();
     requestObserver = requestObservers.poll();
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest(NODE, "", "foo.googleapis.com:8080",
+        .onNext(eq(buildDiscoveryRequest(NODE, "", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS, "")));
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster.googleapis.com",
@@ -2920,7 +2931,7 @@ public class XdsClientImplTest {
     requestObserver = requestObservers.poll();
 
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest(NODE, "", "foo.googleapis.com:8080",
+        .onNext(eq(buildDiscoveryRequest(NODE, "", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS, "")));
     verify(requestObserver, never())
         .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster.googleapis.com",
@@ -2938,7 +2949,7 @@ public class XdsClientImplTest {
     InOrder inOrder =
         Mockito.inOrder(mockedDiscoveryService, backoffPolicyProvider, backoffPolicy1,
             backoffPolicy2);
-    xdsClient.watchConfigData(TARGET_NAME, configWatcher);
+    xdsClient.watchConfigData(TARGET_AUTHORITY, configWatcher);
 
     ArgumentCaptor<StreamObserver<DiscoveryResponse>> responseObserverCaptor =
         ArgumentCaptor.forClass(null);
@@ -2957,7 +2968,7 @@ public class XdsClientImplTest {
             .build();
 
     List<Any> listeners = ImmutableList.of(
-        Any.pack(buildListener("foo.googleapis.com:8080", /* matching resource */
+        Any.pack(buildListener(TARGET_AUTHORITY, /* matching resource */
             Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build())))
     );
     DiscoveryResponse response =
@@ -2992,7 +3003,7 @@ public class XdsClientImplTest {
 
     // Client resumed requests and management server sends back LDS resources again.
     verify(requestObserver).onNext(
-        eq(buildDiscoveryRequest(NODE, "", "foo.googleapis.com:8080",
+        eq(buildDiscoveryRequest(NODE, "", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS, "")));
     responseObserver.onNext(response);
 
@@ -3010,9 +3021,10 @@ public class XdsClientImplTest {
     List<Any> routeConfigs = ImmutableList.of(
         Any.pack(
             buildRouteConfiguration(
-                "route-foo.googleapis.com",
+                "route-foo.googleapis.com", // target route configuration
                 ImmutableList.of(
-                    buildVirtualHost(ImmutableList.of("foo.googleapis.com"),
+                    buildVirtualHost(
+                        ImmutableList.of(TARGET_AUTHORITY), // matching virtual host
                         "cluster-foo.googleapis.com")))));
     response = buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0000");
     responseObserver.onNext(response);
@@ -3117,7 +3129,7 @@ public class XdsClientImplTest {
   // Simulates the use case of watching clusters/endpoints based on service config resolved by
   // LDS/RDS.
   private void waitUntilConfigResolved(StreamObserver<DiscoveryResponse> responseObserver) {
-    // Client sent an LDS request for resource "foo.googleapis.com:8080" (Omitted).
+    // Client sent an LDS request for resource TARGET_AUTHORITY (Omitted).
 
     // Management server responses with a listener telling client to do RDS.
     Rds rdsConfig =
@@ -3128,7 +3140,7 @@ public class XdsClientImplTest {
             .build();
 
     List<Any> listeners = ImmutableList.of(
-        Any.pack(buildListener("foo.googleapis.com:8080", /* matching resource */
+        Any.pack(buildListener(TARGET_AUTHORITY, /* matching resource */
             Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build())))
     );
     DiscoveryResponse ldsResponse =
@@ -3142,9 +3154,10 @@ public class XdsClientImplTest {
     List<Any> routeConfigs = ImmutableList.of(
         Any.pack(
             buildRouteConfiguration(
-                "route-foo.googleapis.com",
+                "route-foo.googleapis.com", // target route configuration
                 ImmutableList.of(
-                    buildVirtualHost(ImmutableList.of("foo.googleapis.com"),
+                    buildVirtualHost(
+                        ImmutableList.of(TARGET_AUTHORITY), // matching virtual host
                         "cluster.googleapis.com")))));
     DiscoveryResponse rdsResponse =
         buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0000");
