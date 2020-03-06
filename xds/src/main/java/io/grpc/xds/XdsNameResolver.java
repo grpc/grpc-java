@@ -16,7 +16,6 @@
 
 package io.grpc.xds;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.Stopwatch;
@@ -31,6 +30,7 @@ import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.BackoffPolicy;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.ObjectPool;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
@@ -42,7 +42,6 @@ import io.grpc.xds.XdsClient.XdsChannelFactory;
 import io.grpc.xds.XdsClient.XdsClientFactory;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.io.IOException;
-import java.net.URI;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
@@ -60,8 +59,6 @@ final class XdsNameResolver extends NameResolver {
 
   private final XdsLogger logger;
   private final String authority;
-  private final String hostName;
-  private final int port;
   private final XdsChannelFactory channelFactory;
   private final SynchronizationContext syncContext;
   private final ScheduledExecutorService timeService;
@@ -82,12 +79,7 @@ final class XdsNameResolver extends NameResolver {
       Supplier<Stopwatch> stopwatchSupplier,
       XdsChannelFactory channelFactory,
       Bootstrapper bootstrapper) {
-    URI nameUri = URI.create("//" + checkNotNull(name, "name"));
-    checkArgument(nameUri.getHost() != null, "Invalid hostname: %s", name);
-    authority =
-        checkNotNull(nameUri.getAuthority(), "nameUri (%s) doesn't have an authority", nameUri);
-    hostName = nameUri.getHost();
-    port = nameUri.getPort();  // -1 if not specified
+    authority = GrpcUtil.checkAuthority(checkNotNull(name, "name"));
     this.channelFactory = checkNotNull(channelFactory, "channelFactory");
     this.syncContext = checkNotNull(args.getSynchronizationContext(), "syncContext");
     this.timeService = checkNotNull(args.getScheduledExecutorService(), "timeService");
@@ -139,7 +131,7 @@ final class XdsNameResolver extends NameResolver {
     };
     xdsClientPool = new RefCountedXdsClientObjectPool(xdsClientFactory);
     xdsClient = xdsClientPool.getObject();
-    xdsClient.watchConfigData(hostName, port, new ConfigWatcher() {
+    xdsClient.watchConfigData(authority, new ConfigWatcher() {
       @Override
       public void onConfigChanged(ConfigUpdate update) {
         logger.log(
