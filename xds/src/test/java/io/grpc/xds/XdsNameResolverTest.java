@@ -78,8 +78,7 @@ import org.mockito.junit.MockitoRule;
 // TODO(creamsoup) use parsed service config
 @SuppressWarnings("deprecation")
 public class XdsNameResolverTest {
-  private static final String HOST_NAME = "foo.googleapis.com";
-  private static final int PORT = 443;
+  private static final String AUTHORITY = "foo.googleapis.com:80";
   private static final Node FAKE_BOOTSTRAP_NODE =
       Node.newBuilder().setId("XdsNameResolverTest").build();
 
@@ -166,7 +165,7 @@ public class XdsNameResolverTest {
     };
     xdsNameResolver =
         new XdsNameResolver(
-            HOST_NAME + ":" + PORT,
+            AUTHORITY,
             args,
             backoffPolicyProvider,
             fakeClock.getStopwatchSupplier(),
@@ -191,7 +190,7 @@ public class XdsNameResolverTest {
 
     XdsNameResolver resolver =
         new XdsNameResolver(
-            HOST_NAME + ":" + PORT,
+            AUTHORITY,
             args,
             backoffPolicyProvider,
             fakeClock.getStopwatchSupplier(),
@@ -216,7 +215,7 @@ public class XdsNameResolverTest {
 
     XdsNameResolver resolver =
         new XdsNameResolver(
-            HOST_NAME + ":" + PORT,
+            AUTHORITY,
             args,
             backoffPolicyProvider,
             fakeClock.getStopwatchSupplier(),
@@ -240,7 +239,7 @@ public class XdsNameResolverTest {
     // Simulate receiving an LDS response that contains cluster resolution directly in-line.
     String clusterName = "cluster-foo.googleapis.com";
     responseObserver.onNext(
-        buildLdsResponseForCluster("0", HOST_NAME, PORT, clusterName, "0000"));
+        buildLdsResponseForCluster("0", AUTHORITY, clusterName, "0000"));
 
     ArgumentCaptor<ResolutionResult> resolutionResultCaptor = ArgumentCaptor.forClass(null);
     verify(mockListener).onResult(resolutionResultCaptor.capture());
@@ -258,7 +257,7 @@ public class XdsNameResolverTest {
     // Simulate receiving an LDS response that contains cluster resolution directly in-line.
     String clusterName = "cluster-foo.googleapis.com";
     responseObserver.onNext(
-        buildLdsResponseForCluster("0", HOST_NAME, PORT, clusterName, "0000"));
+        buildLdsResponseForCluster("0", AUTHORITY, clusterName, "0000"));
 
     ArgumentCaptor<ResolutionResult> resolutionResultCaptor = ArgumentCaptor.forClass(null);
     verify(mockListener).onResult(resolutionResultCaptor.capture());
@@ -286,7 +285,7 @@ public class XdsNameResolverTest {
     // Simulate receiving an LDS response that does not contain requested resource.
     String clusterName = "cluster-bar.googleapis.com";
     responseObserver.onNext(
-        buildLdsResponseForCluster("0", "bar.googleapis.com", 80, clusterName, "0000"));
+        buildLdsResponseForCluster("0", "bar.googleapis.com", clusterName, "0000"));
 
     fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     ArgumentCaptor<ResolutionResult> resolutionResultCaptor = ArgumentCaptor.forClass(null);
@@ -305,7 +304,7 @@ public class XdsNameResolverTest {
 
     // Simulate receiving an LDS response that contains cluster resolution directly in-line.
     responseObserver.onNext(
-        buildLdsResponseForCluster("0", HOST_NAME, PORT, "cluster-foo.googleapis.com", "0000"));
+        buildLdsResponseForCluster("0", AUTHORITY, "cluster-foo.googleapis.com", "0000"));
 
     ArgumentCaptor<ResolutionResult> resolutionResultCaptor = ArgumentCaptor.forClass(null);
     verify(mockListener).onResult(resolutionResultCaptor.capture());
@@ -325,14 +324,14 @@ public class XdsNameResolverTest {
     // Simulate receiving another LDS response that tells client to do RDS.
     String routeConfigName = "route-foo.googleapis.com";
     responseObserver.onNext(
-        buildLdsResponseForRdsResource("1", HOST_NAME, PORT, routeConfigName, "0001"));
+        buildLdsResponseForRdsResource("1", AUTHORITY, routeConfigName, "0001"));
 
     // Client sent an RDS request for resource "route-foo.googleapis.com" (Omitted in this test).
 
     // Simulate receiving an RDS response that contains the resource "route-foo.googleapis.com"
     // with cluster resolution for "foo.googleapis.com".
     responseObserver.onNext(
-        buildRdsResponseForCluster("0", routeConfigName, "foo.googleapis.com",
+        buildRdsResponseForCluster("0", routeConfigName, AUTHORITY,
             "cluster-blade.googleapis.com", "0000"));
 
     verify(mockListener, times(2)).onResult(resolutionResultCaptor.capture());
@@ -355,7 +354,7 @@ public class XdsNameResolverTest {
 
     // Simulate receiving an LDS response that does not contain requested resource.
     responseObserver.onNext(
-        buildLdsResponseForCluster("0", "bar.googleapis.com", 80,
+        buildLdsResponseForCluster("0", "bar.googleapis.com",
             "cluster-bar.googleapis.com", "0000"));
 
     fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
@@ -367,7 +366,7 @@ public class XdsNameResolverTest {
 
     // Simulate receiving another LDS response that contains cluster resolution directly in-line.
     responseObserver.onNext(
-        buildLdsResponseForCluster("1", HOST_NAME, PORT, "cluster-foo.googleapis.com",
+        buildLdsResponseForCluster("1", AUTHORITY, "cluster-foo.googleapis.com",
             "0001"));
 
     verify(mockListener, times(2)).onResult(resolutionResultCaptor.capture());
@@ -387,35 +386,33 @@ public class XdsNameResolverTest {
   }
 
   /**
-   * Builds an LDS DiscoveryResponse containing the mapping of given host name (with port if any) to
-   * the given cluster name directly in-line. Clients receiving this response is able to resolve
-   * cluster name for the given hostname:port immediately.
+   * Builds an LDS DiscoveryResponse containing the mapping of given host to
+   * the given cluster name directly in-line. Clients receiving this response is
+   * able to resolve cluster name for the given host immediately.
    */
   private static DiscoveryResponse buildLdsResponseForCluster(
-      String versionInfo, String hostName, int port, String clusterName, String nonce) {
-    String ldsResourceName = port == -1 ? hostName : hostName + ":" + port;
+      String versionInfo, String host, String clusterName, String nonce) {
     List<Any> listeners = ImmutableList.of(
-        Any.pack(buildListener(ldsResourceName,
+        Any.pack(buildListener(host, // target Listener resource
             Any.pack(
                 HttpConnectionManager.newBuilder()
                     .setRouteConfig(
-                        buildRouteConfiguration("route-foo.googleapis.com",
+                        buildRouteConfiguration("route-foo.googleapis.com", // doesn't matter
                             ImmutableList.of(
                                 buildVirtualHost(
-                                    ImmutableList.of("foo.googleapis.com"),
+                                    ImmutableList.of(host), // exact match
                                     clusterName))))
                     .build()))));
     return buildDiscoveryResponse(versionInfo, listeners, XdsClientImpl.ADS_TYPE_URL_LDS, nonce);
   }
 
   /**
-   * Builds an LDS DiscoveryResponse containing the mapping of given host name (with port if any) to
-   * the given RDS resource name. Clients receiving this response is able to send an RDS request for
-   * resolving the cluster name for the given hostname:port.
+   * Builds an LDS DiscoveryResponse containing the mapping of given host to
+   * the given RDS resource name. Clients receiving this response is able to
+   * send an RDS request for resolving the cluster name for the given host.
    */
   private static DiscoveryResponse buildLdsResponseForRdsResource(
-      String versionInfo, String hostName, int port, String routeConfigName, String nonce) {
-    String ldsResourceName = port == -1 ? hostName : hostName + ":" + port;
+      String versionInfo, String host, String routeConfigName, String nonce) {
     Rds rdsConfig =
         Rds.newBuilder()
             // Must set to use ADS.
@@ -425,19 +422,20 @@ public class XdsNameResolverTest {
             .build();
 
     List<Any> listeners = ImmutableList.of(
-        Any.pack(buildListener(ldsResourceName,
-            Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build()))));
+        Any.pack(
+            buildListener(
+                host, Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build()))));
     return buildDiscoveryResponse(versionInfo, listeners, XdsClientImpl.ADS_TYPE_URL_LDS, nonce);
   }
 
   /**
-   * Builds an RDS DiscoveryResponse containing the mapping of given route config name to the given
-   * cluster name under.
+   * Builds an RDS DiscoveryResponse containing route configuration with the given name and a
+   * virtual host that matches the given host to the given cluster name.
    */
   private static DiscoveryResponse buildRdsResponseForCluster(
       String versionInfo,
       String routeConfigName,
-      String hostName,
+      String host,
       String clusterName,
       String nonce) {
     List<Any> routeConfigs = ImmutableList.of(
@@ -445,7 +443,7 @@ public class XdsNameResolverTest {
             buildRouteConfiguration(
                 routeConfigName,
                 ImmutableList.of(
-                    buildVirtualHost(ImmutableList.of(hostName), clusterName)))));
+                    buildVirtualHost(ImmutableList.of(host), clusterName)))));
     return buildDiscoveryResponse(versionInfo, routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, nonce);
   }
 }
