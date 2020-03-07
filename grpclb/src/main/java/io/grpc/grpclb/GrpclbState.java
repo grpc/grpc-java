@@ -47,7 +47,6 @@ import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
-import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.TimeProvider;
 import io.grpc.lb.v1.ClientStats;
 import io.grpc.lb.v1.InitialLoadBalanceRequest;
@@ -86,11 +85,14 @@ import javax.annotation.concurrent.NotThreadSafe;
 final class GrpclbState {
   static final long FALLBACK_TIMEOUT_MS = TimeUnit.SECONDS.toMillis(10);
   private static final Attributes LB_PROVIDED_BACKEND_ATTRS =
-      Attributes.newBuilder().set(GrpcAttributes.ATTR_LB_PROVIDED_BACKEND, true).build();
+      Attributes.newBuilder().set(GrpclbConstants.ATTR_LB_PROVIDED_BACKEND, true).build();
 
   @VisibleForTesting
   static final PickResult DROP_PICK_RESULT =
       PickResult.withDrop(Status.UNAVAILABLE.withDescription("Dropped as requested by balancer"));
+  @VisibleForTesting
+  static final Status NO_AVAILABLE_BACKENDS_STATUS =
+      Status.UNAVAILABLE.withDescription("LoadBalancer responded without any backends");
 
   @VisibleForTesting
   static final RoundRobinEntry BUFFER_ENTRY = new RoundRobinEntry() {
@@ -742,7 +744,8 @@ final class GrpclbState {
         if (backendList.isEmpty()) {
           if (lbSentEmptyBackends) {
             pickList =
-                Collections.<RoundRobinEntry>singletonList(new ErrorEntry(Status.UNAVAILABLE));
+                Collections.<RoundRobinEntry>singletonList(
+                    new ErrorEntry(NO_AVAILABLE_BACKENDS_STATUS));
             state = TRANSIENT_FAILURE;
           } else {
             pickList = Collections.singletonList(BUFFER_ENTRY);

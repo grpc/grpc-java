@@ -53,7 +53,7 @@ interface LoadStatsStore {
    * once all of theirs loads are completed and reported.
    *
    * <p>The fields {@code cluster_name} and {@code load_report_interval} in the returned {@link
-   * ClusterStats} needs to be set before it is ready to be sent to the traffic directory for load
+   * ClusterStats} needs to be set before it is ready to be sent to the traffic director for load
    * reporting.
    *
    * <p>This method is not thread-safe and should be called from the same synchronized context

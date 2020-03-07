@@ -77,6 +77,7 @@ public class CommonTlsContextTestsUtil {
   }
 
   /** takes additional values and creates CombinedCertificateValidationContext as needed. */
+  @SuppressWarnings("deprecation")
   static CommonTlsContext buildCommonTlsContextWithAdditionalValues(
       String certName,
       String certTargetUri,

@@ -16,7 +16,6 @@ echo y | ${ANDROID_HOME}/tools/bin/sdkmanager "build-tools;28.0.3"
 LOCAL_MVN_TEMP=$(mktemp -d)
 pushd "$GRPC_JAVA_DIR/android"
 ../gradlew publish \
-  --include-build "$GRPC_JAVA_DIR" \
   -Dorg.gradle.parallel=false \
   -PskipCodegen=true \
   -PrepositoryDir="$LOCAL_MVN_TEMP"

@@ -16,10 +16,16 @@
 
 package io.grpc.grpclb;
 
-import io.grpc.internal.BaseDnsNameResolverProvider;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Stopwatch;
+import io.grpc.InternalServiceProviders;
+import io.grpc.NameResolver.Args;
+import io.grpc.NameResolverProvider;
+import io.grpc.internal.GrpcUtil;
+import java.net.URI;
 
 /**
- * A provider for {@code io.grpc.internal.DnsNameResolver} for gRPC lb.
+ * A provider for {@code io.grpc.grpclb.GrpclbNameResolver}.
  *
  * <p>It resolves a target URI whose scheme is {@code "dns"}. The (optional) authority of the target
  * URI is reserved for the address of alternative DNS server (not implemented yet). The path of the
@@ -32,9 +38,6 @@ import io.grpc.internal.BaseDnsNameResolverProvider;
  *   yet))</li>
  *   <li>{@code "dns:///foo.googleapis.com"} (without port)</li>
  * </ul>
- *
- * <p>Note: the main difference between {@code io.grpc.DnsNameResolver} is service record is enabled
- * by default.
  */
 // Make it package-private so that it cannot be directly referenced by users.  Java service loader
 // requires the provider to be public, but we can hide it under a package-private class.
@@ -42,14 +45,39 @@ final class SecretGrpclbNameResolverProvider {
 
   private SecretGrpclbNameResolverProvider() {}
 
-  public static final class Provider extends BaseDnsNameResolverProvider {
+  public static final class Provider extends NameResolverProvider {
 
-    private static final boolean SRV_ENABLED =
-        Boolean.parseBoolean(System.getProperty(ENABLE_GRPCLB_PROPERTY_NAME, "true"));
+    private static final String SCHEME = "dns";
 
     @Override
-    protected boolean isSrvEnabled() {
-      return SRV_ENABLED;
+    public GrpclbNameResolver newNameResolver(URI targetUri, Args args) {
+      if (SCHEME.equals(targetUri.getScheme())) {
+        String targetPath = Preconditions.checkNotNull(targetUri.getPath(), "targetPath");
+        Preconditions.checkArgument(
+            targetPath.startsWith("/"),
+            "the path component (%s) of the target (%s) must start with '/'",
+            targetPath, targetUri);
+        String name = targetPath.substring(1);
+        return new GrpclbNameResolver(
+            targetUri.getAuthority(),
+            name,
+            args,
+            GrpcUtil.SHARED_CHANNEL_EXECUTOR,
+            Stopwatch.createUnstarted(),
+            InternalServiceProviders.isAndroid(getClass().getClassLoader()));
+      } else {
+        return null;
+      }
+    }
+
+    @Override
+    public String getDefaultScheme() {
+      return SCHEME;
+    }
+
+    @Override
+    protected boolean isAvailable() {
+      return true;
     }
 
     @Override

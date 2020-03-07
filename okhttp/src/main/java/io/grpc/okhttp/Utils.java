@@ -42,6 +42,7 @@ class Utils {
    * is sent to expand the window.
    */
   static final float DEFAULT_WINDOW_UPDATE_RATIO = 0.5f;
+  static final int DEFAULT_WINDOW_SIZE = 65535;
   static final int CONNECTION_STREAM_ID = 0;
 
   public static Metadata convertHeaders(List<Header> http2Headers) {

@@ -17,34 +17,92 @@
 package io.grpc.grpclb;
 
 import static com.google.common.truth.Truth.assertThat;
-import static io.grpc.internal.BaseDnsNameResolverProvider.ENABLE_GRPCLB_PROPERTY_NAME;
-import static org.junit.Assume.assumeTrue;
+import static org.junit.Assert.fail;
+import static org.mockito.Mockito.mock;
 
+import io.grpc.ChannelLogger;
+import io.grpc.NameResolver;
+import io.grpc.NameResolver.ServiceConfigParser;
+import io.grpc.SynchronizationContext;
 import io.grpc.internal.DnsNameResolverProvider;
+import io.grpc.internal.GrpcUtil;
+import java.net.URI;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
+/** Unit tests for {@link SecretGrpclbNameResolverProvider}. */
 @RunWith(JUnit4.class)
 public class SecretGrpclbNameResolverProviderTest {
+
+  private final SynchronizationContext syncContext = new SynchronizationContext(
+      new Thread.UncaughtExceptionHandler() {
+        @Override
+        public void uncaughtException(Thread t, Throwable e) {
+          throw new AssertionError(e);
+        }
+      });
+  private final NameResolver.Args args = NameResolver.Args.newBuilder()
+      .setDefaultPort(8080)
+      .setProxyDetector(GrpcUtil.DEFAULT_PROXY_DETECTOR)
+      .setSynchronizationContext(syncContext)
+      .setServiceConfigParser(mock(ServiceConfigParser.class))
+      .setChannelLogger(mock(ChannelLogger.class))
+      .build();
+
+  private SecretGrpclbNameResolverProvider.Provider provider =
+      new SecretGrpclbNameResolverProvider.Provider();
+
+  @Test
+  public void isAvailable() {
+    assertThat(provider.isAvailable()).isTrue();
+  }
 
   @Test
   public void priority_shouldBeHigherThanDefaultDnsNameResolver() {
     DnsNameResolverProvider defaultDnsNameResolver = new DnsNameResolverProvider();
-    SecretGrpclbNameResolverProvider.Provider grpclbDnsNameResolver =
-        new SecretGrpclbNameResolverProvider.Provider();
 
-    assertThat(defaultDnsNameResolver.priority())
-        .isLessThan(grpclbDnsNameResolver.priority());
+    assertThat(provider.priority()).isGreaterThan(defaultDnsNameResolver.priority());
   }
 
   @Test
-  public void isSrvEnabled_trueByDefault() {
-    assumeTrue(System.getProperty(ENABLE_GRPCLB_PROPERTY_NAME) == null);
+  public void newNameResolver() {
+    assertThat(provider.newNameResolver(URI.create("dns:///localhost:443"), args))
+        .isInstanceOf(GrpclbNameResolver.class);
+    assertThat(provider.newNameResolver(URI.create("notdns:///localhost:443"), args)).isNull();
+  }
 
-    SecretGrpclbNameResolverProvider.Provider grpclbDnsNameResolver =
-        new SecretGrpclbNameResolverProvider.Provider();
+  @Test
+  public void invalidDnsName() throws Exception {
+    testInvalidUri(new URI("dns", null, "/[invalid]", null));
+  }
 
-    assertThat(grpclbDnsNameResolver.isSrvEnabled()).isTrue();
+  @Test
+  public void validIpv6() throws Exception {
+    testValidUri(new URI("dns", null, "/[::1]", null));
+  }
+
+  @Test
+  public void validDnsNameWithoutPort() throws Exception {
+    testValidUri(new URI("dns", null, "/foo.googleapis.com", null));
+  }
+
+  @Test
+  public void validDnsNameWithPort() throws Exception {
+    testValidUri(new URI("dns", null, "/foo.googleapis.com:456", null));
+  }
+
+  private void testInvalidUri(URI uri) {
+    try {
+      provider.newNameResolver(uri, args);
+      fail("Should have failed");
+    } catch (IllegalArgumentException e) {
+      // expected
+    }
+  }
+
+  private void testValidUri(URI uri) {
+    GrpclbNameResolver resolver = provider.newNameResolver(uri, args);
+    assertThat(resolver).isNotNull();
   }
 }

@@ -125,6 +125,7 @@ class XdsClientTestHelper {
     return buildSecureCluster(clusterName, edsServiceName, enableLrs, null);
   }
 
+  @SuppressWarnings("deprecation")
   static Cluster buildSecureCluster(String clusterName, @Nullable String edsServiceName,
       boolean enableLrs, @Nullable UpstreamTlsContext upstreamTlsContext) {
     Cluster.Builder clusterBuilder = Cluster.newBuilder();
