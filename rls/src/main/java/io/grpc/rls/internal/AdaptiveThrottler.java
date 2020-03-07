@@ -136,7 +136,7 @@ public final class AdaptiveThrottler implements Throttler {
   }
 
   private static float randomFloat() {
-    return (float) ThreadLocalRandom.current().nextDouble(0.0, 1.0);
+    return (float) ThreadLocalRandom.current().nextDouble();
   }
 
   @Override
