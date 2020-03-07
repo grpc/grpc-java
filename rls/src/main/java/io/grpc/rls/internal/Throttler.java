@@ -34,7 +34,7 @@ public interface Throttler {
   boolean shouldThrottle();
 
   /**
-   * Register a response received from the backend for a request allowed by shouldThrottle. This
+   * Registers a response received from the backend for a request allowed by shouldThrottle. This
    * should be called for every response received from the backend (i.e., once for each request for
    * which ShouldThrottle returned false). This updates the internal statistics used by
    * shouldThrottle.
@@ -60,8 +60,9 @@ public interface Throttler {
       super(s);
     }
 
-    public ThrottledException(String s, Throwable throwable) {
-      super(s, throwable);
+    @Override
+    public synchronized Throwable fillInStackTrace() {
+      return this;
     }
   }
 }
