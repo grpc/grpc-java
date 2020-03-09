@@ -372,6 +372,7 @@ public final class ClientCalls {
       this.onReadyHandler = onReadyHandler;
     }
 
+    @Deprecated
     @Override
     public void disableAutoInboundFlowControl() {
       if (frozen) {

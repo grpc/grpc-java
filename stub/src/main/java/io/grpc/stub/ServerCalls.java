@@ -399,6 +399,7 @@ public final class ServerCalls {
       this.onCancelHandler = onCancelHandler;
     }
 
+    @Deprecated
     @Override
     public void disableAutoInboundFlowControl() {
       disableAutoRequest();
