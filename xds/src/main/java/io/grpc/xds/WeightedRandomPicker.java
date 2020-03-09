@@ -122,11 +122,15 @@ final class WeightedRandomPicker extends SubchannelPicker {
     SubchannelPicker picker(List<WeightedChildPicker> childPickers);
   }
 
-  static final WeightedPickerFactory RANDOM_PICKER_FACTORY =
-      new WeightedPickerFactory() {
-        @Override
-        public SubchannelPicker picker(List<WeightedChildPicker> childPickers) {
-          return new WeightedRandomPicker(childPickers);
-        }
-      };
+  static final class WeightedRandomPickerFactory implements WeightedPickerFactory {
+
+    static final WeightedRandomPickerFactory INSTANCE = new WeightedRandomPickerFactory();
+
+    private WeightedRandomPickerFactory() {}
+
+    @Override
+    public SubchannelPicker picker(List<WeightedChildPicker> childPickers) {
+      return new WeightedRandomPicker(childPickers);
+    }
+  }
 }

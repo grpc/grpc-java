@@ -33,6 +33,7 @@ import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.WeightedRandomPicker.WeightedChildPicker;
 import io.grpc.xds.WeightedRandomPicker.WeightedPickerFactory;
+import io.grpc.xds.WeightedRandomPicker.WeightedRandomPickerFactory;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedPolicySelection;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedTargetConfig;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
@@ -57,7 +58,7 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
   WeightedTargetLoadBalancer(Helper helper) {
     this(
         checkNotNull(helper, "helper"),
-        WeightedRandomPicker.RANDOM_PICKER_FACTORY);
+        WeightedRandomPickerFactory.INSTANCE);
   }
 
   @VisibleForTesting

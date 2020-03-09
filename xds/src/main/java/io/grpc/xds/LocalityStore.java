@@ -52,6 +52,7 @@ import io.grpc.xds.OrcaOobUtil.OrcaReportingConfig;
 import io.grpc.xds.OrcaOobUtil.OrcaReportingHelperWrapper;
 import io.grpc.xds.WeightedRandomPicker.WeightedChildPicker;
 import io.grpc.xds.WeightedRandomPicker.WeightedPickerFactory;
+import io.grpc.xds.WeightedRandomPicker.WeightedRandomPickerFactory;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.ArrayList;
@@ -131,7 +132,7 @@ interface LocalityStore {
       this(
           logId,
           helper,
-          WeightedRandomPicker.RANDOM_PICKER_FACTORY,
+          WeightedRandomPickerFactory.INSTANCE,
           lbRegistry,
           ThreadSafeRandom.ThreadSafeRandomImpl.instance,
           loadStatsStore,
