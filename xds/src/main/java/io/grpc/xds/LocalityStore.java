@@ -51,8 +51,6 @@ import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
 import io.grpc.xds.OrcaOobUtil.OrcaReportingConfig;
 import io.grpc.xds.OrcaOobUtil.OrcaReportingHelperWrapper;
 import io.grpc.xds.WeightedRandomPicker.WeightedChildPicker;
-import io.grpc.xds.WeightedRandomPicker.WeightedPickerFactory;
-import io.grpc.xds.WeightedRandomPicker.WeightedRandomPickerFactory;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.ArrayList;
@@ -111,7 +109,6 @@ interface LocalityStore {
 
     private final XdsLogger logger;
     private final Helper helper;
-    private final WeightedPickerFactory pickerFactory;
     private final LoadBalancerProvider loadBalancerProvider;
     private final ThreadSafeRandom random;
     private final LoadStatsStore loadStatsStore;
@@ -132,7 +129,6 @@ interface LocalityStore {
       this(
           logId,
           helper,
-          WeightedRandomPickerFactory.INSTANCE,
           lbRegistry,
           ThreadSafeRandom.ThreadSafeRandomImpl.instance,
           loadStatsStore,
@@ -144,14 +140,12 @@ interface LocalityStore {
     LocalityStoreImpl(
         InternalLogId logId,
         Helper helper,
-        WeightedPickerFactory pickerFactory,
         LoadBalancerRegistry lbRegistry,
         ThreadSafeRandom random,
         LoadStatsStore loadStatsStore,
         OrcaPerRequestUtil orcaPerRequestUtil,
         OrcaOobUtil orcaOobUtil) {
       this.helper = checkNotNull(helper, "helper");
-      this.pickerFactory = checkNotNull(pickerFactory, "pickerFactory");
       loadBalancerProvider = checkNotNull(
           lbRegistry.getProvider(ROUND_ROBIN),
           "Unable to find '%s' LoadBalancer", ROUND_ROBIN);
@@ -333,7 +327,7 @@ interface LocalityStore {
           picker = XdsSubchannelPickers.BUFFER_PICKER;
         }
       } else {
-        picker = pickerFactory.picker(childPickers);
+        picker = new WeightedRandomPicker(childPickers);
       }
 
       if (!dropOverloads.isEmpty()) {

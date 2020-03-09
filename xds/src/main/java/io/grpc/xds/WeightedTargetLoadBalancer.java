@@ -23,7 +23,6 @@ import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.xds.XdsSubchannelPickers.BUFFER_PICKER;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.ConnectivityState;
 import io.grpc.InternalLogId;
@@ -32,8 +31,6 @@ import io.grpc.Status;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.WeightedRandomPicker.WeightedChildPicker;
-import io.grpc.xds.WeightedRandomPicker.WeightedPickerFactory;
-import io.grpc.xds.WeightedRandomPicker.WeightedRandomPickerFactory;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedPolicySelection;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedTargetConfig;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
@@ -51,21 +48,11 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
   private final Map<String, GracefulSwitchLoadBalancer> childBalancers = new HashMap<>();
   private final Map<String, ChildHelper> childHelpers = new HashMap<>();
   private final Helper helper;
-  private final WeightedPickerFactory weightedPickerFactory;
 
   private Map<String, WeightedPolicySelection> targets = ImmutableMap.of();
 
   WeightedTargetLoadBalancer(Helper helper) {
-    this(
-        checkNotNull(helper, "helper"),
-        WeightedRandomPickerFactory.INSTANCE);
-  }
-
-  @VisibleForTesting
-  WeightedTargetLoadBalancer(
-      Helper helper, WeightedPickerFactory weightedPickerFactory) {
     this.helper = helper;
-    this.weightedPickerFactory = weightedPickerFactory;
     logger = XdsLogger.withLogId(
         InternalLogId.allocate("weighted-target-lb", helper.getAuthority()));
     logger.log(XdsLogLevel.INFO, "Created");
@@ -161,7 +148,7 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
         picker = XdsSubchannelPickers.BUFFER_PICKER;
       }
     } else {
-      picker = weightedPickerFactory.picker(childPickers);
+      picker = new WeightedRandomPicker(childPickers);
     }
 
     if (overallState != null) {

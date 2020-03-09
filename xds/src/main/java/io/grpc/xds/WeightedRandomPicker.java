@@ -26,16 +26,19 @@ import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import java.util.List;
+import java.util.Objects;
 
 final class WeightedRandomPicker extends SubchannelPicker {
 
-  private final List<WeightedChildPicker> weightedChildPickers;
+  @VisibleForTesting
+  final List<WeightedChildPicker> weightedChildPickers;
+
   private final ThreadSafeRandom random;
   private final int totalWeight;
 
   static final class WeightedChildPicker {
-    final int weight;
-    final SubchannelPicker childPicker;
+    private final int weight;
+    private final SubchannelPicker childPicker;
 
     WeightedChildPicker(int weight, SubchannelPicker childPicker) {
       checkArgument(weight >= 0, "weight is negative");
@@ -51,6 +54,23 @@ final class WeightedRandomPicker extends SubchannelPicker {
 
     SubchannelPicker getPicker() {
       return childPicker;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      WeightedChildPicker that = (WeightedChildPicker) o;
+      return weight == that.weight && Objects.equals(childPicker, that.childPicker);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(weight, childPicker);
     }
 
     @Override
@@ -115,22 +135,5 @@ final class WeightedRandomPicker extends SubchannelPicker {
         .add("weightedChildPickers", weightedChildPickers)
         .add("totalWeight", totalWeight)
         .toString();
-  }
-
-  /** Factory that creates a SubchannelPicker for a given list of weighted child pickers. */
-  interface WeightedPickerFactory {
-    SubchannelPicker picker(List<WeightedChildPicker> childPickers);
-  }
-
-  static final class WeightedRandomPickerFactory implements WeightedPickerFactory {
-
-    static final WeightedRandomPickerFactory INSTANCE = new WeightedRandomPickerFactory();
-
-    private WeightedRandomPickerFactory() {}
-
-    @Override
-    public SubchannelPicker picker(List<WeightedChildPicker> childPickers) {
-      return new WeightedRandomPicker(childPickers);
-    }
   }
 }

@@ -40,14 +40,12 @@ import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.ResolvedAddresses;
-import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.xds.WeightedRandomPicker.WeightedChildPicker;
-import io.grpc.xds.WeightedRandomPicker.WeightedPickerFactory;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedPolicySelection;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedTargetConfig;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
@@ -134,28 +132,6 @@ public class WeightedTargetLoadBalancerTest {
   private final WeightedPolicySelection weightedLbConfig3 = new WeightedPolicySelection(
       weights[3], new PolicySelection(fooLbProvider, null, configs[3]));
 
-  private final WeightedPickerFactory pickerFactory = new WeightedPickerFactory() {
-    // Pick from the child picker with the given weight: weightToPick.
-    @Override
-    public SubchannelPicker picker(final List<WeightedChildPicker> childPickers) {
-      childPickerWeights = new ArrayList<>(childPickers.size());
-      for (WeightedChildPicker weightedChildPicker : childPickers) {
-        childPickerWeights.add(weightedChildPicker.weight);
-      }
-      return new SubchannelPicker() {
-        @Override
-        public PickResult pickSubchannel(PickSubchannelArgs args) {
-          for (WeightedChildPicker weightedChildPicker : childPickers) {
-            if (weightedChildPicker.weight == weightToPick) {
-              return weightedChildPicker.getPicker().pickSubchannel(args);
-            }
-          }
-          throw new AssertionError("There is no picker with expected weight: " + weightToPick);
-        }
-      };
-    }
-  };
-
   @Mock
   private Helper helper;
   @Mock
@@ -164,8 +140,6 @@ public class WeightedTargetLoadBalancerTest {
   private LoadBalancer weightedTargetLb;
   private int fooLbCreated;
   private int barLbCreated;
-  private List<Integer> childPickerWeights;
-  private int weightToPick;
 
   @Before
   public void setUp() {
@@ -175,7 +149,7 @@ public class WeightedTargetLoadBalancerTest {
     lbRegistry.register(fooLbProvider);
     lbRegistry.register(barLbProvider);
 
-    weightedTargetLb = new WeightedTargetLoadBalancer(helper, pickerFactory);
+    weightedTargetLb = new WeightedTargetLoadBalancer(helper);
   }
 
   @After
@@ -313,11 +287,11 @@ public class WeightedTargetLoadBalancerTest {
             .build());
 
     // Subchannels to be created for each child balancer.
-    final Subchannel[] subchannels = new Subchannel[]{
-        mock(Subchannel.class),
-        mock(Subchannel.class),
-        mock(Subchannel.class),
-        mock(Subchannel.class)};
+    final SubchannelPicker[] subchannelPickers = new SubchannelPicker[]{
+        mock(SubchannelPicker.class),
+        mock(SubchannelPicker.class),
+        mock(SubchannelPicker.class),
+        mock(SubchannelPicker.class)};
     ArgumentCaptor<SubchannelPicker> pickerCaptor = ArgumentCaptor.forClass(null);
 
     // One child balancer goes to TRANSIENT_FAILURE.
@@ -327,64 +301,40 @@ public class WeightedTargetLoadBalancerTest {
     verify(helper).updateBalancingState(eq(CONNECTING), eq(BUFFER_PICKER));
 
     // Another child balancer goes to READY.
-    SubchannelPicker subchannelPicker = new SubchannelPicker() {
-      @Override
-      public PickResult pickSubchannel(PickSubchannelArgs args) {
-        return PickResult.withSubchannel(subchannels[2]);
-      }
-    };
-    childHelpers.get(2).updateBalancingState(READY, subchannelPicker);
+    childHelpers.get(2).updateBalancingState(READY, subchannelPickers[2]);
     verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
-    assertThat(childPickerWeights).containsExactly(weights[2]);
-    weightToPick = weights[2];
-    assertThat(pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class))
-        .getSubchannel())
-        .isEqualTo(subchannels[2]);
+    assertThat(pickerCaptor.getValue()).isInstanceOf(WeightedRandomPicker.class);
+    WeightedRandomPicker overallPicker = (WeightedRandomPicker) pickerCaptor.getValue();
+    assertThat(overallPicker.weightedChildPickers).isEqualTo(
+        ImmutableList.of(new WeightedChildPicker(weights[2], subchannelPickers[2])));
 
     // Another child balancer goes to READY.
-    subchannelPicker = new SubchannelPicker() {
-      @Override
-      public PickResult pickSubchannel(PickSubchannelArgs args) {
-        return PickResult.withSubchannel(subchannels[3]);
-      }
-    };
-    childHelpers.get(3).updateBalancingState(READY, subchannelPicker);
+    childHelpers.get(3).updateBalancingState(READY, subchannelPickers[3]);
     verify(helper, times(2)).updateBalancingState(eq(READY), pickerCaptor.capture());
-    assertThat(childPickerWeights).containsExactly(weights[2], weights[3]);
-    for (int i : new int[]{2, 3}) {
-      weightToPick = weights[i];
-      assertThat(pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class))
-          .getSubchannel())
-          .isEqualTo(subchannels[i]);
-    }
+    overallPicker = (WeightedRandomPicker) pickerCaptor.getValue();
+    assertThat(overallPicker.weightedChildPickers).isEqualTo(
+        ImmutableList.of(
+            new WeightedChildPicker(weights[2], subchannelPickers[2]),
+            new WeightedChildPicker(weights[3], subchannelPickers[3])));
 
     // Another child balancer goes to READY.
-    subchannelPicker = new SubchannelPicker() {
-      @Override
-      public PickResult pickSubchannel(PickSubchannelArgs args) {
-        return PickResult.withSubchannel(subchannels[0]);
-      }
-    };
-    childHelpers.get(0).updateBalancingState(READY, subchannelPicker);
+    childHelpers.get(0).updateBalancingState(READY, subchannelPickers[0]);
     verify(helper, times(3)).updateBalancingState(eq(READY), pickerCaptor.capture());
-    assertThat(childPickerWeights).containsExactly(weights[0], weights[2], weights[3]);
-    for (int i : new int[]{0, 2, 3}) {
-      weightToPick = weights[i];
-      assertThat(pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class))
-          .getSubchannel())
-          .isEqualTo(subchannels[i]);
-    }
+    overallPicker = (WeightedRandomPicker) pickerCaptor.getValue();
+    assertThat(overallPicker.weightedChildPickers).isEqualTo(
+        ImmutableList.of(
+            new WeightedChildPicker(weights[0], subchannelPickers[0]),
+            new WeightedChildPicker(weights[2], subchannelPickers[2]),
+            new WeightedChildPicker(weights[3], subchannelPickers[3])));
 
     // One of READY child balancers goes to TRANSIENT_FAILURE.
     childHelpers.get(2).updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(Status.DATA_LOSS));
     verify(helper, times(4)).updateBalancingState(eq(READY), pickerCaptor.capture());
-    assertThat(childPickerWeights).containsExactly(weights[0], weights[3]);
-    for (int i : new int[]{0, 3}) {
-      weightToPick = weights[i];
-      assertThat(pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class))
-          .getSubchannel())
-          .isEqualTo(subchannels[i]);
-    }
+    overallPicker = (WeightedRandomPicker) pickerCaptor.getValue();
+    assertThat(overallPicker.weightedChildPickers).isEqualTo(
+        ImmutableList.of(
+            new WeightedChildPicker(weights[0], subchannelPickers[0]),
+            new WeightedChildPicker(weights[3], subchannelPickers[3])));
 
     // All child balancers go to TRANSIENT_FAILURE.
     childHelpers.get(3).updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(Status.DATA_LOSS));
