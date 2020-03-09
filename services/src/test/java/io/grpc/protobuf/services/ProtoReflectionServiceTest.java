@@ -532,8 +532,11 @@ public class ProtoReflectionServiceTest {
         (ClientCallStreamObserver<ServerReflectionRequest>)
             stub.serverReflectionInfo(clientResponseObserver);
 
-    // ClientCalls.startCall() calls request(1) initially, so we should get an immediate response.
+    // Verify we don't receive a response until we request it.    requestObserver.onNext(flowControlRequest);
     requestObserver.onNext(flowControlRequest);
+    assertEquals(0, clientResponseObserver.getResponses().size());
+
+    requestObserver.request(1);
     assertEquals(1, clientResponseObserver.getResponses().size());
     assertEquals(flowControlGoldenResponse, clientResponseObserver.getResponses().get(0));
 
@@ -594,7 +597,7 @@ public class ProtoReflectionServiceTest {
 
     @Override
     public void beforeStart(final ClientCallStreamObserver<ServerReflectionRequest> requestStream) {
-      requestStream.disableAutoInboundFlowControl();
+      requestStream.disableAutoRequest();
     }
 
     @Override

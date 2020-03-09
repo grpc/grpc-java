@@ -135,7 +135,7 @@ public final class ProtoReflectionService extends ServerReflectionGrpc.ServerRef
     ProtoReflectionStreamObserver requestObserver =
         new ProtoReflectionStreamObserver(updateIndexIfNecessary(), serverCallStreamObserver);
     serverCallStreamObserver.setOnReadyHandler(requestObserver);
-    serverCallStreamObserver.disableAutoInboundFlowControl();
+    serverCallStreamObserver.disableAutoRequest();
     serverCallStreamObserver.request(1);
     return requestObserver;
   }
