@@ -316,11 +316,17 @@ public final class ClientCalls {
     abstract void onStart();
   }
 
+  private enum AutoRequestMode {
+    INITIAL_AND_NEXT,
+    INITIAL_ONLY,
+    DISABLED
+  }
+
   private static final class CallToStreamObserverAdapter<T> extends ClientCallStreamObserver<T> {
     private boolean frozen;
     private final ClientCall<T, ?> call;
     private Runnable onReadyHandler;
-    private boolean autoFlowControlEnabled = true;
+    private AutoRequestMode autoRequestMode = AutoRequestMode.INITIAL_AND_NEXT;
     private boolean aborted = false;
     private boolean completed = false;
 
@@ -372,7 +378,13 @@ public final class ClientCalls {
         throw new IllegalStateException(
             "Cannot disable auto flow control after call started. Use ClientResponseObserver");
       }
-      autoFlowControlEnabled = false;
+      autoRequestMode = AutoRequestMode.INITIAL_ONLY;
+    }
+
+    @Override
+    public void disableAutoRequest() {
+      checkState(!frozen, "Cannot disable auto flow control after call started. Use ClientResponseObserver");
+      autoRequestMode = AutoRequestMode.DISABLED;
     }
 
     @Override
@@ -429,7 +441,7 @@ public final class ClientCalls {
       firstResponseReceived = true;
       observer.onNext(message);
 
-      if (streamingResponse && adapter.autoFlowControlEnabled) {
+      if (streamingResponse && adapter.autoRequestMode == AutoRequestMode.INITIAL_AND_NEXT) {
         // Request delivery of the next inbound message.
         adapter.request(1);
       }
@@ -453,7 +465,7 @@ public final class ClientCalls {
 
     @Override
     void onStart() {
-      if (adapter.autoFlowControlEnabled) {
+      if (adapter.autoRequestMode != AutoRequestMode.DISABLED) {
         if (streamingResponse) {
           adapter.request(1);
         } else {
