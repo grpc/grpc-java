@@ -104,8 +104,7 @@ final class XdsClientImpl extends XdsClient {
   private final Stopwatch adsStreamRetryStopwatch;
   // The node identifier to be included in xDS requests. Management server only requires the
   // first request to carry the node identifier on a stream. It should be identical if present
-  // more than once. In case of Listener watcher metadata will be updated to include specific
-  // information.
+  // more than once.
   private Node node;
 
   // Cached data for CDS responses, keyed by cluster names.
@@ -171,7 +170,7 @@ final class XdsClientImpl extends XdsClient {
   @Nullable
   private ListenerWatcher listenerWatcher;
   // port of the listener that server builder is targeting for.
-  private int port;
+  private int port = -1;
 
   XdsClientImpl(
       String targetName,
@@ -443,6 +442,7 @@ final class XdsClientImpl extends XdsClient {
                 INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS, timeService);
   }
 
+  /** In case of Listener watcher metadata to be updated to include port. */
   void updateNodeMetadataForListenerRequest(int port) {
     // TODO(sanjaypujare): fields of metadata to update to be finalized
     Struct newMetadata = node.getMetadata().toBuilder()
@@ -510,25 +510,34 @@ final class XdsClientImpl extends XdsClient {
   }
 
   /**
-   * If listenerWatcher is set it just calls handleLdsResponseForListener. Otherwise
-   * handles LDS response to find the HttpConnectionManager message for the requested resource name.
+   * Calls handleLdsResponseForListener or handleLdsResponseForConfigUpdate based on which watcher
+   * was set.
+   */
+  private void handleLdsResponse(DiscoveryResponse ldsResponse) {
+    checkState((configWatcher != null) != (listenerWatcher != null),
+        "No LDS request was ever sent. Management server is doing something wrong");
+    if (logger.isLoggable(XdsLogLevel.DEBUG)) {
+      logger.log(
+          XdsLogLevel.DEBUG, "Received  LDS response:\n{0}", respPrinter.print(ldsResponse));
+    }
+    if (listenerWatcher != null) {
+      handleLdsResponseForListener(ldsResponse);
+    } else {
+      handleLdsResponseForConfigUpdate(ldsResponse);
+    }
+  }
+
+  /**
+   * Handles LDS response to find the HttpConnectionManager message for the requested resource name.
    * Proceed with the resolved RouteConfiguration in HttpConnectionManager message of the requested
    * listener, if exists, to find the VirtualHost configuration for the "xds:" URI
    * (with the port, if any, stripped off). Or sends an RDS request if configured for dynamic
    * resolution. The response is NACKed if contains invalid data for gRPC's usage. Otherwise, an
    * ACK request is sent to management server.
    */
-  private void handleLdsResponse(DiscoveryResponse ldsResponse) {
-    if (listenerWatcher != null) {
-      handleLdsResponseForListener(ldsResponse);
-      return;
-    }
+  private void handleLdsResponseForConfigUpdate(DiscoveryResponse ldsResponse) {
     checkState(ldsResourceName != null && configWatcher != null,
-        "No LDS request was ever sent. Management server is doing something wrong");
-    if (logger.isLoggable(XdsLogLevel.DEBUG)) {
-      logger.log(
-          XdsLogLevel.DEBUG, "Received  LDS response:\n{0}", respPrinter.print(ldsResponse));
-    }
+        "LDS request for ConfigWatcher was never sent!");
 
     // Unpack Listener messages.
     List<Listener> listeners = new ArrayList<>(ldsResponse.getResourcesCount());
@@ -658,11 +667,7 @@ final class XdsClientImpl extends XdsClient {
 
   private void handleLdsResponseForListener(DiscoveryResponse ldsResponse) {
     checkState(ldsResourceName == null && port > 0 && listenerWatcher != null,
-        "LDS watcher not set up for listener watching");
-    if (logger.isLoggable(XdsLogLevel.DEBUG)) {
-      logger.log(
-          XdsLogLevel.DEBUG, "Received  LDS response:\n{0}", respPrinter.print(ldsResponse));
-    }
+        "LDS request for ListenerWatcher was never sent!");
 
     // Unpack Listener messages.
     Listener requestedListener = null;

@@ -62,20 +62,13 @@ abstract class XdsClient {
    */
   static final class ConfigUpdate {
     private final String clusterName;
-    private final Listener listener;
 
-    private ConfigUpdate(String clusterName, @Nullable Listener listener) {
+    private ConfigUpdate(String clusterName) {
       this.clusterName = clusterName;
-      this.listener = listener;
     }
 
     String getClusterName() {
       return clusterName;
-    }
-
-    @Nullable
-    public Listener getListener() {
-      return listener;
     }
 
     @Override
@@ -93,7 +86,6 @@ abstract class XdsClient {
 
     static final class Builder {
       private String clusterName;
-      @Nullable private Listener listener;
 
       // Use ConfigUpdate.newBuilder().
       private Builder() {
@@ -104,14 +96,9 @@ abstract class XdsClient {
         return this;
       }
 
-      Builder setListener(Listener listener) {
-        this.listener = listener;
-        return this;
-      }
-
       ConfigUpdate build() {
         Preconditions.checkState(clusterName != null, "clusterName is not set");
-        return new ConfigUpdate(clusterName, listener);
+        return new ConfigUpdate(clusterName);
       }
     }
   }
@@ -357,6 +344,7 @@ abstract class XdsClient {
    * config for security, RBAC or other server side features such as rate limit.
    */
   static final class ListenerUpdate {
+    // TODO(sanjaypujare): flatten structure by moving Listener class members here.
     private final Listener listener;
 
     private ListenerUpdate(Listener listener) {

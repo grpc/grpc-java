@@ -237,14 +237,14 @@ public class XdsClientImplTestForListener {
   /** Error when ConfigWatcher and then ListenerWatcher registered. */
   @Test
   public void ldsResponse_configAndListenerWatcher_expectError() {
-    xdsClient.watchConfigData("somehost", 80, configWatcher);
+    xdsClient.watchConfigData("somehost:80", configWatcher);
     try {
       xdsClient.watchListenerData(PORT, listenerWatcher);
       fail("expected exception");
     } catch (IllegalStateException expected) {
       assertThat(expected)
           .hasMessageThat()
-          .isEqualTo("ConfigWatcher for somehost already registered");
+          .isEqualTo("ConfigWatcher for somehost:80 already registered");
     }
   }
 
@@ -253,7 +253,7 @@ public class XdsClientImplTestForListener {
   public void ldsResponse_listenerAndConfigWatcher_expectError() {
     xdsClient.watchListenerData(PORT, listenerWatcher);
     try {
-      xdsClient.watchConfigData("somehost", 80, configWatcher);
+      xdsClient.watchConfigData("somehost:80", configWatcher);
       fail("expected exception");
     } catch (IllegalStateException expected) {
       assertThat(expected)
