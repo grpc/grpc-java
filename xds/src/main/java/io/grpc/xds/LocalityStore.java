@@ -54,7 +54,6 @@ import io.grpc.xds.WeightedRandomPicker.WeightedChildPicker;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -318,7 +317,6 @@ interface LocalityStore {
 
     private void updatePicker(
         @Nullable ConnectivityState state,  List<WeightedChildPicker> childPickers) {
-      childPickers = Collections.unmodifiableList(childPickers);
       SubchannelPicker picker;
       if (childPickers.isEmpty()) {
         if (state == TRANSIENT_FAILURE) {

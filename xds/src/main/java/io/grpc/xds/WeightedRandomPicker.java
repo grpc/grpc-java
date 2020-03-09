@@ -21,10 +21,10 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
-import com.google.common.collect.ImmutableList;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.SubchannelPicker;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
@@ -91,7 +91,7 @@ final class WeightedRandomPicker extends SubchannelPicker {
     checkNotNull(weightedChildPickers, "weightedChildPickers in null");
     checkArgument(!weightedChildPickers.isEmpty(), "weightedChildPickers is empty");
 
-    this.weightedChildPickers = ImmutableList.copyOf(weightedChildPickers);
+    this.weightedChildPickers = Collections.unmodifiableList(weightedChildPickers);
 
     int totalWeight = 0;
     for (WeightedChildPicker weightedChildPicker : weightedChildPickers) {
