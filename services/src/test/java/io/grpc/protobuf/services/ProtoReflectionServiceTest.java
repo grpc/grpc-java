@@ -560,17 +560,15 @@ public class ProtoReflectionServiceTest {
         (ClientCallStreamObserver<ServerReflectionRequest>)
             stub.serverReflectionInfo(clientResponseObserver);
 
-    // ClientCalls.startCall() calls request(1) initially, so make additional request.
-    requestObserver.onNext(flowControlRequest);
     requestObserver.onNext(flowControlRequest);
     requestObserver.onCompleted();
-    assertEquals(1, clientResponseObserver.getResponses().size());
+    assertEquals(0, clientResponseObserver.getResponses().size());
     assertFalse(clientResponseObserver.onCompleteCalled());
 
     requestObserver.request(1);
     assertTrue(clientResponseObserver.onCompleteCalled());
-    assertEquals(2, clientResponseObserver.getResponses().size());
-    assertEquals(flowControlGoldenResponse, clientResponseObserver.getResponses().get(1));
+    assertEquals(1, clientResponseObserver.getResponses().size());
+    assertEquals(flowControlGoldenResponse, clientResponseObserver.getResponses().get(0));
   }
 
   private final ServerReflectionRequest flowControlRequest =
