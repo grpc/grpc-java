@@ -532,7 +532,7 @@ public class ProtoReflectionServiceTest {
         (ClientCallStreamObserver<ServerReflectionRequest>)
             stub.serverReflectionInfo(clientResponseObserver);
 
-    // Verify we don't receive a response until we request it.    requestObserver.onNext(flowControlRequest);
+    // Verify we don't receive a response until we request it.
     requestObserver.onNext(flowControlRequest);
     assertEquals(0, clientResponseObserver.getResponses().size());
 
