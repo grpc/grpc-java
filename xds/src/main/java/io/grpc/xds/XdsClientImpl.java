@@ -1147,12 +1147,19 @@ final class XdsClientImpl extends XdsClient {
     public void run() {
       startRpcStream();
       if (configWatcher != null) {
-        adsStream.sendXdsRequest(ADS_TYPE_URL_LDS, ldsResourceName != null
-            ? ImmutableList.of(ldsResourceName) : ImmutableList.<String>of());
+        adsStream.sendXdsRequest(ADS_TYPE_URL_LDS, ImmutableList.of(ldsResourceName));
         ldsRespTimer =
             syncContext
                 .schedule(
                     new LdsResourceFetchTimeoutTask(ldsResourceName),
+                    INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS, timeService);
+      }
+      if (listenerWatcher != null) {
+        adsStream.sendXdsRequest(ADS_TYPE_URL_LDS, ImmutableList.<String>of());
+        ldsRespTimer =
+            syncContext
+                .schedule(
+                    new ListenerResourceFetchTimeoutTask(":" + listenerPort),
                     INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS, timeService);
       }
       if (!clusterWatchers.isEmpty()) {
@@ -1290,6 +1297,9 @@ final class XdsClientImpl extends XdsClient {
       closed = true;
       if (configWatcher != null) {
         configWatcher.onError(error);
+      }
+      if (listenerWatcher != null) {
+        listenerWatcher.onError(error);
       }
       for (Set<ClusterWatcher> watchers : clusterWatchers.values()) {
         for (ClusterWatcher watcher : watchers) {
@@ -1511,7 +1521,7 @@ final class XdsClientImpl extends XdsClient {
       ldsRespTimer = null;
       listenerWatcher.onError(
           Status.NOT_FOUND
-              .withDescription("Listener resource for listener " + resourceName + " not found."));
+              .withDescription("Listener resource for port " + resourceName + " not found."));
     }
   }
 

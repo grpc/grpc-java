@@ -29,6 +29,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
@@ -87,7 +88,9 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
 /**
@@ -104,6 +107,13 @@ public class XdsClientImplTestForListener {
           + "envoy.config.filter.network.http_connection_manager.v2.HttpConnectionManager";
 
   private static final Node NODE = Node.getDefaultInstance();
+  private static final FakeClock.TaskFilter RPC_RETRY_TASK_FILTER =
+      new FakeClock.TaskFilter() {
+        @Override
+        public boolean shouldAccept(Runnable command) {
+          return command.toString().contains(XdsClientImpl.RpcRetryTask.class.getSimpleName());
+        }
+      };
   private static final TaskFilter LISTENER_RESOURCE_FETCH_TIMEOUT_TASK_FILTER =
       new TaskFilter() {
         @Override
@@ -616,6 +626,146 @@ public class XdsClientImplTestForListener {
 
     verify(listenerWatcher, never()).onError(any(Status.class));
     verify(listenerWatcher, never()).onListenerChanged(any(ListenerUpdate.class));
+  }
+
+  /**
+   * RPC stream close and retry while there is listener watcher registered.
+   */
+  @Test
+  public void streamClosedAndRetry() {
+    InOrder inOrder =
+        Mockito.inOrder(mockedDiscoveryService, backoffPolicyProvider, backoffPolicy1,
+            backoffPolicy2);
+    xdsClient.watchListenerData(PORT, listenerWatcher);
+
+    ArgumentCaptor<StreamObserver<DiscoveryResponse>> responseObserverCaptor =
+        ArgumentCaptor.forClass(null);
+    inOrder.verify(mockedDiscoveryService)
+        .streamAggregatedResources(responseObserverCaptor.capture());
+    StreamObserver<DiscoveryResponse> responseObserver =
+        responseObserverCaptor.getValue();  // same as responseObservers.poll()
+    StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "",
+            XdsClientImpl.ADS_TYPE_URL_LDS, "")));
+
+    final FilterChain filterChainOutbound = buildFilterChain(buildFilterChainMatch(8000), null);
+    final FilterChain filterChainInbound = buildFilterChain(buildFilterChainMatch(PORT,
+        CidrRange.newBuilder().setAddressPrefix(LOCAL_IP)
+            .setPrefixLen(UInt32Value.of(32)).build()),
+        CommonTlsContextTestsUtil.buildTestDownstreamTlsContext("google-sds-config-default",
+            "ROOTCA"),
+        buildTestFilter("envoy.http_connection_manager"));
+    List<Any> listeners = ImmutableList.of(
+        Any.pack(buildListenerWithFilterChain(LISTENER_NAME, 15001, "0.0.0.0",
+            filterChainOutbound,
+            filterChainInbound
+        )));
+    DiscoveryResponse response =
+        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS, "0000");
+    responseObserver.onNext(response);
+
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
+
+    // Management server closes the RPC stream with an error.
+    responseObserver.onError(Status.UNKNOWN.asException());
+    verify(listenerWatcher).onError(statusCaptor.capture());
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.UNKNOWN);
+
+    // Resets backoff and retry immediately.
+    inOrder.verify(backoffPolicyProvider).get();
+    fakeClock.runDueTasks();
+    inOrder.verify(mockedDiscoveryService)
+        .streamAggregatedResources(responseObserverCaptor.capture());
+    responseObserver = responseObserverCaptor.getValue();
+    requestObserver = requestObservers.poll();
+
+    // Retry resumes requests for all wanted resources.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "",
+            XdsClientImpl.ADS_TYPE_URL_LDS, "")));
+
+    // Management server becomes unreachable.
+    responseObserver.onError(Status.UNAVAILABLE.asException());
+    verify(listenerWatcher, times(2)).onError(statusCaptor.capture());
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.UNAVAILABLE);
+    inOrder.verify(backoffPolicy1).nextBackoffNanos();
+    assertThat(fakeClock.getPendingTasks(RPC_RETRY_TASK_FILTER)).hasSize(1);
+
+    // Retry after backoff.
+    fakeClock.forwardNanos(9L);
+    assertThat(requestObservers).isEmpty();
+    fakeClock.forwardNanos(1L);
+    inOrder.verify(mockedDiscoveryService)
+        .streamAggregatedResources(responseObserverCaptor.capture());
+    responseObserver = responseObserverCaptor.getValue();
+    requestObserver = requestObservers.poll();
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "",
+            XdsClientImpl.ADS_TYPE_URL_LDS, "")));
+
+    // Management server is still not reachable.
+    responseObserver.onError(Status.UNAVAILABLE.asException());
+    verify(listenerWatcher, times(3)).onError(statusCaptor.capture());
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.UNAVAILABLE);
+    inOrder.verify(backoffPolicy1).nextBackoffNanos();
+    assertThat(fakeClock.getPendingTasks(RPC_RETRY_TASK_FILTER)).hasSize(1);
+
+    // Retry after backoff.
+    fakeClock.forwardNanos(99L);
+    assertThat(requestObservers).isEmpty();
+    fakeClock.forwardNanos(1L);
+    inOrder.verify(mockedDiscoveryService)
+        .streamAggregatedResources(responseObserverCaptor.capture());
+    responseObserver = responseObserverCaptor.getValue();
+    requestObserver = requestObservers.poll();
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "",
+            XdsClientImpl.ADS_TYPE_URL_LDS, "")));
+
+    // Management server sends back a LDS response.
+    response = buildDiscoveryResponse("1", listeners,
+        XdsClientImpl.ADS_TYPE_URL_LDS, "0001");
+    responseObserver.onNext(response);
+
+    // Client sent an LDS ACK request (Omitted).
+
+    // Management server closes the RPC stream.
+    responseObserver.onCompleted();
+    verify(listenerWatcher, times(4)).onError(any(Status.class));
+
+    // Resets backoff and retry immediately
+    inOrder.verify(backoffPolicyProvider).get();
+    fakeClock.runDueTasks();
+    inOrder.verify(mockedDiscoveryService)
+        .streamAggregatedResources(responseObserverCaptor.capture());
+    responseObserver = responseObserverCaptor.getValue();
+    requestObserver = requestObservers.poll();
+
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "",
+            XdsClientImpl.ADS_TYPE_URL_LDS, "")));
+
+    // Management server becomes unreachable again.
+    responseObserver.onError(Status.UNAVAILABLE.asException());
+    verify(listenerWatcher, times(5)).onError(statusCaptor.capture());
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.UNAVAILABLE);
+    inOrder.verify(backoffPolicy2).nextBackoffNanos();
+    assertThat(fakeClock.getPendingTasks(RPC_RETRY_TASK_FILTER)).hasSize(1);
+
+    // Retry after backoff.
+    fakeClock.forwardNanos(19L);
+    assertThat(requestObservers).isEmpty();
+    fakeClock.forwardNanos(1L);
+    inOrder.verify(mockedDiscoveryService)
+        .streamAggregatedResources(responseObserverCaptor.capture());
+    requestObserver = requestObservers.poll();
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "",
+            XdsClientImpl.ADS_TYPE_URL_LDS, "")));
+
+    verifyNoMoreInteractions(mockedDiscoveryService, backoffPolicyProvider, backoffPolicy1,
+        backoffPolicy2);
   }
 
   static Listener buildListenerWithFilterChain(String name, int portValue, String address,
