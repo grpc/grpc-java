@@ -107,8 +107,9 @@ public abstract class CallStreamObserver<V> implements StreamObserver<V> {
    * </ul>
    * </p>
    * 
-   * <p>Migrating to {@link #disableAutoRequest} requires making adding an initial {@link #request}
-   * after the call has started. For example:
+   * <p>On the server side, migrating to {@link #disableAutoRequest} requires no changes; they have
+   * identical behavior.  On the client-side, migrating to {@code disableAutoRequest} requires
+   * making adding an initial {@link #request} after the call has started. For example:
    * 
    * <pre>{@code
    * Rectangle request = ...;
