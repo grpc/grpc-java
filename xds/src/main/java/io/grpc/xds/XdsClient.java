@@ -357,9 +357,9 @@ abstract class XdsClient {
 
     @Override
     public String toString() {
-      return "ListenerUpdate{"
-          + "listener=" + listener
-          + '}';
+      return MoreObjects.toStringHelper(this)
+          .add("listener", listener)
+          .toString();
     }
 
     static Builder newBuilder() {

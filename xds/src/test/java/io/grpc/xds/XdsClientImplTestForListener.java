@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 The gRPC Authors
+ * Copyright 2020 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -244,7 +244,7 @@ public class XdsClientImplTestForListener {
     } catch (IllegalStateException expected) {
       assertThat(expected)
           .hasMessageThat()
-          .isEqualTo("ConfigWatcher for somehost:80 already registered");
+          .isEqualTo("ListenerWatcher cannot be set when ConfigWatcher set");
     }
   }
 

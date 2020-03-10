@@ -169,8 +169,7 @@ final class XdsClientImpl extends XdsClient {
   // only a ConfigWatcher or ListenerWatcher can be registered.
   @Nullable
   private ListenerWatcher listenerWatcher;
-  // port of the listener that server builder is targeting for.
-  private int port = -1;
+  private int listenerPort = -1;
 
   XdsClientImpl(
       String targetName,
@@ -420,11 +419,12 @@ final class XdsClientImpl extends XdsClient {
 
   @Override
   void watchListenerData(int port, ListenerWatcher watcher) {
-    checkState(configWatcher == null, "ConfigWatcher for %s already registered", ldsResourceName);
+    checkState(configWatcher == null,
+        "ListenerWatcher cannot be set when ConfigWatcher set");
     checkState(listenerWatcher == null, "ListenerWatcher already registered");
     listenerWatcher = checkNotNull(watcher, "watcher");
-    checkState(port > 0, "port needs to be > 0");
-    this.port = port;
+    checkArgument(port > 0, "port needs to be > 0");
+    this.listenerPort = port;
     logger.log(XdsLogLevel.INFO, "Started watching listener for port {0}", port);
     if (rpcRetryTimer != null && rpcRetryTimer.isPending()) {
       // Currently in retry backoff.
@@ -434,12 +434,20 @@ final class XdsClientImpl extends XdsClient {
       startRpcStream();
     }
     updateNodeMetadataForListenerRequest(port);
-    adsStream.sendXdsRequest(ADS_TYPE_URL_LDS, null);
+    adsStream.sendXdsRequest(ADS_TYPE_URL_LDS, getListOfResourceNames(ldsResourceName));
     ldsRespTimer =
         syncContext
             .schedule(
                 new ListenerResourceFetchTimeoutTask(":" + port),
                 INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS, timeService);
+  }
+
+  private static Collection<String> getListOfResourceNames(String resourceName) {
+    if (resourceName != null) {
+      return ImmutableList.of(resourceName);
+    } else {
+      return ImmutableList.of();
+    }
   }
 
   /** In case of Listener watcher metadata to be updated to include port. */
@@ -551,7 +559,7 @@ final class XdsClientImpl extends XdsClient {
     } catch (InvalidProtocolBufferException e) {
       logger.log(XdsLogLevel.WARNING, "Failed to unpack Listeners in LDS response {0}", e);
       adsStream.sendNackRequest(
-          ADS_TYPE_URL_LDS, ImmutableList.of(ldsResourceName),
+          ADS_TYPE_URL_LDS, getListOfResourceNames(ldsResourceName),
           ldsResponse.getVersionInfo(), "Malformed LDS response: " + e);
       return;
     }
@@ -572,7 +580,7 @@ final class XdsClientImpl extends XdsClient {
           XdsLogLevel.WARNING,
           "Failed to unpack HttpConnectionManagers in Listeners of LDS response {0}", e);
       adsStream.sendNackRequest(
-          ADS_TYPE_URL_LDS, ImmutableList.of(ldsResourceName),
+          ADS_TYPE_URL_LDS, getListOfResourceNames(ldsResourceName),
           ldsResponse.getVersionInfo(), "Malformed LDS response: " + e);
       return;
     }
@@ -617,11 +625,11 @@ final class XdsClientImpl extends XdsClient {
 
     if (errorMessage != null) {
       adsStream.sendNackRequest(
-          ADS_TYPE_URL_LDS, ImmutableList.of(ldsResourceName),
+          ADS_TYPE_URL_LDS, getListOfResourceNames(ldsResourceName),
           ldsResponse.getVersionInfo(), errorMessage);
       return;
     }
-    adsStream.sendAckRequest(ADS_TYPE_URL_LDS, ImmutableList.of(ldsResourceName),
+    adsStream.sendAckRequest(ADS_TYPE_URL_LDS, getListOfResourceNames(ldsResourceName),
         ldsResponse.getVersionInfo());
 
     if (clusterName != null || rdsRouteConfigName != null) {
@@ -666,7 +674,7 @@ final class XdsClientImpl extends XdsClient {
   }
 
   private void handleLdsResponseForListener(DiscoveryResponse ldsResponse) {
-    checkState(ldsResourceName == null && port > 0 && listenerWatcher != null,
+    checkState(ldsResourceName == null && listenerPort > 0 && listenerWatcher != null,
         "LDS request for ListenerWatcher was never sent!");
 
     // Unpack Listener messages.
@@ -682,11 +690,11 @@ final class XdsClientImpl extends XdsClient {
         }
       }
     } catch (InvalidProtocolBufferException e) {
-      adsStream.sendNackRequest(ADS_TYPE_URL_LDS, null,
+      adsStream.sendNackRequest(ADS_TYPE_URL_LDS, getListOfResourceNames(null),
           ldsResponse.getVersionInfo(), "Broken LDS response.");
       return;
     }
-    adsStream.sendAckRequest(ADS_TYPE_URL_LDS, null,
+    adsStream.sendAckRequest(ADS_TYPE_URL_LDS, getListOfResourceNames(null),
         ldsResponse.getVersionInfo());
     if (requestedListener != null) {
       // Found requestedListener
@@ -702,7 +710,7 @@ final class XdsClientImpl extends XdsClient {
       // did not find the requested listener:
       if (ldsRespTimer == null) {
         listenerWatcher.onError(Status.NOT_FOUND.withDescription("did not find listener for "
-            + port));
+            + listenerPort));
       }
     }
   }
@@ -716,7 +724,7 @@ final class XdsClientImpl extends XdsClient {
   private boolean isAddressMatching(Address address) {
     // TODO(sanjaypujare): check IP address once we know xDS server will include it
     return address.hasSocketAddress()
-        && (address.getSocketAddress().getPortValue() == port);
+        && (address.getSocketAddress().getPortValue() == listenerPort);
   }
 
   private boolean hasMatchingFilter(List<FilterChain> filterChainsList) {
@@ -724,7 +732,7 @@ final class XdsClientImpl extends XdsClient {
     for (FilterChain filterChain : filterChainsList) {
       FilterChainMatch filterChainMatch = filterChain.getFilterChainMatch();
 
-      if (port == filterChainMatch.getDestinationPort().getValue()) {
+      if (listenerPort == filterChainMatch.getDestinationPort().getValue()) {
         return true;
       }
     }
@@ -1147,7 +1155,7 @@ final class XdsClientImpl extends XdsClient {
     public void run() {
       startRpcStream();
       if (configWatcher != null) {
-        adsStream.sendXdsRequest(ADS_TYPE_URL_LDS, ImmutableList.of(ldsResourceName));
+        adsStream.sendXdsRequest(ADS_TYPE_URL_LDS, getListOfResourceNames(ldsResourceName));
         ldsRespTimer =
             syncContext
                 .schedule(
@@ -1365,17 +1373,15 @@ final class XdsClientImpl extends XdsClient {
         nonce = edsRespNonce;
         logger.log(XdsLogLevel.INFO, "Sending EDS request for resources: {0}", resourceNames);
       }
-      DiscoveryRequest.Builder requestBuilder =
+      DiscoveryRequest request =
           DiscoveryRequest
               .newBuilder()
               .setVersionInfo(version)
               .setNode(node)
+              .addAllResourceNames(resourceNames)
               .setTypeUrl(typeUrl)
-              .setResponseNonce(nonce);
-      if (resourceNames != null) {
-        requestBuilder = requestBuilder.addAllResourceNames(resourceNames);
-      }
-      DiscoveryRequest request = requestBuilder.build();
+              .setResponseNonce(nonce)
+              .build();
       requestWriter.onNext(request);
       logger.log(XdsLogLevel.DEBUG, "Sent DiscoveryRequest\n{0}", request);
     }
@@ -1401,17 +1407,15 @@ final class XdsClientImpl extends XdsClient {
         edsVersion = versionInfo;
         nonce = edsRespNonce;
       }
-      DiscoveryRequest.Builder requestBuilder =
+      DiscoveryRequest request =
           DiscoveryRequest
               .newBuilder()
               .setVersionInfo(versionInfo)
               .setNode(node)
+              .addAllResourceNames(resourceNames)
               .setTypeUrl(typeUrl)
-              .setResponseNonce(nonce);
-      if (resourceNames != null) {
-        requestBuilder = requestBuilder.addAllResourceNames(resourceNames);
-      }
-      DiscoveryRequest request = requestBuilder.build();
+              .setResponseNonce(nonce)
+              .build();
       requestWriter.onNext(request);
       logger.log(XdsLogLevel.DEBUG, "Sent ACK request\n{0}", request);
     }
@@ -1450,21 +1454,19 @@ final class XdsClientImpl extends XdsClient {
             XdsLogLevel.WARNING,
             "Rejecting EDS update, version: {0}, reason: {1}", rejectVersion, message);
       }
-      DiscoveryRequest.Builder requestBuilder =
+      DiscoveryRequest request =
           DiscoveryRequest
               .newBuilder()
               .setVersionInfo(versionInfo)
               .setNode(node)
+              .addAllResourceNames(resourceNames)
               .setTypeUrl(typeUrl)
               .setResponseNonce(nonce)
               .setErrorDetail(
                   com.google.rpc.Status.newBuilder()
                       .setCode(Code.INVALID_ARGUMENT_VALUE)
-                      .setMessage(message));
-      if (resourceNames != null) {
-        requestBuilder = requestBuilder.addAllResourceNames(resourceNames);
-      }
-      DiscoveryRequest request = requestBuilder.build();
+                      .setMessage(message))
+              .build();
       requestWriter.onNext(request);
       logger.log(XdsLogLevel.DEBUG, "Sent NACK request\n{0}", request);
     }
