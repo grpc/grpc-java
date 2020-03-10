@@ -384,7 +384,10 @@ public final class ClientCalls {
 
     @Override
     public void disableAutoRequest() {
-      checkState(!frozen, "Cannot disable auto flow control after call started. Use ClientResponseObserver");
+      if (frozen) {
+        throw new IllegalStateException(
+            "Cannot disable auto flow control after call started. Use ClientResponseObserver");
+      }
       autoRequestMode = AutoRequestMode.DISABLED;
     }
 
