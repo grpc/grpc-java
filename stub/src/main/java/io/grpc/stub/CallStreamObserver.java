@@ -106,8 +106,33 @@ public abstract class CallStreamObserver<V> implements StreamObserver<V> {
    *   </li>
    * </ul>
    * </p>
-   *
-   * @deprecated Use {@link #disableAutoRequest} instead. This method will be removed.
+   * 
+   * <p>Migrating to {@link #disableAutoRequest} requires making adding an initial {@link #request}
+   * after the call has started. For example:
+   * 
+   * <pre>{@code
+   * Rectangle request = ...;
+   * class ResponseObserver implements ClientResponseObserver<Rectangle, Feature> {
+   *   private ClientCallStreamObserver<Rectangle> requestObserver;
+   *   ...
+   *   @Override public void beforeStart(ClientCallStreamObserver<Rectangle> requestObserver) {
+   *     this.requestObserver = requestObserver;
+   *     requestObserver.disableAutoRequest();
+   *     // Note that requestObserver.request can not be called before the call is started
+   *     ...
+   *   }
+   *   // Need to expose the request method outside the Observer
+   *   void request(int numMessages) {
+   *     requestObserver.request(numMessages);
+   *   }
+   * }
+   * ResponseObserver responseObserver = new ResponseObserver();
+   * asyncStub.listFeatures(request, responseObserver);
+   * responseObserver.request(1);
+   * }</pre>
+   * 
+   * @deprecated Use {@link #disableAutoRequest} instead (see note above about migrating). This
+   * method will be removed.
    */
   @Deprecated
   public abstract void disableAutoInboundFlowControl();
