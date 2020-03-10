@@ -434,20 +434,12 @@ final class XdsClientImpl extends XdsClient {
       startRpcStream();
     }
     updateNodeMetadataForListenerRequest(port);
-    adsStream.sendXdsRequest(ADS_TYPE_URL_LDS, getListOfResourceNames(ldsResourceName));
+    adsStream.sendXdsRequest(ADS_TYPE_URL_LDS, ImmutableList.<String>of());
     ldsRespTimer =
         syncContext
             .schedule(
                 new ListenerResourceFetchTimeoutTask(":" + port),
                 INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS, timeService);
-  }
-
-  private static Collection<String> getListOfResourceNames(String resourceName) {
-    if (resourceName != null) {
-      return ImmutableList.of(resourceName);
-    } else {
-      return ImmutableList.of();
-    }
   }
 
   /** In case of Listener watcher metadata to be updated to include port. */
@@ -559,7 +551,7 @@ final class XdsClientImpl extends XdsClient {
     } catch (InvalidProtocolBufferException e) {
       logger.log(XdsLogLevel.WARNING, "Failed to unpack Listeners in LDS response {0}", e);
       adsStream.sendNackRequest(
-          ADS_TYPE_URL_LDS, getListOfResourceNames(ldsResourceName),
+          ADS_TYPE_URL_LDS, ImmutableList.of(ldsResourceName),
           ldsResponse.getVersionInfo(), "Malformed LDS response: " + e);
       return;
     }
@@ -580,7 +572,7 @@ final class XdsClientImpl extends XdsClient {
           XdsLogLevel.WARNING,
           "Failed to unpack HttpConnectionManagers in Listeners of LDS response {0}", e);
       adsStream.sendNackRequest(
-          ADS_TYPE_URL_LDS, getListOfResourceNames(ldsResourceName),
+          ADS_TYPE_URL_LDS, ImmutableList.of(ldsResourceName),
           ldsResponse.getVersionInfo(), "Malformed LDS response: " + e);
       return;
     }
@@ -625,11 +617,11 @@ final class XdsClientImpl extends XdsClient {
 
     if (errorMessage != null) {
       adsStream.sendNackRequest(
-          ADS_TYPE_URL_LDS, getListOfResourceNames(ldsResourceName),
+          ADS_TYPE_URL_LDS, ImmutableList.of(ldsResourceName),
           ldsResponse.getVersionInfo(), errorMessage);
       return;
     }
-    adsStream.sendAckRequest(ADS_TYPE_URL_LDS, getListOfResourceNames(ldsResourceName),
+    adsStream.sendAckRequest(ADS_TYPE_URL_LDS, ImmutableList.of(ldsResourceName),
         ldsResponse.getVersionInfo());
 
     if (clusterName != null || rdsRouteConfigName != null) {
@@ -690,14 +682,15 @@ final class XdsClientImpl extends XdsClient {
         }
       }
     } catch (InvalidProtocolBufferException e) {
-      adsStream.sendNackRequest(ADS_TYPE_URL_LDS, getListOfResourceNames(null),
-          ldsResponse.getVersionInfo(), "Broken LDS response.");
+      logger.log(XdsLogLevel.WARNING, "Failed to unpack Listeners in LDS response {0}", e);
+      adsStream.sendNackRequest(
+          ADS_TYPE_URL_LDS, ImmutableList.<String>of(),
+          ldsResponse.getVersionInfo(), "Malformed LDS response: " + e);
       return;
     }
-    adsStream.sendAckRequest(ADS_TYPE_URL_LDS, getListOfResourceNames(null),
+    adsStream.sendAckRequest(ADS_TYPE_URL_LDS, ImmutableList.<String>of(),
         ldsResponse.getVersionInfo());
     if (requestedListener != null) {
-      // Found requestedListener
       if (ldsRespTimer != null) {
         ldsRespTimer.cancel();
         ldsRespTimer = null;
@@ -707,7 +700,6 @@ final class XdsClientImpl extends XdsClient {
           .build();
       listenerWatcher.onListenerChanged(listenerUpdate);
     } else {
-      // did not find the requested listener:
       if (ldsRespTimer == null) {
         listenerWatcher.onError(Status.NOT_FOUND.withDescription("did not find listener for "
             + listenerPort));
@@ -1155,7 +1147,8 @@ final class XdsClientImpl extends XdsClient {
     public void run() {
       startRpcStream();
       if (configWatcher != null) {
-        adsStream.sendXdsRequest(ADS_TYPE_URL_LDS, getListOfResourceNames(ldsResourceName));
+        adsStream.sendXdsRequest(ADS_TYPE_URL_LDS, ldsResourceName != null
+            ? ImmutableList.of(ldsResourceName) : ImmutableList.<String>of());
         ldsRespTimer =
             syncContext
                 .schedule(
