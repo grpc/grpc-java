@@ -113,8 +113,8 @@ public abstract class CallStreamObserver<V> implements StreamObserver<V> {
   public abstract void disableAutoInboundFlowControl();
 
   /**
-   * Disables automatic flow control where initial tokens are requested when the call is started,
-   * and a token is returned to the peer after a call to the 'inbound' {@link
+   * Disables automatic flow control where initial messages are requested when the call is started,
+   * and an additional message is requested to be read after a call to the 'inbound' {@link
    * io.grpc.stub.StreamObserver#onNext(Object)} has completed. If disabled an application must
    * make explicit calls to {@link #request} to receive any messages.
    *
@@ -122,7 +122,7 @@ public abstract class CallStreamObserver<V> implements StreamObserver<V> {
    * ClientResponseObserver#beforeStart}. On server-side it may only be called during the initial
    * call to the application, before the service returns its {@code StreamObserver}.
    *
-   * <p>Note that for server-side cases where the message is recieved before the handler is invoked,
+   * <p>Note that for server-side cases where the message is received before the handler is invoked,
    * this method will have no effect. This is true for:
    *
    * <ul>
