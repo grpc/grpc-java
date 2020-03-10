@@ -443,7 +443,7 @@ final class XdsClientImpl extends XdsClient {
   }
 
   /** In case of Listener watcher metadata to be updated to include port. */
-  void updateNodeMetadataForListenerRequest(int port) {
+  private void updateNodeMetadataForListenerRequest(int port) {
     // TODO(sanjaypujare): fields of metadata to update to be finalized
     Struct newMetadata = node.getMetadata().toBuilder()
         .putFields("listener_inbound_port",
