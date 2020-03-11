@@ -7,20 +7,23 @@ fi
 
 cd github
 
-pushd grpc-java/interop-testing
-../gradlew installDist -x test -PskipCodegen=true -PskipAndroid=true
+git clone https://github.com/grpc/grpc-go.git
+
+export GOPATH=~/gopath
+pushd grpc-go/interop/xds/client
+go build
 popd
 
 git clone https://github.com/grpc/grpc.git
 
 grpc/tools/run_tests/helper_scripts/prep_xds.sh
-JAVA_OPTS=-Djava.util.logging.config.file=grpc-java/buildscripts/xds_logging.properties \
+GRPC_GO_LOG_VERBOSITY_LEVEL=99 GRPC_GO_LOG_SEVERITY_LEVEL=info \
   python3 grpc/tools/run_tests/run_xds_tests.py \
     --test_case=all \
     --project_id=grpc-testing \
     --gcp_suffix=$(date '+%s') \
     --verbose \
-    --client_cmd="grpc-java/interop-testing/build/install/grpc-interop-testing/bin/xds-test-client \
+    --client_cmd="${REPO_ROOT}/interop/xds/client/client \
       --server=xds-experimental:///{server_uri} \
       --stats_port={stats_port} \
       --qps={qps}"
