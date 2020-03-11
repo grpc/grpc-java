@@ -133,7 +133,7 @@ public abstract class CallStreamObserver<V> implements StreamObserver<V> {
    * }</pre>
    * 
    * @deprecated Use {@link #disableAutoRequest} instead (see note above about migrating). This
-   * method will be removed.
+   *     method will be removed.
    */
   @Deprecated
   public abstract void disableAutoInboundFlowControl();
