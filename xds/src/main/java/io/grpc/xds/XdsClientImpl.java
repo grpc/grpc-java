@@ -26,6 +26,8 @@ import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.MessageOrBuilder;
+import com.google.protobuf.Struct;
+import com.google.protobuf.Value;
 import com.google.protobuf.util.JsonFormat;
 import com.google.rpc.Code;
 import io.envoyproxy.envoy.api.v2.Cluster;
@@ -37,7 +39,10 @@ import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
 import io.envoyproxy.envoy.api.v2.Listener;
 import io.envoyproxy.envoy.api.v2.RouteConfiguration;
+import io.envoyproxy.envoy.api.v2.core.Address;
 import io.envoyproxy.envoy.api.v2.core.Node;
+import io.envoyproxy.envoy.api.v2.listener.FilterChain;
+import io.envoyproxy.envoy.api.v2.listener.FilterChainMatch;
 import io.envoyproxy.envoy.api.v2.route.Route;
 import io.envoyproxy.envoy.api.v2.route.VirtualHost;
 import io.envoyproxy.envoy.config.filter.network.http_connection_manager.v2.HttpConnectionManager;
@@ -100,7 +105,7 @@ final class XdsClientImpl extends XdsClient {
   // The node identifier to be included in xDS requests. Management server only requires the
   // first request to carry the node identifier on a stream. It should be identical if present
   // more than once.
-  private final Node node;
+  private Node node;
 
   // Cached data for CDS responses, keyed by cluster names.
   // Optimization: cache ClusterUpdate, which contains only information needed by gRPC, instead
@@ -154,12 +159,17 @@ final class XdsClientImpl extends XdsClient {
   private LoadReportClient lrsClient;
 
   // Following fields are set only after the ConfigWatcher registered. Once set, they should
-  // never change.
+  // never change. Only a ConfigWatcher or ListenerWatcher can be registered.
   @Nullable
   private ConfigWatcher configWatcher;
   // The "xds:" URI (including port suffix if present) that the gRPC client targets for.
   @Nullable
   private String ldsResourceName;
+
+  // only a ConfigWatcher or ListenerWatcher can be registered.
+  @Nullable
+  private ListenerWatcher listenerWatcher;
+  private int listenerPort = -1;
 
   XdsClientImpl(
       String targetName,
@@ -232,6 +242,7 @@ final class XdsClientImpl extends XdsClient {
   @Override
   void watchConfigData(String targetAuthority, ConfigWatcher watcher) {
     checkState(configWatcher == null, "watcher for %s already registered", targetAuthority);
+    checkState(listenerWatcher == null, "ListenerWatcher already registered");
     ldsResourceName = checkNotNull(targetAuthority, "targetAuthority");
     configWatcher = checkNotNull(watcher, "watcher");
     logger.log(XdsLogLevel.INFO, "Started watching config {0}", ldsResourceName);
@@ -407,6 +418,41 @@ final class XdsClientImpl extends XdsClient {
   }
 
   @Override
+  void watchListenerData(int port, ListenerWatcher watcher) {
+    checkState(configWatcher == null,
+        "ListenerWatcher cannot be set when ConfigWatcher set");
+    checkState(listenerWatcher == null, "ListenerWatcher already registered");
+    listenerWatcher = checkNotNull(watcher, "watcher");
+    checkArgument(port > 0, "port needs to be > 0");
+    this.listenerPort = port;
+    logger.log(XdsLogLevel.INFO, "Started watching listener for port {0}", port);
+    if (rpcRetryTimer != null && rpcRetryTimer.isPending()) {
+      // Currently in retry backoff.
+      return;
+    }
+    if (adsStream == null) {
+      startRpcStream();
+    }
+    updateNodeMetadataForListenerRequest(port);
+    adsStream.sendXdsRequest(ADS_TYPE_URL_LDS, ImmutableList.<String>of());
+    ldsRespTimer =
+        syncContext
+            .schedule(
+                new ListenerResourceFetchTimeoutTask(":" + port),
+                INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS, timeService);
+  }
+
+  /** In case of Listener watcher metadata to be updated to include port. */
+  private void updateNodeMetadataForListenerRequest(int port) {
+    // TODO(sanjaypujare): fields of metadata to update to be finalized
+    Struct newMetadata = node.getMetadata().toBuilder()
+        .putFields("listener_inbound_port",
+            Value.newBuilder().setStringValue("" + port).build())
+        .build();
+    node = node.toBuilder().setMetadata(newMetadata).build();
+  }
+
+  @Override
   void reportClientStats(
       String clusterName, @Nullable String clusterServiceName, LoadStatsStore loadStatsStore) {
     if (lrsClient == null) {
@@ -464,6 +510,24 @@ final class XdsClientImpl extends XdsClient {
   }
 
   /**
+   * Calls handleLdsResponseForListener or handleLdsResponseForConfigUpdate based on which watcher
+   * was set.
+   */
+  private void handleLdsResponse(DiscoveryResponse ldsResponse) {
+    checkState((configWatcher != null) != (listenerWatcher != null),
+        "No LDS request was ever sent. Management server is doing something wrong");
+    if (logger.isLoggable(XdsLogLevel.DEBUG)) {
+      logger.log(
+          XdsLogLevel.DEBUG, "Received  LDS response:\n{0}", respPrinter.print(ldsResponse));
+    }
+    if (listenerWatcher != null) {
+      handleLdsResponseForListener(ldsResponse);
+    } else {
+      handleLdsResponseForConfigUpdate(ldsResponse);
+    }
+  }
+
+  /**
    * Handles LDS response to find the HttpConnectionManager message for the requested resource name.
    * Proceed with the resolved RouteConfiguration in HttpConnectionManager message of the requested
    * listener, if exists, to find the VirtualHost configuration for the "xds:" URI
@@ -471,13 +535,9 @@ final class XdsClientImpl extends XdsClient {
    * resolution. The response is NACKed if contains invalid data for gRPC's usage. Otherwise, an
    * ACK request is sent to management server.
    */
-  private void handleLdsResponse(DiscoveryResponse ldsResponse) {
+  private void handleLdsResponseForConfigUpdate(DiscoveryResponse ldsResponse) {
     checkState(ldsResourceName != null && configWatcher != null,
-        "No LDS request was ever sent. Management server is doing something wrong");
-    if (logger.isLoggable(XdsLogLevel.DEBUG)) {
-      logger.log(
-          XdsLogLevel.DEBUG, "Received  LDS response:\n{0}", respPrinter.print(ldsResponse));
-    }
+        "LDS request for ConfigWatcher was never sent!");
 
     // Unpack Listener messages.
     List<Listener> listeners = new ArrayList<>(ldsResponse.getResourcesCount());
@@ -603,6 +663,72 @@ final class XdsClientImpl extends XdsClient {
       }
 
     }
+  }
+
+  private void handleLdsResponseForListener(DiscoveryResponse ldsResponse) {
+    checkState(ldsResourceName == null && listenerPort > 0 && listenerWatcher != null,
+        "LDS request for ListenerWatcher was never sent!");
+
+    // Unpack Listener messages.
+    Listener requestedListener = null;
+    logger.log(XdsLogLevel.DEBUG, "Listener count: {0}", ldsResponse.getResourcesCount());
+    try {
+      for (com.google.protobuf.Any res : ldsResponse.getResourcesList()) {
+        Listener listener = res.unpack(Listener.class);
+        logger.log(XdsLogLevel.DEBUG, "Found listener {0}", listener.toString());
+        if (isRequestedListener(listener)) {
+          requestedListener = listener;
+          logger.log(XdsLogLevel.DEBUG, "Requested listener found: {0}", listener.getName());
+        }
+      }
+    } catch (InvalidProtocolBufferException e) {
+      logger.log(XdsLogLevel.WARNING, "Failed to unpack Listeners in LDS response {0}", e);
+      adsStream.sendNackRequest(
+          ADS_TYPE_URL_LDS, ImmutableList.<String>of(),
+          ldsResponse.getVersionInfo(), "Malformed LDS response: " + e);
+      return;
+    }
+    adsStream.sendAckRequest(ADS_TYPE_URL_LDS, ImmutableList.<String>of(),
+        ldsResponse.getVersionInfo());
+    if (requestedListener != null) {
+      if (ldsRespTimer != null) {
+        ldsRespTimer.cancel();
+        ldsRespTimer = null;
+      }
+      ListenerUpdate listenerUpdate = ListenerUpdate.newBuilder()
+          .setListener(EnvoyServerProtoData.Listener.fromEnvoyProtoListener(requestedListener))
+          .build();
+      listenerWatcher.onListenerChanged(listenerUpdate);
+    } else {
+      if (ldsRespTimer == null) {
+        listenerWatcher.onError(Status.NOT_FOUND.withDescription("did not find listener for "
+            + listenerPort));
+      }
+    }
+  }
+
+  private boolean isRequestedListener(Listener listener) {
+    // TODO(sanjaypujare): check listener.getName() once we know what xDS server returns
+    return isAddressMatching(listener.getAddress())
+        && hasMatchingFilter(listener.getFilterChainsList());
+  }
+
+  private boolean isAddressMatching(Address address) {
+    // TODO(sanjaypujare): check IP address once we know xDS server will include it
+    return address.hasSocketAddress()
+        && (address.getSocketAddress().getPortValue() == listenerPort);
+  }
+
+  private boolean hasMatchingFilter(List<FilterChain> filterChainsList) {
+    // TODO(sanjaypujare): if myIp to be checked against filterChainMatch.getPrefixRangesList()
+    for (FilterChain filterChain : filterChainsList) {
+      FilterChainMatch filterChainMatch = filterChain.getFilterChainMatch();
+
+      if (listenerPort == filterChainMatch.getDestinationPort().getValue()) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
@@ -1028,6 +1154,14 @@ final class XdsClientImpl extends XdsClient {
                     new LdsResourceFetchTimeoutTask(ldsResourceName),
                     INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS, timeService);
       }
+      if (listenerWatcher != null) {
+        adsStream.sendXdsRequest(ADS_TYPE_URL_LDS, ImmutableList.<String>of());
+        ldsRespTimer =
+            syncContext
+                .schedule(
+                    new ListenerResourceFetchTimeoutTask(":" + listenerPort),
+                    INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS, timeService);
+      }
       if (!clusterWatchers.isEmpty()) {
         adsStream.sendXdsRequest(ADS_TYPE_URL_CDS, clusterWatchers.keySet());
         for (String clusterName : clusterWatchers.keySet()) {
@@ -1163,6 +1297,9 @@ final class XdsClientImpl extends XdsClient {
       closed = true;
       if (configWatcher != null) {
         configWatcher.onError(error);
+      }
+      if (listenerWatcher != null) {
+        listenerWatcher.onError(error);
       }
       for (Set<ClusterWatcher> watchers : clusterWatchers.values()) {
         for (ClusterWatcher watcher : watchers) {
@@ -1368,6 +1505,23 @@ final class XdsClientImpl extends XdsClient {
       configWatcher.onError(
           Status.NOT_FOUND
               .withDescription("Listener resource for listener " + resourceName + " not found."));
+    }
+  }
+
+  @VisibleForTesting
+  final class ListenerResourceFetchTimeoutTask extends ResourceFetchTimeoutTask {
+
+    ListenerResourceFetchTimeoutTask(String resourceName) {
+      super(resourceName);
+    }
+
+    @Override
+    public void run() {
+      super.run();
+      ldsRespTimer = null;
+      listenerWatcher.onError(
+          Status.NOT_FOUND
+              .withDescription("Listener resource for port " + resourceName + " not found."));
     }
   }
 

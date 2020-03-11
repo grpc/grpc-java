@@ -128,15 +128,20 @@ public class CommonTlsContextTestsUtil {
 
   /** Helper method for creating DownstreamTlsContext values for tests. */
   public static DownstreamTlsContext buildTestDownstreamTlsContext() {
+    return buildTestDownstreamTlsContext("google-sds-config-default", "ROOTCA");
+  }
+
+  /** Helper method for creating DownstreamTlsContext values with names. */
+  public static DownstreamTlsContext buildTestDownstreamTlsContext(
+      String certName, String validationContextName) {
     return buildDownstreamTlsContext(
         buildCommonTlsContextWithAdditionalValues(
-            "google-sds-config-default",
+            certName,
             "unix:/var/run/sds/uds_path",
-            "ROOTCA",
+            validationContextName,
             "unix:/var/run/sds/uds_path",
             Arrays.asList("spiffe://grpc-sds-testing.svc.id.goog/ns/default/sa/bob"),
             Arrays.asList("managed-tls"),
-            null
-        ));
+            null));
   }
 }
