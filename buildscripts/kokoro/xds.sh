@@ -5,9 +5,6 @@ if [[ -f /VERSION ]]; then
   cat /VERSION
 fi
 
-sudo apt-get install -y python3-pip
-sudo python3 -m pip install grpcio grpcio-tools google-api-python-client google-auth-httplib2
-
 cd github
 
 pushd grpc-java/interop-testing
@@ -22,4 +19,7 @@ python3 grpc/tools/run_tests/run_xds_tests.py \
     --project_id=grpc-testing \
     --gcp_suffix=$(date '+%s') \
     --verbose \
-    --client_cmd='grpc-java/interop-testing/build/install/grpc-interop-testing/bin/xds-test-client --server=xds-experimental:///{service_host}:{service_port} --stats_port={stats_port} --qps={qps}'
+    --client_cmd="grpc-java/interop-testing/build/install/grpc-interop-testing/bin/xds-test-client \
+      --server=xds-experimental:///{server_uri} \
+      --stats_port={stats_port} \
+      --qps={qps}"
