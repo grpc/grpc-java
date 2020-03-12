@@ -21,21 +21,24 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
-import com.google.common.collect.ImmutableList;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.SubchannelPicker;
+import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 
-final class InterLocalityPicker extends SubchannelPicker {
+final class WeightedRandomPicker extends SubchannelPicker {
 
-  private final List<WeightedChildPicker> weightedChildPickers;
+  @VisibleForTesting
+  final List<WeightedChildPicker> weightedChildPickers;
+
   private final ThreadSafeRandom random;
   private final int totalWeight;
 
   static final class WeightedChildPicker {
-    final int weight;
-    final SubchannelPicker childPicker;
+    private final int weight;
+    private final SubchannelPicker childPicker;
 
     WeightedChildPicker(int weight, SubchannelPicker childPicker) {
       checkArgument(weight >= 0, "weight is negative");
@@ -54,6 +57,23 @@ final class InterLocalityPicker extends SubchannelPicker {
     }
 
     @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      WeightedChildPicker that = (WeightedChildPicker) o;
+      return weight == that.weight && Objects.equals(childPicker, that.childPicker);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(weight, childPicker);
+    }
+
+    @Override
     public String toString() {
       return MoreObjects.toStringHelper(this)
           .add("weight", weight)
@@ -62,16 +82,16 @@ final class InterLocalityPicker extends SubchannelPicker {
     }
   }
 
-  InterLocalityPicker(List<WeightedChildPicker> weightedChildPickers) {
+  WeightedRandomPicker(List<WeightedChildPicker> weightedChildPickers) {
     this(weightedChildPickers, ThreadSafeRandom.ThreadSafeRandomImpl.instance);
   }
 
   @VisibleForTesting
-  InterLocalityPicker(List<WeightedChildPicker> weightedChildPickers, ThreadSafeRandom random) {
+  WeightedRandomPicker(List<WeightedChildPicker> weightedChildPickers, ThreadSafeRandom random) {
     checkNotNull(weightedChildPickers, "weightedChildPickers in null");
     checkArgument(!weightedChildPickers.isEmpty(), "weightedChildPickers is empty");
 
-    this.weightedChildPickers = ImmutableList.copyOf(weightedChildPickers);
+    this.weightedChildPickers = Collections.unmodifiableList(weightedChildPickers);
 
     int totalWeight = 0;
     for (WeightedChildPicker weightedChildPicker : weightedChildPickers) {
