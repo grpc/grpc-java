@@ -17,6 +17,7 @@
 package io.grpc.rls.internal;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.Converter;
 import io.grpc.internal.JsonUtil;
@@ -31,6 +32,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import javax.annotation.Nullable;
 
 /**
  * RlsProtoConverters is a collection of {@link Converter} between RouteLookupService proto / json
@@ -104,14 +106,17 @@ public final class RlsProtoConverters {
               .covertAll(JsonUtil.checkObjectList(JsonUtil.getList(json, "grpcKeyBuilders")));
       String lookupService = JsonUtil.getString(json, "lookupService");
       long timeout =
-          TimeUnit.SECONDS.toMillis(JsonUtil.getNumberAsLong(json, "lookupServiceTimeout"));
+          TimeUnit.SECONDS.toMillis(
+              orDefault(
+                  JsonUtil.getNumberAsLong(json, "lookupServiceTimeout"),
+                  0L));
       Long maxAge =
           convertTimeIfNotNull(
               TimeUnit.SECONDS, TimeUnit.MILLISECONDS, JsonUtil.getNumberAsLong(json, "maxAge"));
       Long staleAge =
           convertTimeIfNotNull(
               TimeUnit.SECONDS, TimeUnit.MILLISECONDS, JsonUtil.getNumberAsLong(json, "staleAge"));
-      long cacheSize = JsonUtil.getNumberAsLong(json, "cacheSizeBytes");
+      long cacheSize = orDefault(JsonUtil.getNumberAsLong(json, "cacheSizeBytes"), Long.MAX_VALUE);
       List<String> validTargets = JsonUtil.checkStringList(JsonUtil.getList(json, "validTargets"));
       String defaultTarget = JsonUtil.getString(json, "defaultTarget");
       RequestProcessingStrategy strategy =
@@ -127,6 +132,13 @@ public final class RlsProtoConverters {
           validTargets,
           defaultTarget,
           strategy);
+    }
+
+    private static <T> T orDefault(@Nullable T value, T defaultValue) {
+      if (value == null) {
+        return checkNotNull(defaultValue, "defaultValue");
+      }
+      return value;
     }
 
     private static Long convertTimeIfNotNull(TimeUnit from, TimeUnit to, Long value) {
