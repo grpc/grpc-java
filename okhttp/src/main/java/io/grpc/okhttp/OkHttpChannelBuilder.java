@@ -41,8 +41,6 @@ import io.grpc.okhttp.internal.TlsVersion;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.security.GeneralSecurityException;
-import java.security.KeyStore;
-import java.security.SecureRandom;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -53,7 +51,6 @@ import javax.net.SocketFactory;
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocketFactory;
-import javax.net.ssl.TrustManagerFactory;
 
 /** Convenience class for building channels with the OkHttp transport. */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1785")
@@ -131,6 +128,12 @@ public class OkHttpChannelBuilder extends
   private int flowControlWindow = DEFAULT_FLOW_CONTROL_WINDOW;
   private boolean keepAliveWithoutCalls;
   private int maxInboundMetadataSize = Integer.MAX_VALUE;
+
+  /**
+   * If true, indicates that the transport may use the GET method for RPCs, and may include the
+   * request body in the query params.
+   */
+  private final boolean useGetForSafeMethods = false;
 
   protected OkHttpChannelBuilder(String host, int port) {
     this(GrpcUtil.authorityFromHostAndPort(host, port));
@@ -302,22 +305,6 @@ public class OkHttpChannelBuilder extends
     return this;
   }
 
-  /**
-   * Equivalent to using {@link #negotiationType} with {@code PLAINTEXT}.
-   *
-   * @deprecated use {@link #usePlaintext()} instead.
-   */
-  @Override
-  @Deprecated
-  public final OkHttpChannelBuilder usePlaintext(boolean skipNegotiation) {
-    if (skipNegotiation) {
-      negotiationType(io.grpc.okhttp.NegotiationType.PLAINTEXT);
-    } else {
-      throw new IllegalArgumentException("Plaintext negotiation not currently supported");
-    }
-    return this;
-  }
-
   /** Sets the negotiation type for the HTTP/2 connection to plaintext. */
   @Override
   public final OkHttpChannelBuilder usePlaintext() {
@@ -394,7 +381,8 @@ public class OkHttpChannelBuilder extends
         flowControlWindow,
         keepAliveWithoutCalls,
         maxInboundMetadataSize,
-        transportTracerFactory);
+        transportTracerFactory,
+        useGetForSafeMethods);
   }
 
   @Override
@@ -416,25 +404,7 @@ public class OkHttpChannelBuilder extends
       case TLS:
         try {
           if (sslSocketFactory == null) {
-            SSLContext sslContext;
-            if (GrpcUtil.IS_RESTRICTED_APPENGINE) {
-              // The following auth code circumvents the following AccessControlException:
-              // access denied ("java.util.PropertyPermission" "javax.net.ssl.keyStore" "read")
-              // Conscrypt will attempt to load the default KeyStore if a trust manager is not
-              // provided, which is forbidden on AppEngine
-              sslContext = SSLContext.getInstance("TLS", Platform.get().getProvider());
-              TrustManagerFactory trustManagerFactory =
-                  TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-              trustManagerFactory.init((KeyStore) null);
-              sslContext.init(
-                  null,
-                  trustManagerFactory.getTrustManagers(),
-                  // Use an algorithm that doesn't need /dev/urandom
-                  SecureRandom.getInstance("SHA1PRNG", Platform.get().getProvider()));
-
-            } else {
-              sslContext = SSLContext.getInstance("Default", Platform.get().getProvider());
-            }
+            SSLContext sslContext = SSLContext.getInstance("Default", Platform.get().getProvider());
             sslSocketFactory = sslContext.getSocketFactory();
           }
           return sslSocketFactory;
@@ -470,6 +440,7 @@ public class OkHttpChannelBuilder extends
     private final boolean keepAliveWithoutCalls;
     private final int maxInboundMetadataSize;
     private final ScheduledExecutorService timeoutService;
+    private final boolean useGetForSafeMethods;
     private boolean closed;
 
     private OkHttpTransportFactory(
@@ -486,7 +457,8 @@ public class OkHttpChannelBuilder extends
         int flowControlWindow,
         boolean keepAliveWithoutCalls,
         int maxInboundMetadataSize,
-        TransportTracer.Factory transportTracerFactory) {
+        TransportTracer.Factory transportTracerFactory,
+        boolean useGetForSafeMethods) {
       usingSharedScheduler = timeoutService == null;
       this.timeoutService = usingSharedScheduler
           ? SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE) : timeoutService;
@@ -501,6 +473,7 @@ public class OkHttpChannelBuilder extends
       this.flowControlWindow = flowControlWindow;
       this.keepAliveWithoutCalls = keepAliveWithoutCalls;
       this.maxInboundMetadataSize = maxInboundMetadataSize;
+      this.useGetForSafeMethods = useGetForSafeMethods;
 
       usingSharedExecutor = executor == null;
       this.transportTracerFactory =
@@ -543,7 +516,8 @@ public class OkHttpChannelBuilder extends
           options.getHttpConnectProxiedSocketAddress(),
           tooManyPingsRunnable,
           maxInboundMetadataSize,
-          transportTracerFactory.create());
+          transportTracerFactory.create(),
+          useGetForSafeMethods);
       if (enableKeepAlive) {
         transport.enableKeepAlive(
             true, keepAliveTimeNanosState.get(), keepAliveTimeoutNanos, keepAliveWithoutCalls);

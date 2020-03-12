@@ -44,22 +44,21 @@ public final class SimpleServiceGrpc {
     if ((getUnaryRpcMethod = SimpleServiceGrpc.getUnaryRpcMethod) == null) {
       synchronized (SimpleServiceGrpc.class) {
         if ((getUnaryRpcMethod = SimpleServiceGrpc.getUnaryRpcMethod) == null) {
-          SimpleServiceGrpc.getUnaryRpcMethod = getUnaryRpcMethod = 
+          SimpleServiceGrpc.getUnaryRpcMethod = getUnaryRpcMethod =
               io.grpc.MethodDescriptor.<io.grpc.testing.protobuf.SimpleRequest, io.grpc.testing.protobuf.SimpleResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.testing.SimpleService", "UnaryRpc"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "UnaryRpc"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.testing.protobuf.SimpleRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.testing.protobuf.SimpleResponse.getDefaultInstance()))
-                  .setSchemaDescriptor(new SimpleServiceMethodDescriptorSupplier("UnaryRpc"))
-                  .build();
-          }
+              .setSchemaDescriptor(new SimpleServiceMethodDescriptorSupplier("UnaryRpc"))
+              .build();
         }
-     }
-     return getUnaryRpcMethod;
+      }
+    }
+    return getUnaryRpcMethod;
   }
 
   private static volatile io.grpc.MethodDescriptor<io.grpc.testing.protobuf.SimpleRequest,
@@ -76,22 +75,21 @@ public final class SimpleServiceGrpc {
     if ((getClientStreamingRpcMethod = SimpleServiceGrpc.getClientStreamingRpcMethod) == null) {
       synchronized (SimpleServiceGrpc.class) {
         if ((getClientStreamingRpcMethod = SimpleServiceGrpc.getClientStreamingRpcMethod) == null) {
-          SimpleServiceGrpc.getClientStreamingRpcMethod = getClientStreamingRpcMethod = 
+          SimpleServiceGrpc.getClientStreamingRpcMethod = getClientStreamingRpcMethod =
               io.grpc.MethodDescriptor.<io.grpc.testing.protobuf.SimpleRequest, io.grpc.testing.protobuf.SimpleResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.CLIENT_STREAMING)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.testing.SimpleService", "ClientStreamingRpc"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "ClientStreamingRpc"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.testing.protobuf.SimpleRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.testing.protobuf.SimpleResponse.getDefaultInstance()))
-                  .setSchemaDescriptor(new SimpleServiceMethodDescriptorSupplier("ClientStreamingRpc"))
-                  .build();
-          }
+              .setSchemaDescriptor(new SimpleServiceMethodDescriptorSupplier("ClientStreamingRpc"))
+              .build();
         }
-     }
-     return getClientStreamingRpcMethod;
+      }
+    }
+    return getClientStreamingRpcMethod;
   }
 
   private static volatile io.grpc.MethodDescriptor<io.grpc.testing.protobuf.SimpleRequest,
@@ -108,22 +106,21 @@ public final class SimpleServiceGrpc {
     if ((getServerStreamingRpcMethod = SimpleServiceGrpc.getServerStreamingRpcMethod) == null) {
       synchronized (SimpleServiceGrpc.class) {
         if ((getServerStreamingRpcMethod = SimpleServiceGrpc.getServerStreamingRpcMethod) == null) {
-          SimpleServiceGrpc.getServerStreamingRpcMethod = getServerStreamingRpcMethod = 
+          SimpleServiceGrpc.getServerStreamingRpcMethod = getServerStreamingRpcMethod =
               io.grpc.MethodDescriptor.<io.grpc.testing.protobuf.SimpleRequest, io.grpc.testing.protobuf.SimpleResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.SERVER_STREAMING)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.testing.SimpleService", "ServerStreamingRpc"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "ServerStreamingRpc"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.testing.protobuf.SimpleRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.testing.protobuf.SimpleResponse.getDefaultInstance()))
-                  .setSchemaDescriptor(new SimpleServiceMethodDescriptorSupplier("ServerStreamingRpc"))
-                  .build();
-          }
+              .setSchemaDescriptor(new SimpleServiceMethodDescriptorSupplier("ServerStreamingRpc"))
+              .build();
         }
-     }
-     return getServerStreamingRpcMethod;
+      }
+    }
+    return getServerStreamingRpcMethod;
   }
 
   private static volatile io.grpc.MethodDescriptor<io.grpc.testing.protobuf.SimpleRequest,
@@ -140,29 +137,35 @@ public final class SimpleServiceGrpc {
     if ((getBidiStreamingRpcMethod = SimpleServiceGrpc.getBidiStreamingRpcMethod) == null) {
       synchronized (SimpleServiceGrpc.class) {
         if ((getBidiStreamingRpcMethod = SimpleServiceGrpc.getBidiStreamingRpcMethod) == null) {
-          SimpleServiceGrpc.getBidiStreamingRpcMethod = getBidiStreamingRpcMethod = 
+          SimpleServiceGrpc.getBidiStreamingRpcMethod = getBidiStreamingRpcMethod =
               io.grpc.MethodDescriptor.<io.grpc.testing.protobuf.SimpleRequest, io.grpc.testing.protobuf.SimpleResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.testing.SimpleService", "BidiStreamingRpc"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "BidiStreamingRpc"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.testing.protobuf.SimpleRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.testing.protobuf.SimpleResponse.getDefaultInstance()))
-                  .setSchemaDescriptor(new SimpleServiceMethodDescriptorSupplier("BidiStreamingRpc"))
-                  .build();
-          }
+              .setSchemaDescriptor(new SimpleServiceMethodDescriptorSupplier("BidiStreamingRpc"))
+              .build();
         }
-     }
-     return getBidiStreamingRpcMethod;
+      }
+    }
+    return getBidiStreamingRpcMethod;
   }
 
   /**
    * Creates a new async stub that supports all call types for the service
    */
   public static SimpleServiceStub newStub(io.grpc.Channel channel) {
-    return new SimpleServiceStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<SimpleServiceStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<SimpleServiceStub>() {
+        @java.lang.Override
+        public SimpleServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new SimpleServiceStub(channel, callOptions);
+        }
+      };
+    return SimpleServiceStub.newStub(factory, channel);
   }
 
   /**
@@ -170,7 +173,14 @@ public final class SimpleServiceGrpc {
    */
   public static SimpleServiceBlockingStub newBlockingStub(
       io.grpc.Channel channel) {
-    return new SimpleServiceBlockingStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<SimpleServiceBlockingStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<SimpleServiceBlockingStub>() {
+        @java.lang.Override
+        public SimpleServiceBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new SimpleServiceBlockingStub(channel, callOptions);
+        }
+      };
+    return SimpleServiceBlockingStub.newStub(factory, channel);
   }
 
   /**
@@ -178,7 +188,14 @@ public final class SimpleServiceGrpc {
    */
   public static SimpleServiceFutureStub newFutureStub(
       io.grpc.Channel channel) {
-    return new SimpleServiceFutureStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<SimpleServiceFutureStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<SimpleServiceFutureStub>() {
+        @java.lang.Override
+        public SimpleServiceFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new SimpleServiceFutureStub(channel, callOptions);
+        }
+      };
+    return SimpleServiceFutureStub.newStub(factory, channel);
   }
 
   /**
@@ -267,19 +284,15 @@ public final class SimpleServiceGrpc {
    * A simple service for test.
    * </pre>
    */
-  public static final class SimpleServiceStub extends io.grpc.stub.AbstractStub<SimpleServiceStub> {
-    private SimpleServiceStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
-    private SimpleServiceStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+  public static final class SimpleServiceStub extends io.grpc.stub.AbstractAsyncStub<SimpleServiceStub> {
+    private SimpleServiceStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected SimpleServiceStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+    protected SimpleServiceStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       return new SimpleServiceStub(channel, callOptions);
     }
 
@@ -333,19 +346,15 @@ public final class SimpleServiceGrpc {
    * A simple service for test.
    * </pre>
    */
-  public static final class SimpleServiceBlockingStub extends io.grpc.stub.AbstractStub<SimpleServiceBlockingStub> {
-    private SimpleServiceBlockingStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
-    private SimpleServiceBlockingStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+  public static final class SimpleServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<SimpleServiceBlockingStub> {
+    private SimpleServiceBlockingStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected SimpleServiceBlockingStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+    protected SimpleServiceBlockingStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       return new SimpleServiceBlockingStub(channel, callOptions);
     }
 
@@ -376,19 +385,15 @@ public final class SimpleServiceGrpc {
    * A simple service for test.
    * </pre>
    */
-  public static final class SimpleServiceFutureStub extends io.grpc.stub.AbstractStub<SimpleServiceFutureStub> {
-    private SimpleServiceFutureStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
-    private SimpleServiceFutureStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+  public static final class SimpleServiceFutureStub extends io.grpc.stub.AbstractFutureStub<SimpleServiceFutureStub> {
+    private SimpleServiceFutureStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected SimpleServiceFutureStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+    protected SimpleServiceFutureStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       return new SimpleServiceFutureStub(channel, callOptions);
     }
 

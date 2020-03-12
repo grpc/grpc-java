@@ -30,8 +30,8 @@ For a guided tour, take a look at the [quick start
 guide](https://grpc.io/docs/quickstart/java.html) or the more explanatory [gRPC
 basics](https://grpc.io/docs/tutorials/basic/java.html).
 
-The [examples](https://github.com/grpc/grpc-java/tree/v1.21.0/examples) and the
-[Android example](https://github.com/grpc/grpc-java/tree/v1.21.0/examples/android)
+The [examples](https://github.com/grpc/grpc-java/tree/v1.28.0/examples) and the
+[Android example](https://github.com/grpc/grpc-java/tree/v1.28.0/examples/android)
 are standalone projects that showcase the usage of gRPC.
 
 Download
@@ -42,37 +42,37 @@ Download [the JARs][]. Or for Maven with non-Android, add to your `pom.xml`:
 <dependency>
   <groupId>io.grpc</groupId>
   <artifactId>grpc-netty-shaded</artifactId>
-  <version>1.21.0</version>
+  <version>1.28.0</version>
 </dependency>
 <dependency>
   <groupId>io.grpc</groupId>
   <artifactId>grpc-protobuf</artifactId>
-  <version>1.21.0</version>
+  <version>1.28.0</version>
 </dependency>
 <dependency>
   <groupId>io.grpc</groupId>
   <artifactId>grpc-stub</artifactId>
-  <version>1.21.0</version>
+  <version>1.28.0</version>
 </dependency>
 ```
 
 Or for Gradle with non-Android, add to your dependencies:
 ```gradle
-compile 'io.grpc:grpc-netty-shaded:1.21.0'
-compile 'io.grpc:grpc-protobuf:1.21.0'
-compile 'io.grpc:grpc-stub:1.21.0'
+implementation 'io.grpc:grpc-netty-shaded:1.28.0'
+implementation 'io.grpc:grpc-protobuf:1.28.0'
+implementation 'io.grpc:grpc-stub:1.28.0'
 ```
 
 For Android client, use `grpc-okhttp` instead of `grpc-netty-shaded` and
 `grpc-protobuf-lite` instead of `grpc-protobuf`:
 ```gradle
-compile 'io.grpc:grpc-okhttp:1.21.0'
-compile 'io.grpc:grpc-protobuf-lite:1.21.0'
-compile 'io.grpc:grpc-stub:1.21.0'
+implementation 'io.grpc:grpc-okhttp:1.28.0'
+implementation 'io.grpc:grpc-protobuf-lite:1.28.0'
+implementation 'io.grpc:grpc-stub:1.28.0'
 ```
 
 [the JARs]:
-https://search.maven.org/search?q=g:io.grpc%20AND%20v:1.21.0
+https://search.maven.org/search?q=g:io.grpc%20AND%20v:1.28.0
 
 Development snapshots are available in [Sonatypes's snapshot
 repository](https://oss.sonatype.org/content/repositories/snapshots/).
@@ -93,18 +93,18 @@ For protobuf-based codegen integrated with the Maven build system, you can use
     <extension>
       <groupId>kr.motd.maven</groupId>
       <artifactId>os-maven-plugin</artifactId>
-      <version>1.5.0.Final</version>
+      <version>1.6.2</version>
     </extension>
   </extensions>
   <plugins>
     <plugin>
       <groupId>org.xolstice.maven.plugins</groupId>
       <artifactId>protobuf-maven-plugin</artifactId>
-      <version>0.5.1</version>
+      <version>0.6.1</version>
       <configuration>
-        <protocArtifact>com.google.protobuf:protoc:3.7.1:exe:${os.detected.classifier}</protocArtifact>
+        <protocArtifact>com.google.protobuf:protoc:3.11.0:exe:${os.detected.classifier}</protocArtifact>
         <pluginId>grpc-java</pluginId>
-        <pluginArtifact>io.grpc:protoc-gen-grpc-java:1.21.0:exe:${os.detected.classifier}</pluginArtifact>
+        <pluginArtifact>io.grpc:protoc-gen-grpc-java:1.28.0:exe:${os.detected.classifier}</pluginArtifact>
       </configuration>
       <executions>
         <execution>
@@ -124,24 +124,17 @@ For protobuf-based codegen integrated with the Maven build system, you can use
 For protobuf-based codegen integrated with the Gradle build system, you can use
 [protobuf-gradle-plugin][]:
 ```gradle
-apply plugin: 'com.google.protobuf'
-
-buildscript {
-  repositories {
-    mavenCentral()
-  }
-  dependencies {
-    classpath 'com.google.protobuf:protobuf-gradle-plugin:0.8.8'
-  }
+plugins {
+    id 'com.google.protobuf' version '0.8.8'
 }
 
 protobuf {
   protoc {
-    artifact = "com.google.protobuf:protoc:3.7.1"
+    artifact = "com.google.protobuf:protoc:3.11.0"
   }
   plugins {
     grpc {
-      artifact = 'io.grpc:protoc-gen-grpc-java:1.21.0'
+      artifact = 'io.grpc:protoc-gen-grpc-java:1.28.0'
     }
   }
   generateProtoTasks {
@@ -172,7 +165,7 @@ We recommend using the
 [grpc-java-api-checker](https://github.com/grpc/grpc-java-api-checker)
 (an [Error Prone](https://github.com/google/error-prone) plugin)
 to check for usages of `@ExperimentalApi` and `@Internal` in any library code
-that depends on gRPC. It may also be used to check for `@Internal` usage or 
+that depends on gRPC. It may also be used to check for `@Internal` usage or
 unintended `@ExperimentalApi` consumption in non-library code.
 
 How to Build

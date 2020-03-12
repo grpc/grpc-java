@@ -29,7 +29,7 @@ import io.grpc.examples.helloworld.HelloRequest;
 import io.grpc.stub.StreamObserver;
 import java.io.IOException;
 import java.util.Random;
-import java.util.logging.Level;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
 /**
@@ -54,15 +54,19 @@ public class HedgingHelloWorldServer {
       public void run() {
         // Use stderr here since the logger may have been reset by its JVM shutdown hook.
         System.err.println("*** shutting down gRPC server since JVM is shutting down");
-        HedgingHelloWorldServer.this.stop();
+        try {
+          HedgingHelloWorldServer.this.stop();
+        } catch (InterruptedException e) {
+          e.printStackTrace(System.err);
+        }
         System.err.println("*** server shut down");
       }
     });
   }
 
-  private void stop() {
+  private void stop() throws InterruptedException {
     if (server != null) {
-      server.shutdown();
+      server.shutdown().awaitTermination(30, TimeUnit.SECONDS);
     }
   }
 
@@ -97,9 +101,9 @@ public class HedgingHelloWorldServer {
   static class LatencyInjectionInterceptor implements ServerInterceptor {
 
     @Override
-    public <HelloRequest, HelloReply> Listener<HelloRequest> interceptCall(
-        ServerCall<HelloRequest, HelloReply> call,
-        Metadata headers, ServerCallHandler<HelloRequest, HelloReply> next) {
+    public <HelloRequestT, HelloReplyT> Listener<HelloRequestT> interceptCall(
+        ServerCall<HelloRequestT, HelloReplyT> call,
+        Metadata headers, ServerCallHandler<HelloRequestT, HelloReplyT> next) {
       int random = new Random().nextInt(100);
       long delay = 0;
       if (random < 1) {

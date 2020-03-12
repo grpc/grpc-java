@@ -66,7 +66,7 @@ public class ManualFlowControlClient {
             // Note: the onReadyHandler's invocation is serialized on the same thread pool as the incoming
             // StreamObserver's onNext(), onError(), and onComplete() handlers. Blocking the onReadyHandler will prevent
             // additional messages from being processed by the incoming StreamObserver. The onReadyHandler must return
-            // in a timely manor or else message processing throughput will suffer.
+            // in a timely manner or else message processing throughput will suffer.
             requestStream.setOnReadyHandler(new Runnable() {
               // An iterator is used so we can pause and resume iteration of the request data.
               Iterator<String> iterator = names().iterator();

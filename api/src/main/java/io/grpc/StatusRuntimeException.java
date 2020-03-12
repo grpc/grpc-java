@@ -82,6 +82,7 @@ public class StatusRuntimeException extends RuntimeException {
    *
    * @since 1.0.0
    */
+  @Nullable
   public final Metadata getTrailers() {
     return trailers;
   }

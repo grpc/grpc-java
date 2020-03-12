@@ -27,6 +27,7 @@ import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.bootstrap.ServerBootstrap;
+import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelFuture;
@@ -40,6 +41,7 @@ import io.netty.channel.local.LocalAddress;
 import io.netty.channel.local.LocalChannel;
 import io.netty.channel.local.LocalServerChannel;
 import java.net.ConnectException;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -68,14 +70,14 @@ public class WriteBufferingAndExceptionHandlerTest {
   private Channel server;
 
   @After
-  public void tearDown() {
+  public void tearDown() throws InterruptedException {
     if (server != null) {
-      server.close();
+      server.close().sync();
     }
     if (chan != null) {
-      chan.close();
+      chan.close().sync();
     }
-    group.shutdownGracefully();
+    group.shutdownGracefully(0, 10, TimeUnit.SECONDS).sync();
   }
 
   @Test
@@ -344,5 +346,39 @@ public class WriteBufferingAndExceptionHandlerTest {
     assertThat(write.get().getClass()).isSameInstanceAs(Object.class);
     assertTrue(flush.get());
     assertThat(chan.pipeline()).doesNotContain(handler);
+  }
+
+  @Test
+  public void uncaughtReadFails() throws Exception {
+    WriteBufferingAndExceptionHandler handler =
+        new WriteBufferingAndExceptionHandler(new ChannelHandlerAdapter() {});
+    LocalAddress addr = new LocalAddress("local");
+    ChannelFuture cf = new Bootstrap()
+        .channel(LocalChannel.class)
+        .handler(handler)
+        .group(group)
+        .register();
+    chan = cf.channel();
+    cf.sync();
+    ChannelFuture sf = new ServerBootstrap()
+        .channel(LocalServerChannel.class)
+        .childHandler(new ChannelHandlerAdapter() {})
+        .group(group)
+        .bind(addr);
+    server = sf.channel();
+    sf.sync();
+
+    ChannelFuture wf = chan.writeAndFlush(new Object());
+    chan.connect(addr);
+    chan.pipeline().fireChannelRead(Unpooled.copiedBuffer(new byte[] {'a'}));
+
+    try {
+      wf.sync();
+      fail();
+    } catch (Exception e) {
+      Status status = Status.fromThrowable(e);
+      assertThat(status.getCode()).isEqualTo(Code.INTERNAL);
+      assertThat(status.getDescription()).contains("channelRead() missed");
+    }
   }
 }

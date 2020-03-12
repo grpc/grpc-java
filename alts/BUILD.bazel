@@ -1,3 +1,4 @@
+load("@rules_proto//proto:defs.bzl", "proto_library")
 load("//:java_grpc_library.bzl", "java_grpc_library")
 
 java_library(
@@ -10,6 +11,7 @@ java_library(
         ":handshaker_java_proto",
         "//api",
         "//core:internal",
+        "//grpclb",
         "//netty",
         "//stub",
         "@com_google_code_findbugs_jsr305//jar",
@@ -31,7 +33,6 @@ java_library(
         "src/main/java/io/grpc/alts/*.java",
     ]),
     visibility = ["//visibility:public"],
-    runtime_deps = ["//grpclb"],
     deps = [
         ":alts_internal",
         ":handshaker_java_grpc",

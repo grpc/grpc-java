@@ -1,7 +1,5 @@
 """Build rule for java_grpc_library."""
 
-load("@bazel_tools//tools/jdk:toolchain_utils.bzl", "find_java_runtime_toolchain", "find_java_toolchain")
-
 _JavaRpcToolchainInfo = provider(
     fields = [
         "host_javabase",
@@ -60,9 +58,22 @@ java_rpc_toolchain = rule(
 
 # "repository" here is for Bazel builds that span multiple WORKSPACES.
 def _path_ignoring_repository(f):
-    if len(f.owner.workspace_root) == 0:
+    # Bazel creates a _virtual_imports directory in case the .proto source files
+    # need to be accessed at a path that's different from their source path:
+    # https://github.com/bazelbuild/bazel/blob/0.27.1/src/main/java/com/google/devtools/build/lib/rules/proto/ProtoCommon.java#L289
+    #
+    # In that case, the import path of the .proto file is the path relative to
+    # the virtual imports directory of the rule in question.
+    virtual_imports = "/_virtual_imports/"
+    if virtual_imports in f.path:
+        return f.path.split(virtual_imports)[1].split("/", 1)[1]
+    elif len(f.owner.workspace_root) == 0:
+        # |f| is in the main repository
         return f.short_path
-    return f.path[f.path.find(f.owner.workspace_root) + len(f.owner.workspace_root) + 1:]
+    else:
+        # If |f| is a generated file, it will have "bazel-out/*/genfiles" prefix
+        # before "external/workspace", so we need to add the starting index of "external/workspace"
+        return f.path[f.path.find(f.owner.workspace_root) + len(f.owner.workspace_root) + 1:]
 
 def _java_rpc_library_impl(ctx):
     if len(ctx.attr.srcs) != 1:
@@ -80,7 +91,7 @@ def _java_rpc_library_impl(ctx):
     args = ctx.actions.args()
     args.add(toolchain.plugin, format = "--plugin=protoc-gen-rpc-plugin=%s")
     args.add("--rpc-plugin_out={0}:{1}".format(toolchain.plugin_arg, srcjar.path))
-    args.add_joined("--descriptor_set_in", descriptor_set_in, join_with = ":")
+    args.add_joined("--descriptor_set_in", descriptor_set_in, join_with = ctx.host_configuration.host_path_separator)
     args.add_all(srcs, map_each = _path_ignoring_repository)
 
     ctx.actions.run(
@@ -94,8 +105,8 @@ def _java_rpc_library_impl(ctx):
 
     java_info = java_common.compile(
         ctx,
-        java_toolchain = find_java_toolchain(ctx, toolchain.java_toolchain),
-        host_javabase = find_java_runtime_toolchain(ctx, toolchain.host_javabase),
+        java_toolchain = toolchain.java_toolchain[java_common.JavaToolchainInfo],
+        host_javabase = toolchain.host_javabase[java_common.JavaRuntimeInfo],
         source_jars = [srcjar],
         output = ctx.outputs.jar,
         output_source_jar = ctx.outputs.srcjar,
@@ -136,7 +147,7 @@ _java_lite_grpc_library = rule(
         "srcs": attr.label_list(
             mandatory = True,
             allow_empty = False,
-            providers = ["proto"],
+            providers = [ProtoInfo],
         ),
         "deps": attr.label_list(
             mandatory = True,

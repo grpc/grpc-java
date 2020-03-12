@@ -41,29 +41,35 @@ public final class ServerReflectionGrpc {
     if ((getServerReflectionInfoMethod = ServerReflectionGrpc.getServerReflectionInfoMethod) == null) {
       synchronized (ServerReflectionGrpc.class) {
         if ((getServerReflectionInfoMethod = ServerReflectionGrpc.getServerReflectionInfoMethod) == null) {
-          ServerReflectionGrpc.getServerReflectionInfoMethod = getServerReflectionInfoMethod = 
+          ServerReflectionGrpc.getServerReflectionInfoMethod = getServerReflectionInfoMethod =
               io.grpc.MethodDescriptor.<io.grpc.reflection.v1alpha.ServerReflectionRequest, io.grpc.reflection.v1alpha.ServerReflectionResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.reflection.v1alpha.ServerReflection", "ServerReflectionInfo"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "ServerReflectionInfo"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.reflection.v1alpha.ServerReflectionRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.reflection.v1alpha.ServerReflectionResponse.getDefaultInstance()))
-                  .setSchemaDescriptor(new ServerReflectionMethodDescriptorSupplier("ServerReflectionInfo"))
-                  .build();
-          }
+              .setSchemaDescriptor(new ServerReflectionMethodDescriptorSupplier("ServerReflectionInfo"))
+              .build();
         }
-     }
-     return getServerReflectionInfoMethod;
+      }
+    }
+    return getServerReflectionInfoMethod;
   }
 
   /**
    * Creates a new async stub that supports all call types for the service
    */
   public static ServerReflectionStub newStub(io.grpc.Channel channel) {
-    return new ServerReflectionStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<ServerReflectionStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<ServerReflectionStub>() {
+        @java.lang.Override
+        public ServerReflectionStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new ServerReflectionStub(channel, callOptions);
+        }
+      };
+    return ServerReflectionStub.newStub(factory, channel);
   }
 
   /**
@@ -71,7 +77,14 @@ public final class ServerReflectionGrpc {
    */
   public static ServerReflectionBlockingStub newBlockingStub(
       io.grpc.Channel channel) {
-    return new ServerReflectionBlockingStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<ServerReflectionBlockingStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<ServerReflectionBlockingStub>() {
+        @java.lang.Override
+        public ServerReflectionBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new ServerReflectionBlockingStub(channel, callOptions);
+        }
+      };
+    return ServerReflectionBlockingStub.newStub(factory, channel);
   }
 
   /**
@@ -79,7 +92,14 @@ public final class ServerReflectionGrpc {
    */
   public static ServerReflectionFutureStub newFutureStub(
       io.grpc.Channel channel) {
-    return new ServerReflectionFutureStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<ServerReflectionFutureStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<ServerReflectionFutureStub>() {
+        @java.lang.Override
+        public ServerReflectionFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new ServerReflectionFutureStub(channel, callOptions);
+        }
+      };
+    return ServerReflectionFutureStub.newStub(factory, channel);
   }
 
   /**
@@ -112,19 +132,15 @@ public final class ServerReflectionGrpc {
 
   /**
    */
-  public static final class ServerReflectionStub extends io.grpc.stub.AbstractStub<ServerReflectionStub> {
-    private ServerReflectionStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
-    private ServerReflectionStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+  public static final class ServerReflectionStub extends io.grpc.stub.AbstractAsyncStub<ServerReflectionStub> {
+    private ServerReflectionStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected ServerReflectionStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+    protected ServerReflectionStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       return new ServerReflectionStub(channel, callOptions);
     }
 
@@ -143,38 +159,30 @@ public final class ServerReflectionGrpc {
 
   /**
    */
-  public static final class ServerReflectionBlockingStub extends io.grpc.stub.AbstractStub<ServerReflectionBlockingStub> {
-    private ServerReflectionBlockingStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
-    private ServerReflectionBlockingStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+  public static final class ServerReflectionBlockingStub extends io.grpc.stub.AbstractBlockingStub<ServerReflectionBlockingStub> {
+    private ServerReflectionBlockingStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected ServerReflectionBlockingStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+    protected ServerReflectionBlockingStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       return new ServerReflectionBlockingStub(channel, callOptions);
     }
   }
 
   /**
    */
-  public static final class ServerReflectionFutureStub extends io.grpc.stub.AbstractStub<ServerReflectionFutureStub> {
-    private ServerReflectionFutureStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
-    private ServerReflectionFutureStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+  public static final class ServerReflectionFutureStub extends io.grpc.stub.AbstractFutureStub<ServerReflectionFutureStub> {
+    private ServerReflectionFutureStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected ServerReflectionFutureStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+    protected ServerReflectionFutureStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       return new ServerReflectionFutureStub(channel, callOptions);
     }
   }

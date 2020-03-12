@@ -1,11 +1,21 @@
+plugins {
+    id "java"
+    id "maven-publish"
+
+    id "me.champeau.gradle.japicmp"
+    id "ru.vyarus.animalsniffer"
+}
+
 description = "gRPC: OkHttp"
+
+evaluationDependsOn(project(':grpc-core').path)
 
 dependencies {
     compile project(':grpc-core'),
             libraries.okio
 
     compile (libraries.okhttp) {
-        // prefer 1.13.0 from libraries instead of 1.6.0
+        // prefer our own versions instead of okhttp's dependency
         exclude group: 'com.squareup.okio', module: 'okio'
     }
 

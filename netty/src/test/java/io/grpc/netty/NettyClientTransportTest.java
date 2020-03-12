@@ -65,10 +65,13 @@ import io.grpc.internal.ServerTransportListener;
 import io.grpc.internal.TransportTracer;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.NettyChannelBuilder.LocalSocketPicker;
+import io.grpc.netty.NettyTestUtil.TrackingObjectPoolForTest;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelConfig;
+import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelFactory;
 import io.netty.channel.ChannelHandler;
+import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.ReflectiveChannelFactory;
@@ -191,7 +194,7 @@ public class NettyClientTransportTest {
         newNegotiator(), DEFAULT_WINDOW_SIZE, DEFAULT_MAX_MESSAGE_SIZE,
         GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, KEEPALIVE_TIME_NANOS_DISABLED, 1L, false, authority,
         null /* user agent */, tooManyPingsRunnable, new TransportTracer(), Attributes.EMPTY,
-        new SocketPicker(), new FakeChannelLogger());
+        new SocketPicker(), new FakeChannelLogger(), false);
     transports.add(transport);
     callMeMaybe(transport.start(clientTransportListener));
 
@@ -285,7 +288,9 @@ public class NettyClientTransportTest {
       rpc.waitForClose();
       fail("expected exception");
     } catch (ExecutionException ex) {
-      assertSame(failureStatus, ((StatusException) ex.getCause()).getStatus());
+      Status actual = ((StatusException) ex.getCause()).getStatus();
+      assertSame(failureStatus.getCode(), actual.getCode());
+      assertThat(actual.getDescription()).contains(failureStatus.getDescription());
     }
   }
 
@@ -372,7 +377,9 @@ public class NettyClientTransportTest {
       rpc.waitForClose();
       fail("expected exception");
     } catch (ExecutionException ex) {
-      assertSame(failureStatus, ((StatusException) ex.getCause()).getStatus());
+      Status actual = ((StatusException) ex.getCause()).getStatus();
+      assertSame(failureStatus.getCode(), actual.getCode());
+      assertThat(actual.getDescription()).contains(failureStatus.getDescription());
     }
   }
 
@@ -433,7 +440,7 @@ public class NettyClientTransportTest {
         newNegotiator(), DEFAULT_WINDOW_SIZE, DEFAULT_MAX_MESSAGE_SIZE,
         GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, KEEPALIVE_TIME_NANOS_DISABLED, 1, false, authority,
         null, tooManyPingsRunnable, new TransportTracer(), Attributes.EMPTY, new SocketPicker(),
-        new FakeChannelLogger());
+        new FakeChannelLogger(), false);
     transports.add(transport);
 
     // Should not throw
@@ -665,6 +672,51 @@ public class NettyClientTransportTest {
     }
   }
 
+  /**
+   * Verifies that we can successfully build a server and client negotiator with tls and the
+   * executor passing in, and without resource leak after closing the negotiator.
+   */
+  @Test
+  public void tlsNegotiationServerExecutorShouldSucceed() throws Exception {
+    // initialize the client and server Executor pool
+    TrackingObjectPoolForTest serverExecutorPool = new TrackingObjectPoolForTest();
+    TrackingObjectPoolForTest clientExecutorPool = new TrackingObjectPoolForTest();
+    assertEquals(false, serverExecutorPool.isInUse());
+    assertEquals(false, clientExecutorPool.isInUse());
+
+    File serverCert = TestUtils.loadCert("server1.pem");
+    File serverKey = TestUtils.loadCert("server1.key");
+    SslContext sslContext = GrpcSslContexts.forServer(serverCert, serverKey)
+        .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE)
+        .clientAuth(ClientAuth.NONE)
+        .build();
+    negotiator = ProtocolNegotiators.serverTls(sslContext, serverExecutorPool);
+    startServer();
+    // after starting the server, the Executor in the server pool should be used
+    assertEquals(true, serverExecutorPool.isInUse());
+
+    File caCert = TestUtils.loadCert("ca.pem");
+    File clientCert = TestUtils.loadCert("client.pem");
+    File clientKey = TestUtils.loadCert("client.key");
+    SslContext clientContext = GrpcSslContexts.forClient()
+        .trustManager(caCert)
+        .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE)
+        .keyManager(clientCert, clientKey)
+        .build();
+    ProtocolNegotiator negotiator = ProtocolNegotiators.tls(clientContext, clientExecutorPool);
+    // after starting the client, the Executor in the client pool should be used
+    assertEquals(true, clientExecutorPool.isInUse());
+    final NettyClientTransport transport = newTransport(negotiator);
+    callMeMaybe(transport.start(clientTransportListener));
+    Rpc rpc = new Rpc(transport).halfClose();
+    rpc.waitForResponse();
+    // closing the negotiators should return the executors back to pool, and release the resource
+    negotiator.close();
+    assertEquals(false, clientExecutorPool.isInUse());
+    this.negotiator.close();
+    assertEquals(false, serverExecutorPool.isInUse());
+  }
+
   private Throwable getRootCause(Throwable t) {
     if (t.getCause() == null) {
       return t;
@@ -703,7 +755,7 @@ public class NettyClientTransportTest {
         negotiator, DEFAULT_WINDOW_SIZE, maxMsgSize, maxHeaderListSize,
         keepAliveTimeNano, keepAliveTimeoutNano,
         false, authority, userAgent, tooManyPingsRunnable,
-        new TransportTracer(), eagAttributes, new SocketPicker(), new FakeChannelLogger());
+        new TransportTracer(), eagAttributes, new SocketPicker(), new FakeChannelLogger(), false);
     transports.add(transport);
     return transport;
   }
@@ -715,9 +767,9 @@ public class NettyClientTransportTest {
   private void startServer(int maxStreamsPerConnection, int maxHeaderListSize) throws IOException {
     server = new NettyServer(
         TestUtils.testServerAddress(new InetSocketAddress(0)),
-        NioServerSocketChannel.class,
+        new ReflectiveChannelFactory<>(NioServerSocketChannel.class),
         new HashMap<ChannelOption<?>, Object>(),
-        new FixedObjectPool<>(group), new FixedObjectPool<>(group), negotiator,
+        new FixedObjectPool<>(group), new FixedObjectPool<>(group), false, negotiator,
         Collections.<ServerStreamTracer.Factory>emptyList(),
         TransportTracer.getDefaultFactory(),
         maxStreamsPerConnection,
@@ -911,9 +963,21 @@ public class NettyClientTransportTest {
     }
   }
 
-  private static class NoopHandler extends ProtocolNegotiators.AbstractBufferingHandler {
+  private static class NoopHandler extends ChannelDuplexHandler {
+
+    private final GrpcHttp2ConnectionHandler grpcHandler;
+
     public NoopHandler(GrpcHttp2ConnectionHandler grpcHandler) {
-      super(grpcHandler);
+      this.grpcHandler = grpcHandler;
+    }
+
+    @Override
+    public void channelRegistered(ChannelHandlerContext ctx) throws Exception {
+      ctx.pipeline().addBefore(ctx.name(), null, grpcHandler);
+    }
+
+    public void fail(ChannelHandlerContext ctx, Throwable cause) {
+      ctx.fireExceptionCaught(cause);
     }
   }
 

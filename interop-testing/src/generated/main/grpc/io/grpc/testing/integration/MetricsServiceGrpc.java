@@ -41,22 +41,21 @@ public final class MetricsServiceGrpc {
     if ((getGetAllGaugesMethod = MetricsServiceGrpc.getGetAllGaugesMethod) == null) {
       synchronized (MetricsServiceGrpc.class) {
         if ((getGetAllGaugesMethod = MetricsServiceGrpc.getGetAllGaugesMethod) == null) {
-          MetricsServiceGrpc.getGetAllGaugesMethod = getGetAllGaugesMethod = 
+          MetricsServiceGrpc.getGetAllGaugesMethod = getGetAllGaugesMethod =
               io.grpc.MethodDescriptor.<io.grpc.testing.integration.Metrics.EmptyMessage, io.grpc.testing.integration.Metrics.GaugeResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.SERVER_STREAMING)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.testing.MetricsService", "GetAllGauges"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "GetAllGauges"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.testing.integration.Metrics.EmptyMessage.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.testing.integration.Metrics.GaugeResponse.getDefaultInstance()))
-                  .setSchemaDescriptor(new MetricsServiceMethodDescriptorSupplier("GetAllGauges"))
-                  .build();
-          }
+              .setSchemaDescriptor(new MetricsServiceMethodDescriptorSupplier("GetAllGauges"))
+              .build();
         }
-     }
-     return getGetAllGaugesMethod;
+      }
+    }
+    return getGetAllGaugesMethod;
   }
 
   private static volatile io.grpc.MethodDescriptor<io.grpc.testing.integration.Metrics.GaugeRequest,
@@ -73,29 +72,35 @@ public final class MetricsServiceGrpc {
     if ((getGetGaugeMethod = MetricsServiceGrpc.getGetGaugeMethod) == null) {
       synchronized (MetricsServiceGrpc.class) {
         if ((getGetGaugeMethod = MetricsServiceGrpc.getGetGaugeMethod) == null) {
-          MetricsServiceGrpc.getGetGaugeMethod = getGetGaugeMethod = 
+          MetricsServiceGrpc.getGetGaugeMethod = getGetGaugeMethod =
               io.grpc.MethodDescriptor.<io.grpc.testing.integration.Metrics.GaugeRequest, io.grpc.testing.integration.Metrics.GaugeResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.testing.MetricsService", "GetGauge"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "GetGauge"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.testing.integration.Metrics.GaugeRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.testing.integration.Metrics.GaugeResponse.getDefaultInstance()))
-                  .setSchemaDescriptor(new MetricsServiceMethodDescriptorSupplier("GetGauge"))
-                  .build();
-          }
+              .setSchemaDescriptor(new MetricsServiceMethodDescriptorSupplier("GetGauge"))
+              .build();
         }
-     }
-     return getGetGaugeMethod;
+      }
+    }
+    return getGetGaugeMethod;
   }
 
   /**
    * Creates a new async stub that supports all call types for the service
    */
   public static MetricsServiceStub newStub(io.grpc.Channel channel) {
-    return new MetricsServiceStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<MetricsServiceStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<MetricsServiceStub>() {
+        @java.lang.Override
+        public MetricsServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new MetricsServiceStub(channel, callOptions);
+        }
+      };
+    return MetricsServiceStub.newStub(factory, channel);
   }
 
   /**
@@ -103,7 +108,14 @@ public final class MetricsServiceGrpc {
    */
   public static MetricsServiceBlockingStub newBlockingStub(
       io.grpc.Channel channel) {
-    return new MetricsServiceBlockingStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<MetricsServiceBlockingStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<MetricsServiceBlockingStub>() {
+        @java.lang.Override
+        public MetricsServiceBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new MetricsServiceBlockingStub(channel, callOptions);
+        }
+      };
+    return MetricsServiceBlockingStub.newStub(factory, channel);
   }
 
   /**
@@ -111,7 +123,14 @@ public final class MetricsServiceGrpc {
    */
   public static MetricsServiceFutureStub newFutureStub(
       io.grpc.Channel channel) {
-    return new MetricsServiceFutureStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<MetricsServiceFutureStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<MetricsServiceFutureStub>() {
+        @java.lang.Override
+        public MetricsServiceFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new MetricsServiceFutureStub(channel, callOptions);
+        }
+      };
+    return MetricsServiceFutureStub.newStub(factory, channel);
   }
 
   /**
@@ -161,19 +180,15 @@ public final class MetricsServiceGrpc {
 
   /**
    */
-  public static final class MetricsServiceStub extends io.grpc.stub.AbstractStub<MetricsServiceStub> {
-    private MetricsServiceStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
-    private MetricsServiceStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+  public static final class MetricsServiceStub extends io.grpc.stub.AbstractAsyncStub<MetricsServiceStub> {
+    private MetricsServiceStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected MetricsServiceStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+    protected MetricsServiceStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       return new MetricsServiceStub(channel, callOptions);
     }
 
@@ -203,19 +218,15 @@ public final class MetricsServiceGrpc {
 
   /**
    */
-  public static final class MetricsServiceBlockingStub extends io.grpc.stub.AbstractStub<MetricsServiceBlockingStub> {
-    private MetricsServiceBlockingStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
-    private MetricsServiceBlockingStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+  public static final class MetricsServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<MetricsServiceBlockingStub> {
+    private MetricsServiceBlockingStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected MetricsServiceBlockingStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+    protected MetricsServiceBlockingStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       return new MetricsServiceBlockingStub(channel, callOptions);
     }
 
@@ -244,19 +255,15 @@ public final class MetricsServiceGrpc {
 
   /**
    */
-  public static final class MetricsServiceFutureStub extends io.grpc.stub.AbstractStub<MetricsServiceFutureStub> {
-    private MetricsServiceFutureStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
-    private MetricsServiceFutureStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+  public static final class MetricsServiceFutureStub extends io.grpc.stub.AbstractFutureStub<MetricsServiceFutureStub> {
+    private MetricsServiceFutureStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected MetricsServiceFutureStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+    protected MetricsServiceFutureStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       return new MetricsServiceFutureStub(channel, callOptions);
     }
 

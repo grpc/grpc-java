@@ -176,6 +176,22 @@ public class InternalSubchannelTest {
         isA(TransportLogger.class));
   }
 
+  @Test public void eagAuthorityOverride_propagatesToTransport() {
+    SocketAddress addr = new SocketAddress() {};
+    String overriddenAuthority = "authority-override";
+    Attributes attr = Attributes.newBuilder()
+            .set(EquivalentAddressGroup.ATTR_AUTHORITY_OVERRIDE, overriddenAuthority).build();
+    createInternalSubchannel(new EquivalentAddressGroup(Arrays.asList(addr), attr));
+
+    // First attempt
+    assertNull(internalSubchannel.obtainActiveTransport());
+    assertEquals(CONNECTING, internalSubchannel.getState());
+    verify(mockTransportFactory).newClientTransport(
+        eq(addr),
+        eq(createClientTransportOptions().setAuthority(overriddenAuthority).setEagAttributes(attr)),
+        isA(TransportLogger.class));
+  }
+
   @Test public void singleAddressReconnect() {
     SocketAddress addr = mock(SocketAddress.class);
     createInternalSubchannel(addr);
@@ -839,6 +855,7 @@ public class InternalSubchannelTest {
     internalSubchannel.shutdown(SHUTDOWN_REASON);
     verify(transportInfo.transport).shutdown(same(SHUTDOWN_REASON));
     assertExactCallbackInvokes("onStateChange:SHUTDOWN");
+    transportInfo.listener.transportShutdown(SHUTDOWN_REASON);
 
     transportInfo.listener.transportTerminated();
     assertExactCallbackInvokes("onTerminated");
@@ -1144,7 +1161,9 @@ public class InternalSubchannelTest {
     internalSubchannel.obtainActiveTransport();
 
     MockClientTransportInfo t0 = transports.poll();
+    t0.listener.transportReady();
     assertTrue(channelz.containsClientSocket(t0.transport.getLogId()));
+    t0.listener.transportShutdown(Status.RESOURCE_EXHAUSTED);
     t0.listener.transportTerminated();
     assertFalse(channelz.containsClientSocket(t0.transport.getLogId()));
   }

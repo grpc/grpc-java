@@ -41,22 +41,52 @@ public final class EndpointDiscoveryServiceGrpc {
     if ((getStreamEndpointsMethod = EndpointDiscoveryServiceGrpc.getStreamEndpointsMethod) == null) {
       synchronized (EndpointDiscoveryServiceGrpc.class) {
         if ((getStreamEndpointsMethod = EndpointDiscoveryServiceGrpc.getStreamEndpointsMethod) == null) {
-          EndpointDiscoveryServiceGrpc.getStreamEndpointsMethod = getStreamEndpointsMethod = 
+          EndpointDiscoveryServiceGrpc.getStreamEndpointsMethod = getStreamEndpointsMethod =
               io.grpc.MethodDescriptor.<io.envoyproxy.envoy.api.v2.DiscoveryRequest, io.envoyproxy.envoy.api.v2.DiscoveryResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING)
-              .setFullMethodName(generateFullMethodName(
-                  "envoy.api.v2.EndpointDiscoveryService", "StreamEndpoints"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "StreamEndpoints"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.envoyproxy.envoy.api.v2.DiscoveryRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.envoyproxy.envoy.api.v2.DiscoveryResponse.getDefaultInstance()))
-                  .setSchemaDescriptor(new EndpointDiscoveryServiceMethodDescriptorSupplier("StreamEndpoints"))
-                  .build();
-          }
+              .setSchemaDescriptor(new EndpointDiscoveryServiceMethodDescriptorSupplier("StreamEndpoints"))
+              .build();
         }
-     }
-     return getStreamEndpointsMethod;
+      }
+    }
+    return getStreamEndpointsMethod;
+  }
+
+  private static volatile io.grpc.MethodDescriptor<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest,
+      io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse> getDeltaEndpointsMethod;
+
+  @io.grpc.stub.annotations.RpcMethod(
+      fullMethodName = SERVICE_NAME + '/' + "DeltaEndpoints",
+      requestType = io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest.class,
+      responseType = io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse.class,
+      methodType = io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING)
+  public static io.grpc.MethodDescriptor<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest,
+      io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse> getDeltaEndpointsMethod() {
+    io.grpc.MethodDescriptor<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest, io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse> getDeltaEndpointsMethod;
+    if ((getDeltaEndpointsMethod = EndpointDiscoveryServiceGrpc.getDeltaEndpointsMethod) == null) {
+      synchronized (EndpointDiscoveryServiceGrpc.class) {
+        if ((getDeltaEndpointsMethod = EndpointDiscoveryServiceGrpc.getDeltaEndpointsMethod) == null) {
+          EndpointDiscoveryServiceGrpc.getDeltaEndpointsMethod = getDeltaEndpointsMethod =
+              io.grpc.MethodDescriptor.<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest, io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse>newBuilder()
+              .setType(io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING)
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "DeltaEndpoints"))
+              .setSampledToLocalTracing(true)
+              .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
+                  io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest.getDefaultInstance()))
+              .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
+                  io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse.getDefaultInstance()))
+              .setSchemaDescriptor(new EndpointDiscoveryServiceMethodDescriptorSupplier("DeltaEndpoints"))
+              .build();
+        }
+      }
+    }
+    return getDeltaEndpointsMethod;
   }
 
   private static volatile io.grpc.MethodDescriptor<io.envoyproxy.envoy.api.v2.DiscoveryRequest,
@@ -73,29 +103,35 @@ public final class EndpointDiscoveryServiceGrpc {
     if ((getFetchEndpointsMethod = EndpointDiscoveryServiceGrpc.getFetchEndpointsMethod) == null) {
       synchronized (EndpointDiscoveryServiceGrpc.class) {
         if ((getFetchEndpointsMethod = EndpointDiscoveryServiceGrpc.getFetchEndpointsMethod) == null) {
-          EndpointDiscoveryServiceGrpc.getFetchEndpointsMethod = getFetchEndpointsMethod = 
+          EndpointDiscoveryServiceGrpc.getFetchEndpointsMethod = getFetchEndpointsMethod =
               io.grpc.MethodDescriptor.<io.envoyproxy.envoy.api.v2.DiscoveryRequest, io.envoyproxy.envoy.api.v2.DiscoveryResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
-              .setFullMethodName(generateFullMethodName(
-                  "envoy.api.v2.EndpointDiscoveryService", "FetchEndpoints"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "FetchEndpoints"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.envoyproxy.envoy.api.v2.DiscoveryRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.envoyproxy.envoy.api.v2.DiscoveryResponse.getDefaultInstance()))
-                  .setSchemaDescriptor(new EndpointDiscoveryServiceMethodDescriptorSupplier("FetchEndpoints"))
-                  .build();
-          }
+              .setSchemaDescriptor(new EndpointDiscoveryServiceMethodDescriptorSupplier("FetchEndpoints"))
+              .build();
         }
-     }
-     return getFetchEndpointsMethod;
+      }
+    }
+    return getFetchEndpointsMethod;
   }
 
   /**
    * Creates a new async stub that supports all call types for the service
    */
   public static EndpointDiscoveryServiceStub newStub(io.grpc.Channel channel) {
-    return new EndpointDiscoveryServiceStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<EndpointDiscoveryServiceStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<EndpointDiscoveryServiceStub>() {
+        @java.lang.Override
+        public EndpointDiscoveryServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new EndpointDiscoveryServiceStub(channel, callOptions);
+        }
+      };
+    return EndpointDiscoveryServiceStub.newStub(factory, channel);
   }
 
   /**
@@ -103,7 +139,14 @@ public final class EndpointDiscoveryServiceGrpc {
    */
   public static EndpointDiscoveryServiceBlockingStub newBlockingStub(
       io.grpc.Channel channel) {
-    return new EndpointDiscoveryServiceBlockingStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<EndpointDiscoveryServiceBlockingStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<EndpointDiscoveryServiceBlockingStub>() {
+        @java.lang.Override
+        public EndpointDiscoveryServiceBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new EndpointDiscoveryServiceBlockingStub(channel, callOptions);
+        }
+      };
+    return EndpointDiscoveryServiceBlockingStub.newStub(factory, channel);
   }
 
   /**
@@ -111,7 +154,14 @@ public final class EndpointDiscoveryServiceGrpc {
    */
   public static EndpointDiscoveryServiceFutureStub newFutureStub(
       io.grpc.Channel channel) {
-    return new EndpointDiscoveryServiceFutureStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<EndpointDiscoveryServiceFutureStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<EndpointDiscoveryServiceFutureStub>() {
+        @java.lang.Override
+        public EndpointDiscoveryServiceFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new EndpointDiscoveryServiceFutureStub(channel, callOptions);
+        }
+      };
+    return EndpointDiscoveryServiceFutureStub.newStub(factory, channel);
   }
 
   /**
@@ -131,6 +181,13 @@ public final class EndpointDiscoveryServiceGrpc {
 
     /**
      */
+    public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest> deltaEndpoints(
+        io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse> responseObserver) {
+      return asyncUnimplementedStreamingCall(getDeltaEndpointsMethod(), responseObserver);
+    }
+
+    /**
+     */
     public void fetchEndpoints(io.envoyproxy.envoy.api.v2.DiscoveryRequest request,
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
       asyncUnimplementedUnaryCall(getFetchEndpointsMethod(), responseObserver);
@@ -146,6 +203,13 @@ public final class EndpointDiscoveryServiceGrpc {
                 io.envoyproxy.envoy.api.v2.DiscoveryResponse>(
                   this, METHODID_STREAM_ENDPOINTS)))
           .addMethod(
+            getDeltaEndpointsMethod(),
+            asyncBidiStreamingCall(
+              new MethodHandlers<
+                io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest,
+                io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse>(
+                  this, METHODID_DELTA_ENDPOINTS)))
+          .addMethod(
             getFetchEndpointsMethod(),
             asyncUnaryCall(
               new MethodHandlers<
@@ -158,19 +222,15 @@ public final class EndpointDiscoveryServiceGrpc {
 
   /**
    */
-  public static final class EndpointDiscoveryServiceStub extends io.grpc.stub.AbstractStub<EndpointDiscoveryServiceStub> {
-    private EndpointDiscoveryServiceStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
-    private EndpointDiscoveryServiceStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+  public static final class EndpointDiscoveryServiceStub extends io.grpc.stub.AbstractAsyncStub<EndpointDiscoveryServiceStub> {
+    private EndpointDiscoveryServiceStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected EndpointDiscoveryServiceStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+    protected EndpointDiscoveryServiceStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       return new EndpointDiscoveryServiceStub(channel, callOptions);
     }
 
@@ -188,6 +248,14 @@ public final class EndpointDiscoveryServiceGrpc {
 
     /**
      */
+    public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest> deltaEndpoints(
+        io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse> responseObserver) {
+      return asyncBidiStreamingCall(
+          getChannel().newCall(getDeltaEndpointsMethod(), getCallOptions()), responseObserver);
+    }
+
+    /**
+     */
     public void fetchEndpoints(io.envoyproxy.envoy.api.v2.DiscoveryRequest request,
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
       asyncUnaryCall(
@@ -197,19 +265,15 @@ public final class EndpointDiscoveryServiceGrpc {
 
   /**
    */
-  public static final class EndpointDiscoveryServiceBlockingStub extends io.grpc.stub.AbstractStub<EndpointDiscoveryServiceBlockingStub> {
-    private EndpointDiscoveryServiceBlockingStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
-    private EndpointDiscoveryServiceBlockingStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+  public static final class EndpointDiscoveryServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<EndpointDiscoveryServiceBlockingStub> {
+    private EndpointDiscoveryServiceBlockingStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected EndpointDiscoveryServiceBlockingStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+    protected EndpointDiscoveryServiceBlockingStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       return new EndpointDiscoveryServiceBlockingStub(channel, callOptions);
     }
 
@@ -223,19 +287,15 @@ public final class EndpointDiscoveryServiceGrpc {
 
   /**
    */
-  public static final class EndpointDiscoveryServiceFutureStub extends io.grpc.stub.AbstractStub<EndpointDiscoveryServiceFutureStub> {
-    private EndpointDiscoveryServiceFutureStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
-    private EndpointDiscoveryServiceFutureStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+  public static final class EndpointDiscoveryServiceFutureStub extends io.grpc.stub.AbstractFutureStub<EndpointDiscoveryServiceFutureStub> {
+    private EndpointDiscoveryServiceFutureStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected EndpointDiscoveryServiceFutureStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+    protected EndpointDiscoveryServiceFutureStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       return new EndpointDiscoveryServiceFutureStub(channel, callOptions);
     }
 
@@ -250,6 +310,7 @@ public final class EndpointDiscoveryServiceGrpc {
 
   private static final int METHODID_FETCH_ENDPOINTS = 0;
   private static final int METHODID_STREAM_ENDPOINTS = 1;
+  private static final int METHODID_DELTA_ENDPOINTS = 2;
 
   private static final class MethodHandlers<Req, Resp> implements
       io.grpc.stub.ServerCalls.UnaryMethod<Req, Resp>,
@@ -285,6 +346,9 @@ public final class EndpointDiscoveryServiceGrpc {
         case METHODID_STREAM_ENDPOINTS:
           return (io.grpc.stub.StreamObserver<Req>) serviceImpl.streamEndpoints(
               (io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse>) responseObserver);
+        case METHODID_DELTA_ENDPOINTS:
+          return (io.grpc.stub.StreamObserver<Req>) serviceImpl.deltaEndpoints(
+              (io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse>) responseObserver);
         default:
           throw new AssertionError();
       }
@@ -337,6 +401,7 @@ public final class EndpointDiscoveryServiceGrpc {
           serviceDescriptor = result = io.grpc.ServiceDescriptor.newBuilder(SERVICE_NAME)
               .setSchemaDescriptor(new EndpointDiscoveryServiceFileDescriptorSupplier())
               .addMethod(getStreamEndpointsMethod())
+              .addMethod(getDeltaEndpointsMethod())
               .addMethod(getFetchEndpointsMethod())
               .build();
         }

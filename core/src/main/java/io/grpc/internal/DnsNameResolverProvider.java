@@ -72,7 +72,7 @@ public final class DnsNameResolverProvider extends NameResolverProvider {
   }
 
   @Override
-  protected int priority() {
+  public int priority() {
     return 5;
   }
 }

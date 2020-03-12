@@ -29,22 +29,29 @@ import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalInstrumented;
 import io.grpc.Metadata;
 import io.grpc.ServerStreamTracer;
+import io.grpc.internal.FixedObjectPool;
 import io.grpc.internal.ServerListener;
 import io.grpc.internal.ServerStream;
 import io.grpc.internal.ServerTransport;
 import io.grpc.internal.ServerTransportListener;
-import io.grpc.internal.SharedResourcePool;
 import io.grpc.internal.TransportTracer;
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelOption;
+import io.netty.channel.ReflectiveChannelFactory;
 import io.netty.channel.WriteBufferWaterMark;
+import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.nio.NioServerSocketChannel;
+import io.netty.util.AsciiString;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -52,17 +59,43 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class NettyServerTest {
   private final InternalChannelz channelz = new InternalChannelz();
+  private final NioEventLoopGroup eventLoop = new NioEventLoopGroup(1);
+
+  @After
+  public void tearDown() throws Exception {
+    eventLoop.shutdownGracefully(0, 0, TimeUnit.SECONDS);
+    eventLoop.awaitTermination(5, TimeUnit.SECONDS);
+  }
 
   @Test
-  public void getPort() throws Exception {
+  public void startStop() throws Exception {
     InetSocketAddress addr = new InetSocketAddress(0);
+
+    class TestProtocolNegotiator implements ProtocolNegotiator {
+      boolean closed;
+
+      @Override public ChannelHandler newHandler(GrpcHttp2ConnectionHandler handler) {
+        throw new UnsupportedOperationException();
+      }
+
+      @Override public void close() {
+        closed = true;
+      }
+
+      @Override public AsciiString scheme() {
+        return Utils.HTTP;
+      }
+    }
+
+    TestProtocolNegotiator protocolNegotiator = new TestProtocolNegotiator();
     NettyServer ns = new NettyServer(
         addr,
-        Utils.DEFAULT_SERVER_CHANNEL_TYPE,
+        new ReflectiveChannelFactory<>(NioServerSocketChannel.class),
         new HashMap<ChannelOption<?>, Object>(),
-        SharedResourcePool.forResource(Utils.DEFAULT_BOSS_EVENT_LOOP_GROUP),
-        SharedResourcePool.forResource(Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP),
-        ProtocolNegotiators.plaintext(),
+        new FixedObjectPool<>(eventLoop),
+        new FixedObjectPool<>(eventLoop),
+        false,
+        protocolNegotiator,
         Collections.<ServerStreamTracer.Factory>emptyList(),
         TransportTracer.getDefaultFactory(),
         1, // ignore
@@ -74,6 +107,7 @@ public class NettyServerTest {
         1, 1, // ignore
         true, 0, // ignore
         channelz);
+    final SettableFuture<Void> serverShutdownCalled = SettableFuture.create();
     ns.start(new ServerListener() {
       @Override
       public ServerTransportListener transportCreated(ServerTransport transport) {
@@ -81,7 +115,9 @@ public class NettyServerTest {
       }
 
       @Override
-      public void serverShutdown() {}
+      public void serverShutdown() {
+        serverShutdownCalled.set(null);
+      }
     });
 
     // Check that we got an actual port.
@@ -89,17 +125,21 @@ public class NettyServerTest {
 
     // Cleanup
     ns.shutdown();
+    // serverShutdown() signals that resources are freed
+    serverShutdownCalled.get(1, TimeUnit.SECONDS);
+    assertThat(protocolNegotiator.closed).isTrue();
   }
 
   @Test
-  public void getPort_notStarted() throws Exception {
+  public void getPort_notStarted() {
     InetSocketAddress addr = new InetSocketAddress(0);
     NettyServer ns = new NettyServer(
         addr,
-        Utils.DEFAULT_SERVER_CHANNEL_TYPE,
+        new ReflectiveChannelFactory<>(NioServerSocketChannel.class),
         new HashMap<ChannelOption<?>, Object>(),
-        SharedResourcePool.forResource(Utils.DEFAULT_BOSS_EVENT_LOOP_GROUP),
-        SharedResourcePool.forResource(Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP),
+        new FixedObjectPool<>(eventLoop),
+        new FixedObjectPool<>(eventLoop),
+        false,
         ProtocolNegotiators.plaintext(),
         Collections.<ServerStreamTracer.Factory>emptyList(),
         TransportTracer.getDefaultFactory(),
@@ -134,10 +174,11 @@ public class NettyServerTest {
     InetSocketAddress addr = new InetSocketAddress(0);
     NettyServer ns = new NettyServer(
         addr,
-        Utils.DEFAULT_SERVER_CHANNEL_TYPE,
+        new ReflectiveChannelFactory<>(NioServerSocketChannel.class),
         channelOptions,
-        SharedResourcePool.forResource(Utils.DEFAULT_BOSS_EVENT_LOOP_GROUP),
-        SharedResourcePool.forResource(Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP),
+        new FixedObjectPool<>(eventLoop),
+        new FixedObjectPool<>(eventLoop),
+        false,
         ProtocolNegotiators.plaintext(),
         Collections.<ServerStreamTracer.Factory>emptyList(),
         TransportTracer.getDefaultFactory(),
@@ -184,10 +225,11 @@ public class NettyServerTest {
     InetSocketAddress addr = new InetSocketAddress(0);
     NettyServer ns = new NettyServer(
         addr,
-        Utils.DEFAULT_SERVER_CHANNEL_TYPE,
+        new ReflectiveChannelFactory<>(NioServerSocketChannel.class),
         new HashMap<ChannelOption<?>, Object>(),
-        SharedResourcePool.forResource(Utils.DEFAULT_BOSS_EVENT_LOOP_GROUP),
-        SharedResourcePool.forResource(Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP),
+        new FixedObjectPool<>(eventLoop),
+        new FixedObjectPool<>(eventLoop),
+        false,
         ProtocolNegotiators.plaintext(),
         Collections.<ServerStreamTracer.Factory>emptyList(),
         TransportTracer.getDefaultFactory(),
@@ -212,8 +254,15 @@ public class NettyServerTest {
         shutdownCompleted.set(null);
       }
     });
+
     assertThat(((InetSocketAddress) ns.getListenSocketAddress()).getPort()).isGreaterThan(0);
 
+    // SocketStats won't be available until the event loop task of adding SocketStats created by
+    // ns.start() complete. So submit a noop task and await until it's drained.
+    eventLoop.submit(new Runnable() {
+      @Override
+      public void run() {}
+    }).await(5, TimeUnit.SECONDS);
     InternalInstrumented<SocketStats> listenSocket = ns.getListenSocketStats();
     assertSame(listenSocket, channelz.getSocket(id(listenSocket)));
 

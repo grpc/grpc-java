@@ -54,7 +54,9 @@ import javax.annotation.Nullable;
  */
 class NettyClientStream extends AbstractClientStream {
   private static final InternalMethodDescriptor methodDescriptorAccessor =
-      new InternalMethodDescriptor(InternalKnownTransport.NETTY);
+      new InternalMethodDescriptor(
+          NettyClientTransport.class.getName().contains("grpc.netty.shaded")
+              ? InternalKnownTransport.NETTY_SHADED : InternalKnownTransport.NETTY);
 
   private final Sink sink = new Sink();
   private final TransportState state;
@@ -75,14 +77,15 @@ class NettyClientStream extends AbstractClientStream {
       AsciiString userAgent,
       StatsTraceContext statsTraceCtx,
       TransportTracer transportTracer,
-      CallOptions callOptions) {
+      CallOptions callOptions,
+      boolean useGetForSafeMethods) {
     super(
         new NettyWritableBufferAllocator(channel.alloc()),
         statsTraceCtx,
         transportTracer,
         headers,
         callOptions,
-        useGet(method));
+        useGetForSafeMethods && method.isSafe());
     this.state = checkNotNull(state, "transportState");
     this.writeQueue = state.handler.getWriteQueue();
     this.method = checkNotNull(method, "method");
@@ -110,10 +113,6 @@ class NettyClientStream extends AbstractClientStream {
   @Override
   public Attributes getAttributes() {
     return state.handler.getAttributes();
-  }
-
-  private static boolean useGet(MethodDescriptor<?, ?> method) {
-    return method.isSafe();
   }
 
   private class Sink implements AbstractClientStream.Sink {
@@ -174,7 +173,8 @@ class NettyClientStream extends AbstractClientStream {
     private void writeFrameInternal(
         WritableBuffer frame, boolean endOfStream, boolean flush, final int numMessages) {
       Preconditions.checkArgument(numMessages >= 0);
-      ByteBuf bytebuf = frame == null ? EMPTY_BUFFER : ((NettyWritableBuffer) frame).bytebuf();
+      ByteBuf bytebuf =
+          frame == null ? EMPTY_BUFFER : ((NettyWritableBuffer) frame).bytebuf().touch();
       final int numBytes = bytebuf.readableBytes();
       if (numBytes > 0) {
         // Add the bytes to outbound flow control.
@@ -217,13 +217,13 @@ class NettyClientStream extends AbstractClientStream {
         transportState().requestMessagesFromDeframer(numMessages);
       } else {
         channel.eventLoop().execute(new Runnable() {
-          final Link link = PerfMark.link();
+          final Link link = PerfMark.linkOut();
           @Override
           public void run() {
             PerfMark.startTask(
                 "NettyClientStream$Sink.requestMessagesFromDeframer",
                 transportState().tag());
-            link.link();
+            PerfMark.linkIn(link);
             try {
               transportState().requestMessagesFromDeframer(numMessages);
             } finally {

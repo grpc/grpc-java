@@ -112,10 +112,20 @@ public abstract class LoadBalancer {
    * The load-balancing config converted from an JSON object injected by the GRPC library.
    *
    * <p>{@link NameResolver}s should not produce this attribute.
+   *
+   * <p>Deprecated: LB implementations should use parsed object from {@link
+   * LoadBalancerProvider#parseLoadBalancingPolicyConfig(Map)} instead of raw config.
    */
+  @Deprecated
   @NameResolver.ResolutionResultAttr
   public static final Attributes.Key<Map<String, ?>> ATTR_LOAD_BALANCING_CONFIG =
       Attributes.Key.create("io.grpc.LoadBalancer.loadBalancingConfig");
+
+  @Internal
+  @NameResolver.ResolutionResultAttr
+  public static final Attributes.Key<Map<String, ?>> ATTR_HEALTH_CHECKING_CONFIG =
+      Attributes.Key.create("health-checking-config");
+  private int recursionCount;
 
   /**
    * Handles newly resolved server groups and metadata attributes from name resolution system.
@@ -133,8 +143,11 @@ public abstract class LoadBalancer {
   public void handleResolvedAddressGroups(
       List<EquivalentAddressGroup> servers,
       @NameResolver.ResolutionResultAttr Attributes attributes) {
-    handleResolvedAddresses(
-        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(attributes).build());
+    if (recursionCount++ == 0) {
+      handleResolvedAddresses(
+          ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(attributes).build());
+    }
+    recursionCount = 0;
   }
 
   /**
@@ -149,8 +162,11 @@ public abstract class LoadBalancer {
    */
   @SuppressWarnings("deprecation")
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-    handleResolvedAddressGroups(
-        resolvedAddresses.getAddresses(), resolvedAddresses.getAttributes());
+    if (recursionCount++ == 0) {
+      handleResolvedAddressGroups(
+          resolvedAddresses.getAddresses(), resolvedAddresses.getAttributes());
+    }
+    recursionCount = 0;
   }
 
   /**

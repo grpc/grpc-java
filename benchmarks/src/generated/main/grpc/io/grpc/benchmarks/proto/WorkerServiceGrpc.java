@@ -41,22 +41,21 @@ public final class WorkerServiceGrpc {
     if ((getRunServerMethod = WorkerServiceGrpc.getRunServerMethod) == null) {
       synchronized (WorkerServiceGrpc.class) {
         if ((getRunServerMethod = WorkerServiceGrpc.getRunServerMethod) == null) {
-          WorkerServiceGrpc.getRunServerMethod = getRunServerMethod = 
+          WorkerServiceGrpc.getRunServerMethod = getRunServerMethod =
               io.grpc.MethodDescriptor.<io.grpc.benchmarks.proto.Control.ServerArgs, io.grpc.benchmarks.proto.Control.ServerStatus>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.testing.WorkerService", "RunServer"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "RunServer"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.benchmarks.proto.Control.ServerArgs.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.benchmarks.proto.Control.ServerStatus.getDefaultInstance()))
-                  .setSchemaDescriptor(new WorkerServiceMethodDescriptorSupplier("RunServer"))
-                  .build();
-          }
+              .setSchemaDescriptor(new WorkerServiceMethodDescriptorSupplier("RunServer"))
+              .build();
         }
-     }
-     return getRunServerMethod;
+      }
+    }
+    return getRunServerMethod;
   }
 
   private static volatile io.grpc.MethodDescriptor<io.grpc.benchmarks.proto.Control.ClientArgs,
@@ -73,22 +72,21 @@ public final class WorkerServiceGrpc {
     if ((getRunClientMethod = WorkerServiceGrpc.getRunClientMethod) == null) {
       synchronized (WorkerServiceGrpc.class) {
         if ((getRunClientMethod = WorkerServiceGrpc.getRunClientMethod) == null) {
-          WorkerServiceGrpc.getRunClientMethod = getRunClientMethod = 
+          WorkerServiceGrpc.getRunClientMethod = getRunClientMethod =
               io.grpc.MethodDescriptor.<io.grpc.benchmarks.proto.Control.ClientArgs, io.grpc.benchmarks.proto.Control.ClientStatus>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.testing.WorkerService", "RunClient"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "RunClient"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.benchmarks.proto.Control.ClientArgs.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.benchmarks.proto.Control.ClientStatus.getDefaultInstance()))
-                  .setSchemaDescriptor(new WorkerServiceMethodDescriptorSupplier("RunClient"))
-                  .build();
-          }
+              .setSchemaDescriptor(new WorkerServiceMethodDescriptorSupplier("RunClient"))
+              .build();
         }
-     }
-     return getRunClientMethod;
+      }
+    }
+    return getRunClientMethod;
   }
 
   private static volatile io.grpc.MethodDescriptor<io.grpc.benchmarks.proto.Control.CoreRequest,
@@ -105,22 +103,21 @@ public final class WorkerServiceGrpc {
     if ((getCoreCountMethod = WorkerServiceGrpc.getCoreCountMethod) == null) {
       synchronized (WorkerServiceGrpc.class) {
         if ((getCoreCountMethod = WorkerServiceGrpc.getCoreCountMethod) == null) {
-          WorkerServiceGrpc.getCoreCountMethod = getCoreCountMethod = 
+          WorkerServiceGrpc.getCoreCountMethod = getCoreCountMethod =
               io.grpc.MethodDescriptor.<io.grpc.benchmarks.proto.Control.CoreRequest, io.grpc.benchmarks.proto.Control.CoreResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.testing.WorkerService", "CoreCount"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "CoreCount"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.benchmarks.proto.Control.CoreRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.benchmarks.proto.Control.CoreResponse.getDefaultInstance()))
-                  .setSchemaDescriptor(new WorkerServiceMethodDescriptorSupplier("CoreCount"))
-                  .build();
-          }
+              .setSchemaDescriptor(new WorkerServiceMethodDescriptorSupplier("CoreCount"))
+              .build();
         }
-     }
-     return getCoreCountMethod;
+      }
+    }
+    return getCoreCountMethod;
   }
 
   private static volatile io.grpc.MethodDescriptor<io.grpc.benchmarks.proto.Control.Void,
@@ -137,29 +134,35 @@ public final class WorkerServiceGrpc {
     if ((getQuitWorkerMethod = WorkerServiceGrpc.getQuitWorkerMethod) == null) {
       synchronized (WorkerServiceGrpc.class) {
         if ((getQuitWorkerMethod = WorkerServiceGrpc.getQuitWorkerMethod) == null) {
-          WorkerServiceGrpc.getQuitWorkerMethod = getQuitWorkerMethod = 
+          WorkerServiceGrpc.getQuitWorkerMethod = getQuitWorkerMethod =
               io.grpc.MethodDescriptor.<io.grpc.benchmarks.proto.Control.Void, io.grpc.benchmarks.proto.Control.Void>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.testing.WorkerService", "QuitWorker"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "QuitWorker"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.benchmarks.proto.Control.Void.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.benchmarks.proto.Control.Void.getDefaultInstance()))
-                  .setSchemaDescriptor(new WorkerServiceMethodDescriptorSupplier("QuitWorker"))
-                  .build();
-          }
+              .setSchemaDescriptor(new WorkerServiceMethodDescriptorSupplier("QuitWorker"))
+              .build();
         }
-     }
-     return getQuitWorkerMethod;
+      }
+    }
+    return getQuitWorkerMethod;
   }
 
   /**
    * Creates a new async stub that supports all call types for the service
    */
   public static WorkerServiceStub newStub(io.grpc.Channel channel) {
-    return new WorkerServiceStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<WorkerServiceStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<WorkerServiceStub>() {
+        @java.lang.Override
+        public WorkerServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new WorkerServiceStub(channel, callOptions);
+        }
+      };
+    return WorkerServiceStub.newStub(factory, channel);
   }
 
   /**
@@ -167,7 +170,14 @@ public final class WorkerServiceGrpc {
    */
   public static WorkerServiceBlockingStub newBlockingStub(
       io.grpc.Channel channel) {
-    return new WorkerServiceBlockingStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<WorkerServiceBlockingStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<WorkerServiceBlockingStub>() {
+        @java.lang.Override
+        public WorkerServiceBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new WorkerServiceBlockingStub(channel, callOptions);
+        }
+      };
+    return WorkerServiceBlockingStub.newStub(factory, channel);
   }
 
   /**
@@ -175,7 +185,14 @@ public final class WorkerServiceGrpc {
    */
   public static WorkerServiceFutureStub newFutureStub(
       io.grpc.Channel channel) {
-    return new WorkerServiceFutureStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<WorkerServiceFutureStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<WorkerServiceFutureStub>() {
+        @java.lang.Override
+        public WorkerServiceFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new WorkerServiceFutureStub(channel, callOptions);
+        }
+      };
+    return WorkerServiceFutureStub.newStub(factory, channel);
   }
 
   /**
@@ -268,19 +285,15 @@ public final class WorkerServiceGrpc {
 
   /**
    */
-  public static final class WorkerServiceStub extends io.grpc.stub.AbstractStub<WorkerServiceStub> {
-    private WorkerServiceStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
-    private WorkerServiceStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+  public static final class WorkerServiceStub extends io.grpc.stub.AbstractAsyncStub<WorkerServiceStub> {
+    private WorkerServiceStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected WorkerServiceStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+    protected WorkerServiceStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       return new WorkerServiceStub(channel, callOptions);
     }
 
@@ -341,19 +354,15 @@ public final class WorkerServiceGrpc {
 
   /**
    */
-  public static final class WorkerServiceBlockingStub extends io.grpc.stub.AbstractStub<WorkerServiceBlockingStub> {
-    private WorkerServiceBlockingStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
-    private WorkerServiceBlockingStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+  public static final class WorkerServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<WorkerServiceBlockingStub> {
+    private WorkerServiceBlockingStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected WorkerServiceBlockingStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+    protected WorkerServiceBlockingStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       return new WorkerServiceBlockingStub(channel, callOptions);
     }
 
@@ -380,19 +389,15 @@ public final class WorkerServiceGrpc {
 
   /**
    */
-  public static final class WorkerServiceFutureStub extends io.grpc.stub.AbstractStub<WorkerServiceFutureStub> {
-    private WorkerServiceFutureStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
-    private WorkerServiceFutureStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+  public static final class WorkerServiceFutureStub extends io.grpc.stub.AbstractFutureStub<WorkerServiceFutureStub> {
+    private WorkerServiceFutureStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected WorkerServiceFutureStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+    protected WorkerServiceFutureStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       return new WorkerServiceFutureStub(channel, callOptions);
     }
 

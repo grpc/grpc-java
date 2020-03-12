@@ -151,7 +151,7 @@ the dependency.
       <extension>
         <groupId>kr.motd.maven</groupId>
         <artifactId>os-maven-plugin</artifactId>
-        <version>1.5.0.Final</version>
+        <version>1.6.2</version>
       </extension>
     </extensions>
     <plugins>
@@ -393,8 +393,11 @@ grpc-netty version | netty-handler version | netty-tcnative-boringssl-static ver
 1.14.x-1.15.x      | 4.1.27.Final          | 2.0.12.Final
 1.16.x-1.17.x      | 4.1.30.Final          | 2.0.17.Final
 1.18.x-1.19.x      | 4.1.32.Final          | 2.0.20.Final
-1.20.x-1.21x       | 4.1.34.Final          | 2.0.22.Final
-1.22.x-            | 4.1.35.Final          | 2.0.25.Final
+1.20.x-1.21.x      | 4.1.34.Final          | 2.0.22.Final
+1.22.x             | 4.1.35.Final          | 2.0.25.Final
+1.23.x-1.24.x      | 4.1.38.Final          | 2.0.25.Final
+1.25.x-1.27.x      | 4.1.42.Final          | 2.0.26.Final
+1.28.x-            | 4.1.45.Final          | 2.0.28.Final
 
 _(grpc-netty-shaded avoids issues with keeping these versions in sync.)_
 
@@ -423,7 +426,7 @@ The following code snippet shows how you can call the Google Cloud PubSub API us
 
 ```java
 // Create a channel to the test service.
-ManagedChannel channel = ManagedChannelBuilder.forTarget("pubsub.googleapis.com")
+ManagedChannel channel = ManagedChannelBuilder.forTarget("dns:///pubsub.googleapis.com")
     .build();
 // Get the default credentials from the environment
 GoogleCredentials creds = GoogleCredentials.getApplicationDefault();

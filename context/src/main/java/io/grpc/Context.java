@@ -296,11 +296,21 @@ public class Context {
    *   }
    * </pre>
    */
-  public CancellableContext withDeadline(Deadline deadline,
-      ScheduledExecutorService scheduler) {
-    checkNotNull(deadline, "deadline");
+  public CancellableContext withDeadline(Deadline newDeadline, ScheduledExecutorService scheduler) {
+    checkNotNull(newDeadline, "deadline");
     checkNotNull(scheduler, "scheduler");
-    return new CancellableContext(this, deadline, scheduler);
+    Deadline existingDeadline = getDeadline();
+    boolean scheduleDeadlineCancellation = true;
+    if (existingDeadline != null && existingDeadline.compareTo(newDeadline) <= 0) {
+      // The new deadline won't have an effect, so ignore it
+      newDeadline = existingDeadline;
+      scheduleDeadlineCancellation = false;
+    }
+    CancellableContext newCtx = new CancellableContext(this, newDeadline);
+    if (scheduleDeadlineCancellation) {
+      newCtx.setUpDeadlineCancellation(newDeadline, scheduler);
+    }
+    return newCtx;
   }
 
   /**
@@ -316,6 +326,19 @@ public class Context {
    *   });
    * </pre>
    *
+   * <p>Note that multiple calls to {@link #withValue} can be chained together.
+   * That is,
+   *
+   * <pre>
+   * context.withValues(K1, V1, K2, V2);
+   * // is the same as
+   * context.withValue(K1, V1).withValue(K2, V2);
+   * </pre>
+   *
+   * <p>Nonetheless, {@link Context} should not be treated like a general purpose
+   * map with a large number of keys and values — combine multiple related items
+   * together into a single key instead of separating them. But if the items
+   * are unrelated, have separate keys for them.
    */
   public <V> Context withValue(Key<V> k1, V v1) {
     PersistentHashArrayMappedTrie<Key<?>, Object> newKeyValueEntries = keyValueEntries.put(k1, v1);
@@ -345,6 +368,20 @@ public class Context {
   /**
    * Create a new context with the given key value set. The new context will cascade cancellation
    * from its parent.
+   *
+   * <p>For more than 4 key-value pairs, note that multiple calls to
+   * {@link #withValue} can be chained together. That is,
+   *
+   * <pre>
+   * context.withValues(K1, V1, K2, V2);
+   * // is the same as
+   * context.withValue(K1, V1).withValue(K2, V2);
+   * </pre>
+   *
+   * <p>Nonetheless, {@link Context} should not be treated like a general purpose
+   * map with a large number of keys and values — combine multiple related items
+   * together into a single key instead of separating them. But if the items
+   * are unrelated, have separate keys for them.
    */
   public <V1, V2, V3, V4> Context withValues(Key<V1> k1, V1 v1, Key<V2> k2, V2 v2,
       Key<V3> k3, V3 v3, Key<V4> k4, V4 v4) {
@@ -713,37 +750,33 @@ public class Context {
     /**
      * Create a cancellable context that has a deadline.
      */
-    private CancellableContext(Context parent, Deadline deadline,
-        ScheduledExecutorService scheduler) {
+    private CancellableContext(Context parent, Deadline deadline) {
       super(parent, parent.keyValueEntries);
-      Deadline parentDeadline = parent.getDeadline();
-      if (parentDeadline != null && parentDeadline.compareTo(deadline) <= 0) {
-        // The new deadline won't have an effect, so ignore it
-        deadline = parentDeadline;
-      } else {
-        // The new deadline has an effect
-        if (!deadline.isExpired()) {
-          // The parent deadline was after the new deadline so we need to install a listener
-          // on the new earlier deadline to trigger expiration for this context.
-          pendingDeadline = deadline.runOnExpiration(new Runnable() {
-            @Override
-            public void run() {
-              try {
-                cancel(new TimeoutException("context timed out"));
-              } catch (Throwable t) {
-                log.log(Level.SEVERE, "Cancel threw an exception, which should not happen", t);
-              }
-            }
-          }, scheduler);
-        } else {
-          // Cancel immediately if the deadline is already expired.
-          cancel(new TimeoutException("context timed out"));
-        }
-      }
       this.deadline = deadline;
-      uncancellableSurrogate = new Context(this, keyValueEntries);
+      this.uncancellableSurrogate = new Context(this, keyValueEntries);
     }
 
+    private void setUpDeadlineCancellation(Deadline deadline, ScheduledExecutorService scheduler) {
+      if (!deadline.isExpired()) {
+        final class CancelOnExpiration implements Runnable {
+          @Override
+          public void run() {
+            try {
+              cancel(new TimeoutException("context timed out"));
+            } catch (Throwable t) {
+              log.log(Level.SEVERE, "Cancel threw an exception, which should not happen", t);
+            }
+          }
+        }
+
+        synchronized (this) {
+          pendingDeadline = deadline.runOnExpiration(new CancelOnExpiration(), scheduler);
+        }
+      } else {
+        // Cancel immediately if the deadline is already expired.
+        cancel(new TimeoutException("context timed out"));
+      }
+    }
 
     @Override
     public Context attach() {

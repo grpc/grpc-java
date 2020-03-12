@@ -1,0 +1,10 @@
+# Publicly exposed in //netty package. Purposefully does not export any symbols.
+java_library(
+    name = "shaded",
+    visibility = ["//netty:__pkg__"],
+    runtime_deps = [
+        "//netty",
+        "@io_netty_netty_tcnative_boringssl_static//jar",
+        "@io_netty_netty_transport_native_epoll_linux_x86_64//jar",
+    ],
+)

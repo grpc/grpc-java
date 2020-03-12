@@ -18,21 +18,17 @@ package io.grpc.internal;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
-import static com.google.common.base.Verify.verify;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.base.Strings;
 import io.grpc.MethodDescriptor;
-import io.grpc.Status.Code;
 import io.grpc.internal.RetriableStream.Throttle;
 import java.util.Collections;
-import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import javax.annotation.Nullable;
 
 /**
@@ -43,22 +39,38 @@ final class ManagedChannelServiceConfig {
 
   private final Map<String, MethodInfo> serviceMethodMap;
   private final Map<String, MethodInfo> serviceMap;
-  // TODO(notcarl/zdapeng): use retryThrottling here
   @Nullable
-  @SuppressWarnings("unused")
   private final Throttle retryThrottling;
   @Nullable
   private final Object loadBalancingConfig;
+  @Nullable
+  private final Map<String, ?> healthCheckingConfig;
 
   ManagedChannelServiceConfig(
       Map<String, MethodInfo> serviceMethodMap,
       Map<String, MethodInfo> serviceMap,
       @Nullable Throttle retryThrottling,
-      @Nullable Object loadBalancingConfig) {
+      @Nullable Object loadBalancingConfig,
+      @Nullable Map<String, ?> healthCheckingConfig) {
     this.serviceMethodMap = Collections.unmodifiableMap(new HashMap<>(serviceMethodMap));
     this.serviceMap = Collections.unmodifiableMap(new HashMap<>(serviceMap));
     this.retryThrottling = retryThrottling;
     this.loadBalancingConfig = loadBalancingConfig;
+    this.healthCheckingConfig =
+        healthCheckingConfig != null
+            ? Collections.unmodifiableMap(new HashMap<>(healthCheckingConfig))
+            : null;
+  }
+
+  /** Returns an empty {@link ManagedChannelServiceConfig}. */
+  static ManagedChannelServiceConfig empty() {
+    return
+        new ManagedChannelServiceConfig(
+            new HashMap<String, MethodInfo>(),
+            new HashMap<String, MethodInfo>(),
+            /* retryThrottling= */ null,
+            /* loadBalancingConfig= */ null,
+            /* healthCheckingConfig= */ null);
   }
 
   /**
@@ -76,6 +88,8 @@ final class ManagedChannelServiceConfig {
     }
     Map<String, MethodInfo> serviceMethodMap = new HashMap<>();
     Map<String, MethodInfo> serviceMap = new HashMap<>();
+    Map<String, ?> healthCheckingConfig =
+        ServiceConfigUtil.getHealthCheckedService(serviceConfig);
 
     // Try and do as much validation here before we swap out the existing configuration.  In case
     // the input is invalid, we don't want to lose the existing configuration.
@@ -84,8 +98,13 @@ final class ManagedChannelServiceConfig {
 
     if (methodConfigs == null) {
       // this is surprising, but possible.
-      return new ManagedChannelServiceConfig(
-          serviceMethodMap, serviceMap, retryThrottling, loadBalancingConfig);
+      return
+          new ManagedChannelServiceConfig(
+              serviceMethodMap,
+              serviceMap,
+              retryThrottling,
+              loadBalancingConfig,
+              healthCheckingConfig);
     }
 
     for (Map<String, ?> methodConfig : methodConfigs) {
@@ -118,8 +137,13 @@ final class ManagedChannelServiceConfig {
       }
     }
 
-    return new ManagedChannelServiceConfig(
-        serviceMethodMap, serviceMap, retryThrottling, loadBalancingConfig);
+    return
+        new ManagedChannelServiceConfig(
+            serviceMethodMap,
+            serviceMap,
+            retryThrottling,
+            loadBalancingConfig,
+            healthCheckingConfig);
   }
 
   /**
@@ -127,6 +151,11 @@ final class ManagedChannelServiceConfig {
    */
   Map<String, MethodInfo> getServiceMap() {
     return serviceMap;
+  }
+
+  @Nullable
+  Map<String, ?> getHealthCheckingConfig() {
+    return healthCheckingConfig;
   }
 
   /**
@@ -140,6 +169,41 @@ final class ManagedChannelServiceConfig {
   @Nullable
   Object getLoadBalancingConfig() {
     return loadBalancingConfig;
+  }
+
+  @Nullable
+  Throttle getRetryThrottling() {
+    return retryThrottling;
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    ManagedChannelServiceConfig that = (ManagedChannelServiceConfig) o;
+    return Objects.equal(serviceMethodMap, that.serviceMethodMap)
+        && Objects.equal(serviceMap, that.serviceMap)
+        && Objects.equal(retryThrottling, that.retryThrottling)
+        && Objects.equal(loadBalancingConfig, that.loadBalancingConfig);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hashCode(serviceMethodMap, serviceMap, retryThrottling, loadBalancingConfig);
+  }
+
+  @Override
+  public String toString() {
+    return MoreObjects.toStringHelper(this)
+        .add("serviceMethodMap", serviceMethodMap)
+        .add("serviceMap", serviceMap)
+        .add("retryThrottling", retryThrottling)
+        .add("loadBalancingConfig", loadBalancingConfig)
+        .toString();
   }
 
   /**
@@ -256,21 +320,9 @@ final class ManagedChannelServiceConfig {
           "backoffMultiplier must be greater than 0: %s",
           backoffMultiplier);
 
-      List<String> rawCodes =
-          ServiceConfigUtil.getRetryableStatusCodesFromRetryPolicy(retryPolicy);
-      checkNotNull(rawCodes, "rawCodes must be present");
-      checkArgument(!rawCodes.isEmpty(), "rawCodes can't be empty");
-      EnumSet<Code> codes = EnumSet.noneOf(Code.class);
-      // service config doesn't say if duplicates are allowed, so just accept them.
-      for (String rawCode : rawCodes) {
-        verify(!"OK".equals(rawCode), "rawCode can not be \"OK\"");
-        codes.add(Code.valueOf(rawCode));
-      }
-      Set<Code> retryableStatusCodes = Collections.unmodifiableSet(codes);
-
       return new RetryPolicy(
           maxAttempts, initialBackoffNanos, maxBackoffNanos, backoffMultiplier,
-          retryableStatusCodes);
+          ServiceConfigUtil.getRetryableStatusCodesFromRetryPolicy(retryPolicy));
     }
 
     private static HedgingPolicy hedgingPolicy(
@@ -287,19 +339,9 @@ final class ManagedChannelServiceConfig {
       checkArgument(
           hedgingDelayNanos >= 0, "hedgingDelay must not be negative: %s", hedgingDelayNanos);
 
-      List<String> rawCodes =
-          ServiceConfigUtil.getNonFatalStatusCodesFromHedgingPolicy(hedgingPolicy);
-      checkNotNull(rawCodes, "rawCodes must be present");
-      checkArgument(!rawCodes.isEmpty(), "rawCodes can't be empty");
-      EnumSet<Code> codes = EnumSet.noneOf(Code.class);
-      // service config doesn't say if duplicates are allowed, so just accept them.
-      for (String rawCode : rawCodes) {
-        verify(!"OK".equals(rawCode), "rawCode can not be \"OK\"");
-        codes.add(Code.valueOf(rawCode));
-      }
-      Set<Code> nonFatalStatusCodes = Collections.unmodifiableSet(codes);
-
-      return new HedgingPolicy(maxAttempts, hedgingDelayNanos, nonFatalStatusCodes);
+      return new HedgingPolicy(
+          maxAttempts, hedgingDelayNanos,
+          ServiceConfigUtil.getNonFatalStatusCodesFromHedgingPolicy(hedgingPolicy));
     }
   }
 }

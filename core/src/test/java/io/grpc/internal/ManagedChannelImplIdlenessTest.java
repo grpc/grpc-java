@@ -16,6 +16,7 @@
 
 package io.grpc.internal;
 
+import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static org.junit.Assert.assertEquals;
@@ -233,9 +234,12 @@ public class ManagedChannelImplIdlenessTest {
             .setAttributes(Attributes.EMPTY)
             .build();
     nameResolverListenerCaptor.getValue().onResult(resolutionResult);
-    verify(mockLoadBalancer).handleResolvedAddresses(
-        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(Attributes.EMPTY)
-            .build());
+
+    ArgumentCaptor<ResolvedAddresses> resolvedAddressCaptor =
+        ArgumentCaptor.forClass(ResolvedAddresses.class);
+    verify(mockLoadBalancer).handleResolvedAddresses(resolvedAddressCaptor.capture());
+    assertThat(resolvedAddressCaptor.getValue().getAddresses())
+        .containsExactlyElementsIn(servers);
   }
 
   @Test

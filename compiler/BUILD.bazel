@@ -1,5 +1,7 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary")
 load("//:java_grpc_library.bzl", "java_rpc_toolchain")
 
+# This should not generally be referenced. Users should use java_grpc_library
 cc_binary(
     name = "grpc_java_plugin",
     srcs = [
@@ -7,6 +9,7 @@ cc_binary(
         "src/java_plugin/cpp/java_generator.h",
         "src/java_plugin/cpp/java_plugin.cpp",
     ],
+    visibility = ["//visibility:public"],
     deps = [
         "@com_google_protobuf//:protoc_lib",
     ],

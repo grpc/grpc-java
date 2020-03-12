@@ -18,6 +18,7 @@ package io.grpc.netty;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_AGE_NANOS_DISABLED;
+import static io.netty.channel.ChannelOption.ALLOCATOR;
 import static io.netty.channel.ChannelOption.SO_BACKLOG;
 import static io.netty.channel.ChannelOption.SO_KEEPALIVE;
 
@@ -38,6 +39,7 @@ import io.grpc.internal.ServerTransportListener;
 import io.grpc.internal.TransportTracer;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelFactory;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelInitializer;
@@ -54,7 +56,6 @@ import java.net.SocketAddress;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -66,12 +67,13 @@ class NettyServer implements InternalServer, InternalWithLogId {
 
   private final InternalLogId logId;
   private final SocketAddress address;
-  private final Class<? extends ServerChannel> channelType;
+  private final ChannelFactory<? extends ServerChannel> channelFactory;
   private final Map<ChannelOption<?>, ?> channelOptions;
   private final ProtocolNegotiator protocolNegotiator;
   private final int maxStreamsPerConnection;
   private final ObjectPool<? extends EventLoopGroup> bossGroupPool;
   private final ObjectPool<? extends EventLoopGroup> workerGroupPool;
+  private final boolean forceHeapBuffer;
   private EventLoopGroup bossGroup;
   private EventLoopGroup workerGroup;
   private ServerListener listener;
@@ -86,19 +88,20 @@ class NettyServer implements InternalServer, InternalWithLogId {
   private final long maxConnectionAgeGraceInNanos;
   private final boolean permitKeepAliveWithoutCalls;
   private final long permitKeepAliveTimeInNanos;
-  private final ReferenceCounted eventLoopReferenceCounter = new EventLoopReferenceCounter();
+  private final ReferenceCounted sharedResourceReferenceCounter =
+      new SharedResourceReferenceCounter();
   private final List<? extends ServerStreamTracer.Factory> streamTracerFactories;
   private final TransportTracer.Factory transportTracerFactory;
   private final InternalChannelz channelz;
-  // Only modified in event loop but safe to read any time. Set at startup and unset at shutdown.
-  private final AtomicReference<InternalInstrumented<SocketStats>> listenSocketStats =
-      new AtomicReference<>();
+  // Only modified in event loop but safe to read any time.
+  private volatile InternalInstrumented<SocketStats> listenSocketStats;
 
   NettyServer(
-      SocketAddress address, Class<? extends ServerChannel> channelType,
+      SocketAddress address, ChannelFactory<? extends ServerChannel> channelFactory,
       Map<ChannelOption<?>, ?> channelOptions,
       ObjectPool<? extends EventLoopGroup> bossGroupPool,
       ObjectPool<? extends EventLoopGroup> workerGroupPool,
+      boolean forceHeapBuffer,
       ProtocolNegotiator protocolNegotiator,
       List<? extends ServerStreamTracer.Factory> streamTracerFactories,
       TransportTracer.Factory transportTracerFactory,
@@ -109,11 +112,12 @@ class NettyServer implements InternalServer, InternalWithLogId {
       boolean permitKeepAliveWithoutCalls, long permitKeepAliveTimeInNanos,
       InternalChannelz channelz) {
     this.address = address;
-    this.channelType = checkNotNull(channelType, "channelType");
+    this.channelFactory = checkNotNull(channelFactory, "channelFactory");
     checkNotNull(channelOptions, "channelOptions");
     this.channelOptions = new HashMap<ChannelOption<?>, Object>(channelOptions);
     this.bossGroupPool = checkNotNull(bossGroupPool, "bossGroupPool");
     this.workerGroupPool = checkNotNull(workerGroupPool, "workerGroupPool");
+    this.forceHeapBuffer = forceHeapBuffer;
     this.bossGroup = bossGroupPool.getObject();
     this.workerGroup = workerGroupPool.getObject();
     this.protocolNegotiator = checkNotNull(protocolNegotiator, "protocolNegotiator");
@@ -146,7 +150,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
 
   @Override
   public InternalInstrumented<SocketStats> getListenSocketStats() {
-    return listenSocketStats.get();
+    return listenSocketStats;
   }
 
   @Override
@@ -154,8 +158,10 @@ class NettyServer implements InternalServer, InternalWithLogId {
     listener = checkNotNull(serverListener, "serverListener");
 
     ServerBootstrap b = new ServerBootstrap();
+    b.option(ALLOCATOR, Utils.getByteBufAllocator(forceHeapBuffer));
+    b.childOption(ALLOCATOR, Utils.getByteBufAllocator(forceHeapBuffer));
     b.group(bossGroup, workerGroup);
-    b.channel(channelType);
+    b.channelFactory(channelFactory);
     // For non-socket based channel, the option will be ignored.
     b.option(SO_BACKLOG, 128);
     b.childOption(SO_KEEPALIVE, true);
@@ -170,7 +176,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
 
     b.childHandler(new ChannelInitializer<Channel>() {
       @Override
-      public void initChannel(Channel ch) throws Exception {
+      public void initChannel(Channel ch) {
 
         ChannelPromise channelDone = ch.newPromise();
 
@@ -209,7 +215,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
           }
           // `channel` shutdown can race with `ch` initialization, so this is only safe to increment
           // inside the lock.
-          eventLoopReferenceCounter.retain();
+          sharedResourceReferenceCounter.retain();
           transportListener = listener.transportCreated(transport);
         }
 
@@ -217,13 +223,13 @@ class NettyServer implements InternalServer, InternalWithLogId {
          * Releases the event loop if the channel is "done", possibly due to the channel closing.
          */
         final class LoopReleaser implements ChannelFutureListener {
-          boolean done;
+          private boolean done;
 
           @Override
           public void operationComplete(ChannelFuture future) throws Exception {
             if (!done) {
               done = true;
-              eventLoopReferenceCounter.release();
+              sharedResourceReferenceCounter.release();
             }
           }
         }
@@ -246,19 +252,13 @@ class NettyServer implements InternalServer, InternalWithLogId {
       throw new IOException("Failed to bind", future.cause());
     }
     channel = future.channel();
-    Future<?> channelzFuture = channel.eventLoop().submit(new Runnable() {
+    channel.eventLoop().execute(new Runnable() {
       @Override
       public void run() {
-        InternalInstrumented<SocketStats> listenSocket = new ListenSocket(channel);
-        listenSocketStats.set(listenSocket);
-        channelz.addListenSocket(listenSocket);
+        listenSocketStats = new ListenSocket(channel);
+        channelz.addListenSocket(listenSocketStats);
       }
     });
-    try {
-      channelzFuture.await();
-    } catch (InterruptedException ex) {
-      throw new RuntimeException("Interrupted while registering listen socket to channelz", ex);
-    }
   }
 
   @Override
@@ -273,14 +273,16 @@ class NettyServer implements InternalServer, InternalWithLogId {
         if (!future.isSuccess()) {
           log.log(Level.WARNING, "Error shutting down server", future.cause());
         }
-        InternalInstrumented<SocketStats> stats = listenSocketStats.getAndSet(null);
+        InternalInstrumented<SocketStats> stats = listenSocketStats;
+        listenSocketStats = null;
         if (stats != null) {
           channelz.removeListenSocket(stats);
         }
+        sharedResourceReferenceCounter.release();
+        protocolNegotiator.close();
         synchronized (NettyServer.this) {
           listener.serverShutdown();
         }
-        eventLoopReferenceCounter.release();
       }
     });
     try {
@@ -304,7 +306,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
         .toString();
   }
 
-  class EventLoopReferenceCounter extends AbstractReferenceCounted {
+  class SharedResourceReferenceCounter extends AbstractReferenceCounted {
     @Override
     protected void deallocate() {
       try {

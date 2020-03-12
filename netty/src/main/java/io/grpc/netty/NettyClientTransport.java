@@ -17,6 +17,7 @@
 package io.grpc.netty;
 
 import static io.grpc.internal.GrpcUtil.KEEPALIVE_TIME_NANOS_DISABLED;
+import static io.netty.channel.ChannelOption.ALLOCATOR;
 import static io.netty.channel.ChannelOption.SO_KEEPALIVE;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -100,6 +101,7 @@ class NettyClientTransport implements ConnectionClientTransport {
   private final Attributes eagAttributes;
   private final LocalSocketPicker localSocketPicker;
   private final ChannelLogger channelLogger;
+  private final boolean useGetForSafeMethods;
 
   NettyClientTransport(
       SocketAddress address, ChannelFactory<? extends Channel> channelFactory,
@@ -108,7 +110,8 @@ class NettyClientTransport implements ConnectionClientTransport {
       int maxHeaderListSize, long keepAliveTimeNanos, long keepAliveTimeoutNanos,
       boolean keepAliveWithoutCalls, String authority, @Nullable String userAgent,
       Runnable tooManyPingsRunnable, TransportTracer transportTracer, Attributes eagAttributes,
-      LocalSocketPicker localSocketPicker, ChannelLogger channelLogger) {
+      LocalSocketPicker localSocketPicker, ChannelLogger channelLogger,
+      boolean useGetForSafeMethods) {
     this.negotiator = Preconditions.checkNotNull(negotiator, "negotiator");
     this.negotiationScheme = this.negotiator.scheme();
     this.remoteAddress = Preconditions.checkNotNull(address, "address");
@@ -131,6 +134,7 @@ class NettyClientTransport implements ConnectionClientTransport {
     this.localSocketPicker = Preconditions.checkNotNull(localSocketPicker, "localSocketPicker");
     this.logId = InternalLogId.allocate(getClass(), remoteAddress.toString());
     this.channelLogger = Preconditions.checkNotNull(channelLogger, "channelLogger");
+    this.useGetForSafeMethods = useGetForSafeMethods;
   }
 
   @Override
@@ -191,7 +195,8 @@ class NettyClientTransport implements ConnectionClientTransport {
         userAgent,
         statsTraceCtx,
         transportTracer,
-        callOptions);
+        callOptions,
+        useGetForSafeMethods);
   }
 
   @SuppressWarnings("unchecked")
@@ -221,6 +226,7 @@ class NettyClientTransport implements ConnectionClientTransport {
     ChannelHandler negotiationHandler = negotiator.newHandler(handler);
 
     Bootstrap b = new Bootstrap();
+    b.option(ALLOCATOR, Utils.getByteBufAllocator(false));
     b.attr(LOGGER_KEY, channelLogger);
     b.group(eventLoop);
     b.channelFactory(channelFactory);

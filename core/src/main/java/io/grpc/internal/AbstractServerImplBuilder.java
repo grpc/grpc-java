@@ -25,6 +25,7 @@ import io.grpc.BinaryLog;
 import io.grpc.BindableService;
 import io.grpc.CompressorRegistry;
 import io.grpc.Context;
+import io.grpc.Deadline;
 import io.grpc.DecompressorRegistry;
 import io.grpc.HandlerRegistry;
 import io.grpc.InternalChannelz;
@@ -36,12 +37,15 @@ import io.grpc.ServerMethodDefinition;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerStreamTracer;
 import io.grpc.ServerTransportFilter;
-import io.opencensus.trace.Tracing;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
@@ -51,6 +55,8 @@ import javax.annotation.Nullable;
  */
 public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuilder<T>>
         extends ServerBuilder<T> {
+
+  private static final Logger log = Logger.getLogger(AbstractServerImplBuilder.class.getName());
 
   public static ServerBuilder<?> forPort(int port) {
     throw new UnsupportedOperationException("Subclass failed to hide static factory");
@@ -78,7 +84,7 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
   DecompressorRegistry decompressorRegistry = DEFAULT_DECOMPRESSOR_REGISTRY;
   CompressorRegistry compressorRegistry = DEFAULT_COMPRESSOR_REGISTRY;
   long handshakeTimeoutMillis = DEFAULT_HANDSHAKE_TIMEOUT_MILLIS;
-  @Nullable private CensusStatsModule censusStatsOverride;
+  Deadline.Ticker ticker = Deadline.getSystemTicker();
   private boolean statsEnabled = true;
   private boolean recordStartedRpcs = true;
   private boolean recordFinishedRpcs = true;
@@ -163,15 +169,6 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
     return thisT();
   }
 
-  /**
-   * Override the default stats implementation.
-   */
-  @VisibleForTesting
-  protected final T overrideCensusStatsModule(@Nullable CensusStatsModule censusStats) {
-    this.censusStatsOverride = censusStats;
-    return thisT();
-  }
-
   @VisibleForTesting
   public final T setTransportTracerFactory(TransportTracer.Factory transportTracerFactory) {
     this.transportTracerFactory = transportTracerFactory;
@@ -216,6 +213,13 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
     tracingEnabled = value;
   }
 
+  /**
+   * Sets a custom deadline ticker.  This should only be called from InProcessServerBuilder.
+   */
+  protected void setDeadlineTicker(Deadline.Ticker ticker) {
+    this.ticker = checkNotNull(ticker, "ticker");
+  }
+
   @Override
   public final Server build() {
     ServerImpl server = new ServerImpl(
@@ -232,19 +236,59 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
   final List<? extends ServerStreamTracer.Factory> getTracerFactories() {
     ArrayList<ServerStreamTracer.Factory> tracerFactories = new ArrayList<>();
     if (statsEnabled) {
-      CensusStatsModule censusStats = censusStatsOverride;
-      if (censusStats == null) {
-        censusStats = new CensusStatsModule(
-            GrpcUtil.STOPWATCH_SUPPLIER, true, recordStartedRpcs, recordFinishedRpcs,
-            recordRealTimeMetrics);
+      ServerStreamTracer.Factory censusStatsTracerFactory = null;
+      try {
+        Class<?> censusStatsAccessor =
+            Class.forName("io.grpc.census.InternalCensusStatsAccessor");
+        Method getServerStreamTracerFactoryMethod =
+            censusStatsAccessor.getDeclaredMethod(
+                "getServerStreamTracerFactory",
+                boolean.class,
+                boolean.class,
+                boolean.class);
+        censusStatsTracerFactory =
+            (ServerStreamTracer.Factory) getServerStreamTracerFactoryMethod
+                .invoke(
+                    null,
+                    recordStartedRpcs,
+                    recordFinishedRpcs,
+                    recordRealTimeMetrics);
+      } catch (ClassNotFoundException e) {
+        // Replace these separate catch statements with multicatch when Android min-API >= 19
+        log.log(Level.FINE, "Unable to apply census stats", e);
+      } catch (NoSuchMethodException e) {
+        log.log(Level.FINE, "Unable to apply census stats", e);
+      } catch (IllegalAccessException e) {
+        log.log(Level.FINE, "Unable to apply census stats", e);
+      } catch (InvocationTargetException e) {
+        log.log(Level.FINE, "Unable to apply census stats", e);
       }
-      tracerFactories.add(censusStats.getServerTracerFactory());
+      if (censusStatsTracerFactory != null) {
+        tracerFactories.add(censusStatsTracerFactory);
+      }
     }
     if (tracingEnabled) {
-      CensusTracingModule censusTracing =
-          new CensusTracingModule(Tracing.getTracer(),
-              Tracing.getPropagationComponent().getBinaryFormat());
-      tracerFactories.add(censusTracing.getServerTracerFactory());
+      ServerStreamTracer.Factory tracingStreamTracerFactory = null;
+      try {
+        Class<?> censusTracingAccessor =
+            Class.forName("io.grpc.census.InternalCensusTracingAccessor");
+        Method getServerStreamTracerFactoryMethod =
+            censusTracingAccessor.getDeclaredMethod("getServerStreamTracerFactory");
+        tracingStreamTracerFactory =
+            (ServerStreamTracer.Factory) getServerStreamTracerFactoryMethod.invoke(null);
+      } catch (ClassNotFoundException e) {
+        // Replace these separate catch statements with multicatch when Android min-API >= 19
+        log.log(Level.FINE, "Unable to apply census stats", e);
+      } catch (NoSuchMethodException e) {
+        log.log(Level.FINE, "Unable to apply census stats", e);
+      } catch (IllegalAccessException e) {
+        log.log(Level.FINE, "Unable to apply census stats", e);
+      } catch (InvocationTargetException e) {
+        log.log(Level.FINE, "Unable to apply census stats", e);
+      }
+      if (tracingStreamTracerFactory != null) {
+        tracerFactories.add(tracingStreamTracerFactory);
+      }
     }
     tracerFactories.addAll(streamTracerFactories);
     tracerFactories.trimToSize();
@@ -287,5 +331,12 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
         String methodName, @Nullable String authority) {
       return null;
     }
+  }
+
+  /**
+   * Returns the internal ExecutorPool for offloading tasks.
+   */
+  protected ObjectPool<? extends Executor> getExecutorPool() {
+    return this.executorPool;
   }
 }

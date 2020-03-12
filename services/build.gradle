@@ -1,10 +1,9 @@
-// Add dependency on the protobuf plugin
-buildscript {
-    repositories {
-        maven { // The google mirror is less flaky than mavenCentral()
-            url "https://maven-central.storage-download.googleapis.com/repos/central/data/" }
-    }
-    dependencies { classpath libraries.protobuf_plugin }
+plugins {
+    id "java"
+    id "maven-publish"
+
+    id "com.google.protobuf"
+    id "ru.vyarus.animalsniffer"
 }
 
 description = "gRPC: Services"
@@ -17,13 +16,16 @@ description = "gRPC: Services"
     ]
 }
 
+evaluationDependsOn(project(':grpc-core').path)
+
 dependencies {
     compile project(':grpc-protobuf'),
             project(':grpc-stub'),
             project(':grpc-core')
     compile (libraries.protobuf_util) {
-        // prefer 26.0-android from libraries instead of 20.0
+        // prefer our own versions instead of protobuf-util's dependency
         exclude group: 'com.google.guava', module: 'guava'
+        exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
     }
 
     compileOnly libraries.javax_annotation

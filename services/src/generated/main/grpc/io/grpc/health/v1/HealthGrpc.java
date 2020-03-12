@@ -41,22 +41,21 @@ public final class HealthGrpc {
     if ((getCheckMethod = HealthGrpc.getCheckMethod) == null) {
       synchronized (HealthGrpc.class) {
         if ((getCheckMethod = HealthGrpc.getCheckMethod) == null) {
-          HealthGrpc.getCheckMethod = getCheckMethod = 
+          HealthGrpc.getCheckMethod = getCheckMethod =
               io.grpc.MethodDescriptor.<io.grpc.health.v1.HealthCheckRequest, io.grpc.health.v1.HealthCheckResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.health.v1.Health", "Check"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "Check"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.health.v1.HealthCheckRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.health.v1.HealthCheckResponse.getDefaultInstance()))
-                  .setSchemaDescriptor(new HealthMethodDescriptorSupplier("Check"))
-                  .build();
-          }
+              .setSchemaDescriptor(new HealthMethodDescriptorSupplier("Check"))
+              .build();
         }
-     }
-     return getCheckMethod;
+      }
+    }
+    return getCheckMethod;
   }
 
   private static volatile io.grpc.MethodDescriptor<io.grpc.health.v1.HealthCheckRequest,
@@ -73,29 +72,35 @@ public final class HealthGrpc {
     if ((getWatchMethod = HealthGrpc.getWatchMethod) == null) {
       synchronized (HealthGrpc.class) {
         if ((getWatchMethod = HealthGrpc.getWatchMethod) == null) {
-          HealthGrpc.getWatchMethod = getWatchMethod = 
+          HealthGrpc.getWatchMethod = getWatchMethod =
               io.grpc.MethodDescriptor.<io.grpc.health.v1.HealthCheckRequest, io.grpc.health.v1.HealthCheckResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.SERVER_STREAMING)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.health.v1.Health", "Watch"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "Watch"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.health.v1.HealthCheckRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.health.v1.HealthCheckResponse.getDefaultInstance()))
-                  .setSchemaDescriptor(new HealthMethodDescriptorSupplier("Watch"))
-                  .build();
-          }
+              .setSchemaDescriptor(new HealthMethodDescriptorSupplier("Watch"))
+              .build();
         }
-     }
-     return getWatchMethod;
+      }
+    }
+    return getWatchMethod;
   }
 
   /**
    * Creates a new async stub that supports all call types for the service
    */
   public static HealthStub newStub(io.grpc.Channel channel) {
-    return new HealthStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<HealthStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<HealthStub>() {
+        @java.lang.Override
+        public HealthStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new HealthStub(channel, callOptions);
+        }
+      };
+    return HealthStub.newStub(factory, channel);
   }
 
   /**
@@ -103,7 +108,14 @@ public final class HealthGrpc {
    */
   public static HealthBlockingStub newBlockingStub(
       io.grpc.Channel channel) {
-    return new HealthBlockingStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<HealthBlockingStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<HealthBlockingStub>() {
+        @java.lang.Override
+        public HealthBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new HealthBlockingStub(channel, callOptions);
+        }
+      };
+    return HealthBlockingStub.newStub(factory, channel);
   }
 
   /**
@@ -111,7 +123,14 @@ public final class HealthGrpc {
    */
   public static HealthFutureStub newFutureStub(
       io.grpc.Channel channel) {
-    return new HealthFutureStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<HealthFutureStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<HealthFutureStub>() {
+        @java.lang.Override
+        public HealthFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new HealthFutureStub(channel, callOptions);
+        }
+      };
+    return HealthFutureStub.newStub(factory, channel);
   }
 
   /**
@@ -173,19 +192,15 @@ public final class HealthGrpc {
 
   /**
    */
-  public static final class HealthStub extends io.grpc.stub.AbstractStub<HealthStub> {
-    private HealthStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
-    private HealthStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+  public static final class HealthStub extends io.grpc.stub.AbstractAsyncStub<HealthStub> {
+    private HealthStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected HealthStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+    protected HealthStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       return new HealthStub(channel, callOptions);
     }
 
@@ -227,19 +242,15 @@ public final class HealthGrpc {
 
   /**
    */
-  public static final class HealthBlockingStub extends io.grpc.stub.AbstractStub<HealthBlockingStub> {
-    private HealthBlockingStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
-    private HealthBlockingStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+  public static final class HealthBlockingStub extends io.grpc.stub.AbstractBlockingStub<HealthBlockingStub> {
+    private HealthBlockingStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected HealthBlockingStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+    protected HealthBlockingStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       return new HealthBlockingStub(channel, callOptions);
     }
 
@@ -280,19 +291,15 @@ public final class HealthGrpc {
 
   /**
    */
-  public static final class HealthFutureStub extends io.grpc.stub.AbstractStub<HealthFutureStub> {
-    private HealthFutureStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
-    private HealthFutureStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+  public static final class HealthFutureStub extends io.grpc.stub.AbstractFutureStub<HealthFutureStub> {
+    private HealthFutureStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected HealthFutureStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+    protected HealthFutureStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       return new HealthFutureStub(channel, callOptions);
     }
 

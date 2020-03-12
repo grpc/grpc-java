@@ -41,29 +41,35 @@ public final class LoadBalancerGrpc {
     if ((getBalanceLoadMethod = LoadBalancerGrpc.getBalanceLoadMethod) == null) {
       synchronized (LoadBalancerGrpc.class) {
         if ((getBalanceLoadMethod = LoadBalancerGrpc.getBalanceLoadMethod) == null) {
-          LoadBalancerGrpc.getBalanceLoadMethod = getBalanceLoadMethod = 
+          LoadBalancerGrpc.getBalanceLoadMethod = getBalanceLoadMethod =
               io.grpc.MethodDescriptor.<io.grpc.lb.v1.LoadBalanceRequest, io.grpc.lb.v1.LoadBalanceResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.lb.v1.LoadBalancer", "BalanceLoad"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "BalanceLoad"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.lb.v1.LoadBalanceRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.lb.v1.LoadBalanceResponse.getDefaultInstance()))
-                  .setSchemaDescriptor(new LoadBalancerMethodDescriptorSupplier("BalanceLoad"))
-                  .build();
-          }
+              .setSchemaDescriptor(new LoadBalancerMethodDescriptorSupplier("BalanceLoad"))
+              .build();
         }
-     }
-     return getBalanceLoadMethod;
+      }
+    }
+    return getBalanceLoadMethod;
   }
 
   /**
    * Creates a new async stub that supports all call types for the service
    */
   public static LoadBalancerStub newStub(io.grpc.Channel channel) {
-    return new LoadBalancerStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<LoadBalancerStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<LoadBalancerStub>() {
+        @java.lang.Override
+        public LoadBalancerStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new LoadBalancerStub(channel, callOptions);
+        }
+      };
+    return LoadBalancerStub.newStub(factory, channel);
   }
 
   /**
@@ -71,7 +77,14 @@ public final class LoadBalancerGrpc {
    */
   public static LoadBalancerBlockingStub newBlockingStub(
       io.grpc.Channel channel) {
-    return new LoadBalancerBlockingStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<LoadBalancerBlockingStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<LoadBalancerBlockingStub>() {
+        @java.lang.Override
+        public LoadBalancerBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new LoadBalancerBlockingStub(channel, callOptions);
+        }
+      };
+    return LoadBalancerBlockingStub.newStub(factory, channel);
   }
 
   /**
@@ -79,7 +92,14 @@ public final class LoadBalancerGrpc {
    */
   public static LoadBalancerFutureStub newFutureStub(
       io.grpc.Channel channel) {
-    return new LoadBalancerFutureStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<LoadBalancerFutureStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<LoadBalancerFutureStub>() {
+        @java.lang.Override
+        public LoadBalancerFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new LoadBalancerFutureStub(channel, callOptions);
+        }
+      };
+    return LoadBalancerFutureStub.newStub(factory, channel);
   }
 
   /**
@@ -111,19 +131,15 @@ public final class LoadBalancerGrpc {
 
   /**
    */
-  public static final class LoadBalancerStub extends io.grpc.stub.AbstractStub<LoadBalancerStub> {
-    private LoadBalancerStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
-    private LoadBalancerStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+  public static final class LoadBalancerStub extends io.grpc.stub.AbstractAsyncStub<LoadBalancerStub> {
+    private LoadBalancerStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected LoadBalancerStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+    protected LoadBalancerStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       return new LoadBalancerStub(channel, callOptions);
     }
 
@@ -141,38 +157,30 @@ public final class LoadBalancerGrpc {
 
   /**
    */
-  public static final class LoadBalancerBlockingStub extends io.grpc.stub.AbstractStub<LoadBalancerBlockingStub> {
-    private LoadBalancerBlockingStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
-    private LoadBalancerBlockingStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+  public static final class LoadBalancerBlockingStub extends io.grpc.stub.AbstractBlockingStub<LoadBalancerBlockingStub> {
+    private LoadBalancerBlockingStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected LoadBalancerBlockingStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+    protected LoadBalancerBlockingStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       return new LoadBalancerBlockingStub(channel, callOptions);
     }
   }
 
   /**
    */
-  public static final class LoadBalancerFutureStub extends io.grpc.stub.AbstractStub<LoadBalancerFutureStub> {
-    private LoadBalancerFutureStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
-    private LoadBalancerFutureStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+  public static final class LoadBalancerFutureStub extends io.grpc.stub.AbstractFutureStub<LoadBalancerFutureStub> {
+    private LoadBalancerFutureStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected LoadBalancerFutureStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+    protected LoadBalancerFutureStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       return new LoadBalancerFutureStub(channel, callOptions);
     }
   }

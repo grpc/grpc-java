@@ -38,6 +38,7 @@ public class NameResolverRegistryTest {
       .setProxyDetector(mock(ProxyDetector.class))
       .setSynchronizationContext(new SynchronizationContext(mock(UncaughtExceptionHandler.class)))
       .setServiceConfigParser(mock(ServiceConfigParser.class))
+      .setChannelLogger(mock(ChannelLogger.class))
       .build();
 
   @Test
@@ -152,8 +153,12 @@ public class NameResolverRegistryTest {
   @Test
   public void baseProviders() {
     List<NameResolverProvider> providers = NameResolverRegistry.getDefaultRegistry().providers();
-    assertThat(providers).hasSize(1);
-    assertThat(providers.get(0)).isInstanceOf(DnsNameResolverProvider.class);
+    assertThat(providers).hasSize(2);
+    // 2 name resolvers from grpclb and core, ordered with decreasing priorities.
+    assertThat(providers.get(0).getClass().getName())
+        .isEqualTo("io.grpc.grpclb.SecretGrpclbNameResolverProvider$Provider");
+    assertThat(providers.get(1).getClass().getName())
+        .isEqualTo("io.grpc.internal.DnsNameResolverProvider");
     assertThat(NameResolverRegistry.getDefaultRegistry().asFactory().getDefaultScheme())
         .isEqualTo("dns");
   }

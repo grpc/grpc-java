@@ -37,6 +37,7 @@ public class Util {
       = Metadata.Key.of("x-grpc-test-echo-trailing-bin", Metadata.BINARY_BYTE_MARSHALLER);
 
   /** Assert that two messages are equal, producing a useful message if not. */
+  @SuppressWarnings("LiteProtoToString")
   public static void assertEquals(MessageLite expected, MessageLite actual) {
     if (expected == null || actual == null) {
       Assert.assertEquals(expected, actual);

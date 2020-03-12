@@ -22,22 +22,21 @@ import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 
+import com.github.udpa.udpa.data.orca.v1.OrcaLoadReport;
+import com.github.udpa.udpa.service.orca.v1.OpenRcaServiceGrpc;
+import com.github.udpa.udpa.service.orca.v1.OrcaLoadReportRequest;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.protobuf.util.Durations;
-import io.envoyproxy.udpa.data.orca.v1.OrcaLoadReport;
-import io.envoyproxy.udpa.service.orca.v1.OpenRcaServiceGrpc;
-import io.envoyproxy.udpa.service.orca.v1.OrcaLoadReportRequest;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ClientCall;
 import io.grpc.ConnectivityStateInfo;
-import io.grpc.ExperimentalApi;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
@@ -69,8 +68,7 @@ import javax.annotation.Nullable;
  * Utility class that provides method for {@link LoadBalancer} to install listeners to receive
  * out-of-band backend cost metrics in the format of Open Request Cost Aggregation (ORCA).
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/5790")
-public abstract class OrcaOobUtil {
+abstract class OrcaOobUtil {
 
   private static final Logger logger = Logger.getLogger(OrcaPerRequestUtil.class.getName());
   private static final OrcaOobUtil DEFAULT_INSTANCE =

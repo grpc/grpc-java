@@ -2,7 +2,6 @@ java_library(
     name = "netty",
     srcs = glob([
         "src/main/java/**/*.java",
-        "third_party/netty/java/**/*.java",
     ]),
     resources = glob([
         "src/main/resources/**",
@@ -27,4 +26,15 @@ java_library(
         "@io_netty_netty_transport//jar",
         "@io_perfmark_perfmark_api//jar",
     ],
+)
+
+# Mirrors the dependencies included in the artifact on Maven Central for usage
+# with maven_install's override_targets. Purposefully does not export any
+# symbols, as it should only be used as a dep for pre-compiled binaries on
+# Maven Central. Not actually shaded; libraries should not be referencing
+# unstable APIs so there should not be any references to the shaded package.
+java_library(
+    name = "shaded_maven",
+    visibility = ["//visibility:public"],
+    runtime_deps = ["//netty/shaded"],
 )

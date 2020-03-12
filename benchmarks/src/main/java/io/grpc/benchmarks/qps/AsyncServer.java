@@ -89,7 +89,6 @@ public class AsyncServer {
     server.awaitTermination();
   }
 
-  @SuppressWarnings("LiteralClassName") // Epoll is not available on windows
   static Server newServer(ServerConfiguration config) throws IOException {
     final EventLoopGroup boss;
     final EventLoopGroup worker;
