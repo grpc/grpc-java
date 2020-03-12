@@ -90,19 +90,9 @@ public final class AdaptiveThrottler implements Throttler {
     return shouldThrottle(randomFloat());
   }
 
-  /**
-   * Checks if a given request should be throttled by the client. This should be called for every
-   * request before allowing it to hit the network. If the returned value is true, the request
-   * should be aborted immediately (as if it had been throttled by the server).
-   *
-   * <p>This updates internal state and should be called exactly once for each request.
-   */
   @VisibleForTesting
   boolean shouldThrottle(float random) {
-    return shouldThrottle(random, timeProvider.currentTimeNanos());
-  }
-
-  private boolean shouldThrottle(float random, long nowNanos) {
+    long nowNanos = timeProvider.currentTimeNanos();
     if (getThrottleProbability(nowNanos) <= random) {
       return false;
     }
@@ -284,7 +274,7 @@ public final class AdaptiveThrottler implements Throttler {
      * Computes the end boundary since the last bucket can be partial size.
      *
      * @param time the time for which to find the nearest slot boundary
-     * @return the nearest slot boundary (in ms)
+     * @return the nearest slot boundary in nanos
      */
     private long getSlotEndTime(long time) {
       return (time / slotNanos + 1) * slotNanos;
@@ -299,11 +289,6 @@ public final class AdaptiveThrottler implements Throttler {
       return this.interval;
     }
 
-    /** Increments the count of the statistic by the specified amount for the specified time. */
-    final void increment() {
-      increment(timeProvider.currentTimeNanos());
-    }
-
     /**
      * Increments the count of the statistic by the specified amount for the specified time.
      *
@@ -311,15 +296,6 @@ public final class AdaptiveThrottler implements Throttler {
      */
     final void increment(long now) {
       getSlot(now).increment();
-    }
-
-    /**
-     * Returns the count of the statistic over the statistic's configured time interval.
-     *
-     * @return the statistic count
-     */
-    final long get() {
-      return get(timeProvider.currentTimeNanos());
     }
 
     /**
@@ -361,7 +337,7 @@ public final class AdaptiveThrottler implements Throttler {
     public String toString() {
       return MoreObjects.toStringHelper(this)
           .add("interval", interval)
-          .add("current_count", get())
+          .add("current_count", get(timeProvider.currentTimeNanos()))
           .toString();
     }
   }
