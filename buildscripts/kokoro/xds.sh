@@ -19,7 +19,8 @@ python3 grpc/tools/run_tests/run_xds_tests.py \
     --project_id=grpc-testing \
     --gcp_suffix=$(date '+%s') \
     --verbose \
-    --client_cmd="grpc-java/interop-testing/build/install/grpc-interop-testing/bin/xds-test-client \
-      --server=xds-experimental:///{server_uri} \
-      --stats_port={stats_port} \
-      --qps={qps}"
+    --client_cmd="JAVA_OPTS=-Djava.util.logging.config.file=grpc-java/buildscripts/xds_logging.properties \
+        grpc-java/interop-testing/build/install/grpc-interop-testing/bin/xds-test-client \
+          --server=xds-experimental:///{server_uri} \
+          --stats_port={stats_port} \
+          --qps={qps}"
