@@ -223,7 +223,7 @@ public final class XdsTestClient {
 
               @Override
               public void onClose(Status status, Metadata trailers) {
-                if (!status.isOk()) {
+                if (printResponse && !status.isOk()) {
                   logger.log(Level.WARNING, "Greeting RPC failed with status {0}", status);
                 }
                 for (XdsStatsWatcher watcher : savedWatchers) {
