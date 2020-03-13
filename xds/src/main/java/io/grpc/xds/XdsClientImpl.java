@@ -93,7 +93,7 @@ final class XdsClientImpl extends XdsClient {
       "type.googleapis.com/envoy.api.v2.ClusterLoadAssignment";
 
   // For now we do not support path matching unless enabled manually.
-  private static boolean enablePathMatching = String.valueOf(true).equalsIgnoreCase(
+  private static boolean enablePathMatching = Boolean.parseBoolean(
       System.getenv("ENABLE_EXPERIMENTAL_PATH_MATCHING"));
 
   private final MessagePrinter respPrinter = new MessagePrinter();
@@ -884,12 +884,13 @@ final class XdsClientImpl extends XdsClient {
   }
 
   /**
-   * Validates the given list of routes and return error details if there's any error.
+   * Validates the given list of routes and returns error details if there's any error.
    */
   // We only validate the default route unless path matching is enabled.
-  // We do more validation if path matching is enabled, but whether every single route should be
-  // valid or any type of error can be skipped is TBD. For now we consider the whole list invalid on
-  // any single error.
+  // We do more validation if path matching is enabled, but whether every single route is required
+  // to be valid for grpc is TBD.
+  // For now we consider the whole list invalid if anything invalid for grpc is found.
+  // TODO(zdapeng): fix it if the decision is different from current implementation.
   @Nullable
   private static String validateRoutes(List<EnvoyProtoData.Route> routes) {
     if (routes.isEmpty()) {
@@ -924,8 +925,6 @@ final class XdsClientImpl extends XdsClient {
       RouteMatch routeMatch = route.getRouteMatch();
       String prefix = routeMatch.getPrefix();
       String path = routeMatch.getPath();
-      // Whether some of the errors can be skipped is TBD.
-      // For now just treat the entire list as invalid.
       if (!prefix.isEmpty()) {
         if (!prefix.startsWith("/") || !prefix.endsWith("/") || prefix.length() < 3) {
           return "Prefix route match must be in the format of '/service/'";
