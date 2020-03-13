@@ -605,7 +605,7 @@ final class XdsClientImpl extends XdsClient {
               "Listener " + ldsResourceName + " : cannot find a valid cluster name in any "
                   + "virtual hosts inside RouteConfiguration with domains matching: "
                   + ldsResourceName
-                  + ". Error detail : " + errorDetail;
+                  + " with the reason : " + errorDetail;
         }
       } else if (requestedHttpConnManager.hasRds()) {
         Rds rds = requestedHttpConnManager.getRds();
@@ -794,7 +794,7 @@ final class XdsClientImpl extends XdsClient {
             "RouteConfiguration " + requestedRouteConfig.getName() + ": cannot find a "
                 + "valid cluster name in any virtual hosts with domains matching: "
                 + ldsResourceName
-                + ". Error detail: " + errorDetail);
+                + " with the reason: " + errorDetail);
         return;
       }
     }
@@ -815,9 +815,8 @@ final class XdsClientImpl extends XdsClient {
       if (!enablePathMatching) {
         logger.log(XdsLogLevel.INFO, "Found cluster name: {0}", clusterName);
       } else {
-        logger.log(
-            XdsLogLevel.INFO,
-            "Found routes: {0}", routes);
+        logger.log(XdsLogLevel.INFO, "Found {0} routes", routes.size());
+        logger.log(XdsLogLevel.DEBUG, "Found routes: {0}", routes);
       }
       ConfigUpdate configUpdate = ConfigUpdate.newBuilder()
           .setClusterName(clusterName).addRoutes(routes).build();
