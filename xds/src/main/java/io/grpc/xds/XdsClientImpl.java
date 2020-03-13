@@ -890,7 +890,8 @@ final class XdsClientImpl extends XdsClient {
   // We do more validation if path matching is enabled, but whether every single route is required
   // to be valid for grpc is TBD.
   // For now we consider the whole list invalid if anything invalid for grpc is found.
-  // TODO(zdapeng): fix it if the decision is different from current implementation.
+  // TODO(zdapeng): Fix it if the decision is different from current implementation.
+  // TODO(zdapeng): Add test for validation.
   @Nullable
   private static String validateRoutes(List<EnvoyProtoData.Route> routes) {
     if (routes.isEmpty()) {
