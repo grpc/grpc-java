@@ -886,18 +886,13 @@ final class XdsClientImpl extends XdsClient {
   /**
    * Validates the given list of routes and returns error details if there's any error.
    */
-  // We only validate the default route unless path matching is enabled.
-  // We do more validation if path matching is enabled, but whether every single route is required
-  // to be valid for grpc is TBD.
-  // For now we consider the whole list invalid if anything invalid for grpc is found.
-  // TODO(zdapeng): Fix it if the decision is different from current implementation.
-  // TODO(zdapeng): Add test for validation.
   @Nullable
   private static String validateRoutes(List<EnvoyProtoData.Route> routes) {
     if (routes.isEmpty()) {
       return "No routes found";
     }
 
+    // We only validate the default route unless path matching is enabled.
     if (!enablePathMatching) {
       EnvoyProtoData.Route route = routes.get(routes.size() - 1);
       RouteMatch routeMatch = route.getRouteMatch();
@@ -914,6 +909,11 @@ final class XdsClientImpl extends XdsClient {
       return null;
     }
 
+    // We do more validation if path matching is enabled, but whether every single route is required
+    // to be valid for grpc is TBD.
+    // For now we consider the whole list invalid if anything invalid for grpc is found.
+    // TODO(zdapeng): Fix it if the decision is different from current implementation.
+    // TODO(zdapeng): Add test for validation.
     Set<String> prefixMatches = new HashSet<>();
     Set<String> pathMatches = new HashSet<>();
     for (int i = 0; i < routes.size(); i++) {
