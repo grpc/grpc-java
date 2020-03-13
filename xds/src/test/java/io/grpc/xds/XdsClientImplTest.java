@@ -41,7 +41,6 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 
-import com.google.common.base.Optional;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import com.google.common.util.concurrent.MoreExecutors;
@@ -732,37 +731,37 @@ public class XdsClientImplTest {
         new EnvoyProtoData.Route(
             // path match with cluster route
             new EnvoyProtoData.RouteMatch("", "/service1/method1/", false),
-            Optional.of(new EnvoyProtoData.RouteAction(
+            new EnvoyProtoData.RouteAction(
                 "cl1.googleapis.com",
                 "",
-                ImmutableList.<EnvoyProtoData.ClusterWeight>of()))));
+                ImmutableList.<EnvoyProtoData.ClusterWeight>of())));
     assertThat(routes.get(1)).isEqualTo(
         new EnvoyProtoData.Route(
             // path match with weighted cluster route
             new EnvoyProtoData.RouteMatch("", "/service2/method2/", false),
-            Optional.of(new EnvoyProtoData.RouteAction(
+            new EnvoyProtoData.RouteAction(
                 "",
                 "",
                 ImmutableList.of(
                     new EnvoyProtoData.ClusterWeight("cl21.googleapis.com", 30),
                     new EnvoyProtoData.ClusterWeight("cl22.googleapis.com", 70)
-                )))));
+                ))));
     assertThat(routes.get(2)).isEqualTo(
         new EnvoyProtoData.Route(
             // prefix match with cluster route
             new EnvoyProtoData.RouteMatch("/service1/", "", false),
-            Optional.of(new EnvoyProtoData.RouteAction(
+            new EnvoyProtoData.RouteAction(
                 "cl1.googleapis.com",
                 "",
-                ImmutableList.<EnvoyProtoData.ClusterWeight>of()))));
+                ImmutableList.<EnvoyProtoData.ClusterWeight>of())));
     assertThat(routes.get(3)).isEqualTo(
         new EnvoyProtoData.Route(
             // default match with cluster route
             new EnvoyProtoData.RouteMatch("", "", false),
-            Optional.of(new EnvoyProtoData.RouteAction(
+            new EnvoyProtoData.RouteAction(
                 "cluster.googleapis.com",
                 "",
-                ImmutableList.<EnvoyProtoData.ClusterWeight>of()))));
+                ImmutableList.<EnvoyProtoData.ClusterWeight>of())));
   }
 
   /**

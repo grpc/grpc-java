@@ -28,6 +28,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+import javax.annotation.Nullable;
 
 /**
  * Defines gRPC data types for Envoy protobuf messages used in xDS protocol. Each data type has
@@ -344,10 +345,11 @@ final class EnvoyProtoData {
   /** See corresponding Envoy proto message {@link io.envoyproxy.envoy.api.v2.route.Route}. */
   static final class Route {
     private final RouteMatch routeMatch;
-    private final Optional<RouteAction> routeAction;
+    @Nullable
+    private final RouteAction routeAction;
 
     @VisibleForTesting
-    Route(RouteMatch routeMatch, Optional<RouteAction> routeAction) {
+    Route(RouteMatch routeMatch, @Nullable RouteAction routeAction) {
       this.routeMatch = routeMatch;
       this.routeAction = routeAction;
     }
@@ -357,7 +359,7 @@ final class EnvoyProtoData {
     }
 
     Optional<RouteAction> getRouteAction() {
-      return routeAction;
+      return Optional.fromNullable(routeAction);
     }
 
     @Override
@@ -388,9 +390,9 @@ final class EnvoyProtoData {
 
     static Route fromEnvoyProtoRoute(io.envoyproxy.envoy.api.v2.route.Route proto) {
       RouteMatch routeMatch = RouteMatch.fromEnvoyProtoRouteMatch(proto.getMatch());
-      Optional<RouteAction> routeAction = Optional.absent();
+      RouteAction routeAction = null;
       if (proto.hasRoute()) {
-        routeAction = Optional.of(RouteAction.fromEnvoyProtoRouteAction(proto.getRoute()));
+        routeAction = RouteAction.fromEnvoyProtoRouteAction(proto.getRoute());
       }
       return new Route(routeMatch, routeAction);
     }
