@@ -343,12 +343,21 @@ final class EnvoyProtoData {
 
   /** See corresponding Envoy proto message {@link io.envoyproxy.envoy.api.v2.route.Route}. */
   static final class Route {
-    final RouteMatch routeMatch;
-    final Optional<RouteAction> routeAction;
+    private final RouteMatch routeMatch;
+    private final Optional<RouteAction> routeAction;
 
+    @VisibleForTesting
     Route(RouteMatch routeMatch, Optional<RouteAction> routeAction) {
       this.routeMatch = routeMatch;
       this.routeAction = routeAction;
+    }
+
+    RouteMatch getRouteMatch() {
+      return routeMatch;
+    }
+
+    Optional<RouteAction> getRouteAction() {
+      return routeAction;
     }
 
     @Override
@@ -389,14 +398,27 @@ final class EnvoyProtoData {
 
   /** See corresponding Envoy proto message {@link io.envoyproxy.envoy.api.v2.route.RouteMatch}. */
   static final class RouteMatch {
-    final String prefix;
-    final String path;
-    final boolean hasRegex;
+    private final String prefix;
+    private final String path;
+    private final boolean hasRegex;
 
+    @VisibleForTesting
     RouteMatch(String prefix, String path, boolean hasRegex) {
       this.prefix = prefix;
       this.path = path;
       this.hasRegex = hasRegex;
+    }
+
+    String getPrefix() {
+      return prefix;
+    }
+
+    String getPath() {
+      return path;
+    }
+
+    boolean hasRegex() {
+      return hasRegex;
     }
 
     @Override
@@ -436,14 +458,27 @@ final class EnvoyProtoData {
 
   /** See corresponding Envoy proto message {@link io.envoyproxy.envoy.api.v2.route.RouteAction}. */
   static final class RouteAction {
-    final String cluster;
-    final String clusterHeader;
-    final List<ClusterWeight> weightedCluster;
+    private final String cluster;
+    private final String clusterHeader;
+    private final List<ClusterWeight> weightedCluster;
 
+    @VisibleForTesting
     RouteAction(String cluster, String clusterHeader, List<ClusterWeight> weightedCluster) {
       this.cluster = cluster;
       this.clusterHeader = clusterHeader;
       this.weightedCluster = Collections.unmodifiableList(weightedCluster);
+    }
+
+    String getCluster() {
+      return cluster;
+    }
+
+    String getClusterHeader() {
+      return clusterHeader;
+    }
+
+    List<ClusterWeight> getWeightedCluster() {
+      return weightedCluster;
     }
 
     @Override
@@ -492,12 +527,21 @@ final class EnvoyProtoData {
    * io.envoyproxy.envoy.api.v2.route.WeightedCluster.ClusterWeight}.
    */
   static final class ClusterWeight {
-    final String name;
-    final int weight;
+    private final String name;
+    private final int weight;
 
+    @VisibleForTesting
     ClusterWeight(String name, int weight) {
       this.name = name;
       this.weight = weight;
+    }
+
+    String getName() {
+      return name;
+    }
+
+    int getWeight() {
+      return weight;
     }
 
     @Override

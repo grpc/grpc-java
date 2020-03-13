@@ -640,7 +640,7 @@ final class XdsClientImpl extends XdsClient {
     }
     if (routes != null) {
       // Found clusterName in the in-lined RouteConfiguration.
-      String clusterName = routes.get(routes.size() - 1).routeAction.get().cluster;
+      String clusterName = routes.get(routes.size() - 1).getRouteAction().get().getCluster();
       if (!enablePathMatching) {
         logger.log(
             XdsLogLevel.INFO,
@@ -811,7 +811,7 @@ final class XdsClientImpl extends XdsClient {
       }
 
       // Found clusterName in the in-lined RouteConfiguration.
-      String clusterName = routes.get(routes.size() - 1).routeAction.get().cluster;
+      String clusterName = routes.get(routes.size() - 1).getRouteAction().get().getCluster();
       if (!enablePathMatching) {
         logger.log(XdsLogLevel.INFO, "Found cluster name: {0}", clusterName);
       } else {
@@ -898,14 +898,15 @@ final class XdsClientImpl extends XdsClient {
 
     if (!enablePathMatching) {
       EnvoyProtoData.Route route = routes.get(routes.size() - 1);
-      RouteMatch routeMatch = route.routeMatch;
-      if (!routeMatch.path.isEmpty() || !routeMatch.prefix.isEmpty() || routeMatch.hasRegex) {
+      RouteMatch routeMatch = route.getRouteMatch();
+      if (!routeMatch.getPath().isEmpty() || !routeMatch.getPrefix().isEmpty()
+          || routeMatch.hasRegex()) {
         return "The last route must be the default route";
       }
-      if (!route.routeAction.isPresent()) {
+      if (!route.getRouteAction().isPresent()) {
         return "Route action is not specified for the default route";
       }
-      if (route.routeAction.get().cluster.isEmpty()) {
+      if (route.getRouteAction().get().getCluster().isEmpty()) {
         return "Cluster is not specified for the default route";
       }
       return null;
@@ -916,13 +917,13 @@ final class XdsClientImpl extends XdsClient {
     for (int i = 0; i < routes.size(); i++) {
       EnvoyProtoData.Route route = routes.get(i);
 
-      if (!route.routeAction.isPresent()) {
+      if (!route.getRouteAction().isPresent()) {
         return "Route action is not specified for one of the routes";
       }
 
-      RouteMatch routeMatch = route.routeMatch;
-      String prefix = routeMatch.prefix;
-      String path = routeMatch.path;
+      RouteMatch routeMatch = route.getRouteMatch();
+      String prefix = routeMatch.getPrefix();
+      String path = routeMatch.getPath();
       // Whether some of the errors can be skipped is TBD.
       // For now just treat the entire list as invalid.
       if (!prefix.isEmpty()) {
@@ -942,7 +943,7 @@ final class XdsClientImpl extends XdsClient {
           return "Duplicate path match found";
         }
         pathMatches.add(path);
-      } else if (routeMatch.hasRegex) {
+      } else if (routeMatch.hasRegex()) {
         return "Regex route match not supported";
       } else { // Default route match
         if (i != routes.size() - 1) {
@@ -956,8 +957,8 @@ final class XdsClientImpl extends XdsClient {
         }
       }
 
-      RouteAction routeAction = route.routeAction.get();
-      if (routeAction.cluster.isEmpty() && routeAction.weightedCluster.isEmpty()) {
+      RouteAction routeAction = route.getRouteAction().get();
+      if (routeAction.getCluster().isEmpty() && routeAction.getWeightedCluster().isEmpty()) {
         return "Either cluster or weighted cluster route action must be provided";
       }
     }
