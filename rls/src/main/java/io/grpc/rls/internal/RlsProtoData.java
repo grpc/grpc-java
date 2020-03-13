@@ -238,10 +238,10 @@ public final class RlsProtoData {
       this.requestProcessingStrategy = requestProcessingStrategy;
       checkNotNull(requestProcessingStrategy, "requestProcessingStrategy");
       checkState(
-          (requestProcessingStrategy == RequestProcessingStrategy.SYNC_LOOKUP_CLIENT_SEES_ERROR
+          !((requestProcessingStrategy == RequestProcessingStrategy.SYNC_LOOKUP_CLIENT_SEES_ERROR
               || requestProcessingStrategy
               == RequestProcessingStrategy.ASYNC_LOOKUP_DEFAULT_TARGET_ON_MISS)
-              && !defaultTarget.isEmpty(),
+              && defaultTarget.isEmpty()),
           "defaultTarget cannot be empty if strategy is %s",
           requestProcessingStrategy);
     }
@@ -417,10 +417,10 @@ public final class RlsProtoData {
 
     private final boolean optional;
 
-    NameMatcher(String key, List<String> names, boolean optional) {
+    NameMatcher(String key, List<String> names, @Nullable Boolean optional) {
       this.key = checkNotNull(key, "key");
       this.names = ImmutableList.copyOf(checkNotNull(names, "names"));
-      this.optional = optional;
+      this.optional = optional != null ? optional : true;
     }
 
     /** The name that will be used in the RLS key_map to refer to this value. */
