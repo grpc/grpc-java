@@ -91,7 +91,8 @@ final class EnvoyServerProtoData {
     private final List<CidrRange> prefixRanges;
     private final List<String> applicationProtocols;
 
-    private FilterChainMatch(int destinationPort,
+    @VisibleForTesting
+    FilterChainMatch(int destinationPort,
         List<CidrRange> prefixRanges, List<String> applicationProtocols) {
       this.destinationPort = destinationPort;
       this.prefixRanges = Collections.unmodifiableList(prefixRanges);
@@ -164,7 +165,8 @@ final class EnvoyServerProtoData {
     // TODO(sanjaypujare): remove dependency on envoy data type along with rest of the code.
     private final io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext downstreamTlsContext;
 
-    private FilterChain(FilterChainMatch filterChainMatch,
+    @VisibleForTesting
+    FilterChain(FilterChainMatch filterChainMatch,
         io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext downstreamTlsContext) {
       this.filterChainMatch = filterChainMatch;
       this.downstreamTlsContext = downstreamTlsContext;
@@ -223,7 +225,8 @@ final class EnvoyServerProtoData {
     private final String address;
     private final List<FilterChain> filterChains;
 
-    private Listener(String name, String address,
+    @VisibleForTesting
+    Listener(String name, String address,
         List<FilterChain> filterChains) {
       this.name = name;
       this.address = address;

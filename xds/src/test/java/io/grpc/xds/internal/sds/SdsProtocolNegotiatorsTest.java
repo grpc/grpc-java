@@ -190,7 +190,7 @@ public class SdsProtocolNegotiatorsTest {
         buildDownstreamTlsContextFromFilenames(SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, CA_PEM_FILE);
 
     SdsProtocolNegotiators.ServerSdsHandler serverSdsHandler =
-        new SdsProtocolNegotiators.ServerSdsHandler(grpcHandler, downstreamTlsContext);
+        new SdsProtocolNegotiators.ServerSdsHandler(grpcHandler, downstreamTlsContext, null);
     pipeline.addLast(serverSdsHandler);
     channelHandlerCtx = pipeline.context(serverSdsHandler);
     assertNotNull(channelHandlerCtx); // serverSdsHandler ctx is non-null since we just added it
