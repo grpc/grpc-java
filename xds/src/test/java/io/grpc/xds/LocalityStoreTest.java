@@ -68,20 +68,18 @@ import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.LbEndpoint;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
-import io.grpc.xds.InterLocalityPicker.WeightedChildPicker;
 import io.grpc.xds.LocalityStore.LocalityStoreImpl;
-import io.grpc.xds.LocalityStore.LocalityStoreImpl.PickerFactory;
 import io.grpc.xds.OrcaOobUtil.OrcaOobReportListener;
 import io.grpc.xds.OrcaOobUtil.OrcaReportingConfig;
 import io.grpc.xds.OrcaOobUtil.OrcaReportingHelperWrapper;
 import io.grpc.xds.OrcaPerRequestUtil.OrcaPerRequestReportListener;
+import io.grpc.xds.WeightedRandomPicker.WeightedChildPicker;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.net.InetSocketAddress;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -107,25 +105,6 @@ import org.mockito.stubbing.Answer;
 public class LocalityStoreTest {
   @Rule
   public final MockitoRule mockitoRule = MockitoJUnit.rule();
-
-  private static final class FakePickerFactory implements PickerFactory {
-    int totalReadyLocalities;
-    int nextIndex;
-    List<WeightedChildPicker> perLocalitiesPickers;
-
-    @Override
-    public SubchannelPicker picker(final List<WeightedChildPicker> childPickers) {
-      totalReadyLocalities = childPickers.size();
-      perLocalitiesPickers = Collections.unmodifiableList(childPickers);
-
-      return new SubchannelPicker() {
-        @Override
-        public PickResult pickSubchannel(PickSubchannelArgs args) {
-          return childPickers.get(nextIndex).getPicker().pickSubchannel(args);
-        }
-      };
-    }
-  }
 
   private final SynchronizationContext syncContext = new SynchronizationContext(
       new Thread.UncaughtExceptionHandler() {
@@ -181,8 +160,6 @@ public class LocalityStoreTest {
       return fakeLb;
     }
   };
-
-  private final FakePickerFactory pickerFactory = new FakePickerFactory();
 
   private final Locality locality1 = new Locality("r1", "z1", "sz1");
   private final Locality locality2 = new Locality("r2", "z2", "sz2");
@@ -253,7 +230,7 @@ public class LocalityStoreTest {
         });
     lbRegistry.register(lbProvider);
     localityStore =
-        new LocalityStoreImpl(logId, helper, pickerFactory, lbRegistry, random, loadStatsStore,
+        new LocalityStoreImpl(logId, helper, lbRegistry, random, loadStatsStore,
             orcaPerRequestUtil, orcaOobUtil);
   }
 
@@ -302,7 +279,6 @@ public class LocalityStoreTest {
 
     // Two child balancers are created.
     assertThat(loadBalancers).hasSize(2);
-    assertThat(pickerFactory.totalReadyLocalities).isEqualTo(0);
 
     ClientStreamTracer.Factory metricsTracingFactory1 = mock(ClientStreamTracer.Factory.class);
     ClientStreamTracer.Factory metricsTracingFactory2 = mock(ClientStreamTracer.Factory.class);
@@ -326,10 +302,11 @@ public class LocalityStoreTest {
     childHelpers.get("sz1").updateBalancingState(READY, subchannelPicker1);
     childHelpers.get("sz2").updateBalancingState(READY, subchannelPicker2);
 
-    assertThat(pickerFactory.totalReadyLocalities).isEqualTo(2);
     ArgumentCaptor<SubchannelPicker> interLocalityPickerCaptor = ArgumentCaptor.forClass(null);
     verify(helper, times(2)).updateBalancingState(eq(READY), interLocalityPickerCaptor.capture());
-    SubchannelPicker interLocalityPicker = interLocalityPickerCaptor.getValue();
+    WeightedRandomPicker interLocalityPicker =
+        (WeightedRandomPicker) interLocalityPickerCaptor.getValue();
+    assertThat(interLocalityPicker.weightedChildPickers).hasSize(2);
 
     // Verify each PickResult picked is intercepted with client stream tracer factory for
     // recording load and backend metrics.
@@ -337,9 +314,9 @@ public class LocalityStoreTest {
         = ImmutableMap.of(subchannel1, locality1, subchannel2, locality2);
     Map<Subchannel, ClientStreamTracer.Factory> metricsTracingFactoriesBySubchannel
         = ImmutableMap.of(subchannel1, metricsTracingFactory1, subchannel2, metricsTracingFactory2);
-    for (int i = 0; i < pickerFactory.totalReadyLocalities; i++) {
-      pickerFactory.nextIndex = i;
-      PickResult pickResult = interLocalityPicker.pickSubchannel(pickSubchannelArgs);
+    for (int i = 0; i < interLocalityPicker.weightedChildPickers.size(); i++) {
+      PickResult pickResult = interLocalityPicker.weightedChildPickers.get(i).getPicker()
+          .pickSubchannel(pickSubchannelArgs);
       Subchannel expectedSubchannel = pickResult.getSubchannel();
       Locality expectedLocality = localitiesBySubchannel.get(expectedSubchannel);
       ArgumentCaptor<OrcaPerRequestReportListener> listenerCaptor = ArgumentCaptor.forClass(null);
@@ -466,7 +443,6 @@ public class LocalityStoreTest {
         ArgumentCaptor.forClass(ResolvedAddresses.class);
     verify(loadBalancers.get("sz3")).handleResolvedAddresses(resolvedAddressesCaptor3.capture());
     assertThat(resolvedAddressesCaptor3.getValue().getAddresses()).containsExactly(eag31, eag32);
-    assertThat(pickerFactory.totalReadyLocalities).isEqualTo(0);
     // verify no more updateBalancingState except the initial CONNECTING state
     verify(helper, times(1)).updateBalancingState(
         any(ConnectivityState.class), any(SubchannelPicker.class));
@@ -484,7 +460,6 @@ public class LocalityStoreTest {
         ArgumentCaptor.forClass(SubchannelPicker.class);
     verify(helper, times(2)).updateBalancingState(
         same(CONNECTING), subchannelPickerCaptor12.capture());
-    assertThat(pickerFactory.totalReadyLocalities).isEqualTo(0);
     assertThat(subchannelPickerCaptor12.getValue().pickSubchannel(pickSubchannelArgs))
         .isEqualTo(PickResult.withNoResult());
 
@@ -500,21 +475,22 @@ public class LocalityStoreTest {
     ArgumentCaptor<SubchannelPicker> subchannelPickerCaptor =
         ArgumentCaptor.forClass(null);
     verify(helper).updateBalancingState(same(READY), subchannelPickerCaptor.capture());
-    assertThat(pickerFactory.totalReadyLocalities).isEqualTo(1);
-    pickerFactory.nextIndex = 0;
-    assertThat(subchannelPickerCaptor.getValue().pickSubchannel(pickSubchannelArgs).getSubchannel())
+    WeightedRandomPicker interLocalityPicker =
+        (WeightedRandomPicker) subchannelPickerCaptor.getValue();
+    assertThat(interLocalityPicker.weightedChildPickers).hasSize(1);
+    assertThat(interLocalityPicker.pickSubchannel(pickSubchannelArgs).getSubchannel())
         .isEqualTo(subchannel31);
 
     // subchannel12 goes to READY
     childHelpers.get("sz1").updateBalancingState(READY, subchannelPicker12);
     verify(helper, times(2)).updateBalancingState(same(READY), subchannelPickerCaptor.capture());
-    assertThat(pickerFactory.totalReadyLocalities).isEqualTo(2);
+    interLocalityPicker = (WeightedRandomPicker) subchannelPickerCaptor.getValue();
+    assertThat(interLocalityPicker.weightedChildPickers).hasSize(2);
 
-    SubchannelPicker interLocalityPicker = subchannelPickerCaptor.getValue();
     Set<Subchannel> pickedReadySubchannels = new HashSet<>();
-    for (int i = 0; i < pickerFactory.totalReadyLocalities; i++) {
-      pickerFactory.nextIndex = i;
-      PickResult result = interLocalityPicker.pickSubchannel(pickSubchannelArgs);
+    for (int i = 0; i < interLocalityPicker.weightedChildPickers.size(); i++) {
+      PickResult result = interLocalityPicker.weightedChildPickers.get(i).getPicker()
+          .pickSubchannel(pickSubchannelArgs);
       pickedReadySubchannels.add(result.getSubchannel());
     }
     assertThat(pickedReadySubchannels).containsExactly(subchannel31, subchannel12);
@@ -539,7 +515,9 @@ public class LocalityStoreTest {
     verify(loadBalancers.get("sz1"), times(2))
         .handleResolvedAddresses(resolvedAddressesCaptor1.capture());
     assertThat(resolvedAddressesCaptor1.getValue().getAddresses()).containsExactly(eag11);
-    assertThat(pickerFactory.totalReadyLocalities).isEqualTo(1);
+    verify(helper, times(3)).updateBalancingState(same(READY), subchannelPickerCaptor.capture());
+    interLocalityPicker = (WeightedRandomPicker) subchannelPickerCaptor.getValue();
+    assertThat(interLocalityPicker.weightedChildPickers).hasSize(1);
 
     fakeClock.forwardTime(14, TimeUnit.MINUTES);
     verify(loadBalancers.get("sz3"), never()).shutdown();
@@ -598,9 +576,10 @@ public class LocalityStoreTest {
     // helper updated multiple times. Don't care how many times, just capture the latest picker
     verify(helper, atLeastOnce()).updateBalancingState(
         same(READY), subchannelPickerCaptor.capture());
-    assertThat(pickerFactory.totalReadyLocalities).isEqualTo(1);
-    pickerFactory.nextIndex = 0;
-    assertThat(subchannelPickerCaptor.getValue().pickSubchannel(pickSubchannelArgs).getSubchannel())
+    WeightedRandomPicker interLocalityPicker =
+        (WeightedRandomPicker) subchannelPickerCaptor.getValue();
+    assertThat(interLocalityPicker.weightedChildPickers).hasSize(1);
+    assertThat(interLocalityPicker.pickSubchannel(pickSubchannelArgs).getSubchannel())
         .isEqualTo(subchannel3);
 
     // verify no traffic will go to deactivated locality
@@ -614,9 +593,10 @@ public class LocalityStoreTest {
     childHelpers.get("sz2").updateBalancingState(READY, subchannelPicker2);
     verify(helper, atLeastOnce()).updateBalancingState(
         same(READY), subchannelPickerCaptor.capture());
-    assertThat(pickerFactory.totalReadyLocalities).isEqualTo(1);
-    pickerFactory.nextIndex = 0;
-    assertThat(subchannelPickerCaptor.getValue().pickSubchannel(pickSubchannelArgs).getSubchannel())
+    interLocalityPicker =
+        (WeightedRandomPicker) subchannelPickerCaptor.getValue();
+    assertThat(interLocalityPicker.weightedChildPickers).hasSize(1);
+    assertThat(interLocalityPicker.pickSubchannel(pickSubchannelArgs).getSubchannel())
         .isEqualTo(subchannel3);
 
     // update localities, reactivating sz1
@@ -625,13 +605,13 @@ public class LocalityStoreTest {
     localityStore.updateLocalityStore(localityInfoMap);
     verify(helper, atLeastOnce()).updateBalancingState(
         same(READY), subchannelPickerCaptor.capture());
-    assertThat(pickerFactory.totalReadyLocalities).isEqualTo(2);
-    pickerFactory.nextIndex = 0;
-    assertThat(subchannelPickerCaptor.getValue().pickSubchannel(pickSubchannelArgs).getSubchannel())
-        .isEqualTo(subchannel1);
-    pickerFactory.nextIndex = 1;
-    assertThat(subchannelPickerCaptor.getValue().pickSubchannel(pickSubchannelArgs).getSubchannel())
-        .isEqualTo(subchannel3);
+    interLocalityPicker =
+        (WeightedRandomPicker) subchannelPickerCaptor.getValue();
+    assertThat(interLocalityPicker.weightedChildPickers).hasSize(2);
+    assertThat(interLocalityPicker.weightedChildPickers.get(0).getPicker()
+        .pickSubchannel(pickSubchannelArgs).getSubchannel()).isEqualTo(subchannel1);
+    assertThat(interLocalityPicker.weightedChildPickers.get(1).getPicker()
+        .pickSubchannel(pickSubchannelArgs).getSubchannel()).isEqualTo(subchannel3);
 
     verify(lb2, never()).shutdown();
     // delayed deletion timer expires, no reactivation
@@ -648,9 +628,10 @@ public class LocalityStoreTest {
 
     verify(helper, atLeastOnce()).updateBalancingState(
         same(READY), subchannelPickerCaptor.capture());
-    assertThat(pickerFactory.totalReadyLocalities).isEqualTo(1);
-    pickerFactory.nextIndex = 0;
-    assertThat(subchannelPickerCaptor.getValue().pickSubchannel(pickSubchannelArgs).getSubchannel())
+    interLocalityPicker =
+        (WeightedRandomPicker) subchannelPickerCaptor.getValue();
+    assertThat(interLocalityPicker.weightedChildPickers).hasSize(1);
+    assertThat(interLocalityPicker.pickSubchannel(pickSubchannelArgs).getSubchannel())
         .isEqualTo(subchannel1);
     // sz3, sz4 pending removal
     assertThat(fakeClock.getPendingTasks(deactivationTaskFilter)).hasSize(2);
@@ -701,7 +682,6 @@ public class LocalityStoreTest {
         ArgumentCaptor.forClass(ResolvedAddresses.class);
     verify(loadBalancers.get("sz3")).handleResolvedAddresses(resolvedAddressesCaptor3.capture());
     assertThat(resolvedAddressesCaptor3.getValue().getAddresses()).containsExactly(eag31, eag32);
-    assertThat(pickerFactory.totalReadyLocalities).isEqualTo(0);
     ArgumentCaptor<SubchannelPicker> subchannelPickerCaptor =
         ArgumentCaptor.forClass(SubchannelPicker.class);
     verify(helper).updateBalancingState(same(CONNECTING), subchannelPickerCaptor.capture());
@@ -908,7 +888,6 @@ public class LocalityStoreTest {
 
     assertThat(loadBalancers).hasSize(3);
     assertThat(loadBalancers.keySet()).containsExactly("sz1", "sz2", "sz3");
-    assertThat(pickerFactory.totalReadyLocalities).isEqualTo(0);
 
     // Update locality weights before any subchannel becomes READY.
     localityInfo1 = new LocalityLbEndpoints(ImmutableList.of(lbEndpoint11, lbEndpoint12), 4, 0);
@@ -917,8 +896,6 @@ public class LocalityStoreTest {
     localityInfoMap = ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2, locality3, localityInfo3);
     localityStore.updateLocalityStore(localityInfoMap);
-
-    assertThat(pickerFactory.totalReadyLocalities).isEqualTo(0);
 
     final Map<Subchannel, Locality> localitiesBySubchannel = new HashMap<>();
     for (final Helper h : childHelpers.values()) {
@@ -932,10 +909,16 @@ public class LocalityStoreTest {
       });
     }
 
-    assertThat(pickerFactory.totalReadyLocalities).isEqualTo(3);
-    for (int i = 0; i < pickerFactory.totalReadyLocalities; i++) {
+    ArgumentCaptor<SubchannelPicker> subchannelPickerCaptor =
+        ArgumentCaptor.forClass(SubchannelPicker.class);
+    verify(helper, atLeastOnce()).updateBalancingState(
+        same(READY), subchannelPickerCaptor.capture());
+    WeightedRandomPicker interLocalityPicker =
+        (WeightedRandomPicker) subchannelPickerCaptor.getValue();
+    assertThat(interLocalityPicker.weightedChildPickers).hasSize(3);
+    for (int i = 0; i < interLocalityPicker.weightedChildPickers.size(); i++) {
       WeightedChildPicker weightedChildPicker
-          = pickerFactory.perLocalitiesPickers.get(i);
+          = interLocalityPicker.weightedChildPickers.get(i);
       Subchannel subchannel
           = weightedChildPicker.getPicker().pickSubchannel(pickSubchannelArgs).getSubchannel();
       assertThat(weightedChildPicker.getWeight())

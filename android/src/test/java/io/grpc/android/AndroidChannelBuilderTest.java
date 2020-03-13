@@ -28,6 +28,7 @@ import android.content.Intent;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkInfo;
+import androidx.test.core.app.ApplicationProvider;
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
 import io.grpc.ManagedChannel;
@@ -39,7 +40,6 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
-import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.Implementation;
 import org.robolectric.annotation.Implements;
@@ -54,24 +54,32 @@ import org.robolectric.shadows.ShadowNetworkInfo;
 public final class AndroidChannelBuilderTest {
   private final NetworkInfo WIFI_CONNECTED =
       ShadowNetworkInfo.newInstance(
-          NetworkInfo.DetailedState.CONNECTED, ConnectivityManager.TYPE_WIFI, 0, true, true);
+          NetworkInfo.DetailedState.CONNECTED,
+          ConnectivityManager.TYPE_WIFI,
+          0,
+          true,
+          NetworkInfo.State.CONNECTED);
   private final NetworkInfo WIFI_DISCONNECTED =
       ShadowNetworkInfo.newInstance(
-          NetworkInfo.DetailedState.DISCONNECTED, ConnectivityManager.TYPE_WIFI, 0, true, false);
+          NetworkInfo.DetailedState.DISCONNECTED,
+          ConnectivityManager.TYPE_WIFI,
+          0,
+          true,
+          NetworkInfo.State.DISCONNECTED);
   private final NetworkInfo MOBILE_CONNECTED =
       ShadowNetworkInfo.newInstance(
           NetworkInfo.DetailedState.CONNECTED,
           ConnectivityManager.TYPE_MOBILE,
           ConnectivityManager.TYPE_MOBILE_MMS,
           true,
-          true);
+          NetworkInfo.State.CONNECTED);
   private final NetworkInfo MOBILE_DISCONNECTED =
       ShadowNetworkInfo.newInstance(
           NetworkInfo.DetailedState.DISCONNECTED,
           ConnectivityManager.TYPE_MOBILE,
           ConnectivityManager.TYPE_MOBILE_MMS,
           true,
-          false);
+          NetworkInfo.State.DISCONNECTED);
 
   private ConnectivityManager connectivityManager;
 
@@ -79,7 +87,9 @@ public final class AndroidChannelBuilderTest {
   public void setUp() {
     connectivityManager =
         (ConnectivityManager)
-            RuntimeEnvironment.application.getSystemService(Context.CONNECTIVITY_SERVICE);
+            ApplicationProvider
+                .getApplicationContext()
+                .getSystemService(Context.CONNECTIVITY_SERVICE);
   }
 
   @Test
@@ -103,8 +113,9 @@ public final class AndroidChannelBuilderTest {
 
     // Network change and shutdown should be no-op for the channel without an Android Context
     shadowOf(connectivityManager).setActiveNetworkInfo(WIFI_CONNECTED);
-    RuntimeEnvironment.application.sendBroadcast(
-        new Intent(ConnectivityManager.CONNECTIVITY_ACTION));
+    ApplicationProvider
+        .getApplicationContext()
+        .sendBroadcast(new Intent(ConnectivityManager.CONNECTIVITY_ACTION));
     androidChannel.shutdown();
 
     assertThat(delegateChannel.resetCount).isEqualTo(0);
@@ -131,48 +142,55 @@ public final class AndroidChannelBuilderTest {
     TestChannel delegateChannel = new TestChannel();
     ManagedChannel androidChannel =
         new AndroidChannelBuilder.AndroidChannel(
-            delegateChannel, RuntimeEnvironment.application.getApplicationContext());
+            delegateChannel, ApplicationProvider.getApplicationContext());
     assertThat(delegateChannel.resetCount).isEqualTo(0);
 
     // On API levels < 24, the broadcast receiver will invoke resetConnectBackoff() on the first
     // connectivity action broadcast regardless of previous connection status
     shadowOf(connectivityManager).setActiveNetworkInfo(WIFI_CONNECTED);
-    RuntimeEnvironment.application.sendBroadcast(
-        new Intent(ConnectivityManager.CONNECTIVITY_ACTION));
+    ApplicationProvider
+        .getApplicationContext()
+        .sendBroadcast(new Intent(ConnectivityManager.CONNECTIVITY_ACTION));
     assertThat(delegateChannel.resetCount).isEqualTo(1);
 
     // The broadcast receiver may fire when the active network status has not actually changed
-    RuntimeEnvironment.application.sendBroadcast(
-        new Intent(ConnectivityManager.CONNECTIVITY_ACTION));
+    ApplicationProvider
+        .getApplicationContext()
+        .sendBroadcast(new Intent(ConnectivityManager.CONNECTIVITY_ACTION));
     assertThat(delegateChannel.resetCount).isEqualTo(1);
 
     // Drop the connection
     shadowOf(connectivityManager).setActiveNetworkInfo(null);
-    RuntimeEnvironment.application.sendBroadcast(
-        new Intent(ConnectivityManager.CONNECTIVITY_ACTION));
+    ApplicationProvider
+        .getApplicationContext()
+        .sendBroadcast(new Intent(ConnectivityManager.CONNECTIVITY_ACTION));
     assertThat(delegateChannel.resetCount).isEqualTo(1);
 
     // Notify that a new but not connected network is available
     shadowOf(connectivityManager).setActiveNetworkInfo(MOBILE_DISCONNECTED);
-    RuntimeEnvironment.application.sendBroadcast(
-        new Intent(ConnectivityManager.CONNECTIVITY_ACTION));
+    ApplicationProvider
+        .getApplicationContext()
+        .sendBroadcast(new Intent(ConnectivityManager.CONNECTIVITY_ACTION));
     assertThat(delegateChannel.resetCount).isEqualTo(1);
 
     // Establish a connection
     shadowOf(connectivityManager).setActiveNetworkInfo(MOBILE_CONNECTED);
-    RuntimeEnvironment.application.sendBroadcast(
-        new Intent(ConnectivityManager.CONNECTIVITY_ACTION));
+    ApplicationProvider
+        .getApplicationContext()
+        .sendBroadcast(new Intent(ConnectivityManager.CONNECTIVITY_ACTION));
     assertThat(delegateChannel.resetCount).isEqualTo(2);
 
     // Disconnect, then shutdown the channel and verify that the broadcast receiver has been
     // unregistered
     shadowOf(connectivityManager).setActiveNetworkInfo(null);
-    RuntimeEnvironment.application.sendBroadcast(
-        new Intent(ConnectivityManager.CONNECTIVITY_ACTION));
+    ApplicationProvider
+        .getApplicationContext()
+        .sendBroadcast(new Intent(ConnectivityManager.CONNECTIVITY_ACTION));
     androidChannel.shutdown();
     shadowOf(connectivityManager).setActiveNetworkInfo(MOBILE_CONNECTED);
-    RuntimeEnvironment.application.sendBroadcast(
-        new Intent(ConnectivityManager.CONNECTIVITY_ACTION));
+    ApplicationProvider
+        .getApplicationContext()
+        .sendBroadcast(new Intent(ConnectivityManager.CONNECTIVITY_ACTION));
 
     assertThat(delegateChannel.resetCount).isEqualTo(2);
     // enterIdle is not called on API levels < 24
@@ -186,7 +204,7 @@ public final class AndroidChannelBuilderTest {
     TestChannel delegateChannel = new TestChannel();
     ManagedChannel androidChannel =
         new AndroidChannelBuilder.AndroidChannel(
-            delegateChannel, RuntimeEnvironment.application.getApplicationContext());
+            delegateChannel, ApplicationProvider.getApplicationContext());
     assertThat(delegateChannel.resetCount).isEqualTo(0);
     assertThat(delegateChannel.enterIdleCount).isEqualTo(0);
 
@@ -227,7 +245,7 @@ public final class AndroidChannelBuilderTest {
     TestChannel delegateChannel = new TestChannel();
     ManagedChannel androidChannel =
         new AndroidChannelBuilder.AndroidChannel(
-            delegateChannel, RuntimeEnvironment.application.getApplicationContext());
+            delegateChannel, ApplicationProvider.getApplicationContext());
 
     // The first onAvailable() may just signal that the device was connected when the callback is
     // registered, rather than indicating a changed network, so we do not enter idle.
@@ -248,15 +266,17 @@ public final class AndroidChannelBuilderTest {
     TestChannel delegateChannel = new TestChannel();
     ManagedChannel androidChannel =
         new AndroidChannelBuilder.AndroidChannel(
-            delegateChannel, RuntimeEnvironment.application.getApplicationContext());
+            delegateChannel, ApplicationProvider.getApplicationContext());
 
     shadowOf(connectivityManager).setActiveNetworkInfo(null);
-    RuntimeEnvironment.application.sendBroadcast(
-        new Intent(ConnectivityManager.CONNECTIVITY_ACTION));
+    ApplicationProvider
+        .getApplicationContext()
+        .sendBroadcast(new Intent(ConnectivityManager.CONNECTIVITY_ACTION));
     androidChannel.shutdownNow();
     shadowOf(connectivityManager).setActiveNetworkInfo(WIFI_CONNECTED);
-    RuntimeEnvironment.application.sendBroadcast(
-        new Intent(ConnectivityManager.CONNECTIVITY_ACTION));
+    ApplicationProvider
+        .getApplicationContext()
+        .sendBroadcast(new Intent(ConnectivityManager.CONNECTIVITY_ACTION));
 
     assertThat(delegateChannel.resetCount).isEqualTo(0);
   }
@@ -268,7 +288,7 @@ public final class AndroidChannelBuilderTest {
     TestChannel delegateChannel = new TestChannel();
     ManagedChannel androidChannel =
         new AndroidChannelBuilder.AndroidChannel(
-            delegateChannel, RuntimeEnvironment.application.getApplicationContext());
+            delegateChannel, ApplicationProvider.getApplicationContext());
 
     androidChannel.shutdownNow();
     shadowOf(connectivityManager).setActiveNetworkInfo(WIFI_CONNECTED);
@@ -318,6 +338,7 @@ public final class AndroidChannelBuilderTest {
     }
 
     @Implementation(minSdk = N)
+    @Override
     protected void registerDefaultNetworkCallback(
         ConnectivityManager.NetworkCallback networkCallback) {
       defaultNetworkCallbacks.add(networkCallback);

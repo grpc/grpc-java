@@ -14,9 +14,6 @@ run.enabled = false
 
 jmh {
     jvmArgs = "-server -Xms2g -Xmx2g"
-    // Workaround
-    // https://github.com/melix/jmh-gradle-plugin/issues/97#issuecomment-316664026
-    includeTests = true
 }
 
 configurations {
@@ -30,14 +27,15 @@ dependencies {
             project(':grpc-stub'),
             project(':grpc-protobuf'),
             project(':grpc-testing'),
-            libraries.junit,
-            libraries.mockito,
             libraries.hdrhistogram,
             libraries.netty_tcnative,
             libraries.netty_epoll,
             libraries.math
     compileOnly libraries.javax_annotation
     alpnagent libraries.jetty_alpn_agent
+
+    testCompile libraries.junit,
+            libraries.mockito
 }
 
 import net.ltgt.gradle.errorprone.CheckSeverity

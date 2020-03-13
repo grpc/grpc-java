@@ -18,14 +18,11 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.CONNECTING;
-import static io.grpc.LoadBalancer.ATTR_LOAD_BALANCING_CONFIG;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
-import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
@@ -33,12 +30,12 @@ import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
-import io.grpc.internal.JsonParser;
+import io.grpc.internal.ServiceConfigUtil.PolicySelection;
+import io.grpc.xds.XdsLoadBalancerProvider.XdsConfig;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -49,7 +46,6 @@ import org.junit.runners.JUnit4;
  */
 @RunWith(JUnit4.class)
 // TODO(creamsoup) use parsed service config
-@SuppressWarnings("deprecation")
 public class FallbackLbTest {
 
   private final LoadBalancerProvider fallbackProvider1 = new LoadBalancerProvider() {
@@ -108,6 +104,8 @@ public class FallbackLbTest {
   private final List<Helper> helpers2 = new ArrayList<>();
   private final List<LoadBalancer> balancers1 = new ArrayList<>();
   private final List<LoadBalancer> balancers2 = new ArrayList<>();
+  private final PolicySelection fakeEndpointPickingPolicy =
+      new PolicySelection(mock(LoadBalancerProvider.class), null, new Object());
 
   private LoadBalancer fallbackLb;
 
@@ -116,7 +114,7 @@ public class FallbackLbTest {
     LoadBalancerRegistry lbRegistry = new LoadBalancerRegistry();
     lbRegistry.register(fallbackProvider1);
     lbRegistry.register(fallbackProvider2);
-    fallbackLb = new FallbackLb(helper, lbRegistry);
+    fallbackLb = new FallbackLb(helper);
 
     assertThat(helpers1).isEmpty();
     assertThat(helpers2).isEmpty();
@@ -125,18 +123,19 @@ public class FallbackLbTest {
   }
 
   @Test
-  public void handlePolicyChanges() throws Exception {
+  public void handlePolicyChanges() {
     EquivalentAddressGroup eag111 = new EquivalentAddressGroup(mock(SocketAddress.class));
     EquivalentAddressGroup eag112 = new EquivalentAddressGroup(mock(SocketAddress.class));
     List<EquivalentAddressGroup> eags11 = ImmutableList.of(eag111, eag112);
-    String lbConfigRaw11 = "{"
-        + "\"fallbackPolicy\" : [{\"fallback_1\" : { \"fallback_1_option\" : \"yes\"}}]"
-        + "}";
-    @SuppressWarnings("unchecked")
-    Map<String, ?> lbConfig11 = (Map<String, ?>) JsonParser.parse(lbConfigRaw11);
+    Object lbConfig11 =  new Object();
     fallbackLb.handleResolvedAddresses(ResolvedAddresses.newBuilder()
         .setAddresses(eags11)
-        .setAttributes(Attributes.newBuilder().set(ATTR_LOAD_BALANCING_CONFIG, lbConfig11).build())
+        .setLoadBalancingPolicyConfig(new XdsConfig(
+            null,
+            fakeEndpointPickingPolicy,
+            new PolicySelection(fallbackProvider1, null, lbConfig11),
+            null,
+            null))
         .build());
 
     assertThat(helpers1).hasSize(1);
@@ -145,8 +144,7 @@ public class FallbackLbTest {
     LoadBalancer balancer1 = balancers1.get(0);
     verify(balancer1).handleResolvedAddresses(ResolvedAddresses.newBuilder()
         .setAddresses(eags11)
-        .setAttributes(Attributes.newBuilder()
-            .set(ATTR_LOAD_BALANCING_CONFIG, ImmutableMap.of("fallback_1_option", "yes")).build())
+        .setLoadBalancingPolicyConfig(lbConfig11)
         .build());
 
     SubchannelPicker picker1 = mock(SubchannelPicker.class);
@@ -155,20 +153,20 @@ public class FallbackLbTest {
 
     EquivalentAddressGroup eag121 = new EquivalentAddressGroup(mock(SocketAddress.class));
     List<EquivalentAddressGroup> eags12 = ImmutableList.of(eag121);
-    String lbConfigRaw12 = "{"
-        + "\"fallbackPolicy\" : [{\"fallback_1\" : { \"fallback_1_option\" : \"no\"}}]"
-        + "}";
-    @SuppressWarnings("unchecked")
-    Map<String, ?> lbConfig12 = (Map<String, ?>) JsonParser.parse(lbConfigRaw12);
+    Object lbConfig12 =  new Object();
     fallbackLb.handleResolvedAddresses(ResolvedAddresses.newBuilder()
         .setAddresses(eags12)
-        .setAttributes(Attributes.newBuilder().set(ATTR_LOAD_BALANCING_CONFIG, lbConfig12).build())
+        .setLoadBalancingPolicyConfig(new XdsConfig(
+            null,
+            fakeEndpointPickingPolicy,
+            new PolicySelection(fallbackProvider1, null, lbConfig12),
+            null,
+            null))
         .build());
 
     verify(balancer1).handleResolvedAddresses(ResolvedAddresses.newBuilder()
         .setAddresses(eags12)
-        .setAttributes(Attributes.newBuilder()
-            .set(ATTR_LOAD_BALANCING_CONFIG, ImmutableMap.of("fallback_1_option", "no")).build())
+        .setLoadBalancingPolicyConfig(lbConfig12)
         .build());
 
     verify(balancer1, never()).shutdown();
@@ -179,14 +177,15 @@ public class FallbackLbTest {
     EquivalentAddressGroup eag211 = new EquivalentAddressGroup(mock(SocketAddress.class));
     EquivalentAddressGroup eag212 = new EquivalentAddressGroup(mock(SocketAddress.class));
     List<EquivalentAddressGroup> eags21 = ImmutableList.of(eag211, eag212);
-    String lbConfigRaw21 = "{"
-        + "\"fallbackPolicy\" : [{\"fallback_2\" : { \"fallback_2_option\" : \"yes\"}}]"
-        + "}";
-    @SuppressWarnings("unchecked")
-    Map<String, ?> lbConfig21 = (Map<String, ?>) JsonParser.parse(lbConfigRaw21);
+    Object lbConfig21 =  new Object();
     fallbackLb.handleResolvedAddresses(ResolvedAddresses.newBuilder()
         .setAddresses(eags21)
-        .setAttributes(Attributes.newBuilder().set(ATTR_LOAD_BALANCING_CONFIG, lbConfig21).build())
+        .setLoadBalancingPolicyConfig(new XdsConfig(
+            null,
+            fakeEndpointPickingPolicy,
+            new PolicySelection(fallbackProvider2, null, lbConfig21),
+            null,
+            null))
         .build());
 
     verify(balancer1).shutdown();
@@ -196,13 +195,11 @@ public class FallbackLbTest {
     LoadBalancer balancer2 = balancers2.get(0);
     verify(balancer1, never()).handleResolvedAddresses(ResolvedAddresses.newBuilder()
         .setAddresses(eags21)
-        .setAttributes(Attributes.newBuilder()
-            .set(ATTR_LOAD_BALANCING_CONFIG, ImmutableMap.of("fallback_2_option", "yes")).build())
+        .setLoadBalancingPolicyConfig(lbConfig21)
         .build());
     verify(balancer2).handleResolvedAddresses(ResolvedAddresses.newBuilder()
         .setAddresses(eags21)
-        .setAttributes(Attributes.newBuilder()
-            .set(ATTR_LOAD_BALANCING_CONFIG, ImmutableMap.of("fallback_2_option", "yes")).build())
+        .setLoadBalancingPolicyConfig(lbConfig21)
         .build());
 
     picker1 = mock(SubchannelPicker.class);
@@ -214,20 +211,20 @@ public class FallbackLbTest {
 
     EquivalentAddressGroup eag221 = new EquivalentAddressGroup(mock(SocketAddress.class));
     List<EquivalentAddressGroup> eags22 = ImmutableList.of(eag221);
-    String lbConfigRaw22 = "{"
-        + "\"fallbackPolicy\" : [{\"fallback_2\" : { \"fallback_2_option\" : \"no\"}}]"
-        + "}";
-    @SuppressWarnings("unchecked")
-    Map<String, ?> lbConfig22 = (Map<String, ?>) JsonParser.parse(lbConfigRaw22);
+    Object lbConfig22 =  new Object();
     fallbackLb.handleResolvedAddresses(ResolvedAddresses.newBuilder()
         .setAddresses(eags22)
-        .setAttributes(Attributes.newBuilder().set(ATTR_LOAD_BALANCING_CONFIG, lbConfig22).build())
+        .setLoadBalancingPolicyConfig(new XdsConfig(
+            null,
+            fakeEndpointPickingPolicy,
+            new PolicySelection(fallbackProvider2, null, lbConfig22),
+            null,
+            null))
         .build());
 
     verify(balancer2).handleResolvedAddresses(ResolvedAddresses.newBuilder()
         .setAddresses(eags22)
-        .setAttributes(Attributes.newBuilder()
-            .set(ATTR_LOAD_BALANCING_CONFIG, ImmutableMap.of("fallback_2_option", "no")).build())
+        .setLoadBalancingPolicyConfig(lbConfig22)
         .build());
 
     assertThat(helpers1).hasSize(1);
@@ -241,31 +238,29 @@ public class FallbackLbTest {
   }
 
   @Test
-  public void propagateAddressesToFallbackPolicy() throws Exception {
+  public void propagateAddressesToFallbackPolicy() {
     EquivalentAddressGroup eag1 = new EquivalentAddressGroup(
         ImmutableList.<SocketAddress>of(new InetSocketAddress(8080)));
     EquivalentAddressGroup eag2 = new EquivalentAddressGroup(
         ImmutableList.<SocketAddress>of(new InetSocketAddress(8082)));
     List<EquivalentAddressGroup> eags = ImmutableList.of(eag1, eag2);
 
-    String lbConfigRaw = "{"
-        + "\"fallbackPolicy\" : [{\"fallback_1\" : { \"fallback_1_option\" : \"yes\"}}]"
-        + "}";
-    @SuppressWarnings("unchecked")
-    Map<String, ?> lbConfig = (Map<String, ?>) JsonParser.parse(lbConfigRaw);
+    Object lbConfig = new Object();
     fallbackLb.handleResolvedAddresses(ResolvedAddresses.newBuilder()
         .setAddresses(eags)
-        .setAttributes(Attributes.newBuilder().set(ATTR_LOAD_BALANCING_CONFIG, lbConfig).build())
+        .setLoadBalancingPolicyConfig(new XdsConfig(
+            null,
+            fakeEndpointPickingPolicy,
+            new PolicySelection(fallbackProvider1, null, lbConfig),
+            null,
+            null))
         .build());
 
     LoadBalancer balancer1 = balancers1.get(0);
     verify(balancer1).handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(ImmutableList.of(eag1, eag2))
-            .setAttributes(
-                Attributes.newBuilder()
-                    .set(ATTR_LOAD_BALANCING_CONFIG, ImmutableMap.of("fallback_1_option", "yes"))
-                    .build())
+            .setLoadBalancingPolicyConfig(lbConfig)
             .build());
   }
 }

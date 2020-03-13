@@ -1,27 +1,11 @@
-apply plugin: 'com.android.library'
+plugins {
+    id "maven-publish"
 
-group = "io.grpc"
-version = "1.29.0-SNAPSHOT" // CURRENT_GRPC_VERSION
-description = 'gRPC: Android'
-
-buildscript {
-    repositories {
-        google()
-        jcenter()
-        mavenCentral()
-        maven { url "https://plugins.gradle.org/m2/" }
-    }
-    dependencies {
-        classpath 'com.android.tools.build:gradle:3.3.0'
-        classpath "net.ltgt.gradle:gradle-errorprone-plugin:0.8.1"
-        classpath "digital.wup:android-maven-publish:3.6.2"
-    }
+    id "com.android.library"
+    id "digital.wup.android-maven-publish"
 }
 
-apply plugin: "maven-publish"
-apply plugin: "net.ltgt.errorprone"
-apply plugin: "digital.wup.android-maven-publish"
-apply plugin: "signing"
+description = 'gRPC: Android'
 
 android {
     compileSdkVersion 28
@@ -39,20 +23,16 @@ android {
 repositories {
     google()
     jcenter()
-    mavenCentral()
-    mavenLocal()
 }
 
 dependencies {
-    errorprone 'com.google.errorprone:error_prone_core:2.3.4'
-    errorproneJavac 'com.google.errorprone:javac:9+181-r4173-1'
+    implementation project(':grpc-core')
 
-    implementation 'io.grpc:grpc-core:1.29.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-
-    testImplementation 'io.grpc:grpc-okhttp:1.29.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-    testImplementation 'junit:junit:4.12'
-    testImplementation 'org.robolectric:robolectric:4.3.1'
-    testImplementation 'com.google.truth:truth:1.0.1'
+    testImplementation project('::grpc-okhttp')
+    testImplementation libraries.androidx_test
+    testImplementation libraries.junit
+    testImplementation libraries.robolectric
+    testImplementation libraries.truth
 }
 
 task javadocs(type: Javadoc) {
@@ -83,81 +63,11 @@ task sourcesJar(type: Jar) {
 
 publishing {
     publications {
-        maven(MavenPublication) {
+        maven {
             from components.android
 
             artifact javadocJar
             artifact sourcesJar
-
-            pom {
-                name = project.group + ":" + project.name
-                url = 'https://github.com/grpc/grpc-java'
-                afterEvaluate {
-                    // description is not available until evaluated.
-                    description = project.description
-                }
-
-                scm {
-                    connection = 'scm:git:https://github.com/grpc/grpc-java.git'
-                    developerConnection = 'scm:git:git@github.com:grpc/grpc-java.git'
-                    url = 'https://github.com/grpc/grpc-java'
-                }
-
-                licenses {
-                    license {
-                        name = 'Apache 2.0'
-                        url = 'https://opensource.org/licenses/Apache-2.0'
-                    }
-                }
-
-                developers {
-                    developer {
-                        id = "grpc.io"
-                        name = "gRPC Contributors"
-                        email = "grpc-io@googlegroups.com"
-                        url = "https://grpc.io/"
-                        organization = "gRPC Authors"
-                        organizationUrl = "https://www.google.com"
-                    }
-                }
-
-                withXml {
-                    asNode().dependencies.'*'.findAll() { dep ->
-                        dep.artifactId.text() in ['grpc-api', 'grpc-core']
-                    }.each() { core ->
-                        core.version*.value = "[" + core.version.text() + "]"
-                    }
-                }
-            }
         }
     }
-    repositories {
-        maven {
-            if (rootProject.hasProperty('repositoryDir')) {
-                url = new File(rootProject.repositoryDir).toURI()
-            } else {
-                String stagingUrl
-                if (rootProject.hasProperty('repositoryId')) {
-                    stagingUrl = 'https://oss.sonatype.org/service/local/staging/deployByRepositoryId/' +
-                            rootProject.repositoryId
-                } else {
-                    stagingUrl = 'https://oss.sonatype.org/service/local/staging/deploy/maven2/'
-                }
-                credentials {
-                    if (rootProject.hasProperty('ossrhUsername') && rootProject.hasProperty('ossrhPassword')) {
-                        username = rootProject.ossrhUsername
-                        password = rootProject.ossrhPassword
-                    }
-                }
-                def releaseUrl = stagingUrl
-                def snapshotUrl = 'https://oss.sonatype.org/content/repositories/snapshots/'
-                url = version.endsWith('SNAPSHOT') ? snapshotUrl : releaseUrl
-            }
-        }
-    }
-}
-
-signing {
-    required false
-    sign publishing.publications.maven
 }

@@ -3918,6 +3918,36 @@ public class ManagedChannelImplTest {
             .build());
   }
 
+  @Test
+  public void healthCheckingConfigPropagated() throws Exception {
+    LoadBalancerRegistry.getDefaultRegistry().register(mockLoadBalancerProvider);
+    try {
+      FakeNameResolverFactory nameResolverFactory =
+          new FakeNameResolverFactory.Builder(expectedUri)
+              .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
+              .build();
+      channelBuilder.nameResolverFactory(nameResolverFactory);
+
+      Map<String, Object> rawServiceConfig =
+          parseConfig("{\"healthCheckConfig\": {\"serviceName\": \"service1\"}}");
+      ManagedChannelServiceConfig managedChannelServiceConfig =
+          createManagedChannelServiceConfig(rawServiceConfig, null);
+      nameResolverFactory.nextConfigOrError.set(
+          ConfigOrError.fromConfig(managedChannelServiceConfig));
+
+      createChannel();
+
+      ArgumentCaptor<ResolvedAddresses> resultCaptor =
+          ArgumentCaptor.forClass(ResolvedAddresses.class);
+      verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
+      assertThat(resultCaptor.getValue().getAttributes()
+          .get(LoadBalancer.ATTR_HEALTH_CHECKING_CONFIG))
+          .containsExactly("serviceName", "service1");
+    } finally {
+      LoadBalancerRegistry.getDefaultRegistry().deregister(mockLoadBalancerProvider);
+    }
+  }
+
   private static final class ChannelBuilder
       extends AbstractManagedChannelImplBuilder<ChannelBuilder> {
 

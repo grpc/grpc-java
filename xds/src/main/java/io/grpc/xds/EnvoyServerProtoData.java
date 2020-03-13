@@ -159,6 +159,7 @@ final class EnvoyServerProtoData {
    * Corresponds to Envoy proto message {@link io.envoyproxy.envoy.api.v2.listener.FilterChain}.
    */
   static final class FilterChain {
+    // TODO(sanjaypujare): flatten structure by moving FilterChainMatch class members here.
     private final FilterChainMatch filterChainMatch;
     // TODO(sanjaypujare): remove dependency on envoy data type along with rest of the code.
     private final io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext downstreamTlsContext;

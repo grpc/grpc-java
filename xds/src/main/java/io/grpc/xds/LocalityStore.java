@@ -48,13 +48,12 @@ import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.LbEndpoint;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
-import io.grpc.xds.InterLocalityPicker.WeightedChildPicker;
 import io.grpc.xds.OrcaOobUtil.OrcaReportingConfig;
 import io.grpc.xds.OrcaOobUtil.OrcaReportingHelperWrapper;
+import io.grpc.xds.WeightedRandomPicker.WeightedChildPicker;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -109,7 +108,6 @@ interface LocalityStore {
 
     private final XdsLogger logger;
     private final Helper helper;
-    private final PickerFactory pickerFactory;
     private final LoadBalancerProvider loadBalancerProvider;
     private final ThreadSafeRandom random;
     private final LoadStatsStore loadStatsStore;
@@ -130,7 +128,6 @@ interface LocalityStore {
       this(
           logId,
           helper,
-          pickerFactoryImpl,
           lbRegistry,
           ThreadSafeRandom.ThreadSafeRandomImpl.instance,
           loadStatsStore,
@@ -142,14 +139,12 @@ interface LocalityStore {
     LocalityStoreImpl(
         InternalLogId logId,
         Helper helper,
-        PickerFactory pickerFactory,
         LoadBalancerRegistry lbRegistry,
         ThreadSafeRandom random,
         LoadStatsStore loadStatsStore,
         OrcaPerRequestUtil orcaPerRequestUtil,
         OrcaOobUtil orcaOobUtil) {
       this.helper = checkNotNull(helper, "helper");
-      this.pickerFactory = checkNotNull(pickerFactory, "pickerFactory");
       loadBalancerProvider = checkNotNull(
           lbRegistry.getProvider(ROUND_ROBIN),
           "Unable to find '%s' LoadBalancer", ROUND_ROBIN);
@@ -158,11 +153,6 @@ interface LocalityStore {
       this.orcaPerRequestUtil = checkNotNull(orcaPerRequestUtil, "orcaPerRequestUtil");
       this.orcaOobUtil = checkNotNull(orcaOobUtil, "orcaOobUtil");
       logger = XdsLogger.withLogId(checkNotNull(logId, "logId"));
-    }
-
-    @VisibleForTesting // Introduced for testing only.
-    interface PickerFactory {
-      SubchannelPicker picker(List<WeightedChildPicker> childPickers);
     }
 
     private final class DroppablePicker extends SubchannelPicker {
@@ -205,14 +195,6 @@ interface LocalityStore {
             .toString();
       }
     }
-
-    private static final PickerFactory pickerFactoryImpl =
-        new PickerFactory() {
-          @Override
-          public SubchannelPicker picker(List<WeightedChildPicker> childPickers) {
-            return new InterLocalityPicker(childPickers);
-          }
-        };
 
     @Override
     public void reset() {
@@ -335,7 +317,6 @@ interface LocalityStore {
 
     private void updatePicker(
         @Nullable ConnectivityState state,  List<WeightedChildPicker> childPickers) {
-      childPickers = Collections.unmodifiableList(childPickers);
       SubchannelPicker picker;
       if (childPickers.isEmpty()) {
         if (state == TRANSIENT_FAILURE) {
@@ -344,7 +325,7 @@ interface LocalityStore {
           picker = XdsSubchannelPickers.BUFFER_PICKER;
         }
       } else {
-        picker = pickerFactory.picker(childPickers);
+        picker = new WeightedRandomPicker(childPickers);
       }
 
       if (!dropOverloads.isEmpty()) {
