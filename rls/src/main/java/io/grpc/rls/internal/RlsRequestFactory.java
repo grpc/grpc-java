@@ -60,7 +60,9 @@ final class RlsRequestFactory {
       for (NameMatcher nameMatcher : grpcKeyBuilder.getHeaders()) {
         List<String> requestHeaders = nameMatcher.names();
         for (Name name : grpcKeyBuilder.getNames()) {
-          String method = name.getMethod().isEmpty() ? "*" : name.getMethod();
+          String method =
+              name.getMethod() == null || name.getMethod().isEmpty()
+                  ? "*" : name.getMethod();
           String path = name.getService() + "/" + method;
           table.put(
               path,
