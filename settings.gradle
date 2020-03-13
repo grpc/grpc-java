@@ -1,5 +1,6 @@
 pluginManagement {
     plugins {
+        id "com.android.application" version "3.3.0"
         id "com.android.library" version "3.3.0"
         id "com.github.johnrengelman.shadow" version "2.0.4"
         id "com.github.kt3k.coveralls" version "2.0.1"
@@ -88,4 +89,6 @@ if (settings.hasProperty('skipAndroid') && skipAndroid.toBoolean()) {
     project(':grpc-cronet').projectDir = "$rootDir/cronet" as File
     include ":grpc-android"
     project(':grpc-android').projectDir = "$rootDir/android" as File
+    include ":grpc-android-interop-testing"
+    project(':grpc-android-interop-testing').projectDir = "$rootDir/android-interop-testing" as File
 }
