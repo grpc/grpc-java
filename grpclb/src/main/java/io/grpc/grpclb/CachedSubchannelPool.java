@@ -24,8 +24,10 @@ import io.grpc.Attributes;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.Subchannel;
+import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import java.util.HashMap;
 import java.util.concurrent.TimeUnit;
@@ -51,15 +53,23 @@ final class CachedSubchannelPool implements SubchannelPool {
   }
 
   @Override
-  @SuppressWarnings("deprecation")
   public Subchannel takeOrCreateSubchannel(
       EquivalentAddressGroup eag, Attributes defaultAttributes) {
     final CacheEntry entry = cache.remove(eag);
     final Subchannel subchannel;
     if (entry == null) {
-      // TODO(zhangkun83): remove the deprecation suppression on this method once migrated to the
-      // new createSubchannel().
-      subchannel = helper.createSubchannel(eag, defaultAttributes);
+      subchannel =
+          helper.createSubchannel(
+              CreateSubchannelArgs.newBuilder()
+                  .setAddresses(eag)
+                  .setAttributes(defaultAttributes)
+                  .build());
+      subchannel.start(new SubchannelStateListener() {
+        @Override
+        public void onSubchannelState(ConnectivityStateInfo newState) {
+          // do nothing
+        }
+      });
     } else {
       subchannel = entry.subchannel;
       entry.shutdownTimer.cancel();
@@ -67,6 +77,7 @@ final class CachedSubchannelPool implements SubchannelPool {
       // in the cache.
       helper.getSynchronizationContext().execute(new Runnable() {
           @Override
+          @SuppressWarnings("deprecation")
           public void run() {
             lb.handleSubchannelState(subchannel, entry.state);
           }
