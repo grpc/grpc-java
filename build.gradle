@@ -1,5 +1,6 @@
 plugins {
-    id "com.android.library" apply false // Necessary for Android plugin to find its classes
+    id "com.android.application" apply false // Necessary for Android plugin to find its classes
+    id "com.android.library" apply false
     id "com.google.osdetector" apply false
     id "me.champeau.gradle.japicmp" apply false
     id "net.ltgt.errorprone" apply false
