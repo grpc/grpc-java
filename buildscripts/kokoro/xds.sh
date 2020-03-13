@@ -14,7 +14,8 @@ popd
 git clone https://github.com/grpc/grpc.git
 
 grpc/tools/run_tests/helper_scripts/prep_xds.sh
-python3 grpc/tools/run_tests/run_xds_tests.py \
+JAVA_OPTS=-Djava.util.logging.config.file=grpc-java/buildscripts/xds_logging.properties \
+  python3 grpc/tools/run_tests/run_xds_tests.py \
     --test_case=all \
     --project_id=grpc-testing \
     --gcp_suffix=$(date '+%s') \
