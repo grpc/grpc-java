@@ -36,7 +36,7 @@ public class AdaptiveThrottlerTest {
           .setHistorySeconds(1)
           .setRatioForAccepts(1.0f)
           .setRequestsPadding(1)
-          .setTimeProvider(fakeClock.getTimeProvider())
+          .setTimeProvider(fakeTimeProvider)
           .build();
 
   @Test
