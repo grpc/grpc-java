@@ -26,8 +26,7 @@ import static org.mockito.Mockito.CALLS_REAL_METHODS;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
-import com.google.common.base.MoreObjects;
-import io.grpc.rls.internal.AdaptiveThrottler.Ticker;
+import io.grpc.internal.TimeProvider;
 import io.grpc.rls.internal.LruCache.EvictionListener;
 import io.grpc.rls.internal.LruCache.EvictionType;
 import java.util.Objects;
@@ -52,8 +51,9 @@ public class LinkedHashLruCacheTest {
   @Rule
   public final MockitoRule mocks = MockitoJUnit.rule();
 
-  private final FakeScheduledService fses = mock(FakeScheduledService.class, CALLS_REAL_METHODS);
-  private final Ticker ticker = fses.getFakeTicker();
+  private final DoNotUseFakeScheduledService fakeScheduledService =
+      mock(DoNotUseFakeScheduledService.class, CALLS_REAL_METHODS);
+  private final TimeProvider timeProvider = fakeScheduledService.getFakeTicker();
 
   @Mock
   private EvictionListener<Integer, Entry> evictionListener;
@@ -65,12 +65,12 @@ public class LinkedHashLruCacheTest {
         MAX_SIZE,
         evictionListener,
         10,
-        TimeUnit.MILLISECONDS,
-        fses,
-        ticker) {
+        TimeUnit.NANOSECONDS,
+        fakeScheduledService,
+        timeProvider) {
       @Override
-      protected boolean isExpired(Integer key, Entry value, long nowInMillis) {
-        return value.getExpireTime() <= nowInMillis;
+      protected boolean isExpired(Integer key, Entry value, long nowNanos) {
+        return value.expireTime <= nowNanos;
       }
     };
   }
@@ -88,8 +88,8 @@ public class LinkedHashLruCacheTest {
 
   @Test
   public void size() {
-    Entry entry1 = new Entry("Entry0", ticker.nowInMillis() + 10);
-    Entry entry2 = new Entry("Entry1", ticker.nowInMillis() + 20);
+    Entry entry1 = new Entry("Entry0", timeProvider.currentTimeNanos() + 10);
+    Entry entry2 = new Entry("Entry1", timeProvider.currentTimeNanos() + 20);
     cache.cache(0, entry1);
     cache.cache(1, entry2);
     assertThat(cache.estimatedSize()).isEqualTo(2);
@@ -103,22 +103,22 @@ public class LinkedHashLruCacheTest {
 
   @Test
   public void eviction_expire() {
-    Entry toBeEvicted = new Entry("Entry0", ticker.nowInMillis() + 10);
-    Entry survivor = new Entry("Entry1", ticker.nowInMillis() + 20);
+    Entry toBeEvicted = new Entry("Entry0", timeProvider.currentTimeNanos() + 10);
+    Entry survivor = new Entry("Entry1", timeProvider.currentTimeNanos() + 20);
     cache.cache(0, toBeEvicted);
     cache.cache(1, survivor);
 
-    fses.advance(10);
+    fakeScheduledService.advance(10, TimeUnit.NANOSECONDS);
     verify(evictionListener).onEviction(0, toBeEvicted, EvictionType.EXPIRED);
 
-    fses.advance(10);
+    fakeScheduledService.advance(10, TimeUnit.NANOSECONDS);
     verify(evictionListener).onEviction(1, survivor, EvictionType.EXPIRED);
   }
 
   @Test
   public void eviction_explicit() {
-    Entry toBeEvicted = new Entry("Entry0", ticker.nowInMillis() + 10);
-    Entry survivor = new Entry("Entry1", ticker.nowInMillis() + 20);
+    Entry toBeEvicted = new Entry("Entry0", timeProvider.currentTimeNanos() + 10);
+    Entry survivor = new Entry("Entry1", timeProvider.currentTimeNanos() + 20);
     cache.cache(0, toBeEvicted);
     cache.cache(1, survivor);
 
@@ -129,8 +129,8 @@ public class LinkedHashLruCacheTest {
 
   @Test
   public void eviction_replaced() {
-    Entry toBeEvicted = new Entry("Entry0", ticker.nowInMillis() + 10);
-    Entry survivor = new Entry("Entry1", ticker.nowInMillis() + 20);
+    Entry toBeEvicted = new Entry("Entry0", timeProvider.currentTimeNanos() + 10);
+    Entry survivor = new Entry("Entry1", timeProvider.currentTimeNanos() + 20);
     cache.cache(0, toBeEvicted);
     cache.cache(0, survivor);
 
@@ -141,7 +141,7 @@ public class LinkedHashLruCacheTest {
   public void eviction_size_shouldEvictAlreadyExpired() {
     for (int i = 1; i <= MAX_SIZE; i++) {
       // last two entries are <= current time (already expired)
-      cache.cache(i, new Entry("Entry" + i, ticker.nowInMillis() + MAX_SIZE - i - 1));
+      cache.cache(i, new Entry("Entry" + i, timeProvider.currentTimeNanos() + MAX_SIZE - i - 1));
     }
     cache.cache(MAX_SIZE + 1, new Entry("should kick the first", Long.MAX_VALUE));
 
@@ -155,7 +155,7 @@ public class LinkedHashLruCacheTest {
   public void eviction_get_shouldNotReturnAlreadyExpired() {
     for (int i = 1; i <= MAX_SIZE; i++) {
       // last entry is already expired when added
-      cache.cache(i, new Entry("Entry" + i, ticker.nowInMillis() + MAX_SIZE - i));
+      cache.cache(i, new Entry("Entry" + i, timeProvider.currentTimeNanos() + MAX_SIZE - i));
     }
 
     assertThat(cache.estimatedSize()).isEqualTo(MAX_SIZE);
@@ -164,21 +164,13 @@ public class LinkedHashLruCacheTest {
     verify(evictionListener).onEviction(eq(MAX_SIZE), any(Entry.class), eq(EvictionType.EXPIRED));
   }
 
-  private static class Entry {
-    private String value;
-    private long expireTime;
+  private static final class Entry {
+    String value;
+    long expireTime;
 
     Entry(String value, long expireTime) {
       this.value = value;
       this.expireTime = expireTime;
-    }
-
-    String getValue() {
-      return value;
-    }
-
-    long getExpireTime() {
-      return expireTime;
     }
 
     @Override
@@ -190,21 +182,12 @@ public class LinkedHashLruCacheTest {
         return false;
       }
       Entry entry = (Entry) o;
-      return expireTime == entry.expireTime &&
-          Objects.equals(value, entry.value);
+      return expireTime == entry.expireTime && Objects.equals(value, entry.value);
     }
 
     @Override
     public int hashCode() {
       return Objects.hash(value, expireTime);
-    }
-
-    @Override
-    public String toString() {
-      return MoreObjects.toStringHelper(this)
-          .add("value", value)
-          .add("expireTime", expireTime)
-          .toString();
     }
   }
 
@@ -213,9 +196,9 @@ public class LinkedHashLruCacheTest {
    * with a lot of limitation / assumptions. Only intended to be used in this test with
    * CALL_REAL_METHODS mock.
    */
-  private static abstract class FakeScheduledService implements ScheduledExecutorService {
+  private abstract static class DoNotUseFakeScheduledService implements ScheduledExecutorService {
 
-    private long currTimeInMillis;
+    private long currTimeNanos;
     private long period;
     private long nextRun;
     private AtomicReference<Runnable> command;
@@ -235,38 +218,37 @@ public class LinkedHashLruCacheTest {
         command.run();
       }
       this.command.set(checkNotNull(command, "command"));
-      this.nextRun = checkNotNull(unit, "unit").toMillis(initialDelay) + currTimeInMillis;
-      this.period = unit.toMillis(period);
+      this.nextRun = checkNotNull(unit, "unit").toNanos(initialDelay) + currTimeNanos;
+      this.period = unit.toNanos(period);
       return mock(ScheduledFuture.class);
     }
 
-    Ticker getFakeTicker() {
-      return new FakeTicker();
+    TimeProvider getFakeTicker() {
+      return new TimeProvider() {
+        @Override
+        public long currentTimeNanos() {
+          return currTimeNanos;
+        }
+      };
     }
 
-    void advance(long millis) {
+    void advance(long delta, TimeUnit unit) {
       // if scheduled command, only can advance the ticker to trigger at most 1 event
       boolean scheduled = command != null && command.get() != null;
+      long deltaNanos = unit.toNanos(delta);
       if (scheduled) {
         checkArgument(
-            (currTimeInMillis + millis) < (nextRun + 2 * period),
+            (this.currTimeNanos + deltaNanos) < (nextRun + 2 * period),
             "Cannot advance ticker because more than one repeated tasks will run");
-        long finalTime = currTimeInMillis + millis;
+        long finalTime = this.currTimeNanos + deltaNanos;
         if (finalTime >= nextRun) {
           nextRun += period;
-          currTimeInMillis = nextRun;
+          this.currTimeNanos = nextRun;
           command.get().run();
         }
-        currTimeInMillis = finalTime;
+        this.currTimeNanos = finalTime;
       } else {
-        currTimeInMillis += millis;
-      }
-    }
-
-    private class FakeTicker implements Ticker {
-      @Override
-      public long nowInMillis() {
-        return currTimeInMillis;
+        this.currTimeNanos += deltaNanos;
       }
     }
   }

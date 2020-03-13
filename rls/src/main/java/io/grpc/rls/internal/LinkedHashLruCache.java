@@ -21,7 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.base.MoreObjects;
-import io.grpc.rls.internal.AdaptiveThrottler.Ticker;
+import io.grpc.internal.TimeProvider;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
@@ -45,9 +45,6 @@ import javax.annotation.concurrent.ThreadSafe;
  * expired entries, it will remove based on access order of entry. On top of this, LruCache also
  * proactively removed expired entries based on configured time interval.
  */
-// TODO(creamsoup)
-//  - consider making it concurrent data structure
-//  - when max size reached, should it clean all? because it is still o(n)
 @ThreadSafe
 abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
 
@@ -56,7 +53,7 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
   @GuardedBy("lock")
   private final LinkedHashMap<K, SizedValue> delegate;
   private final PeriodicCleaner periodicCleaner;
-  private final Ticker ticker;
+  private final TimeProvider timeProvider;
   private final EvictionListener<K, SizedValue> evictionListener;
   private final AtomicLong estimatedSizeBytes = new AtomicLong();
   private long estimatedMaxSizeBytes;
@@ -67,11 +64,11 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
       int cleaningInterval,
       TimeUnit cleaningIntervalUnit,
       ScheduledExecutorService ses,
-      final Ticker ticker) {
+      final TimeProvider timeProvider) {
     checkState(maxEstimatedSizeBytes > 0, "max estimated cache size should be positive");
     this.estimatedMaxSizeBytes = maxEstimatedSizeBytes;
     this.evictionListener = new SizeHandlingEvictionListener(evictionListener);
-    this.ticker = checkNotNull(ticker, "ticker");
+    this.timeProvider = checkNotNull(timeProvider, "timeProvider");
     delegate = new LinkedHashMap<K, SizedValue>(
         // rough estimate or minimum hashmap default
         Math.max((int) (maxEstimatedSizeBytes / 1000), 16),
@@ -84,7 +81,7 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
         }
 
         // first, remove at most 1 expired entry
-        boolean removed = cleanupExpiredEntries(1, ticker.nowInMillis());
+        boolean removed = cleanupExpiredEntries(1, timeProvider.currentTimeNanos());
         // handles size based eviction if necessary no expired entry
         boolean shouldRemove =
             !removed && shouldInvalidateEldestEntry(eldest.getKey(), eldest.getValue().value);
@@ -105,23 +102,25 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
    * Determines if the eldest entry should be kept or not when the cache size limit is reached. Note
    * that LruCache is access level and the eldest is determined by access pattern.
    */
+  @SuppressWarnings("unused")
   protected boolean shouldInvalidateEldestEntry(K eldestKey, V eldestValue) {
     return true;
   }
 
   /** Determines if the entry is already expired or not. */
-  protected abstract boolean isExpired(K key, V value, long nowInMillis);
+  protected abstract boolean isExpired(K key, V value, long nowNanos);
 
   /**
    * Returns estimated size of entry to keep track. If it always returns 1, the max size bytes
    * behaves like max number of entry (default behavior).
    */
+  @SuppressWarnings("unused")
   protected int estimateSizeOf(K key, V value) {
     return 1;
   }
 
   /** Updates size for given key if entry exists. It is useful if the cache value is mutated. */
-  final void updateEntrySize(K key) {
+  public void updateEntrySize(K key) {
     SizedValue entry = readInternal(key);
     if (entry == null) {
       return;
@@ -166,7 +165,7 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
     checkNotNull(key, "key");
     synchronized (lock) {
       SizedValue existing = delegate.get(key);
-      if (existing != null && isExpired(key, existing.value, ticker.nowInMillis())) {
+      if (existing != null && isExpired(key, existing.value, timeProvider.currentTimeNanos())) {
         invalidate(key, EvictionType.EXPIRED);
         return null;
       }
@@ -180,9 +179,8 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
     return invalidate(key, EvictionType.EXPLICIT);
   }
 
-  @Override
   @Nullable
-  public final V invalidate(K key, EvictionType cause) {
+  private V invalidate(K key, EvictionType cause) {
     checkNotNull(key, "key");
     checkNotNull(cause, "cause");
     synchronized (lock) {
@@ -196,18 +194,12 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
 
   @Override
   public final void invalidateAll(Iterable<K> keys) {
-    invalidateAll(keys, EvictionType.EXPLICIT);
-  }
-
-  @Override
-  public final void invalidateAll(Iterable<K> keys, EvictionType cause) {
     checkNotNull(keys, "keys");
-    checkNotNull(cause, "cause");
     synchronized (lock) {
       for (K key : keys) {
         SizedValue existing = delegate.remove(key);
         if (existing != null) {
-          evictionListener.onEviction(key, existing, cause);
+          evictionListener.onEviction(key, existing, EvictionType.EXPIRED);
         }
       }
     }
@@ -236,7 +228,7 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
    * removing expired entries and removing oldest entries by LRU order.
    */
   public final void resize(int newSizeBytes) {
-    long now = ticker.nowInMillis();
+    long now = timeProvider.currentTimeNanos();
     synchronized (lock) {
       long estimatedSizeBytesCopy = estimatedMaxSizeBytes;
       this.estimatedMaxSizeBytes = newSizeBytes;
@@ -291,9 +283,11 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
 
   @Override
   public final void close() {
-    //TODO maybe clear map/set?
-    periodicCleaner.stop();
-    doClose();
+    synchronized (lock) {
+      periodicCleaner.stop();
+      doClose();
+      delegate.clear();
+    }
   }
 
   protected void doClose() {}
@@ -304,7 +298,6 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
     private final ScheduledExecutorService ses;
     private final int interval;
     private final TimeUnit intervalUnit;
-    @Nullable
     private ScheduledFuture<?> scheduledFuture;
 
     PeriodicCleaner(ScheduledExecutorService ses, int interval, TimeUnit intervalUnit) {
@@ -330,7 +323,7 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
 
     @Override
     public void run() {
-      cleanupExpiredEntries(ticker.nowInMillis());
+      cleanupExpiredEntries(timeProvider.currentTimeNanos());
     }
   }
 

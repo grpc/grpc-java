@@ -19,16 +19,19 @@ package io.grpc.rls.internal;
 import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
 
-/** An LruCache is a cache interface implementing least recently used eviction. */
+/** An LruCache is a cache with least recently used eviction. */
 interface LruCache<K, V> {
 
-  /** Populates a cache entry. If the key already exists, it will replace the entry. */
+  /**
+   * Populates a cache entry. If the cache entry for given key already exists, the value will be
+   * replaced to the new value.
+   */
   @Nullable
   V cache(K key, V value);
 
   /**
-   * Returns cached value for given key if exists. This operation doesn't return already expired
-   * cache entry.
+   * Returns cached value for given key if exists, otherwise {@code null}. This operation doesn't
+   * return already expired cache entry.
    */
   @Nullable
   @CheckReturnValue
@@ -41,25 +44,11 @@ interface LruCache<K, V> {
   @Nullable
   V invalidate(K key);
 
-
-  /**
-   * Invalidates an entry for given key if exists. This operation will trigger {@link
-   * EvictionListener} with given cause.
-   */
-  @Nullable
-  V invalidate(K key, EvictionType cause);
-
   /**
    * Invalidates cache entries for given keys. This operation will trigger {@link EvictionListener}
    * with {@link EvictionType#EXPLICIT}.
    */
   void invalidateAll(Iterable<K> keys);
-
-  /**
-   * Invalidates cache entries for given keys. This operation will trigger {@link EvictionListener}
-   * with given cause.
-   */
-  void invalidateAll(Iterable<K> keys, EvictionType cause);
 
   /** Returns {@code true} if given key is cached. */
   @CheckReturnValue
@@ -67,26 +56,26 @@ interface LruCache<K, V> {
 
   /**
    * Returns the estimated number of entry of the cache. Note that the size can be larger than its
-   * true size because there might be already expired cache.
+   * true size, because there might be already expired cache.
    */
   @CheckReturnValue
   int estimatedSize();
 
-  /** Performs any underlying resource if exists. */
+  /** Closes underlying resources. */
   void close();
 
-  /** A listener to notify when a cache entry is evicted. */
+  /** A Listener notifies cache eviction events. */
   interface EvictionListener<K, V> {
 
     /**
      * Notifies the listener when any cache entry is evicted. Implementation can assume that this
-     * method is not called concurrently. Implementation should be fast and non blocking, for long
-     * running task consider offloading to {@link java.util.concurrent.Executor}.
+     * method is called serially. Implementation should be non blocking, for long running task
+     * consider offloading the task to {@link java.util.concurrent.Executor}.
      */
     void onEviction(K key, V value, EvictionType cause);
   }
 
-  /** An EvictionType indicates the cause of eviction from {@link LinkedHashLruCache}. */
+  /** Type of cache eviction. */
   enum EvictionType {
     /** Explicitly removed by user. */
     EXPLICIT,
