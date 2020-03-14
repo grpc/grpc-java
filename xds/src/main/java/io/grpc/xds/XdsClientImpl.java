@@ -59,6 +59,8 @@ import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
+import io.grpc.xds.EnvoyProtoData.RouteAction;
+import io.grpc.xds.EnvoyProtoData.RouteMatch;
 import io.grpc.xds.LoadReportClient.LoadReportCallback;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.util.ArrayList;
@@ -89,6 +91,10 @@ final class XdsClientImpl extends XdsClient {
   @VisibleForTesting
   static final String ADS_TYPE_URL_EDS =
       "type.googleapis.com/envoy.api.v2.ClusterLoadAssignment";
+
+  // For now we do not support path matching unless enabled manually.
+  private static boolean enablePathMatching = Boolean.parseBoolean(
+      System.getenv("ENABLE_EXPERIMENTAL_PATH_MATCHING"));
 
   private final MessagePrinter respPrinter = new MessagePrinter();
 
@@ -578,8 +584,8 @@ final class XdsClientImpl extends XdsClient {
     }
 
     String errorMessage = null;
-    // Field clusterName found in the in-lined RouteConfiguration, if exists.
-    String clusterName = null;
+    // Routes found in the in-lined RouteConfiguration, if exists.
+    List<EnvoyProtoData.Route> routes = null;
     // RouteConfiguration name to be used as the resource name for RDS request, if exists.
     String rdsRouteConfigName = null;
     // Process the requested Listener if exists, either extract cluster information from in-lined
@@ -592,12 +598,14 @@ final class XdsClientImpl extends XdsClient {
       //  data or one supersedes the other. TBD.
       if (requestedHttpConnManager.hasRouteConfig()) {
         RouteConfiguration rc = requestedHttpConnManager.getRouteConfig();
-        clusterName = findClusterNameInRouteConfig(rc, ldsResourceName);
-        if (clusterName == null) {
+        routes = findRoutesInRouteConfig(rc, ldsResourceName);
+        String errorDetail = validateRoutes(routes);
+        if (errorDetail != null) {
           errorMessage =
               "Listener " + ldsResourceName + " : cannot find a valid cluster name in any "
                   + "virtual hosts inside RouteConfiguration with domains matching: "
-                  + ldsResourceName;
+                  + ldsResourceName
+                  + " with the reason : " + errorDetail;
         }
       } else if (requestedHttpConnManager.hasRds()) {
         Rds rds = requestedHttpConnManager.getRds();
@@ -624,18 +632,26 @@ final class XdsClientImpl extends XdsClient {
     adsStream.sendAckRequest(ADS_TYPE_URL_LDS, ImmutableList.of(ldsResourceName),
         ldsResponse.getVersionInfo());
 
-    if (clusterName != null || rdsRouteConfigName != null) {
+    if (routes != null || rdsRouteConfigName != null) {
       if (ldsRespTimer != null) {
         ldsRespTimer.cancel();
         ldsRespTimer = null;
       }
     }
-    if (clusterName != null) {
+    if (routes != null) {
       // Found clusterName in the in-lined RouteConfiguration.
-      logger.log(
-          XdsLogLevel.INFO,
-          "Found cluster name (inlined in route config): {0}", clusterName);
-      ConfigUpdate configUpdate = ConfigUpdate.newBuilder().setClusterName(clusterName).build();
+      String clusterName = routes.get(routes.size() - 1).getRouteAction().get().getCluster();
+      if (!enablePathMatching) {
+        logger.log(
+            XdsLogLevel.INFO,
+            "Found cluster name (inlined in route config): {0}", clusterName);
+      } else {
+        logger.log(
+            XdsLogLevel.INFO,
+            "Found routes (inlined in route config): {0}", routes);
+      }
+      ConfigUpdate configUpdate = ConfigUpdate.newBuilder()
+          .setClusterName(clusterName).addRoutes(routes).build();
       configWatcher.onConfigChanged(configUpdate);
     } else if (rdsRouteConfigName != null) {
       // Send an RDS request if the resource to request has changed.
@@ -767,16 +783,18 @@ final class XdsClientImpl extends XdsClient {
         XdsLogLevel.INFO, "Received RDS response for resources: {0}", routeConfigNames);
 
     // Resolved cluster name for the requested resource, if exists.
-    String clusterName = null;
+    List<EnvoyProtoData.Route> routes = null;
     if (requestedRouteConfig != null) {
-      clusterName = findClusterNameInRouteConfig(requestedRouteConfig, ldsResourceName);
-      if (clusterName == null) {
+      routes = findRoutesInRouteConfig(requestedRouteConfig, ldsResourceName);
+      String errorDetail = validateRoutes(routes);
+      if (errorDetail != null) {
         adsStream.sendNackRequest(
             ADS_TYPE_URL_RDS, ImmutableList.of(adsStream.rdsResourceName),
             rdsResponse.getVersionInfo(),
             "RouteConfiguration " + requestedRouteConfig.getName() + ": cannot find a "
                 + "valid cluster name in any virtual hosts with domains matching: "
-                + ldsResourceName);
+                + ldsResourceName
+                + " with the reason: " + errorDetail);
         return;
       }
     }
@@ -786,25 +804,33 @@ final class XdsClientImpl extends XdsClient {
 
     // Notify the ConfigWatcher if this RDS response contains the most recently requested
     // RDS resource.
-    if (clusterName != null) {
+    if (routes != null) {
       if (rdsRespTimer != null) {
         rdsRespTimer.cancel();
         rdsRespTimer = null;
       }
-      logger.log(XdsLogLevel.INFO, "Found cluster name: {0}", clusterName);
-      ConfigUpdate configUpdate = ConfigUpdate.newBuilder().setClusterName(clusterName).build();
+
+      // Found clusterName in the in-lined RouteConfiguration.
+      String clusterName = routes.get(routes.size() - 1).getRouteAction().get().getCluster();
+      if (!enablePathMatching) {
+        logger.log(XdsLogLevel.INFO, "Found cluster name: {0}", clusterName);
+      } else {
+        logger.log(XdsLogLevel.INFO, "Found {0} routes", routes.size());
+        logger.log(XdsLogLevel.DEBUG, "Found routes: {0}", routes);
+      }
+      ConfigUpdate configUpdate = ConfigUpdate.newBuilder()
+          .setClusterName(clusterName).addRoutes(routes).build();
       configWatcher.onConfigChanged(configUpdate);
     }
   }
 
   /**
-   * Processes a RouteConfiguration message to find the name of upstream cluster that requests
-   * for the given host will be routed to. Returns the clusterName if found.
-   * Otherwise, returns {@code null}.
+   * Processes a RouteConfiguration message to find the routes that requests for the given host will
+   * be routed to.
    */
   @VisibleForTesting
-  @Nullable
-  static String findClusterNameInRouteConfig(RouteConfiguration config, String hostName) {
+  static List<EnvoyProtoData.Route> findRoutesInRouteConfig(
+      RouteConfiguration config, String hostName) {
     List<VirtualHost> virtualHosts = config.getVirtualHostsList();
     // Domain search order:
     //  1. Exact domain names: ``www.foo.com``.
@@ -842,23 +868,98 @@ final class XdsClientImpl extends XdsClient {
       }
     }
 
+    List<EnvoyProtoData.Route> routes = new ArrayList<>();
     // Proceed with the virtual host that has longest wildcard matched domain name with the
     // hostname in original "xds:" URI.
     // Note we would consider upstream cluster not found if the virtual host is not configured
     // correctly for gRPC, even if there exist other virtual hosts with (lower priority)
     // matching domains.
     if (targetVirtualHost != null) {
-      // The client will look only at the last route in the list (the default route),
-      // whose match field must contain a prefix field whose value is empty string
-      // and whose route field must be set.
-      List<Route> routes = targetVirtualHost.getRoutesList();
-      if (!routes.isEmpty()) {
-        Route route = routes.get(routes.size() - 1);
-        if (route.getMatch().getPrefix().isEmpty()) {
-          if (route.hasRoute()) {
-            return route.getRoute().getCluster();
-          }
+      List<Route> routesProto = targetVirtualHost.getRoutesList();
+      for (Route route : routesProto) {
+        routes.add(EnvoyProtoData.Route.fromEnvoyProtoRoute(route));
+      }
+    }
+    return routes;
+  }
+
+  /**
+   * Validates the given list of routes and returns error details if there's any error.
+   */
+  @Nullable
+  private static String validateRoutes(List<EnvoyProtoData.Route> routes) {
+    if (routes.isEmpty()) {
+      return "No routes found";
+    }
+
+    // We only validate the default route unless path matching is enabled.
+    if (!enablePathMatching) {
+      EnvoyProtoData.Route route = routes.get(routes.size() - 1);
+      RouteMatch routeMatch = route.getRouteMatch();
+      if (!routeMatch.getPath().isEmpty() || !routeMatch.getPrefix().isEmpty()
+          || routeMatch.hasRegex()) {
+        return "The last route must be the default route";
+      }
+      if (!route.getRouteAction().isPresent()) {
+        return "Route action is not specified for the default route";
+      }
+      if (route.getRouteAction().get().getCluster().isEmpty()) {
+        return "Cluster is not specified for the default route";
+      }
+      return null;
+    }
+
+    // We do more validation if path matching is enabled, but whether every single route is required
+    // to be valid for grpc is TBD.
+    // For now we consider the whole list invalid if anything invalid for grpc is found.
+    // TODO(zdapeng): Fix it if the decision is different from current implementation.
+    // TODO(zdapeng): Add test for validation.
+    Set<String> prefixMatches = new HashSet<>();
+    Set<String> pathMatches = new HashSet<>();
+    for (int i = 0; i < routes.size(); i++) {
+      EnvoyProtoData.Route route = routes.get(i);
+
+      if (!route.getRouteAction().isPresent()) {
+        return "Route action is not specified for one of the routes";
+      }
+
+      RouteMatch routeMatch = route.getRouteMatch();
+      String prefix = routeMatch.getPrefix();
+      String path = routeMatch.getPath();
+      if (!prefix.isEmpty()) {
+        if (!prefix.startsWith("/") || !prefix.endsWith("/") || prefix.length() < 3) {
+          return "Prefix route match must be in the format of '/service/'";
         }
+        if (prefixMatches.contains(prefix)) {
+          return "Duplicate prefix match found";
+        }
+        prefixMatches.add(prefix);
+      } else if (!path.isEmpty()) {
+        int lastSlash = path.lastIndexOf('/');
+        if (!path.startsWith("/") || lastSlash == 0 || lastSlash ==  path.length() - 1) {
+          return "Path route match must be in the format of '/service/method'";
+        }
+        if (pathMatches.contains(path)) {
+          return "Duplicate path match found";
+        }
+        pathMatches.add(path);
+      } else if (routeMatch.hasRegex()) {
+        return "Regex route match not supported";
+      } else { // Default route match
+        if (i != routes.size() - 1) {
+          return "Default route found but is not the last route in the route list";
+        }
+      }
+
+      if (i == routes.size() - 1) {
+        if (!prefix.isEmpty() || !path.isEmpty()) {
+          return "The last route must be the default route";
+        }
+      }
+
+      RouteAction routeAction = route.getRouteAction().get();
+      if (routeAction.getCluster().isEmpty() && routeAction.getWeightedCluster().isEmpty()) {
+        return "Either cluster or weighted cluster route action must be provided";
       }
     }
     return null;

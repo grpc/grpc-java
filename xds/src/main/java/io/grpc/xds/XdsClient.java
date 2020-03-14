@@ -35,9 +35,11 @@ import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
+import io.grpc.xds.EnvoyProtoData.Route;
 import io.grpc.xds.EnvoyServerProtoData.Listener;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -62,13 +64,19 @@ abstract class XdsClient {
    */
   static final class ConfigUpdate {
     private final String clusterName;
+    private final List<Route> routes;
 
-    private ConfigUpdate(String clusterName) {
+    private ConfigUpdate(String clusterName, List<Route> routes) {
       this.clusterName = clusterName;
+      this.routes = routes;
     }
 
     String getClusterName() {
       return clusterName;
+    }
+
+    public List<Route> getRoutes() {
+      return routes;
     }
 
     @Override
@@ -77,6 +85,7 @@ abstract class XdsClient {
           MoreObjects
               .toStringHelper(this)
               .add("clusterName", clusterName)
+              .add("routes", routes)
               .toString();
     }
 
@@ -85,6 +94,7 @@ abstract class XdsClient {
     }
 
     static final class Builder {
+      private final List<Route> routes = new ArrayList<>();
       private String clusterName;
 
       // Use ConfigUpdate.newBuilder().
@@ -96,9 +106,14 @@ abstract class XdsClient {
         return this;
       }
 
+      Builder addRoutes(Collection<Route> route) {
+        routes.addAll(route);
+        return this;
+      }
+
       ConfigUpdate build() {
         Preconditions.checkState(clusterName != null, "clusterName is not set");
-        return new ConfigUpdate(clusterName);
+        return new ConfigUpdate(clusterName, Collections.unmodifiableList(routes));
       }
     }
   }
