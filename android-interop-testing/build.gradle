@@ -40,7 +40,7 @@ android {
     buildTypes {
         debug { minifyEnabled false }
         release {
-            minifyEnabled false // TODO(chengyuanzhang): fix proguard rules to enable minification
+            minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
@@ -63,7 +63,7 @@ dependencies {
             libraries.truth
 
     implementation (libraries.google_auth_oauth2_http) {
-        exclude group: 'org.apache.httpcomponents', module: 'httpclient'
+        exclude group: 'org.apache.httpcomponents'
     }
 
     compileOnly libraries.javax_annotation
