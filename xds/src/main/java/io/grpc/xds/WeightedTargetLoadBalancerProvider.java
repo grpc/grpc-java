@@ -185,7 +185,7 @@ public final class WeightedTargetLoadBalancerProvider extends LoadBalancerProvid
 
     @Override
     public int hashCode() {
-      return Objects.hash(targets);
+      return Objects.hashCode(targets);
     }
 
     @Override
