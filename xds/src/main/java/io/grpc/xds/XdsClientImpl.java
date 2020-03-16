@@ -93,7 +93,8 @@ final class XdsClientImpl extends XdsClient {
       "type.googleapis.com/envoy.api.v2.ClusterLoadAssignment";
 
   // For now we do not support path matching unless enabled manually.
-  private static final boolean ENABLE_PATH_MATCHING = Boolean.parseBoolean(
+  // Mutable for testing.
+  static boolean enablePathMatching = Boolean.parseBoolean(
       System.getenv("ENABLE_EXPERIMENTAL_PATH_MATCHING"));
 
   private final MessagePrinter respPrinter = new MessagePrinter();
@@ -641,7 +642,7 @@ final class XdsClientImpl extends XdsClient {
     if (routes != null) {
       // Found clusterName in the in-lined RouteConfiguration.
       String clusterName = routes.get(routes.size() - 1).getRouteAction().get().getCluster();
-      if (!ENABLE_PATH_MATCHING) {
+      if (!enablePathMatching) {
         logger.log(
             XdsLogLevel.INFO,
             "Found cluster name (inlined in route config): {0}", clusterName);
@@ -812,7 +813,7 @@ final class XdsClientImpl extends XdsClient {
 
       // Found clusterName in the in-lined RouteConfiguration.
       String clusterName = routes.get(routes.size() - 1).getRouteAction().get().getCluster();
-      if (!ENABLE_PATH_MATCHING) {
+      if (!enablePathMatching) {
         logger.log(XdsLogLevel.INFO, "Found cluster name: {0}", clusterName);
       } else {
         logger.log(XdsLogLevel.INFO, "Found {0} routes", routes.size());
@@ -893,7 +894,7 @@ final class XdsClientImpl extends XdsClient {
     }
 
     // We only validate the default route unless path matching is enabled.
-    if (!ENABLE_PATH_MATCHING) {
+    if (!enablePathMatching) {
       EnvoyProtoData.Route route = routes.get(routes.size() - 1);
       RouteMatch routeMatch = route.getRouteMatch();
       if (!routeMatch.getPath().isEmpty() || !routeMatch.getPrefix().isEmpty()
