@@ -193,7 +193,7 @@ public class GrpclbLoadBalancerTest {
   private ArgumentCaptor<CreateSubchannelArgs> createSubchannelArgsCaptor =
       ArgumentCaptor.forClass(CreateSubchannelArgs.class);
 
-  @SuppressWarnings({"unchecked", "deprecation"})
+  @SuppressWarnings("unchecked")
   @Before
   public void setUp() throws Exception {
     MockitoAnnotations.initMocks(this);
@@ -260,8 +260,6 @@ public class GrpclbLoadBalancerTest {
           unpooledSubchannelTracker.add(subchannel);
           return subchannel;
         }
-        // TODO(zhangkun83): remove the deprecation suppression on this method once migrated to
-        // the new createSubchannel().
       }).when(helper).createSubchannel(any(CreateSubchannelArgs.class));
     when(helper.getSynchronizationContext()).thenReturn(syncContext);
     when(helper.getScheduledExecutorService()).thenReturn(fakeClock.getScheduledExecutorService());
@@ -1686,7 +1684,6 @@ public class GrpclbLoadBalancerTest {
     verify(helper, times(4)).refreshNameResolution();
   }
 
-  @SuppressWarnings({"unchecked", "deprecation"})
   @Test
   public void grpclbWorking_pickFirstMode() throws Exception {
     InOrder inOrder = inOrder(helper);
@@ -1811,7 +1808,6 @@ public class GrpclbLoadBalancerTest {
         .returnSubchannel(any(Subchannel.class), any(ConnectivityStateInfo.class));
   }
 
-  @SuppressWarnings({"unchecked", "deprecation"})
   @Test
   public void grpclbWorking_pickFirstMode_lbSendsEmptyAddress() throws Exception {
     InOrder inOrder = inOrder(helper);
@@ -1956,7 +1952,6 @@ public class GrpclbLoadBalancerTest {
         .isEqualTo(Code.CANCELLED);
   }
 
-  @SuppressWarnings({"unchecked", "deprecation"})
   @Test
   public void pickFirstMode_fallback() throws Exception {
     InOrder inOrder = inOrder(helper);
