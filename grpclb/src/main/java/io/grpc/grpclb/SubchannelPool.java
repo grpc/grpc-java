@@ -34,7 +34,7 @@ interface SubchannelPool {
   /**
    * Pass essential utilities and the balancer that's using this pool.
    */
-  void init(Helper helper, LoadBalancer lb);
+  void init(LoadBalancer lb);
 
   /**
    * Takes a {@link Subchannel} from the pool for the given {@code eag} if there is one available.

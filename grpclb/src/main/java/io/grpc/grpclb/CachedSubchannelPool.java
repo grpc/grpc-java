@@ -40,15 +40,18 @@ final class CachedSubchannelPool implements SubchannelPool {
   private final HashMap<EquivalentAddressGroup, CacheEntry> cache =
       new HashMap<>();
 
-  private Helper helper;
+  private final Helper helper;
   private LoadBalancer lb;
 
   @VisibleForTesting
   static final long SHUTDOWN_TIMEOUT_MS = 10000;
 
-  @Override
-  public void init(Helper helper, LoadBalancer lb) {
+  public CachedSubchannelPool(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
+  }
+
+  @Override
+  public void init(LoadBalancer lb) {
     this.lb = checkNotNull(lb, "lb");
   }
 

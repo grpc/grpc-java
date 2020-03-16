@@ -69,7 +69,7 @@ class GrpclbLoadBalancer extends LoadBalancer {
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     this.subchannelPool = checkNotNull(subchannelPool, "subchannelPool");
     recreateStates();
-    this.subchannelPool.init(helper, this);
+    this.subchannelPool.init(this);
     checkNotNull(grpclbState, "grpclbState");
   }
 
@@ -80,6 +80,7 @@ class GrpclbLoadBalancer extends LoadBalancer {
     // lb is shutdown.
     grpclbState.handleSubchannelState(subchannel, newState);
   }
+
 
   @Override
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {

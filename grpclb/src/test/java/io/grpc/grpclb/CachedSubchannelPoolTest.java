@@ -89,13 +89,13 @@ public class CachedSubchannelPoolTest {
           throw new AssertionError(e);
         }
       });
-  private final CachedSubchannelPool pool = new CachedSubchannelPool();
+  private final CachedSubchannelPool pool = new CachedSubchannelPool(helper);
   private final ArrayList<Subchannel> mockSubchannels = new ArrayList<>();
   private final ArgumentCaptor<CreateSubchannelArgs> createSubchannelArgsCaptor
       = ArgumentCaptor.forClass(CreateSubchannelArgs.class);
 
   @Before
-  @SuppressWarnings({"unchecked", "deprecation"})
+  @SuppressWarnings("deprecation")
   public void setUp() {
     doAnswer(new Answer<Subchannel>() {
         @Override
@@ -107,8 +107,6 @@ public class CachedSubchannelPoolTest {
           mockSubchannels.add(subchannel);
           return subchannel;
         }
-        // TODO(zhangkun83): remove the deprecation suppression on this method once migrated to
-        // the new createSubchannel().
       }).when(helper).createSubchannel(any(CreateSubchannelArgs.class));
     doAnswer(new Answer<Void>() {
         @Override
@@ -120,7 +118,7 @@ public class CachedSubchannelPoolTest {
           any(Subchannel.class), any(ConnectivityStateInfo.class));
     when(helper.getSynchronizationContext()).thenReturn(syncContext);
     when(helper.getScheduledExecutorService()).thenReturn(clock.getScheduledExecutorService());
-    pool.init(helper, balancer);
+    pool.init(balancer);
   }
 
   @After
