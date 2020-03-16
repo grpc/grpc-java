@@ -72,4 +72,19 @@ dependencies {
     androidTestImplementation 'androidx.test:runner:1.1.0-alpha1'
 }
 
+// Checkstyle doesn't run automatically with android
+task checkStyleMain(type: Checkstyle) {
+    source 'src/main/java'
+    include '**/*.java'
+    classpath = files()
+}
+
+task checkStyleTest(type: Checkstyle) {
+    source 'src/androidTest/java'
+    include '**/*.java'
+    classpath = files()
+}
+
+project.tasks['check'].dependsOn checkStyleMain, checkStyleTest
+
 configureProtoCompilation()
