@@ -488,9 +488,8 @@ public class LocalityStoreTest {
     assertThat(interLocalityPicker.weightedChildPickers).hasSize(2);
 
     Set<Subchannel> pickedReadySubchannels = new HashSet<>();
-    for (int i = 0; i < interLocalityPicker.weightedChildPickers.size(); i++) {
-      PickResult result = interLocalityPicker.weightedChildPickers.get(i).getPicker()
-          .pickSubchannel(pickSubchannelArgs);
+    for (WeightedChildPicker weightedPicker : interLocalityPicker.weightedChildPickers) {
+      PickResult result = weightedPicker.getPicker().pickSubchannel(pickSubchannelArgs);
       pickedReadySubchannels.add(result.getSubchannel());
     }
     assertThat(pickedReadySubchannels).containsExactly(subchannel31, subchannel12);
@@ -916,9 +915,7 @@ public class LocalityStoreTest {
     WeightedRandomPicker interLocalityPicker =
         (WeightedRandomPicker) subchannelPickerCaptor.getValue();
     assertThat(interLocalityPicker.weightedChildPickers).hasSize(3);
-    for (int i = 0; i < interLocalityPicker.weightedChildPickers.size(); i++) {
-      WeightedChildPicker weightedChildPicker
-          = interLocalityPicker.weightedChildPickers.get(i);
+    for (WeightedChildPicker weightedChildPicker : interLocalityPicker.weightedChildPickers) {
       Subchannel subchannel
           = weightedChildPicker.getPicker().pickSubchannel(pickSubchannelArgs).getSubchannel();
       assertThat(weightedChildPicker.getWeight())
