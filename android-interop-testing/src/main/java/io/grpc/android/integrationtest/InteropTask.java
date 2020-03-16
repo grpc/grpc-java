@@ -145,7 +145,6 @@ final class InteropTask extends AsyncTask<Void, Void, String> {
   }
 
   private static class Tester extends AbstractInteropTest {
-    private final ManagedChannel channel;
 
     private Tester(ManagedChannel channel) {
       this.channel = channel;
