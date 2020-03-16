@@ -36,11 +36,13 @@ import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
+import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.Status;
@@ -427,7 +429,7 @@ final class GrpclbState {
         break;
       case PICK_FIRST:
         checkState(subchannels.size() <= 1, "Unexpected Subchannel count: %s", subchannels);
-        Subchannel subchannel;
+        final Subchannel subchannel;
         if (newBackendAddrList.isEmpty()) {
           if (subchannels.size() == 1) {
             cancelFallbackTimer();
@@ -453,9 +455,18 @@ final class GrpclbState {
           eagList.add(new EquivalentAddressGroup(origEag.getAddresses(), eagAttrs));
         }
         if (subchannels.isEmpty()) {
-          // TODO(zhangkun83): remove the deprecation suppression on this method once migrated to
-          // the new createSubchannel().
-          subchannel = helper.createSubchannel(eagList, createSubchannelAttrs());
+          subchannel =
+              helper.createSubchannel(
+                  CreateSubchannelArgs.newBuilder()
+                      .setAddresses(eagList)
+                      .setAttributes(createSubchannelAttrs())
+                      .build());
+          subchannel.start(new SubchannelStateListener() {
+            @Override
+            public void onSubchannelState(ConnectivityStateInfo newState) {
+              handleSubchannelState(subchannel, newState);
+            }
+          });
         } else {
           subchannel = subchannels.values().iterator().next();
           subchannel.updateAddresses(eagList);

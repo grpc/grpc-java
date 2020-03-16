@@ -54,6 +54,7 @@ import io.grpc.ClientStreamTracer;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
@@ -189,6 +190,8 @@ public class GrpclbLoadBalancerTest {
   @Mock
   private BackoffPolicy backoffPolicy2;
   private GrpclbLoadBalancer balancer;
+  private ArgumentCaptor<CreateSubchannelArgs> createSubchannelArgsCaptor =
+      ArgumentCaptor.forClass(CreateSubchannelArgs.class);
 
   @SuppressWarnings({"unchecked", "deprecation"})
   @Before
@@ -250,18 +253,16 @@ public class GrpclbLoadBalancerTest {
         @Override
         public Subchannel answer(InvocationOnMock invocation) throws Throwable {
           Subchannel subchannel = mock(Subchannel.class);
-          List<EquivalentAddressGroup> eagList =
-              (List<EquivalentAddressGroup>) invocation.getArguments()[0];
-          Attributes attrs = (Attributes) invocation.getArguments()[1];
-          when(subchannel.getAllAddresses()).thenReturn(eagList);
-          when(subchannel.getAttributes()).thenReturn(attrs);
+          CreateSubchannelArgs createSubchannelArgs = invocation.getArgument(0);
+          when(subchannel.getAllAddresses()).thenReturn(createSubchannelArgs.getAddresses());
+          when(subchannel.getAttributes()).thenReturn(createSubchannelArgs.getAttributes());
           mockSubchannels.add(subchannel);
           unpooledSubchannelTracker.add(subchannel);
           return subchannel;
         }
         // TODO(zhangkun83): remove the deprecation suppression on this method once migrated to
         // the new createSubchannel().
-      }).when(helper).createSubchannel(any(List.class), any(Attributes.class));
+      }).when(helper).createSubchannel(any(CreateSubchannelArgs.class));
     when(helper.getSynchronizationContext()).thenReturn(syncContext);
     when(helper.getScheduledExecutorService()).thenReturn(fakeClock.getScheduledExecutorService());
     when(helper.getChannelLogger()).thenReturn(channelLogger);
@@ -1716,13 +1717,13 @@ public class GrpclbLoadBalancerTest {
     lbResponseObserver.onNext(buildInitialResponse());
     lbResponseObserver.onNext(buildLbResponse(backends1));
 
-    // TODO(zhangkun83): remove the deprecation suppression on this method once migrated to
-    // the new createSubchannel().
-    inOrder.verify(helper).createSubchannel(
-        eq(Arrays.asList(
+    inOrder.verify(helper).createSubchannel(createSubchannelArgsCaptor.capture());
+    CreateSubchannelArgs createSubchannelArgs = createSubchannelArgsCaptor.getValue();
+    assertThat(createSubchannelArgs.getAddresses())
+        .containsExactly(
             new EquivalentAddressGroup(backends1.get(0).addr, eagAttrsWithToken("token0001")),
-            new EquivalentAddressGroup(backends1.get(1).addr, eagAttrsWithToken("token0002")))),
-        any(Attributes.class));
+            new EquivalentAddressGroup(backends1.get(1).addr, eagAttrsWithToken("token0002")));
+
 
     // Initially IDLE
     inOrder.verify(helper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
@@ -1773,7 +1774,7 @@ public class GrpclbLoadBalancerTest {
 
     // new addresses will be updated to the existing subchannel
     // createSubchannel() has ever been called only once
-    verify(helper, times(1)).createSubchannel(any(List.class), any(Attributes.class));
+    verify(helper, times(1)).createSubchannel(any(CreateSubchannelArgs.class));
     assertThat(mockSubchannels).isEmpty();
     verify(subchannel).updateAddresses(
         eq(Arrays.asList(
@@ -1840,13 +1841,12 @@ public class GrpclbLoadBalancerTest {
     lbResponseObserver.onNext(buildInitialResponse());
     lbResponseObserver.onNext(buildLbResponse(backends1));
 
-    // TODO(zhangkun83): remove the deprecation suppression on this method once migrated to
-    // the new createSubchannel().
-    inOrder.verify(helper).createSubchannel(
-        eq(Arrays.asList(
+    inOrder.verify(helper).createSubchannel(createSubchannelArgsCaptor.capture());
+    CreateSubchannelArgs createSubchannelArgs = createSubchannelArgsCaptor.getValue();
+    assertThat(createSubchannelArgs.getAddresses())
+        .containsExactly(
             new EquivalentAddressGroup(backends1.get(0).addr, eagAttrsWithToken("token0001")),
-            new EquivalentAddressGroup(backends1.get(1).addr, eagAttrsWithToken("token0002")))),
-        any(Attributes.class));
+            new EquivalentAddressGroup(backends1.get(1).addr, eagAttrsWithToken("token0002")));
 
     // Initially IDLE
     inOrder.verify(helper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
@@ -1893,7 +1893,7 @@ public class GrpclbLoadBalancerTest {
 
     // new addresses will be updated to the existing subchannel
     // createSubchannel() has ever been called only once
-    inOrder.verify(helper, never()).createSubchannel(any(List.class), any(Attributes.class));
+    inOrder.verify(helper, never()).createSubchannel(any(CreateSubchannelArgs.class));
     assertThat(mockSubchannels).isEmpty();
     verify(subchannel).shutdown();
 
@@ -1915,7 +1915,7 @@ public class GrpclbLoadBalancerTest {
     lbResponseObserver.onNext(buildLbResponse(backends2));
 
     // new addresses will be updated to the existing subchannel
-    inOrder.verify(helper, times(1)).createSubchannel(any(List.class), any(Attributes.class));
+    inOrder.verify(helper, times(1)).createSubchannel(any(CreateSubchannelArgs.class));
     inOrder.verify(helper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
     subchannel = mockSubchannels.poll();
 
@@ -1979,11 +1979,10 @@ public class GrpclbLoadBalancerTest {
     fakeClock.forwardTime(GrpclbState.FALLBACK_TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
     // Entering fallback mode
-    // TODO(zhangkun83): remove the deprecation suppression on this method once migrated to
-    // the new createSubchannel().
-    inOrder.verify(helper).createSubchannel(
-        eq(Arrays.asList(backendList.get(0), backendList.get(1))),
-        any(Attributes.class));
+    inOrder.verify(helper).createSubchannel(createSubchannelArgsCaptor.capture());
+    CreateSubchannelArgs createSubchannelArgs = createSubchannelArgsCaptor.getValue();
+    assertThat(createSubchannelArgs.getAddresses())
+        .containsExactly(backendList.get(0), backendList.get(1));
 
     assertThat(mockSubchannels).hasSize(1);
     Subchannel subchannel = mockSubchannels.poll();
@@ -2015,7 +2014,7 @@ public class GrpclbLoadBalancerTest {
 
     // new addresses will be updated to the existing subchannel
     // createSubchannel() has ever been called only once
-    verify(helper, times(1)).createSubchannel(any(List.class), any(Attributes.class));
+    verify(helper, times(1)).createSubchannel(any(CreateSubchannelArgs.class));
     assertThat(mockSubchannels).isEmpty();
     verify(subchannel).updateAddresses(
         eq(Arrays.asList(
@@ -2035,7 +2034,6 @@ public class GrpclbLoadBalancerTest {
         .returnSubchannel(any(Subchannel.class), any(ConnectivityStateInfo.class));
   }
 
-  @SuppressWarnings("deprecation")
   @Test
   public void switchMode() throws Exception {
     InOrder inOrder = inOrder(helper);
@@ -2111,13 +2109,12 @@ public class GrpclbLoadBalancerTest {
     lbResponseObserver.onNext(buildLbResponse(backends1));
 
     // PICK_FIRST Subchannel
-    // TODO(zhangkun83): remove the deprecation suppression on this method once migrated to
-    // the new createSubchannel().
-    inOrder.verify(helper).createSubchannel(
-        eq(Arrays.asList(
+    inOrder.verify(helper).createSubchannel(createSubchannelArgsCaptor.capture());
+    CreateSubchannelArgs createSubchannelArgs = createSubchannelArgsCaptor.getValue();
+    assertThat(createSubchannelArgs.getAddresses())
+        .containsExactly(
             new EquivalentAddressGroup(backends1.get(0).addr, eagAttrsWithToken("token0001")),
-            new EquivalentAddressGroup(backends1.get(1).addr, eagAttrsWithToken("token0002")))),
-        any(Attributes.class));
+            new EquivalentAddressGroup(backends1.get(1).addr, eagAttrsWithToken("token0002")));
 
     inOrder.verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
   }
@@ -2127,7 +2124,6 @@ public class GrpclbLoadBalancerTest {
   }
 
   @Test
-  @SuppressWarnings("deprecation")
   public void switchMode_nullLbPolicy() throws Exception {
     InOrder inOrder = inOrder(helper);
 
@@ -2201,13 +2197,12 @@ public class GrpclbLoadBalancerTest {
     lbResponseObserver.onNext(buildLbResponse(backends1));
 
     // PICK_FIRST Subchannel
-    // TODO(zhangkun83): remove the deprecation suppression on this method once migrated to
-    // the new createSubchannel().
-    inOrder.verify(helper).createSubchannel(
-        eq(Arrays.asList(
+    inOrder.verify(helper).createSubchannel(createSubchannelArgsCaptor.capture());
+    CreateSubchannelArgs createSubchannelArgs = createSubchannelArgsCaptor.getValue();
+    assertThat(createSubchannelArgs.getAddresses())
+        .containsExactly(
             new EquivalentAddressGroup(backends1.get(0).addr, eagAttrsWithToken("token0001")),
-            new EquivalentAddressGroup(backends1.get(1).addr, eagAttrsWithToken("token0002")))),
-        any(Attributes.class));
+            new EquivalentAddressGroup(backends1.get(1).addr, eagAttrsWithToken("token0002")));
 
     inOrder.verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
   }
