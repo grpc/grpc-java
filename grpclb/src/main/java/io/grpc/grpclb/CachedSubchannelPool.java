@@ -23,7 +23,6 @@ import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.Subchannel;
@@ -41,7 +40,7 @@ final class CachedSubchannelPool implements SubchannelPool {
       new HashMap<>();
 
   private final Helper helper;
-  private LoadBalancer lb;
+  private PooledSubchannelStateListener listener;
 
   @VisibleForTesting
   static final long SHUTDOWN_TIMEOUT_MS = 10000;
@@ -51,8 +50,8 @@ final class CachedSubchannelPool implements SubchannelPool {
   }
 
   @Override
-  public void init(LoadBalancer lb) {
-    this.lb = checkNotNull(lb, "lb");
+  public void registerListener(PooledSubchannelStateListener pooledSubchannelStateListener) {
+    this.listener = checkNotNull(pooledSubchannelStateListener, "pooledSubchannelStateListener");
   }
 
   @Override
@@ -69,9 +68,8 @@ final class CachedSubchannelPool implements SubchannelPool {
                   .build());
       subchannel.start(new SubchannelStateListener() {
         @Override
-        @SuppressWarnings("deprecation")
         public void onSubchannelState(ConnectivityStateInfo newState) {
-          lb.handleSubchannelState(subchannel, newState);
+          listener.onSubchannelState(subchannel, newState);
         }
       });
     } else {
@@ -81,9 +79,8 @@ final class CachedSubchannelPool implements SubchannelPool {
       // in the cache.
       helper.getSynchronizationContext().execute(new Runnable() {
           @Override
-          @SuppressWarnings("deprecation")
           public void run() {
-            lb.handleSubchannelState(subchannel, entry.state);
+            listener.onSubchannelState(subchannel, entry.state);
           }
         });
     }

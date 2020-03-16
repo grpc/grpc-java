@@ -28,6 +28,7 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.Status;
 import io.grpc.grpclb.GrpclbState.Mode;
+import io.grpc.grpclb.SubchannelPool.PooledSubchannelStateListener;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.TimeProvider;
 import java.util.ArrayList;
@@ -69,7 +70,6 @@ class GrpclbLoadBalancer extends LoadBalancer {
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     this.subchannelPool = checkNotNull(subchannelPool, "subchannelPool");
     recreateStates();
-    this.subchannelPool.init(this);
     checkNotNull(grpclbState, "grpclbState");
   }
 
@@ -139,6 +139,12 @@ class GrpclbLoadBalancer extends LoadBalancer {
     checkState(grpclbState == null, "Should've been cleared");
     grpclbState =
         new GrpclbState(config, helper, subchannelPool, time, stopwatch, backoffPolicyProvider);
+    subchannelPool.registerListener(new PooledSubchannelStateListener() {
+      @Override
+      public void onSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
+        grpclbState.handleSubchannelState(subchannel, newState);
+      }
+    });
   }
 
   @Override

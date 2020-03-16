@@ -19,8 +19,6 @@ package io.grpc.grpclb;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.LoadBalancer;
-import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.Subchannel;
 import javax.annotation.concurrent.NotThreadSafe;
 
@@ -32,9 +30,9 @@ import javax.annotation.concurrent.NotThreadSafe;
 @NotThreadSafe
 interface SubchannelPool {
   /**
-   * Pass essential utilities and the balancer that's using this pool.
+   * Registers a listener to received Subchannel status updates.
    */
-  void init(LoadBalancer lb);
+  void registerListener(PooledSubchannelStateListener listener);
 
   /**
    * Takes a {@link Subchannel} from the pool for the given {@code eag} if there is one available.
@@ -59,4 +57,17 @@ interface SubchannelPool {
    * Shuts down all subchannels in the pool immediately.
    */
   void clear();
+
+  /**
+   * Receives state changes for a pooled {@link Subchannel}.
+   */
+  interface PooledSubchannelStateListener {
+    /**
+     * Handles a state change on a Subchannel. The behavior is same as {@link
+     * io.grpc.LoadBalancer.SubchannelStateListener}.
+     *
+     * <p>When subchannel is reused pooled  it will trigger subchannel state change event.
+     */
+    void onSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState);
+  }
 }

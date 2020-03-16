@@ -279,7 +279,8 @@ public class GrpclbLoadBalancerTest {
     balancer = new GrpclbLoadBalancer(helper, subchannelPool, fakeClock.getTimeProvider(),
         fakeClock.getStopwatchSupplier().get(),
         backoffPolicyProvider);
-    verify(subchannelPool).init(same(balancer));
+    verify(subchannelPool)
+        .registerListener(any(SubchannelPool.PooledSubchannelStateListener.class));
   }
 
   @After

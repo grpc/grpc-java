@@ -34,13 +34,13 @@ import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.grpclb.CachedSubchannelPool.ShutdownSubchannelTask;
+import io.grpc.grpclb.SubchannelPool.PooledSubchannelStateListener;
 import io.grpc.internal.FakeClock;
 import java.util.ArrayList;
 import org.junit.After;
@@ -48,6 +48,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.mockito.AdditionalAnswers;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mockito;
@@ -80,7 +81,15 @@ public class CachedSubchannelPoolTest {
       };
 
   private final Helper helper = mock(Helper.class);
-  private final LoadBalancer balancer = mock(LoadBalancer.class);
+  private final PooledSubchannelStateListener listener = mock(
+      PooledSubchannelStateListener.class,
+      AdditionalAnswers.delegatesTo(new PooledSubchannelStateListener() {
+        @Override
+        public void onSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
+          syncContext.throwIfNotInThisSynchronizationContext();
+        }
+      }));
+
   private final FakeClock clock = new FakeClock();
   private final SynchronizationContext syncContext = new SynchronizationContext(
       new Thread.UncaughtExceptionHandler() {
@@ -95,7 +104,6 @@ public class CachedSubchannelPoolTest {
       = ArgumentCaptor.forClass(CreateSubchannelArgs.class);
 
   @Before
-  @SuppressWarnings("deprecation")
   public void setUp() {
     doAnswer(new Answer<Subchannel>() {
         @Override
@@ -108,31 +116,23 @@ public class CachedSubchannelPoolTest {
           return subchannel;
         }
       }).when(helper).createSubchannel(any(CreateSubchannelArgs.class));
-    doAnswer(new Answer<Void>() {
-        @Override
-        public Void answer(InvocationOnMock invocation) throws Throwable {
-          syncContext.throwIfNotInThisSynchronizationContext();
-          return null;
-        }
-      }).when(balancer).handleSubchannelState(
-          any(Subchannel.class), any(ConnectivityStateInfo.class));
     when(helper.getSynchronizationContext()).thenReturn(syncContext);
     when(helper.getScheduledExecutorService()).thenReturn(clock.getScheduledExecutorService());
-    pool.init(balancer);
+    pool.registerListener(listener);
   }
 
   @After
-  @SuppressWarnings("deprecation")
   public void wrapUp() {
+    if (mockSubchannels.isEmpty()) {
+      return;
+    }
     // Sanity checks
     for (Subchannel subchannel : mockSubchannels) {
       verify(subchannel, atMost(1)).shutdown();
     }
-    // TODO(zhangkun83): remove the deprecation suppression on this method once migrated to
-    // the new API.
-    verify(balancer, atLeast(0))
-        .handleSubchannelState(any(Subchannel.class), any(ConnectivityStateInfo.class));
-    verifyNoMoreInteractions(balancer);
+    verify(listener, atLeast(0))
+        .onSubchannelState(any(Subchannel.class), any(ConnectivityStateInfo.class));
+    verifyNoMoreInteractions(listener);
   }
 
   @Test
@@ -225,7 +225,6 @@ public class CachedSubchannelPoolTest {
     assertThat(clock.numPendingTasks()).isEqualTo(0);
   }
 
-  @SuppressWarnings("deprecation")
   @Test
   public void updateStateWhileInPool() {
     Subchannel subchannel1 = pool.takeOrCreateSubchannel(EAG1, ATTRS1);
@@ -238,21 +237,18 @@ public class CachedSubchannelPoolTest {
 
     pool.handleSubchannelState(subchannel1, anotherFailureState);
 
-    // TODO(zhangkun83): remove the deprecation suppression on this method once migrated to the new
-    // createSubchannel().
-    verify(balancer, never())
-        .handleSubchannelState(any(Subchannel.class), any(ConnectivityStateInfo.class));
+    verify(listener, never())
+        .onSubchannelState(any(Subchannel.class), any(ConnectivityStateInfo.class));
 
     assertThat(pool.takeOrCreateSubchannel(EAG1, ATTRS1)).isSameInstanceAs(subchannel1);
-    verify(balancer).handleSubchannelState(same(subchannel1), same(anotherFailureState));
-    verifyNoMoreInteractions(balancer);
+    verify(listener).onSubchannelState(same(subchannel1), same(anotherFailureState));
+    verifyNoMoreInteractions(listener);
 
     assertThat(pool.takeOrCreateSubchannel(EAG2, ATTRS2)).isSameInstanceAs(subchannel2);
-    verify(balancer).handleSubchannelState(same(subchannel2), same(TRANSIENT_FAILURE_STATE));
-    verifyNoMoreInteractions(balancer);
+    verify(listener).onSubchannelState(same(subchannel2), same(TRANSIENT_FAILURE_STATE));
+    verifyNoMoreInteractions(listener);
   }
 
-  @SuppressWarnings("deprecation")
   @Test
   public void updateStateWhileInPool_notSameObject() {
     Subchannel subchannel1 = pool.takeOrCreateSubchannel(EAG1, ATTRS1);
@@ -274,8 +270,8 @@ public class CachedSubchannelPoolTest {
     assertThat(pool.takeOrCreateSubchannel(EAG1, ATTRS1)).isSameInstanceAs(subchannel1);
 
     // subchannel1's state is unchanged
-    verify(balancer).handleSubchannelState(same(subchannel1), same(READY_STATE));
-    verifyNoMoreInteractions(balancer);
+    verify(listener).onSubchannelState(same(subchannel1), same(READY_STATE));
+    verifyNoMoreInteractions(listener);
   }
 
   @Test
