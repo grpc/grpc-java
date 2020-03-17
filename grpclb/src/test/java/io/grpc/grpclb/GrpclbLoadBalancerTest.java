@@ -285,7 +285,10 @@ public class GrpclbLoadBalancerTest {
     when(backoffPolicy1.nextBackoffNanos()).thenReturn(10L, 100L);
     when(backoffPolicy2.nextBackoffNanos()).thenReturn(10L, 100L);
     when(backoffPolicyProvider.get()).thenReturn(backoffPolicy1, backoffPolicy2);
-    balancer = new GrpclbLoadBalancer(helper, subchannelPool, fakeClock.getTimeProvider(),
+    balancer = new GrpclbLoadBalancer(
+        helper,
+        subchannelPool,
+        fakeClock.getTimeProvider(),
         fakeClock.getStopwatchSupplier().get(),
         backoffPolicyProvider);
     verify(subchannelPool).registerListener(any(PooledSubchannelStateListener.class));
@@ -1743,7 +1746,9 @@ public class GrpclbLoadBalancerTest {
     verify(subchannel, never()).requestConnection();
 
     // CONNECTING
-    deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(CONNECTING));
+    balancer
+        .grpclbState
+        .handleSubchannelState(subchannel,  ConnectivityStateInfo.forNonError(CONNECTING));
 
     inOrder.verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
     RoundRobinPicker picker1 = (RoundRobinPicker) pickerCaptor.getValue();
@@ -1752,14 +1757,19 @@ public class GrpclbLoadBalancerTest {
 
     // TRANSIENT_FAILURE
     Status error = Status.UNAVAILABLE.withDescription("Simulated connection error");
-    deliverSubchannelState(subchannel, ConnectivityStateInfo.forTransientFailure(error));
+    balancer
+        .grpclbState
+        .handleSubchannelState(subchannel,  ConnectivityStateInfo.forTransientFailure(error));
     inOrder.verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
     RoundRobinPicker picker2 = (RoundRobinPicker) pickerCaptor.getValue();
     assertThat(picker2.dropList).containsExactly(null, null);
     assertThat(picker2.pickList).containsExactly(new ErrorEntry(error));
 
     // READY
-    deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
+    balancer
+        .grpclbState
+        .handleSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
+
     inOrder.verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
     RoundRobinPicker picker3 = (RoundRobinPicker) pickerCaptor.getValue();
     assertThat(picker3.dropList).containsExactly(null, null);
@@ -1793,7 +1803,8 @@ public class GrpclbLoadBalancerTest {
         new BackendEntry(subchannel, new TokenAttachingTracerFactory(getLoadRecorder())));
 
     // Subchannel goes IDLE, but PICK_FIRST will not try to reconnect
-    deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(IDLE));
+    balancer.grpclbState.handleSubchannelState(subchannel, ConnectivityStateInfo.forNonError(IDLE));
+
     inOrder.verify(helper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
     RoundRobinPicker picker5 = (RoundRobinPicker) pickerCaptor.getValue();
     verify(subchannel, never()).requestConnection();
@@ -1865,7 +1876,9 @@ public class GrpclbLoadBalancerTest {
     verify(subchannel, never()).requestConnection();
 
     // CONNECTING
-    deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(CONNECTING));
+    balancer
+        .grpclbState
+        .handleSubchannelState(subchannel, ConnectivityStateInfo.forNonError(CONNECTING));
 
     inOrder.verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
     RoundRobinPicker picker1 = (RoundRobinPicker) pickerCaptor.getValue();
@@ -1874,14 +1887,20 @@ public class GrpclbLoadBalancerTest {
 
     // TRANSIENT_FAILURE
     Status error = Status.UNAVAILABLE.withDescription("Simulated connection error");
-    deliverSubchannelState(subchannel, ConnectivityStateInfo.forTransientFailure(error));
+    balancer
+        .grpclbState
+        .handleSubchannelState(subchannel, ConnectivityStateInfo.forTransientFailure(error));
+
     inOrder.verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
     RoundRobinPicker picker2 = (RoundRobinPicker) pickerCaptor.getValue();
     assertThat(picker2.dropList).containsExactly(null, null);
     assertThat(picker2.pickList).containsExactly(new ErrorEntry(error));
 
     // READY
-    deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
+    balancer
+        .grpclbState
+        .handleSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
+
     inOrder.verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
     RoundRobinPicker picker3 = (RoundRobinPicker) pickerCaptor.getValue();
     assertThat(picker3.dropList).containsExactly(null, null);
@@ -1923,8 +1942,12 @@ public class GrpclbLoadBalancerTest {
     subchannel = mockSubchannels.poll();
 
     // Subchannel became READY
-    deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(CONNECTING));
-    deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
+    balancer
+        .grpclbState
+        .handleSubchannelState(subchannel, ConnectivityStateInfo.forNonError(CONNECTING));
+    balancer
+        .grpclbState
+        .handleSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
     inOrder.verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
     RoundRobinPicker picker4 = (RoundRobinPicker) pickerCaptor.getValue();
     assertThat(picker4.pickList).containsExactly(
@@ -1994,7 +2017,9 @@ public class GrpclbLoadBalancerTest {
     RoundRobinPicker picker0 = (RoundRobinPicker) pickerCaptor.getValue();
 
     // READY
-    deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
+    balancer
+        .grpclbState
+        .handleSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
     inOrder.verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
     RoundRobinPicker picker1 = (RoundRobinPicker) pickerCaptor.getValue();
     assertThat(picker1.dropList).containsExactly(null, null);
@@ -2482,6 +2507,7 @@ public class GrpclbLoadBalancerTest {
         .inOrder();
   }
 
+  // Must using round-robin (pick-first doesn't use subchannel pool)
   private void deliverSubchannelState(
       final Subchannel subchannel, final ConnectivityStateInfo newState) {
     syncContext.execute(new Runnable() {

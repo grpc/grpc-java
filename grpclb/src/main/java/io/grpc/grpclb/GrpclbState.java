@@ -171,15 +171,15 @@ final class GrpclbState {
     this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
     if (config.getMode() == Mode.ROUND_ROBIN) {
       this.subchannelPool = checkNotNull(subchannelPool, "subchannelPool");
+      subchannelPool.registerListener(new PooledSubchannelStateListener() {
+        @Override
+        public void onSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
+          handleSubchannelState(subchannel, newState);
+        }
+      });
     } else {
       this.subchannelPool = null;
     }
-    subchannelPool.registerListener(new PooledSubchannelStateListener() {
-      @Override
-      public void onSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
-        handleSubchannelState(subchannel, newState);
-      }
-    });
     this.time = checkNotNull(time, "time provider");
     this.stopwatch = checkNotNull(stopwatch, "stopwatch");
     this.timerService = checkNotNull(helper.getScheduledExecutorService(), "timerService");
