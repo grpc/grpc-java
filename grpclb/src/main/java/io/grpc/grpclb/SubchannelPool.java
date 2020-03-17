@@ -63,10 +63,11 @@ interface SubchannelPool {
    */
   interface PooledSubchannelStateListener {
     /**
-     * Handles a state change on a Subchannel. The behavior is same as {@link
+     * Handles a state change on a Subchannel. The behavior is similar to {@link
      * io.grpc.LoadBalancer.SubchannelStateListener}.
      *
-     * <p>When subchannel is reused pooled  it will trigger subchannel state change event.
+     * <p>When a subchannel is reused, subchannel state change event will be triggered even if the
+     * underlying status remains same.
      */
     void onSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState);
   }
