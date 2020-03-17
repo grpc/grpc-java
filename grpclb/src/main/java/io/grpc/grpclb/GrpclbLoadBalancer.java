@@ -23,12 +23,10 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import io.grpc.Attributes;
 import io.grpc.ChannelLogger.ChannelLogLevel;
-import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.Status;
 import io.grpc.grpclb.GrpclbState.Mode;
-import io.grpc.grpclb.SubchannelPool.PooledSubchannelStateListener;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.TimeProvider;
 import java.util.ArrayList;
@@ -72,15 +70,6 @@ class GrpclbLoadBalancer extends LoadBalancer {
     recreateStates();
     checkNotNull(grpclbState, "grpclbState");
   }
-
-  @Deprecated
-  @Override
-  public void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
-    // grpclbState should never be null here since handleSubchannelState cannot be called while the
-    // lb is shutdown.
-    grpclbState.handleSubchannelState(subchannel, newState);
-  }
-
 
   @Override
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
@@ -139,12 +128,6 @@ class GrpclbLoadBalancer extends LoadBalancer {
     checkState(grpclbState == null, "Should've been cleared");
     grpclbState =
         new GrpclbState(config, helper, subchannelPool, time, stopwatch, backoffPolicyProvider);
-    subchannelPool.registerListener(new PooledSubchannelStateListener() {
-      @Override
-      public void onSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
-        grpclbState.handleSubchannelState(subchannel, newState);
-      }
-    });
   }
 
   @Override

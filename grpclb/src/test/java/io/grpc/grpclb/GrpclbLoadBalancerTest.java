@@ -72,6 +72,7 @@ import io.grpc.grpclb.GrpclbState.ErrorEntry;
 import io.grpc.grpclb.GrpclbState.IdleSubchannelEntry;
 import io.grpc.grpclb.GrpclbState.Mode;
 import io.grpc.grpclb.GrpclbState.RoundRobinPicker;
+import io.grpc.grpclb.SubchannelPool.PooledSubchannelStateListener;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.BackoffPolicy;
@@ -192,6 +193,7 @@ public class GrpclbLoadBalancerTest {
   private GrpclbLoadBalancer balancer;
   private ArgumentCaptor<CreateSubchannelArgs> createSubchannelArgsCaptor =
       ArgumentCaptor.forClass(CreateSubchannelArgs.class);
+  private PooledSubchannelStateListener listener;
 
   @SuppressWarnings("unchecked")
   @Before
@@ -249,6 +251,13 @@ public class GrpclbLoadBalancerTest {
         }
       }).when(subchannelPool).takeOrCreateSubchannel(
           any(EquivalentAddressGroup.class), any(Attributes.class));
+    doAnswer(new Answer<Void>() {
+      @Override
+      public Void answer(InvocationOnMock invocation) throws Throwable {
+        listener = invocation.getArgument(0);
+        return null;
+      }
+    }).when(subchannelPool).registerListener(any(PooledSubchannelStateListener.class));
     doAnswer(new Answer<Subchannel>() {
         @Override
         public Subchannel answer(InvocationOnMock invocation) throws Throwable {
@@ -279,8 +288,7 @@ public class GrpclbLoadBalancerTest {
     balancer = new GrpclbLoadBalancer(helper, subchannelPool, fakeClock.getTimeProvider(),
         fakeClock.getStopwatchSupplier().get(),
         backoffPolicyProvider);
-    verify(subchannelPool)
-        .registerListener(any(SubchannelPool.PooledSubchannelStateListener.class));
+    verify(subchannelPool).registerListener(any(PooledSubchannelStateListener.class));
   }
 
   @After
@@ -354,7 +362,6 @@ public class GrpclbLoadBalancerTest {
 
     verify(subchannel, never()).getAttributes();
   }
-
 
   @Test
   public void roundRobinPickerWithDrop() {
@@ -1722,7 +1729,6 @@ public class GrpclbLoadBalancerTest {
             new EquivalentAddressGroup(backends1.get(0).addr, eagAttrsWithToken("token0001")),
             new EquivalentAddressGroup(backends1.get(1).addr, eagAttrsWithToken("token0002")));
 
-
     // Initially IDLE
     inOrder.verify(helper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
     RoundRobinPicker picker0 = (RoundRobinPicker) pickerCaptor.getValue();
@@ -2476,15 +2482,12 @@ public class GrpclbLoadBalancerTest {
         .inOrder();
   }
 
-  @SuppressWarnings("deprecation")
   private void deliverSubchannelState(
       final Subchannel subchannel, final ConnectivityStateInfo newState) {
     syncContext.execute(new Runnable() {
       @Override
       public void run() {
-        // TODO(zhangkun83): remove the deprecation suppression on this method once migrated to
-        // the new API.
-        balancer.handleSubchannelState(subchannel, newState);
+        listener.onSubchannelState(subchannel, newState);
       }
     });
   }
