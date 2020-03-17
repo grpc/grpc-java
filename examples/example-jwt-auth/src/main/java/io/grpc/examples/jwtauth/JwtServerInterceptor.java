@@ -25,6 +25,7 @@ import io.grpc.ServerInterceptor;
 import io.grpc.Status;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jws;
+import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.JwtParser;
 import io.jsonwebtoken.Jwts;
 
@@ -43,27 +44,30 @@ public class JwtServerInterceptor implements ServerInterceptor {
       Metadata metadata, ServerCallHandler<ReqT, RespT> serverCallHandler) {
     String value = metadata.get(Constant.AUTHORIZATION_METADATA_KEY);
 
-    Status status;
+    Status status = Status.OK;
     if (value == null) {
       status = Status.UNAUTHENTICATED.withDescription("Authorization token is missing");
     } else if (!value.startsWith(Constant.BEARER_TYPE)) {
       status = Status.UNAUTHENTICATED.withDescription("Unknown authorization type");
     } else {
+      Jws<Claims> claims = null;
+      // remove authorization type prefix
+      String token = value.substring(Constant.BEARER_TYPE.length()).trim();
       try {
-        // remove authorization type prefix
-        String token = value.substring(Constant.BEARER_TYPE.length()).trim();
         // verify token signature and parse claims
-        Jws<Claims> claims = parser.parseClaimsJws(token);
+        claims = parser.parseClaimsJws(token);
+      } catch (JwtException e) {
+        status = Status.UNAUTHENTICATED.withDescription(e.getMessage()).withCause(e);
+      }
+      if (claims != null) {
         // set client id into current context
         Context ctx = Context.current()
             .withValue(Constant.CLIENT_ID_CONTEXT_KEY, claims.getBody().getSubject());
         return Contexts.interceptCall(ctx, serverCall, metadata, serverCallHandler);
-      } catch (Exception e) {
-        status = Status.UNAUTHENTICATED.withDescription(e.getMessage()).withCause(e);
       }
     }
 
-    serverCall.close(status, metadata);
+    serverCall.close(status, new Metadata());
     return new ServerCall.Listener<ReqT>() {
       // noop
     };
