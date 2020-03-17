@@ -23,6 +23,8 @@ import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
+import io.grpc.CallCredentials;
+import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
@@ -93,14 +95,15 @@ public class AuthClientTest {
             mockServerInterceptor))
         .build().start());
 
-    // Create an AuthClient using the in-process channel;
-    client = new AuthClient(InProcessChannelBuilder.forName(serverName).directExecutor().build());
+    CallCredentials credentials = new JwtCredential("test-client");
+    ManagedChannel channel = InProcessChannelBuilder.forName(serverName).directExecutor().build();
+    client = new AuthClient(credentials, channel);
   }
 
   @Test
   public void greet() {
     ArgumentCaptor<Metadata> metadataCaptor = ArgumentCaptor.forClass(Metadata.class);
-    String retVal = client.greet("John", "greeting-client");
+    String retVal = client.greet("John");
 
     verify(mockServerInterceptor).interceptCall(
         ArgumentMatchers.<ServerCall<HelloRequest, HelloReply>>any(),

@@ -22,8 +22,6 @@ import io.grpc.ManagedChannelBuilder;
 import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
 import io.grpc.examples.helloworld.HelloRequest;
-import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.SignatureAlgorithm;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
@@ -36,24 +34,28 @@ public class AuthClient {
 
   private final ManagedChannel channel;
   private final GreeterGrpc.GreeterBlockingStub blockingStub;
+  private final CallCredentials callCredentials;
 
   /**
    * Construct client for accessing GreeterGrpc server.
    */
-  AuthClient(String host, int port) {
-    this(ManagedChannelBuilder
-        .forAddress(host, port)
-        // Channels are secure by default (via SSL/TLS). For this example we disable TLS to avoid
-        // needing certificates, but it is recommended to use a secure channel while passing
-        // credentials.
-        .usePlaintext()
-        .build());
+  AuthClient(CallCredentials callCredentials, String host, int port) {
+    this(
+        callCredentials,
+        ManagedChannelBuilder
+            .forAddress(host, port)
+            // Channels are secure by default (via SSL/TLS). For this example we disable TLS
+            // to avoid needing certificates, but it is recommended to use a secure channel
+            // while passing credentials.
+            .usePlaintext()
+            .build());
   }
 
   /**
    * Construct client for accessing GreeterGrpc server using the existing channel.
    */
-  AuthClient(ManagedChannel channel) {
+  AuthClient(CallCredentials callCredentials, ManagedChannel channel) {
+    this.callCredentials = callCredentials;
     this.channel = channel;
     this.blockingStub = GreeterGrpc.newBlockingStub(channel);
   }
@@ -66,28 +68,20 @@ public class AuthClient {
    * Say hello to server.
    *
    * @param name name to set in HelloRequest
-   * @param clientId client identifier to set in JWT subject
    * @return the message in the HelloReply from the server
    */
-  public String greet(String name, String clientId) {
+  public String greet(String name) {
     logger.info("Will try to greet " + name + " ...");
     HelloRequest request = HelloRequest.newBuilder().setName(name).build();
 
-    String jwt = getJwt(clientId); // build JWT
-    CallCredentials credentials = new BearerToken(jwt); // Wrap JWT in CallCredentials
-    HelloReply response = blockingStub
-        .withCallCredentials(credentials) // get a new stub that uses the given call credentials
-        .sayHello(request);               // and call the server using it
+    // Use a stub with the given call credentials applied to invoke the RPC.
+    HelloReply response =
+        blockingStub
+            .withCallCredentials(callCredentials)
+            .sayHello(request);
 
     logger.info("Greeting: " + response.getMessage());
     return response.getMessage();
-  }
-
-  private static String getJwt(String clientId) {
-    return Jwts.builder()
-        .setSubject(clientId)
-        .signWith(SignatureAlgorithm.HS256, Constant.JWT_SIGNING_KEY)
-        .compact();
   }
 
   /**
@@ -114,10 +108,11 @@ public class AuthClient {
       clientId = args[3]; // Use the fourth argument as the client identifier if provided
     }
 
-    AuthClient client = new AuthClient(host, port);
+    CallCredentials credentials = new JwtCredential(clientId);
+    AuthClient client = new AuthClient(credentials, host, port);
 
     try {
-      client.greet(user, clientId);
+      client.greet(user);
     } finally {
       client.shutdown();
     }
