@@ -156,6 +156,8 @@ $ bazel-bin/hello-world-client
 
 - [Google Authentication](example-gauth)
 
+- [JWT-based Authentication](example-jwt-auth)
+
 - [Kotlin examples](example-kotlin)
 
 - [Kotlin Android examples](example-kotlin/android)

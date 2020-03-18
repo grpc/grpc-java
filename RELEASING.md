@@ -45,6 +45,8 @@ $ VERSION_FILES=(
   examples/example-alts/build.gradle
   examples/example-gauth/build.gradle
   examples/example-gauth/pom.xml
+  examples/example-jwt-auth/build.gradle
+  examples/example-jwt-auth/pom.xml
   examples/example-hostname/build.gradle
   examples/example-hostname/pom.xml
   examples/example-kotlin/build.gradle
