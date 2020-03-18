@@ -121,8 +121,10 @@ final class EdsLoadBalancer extends LoadBalancer {
           "Received EDS lb config: cluster={0}, child_policy={1}, fallback_policy={2}, "
               + "eds_service_name={3}, report_load={4}",
           newXdsConfig.cluster,
-          newXdsConfig.childPolicy != null ? newXdsConfig.childPolicy.getPolicyName() : "",
-          newXdsConfig.fallbackPolicy != null ? newXdsConfig.fallbackPolicy.getPolicyName() : "",
+          newXdsConfig.endpointPickingPolicy != null
+              ? newXdsConfig.endpointPickingPolicy.getProvider().getPolicyName() : "",
+          newXdsConfig.fallbackPolicy != null
+              ? newXdsConfig.fallbackPolicy.getProvider().getPolicyName() : "",
           newXdsConfig.edsServiceName,
           newXdsConfig.lrsServerName != null);
     }

@@ -23,6 +23,7 @@ import io.grpc.KnownLength;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 
@@ -209,7 +210,8 @@ public final class ReadableBuffers {
    * A {@link ReadableBuffer} that is backed by a {@link ByteBuffer}.
    */
   private static class ByteReadableBufferWrapper extends AbstractReadableBuffer {
-    final ByteBuffer bytes;
+    // Use Buffer instead of ByteBuffer for JDK 9+ compatibility.
+    final Buffer bytes;
 
     ByteReadableBufferWrapper(ByteBuffer bytes) {
       this.bytes = Preconditions.checkNotNull(bytes, "bytes");
@@ -223,7 +225,7 @@ public final class ReadableBuffers {
     @Override
     public int readUnsignedByte() {
       checkReadable(1);
-      return bytes.get() & 0xFF;
+      return ((ByteBuffer) bytes).get() & 0xFF;
     }
 
     @Override
@@ -235,7 +237,7 @@ public final class ReadableBuffers {
     @Override
     public void readBytes(byte[] dest, int destOffset, int length) {
       checkReadable(length);
-      bytes.get(dest, destOffset, length);
+      ((ByteBuffer) bytes).get(dest, destOffset, length);
     }
 
     @Override
@@ -249,7 +251,7 @@ public final class ReadableBuffers {
       bytes.limit(bytes.position() + length);
 
       // Write the bytes and restore the original limit.
-      dest.put(bytes);
+      dest.put((ByteBuffer) bytes);
       bytes.limit(prevLimit);
     }
 
@@ -262,7 +264,7 @@ public final class ReadableBuffers {
       } else {
         // The buffer doesn't support array(). Copy the data to an intermediate buffer.
         byte[] array = new byte[length];
-        bytes.get(array);
+        ((ByteBuffer) bytes).get(array);
         dest.write(array);
       }
     }
@@ -270,8 +272,8 @@ public final class ReadableBuffers {
     @Override
     public ByteReadableBufferWrapper readBytes(int length) {
       checkReadable(length);
-      ByteBuffer buffer = bytes.duplicate();
-      buffer.limit(bytes.position() + length);
+      ByteBuffer buffer = ((ByteBuffer) bytes).duplicate();
+      ((Buffer) buffer).limit(bytes.position() + length);
       bytes.position(bytes.position() + length);
       return new ByteReadableBufferWrapper(buffer);
     }
@@ -283,7 +285,7 @@ public final class ReadableBuffers {
 
     @Override
     public byte[] array() {
-      return bytes.array();
+      return ((ByteBuffer) bytes).array();
     }
 
     @Override

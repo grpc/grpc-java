@@ -32,7 +32,6 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
@@ -44,10 +43,11 @@ import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
+import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
-import io.grpc.internal.ServiceConfigUtil.LbConfig;
+import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.xds.CdsLoadBalancerProvider.CdsConfig;
 import io.grpc.xds.XdsClient.ClusterUpdate;
 import io.grpc.xds.XdsClient.ClusterWatcher;
@@ -63,7 +63,9 @@ import java.net.InetSocketAddress;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -119,6 +121,34 @@ public class CdsLoadBalancerTest {
     }
   };
 
+  private final LoadBalancerProvider fakeRoundRobinLbProvider = new LoadBalancerProvider() {
+    @Override
+    public boolean isAvailable() {
+      return true;
+    }
+
+    @Override
+    public int getPriority() {
+      return 5;
+    }
+
+    @Override
+    public String getPolicyName() {
+      return "round_robin";
+    }
+
+    @Override
+    public LoadBalancer newLoadBalancer(Helper helper) {
+      return mock(LoadBalancer.class);
+    }
+
+    @Override
+    public ConfigOrError parseLoadBalancingPolicyConfig(
+        Map<String, ?> rawLoadBalancingPolicyConfig) {
+      return ConfigOrError.fromConfig("fake round robin config");
+    }
+  };
+
   private final SynchronizationContext syncContext = new SynchronizationContext(
       new Thread.UncaughtExceptionHandler() {
         @Override
@@ -147,6 +177,7 @@ public class CdsLoadBalancerTest {
     doReturn(syncContext).when(helper).getSynchronizationContext();
     doReturn(fakeClock.getScheduledExecutorService()).when(helper).getScheduledExecutorService();
     lbRegistry.register(fakeEdsLoadBlancerProvider);
+    lbRegistry.register(fakeRoundRobinLbProvider);
     cdsLoadBalancer = new CdsLoadBalancer(helper, lbRegistry, mockTlsContextManager);
   }
 
@@ -190,7 +221,7 @@ public class CdsLoadBalancerTest {
   }
 
   @Test
-  public void handleCdsConfigs() throws Exception {
+  public void handleCdsConfigs() {
     assertThat(xdsClient).isNull();
     ResolvedAddresses resolvedAddresses1 = ResolvedAddresses.newBuilder()
         .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
@@ -218,9 +249,11 @@ public class CdsLoadBalancerTest {
     LoadBalancer edsLoadBalancer1 = edsLoadBalancers.poll();
     ArgumentCaptor<ResolvedAddresses> resolvedAddressesCaptor1 = ArgumentCaptor.forClass(null);
     verify(edsLoadBalancer1).handleResolvedAddresses(resolvedAddressesCaptor1.capture());
+    PolicySelection roundRobinPolicy = new PolicySelection(
+        fakeRoundRobinLbProvider, new HashMap<String, Object>(), "fake round robin config");
     XdsConfig expectedXdsConfig = new XdsConfig(
         "foo.googleapis.com",
-        new LbConfig("round_robin", ImmutableMap.<String, Object>of()),
+        roundRobinPolicy,
         null,
         "edsServiceFoo.googleapis.com",
         null);
@@ -262,7 +295,7 @@ public class CdsLoadBalancerTest {
     verify(edsLoadBalancer2).handleResolvedAddresses(resolvedAddressesCaptor2.capture());
     expectedXdsConfig = new XdsConfig(
         "bar.googleapis.com",
-        new LbConfig("round_robin", ImmutableMap.<String, Object>of()),
+        roundRobinPolicy,
         null,
         "edsServiceBar.googleapis.com",
         "lrsBar.googleapis.com");
@@ -291,7 +324,7 @@ public class CdsLoadBalancerTest {
     verify(edsLoadBalancer2, times(2)).handleResolvedAddresses(resolvedAddressesCaptor2.capture());
     expectedXdsConfig = new XdsConfig(
         "bar.googleapis.com",
-        new LbConfig("round_robin", ImmutableMap.<String, Object>of()),
+        roundRobinPolicy,
         null,
         "edsServiceBar2.googleapis.com",
         null);
@@ -306,7 +339,7 @@ public class CdsLoadBalancerTest {
 
   @Test
   @SuppressWarnings({"unchecked"})
-  public void handleCdsConfigs_withUpstreamTlsContext() throws Exception {
+  public void handleCdsConfigs_withUpstreamTlsContext()  {
     assertThat(xdsClient).isNull();
     ResolvedAddresses resolvedAddresses1 =
          ResolvedAddresses.newBuilder()
@@ -452,7 +485,7 @@ public class CdsLoadBalancerTest {
   }
 
   @Test
-  public void clusterWatcher_onErrorCalledBeforeAndAfterOnClusterChanged() throws Exception {
+  public void clusterWatcher_onErrorCalledBeforeAndAfterOnClusterChanged() {
     ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
         .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
         .setAttributes(Attributes.newBuilder()
@@ -497,7 +530,7 @@ public class CdsLoadBalancerTest {
   }
 
   @Test
-  public void cdsBalancerIntegrateWithEdsBalancer() throws Exception {
+  public void cdsBalancerIntegrateWithEdsBalancer() {
     lbRegistry.deregister(fakeEdsLoadBlancerProvider);
     lbRegistry.register(new EdsLoadBalancerProvider());
 

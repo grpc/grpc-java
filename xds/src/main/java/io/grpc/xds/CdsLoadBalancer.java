@@ -27,10 +27,11 @@ import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status;
 import io.grpc.internal.ObjectPool;
-import io.grpc.internal.ServiceConfigUtil.LbConfig;
+import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.CdsLoadBalancerProvider.CdsConfig;
@@ -283,10 +284,13 @@ public final class CdsLoadBalancer extends LoadBalancer {
       checkArgument(
           newUpdate.getLbPolicy().equals("round_robin"), "can only support round_robin policy");
 
+      LoadBalancerProvider lbProvider = lbRegistry.getProvider(newUpdate.getLbPolicy());
+      Object lbConfig =
+          lbProvider.parseLoadBalancingPolicyConfig(ImmutableMap.<String, Object>of()).getConfig();
       final XdsConfig edsConfig =
           new XdsConfig(
               /* cluster = */ newUpdate.getClusterName(),
-              new LbConfig(newUpdate.getLbPolicy(), ImmutableMap.<String, Object>of()),
+              new PolicySelection(lbProvider, ImmutableMap.<String, Object>of(), lbConfig),
               /* fallbackPolicy = */ null,
               /* edsServiceName = */ newUpdate.getEdsServiceName(),
               /* lrsServerName = */ newUpdate.getLrsServerName());

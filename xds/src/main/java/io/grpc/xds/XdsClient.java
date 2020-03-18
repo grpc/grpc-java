@@ -35,9 +35,11 @@ import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
+import io.grpc.xds.EnvoyProtoData.Route;
 import io.grpc.xds.EnvoyServerProtoData.Listener;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -62,20 +64,19 @@ abstract class XdsClient {
    */
   static final class ConfigUpdate {
     private final String clusterName;
-    private final Listener listener;
+    private final List<Route> routes;
 
-    private ConfigUpdate(String clusterName, @Nullable Listener listener) {
+    private ConfigUpdate(String clusterName, List<Route> routes) {
       this.clusterName = clusterName;
-      this.listener = listener;
+      this.routes = routes;
     }
 
     String getClusterName() {
       return clusterName;
     }
 
-    @Nullable
-    public Listener getListener() {
-      return listener;
+    public List<Route> getRoutes() {
+      return routes;
     }
 
     @Override
@@ -84,6 +85,7 @@ abstract class XdsClient {
           MoreObjects
               .toStringHelper(this)
               .add("clusterName", clusterName)
+              .add("routes", routes)
               .toString();
     }
 
@@ -92,8 +94,8 @@ abstract class XdsClient {
     }
 
     static final class Builder {
+      private final List<Route> routes = new ArrayList<>();
       private String clusterName;
-      @Nullable private Listener listener;
 
       // Use ConfigUpdate.newBuilder().
       private Builder() {
@@ -104,14 +106,14 @@ abstract class XdsClient {
         return this;
       }
 
-      Builder setListener(Listener listener) {
-        this.listener = listener;
+      Builder addRoutes(Collection<Route> route) {
+        routes.addAll(route);
         return this;
       }
 
       ConfigUpdate build() {
         Preconditions.checkState(clusterName != null, "clusterName is not set");
-        return new ConfigUpdate(clusterName, listener);
+        return new ConfigUpdate(clusterName, Collections.unmodifiableList(routes));
       }
     }
   }
@@ -353,6 +355,52 @@ abstract class XdsClient {
   }
 
   /**
+   * Updates via resource discovery RPCs using LDS. Includes {@link Listener} object containing
+   * config for security, RBAC or other server side features such as rate limit.
+   */
+  static final class ListenerUpdate {
+    // TODO(sanjaypujare): flatten structure by moving Listener class members here.
+    private final Listener listener;
+
+    private ListenerUpdate(Listener listener) {
+      this.listener = listener;
+    }
+
+    public Listener getListener() {
+      return listener;
+    }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(this)
+          .add("listener", listener)
+          .toString();
+    }
+
+    static Builder newBuilder() {
+      return new Builder();
+    }
+
+    static final class Builder {
+      private Listener listener;
+
+      // Use ListenerUpdate.newBuilder().
+      private Builder() {
+      }
+
+      Builder setListener(Listener listener) {
+        this.listener = listener;
+        return this;
+      }
+
+      ListenerUpdate build() {
+        Preconditions.checkState(listener != null, "listener is not set");
+        return new ListenerUpdate(listener);
+      }
+    }
+  }
+
+  /**
    * Config watcher interface. To be implemented by the xDS resolver.
    */
   interface ConfigWatcher {
@@ -381,6 +429,19 @@ abstract class XdsClient {
   interface EndpointWatcher {
 
     void onEndpointChanged(EndpointUpdate update);
+
+    void onError(Status error);
+  }
+
+  /**
+   * Listener watcher interface. To be used by {@link io.grpc.xds.internal.sds.XdsServerBuilder}.
+   */
+  interface ListenerWatcher {
+
+    /**
+     * Called when receiving an update on Listener configuration.
+     */
+    void onListenerChanged(ListenerUpdate update);
 
     void onError(Status error);
   }
@@ -428,6 +489,12 @@ abstract class XdsClient {
    * endpoints information in the given cluster.
    */
   void cancelEndpointDataWatch(String clusterName, EndpointWatcher watcher) {
+  }
+
+  /**
+   * Registers a watcher for a Listener with the given port.
+   */
+  void watchListenerData(int port, ListenerWatcher watcher) {
   }
 
   /**
