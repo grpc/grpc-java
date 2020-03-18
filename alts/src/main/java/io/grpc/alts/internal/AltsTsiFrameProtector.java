@@ -33,9 +33,10 @@ public final class AltsTsiFrameProtector implements TsiFrameProtector {
   private static final int HEADER_TYPE_FIELD_BYTES = 4;
   private static final int HEADER_BYTES = HEADER_LEN_FIELD_BYTES + HEADER_TYPE_FIELD_BYTES;
   private static final int HEADER_TYPE_DEFAULT = 6;
-  // Total frame size including full header and tag.
-  private static final int MAX_ALLOWED_FRAME_BYTES = 16 * 1024;
-  private static final int LIMIT_MAX_ALLOWED_FRAME_BYTES = 1024 * 1024;
+  private static final int LIMIT_MAX_ALLOWED_FRAME_SIZE = 1024 * 1024;
+  // Frame size negotiation extends frame size range to [MIN_FRAME_SIZE, MAX_FRAME_SIZE].
+  private static final int MIN_FRAME_SIZE = 16 * 1024;
+  private static final int MAX_FRAME_SIZE = 128 * 1024;
 
   private final Protector protector;
   private final Unprotector unprotector;
@@ -44,7 +45,7 @@ public final class AltsTsiFrameProtector implements TsiFrameProtector {
   public AltsTsiFrameProtector(
       int maxProtectedFrameBytes, ChannelCrypterNetty crypter, ByteBufAllocator alloc) {
     checkArgument(maxProtectedFrameBytes > HEADER_BYTES + crypter.getSuffixLength());
-    maxProtectedFrameBytes = Math.min(LIMIT_MAX_ALLOWED_FRAME_BYTES, maxProtectedFrameBytes);
+    maxProtectedFrameBytes = Math.min(LIMIT_MAX_ALLOWED_FRAME_SIZE, maxProtectedFrameBytes);
     protector = new Protector(maxProtectedFrameBytes, crypter);
     unprotector = new Unprotector(crypter, alloc);
   }
@@ -65,12 +66,16 @@ public final class AltsTsiFrameProtector implements TsiFrameProtector {
     return HEADER_TYPE_DEFAULT;
   }
 
-  public static int getMaxAllowedFrameBytes() {
-    return MAX_ALLOWED_FRAME_BYTES;
+  static int getLimitMaxAllowedFrameSize() {
+    return LIMIT_MAX_ALLOWED_FRAME_SIZE;
   }
 
-  static int getLimitMaxAllowedFrameBytes() {
-    return LIMIT_MAX_ALLOWED_FRAME_BYTES;
+  public static int getMinFrameSize() {
+    return MIN_FRAME_SIZE;
+  }
+
+  public static int getMaxFrameSize() {
+    return MAX_FRAME_SIZE;
   }
 
   @Override
@@ -262,7 +267,7 @@ public final class AltsTsiFrameProtector implements TsiFrameProtector {
       checkArgument(
           requiredProtectedBytes >= suffixBytes, "Invalid header field: frame size too small");
       checkArgument(
-          requiredProtectedBytes <= LIMIT_MAX_ALLOWED_FRAME_BYTES - HEADER_BYTES,
+          requiredProtectedBytes <= LIMIT_MAX_ALLOWED_FRAME_SIZE - HEADER_BYTES,
           "Invalid header field: frame size too large");
       int frameType = header.readIntLE();
       checkArgument(frameType == HEADER_TYPE_DEFAULT, "Invalid header field: frame type");

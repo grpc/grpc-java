@@ -82,6 +82,7 @@ class AltsHandshakerClient {
         startClientReq.addTargetIdentitiesBuilder().setServiceAccount(serviceAccount);
       }
     }
+    startClientReq.setMaxFrameSize(AltsTsiFrameProtector.getMaxFrameSize());
     req.setClientStart(startClientReq);
   }
 
@@ -97,6 +98,7 @@ class AltsHandshakerClient {
     if (handshakerOptions.getRpcProtocolVersions() != null) {
       startServerReq.setRpcVersions(handshakerOptions.getRpcProtocolVersions());
     }
+    startServerReq.setMaxFrameSize(AltsTsiFrameProtector.getMaxFrameSize());
     req.setServerStart(startServerReq);
   }
 
