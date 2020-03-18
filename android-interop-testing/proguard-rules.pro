@@ -21,7 +21,3 @@
 
 # Ignores: can't find referenced method from grpc-testing's compileOnly dependency on Truth
 -dontwarn io.grpc.testing.DeadlineSubject
-
-# Ignores: can't find referenced method for java.nio.ByteBuffer limit(int) due to JDK ABI
-# incompatibility.
--dontwarn java.nio.ByteBuffer
