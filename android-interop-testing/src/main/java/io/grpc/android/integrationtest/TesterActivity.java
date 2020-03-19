@@ -31,7 +31,7 @@ import android.widget.TextView;
 import com.google.android.gms.security.ProviderInstaller;
 import io.grpc.ManagedChannel;
 import java.io.InputStream;
-import java.util.LinkedList;
+import java.util.ArrayList;
 import java.util.List;
 
 public class TesterActivity extends AppCompatActivity
@@ -48,7 +48,7 @@ public class TesterActivity extends AppCompatActivity
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
     setContentView(R.layout.activity_tester);
-    buttons = new LinkedList<>();
+    buttons = new ArrayList<>();
     buttons.add((Button) findViewById(R.id.empty_unary_button));
     buttons.add((Button) findViewById(R.id.large_unary_button));
     buttons.add((Button) findViewById(R.id.client_streaming_button));

@@ -1,5 +1,6 @@
 plugins {
-    id "com.android.library" apply false // Necessary for Android plugin to find its classes
+    id "com.android.application" apply false // Necessary for Android plugin to find its classes
+    id "com.android.library" apply false
     id "com.google.osdetector" apply false
     id "me.champeau.gradle.japicmp" apply false
     id "net.ltgt.errorprone" apply false
@@ -53,6 +54,7 @@ subprojects {
         opencensusVersion = '0.24.0'
 
         configureProtoCompilation = {
+            boolean isAndroid = project.getName().contains('android')
             String generatedSourcePath = "${projectDir}/src/generated"
             project.protobuf {
                 protoc {
@@ -67,41 +69,57 @@ subprojects {
                         // Recompile protos when build.gradle has been changed, because
                         // it's possible the version of protoc has been changed.
                         task.inputs.file "${rootProject.projectDir}/build.gradle"
+                        if (isAndroid) {
+                            task.builtins {
+                                java { option 'lite' }
+                            }
+                        }
                     }
                 }
             }
             if (rootProject.childProjects.containsKey('grpc-compiler')) {
                 // Only when the codegen is built along with the project, will we be able to run
                 // the grpc code generator.
+                task syncGeneratedSources { }
                 project.protobuf {
                     plugins { grpc { path = javaPluginPath } }
                     generateProtoTasks {
                         all().each { task ->
-                            project["syncGeneratedSources${task.sourceSet.name}"].dependsOn task
+                            String variantOrSourceSet = isAndroid ? task.variant.name : task.sourceSet.name
+                            def syncTask = project.tasks.register("syncGeneratedSources${variantOrSourceSet}", Sync) {
+                                from "$buildDir/generated/source/proto/${variantOrSourceSet}/grpc"
+                                into "$generatedSourcePath/${variantOrSourceSet}/grpc"
+                            }
+                            syncGeneratedSources.dependsOn syncTask
 
                             task.dependsOn ':grpc-compiler:java_pluginExecutable'
                             // Recompile protos when the codegen has been changed
                             task.inputs.file javaPluginPath
                             task.plugins { grpc { option 'noversion' } }
+                            if (isAndroid) {
+                                task.plugins {
+                                    grpc {
+                                        option 'lite'
+                                    }
+                                }
+                            }
                         }
                     }
-                }
-
-                task syncGeneratedSources { }
-                sourceSets.all { sourceSet ->
-                    task "syncGeneratedSources${sourceSet.name}"(type: Sync) {
-                        from "$buildDir/generated/source/proto/${sourceSet.name}/grpc"
-                        into "$generatedSourcePath/${sourceSet.name}/grpc"
-                    }
-                    syncGeneratedSources.dependsOn "syncGeneratedSources${sourceSet.name}"
                 }
                 // Re-sync as part of a normal build, to avoid forgetting to run the sync
                 assemble.dependsOn syncGeneratedSources
             } else {
                 // Otherwise, we just use the checked-in generated code.
-                project.sourceSets {
-                    main { java { srcDir "${generatedSourcePath}/main/grpc" } }
-                    test { java { srcDir "${generatedSourcePath}/test/grpc" } }
+                if (isAndroid) {
+                    project.android.sourceSets {
+                        debug { java { srcDir "${generatedSourcePath}/debug/grpc" } }
+                        release { java { srcDir "${generatedSourcePath}/release/grpc" } }
+                    }
+                } else {
+                    project.sourceSets {
+                        main { java { srcDir "${generatedSourcePath}/main/grpc" } }
+                        test { java { srcDir "${generatedSourcePath}/test/grpc" } }
+                    }
                 }
             }
 
