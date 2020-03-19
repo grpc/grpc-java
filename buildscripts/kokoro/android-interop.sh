@@ -30,8 +30,8 @@ cd android-interop-testing
 ../gradlew assembleDebugAndroidTest
 gcloud firebase test android run \
   --type instrumentation \
-  --app app/build/outputs/apk/debug/app-debug.apk \
-  --test app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk \
+  --app build/outputs/apk/debug/grpc-android-interop-testing-debug.apk \
+  --test build/outputs/apk/androidTest/debug/grpc-android-interop-testing-debug-androidTest.apk \
   --environment-variables \
       server_host=grpc-test.sandbox.googleapis.com,server_port=443,test_case=all \
   --device model=Nexus6P,version=27,locale=en,orientation=portrait \
