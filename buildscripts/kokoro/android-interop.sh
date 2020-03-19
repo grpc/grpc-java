@@ -21,9 +21,6 @@ echo y | ${ANDROID_HOME}/tools/bin/sdkmanager "build-tools;28.0.3"
 # Proto deps
 buildscripts/make_dependencies.sh
 
-./gradlew publishToMavenLocal
-
-
 # Build and run interop instrumentation tests on Firebase Test Lab
 cd android-interop-testing
 ../gradlew assembleDebug
