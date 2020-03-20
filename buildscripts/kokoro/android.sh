@@ -44,7 +44,7 @@ pushd android-interop-testing
 ../gradlew build
 popd
 
-# Examples pulls dependencies from maven local
+# Examples pull dependencies from maven local
 ./gradlew publishToMavenLocal
 
 # Build examples
