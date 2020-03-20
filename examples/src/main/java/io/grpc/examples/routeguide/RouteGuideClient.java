@@ -218,8 +218,8 @@ public class RouteGuideClient {
 
     try {
       RouteNote[] requests =
-          {newNote("First message", 0, 0), newNote("Second message", 0, 1),
-              newNote("Third message", 1, 0), newNote("Fourth message", 1, 1)};
+          {newNote("First message", 0, 0), newNote("Second message", 0, 10000000),
+              newNote("Third message", 10000000, 0), newNote("Fourth message", 10000000, 10000000)};
 
       for (RouteNote request : requests) {
         info("Sending message \"{0}\" at {1}, {2}", request.getMessage(), request.getLocation()
