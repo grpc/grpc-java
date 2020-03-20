@@ -21,17 +21,22 @@ import io.grpc.BindableService;
 import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
 import io.grpc.HandlerRegistry;
+import io.grpc.InternalLogId;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerInterceptor;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerStreamTracer;
 import io.grpc.ServerTransportFilter;
+import io.grpc.SynchronizationContext;
 import io.grpc.netty.NettyServerBuilder;
+
 import java.io.File;
 import java.net.InetSocketAddress;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
@@ -39,6 +44,8 @@ import javax.annotation.Nullable;
  * with peers. Note, this is not ready to use yet.
  */
 public final class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
+  private static final Logger logger =
+          Logger.getLogger(XdsServerBuilder.class.getName());
 
   private final NettyServerBuilder delegate;
   private final int port;
@@ -140,8 +147,33 @@ public final class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
   @Override
   public Server build() {
     // note: doing it in build() will overwrite any previously set ProtocolNegotiator
+    final InternalLogId logId = InternalLogId.allocate("XdsServerBuilder", Integer.toString(port));
+    SynchronizationContext syncContext =
+        new SynchronizationContext(
+            new Thread.UncaughtExceptionHandler() {
+            // needed by syncContext
+            private boolean panicMode;
+
+            @Override
+            public void uncaughtException(Thread t, Throwable e) {
+              logger.log(
+                  Level.SEVERE,
+                  "[" + logId + "] Uncaught exception in the SynchronizationContext. Panic!",
+                  e);
+              panic(e);
+            }
+
+            void panic(final Throwable t) {
+              if (panicMode) {
+                // Preserve the first panic information
+                return;
+              }
+              panicMode = true;
+            }
+          });
     delegate.protocolNegotiator(
-        SdsProtocolNegotiators.serverProtocolNegotiator(this.downstreamTlsContext, port));
+        SdsProtocolNegotiators.serverProtocolNegotiator(
+            this.downstreamTlsContext, port, syncContext));
     return delegate.build();
   }
 }

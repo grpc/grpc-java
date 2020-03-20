@@ -20,12 +20,10 @@ import com.google.common.annotations.VisibleForTesting;
 import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.grpc.Internal;
-import io.grpc.InternalLogId;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.GrpcUtil;
-import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SharedResourceHolder;
 import io.grpc.xds.EnvoyServerProtoData.CidrRange;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
@@ -41,6 +39,7 @@ import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.UnknownHostException;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
@@ -58,72 +57,43 @@ public final class XdsClientWrapperForServerSds {
 
   private static final EventLoopGroupResource eventLoopGroupResource =
       Epoll.isAvailable() ? new EventLoopGroupResource("GrpcServerXdsClient") : null;
-  private final InternalLogId logId;
-  // Must be accessed from the syncContext
-  private boolean panicMode;
-  final SynchronizationContext syncContext =
-      new SynchronizationContext(
-        new Thread.UncaughtExceptionHandler() {
-          @Override
-          public void uncaughtException(Thread t, Throwable e) {
-            logger.log(
-                Level.SEVERE,
-                  "[" + getLogId() + "] Uncaught exception in the SynchronizationContext. Panic!",
-                  e);
-            panic(e);
-          }
-        });
 
   private EnvoyServerProtoData.Listener curListener;
-  @Nullable private ObjectPool<XdsClient> xdsClientPool;
+  // TODO(sanjaypujare): implement shutting down XdsServer which will need xdsClient reference
+  @SuppressWarnings("unused")
   @Nullable private XdsClient xdsClient;
+  private final int port;
 
-  /** Wraps the XdsClientImpl for use by SdsProtocolNegotiators. */
-  public XdsClientWrapperForServerSds(int port, Bootstrapper bootstrapper) {
-    this.logId = InternalLogId.allocate("GrpcServer", Integer.toString(port));
-    Bootstrapper.BootstrapInfo bootstrapInfo = null;
-    try {
-      bootstrapInfo = bootstrapper.readBootstrap();
-    } catch (IOException e) {
-      logger.log(Level.SEVERE, "Error from readBootstrap", e);
-      return;
-    }
+  /** Creates a new instance. */
+  public static XdsClientWrapperForServerSds newInstance(
+      int port, Bootstrapper bootstrapper, SynchronizationContext syncContext) throws IOException {
+    Bootstrapper.BootstrapInfo bootstrapInfo = bootstrapper.readBootstrap();
     final List<Bootstrapper.ServerInfo> serverList = bootstrapInfo.getServers();
-    final Node node = bootstrapInfo.getNode();
     if (serverList.isEmpty()) {
-      logger.log(Level.SEVERE, "No traffic director provided by bootstrap");
-      return;
+      throw new NoSuchElementException("No management server provided by bootstrap");
+    }
+    final Node node = bootstrapInfo.getNode();
+    if (eventLoopGroupResource == null) {
+      throw new IllegalStateException(Epoll.unavailabilityCause());
     }
     final EventLoopGroup timeService = SharedResourceHolder.get(eventLoopGroupResource);
-
-    XdsClient.XdsClientFactory xdsClientFactory =
-        new XdsClient.XdsClientFactory() {
-          @Override
-          XdsClient createXdsClient() {
-            return new XdsClientImpl(
-                "",
-                serverList,
-                XdsClient.XdsChannelFactory.getInstance(),
-                node,
-                syncContext,
-                timeService,
-                new ExponentialBackoffPolicy.Provider(),
-                GrpcUtil.STOPWATCH_SUPPLIER);
-          }
-        };
-    xdsClientPool = new XdsClient.RefCountedXdsClientObjectPool(xdsClientFactory);
-    xdsClient = xdsClientPool.getObject();
-    setClientAndWatcher(port);
+    XdsClientImpl xdsClientImpl =
+        new XdsClientImpl(
+            "",
+            serverList,
+            XdsClient.XdsChannelFactory.getInstance(),
+            node,
+            syncContext,
+            timeService,
+            new ExponentialBackoffPolicy.Provider(),
+            GrpcUtil.STOPWATCH_SUPPLIER);
+    return new XdsClientWrapperForServerSds(port, xdsClientImpl);
   }
 
   @VisibleForTesting
   XdsClientWrapperForServerSds(int port, XdsClient xdsClient) {
-    this.logId = InternalLogId.allocate("GrpcServer", Integer.toString(port));
+    this.port = port;
     this.xdsClient = xdsClient;
-    setClientAndWatcher(port);
-  }
-
-  private void setClientAndWatcher(int port) {
     xdsClient.watchListenerData(
         port,
         new XdsClient.ListenerWatcher() {
@@ -155,11 +125,20 @@ public final class XdsClientWrapperForServerSds {
    */
   public DownstreamTlsContext getDownstreamTlsContext(Channel channel) {
     if (curListener != null && channel != null) {
+      SocketAddress localAddress = channel.localAddress();
+      if (!(localAddress instanceof InetSocketAddress)) {
+        return null;
+      }
+      InetSocketAddress localInetAddr = (InetSocketAddress) localAddress;
+      if (port != localInetAddr.getPort()) {
+        throw new IllegalStateException(
+            "Channel localAddress port does not match requested listener port");
+      }
       List<FilterChain> filterChains = curListener.getFilterChains();
       int highestScore = -1;
       FilterChain bestMatch = null;
       for (FilterChain filterChain : filterChains) {
-        int curScore = getFilterChainMatchScore(filterChain.getFilterChainMatch(), channel);
+        int curScore = getFilterChainMatchScore(filterChain.getFilterChainMatch(), localInetAddr);
         if (curScore > 0 && curScore > highestScore) {
           bestMatch = filterChain;
           highestScore = curScore;
@@ -183,17 +162,12 @@ public final class XdsClientWrapperForServerSds {
    *
    * <p>value > 2 indicates some kind of IP address match.
    */
-  private static int getFilterChainMatchScore(FilterChainMatch filterChainMatch, Channel channel) {
+  private static int getFilterChainMatchScore(
+      FilterChainMatch filterChainMatch, InetSocketAddress localInetAddr) {
     if (filterChainMatch == null) {
       return 1;
     }
-    int destPort = filterChainMatch.getDestinationPort();
-    SocketAddress localAddress = channel.localAddress();
-    if (!(localAddress instanceof InetSocketAddress)) {
-      return 0;
-    }
-    InetSocketAddress localInetAddr = (InetSocketAddress) localAddress;
-    if (destPort != localInetAddr.getPort()) {
+    if (filterChainMatch.getDestinationPort() != localInetAddr.getPort()) {
       return -1;
     }
     return getIpAddressAndRangesMatchScore(
@@ -253,20 +227,6 @@ public final class XdsClientWrapperForServerSds {
     }
     // TODO(sanjaypujare): implement CIDR logic to match prefixes if needed
     return 0;
-  }
-
-  private InternalLogId getLogId() {
-    return logId;
-  }
-
-  // Called from syncContext
-  @VisibleForTesting
-  void panic(final Throwable t) {
-    if (panicMode) {
-      // Preserve the first panic information
-      return;
-    }
-    panicMode = true;
   }
 
   private static final class EventLoopGroupResource
