@@ -27,8 +27,6 @@ echo y | ${ANDROID_HOME}/tools/bin/sdkmanager "build-tools;28.0.3"
 # Proto deps
 buildscripts/make_dependencies.sh
 
-./gradlew publishToMavenLocal
-
 # Build grpc-cronet
 
 pushd cronet
@@ -45,6 +43,9 @@ popd
 pushd android-interop-testing
 ../gradlew build
 popd
+
+# Examples pull dependencies from maven local
+./gradlew publishToMavenLocal
 
 # Build examples
 
