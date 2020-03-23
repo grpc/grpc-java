@@ -188,7 +188,7 @@ final class XdsRoutingLoadBalancer extends LoadBalancer {
 
     /**
      * Constructs a picker that will match the path of PickSubchannelArgs with the given map.
-     * The order of the map entries matter. First match will be picked even if second match is an
+     * The order of the map entries matters. First match will be picked even if second match is an
      * exact (service + method) path match.
      */
     PathMatchingSubchannelPicker(Map<MethodName, SubchannelPicker> routePickers) {
