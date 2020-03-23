@@ -55,7 +55,7 @@ public class XdsClientWrapperForServerSdsTestMisc {
   @Before
   public void setUp() throws IOException {
     MockitoAnnotations.initMocks(this);
-    xdsClientWrapperForServerSds = new XdsClientWrapperForServerSds(PORT, xdsClient);
+    xdsClientWrapperForServerSds = new XdsClientWrapperForServerSds(PORT, xdsClient, null);
   }
 
   @Test
@@ -64,9 +64,16 @@ public class XdsClientWrapperForServerSdsTestMisc {
   }
 
   @Test
-  public void nonInetSocketAddress_expectNull() {
-    DownstreamTlsContext downstreamTlsContext = commonTestPrep(new InProcessSocketAddress("test1"));
-    assertThat(downstreamTlsContext).isNull();
+  public void nonInetSocketAddress_expectException() {
+    try {
+      DownstreamTlsContext unused =
+          commonTestPrep(new InProcessSocketAddress("test1"));
+      fail("exception expected");
+    } catch (IllegalStateException expected) {
+      assertThat(expected)
+          .hasMessageThat()
+          .isEqualTo("Channel localAddress is expected to be InetSocketAddress");
+    }
   }
 
   @Test

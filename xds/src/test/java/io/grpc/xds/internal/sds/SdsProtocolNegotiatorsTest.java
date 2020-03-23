@@ -193,17 +193,19 @@ public class SdsProtocolNegotiatorsTest {
         new SdsProtocolNegotiators.HandlerPickerHandler(grpcHandler, downstreamTlsContext, null);
     pipeline.addLast(handlerPickerHandler);
     channelHandlerCtx = pipeline.context(handlerPickerHandler);
-    assertThat(channelHandlerCtx).isNull(); // got replaced by HandlerPickerHandler
-    channelHandlerCtx = pipeline.context(SdsProtocolNegotiators.ServerSdsHandler.class);
-    assertThat(channelHandlerCtx).isNotNull(); // should find ServerSdsHandler
+    assertThat(channelHandlerCtx).isNotNull(); // should find HandlerPickerHandler
 
-    // kick off protocol negotiation
+    // kick off protocol negotiation: should replace HandlerPickerHandler with ServerSdsHandler
     pipeline.fireUserEventTriggered(InternalProtocolNegotiationEvent.getDefault());
+    channelHandlerCtx = pipeline.context(handlerPickerHandler);
+    assertThat(channelHandlerCtx).isNull();
+    channelHandlerCtx = pipeline.context(SdsProtocolNegotiators.ServerSdsHandler.class);
+    assertThat(channelHandlerCtx).isNotNull();
     channel.runPendingTasks(); // need this for tasks to execute on eventLoop
     channelHandlerCtx = pipeline.context(SdsProtocolNegotiators.ServerSdsHandler.class);
     assertThat(channelHandlerCtx).isNull();
 
-    // pipeline should have SslHandler and ServerTlsHandler
+    // pipeline should only have SslHandler and ServerTlsHandler
     Iterator<Map.Entry<String, ChannelHandler>> iterator = pipeline.iterator();
     assertThat(iterator.next().getValue()).isInstanceOf(SslHandler.class);
     // ProtocolNegotiators.ServerTlsHandler.class is not accessible, get canonical name
@@ -217,25 +219,18 @@ public class SdsProtocolNegotiatorsTest {
             new SdsProtocolNegotiators.HandlerPickerHandler(grpcHandler, null, null);
     pipeline.addLast(handlerPickerHandler);
     channelHandlerCtx = pipeline.context(handlerPickerHandler);
-    assertThat(channelHandlerCtx).isNull();  // since replaced by plaintext
-
-    Iterator<Map.Entry<String, ChannelHandler>> iterator = pipeline.iterator();
-    assertThat(iterator.next().getValue().getClass().getCanonicalName())
-            .contains("ProtocolNegotiators.WaitUntilActiveHandler");
-    // no more handlers in the pipeline
-    assertThat(iterator.hasNext()).isFalse();
+    assertThat(channelHandlerCtx).isNotNull(); // should find HandlerPickerHandler
 
     // kick off protocol negotiation
     pipeline.fireUserEventTriggered(InternalProtocolNegotiationEvent.getDefault());
+    channelHandlerCtx = pipeline.context(handlerPickerHandler);
+    assertThat(channelHandlerCtx).isNull();
     channel.runPendingTasks(); // need this for tasks to execute on eventLoop
-
-    // pipeline should have only FakeGrpcHttp2ConnectionHandler
-    iterator = pipeline.iterator();
+    Iterator<Map.Entry<String, ChannelHandler>> iterator = pipeline.iterator();
     assertThat(iterator.next().getValue()).isInstanceOf(FakeGrpcHttp2ConnectionHandler.class);
     // no more handlers in the pipeline
     assertThat(iterator.hasNext()).isFalse();
   }
-
 
   @Test
   public void clientSdsProtocolNegotiatorNewHandler_fireProtocolNegotiationEvent()

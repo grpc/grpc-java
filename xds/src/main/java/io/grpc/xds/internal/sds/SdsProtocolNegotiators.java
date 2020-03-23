@@ -25,10 +25,12 @@ import io.grpc.SynchronizationContext;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
 import io.grpc.netty.InternalNettyChannelBuilder;
 import io.grpc.netty.InternalNettyChannelBuilder.ProtocolNegotiatorFactory;
+import io.grpc.netty.InternalProtocolNegotiationEvent;
 import io.grpc.netty.InternalProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.netty.NettyChannelBuilder;
+import io.grpc.netty.ProtocolNegotiationEvent;
 import io.grpc.xds.Bootstrapper;
 import io.grpc.xds.XdsAttributes;
 import io.grpc.xds.XdsClientWrapperForServerSds;
@@ -39,7 +41,6 @@ import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.handler.ssl.SslContext;
 import io.netty.util.AsciiString;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Level;
@@ -262,8 +263,8 @@ final class SdsProtocolNegotiators {
       try {
         localXdsClientWrapperForServerSds =
             XdsClientWrapperForServerSds.newInstance(port, Bootstrapper.getInstance(), syncContext);
-      } catch (IOException ioe) {
-        logger.log(Level.SEVERE, "XdsClientWrapperForServerSds constructor", ioe);
+      } catch (Exception e) {
+        logger.log(Level.SEVERE, "XdsClientWrapperForServerSds constructor", e);
         localXdsClientWrapperForServerSds = null;
       }
       this.xdsClientWrapperForServerSds = localXdsClientWrapperForServerSds;
@@ -286,7 +287,7 @@ final class SdsProtocolNegotiators {
 
   @VisibleForTesting
   static final class HandlerPickerHandler
-      extends InternalProtocolNegotiators.ProtocolNegotiationHandler {
+      extends ChannelInboundHandlerAdapter {
     private final GrpcHttp2ConnectionHandler grpcHandler;
     private final DownstreamTlsContext downstreamTlsContextFromBuilder;
     private final XdsClientWrapperForServerSds xdsClientWrapperForServerSds;
@@ -295,16 +296,6 @@ final class SdsProtocolNegotiators {
         GrpcHttp2ConnectionHandler grpcHandler,
         DownstreamTlsContext downstreamTlsContext,
         XdsClientWrapperForServerSds xdsClientWrapperForServerSds) {
-      super(
-          // superclass (InternalProtocolNegotiators.ProtocolNegotiationHandler) expects 'next'
-          // handler but we don't have a next handler _yet_. So we "disable" superclass's behavior
-          // here and then manually add 'next' when we call fireProtocolNegotiationEvent()
-          new ChannelHandlerAdapter() {
-            @Override
-            public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
-              ctx.pipeline().remove(this);
-            }
-          });
       checkNotNull(grpcHandler, "grpcHandler");
       this.grpcHandler = grpcHandler;
       this.downstreamTlsContextFromBuilder = downstreamTlsContext;
@@ -316,27 +307,35 @@ final class SdsProtocolNegotiators {
     }
 
     @Override
-    protected void handlerAdded0(final ChannelHandlerContext ctx) {
-      DownstreamTlsContext downstreamTlsContext =
-          xdsClientWrapperForServerSds == null
-              ? null
-              : xdsClientWrapperForServerSds.getDownstreamTlsContext(ctx.channel());
-      if (isTlsContextEmpty(downstreamTlsContext)) {
-        downstreamTlsContext = downstreamTlsContextFromBuilder;
-      }
-      if (isTlsContextEmpty(downstreamTlsContext)) {
-        logger.log(Level.INFO, "Fallback to plaintext for {0}", ctx.channel().localAddress());
-        ctx.pipeline()
-            .replace(
-                this, null, InternalProtocolNegotiators.serverPlaintext().newHandler(grpcHandler));
-        return;
+    public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
+      if (evt instanceof ProtocolNegotiationEvent) {
+        DownstreamTlsContext downstreamTlsContext =
+            xdsClientWrapperForServerSds == null
+                ? null
+                : xdsClientWrapperForServerSds.getDownstreamTlsContext(ctx.channel());
+        if (isTlsContextEmpty(downstreamTlsContext)) {
+          downstreamTlsContext = downstreamTlsContextFromBuilder;
+        }
+        if (isTlsContextEmpty(downstreamTlsContext)) {
+          logger.log(Level.INFO, "Fallback to plaintext for {0}", ctx.channel().localAddress());
+          ctx.pipeline()
+              .replace(
+                  this,
+                  null,
+                  InternalProtocolNegotiators.serverPlaintext().newHandler(grpcHandler));
+          ProtocolNegotiationEvent pne = InternalProtocolNegotiationEvent.getDefault();
+          ctx.fireUserEventTriggered(pne);
+          return;
+        } else {
+          ctx.pipeline()
+              .replace(this, null, new ServerSdsHandler(grpcHandler, downstreamTlsContext));
+          ProtocolNegotiationEvent pne = InternalProtocolNegotiationEvent.getDefault();
+          ctx.fireUserEventTriggered(pne);
+          return;
+        }
       } else {
-        ctx.pipeline()
-            .replace(
-                this, null, new ServerSdsHandler(grpcHandler, downstreamTlsContext));
-        return;
+        super.userEventTriggered(ctx, evt);
       }
-
     }
   }
 

@@ -142,7 +142,7 @@ public class XdsClientWrapperForServerSdsTest {
   @Before
   public void setUp() throws IOException {
     MockitoAnnotations.initMocks(this);
-    xdsClientWrapperForServerSds = new XdsClientWrapperForServerSds(PORT, xdsClient);
+    xdsClientWrapperForServerSds = new XdsClientWrapperForServerSds(PORT, xdsClient, null);
     tlsContexts[0] = null;
     tlsContexts[1] = CommonTlsContextTestsUtil.buildTestDownstreamTlsContext("CERT1", "VA1");
     tlsContexts[2] = CommonTlsContextTestsUtil.buildTestDownstreamTlsContext("CERT2", "VA2");

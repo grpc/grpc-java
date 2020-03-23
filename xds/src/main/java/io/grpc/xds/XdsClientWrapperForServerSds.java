@@ -16,6 +16,8 @@
 
 package io.grpc.xds;
 
+import static com.google.common.base.Preconditions.checkState;
+
 import com.google.common.annotations.VisibleForTesting;
 import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.core.Node;
@@ -29,7 +31,6 @@ import io.grpc.xds.EnvoyServerProtoData.CidrRange;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
 import io.grpc.xds.EnvoyServerProtoData.FilterChainMatch;
 import io.netty.channel.Channel;
-import io.netty.channel.EventLoopGroup;
 import io.netty.channel.epoll.Epoll;
 import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.util.concurrent.DefaultThreadFactory;
@@ -40,6 +41,8 @@ import java.net.SocketAddress;
 import java.net.UnknownHostException;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
@@ -55,14 +58,15 @@ public final class XdsClientWrapperForServerSds {
   private static final Logger logger =
       Logger.getLogger(XdsClientWrapperForServerSds.class.getName());
 
-  private static final EventLoopGroupResource eventLoopGroupResource =
-      Epoll.isAvailable() ? new EventLoopGroupResource("GrpcServerXdsClient") : null;
+  private static final TimeServiceResource timeServiceResource =
+      new TimeServiceResource("GrpcServerXdsClient");
 
   private EnvoyServerProtoData.Listener curListener;
   // TODO(sanjaypujare): implement shutting down XdsServer which will need xdsClient reference
   @SuppressWarnings("unused")
   @Nullable private XdsClient xdsClient;
   private final int port;
+  private final ScheduledExecutorService timeService;
 
   /** Creates a new instance. */
   public static XdsClientWrapperForServerSds newInstance(
@@ -73,10 +77,7 @@ public final class XdsClientWrapperForServerSds {
       throw new NoSuchElementException("No management server provided by bootstrap");
     }
     final Node node = bootstrapInfo.getNode();
-    if (eventLoopGroupResource == null) {
-      throw new IllegalStateException(Epoll.unavailabilityCause());
-    }
-    final EventLoopGroup timeService = SharedResourceHolder.get(eventLoopGroupResource);
+    ScheduledExecutorService timeService = SharedResourceHolder.get(timeServiceResource);
     XdsClientImpl xdsClientImpl =
         new XdsClientImpl(
             "",
@@ -87,13 +88,15 @@ public final class XdsClientWrapperForServerSds {
             timeService,
             new ExponentialBackoffPolicy.Provider(),
             GrpcUtil.STOPWATCH_SUPPLIER);
-    return new XdsClientWrapperForServerSds(port, xdsClientImpl);
+    return new XdsClientWrapperForServerSds(port, xdsClientImpl, timeService);
   }
 
   @VisibleForTesting
-  XdsClientWrapperForServerSds(int port, XdsClient xdsClient) {
+  XdsClientWrapperForServerSds(int port, XdsClient xdsClient,
+      ScheduledExecutorService timeService) {
     this.port = port;
     this.xdsClient = xdsClient;
+    this.timeService = timeService;
     xdsClient.watchListenerData(
         port,
         new XdsClient.ListenerWatcher() {
@@ -120,20 +123,20 @@ public final class XdsClientWrapperForServerSds {
   }
 
   /**
-   * Locates the best matching FilterChain to the channel from the current listener and returns the
-   * DownstreamTlsContext from that FilterChain.
+   * Locates the best matching FilterChain to the channel from the current listener and if found
+   * returns the DownstreamTlsContext from that FilterChain, else null.
    */
+  @Nullable
   public DownstreamTlsContext getDownstreamTlsContext(Channel channel) {
     if (curListener != null && channel != null) {
       SocketAddress localAddress = channel.localAddress();
-      if (!(localAddress instanceof InetSocketAddress)) {
-        return null;
-      }
+      checkState(
+          localAddress instanceof InetSocketAddress,
+          "Channel localAddress is expected to be InetSocketAddress");
       InetSocketAddress localInetAddr = (InetSocketAddress) localAddress;
-      if (port != localInetAddr.getPort()) {
-        throw new IllegalStateException(
-            "Channel localAddress port does not match requested listener port");
-      }
+      checkState(
+          port == localInetAddr.getPort(),
+          "Channel localAddress port does not match requested listener port");
       List<FilterChain> filterChains = curListener.getFilterChains();
       int highestScore = -1;
       FilterChain bestMatch = null;
@@ -229,27 +232,46 @@ public final class XdsClientWrapperForServerSds {
     return 0;
   }
 
-  private static final class EventLoopGroupResource
-      implements SharedResourceHolder.Resource<EventLoopGroup> {
+  /** Shutdown this instance and release resources. */
+  public void shutdown() {
+    logger.log(Level.INFO, "Shutdown");
+    if (xdsClient != null) {
+      xdsClient.shutdown();
+    }
+    if (timeService != null) {
+      timeServiceResource.close(timeService);
+    }
+  }
+
+  private static final class TimeServiceResource
+          implements SharedResourceHolder.Resource<ScheduledExecutorService> {
 
     private final String name;
 
-    EventLoopGroupResource(String name) {
+    TimeServiceResource(String name) {
       this.name = name;
     }
 
     @Override
-    public EventLoopGroup create() {
+    public ScheduledExecutorService create() {
       // Use Netty's DefaultThreadFactory in order to get the benefit of FastThreadLocal.
       ThreadFactory threadFactory = new DefaultThreadFactory(name, /* daemon= */ true);
-      return new EpollEventLoopGroup(1, threadFactory);
+      if (Epoll.isAvailable()) {
+        return new EpollEventLoopGroup(1, threadFactory);
+      } else {
+        return Executors.newSingleThreadScheduledExecutor(threadFactory);
+      }
     }
 
     @SuppressWarnings("FutureReturnValueIgnored")
     @Override
-    public void close(EventLoopGroup instance) {
+    public void close(ScheduledExecutorService instance) {
       try {
-        instance.shutdownGracefully(0, 0, TimeUnit.SECONDS).sync();
+        if (instance instanceof EpollEventLoopGroup) {
+          ((EpollEventLoopGroup)instance).shutdownGracefully(0, 0, TimeUnit.SECONDS).sync();
+        } else {
+          instance.shutdown();
+        }
       } catch (InterruptedException e) {
         logger.log(Level.SEVERE, "from EventLoopGroup.shutdownGracefully", e);
         Thread.currentThread().interrupt(); // to not "swallow" the exception...
