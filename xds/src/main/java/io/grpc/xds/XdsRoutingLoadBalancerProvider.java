@@ -64,10 +64,6 @@ public final class XdsRoutingLoadBalancerProvider extends LoadBalancerProvider {
     this.lbRegistry = lbRegistry;
   }
 
-  private LoadBalancerRegistry loadBalancerRegistry() {
-    return lbRegistry == null ? LoadBalancerRegistry.getDefaultRegistry() : lbRegistry;
-  }
-
   @Override
   public boolean isAvailable() {
     return true;
@@ -85,8 +81,7 @@ public final class XdsRoutingLoadBalancerProvider extends LoadBalancerProvider {
 
   @Override
   public LoadBalancer newLoadBalancer(Helper helper) {
-    // TODO(zdapeng): pass helper and loadBalancerRegistry() to constructor args.
-    return new XdsRoutingLoadBalancer();
+    return new XdsRoutingLoadBalancer(helper);
   }
 
   @Override
@@ -112,8 +107,10 @@ public final class XdsRoutingLoadBalancerProvider extends LoadBalancerProvider {
                   + rawConfig));
         }
 
+        LoadBalancerRegistry lbRegistry =
+            this.lbRegistry == null ? LoadBalancerRegistry.getDefaultRegistry() : this.lbRegistry;
         ConfigOrError selectedConfigOrError =
-            ServiceConfigUtil.selectLbPolicyFromList(childConfigCandidates, loadBalancerRegistry());
+            ServiceConfigUtil.selectLbPolicyFromList(childConfigCandidates, lbRegistry);
         if (selectedConfigOrError.getError() != null) {
           return selectedConfigOrError;
         }
