@@ -16,6 +16,7 @@
 
 package io.grpc.xds;
 
+import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
@@ -55,7 +56,7 @@ final class XdsRoutingLoadBalancer extends LoadBalancer {
   private List<Route> routes = ImmutableList.of();
 
   XdsRoutingLoadBalancer(Helper helper) {
-    this.helper = helper;
+    this.helper = checkNotNull(helper, "helper");
     logger = XdsLogger.withLogId(
         InternalLogId.allocate("xds-routing-lb", helper.getAuthority()));
     logger.log(XdsLogLevel.INFO, "Created");
