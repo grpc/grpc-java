@@ -187,13 +187,15 @@ public final class ServerInterceptors {
       wrappedMethods.add(wrapMethod(definition, wrappedMethodDescriptor));
     }
     // Build the new service descriptor
-    final ServerServiceDefinition.Builder serviceBuilder = ServerServiceDefinition
-        .builder(new ServiceDescriptor(serviceDef.getServiceDescriptor().getName(),
-            wrappedDescriptors));
-    // Create the new service definiton.
-    for (ServerMethodDefinition<?, ?> definition : wrappedMethods) {
-      serviceBuilder.addMethod(definition);
+    final ServiceDescriptor.Builder serviceDescriptorBuilder =
+        ServiceDescriptor.newBuilder(serviceDef.getServiceDescriptor().getName())
+            .setSchemaDescriptor(serviceDef.getServiceDescriptor().getSchemaDescriptor());
+    for (MethodDescriptor<?, ?> wrappedDescriptor : wrappedDescriptors) {
+      serviceDescriptorBuilder.addMethod(wrappedDescriptor);
     }
+    // Create the new service definition.
+    final ServerServiceDefinition.Builder serviceBuilder =
+        ServerServiceDefinition.builder(serviceDescriptorBuilder.build());
     return serviceBuilder.build();
   }
 
