@@ -139,22 +139,32 @@ public final class ServerInterceptors {
       final ServerServiceDefinition serviceDef) {
     final MethodDescriptor.Marshaller<InputStream> marshaller =
         new MethodDescriptor.Marshaller<InputStream>() {
-      @Override
-      public InputStream stream(final InputStream value) {
-        return value;
-      }
+          @Override
+          public InputStream stream(final InputStream value) {
+            return value;
+          }
 
-      @Override
-      public InputStream parse(final InputStream stream) {
-        if (stream.markSupported()) {
-          return stream;
-        } else {
-          return new BufferedInputStream(stream);
-        }
-      }
-    };
+          @Override
+          public InputStream parse(final InputStream stream) {
+            if (stream.markSupported()) {
+              return stream;
+            } else if (stream instanceof KnownLength) {
+              return new KnownLengthBufferedInputStream(stream);
+            } else {
+              return new BufferedInputStream(stream);
+            }
+          }
+        };
 
     return useMarshalledMessages(serviceDef, marshaller);
+  }
+
+  /** {@link BufferedInputStream} that also implements {@link KnownLength}. */
+  private static final class KnownLengthBufferedInputStream extends BufferedInputStream
+      implements KnownLength {
+    KnownLengthBufferedInputStream(InputStream in) {
+      super(in);
+    }
   }
 
   /**
