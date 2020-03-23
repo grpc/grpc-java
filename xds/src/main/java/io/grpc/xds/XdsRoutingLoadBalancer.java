@@ -67,12 +67,7 @@ final class XdsRoutingLoadBalancer extends LoadBalancer {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     XdsRoutingConfig xdsRoutingConfig =
         (XdsRoutingConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
-    if (xdsRoutingConfig == null) {
-      helper.updateBalancingState(
-          TRANSIENT_FAILURE,
-          new ErrorPicker(Status.UNAVAILABLE.withDescription("Missing xds_routing lb config")));
-      return;
-    }
+    checkNotNull(xdsRoutingConfig, "Missing xds_routing lb config");
 
     Map<String, PolicySelection> newActions = xdsRoutingConfig.actions;
     for (String actionName : newActions.keySet()) {
