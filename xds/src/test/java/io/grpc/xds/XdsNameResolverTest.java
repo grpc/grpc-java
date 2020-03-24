@@ -446,7 +446,7 @@ public class XdsNameResolverTest {
     // Client sent an RDS request for resource "route-foo.googleapis.com" (Omitted in this test).
 
     // Simulate receiving an RDS response that contains the resource "route-foo.googleapis.com"
-    // with cluster resolution for "foo.googleapis.com".
+    // with a route resolution for a single weighted cluster route.
     Route weightedClustersDefaultRoute =
         Route.newBuilder()
             .setRoute(buildWeightedClusterRoute(
@@ -625,6 +625,10 @@ public class XdsNameResolverTest {
     return RouteAction.newBuilder().setCluster(clusterName).build();
   }
 
+  /**
+   * Builds a RouteAction for a weighted cluster route. The given map is keyed by cluster name and
+   * valued by the weight of the cluster.
+   */
   private static RouteAction buildWeightedClusterRoute(Map<String, Integer> clusterWeights) {
     WeightedCluster.Builder builder = WeightedCluster.newBuilder();
     for (Map.Entry<String, Integer> entry : clusterWeights.entrySet()) {
