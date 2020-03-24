@@ -35,9 +35,6 @@ import java.util.concurrent.TimeUnit;
  * A {@link SubchannelPool} that keeps returned {@link Subchannel}s for a given time before it's
  * shut down by the pool.
  */
-// TODO(creamsoup) address to subchannel is not 1:1 mapping because subchannel can update its
-//  address. Use Multimap and ForwardingSubchannel (override updateAddresses) to maintain most up to
-//  dated subchannel view.
 final class CachedSubchannelPool implements SubchannelPool {
   private final HashMap<EquivalentAddressGroup, CacheEntry> cache =
       new HashMap<>();
