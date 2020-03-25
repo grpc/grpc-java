@@ -22,7 +22,6 @@ import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
-import io.grpc.grpclb.CachedSubchannelPool.CachedSubchannelPoolFactory;
 import io.grpc.grpclb.GrpclbState.Mode;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.JsonUtil;
@@ -63,7 +62,7 @@ public final class GrpclbLoadBalancerProvider extends LoadBalancerProvider {
     return
         new GrpclbLoadBalancer(
             helper,
-            new CachedSubchannelPoolFactory(helper),
+            new CachedSubchannelPool(helper),
             TimeProvider.SYSTEM_TIME_PROVIDER,
             Stopwatch.createUnstarted(),
             new ExponentialBackoffPolicy.Provider());

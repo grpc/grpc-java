@@ -118,6 +118,7 @@ final class GrpclbState {
   private final String serviceName;
   private final Helper helper;
   private final SynchronizationContext syncContext;
+  @Nullable
   private final SubchannelPool subchannelPool;
   private final TimeProvider time;
   private final Stopwatch stopwatch;
@@ -162,7 +163,7 @@ final class GrpclbState {
   GrpclbState(
       GrpclbConfig config,
       Helper helper,
-      SubchannelPool.Factory subchannelPoolFactory,
+      SubchannelPool subchannelPool,
       TimeProvider time,
       Stopwatch stopwatch,
       BackoffPolicy.Provider backoffPolicyProvider) {
@@ -170,16 +171,15 @@ final class GrpclbState {
     this.helper = checkNotNull(helper, "helper");
     this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
     if (config.getMode() == Mode.ROUND_ROBIN) {
-      checkNotNull(subchannelPoolFactory, "subchannelPoolFactory");
-      this.subchannelPool =
-          subchannelPoolFactory.create(
-              new PooledSubchannelStateListener() {
-                @Override
-                public void onSubchannelState(
-                    Subchannel subchannel, ConnectivityStateInfo newState) {
-                  handleSubchannelState(subchannel, newState);
-                }
-              });
+      this.subchannelPool = checkNotNull(subchannelPool, "subchannelPool");
+      subchannelPool.registerListener(
+          new PooledSubchannelStateListener() {
+            @Override
+            public void onSubchannelState(
+                Subchannel subchannel, ConnectivityStateInfo newState) {
+              handleSubchannelState(subchannel, newState);
+            }
+          });
     } else {
       this.subchannelPool = null;
     }
@@ -262,7 +262,7 @@ final class GrpclbState {
         return;
       }
     }
-    // Fallback contiditions met
+    // Fallback conditions met
     useFallbackBackends();
   }
 
@@ -469,7 +469,7 @@ final class GrpclbState {
           subchannel.start(new SubchannelStateListener() {
             @Override
             public void onSubchannelState(ConnectivityStateInfo newState) {
-              // No-op
+              handleSubchannelState(subchannel, newState);
             }
           });
         } else {

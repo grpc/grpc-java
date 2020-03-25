@@ -31,6 +31,11 @@ import javax.annotation.concurrent.NotThreadSafe;
 interface SubchannelPool {
 
   /**
+   * Registers a listener to received Subchannel status updates.
+   */
+  void registerListener(PooledSubchannelStateListener listener);
+
+  /**
    * Takes a {@link Subchannel} from the pool for the given {@code eag} if there is one available.
    * Otherwise, creates and returns a new {@code Subchannel} with the given {@code eag} and {@code
    * defaultAttributes}.
@@ -47,14 +52,6 @@ interface SubchannelPool {
    * Shuts down all subchannels in the pool immediately.
    */
   void clear();
-
-
-  /** Factory for {@link SubchannelPool}. */
-  interface Factory {
-
-    /** Creates {@link SubchannelPool} for given listener. */
-    SubchannelPool create(PooledSubchannelStateListener listener);
-  }
 
   /**
    * Receives state changes for a pooled {@link Subchannel}.
