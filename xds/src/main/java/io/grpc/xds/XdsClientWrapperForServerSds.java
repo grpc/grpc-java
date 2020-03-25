@@ -16,6 +16,7 @@
 
 package io.grpc.xds;
 
+import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -39,6 +40,8 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.UnknownHostException;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.concurrent.Executors;
@@ -68,7 +71,13 @@ public final class XdsClientWrapperForServerSds {
   private final int port;
   private final ScheduledExecutorService timeService;
 
-  /** Creates a new instance. */
+  /**
+   * Factory method for creating a {@link XdsClientWrapperForServerSds}.
+   *
+   * @param port server's port for which listener config is needed.
+   * @param bootstrapper {@link Bootstrapper} instance to load bootstrap config.
+   * @param syncContext {@link SynchronizationContext} needed by {@link XdsClient}.
+   */
   public static XdsClientWrapperForServerSds newInstance(
       int port, Bootstrapper bootstrapper, SynchronizationContext syncContext) throws IOException {
     Bootstrapper.BootstrapInfo bootstrapInfo = bootstrapper.readBootstrap();
@@ -138,103 +147,109 @@ public final class XdsClientWrapperForServerSds {
           port == localInetAddr.getPort(),
           "Channel localAddress port does not match requested listener port");
       List<FilterChain> filterChains = curListener.getFilterChains();
-      int highestScore = -1;
-      FilterChain bestMatch = null;
-      for (FilterChain filterChain : filterChains) {
-        int curScore = getFilterChainMatchScore(filterChain.getFilterChainMatch(), localInetAddr);
-        if (curScore > 0 && curScore > highestScore) {
-          bestMatch = filterChain;
-          highestScore = curScore;
-        }
-      }
-      if (bestMatch != null) {
+      FilterChainComparator comparator = new FilterChainComparator(localInetAddr);
+      FilterChain bestMatch =
+          filterChains.isEmpty() ? null : Collections.max(filterChains, comparator);
+      if (bestMatch != null && comparator.isMatching(bestMatch.getFilterChainMatch())) {
         return bestMatch.getDownstreamTlsContext();
       }
     }
     return null;
   }
 
-  /**
-   * Computes a score for a match of filterChainMatch with channel.
-   *
-   * <p>-1 => mismatch (of port or IP address etc)
-   *
-   * <p>0 => unimplemented (types or logic etc)
-   *
-   * <p>1 => filterChainMatch is null, so nothing to match.
-   *
-   * <p>value > 2 indicates some kind of IP address match.
-   */
-  private static int getFilterChainMatchScore(
-      FilterChainMatch filterChainMatch, InetSocketAddress localInetAddr) {
-    if (filterChainMatch == null) {
-      return 1;
-    }
-    if (filterChainMatch.getDestinationPort() != localInetAddr.getPort()) {
-      return -1;
-    }
-    return getIpAddressAndRangesMatchScore(
-        localInetAddr.getAddress(), filterChainMatch.getPrefixRanges());
-  }
+  private static final class FilterChainComparator implements Comparator<FilterChain> {
+    private InetSocketAddress localAddress;
 
-  /**
-   * Computes a score for IP address match against a list of CidrRange called only after ports have
-   * matched, so a minimum score of 2 is returned to indicate a match or else -1 for a mismatch.
-   *
-   * <p>-1 => mismatch.
-   *
-   * <p>2 => prefixRanges is null/empty, so no IP address to match.
-   *
-   * <p>value > 2 indicates some kind of IP address match.
-   */
-  private static int getIpAddressAndRangesMatchScore(
-      InetAddress localAddress, List<CidrRange> prefixRanges) {
-    if (prefixRanges == null || prefixRanges.isEmpty()) {
-      return 2;
+    private enum Match {
+      NO_MATCH,
+      EMPTY_PREFIX_RANGE_MATCH,
+      IPANY_MATCH,
+      EXACT_ADDRESS_MATCH
     }
-    int highestScore = -1;
-    for (CidrRange cidrRange : prefixRanges) {
-      int curScore = getIpAddressMatchScore(localAddress, cidrRange);
-      if (curScore > highestScore) {
-        highestScore = curScore;
+
+    private FilterChainComparator(InetSocketAddress localAddress) {
+      checkNotNull(localAddress, "localAddress cannot be null");
+      this.localAddress = localAddress;
+    }
+
+    @Override
+    public int compare(FilterChain first, FilterChain second) {
+      checkNotNull(first, "first arg cannot be null");
+      checkNotNull(second, "second arg cannot be null");
+      FilterChainMatch firstMatch = first.getFilterChainMatch();
+      FilterChainMatch secondMatch = second.getFilterChainMatch();
+
+      if (firstMatch == null) {
+        return (secondMatch == null) ? 0 : (isMatching(secondMatch) ? -1 : 1);
+      } else {
+        return (secondMatch == null)
+            ? (isMatching(firstMatch) ? 1 : -1)
+            : compare(firstMatch, secondMatch);
       }
     }
-    return highestScore;
-  }
 
-  /**
-   * Computes a score for IP address to CidrRange match.
-   *
-   * <p>-1 => mismatch
-   *
-   * <p>0 => unimplemented (prefixLen < 32 logic)
-   *
-   * <p>4 => match because cidrRange is IPANY_ADDRESS (0.0.0.0)
-   *
-   * <p>8 => exact match
-   */
-  private static int getIpAddressMatchScore(InetAddress localAddress, CidrRange cidrRange) {
-    if (cidrRange.getPrefixLen() == 32) {
-      try {
-        InetAddress cidrAddr = InetAddress.getByName(cidrRange.getAddressPrefix());
-        if (cidrAddr.isAnyLocalAddress()) {
-          return 4;
-        }
-        if (cidrAddr.equals(localAddress)) {
-          return 8;
-        }
-        return -1;
-      } catch (UnknownHostException e) {
-        logger.log(Level.SEVERE, "cidrRange address parsing", e);
+    private int compare(FilterChainMatch first, FilterChainMatch second) {
+      int channelPort = localAddress.getPort();
+
+      if (first.getDestinationPort() == channelPort) {
+        return (second.getDestinationPort() == channelPort)
+            ? compare(first.getPrefixRanges(), second.getPrefixRanges())
+            : (isInetAddressMatching(first.getPrefixRanges()) ? 1 : 0);
+      } else {
+        return (second.getDestinationPort() == channelPort)
+            ? (isInetAddressMatching(second.getPrefixRanges()) ? -1 : 0)
+            : 0;
       }
     }
-    // TODO(sanjaypujare): implement CIDR logic to match prefixes if needed
-    return 0;
+
+    private int compare(List<CidrRange> first, List<CidrRange> second) {
+      return getInetAddressMatch(first).ordinal() - getInetAddressMatch(second).ordinal();
+    }
+
+    private boolean isInetAddressMatching(List<CidrRange> prefixRanges) {
+      return getInetAddressMatch(prefixRanges).ordinal() > Match.NO_MATCH.ordinal();
+    }
+
+    private Match getInetAddressMatch(List<CidrRange> prefixRanges) {
+      if (prefixRanges == null || prefixRanges.isEmpty()) {
+        return Match.EMPTY_PREFIX_RANGE_MATCH;
+      }
+      InetAddress localInetAddress = localAddress.getAddress();
+      for (CidrRange cidrRange : prefixRanges) {
+        if (cidrRange.getPrefixLen() == 32) {
+          try {
+            InetAddress cidrAddr = InetAddress.getByName(cidrRange.getAddressPrefix());
+            if (cidrAddr.isAnyLocalAddress()) {
+              return Match.IPANY_MATCH;
+            }
+            if (cidrAddr.equals(localInetAddress)) {
+              return Match.EXACT_ADDRESS_MATCH;
+            }
+          } catch (UnknownHostException e) {
+            logger.log(Level.WARNING, "cidrRange address parsing", e);
+            // continue
+          }
+        }
+        // TODO(sanjaypujare): implement prefix match logic as needed
+      }
+      return Match.NO_MATCH;
+    }
+
+    private boolean isMatching(FilterChainMatch filterChainMatch) {
+      if (filterChainMatch == null) {
+        return true;
+      }
+      int destPort = filterChainMatch.getDestinationPort();
+      if (destPort != localAddress.getPort()) {
+        return false;
+      }
+      return isInetAddressMatching(filterChainMatch.getPrefixRanges());
+    }
   }
 
   /** Shutdown this instance and release resources. */
   public void shutdown() {
-    logger.log(Level.INFO, "Shutdown");
+    logger.log(Level.FINER, "Shutdown");
     if (xdsClient != null) {
       xdsClient.shutdown();
     }
@@ -273,8 +288,8 @@ public final class XdsClientWrapperForServerSds {
           instance.shutdown();
         }
       } catch (InterruptedException e) {
-        logger.log(Level.SEVERE, "from EventLoopGroup.shutdownGracefully", e);
-        Thread.currentThread().interrupt(); // to not "swallow" the exception...
+        logger.log(Level.SEVERE, "Interrupted during shutdown", e);
+        Thread.currentThread().interrupt();
       }
     }
   }

@@ -264,7 +264,7 @@ final class SdsProtocolNegotiators {
         localXdsClientWrapperForServerSds =
             XdsClientWrapperForServerSds.newInstance(port, Bootstrapper.getInstance(), syncContext);
       } catch (Exception e) {
-        logger.log(Level.SEVERE, "XdsClientWrapperForServerSds constructor", e);
+        logger.log(Level.WARNING, "Exception while creating the xDS client", e);
         localXdsClientWrapperForServerSds = null;
       }
       this.xdsClientWrapperForServerSds = localXdsClientWrapperForServerSds;

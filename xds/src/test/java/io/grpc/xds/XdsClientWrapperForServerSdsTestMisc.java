@@ -32,6 +32,7 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.UnknownHostException;
+import java.util.Collections;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -88,6 +89,24 @@ public class XdsClientWrapperForServerSdsTestMisc {
           .hasMessageThat()
           .isEqualTo("Channel localAddress port does not match requested listener port");
     }
+  }
+
+  @Test
+  public void emptyFilterChain_expectNull() throws UnknownHostException {
+    InetAddress ipLocalAddress = InetAddress.getByName("10.1.2.3");
+    InetSocketAddress localAddress = new InetSocketAddress(ipLocalAddress, PORT);
+    ArgumentCaptor<XdsClient.ListenerWatcher> listenerWatcherCaptor = ArgumentCaptor.forClass(null);
+    verify(xdsClient).watchListenerData(eq(PORT), listenerWatcherCaptor.capture());
+    XdsClient.ListenerWatcher registeredWatcher = listenerWatcherCaptor.getValue();
+    when(channel.localAddress()).thenReturn(localAddress);
+    EnvoyServerProtoData.Listener listener =
+            new EnvoyServerProtoData.Listener("listener1",
+                    "10.1.2.3", Collections.<EnvoyServerProtoData.FilterChain>emptyList());
+    XdsClient.ListenerUpdate listenerUpdate =
+            XdsClient.ListenerUpdate.newBuilder().setListener(listener).build();
+    registeredWatcher.onListenerChanged(listenerUpdate);
+    DownstreamTlsContext tlsContext = xdsClientWrapperForServerSds.getDownstreamTlsContext(channel);
+    assertThat(tlsContext).isNull();
   }
 
   private DownstreamTlsContext commonTestPrep(SocketAddress localAddress) {
