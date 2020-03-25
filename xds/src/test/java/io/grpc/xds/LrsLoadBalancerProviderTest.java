@@ -61,7 +61,7 @@ public class LrsLoadBalancerProviderTest {
     Locality locality = config.locality;
     assertThat(locality.getRegion()).isEqualTo("test-region");
     assertThat(locality.getZone()).isEqualTo("test-zone");
-    assertThat(locality.getSubzone()).isEqualTo("test-subzone");
+    assertThat(locality.getSubZone()).isEqualTo("test-subzone");
     assertThat(config.childPolicy.getProvider().getPolicyName()).isEqualTo("round_robin");
   }
 }

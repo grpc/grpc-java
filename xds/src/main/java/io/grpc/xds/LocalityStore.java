@@ -421,7 +421,7 @@ interface LocalityStore {
           @Override
           public String getAuthority() {
             //FIXME: This should be a new proposed field of Locality, locality_name
-            return locality.getSubzone();
+            return locality.getSubZone();
           }
         };
         orcaReportingHelperWrapper =
