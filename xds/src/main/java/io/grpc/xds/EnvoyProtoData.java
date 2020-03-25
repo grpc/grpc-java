@@ -54,8 +54,6 @@ final class EnvoyProtoData {
     private final String zone;
     private final String subzone;
 
-    /** Must only be used for testing. */
-    @VisibleForTesting
     Locality(String region, String zone, String subzone) {
       this.region = region;
       this.zone = zone;
