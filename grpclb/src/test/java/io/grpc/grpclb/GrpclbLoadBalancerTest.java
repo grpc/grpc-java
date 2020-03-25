@@ -1741,7 +1741,7 @@ public class GrpclbLoadBalancerTest {
 
     // CONNECTING
     balancer
-        .grpclbState
+        .getGrpclbState()
         .handleSubchannelState(subchannel,  ConnectivityStateInfo.forNonError(CONNECTING));
 
     inOrder.verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
@@ -1752,7 +1752,7 @@ public class GrpclbLoadBalancerTest {
     // TRANSIENT_FAILURE
     Status error = Status.UNAVAILABLE.withDescription("Simulated connection error");
     balancer
-        .grpclbState
+        .getGrpclbState()
         .handleSubchannelState(subchannel,  ConnectivityStateInfo.forTransientFailure(error));
     inOrder.verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
     RoundRobinPicker picker2 = (RoundRobinPicker) pickerCaptor.getValue();
@@ -1761,7 +1761,7 @@ public class GrpclbLoadBalancerTest {
 
     // READY
     balancer
-        .grpclbState
+        .getGrpclbState()
         .handleSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
 
     inOrder.verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
@@ -1797,7 +1797,9 @@ public class GrpclbLoadBalancerTest {
         new BackendEntry(subchannel, new TokenAttachingTracerFactory(getLoadRecorder())));
 
     // Subchannel goes IDLE, but PICK_FIRST will not try to reconnect
-    balancer.grpclbState.handleSubchannelState(subchannel, ConnectivityStateInfo.forNonError(IDLE));
+    balancer
+        .getGrpclbState()
+        .handleSubchannelState(subchannel, ConnectivityStateInfo.forNonError(IDLE));
 
     inOrder.verify(helper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
     RoundRobinPicker picker5 = (RoundRobinPicker) pickerCaptor.getValue();
@@ -1871,7 +1873,7 @@ public class GrpclbLoadBalancerTest {
 
     // CONNECTING
     balancer
-        .grpclbState
+        .getGrpclbState()
         .handleSubchannelState(subchannel, ConnectivityStateInfo.forNonError(CONNECTING));
 
     inOrder.verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
@@ -1882,7 +1884,7 @@ public class GrpclbLoadBalancerTest {
     // TRANSIENT_FAILURE
     Status error = Status.UNAVAILABLE.withDescription("Simulated connection error");
     balancer
-        .grpclbState
+        .getGrpclbState()
         .handleSubchannelState(subchannel, ConnectivityStateInfo.forTransientFailure(error));
 
     inOrder.verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
@@ -1892,7 +1894,7 @@ public class GrpclbLoadBalancerTest {
 
     // READY
     balancer
-        .grpclbState
+        .getGrpclbState()
         .handleSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
 
     inOrder.verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
@@ -1937,10 +1939,10 @@ public class GrpclbLoadBalancerTest {
 
     // Subchannel became READY
     balancer
-        .grpclbState
+        .getGrpclbState()
         .handleSubchannelState(subchannel, ConnectivityStateInfo.forNonError(CONNECTING));
     balancer
-        .grpclbState
+        .getGrpclbState()
         .handleSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
     inOrder.verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
     RoundRobinPicker picker4 = (RoundRobinPicker) pickerCaptor.getValue();
@@ -2012,7 +2014,7 @@ public class GrpclbLoadBalancerTest {
 
     // READY
     balancer
-        .grpclbState
+        .getGrpclbState()
         .handleSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
     inOrder.verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
     RoundRobinPicker picker1 = (RoundRobinPicker) pickerCaptor.getValue();

@@ -53,9 +53,8 @@ class GrpclbLoadBalancer extends LoadBalancer {
   private GrpclbConfig config = DEFAULT_CONFIG;
 
   // All mutable states in this class are mutated ONLY from Channel Executor
-  @VisibleForTesting
   @Nullable
-  GrpclbState grpclbState;
+  private GrpclbState grpclbState;
 
   GrpclbLoadBalancer(
       Helper helper,
