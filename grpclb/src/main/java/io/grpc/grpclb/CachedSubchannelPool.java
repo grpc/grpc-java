@@ -40,18 +40,14 @@ final class CachedSubchannelPool implements SubchannelPool {
       new HashMap<>();
 
   private final Helper helper;
-  private PooledSubchannelStateListener listener;
+  private final PooledSubchannelStateListener listener;
 
   @VisibleForTesting
   static final long SHUTDOWN_TIMEOUT_MS = 10000;
 
-  public CachedSubchannelPool(Helper helper) {
+  public CachedSubchannelPool(Helper helper, PooledSubchannelStateListener listener) {
     this.helper = checkNotNull(helper, "helper");
-  }
-
-  @Override
-  public void registerListener(PooledSubchannelStateListener pooledSubchannelStateListener) {
-    this.listener = checkNotNull(pooledSubchannelStateListener, "pooledSubchannelStateListener");
+    this.listener = checkNotNull(listener, "listener");
   }
 
   @Override
@@ -153,6 +149,21 @@ final class CachedSubchannelPool implements SubchannelPool {
       this.subchannel = checkNotNull(subchannel, "subchannel");
       this.shutdownTimer = checkNotNull(shutdownTimer, "shutdownTimer");
       this.state = checkNotNull(state, "state");
+    }
+  }
+
+  /** Factory for {@link CachedSubchannelPool}. */
+  public static class CachedSubchannelPoolFactory implements Factory {
+
+    private final Helper helper;
+
+    public CachedSubchannelPoolFactory(Helper helper) {
+      this.helper = checkNotNull(helper, "helper");
+    }
+
+    @Override
+    public SubchannelPool create(PooledSubchannelStateListener listener) {
+      return new CachedSubchannelPool(helper, checkNotNull(listener, "listener"));
     }
   }
 }

@@ -110,7 +110,7 @@ final class GrpclbState {
       }
     };
 
-  static enum Mode {
+  enum Mode {
     ROUND_ROBIN,
     PICK_FIRST,
   }
@@ -162,7 +162,7 @@ final class GrpclbState {
   GrpclbState(
       GrpclbConfig config,
       Helper helper,
-      SubchannelPool subchannelPool,
+      SubchannelPool.Factory subchannelPoolFactory,
       TimeProvider time,
       Stopwatch stopwatch,
       BackoffPolicy.Provider backoffPolicyProvider) {
@@ -170,13 +170,16 @@ final class GrpclbState {
     this.helper = checkNotNull(helper, "helper");
     this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
     if (config.getMode() == Mode.ROUND_ROBIN) {
-      this.subchannelPool = checkNotNull(subchannelPool, "subchannelPool");
-      subchannelPool.registerListener(new PooledSubchannelStateListener() {
-        @Override
-        public void onSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
-          handleSubchannelState(subchannel, newState);
-        }
-      });
+      checkNotNull(subchannelPoolFactory, "subchannelPoolFactory");
+      this.subchannelPool =
+          subchannelPoolFactory.create(
+              new PooledSubchannelStateListener() {
+                @Override
+                public void onSubchannelState(
+                    Subchannel subchannel, ConnectivityStateInfo newState) {
+                  handleSubchannelState(subchannel, newState);
+                }
+              });
     } else {
       this.subchannelPool = null;
     }

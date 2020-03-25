@@ -72,6 +72,7 @@ import io.grpc.grpclb.GrpclbState.ErrorEntry;
 import io.grpc.grpclb.GrpclbState.IdleSubchannelEntry;
 import io.grpc.grpclb.GrpclbState.Mode;
 import io.grpc.grpclb.GrpclbState.RoundRobinPicker;
+import io.grpc.grpclb.SubchannelPool.Factory;
 import io.grpc.grpclb.SubchannelPool.PooledSubchannelStateListener;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
@@ -251,13 +252,6 @@ public class GrpclbLoadBalancerTest {
         }
       }).when(subchannelPool).takeOrCreateSubchannel(
           any(EquivalentAddressGroup.class), any(Attributes.class));
-    doAnswer(new Answer<Void>() {
-      @Override
-      public Void answer(InvocationOnMock invocation) throws Throwable {
-        listener = invocation.getArgument(0);
-        return null;
-      }
-    }).when(subchannelPool).registerListener(any(PooledSubchannelStateListener.class));
     doAnswer(new Answer<Subchannel>() {
         @Override
         public Subchannel answer(InvocationOnMock invocation) throws Throwable {
@@ -285,13 +279,19 @@ public class GrpclbLoadBalancerTest {
     when(backoffPolicy1.nextBackoffNanos()).thenReturn(10L, 100L);
     when(backoffPolicy2.nextBackoffNanos()).thenReturn(10L, 100L);
     when(backoffPolicyProvider.get()).thenReturn(backoffPolicy1, backoffPolicy2);
+    Factory subchannelPoolFactory = new Factory() {
+      @Override
+      public SubchannelPool create(PooledSubchannelStateListener listener) {
+        GrpclbLoadBalancerTest.this.listener = listener;
+        return subchannelPool;
+      }
+    };
     balancer = new GrpclbLoadBalancer(
         helper,
-        subchannelPool,
+        subchannelPoolFactory,
         fakeClock.getTimeProvider(),
         fakeClock.getStopwatchSupplier().get(),
         backoffPolicyProvider);
-    verify(subchannelPool).registerListener(any(PooledSubchannelStateListener.class));
   }
 
   @After

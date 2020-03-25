@@ -47,7 +47,7 @@ class GrpclbLoadBalancer extends LoadBalancer {
   private final Helper helper;
   private final TimeProvider time;
   private final Stopwatch stopwatch;
-  private final SubchannelPool subchannelPool;
+  private final SubchannelPool.Factory subchannelPoolFactory;
   private final BackoffPolicy.Provider backoffPolicyProvider;
 
   private GrpclbConfig config = DEFAULT_CONFIG;
@@ -58,7 +58,7 @@ class GrpclbLoadBalancer extends LoadBalancer {
 
   GrpclbLoadBalancer(
       Helper helper,
-      SubchannelPool subchannelPool,
+      SubchannelPool.Factory subchannelPoolFactory,
       TimeProvider time,
       Stopwatch stopwatch,
       BackoffPolicy.Provider backoffPolicyProvider) {
@@ -66,7 +66,7 @@ class GrpclbLoadBalancer extends LoadBalancer {
     this.time = checkNotNull(time, "time provider");
     this.stopwatch = checkNotNull(stopwatch, "stopwatch");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
-    this.subchannelPool = checkNotNull(subchannelPool, "subchannelPool");
+    this.subchannelPoolFactory = checkNotNull(subchannelPoolFactory, "subchannelPoolFactory");
     recreateStates();
     checkNotNull(grpclbState, "grpclbState");
   }
@@ -127,7 +127,8 @@ class GrpclbLoadBalancer extends LoadBalancer {
     resetStates();
     checkState(grpclbState == null, "Should've been cleared");
     grpclbState =
-        new GrpclbState(config, helper, subchannelPool, time, stopwatch, backoffPolicyProvider);
+        new GrpclbState(
+            config, helper, subchannelPoolFactory, time, stopwatch, backoffPolicyProvider);
   }
 
   @Override

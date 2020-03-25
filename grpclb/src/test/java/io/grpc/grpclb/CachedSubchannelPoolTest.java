@@ -37,6 +37,7 @@ import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.SynchronizationContext;
+import io.grpc.grpclb.CachedSubchannelPool.CachedSubchannelPoolFactory;
 import io.grpc.grpclb.CachedSubchannelPool.ShutdownSubchannelTask;
 import io.grpc.grpclb.SubchannelPool.PooledSubchannelStateListener;
 import io.grpc.internal.FakeClock;
@@ -94,7 +95,8 @@ public class CachedSubchannelPoolTest {
           throw new AssertionError(e);
         }
       });
-  private final CachedSubchannelPool pool = new CachedSubchannelPool(helper);
+  private final SubchannelPool.Factory poolFactory = new CachedSubchannelPoolFactory(helper);
+  private final SubchannelPool pool = poolFactory.create(listener);
   private final ArrayList<Subchannel> mockSubchannels = new ArrayList<>();
   private final ArgumentCaptor<CreateSubchannelArgs> createSubchannelArgsCaptor
       = ArgumentCaptor.forClass(CreateSubchannelArgs.class);
@@ -114,7 +116,6 @@ public class CachedSubchannelPoolTest {
       }).when(helper).createSubchannel(any(CreateSubchannelArgs.class));
     when(helper.getSynchronizationContext()).thenReturn(syncContext);
     when(helper.getScheduledExecutorService()).thenReturn(clock.getScheduledExecutorService());
-    pool.registerListener(listener);
   }
 
   @After

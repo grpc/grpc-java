@@ -29,10 +29,6 @@ import javax.annotation.concurrent.NotThreadSafe;
  */
 @NotThreadSafe
 interface SubchannelPool {
-  /**
-   * Registers a listener to received Subchannel status updates.
-   */
-  void registerListener(PooledSubchannelStateListener listener);
 
   /**
    * Takes a {@link Subchannel} from the pool for the given {@code eag} if there is one available.
@@ -52,10 +48,19 @@ interface SubchannelPool {
    */
   void clear();
 
+
+  /** Factory for {@link SubchannelPool}. */
+  interface Factory {
+
+    /** Creates {@link SubchannelPool} for given listener. */
+    SubchannelPool create(PooledSubchannelStateListener listener);
+  }
+
   /**
    * Receives state changes for a pooled {@link Subchannel}.
    */
   interface PooledSubchannelStateListener {
+
     /**
      * Handles a state change on a Subchannel. The behavior is similar to {@link
      * io.grpc.LoadBalancer.SubchannelStateListener}.
@@ -64,5 +69,6 @@ interface SubchannelPool {
      * underlying status remains same.
      */
     void onSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState);
+
   }
 }
