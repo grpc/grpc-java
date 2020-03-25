@@ -1087,7 +1087,6 @@ public class GrpclbLoadBalancerTest {
         ConnectivityStateInfo.forTransientFailure(
             Status.UNAVAILABLE.withDescription("You can get this error even if you are cached"));
     deliverSubchannelState(subchannel1, errorOnCachedSubchannel1);
-    verify(subchannelPool).handleSubchannelState(same(subchannel1), same(errorOnCachedSubchannel1));
 
     assertEquals(1, mockSubchannels.size());
     Subchannel subchannel3 = mockSubchannels.poll();
@@ -1110,11 +1109,6 @@ public class GrpclbLoadBalancerTest {
     deliverSubchannelState(
         subchannel1, ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
     deliverSubchannelState(subchannel1, ConnectivityStateInfo.forNonError(SHUTDOWN));
-    inOrder.verify(subchannelPool)
-        .handleSubchannelState(same(subchannel1), eq(ConnectivityStateInfo.forNonError(READY)));
-    inOrder.verify(subchannelPool).handleSubchannelState(
-        same(subchannel1), eq(ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE)));
-    inOrder.verifyNoMoreInteractions();
 
     deliverSubchannelState(subchannel3, ConnectivityStateInfo.forNonError(READY));
     inOrder.verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());

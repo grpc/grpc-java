@@ -196,10 +196,7 @@ final class GrpclbState {
     if (newState.getState() == SHUTDOWN) {
       return;
     }
-    if (!subchannels.values().contains(subchannel)) {
-      if (subchannelPool != null ) {
-        subchannelPool.handleSubchannelState(subchannel, newState);
-      }
+    if (subchannelPool == null && !subchannels.values().contains(subchannel)) {
       return;
     }
     if (config.getMode() == Mode.ROUND_ROBIN && newState.getState() == IDLE) {

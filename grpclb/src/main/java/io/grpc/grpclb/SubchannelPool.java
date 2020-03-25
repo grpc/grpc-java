@@ -42,12 +42,6 @@ interface SubchannelPool {
   Subchannel takeOrCreateSubchannel(EquivalentAddressGroup eag, Attributes defaultAttributes);
 
   /**
-   * Gets notified about a state change of Subchannel that is possibly cached in this pool.  Do
-   * nothing if this pool doesn't own this Subchannel.
-   */
-  void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newStateInfo);
-
-  /**
    * Puts a {@link Subchannel} back to the pool.  From this point the Subchannel is owned by the
    * pool, and the caller should stop referencing to this Subchannel.
    */

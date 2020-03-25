@@ -25,7 +25,6 @@ import static org.mockito.Mockito.atMost;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.same;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
@@ -37,7 +36,6 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.Subchannel;
-import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.grpclb.CachedSubchannelPool.ShutdownSubchannelTask;
 import io.grpc.grpclb.SubchannelPool.PooledSubchannelStateListener;
@@ -68,8 +66,6 @@ public class CachedSubchannelPoolTest {
   
   private static final ConnectivityStateInfo READY_STATE =
       ConnectivityStateInfo.forNonError(ConnectivityState.READY);
-  private static final ConnectivityStateInfo TRANSIENT_FAILURE_STATE =
-      ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE.withDescription("Simulated"));
   private static final FakeClock.TaskFilter SHUTDOWN_TASK_FILTER =
       new FakeClock.TaskFilter() {
         @Override
@@ -223,55 +219,6 @@ public class CachedSubchannelPoolTest {
     verify(subchannel1a).shutdown();
 
     assertThat(clock.numPendingTasks()).isEqualTo(0);
-  }
-
-  @Test
-  public void updateStateWhileInPool() {
-    Subchannel subchannel1 = pool.takeOrCreateSubchannel(EAG1, ATTRS1);
-    Subchannel subchannel2 = pool.takeOrCreateSubchannel(EAG2, ATTRS2);
-    pool.returnSubchannel(subchannel1, READY_STATE);
-    pool.returnSubchannel(subchannel2, TRANSIENT_FAILURE_STATE);
-
-    ConnectivityStateInfo anotherFailureState =
-        ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE.withDescription("Another"));
-
-    pool.handleSubchannelState(subchannel1, anotherFailureState);
-
-    verify(listener, never())
-        .onSubchannelState(any(Subchannel.class), any(ConnectivityStateInfo.class));
-
-    assertThat(pool.takeOrCreateSubchannel(EAG1, ATTRS1)).isSameInstanceAs(subchannel1);
-    verify(listener).onSubchannelState(same(subchannel1), same(anotherFailureState));
-    verifyNoMoreInteractions(listener);
-
-    assertThat(pool.takeOrCreateSubchannel(EAG2, ATTRS2)).isSameInstanceAs(subchannel2);
-    verify(listener).onSubchannelState(same(subchannel2), same(TRANSIENT_FAILURE_STATE));
-    verifyNoMoreInteractions(listener);
-  }
-
-  @Test
-  public void updateStateWhileInPool_notSameObject() {
-    Subchannel subchannel1 = pool.takeOrCreateSubchannel(EAG1, ATTRS1);
-    pool.returnSubchannel(subchannel1, READY_STATE);
-
-    Subchannel subchannel2 =
-        helper.createSubchannel(
-            CreateSubchannelArgs.newBuilder().setAddresses(EAG1).setAttributes(ATTRS1).build());
-    Subchannel subchannel3 =
-        helper.createSubchannel(
-            CreateSubchannelArgs.newBuilder().setAddresses(EAG2).setAttributes(ATTRS2).build());
-
-    // subchannel2 is not in the pool, although with the same address
-    pool.handleSubchannelState(subchannel2, TRANSIENT_FAILURE_STATE);
-
-    // subchannel3 is not in the pool.  In fact its address is not in the pool
-    pool.handleSubchannelState(subchannel3, TRANSIENT_FAILURE_STATE);
-
-    assertThat(pool.takeOrCreateSubchannel(EAG1, ATTRS1)).isSameInstanceAs(subchannel1);
-
-    // subchannel1's state is unchanged
-    verify(listener).onSubchannelState(same(subchannel1), same(READY_STATE));
-    verifyNoMoreInteractions(listener);
   }
 
   @Test
