@@ -196,10 +196,7 @@ final class GrpclbState {
   }
 
   void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
-    if (newState.getState() == SHUTDOWN) {
-      return;
-    }
-    if (subchannelPool == null && !subchannels.values().contains(subchannel)) {
+    if (newState.getState() == SHUTDOWN || !subchannels.values().contains(subchannel)) {
       return;
     }
     if (config.getMode() == Mode.ROUND_ROBIN && newState.getState() == IDLE) {
@@ -472,7 +469,7 @@ final class GrpclbState {
           subchannel.start(new SubchannelStateListener() {
             @Override
             public void onSubchannelState(ConnectivityStateInfo newState) {
-              handleSubchannelState(subchannel, newState);
+              // No-op
             }
           });
         } else {
