@@ -241,15 +241,21 @@ final class XdsNameResolver extends NameResolver {
       } else {
         // Either there is only a single cluster route or path matching is not enabled.
         // Generate cds lb config.
+        String clusterName = update.getClusterName();
+        if (clusterName.isEmpty()) {
+          // update.getRoutes() must have exactly the default route, and must be a cluster route.
+          update.getRoutes().get(0).getRouteAction().get().getCluster();
+        }
         logger.log(
             XdsLogLevel.INFO,
             "Received config update from xDS client {0}: cluster_name={1}",
-            xdsClient, update.getClusterName());
+            xdsClient,
+            clusterName);
         String serviceConfig = "{\n"
             + "  \"loadBalancingConfig\": [\n"
             + "    {\n"
             + "      \"cds_experimental\": {\n"
-            + "        \"cluster\": \"" + update.getClusterName() + "\"\n"
+            + "        \"cluster\": \"" + clusterName + "\"\n"
             + "      }\n"
             + "    }\n"
             + "  ]\n"
