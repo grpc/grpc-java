@@ -1805,7 +1805,6 @@ public class GrpclbLoadBalancerTest {
     // TRANSIENT_FAILURE
     Status error = Status.UNAVAILABLE.withDescription("Simulated connection error");
     deliverSubchannelState(subchannel, ConnectivityStateInfo.forTransientFailure(error));
-
     inOrder.verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
     RoundRobinPicker picker2 = (RoundRobinPicker) pickerCaptor.getValue();
     assertThat(picker2.dropList).containsExactly(null, null);
@@ -2592,8 +2591,12 @@ public class GrpclbLoadBalancerTest {
 
     @Override
     public ManagedChannel createOobChannel(EquivalentAddressGroup eag, String authority) {
-      ManagedChannel channel = InProcessChannelBuilder.forName("fakeLb").directExecutor()
-          .overrideAuthority(authority).build();
+      ManagedChannel channel =
+          InProcessChannelBuilder
+              .forName("fakeLb")
+              .directExecutor()
+              .overrideAuthority(authority)
+              .build();
       fakeOobChannels.add(channel);
       oobChannelTracker.add(channel);
       return channel;
@@ -2622,8 +2625,8 @@ public class GrpclbLoadBalancerTest {
     }
 
     @Override
-    public void updateBalancingState(@Nonnull ConnectivityState newState,
-        @Nonnull SubchannelPicker newPicker) {
+    public void updateBalancingState(
+        @Nonnull ConnectivityState newState, @Nonnull SubchannelPicker newPicker) {
       currentPicker = newPicker;
     }
 
