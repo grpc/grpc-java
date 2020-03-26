@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.internal;
+package io.grpc;
 
 /**
  * Determines how long to wait before doing some action (typically a retry, or a reconnect).

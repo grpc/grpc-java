@@ -28,7 +28,7 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.Status;
 import io.grpc.grpclb.GrpclbState.Mode;
-import io.grpc.internal.BackoffPolicy;
+import io.grpc.BackoffPolicy;
 import io.grpc.internal.TimeProvider;
 import java.util.ArrayList;
 import java.util.Collections;

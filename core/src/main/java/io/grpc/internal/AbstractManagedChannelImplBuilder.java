@@ -21,18 +21,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.MoreExecutors;
-import io.grpc.Attributes;
-import io.grpc.BinaryLog;
-import io.grpc.ClientInterceptor;
-import io.grpc.CompressorRegistry;
-import io.grpc.DecompressorRegistry;
-import io.grpc.EquivalentAddressGroup;
-import io.grpc.InternalChannelz;
-import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
-import io.grpc.NameResolver;
-import io.grpc.NameResolverRegistry;
-import io.grpc.ProxyDetector;
+import io.grpc.*;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.SocketAddress;
@@ -384,6 +373,13 @@ public abstract class AbstractManagedChannelImplBuilder
     return thisT();
   }
 
+  @Override
+  // TODO(antonbashir): add unit tests for this setting
+  public final T backOffPolicyProvider(BackoffPolicy.Provider provider) {
+    backOffPolicyProvider = provider;
+    return thisT();
+  }
+
   @Nullable
   private static Map<String, ?> checkMapEntryTypes(@Nullable Map<?, ?> map) {
     if (map == null) {
@@ -484,14 +480,6 @@ public abstract class AbstractManagedChannelImplBuilder
   }
 
   /**
-   * Sets provider of policy for connection backoff mechanism
-   * ExponentialBackoffPolicy.Provider by default.
-   */
-  protected void setBackOffPolicyProvider(BackoffPolicy.Provider provider) {
-    backOffPolicyProvider = provider;
-  }
-
-  /**
    * Disable or enable tracing features.  Enabled by default.
    *
    * <p>For the current release, calling {@code setTracingEnabled(true)} may have a side effect that
@@ -520,7 +508,6 @@ public abstract class AbstractManagedChannelImplBuilder
     return new ManagedChannelOrphanWrapper(new ManagedChannelImpl(
         this,
         buildTransportFactory(),
-        // TODO(carl-mastrangelo): Allow clients to pass this in
         backOffPolicyProvider,
         SharedResourcePool.forResource(GrpcUtil.SHARED_CHANNEL_EXECUTOR),
         GrpcUtil.STOPWATCH_SUPPLIER,
