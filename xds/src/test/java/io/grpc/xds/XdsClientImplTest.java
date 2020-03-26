@@ -70,6 +70,7 @@ import io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.A
 import io.envoyproxy.envoy.service.load_stats.v2.LoadReportingServiceGrpc.LoadReportingServiceImplBase;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsRequest;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsResponse;
+import io.grpc.BackoffPolicy;
 import io.grpc.Context;
 import io.grpc.Context.CancellationListener;
 import io.grpc.ManagedChannel;
@@ -78,7 +79,6 @@ import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
-import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.FakeClock.ScheduledTask;
 import io.grpc.internal.FakeClock.TaskFilter;

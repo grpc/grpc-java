@@ -22,6 +22,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.Attributes;
+import io.grpc.BackoffPolicy;
 import io.grpc.BinaryLog;
 import io.grpc.ClientInterceptor;
 import io.grpc.CompressorRegistry;
@@ -175,6 +176,7 @@ public abstract class AbstractManagedChannelImplBuilder
     return maxInboundMessageSize;
   }
 
+  private BackoffPolicy.Provider backOffPolicyProvider = new ExponentialBackoffPolicy.Provider();
   private boolean statsEnabled = true;
   private boolean recordStartedRpcs = true;
   private boolean recordFinishedRpcs = true;
@@ -383,6 +385,13 @@ public abstract class AbstractManagedChannelImplBuilder
     return thisT();
   }
 
+  @Override
+  // TODO(antonbashir): add unit tests for this setting
+  public final T backOffPolicyProvider(BackoffPolicy.Provider provider) {
+    backOffPolicyProvider = provider;
+    return thisT();
+  }
+
   @Nullable
   private static Map<String, ?> checkMapEntryTypes(@Nullable Map<?, ?> map) {
     if (map == null) {
@@ -511,8 +520,7 @@ public abstract class AbstractManagedChannelImplBuilder
     return new ManagedChannelOrphanWrapper(new ManagedChannelImpl(
         this,
         buildTransportFactory(),
-        // TODO(carl-mastrangelo): Allow clients to pass this in
-        new ExponentialBackoffPolicy.Provider(),
+        backOffPolicyProvider,
         SharedResourcePool.forResource(GrpcUtil.SHARED_CHANNEL_EXECUTOR),
         GrpcUtil.STOPWATCH_SUPPLIER,
         getEffectiveInterceptors(),

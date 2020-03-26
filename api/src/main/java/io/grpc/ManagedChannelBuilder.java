@@ -574,6 +574,17 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   }
 
   /**
+   * Sets provider of policy for connection backoff mechanism.
+   * ExponentialBackoffPolicy.Provider by default.
+   *
+   * @return this
+   * @since 1.20.0
+   */
+  public T backOffPolicyProvider(BackoffPolicy.Provider provider) {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
    * Builds a channel using the given parameters.
    *
    * @since 1.0.0

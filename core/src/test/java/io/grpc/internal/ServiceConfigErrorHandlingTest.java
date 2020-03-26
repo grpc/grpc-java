@@ -32,6 +32,7 @@ import static org.mockito.Mockito.when;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import io.grpc.Attributes;
+import io.grpc.BackoffPolicy;
 import io.grpc.ClientInterceptor;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;

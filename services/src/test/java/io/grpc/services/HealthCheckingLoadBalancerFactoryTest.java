@@ -40,6 +40,7 @@ import static org.mockito.Mockito.when;
 
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.Attributes;
+import io.grpc.BackoffPolicy;
 import io.grpc.Channel;
 import io.grpc.ChannelLogger;
 import io.grpc.ConnectivityState;
@@ -67,7 +68,6 @@ import io.grpc.health.v1.HealthCheckResponse.ServingStatus;
 import io.grpc.health.v1.HealthGrpc;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
-import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.services.HealthCheckingLoadBalancerFactory.SubchannelImpl;
