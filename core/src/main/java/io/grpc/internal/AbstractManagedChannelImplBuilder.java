@@ -175,6 +175,7 @@ public abstract class AbstractManagedChannelImplBuilder
     return maxInboundMessageSize;
   }
 
+  private BackoffPolicy.Provider backOffPolicyProvider = new ExponentialBackoffPolicy.Provider();
   private boolean statsEnabled = true;
   private boolean recordStartedRpcs = true;
   private boolean recordFinishedRpcs = true;
@@ -483,6 +484,14 @@ public abstract class AbstractManagedChannelImplBuilder
   }
 
   /**
+   * Sets provider of policy for connection backoff mechanism
+   * ExponentialBackoffPolicy.Provider by default.
+   */
+  protected void setBackOffPolicyProvider(BackoffPolicy.Provider provider) {
+    backOffPolicyProvider = provider;
+  }
+
+  /**
    * Disable or enable tracing features.  Enabled by default.
    *
    * <p>For the current release, calling {@code setTracingEnabled(true)} may have a side effect that
@@ -512,7 +521,7 @@ public abstract class AbstractManagedChannelImplBuilder
         this,
         buildTransportFactory(),
         // TODO(carl-mastrangelo): Allow clients to pass this in
-        new ExponentialBackoffPolicy.Provider(),
+        backOffPolicyProvider,
         SharedResourcePool.forResource(GrpcUtil.SHARED_CHANNEL_EXECUTOR),
         GrpcUtil.STOPWATCH_SUPPLIER,
         getEffectiveInterceptors(),
