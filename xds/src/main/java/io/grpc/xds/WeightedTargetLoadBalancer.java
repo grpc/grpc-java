@@ -157,7 +157,7 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
   }
 
   @Nullable
-  private ConnectivityState aggregateState(
+  private static ConnectivityState aggregateState(
       @Nullable ConnectivityState overallState, ConnectivityState childState) {
     if (overallState == null) {
       return childState;

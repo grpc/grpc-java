@@ -32,10 +32,7 @@ them before continuing, and set them again when resuming.
 $ MAJOR=1 MINOR=7 PATCH=0 # Set appropriately for new release
 $ VERSION_FILES=(
   build.gradle
-  android/build.gradle
-  android-interop-testing/app/build.gradle
   core/src/main/java/io/grpc/internal/GrpcUtil.java
-  cronet/build.gradle
   examples/build.gradle
   examples/pom.xml
   examples/android/clientcache/app/build.gradle
@@ -45,6 +42,8 @@ $ VERSION_FILES=(
   examples/example-alts/build.gradle
   examples/example-gauth/build.gradle
   examples/example-gauth/pom.xml
+  examples/example-jwt-auth/build.gradle
+  examples/example-jwt-auth/pom.xml
   examples/example-hostname/build.gradle
   examples/example-hostname/pom.xml
   examples/example-kotlin/build.gradle

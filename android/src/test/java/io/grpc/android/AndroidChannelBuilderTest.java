@@ -51,6 +51,7 @@ import org.robolectric.shadows.ShadowNetworkInfo;
 @LooperMode(LEGACY)
 @RunWith(RobolectricTestRunner.class)
 @Config(shadows = {AndroidChannelBuilderTest.ShadowDefaultNetworkListenerConnectivityManager.class})
+@SuppressWarnings("deprecation")
 public final class AndroidChannelBuilderTest {
   private final NetworkInfo WIFI_CONNECTED =
       ShadowNetworkInfo.newInstance(

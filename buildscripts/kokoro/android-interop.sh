@@ -21,17 +21,14 @@ echo y | ${ANDROID_HOME}/tools/bin/sdkmanager "build-tools;28.0.3"
 # Proto deps
 buildscripts/make_dependencies.sh
 
-./gradlew publishToMavenLocal
-
-
 # Build and run interop instrumentation tests on Firebase Test Lab
 cd android-interop-testing
 ../gradlew assembleDebug
 ../gradlew assembleDebugAndroidTest
 gcloud firebase test android run \
   --type instrumentation \
-  --app app/build/outputs/apk/debug/app-debug.apk \
-  --test app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk \
+  --app build/outputs/apk/debug/grpc-android-interop-testing-debug.apk \
+  --test build/outputs/apk/androidTest/debug/grpc-android-interop-testing-debug-androidTest.apk \
   --environment-variables \
       server_host=grpc-test.sandbox.googleapis.com,server_port=443,test_case=all \
   --device model=Nexus6P,version=27,locale=en,orientation=portrait \

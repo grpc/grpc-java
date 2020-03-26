@@ -305,36 +305,36 @@ public class WeightedTargetLoadBalancerTest {
     verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
     assertThat(pickerCaptor.getValue()).isInstanceOf(WeightedRandomPicker.class);
     WeightedRandomPicker overallPicker = (WeightedRandomPicker) pickerCaptor.getValue();
-    assertThat(overallPicker.weightedChildPickers).isEqualTo(
-        ImmutableList.of(new WeightedChildPicker(weights[2], subchannelPickers[2])));
+    assertThat(overallPicker.weightedChildPickers)
+        .containsExactly(new WeightedChildPicker(weights[2], subchannelPickers[2]));
 
     // Another child balancer goes to READY.
     childHelpers.get(3).updateBalancingState(READY, subchannelPickers[3]);
     verify(helper, times(2)).updateBalancingState(eq(READY), pickerCaptor.capture());
     overallPicker = (WeightedRandomPicker) pickerCaptor.getValue();
-    assertThat(overallPicker.weightedChildPickers).isEqualTo(
-        ImmutableList.of(
+    assertThat(overallPicker.weightedChildPickers)
+        .containsExactly(
             new WeightedChildPicker(weights[2], subchannelPickers[2]),
-            new WeightedChildPicker(weights[3], subchannelPickers[3])));
+            new WeightedChildPicker(weights[3], subchannelPickers[3]));
 
     // Another child balancer goes to READY.
     childHelpers.get(0).updateBalancingState(READY, subchannelPickers[0]);
     verify(helper, times(3)).updateBalancingState(eq(READY), pickerCaptor.capture());
     overallPicker = (WeightedRandomPicker) pickerCaptor.getValue();
-    assertThat(overallPicker.weightedChildPickers).isEqualTo(
-        ImmutableList.of(
+    assertThat(overallPicker.weightedChildPickers)
+        .containsExactly(
             new WeightedChildPicker(weights[0], subchannelPickers[0]),
             new WeightedChildPicker(weights[2], subchannelPickers[2]),
-            new WeightedChildPicker(weights[3], subchannelPickers[3])));
+            new WeightedChildPicker(weights[3], subchannelPickers[3]));
 
     // One of READY child balancers goes to TRANSIENT_FAILURE.
     childHelpers.get(2).updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(Status.DATA_LOSS));
     verify(helper, times(4)).updateBalancingState(eq(READY), pickerCaptor.capture());
     overallPicker = (WeightedRandomPicker) pickerCaptor.getValue();
-    assertThat(overallPicker.weightedChildPickers).isEqualTo(
-        ImmutableList.of(
+    assertThat(overallPicker.weightedChildPickers)
+        .containsExactly(
             new WeightedChildPicker(weights[0], subchannelPickers[0]),
-            new WeightedChildPicker(weights[3], subchannelPickers[3])));
+            new WeightedChildPicker(weights[3], subchannelPickers[3]));
 
     // All child balancers go to TRANSIENT_FAILURE.
     childHelpers.get(3).updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(Status.DATA_LOSS));

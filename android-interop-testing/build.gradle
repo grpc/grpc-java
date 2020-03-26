@@ -1,53 +1,90 @@
-// Top-level build file where you can add configuration options common to all sub-projects/modules.
-
-buildscript {
-    repositories {
-        google()
-        jcenter()
-    }
-    dependencies {
-        classpath 'com.android.tools.build:gradle:3.3.0'
-        classpath "com.google.protobuf:protobuf-gradle-plugin:0.8.8"
-
-        // NOTE: Do not place your application dependencies here; they belong
-        // in the individual module build.gradle files
-    }
+plugins {
+    id "com.android.application"
+    id "com.google.protobuf"
 }
 
-allprojects {
-    repositories {
-        google()
-        mavenLocal()
-        jcenter()
-    }
+description = 'gRPC: Android Integration Testing'
+
+repositories {
+    google()
+    jcenter()
 }
 
-subprojects {
-    apply plugin: "checkstyle"
-
-    checkstyle {
-        configDir = file("$rootDir/../buildscripts")
-        toolVersion = "6.17"
-        ignoreFailures = false
-        if (rootProject.hasProperty("checkstyle.ignoreFailures")) {
-            ignoreFailures = rootProject.properties["checkstyle.ignoreFailures"].toBoolean()
+android {
+    sourceSets {
+        main {
+            java {
+                srcDirs += "${projectDir}/../interop-testing/src/main/java/"
+                setIncludes(["io/grpc/android/integrationtest/**",
+                             "io/grpc/testing/integration/AbstractInteropTest.java",
+                             "io/grpc/testing/integration/TestServiceImpl.java",
+                             "io/grpc/testing/integration/Util.java"])
+            }
+            proto {
+                srcDirs += "${projectDir}/../interop-testing/src/main/proto/"
+            }
         }
     }
+    compileSdkVersion 26
 
-    // Checkstyle doesn't run automatically with android
-    task checkStyleMain(type: Checkstyle) {
-        source 'src/main/java'
-        include '**/*.java'
-        classpath = files()
+    defaultConfig {
+        applicationId "io.grpc.android.integrationtest"
+        // API level 14+ is required for TLS since Google Play Services v10.2
+        minSdkVersion 14
+        targetSdkVersion 26
+        versionCode 1
+        versionName "1.0"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        multiDexEnabled true
     }
-
-    task checkStyleTest(type: Checkstyle) {
-        source 'src/test/java'
-        include '**/*.java'
-        classpath = files()
+    buildTypes {
+        debug { minifyEnabled false }
+        release {
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
     }
-
-    afterEvaluate { project ->
-        project.tasks['check'].dependsOn checkStyleMain, checkStyleTest
-    }
+    lintOptions { disable 'InvalidPackage', 'HardcodedText' }
 }
+
+dependencies {
+    implementation 'com.android.support:appcompat-v7:26.1.0'
+    implementation 'com.android.support:multidex:1.0.3'
+    implementation 'com.android.support:support-annotations:27.1.1'
+    implementation 'com.google.android.gms:play-services-base:15.0.1'
+
+    implementation project(':grpc-auth'),
+            project(':grpc-census'),
+            project(':grpc-okhttp'),
+            project(':grpc-protobuf-lite'),
+            project(':grpc-stub'),
+            project(':grpc-testing'),
+            libraries.junit,
+            libraries.truth
+
+    implementation (libraries.google_auth_oauth2_http) {
+        exclude group: 'org.apache.httpcomponents'
+    }
+
+    compileOnly libraries.javax_annotation
+
+    androidTestImplementation 'androidx.test:rules:1.1.0-alpha1'
+    androidTestImplementation 'androidx.test:runner:1.1.0-alpha1'
+}
+
+// Checkstyle doesn't run automatically with android
+task checkStyleMain(type: Checkstyle) {
+    source 'src/main/java'
+    include '**/*.java'
+    classpath = files()
+}
+
+task checkStyleTest(type: Checkstyle) {
+    source 'src/androidTest/java'
+    include '**/*.java'
+    classpath = files()
+}
+
+project.tasks['check'].dependsOn checkStyleMain, checkStyleTest
+
+configureProtoCompilation()

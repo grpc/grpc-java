@@ -226,7 +226,7 @@ public class XdsClientImplTestForListener {
     assertThat(fakeClock.getPendingTasks()).isEmpty();
   }
 
-  private Node getNodeToVerify() {
+  private static Node getNodeToVerify() {
     Struct newMetadata = NODE.getMetadata().toBuilder()
         .putFields("listener_inbound_port",
             Value.newBuilder().setStringValue("" + PORT).build())

@@ -18,7 +18,7 @@ package io.grpc.xds;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
-import com.google.common.base.Objects;
+import com.google.common.base.Optional;
 import com.google.common.collect.ImmutableList;
 import io.envoyproxy.envoy.type.FractionalPercent;
 import io.envoyproxy.envoy.type.FractionalPercent.DenominatorType;
@@ -27,6 +27,8 @@ import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
+import javax.annotation.Nullable;
 
 /**
  * Defines gRPC data types for Envoy protobuf messages used in xDS protocol. Each data type has
@@ -96,14 +98,14 @@ final class EnvoyProtoData {
         return false;
       }
       Locality locality = (Locality) o;
-      return Objects.equal(region, locality.region)
-          && Objects.equal(zone, locality.zone)
-          && Objects.equal(subzone, locality.subzone);
+      return Objects.equals(region, locality.region)
+          && Objects.equals(zone, locality.zone)
+          && Objects.equals(subzone, locality.subzone);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hashCode(region, zone, subzone);
+      return Objects.hash(region, zone, subzone);
     }
 
     @Override
@@ -169,12 +171,12 @@ final class EnvoyProtoData {
       LocalityLbEndpoints that = (LocalityLbEndpoints) o;
       return localityWeight == that.localityWeight
           && priority == that.priority
-          && Objects.equal(endpoints, that.endpoints);
+          && Objects.equals(endpoints, that.endpoints);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hashCode(endpoints, localityWeight, priority);
+      return Objects.hash(endpoints, localityWeight, priority);
     }
 
     @Override
@@ -247,13 +249,13 @@ final class EnvoyProtoData {
       }
       LbEndpoint that = (LbEndpoint) o;
       return loadBalancingWeight == that.loadBalancingWeight
-          && Objects.equal(eag, that.eag)
+          && Objects.equals(eag, that.eag)
           && isHealthy == that.isHealthy;
     }
 
     @Override
     public int hashCode() {
-      return Objects.hashCode(eag, loadBalancingWeight, isHealthy);
+      return Objects.hash(eag, loadBalancingWeight, isHealthy);
     }
 
     @Override
@@ -267,7 +269,7 @@ final class EnvoyProtoData {
   }
 
   /**
-   * See corresponding Enovy proto message {@link
+   * See corresponding Envoy proto message {@link
    * io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy.DropOverload}.
    */
   static final class DropOverload {
@@ -323,12 +325,12 @@ final class EnvoyProtoData {
         return false;
       }
       DropOverload that = (DropOverload) o;
-      return dropsPerMillion == that.dropsPerMillion && Objects.equal(category, that.category);
+      return dropsPerMillion == that.dropsPerMillion && Objects.equals(category, that.category);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hashCode(category, dropsPerMillion);
+      return Objects.hash(category, dropsPerMillion);
     }
 
     @Override
@@ -337,6 +339,241 @@ final class EnvoyProtoData {
           .add("category", category)
           .add("dropsPerMillion", dropsPerMillion)
           .toString();
+    }
+  }
+
+  /** See corresponding Envoy proto message {@link io.envoyproxy.envoy.api.v2.route.Route}. */
+  static final class Route {
+    private final RouteMatch routeMatch;
+    @Nullable
+    private final RouteAction routeAction;
+
+    @VisibleForTesting
+    Route(RouteMatch routeMatch, @Nullable RouteAction routeAction) {
+      this.routeMatch = routeMatch;
+      this.routeAction = routeAction;
+    }
+
+    RouteMatch getRouteMatch() {
+      return routeMatch;
+    }
+
+    Optional<RouteAction> getRouteAction() {
+      return Optional.fromNullable(routeAction);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      Route route = (Route) o;
+      return Objects.equals(routeMatch, route.routeMatch)
+          && Objects.equals(routeAction, route.routeAction);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(routeMatch, routeAction);
+    }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(this)
+          .add("routeMatch", routeMatch)
+          .add("routeAction", routeAction)
+          .toString();
+    }
+
+    static Route fromEnvoyProtoRoute(io.envoyproxy.envoy.api.v2.route.Route proto) {
+      RouteMatch routeMatch = RouteMatch.fromEnvoyProtoRouteMatch(proto.getMatch());
+      RouteAction routeAction = null;
+      if (proto.hasRoute()) {
+        routeAction = RouteAction.fromEnvoyProtoRouteAction(proto.getRoute());
+      }
+      return new Route(routeMatch, routeAction);
+    }
+  }
+
+  /** See corresponding Envoy proto message {@link io.envoyproxy.envoy.api.v2.route.RouteMatch}. */
+  static final class RouteMatch {
+    private final String prefix;
+    private final String path;
+    private final boolean hasRegex;
+
+    @VisibleForTesting
+    RouteMatch(String prefix, String path, boolean hasRegex) {
+      this.prefix = prefix;
+      this.path = path;
+      this.hasRegex = hasRegex;
+    }
+
+    String getPrefix() {
+      return prefix;
+    }
+
+    String getPath() {
+      return path;
+    }
+
+    boolean hasRegex() {
+      return hasRegex;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      RouteMatch that = (RouteMatch) o;
+      return hasRegex == that.hasRegex
+          && Objects.equals(prefix, that.prefix)
+          && Objects.equals(path, that.path);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(prefix, path, hasRegex);
+    }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(this)
+          .add("prefix", prefix)
+          .add("path", path)
+          .add("hasRegex", hasRegex)
+          .toString();
+    }
+
+    private static RouteMatch fromEnvoyProtoRouteMatch(
+        io.envoyproxy.envoy.api.v2.route.RouteMatch proto) {
+      return new RouteMatch(
+          proto.getPrefix(), proto.getPath(), !proto.getRegex().isEmpty() || proto.hasSafeRegex());
+    }
+  }
+
+  /** See corresponding Envoy proto message {@link io.envoyproxy.envoy.api.v2.route.RouteAction}. */
+  static final class RouteAction {
+    private final String cluster;
+    private final String clusterHeader;
+    private final List<ClusterWeight> weightedCluster;
+
+    @VisibleForTesting
+    RouteAction(String cluster, String clusterHeader, List<ClusterWeight> weightedCluster) {
+      this.cluster = cluster;
+      this.clusterHeader = clusterHeader;
+      this.weightedCluster = Collections.unmodifiableList(weightedCluster);
+    }
+
+    String getCluster() {
+      return cluster;
+    }
+
+    String getClusterHeader() {
+      return clusterHeader;
+    }
+
+    List<ClusterWeight> getWeightedCluster() {
+      return weightedCluster;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      RouteAction that = (RouteAction) o;
+      return Objects.equals(cluster, that.cluster)
+              && Objects.equals(clusterHeader, that.clusterHeader)
+              && Objects.equals(weightedCluster, that.weightedCluster);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(cluster, clusterHeader, weightedCluster);
+    }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(this)
+              .add("cluster", cluster)
+              .add("clusterHeader", clusterHeader)
+              .add("weightedCluster", weightedCluster)
+              .toString();
+    }
+
+    private static RouteAction fromEnvoyProtoRouteAction(
+        io.envoyproxy.envoy.api.v2.route.RouteAction proto) {
+      List<ClusterWeight> weightedCluster = new ArrayList<>();
+      List<io.envoyproxy.envoy.api.v2.route.WeightedCluster.ClusterWeight> clusterWeights
+          = proto.getWeightedClusters().getClustersList();
+      for (io.envoyproxy.envoy.api.v2.route.WeightedCluster.ClusterWeight clusterWeight
+          : clusterWeights) {
+        weightedCluster.add(ClusterWeight.fromEnvoyProtoClusterWeight(clusterWeight));
+      }
+      return new RouteAction(proto.getCluster(), proto.getClusterHeader(), weightedCluster);
+    }
+  }
+
+  /**
+   * See corresponding Envoy proto message {@link
+   * io.envoyproxy.envoy.api.v2.route.WeightedCluster.ClusterWeight}.
+   */
+  static final class ClusterWeight {
+    private final String name;
+    private final int weight;
+
+    @VisibleForTesting
+    ClusterWeight(String name, int weight) {
+      this.name = name;
+      this.weight = weight;
+    }
+
+    String getName() {
+      return name;
+    }
+
+    int getWeight() {
+      return weight;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      ClusterWeight that = (ClusterWeight) o;
+      return weight == that.weight && Objects.equals(name, that.name);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(name, weight);
+    }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(this)
+          .add("name", name)
+          .add("weight", weight)
+          .toString();
+    }
+
+    private static ClusterWeight fromEnvoyProtoClusterWeight(
+        io.envoyproxy.envoy.api.v2.route.WeightedCluster.ClusterWeight proto) {
+      return new ClusterWeight(proto.getName(), proto.getWeight().getValue());
     }
   }
 }

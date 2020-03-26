@@ -118,7 +118,7 @@ public class WeightedTargetLoadBalancerProviderTest {
         + "      ]"
         + "    }"
         + "  }"
-        + "}").replace("'", "\"");
+        + "}").replace('\'', '"');
 
     @SuppressWarnings("unchecked")
     Map<String, ?> rawLbConfigMap = (Map<String, ?>) JsonParser.parse(weightedTargetConfigJson);

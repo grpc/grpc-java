@@ -21,20 +21,26 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.annotations.VisibleForTesting;
 import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
+import io.grpc.SynchronizationContext;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
 import io.grpc.netty.InternalNettyChannelBuilder;
 import io.grpc.netty.InternalNettyChannelBuilder.ProtocolNegotiatorFactory;
+import io.grpc.netty.InternalProtocolNegotiationEvent;
 import io.grpc.netty.InternalProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.netty.NettyChannelBuilder;
+import io.grpc.netty.ProtocolNegotiationEvent;
+import io.grpc.xds.Bootstrapper;
 import io.grpc.xds.XdsAttributes;
+import io.grpc.xds.XdsClientWrapperForServerSds;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerAdapter;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.handler.ssl.SslContext;
 import io.netty.util.AsciiString;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Level;
@@ -55,7 +61,6 @@ final class SdsProtocolNegotiators {
    * Returns a {@link ProtocolNegotiatorFactory} to be used on {@link NettyChannelBuilder}. Passing
    * {@code null} for upstreamTlsContext will fall back to plaintext.
    */
-  // TODO (sanjaypujare) integrate with xDS client to get upstreamTlsContext from CDS
   public static ProtocolNegotiatorFactory clientProtocolNegotiatorFactory(
       @Nullable UpstreamTlsContext upstreamTlsContext) {
     return new ClientSdsProtocolNegotiatorFactory(upstreamTlsContext);
@@ -64,17 +69,20 @@ final class SdsProtocolNegotiators {
   /**
    * Creates an SDS based {@link ProtocolNegotiator} for a {@link io.grpc.netty.NettyServerBuilder}.
    * Passing {@code null} for downstreamTlsContext will fall back to plaintext.
+   * If xDS returns no DownstreamTlsContext, it will fall back to plaintext.
+   *
+   * @param downstreamTlsContext passed in {@link XdsServerBuilder#tlsContext}.
+   * @param port the listening port passed to {@link XdsServerBuilder#forPort(int)}.
    */
-  // TODO (sanjaypujare) integrate with xDS client to get LDS
   public static ProtocolNegotiator serverProtocolNegotiator(
-      @Nullable DownstreamTlsContext downstreamTlsContext) {
-    return new ServerSdsProtocolNegotiator(downstreamTlsContext);
+      @Nullable DownstreamTlsContext downstreamTlsContext, int port,
+      SynchronizationContext syncContext) {
+    return new ServerSdsProtocolNegotiator(downstreamTlsContext, port, syncContext);
   }
 
   private static final class ClientSdsProtocolNegotiatorFactory
       implements InternalNettyChannelBuilder.ProtocolNegotiatorFactory {
 
-    // TODO (sanjaypujare) integrate with xDS client to get upstreamTlsContext from CDS
     private final UpstreamTlsContext upstreamTlsContext;
 
     ClientSdsProtocolNegotiatorFactory(UpstreamTlsContext upstreamTlsContext) {
@@ -245,12 +253,21 @@ final class SdsProtocolNegotiators {
 
   private static final class ServerSdsProtocolNegotiator implements ProtocolNegotiator {
 
-    // TODO (sanjaypujare) integrate with xDS client to get LDS. LDS watcher will
-    // inject/update the downstreamTlsContext from LDS
     private DownstreamTlsContext downstreamTlsContext;
+    private final XdsClientWrapperForServerSds xdsClientWrapperForServerSds;
 
-    ServerSdsProtocolNegotiator(DownstreamTlsContext downstreamTlsContext) {
+    ServerSdsProtocolNegotiator(
+        DownstreamTlsContext downstreamTlsContext, int port, SynchronizationContext syncContext) {
       this.downstreamTlsContext = downstreamTlsContext;
+      XdsClientWrapperForServerSds localXdsClientWrapperForServerSds;
+      try {
+        localXdsClientWrapperForServerSds =
+            XdsClientWrapperForServerSds.newInstance(port, Bootstrapper.getInstance(), syncContext);
+      } catch (Exception e) {
+        logger.log(Level.WARNING, "Exception while creating the xDS client", e);
+        localXdsClientWrapperForServerSds = null;
+      }
+      this.xdsClientWrapperForServerSds = localXdsClientWrapperForServerSds;
     }
 
     @Override
@@ -260,14 +277,8 @@ final class SdsProtocolNegotiators {
 
     @Override
     public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
-      if (isTlsContextEmpty(downstreamTlsContext)) {
-        return InternalProtocolNegotiators.serverPlaintext().newHandler(grpcHandler);
-      }
-      return new ServerSdsHandler(grpcHandler, downstreamTlsContext);
-    }
-
-    private static boolean isTlsContextEmpty(DownstreamTlsContext downstreamTlsContext) {
-      return downstreamTlsContext == null || !downstreamTlsContext.hasCommonTlsContext();
+      return new HandlerPickerHandler(grpcHandler, downstreamTlsContext,
+          xdsClientWrapperForServerSds);
     }
 
     @Override
@@ -275,13 +286,68 @@ final class SdsProtocolNegotiators {
   }
 
   @VisibleForTesting
+  static final class HandlerPickerHandler
+      extends ChannelInboundHandlerAdapter {
+    private final GrpcHttp2ConnectionHandler grpcHandler;
+    private final DownstreamTlsContext downstreamTlsContextFromBuilder;
+    private final XdsClientWrapperForServerSds xdsClientWrapperForServerSds;
+
+    HandlerPickerHandler(
+        GrpcHttp2ConnectionHandler grpcHandler,
+        DownstreamTlsContext downstreamTlsContext,
+        XdsClientWrapperForServerSds xdsClientWrapperForServerSds) {
+      checkNotNull(grpcHandler, "grpcHandler");
+      this.grpcHandler = grpcHandler;
+      this.downstreamTlsContextFromBuilder = downstreamTlsContext;
+      this.xdsClientWrapperForServerSds = xdsClientWrapperForServerSds;
+    }
+
+    private static boolean isTlsContextEmpty(DownstreamTlsContext downstreamTlsContext) {
+      return downstreamTlsContext == null || !downstreamTlsContext.hasCommonTlsContext();
+    }
+
+    @Override
+    public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
+      if (evt instanceof ProtocolNegotiationEvent) {
+        DownstreamTlsContext downstreamTlsContext =
+            xdsClientWrapperForServerSds == null
+                ? null
+                : xdsClientWrapperForServerSds.getDownstreamTlsContext(ctx.channel());
+        if (isTlsContextEmpty(downstreamTlsContext)) {
+          downstreamTlsContext = downstreamTlsContextFromBuilder;
+        }
+        if (isTlsContextEmpty(downstreamTlsContext)) {
+          logger.log(Level.INFO, "Fallback to plaintext for {0}", ctx.channel().localAddress());
+          ctx.pipeline()
+              .replace(
+                  this,
+                  null,
+                  InternalProtocolNegotiators.serverPlaintext().newHandler(grpcHandler));
+          ProtocolNegotiationEvent pne = InternalProtocolNegotiationEvent.getDefault();
+          ctx.fireUserEventTriggered(pne);
+          return;
+        } else {
+          ctx.pipeline()
+              .replace(this, null, new ServerSdsHandler(grpcHandler, downstreamTlsContext));
+          ProtocolNegotiationEvent pne = InternalProtocolNegotiationEvent.getDefault();
+          ctx.fireUserEventTriggered(pne);
+          return;
+        }
+      } else {
+        super.userEventTriggered(ctx, evt);
+      }
+    }
+  }
+
+  @VisibleForTesting
   static final class ServerSdsHandler
-      extends InternalProtocolNegotiators.ProtocolNegotiationHandler {
+          extends InternalProtocolNegotiators.ProtocolNegotiationHandler {
     private final GrpcHttp2ConnectionHandler grpcHandler;
     private final DownstreamTlsContext downstreamTlsContext;
 
     ServerSdsHandler(
-        GrpcHttp2ConnectionHandler grpcHandler, DownstreamTlsContext downstreamTlsContext) {
+            GrpcHttp2ConnectionHandler grpcHandler,
+            DownstreamTlsContext downstreamTlsContext) {
       super(
           // superclass (InternalProtocolNegotiators.ProtocolNegotiationHandler) expects 'next'
           // handler but we don't have a next handler _yet_. So we "disable" superclass's behavior
@@ -303,8 +369,8 @@ final class SdsProtocolNegotiators {
       ctx.pipeline().addBefore(ctx.name(), null, bufferReads);
 
       final SslContextProvider<DownstreamTlsContext> sslContextProvider =
-          TlsContextManagerImpl.getInstance()
-              .findOrCreateServerSslContextProvider(downstreamTlsContext);
+              TlsContextManagerImpl.getInstance()
+                      .findOrCreateServerSslContextProvider(downstreamTlsContext);
 
       sslContextProvider.addCallback(
           new SslContextProvider.Callback() {

@@ -45,6 +45,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Any;
+import com.google.protobuf.UInt32Value;
 import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment;
 import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy;
@@ -62,6 +63,7 @@ import io.envoyproxy.envoy.api.v2.route.Route;
 import io.envoyproxy.envoy.api.v2.route.RouteAction;
 import io.envoyproxy.envoy.api.v2.route.RouteMatch;
 import io.envoyproxy.envoy.api.v2.route.VirtualHost;
+import io.envoyproxy.envoy.api.v2.route.WeightedCluster;
 import io.envoyproxy.envoy.config.filter.network.http_connection_manager.v2.HttpConnectionManager;
 import io.envoyproxy.envoy.config.filter.network.http_connection_manager.v2.Rds;
 import io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceImplBase;
@@ -631,6 +633,135 @@ public class XdsClientImplTest {
     ArgumentCaptor<ConfigUpdate> configUpdateCaptor = ArgumentCaptor.forClass(null);
     verify(configWatcher).onConfigChanged(configUpdateCaptor.capture());
     assertThat(configUpdateCaptor.getValue().getClusterName()).isEqualTo("cluster.googleapis.com");
+  }
+
+  /**
+   * Client resolves the virtual host config with path matching from an RDS response for the
+   * requested resource. The RDS response is ACKed.
+   * The config watcher is notified with an update.
+   */
+  @Test
+  public void resolveVirtualHostWithPathMatchingInRdsResponse() {
+    xdsClient.watchConfigData(TARGET_AUTHORITY, configWatcher);
+    StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
+    StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
+
+    Rds rdsConfig =
+        Rds.newBuilder()
+            // Must set to use ADS.
+            .setConfigSource(
+                ConfigSource.newBuilder().setAds(AggregatedConfigSource.getDefaultInstance()))
+            .setRouteConfigName("route-foo.googleapis.com")
+            .build();
+
+    List<Any> listeners = ImmutableList.of(
+            Any.pack(buildListener(TARGET_AUTHORITY, /* matching resource */
+                    Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build())))
+    );
+    DiscoveryResponse response =
+            buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS, "0000");
+    responseObserver.onNext(response);
+
+    // Client sends an ACK LDS request and an RDS request for "route-foo.googleapis.com". (Omitted)
+
+    assertThat(fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
+
+    // Management server should only sends RouteConfiguration messages with at least one
+    // VirtualHost with domains matching requested hostname. Otherwise, it is invalid data.
+    List<Any> routeConfigs = ImmutableList.of(
+        Any.pack(
+            buildRouteConfiguration(
+                "route-foo.googleapis.com",
+                ImmutableList.of(
+                    buildVirtualHost(ImmutableList.of("something does not match"),
+                        "some cluster"),
+                    VirtualHost.newBuilder()
+                        .setName("virtualhost00.googleapis.com") // don't care
+                        // domains wit a match.
+                        .addAllDomains(ImmutableList.of(TARGET_AUTHORITY, "bar.googleapis.com"))
+                        .addRoutes(Route.newBuilder()
+                            // path match with cluster route
+                            .setRoute(RouteAction.newBuilder().setCluster("cl1.googleapis.com"))
+                            .setMatch(RouteMatch.newBuilder().setPath("/service1/method1/")))
+                        .addRoutes(Route.newBuilder()
+                            // path match with weighted cluster route
+                            .setRoute(RouteAction.newBuilder().setWeightedClusters(
+                                WeightedCluster.newBuilder()
+                                    .addClusters(WeightedCluster.ClusterWeight.newBuilder()
+                                        .setWeight(UInt32Value.newBuilder().setValue(30))
+                                        .setName("cl21.googleapis.com"))
+                                    .addClusters(WeightedCluster.ClusterWeight.newBuilder()
+                                        .setWeight(UInt32Value.newBuilder().setValue(70))
+                                        .setName("cl22.googleapis.com"))))
+                            .setMatch(RouteMatch.newBuilder().setPath("/service2/method2/")))
+                        .addRoutes(Route.newBuilder()
+                            // prefix match with cluster route
+                            .setRoute(RouteAction.newBuilder()
+                                .setCluster("cl1.googleapis.com"))
+                            .setMatch(RouteMatch.newBuilder().setPrefix("/service1/")))
+                        .addRoutes(Route.newBuilder()
+                            // default match with cluster route
+                            .setRoute(RouteAction.newBuilder().setCluster("cluster.googleapis.com"))
+                            .setMatch(RouteMatch.newBuilder().setPrefix("")))
+                        .build(),
+                    buildVirtualHost(ImmutableList.of("something does not match"),
+                        "some more cluster")))),
+        Any.pack(
+            buildRouteConfiguration(
+                "some resource name does not match route-foo.googleapis.com",
+                ImmutableList.of(
+                    buildVirtualHost(ImmutableList.of("foo.googleapis.com"),
+                        "some more cluster")))));
+    response = buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0000");
+    responseObserver.onNext(response);
+
+    assertThat(fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
+
+    // Client sent an ACK RDS request.
+    verify(requestObserver)
+            .onNext(eq(buildDiscoveryRequest(NODE, "0", "route-foo.googleapis.com",
+                    XdsClientImpl.ADS_TYPE_URL_RDS, "0000")));
+
+    ArgumentCaptor<ConfigUpdate> configUpdateCaptor = ArgumentCaptor.forClass(null);
+    verify(configWatcher).onConfigChanged(configUpdateCaptor.capture());
+    assertThat(configUpdateCaptor.getValue().getClusterName()).isEqualTo("cluster.googleapis.com");
+    List<EnvoyProtoData.Route> routes = configUpdateCaptor.getValue().getRoutes();
+    assertThat(routes).hasSize(4);
+    assertThat(routes.get(0)).isEqualTo(
+        new EnvoyProtoData.Route(
+            // path match with cluster route
+            new EnvoyProtoData.RouteMatch("", "/service1/method1/", false),
+            new EnvoyProtoData.RouteAction(
+                "cl1.googleapis.com",
+                "",
+                ImmutableList.<EnvoyProtoData.ClusterWeight>of())));
+    assertThat(routes.get(1)).isEqualTo(
+        new EnvoyProtoData.Route(
+            // path match with weighted cluster route
+            new EnvoyProtoData.RouteMatch("", "/service2/method2/", false),
+            new EnvoyProtoData.RouteAction(
+                "",
+                "",
+                ImmutableList.of(
+                    new EnvoyProtoData.ClusterWeight("cl21.googleapis.com", 30),
+                    new EnvoyProtoData.ClusterWeight("cl22.googleapis.com", 70)
+                ))));
+    assertThat(routes.get(2)).isEqualTo(
+        new EnvoyProtoData.Route(
+            // prefix match with cluster route
+            new EnvoyProtoData.RouteMatch("/service1/", "", false),
+            new EnvoyProtoData.RouteAction(
+                "cl1.googleapis.com",
+                "",
+                ImmutableList.<EnvoyProtoData.ClusterWeight>of())));
+    assertThat(routes.get(3)).isEqualTo(
+        new EnvoyProtoData.Route(
+            // default match with cluster route
+            new EnvoyProtoData.RouteMatch("", "", false),
+            new EnvoyProtoData.RouteAction(
+                "cluster.googleapis.com",
+                "",
+                ImmutableList.<EnvoyProtoData.ClusterWeight>of())));
   }
 
   /**
@@ -3240,8 +3371,11 @@ public class XdsClientImplTest {
     RouteConfiguration routeConfig =
         buildRouteConfiguration(
             "route-foo.googleapis.com", ImmutableList.of(vHost1, vHost2, vHost3));
-    String result = XdsClientImpl.findClusterNameInRouteConfig(routeConfig, hostname);
-    assertThat(result).isEqualTo(targetClusterName);
+    List<EnvoyProtoData.Route> routes =
+        XdsClientImpl.findRoutesInRouteConfig(routeConfig, hostname);
+    assertThat(routes).hasSize(1);
+    assertThat(routes.get(0).getRouteAction().get().getCluster())
+        .isEqualTo(targetClusterName);
   }
 
   @Test
@@ -3278,8 +3412,11 @@ public class XdsClientImplTest {
     RouteConfiguration routeConfig =
         buildRouteConfiguration(
             "route-foo.googleapis.com", ImmutableList.of(vHost1, vHost2, vHost3));
-    String result = XdsClientImpl.findClusterNameInRouteConfig(routeConfig, hostname);
-    assertThat(result).isEqualTo(targetClusterName);
+    List<EnvoyProtoData.Route> routes =
+        XdsClientImpl.findRoutesInRouteConfig(routeConfig, hostname);
+    assertThat(routes).hasSize(1);
+    assertThat(routes.get(0).getRouteAction().get().getCluster())
+        .isEqualTo(targetClusterName);
   }
 
   @Test
@@ -3307,8 +3444,11 @@ public class XdsClientImplTest {
     RouteConfiguration routeConfig =
         buildRouteConfiguration(
             "route-foo.googleapis.com", ImmutableList.of(vHost1, vHost2));
-    String result = XdsClientImpl.findClusterNameInRouteConfig(routeConfig, hostname);
-    assertThat(result).isEqualTo(targetClusterName);
+    List<EnvoyProtoData.Route> routes =
+        XdsClientImpl.findRoutesInRouteConfig(routeConfig, hostname);
+    assertThat(routes).hasSize(1);
+    assertThat(routes.get(0).getRouteAction().get().getCluster())
+        .isEqualTo(targetClusterName);
   }
 
   @Test
