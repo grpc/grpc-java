@@ -640,19 +640,20 @@ final class XdsClientImpl extends XdsClient {
       }
     }
     if (routes != null) {
-      // Found clusterName in the in-lined RouteConfiguration.
-      String clusterName = routes.get(routes.size() - 1).getRouteAction().get().getCluster();
+      // Found clusterName or routes in the in-lined RouteConfiguration.
+      ConfigUpdate configUpdate;
       if (!enablePathMatching) {
+        String clusterName = routes.get(routes.size() - 1).getRouteAction().get().getCluster();
+        configUpdate = ConfigUpdate.newBuilder().setClusterName(clusterName).build();
         logger.log(
             XdsLogLevel.INFO,
             "Found cluster name (inlined in route config): {0}", clusterName);
       } else {
+        configUpdate = ConfigUpdate.newBuilder().addRoutes(routes).build();
         logger.log(
             XdsLogLevel.INFO,
             "Found routes (inlined in route config): {0}", routes);
       }
-      ConfigUpdate configUpdate = ConfigUpdate.newBuilder()
-          .setClusterName(clusterName).addRoutes(routes).build();
       configWatcher.onConfigChanged(configUpdate);
     } else if (rdsRouteConfigName != null) {
       // Send an RDS request if the resource to request has changed.
@@ -811,16 +812,17 @@ final class XdsClientImpl extends XdsClient {
         rdsRespTimer = null;
       }
 
-      // Found clusterName in the in-lined RouteConfiguration.
+      // Found clusterName or routes in the in-lined RouteConfiguration.
+      ConfigUpdate configUpdate;
       String clusterName = routes.get(routes.size() - 1).getRouteAction().get().getCluster();
       if (!enablePathMatching) {
+        configUpdate = ConfigUpdate.newBuilder().setClusterName(clusterName).build();
         logger.log(XdsLogLevel.INFO, "Found cluster name: {0}", clusterName);
       } else {
+        configUpdate = ConfigUpdate.newBuilder().addRoutes(routes).build();
         logger.log(XdsLogLevel.INFO, "Found {0} routes", routes.size());
         logger.log(XdsLogLevel.DEBUG, "Found routes: {0}", routes);
       }
-      ConfigUpdate configUpdate = ConfigUpdate.newBuilder()
-          .setClusterName(clusterName).addRoutes(routes).build();
       configWatcher.onConfigChanged(configUpdate);
     }
   }

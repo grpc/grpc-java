@@ -300,6 +300,7 @@ public class XdsClientImplTest {
 
   @After
   public void tearDown() {
+    XdsClientImpl.enablePathMatching = false;
     xdsClient.shutdown();
     assertThat(adsEnded.get()).isTrue();
     assertThat(lrsEnded.get()).isTrue();
@@ -642,6 +643,7 @@ public class XdsClientImplTest {
    */
   @Test
   public void resolveVirtualHostWithPathMatchingInRdsResponse() {
+    XdsClientImpl.enablePathMatching = true;
     xdsClient.watchConfigData(TARGET_AUTHORITY, configWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
@@ -673,8 +675,6 @@ public class XdsClientImplTest {
             buildRouteConfiguration(
                 "route-foo.googleapis.com",
                 ImmutableList.of(
-                    buildVirtualHost(ImmutableList.of("something does not match"),
-                        "some cluster"),
                     VirtualHost.newBuilder()
                         .setName("virtualhost00.googleapis.com") // don't care
                         // domains wit a match.
@@ -682,7 +682,7 @@ public class XdsClientImplTest {
                         .addRoutes(Route.newBuilder()
                             // path match with cluster route
                             .setRoute(RouteAction.newBuilder().setCluster("cl1.googleapis.com"))
-                            .setMatch(RouteMatch.newBuilder().setPath("/service1/method1/")))
+                            .setMatch(RouteMatch.newBuilder().setPath("/service1/method1")))
                         .addRoutes(Route.newBuilder()
                             // path match with weighted cluster route
                             .setRoute(RouteAction.newBuilder().setWeightedClusters(
@@ -693,7 +693,7 @@ public class XdsClientImplTest {
                                     .addClusters(WeightedCluster.ClusterWeight.newBuilder()
                                         .setWeight(UInt32Value.newBuilder().setValue(70))
                                         .setName("cl22.googleapis.com"))))
-                            .setMatch(RouteMatch.newBuilder().setPath("/service2/method2/")))
+                            .setMatch(RouteMatch.newBuilder().setPath("/service2/method2")))
                         .addRoutes(Route.newBuilder()
                             // prefix match with cluster route
                             .setRoute(RouteAction.newBuilder()
@@ -703,15 +703,7 @@ public class XdsClientImplTest {
                             // default match with cluster route
                             .setRoute(RouteAction.newBuilder().setCluster("cluster.googleapis.com"))
                             .setMatch(RouteMatch.newBuilder().setPrefix("")))
-                        .build(),
-                    buildVirtualHost(ImmutableList.of("something does not match"),
-                        "some more cluster")))),
-        Any.pack(
-            buildRouteConfiguration(
-                "some resource name does not match route-foo.googleapis.com",
-                ImmutableList.of(
-                    buildVirtualHost(ImmutableList.of("foo.googleapis.com"),
-                        "some more cluster")))));
+                        .build()))));
     response = buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0000");
     responseObserver.onNext(response);
 
@@ -724,13 +716,12 @@ public class XdsClientImplTest {
 
     ArgumentCaptor<ConfigUpdate> configUpdateCaptor = ArgumentCaptor.forClass(null);
     verify(configWatcher).onConfigChanged(configUpdateCaptor.capture());
-    assertThat(configUpdateCaptor.getValue().getClusterName()).isEqualTo("cluster.googleapis.com");
     List<EnvoyProtoData.Route> routes = configUpdateCaptor.getValue().getRoutes();
     assertThat(routes).hasSize(4);
     assertThat(routes.get(0)).isEqualTo(
         new EnvoyProtoData.Route(
             // path match with cluster route
-            new EnvoyProtoData.RouteMatch("", "/service1/method1/", false),
+            new EnvoyProtoData.RouteMatch("", "/service1/method1", false),
             new EnvoyProtoData.RouteAction(
                 "cl1.googleapis.com",
                 "",
@@ -738,7 +729,7 @@ public class XdsClientImplTest {
     assertThat(routes.get(1)).isEqualTo(
         new EnvoyProtoData.Route(
             // path match with weighted cluster route
-            new EnvoyProtoData.RouteMatch("", "/service2/method2/", false),
+            new EnvoyProtoData.RouteMatch("", "/service2/method2", false),
             new EnvoyProtoData.RouteAction(
                 "",
                 "",

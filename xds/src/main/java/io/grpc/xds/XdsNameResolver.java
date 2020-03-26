@@ -152,7 +152,7 @@ final class XdsNameResolver extends NameResolver {
     @Override
     public void onConfigChanged(ConfigUpdate update) {
       Map<String, ?> config;
-      if (XdsClientImpl.enablePathMatching && update.getRoutes().size() != 1) {
+      if (update.getRoutes().size() > 1) {
         // Path matching is enabled and the config update is not a single route. Generate
         // xds-routing lb config.
         logger.log(
@@ -226,7 +226,8 @@ final class XdsNameResolver extends NameResolver {
         config = ImmutableMap.of("loadBalancingConfig", ImmutableList.of(xdsRoutingRawConfig));
         logger.log(XdsLogLevel.INFO, "Generated service config:\n{0}", config);
       } else if (update.getRoutes().size() == 1 && update.getClusterName().isEmpty()) {
-        // Only a single weighted cluster route. Generate weighted-target lb config.
+        // Path matching is enabled but only a single weighted cluster route.
+        // Generate weighted-target lb config.
         logger.log(
             XdsLogLevel.INFO,
             "Received config update with one weighted cluster route from xDS client {0}",

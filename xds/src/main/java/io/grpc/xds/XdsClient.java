@@ -63,6 +63,9 @@ abstract class XdsClient {
    * be used to generate a service config.
    */
   static final class ConfigUpdate {
+    // Either clusterName or routes is empty, and the other field must not be empty.
+    // If path matching is enabled the config update should have a nonempty routes.
+    // If path matching is not enabled the config update should have a nonempty clusterName.
     private final String clusterName;
     private final List<Route> routes;
 
@@ -95,7 +98,7 @@ abstract class XdsClient {
 
     static final class Builder {
       private final List<Route> routes = new ArrayList<>();
-      private String clusterName;
+      private String clusterName = "";
 
       // Use ConfigUpdate.newBuilder().
       private Builder() {
@@ -112,7 +115,11 @@ abstract class XdsClient {
       }
 
       ConfigUpdate build() {
-        Preconditions.checkState(clusterName != null, "clusterName is not set");
+        Preconditions.checkState(
+            clusterName.isEmpty() ^ routes.isEmpty(),
+            "clusterName '%s' and routes %s can not be both empty or both nonempty",
+            clusterName,
+            routes);
         return new ConfigUpdate(clusterName, Collections.unmodifiableList(routes));
       }
     }
