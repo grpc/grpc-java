@@ -16,10 +16,12 @@
 
 package io.grpc;
 
-import com.google.common.base.*;
-import javax.annotation.*;
-import java.util.*;
-import java.util.concurrent.*;
+import com.google.common.base.Preconditions;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
+import javax.annotation.Nullable;
 
 /**
  * A builder for {@link ManagedChannel} instances.
