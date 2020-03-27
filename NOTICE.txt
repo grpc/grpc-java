@@ -44,8 +44,10 @@ which can be obtained at:
 
   * LICENSE:
     * xds/third_party/protoc-gen-validate/LICENSE (Apache License 2.0)
+  * NOTICE:
+      * xds/third_party/protoc-gen-validate/NOTICE
   * HOMEPAGE:
-    * https://github.com/lyft/protoc-gen-validate
+    * https://github.com/envoyproxy/protoc-gen-validate
   * LOCATION_IN_GRPC:
     * xds/third_party/protoc-gen-validate
 
