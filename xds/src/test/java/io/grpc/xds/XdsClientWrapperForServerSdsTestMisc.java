@@ -22,7 +22,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.mockito.internal.verification.VerificationModeFactory.times;
 
 import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
 import io.grpc.inprocess.InProcessSocketAddress;
@@ -61,7 +60,7 @@ public class XdsClientWrapperForServerSdsTestMisc {
 
   @Test
   public void verifyListenerWatcherRegistered() {
-    verify(xdsClient, times(1)).watchListenerData(eq(PORT), any(XdsClient.ListenerWatcher.class));
+    verify(xdsClient).watchListenerData(eq(PORT), any(XdsClient.ListenerWatcher.class));
   }
 
   @Test

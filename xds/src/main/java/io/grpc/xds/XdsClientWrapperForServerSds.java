@@ -67,7 +67,7 @@ public final class XdsClientWrapperForServerSds {
   private EnvoyServerProtoData.Listener curListener;
   // TODO(sanjaypujare): implement shutting down XdsServer which will need xdsClient reference
   @SuppressWarnings("unused")
-  @Nullable private XdsClient xdsClient;
+  @Nullable private final XdsClient xdsClient;
   private final int port;
   private final ScheduledExecutorService timeService;
 
@@ -158,7 +158,7 @@ public final class XdsClientWrapperForServerSds {
   }
 
   private static final class FilterChainComparator implements Comparator<FilterChain> {
-    private InetSocketAddress localAddress;
+    private final InetSocketAddress localAddress;
 
     private enum Match {
       NO_MATCH,
