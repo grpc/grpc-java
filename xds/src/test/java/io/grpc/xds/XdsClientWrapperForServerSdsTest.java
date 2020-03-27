@@ -137,7 +137,7 @@ public class XdsClientWrapperForServerSdsTest {
   @Mock private Channel channel;
 
   private XdsClientWrapperForServerSds xdsClientWrapperForServerSds;
-  private DownstreamTlsContext[] tlsContexts = new DownstreamTlsContext[3];
+  private final DownstreamTlsContext[] tlsContexts = new DownstreamTlsContext[3];
 
   @Before
   public void setUp() throws IOException {
