@@ -25,10 +25,6 @@ dependencies {
             project(':grpc-services'),
             project(path: ':grpc-alts', configuration: 'shadow')
     def nettyDependency = compile project(':grpc-netty')
-    def pgvDependency = compile (libraries.pgv) {
-        // PGV depends on com.google.protobuf:protobuf-java 3.6.1 conflicting with :grpc-protobuf
-        exclude group: 'com.google.protobuf'
-    }
 
     compile (libraries.protobuf_util) {
         // prefer our own versions instead of protobuf-util's dependency
@@ -47,7 +43,7 @@ dependencies {
             libraries.guava_testlib,
             libraries.netty_epoll
 
-    shadow configurations.compile.getDependencies().minus([nettyDependency, pgvDependency])
+    shadow configurations.compile.getDependencies().minus([nettyDependency])
     shadow project(path: ':grpc-netty-shaded', configuration: 'shadow')
 
     signature "org.codehaus.mojo.signature:java17:1.0@signature"
@@ -58,6 +54,7 @@ sourceSets {
     main {
         proto {
             srcDir 'third_party/envoy/src/main/proto'
+            srcDir 'third_party/protoc-gen-validate/src/main/proto'
             srcDir 'third_party/udpa/src/main/proto'
         }
     }
@@ -77,7 +74,6 @@ shadowJar {
     classifier = null
     dependencies {
         include(project(':grpc-xds'))
-        include(dependency('io.envoyproxy.protoc-gen-validate:'))
     }
     relocate 'com.github.udpa', 'io.grpc.xds.shaded.com.github.udpa'
     relocate 'io.envoyproxy', 'io.grpc.xds.shaded.io.envoyproxy'
