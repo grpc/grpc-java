@@ -53,6 +53,7 @@ final class InteropTask extends AsyncTask<Void, Void, String> {
     tester.setUp();
   }
 
+  @SuppressWarnings("Finally")
   @Override
   protected String doInBackground(Void... ignored) {
     try {
