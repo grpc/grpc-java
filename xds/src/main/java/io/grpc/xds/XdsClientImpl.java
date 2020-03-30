@@ -1173,18 +1173,23 @@ final class XdsClientImpl extends XdsClient {
         errorMessage = "ClusterLoadAssignment " + clusterName + " : no locality endpoints.";
         break;
       }
-      
-      // The policy.disable_overprovisioning field must be set to true.
-      // TODO(chengyuanzhang): temporarily not requiring this field to be set, should push
-      //  server implementors to do this or TBD with design.
-
+      Set<Integer> priorities = new HashSet<>();
+      int maxPriority = -1;
       for (io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints localityLbEndpoints
           : assignment.getEndpointsList()) {
-        // The lb_endpoints field for LbEndpoint must contain at least one entry.
-        if (localityLbEndpoints.getLbEndpointsCount() == 0) {
-          errorMessage = "ClusterLoadAssignment " + clusterName + " : locality with no endpoint.";
+        // Filter out localities without or with 0 weight.
+        if (!localityLbEndpoints.hasLoadBalancingWeight()
+            || localityLbEndpoints.getLoadBalancingWeight().getValue() < 1) {
+          continue;
+        }
+        int localityPriority = localityLbEndpoints.getPriority();
+        if (localityPriority < 0) {
+          errorMessage =
+              "ClusterLoadAssignment " + clusterName + " : locality with negative priority.";
           break;
         }
+        maxPriority = Math.max(maxPriority, localityPriority);
+        priorities.add(localityPriority);
         // The endpoint field of each lb_endpoints must be set.
         // Inside of it: the address field must be set.
         for (io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint lbEndpoint
@@ -1205,6 +1210,10 @@ final class XdsClientImpl extends XdsClient {
             LocalityLbEndpoints.fromEnvoyProtoLocalityLbEndpoints(localityLbEndpoints));
       }
       if (errorMessage != null) {
+        break;
+      }
+      if (priorities.size() != maxPriority + 1) {
+        errorMessage = "ClusterLoadAssignment " + clusterName + " : sparse priorities.";
         break;
       }
       for (io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy.DropOverload dropOverload
