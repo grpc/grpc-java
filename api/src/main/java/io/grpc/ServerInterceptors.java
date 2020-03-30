@@ -196,6 +196,9 @@ public final class ServerInterceptors {
     // Create the new service definition.
     final ServerServiceDefinition.Builder serviceBuilder =
         ServerServiceDefinition.builder(serviceDescriptorBuilder.build());
+    for (ServerMethodDefinition<?, ?> definition : wrappedMethods) {
+      serviceBuilder.addMethod(definition);
+    }
     return serviceBuilder.build();
   }
 
