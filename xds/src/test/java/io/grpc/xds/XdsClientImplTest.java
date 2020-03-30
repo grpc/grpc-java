@@ -2001,7 +2001,7 @@ public class XdsClientImplTest {
                 buildLocalityLbEndpoints("region2", "zone2", "subzone2",
                     ImmutableList.of(
                         buildLbEndpoint("192.168.234.52", 8888, HealthStatus.UNKNOWN, 5)),
-                    6, 1)),
+                    6, 0)),
             ImmutableList.<ClusterLoadAssignment.Policy.DropOverload>of())));
 
     response = buildDiscoveryResponse("1", clusterLoadAssignments,
@@ -2027,7 +2027,7 @@ public class XdsClientImplTest {
             new LocalityLbEndpoints(
                 ImmutableList.of(
                     new LbEndpoint("192.168.234.52", 8888,
-                        5, true)), 6, 1));
+                        5, true)), 6, 0));
   }
 
   /**
@@ -2180,7 +2180,7 @@ public class XdsClientImplTest {
                 buildLocalityLbEndpoints("region2", "zone2", "subzone2",
                     ImmutableList.of(
                         buildLbEndpoint("192.168.312.6", 443, HealthStatus.HEALTHY, 1)),
-                    6, 1)),
+                    6, 0)),
             ImmutableList.<Policy.DropOverload>of())));
 
     response = buildDiscoveryResponse("1", clusterLoadAssignments,
@@ -2205,7 +2205,7 @@ public class XdsClientImplTest {
             new LocalityLbEndpoints(
                 ImmutableList.of(
                     new LbEndpoint("192.168.312.6", 443, 1, true)),
-                6, 1));
+                6, 0));
 
     // Cancel one of the watcher.
     xdsClient.cancelEndpointDataWatch("cluster-foo.googleapis.com", watcher1);
