@@ -23,7 +23,8 @@ dependencies {
             project(':grpc-stub'),
             project(':grpc-core'),
             project(':grpc-services'),
-            project(path: ':grpc-alts', configuration: 'shadow')
+            project(path: ':grpc-alts', configuration: 'shadow'),
+            libraries.opencensus_proto
     def nettyDependency = compile project(':grpc-netty')
 
     compile (libraries.protobuf_util) {
