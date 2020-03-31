@@ -21,15 +21,9 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
-import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver.ConfigOrError;
-import io.grpc.Status;
-import io.grpc.internal.JsonUtil;
-import io.grpc.internal.ServiceConfigUtil;
-import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.xds.EnvoyProtoData.Locality;
-import java.util.List;
 import java.util.Map;
 import javax.annotation.Nullable;
 
@@ -63,73 +57,7 @@ public class LrsLoadBalancerProvider extends LoadBalancerProvider {
 
   @Override
   public ConfigOrError parseLoadBalancingPolicyConfig(Map<String, ?> rawConfig) {
-    String clusterName = JsonUtil.getString(rawConfig, "clusterName");
-    if (clusterName == null) {
-      return
-          ConfigOrError.fromError(
-              Status.INTERNAL.withDescription(
-                  "clusterName required for LRS policy:\n " + rawConfig));
-    }
-    String edsServiceName = JsonUtil.getString(rawConfig, "edsServiceName");
-    String lrsServerName = JsonUtil.getString(rawConfig, "lrsLoadReportingServerName");
-    if (lrsServerName == null) {
-      return
-          ConfigOrError.fromError(
-              Status.INTERNAL.withDescription(
-                  "lrsLoadReportingServerName required for LRS policy:\n " + rawConfig));
-    }
-    Map<String, ?> rawLocality = JsonUtil.getObject(rawConfig, "locality");
-    if (rawLocality == null) {
-      return
-          ConfigOrError.fromError(
-              Status.INTERNAL.withDescription(
-                  "locality required for LRS policy:\n " + rawConfig));
-    }
-    Locality locality = parseLocality(rawLocality);
-    if (locality == null) {
-      return
-          ConfigOrError.fromError(
-              Status.INTERNAL.withDescription(
-                  "Malformed locality:\n " + rawLocality));
-    }
-    List<LbConfig> childConfigCandidates = ServiceConfigUtil.unwrapLoadBalancingConfigList(
-        JsonUtil.getListOfObjects(rawConfig, "childPolicy"));
-    if (childConfigCandidates == null || childConfigCandidates.isEmpty()) {
-      return
-          ConfigOrError.fromError(
-              Status.INTERNAL.withDescription(
-                  "Missing child policy for LRS policy:\n " + rawConfig));
-    }
-    LoadBalancerRegistry lbRegistry = LoadBalancerRegistry.getDefaultRegistry();
-    ConfigOrError selectedConfig =
-        ServiceConfigUtil.selectLbPolicyFromList(childConfigCandidates, lbRegistry);
-    if (selectedConfig.getError() != null) {
-      return selectedConfig;
-    }
-    PolicySelection childPolicy = (PolicySelection) selectedConfig.getConfig();
-    return
-        ConfigOrError.fromConfig(
-            new LrsConfig(clusterName, edsServiceName, lrsServerName, locality, childPolicy));
-  }
-
-  @Nullable
-  private static Locality parseLocality(Map<String, ?> rawObject) {
-    if (rawObject.size() != 3) {
-      return null;
-    }
-    String region = JsonUtil.getString(rawObject, "region");
-    if (region == null) {
-      return null;
-    }
-    String zone = JsonUtil.getString(rawObject, "zone");
-    if (zone == null) {
-      return null;
-    }
-    String subZone = JsonUtil.getString(rawObject, "subZone");
-    if (subZone == null) {
-      return null;
-    }
-    return new Locality(region, zone, subZone);
+    throw new UnsupportedOperationException();
   }
 
   static class LrsConfig {
