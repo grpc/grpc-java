@@ -69,7 +69,7 @@ final class CachedSubchannelPool implements SubchannelPool {
       subchannel.start(new SubchannelStateListener() {
         @Override
         public void onSubchannelState(ConnectivityStateInfo newState) {
-          handleSubchannelState(subchannel, newState);
+          updateCachedSubchannelState(subchannel, newState);
           listener.onSubchannelState(subchannel, newState);
         }
       });
@@ -88,7 +88,8 @@ final class CachedSubchannelPool implements SubchannelPool {
     return subchannel;
   }
 
-  private void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newStateInfo) {
+  private void updateCachedSubchannelState(
+      Subchannel subchannel, ConnectivityStateInfo newStateInfo) {
     CacheEntry cached = cache.get(subchannel.getAddresses());
     if (cached == null || cached.subchannel != subchannel) {
       // Given subchannel is not cached.  Not our responsibility.
