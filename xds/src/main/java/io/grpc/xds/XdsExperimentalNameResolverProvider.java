@@ -16,10 +16,14 @@
 
 package io.grpc.xds;
 
+import com.google.common.base.Preconditions;
 import io.grpc.Internal;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.Args;
 import io.grpc.NameResolverProvider;
+import io.grpc.internal.ExponentialBackoffPolicy;
+import io.grpc.internal.GrpcUtil;
+import io.grpc.xds.XdsClient.XdsChannelFactory;
 import java.net.URI;
 
 /** A deprecated provider for {@link XdsNameResolver}. */
@@ -28,7 +32,34 @@ import java.net.URI;
 @Internal
 public class XdsExperimentalNameResolverProvider extends NameResolverProvider {
 
-  private final NameResolverProvider delegate = new XdsNameResolverProvider();
+  private static final String SCHEME = "xds-experimental";
+
+  @Override
+  public NameResolver newNameResolver(URI targetUri, Args args) {
+    if (SCHEME.equals(targetUri.getScheme())) {
+      String targetPath = Preconditions.checkNotNull(targetUri.getPath(), "targetPath");
+      Preconditions.checkArgument(
+          targetPath.startsWith("/"),
+          "the path component (%s) of the target (%s) must start with '/'",
+          targetPath,
+          targetUri);
+      String name = targetPath.substring(1);
+      return
+          new XdsNameResolver(
+              name,
+              args,
+              new ExponentialBackoffPolicy.Provider(),
+              GrpcUtil.STOPWATCH_SUPPLIER,
+              XdsChannelFactory.getInstance(),
+              Bootstrapper.getInstance());
+    }
+    return null;
+  }
+
+  @Override
+  public String getDefaultScheme() {
+    return SCHEME;
+  }
 
   @Override
   protected boolean isAvailable() {
@@ -40,15 +71,5 @@ public class XdsExperimentalNameResolverProvider extends NameResolverProvider {
     // Set priority value to be < 5 as we still want DNS resolver to be the primary default
     // resolver.
     return 4;
-  }
-
-  @Override
-  public String getDefaultScheme() {
-    return "xds-experimental";
-  }
-
-  @Override
-  public NameResolver newNameResolver(URI targetUri, Args args) {
-    return delegate.newNameResolver(targetUri, args);
   }
 }
