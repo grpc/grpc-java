@@ -36,16 +36,19 @@ import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
+import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
+import io.grpc.grpclb.SubchannelPool.PooledSubchannelStateListener;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.TimeProvider;
 import io.grpc.lb.v1.ClientStats;
@@ -107,7 +110,7 @@ final class GrpclbState {
       }
     };
 
-  static enum Mode {
+  enum Mode {
     ROUND_ROBIN,
     PICK_FIRST,
   }
@@ -115,6 +118,7 @@ final class GrpclbState {
   private final String serviceName;
   private final Helper helper;
   private final SynchronizationContext syncContext;
+  @Nullable
   private final SubchannelPool subchannelPool;
   private final TimeProvider time;
   private final Stopwatch stopwatch;
@@ -166,9 +170,19 @@ final class GrpclbState {
     this.config = checkNotNull(config, "config");
     this.helper = checkNotNull(helper, "helper");
     this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
-    this.subchannelPool =
-        config.getMode() == Mode.ROUND_ROBIN
-            ? checkNotNull(subchannelPool, "subchannelPool") : null;
+    if (config.getMode() == Mode.ROUND_ROBIN) {
+      this.subchannelPool = checkNotNull(subchannelPool, "subchannelPool");
+      subchannelPool.registerListener(
+          new PooledSubchannelStateListener() {
+            @Override
+            public void onSubchannelState(
+                Subchannel subchannel, ConnectivityStateInfo newState) {
+              handleSubchannelState(subchannel, newState);
+            }
+          });
+    } else {
+      this.subchannelPool = null;
+    }
     this.time = checkNotNull(time, "time provider");
     this.stopwatch = checkNotNull(stopwatch, "stopwatch");
     this.timerService = checkNotNull(helper.getScheduledExecutorService(), "timerService");
@@ -182,13 +196,7 @@ final class GrpclbState {
   }
 
   void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
-    if (newState.getState() == SHUTDOWN) {
-      return;
-    }
-    if (!subchannels.values().contains(subchannel)) {
-      if (subchannelPool != null ) {
-        subchannelPool.handleSubchannelState(subchannel, newState);
-      }
+    if (newState.getState() == SHUTDOWN || !subchannels.values().contains(subchannel)) {
       return;
     }
     if (config.getMode() == Mode.ROUND_ROBIN && newState.getState() == IDLE) {
@@ -254,7 +262,7 @@ final class GrpclbState {
         return;
       }
     }
-    // Fallback contiditions met
+    // Fallback conditions met
     useFallbackBackends();
   }
 
@@ -383,7 +391,6 @@ final class GrpclbState {
   /**
    * Populate the round-robin lists with the given values.
    */
-  @SuppressWarnings("deprecation")
   private void useRoundRobinLists(
       List<DropEntry> newDropList, List<BackendAddressGroup> newBackendAddrList,
       @Nullable GrpclbClientLoadRecorder loadRecorder) {
@@ -427,7 +434,7 @@ final class GrpclbState {
         break;
       case PICK_FIRST:
         checkState(subchannels.size() <= 1, "Unexpected Subchannel count: %s", subchannels);
-        Subchannel subchannel;
+        final Subchannel subchannel;
         if (newBackendAddrList.isEmpty()) {
           if (subchannels.size() == 1) {
             cancelFallbackTimer();
@@ -453,9 +460,18 @@ final class GrpclbState {
           eagList.add(new EquivalentAddressGroup(origEag.getAddresses(), eagAttrs));
         }
         if (subchannels.isEmpty()) {
-          // TODO(zhangkun83): remove the deprecation suppression on this method once migrated to
-          // the new createSubchannel().
-          subchannel = helper.createSubchannel(eagList, createSubchannelAttrs());
+          subchannel =
+              helper.createSubchannel(
+                  CreateSubchannelArgs.newBuilder()
+                      .setAddresses(eagList)
+                      .setAttributes(createSubchannelAttrs())
+                      .build());
+          subchannel.start(new SubchannelStateListener() {
+            @Override
+            public void onSubchannelState(ConnectivityStateInfo newState) {
+              handleSubchannelState(subchannel, newState);
+            }
+          });
         } else {
           subchannel = subchannels.values().iterator().next();
           subchannel.updateAddresses(eagList);

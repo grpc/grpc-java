@@ -23,7 +23,6 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import io.grpc.Attributes;
 import io.grpc.ChannelLogger.ChannelLogLevel;
-import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.Status;
@@ -68,17 +67,8 @@ class GrpclbLoadBalancer extends LoadBalancer {
     this.stopwatch = checkNotNull(stopwatch, "stopwatch");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     this.subchannelPool = checkNotNull(subchannelPool, "subchannelPool");
-    this.subchannelPool.init(helper, this);
     recreateStates();
     checkNotNull(grpclbState, "grpclbState");
-  }
-
-  @Deprecated
-  @Override
-  public void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
-    // grpclbState should never be null here since handleSubchannelState cannot be called while the
-    // lb is shutdown.
-    grpclbState.handleSubchannelState(subchannel, newState);
   }
 
   @Override
@@ -137,7 +127,8 @@ class GrpclbLoadBalancer extends LoadBalancer {
     resetStates();
     checkState(grpclbState == null, "Should've been cleared");
     grpclbState =
-        new GrpclbState(config, helper, subchannelPool, time, stopwatch, backoffPolicyProvider);
+        new GrpclbState(
+            config, helper, subchannelPool, time, stopwatch, backoffPolicyProvider);
   }
 
   @Override
