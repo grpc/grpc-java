@@ -25,6 +25,8 @@ interface LruCache<K, V> {
   /**
    * Populates a cache entry. If the cache entry for given key already exists, the value will be
    * replaced to the new value.
+   *
+   * @return the previous value associated with key, otherwise {@code null}
    */
   @Nullable
   V cache(K key, V value);
@@ -40,6 +42,8 @@ interface LruCache<K, V> {
   /**
    * Invalidates an entry for given key if exists. This operation will trigger {@link
    * EvictionListener} with {@link EvictionType#EXPLICIT}.
+   *
+   * @return the previous value associated with key, otherwise {@code null}
    */
   @Nullable
   V invalidate(K key);

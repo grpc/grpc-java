@@ -39,11 +39,11 @@ import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
- * A {@link LinkedHashLruCache} implements least recently used caching where it supports access
- * order lru cache eviction while allowing entry level expiration time. When the cache reaches max
- * capacity, LruCache try to remove up to one already expired entries. If it doesn't find any
- * expired entries, it will remove based on access order of entry. On top of this, LruCache also
- * proactively removed expired entries based on configured time interval.
+ * A LinkedHashLruCache implements least recently used caching where it supports access order lru
+ * cache eviction while allowing entry level expiration time. When the cache reaches max capacity,
+ * LruCache try to remove up to one already expired entries. If it doesn't find any expired entries,
+ * it will remove based on access order of entry. On top of this, LruCache also proactively removes
+ * expired entries based on configured time interval.
  */
 @ThreadSafe
 abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
@@ -59,19 +59,19 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
   private long estimatedMaxSizeBytes;
 
   LinkedHashLruCache(
-      final long maxEstimatedSizeBytes,
+      final long estimatedMaxSizeBytes,
       @Nullable final EvictionListener<K, V> evictionListener,
       int cleaningInterval,
       TimeUnit cleaningIntervalUnit,
       ScheduledExecutorService ses,
       final TimeProvider timeProvider) {
-    checkState(maxEstimatedSizeBytes > 0, "max estimated cache size should be positive");
-    this.estimatedMaxSizeBytes = maxEstimatedSizeBytes;
+    checkState(estimatedMaxSizeBytes > 0, "max estimated cache size should be positive");
+    this.estimatedMaxSizeBytes = estimatedMaxSizeBytes;
     this.evictionListener = new SizeHandlingEvictionListener(evictionListener);
     this.timeProvider = checkNotNull(timeProvider, "timeProvider");
     delegate = new LinkedHashMap<K, SizedValue>(
         // rough estimate or minimum hashmap default
-        Math.max((int) (maxEstimatedSizeBytes / 1000), 16),
+        Math.max((int) (estimatedMaxSizeBytes / 1000), 16),
         /* loadFactor= */ 0.75f,
         /* accessOrder= */ true) {
       @Override
@@ -92,9 +92,6 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
         return false;
       }
     };
-    checkNotNull(ses, "ses");
-    checkState(cleaningInterval > 0, "cleaning interval must be positive");
-    checkNotNull(cleaningIntervalUnit, "cleaningIntervalUnit");
     periodicCleaner = new PeriodicCleaner(ses, cleaningInterval, cleaningIntervalUnit).start();
   }
 
@@ -363,8 +360,7 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
       if (o == null || getClass() != o.getClass()) {
         return false;
       }
-      @SuppressWarnings("unchecked")
-      SizedValue that = (SizedValue) o;
+      LinkedHashLruCache<?, ?>.SizedValue that = (LinkedHashLruCache<?, ?>.SizedValue) o;
       return Objects.equals(value, that.value);
     }
 
