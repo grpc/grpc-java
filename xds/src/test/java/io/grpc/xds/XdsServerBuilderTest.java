@@ -14,17 +14,23 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.internal.sds;
+package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
 import io.grpc.Server;
+import io.grpc.xds.internal.sds.SdsProtocolNegotiators.ServerSdsProtocolNegotiator;
+import io.grpc.xds.internal.sds.XdsServer;
+import io.grpc.xds.internal.sds.XdsServerBuilder;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 /**
- * Unit tests for {@link XdsChannelBuilder}.
+ * Unit tests for {@link XdsServerBuilder}.
  */
 @RunWith(JUnit4.class)
 public class XdsServerBuilderTest {
@@ -35,5 +41,18 @@ public class XdsServerBuilderTest {
     assertThat(builder).isInstanceOf(XdsServerBuilder.class);
     Server server = builder.build();
     assertThat(server).isNotNull();
+  }
+
+  @Test
+  public void xdsServer_callsShutdown() {
+    XdsServerBuilder builder = XdsServerBuilder.forPort(8080);
+    XdsClient mockXdsClient = mock(XdsClient.class);
+    XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
+        new XdsClientWrapperForServerSds(8080, mockXdsClient, null);
+    ServerSdsProtocolNegotiator serverSdsProtocolNegotiator =
+        new ServerSdsProtocolNegotiator(null, xdsClientWrapperForServerSds);
+    XdsServer xdsServer = builder.createXdsServer(serverSdsProtocolNegotiator);
+    xdsServer.shutdown();
+    verify(mockXdsClient, times(1)).shutdown();
   }
 }

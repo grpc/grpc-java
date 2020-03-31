@@ -51,7 +51,8 @@ import javax.annotation.Nullable;
  * Provides client and server side gRPC {@link ProtocolNegotiator}s that use SDS to provide the SSL
  * context.
  */
-final class SdsProtocolNegotiators {
+@VisibleForTesting
+public final class SdsProtocolNegotiators {
 
   private static final Logger logger = Logger.getLogger(SdsProtocolNegotiators.class.getName());
 
@@ -74,7 +75,7 @@ final class SdsProtocolNegotiators {
    * @param downstreamTlsContext passed in {@link XdsServerBuilder#tlsContext}.
    * @param port the listening port passed to {@link XdsServerBuilder#forPort(int)}.
    */
-  public static ProtocolNegotiator serverProtocolNegotiator(
+  public static ServerSdsProtocolNegotiator serverProtocolNegotiator(
       @Nullable DownstreamTlsContext downstreamTlsContext, int port,
       SynchronizationContext syncContext) {
     return new ServerSdsProtocolNegotiator(downstreamTlsContext, port, syncContext);
@@ -251,7 +252,8 @@ final class SdsProtocolNegotiators {
     }
   }
 
-  private static final class ServerSdsProtocolNegotiator implements ProtocolNegotiator {
+  @VisibleForTesting
+  public static final class ServerSdsProtocolNegotiator implements ProtocolNegotiator {
 
     private DownstreamTlsContext downstreamTlsContext;
     private final XdsClientWrapperForServerSds xdsClientWrapperForServerSds;
@@ -264,10 +266,22 @@ final class SdsProtocolNegotiators {
         localXdsClientWrapperForServerSds =
             XdsClientWrapperForServerSds.newInstance(port, Bootstrapper.getInstance(), syncContext);
       } catch (Exception e) {
-        logger.log(Level.WARNING, "Exception while creating the xDS client", e);
+        logger.log(Level.FINE, "Fallback to plaintext due to exception", e);
         localXdsClientWrapperForServerSds = null;
       }
       this.xdsClientWrapperForServerSds = localXdsClientWrapperForServerSds;
+    }
+
+    @VisibleForTesting
+    public ServerSdsProtocolNegotiator(
+        DownstreamTlsContext downstreamTlsContext,
+        XdsClientWrapperForServerSds xdsClientWrapperForServerSds) {
+      this.downstreamTlsContext = downstreamTlsContext;
+      this.xdsClientWrapperForServerSds = xdsClientWrapperForServerSds;
+    }
+
+    XdsClientWrapperForServerSds getXdsClientWrapperForServerSds() {
+      return xdsClientWrapperForServerSds;
     }
 
     @Override

@@ -16,6 +16,7 @@
 
 package io.grpc.xds.internal.sds;
 
+import com.google.common.annotations.VisibleForTesting;
 import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
 import io.grpc.BindableService;
 import io.grpc.CompressorRegistry;
@@ -171,9 +172,21 @@ public final class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
               panicMode = true;
             }
           });
-    delegate.protocolNegotiator(
+    SdsProtocolNegotiators.ServerSdsProtocolNegotiator serverSdsProtocolNegotiator =
         SdsProtocolNegotiators.serverProtocolNegotiator(
-            this.downstreamTlsContext, port, syncContext));
-    return delegate.build();
+            this.downstreamTlsContext, port, syncContext);
+    return createXdsServer(serverSdsProtocolNegotiator);
+  }
+
+  /**
+   * Creates an XdsServer using the given serverSdsProtocolNegotiator: gets the
+   * getXdsClientWrapperForServerSds from the serverSdsProtocolNegotiator.
+   */
+  @VisibleForTesting
+  public XdsServer createXdsServer(
+      SdsProtocolNegotiators.ServerSdsProtocolNegotiator serverSdsProtocolNegotiator) {
+    delegate.protocolNegotiator(serverSdsProtocolNegotiator);
+    return new XdsServer(
+        delegate.build(), serverSdsProtocolNegotiator.getXdsClientWrapperForServerSds());
   }
 }
