@@ -19,7 +19,6 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
-import android.annotation.SuppressLint;
 import io.grpc.ConnectivityState;
 import io.grpc.LoadBalancer;
 import io.grpc.Status;
@@ -65,7 +64,6 @@ final class LrsLoadBalancer extends LoadBalancer {
 
         @Override
         public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
-          @SuppressLint("VisibleForTests")
           SubchannelPicker loadRecordingPicker =
               new LoadRecordingSubchannelPicker(counter, newPicker);
           super.updateBalancingState(newState, loadRecordingPicker);
