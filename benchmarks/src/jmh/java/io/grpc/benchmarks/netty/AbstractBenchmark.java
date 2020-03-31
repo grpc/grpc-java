@@ -210,7 +210,7 @@ public abstract class AbstractBenchmark {
       sock.close();
       serverBuilder =
           NettyServerBuilder.forAddress(address).channelType(NioServerSocketChannel.class);
-      channelBuilder = NettyChannelBuilder.forAddress(address);
+      channelBuilder = NettyChannelBuilder.forAddress(address).channelType(NioSocketChannel.class);
     }
 
     if (serverExecutor == ExecutorType.DIRECT) {
@@ -383,7 +383,6 @@ public abstract class AbstractBenchmark {
       // Use a dedicated event-loop for each channel
       channels[i] = channelBuilder
           .eventLoopGroup(new NioEventLoopGroup(1, clientThreadFactory))
-          .channelType(NioSocketChannel.class)
           .build();
     }
   }
