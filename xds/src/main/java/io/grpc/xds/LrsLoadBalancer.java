@@ -29,12 +29,14 @@ import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.LrsLoadBalancerProvider.LrsConfig;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.Objects;
+import javax.annotation.CheckForNull;
 
 /**
  * Load balancer for lrs policy.
  */
 final class LrsLoadBalancer extends LoadBalancer {
   private final LoadBalancer.Helper helper;
+  @CheckForNull
   private GracefulSwitchLoadBalancer switchingLoadBalancer;
   private LoadStatsStore loadStatsStore;
   private String clusterName;
@@ -51,6 +53,8 @@ final class LrsLoadBalancer extends LoadBalancer {
     LrsConfig config = (LrsConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
     LoadStatsStore store =
         resolvedAddresses.getAttributes().get(XdsAttributes.ATTR_CLUSTER_SERVICE_LOAD_STATS_STORE);
+    checkNotNull(config, "missing LRS lb config");
+    checkNotNull(store, "missing cluster service stats object");
     checkAndSetUp(config, store);
 
     if (switchingLoadBalancer == null) {
