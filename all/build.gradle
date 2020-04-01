@@ -18,6 +18,7 @@ def subprojects = [
     project(':grpc-protobuf-lite'),
     project(':grpc-stub'),
     project(':grpc-testing'),
+    project(':grpc-xds'),
 ]
 
 for (subproject in rootProject.subprojects) {

@@ -74,6 +74,9 @@ jar {
 
 javadoc {
     exclude 'io/grpc/xds/internal/**'
+    // At the moment there is no public API. Should probably clean up the class structure to reduce
+    // how much is exposed
+    exclude 'io/grpc/xds/**'
 }
 
 shadowJar {
@@ -86,6 +89,18 @@ shadowJar {
     relocate 'io.grpc.netty', 'io.grpc.netty.shaded.io.grpc.netty'
     relocate 'io.netty', 'io.grpc.netty.shaded.io.netty'
     exclude "**/*.proto"
+}
+
+jacocoTestReport {
+    classDirectories.from = sourceSets.main.output.collect {
+        fileTree(dir: it,
+        exclude: [
+                '**/com/github/**',
+                '**/envoy/annotations/**',
+                '**/io/envoyproxy/**',
+                '**/udpa/annotations/**',
+        ])
+    }
 }
 
 publishing {
