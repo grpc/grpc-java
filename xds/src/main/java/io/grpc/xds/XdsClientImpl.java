@@ -640,14 +640,16 @@ final class XdsClientImpl extends XdsClient {
       }
     }
     if (routes != null) {
-      // Found clusterName or routes in the in-lined RouteConfiguration.
+      // Found  routes in the in-lined RouteConfiguration.
       ConfigUpdate configUpdate;
       if (!enablePathMatching) {
-        String clusterName = routes.get(routes.size() - 1).getRouteAction().get().getCluster();
-        configUpdate = ConfigUpdate.newBuilder().setClusterName(clusterName).build();
+        configUpdate =
+            ConfigUpdate.newBuilder()
+                .addRoutes(routes.subList(routes.size() - 1, routes.size()))
+                .build();
         logger.log(
             XdsLogLevel.INFO,
-            "Found cluster name (inlined in route config): {0}", clusterName);
+            "Found cluster name (inlined in route config): {0}", configUpdate.getClusterName());
       } else {
         configUpdate = ConfigUpdate.newBuilder().addRoutes(routes).build();
         logger.log(
@@ -812,12 +814,14 @@ final class XdsClientImpl extends XdsClient {
         rdsRespTimer = null;
       }
 
-      // Found clusterName or routes in the in-lined RouteConfiguration.
+      // Found routes in the in-lined RouteConfiguration.
       ConfigUpdate configUpdate;
-      String clusterName = routes.get(routes.size() - 1).getRouteAction().get().getCluster();
       if (!enablePathMatching) {
-        configUpdate = ConfigUpdate.newBuilder().setClusterName(clusterName).build();
-        logger.log(XdsLogLevel.INFO, "Found cluster name: {0}", clusterName);
+        configUpdate =
+            ConfigUpdate.newBuilder()
+                .addRoutes(routes.subList(routes.size() - 1, routes.size()))
+                .build();
+        logger.log(XdsLogLevel.INFO, "Found cluster name: {0}", configUpdate.getClusterName());
       } else {
         configUpdate = ConfigUpdate.newBuilder().addRoutes(routes).build();
         logger.log(XdsLogLevel.INFO, "Found {0} routes", routes.size());

@@ -2700,9 +2700,9 @@ public class XdsClientImplTest {
     responseObserver.onNext(rdsResponse);
 
     // Client has resolved the cluster based on the RDS response.
-    configWatcher
-        .onConfigChanged(
-            eq(ConfigUpdate.newBuilder().setClusterName("cluster.googleapis.com").build()));
+    ArgumentCaptor<ConfigUpdate> configUpdateCaptor = ArgumentCaptor.forClass(null);
+    verify(configWatcher).onConfigChanged(configUpdateCaptor.capture());
+    assertThat(configUpdateCaptor.getValue().getClusterName()).isEqualTo("cluster.googleapis.com");
 
     // RPC stream closed with an error again.
     responseObserver.onError(Status.UNKNOWN.asException());
