@@ -162,22 +162,24 @@ final class XdsNameResolver extends NameResolver {
             xdsClient,
             update);
         rawLbConfig = generateXdsRoutingRawConfig(update.getRoutes());
-      } else if (update.getClusterName().isEmpty()) {
-        logger.log(
-            XdsLogLevel.INFO,
-            "Received config update with one weighted cluster route from xDS client {0}",
-            xdsClient);
-        Route defaultRoute = update.getRoutes().get(0);
-        List<ClusterWeight> clusterWeights = defaultRoute.getRouteAction().getWeightedCluster();
-        rawLbConfig = generateWeightedTargetRawConfig(clusterWeights);
       } else {
         String clusterName = update.getClusterName();
-        logger.log(
-            XdsLogLevel.INFO,
-            "Received config update from xDS client {0}: cluster_name={1}",
-            xdsClient,
-            clusterName);
-        rawLbConfig = generateCdsRawConfig(clusterName);
+        if (!clusterName.isEmpty()) {
+          logger.log(
+              XdsLogLevel.INFO,
+              "Received config update from xDS client {0}: cluster_name={1}",
+              xdsClient,
+              clusterName);
+          rawLbConfig = generateCdsRawConfig(clusterName);
+        } else {
+          logger.log(
+              XdsLogLevel.INFO,
+              "Received config update with one weighted cluster route from xDS client {0}",
+              xdsClient);
+          Route defaultRoute = update.getRoutes().get(0);
+          List<ClusterWeight> clusterWeights = defaultRoute.getRouteAction().getWeightedCluster();
+          rawLbConfig = generateWeightedTargetRawConfig(clusterWeights);
+        }
       }
 
       Map<String, ?> serviceConfig =
