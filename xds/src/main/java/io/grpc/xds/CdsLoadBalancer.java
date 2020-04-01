@@ -22,7 +22,6 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.xds.EdsLoadBalancerProvider.EDS_POLICY_NAME;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.ImmutableMap;
 import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.InternalLogId;
@@ -35,15 +34,16 @@ import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.CdsLoadBalancerProvider.CdsConfig;
+import io.grpc.xds.EdsLoadBalancerProvider.EdsConfig;
 import io.grpc.xds.XdsClient.ClusterUpdate;
 import io.grpc.xds.XdsClient.ClusterWatcher;
-import io.grpc.xds.XdsLoadBalancerProvider.XdsConfig;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import io.grpc.xds.internal.sds.SslContextProvider;
 import io.grpc.xds.internal.sds.TlsContextManager;
 import io.grpc.xds.internal.sds.TlsContextManagerImpl;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
@@ -286,14 +286,15 @@ public final class CdsLoadBalancer extends LoadBalancer {
 
       LoadBalancerProvider lbProvider = lbRegistry.getProvider(newUpdate.getLbPolicy());
       Object lbConfig =
-          lbProvider.parseLoadBalancingPolicyConfig(ImmutableMap.<String, Object>of()).getConfig();
-      final XdsConfig edsConfig =
-          new XdsConfig(
-              /* cluster = */ newUpdate.getClusterName(),
-              new PolicySelection(lbProvider, ImmutableMap.<String, Object>of(), lbConfig),
-              /* fallbackPolicy = */ null,
+          lbProvider
+              .parseLoadBalancingPolicyConfig(Collections.<String, Object>emptyMap())
+              .getConfig();
+      final EdsConfig edsConfig =
+          new EdsConfig(
+              /* clusterName = */ newUpdate.getClusterName(),
               /* edsServiceName = */ newUpdate.getEdsServiceName(),
-              /* lrsServerName = */ newUpdate.getLrsServerName());
+              /* lrsServerName = */ newUpdate.getLrsServerName(),
+              new PolicySelection(lbProvider, Collections.<String, Object>emptyMap(), lbConfig));
       updateSslContextProvider(newUpdate.getUpstreamTlsContext());
       if (edsBalancer == null) {
         edsBalancer = lbRegistry.getProvider(EDS_POLICY_NAME).newLoadBalancer(helper);
