@@ -241,10 +241,7 @@ final class XdsNameResolver extends NameResolver {
       } else {
         if (!routeAction.getCluster().isEmpty()) {
           actionName = "cds:" + routeAction.getCluster();
-          actionPolicy =
-              ImmutableMap.of(
-                  XdsLbPolicies.CDS_POLICY_NAME,
-                  ImmutableMap.of("cluster", routeAction.getCluster()));
+          actionPolicy = generateCdsRawConfig(routeAction.getCluster());
         } else {
           StringBuilder sb = new StringBuilder("weighted:");
           List<ClusterWeight> clusterWeights = routeAction.getWeightedCluster();
