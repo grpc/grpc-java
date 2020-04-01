@@ -24,6 +24,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Iterables;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.MessageOrBuilder;
 import com.google.protobuf.Struct;
@@ -643,13 +644,15 @@ final class XdsClientImpl extends XdsClient {
       // Found  routes in the in-lined RouteConfiguration.
       ConfigUpdate configUpdate;
       if (!enablePathMatching) {
+        EnvoyProtoData.Route defaultRoute = Iterables.getLast(routes);
         configUpdate =
             ConfigUpdate.newBuilder()
-                .addRoutes(routes.subList(routes.size() - 1, routes.size()))
+                .addRoutes(ImmutableList.of(defaultRoute))
                 .build();
         logger.log(
             XdsLogLevel.INFO,
-            "Found cluster name (inlined in route config): {0}", configUpdate.getClusterName());
+            "Found cluster name (inlined in route config): {0}",
+            defaultRoute.getRouteAction().getCluster());
       } else {
         configUpdate = ConfigUpdate.newBuilder().addRoutes(routes).build();
         logger.log(
@@ -817,11 +820,15 @@ final class XdsClientImpl extends XdsClient {
       // Found routes in the in-lined RouteConfiguration.
       ConfigUpdate configUpdate;
       if (!enablePathMatching) {
+        EnvoyProtoData.Route defaultRoute = Iterables.getLast(routes);
         configUpdate =
             ConfigUpdate.newBuilder()
-                .addRoutes(routes.subList(routes.size() - 1, routes.size()))
+                .addRoutes(ImmutableList.of(defaultRoute))
                 .build();
-        logger.log(XdsLogLevel.INFO, "Found cluster name: {0}", configUpdate.getClusterName());
+        logger.log(
+            XdsLogLevel.INFO,
+            "Found cluster name: {0}",
+            defaultRoute.getRouteAction().getCluster());
       } else {
         configUpdate = ConfigUpdate.newBuilder().addRoutes(routes).build();
         logger.log(XdsLogLevel.INFO, "Found {0} routes", routes.size());

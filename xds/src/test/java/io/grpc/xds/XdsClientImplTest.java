@@ -489,7 +489,8 @@ public class XdsClientImplTest {
 
     ArgumentCaptor<ConfigUpdate> configUpdateCaptor = ArgumentCaptor.forClass(null);
     verify(configWatcher).onConfigChanged(configUpdateCaptor.capture());
-    assertThat(configUpdateCaptor.getValue().getClusterName()).isEqualTo("cluster.googleapis.com");
+    assertConfigUpdateContainsSingleClusterRoute(
+        configUpdateCaptor.getValue(), "cluster.googleapis.com");
 
     verifyNoMoreInteractions(requestObserver);
   }
@@ -633,7 +634,8 @@ public class XdsClientImplTest {
 
     ArgumentCaptor<ConfigUpdate> configUpdateCaptor = ArgumentCaptor.forClass(null);
     verify(configWatcher).onConfigChanged(configUpdateCaptor.capture());
-    assertThat(configUpdateCaptor.getValue().getClusterName()).isEqualTo("cluster.googleapis.com");
+    assertConfigUpdateContainsSingleClusterRoute(
+        configUpdateCaptor.getValue(), "cluster.googleapis.com");
   }
 
   /**
@@ -936,7 +938,8 @@ public class XdsClientImplTest {
     // Cluster name is resolved and notified to config watcher.
     ArgumentCaptor<ConfigUpdate> configUpdateCaptor = ArgumentCaptor.forClass(null);
     verify(configWatcher).onConfigChanged(configUpdateCaptor.capture());
-    assertThat(configUpdateCaptor.getValue().getClusterName()).isEqualTo("cluster.googleapis.com");
+    assertConfigUpdateContainsSingleClusterRoute(
+        configUpdateCaptor.getValue(), "cluster.googleapis.com");
 
     // Management sends back another LDS response containing updates for the requested Listener.
     routeConfig =
@@ -964,8 +967,8 @@ public class XdsClientImplTest {
     // Updated cluster name is notified to config watcher.
     configUpdateCaptor = ArgumentCaptor.forClass(null);
     verify(configWatcher, times(2)).onConfigChanged(configUpdateCaptor.capture());
-    assertThat(configUpdateCaptor.getValue().getClusterName())
-        .isEqualTo("another-cluster.googleapis.com");
+    assertConfigUpdateContainsSingleClusterRoute(
+        configUpdateCaptor.getValue(), "another-cluster.googleapis.com");
 
     // Management server sends back another LDS response containing updates for the requested
     // Listener and telling client to do RDS.
@@ -1017,8 +1020,8 @@ public class XdsClientImplTest {
     // Updated cluster name is notified to config watcher again.
     configUpdateCaptor = ArgumentCaptor.forClass(null);
     verify(configWatcher, times(3)).onConfigChanged(configUpdateCaptor.capture());
-    assertThat(configUpdateCaptor.getValue().getClusterName())
-        .isEqualTo("some-other-cluster.googleapis.com");
+    assertConfigUpdateContainsSingleClusterRoute(
+        configUpdateCaptor.getValue(), "some-other-cluster.googleapis.com");
 
     // Management server sends back another RDS response containing updated information for the
     // RouteConfiguration currently in-use by client.
@@ -1040,8 +1043,8 @@ public class XdsClientImplTest {
     // Updated cluster name is notified to config watcher again.
     configUpdateCaptor = ArgumentCaptor.forClass(null);
     verify(configWatcher, times(4)).onConfigChanged(configUpdateCaptor.capture());
-    assertThat(configUpdateCaptor.getValue().getClusterName())
-        .isEqualTo("an-updated-cluster.googleapis.com");
+    assertConfigUpdateContainsSingleClusterRoute(
+        configUpdateCaptor.getValue(), "an-updated-cluster.googleapis.com");
 
     // Management server sends back an LDS response indicating all Listener resources are removed.
     response =
@@ -1157,8 +1160,8 @@ public class XdsClientImplTest {
     // Updated cluster name is notified to config watcher.
     ArgumentCaptor<ConfigUpdate> configUpdateCaptor = ArgumentCaptor.forClass(null);
     verify(configWatcher).onConfigChanged(configUpdateCaptor.capture());
-    assertThat(configUpdateCaptor.getValue().getClusterName())
-        .isEqualTo("another-cluster.googleapis.com");
+    assertConfigUpdateContainsSingleClusterRoute(
+        configUpdateCaptor.getValue(), "another-cluster.googleapis.com");
     assertThat(rdsRespTimer.isCancelled()).isTrue();
   }
 
@@ -1224,7 +1227,8 @@ public class XdsClientImplTest {
     // Resolved cluster name is notified to config watcher.
     ArgumentCaptor<ConfigUpdate> configUpdateCaptor = ArgumentCaptor.forClass(null);
     verify(configWatcher).onConfigChanged(configUpdateCaptor.capture());
-    assertThat(configUpdateCaptor.getValue().getClusterName()).isEqualTo("cluster.googleapis.com");
+    assertConfigUpdateContainsSingleClusterRoute(
+        configUpdateCaptor.getValue(), "cluster.googleapis.com");
 
     // Management server sends back another LDS response with the previous Listener (currently
     // in-use by client) removed as the RouteConfiguration it references to is absent.
@@ -2702,7 +2706,8 @@ public class XdsClientImplTest {
     // Client has resolved the cluster based on the RDS response.
     ArgumentCaptor<ConfigUpdate> configUpdateCaptor = ArgumentCaptor.forClass(null);
     verify(configWatcher).onConfigChanged(configUpdateCaptor.capture());
-    assertThat(configUpdateCaptor.getValue().getClusterName()).isEqualTo("cluster.googleapis.com");
+    assertConfigUpdateContainsSingleClusterRoute(
+        configUpdateCaptor.getValue(), "cluster.googleapis.com");
 
     // RPC stream closed with an error again.
     responseObserver.onError(Status.UNKNOWN.asException());
@@ -3684,6 +3689,14 @@ public class XdsClientImplTest {
         + "}";
     String res = printer.print(response);
     assertThat(res).isEqualTo(expectedString);
+  }
+
+  private static void assertConfigUpdateContainsSingleClusterRoute(
+      ConfigUpdate configUpdate, String expectedClusterName) {
+    List<EnvoyProtoData.Route> routes = configUpdate.getRoutes();
+    assertThat(routes).hasSize(1);
+    assertThat(Iterables.getOnlyElement(routes).getRouteAction().getCluster())
+        .isEqualTo(expectedClusterName);
   }
 
   /**

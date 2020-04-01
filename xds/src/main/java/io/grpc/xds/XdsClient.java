@@ -24,7 +24,6 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Iterables;
 // TODO(sanjaypujare): remove dependency on envoy data types.
 import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.grpc.ManagedChannel;
@@ -69,11 +68,6 @@ abstract class XdsClient {
 
     private ConfigUpdate(List<Route> routes) {
       this.routes = routes;
-    }
-
-    /** Gets the cluster name for the default route. */
-    String getClusterName() {
-      return Iterables.getLast(routes).getRouteAction().getCluster();
     }
 
     List<Route> getRoutes() {

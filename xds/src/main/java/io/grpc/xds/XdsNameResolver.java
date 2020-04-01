@@ -22,6 +22,7 @@ import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Iterables;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
@@ -158,7 +159,8 @@ final class XdsNameResolver extends NameResolver {
             xdsClient);
         rawLbConfig = generateXdsRoutingRawConfig(update.getRoutes());
       } else {
-        String clusterName = update.getClusterName();
+        Route defaultRoute = Iterables.getOnlyElement(update.getRoutes());
+        String clusterName = defaultRoute.getRouteAction().getCluster();
         if (!clusterName.isEmpty()) {
           logger.log(
               XdsLogLevel.INFO,
@@ -171,7 +173,6 @@ final class XdsNameResolver extends NameResolver {
               XdsLogLevel.INFO,
               "Received config update with one weighted cluster route from xDS client {0}",
               xdsClient);
-          Route defaultRoute = update.getRoutes().get(0);
           List<ClusterWeight> clusterWeights = defaultRoute.getRouteAction().getWeightedCluster();
           rawLbConfig = generateWeightedTargetRawConfig(clusterWeights);
         }
