@@ -58,6 +58,8 @@ import org.mockito.junit.MockitoRule;
 /** Unit tests for {@link XdsLoadBalancer}. */
 @RunWith(JUnit4.class)
 public class XdsLoadBalancerTest {
+  private static final String AUTHORITY = "grpc-test.googleapis.com";
+
   @Rule
   public final ExpectedException thrown = ExpectedException.none();
   @Rule
@@ -109,6 +111,7 @@ public class XdsLoadBalancerTest {
         return fallbackLb;
       }
     };
+    doReturn(AUTHORITY).when(helper).getAuthority();
     doReturn(syncContext).when(helper).getSynchronizationContext();
     doReturn(fakeClock.getScheduledExecutorService()).when(helper).getScheduledExecutorService();
     doReturn(mock(ChannelLogger.class)).when(helper).getChannelLogger();

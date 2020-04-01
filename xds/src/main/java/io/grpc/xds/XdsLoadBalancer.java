@@ -18,16 +18,35 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
+import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
+import io.envoyproxy.envoy.api.v2.core.Node;
+import io.grpc.Attributes;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
+import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.Status;
+import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
+import io.grpc.internal.ExponentialBackoffPolicy;
+import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.ObjectPool;
 import io.grpc.util.ForwardingLoadBalancerHelper;
+import io.grpc.xds.Bootstrapper.BootstrapInfo;
+import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EdsLoadBalancer.ResourceUpdateCallback;
+import io.grpc.xds.EdsLoadBalancerProvider.EdsConfig;
+import io.grpc.xds.XdsClient.RefCountedXdsClientObjectPool;
+import io.grpc.xds.XdsClient.XdsChannelFactory;
+import io.grpc.xds.XdsClient.XdsClientFactory;
+import io.grpc.xds.XdsLoadBalancerProvider.XdsConfig;
+import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
+import java.util.Collections;
+import java.util.List;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.CheckForNull;
 import javax.annotation.Nullable;
@@ -43,8 +62,12 @@ final class XdsLoadBalancer extends LoadBalancer {
   private static final long FALLBACK_TIMEOUT_MS = TimeUnit.SECONDS.toMillis(10); // same as grpclb
 
   private final Helper helper;
+  private final String authority;
+  private final SynchronizationContext syncContext;
+  private final ScheduledExecutorService timeService;
   private final LoadBalancer primaryLb;
   private final LoadBalancer.Factory fallbackLbFactory;
+  private final ObjectPool<XdsClient> xdsClientPool;
   private final ResourceUpdateCallback resourceUpdateCallback = new ResourceUpdateCallback() {
     @Override
     public void onWorking() {
@@ -91,10 +114,58 @@ final class XdsLoadBalancer extends LoadBalancer {
       Helper helper,
       PrimaryLbFactory primaryLbFactory,
       LoadBalancer.Factory fallbackLbFactory) {
-    this.helper = helper;
-    this.primaryLb = primaryLbFactory.newLoadBalancer(
-        new PrimaryLbHelper(), resourceUpdateCallback);
-    this.fallbackLbFactory = fallbackLbFactory;
+    this.helper = checkNotNull(helper, "helper");
+    this.authority = checkNotNull(helper.getAuthority(), "authority");
+    this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
+    this.timeService = checkNotNull(helper.getScheduledExecutorService(), "timeService");
+    this.primaryLb =
+        checkNotNull(primaryLbFactory, "primaryLbFactory")
+            .newLoadBalancer(new PrimaryLbHelper(), resourceUpdateCallback);
+    this.fallbackLbFactory = checkNotNull(fallbackLbFactory, "fallbackLbFactory");
+    xdsClientPool =
+        createXdsClientPool(Bootstrapper.getInstance(), XdsChannelFactory.getInstance());
+  }
+
+  @Nullable
+  private ObjectPool<XdsClient> createXdsClientPool(
+      Bootstrapper bootstrapper, final XdsChannelFactory channelFactory) {
+    BootstrapInfo bootstrapInfo;
+    try {
+      bootstrapInfo = bootstrapper.readBootstrap();
+    } catch (Exception e) {
+      helper.updateBalancingState(
+          TRANSIENT_FAILURE,
+          new ErrorPicker(
+              Status.UNAVAILABLE.withDescription("Failed to bootstrap").withCause(e)));
+      return null;
+    }
+
+    final List<ServerInfo> serverList = bootstrapInfo.getServers();
+    final Node node = bootstrapInfo.getNode();
+    if (serverList.isEmpty()) {
+      helper.updateBalancingState(
+          TRANSIENT_FAILURE,
+          new ErrorPicker(
+              Status.UNAVAILABLE
+                  .withDescription("No management server provided by bootstrap")));
+      return null;
+    }
+    XdsClientFactory xdsClientFactory = new XdsClientFactory() {
+      @Override
+      XdsClient createXdsClient() {
+        return
+            new XdsClientImpl(
+                authority,
+                serverList,
+                channelFactory,
+                node,
+                syncContext,
+                timeService,
+                new ExponentialBackoffPolicy.Provider(),
+                GrpcUtil.STOPWATCH_SUPPLIER);
+      }
+    };
+    return new RefCountedXdsClientObjectPool(xdsClientFactory);
   }
 
   @Override
@@ -107,26 +178,48 @@ final class XdsLoadBalancer extends LoadBalancer {
   @Override
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     this.resolvedAddresses = resolvedAddresses;
-
+    Object lbConfig = resolvedAddresses.getLoadBalancingPolicyConfig();
+    if (lbConfig == null) {
+      helper.updateBalancingState(
+          TRANSIENT_FAILURE,
+          new ErrorPicker(Status.UNAVAILABLE.withDescription("Missing xDS lb config")));
+      return;
+    }
+    if (xdsClientPool == null) {
+      useFallbackPolicy();
+      return;
+    }
+    XdsConfig newXdsConfig = (XdsConfig) lbConfig;
+    EdsConfig edsConfig =
+        new EdsConfig(
+            authority,
+            newXdsConfig.edsServiceName,
+            newXdsConfig.lrsServerName,
+            newXdsConfig.childPolicy);
+    primaryLb.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
+            .setAttributes(
+                Attributes.newBuilder().set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool).build())
+            .setLoadBalancingPolicyConfig(edsConfig)
+            .build());
     if (isInFallbackMode()) {
       fallbackLb.handleResolvedAddresses(this.resolvedAddresses);
-    }
-
-    if (fallbackTimer == null) {
+    } else {
       class EnterFallbackTask implements Runnable {
-
         @Override
         public void run() {
           useFallbackPolicy();
         }
       }
 
-      fallbackTimer = helper.getSynchronizationContext().schedule(
-          new EnterFallbackTask(), FALLBACK_TIMEOUT_MS, TimeUnit.MILLISECONDS,
-          helper.getScheduledExecutorService());
+      fallbackTimer =
+          syncContext.schedule(
+              new EnterFallbackTask(),
+              FALLBACK_TIMEOUT_MS,
+              TimeUnit.MILLISECONDS,
+              timeService);
     }
-
-    primaryLb.handleResolvedAddresses(resolvedAddresses);
   }
 
   @Override
