@@ -107,6 +107,7 @@ abstract class XdsClient {
       }
 
       ConfigUpdate build() {
+        checkState(!routes.isEmpty(), "routes is empty");
         return new ConfigUpdate(Collections.unmodifiableList(routes));
       }
     }
