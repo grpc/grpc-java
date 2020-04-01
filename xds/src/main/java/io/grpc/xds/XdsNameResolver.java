@@ -156,11 +156,6 @@ final class XdsNameResolver extends NameResolver {
             "Received config update with {0} routes from xDS client {1}",
             update.getRoutes().size(),
             xdsClient);
-        logger.log(
-            XdsLogLevel.DEBUG,
-            "Received config update from xDS client {0}: {1}",
-            xdsClient,
-            update);
         rawLbConfig = generateXdsRoutingRawConfig(update.getRoutes());
       } else {
         String clusterName = update.getClusterName();
