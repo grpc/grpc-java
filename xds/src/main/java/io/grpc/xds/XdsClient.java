@@ -24,8 +24,8 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-// TODO(sanjaypujare): remove dependency on envoy data types.
 import com.google.common.collect.Iterables;
+// TODO(sanjaypujare): remove dependency on envoy data types.
 import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
