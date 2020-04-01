@@ -3365,7 +3365,7 @@ public class XdsClientImplTest {
     List<EnvoyProtoData.Route> routes =
         XdsClientImpl.findRoutesInRouteConfig(routeConfig, hostname);
     assertThat(routes).hasSize(1);
-    assertThat(routes.get(0).getRouteAction().get().getCluster())
+    assertThat(routes.get(0).getRouteAction().getCluster())
         .isEqualTo(targetClusterName);
   }
 
@@ -3406,7 +3406,7 @@ public class XdsClientImplTest {
     List<EnvoyProtoData.Route> routes =
         XdsClientImpl.findRoutesInRouteConfig(routeConfig, hostname);
     assertThat(routes).hasSize(1);
-    assertThat(routes.get(0).getRouteAction().get().getCluster())
+    assertThat(routes.get(0).getRouteAction().getCluster())
         .isEqualTo(targetClusterName);
   }
 
@@ -3438,7 +3438,7 @@ public class XdsClientImplTest {
     List<EnvoyProtoData.Route> routes =
         XdsClientImpl.findRoutesInRouteConfig(routeConfig, hostname);
     assertThat(routes).hasSize(1);
-    assertThat(routes.get(0).getRouteAction().get().getCluster())
+    assertThat(routes.get(0).getRouteAction().getCluster())
         .isEqualTo(targetClusterName);
   }
 

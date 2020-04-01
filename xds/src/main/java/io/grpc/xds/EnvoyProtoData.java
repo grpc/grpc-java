@@ -18,7 +18,6 @@ package io.grpc.xds;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
-import com.google.common.base.Optional;
 import com.google.common.collect.ImmutableList;
 import io.envoyproxy.envoy.type.FractionalPercent;
 import io.envoyproxy.envoy.type.FractionalPercent.DenominatorType;
@@ -358,8 +357,9 @@ final class EnvoyProtoData {
       return routeMatch;
     }
 
-    Optional<RouteAction> getRouteAction() {
-      return Optional.fromNullable(routeAction);
+    @Nullable
+    RouteAction getRouteAction() {
+      return routeAction;
     }
 
     @Override

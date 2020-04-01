@@ -73,7 +73,7 @@ abstract class XdsClient {
 
     /** Gets the cluster name for the default route. */
     String getClusterName() {
-      return Iterables.getLast(routes).getRouteAction().get().getCluster();
+      return Iterables.getLast(routes).getRouteAction().getCluster();
     }
 
     List<Route> getRoutes() {

@@ -182,7 +182,7 @@ final class XdsNameResolver extends NameResolver {
           }
           Map<String, String> methodName = ImmutableMap.of("service", service, "method", method);
           String actionName;
-          RouteAction routeAction = route.getRouteAction().get();
+          RouteAction routeAction = route.getRouteAction();
           Map<String, ?> actionPolicy;
           if (exitingActions.containsKey(routeAction)) {
             actionName = exitingActions.get(routeAction);
@@ -234,7 +234,7 @@ final class XdsNameResolver extends NameResolver {
             xdsClient);
         Route defaultRoute = update.getRoutes().get(0);
         List<ClusterWeight> clusterWeights =
-            defaultRoute.getRouteAction().get().getWeightedCluster();
+            defaultRoute.getRouteAction().getWeightedCluster();
         Map<String, ?> weightedTargetRawConfig = generateWeightedTargetRawConfig(clusterWeights);
         config = ImmutableMap.of("loadBalancingConfig", ImmutableList.of(weightedTargetRawConfig));
         logger.log(XdsLogLevel.INFO, "Generated service config:\n{0}", config);
@@ -244,7 +244,7 @@ final class XdsNameResolver extends NameResolver {
         String clusterName = update.getClusterName();
         if (clusterName.isEmpty()) {
           // update.getRoutes() must have exactly the default route, and must be a cluster route.
-          update.getRoutes().get(0).getRouteAction().get().getCluster();
+          update.getRoutes().get(0).getRouteAction().getCluster();
         }
         logger.log(
             XdsLogLevel.INFO,

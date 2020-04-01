@@ -907,10 +907,10 @@ final class XdsClientImpl extends XdsClient {
           || routeMatch.hasRegex()) {
         return "The last route must be the default route";
       }
-      if (!route.getRouteAction().isPresent()) {
+      if (route.getRouteAction() == null) {
         return "Route action is not specified for the default route";
       }
-      if (route.getRouteAction().get().getCluster().isEmpty()) {
+      if (route.getRouteAction().getCluster().isEmpty()) {
         return "Cluster is not specified for the default route";
       }
       return null;
@@ -926,7 +926,7 @@ final class XdsClientImpl extends XdsClient {
     for (int i = 0; i < routes.size(); i++) {
       EnvoyProtoData.Route route = routes.get(i);
 
-      if (!route.getRouteAction().isPresent()) {
+      if (route.getRouteAction() == null) {
         return "Route action is not specified for one of the routes";
       }
 
@@ -964,7 +964,7 @@ final class XdsClientImpl extends XdsClient {
         }
       }
 
-      RouteAction routeAction = route.getRouteAction().get();
+      RouteAction routeAction = route.getRouteAction();
       if (routeAction.getCluster().isEmpty() && routeAction.getWeightedCluster().isEmpty()) {
         return "Either cluster or weighted cluster route action must be provided";
       }
