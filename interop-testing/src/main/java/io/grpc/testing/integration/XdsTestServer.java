@@ -17,7 +17,9 @@
 package io.grpc.testing.integration;
 
 import io.grpc.Server;
+import io.grpc.health.v1.HealthCheckResponse.ServingStatus;
 import io.grpc.netty.NettyServerBuilder;
+import io.grpc.services.HealthStatusManager;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.integration.Messages.SimpleRequest;
 import io.grpc.testing.integration.Messages.SimpleResponse;
@@ -33,6 +35,7 @@ public final class XdsTestServer {
 
   private int port = 8080;
   private String serverId = "java_server";
+  private HealthStatusManager health;
   private Server server;
 
   /**
@@ -107,7 +110,14 @@ public final class XdsTestServer {
   }
 
   private void start() throws Exception {
-    server = NettyServerBuilder.forPort(port).addService(new TestServiceImpl()).build().start();
+    health = new HealthStatusManager();
+    server =
+        NettyServerBuilder.forPort(port)
+            .addService(new TestServiceImpl())
+            .addService(health.getHealthService())
+            .build()
+            .start();
+    health.setStatus("", ServingStatus.SERVING);
   }
 
   private void stop() throws Exception {
