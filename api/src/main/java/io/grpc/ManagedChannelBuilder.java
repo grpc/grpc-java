@@ -209,8 +209,8 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
 
   /**
    * Provides a custom {@link NameResolver.Factory} for the channel. If this method is not called,
-   * the builder will try the providers listed by {@link NameResolverProvider#providers()} for the
-   * given target.
+   * the builder will try the providers registered in the default {@link NameResolverRegistry} for
+   * the given target.
    *
    * <p>This method should rarely be used, as name resolvers should provide a {@code
    * NameResolverProvider} and users rely on service loading to find implementations in the class
