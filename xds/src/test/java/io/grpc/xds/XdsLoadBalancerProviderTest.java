@@ -96,8 +96,7 @@ public class XdsLoadBalancerProviderTest {
   @Test
   public void parseLoadBalancingConfigPolicy() throws Exception {
     String rawLbConfig = "{"
-        + "\"cluster\" : \"foo.googleapis.com\","
-        + "\"endpointPickingPolicy\" : "
+        + "\"childPolicy\" : "
         + "    [{\"lbPolicy3\" : {\"key\" : \"val\"}}, {\"supported_1\" : {}}],"
         + "\"fallbackPolicy\" : [],"
         + "\"edsServiceName\" : \"dns:///eds.service.com:8080\","
@@ -111,7 +110,8 @@ public class XdsLoadBalancerProviderTest {
     assertThat(configOrError.getConfig()).isInstanceOf(XdsConfig.class);
     assertThat(configOrError.getConfig()).isEqualTo(
         new XdsConfig(
-            "foo.googleapis.com",
+            "dns:///eds.service.com:8080",
+            "dns:///lrs.service.com:8080",
             new PolicySelection(lbProvider1,
                 ServiceConfigUtil.unwrapLoadBalancingConfig(
                     checkObject(JsonParser.parse("{\"supported_1\" : {}}"))).getRawConfigValue(),
@@ -119,9 +119,7 @@ public class XdsLoadBalancerProviderTest {
             new PolicySelection(
                 lbRegistry.getProvider("round_robin"),
                 new HashMap<String, Object>(),
-                "no service config"),
-            "dns:///eds.service.com:8080",
-            "dns:///lrs.service.com:8080")
+                "no service config"))
     );
   }
 
