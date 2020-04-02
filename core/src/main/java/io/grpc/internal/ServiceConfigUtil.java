@@ -24,6 +24,9 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.base.VerifyException;
+import io.grpc.LoadBalancerProvider;
+import io.grpc.LoadBalancerRegistry;
+import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.internal.RetriableStream.Throttle;
 import java.util.ArrayList;
@@ -33,6 +36,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
@@ -45,10 +50,10 @@ public final class ServiceConfigUtil {
   private ServiceConfigUtil() {}
 
   /**
-   * Fetch the health-checked service name from service config. {@code null} if can't find one.
+   * Fetches the health-checked service config from service config. {@code null} if can't find one.
    */
   @Nullable
-  public static String getHealthCheckedServiceName(@Nullable Map<String, ?> serviceConfig) {
+  public static Map<String, ?> getHealthCheckedService(@Nullable  Map<String, ?> serviceConfig) {
     if (serviceConfig == null) {
       return null;
     }
@@ -61,11 +66,20 @@ public final class ServiceConfigUtil {
       }
     }
     */
-    Map<String, ?> healthCheck = JsonUtil.getObject(serviceConfig, "healthCheckConfig");
-    if (healthCheck == null) {
+    return JsonUtil.getObject(serviceConfig, "healthCheckConfig");
+  }
+
+  /**
+   * Fetches the health-checked service name from health-checked service config. {@code null} if
+   * can't find one.
+   */
+  @Nullable
+  public static String getHealthCheckedServiceName(
+      @Nullable Map<String, ?> healthCheckedServiceConfig) {
+    if (healthCheckedServiceConfig == null) {
       return null;
     }
-    return JsonUtil.getString(healthCheck, "serviceName");
+    return JsonUtil.getString(healthCheckedServiceConfig, "serviceName");
   }
 
   @Nullable
@@ -315,46 +329,36 @@ public final class ServiceConfigUtil {
   }
 
   /**
-   * Extract the server name to use in EDS query.
+   * Parses and selects a load balancing policy from a non-empty list of raw configs. If selection
+   * is successful, the returned ConfigOrError object will include a {@link
+   * ServiceConfigUtil.PolicySelection} as its config value.
    */
-  @Nullable
-  public static String getEdsServiceNameFromXdsConfig(Map<String, ?> rawXdsConfig) {
-    return JsonUtil.getString(rawXdsConfig, "edsServiceName");
-  }
-
-  /**
-   * Extract the LRS server name to send load reports to.
-   */
-  @Nullable
-  public static String getLrsServerNameFromXdsConfig(Map<String, ?> rawXdsConfig) {
-    return JsonUtil.getString(rawXdsConfig, "lrsLoadReportingServerName");
-  }
-
-  /**
-   * Extracts list of child policies from xds loadbalancer config.
-   */
-  @Nullable
-  public static List<LbConfig> getChildPolicyFromXdsConfig(Map<String, ?> rawXdsConfig) {
-    return unwrapLoadBalancingConfigList(
-        JsonUtil.getListOfObjects(rawXdsConfig, "childPolicy"));
-  }
-
-  /**
-   * Extracts list of fallback policies from xds loadbalancer config.
-   */
-  @Nullable
-  public static List<LbConfig> getFallbackPolicyFromXdsConfig(Map<String, ?> rawXdsConfig) {
-    return unwrapLoadBalancingConfigList(
-        JsonUtil.getListOfObjects(rawXdsConfig, "fallbackPolicy"));
-  }
-
-  /**
-   * Extracts the stickiness metadata key from a service config, or {@code null}.
-   */
-  @Nullable
-  public static String getStickinessMetadataKeyFromServiceConfig(
-      Map<String, ?> serviceConfig) {
-    return JsonUtil.getString(serviceConfig, "stickinessMetadataKey");
+  public static ConfigOrError selectLbPolicyFromList(
+      List<LbConfig> lbConfigs, LoadBalancerRegistry lbRegistry) {
+    List<String> policiesTried = new ArrayList<>();
+    for (LbConfig lbConfig : lbConfigs) {
+      String policy = lbConfig.getPolicyName();
+      LoadBalancerProvider provider = lbRegistry.getProvider(policy);
+      if (provider == null) {
+        policiesTried.add(policy);
+      } else {
+        if (!policiesTried.isEmpty()) {
+          Logger.getLogger(ServiceConfigUtil.class.getName()).log(
+              Level.FINEST,
+              "{0} specified by Service Config are not available", policiesTried);
+        }
+        ConfigOrError parsedLbPolicyConfig =
+            provider.parseLoadBalancingPolicyConfig(lbConfig.getRawConfigValue());
+        if (parsedLbPolicyConfig.getError() != null) {
+          return parsedLbPolicyConfig;
+        }
+        return ConfigOrError.fromConfig(new PolicySelection(
+            provider, lbConfig.rawConfigValue, parsedLbPolicyConfig.getConfig()));
+      }
+    }
+    return ConfigOrError.fromError(
+        Status.UNKNOWN.withDescription(
+            "None of " + policiesTried + " specified by Service Config are available."));
   }
 
   /**
@@ -398,6 +402,63 @@ public final class ServiceConfigUtil {
       return MoreObjects.toStringHelper(this)
           .add("policyName", policyName)
           .add("rawConfigValue", rawConfigValue)
+          .toString();
+    }
+  }
+
+  public static final class PolicySelection {
+    final LoadBalancerProvider provider;
+    @Deprecated
+    @Nullable
+    final Map<String, ?> rawConfig;
+    @Nullable
+    final Object config;
+
+    /** Constructs a PolicySelection with selected LB provider, a copy of raw config and the deeply
+     * parsed LB config. */
+    public PolicySelection(
+        LoadBalancerProvider provider,
+        @Nullable Map<String, ?> rawConfig,
+        @Nullable Object config) {
+      this.provider = checkNotNull(provider, "provider");
+      this.rawConfig = rawConfig;
+      this.config = config;
+    }
+
+    public LoadBalancerProvider getProvider() {
+      return provider;
+    }
+
+    @Nullable
+    public Object getConfig() {
+      return config;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      PolicySelection that = (PolicySelection) o;
+      return Objects.equal(provider, that.provider)
+          && Objects.equal(rawConfig, that.rawConfig)
+          && Objects.equal(config, that.config);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hashCode(provider, rawConfig, config);
+    }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(this)
+          .add("provider", provider)
+          .add("rawConfig", rawConfig)
+          .add("config", config)
           .toString();
     }
   }

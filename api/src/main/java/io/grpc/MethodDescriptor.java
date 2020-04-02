@@ -51,8 +51,7 @@ public final class MethodDescriptor<ReqT, RespT> {
 
   // Must be set to InternalKnownTransport.values().length
   // Not referenced to break the dependency.
-  private final AtomicReferenceArray<Object> rawMethodNames = new AtomicReferenceArray<>(1);
-
+  private final AtomicReferenceArray<Object> rawMethodNames = new AtomicReferenceArray<>(2);
 
   /**
    * Gets the cached "raw" method name for this Method Descriptor.  The raw name is transport
@@ -86,7 +85,7 @@ public final class MethodDescriptor<ReqT, RespT> {
     UNARY,
 
     /**
-     * Zero or more request messages followed by one response message.
+     * Zero or more request messages with one response message.
      */
     CLIENT_STREAMING,
 
@@ -107,9 +106,8 @@ public final class MethodDescriptor<ReqT, RespT> {
     UNKNOWN;
 
     /**
-     * Returns {@code true} if the client will immediately send one request message to the server
-     * after calling {@link ClientCall#start(io.grpc.ClientCall.Listener, io.grpc.Metadata)}
-     * and then immediately half-close the stream by calling {@link io.grpc.ClientCall#halfClose()}.
+     * Returns {@code true} for {@code UNARY} and {@code SERVER_STREAMING}, which do not permit the
+     * client to stream.
      *
      * @since 1.0.0
      */
@@ -118,9 +116,8 @@ public final class MethodDescriptor<ReqT, RespT> {
     }
 
     /**
-     * Returns {@code true} if the server will immediately send one response message to the client
-     * upon receipt of {@link io.grpc.ServerCall.Listener#onHalfClose()} and then immediately
-     * close the stream by calling {@link ServerCall#close(Status, io.grpc.Metadata)}.
+     * Returns {@code true} for {@code UNARY} and {@code CLIENT_STREAMING}, which do not permit the
+     * server to stream.
      *
      * @since 1.0.0
      */

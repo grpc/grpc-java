@@ -269,8 +269,6 @@ public class ServiceConfigErrorHandlingTest {
     ResolvedAddresses resolvedAddresses = resultCaptor.getValue();
     assertThat(resolvedAddresses.getAddresses()).containsExactly(addressGroup);
     assertThat(resolvedAddresses.getLoadBalancingPolicyConfig()).isEqualTo("12");
-    assertThat(resolvedAddresses.getAttributes().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG))
-        .isEqualTo(rawServiceConfig);
     verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
 
     assertThat(channel.getState(true)).isEqualTo(ConnectivityState.IDLE);
@@ -361,8 +359,6 @@ public class ServiceConfigErrorHandlingTest {
     ResolvedAddresses resolvedAddresses = resultCaptor.getValue();
     assertThat(resolvedAddresses.getAddresses()).containsExactly(addressGroup);
     assertThat(resolvedAddresses.getLoadBalancingPolicyConfig()).isNull();
-    assertThat(resolvedAddresses.getAttributes().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG))
-        .isEmpty();
     verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
 
     assertThat(channel.getState(false)).isNotEqualTo(ConnectivityState.TRANSIENT_FAILURE);
@@ -389,8 +385,6 @@ public class ServiceConfigErrorHandlingTest {
     ResolvedAddresses resolvedAddresses = resultCaptor.getValue();
     assertThat(resolvedAddresses.getAddresses()).containsExactly(addressGroup);
     assertThat(resolvedAddresses.getLoadBalancingPolicyConfig()).isEqualTo("foo");
-    assertThat(resolvedAddresses.getAttributes().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG))
-        .isEqualTo(defaultServiceConfig);
     verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
     assertThat(channel.getState(false)).isNotEqualTo(ConnectivityState.TRANSIENT_FAILURE);
   }
@@ -437,8 +431,6 @@ public class ServiceConfigErrorHandlingTest {
     ResolvedAddresses resolvedAddresses = resultCaptor.getValue();
     assertThat(resolvedAddresses.getAddresses()).containsExactly(addressGroup);
     assertThat(resolvedAddresses.getLoadBalancingPolicyConfig()).isEqualTo("mate");
-    assertThat(resolvedAddresses.getAttributes().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG))
-        .isEqualTo(defaultServiceConfig);
     verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
 
     assertThat(channel.getState(false)).isNotEqualTo(ConnectivityState.TRANSIENT_FAILURE);
@@ -464,8 +456,6 @@ public class ServiceConfigErrorHandlingTest {
     ResolvedAddresses resolvedAddresses = resultCaptor.getValue();
     assertThat(resolvedAddresses.getAddresses()).containsExactly(addressGroup);
     assertThat(resolvedAddresses.getLoadBalancingPolicyConfig()).isEqualTo("1st raw config");
-    assertThat(resolvedAddresses.getAttributes().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG))
-        .isEqualTo(rawServiceConfig);
     verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
 
     assertThat(channel.getState(false)).isNotEqualTo(ConnectivityState.TRANSIENT_FAILURE);
@@ -481,8 +471,6 @@ public class ServiceConfigErrorHandlingTest {
     // should use previous service config because new service config is invalid.
     assertThat(resolvedAddresses.getLoadBalancingPolicyConfig()).isEqualTo("1st raw config");
     assertThat(newResolvedAddress.getAttributes()).isNotEqualTo(Attributes.EMPTY);
-    assertThat(newResolvedAddress.getAttributes().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG))
-        .isEqualTo(rawServiceConfig);
     verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
     assertThat(channel.getState(false)).isEqualTo(ConnectivityState.IDLE);
   }
@@ -587,11 +575,7 @@ public class ServiceConfigErrorHandlingTest {
         ResolutionResult.Builder builder = ResolutionResult.newBuilder().setAddresses(servers);
         if (rawServiceConfig != null) {
           builder
-              .setServiceConfig(serviceConfigParser.parseServiceConfig(rawServiceConfig))
-              .setAttributes(
-                  Attributes.newBuilder()
-                      .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, rawServiceConfig)
-                      .build());
+              .setServiceConfig(serviceConfigParser.parseServiceConfig(rawServiceConfig));
         }
 
         listener.onResult(builder.build());

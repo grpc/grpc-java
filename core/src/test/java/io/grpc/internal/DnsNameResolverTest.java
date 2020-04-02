@@ -26,6 +26,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -36,6 +37,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import com.google.common.net.InetAddresses;
 import com.google.common.testing.FakeTicker;
+import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.HttpConnectProxiedSocketAddress;
@@ -49,14 +51,12 @@ import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.DnsNameResolver.AddressResolver;
-import io.grpc.internal.DnsNameResolver.ResolutionResults;
 import io.grpc.internal.DnsNameResolver.ResourceResolver;
 import io.grpc.internal.DnsNameResolver.ResourceResolverFactory;
 import io.grpc.internal.JndiResourceResolverFactory.JndiResourceResolver;
 import io.grpc.internal.JndiResourceResolverFactory.RecordFetcher;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import java.io.IOException;
-import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
@@ -87,7 +87,6 @@ import org.junit.rules.Timeout;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
-import org.mockito.ArgumentMatchers;
 import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
@@ -142,6 +141,8 @@ public class DnsNameResolverTest {
   private NameResolver.Listener2 mockListener;
   @Captor
   private ArgumentCaptor<ResolutionResult> resultCaptor;
+  @Captor
+  private ArgumentCaptor<Status> errorCaptor;
   @Nullable
   private String networkaddressCacheTtlPropertyValue;
   @Mock
@@ -154,7 +155,8 @@ public class DnsNameResolverTest {
 
   private DnsNameResolver newResolver(String name, int defaultPort, boolean isAndroid) {
     return newResolver(
-        name, defaultPort, GrpcUtil.NOOP_PROXY_DETECTOR, Stopwatch.createUnstarted(), isAndroid);
+        name, defaultPort, GrpcUtil.NOOP_PROXY_DETECTOR, Stopwatch.createUnstarted(),
+        isAndroid);
   }
 
   private DnsNameResolver newResolver(
@@ -183,10 +185,13 @@ public class DnsNameResolverTest {
   }
 
   private DnsNameResolver newResolver(
-      String name, Stopwatch stopwatch, boolean isAndroid, NameResolver.Args args) {
+      String name,
+      Stopwatch stopwatch,
+      boolean isAndroid,
+      NameResolver.Args args) {
     DnsNameResolver dnsResolver =
         new DnsNameResolver(
-            null, name, args, fakeExecutorResource, stopwatch, isAndroid, /* enableSrv= */ false);
+            null, name, args, fakeExecutorResource, stopwatch, isAndroid);
     // By default, using the mocked ResourceResolver to avoid I/O
     dnsResolver.setResourceResolver(new JndiResourceResolver(recordFetcher));
     return dnsResolver;
@@ -364,26 +369,6 @@ public class DnsNameResolverTest {
   }
 
   @Test
-  public void resolveAll_failsOnEmptyResult() {
-    DnsNameResolver nr = newResolver("dns:///addr.fake:1234", 443);
-    nr.setAddressResolver(new AddressResolver() {
-      @Override
-      public List<InetAddress> resolveAddress(String host) throws Exception {
-        return Collections.emptyList();
-      }
-    });
-
-    nr.start(mockListener);
-    assertThat(fakeExecutor.runDueTasks()).isEqualTo(1);
-
-    ArgumentCaptor<Status> ac = ArgumentCaptor.forClass(Status.class);
-    verify(mockListener).onError(ac.capture());
-    verifyNoMoreInteractions(mockListener);
-    assertThat(ac.getValue().getCode()).isEqualTo(Code.UNAVAILABLE);
-    assertThat(ac.getValue().getDescription()).contains("No DNS backend or balancer addresses");
-  }
-
-  @Test
   public void resolve_cacheForever() throws Exception {
     System.setProperty(DnsNameResolver.NETWORKADDRESS_CACHE_TTL_PROPERTY, "-1");
     final List<InetAddress> answer1 = createAddressList(2);
@@ -532,118 +517,199 @@ public class DnsNameResolverTest {
   }
 
   @Test
-  public void resolveAll_nullResourceResolver() throws Exception {
-    final String hostname = "addr.fake";
-    final Inet4Address backendAddr = InetAddresses.fromInteger(0x7f000001);
-
-    AddressResolver mockResolver = mock(AddressResolver.class);
-    when(mockResolver.resolveAddress(anyString()))
-        .thenReturn(Collections.<InetAddress>singletonList(backendAddr));
-    ResourceResolver resourceResolver = null;
-    boolean resovleSrv = true;
-    boolean resolveTxt = true;
-
-    ResolutionResults res = DnsNameResolver.resolveAll(
-        mockResolver, resourceResolver, resovleSrv, resolveTxt, hostname);
-    assertThat(res.addresses).containsExactly(backendAddr);
-    assertThat(res.balancerAddresses).isEmpty();
-    assertThat(res.txtRecords).isEmpty();
-    verify(mockResolver).resolveAddress(hostname);
-  }
-
-  @Test
-  public void resolveAll_nullResourceResolver_addressFailure() throws Exception {
-    final String hostname = "addr.fake";
-
-    AddressResolver mockResolver = mock(AddressResolver.class);
-    when(mockResolver.resolveAddress(anyString()))
-        .thenThrow(new IOException("no addr"));
-    ResourceResolver resourceResolver = null;
-    boolean resovleSrv = true;
-    boolean resolveTxt = true;
-
-    thrown.expect(RuntimeException.class);
-    thrown.expectMessage("no addr");
-
-    DnsNameResolver.resolveAll(mockResolver, resourceResolver, resovleSrv, resolveTxt, hostname);
-  }
-
-  @Test
-  public void resolveAll_presentResourceResolver() throws Exception {
-    final String hostname = "addr.fake";
-    final Inet4Address backendAddr = InetAddresses.fromInteger(0x7f000001);
-    final EquivalentAddressGroup balancerAddr = new EquivalentAddressGroup(new SocketAddress() {});
-
-    AddressResolver mockAddressResolver = mock(AddressResolver.class);
-    when(mockAddressResolver.resolveAddress(anyString()))
-        .thenReturn(Collections.<InetAddress>singletonList(backendAddr));
-    ResourceResolver mockResourceResolver = mock(ResourceResolver.class);
-    when(mockResourceResolver.resolveTxt(anyString()))
-        .thenReturn(Collections.singletonList("service config"));
-    when(mockResourceResolver.resolveSrv(ArgumentMatchers.any(AddressResolver.class), anyString()))
-        .thenReturn(Collections.singletonList(balancerAddr));
-    boolean resovleSrv = true;
-    boolean resolveTxt = true;
-
-    ResolutionResults res = DnsNameResolver.resolveAll(
-        mockAddressResolver, mockResourceResolver, resovleSrv, resolveTxt, hostname);
-    assertThat(res.addresses).containsExactly(backendAddr);
-    assertThat(res.balancerAddresses).containsExactly(balancerAddr);
-    assertThat(res.txtRecords).containsExactly("service config");
-    verify(mockAddressResolver).resolveAddress(hostname);
-    verify(mockResourceResolver).resolveTxt("_grpc_config." + hostname);
-    verify(mockResourceResolver).resolveSrv(mockAddressResolver, "_grpclb._tcp." + hostname);
-  }
-
-  @Test
-  public void resolveAll_onlyBalancers() throws Exception {
-    String hostname = "addr.fake";
-    EquivalentAddressGroup balancerAddr = new EquivalentAddressGroup(new SocketAddress() {});
-
-    AddressResolver mockAddressResolver = mock(AddressResolver.class);
-    when(mockAddressResolver.resolveAddress(anyString()))
-        .thenThrow(new UnknownHostException("I really tried"));
+  public void resolve_emptyResult() throws Exception {
+    DnsNameResolver.enableTxt = true;
+    DnsNameResolver nr = newResolver("dns:///addr.fake:1234", 443);
+    nr.setAddressResolver(new AddressResolver() {
+      @Override
+      public List<InetAddress> resolveAddress(String host) throws Exception {
+        return Collections.emptyList();
+      }
+    });
     ResourceResolver mockResourceResolver = mock(ResourceResolver.class);
     when(mockResourceResolver.resolveTxt(anyString()))
         .thenReturn(Collections.<String>emptyList());
-    when(mockResourceResolver.resolveSrv(ArgumentMatchers.any(AddressResolver.class), anyString()))
-        .thenReturn(Collections.singletonList(balancerAddr));
-    boolean resovleSrv = true;
-    boolean resolveTxt = true;
 
-    ResolutionResults res = DnsNameResolver.resolveAll(
-        mockAddressResolver, mockResourceResolver, resovleSrv, resolveTxt, hostname);
-    assertThat(res.addresses).isEmpty();
-    assertThat(res.balancerAddresses).containsExactly(balancerAddr);
-    assertThat(res.txtRecords).isEmpty();
-    verify(mockAddressResolver).resolveAddress(hostname);
-    verify(mockResourceResolver).resolveTxt("_grpc_config." + hostname);
-    verify(mockResourceResolver).resolveSrv(mockAddressResolver, "_grpclb._tcp." + hostname);
+    nr.setResourceResolver(mockResourceResolver);
+
+    nr.start(mockListener);
+    assertThat(fakeExecutor.runDueTasks()).isEqualTo(1);
+
+    ArgumentCaptor<ResolutionResult> ac = ArgumentCaptor.forClass(ResolutionResult.class);
+    verify(mockListener).onResult(ac.capture());
+    verifyNoMoreInteractions(mockListener);
+    assertThat(ac.getValue().getAddresses()).isEmpty();
+    assertThat(ac.getValue().getAttributes()).isEqualTo(Attributes.EMPTY);
+    assertThat(ac.getValue().getServiceConfig()).isNull();
+    verify(mockResourceResolver, never()).resolveSrv(anyString());
   }
 
   @Test
-  public void resolveAll_balancerLookupFails() throws Exception {
-    final String hostname = "addr.fake";
-    final Inet4Address backendAddr = InetAddresses.fromInteger(0x7f000001);
+  public void resolve_nullResourceResolver() throws Exception {
+    DnsNameResolver.enableTxt = true;
+    InetAddress backendAddr = InetAddresses.fromInteger(0x7f000001);
     AddressResolver mockAddressResolver = mock(AddressResolver.class);
     when(mockAddressResolver.resolveAddress(anyString()))
-        .thenReturn(Collections.<InetAddress>singletonList(backendAddr));
+        .thenReturn(Collections.singletonList(backendAddr));
+    String name = "foo.googleapis.com";
+
+    DnsNameResolver resolver = newResolver(name, 81);
+    resolver.setAddressResolver(mockAddressResolver);
+    resolver.setResourceResolver(null);
+    resolver.start(mockListener);
+    assertEquals(1, fakeExecutor.runDueTasks());
+    verify(mockListener).onResult(resultCaptor.capture());
+    ResolutionResult result = resultCaptor.getValue();
+    InetSocketAddress resolvedBackendAddr =
+        (InetSocketAddress) Iterables.getOnlyElement(
+            Iterables.getOnlyElement(result.getAddresses()).getAddresses());
+    assertThat(resolvedBackendAddr.getAddress()).isEqualTo(backendAddr);
+    verify(mockAddressResolver).resolveAddress(name);
+    assertThat(result.getAttributes()).isEqualTo(Attributes.EMPTY);
+    assertThat(result.getServiceConfig()).isNull();
+  }
+
+  @Test
+  public void resolve_nullResourceResolver_addressFailure() throws Exception {
+    DnsNameResolver.enableTxt = true;
+    AddressResolver mockAddressResolver = mock(AddressResolver.class);
+    when(mockAddressResolver.resolveAddress(anyString()))
+        .thenThrow(new IOException("no addr"));
+    String name = "foo.googleapis.com";
+
+    DnsNameResolver resolver = newResolver(name, 81);
+    resolver.setAddressResolver(mockAddressResolver);
+    resolver.setResourceResolver(null);
+    resolver.start(mockListener);
+    assertEquals(1, fakeExecutor.runDueTasks());
+    verify(mockListener).onError(errorCaptor.capture());
+    Status errorStatus = errorCaptor.getValue();
+    assertThat(errorStatus.getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat(errorStatus.getCause()).hasMessageThat().contains("no addr");
+  }
+
+  @Test
+  public void resolve_presentResourceResolver() throws Exception {
+    DnsNameResolver.enableTxt = true;
+    InetAddress backendAddr = InetAddresses.fromInteger(0x7f000001);
+    AddressResolver mockAddressResolver = mock(AddressResolver.class);
+    when(mockAddressResolver.resolveAddress(anyString()))
+        .thenReturn(Collections.singletonList(backendAddr));
     ResourceResolver mockResourceResolver = mock(ResourceResolver.class);
     when(mockResourceResolver.resolveTxt(anyString()))
-        .thenReturn(Collections.singletonList("service config"));
-    when(mockResourceResolver.resolveSrv(ArgumentMatchers.any(AddressResolver.class), anyString()))
-        .thenThrow(new Exception("something like javax.naming.NamingException"));
-    boolean resovleSrv = true;
-    boolean resolveTxt = true;
+        .thenReturn(
+            Collections.singletonList(
+                "grpc_config=[{\"clientLanguage\": [\"java\"], \"serviceConfig\": {}}]"));
+    ServiceConfigParser serviceConfigParser = new ServiceConfigParser() {
+      @Override
+      public ConfigOrError parseServiceConfig(Map<String, ?> rawServiceConfig) {
+        return ConfigOrError.fromConfig(rawServiceConfig);
+      }
+    };
+    NameResolver.Args args =
+        NameResolver.Args.newBuilder()
+            .setDefaultPort(DEFAULT_PORT)
+            .setProxyDetector(GrpcUtil.NOOP_PROXY_DETECTOR)
+            .setSynchronizationContext(syncContext)
+            .setServiceConfigParser(serviceConfigParser)
+            .build();
 
-    ResolutionResults res = DnsNameResolver.resolveAll(
-        mockAddressResolver, mockResourceResolver, resovleSrv, resolveTxt, hostname);
-    assertThat(res.addresses).containsExactly(backendAddr);
-    assertThat(res.balancerAddresses).isEmpty();
-    assertThat(res.txtRecords).containsExactly("service config");
-    verify(mockAddressResolver).resolveAddress(hostname);
-    verify(mockResourceResolver).resolveTxt("_grpc_config." + hostname);
-    verify(mockResourceResolver).resolveSrv(mockAddressResolver, "_grpclb._tcp." + hostname);
+    String name = "foo.googleapis.com";
+    DnsNameResolver resolver = newResolver(name, Stopwatch.createUnstarted(), false, args);
+    resolver.setAddressResolver(mockAddressResolver);
+    resolver.setResourceResolver(mockResourceResolver);
+
+    resolver.start(mockListener);
+    assertEquals(1, fakeExecutor.runDueTasks());
+    verify(mockListener).onResult(resultCaptor.capture());
+    ResolutionResult result = resultCaptor.getValue();
+    InetSocketAddress resolvedBackendAddr =
+        (InetSocketAddress) Iterables.getOnlyElement(
+            Iterables.getOnlyElement(result.getAddresses()).getAddresses());
+    assertThat(resolvedBackendAddr.getAddress()).isEqualTo(backendAddr);
+    assertThat(result.getServiceConfig().getConfig()).isNotNull();
+    verify(mockAddressResolver).resolveAddress(name);
+    verify(mockResourceResolver).resolveTxt("_grpc_config." + name);
+  }
+
+  @Test
+  public void resolve_addressFailure_neverLookUpServiceConfig() throws Exception {
+    DnsNameResolver.enableTxt = true;
+    AddressResolver mockAddressResolver = mock(AddressResolver.class);
+    when(mockAddressResolver.resolveAddress(anyString()))
+        .thenThrow(new IOException("no addr"));
+    String name = "foo.googleapis.com";
+
+    ResourceResolver mockResourceResolver = mock(ResourceResolver.class);
+    DnsNameResolver resolver = newResolver(name, 81);
+    resolver.setAddressResolver(mockAddressResolver);
+    resolver.setResourceResolver(mockResourceResolver);
+    resolver.start(mockListener);
+    assertEquals(1, fakeExecutor.runDueTasks());
+    verify(mockListener).onError(errorCaptor.capture());
+    Status errorStatus = errorCaptor.getValue();
+    assertThat(errorStatus.getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat(errorStatus.getCause()).hasMessageThat().contains("no addr");
+    verify(mockResourceResolver, never()).resolveTxt(anyString());
+  }
+
+  @Test
+  public void resolve_serviceConfigLookupFails_nullServiceConfig() throws Exception {
+    DnsNameResolver.enableTxt = true;
+    InetAddress backendAddr = InetAddresses.fromInteger(0x7f000001);
+    AddressResolver mockAddressResolver = mock(AddressResolver.class);
+    when(mockAddressResolver.resolveAddress(anyString()))
+        .thenReturn(Collections.singletonList(backendAddr));
+    String name = "foo.googleapis.com";
+    ResourceResolver mockResourceResolver = mock(ResourceResolver.class);
+    when(mockResourceResolver.resolveTxt(anyString()))
+        .thenThrow(new Exception("something like javax.naming.NamingException"));
+
+    DnsNameResolver resolver = newResolver(name, 81);
+    resolver.setAddressResolver(mockAddressResolver);
+    resolver.setResourceResolver(mockResourceResolver);
+    resolver.start(mockListener);
+    assertEquals(1, fakeExecutor.runDueTasks());
+    verify(mockListener).onResult(resultCaptor.capture());
+    ResolutionResult result = resultCaptor.getValue();
+    InetSocketAddress resolvedBackendAddr =
+        (InetSocketAddress) Iterables.getOnlyElement(
+            Iterables.getOnlyElement(result.getAddresses()).getAddresses());
+    assertThat(resolvedBackendAddr.getAddress()).isEqualTo(backendAddr);
+    verify(mockAddressResolver).resolveAddress(name);
+    assertThat(result.getAttributes()).isEqualTo(Attributes.EMPTY);
+    assertThat(result.getServiceConfig()).isNull();
+    verify(mockResourceResolver).resolveTxt(anyString());
+  }
+
+  @Test
+  public void resolve_serviceConfigMalformed_serviceConfigError() throws Exception {
+    DnsNameResolver.enableTxt = true;
+    InetAddress backendAddr = InetAddresses.fromInteger(0x7f000001);
+    AddressResolver mockAddressResolver = mock(AddressResolver.class);
+    when(mockAddressResolver.resolveAddress(anyString()))
+        .thenReturn(Collections.singletonList(backendAddr));
+    String name = "foo.googleapis.com";
+    ResourceResolver mockResourceResolver = mock(ResourceResolver.class);
+    when(mockResourceResolver.resolveTxt(anyString()))
+        .thenReturn(Collections.singletonList("grpc_config=something invalid"));
+
+    DnsNameResolver resolver = newResolver(name, 81);
+    resolver.setAddressResolver(mockAddressResolver);
+    resolver.setResourceResolver(mockResourceResolver);
+    resolver.start(mockListener);
+    assertEquals(1, fakeExecutor.runDueTasks());
+    verify(mockListener).onResult(resultCaptor.capture());
+    ResolutionResult result = resultCaptor.getValue();
+    InetSocketAddress resolvedBackendAddr =
+        (InetSocketAddress) Iterables.getOnlyElement(
+            Iterables.getOnlyElement(result.getAddresses()).getAddresses());
+    assertThat(resolvedBackendAddr.getAddress()).isEqualTo(backendAddr);
+    verify(mockAddressResolver).resolveAddress(name);
+    assertThat(result.getAttributes()).isEqualTo(Attributes.EMPTY);
+    assertThat(result.getServiceConfig()).isNotNull();
+    assertThat(result.getServiceConfig().getError()).isNotNull();
+    verify(mockResourceResolver).resolveTxt(anyString());
   }
 
   @Test

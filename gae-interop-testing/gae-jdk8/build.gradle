@@ -21,7 +21,7 @@ buildscript {
     }
     dependencies {
         classpath 'com.google.cloud.tools:appengine-gradle-plugin:1.3.5'
-        classpath 'com.squareup.okhttp:okhttp:2.5.0'
+        classpath 'com.squareup.okhttp:okhttp:2.7.4'
     }
 }
 
@@ -50,7 +50,9 @@ dependencies {
     compile project(":grpc-okhttp")
     compile project(":grpc-protobuf")
     compile project(":grpc-stub")
-    compile project(":grpc-interop-testing")
+    compile (project(":grpc-interop-testing")) {
+        exclude group: "io.grpc", module: "grpc-netty-shaded"
+    }
     compile libraries.netty_tcnative
 }
 

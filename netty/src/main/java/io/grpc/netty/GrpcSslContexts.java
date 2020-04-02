@@ -56,7 +56,7 @@ public class GrpcSslContexts {
   /*
    * List of ALPN/NPN protocols in order of preference.
    */
-  static final List<String> NEXT_PROTOCOL_VERSIONS =
+  private static final List<String> NEXT_PROTOCOL_VERSIONS =
       Collections.unmodifiableList(Arrays.asList(HTTP2_VERSION));
 
   /*

@@ -130,6 +130,24 @@ public class JsonUtil {
   }
 
   /**
+   * Gets a number from an object for the given key, casted to an long.  If the key is not
+   * present, this returns null.  If the value is not a Double or loses precision when cast to an
+   * long, throws an exception.
+   */
+  public static Long getNumberAsLong(Map<String, ?> obj, String key) {
+    Double d = getNumber(obj, key);
+    if (d == null) {
+      return null;
+    }
+    long l = d.longValue();
+    if (l != d) {
+      throw new ClassCastException("Number expected to be long: " + d);
+    }
+    return l;
+  }
+
+
+  /**
    * Gets a string from an object for the given key.  If the key is not present, this returns null.
    * If the value is not a String, throws an exception.
    */

@@ -71,6 +71,9 @@ if [[ -z "${SKIP_TESTS:-}" ]]; then
   pushd examples/example-tls
   mvn clean verify --batch-mode
   popd
+  pushd examples/example-xds
+  ../gradlew build $GRADLE_FLAGS
+  popd
   # TODO(zpencer): also build the GAE examples
 fi
 

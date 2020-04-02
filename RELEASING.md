@@ -6,7 +6,7 @@ Build Environments
 We deploy GRPC to Maven Central under the following systems:
 - Ubuntu 14.04 with Docker 13.03.0 that runs CentOS 6.9
 - Windows 7 64-bit with Visual Studio
-- Mac OS X 10.12.6
+- Mac OS X 10.14.6
 
 Other systems may also work, but we haven't verified them.
 
@@ -32,10 +32,7 @@ them before continuing, and set them again when resuming.
 $ MAJOR=1 MINOR=7 PATCH=0 # Set appropriately for new release
 $ VERSION_FILES=(
   build.gradle
-  android/build.gradle
-  android-interop-testing/app/build.gradle
   core/src/main/java/io/grpc/internal/GrpcUtil.java
-  cronet/build.gradle
   examples/build.gradle
   examples/pom.xml
   examples/android/clientcache/app/build.gradle
@@ -45,12 +42,15 @@ $ VERSION_FILES=(
   examples/example-alts/build.gradle
   examples/example-gauth/build.gradle
   examples/example-gauth/pom.xml
+  examples/example-jwt-auth/build.gradle
+  examples/example-jwt-auth/pom.xml
   examples/example-hostname/build.gradle
   examples/example-hostname/pom.xml
   examples/example-kotlin/build.gradle
   examples/example-kotlin/android/helloworld/app/build.gradle
   examples/example-tls/build.gradle
   examples/example-tls/pom.xml
+  examples/example-xds/build.gradle
   )
 ```
 
@@ -122,6 +122,7 @@ Tagging the Release
    $ ${EDITOR:-nano -w} README.md
    $ ${EDITOR:-nano -w} documentation/android-channel-builder.md
    $ ${EDITOR:-nano -w} cronet/README.md
+   $ ${EDITOR:-nano -w} examples/example-xds/README.md
    $ git commit -a -m "Update README etc to reference $MAJOR.$MINOR.$PATCH"
    ```
 3. Change root build files to remove "-SNAPSHOT" for the next release version

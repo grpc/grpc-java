@@ -19,6 +19,7 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkArgument;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -34,7 +35,11 @@ import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
+import io.grpc.xds.EnvoyProtoData.Route;
+import io.grpc.xds.EnvoyServerProtoData.Listener;
+import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -59,13 +64,29 @@ abstract class XdsClient {
    */
   static final class ConfigUpdate {
     private final String clusterName;
+    private final List<Route> routes;
 
-    private ConfigUpdate(String clusterName) {
+    private ConfigUpdate(String clusterName, List<Route> routes) {
       this.clusterName = clusterName;
+      this.routes = routes;
     }
 
     String getClusterName() {
       return clusterName;
+    }
+
+    public List<Route> getRoutes() {
+      return routes;
+    }
+
+    @Override
+    public String toString() {
+      return
+          MoreObjects
+              .toStringHelper(this)
+              .add("clusterName", clusterName)
+              .add("routes", routes)
+              .toString();
     }
 
     static Builder newBuilder() {
@@ -73,6 +94,7 @@ abstract class XdsClient {
     }
 
     static final class Builder {
+      private final List<Route> routes = new ArrayList<>();
       private String clusterName;
 
       // Use ConfigUpdate.newBuilder().
@@ -84,9 +106,14 @@ abstract class XdsClient {
         return this;
       }
 
+      Builder addRoutes(Collection<Route> route) {
+        routes.addAll(route);
+        return this;
+      }
+
       ConfigUpdate build() {
         Preconditions.checkState(clusterName != null, "clusterName is not set");
-        return new ConfigUpdate(clusterName);
+        return new ConfigUpdate(clusterName, Collections.unmodifiableList(routes));
       }
     }
   }
@@ -98,19 +125,22 @@ abstract class XdsClient {
    */
   static final class ClusterUpdate {
     private final String clusterName;
+    @Nullable
     private final String edsServiceName;
     private final String lbPolicy;
-    private final boolean enableLrs;
+    @Nullable
     private final String lrsServerName;
     private final UpstreamTlsContext upstreamTlsContext;
 
-    private ClusterUpdate(String clusterName, String edsServiceName, String lbPolicy,
-        boolean enableLrs, @Nullable String lrsServerName,
+    private ClusterUpdate(
+        String clusterName,
+        @Nullable String edsServiceName,
+        String lbPolicy,
+        @Nullable String lrsServerName,
         @Nullable UpstreamTlsContext upstreamTlsContext) {
       this.clusterName = clusterName;
       this.edsServiceName = edsServiceName;
       this.lbPolicy = lbPolicy;
-      this.enableLrs = enableLrs;
       this.lrsServerName = lrsServerName;
       this.upstreamTlsContext = upstreamTlsContext;
     }
@@ -122,6 +152,7 @@ abstract class XdsClient {
     /**
      * Returns the resource name for EDS requests.
      */
+    @Nullable
     String getEdsServiceName() {
       return edsServiceName;
     }
@@ -135,15 +166,8 @@ abstract class XdsClient {
     }
 
     /**
-     * Returns true if LRS is enabled.
-     */
-    boolean isEnableLrs() {
-      return enableLrs;
-    }
-
-    /**
      * Returns the server name to send client load reports to if LRS is enabled. {@code null} if
-     * {@link #isEnableLrs()} returns {@code false}.
+     * load reporting is disabled for this cluster.
      */
     @Nullable
     String getLrsServerName() {
@@ -156,15 +180,28 @@ abstract class XdsClient {
       return upstreamTlsContext;
     }
 
+    @Override
+    public String toString() {
+      return
+          MoreObjects
+              .toStringHelper(this)
+              .add("clusterName", clusterName)
+              .add("edsServiceName", edsServiceName)
+              .add("lbPolicy", lbPolicy)
+              .add("lrsServerName", lrsServerName)
+              .add("upstreamTlsContext", upstreamTlsContext)
+              .toString();
+    }
+
     static Builder newBuilder() {
       return new Builder();
     }
 
     static final class Builder {
       private String clusterName;
+      @Nullable
       private String edsServiceName;
       private String lbPolicy;
-      private boolean enableLrs;
       @Nullable
       private String lrsServerName;
       @Nullable
@@ -189,11 +226,6 @@ abstract class XdsClient {
         return this;
       }
 
-      Builder setEnableLrs(boolean enableLrs) {
-        this.enableLrs = enableLrs;
-        return this;
-      }
-
       Builder setLrsServerName(String lrsServerName) {
         this.lrsServerName = lrsServerName;
         return this;
@@ -207,13 +239,10 @@ abstract class XdsClient {
       ClusterUpdate build() {
         Preconditions.checkState(clusterName != null, "clusterName is not set");
         Preconditions.checkState(lbPolicy != null, "lbPolicy is not set");
-        Preconditions.checkState(
-            (enableLrs && lrsServerName != null) || (!enableLrs && lrsServerName == null),
-            "lrsServerName is not set while LRS is enabled "
-                + "OR lrsServerName is set while LRS is not enabled");
+
         return
-            new ClusterUpdate(clusterName, edsServiceName == null ? clusterName : edsServiceName,
-                lbPolicy, enableLrs, lrsServerName, upstreamTlsContext);
+            new ClusterUpdate(
+                clusterName, edsServiceName, lbPolicy, lrsServerName, upstreamTlsContext);
       }
     }
   }
@@ -279,6 +308,17 @@ abstract class XdsClient {
       return Objects.hash(clusterName, localityLbEndpointsMap, dropPolicies);
     }
 
+    @Override
+    public String toString() {
+      return
+          MoreObjects
+              .toStringHelper(this)
+              .add("clusterName", clusterName)
+              .add("localityLbEndpointsMap", localityLbEndpointsMap)
+              .add("dropPolicies", dropPolicies)
+              .toString();
+    }
+
     static final class Builder {
       private String clusterName;
       private Map<Locality, LocalityLbEndpoints> localityLbEndpointsMap = new LinkedHashMap<>();
@@ -310,6 +350,52 @@ abstract class XdsClient {
                 clusterName,
                 ImmutableMap.copyOf(localityLbEndpointsMap),
                 ImmutableList.copyOf(dropPolicies));
+      }
+    }
+  }
+
+  /**
+   * Updates via resource discovery RPCs using LDS. Includes {@link Listener} object containing
+   * config for security, RBAC or other server side features such as rate limit.
+   */
+  static final class ListenerUpdate {
+    // TODO(sanjaypujare): flatten structure by moving Listener class members here.
+    private final Listener listener;
+
+    private ListenerUpdate(Listener listener) {
+      this.listener = listener;
+    }
+
+    public Listener getListener() {
+      return listener;
+    }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(this)
+          .add("listener", listener)
+          .toString();
+    }
+
+    static Builder newBuilder() {
+      return new Builder();
+    }
+
+    static final class Builder {
+      private Listener listener;
+
+      // Use ListenerUpdate.newBuilder().
+      private Builder() {
+      }
+
+      Builder setListener(Listener listener) {
+        this.listener = listener;
+        return this;
+      }
+
+      ListenerUpdate build() {
+        Preconditions.checkState(listener != null, "listener is not set");
+        return new ListenerUpdate(listener);
       }
     }
   }
@@ -348,30 +434,39 @@ abstract class XdsClient {
   }
 
   /**
+   * Listener watcher interface. To be used by {@link io.grpc.xds.internal.sds.XdsServerBuilder}.
+   */
+  interface ListenerWatcher {
+
+    /**
+     * Called when receiving an update on Listener configuration.
+     */
+    void onListenerChanged(ListenerUpdate update);
+
+    void onError(Status error);
+  }
+
+  /**
    * Shutdown this {@link XdsClient} and release resources.
    */
   abstract void shutdown();
 
   /**
-   * Registers a watcher to receive {@link ConfigUpdate} for service with the given hostname and
-   * port.
+   * Registers a watcher to receive {@link ConfigUpdate} for service with the given target
+   * authority.
    *
    * <p>Unlike watchers for cluster data and endpoint data, at most one ConfigWatcher can be
    * registered. Once it is registered, it cannot be unregistered.
    *
-   * @param hostName the host name part of the "xds:" URI for the server name that the gRPC client
-   *     targets for. Must NOT contain port.
-   * @param port the port part of the "xds:" URI for the server name that the gRPC client targets
-   *     for. -1 if not specified.
+   * @param targetAuthority authority of the "xds:" URI for the server name that the gRPC client
+   *     targets for.
    * @param watcher the {@link ConfigWatcher} to receive {@link ConfigUpdate}.
    */
-  void watchConfigData(String hostName, int port, ConfigWatcher watcher) {
+  void watchConfigData(String targetAuthority, ConfigWatcher watcher) {
   }
 
   /**
    * Registers a data watcher for the given cluster.
-   *
-   * <p>Adding the same watcher for the same cluster more than once is a no-op.
    */
   void watchClusterData(String clusterName, ClusterWatcher watcher) {
   }
@@ -379,16 +474,12 @@ abstract class XdsClient {
   /**
    * Unregisters the given cluster watcher, which was registered to receive updates for the
    * given cluster.
-   *
-   * <p>Cancelling a watcher that was not registered for the given cluster is a no-op.
    */
   void cancelClusterDataWatch(String clusterName, ClusterWatcher watcher) {
   }
 
   /**
    * Registers a data watcher for endpoints in the given cluster.
-   *
-   * <p>Adding the same watcher for the same cluster more than once is a no-op.
    */
   void watchEndpointData(String clusterName, EndpointWatcher watcher) {
   }
@@ -396,23 +487,32 @@ abstract class XdsClient {
   /**
    * Unregisters the given endpoints watcher, which was registered to receive updates for
    * endpoints information in the given cluster.
-   *
-   * <p>Cancelling a watcher that was not registered for the given cluster is a no-op.
    */
   void cancelEndpointDataWatch(String clusterName, EndpointWatcher watcher) {
   }
 
   /**
-   * Starts reporting client load stats to a remote server for the given cluster.
+   * Registers a watcher for a Listener with the given port.
    */
-  LoadReportClient reportClientStats(String clusterName, String serverUri) {
+  void watchListenerData(int port, ListenerWatcher watcher) {
+  }
+
+  /**
+   * Report client load stats to a remote server for the given cluster:cluster_service.
+   *
+   * <p>Note: currently we can only report loads for a single cluster:cluster_service,
+   * as the design for adding clusters to report loads for while load reporting is
+   * happening is undefined.
+   */
+  void reportClientStats(
+      String clusterName, @Nullable String clusterServiceName, LoadStatsStore loadStatsStore) {
     throw new UnsupportedOperationException();
   }
 
   /**
-   * Stops reporting client load stats to the remote server for the given cluster.
+   * Stops reporting client load stats to the remote server for the given cluster:cluster_service.
    */
-  void cancelClientStatsReport(String clusterName) {
+  void cancelClientStatsReport(String clusterName, @Nullable String clusterServiceName) {
   }
 
   abstract static class XdsClientFactory {
@@ -489,19 +589,23 @@ abstract class XdsClient {
       @Override
       ManagedChannel createChannel(List<ServerInfo> servers) {
         checkArgument(!servers.isEmpty(), "No management server provided.");
+        XdsLogger logger = XdsLogger.withPrefix("xds-client-channel-factory");
         ServerInfo serverInfo = servers.get(0);
         String serverUri = serverInfo.getServerUri();
+        logger.log(XdsLogLevel.INFO, "Creating channel to {0}", serverUri);
         List<ChannelCreds> channelCredsList = serverInfo.getChannelCredentials();
         ManagedChannelBuilder<?> channelBuilder = null;
         // Use the first supported channel credentials configuration.
         // Currently, only "google_default" is supported.
         for (ChannelCreds creds : channelCredsList) {
           if (creds.getType().equals("google_default")) {
+            logger.log(XdsLogLevel.INFO, "Using channel credentials: google_default");
             channelBuilder = GoogleDefaultChannelBuilder.forTarget(serverUri);
             break;
           }
         }
         if (channelBuilder == null) {
+          logger.log(XdsLogLevel.INFO, "Using default channel credentials");
           channelBuilder = ManagedChannelBuilder.forTarget(serverUri);
         }
 

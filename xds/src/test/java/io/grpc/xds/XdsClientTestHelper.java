@@ -45,6 +45,7 @@ import io.envoyproxy.envoy.api.v2.core.SocketAddress;
 import io.envoyproxy.envoy.api.v2.listener.FilterChain;
 import io.envoyproxy.envoy.api.v2.route.Route;
 import io.envoyproxy.envoy.api.v2.route.RouteAction;
+import io.envoyproxy.envoy.api.v2.route.RouteMatch;
 import io.envoyproxy.envoy.api.v2.route.VirtualHost;
 import io.envoyproxy.envoy.config.listener.v2.ApiListener;
 import io.envoyproxy.envoy.type.FractionalPercent;
@@ -104,17 +105,19 @@ class XdsClientTestHelper {
   }
 
   static VirtualHost buildVirtualHost(List<String> domains, String clusterName) {
-    return
-        VirtualHost.newBuilder()
-            .setName("virtualhost00.googleapis.com")  // don't care
-            .addAllDomains(domains)
-            .addRoutes(Route.newBuilder()
-                .setRoute(RouteAction.newBuilder().setCluster("whatever cluster")))
-            .addRoutes(
-                // Only the last (default) route matters.
-                Route.newBuilder()
-                    .setRoute(RouteAction.newBuilder().setCluster(clusterName)))
-            .build();
+    return VirtualHost.newBuilder()
+        .setName("virtualhost00.googleapis.com") // don't care
+        .addAllDomains(domains)
+        .addRoutes(
+            Route.newBuilder()
+                .setRoute(RouteAction.newBuilder().setCluster("whatever cluster"))
+                .setMatch(RouteMatch.newBuilder().setPrefix("")))
+        .addRoutes(
+            // Only the last (default) route matters.
+            Route.newBuilder()
+                .setRoute(RouteAction.newBuilder().setCluster(clusterName))
+                .setMatch(RouteMatch.newBuilder().setPrefix("")))
+        .build();
   }
 
   static Cluster buildCluster(String clusterName, @Nullable String edsServiceName,
@@ -122,6 +125,7 @@ class XdsClientTestHelper {
     return buildSecureCluster(clusterName, edsServiceName, enableLrs, null);
   }
 
+  @SuppressWarnings("deprecation")
   static Cluster buildSecureCluster(String clusterName, @Nullable String edsServiceName,
       boolean enableLrs, @Nullable UpstreamTlsContext upstreamTlsContext) {
     Cluster.Builder clusterBuilder = Cluster.newBuilder();
@@ -145,6 +149,7 @@ class XdsClientTestHelper {
     return clusterBuilder.build();
   }
 
+  @SuppressWarnings("deprecation")
   static ClusterLoadAssignment buildClusterLoadAssignment(String clusterName,
       List<io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints> localityLbEndpoints,
       List<Policy.DropOverload> dropOverloads) {

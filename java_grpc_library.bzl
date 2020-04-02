@@ -1,7 +1,5 @@
 """Build rule for java_grpc_library."""
 
-load("@bazel_tools//tools/jdk:toolchain_utils.bzl", "find_java_runtime_toolchain", "find_java_toolchain")
-
 _JavaRpcToolchainInfo = provider(
     fields = [
         "host_javabase",
@@ -107,8 +105,8 @@ def _java_rpc_library_impl(ctx):
 
     java_info = java_common.compile(
         ctx,
-        java_toolchain = find_java_toolchain(ctx, toolchain.java_toolchain),
-        host_javabase = find_java_runtime_toolchain(ctx, toolchain.host_javabase),
+        java_toolchain = toolchain.java_toolchain[java_common.JavaToolchainInfo],
+        host_javabase = toolchain.host_javabase[java_common.JavaRuntimeInfo],
         source_jars = [srcjar],
         output = ctx.outputs.jar,
         output_source_jar = ctx.outputs.srcjar,

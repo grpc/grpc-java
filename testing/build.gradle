@@ -33,3 +33,12 @@ dependencies {
 }
 
 javadoc { exclude 'io/grpc/internal/**' }
+
+jacocoTestReport {
+    classDirectories.from = sourceSets.main.output.collect {
+        fileTree(dir: it,
+        exclude: [
+                '**/io/grpc/internal/testing/**',
+        ])
+    }
+}

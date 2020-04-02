@@ -37,3 +37,20 @@ dependencies {
 }
 
 configureProtoCompilation()
+
+javadoc {
+    exclude 'io/grpc/services/Internal*.java'
+    exclude 'io/grpc/services/internal/*'
+}
+
+jacocoTestReport {
+    classDirectories.from = sourceSets.main.output.collect {
+        fileTree(dir: it,
+        exclude: [
+                '**/io/grpc/binarylog/v1/**',
+                '**/io/grpc/channelz/v1/**',
+                '**/io/grpc/health/v1/**',
+                '**/io/grpc/reflection/v1alpha/**',
+        ])
+    }
+}

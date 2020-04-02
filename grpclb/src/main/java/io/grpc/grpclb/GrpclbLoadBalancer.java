@@ -22,24 +22,16 @@ import static com.google.common.base.Preconditions.checkState;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import io.grpc.Attributes;
-import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
-import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.Status;
 import io.grpc.grpclb.GrpclbState.Mode;
 import io.grpc.internal.BackoffPolicy;
-import io.grpc.internal.GrpcAttributes;
-import io.grpc.internal.ServiceConfigUtil;
-import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.internal.TimeProvider;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
@@ -49,8 +41,8 @@ import javax.annotation.Nullable;
  * or round-robin balancer.
  */
 class GrpclbLoadBalancer extends LoadBalancer {
-  private static final Mode DEFAULT_MODE = Mode.ROUND_ROBIN;
-  private static final Logger logger = Logger.getLogger(GrpclbLoadBalancer.class.getName());
+
+  private static final GrpclbConfig DEFAULT_CONFIG = GrpclbConfig.create(Mode.ROUND_ROBIN);
 
   private final Helper helper;
   private final TimeProvider time;
@@ -58,7 +50,7 @@ class GrpclbLoadBalancer extends LoadBalancer {
   private final SubchannelPool subchannelPool;
   private final BackoffPolicy.Provider backoffPolicyProvider;
 
-  private Mode mode = Mode.ROUND_ROBIN;
+  private GrpclbConfig config = DEFAULT_CONFIG;
 
   // All mutable states in this class are mutated ONLY from Channel Executor
   @Nullable
@@ -75,43 +67,43 @@ class GrpclbLoadBalancer extends LoadBalancer {
     this.stopwatch = checkNotNull(stopwatch, "stopwatch");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     this.subchannelPool = checkNotNull(subchannelPool, "subchannelPool");
-    this.subchannelPool.init(helper, this);
     recreateStates();
     checkNotNull(grpclbState, "grpclbState");
   }
 
-  @Deprecated
   @Override
-  public void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
-    // grpclbState should never be null here since handleSubchannelState cannot be called while the
-    // lb is shutdown.
-    grpclbState.handleSubchannelState(subchannel, newState);
-  }
-
-  @Override
-  @SuppressWarnings("deprecation")  // TODO(creamsoup) migrate to use parsed service config
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-    List<EquivalentAddressGroup> updatedServers = resolvedAddresses.getAddresses();
     Attributes attributes = resolvedAddresses.getAttributes();
-    // LB addresses and backend addresses are treated separately
+    List<EquivalentAddressGroup> newLbAddresses = attributes.get(GrpclbConstants.ATTR_LB_ADDRS);
+    if ((newLbAddresses == null || newLbAddresses.isEmpty())
+        && resolvedAddresses.getAddresses().isEmpty()) {
+      handleNameResolutionError(
+          Status.UNAVAILABLE.withDescription("No backend or balancer addresses found"));
+      return;
+    }
     List<LbAddressGroup> newLbAddressGroups = new ArrayList<>();
-    List<EquivalentAddressGroup> newBackendServers = new ArrayList<>();
-    for (EquivalentAddressGroup server : updatedServers) {
-      String lbAddrAuthority = server.getAttributes().get(GrpcAttributes.ATTR_LB_ADDR_AUTHORITY);
-      if (lbAddrAuthority != null) {
-        newLbAddressGroups.add(new LbAddressGroup(server, lbAddrAuthority));
-      } else {
-        newBackendServers.add(server);
+
+    if (newLbAddresses != null) {
+      for (EquivalentAddressGroup lbAddr : newLbAddresses) {
+        String lbAddrAuthority = lbAddr.getAttributes().get(GrpclbConstants.ATTR_LB_ADDR_AUTHORITY);
+        if (lbAddrAuthority == null) {
+          throw new AssertionError(
+              "This is a bug: LB address " + lbAddr + " does not have an authority.");
+        }
+        newLbAddressGroups.add(new LbAddressGroup(lbAddr, lbAddrAuthority));
       }
     }
 
     newLbAddressGroups = Collections.unmodifiableList(newLbAddressGroups);
-    newBackendServers = Collections.unmodifiableList(newBackendServers);
-    Map<String, ?> rawLbConfigValue = attributes.get(ATTR_LOAD_BALANCING_CONFIG);
-    Mode newMode = retrieveModeFromLbConfig(rawLbConfigValue, helper.getChannelLogger());
-    if (!mode.equals(newMode)) {
-      mode = newMode;
-      helper.getChannelLogger().log(ChannelLogLevel.INFO, "Mode: " + newMode);
+    List<EquivalentAddressGroup> newBackendServers =
+        Collections.unmodifiableList(resolvedAddresses.getAddresses());
+    GrpclbConfig newConfig = (GrpclbConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
+    if (newConfig == null) {
+      newConfig = DEFAULT_CONFIG;
+    }
+    if (!config.equals(newConfig)) {
+      config = newConfig;
+      helper.getChannelLogger().log(ChannelLogLevel.INFO, "Config: " + newConfig);
       recreateStates();
     }
     grpclbState.handleAddresses(newLbAddressGroups, newBackendServers);
@@ -124,40 +116,6 @@ class GrpclbLoadBalancer extends LoadBalancer {
     }
   }
 
-  @VisibleForTesting
-  static Mode retrieveModeFromLbConfig(
-      @Nullable Map<String, ?> rawLbConfigValue, ChannelLogger channelLogger) {
-    try {
-      if (rawLbConfigValue == null) {
-        return DEFAULT_MODE;
-      }
-      List<?> rawChildPolicies = getList(rawLbConfigValue, "childPolicy");
-      if (rawChildPolicies == null) {
-        return DEFAULT_MODE;
-      }
-      List<LbConfig> childPolicies =
-          ServiceConfigUtil.unwrapLoadBalancingConfigList(checkObjectList(rawChildPolicies));
-      for (LbConfig childPolicy : childPolicies) {
-        String childPolicyName = childPolicy.getPolicyName();
-        switch (childPolicyName) {
-          case "round_robin":
-            return Mode.ROUND_ROBIN;
-          case "pick_first":
-            return Mode.PICK_FIRST;
-          default:
-            channelLogger.log(
-                ChannelLogLevel.DEBUG,
-                "grpclb ignoring unsupported child policy " + childPolicyName);
-        }
-      }
-    } catch (RuntimeException e) {
-      channelLogger.log(ChannelLogLevel.WARNING, "Bad grpclb config, using " + DEFAULT_MODE);
-      logger.log(
-          Level.WARNING, "Bad grpclb config: " + rawLbConfigValue + ", using " + DEFAULT_MODE, e);
-    }
-    return DEFAULT_MODE;
-  }
-
   private void resetStates() {
     if (grpclbState != null) {
       grpclbState.shutdown();
@@ -168,8 +126,9 @@ class GrpclbLoadBalancer extends LoadBalancer {
   private void recreateStates() {
     resetStates();
     checkState(grpclbState == null, "Should've been cleared");
-    grpclbState = new GrpclbState(mode, helper, subchannelPool, time, stopwatch,
-        backoffPolicyProvider);
+    grpclbState =
+        new GrpclbState(
+            config, helper, subchannelPool, time, stopwatch, backoffPolicyProvider);
   }
 
   @Override
@@ -184,43 +143,14 @@ class GrpclbLoadBalancer extends LoadBalancer {
     }
   }
 
+  @Override
+  public boolean canHandleEmptyAddressListFromNameResolution() {
+    return true;
+  }
+
   @VisibleForTesting
   @Nullable
   GrpclbState getGrpclbState() {
     return grpclbState;
-  }
-
-  // TODO(carl-mastrangelo): delete getList and checkObjectList once apply is complete for SVCCFG.
-  /**
-   * Gets a list from an object for the given key.  Copy of
-   * {@link io.grpc.internal.ServiceConfigUtil#getList}.
-   */
-  @SuppressWarnings("unchecked")
-  @Nullable
-  private static List<?> getList(Map<String, ?> obj, String key) {
-    assert key != null;
-    if (!obj.containsKey(key)) {
-      return null;
-    }
-    Object value = obj.get(key);
-    if (!(value instanceof List)) {
-      throw new ClassCastException(
-          String.format("value '%s' for key '%s' in %s is not List", value, key, obj));
-    }
-    return (List<?>) value;
-  }
-
-  /**
-   * Copy of {@link io.grpc.internal.ServiceConfigUtil#checkObjectList}.
-   */
-  @SuppressWarnings("unchecked")
-  private static List<Map<String, ?>> checkObjectList(List<?> rawList) {
-    for (int i = 0; i < rawList.size(); i++) {
-      if (!(rawList.get(i) instanceof Map)) {
-        throw new ClassCastException(
-            String.format("value %s for idx %d in %s is not object", rawList.get(i), i, rawList));
-      }
-    }
-    return (List<Map<String, ?>>) rawList;
   }
 }
