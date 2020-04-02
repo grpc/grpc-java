@@ -23,6 +23,7 @@ import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
+import com.google.gson.Gson;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
@@ -180,7 +181,12 @@ final class XdsNameResolver extends NameResolver {
 
       Map<String, ?> serviceConfig =
           ImmutableMap.of("loadBalancingConfig", ImmutableList.of(rawLbConfig));
-      logger.log(XdsLogLevel.INFO, "Generated service config:\n{0}", serviceConfig);
+      if (logger.isLoggable(XdsLogLevel.INFO)) {
+        logger.log(
+            XdsLogLevel.INFO,
+            "Generated service config:\n{0}",
+            new Gson().toJson(serviceConfig));
+      }
 
       Attributes attrs =
           Attributes.newBuilder()
