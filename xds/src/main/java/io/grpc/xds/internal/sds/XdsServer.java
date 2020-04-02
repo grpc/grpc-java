@@ -18,7 +18,6 @@ package io.grpc.xds.internal.sds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
-import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Server;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.xds.XdsClientWrapperForServerSds;
@@ -27,20 +26,26 @@ import java.io.IOException;
 import java.net.SocketAddress;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
-import javax.annotation.Nullable;
 
 /**
  * Wraps a {@link Server} delegate and {@link XdsClientWrapperForServerSds} and intercepts
  * {@link Server#shutdown()} etc to properly shut down the {@link XdsClientWrapperForServerSds}
  * object.
  */
-@VisibleForTesting
-public final class XdsServer extends Server {
+final class XdsServer extends Server {
   private final Server delegate;
-  @Nullable private final XdsClientWrapperForServerSds xdsClientWrapperForServerSds;
+  private final XdsClientWrapperForServerSds xdsClientWrapperForServerSds;
 
-  XdsServer(Server delegate, XdsClientWrapperForServerSds xdsClientWrapperForServerSds) {
+  static Server newInstance(
+      Server delegate, XdsClientWrapperForServerSds xdsClientWrapperForServerSds) {
+    return (xdsClientWrapperForServerSds == null)
+        ? delegate
+        : new XdsServer(delegate, xdsClientWrapperForServerSds);
+  }
+
+  private XdsServer(Server delegate, XdsClientWrapperForServerSds xdsClientWrapperForServerSds) {
     checkNotNull(delegate, "delegate");
+    checkNotNull(xdsClientWrapperForServerSds, "xdsClientWrapperForServerSds");
     this.delegate = delegate;
     this.xdsClientWrapperForServerSds = xdsClientWrapperForServerSds;
   }

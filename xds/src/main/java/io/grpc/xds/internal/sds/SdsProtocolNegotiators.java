@@ -255,21 +255,23 @@ public final class SdsProtocolNegotiators {
   @VisibleForTesting
   public static final class ServerSdsProtocolNegotiator implements ProtocolNegotiator {
 
-    private DownstreamTlsContext downstreamTlsContext;
+    private final DownstreamTlsContext downstreamTlsContext;
     private final XdsClientWrapperForServerSds xdsClientWrapperForServerSds;
 
     ServerSdsProtocolNegotiator(
         DownstreamTlsContext downstreamTlsContext, int port, SynchronizationContext syncContext) {
-      this.downstreamTlsContext = downstreamTlsContext;
-      XdsClientWrapperForServerSds localXdsClientWrapperForServerSds;
+      this(downstreamTlsContext, getXdsClientWrapperForServerSds(port, syncContext));
+    }
+
+    private static XdsClientWrapperForServerSds getXdsClientWrapperForServerSds(
+        int port, SynchronizationContext syncContext) {
       try {
-        localXdsClientWrapperForServerSds =
-            XdsClientWrapperForServerSds.newInstance(port, Bootstrapper.getInstance(), syncContext);
+        return XdsClientWrapperForServerSds.newInstance(
+            port, Bootstrapper.getInstance(), syncContext);
       } catch (Exception e) {
         logger.log(Level.FINE, "Fallback to plaintext due to exception", e);
-        localXdsClientWrapperForServerSds = null;
+        return null;
       }
-      this.xdsClientWrapperForServerSds = localXdsClientWrapperForServerSds;
     }
 
     @VisibleForTesting

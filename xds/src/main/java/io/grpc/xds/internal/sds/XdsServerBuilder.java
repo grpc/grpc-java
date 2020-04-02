@@ -179,14 +179,14 @@ public final class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
   }
 
   /**
-   * Creates an XdsServer using the given serverSdsProtocolNegotiator: gets the
+   * Creates a Server using the given serverSdsProtocolNegotiator: gets the
    * getXdsClientWrapperForServerSds from the serverSdsProtocolNegotiator.
    */
   @VisibleForTesting
-  public XdsServer createXdsServer(
+  public Server createXdsServer(
       SdsProtocolNegotiators.ServerSdsProtocolNegotiator serverSdsProtocolNegotiator) {
     delegate.protocolNegotiator(serverSdsProtocolNegotiator);
-    return new XdsServer(
+    return XdsServer.newInstance(
         delegate.build(), serverSdsProtocolNegotiator.getXdsClientWrapperForServerSds());
   }
 }
