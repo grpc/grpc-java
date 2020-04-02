@@ -65,7 +65,7 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
-import io.grpc.NameResolver.Factory;
+import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
@@ -93,10 +93,10 @@ import io.grpc.stub.StreamObserver;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.text.MessageFormat;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -169,10 +169,10 @@ public class GrpclbLoadBalancerTest {
   @Captor
   private ArgumentCaptor<StreamObserver<LoadBalanceResponse>> lbResponseObserverCaptor;
   private final FakeClock fakeClock = new FakeClock();
-  private final LinkedList<StreamObserver<LoadBalanceRequest>> lbRequestObservers =
-      new LinkedList<>();
-  private final LinkedList<Subchannel> mockSubchannels = new LinkedList<>();
-  private final LinkedList<ManagedChannel> fakeOobChannels = new LinkedList<>();
+  private final ArrayDeque<StreamObserver<LoadBalanceRequest>> lbRequestObservers =
+      new ArrayDeque<>();
+  private final ArrayDeque<Subchannel> mockSubchannels = new ArrayDeque<>();
+  private final ArrayDeque<ManagedChannel> fakeOobChannels = new ArrayDeque<>();
   private final ArrayList<Subchannel> unpooledSubchannelTracker = new ArrayList<>();
   private final ArrayList<ManagedChannel> oobChannelTracker = new ArrayList<>();
   private final SynchronizationContext syncContext = new SynchronizationContext(
@@ -2632,8 +2632,8 @@ public class GrpclbLoadBalancerTest {
 
     @Override
     @SuppressWarnings("deprecation")
-    public Factory getNameResolverFactory() {
-      return mock(Factory.class);
+    public NameResolver.Factory getNameResolverFactory() {
+      return mock(NameResolver.Factory.class);
     }
 
     @Override
