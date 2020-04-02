@@ -30,6 +30,7 @@ import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerStreamTracer;
 import io.grpc.ServerTransportFilter;
 import io.grpc.SynchronizationContext;
+import io.grpc.netty.InternalProtocolNegotiator;
 import io.grpc.netty.NettyServerBuilder;
 
 import java.io.File;
@@ -172,10 +173,10 @@ public final class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
               panicMode = true;
             }
           });
-    SdsProtocolNegotiators.ServerSdsProtocolNegotiator serverSdsProtocolNegotiator =
+    InternalProtocolNegotiator.ProtocolNegotiator serverProtocolNegotiator =
         SdsProtocolNegotiators.serverProtocolNegotiator(
             this.downstreamTlsContext, port, syncContext);
-    return createXdsServer(serverSdsProtocolNegotiator);
+    return createXdsServer(serverProtocolNegotiator);
   }
 
   /**
@@ -184,9 +185,15 @@ public final class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
    */
   @VisibleForTesting
   public Server createXdsServer(
-      SdsProtocolNegotiators.ServerSdsProtocolNegotiator serverSdsProtocolNegotiator) {
-    delegate.protocolNegotiator(serverSdsProtocolNegotiator);
-    return XdsServer.newInstance(
-        delegate.build(), serverSdsProtocolNegotiator.getXdsClientWrapperForServerSds());
+          InternalProtocolNegotiator.ProtocolNegotiator serverProtocolNegotiator) {
+    delegate.protocolNegotiator(serverProtocolNegotiator);
+    if (serverProtocolNegotiator instanceof SdsProtocolNegotiators.ServerSdsProtocolNegotiator) {
+      SdsProtocolNegotiators.ServerSdsProtocolNegotiator serverSdsProtocolNegotiator =
+              (SdsProtocolNegotiators.ServerSdsProtocolNegotiator)serverProtocolNegotiator;
+      return XdsServer.newInstance(
+          delegate.build(), serverSdsProtocolNegotiator.getXdsClientWrapperForServerSds());
+    } else {
+      return delegate.build();
+    }
   }
 }

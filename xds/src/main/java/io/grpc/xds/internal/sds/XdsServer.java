@@ -26,6 +26,7 @@ import java.io.IOException;
 import java.net.SocketAddress;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import javax.annotation.Nullable;
 
 /**
  * Wraps a {@link Server} delegate and {@link XdsClientWrapperForServerSds} and intercepts
@@ -37,7 +38,7 @@ final class XdsServer extends Server {
   private final XdsClientWrapperForServerSds xdsClientWrapperForServerSds;
 
   static Server newInstance(
-      Server delegate, XdsClientWrapperForServerSds xdsClientWrapperForServerSds) {
+      Server delegate, @Nullable XdsClientWrapperForServerSds xdsClientWrapperForServerSds) {
     return (xdsClientWrapperForServerSds == null)
         ? delegate
         : new XdsServer(delegate, xdsClientWrapperForServerSds);
