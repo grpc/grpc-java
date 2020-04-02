@@ -24,6 +24,7 @@ dependencies {
             project(':grpc-netty'),
             project(':grpc-okhttp'),
             project(':grpc-protobuf'),
+            project(':grpc-services'),
             project(':grpc-stub'),
             project(':grpc-testing'),
             libraries.google_auth_oauth2_http,
