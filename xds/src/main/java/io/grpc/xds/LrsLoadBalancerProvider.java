@@ -31,7 +31,7 @@ import javax.annotation.Nullable;
  * Provider for lrs load balancing policy.
  */
 @Internal
-public class LrsLoadBalancerProvider extends LoadBalancerProvider {
+public final class LrsLoadBalancerProvider extends LoadBalancerProvider {
 
   private static final String LRS_POLICY_NAME = "lrs_experimental";
 
@@ -60,7 +60,7 @@ public class LrsLoadBalancerProvider extends LoadBalancerProvider {
     throw new UnsupportedOperationException();
   }
 
-  static class LrsConfig {
+  static final class LrsConfig {
     final String clusterName;
     @Nullable
     final String edsServiceName;
