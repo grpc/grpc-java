@@ -104,7 +104,6 @@ public class LrsLoadBalancerTest {
     ClientStreamTracer.Factory tracerFactory = result.getStreamTracerFactory();
     assertThat(((LoadRecordingStreamTracerFactory) tracerFactory).getCounter())
         .isSameInstanceAs(counter);
-    assertThat(result.getSubchannel().getAllAddresses()).isEqualTo(backendAddrs);
   }
 
   @Test
