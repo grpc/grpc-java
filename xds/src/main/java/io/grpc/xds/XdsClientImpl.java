@@ -41,6 +41,7 @@ import io.envoyproxy.envoy.api.v2.Listener;
 import io.envoyproxy.envoy.api.v2.RouteConfiguration;
 import io.envoyproxy.envoy.api.v2.core.Address;
 import io.envoyproxy.envoy.api.v2.core.Node;
+import io.envoyproxy.envoy.api.v2.core.SocketAddress;
 import io.envoyproxy.envoy.api.v2.listener.FilterChain;
 import io.envoyproxy.envoy.api.v2.listener.FilterChainMatch;
 import io.envoyproxy.envoy.api.v2.route.Route;
@@ -450,12 +451,17 @@ final class XdsClientImpl extends XdsClient {
 
   /** In case of Listener watcher metadata to be updated to include port. */
   private void updateNodeMetadataForListenerRequest(int port) {
-    // TODO(sanjaypujare): fields of metadata to update to be finalized
     Struct newMetadata = node.getMetadata().toBuilder()
-        .putFields("listener_inbound_port",
-            Value.newBuilder().setStringValue("" + port).build())
+        .putFields("TRAFFICDIRECTOR_PROXYLESS",
+            Value.newBuilder().setStringValue("1").build())
         .build();
-    node = node.toBuilder().setMetadata(newMetadata).build();
+    Address listeningAddress =
+        Address.newBuilder()
+            .setSocketAddress(
+                SocketAddress.newBuilder().setAddress("0.0.0.0").setPortValue(port).build())
+            .build();
+    node =
+        node.toBuilder().setMetadata(newMetadata).addListeningAddresses(listeningAddress).build();
   }
 
   @Override

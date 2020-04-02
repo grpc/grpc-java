@@ -228,10 +228,18 @@ public class XdsClientImplTestForListener {
 
   private static Node getNodeToVerify() {
     Struct newMetadata = NODE.getMetadata().toBuilder()
-        .putFields("listener_inbound_port",
-            Value.newBuilder().setStringValue("" + PORT).build())
+        .putFields("TRAFFICDIRECTOR_PROXYLESS",
+            Value.newBuilder().setStringValue("1").build())
         .build();
-    return NODE.toBuilder().setMetadata(newMetadata).build();
+    Address listeningAddress =
+        Address.newBuilder()
+            .setSocketAddress(
+                SocketAddress.newBuilder().setAddress("0.0.0.0").setPortValue(PORT).build())
+            .build();
+    return NODE.toBuilder()
+        .setMetadata(newMetadata)
+        .addListeningAddresses(listeningAddress)
+        .build();
   }
 
   private static DiscoveryRequest buildDiscoveryRequest(
