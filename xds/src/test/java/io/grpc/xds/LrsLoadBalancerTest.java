@@ -32,7 +32,6 @@ import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.ResolvedAddresses;
-import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.Status;
@@ -210,11 +209,10 @@ public class LrsLoadBalancerTest {
 
     @Override
     public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-      final Subchannel subchannel = new NoopSubchannel(resolvedAddresses.getAddresses());
       SubchannelPicker picker = new SubchannelPicker() {
         @Override
         public PickResult pickSubchannel(PickSubchannelArgs args) {
-          return PickResult.withSubchannel(subchannel);
+          return PickResult.withSubchannel(mock(Subchannel.class));
         }
       };
       helper.updateBalancingState(ConnectivityState.READY, picker);
@@ -234,32 +232,6 @@ public class LrsLoadBalancerTest {
     @Override
     public void shutdown() {
       shutdown = true;
-    }
-  }
-
-  private static final class NoopSubchannel extends Subchannel {
-    private final List<EquivalentAddressGroup> addresses;
-
-    NoopSubchannel(List<EquivalentAddressGroup> addresses) {
-      this.addresses = addresses;
-    }
-
-    @Override
-    public void shutdown() {
-    }
-
-    @Override
-    public void requestConnection() {
-    }
-
-    @Override
-    public List<EquivalentAddressGroup> getAllAddresses() {
-      return addresses;
-    }
-
-    @Override
-    public Attributes getAttributes() {
-      return Attributes.EMPTY;
     }
   }
 
