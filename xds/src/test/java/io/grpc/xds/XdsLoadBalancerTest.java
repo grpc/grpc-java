@@ -28,6 +28,7 @@ import static org.mockito.Mockito.verify;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
+import io.envoyproxy.envoy.api.v2.core.Node;
 import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
 import io.grpc.ConnectivityStateInfo;
@@ -37,12 +38,20 @@ import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
+import io.grpc.LoadBalancerProvider;
+import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
+import io.grpc.internal.ServiceConfigUtil.PolicySelection;
+import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EdsLoadBalancer.ResourceUpdateCallback;
+import io.grpc.xds.XdsClient.XdsChannelFactory;
 import io.grpc.xds.XdsLoadBalancer.PrimaryLbFactory;
+import io.grpc.xds.XdsLoadBalancerProvider.XdsConfig;
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import org.junit.Before;
@@ -51,6 +60,7 @@ import org.junit.Test;
 import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
@@ -86,6 +96,7 @@ public class XdsLoadBalancerTest {
   private final List<LoadBalancer> fallbackLbs = new ArrayList<>();
 
   private int requestConnectionTimes;
+  private int primaryLbHandleAddrTimes;
 
   @Before
   public void setUp() {
@@ -116,8 +127,28 @@ public class XdsLoadBalancerTest {
     doReturn(fakeClock.getScheduledExecutorService()).when(helper).getScheduledExecutorService();
     doReturn(mock(ChannelLogger.class)).when(helper).getChannelLogger();
 
+    Bootstrapper bootstrapper = new Bootstrapper() {
+      @Override
+      public BootstrapInfo readBootstrap() throws IOException {
+        List<ServerInfo> serverList =
+            Collections.singletonList(
+                new ServerInfo("does not matter", Collections.<ChannelCreds>emptyList()));
+        return new BootstrapInfo(serverList, Node.getDefaultInstance());
+      }
+    };
+    XdsChannelFactory channelFactory = new XdsChannelFactory() {
+      @Override
+      ManagedChannel createChannel(List<ServerInfo> servers) {
+        return mock(ManagedChannel.class);
+      }
+    };
     xdsLoadBalancer =
-        new XdsLoadBalancer(helper, primaryLbFactory, fallbackLbFactory);
+        new XdsLoadBalancer(
+            helper,
+            primaryLbFactory,
+            fallbackLbFactory,
+            bootstrapper,
+            channelFactory);
     xdsLoadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(ImmutableList.<EquivalentAddressGroup>of()).build());
@@ -272,14 +303,22 @@ public class XdsLoadBalancerTest {
     xdsLoadBalancer.requestConnection();
     verify(primaryLb, times(++requestConnectionTimes)).requestConnection();
 
+    PolicySelection childPolicy =
+        new PolicySelection(mock(LoadBalancerProvider.class), null, null);
+    PolicySelection fallbackPolicy =
+        new PolicySelection(mock(LoadBalancerProvider.class), null, null);
     ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
         .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
-        .setAttributes(
-            Attributes.newBuilder().set(Attributes.Key.create("k"), new Object()).build())
-        .setLoadBalancingPolicyConfig(new Object())
+        .setLoadBalancingPolicyConfig(
+            new XdsConfig(null, null, childPolicy, fallbackPolicy))
         .build();
     xdsLoadBalancer.handleResolvedAddresses(resolvedAddresses);
-    verify(primaryLb).handleResolvedAddresses(same(resolvedAddresses));
+    ArgumentCaptor<ResolvedAddresses> resolvedAddrCaptor = ArgumentCaptor.forClass(null);
+    verify(primaryLb, times(++primaryLbHandleAddrTimes))
+        .handleResolvedAddresses(resolvedAddrCaptor.capture());
+    ResolvedAddresses capturedResolvedAddr = resolvedAddrCaptor.getValue();
+    assertThat(capturedResolvedAddr.getAttributes().get(XdsAttributes.XDS_CLIENT_POOL))
+        .isNotNull();
 
     Status status = Status.DATA_LOSS.withDescription("");
     xdsLoadBalancer.handleNameResolutionError(status);

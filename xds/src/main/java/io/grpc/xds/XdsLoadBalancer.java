@@ -106,14 +106,21 @@ final class XdsLoadBalancer extends LoadBalancer {
   private boolean primaryPolicyHasBeenReady;
 
   XdsLoadBalancer(Helper helper) {
-    this(helper, new EdsLoadBalancerFactory(), new FallbackLbFactory());
+    this(
+        helper,
+        new EdsLoadBalancerFactory(),
+        new FallbackLbFactory(),
+        Bootstrapper.getInstance(),
+        XdsChannelFactory.getInstance());
   }
 
   @VisibleForTesting
   XdsLoadBalancer(
       Helper helper,
       PrimaryLbFactory primaryLbFactory,
-      LoadBalancer.Factory fallbackLbFactory) {
+      LoadBalancer.Factory fallbackLbFactory,
+      Bootstrapper bootstrapper,
+      XdsChannelFactory channelFactory) {
     this.helper = checkNotNull(helper, "helper");
     this.authority = checkNotNull(helper.getAuthority(), "authority");
     this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
@@ -122,8 +129,7 @@ final class XdsLoadBalancer extends LoadBalancer {
         checkNotNull(primaryLbFactory, "primaryLbFactory")
             .newLoadBalancer(new PrimaryLbHelper(), resourceUpdateCallback);
     this.fallbackLbFactory = checkNotNull(fallbackLbFactory, "fallbackLbFactory");
-    xdsClientPool =
-        createXdsClientPool(Bootstrapper.getInstance(), XdsChannelFactory.getInstance());
+    xdsClientPool = createXdsClientPool(bootstrapper, channelFactory);
   }
 
   @Nullable
