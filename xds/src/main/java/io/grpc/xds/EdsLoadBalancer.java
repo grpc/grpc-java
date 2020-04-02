@@ -103,8 +103,10 @@ final class EdsLoadBalancer extends LoadBalancer {
           newConfig.edsServiceName,
           newConfig.lrsServerName != null);
     }
+    boolean firstUpdate = false;
     if (clusterName == null) {
       clusterName = newConfig.clusterName;
+      firstUpdate = true;
     } else {
       checkArgument(clusterName.equals(newConfig.clusterName), "cluster name should not change");
     }
@@ -112,7 +114,7 @@ final class EdsLoadBalancer extends LoadBalancer {
       xdsClientPool = resolvedAddresses.getAttributes().get(XdsAttributes.XDS_CLIENT_POOL);
       xdsClient = xdsClientPool.getObject();
     }
-    if (!Objects.equals(edsServiceName, newConfig.edsServiceName)) {
+    if (firstUpdate || !Objects.equals(edsServiceName, newConfig.edsServiceName)) {
       LoadBalancer.Factory clusterEndpointsLoadBalancerFactory =
           new ClusterEndpointsBalancerFactory(newConfig.edsServiceName);
       switchingLoadBalancer.switchTo(clusterEndpointsLoadBalancerFactory);
