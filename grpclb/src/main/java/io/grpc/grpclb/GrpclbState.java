@@ -196,7 +196,7 @@ final class GrpclbState {
   }
 
   void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
-    if (newState.getState() == SHUTDOWN || !subchannels.values().contains(subchannel)) {
+    if (newState.getState() == SHUTDOWN || !subchannels.containsValue(subchannel)) {
       return;
     }
     if (config.getMode() == Mode.ROUND_ROBIN && newState.getState() == IDLE) {

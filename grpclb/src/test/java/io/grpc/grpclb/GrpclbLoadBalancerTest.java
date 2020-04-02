@@ -147,8 +147,8 @@ public class GrpclbLoadBalancerTest {
   private static final Attributes LB_BACKEND_ATTRS =
       Attributes.newBuilder().set(GrpclbConstants.ATTR_LB_PROVIDED_BACKEND, true).build();
 
-  private Helper helper = mock(Helper.class, delegatesTo(new FakeHelper()));
-  private SubchannelPool subchannelPool =
+  private final Helper helper = mock(Helper.class, delegatesTo(new FakeHelper()));
+  private final SubchannelPool subchannelPool =
       mock(
           SubchannelPool.class,
           delegatesTo(new CachedSubchannelPool(helper)));
@@ -195,7 +195,7 @@ public class GrpclbLoadBalancerTest {
   @Mock
   private BackoffPolicy backoffPolicy2;
   private GrpclbLoadBalancer balancer;
-  private ArgumentCaptor<CreateSubchannelArgs> createSubchannelArgsCaptor =
+  private final ArgumentCaptor<CreateSubchannelArgs> createSubchannelArgsCaptor =
       ArgumentCaptor.forClass(CreateSubchannelArgs.class);
 
   @Before
@@ -2540,8 +2540,8 @@ public class GrpclbLoadBalancerTest {
   }
 
   private static class FakeSubchannel extends Subchannel {
+    private final Attributes attributes;
     private List<EquivalentAddressGroup> eags;
-    private Attributes attributes;
     private SubchannelStateListener listener;
 
     public FakeSubchannel(List<EquivalentAddressGroup> eags, Attributes attributes) {
