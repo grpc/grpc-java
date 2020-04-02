@@ -59,10 +59,13 @@ public final class GrpclbLoadBalancerProvider extends LoadBalancerProvider {
 
   @Override
   public LoadBalancer newLoadBalancer(LoadBalancer.Helper helper) {
-    return new GrpclbLoadBalancer(
-        helper, new CachedSubchannelPool(), TimeProvider.SYSTEM_TIME_PROVIDER,
-        Stopwatch.createUnstarted(),
-        new ExponentialBackoffPolicy.Provider());
+    return
+        new GrpclbLoadBalancer(
+            helper,
+            new CachedSubchannelPool(helper),
+            TimeProvider.SYSTEM_TIME_PROVIDER,
+            Stopwatch.createUnstarted(),
+            new ExponentialBackoffPolicy.Provider());
   }
 
   @Override

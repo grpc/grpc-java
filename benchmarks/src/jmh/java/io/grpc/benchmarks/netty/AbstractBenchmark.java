@@ -40,6 +40,8 @@ import io.netty.channel.local.LocalAddress;
 import io.netty.channel.local.LocalChannel;
 import io.netty.channel.local.LocalServerChannel;
 import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.nio.NioServerSocketChannel;
+import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.util.concurrent.DefaultThreadFactory;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -206,8 +208,9 @@ public abstract class AbstractBenchmark {
       sock.bind(new InetSocketAddress(BENCHMARK_ADDR, 0));
       SocketAddress address = sock.getLocalSocketAddress();
       sock.close();
-      serverBuilder = NettyServerBuilder.forAddress(address);
-      channelBuilder = NettyChannelBuilder.forAddress(address);
+      serverBuilder =
+          NettyServerBuilder.forAddress(address).channelType(NioServerSocketChannel.class);
+      channelBuilder = NettyChannelBuilder.forAddress(address).channelType(NioSocketChannel.class);
     }
 
     if (serverExecutor == ExecutorType.DIRECT) {
@@ -220,6 +223,7 @@ public abstract class AbstractBenchmark {
     // Always use a different worker group from the client.
     ThreadFactory serverThreadFactory = new DefaultThreadFactory("STF pool", true /* daemon */);
     serverBuilder.workerEventLoopGroup(new NioEventLoopGroup(0, serverThreadFactory));
+    serverBuilder.bossEventLoopGroup(new NioEventLoopGroup(1, serverThreadFactory));
 
     // Always set connection and stream window size to same value
     serverBuilder.flowControlWindow(windowSize.bytes());
