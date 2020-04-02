@@ -486,6 +486,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
         String encoding = headers.get(MESSAGE_ENCODING_KEY);
         Decompressor decompressor = decompressorRegistry.lookupDecompressor(encoding);
         if (decompressor == null) {
+          stream.setListener(NOOP_LISTENER);
           stream.close(
               Status.UNIMPLEMENTED.withDescription(
                   String.format("Can't find decompressor for %s", encoding)),

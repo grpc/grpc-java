@@ -30,3 +30,12 @@ configureProtoCompilation()
 javadoc {
     exclude 'io/grpc/grpclb/Internal*'
 }
+
+jacocoTestReport {
+    classDirectories.from = sourceSets.main.output.collect {
+        fileTree(dir: it,
+        exclude: [
+                '**/io/grpc/lb/v1/**',
+        ])
+    }
+}

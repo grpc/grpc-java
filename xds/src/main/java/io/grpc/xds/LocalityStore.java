@@ -622,8 +622,7 @@ interface LocalityStore {
               && !localityLbInfo.childBalancer.canHandleEmptyAddressListFromNameResolution()) {
             localityLbInfo.childBalancer.handleNameResolutionError(
                 Status.UNAVAILABLE.withDescription(
-                    "No healthy address available from EDS update '" + localityLbEndpoints
-                        + "' for locality '" + locality + "'"));
+                    "Locality " + locality + " has no healthy endpoint"));
           } else {
             localityLbInfo.childBalancer
                 .handleResolvedAddresses(ResolvedAddresses.newBuilder()

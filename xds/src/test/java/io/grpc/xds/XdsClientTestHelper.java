@@ -149,6 +149,7 @@ class XdsClientTestHelper {
     return clusterBuilder.build();
   }
 
+  @SuppressWarnings("deprecation")
   static ClusterLoadAssignment buildClusterLoadAssignment(String clusterName,
       List<io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints> localityLbEndpoints,
       List<Policy.DropOverload> dropOverloads) {
