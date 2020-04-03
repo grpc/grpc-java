@@ -326,10 +326,6 @@ public class RoundRobinLoadBalancerTest {
     verifyNoMoreInteractions(mockHelper);
   }
 
-  private Subchannel nextSubchannel(Subchannel current, List<Subchannel> allSubChannels) {
-    return allSubChannels.get((allSubChannels.indexOf(current) + 1) % allSubChannels.size());
-  }
-
   @Test
   public void pickerRoundRobin() throws Exception {
     Subchannel subchannel = mock(Subchannel.class);
