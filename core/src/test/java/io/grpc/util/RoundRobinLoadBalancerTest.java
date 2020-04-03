@@ -303,26 +303,20 @@ public class RoundRobinLoadBalancerTest {
 
     inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), isA(EmptyPicker.class));
 
+    // Simulate state transitions for each subchannel individually.
     for (Subchannel sc : loadBalancer.getSubchannels()) {
       deliverSubchannelState(
           sc,
           ConnectivityStateInfo
               .forTransientFailure(Status.UNKNOWN.withDescription("connection broken")));
-    }
-    inOrder.verify(mockHelper).updateBalancingState(eq(TRANSIENT_FAILURE), isA(EmptyPicker.class));
-
-    for (Subchannel sc : loadBalancer.getSubchannels()) {
       deliverSubchannelState(
           sc,
           ConnectivityStateInfo.forNonError(IDLE));
-    }
-    inOrder.verifyNoMoreInteractions();
-
-    for (Subchannel sc : loadBalancer.getSubchannels()) {
       deliverSubchannelState(
           sc,
           ConnectivityStateInfo.forNonError(CONNECTING));
     }
+    inOrder.verify(mockHelper).updateBalancingState(eq(TRANSIENT_FAILURE), isA(EmptyPicker.class));
     inOrder.verifyNoMoreInteractions();
 
     Subchannel subchannel = loadBalancer.getSubchannels().iterator().next();
