@@ -252,7 +252,6 @@ final class XdsNameResolver extends NameResolver {
           for (ClusterWeight clusterWeight : clusterWeights) {
             sb.append(clusterWeight.getName()).append('_');
           }
-
           sb.append(routeAction.hashCode());
           actionName = sb.toString();
           if (actions.containsKey(actionName)) {
@@ -268,7 +267,6 @@ final class XdsNameResolver extends NameResolver {
         List<?> childPolicies = ImmutableList.of(actionPolicy);
         actions.put(actionName, ImmutableMap.of("childPolicy", childPolicies));
       }
-
       routes.add(ImmutableMap.of("methodName", methodName, "action", actionName));
     }
 
