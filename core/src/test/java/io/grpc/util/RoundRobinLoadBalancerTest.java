@@ -279,15 +279,15 @@ public class RoundRobinLoadBalancerTest {
     Status error = Status.UNKNOWN.withDescription("¯\\_(ツ)_//¯");
     deliverSubchannelState(subchannel,
         ConnectivityStateInfo.forTransientFailure(error));
-    assertThat(subchannelStateInfo.value).isEqualTo(
-        ConnectivityStateInfo.forTransientFailure(error));
+    assertThat(subchannelStateInfo.value.getState()).isEqualTo(TRANSIENT_FAILURE);
+    assertThat(subchannelStateInfo.value.getStatus()).isEqualTo(error);
     inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
     assertThat(pickerCaptor.getValue()).isInstanceOf(EmptyPicker.class);
 
     deliverSubchannelState(subchannel,
         ConnectivityStateInfo.forNonError(IDLE));
-    assertThat(subchannelStateInfo.value).isEqualTo(
-        ConnectivityStateInfo.forNonError(IDLE));
+    assertThat(subchannelStateInfo.value.getState()).isEqualTo(TRANSIENT_FAILURE);
+    assertThat(subchannelStateInfo.value.getStatus()).isEqualTo(error);
 
     verify(subchannel, times(2)).requestConnection();
     verify(mockHelper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
