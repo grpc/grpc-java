@@ -81,9 +81,12 @@ public final class SdsProtocolNegotiators {
       SynchronizationContext syncContext) {
     XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
         ServerSdsProtocolNegotiator.getXdsClientWrapperForServerSds(port, syncContext);
-    return (xdsClientWrapperForServerSds == null && downstreamTlsContext == null)
-        ? InternalProtocolNegotiators.serverPlaintext()
-        : new ServerSdsProtocolNegotiator(downstreamTlsContext, xdsClientWrapperForServerSds);
+    if (xdsClientWrapperForServerSds == null && downstreamTlsContext == null) {
+      logger.log(Level.INFO, "Fallback to plaintext for server at port {0}", port);
+      return InternalProtocolNegotiators.serverPlaintext();
+    } else {
+      return new ServerSdsProtocolNegotiator(downstreamTlsContext, xdsClientWrapperForServerSds);
+    }
   }
 
   private static final class ClientSdsProtocolNegotiatorFactory
