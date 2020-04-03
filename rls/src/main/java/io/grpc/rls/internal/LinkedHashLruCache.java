@@ -116,7 +116,12 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
     return 1;
   }
 
-  /** Updates size for given key if entry exists. It is useful if the cache value is mutated. */
+  /**
+   * Updates size for given key if entry exists. It is useful if the cache value is mutated.
+   *
+   * <p>Note: During this method call, the {@link #estimateSizeOf(Object, Object)} should return
+   * same value. Otherwise, the estimated size can be out of sync.
+   */
   public void updateEntrySize(K key) {
     SizedValue entry = readInternal(key);
     if (entry == null) {
@@ -196,7 +201,7 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
       for (K key : keys) {
         SizedValue existing = delegate.remove(key);
         if (existing != null) {
-          evictionListener.onEviction(key, existing, EvictionType.EXPIRED);
+          evictionListener.onEviction(key, existing, EvictionType.EXPLICIT);
         }
       }
     }
@@ -205,7 +210,7 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
   @Override
   @CheckReturnValue
   public final boolean hasCacheEntry(K key) {
-    // call get to handle expired
+    // call readInternal to filter already expired entry in the cache
     return readInternal(key) != null;
   }
 
@@ -335,7 +340,7 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
 
     @Override
     public void onEviction(K key, SizedValue value, EvictionType cause) {
-      estimatedSizeBytes.addAndGet(-1 * estimateSizeOf(key, value.value));
+      estimatedSizeBytes.addAndGet(-1 * value.size);
       if (delegate != null) {
         delegate.onEviction(key, value.value, cause);
       }
