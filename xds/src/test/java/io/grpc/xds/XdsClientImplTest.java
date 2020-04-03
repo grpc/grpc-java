@@ -100,7 +100,6 @@ import io.grpc.xds.XdsClient.XdsChannelFactory;
 import io.grpc.xds.XdsClientImpl.MessagePrinter;
 import java.io.IOException;
 import java.util.ArrayDeque;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Queue;
@@ -2002,7 +2001,7 @@ public class XdsClientImplTest {
                         buildLbEndpoint("192.168.0.1", 8080, HealthStatus.HEALTHY, 2)),
                     1, 0),
                 buildLocalityLbEndpoints("region3", "zone3", "subzone3",
-                    Collections.<io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint>emptyList(),
+                    ImmutableList.<io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint>of(),
                     2, 1), /* locality with 0 endpoint */
                 buildLocalityLbEndpoints("region4", "zone4", "subzone4",
                     ImmutableList.of(
@@ -2047,7 +2046,7 @@ public class XdsClientImplTest {
                     new LbEndpoint("192.168.0.1", 8080,
                         2, true)), 1, 0),
             new Locality("region3", "zone3", "subzone3"),
-            new LocalityLbEndpoints(Collections.<LbEndpoint>emptyList(), 2, 1));
+            new LocalityLbEndpoints(ImmutableList.<LbEndpoint>of(), 2, 1));
   }
 
   @Test
