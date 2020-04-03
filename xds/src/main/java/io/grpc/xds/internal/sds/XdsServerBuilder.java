@@ -189,7 +189,7 @@ public final class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
     delegate.protocolNegotiator(serverProtocolNegotiator);
     if (serverProtocolNegotiator instanceof SdsProtocolNegotiators.ServerSdsProtocolNegotiator) {
       SdsProtocolNegotiators.ServerSdsProtocolNegotiator serverSdsProtocolNegotiator =
-              (SdsProtocolNegotiators.ServerSdsProtocolNegotiator)serverProtocolNegotiator;
+          (SdsProtocolNegotiators.ServerSdsProtocolNegotiator) serverProtocolNegotiator;
       return XdsServer.newInstance(
           delegate.build(), serverSdsProtocolNegotiator.getXdsClientWrapperForServerSds());
     } else {
