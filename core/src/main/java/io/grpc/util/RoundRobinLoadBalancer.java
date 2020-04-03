@@ -198,7 +198,7 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
   private void updateBalancingState(ConnectivityState state, RoundRobinPicker picker) {
     if (state != currentState || !picker.isEquivalentTo(currentPicker)) {
       if (currentState == TRANSIENT_FAILURE && state != READY) {
-        return;
+        state = TRANSIENT_FAILURE;
       }
       helper.updateBalancingState(state, picker);
       currentState = state;
