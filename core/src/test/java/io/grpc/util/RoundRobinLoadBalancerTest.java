@@ -314,6 +314,13 @@ public class RoundRobinLoadBalancerTest {
     for (Subchannel sc : loadBalancer.getSubchannels()) {
       deliverSubchannelState(
           sc,
+          ConnectivityStateInfo.forNonError(IDLE));
+    }
+    inOrder.verifyNoMoreInteractions();
+
+    for (Subchannel sc : loadBalancer.getSubchannels()) {
+      deliverSubchannelState(
+          sc,
           ConnectivityStateInfo.forNonError(CONNECTING));
     }
     inOrder.verifyNoMoreInteractions();

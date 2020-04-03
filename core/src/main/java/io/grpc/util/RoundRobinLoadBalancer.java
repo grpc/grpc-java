@@ -142,13 +142,7 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
     if (stateInfo.getState() == IDLE) {
       subchannel.requestConnection();
     }
-    Ref<ConnectivityStateInfo> subchannelStateRef = getSubchannelStateInfoRef(subchannel);
-    if (subchannelStateRef.value.getState().equals(TRANSIENT_FAILURE)) {
-      if (stateInfo.getState().equals(CONNECTING)) {
-        return;
-      }
-    }
-    subchannelStateRef.value = stateInfo;
+    getSubchannelStateInfoRef(subchannel).value = stateInfo;
     updateBalancingState();
   }
 
@@ -203,6 +197,9 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
 
   private void updateBalancingState(ConnectivityState state, RoundRobinPicker picker) {
     if (state != currentState || !picker.isEquivalentTo(currentPicker)) {
+      if (currentState == TRANSIENT_FAILURE && state != READY) {
+        return;
+      }
       helper.updateBalancingState(state, picker);
       currentState = state;
       currentPicker = picker;
