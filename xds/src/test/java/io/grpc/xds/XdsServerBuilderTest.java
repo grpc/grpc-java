@@ -26,7 +26,6 @@ import io.grpc.xds.internal.sds.SdsProtocolNegotiators.ServerSdsProtocolNegotiat
 import io.grpc.xds.internal.sds.XdsServerBuilder;
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;
-
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;

@@ -32,7 +32,6 @@ import io.grpc.ServerTransportFilter;
 import io.grpc.SynchronizationContext;
 import io.grpc.netty.InternalProtocolNegotiator;
 import io.grpc.netty.NettyServerBuilder;
-
 import java.io.File;
 import java.net.InetSocketAddress;
 import java.util.concurrent.Executor;
@@ -185,7 +184,7 @@ public final class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
    */
   @VisibleForTesting
   public Server buildServer(
-          InternalProtocolNegotiator.ProtocolNegotiator serverProtocolNegotiator) {
+      InternalProtocolNegotiator.ProtocolNegotiator serverProtocolNegotiator) {
     delegate.protocolNegotiator(serverProtocolNegotiator);
     return delegate.build();
   }

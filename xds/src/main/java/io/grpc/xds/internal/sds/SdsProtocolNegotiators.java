@@ -41,7 +41,6 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.handler.ssl.SslContext;
 import io.netty.util.AsciiString;
-
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -261,8 +260,19 @@ public final class SdsProtocolNegotiators {
   @VisibleForTesting
   public static final class ServerSdsProtocolNegotiator implements ProtocolNegotiator {
 
-    private final DownstreamTlsContext downstreamTlsContext;
-    private final XdsClientWrapperForServerSds xdsClientWrapperForServerSds;
+    @Nullable private final DownstreamTlsContext downstreamTlsContext;
+    @Nullable private final XdsClientWrapperForServerSds xdsClientWrapperForServerSds;
+
+    /** Constructor. */
+    @VisibleForTesting
+    public ServerSdsProtocolNegotiator(
+        @Nullable DownstreamTlsContext downstreamTlsContext,
+        @Nullable XdsClientWrapperForServerSds xdsClientWrapperForServerSds) {
+      checkArgument(downstreamTlsContext != null || xdsClientWrapperForServerSds != null,
+          "both downstreamTlsContext and xdsClientWrapperForServerSds cannot be null");
+      this.downstreamTlsContext = downstreamTlsContext;
+      this.xdsClientWrapperForServerSds = xdsClientWrapperForServerSds;
+    }
 
     private static XdsClientWrapperForServerSds getXdsClientWrapperForServerSds(
         int port, SynchronizationContext syncContext) {
@@ -273,21 +283,6 @@ public final class SdsProtocolNegotiators {
         logger.log(Level.FINE, "Fallback to plaintext due to exception", e);
         return null;
       }
-    }
-
-    /** Constructor. */
-    @VisibleForTesting
-    public ServerSdsProtocolNegotiator(
-        @Nullable DownstreamTlsContext downstreamTlsContext,
-        @Nullable XdsClientWrapperForServerSds xdsClientWrapperForServerSds) {
-      checkArgument(downstreamTlsContext != null || xdsClientWrapperForServerSds != null,
-              "both downstreamTlsContext and xdsClientWrapperForServerSds cannot be null");
-      this.downstreamTlsContext = downstreamTlsContext;
-      this.xdsClientWrapperForServerSds = xdsClientWrapperForServerSds;
-    }
-
-    @Nullable XdsClientWrapperForServerSds getXdsClientWrapperForServerSds() {
-      return xdsClientWrapperForServerSds;
     }
 
     @Override
