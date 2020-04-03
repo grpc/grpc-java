@@ -282,7 +282,7 @@ public final class SdsProtocolNegotiators {
       }
     }
 
-    /** creates an instance from the 2 params. */
+    /** Constructor. */
     @VisibleForTesting
     public ServerSdsProtocolNegotiator(
         @Nullable DownstreamTlsContext downstreamTlsContext,
