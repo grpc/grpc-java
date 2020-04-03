@@ -426,8 +426,8 @@ public class XdsNameResolverTest {
     assertThat((Map<String, ?>) routes.get(4).get("methodName"))
         .containsExactly("service", "", "method", "");
     String action4 = (String) routes.get(4).get("action");
-    assertRouteActionIsCdsPolicy(actions.get(action0), "cluster-hello.googleapis.com");
-    assertRouteActionIsCdsPolicy(actions.get(action1), "cluster-foo.googleapis.com");
+    assertCdsPolicy(actions.get(action0), "cluster-hello.googleapis.com");
+    assertCdsPolicy(actions.get(action1), "cluster-foo.googleapis.com");
     assertRouteActionIsWeightedTargetPolicy(
         actions.get(action2),
         ImmutableMap.of(
@@ -477,8 +477,9 @@ public class XdsNameResolverTest {
             "cluster-foo.googleapis.com", 20, "cluster-bar.googleapis.com", 80));
   }
 
+  /** Asserts that the given action contains a single CDS policy with the given cluster name. */
   @SuppressWarnings("unchecked")
-  private static void assertRouteActionIsCdsPolicy(Map<String, ?> action, String clusterName) {
+  private static void assertCdsPolicy(Map<String, ?> action, String clusterName) {
     assertThat(action.keySet()).containsExactly("childPolicy");
     Map<String, ?> lbConfig =
         Iterables.getOnlyElement((List<Map<String, ?>>) action.get("childPolicy"));
