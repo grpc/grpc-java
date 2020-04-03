@@ -176,7 +176,7 @@ public final class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
     InternalProtocolNegotiator.ProtocolNegotiator serverProtocolNegotiator =
         SdsProtocolNegotiators.serverProtocolNegotiator(
             this.downstreamTlsContext, port, syncContext);
-    return createXdsServer(serverProtocolNegotiator);
+    return buildServer(serverProtocolNegotiator);
   }
 
   /**
@@ -184,16 +184,9 @@ public final class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
    * getXdsClientWrapperForServerSds from the serverSdsProtocolNegotiator.
    */
   @VisibleForTesting
-  public Server createXdsServer(
+  public Server buildServer(
           InternalProtocolNegotiator.ProtocolNegotiator serverProtocolNegotiator) {
     delegate.protocolNegotiator(serverProtocolNegotiator);
-    if (serverProtocolNegotiator instanceof SdsProtocolNegotiators.ServerSdsProtocolNegotiator) {
-      SdsProtocolNegotiators.ServerSdsProtocolNegotiator serverSdsProtocolNegotiator =
-          (SdsProtocolNegotiators.ServerSdsProtocolNegotiator) serverProtocolNegotiator;
-      return XdsServer.newInstance(
-          delegate.build(), serverSdsProtocolNegotiator.getXdsClientWrapperForServerSds());
-    } else {
-      return delegate.build();
-    }
+    return delegate.build();
   }
 }

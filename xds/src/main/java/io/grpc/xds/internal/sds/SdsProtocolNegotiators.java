@@ -42,6 +42,7 @@ import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.handler.ssl.SslContext;
 import io.netty.util.AsciiString;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Level;
@@ -79,8 +80,11 @@ public final class SdsProtocolNegotiators {
   public static ProtocolNegotiator serverProtocolNegotiator(
       @Nullable DownstreamTlsContext downstreamTlsContext, int port,
       SynchronizationContext syncContext) {
-    return ServerSdsProtocolNegotiator.createServerNegotiator(
-            downstreamTlsContext, port, syncContext);
+    XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
+        ServerSdsProtocolNegotiator.getXdsClientWrapperForServerSds(port, syncContext);
+    return (xdsClientWrapperForServerSds == null && downstreamTlsContext == null)
+        ? InternalProtocolNegotiators.serverPlaintext()
+        : new ServerSdsProtocolNegotiator(downstreamTlsContext, xdsClientWrapperForServerSds);
   }
 
   private static final class ClientSdsProtocolNegotiatorFactory
@@ -260,23 +264,12 @@ public final class SdsProtocolNegotiators {
     private final DownstreamTlsContext downstreamTlsContext;
     private final XdsClientWrapperForServerSds xdsClientWrapperForServerSds;
 
-    static ProtocolNegotiator createServerNegotiator(
-        @Nullable DownstreamTlsContext downstreamTlsContext,
-        int port,
-        SynchronizationContext syncContext) {
-      XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
-          getXdsClientWrapperForServerSds(port, syncContext);
-      return (xdsClientWrapperForServerSds == null && downstreamTlsContext == null)
-          ? InternalProtocolNegotiators.serverPlaintext()
-          : new ServerSdsProtocolNegotiator(downstreamTlsContext, xdsClientWrapperForServerSds);
-    }
-
     private static XdsClientWrapperForServerSds getXdsClientWrapperForServerSds(
         int port, SynchronizationContext syncContext) {
       try {
         return XdsClientWrapperForServerSds.newInstance(
             port, Bootstrapper.getInstance(), syncContext);
-      } catch (Exception e) {
+      } catch (IOException e) {
         logger.log(Level.FINE, "Fallback to plaintext due to exception", e);
         return null;
       }
@@ -309,7 +302,11 @@ public final class SdsProtocolNegotiators {
     }
 
     @Override
-    public void close() {}
+    public void close() {
+      if (xdsClientWrapperForServerSds != null) {
+        xdsClientWrapperForServerSds.shutdown();
+      }
+    }
   }
 
   @VisibleForTesting

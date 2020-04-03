@@ -24,6 +24,9 @@ import static org.mockito.Mockito.verify;
 import io.grpc.Server;
 import io.grpc.xds.internal.sds.SdsProtocolNegotiators.ServerSdsProtocolNegotiator;
 import io.grpc.xds.internal.sds.XdsServerBuilder;
+import java.io.IOException;
+import java.util.concurrent.TimeUnit;
+
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -43,15 +46,17 @@ public class XdsServerBuilderTest {
   }
 
   @Test
-  public void xdsServer_callsShutdown() {
+  public void xdsServer_callsShutdown() throws IOException, InterruptedException {
     XdsServerBuilder builder = XdsServerBuilder.forPort(8080);
     XdsClient mockXdsClient = mock(XdsClient.class);
     XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
         new XdsClientWrapperForServerSds(8080, mockXdsClient, null);
     ServerSdsProtocolNegotiator serverSdsProtocolNegotiator =
         new ServerSdsProtocolNegotiator(null, xdsClientWrapperForServerSds);
-    Server xdsServer = builder.createXdsServer(serverSdsProtocolNegotiator);
+    Server xdsServer = builder.buildServer(serverSdsProtocolNegotiator);
+    xdsServer.start();
     xdsServer.shutdown();
+    xdsServer.awaitTermination(500L, TimeUnit.MILLISECONDS);
     verify(mockXdsClient, times(1)).shutdown();
   }
 }

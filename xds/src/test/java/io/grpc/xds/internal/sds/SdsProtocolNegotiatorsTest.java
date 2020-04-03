@@ -261,7 +261,7 @@ public class SdsProtocolNegotiatorsTest {
   @Test
   public void serverSdsProtocolNegotiator_passNulls_expectPlaintext() {
     InternalProtocolNegotiator.ProtocolNegotiator protocolNegotiator =
-        SdsProtocolNegotiators.ServerSdsProtocolNegotiator.createServerNegotiator(null, 7000,
+        SdsProtocolNegotiators.serverProtocolNegotiator(null, 7000,
             null);
     assertThat(protocolNegotiator.scheme().toString()).isEqualTo("http");
   }
