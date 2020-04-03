@@ -428,11 +428,11 @@ public class XdsNameResolverTest {
     String action4 = (String) routes.get(4).get("action");
     assertCdsPolicy(actions.get(action0), "cluster-hello.googleapis.com");
     assertCdsPolicy(actions.get(action1), "cluster-foo.googleapis.com");
-    assertRouteActionIsWeightedTargetPolicy(
+    assertWeightedTargetPolicy(
         actions.get(action2),
         ImmutableMap.of(
             "cluster-hello.googleapis.com", 40,  "cluster-hello2.googleapis.com", 60));
-    assertRouteActionIsWeightedTargetPolicy(
+    assertWeightedTargetPolicy(
         actions.get(action3),
         ImmutableMap.of(
             "cluster-bar.googleapis.com", 30, "cluster-bar2.googleapis.com", 70));
@@ -488,8 +488,12 @@ public class XdsNameResolverTest {
     assertThat(rawConfigValues).containsExactly("cluster", clusterName);
   }
 
+  /**
+   * Asserts that the given action contains a single weighted-target policy with the given cluster
+   * to weight mapping.
+   */
   @SuppressWarnings("unchecked")
-  private static void assertRouteActionIsWeightedTargetPolicy(
+  private static void assertWeightedTargetPolicy(
       Map<String, ?> action, Map<String, Integer> clusterWeights) {
     assertThat(action.keySet()).containsExactly("childPolicy");
     Map<String, ?> lbConfig =
@@ -499,6 +503,10 @@ public class XdsNameResolverTest {
     assertWeightedTargetConfigClusterWeights(rawConfigValues, clusterWeights);
   }
 
+  /**
+   * Asserts that the given raw config is a weighted-target config with the given cluster to weight
+   * mapping.
+   */
   @SuppressWarnings("unchecked")
   private static void assertWeightedTargetConfigClusterWeights(
       Map<String, ?> rawConfigValues, Map<String, Integer> clusterWeight) {
