@@ -326,7 +326,7 @@ public final class ClientCalls {
     private boolean completed = false;
 
     // Non private to avoid synthetic class
-    CallToStreamObserverAdapter(ClientCall<T, ?> call) {
+    CallToStreamObserverAdapter(ClientCall<T, ?> call, boolean streamingResponse) {
       this.call = call;
       this.streamingResponse = streamingResponse;
     }
