@@ -409,7 +409,7 @@ public final class ServerCalls {
     @Override
     public void disableAutoRequestWithInitial(int request) {
       checkState(!frozen, "Cannot disable auto flow control after initialization");
-      checkArgument(request >= 0, "Initial requests must be non-negative");
+      Preconditions.checkArgument(request >= 0, "Initial requests must be non-negative");
       initialRequest = request;
       autoRequestEnabled = false;
     }
