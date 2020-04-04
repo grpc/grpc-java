@@ -274,7 +274,7 @@ public final class ClientCalls {
         req,
         new StreamObserverToCallListenerAdapter<>(
             responseObserver,
-            new CallToStreamObserverAdapter<>(call, streamingResponse));
+            new CallToStreamObserverAdapter<>(call, streamingResponse)));
   }
 
   private static <ReqT, RespT> void asyncUnaryRequestCall(
