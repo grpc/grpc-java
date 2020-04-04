@@ -24,7 +24,6 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -94,8 +93,6 @@ public class ClientCallsTest {
   private ManagedChannel channel;
   @Mock
   private ManagedChannel mockChannel;
-  @Mock
-  private ClientCall<Integer, Integer> mockClientCall;
   @Captor
   private ArgumentCaptor<MethodDescriptor<?, ?>> methodDescriptorCaptor;
   @Captor
@@ -222,18 +219,19 @@ public class ClientCallsTest {
 
   @Test
   public void blockingUnaryCall_HasBlockingStubType() {
+    NoopClientCall<Integer, Integer> call = new NoopClientCall<Integer, Integer>() {
+      @Override
+      public void start(io.grpc.ClientCall.Listener<Integer> listener, Metadata headers) {
+        listener.onMessage(1);
+        listener.onClose(Status.OK, new Metadata());
+      }
+    };
     when(mockChannel.newCall(
         ArgumentMatchers.<MethodDescriptor<Integer, Integer>>any(), any(CallOptions.class)))
-        .thenReturn(mockClientCall);
-    // we only interested in the call options, stop the call by thrown.
-    doThrow(new RuntimeException("intended")).when(mockClientCall).sendMessage(any(Integer.class));
-    try {
-      Integer unused =
-          ClientCalls.blockingUnaryCall(mockChannel, UNARY_METHOD, CallOptions.DEFAULT, 1);
-      fail();
-    } catch (RuntimeException e) {
-      assertThat(e).hasMessageThat().isEqualTo("intended");
-    }
+        .thenReturn(call);
+
+    Integer unused =
+        ClientCalls.blockingUnaryCall(mockChannel, UNARY_METHOD, CallOptions.DEFAULT, 1);
 
     verify(mockChannel).newCall(methodDescriptorCaptor.capture(), callOptionsCaptor.capture());
     CallOptions capturedCallOption = callOptionsCaptor.getValue();
@@ -243,18 +241,19 @@ public class ClientCallsTest {
 
   @Test
   public void blockingServerStreamingCall_HasBlockingStubType() {
+    NoopClientCall<Integer, Integer> call = new NoopClientCall<Integer, Integer>() {
+      @Override
+      public void start(io.grpc.ClientCall.Listener<Integer> listener, Metadata headers) {
+        listener.onMessage(1);
+        listener.onClose(Status.OK, new Metadata());
+      }
+    };
     when(mockChannel.newCall(
         ArgumentMatchers.<MethodDescriptor<Integer, Integer>>any(), any(CallOptions.class)))
-        .thenReturn(mockClientCall);
-    // we only interested in the call options, stop the call by thrown.
-    doThrow(new RuntimeException("intended")).when(mockClientCall).sendMessage(any(Integer.class));
-    try {
-      Iterator<Integer> unused = ClientCalls
-          .blockingServerStreamingCall(mockChannel, UNARY_METHOD, CallOptions.DEFAULT, 1);
-      fail();
-    } catch (RuntimeException e) {
-      assertThat(e).hasMessageThat().isEqualTo("intended");
-    }
+        .thenReturn(call);
+
+    Iterator<Integer> unused =
+        ClientCalls.blockingServerStreamingCall(mockChannel, UNARY_METHOD, CallOptions.DEFAULT, 1);
 
     verify(mockChannel).newCall(methodDescriptorCaptor.capture(), callOptionsCaptor.capture());
     CallOptions capturedCallOption = callOptionsCaptor.getValue();
