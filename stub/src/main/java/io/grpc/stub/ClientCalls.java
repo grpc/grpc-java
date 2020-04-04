@@ -320,7 +320,7 @@ public final class ClientCalls {
     private final ClientCall<T, ?> call;
     private final boolean streamingResponse;
     private Runnable onReadyHandler;
-    private int initalRequest = 1;
+    private int initialRequest = 1;
     private boolean autoRequestEnabled = true;
     private boolean aborted = false;
     private boolean completed = false;
@@ -380,7 +380,7 @@ public final class ClientCalls {
         throw new IllegalStateException(
             "Cannot disable auto flow control after call started. Use ClientResponseObserver");
       }
-      Preconditions.checkArugment(request >= 0, "Initial requests must be non-negative");
+      Preconditions.checkArgument(request >= 0, "Initial requests must be non-negative");
       initialRequest = request;
       autoRequestEnabled = false;
     }
