@@ -48,8 +48,6 @@ import javax.annotation.Nullable;
 @Internal
 public final class XdsRoutingLoadBalancerProvider extends LoadBalancerProvider {
 
-  static final String XDS_ROUTING_POLICY_NAME = "xds_routing_experimental";
-
   @Nullable
   private final LoadBalancerRegistry lbRegistry;
 
@@ -76,7 +74,7 @@ public final class XdsRoutingLoadBalancerProvider extends LoadBalancerProvider {
 
   @Override
   public String getPolicyName() {
-    return XDS_ROUTING_POLICY_NAME;
+    return XdsLbPolicies.XDS_ROUTING_POLICY_NAME;
   }
 
   @Override

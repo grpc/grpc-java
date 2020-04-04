@@ -24,6 +24,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Iterables;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.MessageOrBuilder;
 import com.google.protobuf.Struct;
@@ -94,7 +95,8 @@ final class XdsClientImpl extends XdsClient {
       "type.googleapis.com/envoy.api.v2.ClusterLoadAssignment";
 
   // For now we do not support path matching unless enabled manually.
-  private static final boolean ENABLE_PATH_MATCHING = Boolean.parseBoolean(
+  // Mutable for testing.
+  static boolean enablePathMatching = Boolean.parseBoolean(
       System.getenv("ENABLE_EXPERIMENTAL_PATH_MATCHING"));
 
   private final MessagePrinter respPrinter = new MessagePrinter();
@@ -645,19 +647,24 @@ final class XdsClientImpl extends XdsClient {
       }
     }
     if (routes != null) {
-      // Found clusterName in the in-lined RouteConfiguration.
-      String clusterName = routes.get(routes.size() - 1).getRouteAction().get().getCluster();
-      if (!ENABLE_PATH_MATCHING) {
+      // Found  routes in the in-lined RouteConfiguration.
+      ConfigUpdate configUpdate;
+      if (!enablePathMatching) {
+        EnvoyProtoData.Route defaultRoute = Iterables.getLast(routes);
+        configUpdate =
+            ConfigUpdate.newBuilder()
+                .addRoutes(ImmutableList.of(defaultRoute))
+                .build();
         logger.log(
             XdsLogLevel.INFO,
-            "Found cluster name (inlined in route config): {0}", clusterName);
+            "Found cluster name (inlined in route config): {0}",
+            defaultRoute.getRouteAction().getCluster());
       } else {
+        configUpdate = ConfigUpdate.newBuilder().addRoutes(routes).build();
         logger.log(
             XdsLogLevel.INFO,
             "Found routes (inlined in route config): {0}", routes);
       }
-      ConfigUpdate configUpdate = ConfigUpdate.newBuilder()
-          .setClusterName(clusterName).addRoutes(routes).build();
       configWatcher.onConfigChanged(configUpdate);
     } else if (rdsRouteConfigName != null) {
       // Send an RDS request if the resource to request has changed.
@@ -816,16 +823,23 @@ final class XdsClientImpl extends XdsClient {
         rdsRespTimer = null;
       }
 
-      // Found clusterName in the in-lined RouteConfiguration.
-      String clusterName = routes.get(routes.size() - 1).getRouteAction().get().getCluster();
-      if (!ENABLE_PATH_MATCHING) {
-        logger.log(XdsLogLevel.INFO, "Found cluster name: {0}", clusterName);
+      // Found routes in the in-lined RouteConfiguration.
+      ConfigUpdate configUpdate;
+      if (!enablePathMatching) {
+        EnvoyProtoData.Route defaultRoute = Iterables.getLast(routes);
+        configUpdate =
+            ConfigUpdate.newBuilder()
+                .addRoutes(ImmutableList.of(defaultRoute))
+                .build();
+        logger.log(
+            XdsLogLevel.INFO,
+            "Found cluster name: {0}",
+            defaultRoute.getRouteAction().getCluster());
       } else {
+        configUpdate = ConfigUpdate.newBuilder().addRoutes(routes).build();
         logger.log(XdsLogLevel.INFO, "Found {0} routes", routes.size());
         logger.log(XdsLogLevel.DEBUG, "Found routes: {0}", routes);
       }
-      ConfigUpdate configUpdate = ConfigUpdate.newBuilder()
-          .setClusterName(clusterName).addRoutes(routes).build();
       configWatcher.onConfigChanged(configUpdate);
     }
   }
@@ -899,17 +913,17 @@ final class XdsClientImpl extends XdsClient {
     }
 
     // We only validate the default route unless path matching is enabled.
-    if (!ENABLE_PATH_MATCHING) {
+    if (!enablePathMatching) {
       EnvoyProtoData.Route route = routes.get(routes.size() - 1);
       RouteMatch routeMatch = route.getRouteMatch();
       if (!routeMatch.getPath().isEmpty() || !routeMatch.getPrefix().isEmpty()
           || routeMatch.hasRegex()) {
         return "The last route must be the default route";
       }
-      if (!route.getRouteAction().isPresent()) {
+      if (route.getRouteAction() == null) {
         return "Route action is not specified for the default route";
       }
-      if (route.getRouteAction().get().getCluster().isEmpty()) {
+      if (route.getRouteAction().getCluster().isEmpty()) {
         return "Cluster is not specified for the default route";
       }
       return null;
@@ -925,7 +939,7 @@ final class XdsClientImpl extends XdsClient {
     for (int i = 0; i < routes.size(); i++) {
       EnvoyProtoData.Route route = routes.get(i);
 
-      if (!route.getRouteAction().isPresent()) {
+      if (route.getRouteAction() == null) {
         return "Route action is not specified for one of the routes";
       }
 
@@ -963,7 +977,7 @@ final class XdsClientImpl extends XdsClient {
         }
       }
 
-      RouteAction routeAction = route.getRouteAction().get();
+      RouteAction routeAction = route.getRouteAction();
       if (routeAction.getCluster().isEmpty() && routeAction.getWeightedCluster().isEmpty()) {
         return "Either cluster or weighted cluster route action must be provided";
       }

@@ -21,6 +21,9 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Iterables;
+import com.google.gson.Gson;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
@@ -31,17 +34,21 @@ import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.GrpcUtil;
-import io.grpc.internal.JsonParser;
 import io.grpc.internal.ObjectPool;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.Bootstrapper.ServerInfo;
+import io.grpc.xds.EnvoyProtoData.ClusterWeight;
+import io.grpc.xds.EnvoyProtoData.Route;
+import io.grpc.xds.EnvoyProtoData.RouteAction;
 import io.grpc.xds.XdsClient.ConfigUpdate;
 import io.grpc.xds.XdsClient.ConfigWatcher;
 import io.grpc.xds.XdsClient.RefCountedXdsClientObjectPool;
 import io.grpc.xds.XdsClient.XdsChannelFactory;
 import io.grpc.xds.XdsClient.XdsClientFactory;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
-import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
@@ -96,10 +103,9 @@ final class XdsNameResolver extends NameResolver {
     return authority;
   }
 
-  @SuppressWarnings("unchecked")
   @Override
-  public void start(final Listener2 listener) {
-    BootstrapInfo bootstrapInfo = null;
+  public void start(Listener2 listener) {
+    BootstrapInfo bootstrapInfo;
     try {
       bootstrapInfo = bootstrapper.readBootstrap();
     } catch (Exception e) {
@@ -131,62 +137,163 @@ final class XdsNameResolver extends NameResolver {
     };
     xdsClientPool = new RefCountedXdsClientObjectPool(xdsClientFactory);
     xdsClient = xdsClientPool.getObject();
-    xdsClient.watchConfigData(authority, new ConfigWatcher() {
-      @Override
-      public void onConfigChanged(ConfigUpdate update) {
+    xdsClient.watchConfigData(authority, new ConfigWatcherImpl(listener));
+  }
+
+  private class ConfigWatcherImpl implements ConfigWatcher {
+
+    final Listener2 listener;
+
+    ConfigWatcherImpl(Listener2 listener) {
+      this.listener = listener;
+    }
+
+    @SuppressWarnings("unchecked")
+    @Override
+    public void onConfigChanged(ConfigUpdate update) {
+      Map<String, ?> rawLbConfig;
+      if (update.getRoutes().size() > 1) {
         logger.log(
             XdsLogLevel.INFO,
-            "Received config update from xDS client {0}: cluster_name={1}",
-            xdsClient, update.getClusterName());
-        String serviceConfig = "{\n"
-            + "  \"loadBalancingConfig\": [\n"
-            + "    {\n"
-            + "      \"cds_experimental\": {\n"
-            + "        \"cluster\": \"" + update.getClusterName() + "\"\n"
-            + "      }\n"
-            + "    }\n"
-            + "  ]\n"
-            + "}";
-        Map<String, ?> config;
-        try {
-          config = (Map<String, ?>) JsonParser.parse(serviceConfig);
-        } catch (IOException e) {
-          listener.onError(
-              Status.UNKNOWN.withDescription("Invalid service config").withCause(e));
-          return;
+            "Received config update with {0} routes from xDS client {1}",
+            update.getRoutes().size(),
+            xdsClient);
+        rawLbConfig = generateXdsRoutingRawConfig(update.getRoutes());
+      } else {
+        Route defaultRoute = Iterables.getOnlyElement(update.getRoutes());
+        String clusterName = defaultRoute.getRouteAction().getCluster();
+        if (!clusterName.isEmpty()) {
+          logger.log(
+              XdsLogLevel.INFO,
+              "Received config update from xDS client {0}: cluster_name={1}",
+              xdsClient,
+              clusterName);
+          rawLbConfig = generateCdsRawConfig(clusterName);
+        } else {
+          logger.log(
+              XdsLogLevel.INFO,
+              "Received config update with one weighted cluster route from xDS client {0}",
+              xdsClient);
+          List<ClusterWeight> clusterWeights = defaultRoute.getRouteAction().getWeightedCluster();
+          rawLbConfig = generateWeightedTargetRawConfig(clusterWeights);
         }
-        logger.log(XdsLogLevel.INFO, "Generated service config:\n{0}", serviceConfig);
-        Attributes attrs =
-            Attributes.newBuilder()
-                .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
-                .build();
-        ConfigOrError parsedServiceConfig = serviceConfigParser.parseServiceConfig(config);
-        ResolutionResult result =
-            ResolutionResult.newBuilder()
-                .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
-                .setAttributes(attrs)
-                .setServiceConfig(parsedServiceConfig)
-                .build();
-        listener.onResult(result);
       }
 
-      @Override
-      public void onError(Status error) {
-        // In order to distinguish between IO error and resource not found, which trigger
-        // different handling, return an empty resolution result to channel for resource not
-        // found.
-        // TODO(chengyuanzhang): Returning an empty resolution result based on status code is
-        //  a temporary solution. More design discussion needs to be done.
-        if (error.getCode().equals(Code.NOT_FOUND)) {
-          logger.log(
-              XdsLogLevel.WARNING,
-              "Received error from xDS client {0}: {1}", xdsClient, error.getDescription());
-          listener.onResult(ResolutionResult.newBuilder().build());
-          return;
-        }
-        listener.onError(Status.UNAVAILABLE.withDescription(error.getDescription()));
+      Map<String, ?> serviceConfig =
+          ImmutableMap.of("loadBalancingConfig", ImmutableList.of(rawLbConfig));
+      if (logger.isLoggable(XdsLogLevel.INFO)) {
+        logger.log(
+            XdsLogLevel.INFO,
+            "Generated service config:\n{0}",
+            new Gson().toJson(serviceConfig));
       }
-    });
+
+      Attributes attrs =
+          Attributes.newBuilder()
+              .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
+              .build();
+      ConfigOrError parsedServiceConfig = serviceConfigParser.parseServiceConfig(serviceConfig);
+      ResolutionResult result =
+          ResolutionResult.newBuilder()
+              .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+              .setAttributes(attrs)
+              .setServiceConfig(parsedServiceConfig)
+              .build();
+      listener.onResult(result);
+    }
+
+    @Override
+    public void onError(Status error) {
+      // In order to distinguish between IO error and resource not found, which trigger
+      // different handling, return an empty resolution result to channel for resource not
+      // found.
+      // TODO(chengyuanzhang): Returning an empty resolution result based on status code is
+      //  a temporary solution. More design discussion needs to be done.
+      if (error.getCode().equals(Code.NOT_FOUND)) {
+        logger.log(
+            XdsLogLevel.WARNING,
+            "Received error from xDS client {0}: {1}", xdsClient, error.getDescription());
+        listener.onResult(ResolutionResult.newBuilder().build());
+        return;
+      }
+      listener.onError(Status.UNAVAILABLE.withDescription(error.getDescription()));
+    }
+  }
+
+  private static Map<String, ?> generateXdsRoutingRawConfig(List<Route> routesUpdate) {
+    List<Object> routes = new ArrayList<>(routesUpdate.size());
+    Map<String, Object> actions = new LinkedHashMap<>();
+    Map<RouteAction, String> exitingActions = new HashMap<>();
+    for (Route route : routesUpdate) {
+      String service = "";
+      String method = "";
+      String prefix = route.getRouteMatch().getPrefix();
+      String path = route.getRouteMatch().getPath();
+      if (!prefix.isEmpty()) {
+        service = prefix.substring(1, prefix.length() - 1);
+      } else if (!path.isEmpty()) {
+        int splitIndex = path.lastIndexOf('/');
+        service = path.substring(1, splitIndex);
+        method = path.substring(splitIndex + 1);
+      }
+      Map<String, String> methodName = ImmutableMap.of("service", service, "method", method);
+      String actionName;
+      RouteAction routeAction = route.getRouteAction();
+      Map<String, ?> actionPolicy;
+      if (exitingActions.containsKey(routeAction)) {
+        actionName = exitingActions.get(routeAction);
+      } else {
+        if (!routeAction.getCluster().isEmpty()) {
+          actionName = "cds:" + routeAction.getCluster();
+          actionPolicy = generateCdsRawConfig(routeAction.getCluster());
+        } else {
+          StringBuilder sb = new StringBuilder("weighted:");
+          List<ClusterWeight> clusterWeights = routeAction.getWeightedCluster();
+          for (ClusterWeight clusterWeight : clusterWeights) {
+            sb.append(clusterWeight.getName()).append('_');
+          }
+          sb.append(routeAction.hashCode());
+          actionName = sb.toString();
+          if (actions.containsKey(actionName)) {
+            // Just in case of hash collision, append exitingActions.size() to make actionName
+            // unique. However, in case of collision, when new ConfigUpdate is received, actions
+            // and actionNames might be associated differently from the previous update, but it
+            // is just suboptimal and won't cause a problem.
+            actionName = actionName + "_" + exitingActions.size();
+          }
+          actionPolicy = generateWeightedTargetRawConfig(clusterWeights);
+        }
+        exitingActions.put(routeAction, actionName);
+        List<?> childPolicies = ImmutableList.of(actionPolicy);
+        actions.put(actionName, ImmutableMap.of("childPolicy", childPolicies));
+      }
+      routes.add(ImmutableMap.of("methodName", methodName, "action", actionName));
+    }
+
+    return ImmutableMap.of(
+        XdsLbPolicies.XDS_ROUTING_POLICY_NAME,
+        ImmutableMap.of("route", routes, "action", actions));
+  }
+
+  private static Map<String, ?> generateWeightedTargetRawConfig(
+      List<ClusterWeight> clusterWeights) {
+    Map<String, Object> targets = new LinkedHashMap<>();
+    for (ClusterWeight clusterWeight : clusterWeights) {
+      Map<String, ?> childPolicy = generateCdsRawConfig(clusterWeight.getName());
+      Map<String, ?> weightedConfig = ImmutableMap.of(
+          "weight",
+          (double) clusterWeight.getWeight(),
+          "childPolicy",
+          ImmutableList.of(childPolicy));
+      targets.put(clusterWeight.getName(), weightedConfig);
+    }
+    return ImmutableMap.of(
+        XdsLbPolicies.WEIGHTED_TARGET_POLICY_NAME,
+        ImmutableMap.of("targets", targets));
+  }
+
+  private static Map<String, ?> generateCdsRawConfig(String clusterName) {
+    return ImmutableMap.of(XdsLbPolicies.CDS_POLICY_NAME, ImmutableMap.of("cluster", clusterName));
   }
 
   @Override
