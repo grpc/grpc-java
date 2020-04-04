@@ -375,7 +375,7 @@ public class ClientCallsTest {
     ClientCalls.asyncBidiStreamingCall(call, new ClientResponseObserver<Integer, String>() {
       @Override
       public void beforeStart(ClientCallStreamObserver<Integer> requestStream) {
-        requestStream.disableAutoRequest();
+        requestStream.disableAutoRequestWithInitial(0);
       }
 
       @Override
@@ -404,7 +404,7 @@ public class ClientCallsTest {
         new ClientResponseObserver<Integer, String>() {
           @Override
           public void beforeStart(ClientCallStreamObserver<Integer> requestStream) {
-            requestStream.disableAutoRequest();
+            requestStream.disableAutoRequestWithInitial(0);
           }
 
           @Override
@@ -452,7 +452,7 @@ public class ClientCallsTest {
       @Override
       public void beforeStart(ClientCallStreamObserver<Integer> requestStream) {
         this.requestStream = requestStream;
-        requestStream.disableAutoRequest();
+        requestStream.disableAutoRequestWithInitial(0);
       }
 
       @Override
@@ -538,7 +538,7 @@ public class ClientCallsTest {
         new ClientResponseObserver<Integer, Integer>() {
           @Override
           public void beforeStart(final ClientCallStreamObserver<Integer> requestStream) {
-            requestStream.disableAutoRequest();
+            requestStream.disableAutoRequestWithInitial(0);
           }
 
           @Override
@@ -586,7 +586,7 @@ public class ClientCallsTest {
               public StreamObserver<Integer> invoke(StreamObserver<Integer> responseObserver) {
                 final ServerCallStreamObserver<Integer> serverCallObserver =
                     (ServerCallStreamObserver<Integer>) responseObserver;
-                serverCallObserver.disableAutoRequest();
+                serverCallObserver.disableAutoRequestWithInitial(0);
                 observerFuture.set(serverCallObserver);
                 return new StreamObserver<Integer>() {
                   @Override

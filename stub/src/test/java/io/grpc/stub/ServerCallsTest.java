@@ -276,7 +276,7 @@ public class ServerCallsTest {
         callHandler.startCall(serverCall, new Metadata());
     callListener.onMessage(1);
     try {
-      callObserver.get().disableAutoRequest();
+      callObserver.get().disableAutoRequestWithInitial(0);
       fail("Cannot set onCancel handler after service invocation");
     } catch (IllegalStateException expected) {
       // Expected
@@ -316,7 +316,7 @@ public class ServerCallsTest {
               public StreamObserver<Integer> invoke(StreamObserver<Integer> responseObserver) {
                 ServerCallStreamObserver<Integer> serverCallObserver =
                     (ServerCallStreamObserver<Integer>) responseObserver;
-                serverCallObserver.disableAutoRequest();
+                serverCallObserver.disableAutoRequestWithInitial(0);
                 return new ServerCalls.NoopStreamObserver<>();
               }
             });
@@ -339,7 +339,7 @@ public class ServerCallsTest {
               public void invoke(Integer req, StreamObserver<Integer> responseObserver) {
                 ServerCallStreamObserver<Integer> serverCallObserver =
                     (ServerCallStreamObserver<Integer>) responseObserver;
-                serverCallObserver.disableAutoRequest();
+                serverCallObserver.disableAutoRequestWithInitial(0);
               }
             });
     callHandler.startCall(serverCall, new Metadata());

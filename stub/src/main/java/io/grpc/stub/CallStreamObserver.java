@@ -107,30 +107,11 @@ public abstract class CallStreamObserver<V> implements StreamObserver<V> {
    * </ul>
    * </p>
    * 
-   * <p>On the server side, migrating to {@link #disableAutoRequest} requires no changes; they have
-   * identical behavior.  On the client-side, migrating to {@code disableAutoRequest} requires
-   * making adding an initial {@link #request} after the call has started. For example:
-   * 
-   * <pre>{@code
-   * Rectangle request = ...;
-   * class ResponseObserver implements ClientResponseObserver<Rectangle, Feature> {
-   *   private ClientCallStreamObserver<Rectangle> requestObserver;
-   *   ...
-   *   @Override public void beforeStart(ClientCallStreamObserver<Rectangle> requestObserver) {
-   *     this.requestObserver = requestObserver;
-   *     requestObserver.disableAutoRequest();
-   *     // Note that requestObserver.request can not be called before the call is started
-   *     ...
-   *   }
-   *   // Need to expose the request method outside the Observer
-   *   void request(int numMessages) {
-   *     requestObserver.request(numMessages);
-   *   }
-   * }
-   * ResponseObserver responseObserver = new ResponseObserver();
-   * asyncStub.listFeatures(request, responseObserver);
-   * responseObserver.request(1);
-   * }</pre>
+   * <p>To migrate to {@link #disableAutoRequestWithInitial} on the server side, call
+   * {@code disableAutoRequestWithInitial(0)} as {@code disableAutoInboundFlowControl}
+   * already disables all inbound requests.  On the client side, {@code
+   * disableAutoRequestWithInitial(1)} should be called to maintain existing behavior as
+   * {@code disableAutoInboundFlowControl} does not disable the initial request.
    * 
    * @deprecated Use {@link #disableAutoRequest} instead (see note above about migrating). This
    *     method will be removed.
@@ -139,10 +120,9 @@ public abstract class CallStreamObserver<V> implements StreamObserver<V> {
   public abstract void disableAutoInboundFlowControl();
 
   /**
-   * Disables automatic flow control where initial messages are requested when the call is started,
-   * and an additional message is requested to be read after a call to the 'inbound' {@link
-   * io.grpc.stub.StreamObserver#onNext(Object)} has completed. If disabled an application must
-   * make explicit calls to {@link #request} to receive any messages.
+   * Disables automatic flow control where an additional message is requested to be read after a
+   * call to the 'inbound' {@link io.grpc.stub.StreamObserver#onNext(Object)} has completed. A
+   * number of initial requests to make when the call is started may be specified.
    *
    * <p>On client-side this method may only be called during {@link
    * ClientResponseObserver#beforeStart}. On server-side it may only be called during the initial
@@ -157,7 +137,7 @@ public abstract class CallStreamObserver<V> implements StreamObserver<V> {
    * </ul>
    * </p>
    */
-  public abstract void disableAutoRequest();
+  public abstract void disableAutoRequestWithInitial(int request);
 
   /**
    * Requests the peer to produce {@code count} more messages to be delivered to the 'inbound'

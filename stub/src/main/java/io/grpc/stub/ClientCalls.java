@@ -274,8 +274,7 @@ public final class ClientCalls {
         req,
         new StreamObserverToCallListenerAdapter<>(
             responseObserver,
-            new CallToStreamObserverAdapter<>(call),
-            streamingResponse));
+            new CallToStreamObserverAdapter<>(call, streamingResponse));
   }
 
   private static <ReqT, RespT> void asyncUnaryRequestCall(
@@ -297,11 +296,11 @@ public final class ClientCalls {
       ClientCall<ReqT, RespT> call,
       StreamObserver<RespT> responseObserver,
       boolean streamingResponse) {
-    CallToStreamObserverAdapter<ReqT> adapter = new CallToStreamObserverAdapter<>(call);
+    CallToStreamObserverAdapter<ReqT> adapter = new CallToStreamObserverAdapter<>(
+        call, streamingResponse);
     startCall(
         call,
-        new StreamObserverToCallListenerAdapter<>(
-            responseObserver, adapter, streamingResponse));
+        new StreamObserverToCallListenerAdapter<>(responseObserver, adapter));
     return adapter;
   }
 
@@ -316,23 +315,20 @@ public final class ClientCalls {
     abstract void onStart();
   }
 
-  private enum AutoRequestMode {
-    INITIAL_AND_NEXT,
-    INITIAL_ONLY,
-    DISABLED
-  }
-
   private static final class CallToStreamObserverAdapter<T> extends ClientCallStreamObserver<T> {
     private boolean frozen;
     private final ClientCall<T, ?> call;
+    private final boolean streamingResponse;
     private Runnable onReadyHandler;
-    private AutoRequestMode autoRequestMode = AutoRequestMode.INITIAL_AND_NEXT;
+    private int initalRequest = 1;
+    private boolean autoRequestEnabled = true;
     private boolean aborted = false;
     private boolean completed = false;
 
     // Non private to avoid synthetic class
     CallToStreamObserverAdapter(ClientCall<T, ?> call) {
       this.call = call;
+      this.streamingResponse = streamingResponse;
     }
 
     private void freeze() {
@@ -375,25 +371,29 @@ public final class ClientCalls {
     @Deprecated
     @Override
     public void disableAutoInboundFlowControl() {
-      if (frozen) {
-        throw new IllegalStateException(
-            "Cannot disable auto flow control after call started. Use ClientResponseObserver");
-      }
-      autoRequestMode = AutoRequestMode.INITIAL_ONLY;
+      disableAutoRequestWithInitial(1);
     }
 
     @Override
-    public void disableAutoRequest() {
+    public void disableAutoRequestWithInitial(int request) {
       if (frozen) {
         throw new IllegalStateException(
             "Cannot disable auto flow control after call started. Use ClientResponseObserver");
       }
-      autoRequestMode = AutoRequestMode.DISABLED;
+      Preconditions.checkArugment(request >= 0, "Initial requests must be non-negative");
+      initialRequest = request;
+      autoRequestEnabled = false;
     }
 
     @Override
     public void request(int count) {
-      call.request(count);
+      if (!streamingResponse && count == 1) {
+        // Initially ask for two responses from flow-control so that if a misbehaving server
+        // sends more than one responses, we can catch it and fail it in the listener.
+        call.request(2);
+      } else {
+        call.request(count);
+      }
     }
 
     @Override
@@ -411,16 +411,13 @@ public final class ClientCalls {
       extends StartableListener<RespT> {
     private final StreamObserver<RespT> observer;
     private final CallToStreamObserverAdapter<ReqT> adapter;
-    private final boolean streamingResponse;
     private boolean firstResponseReceived;
 
     // Non private to avoid synthetic class
     StreamObserverToCallListenerAdapter(
         StreamObserver<RespT> observer,
-        CallToStreamObserverAdapter<ReqT> adapter,
-        boolean streamingResponse) {
+        CallToStreamObserverAdapter<ReqT> adapter) {
       this.observer = observer;
-      this.streamingResponse = streamingResponse;
       this.adapter = adapter;
       if (observer instanceof ClientResponseObserver) {
         @SuppressWarnings("unchecked")
@@ -437,7 +434,7 @@ public final class ClientCalls {
 
     @Override
     public void onMessage(RespT message) {
-      if (firstResponseReceived && !streamingResponse) {
+      if (firstResponseReceived && !adapter.streamingResponse) {
         throw Status.INTERNAL
             .withDescription("More than one responses received for unary or client-streaming call")
             .asRuntimeException();
@@ -445,7 +442,7 @@ public final class ClientCalls {
       firstResponseReceived = true;
       observer.onNext(message);
 
-      if (streamingResponse && adapter.autoRequestMode == AutoRequestMode.INITIAL_AND_NEXT) {
+      if (adapter.streamingResponse && adapter.autoRequestEnabled) {
         // Request delivery of the next inbound message.
         adapter.request(1);
       }
@@ -469,12 +466,8 @@ public final class ClientCalls {
 
     @Override
     void onStart() {
-      if (adapter.autoRequestMode != AutoRequestMode.DISABLED) {
-        if (streamingResponse) {
-          adapter.request(1);
-        } else {
-          adapter.request(2);
-        }
+      if (adapter.initialRequest > 0) {
+        adapter.request(adapter.initialRequest);
       }
     }
   }
@@ -521,7 +514,7 @@ public final class ClientCalls {
 
     @Override
     void onStart() {
-      responseFuture.request(2);
+      responseFuture.call.request(2);
     }
   }
 
@@ -551,10 +544,6 @@ public final class ClientCalls {
     @SuppressWarnings("MissingOverride") // Add @Override once Java 6 support is dropped
     protected String pendingToString() {
       return MoreObjects.toStringHelper(this).add("clientCall", call).toString();
-    }
-
-    void request(int numMessages) {
-      call.request(numMessages);
     }
   }
 

@@ -595,7 +595,7 @@ public class ProtoReflectionServiceTest {
 
     @Override
     public void beforeStart(final ClientCallStreamObserver<ServerReflectionRequest> requestStream) {
-      requestStream.disableAutoRequest();
+      requestStream.disableAutoRequestWithInitial(0);
     }
 
     @Override
