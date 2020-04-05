@@ -1,5 +1,5 @@
 plugins {
-    id "java"
+    id "java-library"
     id "maven-publish"
 
     id "com.google.protobuf"
@@ -10,11 +10,12 @@ plugins {
 description = 'gRPC: Protobuf Lite'
 
 dependencies {
-    compile project(':grpc-api'),
+    api project(':grpc-api'),
             libraries.protobuf_lite
-    guavaDependency 'compile'
+    implementation libraries.jsr305
+    guavaDependency 'implementation'
 
-    testCompile project(':grpc-core')
+    testImplementation project(':grpc-core')
 
     signature "org.codehaus.mojo.signature:java17:1.0@signature"
     signature "net.sf.androidscents.signature:android-api-level-14:4.0_r4@signature"
