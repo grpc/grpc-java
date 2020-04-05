@@ -33,15 +33,23 @@ android {
 }
 
 dependencies {
-    implementation project(':grpc-core')
-    testImplementation project(':grpc-testing')
-
-    implementation libraries.cronet_api
-    testImplementation libraries.cronet_embedded
-
-    testImplementation libraries.junit
-    testImplementation libraries.mockito
-    testImplementation libraries.robolectric
+    implementation project(':grpc-core'),
+            libraries.cronet_api,
+            libraries.errorprone
+    implementation (libraries.guava) {
+        // prefer our own version from grpc-api instead of Guava's dependency
+        exclude group: 'com.google.code.findbugs', module: 'jsr305'
+        // prefer our own version from libraries instead of Guava's dependency
+        exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
+        // prefer our own version from libraries instead of Guava's dependency
+        exclude group: 'org.codehaus.mojo', module: 'animal-sniffer-annotations'
+    }
+    runtimeOnly libraries.animalsniffer_annotations
+    testImplementation project(':grpc-testing'),
+            libraries.cronet_embedded,
+            libraries.junit,
+            libraries.mockito,
+            libraries.robolectric
 }
 
 task javadocs(type: Javadoc) {

@@ -19,7 +19,16 @@ dependencies {
     compile project(':grpc-core'),
             libraries.netty,
             libraries.netty_proxy_handler
-
+    implementation libraries.errorprone
+    implementation (libraries.guava) {
+        // prefer our own version from grpc-api instead of Guava's dependency
+        exclude group: 'com.google.code.findbugs', module: 'jsr305'
+        // prefer our own version from libraries instead of Guava's dependency
+        exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
+        // prefer our own version from libraries instead of Guava's dependency
+        exclude group: 'org.codehaus.mojo', module: 'animal-sniffer-annotations'
+    }
+    runtimeOnly libraries.animalsniffer_annotations
     // Tests depend on base class defined by core module.
     testCompile project(':grpc-core').sourceSets.test.output,
             project(':grpc-testing'),

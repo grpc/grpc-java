@@ -13,9 +13,11 @@ dependencies {
     compile project(':grpc-api'),
             libraries.protobuf
     compile (libraries.guava) {
-        // prefer our own versions from libraries instead of Guava's dependency
-        exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
+        // prefer our own version from grpc-api instead of Guava's dependency
         exclude group: 'com.google.code.findbugs', module: 'jsr305'
+        // prefer our own version from libraries instead of Guava's dependency
+        exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
+        // prefer our own version from libraries instead of Guava's dependency
         exclude group: 'org.codehaus.mojo', module: 'animal-sniffer-annotations'
     }
 
@@ -30,6 +32,8 @@ dependencies {
     compile (project(':grpc-protobuf-lite')) {
         exclude group: 'com.google.protobuf', module: 'protobuf-javalite'
     }
+    implementation libraries.errorprone
+    runtimeOnly libraries.animalsniffer_annotations
 
     signature "org.codehaus.mojo.signature:java17:1.0@signature"
 }

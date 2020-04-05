@@ -27,7 +27,16 @@ dependencies {
         // prefer 20.0 from libraries instead of 19.0
         exclude group: 'com.google.guava', module: 'guava'
     }
-
+    implementation libraries.errorprone
+    implementation (libraries.guava) {
+        // prefer our own version from grpc-api instead of Guava's dependency
+        exclude group: 'com.google.code.findbugs', module: 'jsr305'
+        // prefer our own version from libraries instead of Guava's dependency
+        exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
+        // prefer our own version from libraries instead of Guava's dependency
+        exclude group: 'org.codehaus.mojo', module: 'animal-sniffer-annotations'
+    }
+    runtimeOnly libraries.animalsniffer_annotations
     testCompile project(':grpc-api').sourceSets.test.output,
             project(':grpc-context').sourceSets.test.output,
             project(':grpc-core').sourceSets.test.output,

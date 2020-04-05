@@ -29,6 +29,15 @@ dependencies {
         exclude group: 'io.grpc', module: 'grpc-context'
     }
     compileOnly libraries.javax_annotation
+    implementation (libraries.guava) {
+        // prefer our own version from grpc-api instead of Guava's dependency
+        exclude group: 'com.google.code.findbugs', module: 'jsr305'
+        // prefer our own version from grpc-stub instead of Guava's dependency
+        exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
+        // prefer our own version from libraries instead of Guava's dependency
+        exclude group: 'org.codehaus.mojo', module: 'animal-sniffer-annotations'
+    }
+    runtimeOnly libraries.animalsniffer_annotations
 
     shadow configurations.compile.getDependencies().minus(nettyDependency)
     shadow project(path: ':grpc-netty-shaded', configuration: 'shadow')

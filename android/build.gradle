@@ -26,13 +26,22 @@ repositories {
 }
 
 dependencies {
-    implementation project(':grpc-core')
-
-    testImplementation project('::grpc-okhttp')
-    testImplementation libraries.androidx_test
-    testImplementation libraries.junit
-    testImplementation libraries.robolectric
-    testImplementation libraries.truth
+    implementation project(':grpc-core'),
+            libraries.errorprone
+    implementation (libraries.guava) {
+        // prefer our own version from grpc-api instead of Guava's dependency
+        exclude group: 'com.google.code.findbugs', module: 'jsr305'
+        // prefer our own version from libraries instead of Guava's dependency
+        exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
+        // prefer our own version from libraries instead of Guava's dependency
+        exclude group: 'org.codehaus.mojo', module: 'animal-sniffer-annotations'
+    }
+    runtimeOnly libraries.animalsniffer_annotations
+    testImplementation project('::grpc-okhttp'),
+            libraries.androidx_test,
+            libraries.junit,
+            libraries.robolectric,
+            libraries.truth
 }
 
 task javadocs(type: Javadoc) {

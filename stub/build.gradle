@@ -8,7 +8,17 @@ plugins {
 
 description = "gRPC: Stub"
 dependencies {
-    compile project(':grpc-api')
+    compile project(':grpc-api'),
+            libraries.errorprone
+    compile (libraries.guava) { // Generated stubs need guava to compile.
+        // prefer our own version from grpc-api instead of Guava's dependency
+        exclude group: 'com.google.code.findbugs', module: 'jsr305'
+        // prefer our own version from libraries instead of Guava's dependency
+        exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
+        // prefer our own version from libraries instead of Guava's dependency
+        exclude group: 'org.codehaus.mojo', module: 'animal-sniffer-annotations'
+    }
+    runtimeOnly libraries.animalsniffer_annotations
     testCompile libraries.truth,
             project(':grpc-testing')
     signature "org.codehaus.mojo.signature:java17:1.0@signature"
