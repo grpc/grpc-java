@@ -1,5 +1,5 @@
 plugins {
-    id "java"
+    id "java-library"
     id "maven-publish"
 
     id "me.champeau.gradle.japicmp"
@@ -13,14 +13,11 @@ evaluationDependsOn(project(':grpc-context').path)
 evaluationDependsOn(project(':grpc-api').path)
 
 dependencies {
-    compile project(':grpc-api'),
-            libraries.gson,
-            libraries.android_annotations,
-    compile (libraries.perfmark) {
-        exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
-    }
-    implementation libraries.animalsniffer_annotations,
-            libraries.errorprone
+    api project(':grpc-api')
+    implementation libraries.android_annotations,
+            libraries.animalsniffer_annotations,
+            libraries.errorprone,
+            libraries.gson
     implementation (libraries.guava) {
         // prefer our own version from grpc-api instead of Guava's dependency
         exclude group: 'com.google.code.findbugs', module: 'jsr305'
@@ -29,12 +26,15 @@ dependencies {
         // prefer our own version from libraries instead of Guava's dependency
         exclude group: 'org.codehaus.mojo', module: 'animal-sniffer-annotations'
     }
-    testCompile project(':grpc-context').sourceSets.test.output,
-            project(':grpc-api').sourceSets.test.output,
-            project(':grpc-testing'),
+    implementation (libraries.perfmark) {
+        // prefer our own versions from libraries instead of PerfMark's dependency
+        exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
+    }
+    testImplementation project(':grpc-api').sourceSets.test.output,
+            project(':grpc-context').sourceSets.test.output,
             project(':grpc-grpclb'),
+            project(':grpc-testing'),
             libraries.guava_testlib
-    
     testRuntimeOnly project(':grpc-census')
 
     jmh project(':grpc-testing')

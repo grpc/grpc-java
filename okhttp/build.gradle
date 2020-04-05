@@ -27,6 +27,10 @@ dependencies {
         // prefer our own version from libraries instead of Guava's dependency
         exclude group: 'org.codehaus.mojo', module: 'animal-sniffer-annotations'
     }
+    implementation (libraries.perfmark) {
+        // prefer our own versions from libraries instead of PerfMark's dependency
+        exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
+    }
     runtimeOnly libraries.animalsniffer_annotations
     // Tests depend on base class defined by core module.
     testCompile project(':grpc-core').sourceSets.test.output,
