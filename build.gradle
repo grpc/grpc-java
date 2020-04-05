@@ -199,6 +199,15 @@ subprojects {
             dependencies.runtimeOnly libraries.animalsniffer_annotations
             dependencies.runtimeOnly libraries.jsr305
         }
+        // A util function to config perfmark dependency with the given configuration
+        // name. We exclude some of its transitive dependencies and manually
+        // add them with a specific version.
+        perfmarkDependency = { configurationName ->
+            dependencies."$configurationName"(libraries.perfmark) {
+                exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
+            }
+            dependencies.runtimeOnly libraries.errorprone
+        }
     }
 
     // Define a separate configuration for managing the dependency on Jetty ALPN agent.
