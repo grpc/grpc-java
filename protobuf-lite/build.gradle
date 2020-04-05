@@ -1,5 +1,5 @@
 plugins {
-    id "java"
+    id "java-library"
     id "maven-publish"
 
     id "com.google.protobuf"
@@ -10,9 +10,10 @@ plugins {
 description = 'gRPC: Protobuf Lite'
 
 dependencies {
-    compile project(':grpc-api'),
+    api project(':grpc-api'),
             libraries.protobuf_lite
-    compile (libraries.guava) {
+    implementation libraries.errorprone
+    implementation (libraries.guava) {
         // prefer our own version from grpc-api instead of Guava's dependency
         exclude group: 'com.google.code.findbugs', module: 'jsr305'
         // prefer our own version from libraries instead of Guava's dependency
@@ -20,7 +21,6 @@ dependencies {
         // prefer our own version from libraries instead of Guava's dependency
         exclude group: 'org.codehaus.mojo', module: 'animal-sniffer-annotations'
     }
-    implementation libraries.errorprone
     runtimeOnly libraries.animalsniffer_annotations
     testCompile project(':grpc-core')
 
