@@ -1,5 +1,5 @@
 plugins {
-    id "java"
+    id "java-library"
     id "maven-publish"
 
     id "me.champeau.gradle.japicmp"
@@ -8,9 +8,9 @@ plugins {
 
 description = "gRPC: Stub"
 dependencies {
-    compile project(':grpc-api'),
+    api project(':grpc-api'),
             libraries.errorprone
-    compile (libraries.guava) { // Generated stubs need guava to compile.
+    api (libraries.guava) { // Generated stubs need guava to compile.
         // prefer our own version from grpc-api instead of Guava's dependency
         exclude group: 'com.google.code.findbugs', module: 'jsr305'
         // prefer our own version from libraries instead of Guava's dependency
@@ -19,8 +19,9 @@ dependencies {
         exclude group: 'org.codehaus.mojo', module: 'animal-sniffer-annotations'
     }
     runtimeOnly libraries.animalsniffer_annotations
-    testCompile libraries.truth,
-            project(':grpc-testing')
+    testImplementation project(':grpc-testing'),
+            libraries.truth
+            
     signature "org.codehaus.mojo.signature:java17:1.0@signature"
     signature "net.sf.androidscents.signature:android-api-level-14:4.0_r4@signature"
 }
