@@ -31,6 +31,14 @@ dependencies {
             libraries.junit,
             libraries.truth
     compileOnly libraries.javax_annotation
+    implementation (libraries.opencensus_contrib_grpc_metrics) {
+        // prefer 3.0.2 from libraries instead of 3.0.1
+        exclude group: 'com.google.code.findbugs', module: 'jsr305'
+        // prefer 20.0 from libraries instead of 19.0
+        exclude group: 'com.google.guava', module: 'guava'
+        // we'll always be more up-to-date
+        exclude group: 'io.grpc', module: 'grpc-context'
+    }
     runtime libraries.opencensus_impl,
             libraries.netty_tcnative,
             project(':grpc-grpclb')
