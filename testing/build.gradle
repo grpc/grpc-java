@@ -14,7 +14,7 @@ dependencies {
             project(':grpc-stub'),
             libraries.junit
 
-    censusApiDependency 'compile'
+    censusApiDependency 'implementation'
 
     testCompile (libraries.mockito) {
         // prefer our own versions instead of mockito's dependency
