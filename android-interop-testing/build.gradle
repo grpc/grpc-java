@@ -61,10 +61,10 @@ dependencies {
             project(':grpc-testing'),
             libraries.junit,
             libraries.truth
-
     implementation (libraries.google_auth_oauth2_http) {
         exclude group: 'org.apache.httpcomponents'
     }
+    censusGrpcMetricDependency 'implementation'
 
     compileOnly libraries.javax_annotation
 
