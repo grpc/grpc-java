@@ -11,17 +11,17 @@ description = "gRPC: GRPCLB LoadBalancer plugin"
 evaluationDependsOn(project(':grpc-core').path)
 
 dependencies {
-    compile project(':grpc-core'),
+    compileOnly libraries.javax_annotation
+    implementation project(':grpc-core'),
             project(':grpc-protobuf'),
             project(':grpc-stub'),
-            libraries.protobuf
-    compile (libraries.protobuf_util) {
-        // prefer our own versions instead of protobuf-util's dependency
-        exclude group: 'com.google.guava', module: 'guava'
+    implementation (libraries.protobuf_util) {
+        // prefer our own version from grpc-stub instead of protobuf-util's dependency
         exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
+        // prefer our own version from grpc-stub instead of protobuf-util's dependency
+        exclude group: 'com.google.guava', module: 'guava'
     }
-    compileOnly libraries.javax_annotation
-    testCompile libraries.truth,
+    testImplementation libraries.truth,
             project(':grpc-core').sourceSets.test.output
 }
 
