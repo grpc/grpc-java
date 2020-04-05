@@ -18,7 +18,7 @@ dependencies {
         // prefer our own versions instead of okhttp's dependency
         exclude group: 'com.squareup.okio', module: 'okio'
     }
-
+    guavaDependency 'implementation'
     // Tests depend on base class defined by core module.
     testCompile project(':grpc-core').sourceSets.test.output,
             project(':grpc-testing'),

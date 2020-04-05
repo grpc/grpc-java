@@ -27,7 +27,7 @@ dependencies {
         // prefer 20.0 from libraries instead of 19.0
         exclude group: 'com.google.guava', module: 'guava'
     }
-
+    guavaDependency 'implementation'
     testCompile project(':grpc-api').sourceSets.test.output,
             project(':grpc-context').sourceSets.test.output,
             project(':grpc-core').sourceSets.test.output,

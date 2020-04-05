@@ -185,6 +185,20 @@ subprojects {
             // Jetty ALPN dependencies
             jetty_alpn_agent: 'org.mortbay.jetty.alpn:jetty-alpn-agent:2.0.9'
         ]
+
+        // A util function to config guava dependency with the given configuration
+        // name. We exclude some of its transitive dependencies and manually
+        // add them with a specific version.
+        guavaDependency = { configurationName ->
+            dependencies."$configurationName"(libraries.guava) {
+                exclude group: 'com.google.code.findbugs', module: 'jsr305'
+                exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
+                exclude group: 'org.codehaus.mojo', module: 'animal-sniffer-annotations'
+            }
+            dependencies."$configurationName" libraries.errorprone
+            dependencies.runtimeOnly libraries.animalsniffer_annotations
+            dependencies.runtimeOnly libraries.jsr305
+        }
     }
 
     // Define a separate configuration for managing the dependency on Jetty ALPN agent.

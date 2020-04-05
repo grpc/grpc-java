@@ -12,13 +12,6 @@ description = 'gRPC: Protobuf'
 dependencies {
     compile project(':grpc-api'),
             libraries.protobuf
-    compile (libraries.guava) {
-        // prefer our own versions from libraries instead of Guava's dependency
-        exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
-        exclude group: 'com.google.code.findbugs', module: 'jsr305'
-        exclude group: 'org.codehaus.mojo', module: 'animal-sniffer-annotations'
-    }
-
     compile (libraries.google_api_protos) {
         // 'com.google.api:api-common' transitively depends on auto-value, which breaks our
         // annotations.
@@ -30,6 +23,7 @@ dependencies {
     compile (project(':grpc-protobuf-lite')) {
         exclude group: 'com.google.protobuf', module: 'protobuf-javalite'
     }
+    guavaDependency 'implementation'
 
     signature "org.codehaus.mojo.signature:java17:1.0@signature"
 }

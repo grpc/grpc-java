@@ -33,15 +33,14 @@ android {
 }
 
 dependencies {
-    implementation project(':grpc-core')
-    testImplementation project(':grpc-testing')
-
-    implementation libraries.cronet_api
-    testImplementation libraries.cronet_embedded
-
-    testImplementation libraries.junit
-    testImplementation libraries.mockito
-    testImplementation libraries.robolectric
+    implementation project(':grpc-core'),
+            libraries.cronet_api
+    guavaDependency 'implementation'
+    testImplementation project(':grpc-testing'),
+            libraries.cronet_embedded,
+            libraries.junit,
+            libraries.mockito,
+            libraries.robolectric
 }
 
 task javadocs(type: Javadoc) {

@@ -27,12 +27,12 @@ repositories {
 
 dependencies {
     implementation project(':grpc-core')
-
-    testImplementation project('::grpc-okhttp')
-    testImplementation libraries.androidx_test
-    testImplementation libraries.junit
-    testImplementation libraries.robolectric
-    testImplementation libraries.truth
+    guavaDependency 'implementation'
+    testImplementation project('::grpc-okhttp'),
+            libraries.androidx_test,
+            libraries.junit,
+            libraries.robolectric,
+            libraries.truth
 }
 
 task javadocs(type: Javadoc) {
