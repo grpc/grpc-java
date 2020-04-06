@@ -32,6 +32,7 @@ import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.ResolvedAddresses;
+import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.Status;
@@ -43,7 +44,9 @@ import io.grpc.xds.LrsLoadBalancerProvider.LrsConfig;
 import java.net.SocketAddress;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Queue;
 import org.junit.After;
 import org.junit.Before;
@@ -76,7 +79,6 @@ public class LrsLoadBalancerTest {
 
   @Mock
   private Helper helper;
-
   private LrsLoadBalancer loadBalancer;
 
   @Before
@@ -87,13 +89,15 @@ public class LrsLoadBalancerTest {
   @After
   public void tearDown() {
     loadBalancer.shutdown();
-    assertThat(loadRecorder.recording).isFalse();
   }
 
   @Test
   public void subchannelPickerInterceptedWithLoadRecording() {
     List<EquivalentAddressGroup> backendAddrs = createResolvedBackendAddresses(2);
     deliverResolvedAddresses(backendAddrs, "round_robin");
+    FakeLoadBalancer childBalancer = (FakeLoadBalancer) childBalancers.poll();
+    NoopSubchannel subchannel = childBalancer.subchannels.values().iterator().next();
+    deliverSubchannelState(subchannel, ConnectivityState.READY);
     assertThat(loadRecorder.recording).isTrue();
     ArgumentCaptor<SubchannelPicker> pickerCaptor = ArgumentCaptor.forClass(null);
     verify(helper).updateBalancingState(eq(ConnectivityState.READY), pickerCaptor.capture());
@@ -103,6 +107,9 @@ public class LrsLoadBalancerTest {
     ClientStreamTracer.Factory tracerFactory = result.getStreamTracerFactory();
     assertThat(((LoadRecordingStreamTracerFactory) tracerFactory).getCounter())
         .isSameInstanceAs(counter);
+    loadBalancer.shutdown();
+    assertThat(childBalancer.shutdown).isTrue();
+    assertThat(loadRecorder.recording).isFalse();
   }
 
   @Test
@@ -131,6 +138,7 @@ public class LrsLoadBalancerTest {
 
     List<EquivalentAddressGroup> backendAddrs = createResolvedBackendAddresses(2);
     deliverResolvedAddresses(backendAddrs, "round_robin");
+    // Error after child policy is created.
     loadBalancer.handleNameResolutionError(Status.UNKNOWN.withDescription("I failed"));
     verify(helper, times(2))
         .updateBalancingState(eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
@@ -167,6 +175,17 @@ public class LrsLoadBalancerTest {
     return list;
   }
 
+  private static void deliverSubchannelState(
+      final NoopSubchannel subchannel, ConnectivityState state) {
+    SubchannelPicker picker = new SubchannelPicker() {
+      @Override
+      public PickResult pickSubchannel(PickSubchannelArgs args) {
+        return PickResult.withSubchannel(subchannel);
+      }
+    };
+    subchannel.helper.updateBalancingState(state, picker);
+  }
+
   private final class FakeLoadBalancerProvider extends LoadBalancerProvider {
     private final String policyName;
 
@@ -201,6 +220,7 @@ public class LrsLoadBalancerTest {
     private final Helper helper;
     private final String name;
     private boolean shutdown;
+    private final Map<EquivalentAddressGroup, NoopSubchannel> subchannels = new HashMap<>();
 
     FakeLoadBalancer(Helper helper, String name) {
       this.helper = helper;
@@ -209,13 +229,10 @@ public class LrsLoadBalancerTest {
 
     @Override
     public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-      SubchannelPicker picker = new SubchannelPicker() {
-        @Override
-        public PickResult pickSubchannel(PickSubchannelArgs args) {
-          return PickResult.withSubchannel(mock(Subchannel.class));
-        }
-      };
-      helper.updateBalancingState(ConnectivityState.READY, picker);
+      List<EquivalentAddressGroup> addresses = resolvedAddresses.getAddresses();
+      for (EquivalentAddressGroup eag : addresses) {
+        subchannels.put(eag, new NoopSubchannel(helper));
+      }
     }
 
     @Override
@@ -232,6 +249,27 @@ public class LrsLoadBalancerTest {
     @Override
     public void shutdown() {
       shutdown = true;
+    }
+  }
+
+  private static final class NoopSubchannel extends Subchannel {
+    final Helper helper;
+
+    NoopSubchannel(Helper helper) {
+      this.helper = helper;
+    }
+
+    @Override
+    public void shutdown() {
+    }
+
+    @Override
+    public void requestConnection() {
+    }
+
+    @Override
+    public Attributes getAttributes() {
+      return Attributes.EMPTY;
     }
   }
 
