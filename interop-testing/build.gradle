@@ -109,7 +109,6 @@ task grpclb_long_lived_affinity_test_client(type: CreateStartScripts) {
     outputDir = new File(project.buildDir, 'tmp')
     classpath = startScripts.classpath
     defaultJvmOpts = [
-        "-Dio.grpc.internal.DnsNameResolverProvider.enable_grpclb=true",
         "-Dio.grpc.internal.DnsNameResolverProvider.enable_service_config=true"
     ]
 }
