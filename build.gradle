@@ -41,6 +41,9 @@ subprojects {
         }
     }
 
+    def isAndroid = project.name in [
+            'grpc-android', 'grpc-android-interop-testing', 'grpc-cronet']
+
     ext {
         def exeSuffix = osdetector.os == 'windows' ? ".exe" : ""
         protocPluginBaseName = 'protoc-gen-grpc-java'
@@ -54,7 +57,6 @@ subprojects {
         opencensusVersion = '0.24.0'
 
         configureProtoCompilation = {
-            boolean isAndroid = project.getName().contains('android')
             String generatedSourcePath = "${projectDir}/src/generated"
             project.protobuf {
                 protoc {
@@ -187,16 +189,20 @@ subprojects {
         ]
     }
 
-    // Define a separate configuration for managing the dependency on Jetty ALPN agent.
     configurations {
-        compile {
-            // Detect Maven Enforcer's dependencyConvergence failures. We only
-            // care for artifacts used as libraries by others.
-            if (!(project.name in [
+        // Detect Maven Enforcer's dependencyConvergence failures. We only
+        // care for artifacts used as libraries by others.
+        if (isAndroid && !(project.name in ['grpc-android-interop-testing'])) {
+            releaseRuntimeClasspath {
+                resolutionStrategy.failOnVersionConflict()
+            }
+        }
+        if (!isAndroid && !(project.name in [
                 'grpc-benchmarks',
                 'grpc-interop-testing',
                 'grpc-gae-interop-testing-jdk8',
-            ])) {
+        ])) {
+            runtimeClasspath {
                 resolutionStrategy.failOnVersionConflict()
             }
         }
