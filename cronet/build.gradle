@@ -33,7 +33,7 @@ android {
 }
 
 dependencies {
-    implementation project(':grpc-core'),
+    api project(':grpc-core'),
             libraries.cronet_api
     guavaDependency 'implementation'
     testImplementation project(':grpc-testing'),

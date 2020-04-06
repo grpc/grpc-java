@@ -26,7 +26,7 @@ repositories {
 }
 
 dependencies {
-    implementation project(':grpc-core')
+    api project(':grpc-core')
     guavaDependency 'implementation'
     testImplementation project('::grpc-okhttp'),
             libraries.androidx_test,
