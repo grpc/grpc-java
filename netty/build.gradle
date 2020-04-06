@@ -1,5 +1,5 @@
 plugins {
-    id "java"
+    id "java-library"
     id "maven-publish"
 
     id "me.champeau.gradle.japicmp"
@@ -16,10 +16,12 @@ configurations {
 evaluationDependsOn(project(':grpc-core').path)
 
 dependencies {
-    compile project(':grpc-core'),
-            libraries.netty,
+    alpnagent libraries.jetty_alpn_agent
+
+    api project(':grpc-core'),
+            libraries.netty
+    implementation libraries.errorprone,
             libraries.netty_proxy_handler
-    implementation libraries.errorprone
     implementation (libraries.guava) {
         // prefer our own version from grpc-api instead of Guava's dependency
         exclude group: 'com.google.code.findbugs', module: 'jsr305'
@@ -34,14 +36,14 @@ dependencies {
     }
     runtimeOnly libraries.animalsniffer_annotations
     // Tests depend on base class defined by core module.
-    testCompile project(':grpc-core').sourceSets.test.output,
+    testImplementation project(':grpc-core').sourceSets.test.output,
             project(':grpc-testing'),
             project(':grpc-testing-proto')
-    testRuntime libraries.netty_tcnative,
-            libraries.conscrypt,
-            libraries.netty_epoll
+    testRuntimeOnly libraries.conscrypt,
+            libraries.netty_epoll,
+            libraries.netty_tcnative
+
     signature "org.codehaus.mojo.signature:java17:1.0@signature"
-    alpnagent libraries.jetty_alpn_agent
 }
 
 import net.ltgt.gradle.errorprone.CheckSeverity

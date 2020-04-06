@@ -10,10 +10,10 @@ description = "gRPC: Netty Shaded"
 sourceSets { testShadow {} }
 
 dependencies {
-    compile project(':grpc-netty')
-    runtime libraries.netty_tcnative,
-            libraries.netty_epoll
-    testShadowCompile files(shadowJar),
+    implementation project(':grpc-netty')
+    runtimeOnly libraries.netty_epoll,
+            libraries.netty_tcnative
+    testShadowImplementation files(shadowJar),
             configurations.shadow,
             project(':grpc-testing-proto'),
             project(':grpc-testing'),
