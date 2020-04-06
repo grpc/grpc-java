@@ -33,9 +33,9 @@ android {
 }
 
 dependencies {
-    implementation project(':grpc-core'),
-            libraries.cronet_api,
-            libraries.errorprone
+    api project(':grpc-core'),
+            libraries.cronet_api
+    implementation libraries.errorprone
     implementation (libraries.guava) {
         // prefer our own version from grpc-api instead of Guava's dependency
         exclude group: 'com.google.code.findbugs', module: 'jsr305'

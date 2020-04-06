@@ -26,8 +26,8 @@ repositories {
 }
 
 dependencies {
-    implementation project(':grpc-core'),
-            libraries.errorprone
+    api project(':grpc-core')
+    implementation libraries.errorprone
     implementation (libraries.guava) {
         // prefer our own version from grpc-api instead of Guava's dependency
         exclude group: 'com.google.code.findbugs', module: 'jsr305'
