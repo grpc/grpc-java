@@ -1,5 +1,5 @@
 plugins {
-    id "java"
+    id "java-library"
     id "maven-publish"
 
     id "me.champeau.gradle.japicmp"
@@ -10,11 +10,10 @@ description = "gRPC: Testing"
 evaluationDependsOn(project(':grpc-core').path)
 
 dependencies {
-    compile project(':grpc-core'),
+    api project(':grpc-core'),
             project(':grpc-stub'),
             libraries.junit
-
-    compile (libraries.opencensus_api) {
+    implementation (libraries.opencensus_api) {
         // prefer 3.0.2 from libraries instead of 3.0.1
         exclude group: 'com.google.code.findbugs', module: 'jsr305'
         // prefer 20.0 from libraries instead of 19.0
@@ -22,14 +21,12 @@ dependencies {
         // we'll always be more up-to-date
         exclude group: 'io.grpc', module: 'grpc-context'
     }
-
-    testCompile (libraries.mockito) {
+    testImplementation project(':grpc-core').sourceSets.test.output,
+            project(':grpc-testing-proto')
+    testImplementation (libraries.mockito) {
         // prefer our own versions instead of mockito's dependency
         exclude group: 'org.hamcrest', module: 'hamcrest-core'
     }
-
-    testCompile project(':grpc-testing-proto'),
-            project(':grpc-core').sourceSets.test.output
 }
 
 javadoc { exclude 'io/grpc/internal/**' }
