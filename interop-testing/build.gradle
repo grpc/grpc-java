@@ -17,7 +17,9 @@ configurations {
 evaluationDependsOn(project(':grpc-context').path)
 
 dependencies {
-    compile project(path: ':grpc-alts', configuration: 'shadow'),
+    alpnagent libraries.jetty_alpn_agent
+    compileOnly libraries.javax_annotation
+    implementation project(path: ':grpc-alts', configuration: 'shadow'),
             project(':grpc-auth'),
             project(':grpc-census'),
             project(':grpc-core'),
@@ -30,7 +32,6 @@ dependencies {
             libraries.google_auth_oauth2_http,
             libraries.junit,
             libraries.truth
-    compileOnly libraries.javax_annotation
     implementation (libraries.opencensus_contrib_grpc_metrics) {
         // prefer 3.0.2 from libraries instead of 3.0.1
         exclude group: 'com.google.code.findbugs', module: 'jsr305'
@@ -39,13 +40,12 @@ dependencies {
         // we'll always be more up-to-date
         exclude group: 'io.grpc', module: 'grpc-context'
     }
-    runtime libraries.opencensus_impl,
+    runtimeOnly project(':grpc-grpclb'),
             libraries.netty_tcnative,
-            project(':grpc-grpclb')
-    xdsRuntime project(path: ':grpc-xds', configuration: 'shadow')
-    testCompile project(':grpc-context').sourceSets.test.output,
+            libraries.opencensus_impl
+    testImplementation project(':grpc-context').sourceSets.test.output,
             libraries.mockito
-    alpnagent libraries.jetty_alpn_agent
+    xdsRuntime project(path: ':grpc-xds', configuration: 'shadow')
 }
 
 configureProtoCompilation()
