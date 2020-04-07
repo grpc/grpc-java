@@ -17,6 +17,9 @@
 package io.grpc.xds.internal.sds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CA_PEM_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_KEY_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_PEM_FILE;
 
 import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
 import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
@@ -35,9 +38,8 @@ public class ClientSslContextProviderFactoryTest {
   @Test
   public void createSslContextProvider_allFilenames() {
     UpstreamTlsContext upstreamTlsContext =
-        SecretVolumeSslContextProviderTest.buildUpstreamTlsContextFromFilenames(
-            CommonTlsContextTestsUtil.CLIENT_KEY_FILE, CommonTlsContextTestsUtil.CLIENT_PEM_FILE,
-            CommonTlsContextTestsUtil.CA_PEM_FILE);
+        CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
+            CLIENT_KEY_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
 
     SslContextProvider<UpstreamTlsContext> sslContextProvider =
         clientSslContextProviderFactory.createSslContextProvider(upstreamTlsContext);
@@ -47,9 +49,8 @@ public class ClientSslContextProviderFactoryTest {
   @Test
   public void createSslContextProvider_sdsConfigForTlsCert_expectException() {
     CommonTlsContext commonTlsContext =
-        CommonTlsContextTestsUtil.buildCommonTlsContextFromSdsConfigForTlsCertificate(
-            /* name= */ "name", /* targetUri= */ "unix:/tmp/sds/path",
-            CommonTlsContextTestsUtil.CA_PEM_FILE);
+            CommonTlsContextTestsUtil.buildCommonTlsContextFromSdsConfigForTlsCertificate(
+            /* name= */ "name", /* targetUri= */ "unix:/tmp/sds/path", CA_PEM_FILE);
     UpstreamTlsContext upstreamTlsContext =
         SecretVolumeSslContextProviderTest.buildUpstreamTlsContext(commonTlsContext);
 
@@ -67,11 +68,9 @@ public class ClientSslContextProviderFactoryTest {
   @Test
   public void createSslContextProvider_sdsConfigForCertValidationContext_expectException() {
     CommonTlsContext commonTlsContext =
-        CommonTlsContextTestsUtil.buildCommonTlsContextFromSdsConfigForValidationContext(
+            CommonTlsContextTestsUtil.buildCommonTlsContextFromSdsConfigForValidationContext(
             /* name= */ "name",
-            /* targetUri= */ "unix:/tmp/sds/path",
-            CommonTlsContextTestsUtil.CLIENT_KEY_FILE,
-            CommonTlsContextTestsUtil.CLIENT_PEM_FILE);
+            /* targetUri= */ "unix:/tmp/sds/path", CLIENT_KEY_FILE, CLIENT_PEM_FILE);
     UpstreamTlsContext upstreamTlsContext =
         SecretVolumeSslContextProviderTest.buildUpstreamTlsContext(commonTlsContext);
 

@@ -17,6 +17,8 @@
 package io.grpc.xds.internal.sds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_0_KEY_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_0_PEM_FILE;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 
@@ -96,8 +98,7 @@ public class SdsClientUdsFileBasedMetadataTest {
 
     doReturn(
         SdsClientTest.getOneTlsCertSecret(
-            "name1", CommonTlsContextTestsUtil.SERVER_0_KEY_FILE,
-            CommonTlsContextTestsUtil.SERVER_0_PEM_FILE))
+            "name1", SERVER_0_KEY_FILE, SERVER_0_PEM_FILE))
         .when(serverMock)
         .getSecretFor("name1");
 

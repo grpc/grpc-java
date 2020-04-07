@@ -17,6 +17,10 @@
 package io.grpc.xds.internal.sds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_0_KEY_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_0_PEM_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_KEY_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_PEM_FILE;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
@@ -99,16 +103,13 @@ public class SdsClientUdsTest {
 
     when(serverMock.getSecretFor("name1"))
         .thenReturn(
-            SdsClientTest.getOneTlsCertSecret("name1", CommonTlsContextTestsUtil.SERVER_0_KEY_FILE,
-                CommonTlsContextTestsUtil.SERVER_0_PEM_FILE));
+            SdsClientTest.getOneTlsCertSecret("name1", SERVER_0_KEY_FILE, SERVER_0_PEM_FILE));
 
     sdsClient.watchSecret(mockWatcher);
     // wait until our server received the requests
     assertThat(server.requestsCounter.tryAcquire(2, 1000, TimeUnit.MILLISECONDS)).isTrue();
     SdsClientTest.verifyDiscoveryRequest(server.lastGoodRequest, "", "", node, "name1");
-    SdsClientTest.verifySecretWatcher(mockWatcher, "name1",
-        CommonTlsContextTestsUtil.SERVER_0_KEY_FILE,
-        CommonTlsContextTestsUtil.SERVER_0_PEM_FILE);
+    SdsClientTest.verifySecretWatcher(mockWatcher, "name1", SERVER_0_KEY_FILE, SERVER_0_PEM_FILE);
     SdsClientTest.verifyDiscoveryRequest(
         server.lastRequestOnlyForAck,
         server.lastResponse.getVersionInfo(),
@@ -119,14 +120,11 @@ public class SdsClientUdsTest {
     reset(mockWatcher);
     when(serverMock.getSecretFor("name1"))
         .thenReturn(
-            SdsClientTest.getOneTlsCertSecret("name1", CommonTlsContextTestsUtil.SERVER_1_KEY_FILE,
-                CommonTlsContextTestsUtil.SERVER_1_PEM_FILE));
+            SdsClientTest.getOneTlsCertSecret("name1", SERVER_1_KEY_FILE, SERVER_1_PEM_FILE));
     server.generateAsyncResponse("name1");
     // wait until our server received the request
     assertThat(server.requestsCounter.tryAcquire(1, 1000, TimeUnit.MILLISECONDS)).isTrue();
-    SdsClientTest.verifySecretWatcher(mockWatcher, "name1",
-        CommonTlsContextTestsUtil.SERVER_1_KEY_FILE,
-        CommonTlsContextTestsUtil.SERVER_1_PEM_FILE);
+    SdsClientTest.verifySecretWatcher(mockWatcher, "name1", SERVER_1_KEY_FILE, SERVER_1_PEM_FILE);
 
     reset(mockWatcher);
     sdsClient.cancelSecretWatch(mockWatcher);

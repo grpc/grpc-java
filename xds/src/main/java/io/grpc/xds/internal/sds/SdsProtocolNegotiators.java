@@ -263,12 +263,12 @@ public final class SdsProtocolNegotiators {
   @VisibleForTesting
   public static final class ServerSdsProtocolNegotiator implements ProtocolNegotiator {
 
-    @Nullable private final XdsClientWrapperForServerSds xdsClientWrapperForServerSds;
+    private final XdsClientWrapperForServerSds xdsClientWrapperForServerSds;
 
     /** Constructor. */
     @VisibleForTesting
     public ServerSdsProtocolNegotiator(
-        @Nullable XdsClientWrapperForServerSds xdsClientWrapperForServerSds) {
+        XdsClientWrapperForServerSds xdsClientWrapperForServerSds) {
       this.xdsClientWrapperForServerSds =
           checkNotNull(xdsClientWrapperForServerSds, "xdsClientWrapperForServerSds");
     }
@@ -291,8 +291,7 @@ public final class SdsProtocolNegotiators {
 
     @Override
     public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
-      return new HandlerPickerHandler(grpcHandler,
-          xdsClientWrapperForServerSds);
+      return new HandlerPickerHandler(grpcHandler, xdsClientWrapperForServerSds);
     }
 
     @Override

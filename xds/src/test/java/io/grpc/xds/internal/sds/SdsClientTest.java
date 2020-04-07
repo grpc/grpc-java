@@ -17,6 +17,11 @@
 package io.grpc.xds.internal.sds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CA_PEM_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_0_KEY_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_0_PEM_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_KEY_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_PEM_FILE;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.doThrow;
@@ -133,8 +138,7 @@ public class SdsClientTest {
     SdsClient.SecretWatcher mockWatcher = mock(SdsClient.SecretWatcher.class);
 
     when(serverMock.getSecretFor("name1"))
-        .thenReturn(getOneTlsCertSecret("name1", CommonTlsContextTestsUtil.SERVER_0_KEY_FILE,
-            CommonTlsContextTestsUtil.SERVER_0_PEM_FILE));
+        .thenReturn(getOneTlsCertSecret("name1", SERVER_0_KEY_FILE, SERVER_0_PEM_FILE));
 
     sdsClient.watchSecret(mockWatcher);
     verifyDiscoveryRequest(server.lastGoodRequest, "", "", node, "name1");
@@ -144,16 +148,13 @@ public class SdsClientTest {
         server.lastResponse.getNonce(),
         node,
         "name1");
-    verifySecretWatcher(mockWatcher, "name1", CommonTlsContextTestsUtil.SERVER_0_KEY_FILE,
-        CommonTlsContextTestsUtil.SERVER_0_PEM_FILE);
+    verifySecretWatcher(mockWatcher, "name1", SERVER_0_KEY_FILE, SERVER_0_PEM_FILE);
 
     reset(mockWatcher);
     when(serverMock.getSecretFor("name1"))
-        .thenReturn(getOneTlsCertSecret("name1", CommonTlsContextTestsUtil.SERVER_1_KEY_FILE,
-            CommonTlsContextTestsUtil.SERVER_1_PEM_FILE));
+        .thenReturn(getOneTlsCertSecret("name1", SERVER_1_KEY_FILE, SERVER_1_PEM_FILE));
     server.generateAsyncResponse("name1");
-    verifySecretWatcher(mockWatcher, "name1", CommonTlsContextTestsUtil.SERVER_1_KEY_FILE,
-        CommonTlsContextTestsUtil.SERVER_1_PEM_FILE);
+    verifySecretWatcher(mockWatcher, "name1", SERVER_1_KEY_FILE, SERVER_1_PEM_FILE);
 
     reset(mockWatcher);
     sdsClient.cancelSecretWatch(mockWatcher);
@@ -166,8 +167,7 @@ public class SdsClientTest {
     SdsClient.SecretWatcher mockWatcher = mock(SdsClient.SecretWatcher.class);
 
     when(serverMock.getSecretFor("name1"))
-        .thenReturn(getOneCertificateValidationContextSecret("name1",
-            CommonTlsContextTestsUtil.CA_PEM_FILE));
+        .thenReturn(getOneCertificateValidationContextSecret("name1", CA_PEM_FILE));
 
     sdsClient.watchSecret(mockWatcher);
     verifyDiscoveryRequest(server.lastGoodRequest, "", "", node, "name1");
@@ -177,14 +177,14 @@ public class SdsClientTest {
         server.lastResponse.getNonce(),
         node,
         "name1");
-    verifySecretWatcher(mockWatcher, "name1", CommonTlsContextTestsUtil.CA_PEM_FILE);
+    verifySecretWatcher(mockWatcher, "name1", CA_PEM_FILE);
 
     reset(mockWatcher);
     when(serverMock.getSecretFor("name1"))
         .thenReturn(getOneCertificateValidationContextSecret("name1",
-            CommonTlsContextTestsUtil.SERVER_1_PEM_FILE));
+            SERVER_1_PEM_FILE));
     server.generateAsyncResponse("name1");
-    verifySecretWatcher(mockWatcher, "name1", CommonTlsContextTestsUtil.SERVER_1_PEM_FILE);
+    verifySecretWatcher(mockWatcher, "name1", SERVER_1_PEM_FILE);
 
     reset(mockWatcher);
     sdsClient.cancelSecretWatch(mockWatcher);
@@ -198,8 +198,7 @@ public class SdsClientTest {
     SdsClient.SecretWatcher mockWatcher2 = mock(SdsClient.SecretWatcher.class);
 
     when(serverMock.getSecretFor("name1"))
-        .thenReturn(getOneTlsCertSecret("name1", CommonTlsContextTestsUtil.SERVER_0_KEY_FILE,
-            CommonTlsContextTestsUtil.SERVER_0_PEM_FILE));
+        .thenReturn(getOneTlsCertSecret("name1", SERVER_0_KEY_FILE, SERVER_0_PEM_FILE));
 
     sdsClient.watchSecret(mockWatcher1);
     verifyDiscoveryRequest(server.lastGoodRequest, "", "", node, "name1");
@@ -209,8 +208,7 @@ public class SdsClientTest {
         server.lastResponse.getNonce(),
         node,
         "name1");
-    verifySecretWatcher(mockWatcher1, "name1", CommonTlsContextTestsUtil.SERVER_0_KEY_FILE,
-        CommonTlsContextTestsUtil.SERVER_0_PEM_FILE);
+    verifySecretWatcher(mockWatcher1, "name1", SERVER_0_KEY_FILE, SERVER_0_PEM_FILE);
 
     // add mockWatcher2
     try {
@@ -252,8 +250,7 @@ public class SdsClientTest {
     SdsClient.SecretWatcher mockWatcher = mock(SdsClient.SecretWatcher.class);
 
     when(serverMock.getSecretFor("name1"))
-        .thenReturn(getOneTlsCertSecret("name1", CommonTlsContextTestsUtil.SERVER_0_KEY_FILE,
-            CommonTlsContextTestsUtil.SERVER_0_PEM_FILE));
+        .thenReturn(getOneTlsCertSecret("name1", SERVER_0_KEY_FILE, SERVER_0_PEM_FILE));
     doThrow(new RuntimeException("test exception-abc"))
         .when(mockWatcher)
         .onSecretChanged(any(Secret.class));

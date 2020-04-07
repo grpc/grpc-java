@@ -20,6 +20,11 @@ import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.xds.XdsLbPolicies.EDS_POLICY_NAME;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.BAD_CLIENT_KEY_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.BAD_CLIENT_PEM_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CA_PEM_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_KEY_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_PEM_FILE;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
@@ -57,7 +62,6 @@ import io.grpc.xds.XdsClient.RefCountedXdsClientObjectPool;
 import io.grpc.xds.XdsClient.XdsClientFactory;
 import io.grpc.xds.XdsLoadBalancerProvider.XdsConfig;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
-import io.grpc.xds.internal.sds.SecretVolumeSslContextProviderTest;
 import io.grpc.xds.internal.sds.SslContextProvider;
 import io.grpc.xds.internal.sds.TlsContextManager;
 import java.net.InetSocketAddress;
@@ -352,9 +356,9 @@ public class CdsLoadBalancerTest {
     verify(xdsClient).watchClusterData(eq("foo.googleapis.com"), clusterWatcherCaptor1.capture());
 
     UpstreamTlsContext upstreamTlsContext =
-        SecretVolumeSslContextProviderTest.buildUpstreamTlsContextFromFilenames(
-            CommonTlsContextTestsUtil.CLIENT_KEY_FILE, CommonTlsContextTestsUtil.CLIENT_PEM_FILE,
-            CommonTlsContextTestsUtil.CA_PEM_FILE);
+        CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
+            CLIENT_KEY_FILE, CLIENT_PEM_FILE,
+            CA_PEM_FILE);
 
     SslContextProvider<UpstreamTlsContext> mockSslContextProvider =
         (SslContextProvider<UpstreamTlsContext>) mock(SslContextProvider.class);
@@ -412,9 +416,9 @@ public class CdsLoadBalancerTest {
     reset(mockTlsContextManager);
     reset(helper);
     UpstreamTlsContext upstreamTlsContext1 =
-        SecretVolumeSslContextProviderTest.buildUpstreamTlsContextFromFilenames(
-            CommonTlsContextTestsUtil.BADCLIENT_KEY_FILE,
-            CommonTlsContextTestsUtil.BADCLIENT_PEM_FILE, CommonTlsContextTestsUtil.CA_PEM_FILE);
+        CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
+            BAD_CLIENT_KEY_FILE,
+            BAD_CLIENT_PEM_FILE, CA_PEM_FILE);
     SslContextProvider<UpstreamTlsContext> mockSslContextProvider1 =
         (SslContextProvider<UpstreamTlsContext>) mock(SslContextProvider.class);
     doReturn(upstreamTlsContext1).when(mockSslContextProvider1).getSource();

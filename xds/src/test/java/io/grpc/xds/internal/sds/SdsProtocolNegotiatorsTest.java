@@ -17,6 +17,11 @@
 package io.grpc.xds.internal.sds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CA_PEM_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_KEY_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_PEM_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_KEY_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_PEM_FILE;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
@@ -151,7 +156,8 @@ public class SdsProtocolNegotiatorsTest {
   @Test
   public void clientSdsProtocolNegotiatorNewHandler_nonNullTlsContext() {
     UpstreamTlsContext upstreamTlsContext =
-        buildUpstreamTlsContext(getCommonTlsContext(null, null));
+        buildUpstreamTlsContext(
+            getCommonTlsContext(/* tlsCertificate= */ null, /* certContext= */ null));
     ClientSdsProtocolNegotiator pn = new ClientSdsProtocolNegotiator(upstreamTlsContext);
     ChannelHandler newHandler = pn.newHandler(grpcHandler);
     assertThat(newHandler).isNotNull();
@@ -161,8 +167,7 @@ public class SdsProtocolNegotiatorsTest {
   @Test
   public void clientSdsHandler_addLast() throws IOException {
     UpstreamTlsContext upstreamTlsContext =
-        buildUpstreamTlsContextFromFilenames(CommonTlsContextTestsUtil.CLIENT_KEY_FILE,
-            CommonTlsContextTestsUtil.CLIENT_PEM_FILE, CommonTlsContextTestsUtil.CA_PEM_FILE);
+        buildUpstreamTlsContextFromFilenames(CLIENT_KEY_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
 
     SdsProtocolNegotiators.ClientSdsHandler clientSdsHandler =
         new SdsProtocolNegotiators.ClientSdsHandler(grpcHandler, upstreamTlsContext);
@@ -195,8 +200,7 @@ public class SdsProtocolNegotiatorsTest {
     };
     pipeline = channel.pipeline();
     DownstreamTlsContext downstreamTlsContext =
-        buildDownstreamTlsContextFromFilenames(CommonTlsContextTestsUtil.SERVER_1_KEY_FILE,
-            CommonTlsContextTestsUtil.SERVER_1_PEM_FILE, CommonTlsContextTestsUtil.CA_PEM_FILE);
+        buildDownstreamTlsContextFromFilenames(SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, CA_PEM_FILE);
 
     XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
         XdsClientWrapperForServerSdsTest
@@ -228,7 +232,8 @@ public class SdsProtocolNegotiatorsTest {
   @Test
   public void serverSdsHandler_nullTlsContext_expectPlaintext() throws IOException {
     SdsProtocolNegotiators.HandlerPickerHandler handlerPickerHandler =
-        new SdsProtocolNegotiators.HandlerPickerHandler(grpcHandler, null);
+        new SdsProtocolNegotiators.HandlerPickerHandler(
+            grpcHandler, /* xdsClientWrapperForServerSds= */ null);
     pipeline.addLast(handlerPickerHandler);
     channelHandlerCtx = pipeline.context(handlerPickerHandler);
     assertThat(channelHandlerCtx).isNotNull(); // should find HandlerPickerHandler
@@ -248,8 +253,7 @@ public class SdsProtocolNegotiatorsTest {
   public void clientSdsProtocolNegotiatorNewHandler_fireProtocolNegotiationEvent()
       throws IOException, InterruptedException {
     UpstreamTlsContext upstreamTlsContext =
-        buildUpstreamTlsContextFromFilenames(CommonTlsContextTestsUtil.CLIENT_KEY_FILE,
-            CommonTlsContextTestsUtil.CLIENT_PEM_FILE, CommonTlsContextTestsUtil.CA_PEM_FILE);
+        buildUpstreamTlsContextFromFilenames(CLIENT_KEY_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
 
     SdsProtocolNegotiators.ClientSdsHandler clientSdsHandler =
         new SdsProtocolNegotiators.ClientSdsHandler(grpcHandler, upstreamTlsContext);
@@ -273,7 +277,7 @@ public class SdsProtocolNegotiatorsTest {
   @Test
   public void serverSdsProtocolNegotiator_nullSyncContext_expectPlaintext() {
     InternalProtocolNegotiator.ProtocolNegotiator protocolNegotiator =
-        SdsProtocolNegotiators.serverProtocolNegotiator(7000, null);
+        SdsProtocolNegotiators.serverProtocolNegotiator(/* port= */ 7000, /* syncContext= */ null);
     assertThat(protocolNegotiator.scheme().toString()).isEqualTo("http");
   }
 

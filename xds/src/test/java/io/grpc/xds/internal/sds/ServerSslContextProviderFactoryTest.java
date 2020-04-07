@@ -17,6 +17,9 @@
 package io.grpc.xds.internal.sds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CA_PEM_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_KEY_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_PEM_FILE;
 
 import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
 import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
@@ -35,10 +38,8 @@ public class ServerSslContextProviderFactoryTest {
   @Test
   public void createSslContextProvider_allFilenames() {
     DownstreamTlsContext downstreamTlsContext =
-        SecretVolumeSslContextProviderTest.buildDownstreamTlsContextFromFilenames(
-            CommonTlsContextTestsUtil.SERVER_1_KEY_FILE,
-            CommonTlsContextTestsUtil.SERVER_1_PEM_FILE,
-            CommonTlsContextTestsUtil.CA_PEM_FILE);
+        CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(
+            SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, CA_PEM_FILE);
 
     SslContextProvider<DownstreamTlsContext> sslContextProvider =
         serverSslContextProviderFactory.createSslContextProvider(downstreamTlsContext);
@@ -49,7 +50,7 @@ public class ServerSslContextProviderFactoryTest {
   public void createSslContextProvider_sdsConfigForTlsCert_expectException() {
     CommonTlsContext commonTlsContext =
         CommonTlsContextTestsUtil.buildCommonTlsContextFromSdsConfigForTlsCertificate(
-            "name", "unix:/tmp/sds/path", CommonTlsContextTestsUtil.CA_PEM_FILE);
+            "name", "unix:/tmp/sds/path", CA_PEM_FILE);
     DownstreamTlsContext downstreamTlsContext =
         CommonTlsContextTestsUtil.buildDownstreamTlsContext(commonTlsContext);
 
@@ -68,8 +69,7 @@ public class ServerSslContextProviderFactoryTest {
   public void createSslContextProvider_sdsConfigForCertValidationContext_expectException() {
     CommonTlsContext commonTlsContext =
         CommonTlsContextTestsUtil.buildCommonTlsContextFromSdsConfigForValidationContext(
-            "name", "unix:/tmp/sds/path", CommonTlsContextTestsUtil.SERVER_1_KEY_FILE,
-            CommonTlsContextTestsUtil.SERVER_1_PEM_FILE);
+            "name", "unix:/tmp/sds/path", SERVER_1_KEY_FILE, SERVER_1_PEM_FILE);
     DownstreamTlsContext downstreamTlsContext =
         CommonTlsContextTestsUtil.buildDownstreamTlsContext(commonTlsContext);
 

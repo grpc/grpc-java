@@ -18,6 +18,13 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.xds.XdsClientWrapperForServerSdsTest.buildFilterChainMatch;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.BAD_SERVER_KEY_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.BAD_SERVER_PEM_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CA_PEM_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_KEY_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_PEM_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_KEY_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_PEM_FILE;
 import static org.junit.Assert.fail;
 
 import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
@@ -31,7 +38,6 @@ import io.grpc.testing.protobuf.SimpleResponse;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import io.grpc.xds.internal.sds.SdsProtocolNegotiators;
-import io.grpc.xds.internal.sds.SecretVolumeSslContextProviderTest;
 import io.grpc.xds.internal.sds.XdsChannelBuilder;
 import io.grpc.xds.internal.sds.XdsServerBuilder;
 import java.io.IOException;
@@ -55,59 +61,70 @@ public class XdsSdsClientServerTest {
 
   @Test
   public void plaintextClientServer() throws IOException {
-    getXdsServer(/* downstreamTlsContext= */ null);
-    buildClientAndTest(
-        /* upstreamTlsContext= */ null, /* overrideAuthority= */ null, "buddy", server.getPort());
+    XdsClient.ListenerWatcher unused =
+        createXdsServerAndReturnListenerWatcher(/* downstreamTlsContext= */ null);
+
+    SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
+        getBlockingStub(
+            /* upstreamTlsContext= */ null, /* overrideAuthority= */ null);
+    assertThat(unaryRpc("buddy", blockingStub)).isEqualTo("Hello buddy");
   }
 
   /** TLS channel - no mTLS. */
   @Test
   public void tlsClientServer_noClientAuthentication() throws IOException {
     DownstreamTlsContext downstreamTlsContext =
-        SecretVolumeSslContextProviderTest.buildDownstreamTlsContextFromFilenames(
-            CommonTlsContextTestsUtil.SERVER_1_KEY_FILE,
-            CommonTlsContextTestsUtil.SERVER_1_PEM_FILE,
+        CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(
+            SERVER_1_KEY_FILE,
+            SERVER_1_PEM_FILE,
             null);
 
-    getXdsServer(downstreamTlsContext);
+    XdsClient.ListenerWatcher unused =
+        createXdsServerAndReturnListenerWatcher(downstreamTlsContext);
 
     // for TLS, client only needs trustCa
     UpstreamTlsContext upstreamTlsContext =
-        SecretVolumeSslContextProviderTest.buildUpstreamTlsContextFromFilenames(
-            null, null, CommonTlsContextTestsUtil.CA_PEM_FILE);
-    buildClientAndTest(upstreamTlsContext, "foo.test.google.fr", "buddy", server.getPort());
+        CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
+            /* privateKey= */ null, /* certChain= */ null, CA_PEM_FILE);
+
+    SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
+        getBlockingStub(
+            upstreamTlsContext, /* overrideAuthority= */ "foo.test.google.fr");
+    assertThat(unaryRpc(/* requestMessage= */ "buddy", blockingStub)).isEqualTo("Hello buddy");
   }
 
   /** mTLS - client auth enabled. */
   @Test
   public void mtlsClientServer_withClientAuthentication() throws IOException {
     UpstreamTlsContext upstreamTlsContext =
-        SecretVolumeSslContextProviderTest.buildUpstreamTlsContextFromFilenames(
-            CommonTlsContextTestsUtil.CLIENT_KEY_FILE,
-            CommonTlsContextTestsUtil.CLIENT_PEM_FILE,
-            CommonTlsContextTestsUtil.CA_PEM_FILE);
-    performMtlsTestAndGetListenerWatcher(upstreamTlsContext);
+        CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
+            CLIENT_KEY_FILE,
+            CLIENT_PEM_FILE,
+            CA_PEM_FILE);
+    XdsClient.ListenerWatcher unused = performMtlsTestAndGetListenerWatcher(upstreamTlsContext);
   }
 
   /** mTLS - client auth enabled then update server certs to untrusted. */
   @Test
   public void mtlsClientServer_changeServerContext_expectException() throws IOException {
     UpstreamTlsContext upstreamTlsContext =
-        SecretVolumeSslContextProviderTest.buildUpstreamTlsContextFromFilenames(
-            CommonTlsContextTestsUtil.CLIENT_KEY_FILE,
-            CommonTlsContextTestsUtil.CLIENT_PEM_FILE,
-            CommonTlsContextTestsUtil.CA_PEM_FILE);
-    XdsClient.ListenerWatcher listenerWatcher = performMtlsTestAndGetListenerWatcher(
-        upstreamTlsContext);
+        CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
+            CLIENT_KEY_FILE,
+            CLIENT_PEM_FILE,
+            CA_PEM_FILE);
+    XdsClient.ListenerWatcher listenerWatcher =
+        performMtlsTestAndGetListenerWatcher(upstreamTlsContext);
     DownstreamTlsContext downstreamTlsContext =
-        SecretVolumeSslContextProviderTest.buildDownstreamTlsContextFromFilenames(
-            CommonTlsContextTestsUtil.BAD_SERVER_KEY_FILE,
-            CommonTlsContextTestsUtil.BAD_SERVER_PEM_FILE,
-            CommonTlsContextTestsUtil.CA_PEM_FILE);
-    XdsClientWrapperForServerSdsTest
-        .generateListenerUpdateToWatcher(server.getPort(), downstreamTlsContext, listenerWatcher);
+        CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(
+            BAD_SERVER_KEY_FILE,
+            BAD_SERVER_PEM_FILE,
+            CA_PEM_FILE);
+    XdsClientWrapperForServerSdsTest.generateListenerUpdateToWatcher(
+        server.getPort(), downstreamTlsContext, listenerWatcher);
     try {
-      buildClientAndTest(upstreamTlsContext, "foo.test.google.fr", "buddy", server.getPort());
+      SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
+          getBlockingStub(upstreamTlsContext, "foo.test.google.fr");
+      assertThat(unaryRpc("buddy", blockingStub)).isEqualTo("Hello buddy");
       fail("exception expected");
     } catch (StatusRuntimeException sre) {
       assertThat(sre).hasCauseThat().isInstanceOf(SSLHandshakeException.class);
@@ -119,24 +136,27 @@ public class XdsSdsClientServerTest {
       UpstreamTlsContext upstreamTlsContext)
       throws IOException {
     DownstreamTlsContext downstreamTlsContext =
-        SecretVolumeSslContextProviderTest.buildDownstreamTlsContextFromFilenames(
-            CommonTlsContextTestsUtil.SERVER_1_KEY_FILE,
-            CommonTlsContextTestsUtil.SERVER_1_PEM_FILE,
-            CommonTlsContextTestsUtil.CA_PEM_FILE);
+        CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(
+            SERVER_1_KEY_FILE,
+            SERVER_1_PEM_FILE,
+            CA_PEM_FILE);
 
-    XdsClient.ListenerWatcher listenerWatcher = getXdsServer(downstreamTlsContext);
-    buildClientAndTest(upstreamTlsContext, "foo.test.google.fr", "buddy", server.getPort());
+    XdsClient.ListenerWatcher listenerWatcher =
+        createXdsServerAndReturnListenerWatcher(downstreamTlsContext);
+
+    SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
+        getBlockingStub(upstreamTlsContext, "foo.test.google.fr");
+    assertThat(unaryRpc("buddy", blockingStub)).isEqualTo("Hello buddy");
     return listenerWatcher;
   }
 
-  private XdsClient.ListenerWatcher getXdsServer(DownstreamTlsContext downstreamTlsContext)
-      throws IOException {
+  private XdsClient.ListenerWatcher createXdsServerAndReturnListenerWatcher(
+      DownstreamTlsContext downstreamTlsContext) throws IOException {
     int port = findFreePort();
-    XdsServerBuilder builder =
-        XdsServerBuilder.forPort(port).addService(new SimpleServiceImpl());
+    XdsServerBuilder builder = XdsServerBuilder.forPort(port).addService(new SimpleServiceImpl());
     final XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
-        XdsClientWrapperForServerSdsTest
-            .createXdsClientWrapperForServerSds(port, downstreamTlsContext);
+        XdsClientWrapperForServerSdsTest.createXdsClientWrapperForServerSds(
+            port, downstreamTlsContext);
     SdsProtocolNegotiators.ServerSdsProtocolNegotiator serverSdsProtocolNegotiator =
         new SdsProtocolNegotiators.ServerSdsProtocolNegotiator(xdsClientWrapperForServerSds);
     server = cleanupRule.register(builder.buildServer(serverSdsProtocolNegotiator)).start();
@@ -164,21 +184,14 @@ public class XdsSdsClientServerTest {
     return listener;
   }
 
-  private void buildClientAndTest(
-      UpstreamTlsContext upstreamTlsContext,
-      String overrideAuthority,
-      String requestMessage,
-      int serverPort) {
-
+  private SimpleServiceGrpc.SimpleServiceBlockingStub getBlockingStub(
+      UpstreamTlsContext upstreamTlsContext, String overrideAuthority) {
     XdsChannelBuilder builder =
-        XdsChannelBuilder.forTarget("localhost:" + serverPort).tlsContext(upstreamTlsContext);
+        XdsChannelBuilder.forTarget("localhost:" + server.getPort()).tlsContext(upstreamTlsContext);
     if (overrideAuthority != null) {
       builder = builder.overrideAuthority(overrideAuthority);
     }
-    SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
-        SimpleServiceGrpc.newBlockingStub(cleanupRule.register(builder.build()));
-    String resp = unaryRpc(requestMessage, blockingStub);
-    assertThat(resp).isEqualTo("Hello " + requestMessage);
+    return SimpleServiceGrpc.newBlockingStub(cleanupRule.register(builder.build()));
   }
 
   /** Say hello to server. */

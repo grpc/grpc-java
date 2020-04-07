@@ -113,7 +113,7 @@ public final class XdsClientWrapperForServerSds {
         logger.log(
             Level.INFO,
             "Setting myListener from ConfigUpdate listener: {0}",
-            update.getListener().toString());
+            update.getListener());
         curListener = update.getListener();
       }
 
