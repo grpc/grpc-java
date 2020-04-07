@@ -219,7 +219,7 @@ final class XdsNameResolver extends NameResolver {
     }
   }
 
-  private static Map<String, ?> generateXdsRoutingRawConfig(List<Route> routesUpdate) {
+  private static ImmutableMap<String, ?> generateXdsRoutingRawConfig(List<Route> routesUpdate) {
     List<Object> routes = new ArrayList<>(routesUpdate.size());
     Map<String, Object> actions = new LinkedHashMap<>();
     Map<RouteAction, String> exitingActions = new HashMap<>();
@@ -274,7 +274,7 @@ final class XdsNameResolver extends NameResolver {
         ImmutableMap.of("route", routes, "action", actions));
   }
 
-  private static Map<String, ?> generateWeightedTargetRawConfig(
+  private static ImmutableMap<String, ?> generateWeightedTargetRawConfig(
       List<ClusterWeight> clusterWeights) {
     Map<String, Object> targets = new LinkedHashMap<>();
     for (ClusterWeight clusterWeight : clusterWeights) {
@@ -291,7 +291,7 @@ final class XdsNameResolver extends NameResolver {
         ImmutableMap.of("targets", targets));
   }
 
-  private static Map<String, ?> generateCdsRawConfig(String clusterName) {
+  private static ImmutableMap<String, ?> generateCdsRawConfig(String clusterName) {
     return ImmutableMap.of(XdsLbPolicies.CDS_POLICY_NAME, ImmutableMap.of("cluster", clusterName));
   }
 
