@@ -16,7 +16,6 @@
 
 package io.grpc.xds;
 
-import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -25,6 +24,7 @@ import io.grpc.Server;
 import io.grpc.xds.internal.sds.SdsProtocolNegotiators.ServerSdsProtocolNegotiator;
 import io.grpc.xds.internal.sds.XdsServerBuilder;
 import java.io.IOException;
+import java.net.ServerSocket;
 import java.util.concurrent.TimeUnit;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -37,19 +37,12 @@ import org.junit.runners.JUnit4;
 public class XdsServerBuilderTest {
 
   @Test
-  public void buildsXdsServerBuilder() {
-    XdsServerBuilder builder = XdsServerBuilder.forPort(8080);
-    assertThat(builder).isInstanceOf(XdsServerBuilder.class);
-    Server server = builder.build();
-    assertThat(server).isNotNull();
-  }
-
-  @Test
   public void xdsServer_callsShutdown() throws IOException, InterruptedException {
-    XdsServerBuilder builder = XdsServerBuilder.forPort(8080);
+    int port = findFreePort();
+    XdsServerBuilder builder = XdsServerBuilder.forPort(port);
     XdsClient mockXdsClient = mock(XdsClient.class);
     XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
-        new XdsClientWrapperForServerSds(8080, mockXdsClient, null);
+        new XdsClientWrapperForServerSds(port, mockXdsClient, null);
     ServerSdsProtocolNegotiator serverSdsProtocolNegotiator =
         new ServerSdsProtocolNegotiator(null, xdsClientWrapperForServerSds);
     Server xdsServer = builder.buildServer(serverSdsProtocolNegotiator);
@@ -57,5 +50,12 @@ public class XdsServerBuilderTest {
     xdsServer.shutdown();
     xdsServer.awaitTermination(500L, TimeUnit.MILLISECONDS);
     verify(mockXdsClient, times(1)).shutdown();
+  }
+
+  private static int findFreePort() throws IOException {
+    try (ServerSocket socket = new ServerSocket(0)) {
+      socket.setReuseAddress(true);
+      return socket.getLocalPort();
+    }
   }
 }
