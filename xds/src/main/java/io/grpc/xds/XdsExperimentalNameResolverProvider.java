@@ -30,7 +30,7 @@ import java.net.URI;
 // TODO(zdapeng): remove this class once it's not needed for interop testing.
 @Deprecated
 @Internal
-public class XdsExperimentalNameResolverProvider extends NameResolverProvider {
+public final class XdsExperimentalNameResolverProvider extends NameResolverProvider {
 
   private static final String SCHEME = "xds-experimental";
 
