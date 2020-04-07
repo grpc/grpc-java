@@ -112,7 +112,7 @@ public final class XdsClientWrapperForServerSds {
       public void onListenerChanged(XdsClient.ListenerUpdate update) {
         logger.log(
             Level.INFO,
-            "Setting myListener from ConfigUpdate listener :{0}",
+            "Setting myListener from ConfigUpdate listener: {0}",
             update.getListener().toString());
         curListener = update.getListener();
       }
@@ -125,7 +125,7 @@ public final class XdsClientWrapperForServerSds {
           curListener = null;
         }
         // TODO(sanjaypujare): Implement logic for other cases based on final design.
-        logger.log(Level.SEVERE, "ListenerWatcher in XdsClientWrapperForServerSds:{0}", error);
+        logger.log(Level.SEVERE, "ListenerWatcher in XdsClientWrapperForServerSds: {0}", error);
       }
     };
     xdsClient.watchListenerData(port, listenerWatcher);

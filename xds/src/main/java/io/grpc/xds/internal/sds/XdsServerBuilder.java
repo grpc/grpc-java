@@ -160,8 +160,7 @@ public final class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
             }
           });
     InternalProtocolNegotiator.ProtocolNegotiator serverProtocolNegotiator =
-        SdsProtocolNegotiators.serverProtocolNegotiator(
-            port, syncContext);
+        SdsProtocolNegotiators.serverProtocolNegotiator(port, syncContext);
     return buildServer(serverProtocolNegotiator);
   }
 

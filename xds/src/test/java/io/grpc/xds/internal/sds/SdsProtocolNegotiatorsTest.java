@@ -32,7 +32,7 @@ import io.grpc.netty.GrpcHttp2ConnectionHandler;
 import io.grpc.netty.InternalProtocolNegotiationEvent;
 import io.grpc.netty.InternalProtocolNegotiator;
 import io.grpc.xds.XdsClientWrapperForServerSds;
-import io.grpc.xds.XdsSdsClientServerTest;
+import io.grpc.xds.XdsClientWrapperForServerSdsTest;
 import io.grpc.xds.internal.sds.SdsProtocolNegotiators.ClientSdsHandler;
 import io.grpc.xds.internal.sds.SdsProtocolNegotiators.ClientSdsProtocolNegotiator;
 import io.netty.channel.ChannelHandler;
@@ -62,12 +62,6 @@ import org.junit.runners.JUnit4;
 /** Unit tests for {@link SdsProtocolNegotiators}. */
 @RunWith(JUnit4.class)
 public class SdsProtocolNegotiatorsTest {
-
-  private static final String SERVER_1_PEM_FILE = "server1.pem";
-  private static final String SERVER_1_KEY_FILE = "server1.key";
-  private static final String CLIENT_PEM_FILE = "client.pem";
-  private static final String CLIENT_KEY_FILE = "client.key";
-  private static final String CA_PEM_FILE = "ca.pem";
 
   private final GrpcHttp2ConnectionHandler grpcHandler =
       FakeGrpcHttp2ConnectionHandler.newHandler();
@@ -167,7 +161,8 @@ public class SdsProtocolNegotiatorsTest {
   @Test
   public void clientSdsHandler_addLast() throws IOException {
     UpstreamTlsContext upstreamTlsContext =
-        buildUpstreamTlsContextFromFilenames(CLIENT_KEY_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
+        buildUpstreamTlsContextFromFilenames(CommonTlsContextTestsUtil.CLIENT_KEY_FILE,
+            CommonTlsContextTestsUtil.CLIENT_PEM_FILE, CommonTlsContextTestsUtil.CA_PEM_FILE);
 
     SdsProtocolNegotiators.ClientSdsHandler clientSdsHandler =
         new SdsProtocolNegotiators.ClientSdsHandler(grpcHandler, upstreamTlsContext);
@@ -200,10 +195,12 @@ public class SdsProtocolNegotiatorsTest {
     };
     pipeline = channel.pipeline();
     DownstreamTlsContext downstreamTlsContext =
-        buildDownstreamTlsContextFromFilenames(SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, CA_PEM_FILE);
+        buildDownstreamTlsContextFromFilenames(CommonTlsContextTestsUtil.SERVER_1_KEY_FILE,
+            CommonTlsContextTestsUtil.SERVER_1_PEM_FILE, CommonTlsContextTestsUtil.CA_PEM_FILE);
 
     XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
-        XdsSdsClientServerTest.createXdsClientWrapperForServerSds(80, downstreamTlsContext);
+        XdsClientWrapperForServerSdsTest
+            .createXdsClientWrapperForServerSds(80, downstreamTlsContext);
     SdsProtocolNegotiators.HandlerPickerHandler handlerPickerHandler =
         new SdsProtocolNegotiators.HandlerPickerHandler(grpcHandler, xdsClientWrapperForServerSds);
     pipeline.addLast(handlerPickerHandler);
@@ -231,7 +228,7 @@ public class SdsProtocolNegotiatorsTest {
   @Test
   public void serverSdsHandler_nullTlsContext_expectPlaintext() throws IOException {
     SdsProtocolNegotiators.HandlerPickerHandler handlerPickerHandler =
-            new SdsProtocolNegotiators.HandlerPickerHandler(grpcHandler, null);
+        new SdsProtocolNegotiators.HandlerPickerHandler(grpcHandler, null);
     pipeline.addLast(handlerPickerHandler);
     channelHandlerCtx = pipeline.context(handlerPickerHandler);
     assertThat(channelHandlerCtx).isNotNull(); // should find HandlerPickerHandler
@@ -251,7 +248,8 @@ public class SdsProtocolNegotiatorsTest {
   public void clientSdsProtocolNegotiatorNewHandler_fireProtocolNegotiationEvent()
       throws IOException, InterruptedException {
     UpstreamTlsContext upstreamTlsContext =
-        buildUpstreamTlsContextFromFilenames(CLIENT_KEY_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
+        buildUpstreamTlsContextFromFilenames(CommonTlsContextTestsUtil.CLIENT_KEY_FILE,
+            CommonTlsContextTestsUtil.CLIENT_PEM_FILE, CommonTlsContextTestsUtil.CA_PEM_FILE);
 
     SdsProtocolNegotiators.ClientSdsHandler clientSdsHandler =
         new SdsProtocolNegotiators.ClientSdsHandler(grpcHandler, upstreamTlsContext);
@@ -273,7 +271,7 @@ public class SdsProtocolNegotiatorsTest {
   }
 
   @Test
-  public void serverSdsProtocolNegotiator_passNulls_expectPlaintext() {
+  public void serverSdsProtocolNegotiator_nullSyncContext_expectPlaintext() {
     InternalProtocolNegotiator.ProtocolNegotiator protocolNegotiator =
         SdsProtocolNegotiators.serverProtocolNegotiator(7000, null);
     assertThat(protocolNegotiator.scheme().toString()).isEqualTo("http");

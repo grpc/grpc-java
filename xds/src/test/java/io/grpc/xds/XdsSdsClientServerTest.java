@@ -19,7 +19,6 @@ package io.grpc.xds;
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.xds.XdsClientWrapperForServerSdsTest.buildFilterChainMatch;
 import static org.junit.Assert.fail;
-import static org.mockito.Mockito.mock;
 
 import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
@@ -30,6 +29,7 @@ import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.testing.protobuf.SimpleRequest;
 import io.grpc.testing.protobuf.SimpleResponse;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
+import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import io.grpc.xds.internal.sds.SdsProtocolNegotiators;
 import io.grpc.xds.internal.sds.SecretVolumeSslContextProviderTest;
 import io.grpc.xds.internal.sds.XdsChannelBuilder;
@@ -50,10 +50,6 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class XdsSdsClientServerTest {
 
-  /** Bad/untrusted server certs. */
-  private static final String BAD_SERVER_PEM_FILE = "badserver.pem";
-  private static final String BAD_SERVER_KEY_FILE = "badserver.key";
-
   @Rule public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
   private Server server;
 
@@ -69,8 +65,8 @@ public class XdsSdsClientServerTest {
   public void tlsClientServer_noClientAuthentication() throws IOException {
     DownstreamTlsContext downstreamTlsContext =
         SecretVolumeSslContextProviderTest.buildDownstreamTlsContextFromFilenames(
-            SecretVolumeSslContextProviderTest.SERVER_1_KEY_FILE,
-            SecretVolumeSslContextProviderTest.SERVER_1_PEM_FILE,
+            CommonTlsContextTestsUtil.SERVER_1_KEY_FILE,
+            CommonTlsContextTestsUtil.SERVER_1_PEM_FILE,
             null);
 
     getXdsServer(downstreamTlsContext);
@@ -78,7 +74,7 @@ public class XdsSdsClientServerTest {
     // for TLS, client only needs trustCa
     UpstreamTlsContext upstreamTlsContext =
         SecretVolumeSslContextProviderTest.buildUpstreamTlsContextFromFilenames(
-            null, null, SecretVolumeSslContextProviderTest.CA_PEM_FILE);
+            null, null, CommonTlsContextTestsUtil.CA_PEM_FILE);
     buildClientAndTest(upstreamTlsContext, "foo.test.google.fr", "buddy", server.getPort());
   }
 
@@ -87,10 +83,10 @@ public class XdsSdsClientServerTest {
   public void mtlsClientServer_withClientAuthentication() throws IOException {
     UpstreamTlsContext upstreamTlsContext =
         SecretVolumeSslContextProviderTest.buildUpstreamTlsContextFromFilenames(
-            SecretVolumeSslContextProviderTest.CLIENT_KEY_FILE,
-            SecretVolumeSslContextProviderTest.CLIENT_PEM_FILE,
-            SecretVolumeSslContextProviderTest.CA_PEM_FILE);
-    mtlsCommonTest(upstreamTlsContext);
+            CommonTlsContextTestsUtil.CLIENT_KEY_FILE,
+            CommonTlsContextTestsUtil.CLIENT_PEM_FILE,
+            CommonTlsContextTestsUtil.CA_PEM_FILE);
+    performMtlsTestAndGetListenerWatcher(upstreamTlsContext);
   }
 
   /** mTLS - client auth enabled then update server certs to untrusted. */
@@ -98,16 +94,18 @@ public class XdsSdsClientServerTest {
   public void mtlsClientServer_changeServerContext_expectException() throws IOException {
     UpstreamTlsContext upstreamTlsContext =
         SecretVolumeSslContextProviderTest.buildUpstreamTlsContextFromFilenames(
-            SecretVolumeSslContextProviderTest.CLIENT_KEY_FILE,
-            SecretVolumeSslContextProviderTest.CLIENT_PEM_FILE,
-            SecretVolumeSslContextProviderTest.CA_PEM_FILE);
-    XdsClient.ListenerWatcher listenerWatcher = mtlsCommonTest(upstreamTlsContext);
+            CommonTlsContextTestsUtil.CLIENT_KEY_FILE,
+            CommonTlsContextTestsUtil.CLIENT_PEM_FILE,
+            CommonTlsContextTestsUtil.CA_PEM_FILE);
+    XdsClient.ListenerWatcher listenerWatcher = performMtlsTestAndGetListenerWatcher(
+        upstreamTlsContext);
     DownstreamTlsContext downstreamTlsContext =
         SecretVolumeSslContextProviderTest.buildDownstreamTlsContextFromFilenames(
-            BAD_SERVER_KEY_FILE,
-            BAD_SERVER_PEM_FILE,
-            SecretVolumeSslContextProviderTest.CA_PEM_FILE);
-    createListenerUpdate(server.getPort(), downstreamTlsContext, listenerWatcher);
+            CommonTlsContextTestsUtil.BAD_SERVER_KEY_FILE,
+            CommonTlsContextTestsUtil.BAD_SERVER_PEM_FILE,
+            CommonTlsContextTestsUtil.CA_PEM_FILE);
+    XdsClientWrapperForServerSdsTest
+        .generateListenerUpdateToWatcher(server.getPort(), downstreamTlsContext, listenerWatcher);
     try {
       buildClientAndTest(upstreamTlsContext, "foo.test.google.fr", "buddy", server.getPort());
       fail("exception expected");
@@ -117,13 +115,14 @@ public class XdsSdsClientServerTest {
     }
   }
 
-  private XdsClient.ListenerWatcher mtlsCommonTest(UpstreamTlsContext upstreamTlsContext)
+  private XdsClient.ListenerWatcher performMtlsTestAndGetListenerWatcher(
+      UpstreamTlsContext upstreamTlsContext)
       throws IOException {
     DownstreamTlsContext downstreamTlsContext =
         SecretVolumeSslContextProviderTest.buildDownstreamTlsContextFromFilenames(
-            SecretVolumeSslContextProviderTest.SERVER_1_KEY_FILE,
-            SecretVolumeSslContextProviderTest.SERVER_1_PEM_FILE,
-            SecretVolumeSslContextProviderTest.CA_PEM_FILE);
+            CommonTlsContextTestsUtil.SERVER_1_KEY_FILE,
+            CommonTlsContextTestsUtil.SERVER_1_PEM_FILE,
+            CommonTlsContextTestsUtil.CA_PEM_FILE);
 
     XdsClient.ListenerWatcher listenerWatcher = getXdsServer(downstreamTlsContext);
     buildClientAndTest(upstreamTlsContext, "foo.test.google.fr", "buddy", server.getPort());
@@ -136,22 +135,12 @@ public class XdsSdsClientServerTest {
     XdsServerBuilder builder =
         XdsServerBuilder.forPort(port).addService(new SimpleServiceImpl());
     final XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
-        createXdsClientWrapperForServerSds(port, downstreamTlsContext);
+        XdsClientWrapperForServerSdsTest
+            .createXdsClientWrapperForServerSds(port, downstreamTlsContext);
     SdsProtocolNegotiators.ServerSdsProtocolNegotiator serverSdsProtocolNegotiator =
         new SdsProtocolNegotiators.ServerSdsProtocolNegotiator(xdsClientWrapperForServerSds);
     server = cleanupRule.register(builder.buildServer(serverSdsProtocolNegotiator)).start();
     return xdsClientWrapperForServerSds.getListenerWatcher();
-  }
-
-  /** Creates XdsClientWrapperForServerSds: also used by other classes. */
-  public static XdsClientWrapperForServerSds createXdsClientWrapperForServerSds(
-      int port, DownstreamTlsContext downstreamTlsContext) {
-    XdsClient mockXdsClient = mock(XdsClient.class);
-    XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
-        new XdsClientWrapperForServerSds(port, mockXdsClient, null);
-    createListenerUpdate(port, downstreamTlsContext,
-        xdsClientWrapperForServerSds.getListenerWatcher());
-    return xdsClientWrapperForServerSds;
   }
 
   private static int findFreePort() throws IOException {
@@ -159,15 +148,6 @@ public class XdsSdsClientServerTest {
       socket.setReuseAddress(true);
       return socket.getLocalPort();
     }
-  }
-
-  private static void createListenerUpdate(
-      int port, DownstreamTlsContext tlsContext, XdsClient.ListenerWatcher registeredWatcher) {
-    EnvoyServerProtoData.Listener listener =
-        buildListener("listener1", "0.0.0.0", port, tlsContext);
-    XdsClient.ListenerUpdate listenerUpdate =
-        XdsClient.ListenerUpdate.newBuilder().setListener(listener).build();
-    registeredWatcher.onListenerChanged(listenerUpdate);
   }
 
   static EnvoyServerProtoData.Listener buildListener(

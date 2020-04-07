@@ -29,10 +29,6 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class ClientSslContextProviderFactoryTest {
 
-  private static final String CLIENT_PEM_FILE = "client.pem";
-  private static final String CLIENT_KEY_FILE = "client.key";
-  private static final String CA_PEM_FILE = "ca.pem";
-
   ClientSslContextProviderFactory clientSslContextProviderFactory =
       new ClientSslContextProviderFactory();
 
@@ -40,7 +36,8 @@ public class ClientSslContextProviderFactoryTest {
   public void createSslContextProvider_allFilenames() {
     UpstreamTlsContext upstreamTlsContext =
         SecretVolumeSslContextProviderTest.buildUpstreamTlsContextFromFilenames(
-            CLIENT_KEY_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
+            CommonTlsContextTestsUtil.CLIENT_KEY_FILE, CommonTlsContextTestsUtil.CLIENT_PEM_FILE,
+            CommonTlsContextTestsUtil.CA_PEM_FILE);
 
     SslContextProvider<UpstreamTlsContext> sslContextProvider =
         clientSslContextProviderFactory.createSslContextProvider(upstreamTlsContext);
@@ -51,7 +48,8 @@ public class ClientSslContextProviderFactoryTest {
   public void createSslContextProvider_sdsConfigForTlsCert_expectException() {
     CommonTlsContext commonTlsContext =
         CommonTlsContextTestsUtil.buildCommonTlsContextFromSdsConfigForTlsCertificate(
-            /* name= */ "name", /* targetUri= */ "unix:/tmp/sds/path", CA_PEM_FILE);
+            /* name= */ "name", /* targetUri= */ "unix:/tmp/sds/path",
+            CommonTlsContextTestsUtil.CA_PEM_FILE);
     UpstreamTlsContext upstreamTlsContext =
         SecretVolumeSslContextProviderTest.buildUpstreamTlsContext(commonTlsContext);
 
@@ -72,8 +70,8 @@ public class ClientSslContextProviderFactoryTest {
         CommonTlsContextTestsUtil.buildCommonTlsContextFromSdsConfigForValidationContext(
             /* name= */ "name",
             /* targetUri= */ "unix:/tmp/sds/path",
-            CLIENT_KEY_FILE,
-            CLIENT_PEM_FILE);
+            CommonTlsContextTestsUtil.CLIENT_KEY_FILE,
+            CommonTlsContextTestsUtil.CLIENT_PEM_FILE);
     UpstreamTlsContext upstreamTlsContext =
         SecretVolumeSslContextProviderTest.buildUpstreamTlsContext(commonTlsContext);
 

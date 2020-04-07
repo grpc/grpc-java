@@ -32,6 +32,7 @@ import java.io.IOException;
 import java.security.cert.CertStoreException;
 import java.security.cert.CertificateException;
 import java.util.List;
+import javax.annotation.Nullable;
 import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
@@ -42,12 +43,6 @@ import org.junit.runners.JUnit4;
 /** Unit tests for {@link SecretVolumeSslContextProvider}. */
 @RunWith(JUnit4.class)
 public class SecretVolumeSslContextProviderTest {
-
-  public static final String SERVER_1_PEM_FILE = "server1.pem";
-  public static final String SERVER_1_KEY_FILE = "server1.key";
-  public static final String CLIENT_PEM_FILE = "client.pem";
-  public static final String CLIENT_KEY_FILE = "client.key";
-  public static final String CA_PEM_FILE = "ca.pem";
 
   @Rule public TemporaryFolder temporaryFolder = new TemporaryFolder();
 
@@ -410,7 +405,7 @@ public class SecretVolumeSslContextProviderTest {
    * Helper method to build DownstreamTlsContext for above tests. Called from other classes as well.
    */
   public static DownstreamTlsContext buildDownstreamTlsContextFromFilenames(
-      String privateKey, String certChain, String trustCa) {
+      @Nullable String privateKey, @Nullable String certChain, @Nullable String trustCa) {
     // get temp file for each file
     try {
       if (certChain != null) {
@@ -433,7 +428,7 @@ public class SecretVolumeSslContextProviderTest {
    * Helper method to build UpstreamTlsContext for above tests. Called from other classes as well.
    */
   public static UpstreamTlsContext buildUpstreamTlsContextFromFilenames(
-      String privateKey, String certChain, String trustCa) {
+      @Nullable String privateKey, @Nullable String certChain, @Nullable String trustCa) {
     try {
       if (certChain != null) {
         certChain = getTempFileNameForResourcesFile(certChain);
@@ -495,31 +490,36 @@ public class SecretVolumeSslContextProviderTest {
   @Test
   public void getProviderForServer() throws IOException, CertificateException, CertStoreException {
     sslContextForEitherWithBothCertAndTrust(
-        true, SERVER_1_PEM_FILE, SERVER_1_KEY_FILE, CA_PEM_FILE);
+        true, CommonTlsContextTestsUtil.SERVER_1_PEM_FILE,
+        CommonTlsContextTestsUtil.SERVER_1_KEY_FILE, CommonTlsContextTestsUtil.CA_PEM_FILE);
   }
 
   @Test
   public void getProviderForClient() throws IOException, CertificateException, CertStoreException {
-    sslContextForEitherWithBothCertAndTrust(false, CLIENT_PEM_FILE, CLIENT_KEY_FILE, CA_PEM_FILE);
+    sslContextForEitherWithBothCertAndTrust(false, CommonTlsContextTestsUtil.CLIENT_PEM_FILE,
+        CommonTlsContextTestsUtil.CLIENT_KEY_FILE, CommonTlsContextTestsUtil.CA_PEM_FILE);
   }
 
   @Test
   public void getProviderForServer_onlyCert()
       throws IOException, CertificateException, CertStoreException {
-    sslContextForEitherWithBothCertAndTrust(true, SERVER_1_PEM_FILE, SERVER_1_KEY_FILE, null);
+    sslContextForEitherWithBothCertAndTrust(true, CommonTlsContextTestsUtil.SERVER_1_PEM_FILE,
+        CommonTlsContextTestsUtil.SERVER_1_KEY_FILE, null);
   }
 
   @Test
   public void getProviderForClient_onlyTrust()
       throws IOException, CertificateException, CertStoreException {
-    sslContextForEitherWithBothCertAndTrust(false, null, null, CA_PEM_FILE);
+    sslContextForEitherWithBothCertAndTrust(false, null, null,
+        CommonTlsContextTestsUtil.CA_PEM_FILE);
   }
 
   @Test
   public void getProviderForServer_badFile_throwsException()
       throws IOException, CertificateException, CertStoreException {
     try {
-      sslContextForEitherWithBothCertAndTrust(true, SERVER_1_PEM_FILE, SERVER_1_PEM_FILE, null);
+      sslContextForEitherWithBothCertAndTrust(true, CommonTlsContextTestsUtil.SERVER_1_PEM_FILE,
+          CommonTlsContextTestsUtil.SERVER_1_PEM_FILE, null);
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
       assertThat(expected).hasMessageThat().contains("File does not contain valid private key");
@@ -556,7 +556,8 @@ public class SecretVolumeSslContextProviderTest {
   public void getProviderForServer_both_callsback() throws IOException {
     SecretVolumeSslContextProvider<?> provider =
         getSslContextSecretVolumeSecretProvider(
-            true, SERVER_1_PEM_FILE, SERVER_1_KEY_FILE, CA_PEM_FILE);
+            true, CommonTlsContextTestsUtil.SERVER_1_PEM_FILE,
+            CommonTlsContextTestsUtil.SERVER_1_KEY_FILE, CommonTlsContextTestsUtil.CA_PEM_FILE);
 
     TestCallback testCallback = getValueThruCallback(provider);
     doChecksOnSslContext(true, testCallback.updatedSslContext, /* expectedApnProtos= */ null);
@@ -566,7 +567,8 @@ public class SecretVolumeSslContextProviderTest {
   public void getProviderForClient_both_callsback() throws IOException {
     SecretVolumeSslContextProvider<?> provider =
         getSslContextSecretVolumeSecretProvider(
-            false, CLIENT_PEM_FILE, CLIENT_KEY_FILE, CA_PEM_FILE);
+            false, CommonTlsContextTestsUtil.CLIENT_PEM_FILE,
+            CommonTlsContextTestsUtil.CLIENT_KEY_FILE, CommonTlsContextTestsUtil.CA_PEM_FILE);
 
     TestCallback testCallback = getValueThruCallback(provider);
     doChecksOnSslContext(false, testCallback.updatedSslContext, /* expectedApnProtos= */ null);
@@ -577,7 +579,8 @@ public class SecretVolumeSslContextProviderTest {
   public void getProviderForClient_both_callsback_setException() throws IOException {
     SecretVolumeSslContextProvider<?> provider =
         getSslContextSecretVolumeSecretProvider(
-            false, CLIENT_PEM_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
+            false, CommonTlsContextTestsUtil.CLIENT_PEM_FILE,
+            CommonTlsContextTestsUtil.CLIENT_PEM_FILE, CommonTlsContextTestsUtil.CA_PEM_FILE);
     TestCallback testCallback = getValueThruCallback(provider);
     assertThat(testCallback.updatedSslContext).isNull();
     assertThat(testCallback.updatedThrowable).isInstanceOf(IllegalArgumentException.class);

@@ -56,6 +56,7 @@ import io.grpc.xds.XdsClient.EndpointWatcher;
 import io.grpc.xds.XdsClient.RefCountedXdsClientObjectPool;
 import io.grpc.xds.XdsClient.XdsClientFactory;
 import io.grpc.xds.XdsLoadBalancerProvider.XdsConfig;
+import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import io.grpc.xds.internal.sds.SecretVolumeSslContextProviderTest;
 import io.grpc.xds.internal.sds.SslContextProvider;
 import io.grpc.xds.internal.sds.TlsContextManager;
@@ -79,11 +80,6 @@ import org.mockito.MockitoAnnotations;
  */
 @RunWith(JUnit4.class)
 public class CdsLoadBalancerTest {
-  private static final String CLIENT_PEM_FILE = "client.pem";
-  private static final String CLIENT_KEY_FILE = "client.key";
-  private static final String BADCLIENT_PEM_FILE = "badclient.pem";
-  private static final String BADCLIENT_KEY_FILE = "badclient.key";
-  private static final String CA_PEM_FILE = "ca.pem";
 
   private final RefCountedXdsClientObjectPool xdsClientPool = new RefCountedXdsClientObjectPool(
       new XdsClientFactory() {
@@ -357,7 +353,8 @@ public class CdsLoadBalancerTest {
 
     UpstreamTlsContext upstreamTlsContext =
         SecretVolumeSslContextProviderTest.buildUpstreamTlsContextFromFilenames(
-            CLIENT_KEY_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
+            CommonTlsContextTestsUtil.CLIENT_KEY_FILE, CommonTlsContextTestsUtil.CLIENT_PEM_FILE,
+            CommonTlsContextTestsUtil.CA_PEM_FILE);
 
     SslContextProvider<UpstreamTlsContext> mockSslContextProvider =
         (SslContextProvider<UpstreamTlsContext>) mock(SslContextProvider.class);
@@ -416,7 +413,8 @@ public class CdsLoadBalancerTest {
     reset(helper);
     UpstreamTlsContext upstreamTlsContext1 =
         SecretVolumeSslContextProviderTest.buildUpstreamTlsContextFromFilenames(
-            BADCLIENT_KEY_FILE, BADCLIENT_PEM_FILE, CA_PEM_FILE);
+            CommonTlsContextTestsUtil.BADCLIENT_KEY_FILE,
+            CommonTlsContextTestsUtil.BADCLIENT_PEM_FILE, CommonTlsContextTestsUtil.CA_PEM_FILE);
     SslContextProvider<UpstreamTlsContext> mockSslContextProvider1 =
         (SslContextProvider<UpstreamTlsContext>) mock(SslContextProvider.class);
     doReturn(upstreamTlsContext1).when(mockSslContextProvider1).getSource();

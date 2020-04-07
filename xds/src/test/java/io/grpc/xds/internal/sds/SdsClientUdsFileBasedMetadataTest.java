@@ -95,8 +95,9 @@ public class SdsClientUdsFileBasedMetadataTest {
     final SdsClient.SecretWatcher mockWatcher = mock(SdsClient.SecretWatcher.class);
 
     doReturn(
-            SdsClientTest.getOneTlsCertSecret(
-                "name1", SdsClientTest.SERVER_0_KEY_FILE, SdsClientTest.SERVER_0_PEM_FILE))
+        SdsClientTest.getOneTlsCertSecret(
+            "name1", CommonTlsContextTestsUtil.SERVER_0_KEY_FILE,
+            CommonTlsContextTestsUtil.SERVER_0_PEM_FILE))
         .when(serverMock)
         .getSecretFor("name1");
 

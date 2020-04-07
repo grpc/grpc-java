@@ -29,6 +29,19 @@ import java.util.Arrays;
 /** Utility class for client and server ssl provider tests. */
 public class CommonTlsContextTestsUtil {
 
+  public static final String SERVER_0_PEM_FILE = "server0.pem";
+  public static final String SERVER_0_KEY_FILE = "server0.key";
+  public static final String SERVER_1_PEM_FILE = "server1.pem";
+  public static final String SERVER_1_KEY_FILE = "server1.key";
+  public static final String CLIENT_PEM_FILE = "client.pem";
+  public static final String CLIENT_KEY_FILE = "client.key";
+  public static final String CA_PEM_FILE = "ca.pem";
+  /** Bad/untrusted server certs. */
+  public static final String BAD_SERVER_PEM_FILE = "badserver.pem";
+  public static final String BAD_SERVER_KEY_FILE = "badserver.key";
+  public static final String BADCLIENT_PEM_FILE = "badclient.pem";
+  public static final String BADCLIENT_KEY_FILE = "badclient.key";
+
   static SdsSecretConfig buildSdsSecretConfig(String name, String targetUri, String channelType) {
     SdsSecretConfig sdsSecretConfig = null;
     if (!Strings.isNullOrEmpty(name) && !Strings.isNullOrEmpty(targetUri)) {

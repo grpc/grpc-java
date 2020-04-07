@@ -29,10 +29,6 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class ServerSslContextProviderFactoryTest {
 
-  private static final String SERVER_PEM_FILE = "server1.pem";
-  private static final String SERVER_KEY_FILE = "server1.key";
-  private static final String CA_PEM_FILE = "ca.pem";
-
   ServerSslContextProviderFactory serverSslContextProviderFactory =
       new ServerSslContextProviderFactory();
 
@@ -40,7 +36,9 @@ public class ServerSslContextProviderFactoryTest {
   public void createSslContextProvider_allFilenames() {
     DownstreamTlsContext downstreamTlsContext =
         SecretVolumeSslContextProviderTest.buildDownstreamTlsContextFromFilenames(
-            SERVER_KEY_FILE, SERVER_PEM_FILE, CA_PEM_FILE);
+            CommonTlsContextTestsUtil.SERVER_1_KEY_FILE,
+            CommonTlsContextTestsUtil.SERVER_1_PEM_FILE,
+            CommonTlsContextTestsUtil.CA_PEM_FILE);
 
     SslContextProvider<DownstreamTlsContext> sslContextProvider =
         serverSslContextProviderFactory.createSslContextProvider(downstreamTlsContext);
@@ -51,7 +49,7 @@ public class ServerSslContextProviderFactoryTest {
   public void createSslContextProvider_sdsConfigForTlsCert_expectException() {
     CommonTlsContext commonTlsContext =
         CommonTlsContextTestsUtil.buildCommonTlsContextFromSdsConfigForTlsCertificate(
-            "name", "unix:/tmp/sds/path", CA_PEM_FILE);
+            "name", "unix:/tmp/sds/path", CommonTlsContextTestsUtil.CA_PEM_FILE);
     DownstreamTlsContext downstreamTlsContext =
         CommonTlsContextTestsUtil.buildDownstreamTlsContext(commonTlsContext);
 
@@ -70,7 +68,8 @@ public class ServerSslContextProviderFactoryTest {
   public void createSslContextProvider_sdsConfigForCertValidationContext_expectException() {
     CommonTlsContext commonTlsContext =
         CommonTlsContextTestsUtil.buildCommonTlsContextFromSdsConfigForValidationContext(
-            "name", "unix:/tmp/sds/path", SERVER_KEY_FILE, SERVER_PEM_FILE);
+            "name", "unix:/tmp/sds/path", CommonTlsContextTestsUtil.SERVER_1_KEY_FILE,
+            CommonTlsContextTestsUtil.SERVER_1_PEM_FILE);
     DownstreamTlsContext downstreamTlsContext =
         CommonTlsContextTestsUtil.buildDownstreamTlsContext(commonTlsContext);
 

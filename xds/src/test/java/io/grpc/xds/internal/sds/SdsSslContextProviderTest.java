@@ -39,12 +39,6 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class SdsSslContextProviderTest {
 
-  private static final String SERVER_1_PEM_FILE = "server1.pem";
-  private static final String SERVER_1_KEY_FILE = "server1.key";
-  private static final String CLIENT_PEM_FILE = "client.pem";
-  private static final String CLIENT_KEY_FILE = "client.key";
-  private static final String CA_PEM_FILE = "ca.pem";
-
   private TestSdsServer.ServerMock serverMock;
   private TestSdsServer server;
   private Node node;
@@ -94,9 +88,12 @@ public class SdsSslContextProviderTest {
   @Test
   public void testProviderForServer() throws IOException {
     when(serverMock.getSecretFor(/* name= */ "cert1"))
-        .thenReturn(getOneTlsCertSecret(/* name= */ "cert1", SERVER_1_KEY_FILE, SERVER_1_PEM_FILE));
+        .thenReturn(getOneTlsCertSecret(/* name= */ "cert1",
+            CommonTlsContextTestsUtil.SERVER_1_KEY_FILE,
+            CommonTlsContextTestsUtil.SERVER_1_PEM_FILE));
     when(serverMock.getSecretFor(/* name= */ "valid1"))
-        .thenReturn(getOneCertificateValidationContextSecret(/* name= */ "valid1", CA_PEM_FILE));
+        .thenReturn(getOneCertificateValidationContextSecret(/* name= */ "valid1",
+            CommonTlsContextTestsUtil.CA_PEM_FILE));
 
     SdsSslContextProvider<?> provider =
         getSdsSslContextProvider(/* server= */ true, "cert1", "valid1", null, null);
@@ -109,9 +106,12 @@ public class SdsSslContextProviderTest {
   @Test
   public void testProviderForClient() throws IOException {
     when(serverMock.getSecretFor(/* name= */ "cert1"))
-        .thenReturn(getOneTlsCertSecret(/* name= */ "cert1", CLIENT_KEY_FILE, CLIENT_PEM_FILE));
+        .thenReturn(getOneTlsCertSecret(/* name= */ "cert1",
+            CommonTlsContextTestsUtil.CLIENT_KEY_FILE,
+            CommonTlsContextTestsUtil.CLIENT_PEM_FILE));
     when(serverMock.getSecretFor("valid1"))
-        .thenReturn(getOneCertificateValidationContextSecret(/* name= */ "valid1", CA_PEM_FILE));
+        .thenReturn(getOneCertificateValidationContextSecret(/* name= */ "valid1",
+            CommonTlsContextTestsUtil.CA_PEM_FILE));
 
     SdsSslContextProvider<?> provider =
         getSdsSslContextProvider(
@@ -129,7 +129,9 @@ public class SdsSslContextProviderTest {
   @Test
   public void testProviderForServer_onlyCert() throws IOException {
     when(serverMock.getSecretFor(/* name= */ "cert1"))
-        .thenReturn(getOneTlsCertSecret(/* name= */ "cert1", SERVER_1_KEY_FILE, SERVER_1_PEM_FILE));
+        .thenReturn(getOneTlsCertSecret(/* name= */ "cert1",
+            CommonTlsContextTestsUtil.SERVER_1_KEY_FILE,
+            CommonTlsContextTestsUtil.SERVER_1_PEM_FILE));
 
     SdsSslContextProvider<?> provider =
         getSdsSslContextProvider(
@@ -144,7 +146,8 @@ public class SdsSslContextProviderTest {
   @Test
   public void getProviderForClient_onlyTrust() throws IOException {
     when(serverMock.getSecretFor(/* name= */ "valid1"))
-        .thenReturn(getOneCertificateValidationContextSecret(/* name= */ "valid1", CA_PEM_FILE));
+        .thenReturn(getOneCertificateValidationContextSecret(/* name= */ "valid1",
+            CommonTlsContextTestsUtil.CA_PEM_FILE));
 
     SdsSslContextProvider<?> provider =
         getSdsSslContextProvider(
@@ -159,7 +162,8 @@ public class SdsSslContextProviderTest {
   @Test
   public void getProviderForServer_noCert_throwsException() throws IOException {
     when(serverMock.getSecretFor(/* name= */ "valid1"))
-        .thenReturn(getOneCertificateValidationContextSecret(/* name= */ "valid1", CA_PEM_FILE));
+        .thenReturn(getOneCertificateValidationContextSecret(/* name= */ "valid1",
+            CommonTlsContextTestsUtil.CA_PEM_FILE));
 
     SdsSslContextProvider<?> provider =
         getSdsSslContextProvider(
@@ -180,10 +184,12 @@ public class SdsSslContextProviderTest {
   @Test
   public void testProviderForClient_withSubjectAltNames() throws IOException {
     when(serverMock.getSecretFor(/* name= */ "cert1"))
-        .thenReturn(getOneTlsCertSecret(/* name= */ "cert1", CLIENT_KEY_FILE, CLIENT_PEM_FILE));
+        .thenReturn(getOneTlsCertSecret(/* name= */ "cert1",
+            CommonTlsContextTestsUtil.CLIENT_KEY_FILE,
+            CommonTlsContextTestsUtil.CLIENT_PEM_FILE));
     when(serverMock.getSecretFor("valid1"))
         .thenReturn(getOneCertificateValidationContextSecret(/* name= */ "valid1",
-            CA_PEM_FILE));
+            CommonTlsContextTestsUtil.CA_PEM_FILE));
 
     SdsSslContextProvider<?> provider =
         getSdsSslContextProvider(
@@ -202,9 +208,12 @@ public class SdsSslContextProviderTest {
   @Test
   public void testProviderForClient_withAlpnProtocols() throws IOException {
     when(serverMock.getSecretFor(/* name= */ "cert1"))
-        .thenReturn(getOneTlsCertSecret(/* name= */ "cert1", CLIENT_KEY_FILE, CLIENT_PEM_FILE));
+        .thenReturn(getOneTlsCertSecret(/* name= */ "cert1",
+            CommonTlsContextTestsUtil.CLIENT_KEY_FILE,
+            CommonTlsContextTestsUtil.CLIENT_PEM_FILE));
     when(serverMock.getSecretFor("valid1"))
-        .thenReturn(getOneCertificateValidationContextSecret(/* name= */ "valid1", CA_PEM_FILE));
+        .thenReturn(getOneCertificateValidationContextSecret(/* name= */ "valid1",
+            CommonTlsContextTestsUtil.CA_PEM_FILE));
 
     SdsSslContextProvider<?> provider =
         getSdsSslContextProvider(
@@ -223,9 +232,12 @@ public class SdsSslContextProviderTest {
   @Test
   public void testProviderForServer_withAlpnProtocols() throws IOException {
     when(serverMock.getSecretFor(/* name= */ "cert1"))
-        .thenReturn(getOneTlsCertSecret(/* name= */ "cert1", SERVER_1_KEY_FILE, SERVER_1_PEM_FILE));
+        .thenReturn(getOneTlsCertSecret(/* name= */ "cert1",
+            CommonTlsContextTestsUtil.SERVER_1_KEY_FILE,
+            CommonTlsContextTestsUtil.SERVER_1_PEM_FILE));
     when(serverMock.getSecretFor(/* name= */ "valid1"))
-        .thenReturn(getOneCertificateValidationContextSecret(/* name= */ "valid1", CA_PEM_FILE));
+        .thenReturn(getOneCertificateValidationContextSecret(/* name= */ "valid1",
+            CommonTlsContextTestsUtil.CA_PEM_FILE));
 
     SdsSslContextProvider<?> provider =
         getSdsSslContextProvider(

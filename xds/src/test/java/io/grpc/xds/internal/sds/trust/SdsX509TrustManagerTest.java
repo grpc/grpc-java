@@ -27,6 +27,7 @@ import static org.mockito.Mockito.when;
 
 import io.envoyproxy.envoy.api.v2.auth.CertificateValidationContext;
 import io.grpc.internal.testing.TestUtils;
+import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.security.cert.CertStoreException;
@@ -52,18 +53,6 @@ import sun.security.validator.ValidatorException;
 @RunWith(JUnit4.class)
 public class SdsX509TrustManagerTest {
 
-  /** Trust store cert. */
-  private static final String CA_PEM_FILE = "ca.pem";
-
-  /** server1 has 4 SANs. */
-  private static final String SERVER_1_PEM_FILE = "server1.pem";
-
-  /** client has no SANs. */
-  private static final String CLIENT_PEM_FILE = "client.pem";
-
-  /** Untrusted server. */
-  private static final String BAD_SERVER_PEM_FILE = "badserver.pem";
-
   @Rule
   public final MockitoRule mockitoRule = MockitoJUnit.rule();
 
@@ -79,7 +68,8 @@ public class SdsX509TrustManagerTest {
   public void nullCertContextTest() throws CertificateException, IOException {
     trustManager = new SdsX509TrustManager(null, mockDelegate);
     X509Certificate[] certs =
-        CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
+        CertificateUtils.toX509Certificates(TestUtils.loadCert(
+            CommonTlsContextTestsUtil.SERVER_1_PEM_FILE));
     trustManager.verifySubjectAltNameInChain(certs);
   }
 
@@ -88,7 +78,8 @@ public class SdsX509TrustManagerTest {
     CertificateValidationContext certContext = CertificateValidationContext.getDefaultInstance();
     trustManager = new SdsX509TrustManager(certContext, mockDelegate);
     X509Certificate[] certs =
-        CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
+        CertificateUtils.toX509Certificates(TestUtils.loadCert(
+            CommonTlsContextTestsUtil.SERVER_1_PEM_FILE));
     trustManager.verifySubjectAltNameInChain(certs);
   }
 
@@ -127,7 +118,8 @@ public class SdsX509TrustManagerTest {
         CertificateValidationContext.newBuilder().addVerifySubjectAltName("foo.com").build();
     trustManager = new SdsX509TrustManager(certContext, mockDelegate);
     X509Certificate[] certs =
-        CertificateUtils.toX509Certificates(TestUtils.loadCert(CLIENT_PEM_FILE));
+        CertificateUtils.toX509Certificates(TestUtils.loadCert(
+            CommonTlsContextTestsUtil.CLIENT_PEM_FILE));
     try {
       trustManager.verifySubjectAltNameInChain(certs);
       fail("no exception thrown");
@@ -145,7 +137,8 @@ public class SdsX509TrustManagerTest {
             .build();
     trustManager = new SdsX509TrustManager(certContext, mockDelegate);
     X509Certificate[] certs =
-        CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
+        CertificateUtils.toX509Certificates(TestUtils.loadCert(
+            CommonTlsContextTestsUtil.SERVER_1_PEM_FILE));
     trustManager.verifySubjectAltNameInChain(certs);
   }
 
@@ -160,7 +153,8 @@ public class SdsX509TrustManagerTest {
             .build();
     trustManager = new SdsX509TrustManager(certContext, mockDelegate);
     X509Certificate[] certs =
-        CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
+        CertificateUtils.toX509Certificates(TestUtils.loadCert(
+            CommonTlsContextTestsUtil.SERVER_1_PEM_FILE));
     trustManager.verifySubjectAltNameInChain(certs);
   }
 
@@ -172,7 +166,8 @@ public class SdsX509TrustManagerTest {
         CertificateValidationContext.newBuilder().addVerifySubjectAltName("x.foo.com").build();
     trustManager = new SdsX509TrustManager(certContext, mockDelegate);
     X509Certificate[] certs =
-        CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
+        CertificateUtils.toX509Certificates(TestUtils.loadCert(
+            CommonTlsContextTestsUtil.SERVER_1_PEM_FILE));
     try {
       trustManager.verifySubjectAltNameInChain(certs);
       fail("no exception thrown");
@@ -192,7 +187,8 @@ public class SdsX509TrustManagerTest {
             .build();
     trustManager = new SdsX509TrustManager(certContext, mockDelegate);
     X509Certificate[] certs =
-        CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
+        CertificateUtils.toX509Certificates(TestUtils.loadCert(
+            CommonTlsContextTestsUtil.SERVER_1_PEM_FILE));
     trustManager.verifySubjectAltNameInChain(certs);
   }
 
@@ -207,7 +203,8 @@ public class SdsX509TrustManagerTest {
             .build();
     trustManager = new SdsX509TrustManager(certContext, mockDelegate);
     X509Certificate[] certs =
-        CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
+        CertificateUtils.toX509Certificates(TestUtils.loadCert(
+            CommonTlsContextTestsUtil.SERVER_1_PEM_FILE));
     trustManager.verifySubjectAltNameInChain(certs);
   }
 
@@ -224,7 +221,8 @@ public class SdsX509TrustManagerTest {
             .build();
     trustManager = new SdsX509TrustManager(certContext, mockDelegate);
     X509Certificate[] certs =
-        CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
+        CertificateUtils.toX509Certificates(TestUtils.loadCert(
+            CommonTlsContextTestsUtil.SERVER_1_PEM_FILE));
     try {
       trustManager.verifySubjectAltNameInChain(certs);
       fail("no exception thrown");
@@ -243,7 +241,8 @@ public class SdsX509TrustManagerTest {
             .build();
     trustManager = new SdsX509TrustManager(certContext, mockDelegate);
     X509Certificate[] certs =
-        CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
+        CertificateUtils.toX509Certificates(TestUtils.loadCert(
+            CommonTlsContextTestsUtil.SERVER_1_PEM_FILE));
     trustManager.verifySubjectAltNameInChain(certs);
   }
 
@@ -257,7 +256,8 @@ public class SdsX509TrustManagerTest {
             .build();
     trustManager = new SdsX509TrustManager(certContext, mockDelegate);
     X509Certificate[] certs =
-        CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
+        CertificateUtils.toX509Certificates(TestUtils.loadCert(
+            CommonTlsContextTestsUtil.SERVER_1_PEM_FILE));
     try {
       trustManager.verifySubjectAltNameInChain(certs);
       fail("no exception thrown");
@@ -271,7 +271,8 @@ public class SdsX509TrustManagerTest {
       throws CertificateException, IOException, CertStoreException {
     TestSslEngine sslEngine = buildTrustManagerAndGetSslEngine();
     X509Certificate[] serverCerts =
-        CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
+        CertificateUtils.toX509Certificates(TestUtils.loadCert(
+            CommonTlsContextTestsUtil.SERVER_1_PEM_FILE));
     trustManager.checkServerTrusted(serverCerts, "ECDHE_ECDSA", sslEngine);
     verify(sslEngine, times(1)).getHandshakeSession();
   }
@@ -281,7 +282,8 @@ public class SdsX509TrustManagerTest {
       throws CertificateException, IOException, CertStoreException {
     TestSslEngine sslEngine = buildTrustManagerAndGetSslEngine();
     X509Certificate[] badServerCert =
-        CertificateUtils.toX509Certificates(TestUtils.loadCert(BAD_SERVER_PEM_FILE));
+        CertificateUtils.toX509Certificates(TestUtils.loadCert(
+            CommonTlsContextTestsUtil.BAD_SERVER_PEM_FILE));
     try {
       trustManager.checkServerTrusted(badServerCert, "ECDHE_ECDSA", sslEngine);
       fail("exception expected");
@@ -297,7 +299,8 @@ public class SdsX509TrustManagerTest {
       throws CertificateException, IOException, CertStoreException {
     TestSslSocket sslSocket = buildTrustManagerAndGetSslSocket();
     X509Certificate[] serverCerts =
-        CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
+        CertificateUtils.toX509Certificates(TestUtils.loadCert(
+            CommonTlsContextTestsUtil.SERVER_1_PEM_FILE));
     trustManager.checkServerTrusted(serverCerts, "ECDHE_ECDSA", sslSocket);
     verify(sslSocket, times(1)).isConnected();
     verify(sslSocket, times(1)).getHandshakeSession();
@@ -308,7 +311,8 @@ public class SdsX509TrustManagerTest {
       throws CertificateException, IOException, CertStoreException {
     TestSslSocket sslSocket = buildTrustManagerAndGetSslSocket();
     X509Certificate[] badServerCert =
-        CertificateUtils.toX509Certificates(TestUtils.loadCert(BAD_SERVER_PEM_FILE));
+        CertificateUtils.toX509Certificates(TestUtils.loadCert(
+            CommonTlsContextTestsUtil.BAD_SERVER_PEM_FILE));
     try {
       trustManager.checkServerTrusted(badServerCert, "ECDHE_ECDSA", sslSocket);
       fail("exception expected");
@@ -344,7 +348,8 @@ public class SdsX509TrustManagerTest {
   private SSLParameters buildTrustManagerAndGetSslParameters()
       throws CertificateException, IOException, CertStoreException {
     X509Certificate[] caCerts =
-        CertificateUtils.toX509Certificates(TestUtils.loadCert(CA_PEM_FILE));
+        CertificateUtils.toX509Certificates(TestUtils.loadCert(
+            CommonTlsContextTestsUtil.CA_PEM_FILE));
     trustManager = SdsTrustManagerFactory.createSdsX509TrustManager(caCerts,
         null);
     when(mockSession.getProtocol()).thenReturn("TLSv1.2");
