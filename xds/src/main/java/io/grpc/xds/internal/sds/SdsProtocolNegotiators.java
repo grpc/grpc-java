@@ -55,6 +55,10 @@ import javax.annotation.Nullable;
 @VisibleForTesting
 public final class SdsProtocolNegotiators {
 
+  // Prevent instantiation.
+  private SdsProtocolNegotiators() {
+  }
+
   private static final Logger logger = Logger.getLogger(SdsProtocolNegotiators.class.getName());
 
   private static final AsciiString SCHEME = AsciiString.of("https");
