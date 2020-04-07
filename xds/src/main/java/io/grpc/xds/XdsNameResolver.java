@@ -148,7 +148,6 @@ final class XdsNameResolver extends NameResolver {
       this.listener = listener;
     }
 
-    @SuppressWarnings("unchecked")
     @Override
     public void onConfigChanged(ConfigUpdate update) {
       Map<String, ?> rawLbConfig;
