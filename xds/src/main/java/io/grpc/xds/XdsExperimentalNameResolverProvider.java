@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 The gRPC Authors
+ * Copyright 2020 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import com.google.common.base.Preconditions;
 import io.grpc.Internal;
+import io.grpc.NameResolver;
 import io.grpc.NameResolver.Args;
 import io.grpc.NameResolverProvider;
 import io.grpc.internal.ExponentialBackoffPolicy;
@@ -25,23 +26,16 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.xds.XdsClient.XdsChannelFactory;
 import java.net.URI;
 
-/**
- * A provider for {@link XdsNameResolver}.
- *
- * <p>It resolves a target URI whose scheme is {@code "xds"}. The authority of the
- * target URI is never used for current release. The path of the target URI, excluding the leading
- * slash {@code '/'}, will indicate the name to use in the VHDS query.
- *
- * <p>This class should not be directly referenced in code. The resolver should be accessed
- * through {@link io.grpc.NameResolverRegistry} with the URI scheme "xds".
- */
+/** A deprecated provider for {@link XdsNameResolver}. */
+// TODO(zdapeng): remove this class once it's not needed for interop testing.
+@Deprecated
 @Internal
-public final class XdsNameResolverProvider extends NameResolverProvider {
+public final class XdsExperimentalNameResolverProvider extends NameResolverProvider {
 
-  private static final String SCHEME = "xds";
+  private static final String SCHEME = "xds-experimental";
 
   @Override
-  public XdsNameResolver newNameResolver(URI targetUri, Args args) {
+  public NameResolver newNameResolver(URI targetUri, Args args) {
     if (SCHEME.equals(targetUri.getScheme())) {
       String targetPath = Preconditions.checkNotNull(targetUri.getPath(), "targetPath");
       Preconditions.checkArgument(

@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 The gRPC Authors
+ * Copyright 2020 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,9 +33,10 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-/** Unit tests for {@link XdsNameResolverProvider}. */
+/** Unit tests for {@link XdsExperimentalNameResolverProvider}. */
+@Deprecated
 @RunWith(JUnit4.class)
-public class XdsNameResolverProviderTest {
+public class XdsExperimentalNameResolverProviderTest {
   private final SynchronizationContext syncContext = new SynchronizationContext(
       new Thread.UncaughtExceptionHandler() {
         @Override
@@ -54,18 +55,18 @@ public class XdsNameResolverProviderTest {
       .setChannelLogger(mock(ChannelLogger.class))
       .build();
 
-  private XdsNameResolverProvider provider = new XdsNameResolverProvider();
+  private XdsExperimentalNameResolverProvider provider = new XdsExperimentalNameResolverProvider();
 
   @Test
   public void provided() {
     for (NameResolverProvider current
         : InternalServiceProviders.getCandidatesViaServiceLoader(
         NameResolverProvider.class, getClass().getClassLoader())) {
-      if (current instanceof XdsNameResolverProvider) {
+      if (current instanceof XdsExperimentalNameResolverProvider) {
         return;
       }
     }
-    fail("XdsNameResolverProvider not registered");
+    fail("XdsExperimentalNameResolverProvider not registered");
   }
 
   @Test
@@ -76,37 +77,37 @@ public class XdsNameResolverProviderTest {
   @Test
   public void newNameResolver() {
     assertThat(
-        provider.newNameResolver(URI.create("xds://1.1.1.1/foo.googleapis.com"), args))
+        provider.newNameResolver(URI.create("xds-experimental://1.1.1.1/foo.googleapis.com"), args))
         .isInstanceOf(XdsNameResolver.class);
     assertThat(
-        provider.newNameResolver(URI.create("xds:///foo.googleapis.com"), args))
+        provider.newNameResolver(URI.create("xds-experimental:///foo.googleapis.com"), args))
         .isInstanceOf(XdsNameResolver.class);
     assertThat(
-        provider.newNameResolver(URI.create("notxds://1.1.1.1/foo.googleapis.com"),
+        provider.newNameResolver(URI.create("notxds-experimental://1.1.1.1/foo.googleapis.com"),
             args))
         .isNull();
   }
 
   @Test
   public void validName_withAuthority() {
-    XdsNameResolver resolver =
+    NameResolver resolver =
         provider.newNameResolver(
-            URI.create("xds://trafficdirector.google.com/foo.googleapis.com"), args);
+            URI.create("xds-experimental://trafficdirector.google.com/foo.googleapis.com"), args);
     assertThat(resolver).isNotNull();
     assertThat(resolver.getServiceAuthority()).isEqualTo("foo.googleapis.com");
   }
 
   @Test
   public void validName_noAuthority() {
-    XdsNameResolver resolver =
-        provider.newNameResolver(URI.create("xds:///foo.googleapis.com"), args);
+    NameResolver resolver =
+        provider.newNameResolver(URI.create("xds-experimental:///foo.googleapis.com"), args);
     assertThat(resolver).isNotNull();
     assertThat(resolver.getServiceAuthority()).isEqualTo("foo.googleapis.com");
   }
 
   @Test
   public void invalidName_hostnameContainsUnderscore() {
-    URI uri = URI.create("xds:///foo_bar.googleapis.com");
+    URI uri = URI.create("xds-experimental:///foo_bar.googleapis.com");
     try {
       provider.newNameResolver(uri, args);
       fail("Expected IllegalArgumentException");
