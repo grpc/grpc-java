@@ -51,28 +51,26 @@ final class EnvoyProtoData {
   static final class Locality {
     private final String region;
     private final String zone;
-    private final String subzone;
+    private final String subZone;
 
-    /** Must only be used for testing. */
-    @VisibleForTesting
-    Locality(String region, String zone, String subzone) {
+    Locality(String region, String zone, String subZone) {
       this.region = region;
       this.zone = zone;
-      this.subzone = subzone;
+      this.subZone = subZone;
     }
 
     static Locality fromEnvoyProtoLocality(io.envoyproxy.envoy.api.v2.core.Locality locality) {
       return new Locality(
           /* region = */ locality.getRegion(),
           /* zone = */ locality.getZone(),
-          /* subzone = */ locality.getSubZone());
+          /* subZone = */ locality.getSubZone());
     }
 
     io.envoyproxy.envoy.api.v2.core.Locality toEnvoyProtoLocality() {
       return io.envoyproxy.envoy.api.v2.core.Locality.newBuilder()
           .setRegion(region)
           .setZone(zone)
-          .setSubZone(subzone)
+          .setSubZone(subZone)
           .build();
     }
 
@@ -84,8 +82,8 @@ final class EnvoyProtoData {
       return zone;
     }
 
-    String getSubzone() {
-      return subzone;
+    String getSubZone() {
+      return subZone;
     }
 
     @Override
@@ -99,12 +97,12 @@ final class EnvoyProtoData {
       Locality locality = (Locality) o;
       return Objects.equals(region, locality.region)
           && Objects.equals(zone, locality.zone)
-          && Objects.equals(subzone, locality.subzone);
+          && Objects.equals(subZone, locality.subZone);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hash(region, zone, subzone);
+      return Objects.hash(region, zone, subZone);
     }
 
     @Override
@@ -112,7 +110,7 @@ final class EnvoyProtoData {
       return MoreObjects.toStringHelper(this)
           .add("region", region)
           .add("zone", zone)
-          .add("subzone", subzone)
+          .add("subZone", subZone)
           .toString();
     }
   }
