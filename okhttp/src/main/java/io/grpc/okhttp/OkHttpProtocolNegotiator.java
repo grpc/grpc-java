@@ -186,7 +186,8 @@ class OkHttpProtocolNegotiator {
 
     /**
      * Override {@link Platform}'s configureTlsExtensions for Android older than 5.0, since OkHttp
-     * (2.3+) only support such function for Android 5.0+.
+     * (2.3+) only support such function for Android 5.0+. It also invokes new Conscrypt APIs
+     * whenever possible for Android 10.0+.
      */
     @Override
     protected void configureTlsExtensions(
@@ -236,13 +237,14 @@ class OkHttpProtocolNegotiator {
 
     @Override
     public String getSelectedProtocol(SSLSocket socket) {
+      // This API was added in Android Q
+      try {
+        return (String) GET_APPLICATION_PROTOCOL.invokeOptionalWithoutCheckedException(socket);
+      } catch (UnsupportedOperationException ignored) {
+        // The socket doesn't support this API, try the old reflective method
+      }
+
       if (platform.getTlsExtensionType() == TlsExtensionType.ALPN_AND_NPN) {
-        // This API was added in Android Q
-        try {
-          return (String) GET_APPLICATION_PROTOCOL.invokeOptionalWithoutCheckedException(socket);
-        } catch (UnsupportedOperationException ignored) {
-          // The socket doesn't support this API, try the old reflective method
-        }
         try {
           byte[] alpnResult =
               (byte[]) GET_ALPN_SELECTED_PROTOCOL.invokeWithoutCheckedException(socket);
