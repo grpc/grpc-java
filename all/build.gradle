@@ -31,7 +31,7 @@ for (subproject in rootProject.subprojects) {
 }
 
 dependencies {
-    compile subprojects.minus(project(':grpc-protobuf-lite'))
+    implementation subprojects.minus(project(':grpc-protobuf-lite'))
 }
 
 javadoc {
