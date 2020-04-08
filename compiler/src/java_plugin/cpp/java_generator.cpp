@@ -161,10 +161,6 @@ static inline std::string MethodIdFieldName(const MethodDescriptor* method) {
   return "METHODID_" + ToAllUpperCase(method->name());
 }
 
-static inline bool ShouldGenerateAsLite(const Descriptor* desc) {
-  return false;
-}
-
 static inline std::string MessageFullJavaName(const Descriptor* desc) {
   return google::protobuf::compiler::java::ClassName(desc);
 }
