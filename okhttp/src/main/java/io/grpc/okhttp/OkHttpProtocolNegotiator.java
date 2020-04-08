@@ -281,7 +281,9 @@ class OkHttpProtocolNegotiator {
     List<String> result = new ArrayList<>();
     for (int i = 0; i < protocols.size(); i++) {
       Protocol protocol = protocols.get(i);
-      if (protocol == Protocol.HTTP_1_0) continue; // No HTTP/1.0 for ALPN.
+      if (protocol == Protocol.HTTP_1_0) {
+        continue; // No HTTP/1.0 for ALPN.
+      }
       result.add(protocol.toString());
     }
     return result.toArray(new String[0]);
