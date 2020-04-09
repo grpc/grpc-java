@@ -198,7 +198,7 @@ class OkHttpProtocolNegotiator {
         try {
           if (sslSocketsIsSupportedSocket != null
               && (boolean) sslSocketsIsSupportedSocket.invoke(null, sslSocket)) {
-            sslSocketsSetUseSessionTickets.invoke(sslSocket, true);
+            sslSocketsSetUseSessionTickets.invoke(null, sslSocket, true);
           } else {
             SET_USE_SESSION_TICKETS.invokeOptionalWithoutCheckedException(sslSocket, true);
           }
