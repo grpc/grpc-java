@@ -204,7 +204,7 @@ public class LinkedHashLruCacheTest {
     private AtomicReference<Runnable> command;
 
     @Override
-    public ScheduledFuture<?> scheduleAtFixedRate(
+    public final ScheduledFuture<?> scheduleAtFixedRate(
         Runnable command, long initialDelay, long period, TimeUnit unit) {
       // hack to initialize
       if (this.command == null) {
