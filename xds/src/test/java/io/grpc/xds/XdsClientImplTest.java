@@ -2042,6 +2042,27 @@ public class XdsClientImplTest {
                         2, true)), 1, 0),
             new Locality("region3", "zone3", "subzone3"),
             new LocalityLbEndpoints(ImmutableList.<LbEndpoint>of(), 2, 1));
+
+    clusterLoadAssignments = ImmutableList.of(
+        Any.pack(buildClusterLoadAssignment("cluster-foo.googleapis.com",
+            // 0 locality
+            ImmutableList.<io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints>of(),
+            ImmutableList.<ClusterLoadAssignment.Policy.DropOverload>of())));
+    response =
+        buildDiscoveryResponse(
+            "1", clusterLoadAssignments, XdsClientImpl.ADS_TYPE_URL_EDS, "0001");
+    responseObserver.onNext(response);
+
+    // Client sent an ACK EDS request.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest(NODE, "1", "cluster-foo.googleapis.com",
+            XdsClientImpl.ADS_TYPE_URL_EDS, "0001")));
+
+    verify(endpointWatcher, times(2)).onEndpointChanged(endpointUpdateCaptor.capture());
+    endpointUpdate = endpointUpdateCaptor.getValue();
+    assertThat(endpointUpdate.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
+    assertThat(endpointUpdate.getDropPolicies()).isEmpty();
+    assertThat(endpointUpdate.getLocalityLbEndpointsMap()).isEmpty();
   }
 
   @Test

@@ -1189,10 +1189,6 @@ final class XdsClientImpl extends XdsClient {
       }
       EndpointUpdate.Builder updateBuilder = EndpointUpdate.newBuilder();
       updateBuilder.setClusterName(clusterName);
-      if (assignment.getEndpointsCount() == 0) {
-        errorMessage = "ClusterLoadAssignment " + clusterName + " : no locality endpoints.";
-        break;
-      }
       Set<Integer> priorities = new HashSet<>();
       int maxPriority = -1;
       for (io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints localityLbEndpoints
