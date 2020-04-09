@@ -295,7 +295,7 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
   protected void doClose() {}
 
   /** Periodically cleans up the AsyncRequestCache. */
-  private final class PeriodicCleaner implements Runnable {
+  private final class PeriodicCleaner {
 
     private final ScheduledExecutorService ses;
     private final int interval;
@@ -312,7 +312,7 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
     PeriodicCleaner start() {
       checkState(scheduledFuture == null, "cleaning task can be started only once");
       this.scheduledFuture =
-          ses.scheduleAtFixedRate(this, interval, interval, intervalUnit);
+          ses.scheduleAtFixedRate(new CleaningTask(), interval, interval, intervalUnit);
       return this;
     }
 
@@ -323,9 +323,12 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
       }
     }
 
-    @Override
-    public void run() {
-      cleanupExpiredEntries(timeProvider.currentTimeNanos());
+    private class CleaningTask implements Runnable {
+
+      @Override
+      public void run() {
+        cleanupExpiredEntries(timeProvider.currentTimeNanos());
+      }
     }
   }
 
