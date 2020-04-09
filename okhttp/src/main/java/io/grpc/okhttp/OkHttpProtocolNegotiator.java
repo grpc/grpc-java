@@ -186,8 +186,14 @@ class OkHttpProtocolNegotiator {
 
     /**
      * Override {@link Platform}'s configureTlsExtensions for Android older than 5.0, since OkHttp
-     * (2.3+) only support such function for Android 5.0+. It also invokes new Conscrypt APIs
-     * whenever possible for Android 10.0+.
+     * (2.3+) only support such function for Android 5.0+.
+     *
+     * <p>Note: Prior to Android Q, the standard way of accessing some Conscrypt features was to
+     * use reflection to call hidden APIs. Beginning in Q, there is public API for all of these
+     * features. We attempt to use the public API where possible, but also still call the
+     * hidden versions to continue to support old versions of Conscrypt that might be bundled with
+     * apps or third-party TLS providers that might have taken advantage of being able to
+     * duck-type their way into compatibility.
      */
     @Override
     protected void configureTlsExtensions(
@@ -217,17 +223,21 @@ class OkHttpProtocolNegotiator {
         }
       }
 
+      // Enable ALPN and NPN if necessary.
+      SET_APPLICATION_PROTOCOLS
+          .invokeOptionalWithoutCheckedException(sslParams, (Object) protocolIds(protocols));
+
       Object[] parameters = {Platform.concatLengthPrefixed(protocols)};
       if (platform.getTlsExtensionType() == TlsExtensionType.ALPN_AND_NPN) {
-        SET_APPLICATION_PROTOCOLS.invokeOptionalWithoutCheckedException(
-            sslParams, (Object) protocolIds(protocols));
         if (!isPlatformSocket(sslSocket) && SET_ALPN_PROTOCOLS.isSupported(sslSocket)) {
           SET_ALPN_PROTOCOLS.invokeWithoutCheckedException(sslSocket, parameters);
         }
       }
 
       if (platform.getTlsExtensionType() != TlsExtensionType.NONE) {
-        SET_NPN_PROTOCOLS.invokeWithoutCheckedException(sslSocket, parameters);
+        if (!isPlatformSocket(sslSocket) && SET_ALPN_PROTOCOLS.isSupported(sslSocket)) {
+          SET_NPN_PROTOCOLS.invokeWithoutCheckedException(sslSocket, parameters);
+        }
       } else {
         throw new RuntimeException("We can not do TLS handshake on this Android version, please"
             + " install the Google Play Services Dynamic Security Provider to use TLS");
