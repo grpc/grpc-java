@@ -43,14 +43,25 @@ final class ClientTransportLifecycleManager {
     listener.transportReady();
   }
 
-  public void notifyShutdown(Status s) {
+  /**
+   * Marks transport as shutdown, but does not set the error status. This must eventually be
+   * followed by a call to notifyShutdown.
+   */
+  public void notifyGracefulShutdown(Status s) {
     if (transportShutdown) {
       return;
     }
     transportShutdown = true;
+    listener.transportShutdown(s);
+  }
+
+  public void notifyShutdown(Status s) {
+    notifyGracefulShutdown(s);
+    if (shutdownStatus != null) {
+      return;
+    }
     shutdownStatus = s;
     shutdownThrowable = s.asException();
-    listener.transportShutdown(s);
   }
 
   public void notifyInUse(boolean inUse) {
