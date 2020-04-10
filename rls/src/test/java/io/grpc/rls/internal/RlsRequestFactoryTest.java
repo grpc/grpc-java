@@ -158,3 +158,4 @@ public class RlsRequestFactoryTest {
     assertThat(request.getKeyMap()).containsExactly("user", "test");
   }
 }
+

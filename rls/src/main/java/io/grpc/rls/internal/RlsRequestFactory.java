@@ -30,7 +30,6 @@ import io.grpc.rls.internal.RlsProtoData.NameMatcher;
 import io.grpc.rls.internal.RlsProtoData.RouteLookupConfig;
 import io.grpc.rls.internal.RlsProtoData.RouteLookupRequest;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import javax.annotation.CheckReturnValue;
 
@@ -58,23 +57,19 @@ final class RlsRequestFactory {
     Table<String, String, NameMatcher> table = HashBasedTable.create();
     for (GrpcKeyBuilder grpcKeyBuilder : config.getGrpcKeyBuilders()) {
       for (NameMatcher nameMatcher : grpcKeyBuilder.getHeaders()) {
-        List<String> requestHeaders = nameMatcher.names();
         for (Name name : grpcKeyBuilder.getNames()) {
           String method =
               name.getMethod() == null || name.getMethod().isEmpty()
                   ? "*" : name.getMethod();
           String path = name.getService() + "/" + method;
-          table.put(
-              path,
-              nameMatcher.getKey(),
-              new NameMatcher(nameMatcher.getKey(), requestHeaders, nameMatcher.isOptional()));
+          table.put(path, nameMatcher.getKey(), nameMatcher);
         }
       }
     }
     return table;
   }
 
-  /** Creates an {@link RouteLookupRequest} for given request's metadata. */
+  /** Creates a {@link RouteLookupRequest} for given request's metadata. */
   @CheckReturnValue
   public RouteLookupRequest create(String service, String method, Metadata metadata) {
     checkNotNull(service, "service");
@@ -120,3 +115,4 @@ final class RlsRequestFactory {
         .toString();
   }
 }
+
