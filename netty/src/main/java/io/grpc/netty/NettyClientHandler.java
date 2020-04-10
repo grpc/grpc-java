@@ -755,10 +755,21 @@ class NettyClientHandler extends AbstractNettyHandler {
 
   /**
    * Handler for a GOAWAY being received. Fails any streams created after the
-   * last known stream.
+   * last known stream. May only be called during a read.
    */
   private void goingAway(Status status) {
+    lifecycleManager.notifyGracefulShutdown(status);
+    // Try to allocate as many in-flight streams as possible, to reduce race window of
+    // https://github.com/grpc/grpc-java/issues/2562 . To be of any help, the server has to
+    // gracefully shut down the connection with two GOAWAYs. gRPC servers generally send a PING
+    // after the first GOAWAY, so they can very precisely detect when the GOAWAY has been
+    // processed and thus this processing must be in-line before processing additional reads.
+
+    // This can cause reentrancy, but should be minor since it is normal to handle writes in
+    // response to a read. Also, the call stack is rather shallow at this point
+    clientWriteQueue.drainNow();
     lifecycleManager.notifyShutdown(status);
+
     final Status goAwayStatus = lifecycleManager.getShutdownStatus();
     final int lastKnownStream = connection().local().lastStreamKnownByPeer();
     try {
