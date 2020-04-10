@@ -36,6 +36,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
+import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * A LinkedHashLruCache implements least recently used caching where it supports access order lru
@@ -43,9 +44,8 @@ import javax.annotation.concurrent.GuardedBy;
  * LruCache try to remove up to one already expired entries. If it doesn't find any expired entries,
  * it will remove based on access order of entry. On top of this, LruCache also proactively removes
  * expired entries based on configured time interval.
- *
- * <p>Note: this implementation is generally thread-safe otherwise noted in the method.
  */
+@ThreadSafe
 abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
 
   private final Object lock = new Object();
@@ -116,21 +116,18 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
     return 1;
   }
 
-  /**
-   * Updates size for given key if entry exists. It is useful if the cache value is mutated.
-   *
-   * <p>Note: This method is not thread-safe. If caller need to modify the size of same key
-   * concurrently, it should be called synchronously.
-   */
+  /** Updates size for given key if entry exists. It is useful if the cache value is mutated. */
   public void updateEntrySize(K key) {
-    SizedValue entry = readInternal(key);
-    if (entry == null) {
-      return;
+    synchronized (lock) {
+      SizedValue entry = readInternal(key);
+      if (entry == null) {
+        return;
+      }
+      int prevSize = entry.size;
+      int newSize = estimateSizeOf(key, entry.value);
+      entry.size = newSize;
+      estimatedSizeBytes.addAndGet(newSize - prevSize);
     }
-    int prevSize = entry.size;
-    int newSize = estimateSizeOf(key, entry.value);
-    entry.size = newSize;
-    estimatedSizeBytes.addAndGet(newSize - prevSize);
   }
 
   @Override
