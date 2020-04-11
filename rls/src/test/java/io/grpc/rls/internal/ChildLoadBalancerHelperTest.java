@@ -16,6 +16,7 @@
 
 package io.grpc.rls.internal;
 
+import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.Mockito.mock;
 
 import io.grpc.ConnectivityState;
@@ -40,21 +41,31 @@ public class ChildLoadBalancerHelperTest {
   @Test
   public void childLoadBalancerHelper_shouldReportsSubchannelState() {
     InOrder inOrder = Mockito.inOrder(helper);
-    ChildLoadBalancerHelper childLbHelper1 = provider.forTarget("foo.com");
+    String target1 = "foo.com";
+    ChildLoadBalancerHelper childLbHelper1 = provider.forTarget(target1);
     SubchannelPicker picker1 = mock(SubchannelPicker.class);
-    ChildLoadBalancerHelper childLbHelper2 = provider.forTarget("bar.com");
+    String target2 = "bar.com";
+    ChildLoadBalancerHelper childLbHelper2 = provider.forTarget(target2);
     SubchannelPicker picker2 = mock(SubchannelPicker.class);
+
+    assertThat(subchannelStateManager.getState(target1)).isNull();
+    assertThat(subchannelStateManager.getState(target2)).isNull();
 
     childLbHelper1.updateBalancingState(ConnectivityState.TRANSIENT_FAILURE, picker1);
     inOrder.verify(helper).updateBalancingState(ConnectivityState.TRANSIENT_FAILURE, picker);
+    assertThat(subchannelStateManager.getState(target1))
+        .isEqualTo(ConnectivityState.TRANSIENT_FAILURE);
 
     childLbHelper2.updateBalancingState(ConnectivityState.CONNECTING, picker2);
     inOrder.verify(helper).updateBalancingState(ConnectivityState.CONNECTING, picker);
+    assertThat(subchannelStateManager.getState(target2)).isEqualTo(ConnectivityState.CONNECTING);
 
     childLbHelper1.updateBalancingState(ConnectivityState.READY, picker1);
     inOrder.verify(helper).updateBalancingState(ConnectivityState.READY, picker);
+    assertThat(subchannelStateManager.getState(target1)).isEqualTo(ConnectivityState.READY);
 
     childLbHelper1.updateBalancingState(ConnectivityState.SHUTDOWN, picker1);
     inOrder.verify(helper).updateBalancingState(ConnectivityState.CONNECTING, picker);
+    assertThat(subchannelStateManager.getState(target1)).isNull();
   }
 }
