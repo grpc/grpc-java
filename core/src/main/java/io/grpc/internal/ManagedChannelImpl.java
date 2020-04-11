@@ -1260,6 +1260,49 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
 
     @Override
+    public ManagedChannel createResolvingOobChannel(String target) {
+      final class ResolvingOobChannelBuilder
+          extends AbstractManagedChannelImplBuilder<ResolvingOobChannelBuilder> {
+        int defaultPort = -1;
+
+        ResolvingOobChannelBuilder(String target) {
+          super(target);
+        }
+
+        @Override
+        public int getDefaultPort() {
+          return defaultPort;
+        }
+
+        @Override
+        protected ClientTransportFactory buildTransportFactory() {
+          throw new UnsupportedOperationException();
+        }
+      }
+
+      checkState(!terminated, "Channel is terminated");
+
+      ResolvingOobChannelBuilder builder = new ResolvingOobChannelBuilder(target);
+      builder.offloadExecutorPool = offloadExecutorHolder.pool;
+      builder.overrideAuthority(getAuthority());
+      builder.nameResolverFactory(nameResolverFactory);
+      builder.executorPool = executorPool;
+      builder.maxTraceEvents = maxTraceEvents;
+      builder.proxyDetector = nameResolverArgs.getProxyDetector();
+      builder.defaultPort = nameResolverArgs.getDefaultPort();
+      builder.userAgent = userAgent;
+      return
+          new ManagedChannelImpl(
+              builder,
+              transportFactory,
+              backoffPolicyProvider,
+              balancerRpcExecutorPool,
+              stopwatchSupplier,
+              Collections.<ClientInterceptor>emptyList(),
+              timeProvider);
+    }
+
+    @Override
     public void updateOobChannelAddresses(ManagedChannel channel, EquivalentAddressGroup eag) {
       checkArgument(channel instanceof OobChannel,
           "channel must have been returned from createOobChannel");
