@@ -44,6 +44,7 @@ import java.io.IOException;
 import java.net.ServerSocket;
 import java.util.Arrays;
 import javax.net.ssl.SSLHandshakeException;
+import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -57,12 +58,16 @@ import org.junit.runners.JUnit4;
 public class XdsSdsClientServerTest {
 
   @Rule public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
-  private Server server;
+  private int port;
+
+  @Before
+  public void setUp() throws IOException {
+    port = findFreePort();
+  }
 
   @Test
   public void plaintextClientServer() throws IOException {
-    XdsClient.ListenerWatcher unused =
-        createXdsServerAndReturnListenerWatcher(/* downstreamTlsContext= */ null);
+    Server unused = buildServerWithTlsContext(/* downstreamTlsContext= */ null);
 
     SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
         getBlockingStub(/* upstreamTlsContext= */ null, /* overrideAuthority= */ null);
@@ -75,9 +80,7 @@ public class XdsSdsClientServerTest {
     DownstreamTlsContext downstreamTlsContext =
         CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(
             SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, null);
-
-    XdsClient.ListenerWatcher unused =
-        createXdsServerAndReturnListenerWatcher(downstreamTlsContext);
+    Server unused = buildServerWithTlsContext(downstreamTlsContext);
 
     // for TLS, client only needs trustCa
     UpstreamTlsContext upstreamTlsContext =
@@ -110,7 +113,7 @@ public class XdsSdsClientServerTest {
         CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(
             BAD_SERVER_KEY_FILE, BAD_SERVER_PEM_FILE, CA_PEM_FILE);
     XdsClientWrapperForServerSdsTest.generateListenerUpdateToWatcher(
-        server.getPort(), downstreamTlsContext, listenerWatcher);
+        port, downstreamTlsContext, listenerWatcher);
     try {
       SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
           getBlockingStub(upstreamTlsContext, "foo.test.google.fr");
@@ -128,8 +131,14 @@ public class XdsSdsClientServerTest {
         CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(
             SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, CA_PEM_FILE);
 
-    XdsClient.ListenerWatcher listenerWatcher =
-        createXdsServerAndReturnListenerWatcher(downstreamTlsContext);
+    final XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
+        XdsClientWrapperForServerSdsTest.createXdsClientWrapperForServerSds(
+            port, /* downstreamTlsContext= */ downstreamTlsContext);
+    SdsProtocolNegotiators.ServerSdsProtocolNegotiator serverSdsProtocolNegotiator =
+        new SdsProtocolNegotiators.ServerSdsProtocolNegotiator(xdsClientWrapperForServerSds);
+    Server unused = getServer(port, serverSdsProtocolNegotiator);
+
+    XdsClient.ListenerWatcher listenerWatcher = xdsClientWrapperForServerSds.getListenerWatcher();
 
     SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
         getBlockingStub(upstreamTlsContext, "foo.test.google.fr");
@@ -137,17 +146,21 @@ public class XdsSdsClientServerTest {
     return listenerWatcher;
   }
 
-  private XdsClient.ListenerWatcher createXdsServerAndReturnListenerWatcher(
-      DownstreamTlsContext downstreamTlsContext) throws IOException {
-    int port = findFreePort();
-    XdsServerBuilder builder = XdsServerBuilder.forPort(port).addService(new SimpleServiceImpl());
+  private Server buildServerWithTlsContext(DownstreamTlsContext downstreamTlsContext)
+      throws IOException {
     final XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
         XdsClientWrapperForServerSdsTest.createXdsClientWrapperForServerSds(
-            port, downstreamTlsContext);
+            port, /* downstreamTlsContext= */ downstreamTlsContext);
     SdsProtocolNegotiators.ServerSdsProtocolNegotiator serverSdsProtocolNegotiator =
         new SdsProtocolNegotiators.ServerSdsProtocolNegotiator(xdsClientWrapperForServerSds);
-    server = cleanupRule.register(builder.buildServer(serverSdsProtocolNegotiator)).start();
-    return xdsClientWrapperForServerSds.getListenerWatcher();
+    return getServer(port, serverSdsProtocolNegotiator);
+  }
+
+  private Server getServer(
+      int port, SdsProtocolNegotiators.ServerSdsProtocolNegotiator serverSdsProtocolNegotiator)
+      throws IOException {
+    XdsServerBuilder builder = XdsServerBuilder.forPort(port).addService(new SimpleServiceImpl());
+    return cleanupRule.register(builder.buildServer(serverSdsProtocolNegotiator)).start();
   }
 
   private static int findFreePort() throws IOException {
@@ -170,7 +183,7 @@ public class XdsSdsClientServerTest {
   private SimpleServiceGrpc.SimpleServiceBlockingStub getBlockingStub(
       UpstreamTlsContext upstreamTlsContext, String overrideAuthority) {
     XdsChannelBuilder builder =
-        XdsChannelBuilder.forTarget("localhost:" + server.getPort()).tlsContext(upstreamTlsContext);
+        XdsChannelBuilder.forTarget("localhost:" + port).tlsContext(upstreamTlsContext);
     if (overrideAuthority != null) {
       builder = builder.overrideAuthority(overrideAuthority);
     }
