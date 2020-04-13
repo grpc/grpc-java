@@ -189,7 +189,7 @@ public final class AltsTsiHandshaker implements TsiHandshaker {
       maxFrameSize = Math.min(peerMaxFrameSize, AltsTsiFrameProtector.getMaxFrameSize());
       maxFrameSize = Math.max(AltsTsiFrameProtector.getMinFrameSize(), maxFrameSize);
     }
-    logger.log(Level.INFO, "Maximum frame size value is " + maxFrameSize);
+    logger.log(Level.FINE, "Maximum frame size value is {0}.", maxFrameSize);
     return new AltsTsiFrameProtector(maxFrameSize, new AltsChannelCrypter(key, isClient), alloc);
   }
 
