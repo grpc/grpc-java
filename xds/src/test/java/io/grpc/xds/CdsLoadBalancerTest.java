@@ -357,8 +357,7 @@ public class CdsLoadBalancerTest {
 
     UpstreamTlsContext upstreamTlsContext =
         CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
-            CLIENT_KEY_FILE, CLIENT_PEM_FILE,
-            CA_PEM_FILE);
+            CLIENT_KEY_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
 
     SslContextProvider<UpstreamTlsContext> mockSslContextProvider =
         (SslContextProvider<UpstreamTlsContext>) mock(SslContextProvider.class);
