@@ -235,7 +235,7 @@ class OkHttpProtocolNegotiator {
       }
 
       if (platform.getTlsExtensionType() != TlsExtensionType.NONE) {
-        if (!isPlatformSocket(sslSocket) && SET_ALPN_PROTOCOLS.isSupported(sslSocket)) {
+        if (!isPlatformSocket(sslSocket) && SET_NPN_PROTOCOLS.isSupported(sslSocket)) {
           SET_NPN_PROTOCOLS.invokeWithoutCheckedException(sslSocket, parameters);
         }
       } else {
@@ -291,11 +291,7 @@ class OkHttpProtocolNegotiator {
 
   private static String[] protocolIds(List<Protocol> protocols) {
     List<String> result = new ArrayList<>();
-    for (int i = 0; i < protocols.size(); i++) {
-      Protocol protocol = protocols.get(i);
-      if (protocol == Protocol.HTTP_1_0) {
-        continue; // No HTTP/1.0 for ALPN.
-      }
+    for (Protocol protocol : protocols) {
       result.add(protocol.toString());
     }
     return result.toArray(new String[0]);
