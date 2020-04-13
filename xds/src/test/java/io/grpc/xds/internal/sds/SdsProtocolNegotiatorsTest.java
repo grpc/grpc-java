@@ -192,19 +192,20 @@ public class SdsProtocolNegotiatorsTest {
   @Test
   public void serverSdsHandler_addLast() throws IOException {
     // we need InetSocketAddress instead of EmbeddedSocketAddress as localAddress for this test
-    channel = new EmbeddedChannel() {
-      @Override
-      public SocketAddress localAddress() {
-        return new InetSocketAddress("172.168.1.1", 80);
-      }
-    };
+    channel =
+        new EmbeddedChannel() {
+          @Override
+          public SocketAddress localAddress() {
+            return new InetSocketAddress("172.168.1.1", 80);
+          }
+        };
     pipeline = channel.pipeline();
     DownstreamTlsContext downstreamTlsContext =
         buildDownstreamTlsContextFromFilenames(SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, CA_PEM_FILE);
 
     XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
-        XdsClientWrapperForServerSdsTest
-            .createXdsClientWrapperForServerSds(80, downstreamTlsContext);
+        XdsClientWrapperForServerSdsTest.createXdsClientWrapperForServerSds(
+            80, downstreamTlsContext);
     SdsProtocolNegotiators.HandlerPickerHandler handlerPickerHandler =
         new SdsProtocolNegotiators.HandlerPickerHandler(grpcHandler, xdsClientWrapperForServerSds);
     pipeline.addLast(handlerPickerHandler);

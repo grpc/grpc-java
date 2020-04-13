@@ -146,8 +146,8 @@ public class XdsClientWrapperForServerSdsTest {
     XdsClient mockXdsClient = mock(XdsClient.class);
     XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
         new XdsClientWrapperForServerSds(port, mockXdsClient, null);
-    generateListenerUpdateToWatcher(port, downstreamTlsContext,
-        xdsClientWrapperForServerSds.getListenerWatcher());
+    generateListenerUpdateToWatcher(
+        port, downstreamTlsContext, xdsClientWrapperForServerSds.getListenerWatcher());
     return xdsClientWrapperForServerSds;
   }
 

@@ -34,7 +34,6 @@ import java.io.IOException;
 import java.security.cert.CertStoreException;
 import java.security.cert.CertificateException;
 import java.util.List;
-
 import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
@@ -308,9 +307,9 @@ public class SecretVolumeSslContextProviderTest {
     CertificateValidationContext certContext = CertificateValidationContext.getDefaultInstance();
     try {
       SecretVolumeSslContextProvider.getProviderForClient(
-              buildUpstreamTlsContext(
-                      CommonTlsContextTestsUtil.getCommonTlsContext(
-                              /* tlsCertificate= */ null, certContext)));
+          buildUpstreamTlsContext(
+              CommonTlsContextTestsUtil.getCommonTlsContext(
+                  /* tlsCertificate= */ null, certContext)));
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
       assertThat(expected).hasMessageThat().isEqualTo("certContext is required");
@@ -361,13 +360,15 @@ public class SecretVolumeSslContextProviderTest {
 
   /** Helper method to build SecretVolumeSslContextProvider from given files. */
   private static SecretVolumeSslContextProvider<?> getSslContextSecretVolumeSecretProvider(
-      boolean server, String certChainFilename, String privateKeyFilename,
+      boolean server,
+      String certChainFilename,
+      String privateKeyFilename,
       String trustedCaFilename) {
 
     return server
         ? SecretVolumeSslContextProvider.getProviderForServer(
-        CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(
-            privateKeyFilename, certChainFilename, trustedCaFilename))
+            CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(
+                privateKeyFilename, certChainFilename, trustedCaFilename))
         : SecretVolumeSslContextProvider.getProviderForClient(
             CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
                 privateKeyFilename, certChainFilename, trustedCaFilename));
@@ -432,8 +433,7 @@ public class SecretVolumeSslContextProviderTest {
   @Test
   public void getProviderForClient_onlyTrust()
       throws IOException, CertificateException, CertStoreException {
-    sslContextForEitherWithBothCertAndTrust(false, null, null,
-        CA_PEM_FILE);
+    sslContextForEitherWithBothCertAndTrust(false, null, null, CA_PEM_FILE);
   }
 
   @Test

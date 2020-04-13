@@ -181,8 +181,7 @@ public class SdsClientTest {
 
     reset(mockWatcher);
     when(serverMock.getSecretFor("name1"))
-        .thenReturn(getOneCertificateValidationContextSecret("name1",
-            SERVER_1_PEM_FILE));
+        .thenReturn(getOneCertificateValidationContextSecret("name1", SERVER_1_PEM_FILE));
     server.generateAsyncResponse("name1");
     verifySecretWatcher(mockWatcher, "name1", SERVER_1_PEM_FILE);
 

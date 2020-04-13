@@ -267,8 +267,7 @@ public final class SdsProtocolNegotiators {
 
     /** Constructor. */
     @VisibleForTesting
-    public ServerSdsProtocolNegotiator(
-        XdsClientWrapperForServerSds xdsClientWrapperForServerSds) {
+    public ServerSdsProtocolNegotiator(XdsClientWrapperForServerSds xdsClientWrapperForServerSds) {
       this.xdsClientWrapperForServerSds =
           checkNotNull(xdsClientWrapperForServerSds, "xdsClientWrapperForServerSds");
     }

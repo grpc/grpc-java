@@ -107,27 +107,28 @@ public final class XdsClientWrapperForServerSds {
     this.port = port;
     this.xdsClient = xdsClient;
     this.timeService = timeService;
-    this.listenerWatcher = new XdsClient.ListenerWatcher() {
-      @Override
-      public void onListenerChanged(XdsClient.ListenerUpdate update) {
-        logger.log(
-            Level.INFO,
-            "Setting myListener from ConfigUpdate listener: {0}",
-            update.getListener());
-        curListener = update.getListener();
-      }
+    this.listenerWatcher =
+        new XdsClient.ListenerWatcher() {
+          @Override
+          public void onListenerChanged(XdsClient.ListenerUpdate update) {
+            logger.log(
+                Level.INFO,
+                "Setting myListener from ConfigUpdate listener: {0}",
+                update.getListener());
+            curListener = update.getListener();
+          }
 
-      @Override
-      public void onError(Status error) {
-        // In order to distinguish between IO error and resource not found, set curListener
-        // to null in case of NOT_FOUND
-        if (error.getCode().equals(Status.Code.NOT_FOUND)) {
-          curListener = null;
-        }
-        // TODO(sanjaypujare): Implement logic for other cases based on final design.
-        logger.log(Level.SEVERE, "ListenerWatcher in XdsClientWrapperForServerSds: {0}", error);
-      }
-    };
+          @Override
+          public void onError(Status error) {
+            // In order to distinguish between IO error and resource not found, set curListener
+            // to null in case of NOT_FOUND
+            if (error.getCode().equals(Status.Code.NOT_FOUND)) {
+              curListener = null;
+            }
+            // TODO(sanjaypujare): Implement logic for other cases based on final design.
+            logger.log(Level.SEVERE, "ListenerWatcher in XdsClientWrapperForServerSds: {0}", error);
+          }
+        };
     xdsClient.watchListenerData(port, listenerWatcher);
   }
 

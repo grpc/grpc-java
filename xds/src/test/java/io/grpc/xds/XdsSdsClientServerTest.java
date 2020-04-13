@@ -65,8 +65,7 @@ public class XdsSdsClientServerTest {
         createXdsServerAndReturnListenerWatcher(/* downstreamTlsContext= */ null);
 
     SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
-        getBlockingStub(
-            /* upstreamTlsContext= */ null, /* overrideAuthority= */ null);
+        getBlockingStub(/* upstreamTlsContext= */ null, /* overrideAuthority= */ null);
     assertThat(unaryRpc("buddy", blockingStub)).isEqualTo("Hello buddy");
   }
 
@@ -75,9 +74,7 @@ public class XdsSdsClientServerTest {
   public void tlsClientServer_noClientAuthentication() throws IOException {
     DownstreamTlsContext downstreamTlsContext =
         CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(
-            SERVER_1_KEY_FILE,
-            SERVER_1_PEM_FILE,
-            null);
+            SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, null);
 
     XdsClient.ListenerWatcher unused =
         createXdsServerAndReturnListenerWatcher(downstreamTlsContext);
@@ -88,8 +85,7 @@ public class XdsSdsClientServerTest {
             /* privateKey= */ null, /* certChain= */ null, CA_PEM_FILE);
 
     SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
-        getBlockingStub(
-            upstreamTlsContext, /* overrideAuthority= */ "foo.test.google.fr");
+        getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ "foo.test.google.fr");
     assertThat(unaryRpc(/* requestMessage= */ "buddy", blockingStub)).isEqualTo("Hello buddy");
   }
 
@@ -98,9 +94,7 @@ public class XdsSdsClientServerTest {
   public void mtlsClientServer_withClientAuthentication() throws IOException {
     UpstreamTlsContext upstreamTlsContext =
         CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
-            CLIENT_KEY_FILE,
-            CLIENT_PEM_FILE,
-            CA_PEM_FILE);
+            CLIENT_KEY_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
     XdsClient.ListenerWatcher unused = performMtlsTestAndGetListenerWatcher(upstreamTlsContext);
   }
 
@@ -109,16 +103,12 @@ public class XdsSdsClientServerTest {
   public void mtlsClientServer_changeServerContext_expectException() throws IOException {
     UpstreamTlsContext upstreamTlsContext =
         CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
-            CLIENT_KEY_FILE,
-            CLIENT_PEM_FILE,
-            CA_PEM_FILE);
+            CLIENT_KEY_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
     XdsClient.ListenerWatcher listenerWatcher =
         performMtlsTestAndGetListenerWatcher(upstreamTlsContext);
     DownstreamTlsContext downstreamTlsContext =
         CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(
-            BAD_SERVER_KEY_FILE,
-            BAD_SERVER_PEM_FILE,
-            CA_PEM_FILE);
+            BAD_SERVER_KEY_FILE, BAD_SERVER_PEM_FILE, CA_PEM_FILE);
     XdsClientWrapperForServerSdsTest.generateListenerUpdateToWatcher(
         server.getPort(), downstreamTlsContext, listenerWatcher);
     try {
@@ -133,13 +123,10 @@ public class XdsSdsClientServerTest {
   }
 
   private XdsClient.ListenerWatcher performMtlsTestAndGetListenerWatcher(
-      UpstreamTlsContext upstreamTlsContext)
-      throws IOException {
+      UpstreamTlsContext upstreamTlsContext) throws IOException {
     DownstreamTlsContext downstreamTlsContext =
         CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(
-            SERVER_1_KEY_FILE,
-            SERVER_1_PEM_FILE,
-            CA_PEM_FILE);
+            SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, CA_PEM_FILE);
 
     XdsClient.ListenerWatcher listenerWatcher =
         createXdsServerAndReturnListenerWatcher(downstreamTlsContext);
@@ -171,12 +158,8 @@ public class XdsSdsClientServerTest {
   }
 
   static EnvoyServerProtoData.Listener buildListener(
-      String name,
-      String address,
-      int port,
-      DownstreamTlsContext tlsContext) {
-    EnvoyServerProtoData.FilterChainMatch filterChainMatch =
-        buildFilterChainMatch(port, address);
+      String name, String address, int port, DownstreamTlsContext tlsContext) {
+    EnvoyServerProtoData.FilterChainMatch filterChainMatch = buildFilterChainMatch(port, address);
     EnvoyServerProtoData.FilterChain filterChain1 =
         new EnvoyServerProtoData.FilterChain(filterChainMatch, tlsContext);
     EnvoyServerProtoData.Listener listener =

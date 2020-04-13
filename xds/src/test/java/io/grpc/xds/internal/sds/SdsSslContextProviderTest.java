@@ -93,8 +93,7 @@ public class SdsSslContextProviderTest {
   @Test
   public void testProviderForServer() throws IOException {
     when(serverMock.getSecretFor(/* name= */ "cert1"))
-        .thenReturn(getOneTlsCertSecret(/* name= */ "cert1",
-            SERVER_1_KEY_FILE, SERVER_1_PEM_FILE));
+        .thenReturn(getOneTlsCertSecret(/* name= */ "cert1", SERVER_1_KEY_FILE, SERVER_1_PEM_FILE));
     when(serverMock.getSecretFor(/* name= */ "valid1"))
         .thenReturn(getOneCertificateValidationContextSecret(/* name= */ "valid1", CA_PEM_FILE));
 
@@ -222,8 +221,7 @@ public class SdsSslContextProviderTest {
   @Test
   public void testProviderForServer_withAlpnProtocols() throws IOException {
     when(serverMock.getSecretFor(/* name= */ "cert1"))
-        .thenReturn(getOneTlsCertSecret(/* name= */ "cert1",
-            SERVER_1_KEY_FILE, SERVER_1_PEM_FILE));
+        .thenReturn(getOneTlsCertSecret(/* name= */ "cert1", SERVER_1_KEY_FILE, SERVER_1_PEM_FILE));
     when(serverMock.getSecretFor(/* name= */ "valid1"))
         .thenReturn(getOneCertificateValidationContextSecret(/* name= */ "valid1", CA_PEM_FILE));
 

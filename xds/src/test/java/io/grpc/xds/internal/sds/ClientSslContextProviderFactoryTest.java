@@ -49,7 +49,7 @@ public class ClientSslContextProviderFactoryTest {
   @Test
   public void createSslContextProvider_sdsConfigForTlsCert_expectException() {
     CommonTlsContext commonTlsContext =
-            CommonTlsContextTestsUtil.buildCommonTlsContextFromSdsConfigForTlsCertificate(
+        CommonTlsContextTestsUtil.buildCommonTlsContextFromSdsConfigForTlsCertificate(
             /* name= */ "name", /* targetUri= */ "unix:/tmp/sds/path", CA_PEM_FILE);
     UpstreamTlsContext upstreamTlsContext =
         SecretVolumeSslContextProviderTest.buildUpstreamTlsContext(commonTlsContext);
@@ -70,7 +70,9 @@ public class ClientSslContextProviderFactoryTest {
     CommonTlsContext commonTlsContext =
         CommonTlsContextTestsUtil.buildCommonTlsContextFromSdsConfigForValidationContext(
             /* name= */ "name",
-            /* targetUri= */ "unix:/tmp/sds/path", CLIENT_KEY_FILE, CLIENT_PEM_FILE);
+            /* targetUri= */ "unix:/tmp/sds/path",
+            CLIENT_KEY_FILE,
+            CLIENT_PEM_FILE);
     UpstreamTlsContext upstreamTlsContext =
         SecretVolumeSslContextProviderTest.buildUpstreamTlsContext(commonTlsContext);
 

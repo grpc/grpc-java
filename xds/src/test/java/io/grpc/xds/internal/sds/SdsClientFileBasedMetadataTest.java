@@ -219,9 +219,7 @@ public class SdsClientFileBasedMetadataTest {
   public void testSecretWatcher_tlsCertificate() throws IOException {
     SdsClient.SecretWatcher mockWatcher = mock(SdsClient.SecretWatcher.class);
 
-    doReturn(
-        SdsClientTest.getOneTlsCertSecret(
-            "name1", SERVER_0_KEY_FILE, SERVER_0_PEM_FILE))
+    doReturn(SdsClientTest.getOneTlsCertSecret("name1", SERVER_0_KEY_FILE, SERVER_0_PEM_FILE))
         .when(serverMock)
         .getSecretFor("name1");
 
