@@ -68,7 +68,7 @@ public class ClientSslContextProviderFactoryTest {
   @Test
   public void createSslContextProvider_sdsConfigForCertValidationContext_expectException() {
     CommonTlsContext commonTlsContext =
-            CommonTlsContextTestsUtil.buildCommonTlsContextFromSdsConfigForValidationContext(
+        CommonTlsContextTestsUtil.buildCommonTlsContextFromSdsConfigForValidationContext(
             /* name= */ "name",
             /* targetUri= */ "unix:/tmp/sds/path", CLIENT_KEY_FILE, CLIENT_PEM_FILE);
     UpstreamTlsContext upstreamTlsContext =
