@@ -17,6 +17,10 @@
 package io.grpc.xds.internal.sds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_0_KEY_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_0_PEM_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_KEY_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_PEM_FILE;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
@@ -45,10 +49,6 @@ import org.mockito.ArgumentMatchers;
 @RunWith(JUnit4.class)
 public class SdsClientUdsTest {
 
-  private static final String SERVER_0_PEM_FILE = "server0.pem";
-  private static final String SERVER_0_KEY_FILE = "server0.key";
-  private static final String SERVER_1_PEM_FILE = "server1.pem";
-  private static final String SERVER_1_KEY_FILE = "server1.key";
   private static final String SDSCLIENT_TEST_SOCKET = "/tmp/sdsclient-test.socket";
 
   private TestSdsServer.ServerMock serverMock;

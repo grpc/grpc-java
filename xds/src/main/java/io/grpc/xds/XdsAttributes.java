@@ -79,5 +79,10 @@ public final class XdsAttributes {
   static final Attributes.Key<ObjectPool<XdsClient>> XDS_CLIENT_POOL =
       Attributes.Key.create("io.grpc.xds.XdsAttributes.xdsClientPool");
 
+  // TODO (chengyuanzhang): temporary solution for migrating to LRS policy. Should access
+  //   stats object via XdsClient interface.
+  static final Attributes.Key<LoadStatsStore> ATTR_CLUSTER_SERVICE_LOAD_STATS_STORE =
+      Attributes.Key.create("io.grpc.xds.XdsAttributes.loadStatsStore");
+
   private XdsAttributes() {}
 }

@@ -125,7 +125,9 @@ public final class ClientCalls {
       Channel channel, MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, ReqT req) {
     ThreadlessExecutor executor = new ThreadlessExecutor();
     boolean interrupt = false;
-    ClientCall<ReqT, RespT> call = channel.newCall(method, callOptions.withExecutor(executor));
+    ClientCall<ReqT, RespT> call = channel.newCall(method,
+        callOptions.withOption(ClientCalls.STUB_TYPE_OPTION, StubType.BLOCKING)
+            .withExecutor(executor));
     try {
       ListenableFuture<RespT> responseFuture = futureUnaryCall(call, req);
       while (!responseFuture.isDone()) {
@@ -177,7 +179,9 @@ public final class ClientCalls {
   public static <ReqT, RespT> Iterator<RespT> blockingServerStreamingCall(
       Channel channel, MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, ReqT req) {
     ThreadlessExecutor executor = new ThreadlessExecutor();
-    ClientCall<ReqT, RespT> call = channel.newCall(method, callOptions.withExecutor(executor));
+    ClientCall<ReqT, RespT> call = channel.newCall(method,
+        callOptions.withOption(ClientCalls.STUB_TYPE_OPTION, StubType.BLOCKING)
+            .withExecutor(executor));
     BlockingResponseStream<RespT> result = new BlockingResponseStream<>(call, executor);
     asyncUnaryRequestCall(call, req, result.listener(), true);
     return result;

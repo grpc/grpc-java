@@ -24,6 +24,11 @@ import static org.mockito.Mockito.when;
 import io.grpc.CallOptions;
 import io.grpc.ChannelLogger;
 import io.grpc.InternalLogId;
+import io.grpc.LoadBalancer.PickResult;
+import io.grpc.LoadBalancer.PickSubchannelArgs;
+import io.grpc.LoadBalancer.Subchannel;
+import io.grpc.LoadBalancer.SubchannelPicker;
+import io.grpc.LoadBalancerProvider;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import java.net.SocketAddress;
@@ -36,7 +41,41 @@ import org.mockito.stubbing.Answer;
 /**
  * Common utility methods for tests.
  */
-final class TestUtils {
+public final class TestUtils {
+
+  /** Base class for a standard LoadBalancerProvider implementation. */
+  public abstract static class StandardLoadBalancerProvider extends LoadBalancerProvider {
+    private final String policyName;
+
+    public StandardLoadBalancerProvider(String policyName) {
+      this.policyName = policyName;
+    }
+
+    @Override
+    public boolean isAvailable() {
+      return true;
+    }
+
+    @Override
+    public int getPriority() {
+      return 5;
+    }
+
+    @Override
+    public final String getPolicyName() {
+      return policyName;
+    }
+  }
+
+  /** Creates a {@link SubchannelPicker} that returns the given {@link Subchannel} on every pick. */
+  public static SubchannelPicker pickerOf(final Subchannel subchannel) {
+    return new SubchannelPicker() {
+      @Override
+      public PickResult pickSubchannel(PickSubchannelArgs args) {
+        return PickResult.withSubchannel(subchannel);
+      }
+    };
+  }
 
   static class MockClientTransportInfo {
     /**

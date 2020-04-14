@@ -69,7 +69,6 @@ import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
-import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.services.HealthCheckingLoadBalancerFactory.SubchannelImpl;
 import io.grpc.stub.StreamObserver;
@@ -978,30 +977,21 @@ public class HealthCheckingLoadBalancerFactoryTest {
   }
 
   @Test
-  public void getHealthCheckedServiceName_nullServiceConfig() {
+  public void getHealthCheckedServiceName_nullHealthCheckConfig() {
     assertThat(ServiceConfigUtil.getHealthCheckedServiceName(null)).isNull();
   }
 
   @Test
-  public void getHealthCheckedServiceName_noHealthCheckConfig() {
-    assertThat(ServiceConfigUtil.getHealthCheckedServiceName(new HashMap<String, Void>())).isNull();
-  }
-
-  @Test
-  public void getHealthCheckedServiceName_healthCheckConfigMissingServiceName() {
-    HashMap<String, Object> serviceConfig = new HashMap<>();
+  public void getHealthCheckedServiceName_missingServiceName() {
     HashMap<String, Object> hcConfig = new HashMap<>();
-    serviceConfig.put("healthCheckConfig", hcConfig);
-    assertThat(ServiceConfigUtil.getHealthCheckedServiceName(serviceConfig)).isNull();
+    assertThat(ServiceConfigUtil.getHealthCheckedServiceName(hcConfig)).isNull();
   }
 
   @Test
   public void getHealthCheckedServiceName_healthCheckConfigHasServiceName() {
-    HashMap<String, Object> serviceConfig = new HashMap<>();
     HashMap<String, Object> hcConfig = new HashMap<>();
     hcConfig.put("serviceName", "FooService");
-    serviceConfig.put("healthCheckConfig", hcConfig);
-    assertThat(ServiceConfigUtil.getHealthCheckedServiceName(serviceConfig))
+    assertThat(ServiceConfigUtil.getHealthCheckedServiceName(hcConfig))
         .isEqualTo("FooService");
   }
 
@@ -1094,14 +1084,12 @@ public class HealthCheckingLoadBalancerFactoryTest {
     assertThat(healthImpls[0].calls).hasSize(1);
   }
 
-  @SuppressWarnings("deprecation")  // TODO(creamsoup) migrate to parsed object
   private Attributes attrsWithHealthCheckService(@Nullable String serviceName) {
-    HashMap<String, Object> serviceConfig = new HashMap<>();
     HashMap<String, Object> hcConfig = new HashMap<>();
     hcConfig.put("serviceName", serviceName);
-    serviceConfig.put("healthCheckConfig", hcConfig);
     return Attributes.newBuilder()
-        .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig).build();
+        .set(LoadBalancer.ATTR_HEALTH_CHECKING_CONFIG, hcConfig)
+        .build();
   }
 
   private HealthCheckRequest makeRequest(String service) {

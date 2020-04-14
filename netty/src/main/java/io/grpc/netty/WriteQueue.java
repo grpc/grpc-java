@@ -102,6 +102,19 @@ class WriteQueue {
   }
 
   /**
+   * Executes enqueued work directly on the current thread. This can be used to trigger writes
+   * before performing additional reads. Must be called from the event loop. This method makes no
+   * guarantee that the work queue is empty when it returns.
+   */
+  void drainNow() {
+    Preconditions.checkState(channel.eventLoop().inEventLoop(), "must be on the event loop");
+    if (queue.peek() == null) {
+      return;
+    }
+    flush();
+  }
+
+  /**
    * Process the queue of commands and dispatch them to the stream. This method is only
    * called in the event loop
    */

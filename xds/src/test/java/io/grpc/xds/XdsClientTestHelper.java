@@ -149,6 +149,7 @@ class XdsClientTestHelper {
     return clusterBuilder.build();
   }
 
+  @SuppressWarnings("deprecation")
   static ClusterLoadAssignment buildClusterLoadAssignment(String clusterName,
       List<io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints> localityLbEndpoints,
       List<Policy.DropOverload> dropOverloads) {
@@ -175,7 +176,7 @@ class XdsClientTestHelper {
   }
 
   static io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints buildLocalityLbEndpoints(
-      String region, String zone, String subzone,
+      String region, String zone, String subZone,
       List<io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint> lbEndpoints,
       int loadBalancingWeight, int priority) {
     return
@@ -184,7 +185,7 @@ class XdsClientTestHelper {
                 io.envoyproxy.envoy.api.v2.core.Locality.newBuilder()
                     .setRegion(region)
                     .setZone(zone)
-                    .setSubZone(subzone))
+                    .setSubZone(subZone))
             .addAllLbEndpoints(lbEndpoints)
             .setLoadBalancingWeight(UInt32Value.newBuilder().setValue(loadBalancingWeight))
             .setPriority(priority)

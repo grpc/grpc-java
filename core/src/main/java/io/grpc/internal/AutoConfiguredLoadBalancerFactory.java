@@ -21,7 +21,6 @@ import static io.grpc.LoadBalancer.ATTR_LOAD_BALANCING_CONFIG;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
-import com.google.common.base.Objects;
 import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
@@ -40,7 +39,7 @@ import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
-import java.util.ArrayList;
+import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import java.util.List;
 import java.util.Map;
 import javax.annotation.Nullable;
@@ -247,31 +246,7 @@ public final class AutoConfiguredLoadBalancerFactory {
         loadBalancerConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(rawLbConfigs);
       }
       if (loadBalancerConfigs != null && !loadBalancerConfigs.isEmpty()) {
-        List<String> policiesTried = new ArrayList<>();
-        for (LbConfig lbConfig : loadBalancerConfigs) {
-          String policy = lbConfig.getPolicyName();
-          LoadBalancerProvider provider = registry.getProvider(policy);
-          if (provider == null) {
-            policiesTried.add(policy);
-          } else {
-            if (!policiesTried.isEmpty()) {
-              channelLogger.log(
-                  ChannelLogLevel.DEBUG,
-                  "{0} specified by Service Config are not available", policiesTried);
-            }
-            ConfigOrError parsedLbPolicyConfig =
-                provider.parseLoadBalancingPolicyConfig(lbConfig.getRawConfigValue());
-            if (parsedLbPolicyConfig.getError() != null) {
-              return parsedLbPolicyConfig;
-            }
-            return ConfigOrError.fromConfig(
-                new PolicySelection(
-                    provider, lbConfig.getRawConfigValue(), parsedLbPolicyConfig.getConfig()));
-          }
-        }
-        return ConfigOrError.fromError(
-            Status.UNKNOWN.withDescription(
-                "None of " + policiesTried + " specified by Service Config are available."));
+        return ServiceConfigUtil.selectLbPolicyFromList(loadBalancerConfigs, registry);
       }
       return null;
     } catch (RuntimeException e) {
@@ -286,50 +261,6 @@ public final class AutoConfiguredLoadBalancerFactory {
 
     private PolicyException(String msg) {
       super(msg);
-    }
-  }
-
-  @VisibleForTesting
-  static final class PolicySelection {
-    final LoadBalancerProvider provider;
-    @Nullable final Map<String, ?> rawConfig;
-    @Nullable final Object config;
-
-    PolicySelection(
-        LoadBalancerProvider provider,
-        @Nullable Map<String, ?> rawConfig,
-        @Nullable Object config) {
-      this.provider = checkNotNull(provider, "provider");
-      this.rawConfig = rawConfig;
-      this.config = config;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (o == null || getClass() != o.getClass()) {
-        return false;
-      }
-      PolicySelection that = (PolicySelection) o;
-      return Objects.equal(provider, that.provider)
-          && Objects.equal(rawConfig, that.rawConfig)
-          && Objects.equal(config, that.config);
-    }
-
-    @Override
-    public int hashCode() {
-      return Objects.hashCode(provider, rawConfig, config);
-    }
-
-    @Override
-    public String toString() {
-      return MoreObjects.toStringHelper(this)
-          .add("provider", provider)
-          .add("rawConfig", rawConfig)
-          .add("config", config)
-          .toString();
     }
   }
 

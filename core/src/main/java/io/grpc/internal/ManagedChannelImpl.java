@@ -27,7 +27,6 @@ import static io.grpc.internal.ServiceConfigInterceptor.RETRY_POLICY_KEY;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
-import com.google.common.base.Objects;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -115,7 +114,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
   static final long IDLE_TIMEOUT_MILLIS_DISABLE = -1;
 
-  @VisibleForTesting
   static final long SUBCHANNEL_SHUTDOWN_DELAY_SECONDS = 5;
 
   @VisibleForTesting
@@ -130,10 +128,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
   static final Status SUBCHANNEL_SHUTDOWN_STATUS =
       Status.UNAVAILABLE.withDescription("Subchannel shutdown invoked");
 
-  private static final ServiceConfigHolder EMPTY_SERVICE_CONFIG =
-      new ServiceConfigHolder(
-          Collections.<String, Object>emptyMap(),
-          ManagedChannelServiceConfig.empty());
+  private static final ManagedChannelServiceConfig EMPTY_SERVICE_CONFIG =
+      ManagedChannelServiceConfig.empty();
 
   private final InternalLogId logId;
   private final String target;
@@ -254,9 +250,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private ResolutionState lastResolutionState = ResolutionState.NO_RESOLUTION;
   // Must be mutated and read from constructor or syncContext
   // used for channel tracing when value changed
-  private ServiceConfigHolder lastServiceConfig = EMPTY_SERVICE_CONFIG;
+  private ManagedChannelServiceConfig lastServiceConfig = EMPTY_SERVICE_CONFIG;
   @Nullable
-  private final ServiceConfigHolder defaultServiceConfig;
+  private final ManagedChannelServiceConfig defaultServiceConfig;
   // Must be mutated and read from constructor or syncContext
   private boolean serviceConfigUpdated = false;
   private final boolean lookUpServiceConfig;
@@ -503,7 +499,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
         final Metadata headers,
         final Context context) {
       checkState(retryEnabled, "retry should be enabled");
-      final Throttle throttle = lastServiceConfig.managedChannelServiceConfig.getRetryThrottling();
+      final Throttle throttle = lastServiceConfig.getRetryThrottling();
       final class RetryStream extends RetriableStream<ReqT> {
         RetryStream() {
           super(
@@ -622,9 +618,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
           "Default config is invalid: %s",
           parsedDefaultServiceConfig.getError());
       this.defaultServiceConfig =
-          new ServiceConfigHolder(
-              builder.defaultServiceConfig,
-              (ManagedChannelServiceConfig) parsedDefaultServiceConfig.getConfig());
+          (ManagedChannelServiceConfig) parsedDefaultServiceConfig.getConfig();
       this.lastServiceConfig = this.defaultServiceConfig;
     } else {
       this.defaultServiceConfig = null;
@@ -683,7 +677,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
   // May only be called in constructor or syncContext
   private void handleServiceConfigUpdate() {
     serviceConfigUpdated = true;
-    serviceConfigInterceptor.handleUpdate(lastServiceConfig.managedChannelServiceConfig);
+    serviceConfigInterceptor.handleUpdate(lastServiceConfig);
   }
 
   @VisibleForTesting
@@ -1322,13 +1316,16 @@ final class ManagedChannelImpl extends ManagedChannel implements
     public void onResult(final ResolutionResult resolutionResult) {
       final class NamesResolved implements Runnable {
 
-        @SuppressWarnings({"ReferenceEquality", "deprecation"})
+        @SuppressWarnings("ReferenceEquality")
         @Override
         public void run() {
+
           List<EquivalentAddressGroup> servers = resolutionResult.getAddresses();
-          Attributes attrs = resolutionResult.getAttributes();
           channelLogger.log(
-              ChannelLogLevel.DEBUG, "Resolved address: {0}, config={1}", servers, attrs);
+              ChannelLogLevel.DEBUG,
+              "Resolved address: {0}, config={1}",
+              servers,
+              resolutionResult.getAttributes());
           ResolutionState lastResolutionStateCopy = lastResolutionState;
 
           if (lastResolutionState != ResolutionState.SUCCESS) {
@@ -1338,19 +1335,13 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
           nameResolverBackoffPolicy = null;
           ConfigOrError configOrError = resolutionResult.getServiceConfig();
-          ServiceConfigHolder validServiceConfig = null;
-          Status serviceConfigError = null;
-          if (configOrError != null) {
-            Map<String, ?> rawServiceConfig =
-                resolutionResult.getAttributes().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
-            validServiceConfig = configOrError.getConfig() == null
-                ? null
-                : new ServiceConfigHolder(
-                    rawServiceConfig, (ManagedChannelServiceConfig) configOrError.getConfig());
-            serviceConfigError = configOrError.getError();
-          }
+          ManagedChannelServiceConfig validServiceConfig =
+              configOrError != null && configOrError.getConfig() != null
+                  ? (ManagedChannelServiceConfig) resolutionResult.getServiceConfig().getConfig()
+                  : null;
+          Status serviceConfigError = configOrError != null ? configOrError.getError() : null;
 
-          ServiceConfigHolder effectiveServiceConfig;
+          ManagedChannelServiceConfig effectiveServiceConfig;
           if (!lookUpServiceConfig) {
             if (validServiceConfig != null) {
               channelLogger.log(
@@ -1359,7 +1350,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
             }
             effectiveServiceConfig =
                 defaultServiceConfig == null ? EMPTY_SERVICE_CONFIG : defaultServiceConfig;
-            attrs = attrs.toBuilder().discard(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG).build();
           } else {
             // Try to use config if returned from name resolver
             // Otherwise, try to use the default config if available
@@ -1405,14 +1395,14 @@ final class ManagedChannelImpl extends ManagedChannel implements
             }
           }
 
+          Attributes effectiveAttrs = resolutionResult.getAttributes();
           // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
           if (NameResolverListener.this.helper == ManagedChannelImpl.this.lbHelper) {
-            Attributes effectiveAttrs = attrs;
-            if (effectiveServiceConfig != validServiceConfig) {
-              effectiveAttrs = attrs.toBuilder()
-                  .set(
-                      GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG,
-                      effectiveServiceConfig.rawServiceConfig)
+            Map<String, ?> healthCheckingConfig =
+                effectiveServiceConfig.getHealthCheckingConfig();
+            if (healthCheckingConfig != null) {
+              effectiveAttrs = effectiveAttrs.toBuilder()
+                  .set(LoadBalancer.ATTR_HEALTH_CHECKING_CONFIG, healthCheckingConfig)
                   .build();
             }
 
@@ -1420,8 +1410,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
                 ResolvedAddresses.newBuilder()
                     .setAddresses(servers)
                     .setAttributes(effectiveAttrs)
-                    .setLoadBalancingPolicyConfig(
-                        effectiveServiceConfig.managedChannelServiceConfig.getLoadBalancingConfig())
+                    .setLoadBalancingPolicyConfig(effectiveServiceConfig.getLoadBalancingConfig())
                     .build());
 
             if (!handleResult.isOk()) {
@@ -1970,46 +1959,5 @@ final class ManagedChannelImpl extends ManagedChannel implements
     NO_RESOLUTION,
     SUCCESS,
     ERROR
-  }
-
-  // TODO(creamsoup) remove this class when AutoConfiguredLoadBalancerFactory doesn't require raw
-  //  service config.
-  private static final class ServiceConfigHolder {
-    Map<String, ?> rawServiceConfig;
-    ManagedChannelServiceConfig managedChannelServiceConfig;
-
-    ServiceConfigHolder(
-        Map<String, ?> rawServiceConfig, ManagedChannelServiceConfig managedChannelServiceConfig) {
-      this.rawServiceConfig = checkNotNull(rawServiceConfig, "rawServiceConfig");
-      this.managedChannelServiceConfig =
-          checkNotNull(managedChannelServiceConfig, "managedChannelServiceConfig");
-    }
-
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (o == null || getClass() != o.getClass()) {
-        return false;
-      }
-      ServiceConfigHolder that = (ServiceConfigHolder) o;
-      return Objects.equal(rawServiceConfig, that.rawServiceConfig)
-          && Objects
-          .equal(managedChannelServiceConfig, that.managedChannelServiceConfig);
-    }
-
-    @Override
-    public int hashCode() {
-      return Objects.hashCode(rawServiceConfig, managedChannelServiceConfig);
-    }
-
-    @Override
-    public String toString() {
-      return MoreObjects.toStringHelper(this)
-          .add("rawServiceConfig", rawServiceConfig)
-          .add("managedChannelServiceConfig", managedChannelServiceConfig)
-          .toString();
-    }
   }
 }
