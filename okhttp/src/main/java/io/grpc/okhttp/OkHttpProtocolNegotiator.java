@@ -210,7 +210,7 @@ class OkHttpProtocolNegotiator {
       SET_APPLICATION_PROTOCOLS
           .invokeOptionalWithoutCheckedException(sslParams, (Object) protocolIds(protocols));
       sslSocket.setSSLParameters(sslParams);
-      if (!isPlatformSocket(sslSocket)) {
+      if (!isPlatformSocket(sslSocket) || !SET_APPLICATION_PROTOCOLS.isSupported(sslParams)) {
         Object[] parameters = {Platform.concatLengthPrefixed(protocols)};
         if (platform.getTlsExtensionType() == TlsExtensionType.ALPN_AND_NPN) {
           SET_ALPN_PROTOCOLS.invokeWithoutCheckedException(sslSocket, parameters);
