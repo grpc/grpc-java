@@ -268,7 +268,7 @@ def com_google_protobuf():
         name = "com_google_protobuf",
         sha256 = "42e98f58f53d1a49fd734c2dd193880f2dfec3436a2993a00d06b8800a22a3f2",
         strip_prefix = "protobuf-3.11.4",
-        urls = ["https://github.com/protocolbuffers/protobuf/archive/v3.11.0.zip"],
+        urls = ["https://github.com/protocolbuffers/protobuf/archive/v3.11.4.zip"],
     )
 
 def com_google_protobuf_javalite():
