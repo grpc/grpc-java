@@ -25,12 +25,10 @@ import io.grpc.okhttp.internal.Platform.TlsExtensionType;
 import io.grpc.okhttp.internal.Protocol;
 import io.grpc.okhttp.internal.Util;
 import java.io.IOException;
-import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.Socket;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -147,8 +145,6 @@ class OkHttpProtocolNegotiator {
     // setServerNames(List<SNIServerName>)
     private static final OptionalMethod<SSLParameters> SET_SERVER_NAMES =
         new OptionalMethod<>(null, "setServerNames", List.class);
-    // SNIHostName(String)
-    private static Constructor<?> sniHostNameConstructor;
     // Non-null on Android 10.0+.
     // SSLSockets.isSupportedSocket(SSLSocket)
     private static Method sslSocketsIsSupportedSocket;
@@ -156,13 +152,12 @@ class OkHttpProtocolNegotiator {
     private static Method sslSocketsSetUseSessionTickets;
 
     static {
+      // Attempt to find Android 10.0+ APIs.
       try {
         Class<?> sslSockets = Class.forName("android.net.ssl.SSLSockets");
         sslSocketsIsSupportedSocket = sslSockets.getMethod("isSupportedSocket", SSLSocket.class);
         sslSocketsSetUseSessionTickets =
             sslSockets.getMethod("setUseSessionTickets", SSLSocket.class, boolean.class);
-        sniHostNameConstructor =
-            Class.forName("javax.net.ssl.SNIHostName").getConstructor(String.class);
       } catch (ClassNotFoundException ignored) {
       } catch (NoSuchMethodException ignored) {
       }
@@ -198,7 +193,6 @@ class OkHttpProtocolNegotiator {
     @Override
     protected void configureTlsExtensions(
         SSLSocket sslSocket, String hostname, List<Protocol> protocols) {
-      SSLParameters sslParams = sslSocket.getSSLParameters();
       // Enable SNI and session tickets.
       if (hostname != null) {
         try {
@@ -208,50 +202,39 @@ class OkHttpProtocolNegotiator {
           } else {
             SET_USE_SESSION_TICKETS.invokeOptionalWithoutCheckedException(sslSocket, true);
           }
-          if (sniHostNameConstructor != null) {
-            SET_SERVER_NAMES
-                .invokeOptionalWithoutCheckedException(
-                    sslParams,
-                    Collections.singletonList(sniHostNameConstructor.newInstance(hostname)));
-          }
-        } catch (InstantiationException ignored) {
         } catch (IllegalAccessException ignored) {
         } catch (InvocationTargetException ignored) {
         }
-        if (!isPlatformSocket(sslSocket)) {
-          SET_HOSTNAME.invokeOptionalWithoutCheckedException(sslSocket, hostname);
-        }
+        SET_HOSTNAME.invokeOptionalWithoutCheckedException(sslSocket, hostname);
       }
 
       // Enable ALPN and NPN if necessary.
+      SSLParameters sslParams = sslSocket.getSSLParameters();
       SET_APPLICATION_PROTOCOLS
           .invokeOptionalWithoutCheckedException(sslParams, (Object) protocolIds(protocols));
-
-      Object[] parameters = {Platform.concatLengthPrefixed(protocols)};
-      if (platform.getTlsExtensionType() == TlsExtensionType.ALPN_AND_NPN) {
-        if (!isPlatformSocket(sslSocket) && SET_ALPN_PROTOCOLS.isSupported(sslSocket)) {
+      sslSocket.setSSLParameters(sslParams);
+      if (!isPlatformSocket(sslSocket)) {
+        Object[] parameters = {Platform.concatLengthPrefixed(protocols)};
+        if (platform.getTlsExtensionType() == TlsExtensionType.ALPN_AND_NPN) {
           SET_ALPN_PROTOCOLS.invokeWithoutCheckedException(sslSocket, parameters);
         }
-      }
-
-      if (platform.getTlsExtensionType() != TlsExtensionType.NONE) {
-        if (!isPlatformSocket(sslSocket) && SET_NPN_PROTOCOLS.isSupported(sslSocket)) {
+        if (platform.getTlsExtensionType() != TlsExtensionType.NONE) {
           SET_NPN_PROTOCOLS.invokeWithoutCheckedException(sslSocket, parameters);
+        } else {
+          throw new RuntimeException("We can not do TLS handshake on this Android version, please"
+              + " install the Google Play Services Dynamic Security Provider to use TLS");
         }
-      } else {
-        throw new RuntimeException("We can not do TLS handshake on this Android version, please"
-            + " install the Google Play Services Dynamic Security Provider to use TLS");
       }
-      sslSocket.setSSLParameters(sslParams);
     }
 
     @Override
     public String getSelectedProtocol(SSLSocket socket) {
-      // This API was added in Android Q
-      try {
-        return (String) GET_APPLICATION_PROTOCOL.invokeOptionalWithoutCheckedException(socket);
-      } catch (UnsupportedOperationException ignored) {
-        // The socket doesn't support this API, try the old reflective method
+      if (GET_APPLICATION_PROTOCOL.isSupported(socket)) {
+        try {
+          return (String) GET_APPLICATION_PROTOCOL.invokeOptionalWithoutCheckedException(socket);
+        } catch (UnsupportedOperationException ignored) {
+          // The socket doesn't support this API, try the old reflective method
+        }
       }
 
       if (platform.getTlsExtensionType() == TlsExtensionType.ALPN_AND_NPN) {
