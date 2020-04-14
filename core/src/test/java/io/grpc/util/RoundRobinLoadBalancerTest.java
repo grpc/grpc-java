@@ -279,17 +279,57 @@ public class RoundRobinLoadBalancerTest {
     Status error = Status.UNKNOWN.withDescription("¯\\_(ツ)_//¯");
     deliverSubchannelState(subchannel,
         ConnectivityStateInfo.forTransientFailure(error));
-    assertThat(subchannelStateInfo.value).isEqualTo(
-        ConnectivityStateInfo.forTransientFailure(error));
+    assertThat(subchannelStateInfo.value.getState()).isEqualTo(TRANSIENT_FAILURE);
+    assertThat(subchannelStateInfo.value.getStatus()).isEqualTo(error);
     inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
     assertThat(pickerCaptor.getValue()).isInstanceOf(EmptyPicker.class);
 
     deliverSubchannelState(subchannel,
         ConnectivityStateInfo.forNonError(IDLE));
-    assertThat(subchannelStateInfo.value).isEqualTo(
-        ConnectivityStateInfo.forNonError(IDLE));
+    assertThat(subchannelStateInfo.value.getState()).isEqualTo(TRANSIENT_FAILURE);
+    assertThat(subchannelStateInfo.value.getStatus()).isEqualTo(error);
 
     verify(subchannel, times(2)).requestConnection();
+    verify(mockHelper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
+    verifyNoMoreInteractions(mockHelper);
+  }
+
+  @Test
+  public void stayTransientFailureUntilReady() {
+    InOrder inOrder = inOrder(mockHelper);
+    loadBalancer.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(Attributes.EMPTY)
+            .build());
+
+    inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), isA(EmptyPicker.class));
+
+    // Simulate state transitions for each subchannel individually.
+    for (Subchannel sc : loadBalancer.getSubchannels()) {
+      Status error = Status.UNKNOWN.withDescription("connection broken");
+      deliverSubchannelState(
+          sc,
+          ConnectivityStateInfo.forTransientFailure(error));
+      deliverSubchannelState(
+          sc,
+          ConnectivityStateInfo.forNonError(IDLE));
+      deliverSubchannelState(
+          sc,
+          ConnectivityStateInfo.forNonError(CONNECTING));
+      Ref<ConnectivityStateInfo> scStateInfo = sc.getAttributes().get(
+          STATE_INFO);
+      assertThat(scStateInfo.value.getState()).isEqualTo(TRANSIENT_FAILURE);
+      assertThat(scStateInfo.value.getStatus()).isEqualTo(error);
+    }
+    inOrder.verify(mockHelper).updateBalancingState(eq(TRANSIENT_FAILURE), isA(EmptyPicker.class));
+    inOrder.verifyNoMoreInteractions();
+
+    Subchannel subchannel = loadBalancer.getSubchannels().iterator().next();
+    deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
+    Ref<ConnectivityStateInfo> subchannelStateInfo = subchannel.getAttributes().get(
+        STATE_INFO);
+    assertThat(subchannelStateInfo.value).isEqualTo(ConnectivityStateInfo.forNonError(READY));
+    inOrder.verify(mockHelper).updateBalancingState(eq(READY), isA(ReadyPicker.class));
+
     verify(mockHelper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
     verifyNoMoreInteractions(mockHelper);
   }

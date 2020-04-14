@@ -17,6 +17,11 @@
 package io.grpc.xds.internal.sds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CA_PEM_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_0_KEY_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_0_PEM_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_KEY_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_PEM_FILE;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.doThrow;
@@ -64,12 +69,6 @@ import org.mockito.stubbing.Answer;
 /** Unit tests for {@link SdsClient}. */
 @RunWith(JUnit4.class)
 public class SdsClientTest {
-
-  static final String SERVER_0_PEM_FILE = "server0.pem";
-  static final String SERVER_0_KEY_FILE = "server0.key";
-  static final String SERVER_1_PEM_FILE = "server1.pem";
-  static final String SERVER_1_KEY_FILE = "server1.key";
-  static final String CA_PEM_FILE = "ca.pem";
 
   private TestSdsServer.ServerMock serverMock;
   private TestSdsServer server;

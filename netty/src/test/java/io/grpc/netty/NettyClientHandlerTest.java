@@ -362,6 +362,19 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   }
 
   @Test
+  public void receivedGoAwayShouldNotAffectRacingQueuedStreamId() throws Exception {
+    // This command has not actually been executed yet
+    ChannelFuture future = writeQueue().enqueue(
+        newCreateStreamCommand(grpcHeaders, streamTransportState), true);
+    channelRead(goAwayFrame(streamId));
+    verify(streamListener, never())
+        .closed(any(Status.class), any(Metadata.class));
+    verify(streamListener, never())
+        .closed(any(Status.class), any(RpcProgress.class), any(Metadata.class));
+    assertTrue(future.isDone());
+  }
+
+  @Test
   public void receivedResetWithRefuseCode() throws Exception {
     ChannelFuture future = enqueue(newCreateStreamCommand(grpcHeaders, streamTransportState));
     channelRead(rstStreamFrame(streamId, (int) Http2Error.REFUSED_STREAM.code() ));

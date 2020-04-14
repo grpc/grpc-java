@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
@@ -63,19 +64,13 @@ abstract class XdsClient {
    * be used to generate a service config.
    */
   static final class ConfigUpdate {
-    private final String clusterName;
     private final List<Route> routes;
 
-    private ConfigUpdate(String clusterName, List<Route> routes) {
-      this.clusterName = clusterName;
+    private ConfigUpdate(List<Route> routes) {
       this.routes = routes;
     }
 
-    String getClusterName() {
-      return clusterName;
-    }
-
-    public List<Route> getRoutes() {
+    List<Route> getRoutes() {
       return routes;
     }
 
@@ -84,7 +79,6 @@ abstract class XdsClient {
       return
           MoreObjects
               .toStringHelper(this)
-              .add("clusterName", clusterName)
               .add("routes", routes)
               .toString();
     }
@@ -95,16 +89,11 @@ abstract class XdsClient {
 
     static final class Builder {
       private final List<Route> routes = new ArrayList<>();
-      private String clusterName;
 
       // Use ConfigUpdate.newBuilder().
       private Builder() {
       }
 
-      Builder setClusterName(String clusterName) {
-        this.clusterName = clusterName;
-        return this;
-      }
 
       Builder addRoutes(Collection<Route> route) {
         routes.addAll(route);
@@ -112,8 +101,8 @@ abstract class XdsClient {
       }
 
       ConfigUpdate build() {
-        Preconditions.checkState(clusterName != null, "clusterName is not set");
-        return new ConfigUpdate(clusterName, Collections.unmodifiableList(routes));
+        checkState(!routes.isEmpty(), "routes is empty");
+        return new ConfigUpdate(Collections.unmodifiableList(routes));
       }
     }
   }
@@ -237,8 +226,8 @@ abstract class XdsClient {
       }
 
       ClusterUpdate build() {
-        Preconditions.checkState(clusterName != null, "clusterName is not set");
-        Preconditions.checkState(lbPolicy != null, "lbPolicy is not set");
+        checkState(clusterName != null, "clusterName is not set");
+        checkState(lbPolicy != null, "lbPolicy is not set");
 
         return
             new ClusterUpdate(
@@ -344,7 +333,7 @@ abstract class XdsClient {
       }
 
       EndpointUpdate build() {
-        Preconditions.checkState(clusterName != null, "clusterName is not set");
+        checkState(clusterName != null, "clusterName is not set");
         return
             new EndpointUpdate(
                 clusterName,
@@ -394,7 +383,7 @@ abstract class XdsClient {
       }
 
       ListenerUpdate build() {
-        Preconditions.checkState(listener != null, "listener is not set");
+        checkState(listener != null, "listener is not set");
         return new ListenerUpdate(listener);
       }
     }
@@ -546,7 +535,7 @@ abstract class XdsClient {
     @Override
     public synchronized XdsClient getObject() {
       if (xdsClient == null) {
-        Preconditions.checkState(
+        checkState(
             refCount == 0,
             "Bug: refCount should be zero while xdsClient is null");
         xdsClient = xdsClientFactory.createXdsClient();
@@ -560,14 +549,14 @@ abstract class XdsClient {
      */
     @Override
     public synchronized XdsClient returnObject(Object object) {
-      Preconditions.checkState(
+      checkState(
           object == xdsClient,
           "Bug: the returned object '%s' does not match current XdsClient '%s'",
           object,
           xdsClient);
 
       refCount--;
-      Preconditions.checkState(refCount >= 0, "Bug: refCount of XdsClient less than 0");
+      checkState(refCount >= 0, "Bug: refCount of XdsClient less than 0");
       if (refCount == 0) {
         xdsClient.shutdown();
         xdsClient = null;

@@ -14,26 +14,13 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.internal.sds;
+package io.grpc.xds;
 
-import static com.google.common.truth.Truth.assertThat;
+final class XdsLbPolicies {
+  static final String CDS_POLICY_NAME = "cds_experimental";
+  static final String EDS_POLICY_NAME = "eds_experimental";
+  static final String WEIGHTED_TARGET_POLICY_NAME = "weighted_target_experimental";
+  static final String XDS_ROUTING_POLICY_NAME = "xds_routing_experimental";
 
-import io.grpc.Server;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
-
-/**
- * Unit tests for {@link XdsChannelBuilder}.
- */
-@RunWith(JUnit4.class)
-public class XdsServerBuilderTest {
-
-  @Test
-  public void buildsXdsServerBuilder() {
-    XdsServerBuilder builder = XdsServerBuilder.forPort(8080);
-    assertThat(builder).isInstanceOf(XdsServerBuilder.class);
-    Server server = builder.build();
-    assertThat(server).isNotNull();
-  }
+  private XdsLbPolicies() {}
 }

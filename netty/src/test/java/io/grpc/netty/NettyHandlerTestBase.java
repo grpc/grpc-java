@@ -203,6 +203,10 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
     }
   }
 
+  protected final WriteQueue writeQueue() {
+    return writeQueue;
+  }
+
   protected final T handler() {
     return handler;
   }

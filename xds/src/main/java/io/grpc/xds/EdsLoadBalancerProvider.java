@@ -38,8 +38,6 @@ import javax.annotation.Nullable;
 @Internal
 public class EdsLoadBalancerProvider extends LoadBalancerProvider {
 
-  static final String EDS_POLICY_NAME = "eds_experimental";
-
   @Override
   public boolean isAvailable() {
     return true;
@@ -52,7 +50,7 @@ public class EdsLoadBalancerProvider extends LoadBalancerProvider {
 
   @Override
   public String getPolicyName() {
-    return EDS_POLICY_NAME;
+    return XdsLbPolicies.EDS_POLICY_NAME;
   }
 
   @Override

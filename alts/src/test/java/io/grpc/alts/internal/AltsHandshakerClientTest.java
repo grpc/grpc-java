@@ -106,6 +106,7 @@ public class AltsHandshakerClientTest {
                     .setTargetName(TEST_TARGET_NAME)
                     .addTargetIdentities(
                         Identity.newBuilder().setServiceAccount(TEST_TARGET_SERVICE_ACCOUNT))
+                    .setMaxFrameSize(AltsTsiFrameProtector.getMaxFrameSize())
                     .build())
             .build();
     verify(mockStub).send(req);
@@ -132,6 +133,22 @@ public class AltsHandshakerClientTest {
 
     ByteBuffer inBytes = ByteBuffer.allocate(IN_BYTES_SIZE);
     ByteBuffer outFrame = handshaker.startServerHandshake(inBytes);
+
+    HandshakerReq req =
+        HandshakerReq.newBuilder()
+            .setServerStart(
+                StartServerHandshakeReq.newBuilder()
+                    .addApplicationProtocols(AltsHandshakerClient.getApplicationProtocol())
+                    .putHandshakeParameters(
+                      HandshakeProtocol.ALTS.getNumber(),
+                      ServerHandshakeParameters.newBuilder()
+                          .addRecordProtocols(AltsHandshakerClient.getRecordProtocol())
+                          .build())
+                    .setInBytes(ByteString.copyFrom(ByteBuffer.allocate(IN_BYTES_SIZE)))
+                    .setMaxFrameSize(AltsTsiFrameProtector.getMaxFrameSize())
+                    .build())
+            .build();
+    verify(mockStub).send(req);
 
     assertEquals(ByteString.copyFrom(outFrame), MockAltsHandshakerResp.getOutFrame());
     assertFalse(handshaker.isFinished());

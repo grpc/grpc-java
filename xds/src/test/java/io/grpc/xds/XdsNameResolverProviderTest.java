@@ -76,13 +76,13 @@ public class XdsNameResolverProviderTest {
   @Test
   public void newNameResolver() {
     assertThat(
-        provider.newNameResolver(URI.create("xds-experimental://1.1.1.1/foo.googleapis.com"), args))
+        provider.newNameResolver(URI.create("xds://1.1.1.1/foo.googleapis.com"), args))
         .isInstanceOf(XdsNameResolver.class);
     assertThat(
-        provider.newNameResolver(URI.create("xds-experimental:///foo.googleapis.com"), args))
+        provider.newNameResolver(URI.create("xds:///foo.googleapis.com"), args))
         .isInstanceOf(XdsNameResolver.class);
     assertThat(
-        provider.newNameResolver(URI.create("notxds-experimental://1.1.1.1/foo.googleapis.com"),
+        provider.newNameResolver(URI.create("notxds://1.1.1.1/foo.googleapis.com"),
             args))
         .isNull();
   }
@@ -91,7 +91,7 @@ public class XdsNameResolverProviderTest {
   public void validName_withAuthority() {
     XdsNameResolver resolver =
         provider.newNameResolver(
-            URI.create("xds-experimental://trafficdirector.google.com/foo.googleapis.com"), args);
+            URI.create("xds://trafficdirector.google.com/foo.googleapis.com"), args);
     assertThat(resolver).isNotNull();
     assertThat(resolver.getServiceAuthority()).isEqualTo("foo.googleapis.com");
   }
@@ -99,14 +99,14 @@ public class XdsNameResolverProviderTest {
   @Test
   public void validName_noAuthority() {
     XdsNameResolver resolver =
-        provider.newNameResolver(URI.create("xds-experimental:///foo.googleapis.com"), args);
+        provider.newNameResolver(URI.create("xds:///foo.googleapis.com"), args);
     assertThat(resolver).isNotNull();
     assertThat(resolver.getServiceAuthority()).isEqualTo("foo.googleapis.com");
   }
 
   @Test
   public void invalidName_hostnameContainsUnderscore() {
-    URI uri = URI.create("xds-experimental:///foo_bar.googleapis.com");
+    URI uri = URI.create("xds:///foo_bar.googleapis.com");
     try {
       provider.newNameResolver(uri, args);
       fail("Expected IllegalArgumentException");

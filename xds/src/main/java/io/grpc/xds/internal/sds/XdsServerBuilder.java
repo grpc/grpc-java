@@ -16,7 +16,7 @@
 
 package io.grpc.xds.internal.sds;
 
-import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
+import com.google.common.annotations.VisibleForTesting;
 import io.grpc.BindableService;
 import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
@@ -29,8 +29,8 @@ import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerStreamTracer;
 import io.grpc.ServerTransportFilter;
 import io.grpc.SynchronizationContext;
+import io.grpc.netty.InternalProtocolNegotiator;
 import io.grpc.netty.NettyServerBuilder;
-
 import java.io.File;
 import java.net.InetSocketAddress;
 import java.util.concurrent.Executor;
@@ -49,9 +49,6 @@ public final class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
 
   private final NettyServerBuilder delegate;
   private final int port;
-
-  // TODO (sanjaypujare) integrate with xDS client to get downstreamTlsContext from LDS
-  @Nullable private DownstreamTlsContext downstreamTlsContext;
 
   private XdsServerBuilder(NettyServerBuilder nettyDelegate, int port) {
     this.delegate = nettyDelegate;
@@ -129,15 +126,6 @@ public final class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
     return this;
   }
 
-  /**
-   * Set the DownstreamTlsContext for the server. This is a temporary workaround until integration
-   * with xDS client is implemented to get LDS. Passing {@code null} will fall back to plaintext.
-   */
-  public XdsServerBuilder tlsContext(@Nullable DownstreamTlsContext downstreamTlsContext) {
-    this.downstreamTlsContext = downstreamTlsContext;
-    return this;
-  }
-
   /** Creates a gRPC server builder for the given port. */
   public static XdsServerBuilder forPort(int port) {
     NettyServerBuilder nettyDelegate = NettyServerBuilder.forAddress(new InetSocketAddress(port));
@@ -171,9 +159,19 @@ public final class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
               panicMode = true;
             }
           });
-    delegate.protocolNegotiator(
-        SdsProtocolNegotiators.serverProtocolNegotiator(
-            this.downstreamTlsContext, port, syncContext));
+    InternalProtocolNegotiator.ProtocolNegotiator serverProtocolNegotiator =
+        SdsProtocolNegotiators.serverProtocolNegotiator(port, syncContext);
+    return buildServer(serverProtocolNegotiator);
+  }
+
+  /**
+   * Creates a Server using the given serverSdsProtocolNegotiator: gets the
+   * getXdsClientWrapperForServerSds from the serverSdsProtocolNegotiator.
+   */
+  @VisibleForTesting
+  public Server buildServer(
+      InternalProtocolNegotiator.ProtocolNegotiator serverProtocolNegotiator) {
+    delegate.protocolNegotiator(serverProtocolNegotiator);
     return delegate.build();
   }
 }

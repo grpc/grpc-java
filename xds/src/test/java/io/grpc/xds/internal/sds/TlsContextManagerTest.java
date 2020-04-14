@@ -17,6 +17,13 @@
 package io.grpc.xds.internal.sds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CA_PEM_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_KEY_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_PEM_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_0_KEY_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_0_PEM_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_KEY_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_PEM_FILE;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -40,14 +47,6 @@ import org.mockito.junit.MockitoRule;
 @RunWith(JUnit4.class)
 public class TlsContextManagerTest {
 
-  private static final String SERVER_0_PEM_FILE = "server0.pem";
-  private static final String SERVER_0_KEY_FILE = "server0.key";
-  private static final String SERVER_1_PEM_FILE = "server1.pem";
-  private static final String SERVER_1_KEY_FILE = "server1.key";
-  private static final String CLIENT_PEM_FILE = "client.pem";
-  private static final String CLIENT_KEY_FILE = "client.key";
-  private static final String CA_PEM_FILE = "ca.pem";
-
   @Rule public final MockitoRule mockitoRule = MockitoJUnit.rule();
 
   @Mock
@@ -66,7 +65,7 @@ public class TlsContextManagerTest {
   @Test
   public void createServerSslContextProvider() {
     DownstreamTlsContext downstreamTlsContext =
-        SecretVolumeSslContextProviderTest.buildDownstreamTlsContextFromFilenames(
+        CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(
             SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, /* trustCa= */ null);
 
     TlsContextManagerImpl tlsContextManagerImpl = TlsContextManagerImpl.getInstance();
@@ -82,7 +81,7 @@ public class TlsContextManagerTest {
   @Test
   public void createClientSslContextProvider() {
     UpstreamTlsContext upstreamTlsContext =
-        SecretVolumeSslContextProviderTest.buildUpstreamTlsContextFromFilenames(
+        CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
             /* privateKey= */ null, /* certChain= */ null, CA_PEM_FILE);
 
     TlsContextManagerImpl tlsContextManagerImpl = TlsContextManagerImpl.getInstance();
@@ -98,7 +97,7 @@ public class TlsContextManagerTest {
   @Test
   public void createServerSslContextProvider_differentInstance() {
     DownstreamTlsContext downstreamTlsContext =
-        SecretVolumeSslContextProviderTest.buildDownstreamTlsContextFromFilenames(
+        CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(
             SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, /* trustCa= */ null);
 
     TlsContextManagerImpl tlsContextManagerImpl = TlsContextManagerImpl.getInstance();
@@ -107,7 +106,7 @@ public class TlsContextManagerTest {
     assertThat(serverSecretProvider).isNotNull();
 
     DownstreamTlsContext downstreamTlsContext1 =
-        SecretVolumeSslContextProviderTest.buildDownstreamTlsContextFromFilenames(
+        CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(
             SERVER_0_KEY_FILE, SERVER_0_PEM_FILE, CA_PEM_FILE);
     SslContextProvider<DownstreamTlsContext> serverSecretProvider1 =
         tlsContextManagerImpl.findOrCreateServerSslContextProvider(downstreamTlsContext1);
@@ -118,7 +117,7 @@ public class TlsContextManagerTest {
   @Test
   public void createClientSslContextProvider_differentInstance() {
     UpstreamTlsContext upstreamTlsContext =
-        SecretVolumeSslContextProviderTest.buildUpstreamTlsContextFromFilenames(
+        CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
             /* privateKey= */ null, /* certChain= */ null, CA_PEM_FILE);
 
     TlsContextManagerImpl tlsContextManagerImpl = TlsContextManagerImpl.getInstance();
@@ -127,7 +126,7 @@ public class TlsContextManagerTest {
     assertThat(clientSecretProvider).isNotNull();
 
     UpstreamTlsContext upstreamTlsContext1 =
-        SecretVolumeSslContextProviderTest.buildUpstreamTlsContextFromFilenames(
+        CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
             CLIENT_KEY_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
 
     SslContextProvider<UpstreamTlsContext> clientSecretProvider1 =
@@ -138,7 +137,7 @@ public class TlsContextManagerTest {
   @Test
   public void createServerSslContextProvider_releaseInstance() {
     DownstreamTlsContext downstreamTlsContext =
-        SecretVolumeSslContextProviderTest.buildDownstreamTlsContextFromFilenames(
+        CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(
             SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, /* trustCa= */ null);
 
     TlsContextManagerImpl tlsContextManagerImpl =
@@ -158,7 +157,7 @@ public class TlsContextManagerTest {
   @Test
   public void createClientSslContextProvider_releaseInstance() {
     UpstreamTlsContext upstreamTlsContext =
-        SecretVolumeSslContextProviderTest.buildUpstreamTlsContextFromFilenames(
+        CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
             CLIENT_KEY_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
 
     TlsContextManagerImpl tlsContextManagerImpl =
