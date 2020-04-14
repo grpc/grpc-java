@@ -42,7 +42,6 @@ public class CommonTlsContextTestsUtil {
   public static final String CA_PEM_FILE = "ca.pem";
   /** Bad/untrusted server certs. */
   public static final String BAD_SERVER_PEM_FILE = "badserver.pem";
-
   public static final String BAD_SERVER_KEY_FILE = "badserver.key";
   public static final String BAD_CLIENT_PEM_FILE = "badclient.pem";
   public static final String BAD_CLIENT_KEY_FILE = "badclient.key";
