@@ -19,7 +19,7 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.code.gson:gson:jar:2.8.6",
     "com.google.errorprone:error_prone_annotations:2.3.4",
     "com.google.guava:failureaccess:1.0.1",
-    "com.google.guava:guava:28.2-android",
+    "com.google.guava:guava:29.0-android",
     "com.google.j2objc:j2objc-annotations:1.3",
     "com.google.truth:truth:1.0.1",
     "com.squareup.okhttp:okhttp:2.7.4",
@@ -236,14 +236,13 @@ def com_google_errorprone_error_prone_annotations():
 def com_google_guava_guava():
     jvm_maven_import_external(
         name = "com_google_guava_guava",
-        artifact = "com.google.guava:guava:28.2-android",
+        artifact = "com.google.guava:guava:29.0-android",
         server_urls = ["https://repo.maven.apache.org/maven2/"],
-        artifact_sha256 = "1faf214c94723ab9fbadfedd9af88ddc325faf669e68eab04688c3afcf59c037",
+        artifact_sha256 = "00ba22cb0e32610db7cf8ab4c20017c85d11788600734ff1d86995345eb5bc3b",
         licenses = ["notice"],  # Apache 2.0
     )
 
 def com_google_guava_failureaccess():
-    # Not needed until Guava 27.0, but including now to ease upgrading of users. See #5214
     jvm_maven_import_external(
         name = "com_google_guava_failureaccess",
         artifact = "com.google.guava:failureaccess:1.0.1",
@@ -267,8 +266,8 @@ def com_google_protobuf():
     # This statement defines the @com_google_protobuf repo.
     http_archive(
         name = "com_google_protobuf",
-        sha256 = "60d2012e3922e429294d3a4ac31f336016514a91e5a63fd33f35743ccfe1bd7d",
-        strip_prefix = "protobuf-3.11.0",
+        sha256 = "42e98f58f53d1a49fd734c2dd193880f2dfec3436a2993a00d06b8800a22a3f2",
+        strip_prefix = "protobuf-3.11.4",
         urls = ["https://github.com/protocolbuffers/protobuf/archive/v3.11.0.zip"],
     )
 
