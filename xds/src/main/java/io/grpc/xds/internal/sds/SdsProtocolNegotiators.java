@@ -16,7 +16,6 @@
 
 package io.grpc.xds.internal.sds;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -74,22 +73,19 @@ public final class SdsProtocolNegotiators {
 
   /**
    * Creates an SDS based {@link ProtocolNegotiator} for a {@link io.grpc.netty.NettyServerBuilder}.
-   * Passing {@code null} for downstreamTlsContext will fall back to plaintext.
    * If xDS returns no DownstreamTlsContext, it will fall back to plaintext.
    *
-   * @param downstreamTlsContext passed in {@link XdsServerBuilder#tlsContext}.
    * @param port the listening port passed to {@link XdsServerBuilder#forPort(int)}.
    */
   public static ProtocolNegotiator serverProtocolNegotiator(
-      @Nullable DownstreamTlsContext downstreamTlsContext, int port,
-      SynchronizationContext syncContext) {
+      int port, SynchronizationContext syncContext) {
     XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
         ServerSdsProtocolNegotiator.getXdsClientWrapperForServerSds(port, syncContext);
-    if (xdsClientWrapperForServerSds == null && downstreamTlsContext == null) {
+    if (xdsClientWrapperForServerSds == null) {
       logger.log(Level.INFO, "Fallback to plaintext for server at port {0}", port);
       return InternalProtocolNegotiators.serverPlaintext();
     } else {
-      return new ServerSdsProtocolNegotiator(downstreamTlsContext, xdsClientWrapperForServerSds);
+      return new ServerSdsProtocolNegotiator(xdsClientWrapperForServerSds);
     }
   }
 
@@ -267,18 +263,13 @@ public final class SdsProtocolNegotiators {
   @VisibleForTesting
   public static final class ServerSdsProtocolNegotiator implements ProtocolNegotiator {
 
-    @Nullable private final DownstreamTlsContext downstreamTlsContext;
-    @Nullable private final XdsClientWrapperForServerSds xdsClientWrapperForServerSds;
+    private final XdsClientWrapperForServerSds xdsClientWrapperForServerSds;
 
     /** Constructor. */
     @VisibleForTesting
-    public ServerSdsProtocolNegotiator(
-        @Nullable DownstreamTlsContext downstreamTlsContext,
-        @Nullable XdsClientWrapperForServerSds xdsClientWrapperForServerSds) {
-      checkArgument(downstreamTlsContext != null || xdsClientWrapperForServerSds != null,
-          "both downstreamTlsContext and xdsClientWrapperForServerSds cannot be null");
-      this.downstreamTlsContext = downstreamTlsContext;
-      this.xdsClientWrapperForServerSds = xdsClientWrapperForServerSds;
+    public ServerSdsProtocolNegotiator(XdsClientWrapperForServerSds xdsClientWrapperForServerSds) {
+      this.xdsClientWrapperForServerSds =
+          checkNotNull(xdsClientWrapperForServerSds, "xdsClientWrapperForServerSds");
     }
 
     private static XdsClientWrapperForServerSds getXdsClientWrapperForServerSds(
@@ -299,8 +290,7 @@ public final class SdsProtocolNegotiators {
 
     @Override
     public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
-      return new HandlerPickerHandler(grpcHandler, downstreamTlsContext,
-          xdsClientWrapperForServerSds);
+      return new HandlerPickerHandler(grpcHandler, xdsClientWrapperForServerSds);
     }
 
     @Override
@@ -315,16 +305,13 @@ public final class SdsProtocolNegotiators {
   static final class HandlerPickerHandler
       extends ChannelInboundHandlerAdapter {
     private final GrpcHttp2ConnectionHandler grpcHandler;
-    private final DownstreamTlsContext downstreamTlsContextFromBuilder;
     private final XdsClientWrapperForServerSds xdsClientWrapperForServerSds;
 
     HandlerPickerHandler(
         GrpcHttp2ConnectionHandler grpcHandler,
-        @Nullable DownstreamTlsContext downstreamTlsContext,
         @Nullable XdsClientWrapperForServerSds xdsClientWrapperForServerSds) {
       checkNotNull(grpcHandler, "grpcHandler");
       this.grpcHandler = grpcHandler;
-      this.downstreamTlsContextFromBuilder = downstreamTlsContext;
       this.xdsClientWrapperForServerSds = xdsClientWrapperForServerSds;
     }
 
@@ -339,9 +326,6 @@ public final class SdsProtocolNegotiators {
             xdsClientWrapperForServerSds == null
                 ? null
                 : xdsClientWrapperForServerSds.getDownstreamTlsContext(ctx.channel());
-        if (isTlsContextEmpty(downstreamTlsContext)) {
-          downstreamTlsContext = downstreamTlsContextFromBuilder;
-        }
         if (isTlsContextEmpty(downstreamTlsContext)) {
           logger.log(Level.INFO, "Fallback to plaintext for {0}", ctx.channel().localAddress());
           ctx.pipeline()

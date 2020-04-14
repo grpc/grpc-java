@@ -70,6 +70,7 @@ public final class XdsClientWrapperForServerSds {
   @Nullable private final XdsClient xdsClient;
   private final int port;
   private final ScheduledExecutorService timeService;
+  private final XdsClient.ListenerWatcher listenerWatcher;
 
   /**
    * Factory method for creating a {@link XdsClientWrapperForServerSds}.
@@ -106,15 +107,14 @@ public final class XdsClientWrapperForServerSds {
     this.port = port;
     this.xdsClient = xdsClient;
     this.timeService = timeService;
-    xdsClient.watchListenerData(
-        port,
+    this.listenerWatcher =
         new XdsClient.ListenerWatcher() {
           @Override
           public void onListenerChanged(XdsClient.ListenerUpdate update) {
             logger.log(
                 Level.INFO,
-                "Setting myListener from ConfigUpdate listener :{0}",
-                update.getListener().toString());
+                "Setting myListener from ConfigUpdate listener: {0}",
+                update.getListener());
             curListener = update.getListener();
           }
 
@@ -126,9 +126,10 @@ public final class XdsClientWrapperForServerSds {
               curListener = null;
             }
             // TODO(sanjaypujare): Implement logic for other cases based on final design.
-            logger.log(Level.SEVERE, "ListenerWatcher in XdsClientWrapperForServerSds:{0}", error);
+            logger.log(Level.SEVERE, "ListenerWatcher in XdsClientWrapperForServerSds: {0}", error);
           }
-        });
+        };
+    xdsClient.watchListenerData(port, listenerWatcher);
   }
 
   /**
@@ -155,6 +156,11 @@ public final class XdsClientWrapperForServerSds {
       }
     }
     return null;
+  }
+
+  @VisibleForTesting
+  XdsClient.ListenerWatcher getListenerWatcher() {
+    return listenerWatcher;
   }
 
   private static final class FilterChainComparator implements Comparator<FilterChain> {

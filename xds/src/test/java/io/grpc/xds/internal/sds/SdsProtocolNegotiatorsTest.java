@@ -17,6 +17,11 @@
 package io.grpc.xds.internal.sds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CA_PEM_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_KEY_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_PEM_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_KEY_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_PEM_FILE;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
@@ -31,6 +36,8 @@ import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
 import io.grpc.netty.InternalProtocolNegotiationEvent;
 import io.grpc.netty.InternalProtocolNegotiator;
+import io.grpc.xds.XdsClientWrapperForServerSds;
+import io.grpc.xds.XdsClientWrapperForServerSdsTest;
 import io.grpc.xds.internal.sds.SdsProtocolNegotiators.ClientSdsHandler;
 import io.grpc.xds.internal.sds.SdsProtocolNegotiators.ClientSdsProtocolNegotiator;
 import io.netty.channel.ChannelHandler;
@@ -49,6 +56,8 @@ import io.netty.handler.codec.http2.Http2Settings;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.ssl.SslHandshakeCompletionEvent;
 import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.util.Iterator;
 import java.util.Map;
 import org.junit.Test;
@@ -58,12 +67,6 @@ import org.junit.runners.JUnit4;
 /** Unit tests for {@link SdsProtocolNegotiators}. */
 @RunWith(JUnit4.class)
 public class SdsProtocolNegotiatorsTest {
-
-  private static final String SERVER_1_PEM_FILE = "server1.pem";
-  private static final String SERVER_1_KEY_FILE = "server1.key";
-  private static final String CLIENT_PEM_FILE = "client.pem";
-  private static final String CLIENT_KEY_FILE = "client.key";
-  private static final String CA_PEM_FILE = "ca.pem";
 
   private final GrpcHttp2ConnectionHandler grpcHandler =
       FakeGrpcHttp2ConnectionHandler.newHandler();
@@ -153,7 +156,8 @@ public class SdsProtocolNegotiatorsTest {
   @Test
   public void clientSdsProtocolNegotiatorNewHandler_nonNullTlsContext() {
     UpstreamTlsContext upstreamTlsContext =
-        buildUpstreamTlsContext(getCommonTlsContext(null, null));
+        buildUpstreamTlsContext(
+            getCommonTlsContext(/* tlsCertificate= */ null, /* certContext= */ null));
     ClientSdsProtocolNegotiator pn = new ClientSdsProtocolNegotiator(upstreamTlsContext);
     ChannelHandler newHandler = pn.newHandler(grpcHandler);
     assertThat(newHandler).isNotNull();
@@ -187,11 +191,23 @@ public class SdsProtocolNegotiatorsTest {
 
   @Test
   public void serverSdsHandler_addLast() throws IOException {
+    // we need InetSocketAddress instead of EmbeddedSocketAddress as localAddress for this test
+    channel =
+        new EmbeddedChannel() {
+          @Override
+          public SocketAddress localAddress() {
+            return new InetSocketAddress("172.168.1.1", 80);
+          }
+        };
+    pipeline = channel.pipeline();
     DownstreamTlsContext downstreamTlsContext =
         buildDownstreamTlsContextFromFilenames(SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, CA_PEM_FILE);
 
+    XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
+        XdsClientWrapperForServerSdsTest.createXdsClientWrapperForServerSds(
+            80, downstreamTlsContext);
     SdsProtocolNegotiators.HandlerPickerHandler handlerPickerHandler =
-        new SdsProtocolNegotiators.HandlerPickerHandler(grpcHandler, downstreamTlsContext, null);
+        new SdsProtocolNegotiators.HandlerPickerHandler(grpcHandler, xdsClientWrapperForServerSds);
     pipeline.addLast(handlerPickerHandler);
     channelHandlerCtx = pipeline.context(handlerPickerHandler);
     assertThat(channelHandlerCtx).isNotNull(); // should find HandlerPickerHandler
@@ -217,7 +233,8 @@ public class SdsProtocolNegotiatorsTest {
   @Test
   public void serverSdsHandler_nullTlsContext_expectPlaintext() throws IOException {
     SdsProtocolNegotiators.HandlerPickerHandler handlerPickerHandler =
-            new SdsProtocolNegotiators.HandlerPickerHandler(grpcHandler, null, null);
+        new SdsProtocolNegotiators.HandlerPickerHandler(
+            grpcHandler, /* xdsClientWrapperForServerSds= */ null);
     pipeline.addLast(handlerPickerHandler);
     channelHandlerCtx = pipeline.context(handlerPickerHandler);
     assertThat(channelHandlerCtx).isNotNull(); // should find HandlerPickerHandler
@@ -259,10 +276,9 @@ public class SdsProtocolNegotiatorsTest {
   }
 
   @Test
-  public void serverSdsProtocolNegotiator_passNulls_expectPlaintext() {
+  public void serverSdsProtocolNegotiator_nullSyncContext_expectPlaintext() {
     InternalProtocolNegotiator.ProtocolNegotiator protocolNegotiator =
-        SdsProtocolNegotiators.serverProtocolNegotiator(null, 7000,
-            null);
+        SdsProtocolNegotiators.serverProtocolNegotiator(/* port= */ 7000, /* syncContext= */ null);
     assertThat(protocolNegotiator.scheme().toString()).isEqualTo("http");
   }
 

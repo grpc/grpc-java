@@ -17,6 +17,10 @@
 package io.grpc.xds.internal.sds.trust;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.BAD_SERVER_PEM_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CA_PEM_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_PEM_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_PEM_FILE;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.CALLS_REAL_METHODS;
 import static org.mockito.Mockito.doReturn;
@@ -51,18 +55,6 @@ import sun.security.validator.ValidatorException;
  */
 @RunWith(JUnit4.class)
 public class SdsX509TrustManagerTest {
-
-  /** Trust store cert. */
-  private static final String CA_PEM_FILE = "ca.pem";
-
-  /** server1 has 4 SANs. */
-  private static final String SERVER_1_PEM_FILE = "server1.pem";
-
-  /** client has no SANs. */
-  private static final String CLIENT_PEM_FILE = "client.pem";
-
-  /** Untrusted server. */
-  private static final String BAD_SERVER_PEM_FILE = "badserver.pem";
 
   @Rule
   public final MockitoRule mockitoRule = MockitoJUnit.rule();

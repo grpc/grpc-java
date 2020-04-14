@@ -17,7 +17,6 @@
 package io.grpc.xds.internal.sds;
 
 import com.google.common.annotations.VisibleForTesting;
-import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
 import io.grpc.BindableService;
 import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
@@ -50,9 +49,6 @@ public final class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
 
   private final NettyServerBuilder delegate;
   private final int port;
-
-  // TODO (sanjaypujare) integrate with xDS client to get downstreamTlsContext from LDS
-  @Nullable private DownstreamTlsContext downstreamTlsContext;
 
   private XdsServerBuilder(NettyServerBuilder nettyDelegate, int port) {
     this.delegate = nettyDelegate;
@@ -130,15 +126,6 @@ public final class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
     return this;
   }
 
-  /**
-   * Set the DownstreamTlsContext for the server. This is a temporary workaround until integration
-   * with xDS client is implemented to get LDS. Passing {@code null} will fall back to plaintext.
-   */
-  public XdsServerBuilder tlsContext(@Nullable DownstreamTlsContext downstreamTlsContext) {
-    this.downstreamTlsContext = downstreamTlsContext;
-    return this;
-  }
-
   /** Creates a gRPC server builder for the given port. */
   public static XdsServerBuilder forPort(int port) {
     NettyServerBuilder nettyDelegate = NettyServerBuilder.forAddress(new InetSocketAddress(port));
@@ -173,8 +160,7 @@ public final class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
             }
           });
     InternalProtocolNegotiator.ProtocolNegotiator serverProtocolNegotiator =
-        SdsProtocolNegotiators.serverProtocolNegotiator(
-            this.downstreamTlsContext, port, syncContext);
+        SdsProtocolNegotiators.serverProtocolNegotiator(port, syncContext);
     return buildServer(serverProtocolNegotiator);
   }
 

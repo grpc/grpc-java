@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -138,6 +139,26 @@ public class XdsClientWrapperForServerSdsTest {
 
   private XdsClientWrapperForServerSds xdsClientWrapperForServerSds;
   private final DownstreamTlsContext[] tlsContexts = new DownstreamTlsContext[3];
+
+  /** Creates XdsClientWrapperForServerSds: also used by other classes. */
+  public static XdsClientWrapperForServerSds createXdsClientWrapperForServerSds(
+      int port, DownstreamTlsContext downstreamTlsContext) {
+    XdsClient mockXdsClient = mock(XdsClient.class);
+    XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
+        new XdsClientWrapperForServerSds(port, mockXdsClient, null);
+    generateListenerUpdateToWatcher(
+        port, downstreamTlsContext, xdsClientWrapperForServerSds.getListenerWatcher());
+    return xdsClientWrapperForServerSds;
+  }
+
+  static void generateListenerUpdateToWatcher(
+      int port, DownstreamTlsContext tlsContext, XdsClient.ListenerWatcher registeredWatcher) {
+    EnvoyServerProtoData.Listener listener =
+        XdsSdsClientServerTest.buildListener("listener1", "0.0.0.0", port, tlsContext);
+    XdsClient.ListenerUpdate listenerUpdate =
+        XdsClient.ListenerUpdate.newBuilder().setListener(listener).build();
+    registeredWatcher.onListenerChanged(listenerUpdate);
+  }
 
   @Before
   public void setUp() throws IOException {

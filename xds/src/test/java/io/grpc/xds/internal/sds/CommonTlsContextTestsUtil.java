@@ -23,11 +23,28 @@ import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext.CombinedCertificateValid
 import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.auth.SdsSecretConfig;
 import io.envoyproxy.envoy.api.v2.auth.TlsCertificate;
+import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.core.DataSource;
+import io.grpc.internal.testing.TestUtils;
+import java.io.IOException;
 import java.util.Arrays;
+import javax.annotation.Nullable;
 
 /** Utility class for client and server ssl provider tests. */
 public class CommonTlsContextTestsUtil {
+
+  public static final String SERVER_0_PEM_FILE = "server0.pem";
+  public static final String SERVER_0_KEY_FILE = "server0.key";
+  public static final String SERVER_1_PEM_FILE = "server1.pem";
+  public static final String SERVER_1_KEY_FILE = "server1.key";
+  public static final String CLIENT_PEM_FILE = "client.pem";
+  public static final String CLIENT_KEY_FILE = "client.key";
+  public static final String CA_PEM_FILE = "ca.pem";
+  /** Bad/untrusted server certs. */
+  public static final String BAD_SERVER_PEM_FILE = "badserver.pem";
+  public static final String BAD_SERVER_KEY_FILE = "badserver.key";
+  public static final String BAD_CLIENT_PEM_FILE = "badclient.pem";
+  public static final String BAD_CLIENT_KEY_FILE = "badclient.key";
 
   static SdsSecretConfig buildSdsSecretConfig(String name, String targetUri, String channelType) {
     SdsSecretConfig sdsSecretConfig = null;
@@ -143,5 +160,86 @@ public class CommonTlsContextTestsUtil {
             Arrays.asList("spiffe://grpc-sds-testing.svc.id.goog/ns/default/sa/bob"),
             Arrays.asList("managed-tls"),
             null));
+  }
+
+  static String getTempFileNameForResourcesFile(String resFile) throws IOException {
+    return TestUtils.loadCert(resFile).getAbsolutePath();
+  }
+
+  /**
+   * Helper method to build DownstreamTlsContext for above tests. Called from other classes as well.
+   */
+  public static DownstreamTlsContext buildDownstreamTlsContextFromFilenames(
+      @Nullable String privateKey, @Nullable String certChain, @Nullable String trustCa) {
+    // get temp file for each file
+    try {
+      if (certChain != null) {
+        certChain = getTempFileNameForResourcesFile(certChain);
+      }
+      if (privateKey != null) {
+        privateKey = getTempFileNameForResourcesFile(privateKey);
+      }
+      if (trustCa != null) {
+        trustCa = getTempFileNameForResourcesFile(trustCa);
+      }
+    } catch (IOException ioe) {
+      throw new RuntimeException(ioe);
+    }
+    return buildDownstreamTlsContext(
+        buildCommonTlsContextFromFilenames(privateKey, certChain, trustCa));
+  }
+
+  /**
+   * Helper method to build UpstreamTlsContext for above tests. Called from other classes as well.
+   */
+  public static UpstreamTlsContext buildUpstreamTlsContextFromFilenames(
+      @Nullable String privateKey, @Nullable String certChain, @Nullable String trustCa) {
+    try {
+      if (certChain != null) {
+        certChain = getTempFileNameForResourcesFile(certChain);
+      }
+      if (privateKey != null) {
+        privateKey = getTempFileNameForResourcesFile(privateKey);
+      }
+      if (trustCa != null) {
+        trustCa = getTempFileNameForResourcesFile(trustCa);
+      }
+    } catch (IOException ioe) {
+      throw new RuntimeException(ioe);
+    }
+    return SecretVolumeSslContextProviderTest.buildUpstreamTlsContext(
+        buildCommonTlsContextFromFilenames(privateKey, certChain, trustCa));
+  }
+
+  private static CommonTlsContext buildCommonTlsContextFromFilenames(
+      String privateKey, String certChain, String trustCa) {
+    TlsCertificate tlsCert = null;
+    if (!Strings.isNullOrEmpty(privateKey) && !Strings.isNullOrEmpty(certChain)) {
+      tlsCert =
+          TlsCertificate.newBuilder()
+              .setCertificateChain(DataSource.newBuilder().setFilename(certChain))
+              .setPrivateKey(DataSource.newBuilder().setFilename(privateKey))
+              .build();
+    }
+    CertificateValidationContext certContext = null;
+    if (!Strings.isNullOrEmpty(trustCa)) {
+      certContext =
+          CertificateValidationContext.newBuilder()
+              .setTrustedCa(DataSource.newBuilder().setFilename(trustCa))
+              .build();
+    }
+    return getCommonTlsContext(tlsCert, certContext);
+  }
+
+  static CommonTlsContext getCommonTlsContext(
+      TlsCertificate tlsCertificate, CertificateValidationContext certContext) {
+    CommonTlsContext.Builder builder = CommonTlsContext.newBuilder();
+    if (tlsCertificate != null) {
+      builder = builder.addTlsCertificates(tlsCertificate);
+    }
+    if (certContext != null) {
+      builder = builder.setValidationContext(certContext);
+    }
+    return builder.build();
   }
 }
