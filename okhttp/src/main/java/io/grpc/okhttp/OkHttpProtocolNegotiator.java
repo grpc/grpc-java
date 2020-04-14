@@ -142,9 +142,6 @@ class OkHttpProtocolNegotiator {
     // getApplicationProtocol()
     private static final OptionalMethod<SSLSocket> GET_APPLICATION_PROTOCOL =
         new OptionalMethod<>(String.class, "getApplicationProtocol");
-    // setServerNames(List<SNIServerName>)
-    private static final OptionalMethod<SSLParameters> SET_SERVER_NAMES =
-        new OptionalMethod<>(null, "setServerNames", List.class);
     // Non-null on Android 10.0+.
     // SSLSockets.isSupportedSocket(SSLSocket)
     private static Method sslSocketsIsSupportedSocket;
