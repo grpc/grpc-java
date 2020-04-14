@@ -26,9 +26,14 @@ import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_PEM_FILE
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_KEY_FILE;
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_PEM_FILE;
 import static org.junit.Assert.fail;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 
 import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
+import io.grpc.EquivalentAddressGroup;
+import io.grpc.NameResolver;
+import io.grpc.NameResolverRegistry;
 import io.grpc.Server;
 import io.grpc.StatusRuntimeException;
 import io.grpc.stub.StreamObserver;
@@ -38,17 +43,26 @@ import io.grpc.testing.protobuf.SimpleResponse;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import io.grpc.xds.internal.sds.SdsProtocolNegotiators;
+import io.grpc.xds.internal.sds.TestSdsNameResolver;
+import io.grpc.xds.internal.sds.TestSdsNameResolverProvider;
 import io.grpc.xds.internal.sds.XdsChannelBuilder;
 import io.grpc.xds.internal.sds.XdsServerBuilder;
 import java.io.IOException;
 import java.net.ServerSocket;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import javax.net.ssl.SSLHandshakeException;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
 
 /**
  * Unit tests for {@link XdsChannelBuilder} and {@link XdsServerBuilder} for plaintext/TLS/mTLS
@@ -59,10 +73,20 @@ public class XdsSdsClientServerTest {
 
   @Rule public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
   private int port;
+  private TestSdsNameResolverProvider testSdsNameResolverProvider;
+  @Mock private TestSdsNameResolver.Callback callback;
 
   @Before
   public void setUp() throws IOException {
+    MockitoAnnotations.initMocks(this);
+    testSdsNameResolverProvider = new TestSdsNameResolverProvider(callback);
+    NameResolverRegistry.getDefaultRegistry().register(testSdsNameResolverProvider);
     port = findFreePort();
+  }
+
+  @After
+  public void tearDown() {
+    NameResolverRegistry.getDefaultRegistry().deregister(testSdsNameResolverProvider);
   }
 
   @Test
@@ -181,12 +205,38 @@ public class XdsSdsClientServerTest {
   }
 
   private SimpleServiceGrpc.SimpleServiceBlockingStub getBlockingStub(
-      UpstreamTlsContext upstreamTlsContext, String overrideAuthority) {
-    XdsChannelBuilder builder =
-        XdsChannelBuilder.forTarget("localhost:" + port).tlsContext(upstreamTlsContext);
+      final UpstreamTlsContext upstreamTlsContext, String overrideAuthority) {
+    XdsChannelBuilder builder = XdsChannelBuilder.forTarget("sdstest:///localhost:" + port);
     if (overrideAuthority != null) {
       builder = builder.overrideAuthority(overrideAuthority);
     }
+    doAnswer(
+        new Answer<NameResolver.ResolutionResult>() {
+          @Override
+          public NameResolver.ResolutionResult answer(InvocationOnMock invocation)
+              throws Throwable {
+            Object[] args = invocation.getArguments();
+            NameResolver.ResolutionResult resolutionResult =
+                (NameResolver.ResolutionResult) args[0];
+            List<EquivalentAddressGroup> addresses = resolutionResult.getAddresses();
+            if (upstreamTlsContext != null && addresses != null) {
+              ArrayList<EquivalentAddressGroup> copyList = new ArrayList<>(addresses.size());
+              for (EquivalentAddressGroup eag : addresses) {
+                EquivalentAddressGroup eagCopy =
+                    new EquivalentAddressGroup(
+                        eag.getAddresses(),
+                        eag.getAttributes().toBuilder()
+                            .set(XdsAttributes.ATTR_UPSTREAM_TLS_CONTEXT, upstreamTlsContext)
+                            .build());
+                copyList.add(eagCopy);
+              }
+              resolutionResult = resolutionResult.toBuilder().setAddresses(copyList).build();
+            }
+            return resolutionResult;
+          }
+        })
+        .when(callback)
+        .onResult(any(NameResolver.ResolutionResult.class));
     return SimpleServiceGrpc.newBlockingStub(cleanupRule.register(builder.build()));
   }
 
