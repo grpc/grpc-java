@@ -26,15 +26,16 @@ import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_PEM_FILE
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_KEY_FILE;
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_PEM_FILE;
 import static org.junit.Assert.fail;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doAnswer;
 
+import com.google.common.collect.ImmutableList;
 import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
+import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
-import io.grpc.NameResolverRegistry;
+import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Server;
+import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
@@ -43,15 +44,19 @@ import io.grpc.testing.protobuf.SimpleResponse;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import io.grpc.xds.internal.sds.SdsProtocolNegotiators;
-import io.grpc.xds.internal.sds.TestSdsNameResolver;
-import io.grpc.xds.internal.sds.TestSdsNameResolverProvider;
 import io.grpc.xds.internal.sds.XdsChannelBuilder;
 import io.grpc.xds.internal.sds.XdsServerBuilder;
 import java.io.IOException;
+import java.net.Inet4Address;
+import java.net.InetSocketAddress;
 import java.net.ServerSocket;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 import javax.net.ssl.SSLHandshakeException;
 import org.junit.After;
 import org.junit.Before;
@@ -59,10 +64,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
-import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
-import org.mockito.invocation.InvocationOnMock;
-import org.mockito.stubbing.Answer;
 
 /**
  * Unit tests for {@link XdsChannelBuilder} and {@link XdsServerBuilder} for plaintext/TLS/mTLS
@@ -73,20 +75,21 @@ public class XdsSdsClientServerTest {
 
   @Rule public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
   private int port;
-  private TestSdsNameResolverProvider testSdsNameResolverProvider;
-  @Mock private TestSdsNameResolver.Callback callback;
+  private FakeNameResolverFactory fakeNameResolverFactory;
+  private XdsChannelBuilder builder;
 
   @Before
-  public void setUp() throws IOException {
+  public void setUp() throws IOException, URISyntaxException {
     MockitoAnnotations.initMocks(this);
-    testSdsNameResolverProvider = new TestSdsNameResolverProvider(callback);
-    NameResolverRegistry.getDefaultRegistry().register(testSdsNameResolverProvider);
     port = findFreePort();
+    URI expectedUri = new URI("sdstest://localhost:" + port);
+    fakeNameResolverFactory = new FakeNameResolverFactory.Builder(expectedUri).build();
+    builder = XdsChannelBuilder.forTarget("sdstest://localhost:" + port)
+        .nameResolverFactory(fakeNameResolverFactory);
   }
 
   @After
   public void tearDown() {
-    NameResolverRegistry.getDefaultRegistry().deregister(testSdsNameResolverProvider);
   }
 
   @Test
@@ -206,37 +209,16 @@ public class XdsSdsClientServerTest {
 
   private SimpleServiceGrpc.SimpleServiceBlockingStub getBlockingStub(
       final UpstreamTlsContext upstreamTlsContext, String overrideAuthority) {
-    XdsChannelBuilder builder = XdsChannelBuilder.forTarget("sdstest:///localhost:" + port);
     if (overrideAuthority != null) {
       builder = builder.overrideAuthority(overrideAuthority);
     }
-    doAnswer(
-        new Answer<NameResolver.ResolutionResult>() {
-          @Override
-          public NameResolver.ResolutionResult answer(InvocationOnMock invocation)
-              throws Throwable {
-            Object[] args = invocation.getArguments();
-            NameResolver.ResolutionResult resolutionResult =
-                (NameResolver.ResolutionResult) args[0];
-            List<EquivalentAddressGroup> addresses = resolutionResult.getAddresses();
-            if (upstreamTlsContext != null && addresses != null) {
-              ArrayList<EquivalentAddressGroup> copyList = new ArrayList<>(addresses.size());
-              for (EquivalentAddressGroup eag : addresses) {
-                EquivalentAddressGroup eagCopy =
-                    new EquivalentAddressGroup(
-                        eag.getAddresses(),
-                        eag.getAttributes().toBuilder()
-                            .set(XdsAttributes.ATTR_UPSTREAM_TLS_CONTEXT, upstreamTlsContext)
-                            .build());
-                copyList.add(eagCopy);
-              }
-              resolutionResult = resolutionResult.toBuilder().setAddresses(copyList).build();
-            }
-            return resolutionResult;
-          }
-        })
-        .when(callback)
-        .onResult(any(NameResolver.ResolutionResult.class));
+    InetSocketAddress socketAddress = new InetSocketAddress(Inet4Address.getLoopbackAddress(),
+        port);
+    Attributes attrs = (upstreamTlsContext != null) ? Attributes.newBuilder()
+        .set(XdsAttributes.ATTR_UPSTREAM_TLS_CONTEXT, upstreamTlsContext).build()
+        : Attributes.EMPTY;
+    fakeNameResolverFactory
+        .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress, attrs)));
     return SimpleServiceGrpc.newBlockingStub(cleanupRule.register(builder.build()));
   }
 
@@ -260,4 +242,124 @@ public class XdsSdsClientServerTest {
       responseObserver.onCompleted();
     }
   }
+
+  private static final class FakeNameResolverFactory extends NameResolver.Factory {
+    final URI expectedUri;
+    List<EquivalentAddressGroup> servers = ImmutableList.of();
+    final boolean resolvedAtStart;
+    final Status error;
+    final ArrayList<FakeNameResolver> resolvers = new ArrayList<>();
+    final AtomicReference<ConfigOrError> nextConfigOrError = new AtomicReference<>();
+
+    FakeNameResolverFactory(
+        URI expectedUri,
+        boolean resolvedAtStart,
+        Status error) {
+      this.expectedUri = expectedUri;
+      this.resolvedAtStart = resolvedAtStart;
+      this.error = error;
+    }
+
+    void setServers(List<EquivalentAddressGroup> servers) {
+      this.servers = servers;
+    }
+
+    @Override
+    public NameResolver newNameResolver(final URI targetUri, NameResolver.Args args) {
+      if (!expectedUri.equals(targetUri)) {
+        return null;
+      }
+      FakeNameResolver resolver =
+          new FakeNameResolver(error);
+      resolvers.add(resolver);
+      return resolver;
+    }
+
+    @Override
+    public String getDefaultScheme() {
+      return "fake";
+    }
+
+    void allResolved() {
+      for (FakeNameResolver resolver : resolvers) {
+        resolver.resolved();
+      }
+    }
+
+    final class FakeNameResolver extends NameResolver {
+      Listener2 listener;
+      boolean shutdown;
+      int refreshCalled;
+      Status error;
+
+      FakeNameResolver(Status error) {
+        this.error = error;
+      }
+
+      @Override public String getServiceAuthority() {
+        return expectedUri.getAuthority();
+      }
+
+      @Override public void start(Listener2 listener) {
+        this.listener = listener;
+        if (resolvedAtStart) {
+          resolved();
+        }
+      }
+
+      @Override public void refresh() {
+        refreshCalled++;
+        resolved();
+      }
+
+      void resolved() {
+        if (error != null) {
+          listener.onError(error);
+          return;
+        }
+        ResolutionResult.Builder builder =
+            ResolutionResult.newBuilder()
+                .setAddresses(servers);
+        ConfigOrError configOrError = nextConfigOrError.get();
+        if (configOrError != null) {
+          builder.setServiceConfig(configOrError);
+        }
+        listener.onResult(builder.build());
+      }
+
+      @Override public void shutdown() {
+        shutdown = true;
+      }
+
+      @Override
+      public String toString() {
+        return "FakeNameResolver";
+      }
+    }
+
+    static final class Builder {
+      final URI expectedUri;
+      boolean resolvedAtStart = true;
+      Status error = null;
+
+      Builder(URI expectedUri) {
+        this.expectedUri = expectedUri;
+      }
+
+      Builder setResolvedAtStart(boolean resolvedAtStart) {
+        this.resolvedAtStart = resolvedAtStart;
+        return this;
+      }
+
+      Builder setError(Status error) {
+        this.error = error;
+        return this;
+      }
+
+      FakeNameResolverFactory build() {
+        return new FakeNameResolverFactory(expectedUri, resolvedAtStart, error);
+      }
+    }
+  }
+
 }

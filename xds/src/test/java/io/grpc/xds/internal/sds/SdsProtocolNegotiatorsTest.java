@@ -147,7 +147,7 @@ public class SdsProtocolNegotiatorsTest {
   }
 
   @Test
-  public void clientSdsProtocolNegotiatorNewHandler_nullTlsContextAttribute() {
+  public void clientSdsProtocolNegotiatorNewHandler_noTlsContextAttribute() {
     ClientSdsProtocolNegotiator pn = new ClientSdsProtocolNegotiator();
     ChannelHandler newHandler = pn.newHandler(grpcHandler);
     assertThat(newHandler).isNotNull();
@@ -157,7 +157,7 @@ public class SdsProtocolNegotiatorsTest {
   }
 
   @Test
-  public void clientSdsProtocolNegotiatorNewHandler_nonNullTlsContextAttribute() {
+  public void clientSdsProtocolNegotiatorNewHandler_withTlsContextAttribute() {
     UpstreamTlsContext upstreamTlsContext =
         buildUpstreamTlsContext(
             getCommonTlsContext(/* tlsCertificate= */ null, /* certContext= */ null));
