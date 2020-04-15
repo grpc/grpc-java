@@ -25,11 +25,13 @@ import io.grpc.okhttp.internal.Platform.TlsExtensionType;
 import io.grpc.okhttp.internal.Protocol;
 import io.grpc.okhttp.internal.Util;
 import java.io.IOException;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -149,11 +151,20 @@ class OkHttpProtocolNegotiator {
     private static final OptionalMethod<SSLSocket> GET_APPLICATION_PROTOCOL =
         new OptionalMethod<>(String.class, "getApplicationProtocol");
 
+    // Available on Android 7.0+.
+    // SSLParameters#setServerNames(List<SNIServerName>)
+    private static final OptionalMethod<SSLParameters> SET_SERVER_NAMES =
+        new OptionalMethod<>(null, "setServerNames", List.class);
+
     // Non-null on Android 10.0+.
     // SSLSockets#isSupportedSocket(SSLSocket)
     private static final Method sslSocketsIsSupportedSocket;
     // SSLSockets#setUseSessionTickets(SSLSocket, boolean)
     private static final Method sslSocketsSetUseSessionTickets;
+
+    // Non-null on Android 7.0+.
+    // SNIHostName(String)
+    private static final Constructor<?> sniHostName;
 
     static {
       // Attempt to find Android 10.0+ APIs.
@@ -169,6 +180,16 @@ class OkHttpProtocolNegotiator {
       }
       sslSocketsIsSupportedSocket = sslSocketsIsSupportedSocketMethod;
       sslSocketsSetUseSessionTickets = sslSocketsSetUseSessionTicketsMethod;
+
+      // Attempt to find Android 7.0+ APIs.
+      Constructor<?> sniHostNameConstructor = null;
+      try {
+        sniHostNameConstructor =
+            Class.forName("javax.net.ssl.SNIHostName").getConstructor(String.class);
+      } catch (ClassNotFoundException ignored) {
+      } catch (NoSuchMethodException ignored) {
+      }
+      sniHostName = sniHostNameConstructor;
     }
 
     AndroidNegotiator(Platform platform) {
@@ -199,6 +220,7 @@ class OkHttpProtocolNegotiator {
     @Override
     protected void configureTlsExtensions(
         SSLSocket sslSocket, String hostname, List<Protocol> protocols) {
+      SSLParameters sslParams = sslSocket.getSSLParameters();
       // Enable SNI and session tickets.
       if (hostname != null) {
         try {
@@ -211,38 +233,46 @@ class OkHttpProtocolNegotiator {
         } catch (IllegalAccessException ignored) {
         } catch (InvocationTargetException ignored) {
         }
-        SET_HOSTNAME.invokeOptionalWithoutCheckedException(sslSocket, hostname);
+
+        try {
+          if (sniHostName != null) {
+            SET_SERVER_NAMES
+                .invokeOptionalWithoutCheckedException(
+                    sslParams,
+                    Collections.singletonList(sniHostName.newInstance(hostname)));
+          } else {
+            SET_HOSTNAME.invokeOptionalWithoutCheckedException(sslSocket, hostname);
+          }
+        } catch (IllegalAccessException ignored) {
+        } catch (InstantiationException ignored) {
+        } catch (InvocationTargetException ignored) {
+        }
       }
 
       // Enable ALPN and NPN if necessary.
-      boolean configured = false;
-      SSLParameters sslParams = sslSocket.getSSLParameters();
-      if (SET_APPLICATION_PROTOCOLS.isSupported(sslParams)) {
-        String[] protocolNames = protocolIds(protocols);
-        SET_APPLICATION_PROTOCOLS
-            .invokeOptionalWithoutCheckedException(sslParams, (Object) protocolIds(protocols));
-        sslSocket.setSSLParameters(sslParams);
-        // Check protocol configuration through SSLParameters succeeds. If not, fall back to
-        // configure with the old reflective method.
-        // Workaround for Conscrypt issue: https://github.com/google/conscrypt/issues/832
-        String[] configuredProtocols =
-            (String[]) GET_APPLICATION_PROTOCOLS
-                .invokeOptionalWithoutCheckedException(sslSocket.getSSLParameters());
-        if (Arrays.equals(protocolNames, configuredProtocols)) {
-          configured = true;
-        }
+      String[] protocolNames = protocolIds(protocols);
+      SET_APPLICATION_PROTOCOLS
+          .invokeOptionalWithoutCheckedException(sslParams, (Object) protocolIds(protocols));
+      sslSocket.setSSLParameters(sslParams);
+      // Check protocol configuration through SSLParameters succeeds. If not, fall back to
+      // configure with the old reflective method.
+      // Workaround for Conscrypt issue: https://github.com/google/conscrypt/issues/832
+      String[] configuredProtocols =
+          (String[]) GET_APPLICATION_PROTOCOLS
+              .invokeOptionalWithoutCheckedException(sslSocket.getSSLParameters());
+      if (Arrays.equals(protocolNames, configuredProtocols)) {
+        return;
       }
-      if (!configured) {
-        Object[] parameters = {Platform.concatLengthPrefixed(protocols)};
-        if (platform.getTlsExtensionType() == TlsExtensionType.ALPN_AND_NPN) {
-          SET_ALPN_PROTOCOLS.invokeWithoutCheckedException(sslSocket, parameters);
-        }
-        if (platform.getTlsExtensionType() != TlsExtensionType.NONE) {
-          SET_NPN_PROTOCOLS.invokeWithoutCheckedException(sslSocket, parameters);
-        } else {
-          throw new RuntimeException("We can not do TLS handshake on this Android version, please"
-              + " install the Google Play Services Dynamic Security Provider to use TLS");
-        }
+
+      Object[] parameters = {Platform.concatLengthPrefixed(protocols)};
+      if (platform.getTlsExtensionType() == TlsExtensionType.ALPN_AND_NPN) {
+        SET_ALPN_PROTOCOLS.invokeWithoutCheckedException(sslSocket, parameters);
+      }
+      if (platform.getTlsExtensionType() != TlsExtensionType.NONE) {
+        SET_NPN_PROTOCOLS.invokeWithoutCheckedException(sslSocket, parameters);
+      } else {
+        throw new RuntimeException("We can not do TLS handshake on this Android version, please"
+            + " install the Google Play Services Dynamic Security Provider to use TLS");
       }
     }
 
