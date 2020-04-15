@@ -58,7 +58,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.net.ssl.SSLHandshakeException;
-import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -84,12 +83,9 @@ public class XdsSdsClientServerTest {
     port = findFreePort();
     URI expectedUri = new URI("sdstest://localhost:" + port);
     fakeNameResolverFactory = new FakeNameResolverFactory.Builder(expectedUri).build();
-    builder = XdsChannelBuilder.forTarget("sdstest://localhost:" + port)
-        .nameResolverFactory(fakeNameResolverFactory);
-  }
-
-  @After
-  public void tearDown() {
+    builder =
+        XdsChannelBuilder.forTarget("sdstest://localhost:" + port)
+            .nameResolverFactory(fakeNameResolverFactory);
   }
 
   @Test
@@ -212,13 +208,16 @@ public class XdsSdsClientServerTest {
     if (overrideAuthority != null) {
       builder = builder.overrideAuthority(overrideAuthority);
     }
-    InetSocketAddress socketAddress = new InetSocketAddress(Inet4Address.getLoopbackAddress(),
-        port);
-    Attributes attrs = (upstreamTlsContext != null) ? Attributes.newBuilder()
-        .set(XdsAttributes.ATTR_UPSTREAM_TLS_CONTEXT, upstreamTlsContext).build()
-        : Attributes.EMPTY;
-    fakeNameResolverFactory
-        .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress, attrs)));
+    InetSocketAddress socketAddress =
+        new InetSocketAddress(Inet4Address.getLoopbackAddress(), port);
+    Attributes attrs =
+        (upstreamTlsContext != null)
+            ? Attributes.newBuilder()
+                .set(XdsAttributes.ATTR_UPSTREAM_TLS_CONTEXT, upstreamTlsContext)
+                .build()
+            : Attributes.EMPTY;
+    fakeNameResolverFactory.setServers(
+        Collections.singletonList(new EquivalentAddressGroup(socketAddress, attrs)));
     return SimpleServiceGrpc.newBlockingStub(cleanupRule.register(builder.build()));
   }
 
@@ -251,10 +250,7 @@ public class XdsSdsClientServerTest {
     final ArrayList<FakeNameResolver> resolvers = new ArrayList<>();
     final AtomicReference<ConfigOrError> nextConfigOrError = new AtomicReference<>();
 
-    FakeNameResolverFactory(
-        URI expectedUri,
-        boolean resolvedAtStart,
-        Status error) {
+    FakeNameResolverFactory(URI expectedUri, boolean resolvedAtStart, Status error) {
       this.expectedUri = expectedUri;
       this.resolvedAtStart = resolvedAtStart;
       this.error = error;
@@ -269,8 +265,7 @@ public class XdsSdsClientServerTest {
       if (!expectedUri.equals(targetUri)) {
         return null;
       }
-      FakeNameResolver resolver =
-          new FakeNameResolver(error);
+      FakeNameResolver resolver = new FakeNameResolver(error);
       resolvers.add(resolver);
       return resolver;
     }
@@ -296,18 +291,21 @@ public class XdsSdsClientServerTest {
         this.error = error;
       }
 
-      @Override public String getServiceAuthority() {
+      @Override
+      public String getServiceAuthority() {
         return expectedUri.getAuthority();
       }
 
-      @Override public void start(Listener2 listener) {
+      @Override
+      public void start(Listener2 listener) {
         this.listener = listener;
         if (resolvedAtStart) {
           resolved();
         }
       }
 
-      @Override public void refresh() {
+      @Override
+      public void refresh() {
         refreshCalled++;
         resolved();
       }
@@ -317,9 +315,7 @@ public class XdsSdsClientServerTest {
           listener.onError(error);
           return;
         }
-        ResolutionResult.Builder builder =
-            ResolutionResult.newBuilder()
-                .setAddresses(servers);
+        ResolutionResult.Builder builder = ResolutionResult.newBuilder().setAddresses(servers);
         ConfigOrError configOrError = nextConfigOrError.get();
         if (configOrError != null) {
           builder.setServiceConfig(configOrError);
@@ -327,7 +323,8 @@ public class XdsSdsClientServerTest {
         listener.onResult(builder.build());
       }
 
-      @Override public void shutdown() {
+      @Override
+      public void shutdown() {
         shutdown = true;
       }
 
@@ -361,5 +358,4 @@ public class XdsSdsClientServerTest {
       }
     }
   }
-
 }
