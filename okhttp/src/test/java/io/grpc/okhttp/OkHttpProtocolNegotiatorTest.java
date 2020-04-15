@@ -203,45 +203,6 @@ public class OkHttpProtocolNegotiatorTest {
     assertEquals("h2", actual);
   }
 
-  private static class FakeAndroid10SslSocket extends FakeAndroidSslSocket {
-
-    @Override
-    public String getApplicationProtocol() {
-      return "h2";
-    }
-
-    @Override
-    public byte[] getAlpnSelectedProtocol() {
-      throw new UnsupportedOperationException("deprecated");
-    }
-
-    @Override
-    public void setAlpnProtocols(byte[] arg) {
-      throw new UnsupportedOperationException("deprecated");
-    }
-
-    @Override
-    public byte[] getNpnSelectedProtocol() {
-      throw new UnsupportedOperationException("deprecated");
-    }
-
-    @Override
-    public void setNpnProtocols(byte[] arg) {
-      throw new UnsupportedOperationException("deprecated");
-    }
-  }
-
-  @Test
-  public void android10_getApplicationProtocol() {
-    when(platform.getTlsExtensionType()).thenReturn(TlsExtensionType.ALPN_AND_NPN);
-    AndroidNegotiator negotiator = new AndroidNegotiator(platform);
-    FakeAndroidSslSocket androidSock = new FakeAndroid10SslSocket();
-
-    String actual = negotiator.getSelectedProtocol(androidSock);
-
-    assertEquals("h2", actual);
-  }
-
   // A fake of org.conscrypt.OpenSSLSocketImpl
   @VisibleForTesting // Must be public for reflection to work
   public static class FakeAndroidSslSocket extends SSLSocket {
@@ -261,11 +222,6 @@ public class OkHttpProtocolNegotiatorTest {
     }
 
     public void setNpnProtocols(byte[] arg) {}
-
-    @SuppressWarnings("MissingOverride")
-    public String getApplicationProtocol() {
-      throw new UnsupportedOperationException("unavailable");
-    }
 
     @Override
     public void addHandshakeCompletedListener(HandshakeCompletedListener listener) {}
