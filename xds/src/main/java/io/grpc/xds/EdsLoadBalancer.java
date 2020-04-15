@@ -16,6 +16,7 @@
 
 package io.grpc.xds;
 
+import static com.google.api.client.util.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
@@ -34,6 +35,7 @@ import io.grpc.internal.ObjectPool;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.Bootstrapper.ServerInfo;
+import io.grpc.xds.EdsLoadBalancerProvider.EdsConfig;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
@@ -43,7 +45,6 @@ import io.grpc.xds.XdsClient.EndpointWatcher;
 import io.grpc.xds.XdsClient.RefCountedXdsClientObjectPool;
 import io.grpc.xds.XdsClient.XdsChannelFactory;
 import io.grpc.xds.XdsClient.XdsClientFactory;
-import io.grpc.xds.XdsLoadBalancerProvider.XdsConfig;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.List;
@@ -64,15 +65,14 @@ final class EdsLoadBalancer extends LoadBalancer {
   private final XdsChannelFactory channelFactory;
   private final Helper edsLbHelper;
 
-  // Most recent XdsConfig.
-  @Nullable
-  private XdsConfig xdsConfig;
   @Nullable
   private ObjectPool<XdsClient> xdsClientPool;
   @Nullable
   private XdsClient xdsClient;
   @Nullable
   private String clusterName;
+  @Nullable
+  private EdsConfig config;
 
   EdsLoadBalancer(Helper edsLbHelper, ResourceUpdateCallback resourceUpdateCallback) {
     this(
@@ -108,27 +108,25 @@ final class EdsLoadBalancer extends LoadBalancer {
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     Object lbConfig = resolvedAddresses.getLoadBalancingPolicyConfig();
-    if (lbConfig == null) {
-      edsLbHelper.updateBalancingState(
-          TRANSIENT_FAILURE,
-          new ErrorPicker(Status.UNAVAILABLE.withDescription("Missing EDS lb config")));
-      return;
-    }
-    XdsConfig newXdsConfig = (XdsConfig) lbConfig;
+    checkNotNull(lbConfig, "missing EDS lb config");
+    EdsConfig newEdsConfig = (EdsConfig) lbConfig;
     if (logger.isLoggable(XdsLogLevel.INFO)) {
       logger.log(
           XdsLogLevel.INFO,
-          "Received EDS lb config: cluster={0}, child_policy={1}, fallback_policy={2}, "
-              + "eds_service_name={3}, report_load={4}",
-          newXdsConfig.cluster,
-          newXdsConfig.endpointPickingPolicy != null
-              ? newXdsConfig.endpointPickingPolicy.getProvider().getPolicyName() : "",
-          newXdsConfig.fallbackPolicy != null
-              ? newXdsConfig.fallbackPolicy.getProvider().getPolicyName() : "",
-          newXdsConfig.edsServiceName,
-          newXdsConfig.lrsServerName != null);
+          "Received EDS lb config: cluster={0}, child_policy={1}, "
+              + "eds_service_name={2}, report_load={3}",
+          newEdsConfig.clusterName,
+          newEdsConfig.endpointPickingPolicy.getProvider().getPolicyName(),
+          newEdsConfig.edsServiceName,
+          newEdsConfig.lrsServerName != null);
     }
-
+    if (clusterName == null) {
+      clusterName = newEdsConfig.clusterName;
+    } else {
+      checkArgument(
+          clusterName.equals(newEdsConfig.clusterName),
+          "cluster name should not change");
+    }
     if (xdsClientPool == null) {
       // Init xdsClientPool and xdsClient.
       // There are two usecases:
@@ -188,19 +186,16 @@ final class EdsLoadBalancer extends LoadBalancer {
       xdsClient = xdsClientPool.getObject();
     }
 
-    // FIXME(chengyuanzhang): make cluster name required in XdsConfig.
-    clusterName = newXdsConfig.cluster != null ? newXdsConfig.cluster : edsLbHelper.getAuthority();
-
     // Note: childPolicy change will be handled in LocalityStore, to be implemented.
     // If edsServiceName in XdsConfig is changed, do a graceful switch.
-    if (xdsConfig == null
-        || !Objects.equals(newXdsConfig.edsServiceName, xdsConfig.edsServiceName)) {
+    if (config == null
+        || !Objects.equals(newEdsConfig.edsServiceName, config.edsServiceName)) {
       LoadBalancer.Factory clusterEndpointsLoadBalancerFactory =
-          new ClusterEndpointsBalancerFactory(newXdsConfig.edsServiceName);
+          new ClusterEndpointsBalancerFactory(newEdsConfig.edsServiceName);
       switchingLoadBalancer.switchTo(clusterEndpointsLoadBalancerFactory);
     }
     switchingLoadBalancer.handleResolvedAddresses(resolvedAddresses);
-    this.xdsConfig = newXdsConfig;
+    this.config = newEdsConfig;
   }
 
   @Override
@@ -283,7 +278,7 @@ final class EdsLoadBalancer extends LoadBalancer {
 
       @Override
       public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-        XdsConfig config = (XdsConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
+        EdsConfig config = (EdsConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
         if (config.lrsServerName != null) {
           if (!config.lrsServerName.equals("")) {
             throw new AssertionError("Can only report load to the same management server");

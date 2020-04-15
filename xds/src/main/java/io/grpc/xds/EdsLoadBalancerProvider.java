@@ -16,14 +16,19 @@
 
 package io.grpc.xds;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
+import com.google.common.base.MoreObjects;
+import com.google.common.base.Objects;
 import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancerProvider;
-import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver.ConfigOrError;
+import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.xds.EdsLoadBalancer.ResourceUpdateCallback;
 import java.util.Map;
+import javax.annotation.Nullable;
 
 /**
  * The provider for the "eds" balancing policy.  This class should not be directly referenced in
@@ -67,7 +72,59 @@ public class EdsLoadBalancerProvider extends LoadBalancerProvider {
   @Override
   public ConfigOrError parseLoadBalancingPolicyConfig(
       Map<String, ?> rawLoadBalancingPolicyConfig) {
-    return XdsLoadBalancerProvider.parseLoadBalancingConfigPolicy(
-        rawLoadBalancingPolicyConfig, LoadBalancerRegistry.getDefaultRegistry());
+    throw new UnsupportedOperationException();
+  }
+
+  static final class EdsConfig {
+
+    final String clusterName;
+    @Nullable
+    final String edsServiceName;
+    @Nullable
+    final String lrsServerName;
+    final PolicySelection endpointPickingPolicy;
+
+    EdsConfig(
+        String clusterName,
+        @Nullable String edsServiceName,
+        @Nullable String lrsServerName,
+        PolicySelection endpointPickingPolicy) {
+      this.clusterName = checkNotNull(clusterName, "clusterName");
+      this.edsServiceName = edsServiceName;
+      this.lrsServerName = lrsServerName;
+      this.endpointPickingPolicy = checkNotNull(endpointPickingPolicy, "endpointPickingPolicy");
+    }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(this)
+          .add("clusterName", clusterName)
+          .add("edsServiceName", edsServiceName)
+          .add("lrsServerName", lrsServerName)
+          .add("endpointPickingPolicy", endpointPickingPolicy)
+          .toString();
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+      if (!(obj instanceof EdsConfig)) {
+        return false;
+      }
+      EdsConfig that = (EdsConfig) obj;
+      return Objects.equal(this.clusterName, that.clusterName)
+          && Objects.equal(this.edsServiceName, that.edsServiceName)
+          && Objects.equal(this.lrsServerName, that.lrsServerName)
+          && Objects.equal(this.endpointPickingPolicy, that.endpointPickingPolicy);
+    }
+
+    @Override
+    public int hashCode() {
+      return
+          Objects.hashCode(
+              clusterName,
+              edsServiceName,
+              lrsServerName,
+              endpointPickingPolicy);
+    }
   }
 }

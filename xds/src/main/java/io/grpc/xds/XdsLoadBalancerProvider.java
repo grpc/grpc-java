@@ -32,7 +32,7 @@ import io.grpc.internal.JsonUtil;
 import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
-import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import javax.annotation.Nullable;
@@ -77,19 +77,14 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
   static ConfigOrError parseLoadBalancingConfigPolicy(
       Map<String, ?> rawLoadBalancingPolicyConfig, LoadBalancerRegistry registry) {
     try {
-      String cluster = JsonUtil.getString(rawLoadBalancingPolicyConfig, "cluster");
-
       LbConfig roundRobinConfig = new LbConfig("round_robin", ImmutableMap.<String, Object>of());
-      List<LbConfig> endpointPickingConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
-          JsonUtil.getListOfObjects(rawLoadBalancingPolicyConfig, "endpointPickingPolicy"));
-      if (endpointPickingConfigs == null) {
-        endpointPickingConfigs = new ArrayList<>(1);
-      } else {
-        endpointPickingConfigs = new ArrayList<>(endpointPickingConfigs);
+      List<LbConfig> childPolicyConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
+          JsonUtil.getListOfObjects(rawLoadBalancingPolicyConfig, "childPolicy"));
+      if (childPolicyConfigs == null || childPolicyConfigs.isEmpty()) {
+        childPolicyConfigs = Collections.singletonList(roundRobinConfig);
       }
-      endpointPickingConfigs.add(roundRobinConfig);
       ConfigOrError childConfigOrError =
-          ServiceConfigUtil.selectLbPolicyFromList(endpointPickingConfigs, registry);
+          ServiceConfigUtil.selectLbPolicyFromList(childPolicyConfigs, registry);
       if (childConfigOrError.getError() != null) {
         return childConfigOrError;
       }
@@ -97,12 +92,9 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
 
       List<LbConfig> fallbackConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
           JsonUtil.getListOfObjects(rawLoadBalancingPolicyConfig, "fallbackPolicy"));
-      if (fallbackConfigs == null) {
-        fallbackConfigs = new ArrayList<>(1);
-      } else {
-        fallbackConfigs = new ArrayList<>(fallbackConfigs);
+      if (fallbackConfigs == null || fallbackConfigs.isEmpty()) {
+        fallbackConfigs = Collections.singletonList(roundRobinConfig);
       }
-      fallbackConfigs.add(roundRobinConfig);
       ConfigOrError fallbackConfigOrError =
           ServiceConfigUtil.selectLbPolicyFromList(fallbackConfigs, registry);
       if (fallbackConfigOrError.getError() != null) {
@@ -114,7 +106,7 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
       String lrsServerName =
           JsonUtil.getString(rawLoadBalancingPolicyConfig, "lrsLoadReportingServerName");
       return ConfigOrError.fromConfig(
-          new XdsConfig(cluster, childPolicy, fallbackPolicy, edsServiceName, lrsServerName));
+          new XdsConfig(edsServiceName, lrsServerName, childPolicy, fallbackPolicy));
     } catch (RuntimeException e) {
       return ConfigOrError.fromError(
           Status.fromThrowable(e).withDescription(
@@ -123,46 +115,34 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
   }
 
   /**
-   * Represents a successfully parsed and validated LoadBalancingConfig for XDS.
+   * Represents a successfully parsed and validated LoadBalancingConfig for XDS LB policy.
    */
   static final class XdsConfig {
-    // FIXME(chengyuanzhang): make cluster name required.
-    @Nullable
-    final String cluster;
-    final PolicySelection endpointPickingPolicy;
-    @Nullable
-    final PolicySelection fallbackPolicy;
-    // Optional. Name to use in EDS query. If not present, defaults to the server name from the
-    // target URI.
     @Nullable
     final String edsServiceName;
-    // Optional. LRS server to send load reports to. If not present, load reporting will be
-    // disabled. If set to the empty string, load reporting will be sent to the same server that
-    // we obtained CDS data from.
     @Nullable
     final String lrsServerName;
+    final PolicySelection childPolicy;  // default to round_robin if not specified in proto
+    final PolicySelection fallbackPolicy;  // default to round_robin if not specified in proto
 
     XdsConfig(
-        @Nullable String cluster,
-        PolicySelection endpointPickingPolicy,
-        @Nullable PolicySelection fallbackPolicy,
         @Nullable String edsServiceName,
-        @Nullable String lrsServerName) {
-      this.cluster = cluster;
-      this.endpointPickingPolicy = checkNotNull(endpointPickingPolicy, "endpointPickingPolicy");
-      this.fallbackPolicy = fallbackPolicy;
+        @Nullable String lrsServerName,
+        PolicySelection childPolicy,
+        PolicySelection fallbackPolicy) {
       this.edsServiceName = edsServiceName;
       this.lrsServerName = lrsServerName;
+      this.childPolicy = checkNotNull(childPolicy, "childPolicy");
+      this.fallbackPolicy = fallbackPolicy;
     }
 
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(this)
-          .add("cluster", cluster)
-          .add("endpointPickingPolicy", endpointPickingPolicy)
-          .add("fallbackPolicy", fallbackPolicy)
           .add("edsServiceName", edsServiceName)
           .add("lrsServerName", lrsServerName)
+          .add("childPolicy", childPolicy)
+          .add("fallbackPolicy", fallbackPolicy)
           .toString();
     }
 
@@ -172,17 +152,16 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
         return false;
       }
       XdsConfig that = (XdsConfig) obj;
-      return Objects.equal(this.cluster, that.cluster)
-          && Objects.equal(this.endpointPickingPolicy, that.endpointPickingPolicy)
-          && Objects.equal(this.fallbackPolicy, that.fallbackPolicy)
-          && Objects.equal(this.edsServiceName, that.edsServiceName)
-          && Objects.equal(this.lrsServerName, that.lrsServerName);
+      return Objects.equal(this.edsServiceName, that.edsServiceName)
+          && Objects.equal(this.lrsServerName, that.lrsServerName)
+          && Objects.equal(this.childPolicy, that.childPolicy)
+          && Objects.equal(this.fallbackPolicy, that.fallbackPolicy);
     }
 
     @Override
     public int hashCode() {
       return Objects.hashCode(
-          cluster, endpointPickingPolicy, fallbackPolicy, edsServiceName, lrsServerName);
+          edsServiceName, lrsServerName, childPolicy, fallbackPolicy);
     }
   }
 }

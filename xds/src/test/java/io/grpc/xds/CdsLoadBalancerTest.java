@@ -54,13 +54,13 @@ import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.xds.CdsLoadBalancerProvider.CdsConfig;
+import io.grpc.xds.EdsLoadBalancerProvider.EdsConfig;
 import io.grpc.xds.XdsClient.ClusterUpdate;
 import io.grpc.xds.XdsClient.ClusterWatcher;
 import io.grpc.xds.XdsClient.EndpointUpdate;
 import io.grpc.xds.XdsClient.EndpointWatcher;
 import io.grpc.xds.XdsClient.RefCountedXdsClientObjectPool;
 import io.grpc.xds.XdsClient.XdsClientFactory;
-import io.grpc.xds.XdsLoadBalancerProvider.XdsConfig;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import io.grpc.xds.internal.sds.SslContextProvider;
 import io.grpc.xds.internal.sds.TlsContextManager;
@@ -251,14 +251,13 @@ public class CdsLoadBalancerTest {
     verify(edsLoadBalancer1).handleResolvedAddresses(resolvedAddressesCaptor1.capture());
     PolicySelection roundRobinPolicy = new PolicySelection(
         fakeRoundRobinLbProvider, new HashMap<String, Object>(), "fake round robin config");
-    XdsConfig expectedXdsConfig = new XdsConfig(
+    EdsConfig expectedEdsConfig = new EdsConfig(
         "foo.googleapis.com",
-        roundRobinPolicy,
-        null,
         "edsServiceFoo.googleapis.com",
-        null);
+        null,
+        roundRobinPolicy);
     ResolvedAddresses resolvedAddressesFoo = resolvedAddressesCaptor1.getValue();
-    assertThat(resolvedAddressesFoo.getLoadBalancingPolicyConfig()).isEqualTo(expectedXdsConfig);
+    assertThat(resolvedAddressesFoo.getLoadBalancingPolicyConfig()).isEqualTo(expectedEdsConfig);
     assertThat(resolvedAddressesFoo.getAttributes().get(XdsAttributes.XDS_CLIENT_POOL))
         .isSameInstanceAs(xdsClientPool);
 
@@ -293,14 +292,13 @@ public class CdsLoadBalancerTest {
     LoadBalancer edsLoadBalancer2 = edsLoadBalancers.poll();
     ArgumentCaptor<ResolvedAddresses> resolvedAddressesCaptor2 = ArgumentCaptor.forClass(null);
     verify(edsLoadBalancer2).handleResolvedAddresses(resolvedAddressesCaptor2.capture());
-    expectedXdsConfig = new XdsConfig(
+    expectedEdsConfig = new EdsConfig(
         "bar.googleapis.com",
-        roundRobinPolicy,
-        null,
         "edsServiceBar.googleapis.com",
-        "lrsBar.googleapis.com");
+        "lrsBar.googleapis.com",
+        roundRobinPolicy);
     ResolvedAddresses resolvedAddressesBar = resolvedAddressesCaptor2.getValue();
-    assertThat(resolvedAddressesBar.getLoadBalancingPolicyConfig()).isEqualTo(expectedXdsConfig);
+    assertThat(resolvedAddressesBar.getLoadBalancingPolicyConfig()).isEqualTo(expectedEdsConfig);
     assertThat(resolvedAddressesBar.getAttributes().get(XdsAttributes.XDS_CLIENT_POOL))
         .isSameInstanceAs(xdsClientPool);
 
@@ -322,14 +320,13 @@ public class CdsLoadBalancerTest {
             .setLbPolicy("round_robin")
             .build());
     verify(edsLoadBalancer2, times(2)).handleResolvedAddresses(resolvedAddressesCaptor2.capture());
-    expectedXdsConfig = new XdsConfig(
+    expectedEdsConfig = new EdsConfig(
         "bar.googleapis.com",
-        roundRobinPolicy,
-        null,
         "edsServiceBar2.googleapis.com",
-        null);
+        null,
+        roundRobinPolicy);
     ResolvedAddresses resolvedAddressesBar2 = resolvedAddressesCaptor2.getValue();
-    assertThat(resolvedAddressesBar2.getLoadBalancingPolicyConfig()).isEqualTo(expectedXdsConfig);
+    assertThat(resolvedAddressesBar2.getLoadBalancingPolicyConfig()).isEqualTo(expectedEdsConfig);
 
     cdsLoadBalancer.shutdown();
     verify(edsLoadBalancer2).shutdown();

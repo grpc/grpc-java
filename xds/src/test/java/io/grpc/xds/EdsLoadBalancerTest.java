@@ -75,10 +75,10 @@ import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.Bootstrapper.ChannelCreds;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EdsLoadBalancer.ResourceUpdateCallback;
+import io.grpc.xds.EdsLoadBalancerProvider.EdsConfig;
 import io.grpc.xds.LocalityStore.LocalityStoreFactory;
 import io.grpc.xds.XdsClient.EndpointUpdate;
 import io.grpc.xds.XdsClient.XdsChannelFactory;
-import io.grpc.xds.XdsLoadBalancerProvider.XdsConfig;
 import java.net.InetSocketAddress;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -274,8 +274,7 @@ public class EdsLoadBalancerTest {
 
   @Test
   public void handleNameResolutionErrorBeforeAndAfterEdsWorkding() {
-    deliverResolvedAddresses(
-        new XdsConfig(CLUSTER_NAME, fakeEndpointPickingPolicy, null, null, null));
+    deliverResolvedAddresses(null, null, fakeEndpointPickingPolicy);
 
     // handleResolutionError() before receiving any endpoint update.
     edsLb.handleNameResolutionError(Status.DATA_LOSS.withDescription("fake status"));
@@ -303,8 +302,7 @@ public class EdsLoadBalancerTest {
   public void handleEdsServiceNameChangeInXdsConfig() {
     assertThat(childHelpers).isEmpty();
 
-    deliverResolvedAddresses(
-        new XdsConfig(CLUSTER_NAME, fakeEndpointPickingPolicy, null, "edsServiceName1", null));
+    deliverResolvedAddresses("edsServiceName1", null, fakeEndpointPickingPolicy);
     ClusterLoadAssignment clusterLoadAssignment =
         buildClusterLoadAssignment("edsServiceName1",
             ImmutableList.of(
@@ -324,8 +322,7 @@ public class EdsLoadBalancerTest {
     assertLatestConnectivityState(CONNECTING);
 
     // Change edsServicename to edsServiceName2.
-    deliverResolvedAddresses(
-        new XdsConfig(CLUSTER_NAME, fakeEndpointPickingPolicy, null, "edsServiceName2", null));
+    deliverResolvedAddresses("edsServiceName2", null, fakeEndpointPickingPolicy);
     // The old balancer was not READY, so it will be shutdown immediately.
     verify(childBalancer1).shutdown();
 
@@ -355,8 +352,7 @@ public class EdsLoadBalancerTest {
     assertLatestSubchannelPicker(subchannel2);
 
     // Change edsServiceName to edsServiceName3.
-    deliverResolvedAddresses(
-        new XdsConfig(CLUSTER_NAME, fakeEndpointPickingPolicy, null, "edsServiceName3", null));
+    deliverResolvedAddresses("edsServiceName3", null, fakeEndpointPickingPolicy);
     clusterLoadAssignment =
         buildClusterLoadAssignment("edsServiceName3",
             ImmutableList.of(
@@ -382,8 +378,7 @@ public class EdsLoadBalancerTest {
     assertLatestConnectivityState(CONNECTING);
 
     // Change edsServiceName to edsServiceName4.
-    deliverResolvedAddresses(
-        new XdsConfig(CLUSTER_NAME, fakeEndpointPickingPolicy, null, "edsServiceName4", null));
+    deliverResolvedAddresses("edsServiceName4", null, fakeEndpointPickingPolicy);
     verify(childBalancer3).shutdown();
 
     clusterLoadAssignment =
@@ -411,8 +406,7 @@ public class EdsLoadBalancerTest {
     assertLatestSubchannelPicker(subchannel4);
 
     // Change edsServiceName to edsServiceName5.
-    deliverResolvedAddresses(
-        new XdsConfig(CLUSTER_NAME, fakeEndpointPickingPolicy, null, "edsServiceName5", null));
+    deliverResolvedAddresses("edsServiceName5", null, fakeEndpointPickingPolicy);
     clusterLoadAssignment =
         buildClusterLoadAssignment("edsServiceName5",
             ImmutableList.of(
@@ -447,8 +441,7 @@ public class EdsLoadBalancerTest {
 
   @Test
   public void firstAndSecondEdsResponseReceived_onWorkingCalledOnce() {
-    deliverResolvedAddresses(
-        new XdsConfig(CLUSTER_NAME, fakeEndpointPickingPolicy, null, null, null));
+    deliverResolvedAddresses(null, null, fakeEndpointPickingPolicy);
 
     verify(resourceUpdateCallback, never()).onWorking();
 
@@ -482,8 +475,7 @@ public class EdsLoadBalancerTest {
 
   @Test
   public void handleAllDropUpdates_pickersAreDropped() {
-    deliverResolvedAddresses(
-        new XdsConfig(CLUSTER_NAME, fakeEndpointPickingPolicy, null, null, null));
+    deliverResolvedAddresses(null, null, fakeEndpointPickingPolicy);
 
     ClusterLoadAssignment clusterLoadAssignment = buildClusterLoadAssignment(
         CLUSTER_NAME,
@@ -536,8 +528,7 @@ public class EdsLoadBalancerTest {
 
   @Test
   public void handleLocalityAssignmentUpdates_pickersUpdatedFromChildBalancer() {
-    deliverResolvedAddresses(
-        new XdsConfig(CLUSTER_NAME, fakeEndpointPickingPolicy, null, null, null));
+    deliverResolvedAddresses(null, null, fakeEndpointPickingPolicy);
 
     LbEndpoint endpoint11 = buildLbEndpoint("addr11.example.com", 8011, HEALTHY, 11);
     LbEndpoint endpoint12 = buildLbEndpoint("addr12.example.com", 8012, HEALTHY, 12);
@@ -627,8 +618,7 @@ public class EdsLoadBalancerTest {
         helper, resourceUpdateCallback, lbRegistry, localityStoreFactory, bootstrapper,
         channelFactory);
 
-    deliverResolvedAddresses(
-        new XdsConfig(CLUSTER_NAME, fakeEndpointPickingPolicy, null, "edsServiceName1", null));
+    deliverResolvedAddresses("edsServiceName1", null, fakeEndpointPickingPolicy);
     assertThat(localityStores).hasSize(1);
     LocalityStore localityStore = localityStores.peekLast();
 
@@ -665,8 +655,7 @@ public class EdsLoadBalancerTest {
     verify(localityStore).updateLocalityStore(endpointUpdate.getLocalityLbEndpointsMap());
 
     // Change cluster name.
-    deliverResolvedAddresses(
-        new XdsConfig(CLUSTER_NAME, fakeEndpointPickingPolicy, null, "edsServiceName2", null));
+    deliverResolvedAddresses("edsServiceName2", null, fakeEndpointPickingPolicy);
     assertThat(localityStores).hasSize(2);
     localityStore = localityStores.peekLast();
 
@@ -689,8 +678,7 @@ public class EdsLoadBalancerTest {
 
   @Test
   public void verifyErrorPropagation_noPreviousEndpointUpdateReceived() {
-    deliverResolvedAddresses(
-        new XdsConfig(CLUSTER_NAME, fakeEndpointPickingPolicy, null, null, null));
+    deliverResolvedAddresses(null, null, fakeEndpointPickingPolicy);
 
     verify(resourceUpdateCallback, never()).onError();
     // Forwarding 20 seconds so that the xds client will deem EDS resource not available.
@@ -701,8 +689,7 @@ public class EdsLoadBalancerTest {
 
   @Test
   public void verifyErrorPropagation_withPreviousEndpointUpdateReceived() {
-    deliverResolvedAddresses(
-        new XdsConfig(CLUSTER_NAME, fakeEndpointPickingPolicy, null, null, null));
+    deliverResolvedAddresses(null, null, fakeEndpointPickingPolicy);
     // Endpoint update received.
     ClusterLoadAssignment clusterLoadAssignment =
         buildClusterLoadAssignment(CLUSTER_NAME,
@@ -748,10 +735,15 @@ public class EdsLoadBalancerTest {
     return endpointUpdateBuilder.build();
   }
 
-  private void deliverResolvedAddresses(XdsConfig xdsConfig) {
+  private void deliverResolvedAddresses(
+      @Nullable String edsServiceName,
+      @Nullable String lrsServerName,
+      PolicySelection endpointPickingPolicy) {
+    EdsConfig config =
+        new EdsConfig(CLUSTER_NAME, edsServiceName, lrsServerName, endpointPickingPolicy);
     ResolvedAddresses.Builder resolvedAddressBuilder = ResolvedAddresses.newBuilder()
         .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
-        .setLoadBalancingPolicyConfig(xdsConfig);
+        .setLoadBalancingPolicyConfig(config);
     if (isFullFlow) {
       resolvedAddressBuilder.setAttributes(
           Attributes.newBuilder().set(XdsAttributes.XDS_CLIENT_POOL,

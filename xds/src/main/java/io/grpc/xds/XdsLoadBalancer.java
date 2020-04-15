@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
+import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.ChannelLogger.ChannelLogLevel;
@@ -28,6 +29,9 @@ import io.grpc.Status;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.xds.EdsLoadBalancer.ResourceUpdateCallback;
+import io.grpc.xds.EdsLoadBalancerProvider.EdsConfig;
+import io.grpc.xds.XdsLoadBalancerProvider.XdsConfig;
+import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.CheckForNull;
 import javax.annotation.Nullable;
@@ -91,7 +95,7 @@ final class XdsLoadBalancer extends LoadBalancer {
       Helper helper,
       PrimaryLbFactory primaryLbFactory,
       LoadBalancer.Factory fallbackLbFactory) {
-    this.helper = helper;
+    this.helper = checkNotNull(helper, "helper");
     this.primaryLb = primaryLbFactory.newLoadBalancer(
         new PrimaryLbHelper(), resourceUpdateCallback);
     this.fallbackLbFactory = fallbackLbFactory;
@@ -107,7 +111,14 @@ final class XdsLoadBalancer extends LoadBalancer {
   @Override
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     this.resolvedAddresses = resolvedAddresses;
-
+    Object lbConfig = resolvedAddresses.getLoadBalancingPolicyConfig();
+    if (lbConfig == null) {
+      helper.updateBalancingState(
+          TRANSIENT_FAILURE,
+          new ErrorPicker(Status.UNAVAILABLE.withDescription("Missing xDS lb config")));
+      return;
+    }
+    XdsConfig newXdsConfig = (XdsConfig) lbConfig;
     if (isInFallbackMode()) {
       fallbackLb.handleResolvedAddresses(this.resolvedAddresses);
     }
@@ -125,8 +136,14 @@ final class XdsLoadBalancer extends LoadBalancer {
           new EnterFallbackTask(), FALLBACK_TIMEOUT_MS, TimeUnit.MILLISECONDS,
           helper.getScheduledExecutorService());
     }
-
-    primaryLb.handleResolvedAddresses(resolvedAddresses);
+    EdsConfig edsConfig =
+        new EdsConfig(
+            helper.getAuthority(),
+            newXdsConfig.edsServiceName,
+            newXdsConfig.lrsServerName,
+            newXdsConfig.childPolicy);
+    primaryLb.handleResolvedAddresses(
+        resolvedAddresses.toBuilder().setLoadBalancingPolicyConfig(edsConfig).build());
   }
 
   @Override
