@@ -47,7 +47,6 @@ final class XdsLoadBalancer extends LoadBalancer {
   private static final long FALLBACK_TIMEOUT_MS = TimeUnit.SECONDS.toMillis(10); // same as grpclb
 
   private final Helper helper;
-  private final String authority;
   private final LoadBalancer primaryLb;
   private final LoadBalancer.Factory fallbackLbFactory;
   private final ResourceUpdateCallback resourceUpdateCallback = new ResourceUpdateCallback() {
@@ -97,7 +96,6 @@ final class XdsLoadBalancer extends LoadBalancer {
       PrimaryLbFactory primaryLbFactory,
       LoadBalancer.Factory fallbackLbFactory) {
     this.helper = checkNotNull(helper, "helper");
-    authority = checkNotNull(helper.getAuthority(), "authority");
     this.primaryLb = primaryLbFactory.newLoadBalancer(
         new PrimaryLbHelper(), resourceUpdateCallback);
     this.fallbackLbFactory = fallbackLbFactory;
@@ -140,7 +138,7 @@ final class XdsLoadBalancer extends LoadBalancer {
     }
     EdsConfig edsConfig =
         new EdsConfig(
-            authority,
+            helper.getAuthority(),
             newXdsConfig.edsServiceName,
             newXdsConfig.lrsServerName,
             newXdsConfig.childPolicy);
