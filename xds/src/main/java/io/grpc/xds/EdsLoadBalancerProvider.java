@@ -26,7 +26,6 @@ import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
-import io.grpc.xds.EdsLoadBalancer.ResourceUpdateCallback;
 import java.util.Map;
 import javax.annotation.Nullable;
 
@@ -55,18 +54,7 @@ public class EdsLoadBalancerProvider extends LoadBalancerProvider {
 
   @Override
   public LoadBalancer newLoadBalancer(Helper helper) {
-    return new EdsLoadBalancer(
-        helper,
-        new ResourceUpdateCallback() {
-          @Override
-          public void onWorking() {}
-
-          @Override
-          public void onError() {}
-
-          @Override
-          public void onAllDrop() {}
-        });
+    return new EdsLoadBalancer(helper);
   }
 
   @Override
