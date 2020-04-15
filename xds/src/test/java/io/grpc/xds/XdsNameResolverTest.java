@@ -376,8 +376,9 @@ public class XdsNameResolverTest {
                         ImmutableMap.of(
                             "cluster-bar.googleapis.com", 30, "cluster-bar2.googleapis.com", 70)))
                 .build(),
-            // default, routed to cluster
+            // default with prefix = "/", routed to cluster
             Route.newBuilder()
+                .setMatch(RouteMatch.newBuilder().setPrefix("/"))
                 .setRoute(buildClusterRoute("cluster-hello.googleapis.com"))
                 .build());
     HttpConnectionManager httpConnectionManager =

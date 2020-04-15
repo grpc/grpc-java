@@ -421,6 +421,16 @@ final class EnvoyProtoData {
       return hasRegex;
     }
 
+    boolean isDefaultMatcher() {
+      if (hasRegex) {
+        return false;
+      }
+      if (!path.isEmpty()) {
+        return false;
+      }
+      return prefix.isEmpty() || prefix.equals("/");
+    }
+
     @Override
     public boolean equals(Object o) {
       if (this == o) {
