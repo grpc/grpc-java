@@ -158,13 +158,13 @@ class OkHttpProtocolNegotiator {
 
     // Non-null on Android 10.0+.
     // SSLSockets#isSupportedSocket(SSLSocket)
-    private static final Method sslSocketsIsSupportedSocket;
+    private static final Method SSL_SOCKETS_IS_SUPPORTED_SOCKET;
     // SSLSockets#setUseSessionTickets(SSLSocket, boolean)
-    private static final Method sslSocketsSetUseSessionTickets;
+    private static final Method SSL_SOCKETS_SET_USE_SESSION_TICKET;
 
     // Non-null on Android 7.0+.
     // SNIHostName(String)
-    private static final Constructor<?> sniHostName;
+    private static final Constructor<?> SNI_HOST_NAME;
 
     static {
       // Attempt to find Android 10.0+ APIs.
@@ -175,21 +175,21 @@ class OkHttpProtocolNegotiator {
         sslSocketsIsSupportedSocketMethod = sslSockets.getMethod("isSupportedSocket", SSLSocket.class);
         sslSocketsSetUseSessionTicketsMethod =
             sslSockets.getMethod("setUseSessionTickets", SSLSocket.class, boolean.class);
-      } catch (ClassNotFoundException ignored) {
-      } catch (NoSuchMethodException ignored) {
+      } catch (Throwable e) {
+        logger.log(Level.FINER, "SSLSockets#setUseSessionTicktes API not found");
       }
-      sslSocketsIsSupportedSocket = sslSocketsIsSupportedSocketMethod;
-      sslSocketsSetUseSessionTickets = sslSocketsSetUseSessionTicketsMethod;
+      SSL_SOCKETS_IS_SUPPORTED_SOCKET = sslSocketsIsSupportedSocketMethod;
+      SSL_SOCKETS_SET_USE_SESSION_TICKET = sslSocketsSetUseSessionTicketsMethod;
 
       // Attempt to find Android 7.0+ APIs.
       Constructor<?> sniHostNameConstructor = null;
       try {
         sniHostNameConstructor =
             Class.forName("javax.net.ssl.SNIHostName").getConstructor(String.class);
-      } catch (ClassNotFoundException ignored) {
-      } catch (NoSuchMethodException ignored) {
+      } catch (Throwable e) {
+        logger.log(Level.FINER, "SNIHostName API not found");
       }
-      sniHostName = sniHostNameConstructor;
+      SNI_HOST_NAME = sniHostNameConstructor;
     }
 
     AndroidNegotiator(Platform platform) {
@@ -214,7 +214,7 @@ class OkHttpProtocolNegotiator {
      *
      * <p>Note: Prior to Android Q, the standard way of accessing some Conscrypt features was to
      * use reflection to call hidden APIs. Beginning in Q, there is public API for all of these
-     * features. We attempt to use the public API where possible while falling back to use the
+     * features. We attempt to use the public API where possible. Otherwise, fall back to use the
      * old reflective API.
      */
     @Override
@@ -224,28 +224,33 @@ class OkHttpProtocolNegotiator {
       // Enable SNI and session tickets.
       if (hostname != null) {
         try {
-          if (sslSocketsIsSupportedSocket != null
-              && (boolean) sslSocketsIsSupportedSocket.invoke(null, sslSocket)) {
-            sslSocketsSetUseSessionTickets.invoke(null, sslSocket, true);
+          if (SSL_SOCKETS_IS_SUPPORTED_SOCKET != null
+              && (boolean) SSL_SOCKETS_IS_SUPPORTED_SOCKET.invoke(null, sslSocket)) {
+            SSL_SOCKETS_SET_USE_SESSION_TICKET.invoke(null, sslSocket, true);
           } else {
             SET_USE_SESSION_TICKETS.invokeOptionalWithoutCheckedException(sslSocket, true);
           }
-        } catch (IllegalAccessException ignored) {
-        } catch (InvocationTargetException ignored) {
+        } catch (IllegalAccessException e) {
+          throw new RuntimeException(e);
+        } catch (InvocationTargetException e) {
+          throw new RuntimeException(e);
         }
 
         try {
-          if (sniHostName != null) {
+          if (SNI_HOST_NAME != null) {
             SET_SERVER_NAMES
                 .invokeOptionalWithoutCheckedException(
                     sslParams,
-                    Collections.singletonList(sniHostName.newInstance(hostname)));
+                    Collections.singletonList(SNI_HOST_NAME.newInstance(hostname)));
           } else {
             SET_HOSTNAME.invokeOptionalWithoutCheckedException(sslSocket, hostname);
           }
-        } catch (IllegalAccessException ignored) {
-        } catch (InstantiationException ignored) {
-        } catch (InvocationTargetException ignored) {
+        } catch (IllegalAccessException e) {
+          throw new RuntimeException(e);
+        } catch (InstantiationException e) {
+          throw new RuntimeException(e);
+        } catch (InvocationTargetException e) {
+          throw new RuntimeException(e);
         }
       }
 
