@@ -34,7 +34,6 @@ import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.ConfigOrError;
-import io.grpc.Server;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.stub.StreamObserver;
@@ -75,7 +74,7 @@ public class XdsSdsClientServerTest {
   @Rule public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
   private int port;
   private FakeNameResolverFactory fakeNameResolverFactory;
-  private XdsChannelBuilder builder;
+  private XdsChannelBuilder channelBuilder;
 
   @Before
   public void setUp() throws IOException, URISyntaxException {
@@ -83,14 +82,14 @@ public class XdsSdsClientServerTest {
     port = findFreePort();
     URI expectedUri = new URI("sdstest://localhost:" + port);
     fakeNameResolverFactory = new FakeNameResolverFactory.Builder(expectedUri).build();
-    builder =
+    channelBuilder =
         XdsChannelBuilder.forTarget("sdstest://localhost:" + port)
             .nameResolverFactory(fakeNameResolverFactory);
   }
 
   @Test
   public void plaintextClientServer() throws IOException {
-    Server unused = buildServerWithTlsContext(/* downstreamTlsContext= */ null);
+    buildServerWithTlsContext(/* downstreamTlsContext= */ null);
 
     SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
         getBlockingStub(/* upstreamTlsContext= */ null, /* overrideAuthority= */ null);
@@ -103,7 +102,7 @@ public class XdsSdsClientServerTest {
     DownstreamTlsContext downstreamTlsContext =
         CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(
             SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, null);
-    Server unused = buildServerWithTlsContext(downstreamTlsContext);
+    buildServerWithTlsContext(downstreamTlsContext);
 
     // for TLS, client only needs trustCa
     UpstreamTlsContext upstreamTlsContext =
@@ -159,7 +158,7 @@ public class XdsSdsClientServerTest {
             port, /* downstreamTlsContext= */ downstreamTlsContext);
     SdsProtocolNegotiators.ServerSdsProtocolNegotiator serverSdsProtocolNegotiator =
         new SdsProtocolNegotiators.ServerSdsProtocolNegotiator(xdsClientWrapperForServerSds);
-    Server unused = getServer(port, serverSdsProtocolNegotiator);
+    buildServer(port, serverSdsProtocolNegotiator);
 
     XdsClient.ListenerWatcher listenerWatcher = xdsClientWrapperForServerSds.getListenerWatcher();
 
@@ -169,21 +168,21 @@ public class XdsSdsClientServerTest {
     return listenerWatcher;
   }
 
-  private Server buildServerWithTlsContext(DownstreamTlsContext downstreamTlsContext)
+  private void buildServerWithTlsContext(DownstreamTlsContext downstreamTlsContext)
       throws IOException {
     final XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
         XdsClientWrapperForServerSdsTest.createXdsClientWrapperForServerSds(
             port, /* downstreamTlsContext= */ downstreamTlsContext);
     SdsProtocolNegotiators.ServerSdsProtocolNegotiator serverSdsProtocolNegotiator =
         new SdsProtocolNegotiators.ServerSdsProtocolNegotiator(xdsClientWrapperForServerSds);
-    return getServer(port, serverSdsProtocolNegotiator);
+    buildServer(port, serverSdsProtocolNegotiator);
   }
 
-  private Server getServer(
+  private void buildServer(
       int port, SdsProtocolNegotiators.ServerSdsProtocolNegotiator serverSdsProtocolNegotiator)
       throws IOException {
     XdsServerBuilder builder = XdsServerBuilder.forPort(port).addService(new SimpleServiceImpl());
-    return cleanupRule.register(builder.buildServer(serverSdsProtocolNegotiator)).start();
+    cleanupRule.register(builder.buildServer(serverSdsProtocolNegotiator)).start();
   }
 
   private static int findFreePort() throws IOException {
@@ -206,7 +205,7 @@ public class XdsSdsClientServerTest {
   private SimpleServiceGrpc.SimpleServiceBlockingStub getBlockingStub(
       final UpstreamTlsContext upstreamTlsContext, String overrideAuthority) {
     if (overrideAuthority != null) {
-      builder = builder.overrideAuthority(overrideAuthority);
+      channelBuilder = channelBuilder.overrideAuthority(overrideAuthority);
     }
     InetSocketAddress socketAddress =
         new InetSocketAddress(Inet4Address.getLoopbackAddress(), port);
@@ -218,7 +217,7 @@ public class XdsSdsClientServerTest {
             : Attributes.EMPTY;
     fakeNameResolverFactory.setServers(
         Collections.singletonList(new EquivalentAddressGroup(socketAddress, attrs)));
-    return SimpleServiceGrpc.newBlockingStub(cleanupRule.register(builder.build()));
+    return SimpleServiceGrpc.newBlockingStub(cleanupRule.register(channelBuilder.build()));
   }
 
   /** Say hello to server. */
