@@ -116,8 +116,7 @@ final class EdsLoadBalancer extends LoadBalancer {
           "Received EDS lb config: cluster={0}, child_policy={1}, "
               + "eds_service_name={2}, report_load={3}",
           newEdsConfig.clusterName,
-          newEdsConfig.endpointPickingPolicy != null
-              ? newEdsConfig.endpointPickingPolicy.getProvider().getPolicyName() : "",
+          newEdsConfig.endpointPickingPolicy.getProvider().getPolicyName(),
           newEdsConfig.edsServiceName,
           newEdsConfig.lrsServerName != null);
     }
