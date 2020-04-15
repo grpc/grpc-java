@@ -58,7 +58,6 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
-import org.mockito.MockitoAnnotations;
 
 /**
  * Unit tests for {@link XdsChannelBuilder} and {@link XdsServerBuilder} for plaintext/TLS/mTLS
@@ -71,8 +70,7 @@ public class XdsSdsClientServerTest {
   private int port;
 
   @Before
-  public void setUp() throws IOException, URISyntaxException {
-    MockitoAnnotations.initMocks(this);
+  public void setUp() throws IOException {
     port = findFreePort();
   }
 
