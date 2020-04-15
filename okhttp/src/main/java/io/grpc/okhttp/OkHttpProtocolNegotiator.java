@@ -140,56 +140,68 @@ class OkHttpProtocolNegotiator {
     private static final OptionalMethod<Socket> SET_NPN_PROTOCOLS =
         new OptionalMethod<>(null, "setNpnProtocols", byte[].class);
 
-    // Available on Android 10.0+.
-    // SSLParameters#setApplicationProtocols(String[])
-    private static final OptionalMethod<SSLParameters> SET_APPLICATION_PROTOCOLS =
-        new OptionalMethod<>(null, "setApplicationProtocols", String[].class);
-    // SSLParameters#getApplicationProtocols()
-    private static final OptionalMethod<SSLParameters> GET_APPLICATION_PROTOCOLS =
-        new OptionalMethod<>(String[].class, "getApplicationProtocols");
-    // SSLSocket#getApplicationProtocol()
-    private static final OptionalMethod<SSLSocket> GET_APPLICATION_PROTOCOL =
-        new OptionalMethod<>(String.class, "getApplicationProtocol");
-
-    // Available on Android 7.0+.
-    // SSLParameters#setServerNames(List<SNIServerName>)
-    private static final OptionalMethod<SSLParameters> SET_SERVER_NAMES =
-        new OptionalMethod<>(null, "setServerNames", List.class);
-
     // Non-null on Android 10.0+.
-    // SSLSockets#isSupportedSocket(SSLSocket)
+    // SSLSockets.isSupportedSocket(SSLSocket)
     private static final Method SSL_SOCKETS_IS_SUPPORTED_SOCKET;
-    // SSLSockets#setUseSessionTickets(SSLSocket, boolean)
+    // SSLSockets.setUseSessionTickets(SSLSocket, boolean)
     private static final Method SSL_SOCKETS_SET_USE_SESSION_TICKET;
+    // SSLParameters.setApplicationProtocols(String[])
+    private static final Method SET_APPLICATION_PROTOCOLS;
+    // SSLParameters.getApplicationProtocols()
+    private static final Method GET_APPLICATION_PROTOCOLS;
+    // SSLSocket.getApplicationProtocol()
+    private static final Method GET_APPLICATION_PROTOCOL;
 
     // Non-null on Android 7.0+.
+    // SSLParameters.setServerNames(List<SNIServerName>)
+    private static final Method SET_SERVER_NAMES;
     // SNIHostName(String)
     private static final Constructor<?> SNI_HOST_NAME;
 
     static {
       // Attempt to find Android 10.0+ APIs.
+      Method setApplicationProtocolsMethod = null;
+      Method getApplicationProtocolsMethod = null;
+      Method getApplicationProtocolMethod = null;
       Method sslSocketsIsSupportedSocketMethod = null;
       Method sslSocketsSetUseSessionTicketsMethod = null;
       try {
+        Class<?> sslParameters = Class.forName("javax.net.ssl.SSLParameters");
+        setApplicationProtocolsMethod =
+            sslParameters.getMethod("setApplicationProtocols", String[].class);
+        getApplicationProtocolsMethod = sslParameters.getMethod("getApplicationProtocols");
+        getApplicationProtocolMethod =
+            Class.forName("javax.net.ssl.SSLSocket").getMethod("getApplicationProtocol");
         Class<?> sslSockets = Class.forName("android.net.ssl.SSLSockets");
         sslSocketsIsSupportedSocketMethod =
             sslSockets.getMethod("isSupportedSocket", SSLSocket.class);
         sslSocketsSetUseSessionTicketsMethod =
             sslSockets.getMethod("setUseSessionTickets", SSLSocket.class, boolean.class);
-      } catch (Throwable e) {
-        logger.log(Level.FINER, "SSLSockets#setUseSessionTicktes API not found");
+      } catch (ClassNotFoundException e) {
+        logger.log(Level.FINER, "Failed to find Android 10.0+ APIs", e);
+      } catch (NoSuchMethodException e) {
+        logger.log(Level.FINER, "Failed to find Android 10.0+ APIs", e);
       }
+      SET_APPLICATION_PROTOCOLS = setApplicationProtocolsMethod;
+      GET_APPLICATION_PROTOCOLS = getApplicationProtocolsMethod;
+      GET_APPLICATION_PROTOCOL = getApplicationProtocolMethod;
       SSL_SOCKETS_IS_SUPPORTED_SOCKET = sslSocketsIsSupportedSocketMethod;
       SSL_SOCKETS_SET_USE_SESSION_TICKET = sslSocketsSetUseSessionTicketsMethod;
 
       // Attempt to find Android 7.0+ APIs.
+      Method setServerNamesMethod = null;
       Constructor<?> sniHostNameConstructor = null;
       try {
+        setServerNamesMethod =
+            Class.forName("javax.net.ssl.SSLParameters").getMethod("setServerNames", List.class);
         sniHostNameConstructor =
             Class.forName("javax.net.ssl.SNIHostName").getConstructor(String.class);
-      } catch (Throwable e) {
-        logger.log(Level.FINER, "SNIHostName API not found");
+      } catch (ClassNotFoundException e) {
+        logger.log(Level.FINER, "Failed to find Android 7.0+ APIs", e);
+      } catch (NoSuchMethodException e) {
+        logger.log(Level.FINER, "Failed to find Android 7.0+ APIs", e);
       }
+      SET_SERVER_NAMES = setServerNamesMethod;
       SNI_HOST_NAME = sniHostNameConstructor;
     }
 
@@ -221,53 +233,44 @@ class OkHttpProtocolNegotiator {
     @Override
     protected void configureTlsExtensions(
         SSLSocket sslSocket, String hostname, List<Protocol> protocols) {
-      SSLParameters sslParams = sslSocket.getSSLParameters();
-      // Enable SNI and session tickets.
-      if (hostname != null) {
-        try {
+      try {
+        SSLParameters sslParams = sslSocket.getSSLParameters();
+        // Enable SNI and session tickets.
+        if (hostname != null) {
           if (SSL_SOCKETS_IS_SUPPORTED_SOCKET != null
               && (boolean) SSL_SOCKETS_IS_SUPPORTED_SOCKET.invoke(null, sslSocket)) {
             SSL_SOCKETS_SET_USE_SESSION_TICKET.invoke(null, sslSocket, true);
           } else {
             SET_USE_SESSION_TICKETS.invokeOptionalWithoutCheckedException(sslSocket, true);
           }
-        } catch (IllegalAccessException e) {
-          throw new RuntimeException(e);
-        } catch (InvocationTargetException e) {
-          throw new RuntimeException(e);
-        }
-
-        try {
-          if (SNI_HOST_NAME != null) {
+          if (SET_SERVER_NAMES != null && SNI_HOST_NAME != null) {
             SET_SERVER_NAMES
-                .invokeOptionalWithoutCheckedException(
-                    sslParams,
-                    Collections.singletonList(SNI_HOST_NAME.newInstance(hostname)));
+                .invoke(sslParams, Collections.singletonList(SNI_HOST_NAME.newInstance(hostname)));
           } else {
             SET_HOSTNAME.invokeOptionalWithoutCheckedException(sslSocket, hostname);
           }
-        } catch (IllegalAccessException e) {
-          throw new RuntimeException(e);
-        } catch (InstantiationException e) {
-          throw new RuntimeException(e);
-        } catch (InvocationTargetException e) {
-          throw new RuntimeException(e);
         }
-      }
-
-      // Enable ALPN and NPN if necessary.
-      String[] protocolNames = protocolIds(protocols);
-      SET_APPLICATION_PROTOCOLS
-          .invokeOptionalWithoutCheckedException(sslParams, (Object) protocolIds(protocols));
-      sslSocket.setSSLParameters(sslParams);
-      // Check protocol configuration through SSLParameters succeeds. If not, fall back to
-      // configure with the old reflective method.
-      // Workaround for Conscrypt issue: https://github.com/google/conscrypt/issues/832
-      String[] configuredProtocols =
-          (String[]) GET_APPLICATION_PROTOCOLS
-              .invokeOptionalWithoutCheckedException(sslSocket.getSSLParameters());
-      if (Arrays.equals(protocolNames, configuredProtocols)) {
-        return;
+        String[] protocolNames = protocolIds(protocols);
+        if (SET_APPLICATION_PROTOCOLS != null) {
+          SET_APPLICATION_PROTOCOLS.invoke(sslParams, (Object) protocolNames);
+        }
+        sslSocket.setSSLParameters(sslParams);
+        // Check application protocols are configured correctly. If not, configure again with
+        // old methods.
+        // Workaround for Conscrypt bug: https://github.com/google/conscrypt/issues/832
+        if (GET_APPLICATION_PROTOCOLS != null) {
+          String[] configuredProtocols =
+              (String[]) GET_APPLICATION_PROTOCOLS.invoke(sslSocket.getSSLParameters());
+          if (Arrays.equals(protocolNames, configuredProtocols)) {
+            return;
+          }
+        }
+      } catch (IllegalAccessException e) {
+        throw new RuntimeException(e);
+      } catch (InvocationTargetException e) {
+        throw new RuntimeException(e);
+      } catch (InstantiationException e) {
+        throw new RuntimeException(e);
       }
 
       Object[] parameters = {Platform.concatLengthPrefixed(protocols)};
@@ -284,9 +287,13 @@ class OkHttpProtocolNegotiator {
 
     @Override
     public String getSelectedProtocol(SSLSocket socket) {
-      if (GET_APPLICATION_PROTOCOL.isSupported(socket)) {
+      if (GET_APPLICATION_PROTOCOL != null) {
         try {
-          return (String) GET_APPLICATION_PROTOCOL.invokeOptionalWithoutCheckedException(socket);
+          return (String) GET_APPLICATION_PROTOCOL.invoke(socket);
+        } catch (IllegalAccessException e) {
+          throw new RuntimeException(e);
+        } catch (InvocationTargetException e) {
+          throw new RuntimeException(e);
         } catch (UnsupportedOperationException e) {
           logger.log(
               Level.FINER,
