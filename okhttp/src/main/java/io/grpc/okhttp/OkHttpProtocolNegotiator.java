@@ -172,7 +172,8 @@ class OkHttpProtocolNegotiator {
       Method sslSocketsSetUseSessionTicketsMethod = null;
       try {
         Class<?> sslSockets = Class.forName("android.net.ssl.SSLSockets");
-        sslSocketsIsSupportedSocketMethod = sslSockets.getMethod("isSupportedSocket", SSLSocket.class);
+        sslSocketsIsSupportedSocketMethod =
+            sslSockets.getMethod("isSupportedSocket", SSLSocket.class);
         sslSocketsSetUseSessionTicketsMethod =
             sslSockets.getMethod("setUseSessionTickets", SSLSocket.class, boolean.class);
       } catch (Throwable e) {
