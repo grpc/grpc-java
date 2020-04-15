@@ -290,7 +290,7 @@ class OkHttpProtocolNegotiator {
         } catch (UnsupportedOperationException e) {
           logger.log(
               Level.FINER,
-              "socket unsupported for getApplicationProtocol, will try old methods");
+              "Socket unsupported for getApplicationProtocol, will try old methods");
         }
       }
 
