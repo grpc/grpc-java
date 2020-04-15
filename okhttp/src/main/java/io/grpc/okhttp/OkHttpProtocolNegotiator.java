@@ -29,6 +29,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.Socket;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -136,28 +137,38 @@ class OkHttpProtocolNegotiator {
     // setNpnProtocol(byte[])
     private static final OptionalMethod<Socket> SET_NPN_PROTOCOLS =
         new OptionalMethod<>(null, "setNpnProtocols", byte[].class);
-    // setApplicationProtocols(String[])
+
+    // Available on Android 10.0+.
+    // SSLParameters#setApplicationProtocols(String[])
     private static final OptionalMethod<SSLParameters> SET_APPLICATION_PROTOCOLS =
         new OptionalMethod<>(null, "setApplicationProtocols", String[].class);
-    // getApplicationProtocol()
+    // SSLParameters#getApplicationProtocols()
+    private static final OptionalMethod<SSLParameters> GET_APPLICATION_PROTOCOLS =
+        new OptionalMethod<>(String[].class, "getApplicationProtocols");
+    // SSLSocket#getApplicationProtocol()
     private static final OptionalMethod<SSLSocket> GET_APPLICATION_PROTOCOL =
         new OptionalMethod<>(String.class, "getApplicationProtocol");
+
     // Non-null on Android 10.0+.
-    // SSLSockets.isSupportedSocket(SSLSocket)
-    private static Method sslSocketsIsSupportedSocket;
-    // SSLSockets.setUseSessionTickets(SSLSocket, boolean)
-    private static Method sslSocketsSetUseSessionTickets;
+    // SSLSockets#isSupportedSocket(SSLSocket)
+    private static final Method sslSocketsIsSupportedSocket;
+    // SSLSockets#setUseSessionTickets(SSLSocket, boolean)
+    private static final Method sslSocketsSetUseSessionTickets;
 
     static {
       // Attempt to find Android 10.0+ APIs.
+      Method sslSocketsIsSupportedSocketMethod = null;
+      Method sslSocketsSetUseSessionTicketsMethod = null;
       try {
         Class<?> sslSockets = Class.forName("android.net.ssl.SSLSockets");
-        sslSocketsIsSupportedSocket = sslSockets.getMethod("isSupportedSocket", SSLSocket.class);
-        sslSocketsSetUseSessionTickets =
+        sslSocketsIsSupportedSocketMethod = sslSockets.getMethod("isSupportedSocket", SSLSocket.class);
+        sslSocketsSetUseSessionTicketsMethod =
             sslSockets.getMethod("setUseSessionTickets", SSLSocket.class, boolean.class);
       } catch (ClassNotFoundException ignored) {
       } catch (NoSuchMethodException ignored) {
       }
+      sslSocketsIsSupportedSocket = sslSocketsIsSupportedSocketMethod;
+      sslSocketsSetUseSessionTickets = sslSocketsSetUseSessionTicketsMethod;
     }
 
     AndroidNegotiator(Platform platform) {
@@ -182,10 +193,8 @@ class OkHttpProtocolNegotiator {
      *
      * <p>Note: Prior to Android Q, the standard way of accessing some Conscrypt features was to
      * use reflection to call hidden APIs. Beginning in Q, there is public API for all of these
-     * features. We attempt to use the public API where possible, but also still call the
-     * hidden versions to continue to support old versions of Conscrypt that might be bundled with
-     * apps or third-party TLS providers that might have taken advantage of being able to
-     * duck-type their way into compatibility.
+     * features. We attempt to use the public API where possible while falling back to use the
+     * old reflective API.
      */
     @Override
     protected void configureTlsExtensions(
@@ -206,11 +215,24 @@ class OkHttpProtocolNegotiator {
       }
 
       // Enable ALPN and NPN if necessary.
+      boolean configured = false;
       SSLParameters sslParams = sslSocket.getSSLParameters();
-      SET_APPLICATION_PROTOCOLS
-          .invokeOptionalWithoutCheckedException(sslParams, (Object) protocolIds(protocols));
-      sslSocket.setSSLParameters(sslParams);
-      if (!isPlatformSocket(sslSocket) || !SET_APPLICATION_PROTOCOLS.isSupported(sslParams)) {
+      if (SET_APPLICATION_PROTOCOLS.isSupported(sslParams)) {
+        String[] protocolNames = protocolIds(protocols);
+        SET_APPLICATION_PROTOCOLS
+            .invokeOptionalWithoutCheckedException(sslParams, (Object) protocolIds(protocols));
+        sslSocket.setSSLParameters(sslParams);
+        // Check protocol configuration through SSLParameters succeeds. If not, fall back to
+        // configure with the old reflective method.
+        // Workaround for Conscrypt issue: https://github.com/google/conscrypt/issues/832
+        String[] configuredProtocols =
+            (String[]) GET_APPLICATION_PROTOCOLS
+                .invokeOptionalWithoutCheckedException(sslSocket.getSSLParameters());
+        if (Arrays.equals(protocolNames, configuredProtocols)) {
+          configured = true;
+        }
+      }
+      if (!configured) {
         Object[] parameters = {Platform.concatLengthPrefixed(protocols)};
         if (platform.getTlsExtensionType() == TlsExtensionType.ALPN_AND_NPN) {
           SET_ALPN_PROTOCOLS.invokeWithoutCheckedException(sslSocket, parameters);
@@ -262,10 +284,6 @@ class OkHttpProtocolNegotiator {
         }
       }
       return null;
-    }
-
-    private static boolean isPlatformSocket(SSLSocket socket) {
-      return socket.getClass().getName().startsWith("com.android.org.conscrypt");
     }
   }
 
