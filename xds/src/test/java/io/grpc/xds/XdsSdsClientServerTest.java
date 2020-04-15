@@ -33,8 +33,6 @@ import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
-import io.grpc.NameResolver.ConfigOrError;
-import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
@@ -53,9 +51,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicReference;
 import javax.net.ssl.SSLHandshakeException;
 import org.junit.Before;
 import org.junit.Rule;
@@ -73,22 +69,15 @@ public class XdsSdsClientServerTest {
 
   @Rule public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
   private int port;
-  private FakeNameResolverFactory fakeNameResolverFactory;
-  private XdsChannelBuilder channelBuilder;
 
   @Before
   public void setUp() throws IOException, URISyntaxException {
     MockitoAnnotations.initMocks(this);
     port = findFreePort();
-    URI expectedUri = new URI("sdstest://localhost:" + port);
-    fakeNameResolverFactory = new FakeNameResolverFactory.Builder(expectedUri).build();
-    channelBuilder =
-        XdsChannelBuilder.forTarget("sdstest://localhost:" + port)
-            .nameResolverFactory(fakeNameResolverFactory);
   }
 
   @Test
-  public void plaintextClientServer() throws IOException {
+  public void plaintextClientServer() throws IOException, URISyntaxException {
     buildServerWithTlsContext(/* downstreamTlsContext= */ null);
 
     SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
@@ -98,7 +87,7 @@ public class XdsSdsClientServerTest {
 
   /** TLS channel - no mTLS. */
   @Test
-  public void tlsClientServer_noClientAuthentication() throws IOException {
+  public void tlsClientServer_noClientAuthentication() throws IOException, URISyntaxException {
     DownstreamTlsContext downstreamTlsContext =
         CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(
             SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, null);
@@ -116,7 +105,7 @@ public class XdsSdsClientServerTest {
 
   /** mTLS - client auth enabled. */
   @Test
-  public void mtlsClientServer_withClientAuthentication() throws IOException {
+  public void mtlsClientServer_withClientAuthentication() throws IOException, URISyntaxException {
     UpstreamTlsContext upstreamTlsContext =
         CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
             CLIENT_KEY_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
@@ -125,7 +114,8 @@ public class XdsSdsClientServerTest {
 
   /** mTLS - client auth enabled then update server certs to untrusted. */
   @Test
-  public void mtlsClientServer_changeServerContext_expectException() throws IOException {
+  public void mtlsClientServer_changeServerContext_expectException()
+      throws IOException, URISyntaxException {
     UpstreamTlsContext upstreamTlsContext =
         CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
             CLIENT_KEY_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
@@ -148,7 +138,7 @@ public class XdsSdsClientServerTest {
   }
 
   private XdsClient.ListenerWatcher performMtlsTestAndGetListenerWatcher(
-      UpstreamTlsContext upstreamTlsContext) throws IOException {
+      UpstreamTlsContext upstreamTlsContext) throws IOException, URISyntaxException {
     DownstreamTlsContext downstreamTlsContext =
         CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(
             SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, CA_PEM_FILE);
@@ -203,7 +193,14 @@ public class XdsSdsClientServerTest {
   }
 
   private SimpleServiceGrpc.SimpleServiceBlockingStub getBlockingStub(
-      final UpstreamTlsContext upstreamTlsContext, String overrideAuthority) {
+      final UpstreamTlsContext upstreamTlsContext, String overrideAuthority)
+      throws URISyntaxException {
+    URI expectedUri = new URI("sdstest://localhost:" + port);
+    FakeNameResolverFactory fakeNameResolverFactory = new FakeNameResolverFactory.Builder(
+        expectedUri).build();
+    XdsChannelBuilder channelBuilder =
+        XdsChannelBuilder.forTarget("sdstest://localhost:" + port)
+            .nameResolverFactory(fakeNameResolverFactory);
     if (overrideAuthority != null) {
       channelBuilder = channelBuilder.overrideAuthority(overrideAuthority);
     }
@@ -216,7 +213,7 @@ public class XdsSdsClientServerTest {
                 .build()
             : Attributes.EMPTY;
     fakeNameResolverFactory.setServers(
-        Collections.singletonList(new EquivalentAddressGroup(socketAddress, attrs)));
+        ImmutableList.of(new EquivalentAddressGroup(socketAddress, attrs)));
     return SimpleServiceGrpc.newBlockingStub(cleanupRule.register(channelBuilder.build()));
   }
 
@@ -244,15 +241,10 @@ public class XdsSdsClientServerTest {
   private static final class FakeNameResolverFactory extends NameResolver.Factory {
     final URI expectedUri;
     List<EquivalentAddressGroup> servers = ImmutableList.of();
-    final boolean resolvedAtStart;
-    final Status error;
     final ArrayList<FakeNameResolver> resolvers = new ArrayList<>();
-    final AtomicReference<ConfigOrError> nextConfigOrError = new AtomicReference<>();
 
-    FakeNameResolverFactory(URI expectedUri, boolean resolvedAtStart, Status error) {
+    FakeNameResolverFactory(URI expectedUri) {
       this.expectedUri = expectedUri;
-      this.resolvedAtStart = resolvedAtStart;
-      this.error = error;
     }
 
     void setServers(List<EquivalentAddressGroup> servers) {
@@ -264,31 +256,18 @@ public class XdsSdsClientServerTest {
       if (!expectedUri.equals(targetUri)) {
         return null;
       }
-      FakeNameResolver resolver = new FakeNameResolver(error);
+      FakeNameResolver resolver = new FakeNameResolver();
       resolvers.add(resolver);
       return resolver;
     }
 
     @Override
     public String getDefaultScheme() {
-      return "fake";
-    }
-
-    void allResolved() {
-      for (FakeNameResolver resolver : resolvers) {
-        resolver.resolved();
-      }
+      return "sdstest";
     }
 
     final class FakeNameResolver extends NameResolver {
       Listener2 listener;
-      boolean shutdown;
-      int refreshCalled;
-      Status error;
-
-      FakeNameResolver(Status error) {
-        this.error = error;
-      }
 
       @Override
       public String getServiceAuthority() {
@@ -298,33 +277,21 @@ public class XdsSdsClientServerTest {
       @Override
       public void start(Listener2 listener) {
         this.listener = listener;
-        if (resolvedAtStart) {
-          resolved();
-        }
+        resolved();
       }
 
       @Override
       public void refresh() {
-        refreshCalled++;
         resolved();
       }
 
       void resolved() {
-        if (error != null) {
-          listener.onError(error);
-          return;
-        }
         ResolutionResult.Builder builder = ResolutionResult.newBuilder().setAddresses(servers);
-        ConfigOrError configOrError = nextConfigOrError.get();
-        if (configOrError != null) {
-          builder.setServiceConfig(configOrError);
-        }
         listener.onResult(builder.build());
       }
 
       @Override
       public void shutdown() {
-        shutdown = true;
       }
 
       @Override
@@ -335,25 +302,13 @@ public class XdsSdsClientServerTest {
 
     static final class Builder {
       final URI expectedUri;
-      boolean resolvedAtStart = true;
-      Status error = null;
 
       Builder(URI expectedUri) {
         this.expectedUri = expectedUri;
       }
 
-      Builder setResolvedAtStart(boolean resolvedAtStart) {
-        this.resolvedAtStart = resolvedAtStart;
-        return this;
-      }
-
-      Builder setError(Status error) {
-        this.error = error;
-        return this;
-      }
-
       FakeNameResolverFactory build() {
-        return new FakeNameResolverFactory(expectedUri, resolvedAtStart, error);
+        return new FakeNameResolverFactory(expectedUri);
       }
     }
   }
