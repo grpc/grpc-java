@@ -287,8 +287,10 @@ class OkHttpProtocolNegotiator {
       if (GET_APPLICATION_PROTOCOL.isSupported(socket)) {
         try {
           return (String) GET_APPLICATION_PROTOCOL.invokeOptionalWithoutCheckedException(socket);
-        } catch (UnsupportedOperationException ignored) {
-          // The socket doesn't support this API, try the old reflective method
+        } catch (UnsupportedOperationException e) {
+          logger.log(
+              Level.FINER,
+              "socket unsupported for getApplicationProtocol, will try old methods");
         }
       }
 
