@@ -104,7 +104,10 @@ final class EdsLoadBalancer extends LoadBalancer {
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     Object lbConfig = resolvedAddresses.getLoadBalancingPolicyConfig();
-    checkNotNull(lbConfig, "missing EDS lb config");
+    if (lbConfig == null) {
+      handleNameResolutionError(Status.UNAVAILABLE.withDescription("Missing EDS lb config"));
+      return;
+    }
     EdsConfig newEdsConfig = (EdsConfig) lbConfig;
     if (logger.isLoggable(XdsLogLevel.INFO)) {
       logger.log(
