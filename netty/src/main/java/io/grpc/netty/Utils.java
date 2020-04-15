@@ -125,25 +125,36 @@ class Utils {
   public static ByteBufAllocator getByteBufAllocator(boolean forceHeapBuffer) {
     if (Boolean.parseBoolean(
             System.getProperty("io.grpc.netty.useCustomAllocator", "true"))) {
-      if (forceHeapBuffer || !PooledByteBufAllocator.defaultPreferDirect()) {
+      boolean defaultPreferDirect = PooledByteBufAllocator.defaultPreferDirect();
+      logger.log(
+          Level.FINE,
+          String.format(
+              "Using custom allocator: forceHeapBuffer=%s, defaultPreferDirect=%s",
+              forceHeapBuffer,
+              defaultPreferDirect));
+      if (forceHeapBuffer || !defaultPreferDirect) {
         return ByteBufAllocatorPreferHeapHolder.allocator;
       } else {
         return ByteBufAllocatorPreferDirectHolder.allocator;
       }
     } else {
+      logger.log(Level.FINE, "Using default allocator");
       return ByteBufAllocator.DEFAULT;
     }
   }
 
   private static ByteBufAllocator createByteBufAllocator(boolean preferDirect) {
     int maxOrder;
+    logger.log(Level.FINE, "Creating allocator, preferDirect=" + preferDirect);
     if (System.getProperty("io.netty.allocator.maxOrder") == null) {
       // See the implementation of PooledByteBufAllocator.  DEFAULT_MAX_ORDER in there is
       // 11, which makes chunk size to be 8192 << 11 = 16 MiB.  We want the chunk size to be
       // 2MiB, thus reducing the maxOrder to 8.
       maxOrder = 8;
+      logger.log(Level.FINE, "Forcing maxOrder=" + maxOrder);
     } else {
       maxOrder = PooledByteBufAllocator.defaultMaxOrder();
+      logger.log(Level.FINE, "Using default maxOrder=" + maxOrder);
     }
     return new PooledByteBufAllocator(
         preferDirect,
