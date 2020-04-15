@@ -62,13 +62,9 @@ public final class SdsProtocolNegotiators {
 
   private static final AsciiString SCHEME = AsciiString.of("https");
 
-  /**
-   * Returns a {@link ProtocolNegotiatorFactory} to be used on {@link NettyChannelBuilder}. Passing
-   * {@code null} for upstreamTlsContext will fall back to plaintext.
-   */
-  public static ProtocolNegotiatorFactory clientProtocolNegotiatorFactory(
-      @Nullable UpstreamTlsContext upstreamTlsContext) {
-    return new ClientSdsProtocolNegotiatorFactory(upstreamTlsContext);
+  /** Returns a {@link ProtocolNegotiatorFactory} to be used on {@link NettyChannelBuilder}. */
+  public static ProtocolNegotiatorFactory clientProtocolNegotiatorFactory() {
+    return new ClientSdsProtocolNegotiatorFactory();
   }
 
   /**
@@ -92,16 +88,9 @@ public final class SdsProtocolNegotiators {
   private static final class ClientSdsProtocolNegotiatorFactory
       implements InternalNettyChannelBuilder.ProtocolNegotiatorFactory {
 
-    private final UpstreamTlsContext upstreamTlsContext;
-
-    ClientSdsProtocolNegotiatorFactory(UpstreamTlsContext upstreamTlsContext) {
-      this.upstreamTlsContext = upstreamTlsContext;
-    }
-
     @Override
     public InternalProtocolNegotiator.ProtocolNegotiator buildProtocolNegotiator() {
-      final ClientSdsProtocolNegotiator negotiator =
-          new ClientSdsProtocolNegotiator(upstreamTlsContext);
+      final ClientSdsProtocolNegotiator negotiator = new ClientSdsProtocolNegotiator();
       final class LocalSdsNegotiator implements InternalProtocolNegotiator.ProtocolNegotiator {
 
         @Override
@@ -127,13 +116,6 @@ public final class SdsProtocolNegotiators {
   @VisibleForTesting
   static final class ClientSdsProtocolNegotiator implements ProtocolNegotiator {
 
-    // TODO (sanjaypujare) remove once we get this from CDS & don't need for testing
-    UpstreamTlsContext upstreamTlsContext;
-
-    ClientSdsProtocolNegotiator(UpstreamTlsContext upstreamTlsContext) {
-      this.upstreamTlsContext = upstreamTlsContext;
-    }
-
     @Override
     public AsciiString scheme() {
       return SCHEME;
@@ -144,9 +126,6 @@ public final class SdsProtocolNegotiators {
       // check if UpstreamTlsContext was passed via attributes
       UpstreamTlsContext localUpstreamTlsContext =
           grpcHandler.getEagAttributes().get(XdsAttributes.ATTR_UPSTREAM_TLS_CONTEXT);
-      if (localUpstreamTlsContext == null) {
-        localUpstreamTlsContext = upstreamTlsContext;
-      }
       if (isTlsContextEmpty(localUpstreamTlsContext)) {
         return InternalProtocolNegotiators.plaintext().newHandler(grpcHandler);
       }

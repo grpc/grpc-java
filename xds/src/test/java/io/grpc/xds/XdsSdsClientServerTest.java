@@ -27,9 +27,12 @@ import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_KEY_FI
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_PEM_FILE;
 import static org.junit.Assert.fail;
 
+import com.google.common.collect.ImmutableList;
 import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
-import io.grpc.Server;
+import io.grpc.Attributes;
+import io.grpc.EquivalentAddressGroup;
+import io.grpc.NameResolver;
 import io.grpc.StatusRuntimeException;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
@@ -41,8 +44,14 @@ import io.grpc.xds.internal.sds.SdsProtocolNegotiators;
 import io.grpc.xds.internal.sds.XdsChannelBuilder;
 import io.grpc.xds.internal.sds.XdsServerBuilder;
 import java.io.IOException;
+import java.net.Inet4Address;
+import java.net.InetSocketAddress;
 import java.net.ServerSocket;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import javax.net.ssl.SSLHandshakeException;
 import org.junit.Before;
 import org.junit.Rule;
@@ -66,8 +75,8 @@ public class XdsSdsClientServerTest {
   }
 
   @Test
-  public void plaintextClientServer() throws IOException {
-    Server unused = buildServerWithTlsContext(/* downstreamTlsContext= */ null);
+  public void plaintextClientServer() throws IOException, URISyntaxException {
+    buildServerWithTlsContext(/* downstreamTlsContext= */ null);
 
     SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
         getBlockingStub(/* upstreamTlsContext= */ null, /* overrideAuthority= */ null);
@@ -76,11 +85,11 @@ public class XdsSdsClientServerTest {
 
   /** TLS channel - no mTLS. */
   @Test
-  public void tlsClientServer_noClientAuthentication() throws IOException {
+  public void tlsClientServer_noClientAuthentication() throws IOException, URISyntaxException {
     DownstreamTlsContext downstreamTlsContext =
         CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(
             SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, null);
-    Server unused = buildServerWithTlsContext(downstreamTlsContext);
+    buildServerWithTlsContext(downstreamTlsContext);
 
     // for TLS, client only needs trustCa
     UpstreamTlsContext upstreamTlsContext =
@@ -94,7 +103,7 @@ public class XdsSdsClientServerTest {
 
   /** mTLS - client auth enabled. */
   @Test
-  public void mtlsClientServer_withClientAuthentication() throws IOException {
+  public void mtlsClientServer_withClientAuthentication() throws IOException, URISyntaxException {
     UpstreamTlsContext upstreamTlsContext =
         CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
             CLIENT_KEY_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
@@ -103,7 +112,8 @@ public class XdsSdsClientServerTest {
 
   /** mTLS - client auth enabled then update server certs to untrusted. */
   @Test
-  public void mtlsClientServer_changeServerContext_expectException() throws IOException {
+  public void mtlsClientServer_changeServerContext_expectException()
+      throws IOException, URISyntaxException {
     UpstreamTlsContext upstreamTlsContext =
         CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
             CLIENT_KEY_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
@@ -126,7 +136,7 @@ public class XdsSdsClientServerTest {
   }
 
   private XdsClient.ListenerWatcher performMtlsTestAndGetListenerWatcher(
-      UpstreamTlsContext upstreamTlsContext) throws IOException {
+      UpstreamTlsContext upstreamTlsContext) throws IOException, URISyntaxException {
     DownstreamTlsContext downstreamTlsContext =
         CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(
             SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, CA_PEM_FILE);
@@ -136,7 +146,7 @@ public class XdsSdsClientServerTest {
             port, /* downstreamTlsContext= */ downstreamTlsContext);
     SdsProtocolNegotiators.ServerSdsProtocolNegotiator serverSdsProtocolNegotiator =
         new SdsProtocolNegotiators.ServerSdsProtocolNegotiator(xdsClientWrapperForServerSds);
-    Server unused = getServer(port, serverSdsProtocolNegotiator);
+    buildServer(port, serverSdsProtocolNegotiator);
 
     XdsClient.ListenerWatcher listenerWatcher = xdsClientWrapperForServerSds.getListenerWatcher();
 
@@ -146,21 +156,21 @@ public class XdsSdsClientServerTest {
     return listenerWatcher;
   }
 
-  private Server buildServerWithTlsContext(DownstreamTlsContext downstreamTlsContext)
+  private void buildServerWithTlsContext(DownstreamTlsContext downstreamTlsContext)
       throws IOException {
     final XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
         XdsClientWrapperForServerSdsTest.createXdsClientWrapperForServerSds(
             port, /* downstreamTlsContext= */ downstreamTlsContext);
     SdsProtocolNegotiators.ServerSdsProtocolNegotiator serverSdsProtocolNegotiator =
         new SdsProtocolNegotiators.ServerSdsProtocolNegotiator(xdsClientWrapperForServerSds);
-    return getServer(port, serverSdsProtocolNegotiator);
+    buildServer(port, serverSdsProtocolNegotiator);
   }
 
-  private Server getServer(
+  private void buildServer(
       int port, SdsProtocolNegotiators.ServerSdsProtocolNegotiator serverSdsProtocolNegotiator)
       throws IOException {
     XdsServerBuilder builder = XdsServerBuilder.forPort(port).addService(new SimpleServiceImpl());
-    return cleanupRule.register(builder.buildServer(serverSdsProtocolNegotiator)).start();
+    cleanupRule.register(builder.buildServer(serverSdsProtocolNegotiator)).start();
   }
 
   private static int findFreePort() throws IOException {
@@ -181,13 +191,28 @@ public class XdsSdsClientServerTest {
   }
 
   private SimpleServiceGrpc.SimpleServiceBlockingStub getBlockingStub(
-      UpstreamTlsContext upstreamTlsContext, String overrideAuthority) {
-    XdsChannelBuilder builder =
-        XdsChannelBuilder.forTarget("localhost:" + port).tlsContext(upstreamTlsContext);
+      final UpstreamTlsContext upstreamTlsContext, String overrideAuthority)
+      throws URISyntaxException {
+    URI expectedUri = new URI("sdstest://localhost:" + port);
+    FakeNameResolverFactory fakeNameResolverFactory = new FakeNameResolverFactory.Builder(
+        expectedUri).build();
+    XdsChannelBuilder channelBuilder =
+        XdsChannelBuilder.forTarget("sdstest://localhost:" + port)
+            .nameResolverFactory(fakeNameResolverFactory);
     if (overrideAuthority != null) {
-      builder = builder.overrideAuthority(overrideAuthority);
+      channelBuilder = channelBuilder.overrideAuthority(overrideAuthority);
     }
-    return SimpleServiceGrpc.newBlockingStub(cleanupRule.register(builder.build()));
+    InetSocketAddress socketAddress =
+        new InetSocketAddress(Inet4Address.getLoopbackAddress(), port);
+    Attributes attrs =
+        (upstreamTlsContext != null)
+            ? Attributes.newBuilder()
+                .set(XdsAttributes.ATTR_UPSTREAM_TLS_CONTEXT, upstreamTlsContext)
+                .build()
+            : Attributes.EMPTY;
+    fakeNameResolverFactory.setServers(
+        ImmutableList.of(new EquivalentAddressGroup(socketAddress, attrs)));
+    return SimpleServiceGrpc.newBlockingStub(cleanupRule.register(channelBuilder.build()));
   }
 
   /** Say hello to server. */
@@ -208,6 +233,81 @@ public class XdsSdsClientServerTest {
               .build();
       responseObserver.onNext(response);
       responseObserver.onCompleted();
+    }
+  }
+
+  private static final class FakeNameResolverFactory extends NameResolver.Factory {
+    final URI expectedUri;
+    List<EquivalentAddressGroup> servers = ImmutableList.of();
+    final ArrayList<FakeNameResolver> resolvers = new ArrayList<>();
+
+    FakeNameResolverFactory(URI expectedUri) {
+      this.expectedUri = expectedUri;
+    }
+
+    void setServers(List<EquivalentAddressGroup> servers) {
+      this.servers = servers;
+    }
+
+    @Override
+    public NameResolver newNameResolver(final URI targetUri, NameResolver.Args args) {
+      if (!expectedUri.equals(targetUri)) {
+        return null;
+      }
+      FakeNameResolver resolver = new FakeNameResolver();
+      resolvers.add(resolver);
+      return resolver;
+    }
+
+    @Override
+    public String getDefaultScheme() {
+      return "sdstest";
+    }
+
+    final class FakeNameResolver extends NameResolver {
+      Listener2 listener;
+
+      @Override
+      public String getServiceAuthority() {
+        return expectedUri.getAuthority();
+      }
+
+      @Override
+      public void start(Listener2 listener) {
+        this.listener = listener;
+        resolved();
+      }
+
+      @Override
+      public void refresh() {
+        resolved();
+      }
+
+      void resolved() {
+        ResolutionResult.Builder builder = ResolutionResult.newBuilder().setAddresses(servers);
+        listener.onResult(builder.build());
+      }
+
+      @Override
+      public void shutdown() {
+      }
+
+      @Override
+      public String toString() {
+        return "FakeNameResolver";
+      }
+    }
+
+    static final class Builder {
+      final URI expectedUri;
+
+      Builder(URI expectedUri) {
+        this.expectedUri = expectedUri;
+      }
+
+      FakeNameResolverFactory build() {
+        return new FakeNameResolverFactory(expectedUri);
+      }
     }
   }
 }
