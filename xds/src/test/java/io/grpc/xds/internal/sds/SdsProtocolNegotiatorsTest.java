@@ -288,7 +288,8 @@ public class SdsProtocolNegotiatorsTest {
   public void serverSdsProtocolNegotiator_nullSyncContext_expectPlaintext() {
     InternalProtocolNegotiator.ProtocolNegotiator protocolNegotiator =
         SdsProtocolNegotiators.serverProtocolNegotiator(/* port= */ 7000, /* syncContext= */ null);
-    assertThat(protocolNegotiator.scheme().toString()).isEqualTo("http");
+    assertThat(protocolNegotiator.getClass().getSimpleName())
+        .isEqualTo("ServerPlaintextNegotiator");
   }
 
   private static final class FakeGrpcHttp2ConnectionHandler extends GrpcHttp2ConnectionHandler {
