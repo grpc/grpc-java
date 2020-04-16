@@ -16,7 +16,10 @@
 
 package io.grpc.netty;
 
+import io.grpc.ExperimentalApi;
+import java.io.IOException;
 import java.security.KeyStore;
+import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import javax.net.ssl.SSLEngine;
 
@@ -27,6 +30,7 @@ import javax.net.ssl.SSLEngine;
  * 2. provide custom peer verification check by inheriting |verifyPeerCertificate|
  * 3. change the trust CA certificate bundle by inheriting |getTrustedCerts|
  */
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/XXX")
 public abstract class TlsOptions {
   /**
    * VerificationAuthType contains set of verification levels users can choose to customize
@@ -69,16 +73,16 @@ public abstract class TlsOptions {
    * @param authType the key exchange algorithm used
    * @param engine the engine used for this connection. This parameter can be null, which indicates
    *     that implementations need not check the ssl parameters
-   * @throws Exception exception thrown when performing custom peer identity check
+   * @throws CertificateException exception thrown when performing custom peer identity check
    */
   abstract void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType,
-      SSLEngine engine) throws Exception;
+      SSLEngine engine) throws CertificateException;
 
   /**
    * sub-classes extend this function to perform trust certificate bundle reloading.
    * @return A KeyStore containing the trust certificate bundle that will be used for the following
    *     connections.
-   * @throws Exception exception thrown when performing trust certificate bundle reloading
+   * @throws IOException exception thrown when performing trust certificate bundle reloading
    */
-  abstract KeyStore getTrustedCerts() throws Exception;
+  abstract KeyStore getTrustedCerts() throws IOException;
 }

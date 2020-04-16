@@ -18,6 +18,7 @@ package io.grpc.netty;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import io.grpc.ExperimentalApi;
 import io.grpc.netty.TlsOptions.VerificationAuthType;
 import java.net.Socket;
 import java.security.KeyStore;
@@ -30,11 +31,12 @@ import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509ExtendedTrustManager;
 
 /**
- * ConfigurableX509TrustManager is a highly configurable class that allows users choose different
+ * ConfigurableX509TrustManager is an {@code X509TrustManager} that allows users to choose different
  * level of peer checking mechanisms, as well as some customized check. It could also be used to
  * reload trust certificate bundle client/server uses.
  */
-public class ConfigurableX509TrustManager extends X509ExtendedTrustManager {
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/XXXX")
+public final class ConfigurableX509TrustManager extends X509ExtendedTrustManager {
 
   private TlsOptions tlsOptions;
 
@@ -45,7 +47,7 @@ public class ConfigurableX509TrustManager extends X509ExtendedTrustManager {
   @Override
   public void checkClientTrusted(X509Certificate[] x509Certificates, String s, Socket socket)
       throws CertificateException {
-
+    checkTrusted(x509Certificates, s, null, false);
   }
 
   @Override
@@ -57,13 +59,13 @@ public class ConfigurableX509TrustManager extends X509ExtendedTrustManager {
   @Override
   public void checkClientTrusted(X509Certificate[] x509Certificates, String s)
       throws CertificateException {
-
+    checkTrusted(x509Certificates, s, null, false);
   }
 
   @Override
   public void checkServerTrusted(X509Certificate[] x509Certificates, String s, Socket socket)
       throws CertificateException {
-
+    checkTrusted(x509Certificates, s, null, true);
   }
 
   @Override
@@ -75,7 +77,7 @@ public class ConfigurableX509TrustManager extends X509ExtendedTrustManager {
   @Override
   public void checkServerTrusted(X509Certificate[] x509Certificates, String s)
       throws CertificateException {
-
+    checkTrusted(x509Certificates, s, null, true);
   }
 
   @Override
@@ -96,7 +98,7 @@ public class ConfigurableX509TrustManager extends X509ExtendedTrustManager {
       try {
         ks = this.tlsOptions.getTrustedCerts();
       } catch (Exception e) {
-        throw new CertificateException("Function getTrustedCerts fails, error: " + e.getMessage());
+        throw new CertificateException("Failed loading trusted certs", e);
       }
       X509ExtendedTrustManager delegateManager = null;
       try {
@@ -117,16 +119,15 @@ public class ConfigurableX509TrustManager extends X509ExtendedTrustManager {
               "Instance delegateX509TrustManager is null. Failed to initialize");
         }
       } catch (Exception e) {
-        throw new CertificateException("Failed to initialize delegateX509TrustManager, error: "
-            + e.getMessage());
+        throw new CertificateException("Failed to initialize delegateX509TrustManager", e);
       }
       if (isClient) {
         if (authType == VerificationAuthType.CertificateAndHostNameVerification
-            && (sslEngine == null || sslEngine.getSSLParameters() == null)) {
+            && sslEngine == null) {
           throw new CertificateException(
               "SSLEngine or SSLParameters is null. Couldn't check host name");
         }
-        if (sslEngine != null && sslEngine.getSSLParameters() != null) {
+        if (sslEngine != null) {
           String algorithm = authType == VerificationAuthType.CertificateAndHostNameVerification
               ? "HTTPS" : "";
           SSLParameters sslParams = sslEngine.getSSLParameters();
@@ -142,7 +143,7 @@ public class ConfigurableX509TrustManager extends X509ExtendedTrustManager {
     try {
       this.tlsOptions.verifyPeerCertificate(x509Certificates, s, sslEngine);
     } catch (Exception e) {
-      throw new CertificateException("Custom authorization check fails, error: " + e.getMessage());
+      throw new CertificateException("Custom authorization check fails", e);
     }
   }
 }

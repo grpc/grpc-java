@@ -355,14 +355,14 @@ public class AdvancedTlsTest {
 
     @Override
     void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType,
-        SSLEngine engine) throws Exception {
+        SSLEngine engine) throws CertificateException {
       if (!this.goodCheck) {
-        throw new Exception("Custom check fails");
+        throw new CertificateException("Custom check fails");
       }
     }
 
     @Override
-    KeyStore getTrustedCerts() throws Exception {
+    KeyStore getTrustedCerts() throws IOException {
       return this.ks;
     }
   }
