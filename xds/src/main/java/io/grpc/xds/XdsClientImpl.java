@@ -933,14 +933,12 @@ final class XdsClientImpl extends XdsClient {
     // For now we consider the whole list invalid if anything invalid for grpc is found.
     // TODO(zdapeng): Fix it if the decision is different from current implementation.
     // TODO(zdapeng): Add test for validation.
-    Set<String> pathMatches = new HashSet<>();
     for (int i = 0; i < routes.size(); i++) {
       EnvoyProtoData.Route route = routes.get(i);
-
-      if (route.getRouteAction() == null) {
+      RouteAction routeAction = route.getRouteAction();
+      if (routeAction == null) {
         return "Route action is not specified for one of the routes";
       }
-
       RouteMatch routeMatch = route.getRouteMatch();
       if (!routeMatch.isDefaultMatcher()) {
         String prefix = routeMatch.getPrefix();
@@ -954,10 +952,6 @@ final class XdsClientImpl extends XdsClient {
           if (!path.startsWith("/") || lastSlash == 0 || lastSlash == path.length() - 1) {
             return "Path route match must be in the format of '/service/method'";
           }
-          if (pathMatches.contains(path)) {
-            return "Duplicate path match found";
-          }
-          pathMatches.add(path);
         } else if (routeMatch.hasRegex()) {
           return "Regex route match not supported";
         }
@@ -967,8 +961,6 @@ final class XdsClientImpl extends XdsClient {
           return "The last route must be the default route";
         }
       }
-
-      RouteAction routeAction = route.getRouteAction();
       if (routeAction.getCluster().isEmpty() && routeAction.getWeightedCluster().isEmpty()) {
         return "Either cluster or weighted cluster route action must be provided";
       }
