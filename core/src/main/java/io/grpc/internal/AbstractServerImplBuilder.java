@@ -221,7 +221,7 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
   }
 
   @Override
-  public final Server build() {
+  public Server build() {
     ServerImpl server = new ServerImpl(
         this,
         buildTransportServers(getTracerFactories()),

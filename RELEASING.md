@@ -48,6 +48,7 @@ $ VERSION_FILES=(
   examples/example-hostname/pom.xml
   examples/example-kotlin/build.gradle
   examples/example-kotlin/android/helloworld/app/build.gradle
+  examples/example-servlet/build.gradle
   examples/example-tls/build.gradle
   examples/example-tls/pom.xml
   examples/example-xds/build.gradle

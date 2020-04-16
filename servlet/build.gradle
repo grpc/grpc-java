@@ -1,0 +1,44 @@
+description = "gRPC: Servlet"
+sourceCompatibility = 1.8
+targetCompatibility = 1.8
+
+dependencies {
+    compile project(':grpc-core')
+    compileOnly 'javax.servlet:javax.servlet-api:4.0.1',
+            libraries.javax_annotation // java 9, 10 needs it
+
+    testCompile project(':grpc-stub'),
+            project(':grpc-protobuf'),
+            project(':grpc-servlet'),
+            project(':grpc-netty'),
+            project(':grpc-testing'),
+            project(':grpc-auth'),
+            project(':grpc-interop-testing'),
+            project(':grpc-core').sourceSets.test.output,
+            project(':grpc-netty').sourceSets.test.output,
+            libraries.junit,
+            'io.undertow:undertow-servlet:2.0.22.Final',
+            'org.apache.tomcat.embed:tomcat-embed-core:9.0.20'
+}
+
+// Jetty only works with Java 11
+if (JavaVersion.current().isJava11Compatible()) {
+    compileTestJava {
+        sourceCompatibility = "11"
+        targetCompatibility = "11"
+    }
+    
+    def jettyVersion = '10.0.0-alpha0'
+    dependencies {
+        testCompile "org.eclipse.jetty:jetty-servlet:${jettyVersion}",
+            "org.eclipse.jetty.http2:http2-server:${jettyVersion}"
+    }
+} else {
+    sourceSets {
+        test {
+            java {
+                exclude '**/Jetty*Test.java'
+            }
+        }
+    }
+}

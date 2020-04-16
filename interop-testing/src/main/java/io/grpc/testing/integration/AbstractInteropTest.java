@@ -217,10 +217,8 @@ public abstract class AbstractInteropTest {
 
   protected static final Empty EMPTY = Empty.getDefaultInstance();
 
-  private void startServer() {
-    ServerBuilder<?> builder = getServerBuilder();
+  private void configBuilder(@Nullable ServerBuilder<?> builder) {
     if (builder == null) {
-      server = null;
       return;
     }
     testServiceExecutor = Executors.newScheduledThreadPool(2);
@@ -252,6 +250,13 @@ public abstract class AbstractInteropTest {
     }
     if (metricsExpected()) {
       assertThat(builder).isInstanceOf(AbstractServerImplBuilder.class);
+    }
+  }
+
+  protected void startServer(@Nullable ServerBuilder<?> builder) {
+    if (builder == null) {
+      server = null;
+      return;
     }
     try {
       server = builder.build().start();
@@ -305,7 +310,9 @@ public abstract class AbstractInteropTest {
    */
   @Before
   public void setUp() {
-    startServer();
+    ServerBuilder<?> builder = getServerBuilder();
+    configBuilder(builder);
+    startServer(builder);
     channel = createChannel();
 
     blockingStub =
