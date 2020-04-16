@@ -16,7 +16,6 @@
 
 package io.grpc.xds;
 
-import static com.google.api.client.util.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
@@ -121,12 +120,9 @@ final class EdsLoadBalancer extends LoadBalancer {
     }
     boolean firstUpdate = false;
     if (clusterName == null) {
-      clusterName = newEdsConfig.clusterName;
       firstUpdate = true;
-    } else {
-      checkArgument(
-          clusterName.equals(newEdsConfig.clusterName), "cluster name should not change");
     }
+    clusterName = newEdsConfig.clusterName;
     if (xdsClientPool == null) {
       Attributes attributes = resolvedAddresses.getAttributes();
       xdsClientPool = attributes.get(XdsAttributes.XDS_CLIENT_POOL);
