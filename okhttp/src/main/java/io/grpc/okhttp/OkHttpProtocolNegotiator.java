@@ -252,6 +252,10 @@ class OkHttpProtocolNegotiator {
         boolean alpnEnabled = false;
         if (GET_APPLICATION_PROTOCOL != null) {
           try {
+            // If calling SSLSocket.getApplicationProtocol() throws UnsupportedOperationException
+            // exception, the underlying provider does not implement operations for enabling
+            // ALPN in the fashion of SSLParameters.setApplicationProtocols(). Fall back to
+            // use old hidden methods.
             GET_APPLICATION_PROTOCOL.invoke(sslSocket);
             SET_APPLICATION_PROTOCOLS.invoke(sslParams, (Object) protocolNames);
             alpnEnabled = true;
