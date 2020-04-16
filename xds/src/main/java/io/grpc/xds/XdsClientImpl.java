@@ -916,8 +916,7 @@ final class XdsClientImpl extends XdsClient {
     if (!enablePathMatching) {
       EnvoyProtoData.Route route = routes.get(routes.size() - 1);
       RouteMatch routeMatch = route.getRouteMatch();
-      if (!routeMatch.getPath().isEmpty() || !routeMatch.getPrefix().isEmpty()
-          || routeMatch.hasRegex()) {
+      if (!routeMatch.isDefaultMatcher()) {
         return "The last route must be the default route";
       }
       if (route.getRouteAction() == null) {
@@ -934,50 +933,34 @@ final class XdsClientImpl extends XdsClient {
     // For now we consider the whole list invalid if anything invalid for grpc is found.
     // TODO(zdapeng): Fix it if the decision is different from current implementation.
     // TODO(zdapeng): Add test for validation.
-    Set<String> prefixMatches = new HashSet<>();
-    Set<String> pathMatches = new HashSet<>();
     for (int i = 0; i < routes.size(); i++) {
       EnvoyProtoData.Route route = routes.get(i);
-
-      if (route.getRouteAction() == null) {
+      RouteAction routeAction = route.getRouteAction();
+      if (routeAction == null) {
         return "Route action is not specified for one of the routes";
       }
-
       RouteMatch routeMatch = route.getRouteMatch();
-      String prefix = routeMatch.getPrefix();
-      String path = routeMatch.getPath();
-      if (!prefix.isEmpty()) {
-        if (!prefix.startsWith("/") || !prefix.endsWith("/") || prefix.length() < 3) {
-          return "Prefix route match must be in the format of '/service/'";
-        }
-        if (prefixMatches.contains(prefix)) {
-          return "Duplicate prefix match found";
-        }
-        prefixMatches.add(prefix);
-      } else if (!path.isEmpty()) {
-        int lastSlash = path.lastIndexOf('/');
-        if (!path.startsWith("/") || lastSlash == 0 || lastSlash ==  path.length() - 1) {
-          return "Path route match must be in the format of '/service/method'";
-        }
-        if (pathMatches.contains(path)) {
-          return "Duplicate path match found";
-        }
-        pathMatches.add(path);
-      } else if (routeMatch.hasRegex()) {
-        return "Regex route match not supported";
-      } else { // Default route match
-        if (i != routes.size() - 1) {
-          return "Default route found but is not the last route in the route list";
+      if (!routeMatch.isDefaultMatcher()) {
+        String prefix = routeMatch.getPrefix();
+        String path = routeMatch.getPath();
+        if (!prefix.isEmpty()) {
+          if (!prefix.startsWith("/") || !prefix.endsWith("/") || prefix.length() < 3) {
+            return "Prefix route match must be in the format of '/service/'";
+          }
+        } else if (!path.isEmpty()) {
+          int lastSlash = path.lastIndexOf('/');
+          if (!path.startsWith("/") || lastSlash == 0 || lastSlash == path.length() - 1) {
+            return "Path route match must be in the format of '/service/method'";
+          }
+        } else if (routeMatch.hasRegex()) {
+          return "Regex route match not supported";
         }
       }
-
       if (i == routes.size() - 1) {
-        if (!prefix.isEmpty() || !path.isEmpty()) {
+        if (!routeMatch.isDefaultMatcher()) {
           return "The last route must be the default route";
         }
       }
-
-      RouteAction routeAction = route.getRouteAction();
       if (routeAction.getCluster().isEmpty() && routeAction.getWeightedCluster().isEmpty()) {
         return "Either cluster or weighted cluster route action must be provided";
       }

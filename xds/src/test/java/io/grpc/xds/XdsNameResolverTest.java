@@ -376,8 +376,9 @@ public class XdsNameResolverTest {
                         ImmutableMap.of(
                             "cluster-bar.googleapis.com", 30, "cluster-bar2.googleapis.com", 70)))
                 .build(),
-            // default, routed to cluster
+            // default with prefix = "/", routed to cluster
             Route.newBuilder()
+                .setMatch(RouteMatch.newBuilder().setPrefix("/"))
                 .setRoute(buildClusterRoute("cluster-hello.googleapis.com"))
                 .build());
     HttpConnectionManager httpConnectionManager =
@@ -475,6 +476,104 @@ public class XdsNameResolverTest {
         rawConfigValues,
         ImmutableMap.of(
             "cluster-foo.googleapis.com", 20, "cluster-bar.googleapis.com", 80));
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void resolve_resourceUpdated_allowDuplicateMatchers() {
+    XdsClientImpl.enablePathMatching = true;
+    xdsNameResolver.start(mockListener);
+    assertThat(responseObservers).hasSize(1);
+    StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
+    // Simulate receiving another LDS response that tells client to do RDS.
+    String routeConfigName = "route-foo.googleapis.com";
+    responseObserver.onNext(
+        buildLdsResponseForRdsResource("1", AUTHORITY, routeConfigName, "0001"));
+
+    // Client sent an RDS request for resource "route-foo.googleapis.com" (Omitted in this test).
+    List<Route> protoRoutes =
+        ImmutableList.of(
+            // path match, routed to cluster
+            Route.newBuilder()
+                .setMatch(buildPathMatch("fooSvc", "hello"))
+                .setRoute(buildClusterRoute("cluster-hello.googleapis.com"))
+                .build(),
+            // prefix match, routed to cluster
+            Route.newBuilder()
+                .setMatch(buildPrefixMatch("fooSvc"))
+                .setRoute(buildClusterRoute("cluster-foo.googleapis.com"))
+                .build(),
+            // duplicate path match, routed to weighted clusters
+            Route.newBuilder()
+                .setMatch(buildPathMatch("fooSvc", "hello"))
+                .setRoute(buildWeightedClusterRoute(ImmutableMap.of(
+                    "cluster-hello.googleapis.com", 40,  "cluster-hello2.googleapis.com", 60)))
+                .build(),
+            // duplicage prefix match, routed to weighted clusters
+            Route.newBuilder()
+                .setMatch(buildPrefixMatch("fooSvc"))
+                .setRoute(
+                    buildWeightedClusterRoute(
+                        ImmutableMap.of(
+                            "cluster-bar.googleapis.com", 30, "cluster-bar2.googleapis.com", 70)))
+                .build(),
+            // default, routed to cluster
+            Route.newBuilder()
+                .setRoute(buildClusterRoute("cluster-hello.googleapis.com"))
+                .build());
+    List<Any> routeConfigs = ImmutableList.of(
+        Any.pack(
+            buildRouteConfiguration(
+                routeConfigName,
+                ImmutableList.of(buildVirtualHostForRoutes(AUTHORITY, protoRoutes)))));
+    responseObserver.onNext(
+        buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0000"));
+
+    ArgumentCaptor<ResolutionResult> resolutionResultCaptor = ArgumentCaptor.forClass(null);
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    ResolutionResult result = resolutionResultCaptor.getValue();
+    assertThat(result.getAddresses()).isEmpty();
+    Map<String, ?> serviceConfig = (Map<String, ?>) result.getServiceConfig().getConfig();
+
+    List<Map<String, ?>> rawLbConfigs =
+        (List<Map<String, ?>>) serviceConfig.get("loadBalancingConfig");
+    Map<String, ?> lbConfig = Iterables.getOnlyElement(rawLbConfigs);
+    assertThat(lbConfig.keySet()).containsExactly("xds_routing_experimental");
+    Map<String, ?> rawConfigValues = (Map<String, ?>) lbConfig.get("xds_routing_experimental");
+    assertThat(rawConfigValues.keySet()).containsExactly("action", "route");
+    Map<String, Map<String, ?>> actions =
+        (Map<String, Map<String, ?>>) rawConfigValues.get("action");
+    List<Map<String, ?>> routes = (List<Map<String, ?>>) rawConfigValues.get("route");
+    assertThat(routes).hasSize(5);
+    for (Map<String, ?> route : routes) {
+      assertThat(route.keySet()).containsExactly("methodName", "action");
+    }
+    assertThat((Map<String, ?>) routes.get(0).get("methodName"))
+        .containsExactly("service", "fooSvc", "method", "hello");
+    String action0 = (String) routes.get(0).get("action");
+    assertThat((Map<String, ?>) routes.get(1).get("methodName"))
+        .containsExactly("service", "fooSvc", "method", "");
+    String action1 = (String) routes.get(1).get("action");
+    assertThat((Map<String, ?>) routes.get(2).get("methodName"))
+        .containsExactly("service", "fooSvc", "method", "hello");
+    String action2 = (String) routes.get(2).get("action");
+    assertThat((Map<String, ?>) routes.get(3).get("methodName"))
+        .containsExactly("service", "fooSvc", "method", "");
+    String action3 = (String) routes.get(3).get("action");
+    assertThat((Map<String, ?>) routes.get(4).get("methodName"))
+        .containsExactly("service", "", "method", "");
+    String action4 = (String) routes.get(4).get("action");
+    assertCdsPolicy(actions.get(action0), "cluster-hello.googleapis.com");
+    assertCdsPolicy(actions.get(action1), "cluster-foo.googleapis.com");
+    assertWeightedTargetPolicy(
+        actions.get(action2),
+        ImmutableMap.of(
+            "cluster-hello.googleapis.com", 40,  "cluster-hello2.googleapis.com", 60));
+    assertWeightedTargetPolicy(
+        actions.get(action3),
+        ImmutableMap.of(
+            "cluster-bar.googleapis.com", 30, "cluster-bar2.googleapis.com", 70));
+    assertThat(action4).isEqualTo(action0);
   }
 
   /** Asserts that the given action contains a single CDS policy with the given cluster name. */
