@@ -46,8 +46,6 @@ $ VERSION_FILES=(
   examples/example-jwt-auth/pom.xml
   examples/example-hostname/build.gradle
   examples/example-hostname/pom.xml
-  examples/example-kotlin/build.gradle
-  examples/example-kotlin/android/helloworld/app/build.gradle
   examples/example-tls/build.gradle
   examples/example-tls/pom.xml
   examples/example-xds/build.gradle
