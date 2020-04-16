@@ -28,7 +28,6 @@ install:
   - pushd examples/example-hostname && ../gradlew build && popd
   - pushd examples/example-hostname && mvn verify && popd
   - pushd examples/example-tls && ../gradlew clean build && popd
-  - pushd examples/example-kotlin && ../gradlew build && popd
   - pushd examples/example-xds && ../gradlew build && popd
 
 before_script:
