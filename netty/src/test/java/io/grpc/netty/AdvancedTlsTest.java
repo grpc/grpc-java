@@ -39,6 +39,7 @@ import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslProvider;
 import java.io.File;
 import java.io.IOException;
+import java.net.Socket;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
@@ -54,6 +55,7 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.TrustManager;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Assume;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -179,6 +181,51 @@ public class AdvancedTlsTest {
     MoreExecutors.shutdownAndAwaitTermination(executor, 5, TimeUnit.SECONDS);
   }
 
+  /**
+   * Tests the basic creation and verification logic of {@code ConfigurableX509TrustManager}.
+   */
+  @Test
+  public void basicConfigurableX509TrustManagerTest() throws Exception {
+    // Expect the verification function to fail if choosing to verify certificates, while the
+    // certificates provided are null.
+    TlsOptions nullCertOptions = new SimpleTlsOptions(
+        VerificationAuthType.CertificateAndHostNameVerification, null, true, true);
+    ConfigurableX509TrustManager nullCertManager = new ConfigurableX509TrustManager(
+        nullCertOptions);
+    try {
+      nullCertManager.checkClientTrusted(null, "");
+      Assert.fail("An exception should haven been raised already.");;
+    } catch (CertificateException e) {
+      assertEquals(
+          "Want certificate verification but got null or empty certificates", e.getMessage());
+    }
+    // Expect the verification function to fail if choosing to verify hostname, while the
+    // SslEngine provided is null.
+    TlsOptions nullSslEngineOptions = new SimpleTlsOptions(
+        VerificationAuthType.CertificateAndHostNameVerification, null, true, true);
+    ConfigurableX509TrustManager nullSslEngineManager = new ConfigurableX509TrustManager(
+        nullSslEngineOptions);
+    try {
+      nullSslEngineManager.checkServerTrusted(new X509Certificate[1], "");
+      Assert.fail("An exception should haven been raised already.");
+    } catch (CertificateException e) {
+      assertEquals(
+          "SSLEngine or SSLParameters is null. Couldn't check host name", e.getMessage());
+    }
+    // Expect to fail if the reloading returns an IO error.
+    TlsOptions badReloadingOptions = new SimpleTlsOptions(
+        VerificationAuthType.CertificateAndHostNameVerification, null, true, false);
+    ConfigurableX509TrustManager badReloadingManager = new ConfigurableX509TrustManager(
+        badReloadingOptions);
+    try {
+      Socket socket = new Socket();
+      badReloadingManager.checkServerTrusted(new X509Certificate[1], "", socket);
+      Assert.fail("An exception should haven been raised already.");
+    } catch (CertificateException e) {
+      assertEquals(
+          "Failed loading trusted certs", e.getMessage());
+    }
+  }
 
   /**
    * Tests that a client and a server configured using different ConfigurableX509TrustManager(s)
@@ -205,7 +252,7 @@ public class AdvancedTlsTest {
     }
     // Client side overrides the authority name and does both certificate and hostname check.
     TlsOptions checkAllOptions = new SimpleTlsOptions(
-        VerificationAuthType.CertificateAndHostNameVerification, ks, true);
+        VerificationAuthType.CertificateAndHostNameVerification, ks, true, true);
     // This is the basic mTLS integration test and should work.
     makeRpcCall(checkAllOptions, clientCertChainFile, clientPrivateKeyFile, true, false);
     // Client side doesn't overrides the authority name but does certificate and hostname check.
@@ -214,7 +261,7 @@ public class AdvancedTlsTest {
     makeRpcCall(checkAllOptions, clientCertChainFile, clientPrivateKeyFile, false, true);
     // Client side doesn't override the authority name and does certificate check only.
     TlsOptions checkCertOptions = new SimpleTlsOptions(
-        VerificationAuthType.CertificateVerification, ks, true);
+        VerificationAuthType.CertificateVerification, ks, true, true);
     // This should work because we doesn't check the authority name against the name on the server
     // cert.
     makeRpcCall(checkCertOptions, clientCertChainFile, clientPrivateKeyFile, false, false);
@@ -228,13 +275,13 @@ public class AdvancedTlsTest {
     // Client side doesn't override the authority name or check anything, and server sends a bad
     // certificate.
     TlsOptions noCheckOptions = new SimpleTlsOptions(
-        VerificationAuthType.SkipAllVerification, ks, true);
+        VerificationAuthType.SkipAllVerification, ks, true, true);
     // This should work because we don't check any thing.
     makeRpcCall(noCheckOptions, clientCertChainFile, clientPrivateKeyFile, false, false);
     // All previous working scenarios are expected to fail if we use a custom check that always
     // fails.
     TlsOptions noCheckOptionsAlwayFail = new SimpleTlsOptions(
-        VerificationAuthType.SkipAllVerification, ks, false);
+        VerificationAuthType.SkipAllVerification, ks, false, true);
     makeRpcCall(noCheckOptionsAlwayFail, clientCertChainFile, clientPrivateKeyFile,
         false, true);
   }
@@ -264,7 +311,7 @@ public class AdvancedTlsTest {
       i++;
     }
     TlsOptions checkAllOptions = new SimpleTlsOptions(
-        VerificationAuthType.CertificateAndHostNameVerification, ks, true);
+        VerificationAuthType.CertificateAndHostNameVerification, ks, true, true);
     // This is the basic mTLS integration test and should work.
     makeRpcCall(checkAllOptions, clientCertChainFile, clientPrivateKeyFile, true, false);
 
@@ -280,7 +327,7 @@ public class AdvancedTlsTest {
     }
     // Client side will send bad certificate.
     checkAllOptions = new SimpleTlsOptions(
-        VerificationAuthType.CertificateAndHostNameVerification, ksBad, true);
+        VerificationAuthType.CertificateAndHostNameVerification, ksBad, true, true);
     // This is expected to fail because client sends a bad certificate.
     makeRpcCall(checkAllOptions, badClientCertChainFile, badClientPrivateKeyFile, true, true);
     // Create & start a server that doesn't check anything.
@@ -345,12 +392,14 @@ public class AdvancedTlsTest {
 
     private KeyStore ks;
     private boolean goodCheck;
+    private boolean goodReload;
 
     public SimpleTlsOptions(VerificationAuthType verificationAuthType,
-        KeyStore ks, boolean goodCheck) {
+        KeyStore ks, boolean goodCheck, boolean goodReload) {
       super(verificationAuthType);
       this.ks = ks;
       this.goodCheck = goodCheck;
+      this.goodReload = goodReload;
     }
 
     @Override
@@ -363,6 +412,9 @@ public class AdvancedTlsTest {
 
     @Override
     KeyStore getTrustedCerts() throws IOException {
+      if (!this.goodReload) {
+        throw new IOException("Reload fails");
+      }
       return this.ks;
     }
   }
@@ -388,7 +440,7 @@ public class AdvancedTlsTest {
       i++;
     }
     TlsOptions options = new SimpleTlsOptions(
-        authType, ks, customCheckResult);
+        authType, ks, customCheckResult, true);
     TrustManager tm = new ConfigurableX509TrustManager(options);
     sslContextBuilder.trustManager(tm)
         .clientAuth(ClientAuth.REQUIRE);

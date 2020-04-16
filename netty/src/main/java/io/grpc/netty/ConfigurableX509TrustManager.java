@@ -86,7 +86,7 @@ public final class ConfigurableX509TrustManager extends X509ExtendedTrustManager
   }
 
   private void checkTrusted(X509Certificate[] x509Certificates, String s, SSLEngine sslEngine,
-      boolean isClient) throws CertificateException {
+      boolean checkingServer) throws CertificateException {
     VerificationAuthType authType = this.tlsOptions.getVerificationAuthType();
     if (authType == VerificationAuthType.CertificateAndHostNameVerification
         || authType == VerificationAuthType.CertificateVerification) {
@@ -121,7 +121,7 @@ public final class ConfigurableX509TrustManager extends X509ExtendedTrustManager
       } catch (Exception e) {
         throw new CertificateException("Failed to initialize delegateX509TrustManager", e);
       }
-      if (isClient) {
+      if (checkingServer) {
         if (authType == VerificationAuthType.CertificateAndHostNameVerification
             && sslEngine == null) {
           throw new CertificateException(
