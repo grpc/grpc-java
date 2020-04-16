@@ -166,12 +166,11 @@ class OkHttpProtocolNegotiator {
       Method sslSocketsIsSupportedSocketMethod = null;
       Method sslSocketsSetUseSessionTicketsMethod = null;
       try {
-        Class<?> sslParameters = Class.forName("javax.net.ssl.SSLParameters");
+        Class<?> sslParameters = SSLParameters.class;
         setApplicationProtocolsMethod =
             sslParameters.getMethod("setApplicationProtocols", String[].class);
         getApplicationProtocolsMethod = sslParameters.getMethod("getApplicationProtocols");
-        getApplicationProtocolMethod =
-            Class.forName("javax.net.ssl.SSLSocket").getMethod("getApplicationProtocol");
+        getApplicationProtocolMethod = SSLSocket.class.getMethod("getApplicationProtocol");
         Class<?> sslSockets = Class.forName("android.net.ssl.SSLSockets");
         sslSocketsIsSupportedSocketMethod =
             sslSockets.getMethod("isSupportedSocket", SSLSocket.class);
@@ -192,8 +191,7 @@ class OkHttpProtocolNegotiator {
       Method setServerNamesMethod = null;
       Constructor<?> sniHostNameConstructor = null;
       try {
-        setServerNamesMethod =
-            Class.forName("javax.net.ssl.SSLParameters").getMethod("setServerNames", List.class);
+        setServerNamesMethod = SSLParameters.class.getMethod("setServerNames", List.class);
         sniHostNameConstructor =
             Class.forName("javax.net.ssl.SNIHostName").getConstructor(String.class);
       } catch (ClassNotFoundException e) {
