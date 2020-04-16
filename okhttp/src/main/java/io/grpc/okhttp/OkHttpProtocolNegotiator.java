@@ -257,8 +257,13 @@ class OkHttpProtocolNegotiator {
             GET_APPLICATION_PROTOCOL.invoke(sslSocket);
             SET_APPLICATION_PROTOCOLS.invoke(sslParams, (Object) protocolNames);
             alpnEnabled = true;
-          } catch (UnsupportedOperationException e) {
-            logger.log(Level.FINER, "setApplicationProtocol unsupported, will try old methods");
+          } catch (InvocationTargetException e) {
+            Throwable targetException = e.getTargetException();
+            if (targetException instanceof UnsupportedOperationException) {
+              logger.log(Level.FINER, "setApplicationProtocol unsupported, will try old methods");
+            } else {
+              throw e;
+            }
           }
         }
         sslSocket.setSSLParameters(sslParams);
@@ -300,11 +305,14 @@ class OkHttpProtocolNegotiator {
         } catch (IllegalAccessException e) {
           throw new RuntimeException(e);
         } catch (InvocationTargetException e) {
-          throw new RuntimeException(e);
-        } catch (UnsupportedOperationException e) {
-          logger.log(
-              Level.FINER,
-              "Socket unsupported for getApplicationProtocol, will try old methods");
+          Throwable targetException = e.getTargetException();
+          if (targetException instanceof UnsupportedOperationException) {
+            logger.log(
+                Level.FINER,
+                "Socket unsupported for getApplicationProtocol, will try old methods");
+          } else {
+            throw new RuntimeException(e);
+          }
         }
       }
 
