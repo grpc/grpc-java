@@ -226,14 +226,16 @@ final class XdsNameResolver extends NameResolver {
     for (Route route : routesUpdate) {
       String service = "";
       String method = "";
-      String prefix = route.getRouteMatch().getPrefix();
-      String path = route.getRouteMatch().getPath();
-      if (!prefix.isEmpty()) {
-        service = prefix.substring(1, prefix.length() - 1);
-      } else if (!path.isEmpty()) {
-        int splitIndex = path.lastIndexOf('/');
-        service = path.substring(1, splitIndex);
-        method = path.substring(splitIndex + 1);
+      if (!route.getRouteMatch().isDefaultMatcher()) {
+        String prefix = route.getRouteMatch().getPrefix();
+        String path = route.getRouteMatch().getPath();
+        if (!prefix.isEmpty()) {
+          service = prefix.substring(1, prefix.length() - 1);
+        } else if (!path.isEmpty()) {
+          int splitIndex = path.lastIndexOf('/');
+          service = path.substring(1, splitIndex);
+          method = path.substring(splitIndex + 1);
+        }
       }
       Map<String, String> methodName = ImmutableMap.of("service", service, "method", method);
       String actionName;
