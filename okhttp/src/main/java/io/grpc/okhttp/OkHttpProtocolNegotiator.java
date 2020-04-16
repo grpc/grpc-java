@@ -233,8 +233,9 @@ class OkHttpProtocolNegotiator {
     @Override
     protected void configureTlsExtensions(
         SSLSocket sslSocket, String hostname, List<Protocol> protocols) {
+      String[] protocolNames = protocolIds(protocols);
+      SSLParameters sslParams = sslSocket.getSSLParameters();
       try {
-        SSLParameters sslParams = sslSocket.getSSLParameters();
         // Enable SNI and session tickets.
         if (hostname != null) {
           if (SSL_SOCKETS_IS_SUPPORTED_SOCKET != null
@@ -250,15 +251,21 @@ class OkHttpProtocolNegotiator {
             SET_HOSTNAME.invokeOptionalWithoutCheckedException(sslSocket, hostname);
           }
         }
-        String[] protocolNames = protocolIds(protocols);
-        if (SET_APPLICATION_PROTOCOLS != null) {
-          SET_APPLICATION_PROTOCOLS.invoke(sslParams, (Object) protocolNames);
+        boolean alpnEnabled = false;
+        if (GET_APPLICATION_PROTOCOL != null) {
+          try {
+            GET_APPLICATION_PROTOCOL.invoke(sslSocket);
+            SET_APPLICATION_PROTOCOLS.invoke(sslParams, (Object) protocolNames);
+            alpnEnabled = true;
+          } catch (UnsupportedOperationException e) {
+            logger.log(Level.FINER, "setApplicationProtocol unsupported, will try old methods");
+          }
         }
         sslSocket.setSSLParameters(sslParams);
         // Check application protocols are configured correctly. If not, configure again with
         // old methods.
         // Workaround for Conscrypt bug: https://github.com/google/conscrypt/issues/832
-        if (GET_APPLICATION_PROTOCOLS != null) {
+        if (alpnEnabled && GET_APPLICATION_PROTOCOLS != null) {
           String[] configuredProtocols =
               (String[]) GET_APPLICATION_PROTOCOLS.invoke(sslSocket.getSSLParameters());
           if (Arrays.equals(protocolNames, configuredProtocols)) {
