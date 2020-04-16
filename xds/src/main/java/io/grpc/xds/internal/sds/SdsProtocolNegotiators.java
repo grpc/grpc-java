@@ -60,7 +60,7 @@ public final class SdsProtocolNegotiators {
 
   private static final Logger logger = Logger.getLogger(SdsProtocolNegotiators.class.getName());
 
-  private static final AsciiString SCHEME = AsciiString.of("https");
+  private static final AsciiString SCHEME = AsciiString.of("http");
 
   /** Returns a {@link ProtocolNegotiatorFactory} to be used on {@link NettyChannelBuilder}. */
   public static ProtocolNegotiatorFactory clientProtocolNegotiatorFactory() {

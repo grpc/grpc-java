@@ -33,6 +33,7 @@ import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
+import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
@@ -43,6 +44,7 @@ import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import io.grpc.xds.internal.sds.SdsProtocolNegotiators;
 import io.grpc.xds.internal.sds.XdsChannelBuilder;
 import io.grpc.xds.internal.sds.XdsServerBuilder;
+import io.netty.handler.ssl.NotSslRecordException;
 import java.io.IOException;
 import java.net.Inet4Address;
 import java.net.InetSocketAddress;
@@ -108,6 +110,44 @@ public class XdsSdsClientServerTest {
         CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
             CLIENT_KEY_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
     XdsClient.ListenerWatcher unused = performMtlsTestAndGetListenerWatcher(upstreamTlsContext);
+  }
+
+  @Test
+  public void tlsServer_plaintextClient_expectException() throws IOException, URISyntaxException {
+    DownstreamTlsContext downstreamTlsContext =
+        CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(
+            SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, null);
+    buildServerWithTlsContext(downstreamTlsContext);
+
+    SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
+        getBlockingStub(/* upstreamTlsContext= */ null, /* overrideAuthority= */ null);
+    try {
+      unaryRpc("buddy", blockingStub);
+      fail("exception expected");
+    } catch (StatusRuntimeException sre) {
+      assertThat(sre.getStatus().getCode()).isEqualTo(Status.UNAVAILABLE.getCode());
+      assertThat(sre.getStatus().getDescription()).contains("Network closed");
+    }
+  }
+
+  @Test
+  public void plaintextServer_tlsClient_expectException() throws IOException, URISyntaxException {
+    buildServerWithTlsContext(/* downstreamTlsContext= */ null);
+
+    // for TLS, client only needs trustCa
+    UpstreamTlsContext upstreamTlsContext =
+        CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
+            /* privateKey= */ null, /* certChain= */ null, CA_PEM_FILE);
+
+    SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
+        getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ "foo.test.google.fr");
+    try {
+      unaryRpc("buddy", blockingStub);
+      fail("exception expected");
+    } catch (StatusRuntimeException sre) {
+      assertThat(sre).hasCauseThat().isInstanceOf(NotSslRecordException.class);
+      assertThat(sre).hasCauseThat().hasMessageThat().contains("not an SSL/TLS record");
+    }
   }
 
   /** mTLS - client auth enabled then update server certs to untrusted. */

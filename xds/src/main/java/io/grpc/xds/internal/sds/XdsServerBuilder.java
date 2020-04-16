@@ -159,6 +159,7 @@ public final class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
               panicMode = true;
             }
           });
+    // TODO(sanjaypujare): move this to start() after creating an XdsServer wrapper
     InternalProtocolNegotiator.ProtocolNegotiator serverProtocolNegotiator =
         SdsProtocolNegotiators.serverProtocolNegotiator(port, syncContext);
     return buildServer(serverProtocolNegotiator);

@@ -35,6 +35,7 @@ import io.netty.channel.Channel;
 import io.netty.channel.epoll.Epoll;
 import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.util.concurrent.DefaultThreadFactory;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -43,7 +44,6 @@ import java.net.UnknownHostException;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
-import java.util.NoSuchElementException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
@@ -84,7 +84,7 @@ public final class XdsClientWrapperForServerSds {
     Bootstrapper.BootstrapInfo bootstrapInfo = bootstrapper.readBootstrap();
     final List<Bootstrapper.ServerInfo> serverList = bootstrapInfo.getServers();
     if (serverList.isEmpty()) {
-      throw new NoSuchElementException("No management server provided by bootstrap");
+      throw new FileNotFoundException("No management server provided by bootstrap");
     }
     final Node node = bootstrapInfo.getNode();
     ScheduledExecutorService timeService = SharedResourceHolder.get(timeServiceResource);
