@@ -400,9 +400,9 @@ public class RouteGuideClientTest {
     assertEquals(
         Arrays.asList(
             Point.newBuilder().setLatitude(0).setLongitude(0).build(),
-            Point.newBuilder().setLatitude(0).setLongitude(1).build(),
-            Point.newBuilder().setLatitude(1).setLongitude(0).build(),
-            Point.newBuilder().setLatitude(1).setLongitude(1).build()
+            Point.newBuilder().setLatitude(0).setLongitude(10_000_000).build(),
+            Point.newBuilder().setLatitude(10_000_000).setLongitude(0).build(),
+            Point.newBuilder().setLatitude(10_000_000).setLongitude(10_000_000).build()
         ),
         locationsDelivered);
 
