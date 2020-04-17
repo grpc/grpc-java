@@ -16,7 +16,6 @@
 
 package io.grpc.xds;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
@@ -57,13 +56,12 @@ final class EdsLoadBalancer extends LoadBalancer {
 
   private final InternalLogId logId;
   private final XdsLogger logger;
-  private final ResourceUpdateCallback resourceUpdateCallback;
   private final GracefulSwitchLoadBalancer switchingLoadBalancer;
   private final LoadBalancerRegistry lbRegistry;
   private final LocalityStoreFactory localityStoreFactory;
   private final Bootstrapper bootstrapper;
   private final XdsChannelFactory channelFactory;
-  private final Helper edsLbHelper;
+  private final Helper helper;
 
   @Nullable
   private ObjectPool<XdsClient> xdsClientPool;
@@ -72,12 +70,11 @@ final class EdsLoadBalancer extends LoadBalancer {
   @Nullable
   private String clusterName;
   @Nullable
-  private EdsConfig config;
+  private String edsServiceName;
 
-  EdsLoadBalancer(Helper edsLbHelper, ResourceUpdateCallback resourceUpdateCallback) {
+  EdsLoadBalancer(Helper helper) {
     this(
-        edsLbHelper,
-        resourceUpdateCallback,
+        helper,
         LoadBalancerRegistry.getDefaultRegistry(),
         LocalityStoreFactory.getInstance(),
         Bootstrapper.getInstance(),
@@ -86,20 +83,18 @@ final class EdsLoadBalancer extends LoadBalancer {
 
   @VisibleForTesting
   EdsLoadBalancer(
-      Helper edsLbHelper,
-      ResourceUpdateCallback resourceUpdateCallback,
+      Helper helper,
       LoadBalancerRegistry lbRegistry,
       LocalityStoreFactory localityStoreFactory,
       Bootstrapper bootstrapper,
       XdsChannelFactory channelFactory) {
-    this.edsLbHelper = checkNotNull(edsLbHelper, "edsLbHelper");
-    this.resourceUpdateCallback = checkNotNull(resourceUpdateCallback, "resourceUpdateCallback");
+    this.helper = checkNotNull(helper, "helper");
     this.lbRegistry = checkNotNull(lbRegistry, "lbRegistry");
     this.localityStoreFactory = checkNotNull(localityStoreFactory, "localityStoreFactory");
     this.bootstrapper = checkNotNull(bootstrapper, "bootstrapper");
     this.channelFactory = checkNotNull(channelFactory, "channelFactory");
-    this.switchingLoadBalancer = new GracefulSwitchLoadBalancer(edsLbHelper);
-    logId = InternalLogId.allocate("eds-lb", edsLbHelper.getAuthority());
+    this.switchingLoadBalancer = new GracefulSwitchLoadBalancer(helper);
+    logId = InternalLogId.allocate("eds-lb", helper.getAuthority());
     logger = XdsLogger.withLogId(logId);
     logger.log(XdsLogLevel.INFO, "Created");
   }
@@ -108,7 +103,10 @@ final class EdsLoadBalancer extends LoadBalancer {
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     Object lbConfig = resolvedAddresses.getLoadBalancingPolicyConfig();
-    checkNotNull(lbConfig, "missing EDS lb config");
+    if (lbConfig == null) {
+      handleNameResolutionError(Status.UNAVAILABLE.withDescription("Missing EDS lb config"));
+      return;
+    }
     EdsConfig newEdsConfig = (EdsConfig) lbConfig;
     if (logger.isLoggable(XdsLogLevel.INFO)) {
       logger.log(
@@ -120,34 +118,20 @@ final class EdsLoadBalancer extends LoadBalancer {
           newEdsConfig.edsServiceName,
           newEdsConfig.lrsServerName != null);
     }
+    boolean firstUpdate = false;
     if (clusterName == null) {
-      clusterName = newEdsConfig.clusterName;
-    } else {
-      checkArgument(
-          clusterName.equals(newEdsConfig.clusterName),
-          "cluster name should not change");
+      firstUpdate = true;
     }
+    clusterName = newEdsConfig.clusterName;
     if (xdsClientPool == null) {
-      // Init xdsClientPool and xdsClient.
-      // There are two usecases:
-      // 1. EDS-only:
-      //    The name resolver resolves a ResolvedAddresses with an XdsConfig. Use the bootstrap
-      //    information to create a channel.
-      // 2. Non EDS-only:
-      //    XDS_CLIENT_POOL attribute is available from ResolvedAddresses either from
-      //    XdsNameResolver or CDS policy.
-      //
-      // We assume XdsConfig switching happens only within one usecase, and there is no switching
-      // between different usecases.
-
       Attributes attributes = resolvedAddresses.getAttributes();
       xdsClientPool = attributes.get(XdsAttributes.XDS_CLIENT_POOL);
-      if (xdsClientPool == null) { // This is the EDS-only usecase.
+      if (xdsClientPool == null) {
         final BootstrapInfo bootstrapInfo;
         try {
           bootstrapInfo = bootstrapper.readBootstrap();
         } catch (Exception e) {
-          edsLbHelper.updateBalancingState(
+          helper.updateBalancingState(
               TRANSIENT_FAILURE,
               new ErrorPicker(
                   Status.UNAVAILABLE.withDescription("Failed to bootstrap").withCause(e)));
@@ -157,7 +141,7 @@ final class EdsLoadBalancer extends LoadBalancer {
         final List<ServerInfo> serverList = bootstrapInfo.getServers();
         final Node node = bootstrapInfo.getNode();
         if (serverList.isEmpty()) {
-          edsLbHelper.updateBalancingState(
+          helper.updateBalancingState(
               TRANSIENT_FAILURE,
               new ErrorPicker(
                   Status.UNAVAILABLE
@@ -169,12 +153,12 @@ final class EdsLoadBalancer extends LoadBalancer {
           XdsClient createXdsClient() {
             return
                 new XdsClientImpl(
-                    edsLbHelper.getAuthority(),
+                    helper.getAuthority(),
                     serverList,
                     channelFactory,
                     node,
-                    edsLbHelper.getSynchronizationContext(),
-                    edsLbHelper.getScheduledExecutorService(),
+                    helper.getSynchronizationContext(),
+                    helper.getScheduledExecutorService(),
                     new ExponentialBackoffPolicy.Provider(),
                     GrpcUtil.STOPWATCH_SUPPLIER);
           }
@@ -188,14 +172,13 @@ final class EdsLoadBalancer extends LoadBalancer {
 
     // Note: childPolicy change will be handled in LocalityStore, to be implemented.
     // If edsServiceName in XdsConfig is changed, do a graceful switch.
-    if (config == null
-        || !Objects.equals(newEdsConfig.edsServiceName, config.edsServiceName)) {
+    if (firstUpdate || !Objects.equals(newEdsConfig.edsServiceName, edsServiceName)) {
       LoadBalancer.Factory clusterEndpointsLoadBalancerFactory =
           new ClusterEndpointsBalancerFactory(newEdsConfig.edsServiceName);
       switchingLoadBalancer.switchTo(clusterEndpointsLoadBalancerFactory);
     }
     switchingLoadBalancer.handleResolvedAddresses(resolvedAddresses);
-    this.config = newEdsConfig;
+    this.edsServiceName = newEdsConfig.edsServiceName;
   }
 
   @Override
@@ -267,7 +250,7 @@ final class EdsLoadBalancer extends LoadBalancer {
         resourceName = clusterServiceName != null ? clusterServiceName : clusterName;
         localityStore =
             localityStoreFactory.newLocalityStore(logId, helper, lbRegistry, loadStatsStore);
-        endpointWatcher = new EndpointWatcherImpl(localityStore);
+        endpointWatcher = new EndpointWatcherImpl();
         logger.log(
             XdsLogLevel.INFO,
             "Start endpoint watcher on {0} with xDS client {1}",
@@ -308,9 +291,7 @@ final class EdsLoadBalancer extends LoadBalancer {
 
       @Override
       public void handleNameResolutionError(Status error) {
-        // Go into TRANSIENT_FAILURE if we have not yet received any endpoint update. Otherwise,
-        // we keep running with the data we had previously.
-        if (!endpointWatcher.firstEndpointUpdateReceived) {
+        if (!endpointWatcher.endpointsReceived) {
           helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
         }
       }
@@ -339,88 +320,59 @@ final class EdsLoadBalancer extends LoadBalancer {
             resourceName,
             xdsClient);
       }
-    }
-  }
 
-  /**
-   * Callbacks for the EDS-only-with-fallback usecase. Being deprecated.
-   */
-  interface ResourceUpdateCallback {
+      private final class EndpointWatcherImpl implements EndpointWatcher {
+        boolean endpointsReceived;
 
-    void onWorking();
+        @Override
+        public void onEndpointChanged(EndpointUpdate endpointUpdate) {
+          logger.log(XdsLogLevel.DEBUG, "Received endpoint update: {0}", endpointUpdate);
+          if (logger.isLoggable(XdsLogLevel.INFO)) {
+            logger.log(
+                XdsLogLevel.INFO,
+                "Received endpoint update from xDS client {0}: cluster_name={1}, {2} localities, "
+                    + "{3} drop categories",
+                xdsClient,
+                endpointUpdate.getClusterName(),
+                endpointUpdate.getLocalityLbEndpointsMap().size(),
+                endpointUpdate.getDropPolicies().size());
+          }
+          endpointsReceived = true;
+          List<DropOverload> dropOverloads = endpointUpdate.getDropPolicies();
+          ImmutableList.Builder<DropOverload> dropOverloadsBuilder = ImmutableList.builder();
+          for (DropOverload dropOverload : dropOverloads) {
+            dropOverloadsBuilder.add(dropOverload);
+            if (dropOverload.getDropsPerMillion() == 1_000_000) {
+              break;
+            }
+          }
+          localityStore.updateDropPercentage(dropOverloadsBuilder.build());
 
-    void onError();
+          ImmutableMap.Builder<Locality, LocalityLbEndpoints> localityEndpointsMapping =
+              new ImmutableMap.Builder<>();
+          for (Map.Entry<Locality, LocalityLbEndpoints> entry
+              : endpointUpdate.getLocalityLbEndpointsMap().entrySet()) {
+            int localityWeight = entry.getValue().getLocalityWeight();
 
-    void onAllDrop();
-  }
-
-  private final class EndpointWatcherImpl implements EndpointWatcher {
-
-    final LocalityStore localityStore;
-    boolean firstEndpointUpdateReceived;
-
-    EndpointWatcherImpl(LocalityStore localityStore) {
-      this.localityStore = localityStore;
-    }
-
-    @Override
-    public void onEndpointChanged(EndpointUpdate endpointUpdate) {
-      logger.log(XdsLogLevel.DEBUG, "Received endpoint update: {0}", endpointUpdate);
-      if (logger.isLoggable(XdsLogLevel.INFO)) {
-        logger.log(
-            XdsLogLevel.INFO,
-            "Received endpoint update from xDS client {0}: cluster_name={1}, {2} localities, "
-            + "{3} drop categories",
-            xdsClient,
-            endpointUpdate.getClusterName(),
-            endpointUpdate.getLocalityLbEndpointsMap().size(),
-            endpointUpdate.getDropPolicies().size());
-      }
-
-      if (!firstEndpointUpdateReceived) {
-        firstEndpointUpdateReceived = true;
-        resourceUpdateCallback.onWorking();
-      }
-
-      List<DropOverload> dropOverloads = endpointUpdate.getDropPolicies();
-      ImmutableList.Builder<DropOverload> dropOverloadsBuilder = ImmutableList.builder();
-      for (DropOverload dropOverload : dropOverloads) {
-        dropOverloadsBuilder.add(dropOverload);
-        if (dropOverload.getDropsPerMillion() == 1_000_000) {
-          resourceUpdateCallback.onAllDrop();
-          break;
+            if (localityWeight != 0) {
+              localityEndpointsMapping.put(entry.getKey(), entry.getValue());
+            }
+          }
+          localityStore.updateLocalityStore(localityEndpointsMapping.build());
         }
-      }
-      localityStore.updateDropPercentage(dropOverloadsBuilder.build());
 
-      ImmutableMap.Builder<Locality, LocalityLbEndpoints> localityEndpointsMapping =
-          new ImmutableMap.Builder<>();
-      for (Map.Entry<Locality, LocalityLbEndpoints> entry
-          : endpointUpdate.getLocalityLbEndpointsMap().entrySet()) {
-        int localityWeight = entry.getValue().getLocalityWeight();
-
-        if (localityWeight != 0) {
-          localityEndpointsMapping.put(entry.getKey(), entry.getValue());
+        @Override
+        public void onError(Status error) {
+          logger.log(
+              XdsLogLevel.WARNING,
+              "Received error from xDS client {0}: {1}: {2}",
+              xdsClient,
+              error.getCode(),
+              error.getDescription());
+          if (!endpointsReceived) {
+            helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
+          }
         }
-      }
-
-      localityStore.updateLocalityStore(localityEndpointsMapping.build());
-    }
-
-    @Override
-    public void onError(Status error) {
-      logger.log(
-          XdsLogLevel.WARNING,
-          "Received error from xDS client {0}: {1}: {2}",
-          xdsClient,
-          error.getCode(),
-          error.getDescription());
-      resourceUpdateCallback.onError();
-      // If we get an error before getting any valid result, we should put the channel in
-      // TRANSIENT_FAILURE; if they get an error after getting a valid result, we keep using the
-      // previous channel state.
-      if (!firstEndpointUpdateReceived) {
-        edsLbHelper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
       }
     }
   }

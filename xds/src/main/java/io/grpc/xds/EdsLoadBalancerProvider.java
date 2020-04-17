@@ -20,13 +20,20 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
+import com.google.common.collect.ImmutableMap;
 import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancerProvider;
+import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver.ConfigOrError;
+import io.grpc.Status;
+import io.grpc.internal.JsonUtil;
+import io.grpc.internal.ServiceConfigUtil;
+import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
-import io.grpc.xds.EdsLoadBalancer.ResourceUpdateCallback;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import javax.annotation.Nullable;
 
@@ -55,24 +62,47 @@ public class EdsLoadBalancerProvider extends LoadBalancerProvider {
 
   @Override
   public LoadBalancer newLoadBalancer(Helper helper) {
-    return new EdsLoadBalancer(
-        helper,
-        new ResourceUpdateCallback() {
-          @Override
-          public void onWorking() {}
-
-          @Override
-          public void onError() {}
-
-          @Override
-          public void onAllDrop() {}
-        });
+    return new EdsLoadBalancer(helper);
   }
 
   @Override
   public ConfigOrError parseLoadBalancingPolicyConfig(
       Map<String, ?> rawLoadBalancingPolicyConfig) {
-    throw new UnsupportedOperationException();
+    LoadBalancerRegistry registry = LoadBalancerRegistry.getDefaultRegistry();
+    try {
+      String cluster = JsonUtil.getString(rawLoadBalancingPolicyConfig, "cluster");
+      if (cluster == null) {
+        return ConfigOrError.fromError(Status.INTERNAL.withDescription("Cluster name required"));
+      }
+      String edsServiceName = JsonUtil.getString(rawLoadBalancingPolicyConfig, "edsServiceName");
+      String lrsServerName =
+          JsonUtil.getString(rawLoadBalancingPolicyConfig, "lrsLoadReportingServerName");
+
+      // TODO(chengyuanzhang): figure out locality_picking_policy parsing and its default value.
+
+      LbConfig roundRobinConfig = new LbConfig("round_robin", ImmutableMap.<String, Object>of());
+      List<LbConfig> endpointPickingPolicy =
+          ServiceConfigUtil
+              .unwrapLoadBalancingConfigList(
+                  JsonUtil.getListOfObjects(
+                      rawLoadBalancingPolicyConfig, "endpointPickingPolicy"));
+      if (endpointPickingPolicy == null || endpointPickingPolicy.isEmpty()) {
+        endpointPickingPolicy = Collections.singletonList(roundRobinConfig);
+      }
+      ConfigOrError endpointPickingConfigOrError =
+          ServiceConfigUtil.selectLbPolicyFromList(endpointPickingPolicy, registry);
+      if (endpointPickingConfigOrError.getError() != null) {
+        return endpointPickingConfigOrError;
+      }
+      PolicySelection endpointPickingSelection =
+          (PolicySelection) endpointPickingConfigOrError.getConfig();
+      return ConfigOrError.fromConfig(
+          new EdsConfig(cluster, edsServiceName, lrsServerName, endpointPickingSelection));
+    } catch (RuntimeException e) {
+      return ConfigOrError.fromError(
+          Status.fromThrowable(e).withDescription(
+              "Failed to parse EDS LB config: " + rawLoadBalancingPolicyConfig));
+    }
   }
 
   static final class EdsConfig {
