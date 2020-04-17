@@ -33,6 +33,9 @@ import com.google.common.util.concurrent.SettableFuture;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
@@ -301,6 +304,35 @@ public class ContextTest {
   }
 
   @Test
+  public void removeListenersFromContextAndChildContext() {
+    class SetContextCancellationListener implements Context.CancellationListener {
+      private final List<Context> observedContexts;
+
+      SetContextCancellationListener() {
+        this.observedContexts = Collections.synchronizedList(new ArrayList<Context>());
+      }
+
+      @Override
+      public void cancelled(Context context) {
+        observedContexts.add(context);
+      }
+    }
+
+    Context.CancellableContext base = Context.current().withCancellation();
+    Context child = base.withValue(PET, "tiger");
+    Context childOfChild = base.withValue(PET, "lion");
+    final SetContextCancellationListener listener = new SetContextCancellationListener();
+    base.addListener(listener, MoreExecutors.directExecutor());
+    child.addListener(listener, MoreExecutors.directExecutor());
+    childOfChild.addListener(listener, MoreExecutors.directExecutor());
+    base.removeListener(listener);
+    childOfChild.removeListener(listener);
+    base.cancel(null);
+    assertEquals(1, listener.observedContexts.size());
+    assertSame(child, listener.observedContexts.get(0));
+  }
+
+  @Test
   public void exceptionOfExecutorDoesntThrow() {
     final AtomicReference<Throwable> loggedThrowable = new AtomicReference<>();
     Handler logHandler = new Handler() {
@@ -404,7 +436,6 @@ public class ContextTest {
     assertSame("fish", FOOD.get());
     assertFalse(attached.isCancelled());
     assertNull(attached.cancellationCause());
-    assertTrue(attached.canBeCancelled());
     assertTrue(attached.isCurrent());
     assertTrue(base.isCurrent());
 
@@ -892,7 +923,6 @@ public class ContextTest {
   @Test
   public void cancellableAncestorTest() {
     Context c = Context.current();
-    assertFalse(c.canBeCancelled());
     assertNull(cancellableAncestor(c));
 
     Context.CancellableContext withCancellation = c.withCancellation();
