@@ -22,7 +22,6 @@ import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
-import com.google.common.collect.Iterables;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.LoadBalancer.Helper;
@@ -111,8 +110,8 @@ public final class LbPolicyConfiguration {
     /** Creates ChildLoadBalancingPolicy. */
     @SuppressWarnings("unchecked")
     public static ChildLoadBalancingPolicy create(
-        String childPolicyConfigTargetFieldName,
-        List<Map<String, ?>> childPolicies) {
+        String childPolicyConfigTargetFieldName, List<Map<String, ?>> childPolicies)
+        throws InvalidChildPolicyConfigException {
       Map<String, Object> effectiveChildPolicy = null;
       LoadBalancerProvider effectiveLbProvider = null;
       List<String> policyTried = new ArrayList<>();
@@ -122,7 +121,12 @@ public final class LbPolicyConfiguration {
         if (childPolicy.isEmpty()) {
           continue;
         }
-        String policyName = Iterables.getOnlyElement(childPolicy.keySet());
+        if (childPolicy.size() != 1) {
+          throw
+              new InvalidChildPolicyConfigException(
+                  "childPolicy should have exactly one loadbalancing policy");
+        }
+        String policyName = childPolicy.keySet().iterator().next();
         LoadBalancerProvider provider = lbRegistry.getProvider(policyName);
         if (provider != null) {
           effectiveLbProvider = provider;
@@ -131,12 +135,12 @@ public final class LbPolicyConfiguration {
         }
         policyTried.add(policyName);
       }
-      checkState(
-          effectiveChildPolicy != null,
-          "no valid childPolicy found, policy tried: %s", policyTried);
-      checkArgument(
-          effectiveChildPolicy.size() == 1,
-          "childPolicy should have exactly one loadbalancing policy");
+      if (effectiveChildPolicy == null) {
+        throw
+            new InvalidChildPolicyConfigException(
+                String.format("no valid childPolicy found, policy tried: %s", policyTried));
+      }
+
       return
           new ChildLoadBalancingPolicy(
               childPolicyConfigTargetFieldName,
@@ -342,6 +346,16 @@ public final class LbPolicyConfiguration {
           .add("object", childPolicyWrapper)
           .add("refCnt", refCnt.get())
           .toString();
+    }
+  }
+
+  /** Exception thrown when attempting to parse child policy encountered parsing issue. */
+  public static final class InvalidChildPolicyConfigException extends Exception {
+
+    private static final long serialVersionUID = 0L;
+
+    public InvalidChildPolicyConfigException(String message) {
+      super(message);
     }
   }
 }

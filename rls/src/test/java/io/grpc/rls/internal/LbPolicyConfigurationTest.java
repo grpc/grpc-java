@@ -19,11 +19,16 @@ package io.grpc.rls.internal;
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.LoadBalancerProvider;
+import io.grpc.LoadBalancerRegistry;
 import io.grpc.rls.internal.LbPolicyConfiguration.ChildLoadBalancingPolicy;
 import io.grpc.rls.internal.LbPolicyConfiguration.ChildPolicyWrapper;
+import io.grpc.rls.internal.LbPolicyConfiguration.InvalidChildPolicyConfigException;
+import java.util.Map;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -67,5 +72,38 @@ public class LbPolicyConfigurationTest {
     assertThat(childLbPolicy.getEffectiveChildPolicy("target"))
         .containsExactly("foo", "bar", "targetFieldName", "target");
     assertThat(childLbPolicy.getEffectiveLbProvider()).isEqualTo(mockProvider);
+  }
+
+  @Test
+  public void childLoadBalancingPolicy_noPolicyProvided() {
+    LoadBalancerProvider mockProvider = mock(LoadBalancerProvider.class);
+    when(mockProvider.getPolicyName()).thenReturn("rls");
+    when(mockProvider.isAvailable()).thenReturn(true);
+
+    LoadBalancerRegistry.getDefaultRegistry().register(mockProvider);
+    try {
+      ChildLoadBalancingPolicy.create(
+          "targetFieldName",
+          ImmutableList.<Map<String, ?>>of(
+              ImmutableMap.<String, Object>of(
+                  "rls", ImmutableMap.of(), "rls2", ImmutableMap.of())));
+      fail("parsing exception expected");
+    } catch (InvalidChildPolicyConfigException e) {
+      assertThat(e).hasMessageThat()
+          .contains("childPolicy should have exactly one loadbalancing policy");
+    } finally {
+      LoadBalancerRegistry.getDefaultRegistry().deregister(mockProvider);
+    }
+  }
+
+  @Test
+  public void childLoadBalancingPolicy_tooManyChildPolicies() {
+    try {
+      ChildLoadBalancingPolicy
+          .create("targetFieldName", ImmutableList.<Map<String, ?>>of());
+      fail("parsing exception expected");
+    } catch (InvalidChildPolicyConfigException e) {
+      assertThat(e).hasMessageThat().contains("no valid childPolicy found");
+    }
   }
 }
