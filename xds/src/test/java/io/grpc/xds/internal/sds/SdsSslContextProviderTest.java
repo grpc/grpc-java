@@ -79,7 +79,8 @@ public class SdsSslContextProviderTest {
 
     return server
         ? SdsSslContextProvider.getProviderForServer(
-            CommonTlsContextTestsUtil.buildDownstreamTlsContext(commonTlsContext),
+            CommonTlsContextTestsUtil.buildDownstreamTlsContext(
+                commonTlsContext, /* requireClientCert= */ false),
             node,
             MoreExecutors.directExecutor(),
             MoreExecutors.directExecutor())

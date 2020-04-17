@@ -274,7 +274,8 @@ public class SecretVolumeSslContextProviderTest {
     try {
       SecretVolumeSslContextProvider.getProviderForServer(
           CommonTlsContextTestsUtil.buildDownstreamTlsContext(
-              CommonTlsContextTestsUtil.getCommonTlsContext(tlsCert, /* certContext= */ null)));
+              CommonTlsContextTestsUtil.getCommonTlsContext(tlsCert, /* certContext= */ null),
+              /* requireClientCert= */ false));
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
       assertThat(expected).hasMessageThat().isEqualTo("filename expected");
@@ -295,7 +296,8 @@ public class SecretVolumeSslContextProviderTest {
     try {
       SecretVolumeSslContextProvider.getProviderForServer(
           CommonTlsContextTestsUtil.buildDownstreamTlsContext(
-              CommonTlsContextTestsUtil.getCommonTlsContext(tlsCert, certContext)));
+              CommonTlsContextTestsUtil.getCommonTlsContext(tlsCert, certContext),
+              /* requireClientCert= */ false));
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
       assertThat(expected.getMessage()).isEqualTo("filename expected");
@@ -368,7 +370,10 @@ public class SecretVolumeSslContextProviderTest {
     return server
         ? SecretVolumeSslContextProvider.getProviderForServer(
             CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(
-                privateKeyFilename, certChainFilename, trustedCaFilename))
+                privateKeyFilename,
+                certChainFilename,
+                trustedCaFilename,
+                /* requireClientCert= */ false))
         : SecretVolumeSslContextProvider.getProviderForClient(
             CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
                 privateKeyFilename, certChainFilename, trustedCaFilename));
