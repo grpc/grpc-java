@@ -29,10 +29,8 @@ import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
-import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.ObjectPool;
 import io.grpc.rls.internal.RlsProtoData.RouteLookupConfig;
-import io.grpc.rls.internal.RlsProtoData.RouteLookupRequest;
 import java.io.Closeable;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -94,18 +92,17 @@ public final class LbPolicyConfiguration {
 
     private final Map<String, Object> effectiveRawChildPolicy;
     private final LoadBalancerProvider effectiveLbProvider;
-    private final String childPolicyConfigTargetFieldName;
-    private final Map<RouteLookupRequest, BackoffPolicy> pendingRequests = new HashMap<>();
+    private final String targetFieldName;
 
     @VisibleForTesting
     ChildLoadBalancingPolicy(
-        String childPolicyConfigTargetFieldName,
+        String targetFieldName,
         Map<String, Object> effectiveRawChildPolicy,
         LoadBalancerProvider effectiveLbProvider) {
       checkArgument(
-          childPolicyConfigTargetFieldName != null && !childPolicyConfigTargetFieldName.isEmpty(),
-          "childPolicyConfigTargetFieldName cannot be empty or null");
-      this.childPolicyConfigTargetFieldName = childPolicyConfigTargetFieldName;
+          targetFieldName != null && !targetFieldName.isEmpty(),
+          "targetFieldName cannot be empty or null");
+      this.targetFieldName = targetFieldName;
       this.effectiveRawChildPolicy =
           checkNotNull(effectiveRawChildPolicy, "effectiveRawChildPolicy");
       this.effectiveLbProvider = checkNotNull(effectiveLbProvider, "effectiveLbProvider");
@@ -150,27 +147,13 @@ public final class LbPolicyConfiguration {
     /** Creates a child load balancer config for given target from elected raw child policy. */
     public Map<String, ?> getEffectiveChildPolicy(String target) {
       Map<String, Object> childPolicy = new HashMap<>(effectiveRawChildPolicy);
-      childPolicy.put(childPolicyConfigTargetFieldName, target);
+      childPolicy.put(targetFieldName, target);
       return childPolicy;
     }
 
     /** Returns the elected child {@link LoadBalancerProvider}. */
     public LoadBalancerProvider getEffectiveLbProvider() {
       return effectiveLbProvider;
-    }
-
-    void addPendingRequest(RouteLookupRequest request, BackoffPolicy backoffPolicy) {
-      checkNotNull(request, "request");
-      checkNotNull(backoffPolicy, "backoffPolicy");
-      BackoffPolicy existing = pendingRequests.put(request, backoffPolicy);
-      checkState(
-          existing == null,
-          "This is a bug, there should be at most one outstanding pending request");
-    }
-
-    void removePendingRequest(RouteLookupRequest request) {
-      BackoffPolicy policy = pendingRequests.remove(request);
-      checkState(policy != null, "This is a bug, untracked pending request found");
     }
 
     @Override
@@ -184,19 +167,12 @@ public final class LbPolicyConfiguration {
       ChildLoadBalancingPolicy that = (ChildLoadBalancingPolicy) o;
       return Objects.equals(effectiveRawChildPolicy, that.effectiveRawChildPolicy)
           && Objects.equals(effectiveLbProvider, that.effectiveLbProvider)
-          && Objects.equals(childPolicyConfigTargetFieldName, that.childPolicyConfigTargetFieldName)
-          && Objects.equals(pendingRequests, that.pendingRequests);
+          && Objects.equals(targetFieldName, that.targetFieldName);
     }
 
     @Override
     public int hashCode() {
-      return
-          Objects
-              .hash(
-                  effectiveRawChildPolicy,
-                  effectiveLbProvider,
-                  childPolicyConfigTargetFieldName,
-                  pendingRequests);
+      return Objects.hash(effectiveRawChildPolicy, effectiveLbProvider, targetFieldName);
     }
 
     @Override
@@ -204,8 +180,7 @@ public final class LbPolicyConfiguration {
       return MoreObjects.toStringHelper(this)
           .add("effectiveRawChildPolicy", effectiveRawChildPolicy)
           .add("effectiveLbProvider", effectiveLbProvider)
-          .add("childPolicyConfigTargetFieldName", childPolicyConfigTargetFieldName)
-          .add("pendingRequests", pendingRequests)
+          .add("childPolicyConfigTargetFieldName", targetFieldName)
           .toString();
     }
   }
