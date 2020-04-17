@@ -43,7 +43,6 @@ import java.net.UnknownHostException;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
-import java.util.NoSuchElementException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
@@ -73,6 +72,18 @@ public final class XdsClientWrapperForServerSds {
   private final XdsClient.ListenerWatcher listenerWatcher;
 
   /**
+   * Thrown when no suitable management server was found in the bootstrap file.
+   */
+  public static final class ManagementServerNotFoundException extends Exception {
+
+    private static final long serialVersionUID = 1;
+
+    public ManagementServerNotFoundException(String msg) {
+      super(msg);
+    }
+  }
+
+  /**
    * Factory method for creating a {@link XdsClientWrapperForServerSds}.
    *
    * @param port server's port for which listener config is needed.
@@ -80,11 +91,12 @@ public final class XdsClientWrapperForServerSds {
    * @param syncContext {@link SynchronizationContext} needed by {@link XdsClient}.
    */
   public static XdsClientWrapperForServerSds newInstance(
-      int port, Bootstrapper bootstrapper, SynchronizationContext syncContext) throws IOException {
+      int port, Bootstrapper bootstrapper, SynchronizationContext syncContext)
+      throws IOException, ManagementServerNotFoundException {
     Bootstrapper.BootstrapInfo bootstrapInfo = bootstrapper.readBootstrap();
     final List<Bootstrapper.ServerInfo> serverList = bootstrapInfo.getServers();
     if (serverList.isEmpty()) {
-      throw new NoSuchElementException("No management server provided by bootstrap");
+      throw new ManagementServerNotFoundException("No management server provided by bootstrap");
     }
     final Node node = bootstrapInfo.getNode();
     ScheduledExecutorService timeService = SharedResourceHolder.get(timeServiceResource);

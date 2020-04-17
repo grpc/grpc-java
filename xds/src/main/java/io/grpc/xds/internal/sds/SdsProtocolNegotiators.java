@@ -34,6 +34,7 @@ import io.grpc.netty.ProtocolNegotiationEvent;
 import io.grpc.xds.Bootstrapper;
 import io.grpc.xds.XdsAttributes;
 import io.grpc.xds.XdsClientWrapperForServerSds;
+import io.grpc.xds.XdsClientWrapperForServerSds.ManagementServerNotFoundException;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerAdapter;
 import io.netty.channel.ChannelHandlerContext;
@@ -60,7 +61,7 @@ public final class SdsProtocolNegotiators {
 
   private static final Logger logger = Logger.getLogger(SdsProtocolNegotiators.class.getName());
 
-  private static final AsciiString SCHEME = AsciiString.of("https");
+  private static final AsciiString SCHEME = AsciiString.of("http");
 
   /** Returns a {@link ProtocolNegotiatorFactory} to be used on {@link NettyChannelBuilder}. */
   public static ProtocolNegotiatorFactory clientProtocolNegotiatorFactory() {
@@ -75,13 +76,14 @@ public final class SdsProtocolNegotiators {
    */
   public static ProtocolNegotiator serverProtocolNegotiator(
       int port, SynchronizationContext syncContext) {
-    XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
-        ServerSdsProtocolNegotiator.getXdsClientWrapperForServerSds(port, syncContext);
-    if (xdsClientWrapperForServerSds == null) {
+    XdsClientWrapperForServerSds xdsClientWrapperForServerSds;
+    try {
+      xdsClientWrapperForServerSds = XdsClientWrapperForServerSds.newInstance(
+          port, Bootstrapper.getInstance(), syncContext);
+      return new ServerSdsProtocolNegotiator(xdsClientWrapperForServerSds);
+    } catch (IOException | ManagementServerNotFoundException e) {
       logger.log(Level.INFO, "Fallback to plaintext for server at port {0}", port);
       return InternalProtocolNegotiators.serverPlaintext();
-    } else {
-      return new ServerSdsProtocolNegotiator(xdsClientWrapperForServerSds);
     }
   }
 
@@ -249,17 +251,6 @@ public final class SdsProtocolNegotiators {
     public ServerSdsProtocolNegotiator(XdsClientWrapperForServerSds xdsClientWrapperForServerSds) {
       this.xdsClientWrapperForServerSds =
           checkNotNull(xdsClientWrapperForServerSds, "xdsClientWrapperForServerSds");
-    }
-
-    private static XdsClientWrapperForServerSds getXdsClientWrapperForServerSds(
-        int port, SynchronizationContext syncContext) {
-      try {
-        return XdsClientWrapperForServerSds.newInstance(
-            port, Bootstrapper.getInstance(), syncContext);
-      } catch (IOException e) {
-        logger.log(Level.FINE, "Fallback to plaintext due to exception", e);
-        return null;
-      }
     }
 
     @Override
