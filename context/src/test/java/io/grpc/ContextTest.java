@@ -71,30 +71,31 @@ public class ContextTest {
 
   private Context listenerNotifedContext;
   private CountDownLatch deadlineLatch = new CountDownLatch(1);
-  private Context.CancellationListener cancellationListener = new Context.CancellationListener() {
-    @Override
-    public void cancelled(Context context) {
-      listenerNotifedContext = context;
-      deadlineLatch.countDown();
-    }
-  };
+  private final Context.CancellationListener cancellationListener =
+      new Context.CancellationListener() {
+        @Override
+        public void cancelled(Context context) {
+          listenerNotifedContext = context;
+          deadlineLatch.countDown();
+        }
+      };
 
   private Context observed;
-  private Runnable runner = new Runnable() {
+  private final Runnable runner = new Runnable() {
     @Override
     public void run() {
       observed = Context.current();
     }
   };
-  private ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+  private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
 
   @Before
-  public void setUp() throws Exception {
+  public void setUp() {
     Context.ROOT.attach();
   }
 
   @After
-  public void tearDown() throws Exception {
+  public void tearDown()  {
     scheduler.shutdown();
     assertEquals(Context.ROOT, Context.current());
   }
@@ -450,7 +451,7 @@ public class ContextTest {
   }
 
   @Test
-  public void testWrapRunnable() throws Exception {
+  public void testWrapRunnable() {
     Context base = Context.current().withValue(PET, "cat");
     Context current = Context.current().withValue(PET, "fish");
     current.attach();
@@ -521,7 +522,7 @@ public class ContextTest {
   }
 
   @Test
-  public void currentContextExecutor() throws Exception {
+  public void currentContextExecutor() {
     QueuedExecutor queuedExecutor = new QueuedExecutor();
     Executor executor = Context.currentContextExecutor(queuedExecutor);
     Context base = Context.current().withValue(PET, "cat");
@@ -537,7 +538,7 @@ public class ContextTest {
   }
 
   @Test
-  public void fixedContextExecutor() throws Exception {
+  public void fixedContextExecutor() {
     Context base = Context.current().withValue(PET, "cat");
     QueuedExecutor queuedExecutor = new QueuedExecutor();
     base.fixedContextExecutor(queuedExecutor).execute(runner);
@@ -547,7 +548,7 @@ public class ContextTest {
   }
 
   @Test
-  public void typicalTryFinallyHandling() throws Exception {
+  public void typicalTryFinallyHandling() {
     Context base = Context.current().withValue(COLOR, "blue");
     Context previous = base.attach();
     try {
@@ -560,7 +561,7 @@ public class ContextTest {
   }
 
   @Test
-  public void typicalCancellableTryCatchFinallyHandling() throws Exception {
+  public void typicalCancellableTryCatchFinallyHandling() {
     Context.CancellableContext base = Context.current().withCancellation();
     Context previous = base.attach();
     try {
@@ -830,7 +831,7 @@ public class ContextTest {
                 return COLOR.get();
               }
             });
-        assertEquals(null, workerThreadVal.get());
+        assertNull(workerThreadVal.get());
 
         assertEquals("blue", COLOR.get());
         return null;
@@ -890,11 +891,11 @@ public class ContextTest {
 
   @Test
   public void cancellableAncestorTest() {
-    assertEquals(null, cancellableAncestor(null));
+    assertNull(cancellableAncestor(null));
 
     Context c = Context.current();
     assertFalse(c.canBeCancelled());
-    assertEquals(null, cancellableAncestor(c));
+    assertNull(cancellableAncestor(c));
 
     Context.CancellableContext withCancellation = c.withCancellation();
     assertEquals(withCancellation, cancellableAncestor(withCancellation));
@@ -935,7 +936,7 @@ public class ContextTest {
   }
 
   @Test
-  public void cancellableContext_closeCancelsWithNullCause() throws Exception {
+  public void cancellableContext_closeCancelsWithNullCause() {
     Context.CancellableContext cancellable = Context.current().withCancellation();
     cancellable.close();
     assertTrue(cancellable.isCancelled());
