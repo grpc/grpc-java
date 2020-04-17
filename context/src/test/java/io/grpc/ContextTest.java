@@ -891,8 +891,6 @@ public class ContextTest {
 
   @Test
   public void cancellableAncestorTest() {
-    assertNull(cancellableAncestor(null));
-
     Context c = Context.current();
     assertFalse(c.canBeCancelled());
     assertNull(cancellableAncestor(c));

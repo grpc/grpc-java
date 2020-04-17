@@ -114,7 +114,7 @@ public class Context {
    * <p>Never assume this is the default context for new threads, because {@link Storage} may define
    * a default context that is different from ROOT.
    */
-  public static final Context ROOT = new Context(null, EMPTY_ENTRIES);
+  public static final Context ROOT = new Context();
 
   // Visible For testing
   static Storage storage() {
@@ -196,7 +196,7 @@ public class Context {
    * Construct a context that cannot be cancelled and will not cascade cancellation from its parent.
    */
   private Context(PersistentHashArrayMappedTrie<Key<?>, Object> keyValueEntries, int generation) {
-    cancellableAncestor = null;
+    this.cancellableAncestor = null;
     this.keyValueEntries = keyValueEntries;
     this.generation = generation;
     validateGeneration(generation);
@@ -207,9 +207,19 @@ public class Context {
    * it is cancellable.
    */
   private Context(Context parent, PersistentHashArrayMappedTrie<Key<?>, Object> keyValueEntries) {
-    cancellableAncestor = cancellableAncestor(parent);
+    this.cancellableAncestor = cancellableAncestor(parent);
     this.keyValueEntries = keyValueEntries;
-    this.generation = parent == null ? 0 : parent.generation + 1;
+    this.generation = parent.generation + 1;
+    validateGeneration(generation);
+  }
+
+  /**
+   * Construct for {@link #ROOT}.
+   */
+  private Context() {
+    this.cancellableAncestor = null;
+    this.keyValueEntries = EMPTY_ENTRIES;
+    this.generation = 0;
     validateGeneration(generation);
   }
 
@@ -1072,9 +1082,6 @@ public class Context {
    * {@link #cancellableAncestor}.
    */
   static CancellableContext cancellableAncestor(Context parent) {
-    if (parent == null) {
-      return null;
-    }
     if (parent instanceof CancellableContext) {
       return (CancellableContext) parent;
     }
