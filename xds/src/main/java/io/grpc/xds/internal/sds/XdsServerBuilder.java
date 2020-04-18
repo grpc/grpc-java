@@ -16,6 +16,7 @@
 
 package io.grpc.xds.internal.sds;
 
+import com.google.common.annotations.VisibleForTesting;
 import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
 import io.grpc.BindableService;
 import io.grpc.CompressorRegistry;
@@ -29,8 +30,8 @@ import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerStreamTracer;
 import io.grpc.ServerTransportFilter;
 import io.grpc.SynchronizationContext;
+import io.grpc.netty.InternalProtocolNegotiator;
 import io.grpc.netty.NettyServerBuilder;
-
 import java.io.File;
 import java.net.InetSocketAddress;
 import java.util.concurrent.Executor;
@@ -171,9 +172,20 @@ public final class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
               panicMode = true;
             }
           });
-    delegate.protocolNegotiator(
+    InternalProtocolNegotiator.ProtocolNegotiator serverProtocolNegotiator =
         SdsProtocolNegotiators.serverProtocolNegotiator(
-            this.downstreamTlsContext, port, syncContext));
+            this.downstreamTlsContext, port, syncContext);
+    return buildServer(serverProtocolNegotiator);
+  }
+
+  /**
+   * Creates a Server using the given serverSdsProtocolNegotiator: gets the
+   * getXdsClientWrapperForServerSds from the serverSdsProtocolNegotiator.
+   */
+  @VisibleForTesting
+  public Server buildServer(
+      InternalProtocolNegotiator.ProtocolNegotiator serverProtocolNegotiator) {
+    delegate.protocolNegotiator(serverProtocolNegotiator);
     return delegate.build();
   }
 }

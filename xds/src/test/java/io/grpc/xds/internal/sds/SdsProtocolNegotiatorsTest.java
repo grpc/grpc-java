@@ -30,6 +30,7 @@ import io.envoyproxy.envoy.api.v2.core.DataSource;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
 import io.grpc.netty.InternalProtocolNegotiationEvent;
+import io.grpc.netty.InternalProtocolNegotiator;
 import io.grpc.xds.internal.sds.SdsProtocolNegotiators.ClientSdsHandler;
 import io.grpc.xds.internal.sds.SdsProtocolNegotiators.ClientSdsProtocolNegotiator;
 import io.netty.channel.ChannelHandler;
@@ -255,6 +256,14 @@ public class SdsProtocolNegotiatorsTest {
     pipeline.fireUserEventTriggered(sslEvent);
     channel.runPendingTasks(); // need this for tasks to execute on eventLoop
     assertTrue(channel.isOpen());
+  }
+
+  @Test
+  public void serverSdsProtocolNegotiator_passNulls_expectPlaintext() {
+    InternalProtocolNegotiator.ProtocolNegotiator protocolNegotiator =
+        SdsProtocolNegotiators.serverProtocolNegotiator(null, 7000,
+            null);
+    assertThat(protocolNegotiator.scheme().toString()).isEqualTo("http");
   }
 
   private static final class FakeGrpcHttp2ConnectionHandler extends GrpcHttp2ConnectionHandler {

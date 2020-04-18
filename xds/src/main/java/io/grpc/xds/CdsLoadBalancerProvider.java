@@ -36,7 +36,6 @@ import java.util.Objects;
 @Internal
 public class CdsLoadBalancerProvider extends LoadBalancerProvider {
 
-  static final String CDS_POLICY_NAME = "cds_experimental";
   private static final String CLUSTER_KEY = "cluster";
 
   @Override
@@ -51,7 +50,7 @@ public class CdsLoadBalancerProvider extends LoadBalancerProvider {
 
   @Override
   public String getPolicyName() {
-    return CDS_POLICY_NAME;
+    return XdsLbPolicies.CDS_POLICY_NAME;
   }
 
   @Override

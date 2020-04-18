@@ -28,17 +28,17 @@ import java.net.URI;
 /**
  * A provider for {@link XdsNameResolver}.
  *
- * <p>It resolves a target URI whose scheme is {@code "xds-experimental"}. The authority of the
+ * <p>It resolves a target URI whose scheme is {@code "xds"}. The authority of the
  * target URI is never used for current release. The path of the target URI, excluding the leading
  * slash {@code '/'}, will indicate the name to use in the VHDS query.
  *
  * <p>This class should not be directly referenced in code. The resolver should be accessed
- * through {@link io.grpc.NameResolverRegistry} with the URI scheme "xds-experimental".
+ * through {@link io.grpc.NameResolverRegistry} with the URI scheme "xds".
  */
 @Internal
 public final class XdsNameResolverProvider extends NameResolverProvider {
 
-  private static final String SCHEME = "xds-experimental";
+  private static final String SCHEME = "xds";
 
   @Override
   public XdsNameResolver newNameResolver(URI targetUri, Args args) {

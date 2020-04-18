@@ -43,8 +43,6 @@ import javax.annotation.Nullable;
 @Internal
 public final class WeightedTargetLoadBalancerProvider extends LoadBalancerProvider {
 
-  static final String WEIGHTED_TARGET_POLICY_NAME = "weighted_target_experimental";
-
   @Nullable
   private final LoadBalancerRegistry lbRegistry;
 
@@ -71,7 +69,7 @@ public final class WeightedTargetLoadBalancerProvider extends LoadBalancerProvid
 
   @Override
   public String getPolicyName() {
-    return WEIGHTED_TARGET_POLICY_NAME;
+    return XdsLbPolicies.WEIGHTED_TARGET_POLICY_NAME;
   }
 
   @Override

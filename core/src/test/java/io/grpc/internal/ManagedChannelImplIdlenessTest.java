@@ -367,6 +367,9 @@ public class ManagedChannelImplIdlenessTest {
     requestConnectionSafely(helper, subchannel);
     MockClientTransportInfo t1 = newTransports.poll();
     t1.listener.transportReady();
+
+    // Drain InternalSubchannel's delayed shutdown on updateAddresses
+    timer.forwardTime(ManagedChannelImpl.SUBCHANNEL_SHUTDOWN_DELAY_SECONDS, TimeUnit.SECONDS);
   }
 
   @Test
@@ -459,6 +462,9 @@ public class ManagedChannelImplIdlenessTest {
     oobChannel.newCall(method, CallOptions.DEFAULT).start(mockCallListener, new Metadata());
     MockClientTransportInfo t1 = newTransports.poll();
     t1.listener.transportReady();
+
+    // Drain InternalSubchannel's delayed shutdown on updateAddresses
+    timer.forwardTime(ManagedChannelImpl.SUBCHANNEL_SHUTDOWN_DELAY_SECONDS, TimeUnit.SECONDS);
   }
 
   @Test

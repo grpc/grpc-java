@@ -36,3 +36,12 @@ checkstyleMain.exclude '**/io/grpc/okhttp/internal/**'
 
 javadoc.exclude 'io/grpc/okhttp/internal/**'
 javadoc.options.links 'http://square.github.io/okhttp/2.x/okhttp/'
+
+jacocoTestReport {
+    classDirectories.from = sourceSets.main.output.collect {
+        fileTree(dir: it,
+        exclude: [
+                '**/io/grpc/okhttp/internal/**',
+        ])
+    }
+}

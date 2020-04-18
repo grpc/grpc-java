@@ -26,11 +26,15 @@ import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Negotiates a grpc channel key to be used by the TsiFrameProtector, using ALTs handshaker service.
  */
 public final class AltsTsiHandshaker implements TsiHandshaker {
+  private static final Logger logger = Logger.getLogger(AltsTsiHandshaker.class.getName());
+
   public static final String TSI_SERVICE_ACCOUNT_PEER_PROPERTY = "service_account";
 
   private final boolean isClient;
@@ -178,6 +182,14 @@ public final class AltsTsiHandshaker implements TsiHandshaker {
     byte[] key = handshaker.getKey();
     Preconditions.checkState(key.length == AltsChannelCrypter.getKeyLength(), "Bad key length.");
 
+    // Frame size negotiation is not performed if the peer does not send max frame size (e.g. peer
+    // is gRPC Go or peer uses an old binary).
+    int peerMaxFrameSize = handshaker.getResult().getMaxFrameSize();
+    if (peerMaxFrameSize != 0) {
+      maxFrameSize = Math.min(peerMaxFrameSize, AltsTsiFrameProtector.getMaxFrameSize());
+      maxFrameSize = Math.max(AltsTsiFrameProtector.getMinFrameSize(), maxFrameSize);
+    }
+    logger.log(Level.INFO, "Maximum frame size value is " + maxFrameSize);
     return new AltsTsiFrameProtector(maxFrameSize, new AltsChannelCrypter(key, isClient), alloc);
   }
 
@@ -190,7 +202,7 @@ public final class AltsTsiHandshaker implements TsiHandshaker {
    */
   @Override
   public TsiFrameProtector createFrameProtector(ByteBufAllocator alloc) {
-    return createFrameProtector(AltsTsiFrameProtector.getMaxAllowedFrameBytes(), alloc);
+    return createFrameProtector(AltsTsiFrameProtector.getMinFrameSize(), alloc);
   }
 
   @Override
