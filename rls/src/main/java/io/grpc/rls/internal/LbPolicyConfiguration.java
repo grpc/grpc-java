@@ -140,7 +140,6 @@ public final class LbPolicyConfiguration {
             new InvalidChildPolicyConfigException(
                 String.format("no valid childPolicy found, policy tried: %s", policyTried));
       }
-
       return
           new ChildLoadBalancingPolicy(
               childPolicyConfigTargetFieldName,
@@ -189,29 +188,14 @@ public final class LbPolicyConfiguration {
     }
   }
 
-  /**
-   * ChildPolicyWrapper is a wrapper class for child load balancing policy with associated helper /
-   * utility classes to manage the child policy.
-   */
-  static final class ChildPolicyWrapper implements Closeable {
-
+  /** Factory for {@link ChildPolicyWrapper}. */
+  static final class RefCountedChildPolicyWrapperFactory {
     @VisibleForTesting
-    static final Map<String /* target */, RefCountedChildPolicyWrapper> childPolicyMap =
+    final Map<String /* target */, RefCountedChildPolicyWrapper> childPolicyMap =
         new HashMap<>();
 
-    private final String target;
-    @Nullable
-    private ChildLoadBalancingPolicy childPolicy;
-    private ConnectivityStateInfo connectivityStateInfo =
-        ConnectivityStateInfo.forNonError(ConnectivityState.IDLE);
-    private SubchannelPicker picker;
-    private Helper helper;
-
-    private ChildPolicyWrapper(String target) {
-      this.target = target;
-    }
-
-    static ChildPolicyWrapper createOrGet(String target) {
+    ChildPolicyWrapper createOrGet(String target) {
+      // TODO(creamsoup) check if the target is valid or not
       ObjectPool<ChildPolicyWrapper> existing = childPolicyMap.get(target);
       if (existing != null) {
         return existing.getObject();
@@ -221,6 +205,37 @@ public final class LbPolicyConfiguration {
       childPolicyMap.put(target, wrapper);
       return childPolicyWrapper;
     }
+
+    void release(ChildPolicyWrapper childPolicyWrapper) {
+      checkNotNull(childPolicyWrapper, "childPolicyWrapper");
+      String target = childPolicyWrapper.getTarget();
+      ObjectPool<ChildPolicyWrapper> existing = childPolicyMap.get(target);
+      checkState(existing != null, "Cannot access already released object");
+      if (existing.returnObject(childPolicyWrapper) == null) {
+        childPolicyMap.remove(target);
+      }
+    }
+  }
+
+  /**
+   * ChildPolicyWrapper is a wrapper class for child load balancing policy with associated helper /
+   * utility classes to manage the child policy.
+   */
+  static final class ChildPolicyWrapper implements Closeable {
+
+    private final String target;
+    @Nullable
+    private ChildLoadBalancingPolicy childPolicy;
+    private ConnectivityStateInfo connectivityStateInfo =
+        ConnectivityStateInfo.forNonError(ConnectivityState.IDLE);
+    private SubchannelPicker picker;
+    // TODO(creamsoup) change to ChildPolicyReportingHelper when it is available
+    private Helper helper;
+
+    private ChildPolicyWrapper(String target) {
+      this.target = target;
+    }
+
 
     String getTarget() {
       return target;
@@ -256,14 +271,6 @@ public final class LbPolicyConfiguration {
 
     ConnectivityStateInfo getConnectivityStateInfo() {
       return connectivityStateInfo;
-    }
-
-    void release() {
-      ObjectPool<ChildPolicyWrapper> existing = childPolicyMap.get(target);
-      checkState(existing != null, "Cannot access already released object");
-      if (existing.returnObject(this) == null) {
-        childPolicyMap.remove(target);
-      }
     }
 
     @Override

@@ -28,6 +28,7 @@ import io.grpc.LoadBalancerRegistry;
 import io.grpc.rls.internal.LbPolicyConfiguration.ChildLoadBalancingPolicy;
 import io.grpc.rls.internal.LbPolicyConfiguration.ChildPolicyWrapper;
 import io.grpc.rls.internal.LbPolicyConfiguration.InvalidChildPolicyConfigException;
+import io.grpc.rls.internal.LbPolicyConfiguration.RefCountedChildPolicyWrapperFactory;
 import java.util.Map;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -36,24 +37,27 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class LbPolicyConfigurationTest {
 
+  private final RefCountedChildPolicyWrapperFactory factory =
+      new RefCountedChildPolicyWrapperFactory();
+
   @Test
   public void childPolicyWrapper_refCounted() {
     String target = "target";
-    ChildPolicyWrapper childPolicy = ChildPolicyWrapper.createOrGet(target);
-    assertThat(ChildPolicyWrapper.childPolicyMap.keySet()).containsExactly(target);
+    ChildPolicyWrapper childPolicy = factory.createOrGet(target);
+    assertThat(factory.childPolicyMap.keySet()).containsExactly(target);
 
-    ChildPolicyWrapper childPolicy2 = ChildPolicyWrapper.createOrGet(target);
-    assertThat(ChildPolicyWrapper.childPolicyMap.keySet()).containsExactly(target);
+    ChildPolicyWrapper childPolicy2 = factory.createOrGet(target);
+    assertThat(factory.childPolicyMap.keySet()).containsExactly(target);
     assertThat(childPolicy2).isEqualTo(childPolicy);
 
-    childPolicy2.release();
-    assertThat(ChildPolicyWrapper.childPolicyMap.keySet()).containsExactly(target);
+    factory.release(childPolicy2);
+    assertThat(factory.childPolicyMap.keySet()).containsExactly(target);
 
-    childPolicy.release();
-    assertThat(ChildPolicyWrapper.childPolicyMap).isEmpty();
+    factory.release(childPolicy);
+    assertThat(factory.childPolicyMap).isEmpty();
 
     try {
-      childPolicy.release();
+      factory.release(childPolicy);
       fail("should not be able to access already released policy");
     } catch (IllegalStateException e) {
       assertThat(e).hasMessageThat().contains("already released");
