@@ -17,6 +17,7 @@
 package io.grpc;
 
 import io.grpc.Context.CheckReturnValue;
+import io.grpc.PersistentHashArrayMappedTrie.Node;
 import java.io.Closeable;
 import java.util.ArrayList;
 import java.util.concurrent.Callable;
@@ -98,9 +99,6 @@ import java.util.logging.Logger;
 public class Context {
 
   static final Logger log = Logger.getLogger(Context.class.getName());
-
-  private static final PersistentHashArrayMappedTrie<Key<?>, Object> EMPTY_ENTRIES =
-      new PersistentHashArrayMappedTrie<>();
 
   // Long chains of contexts are suspicious and usually indicate a misuse of Context.
   // The threshold is arbitrarily chosen.
@@ -188,14 +186,14 @@ public class Context {
   private ArrayList<ExecutableListener> listeners;
   private CancellationListener parentListener = new ParentListener();
   final CancellableContext cancellableAncestor;
-  final PersistentHashArrayMappedTrie<Key<?>, Object> keyValueEntries;
+  final Node<Key<?>, Object> keyValueEntries;
   // The number parents between this context and the root context.
   final int generation;
 
   /**
    * Construct a context that cannot be cancelled and will not cascade cancellation from its parent.
    */
-  private Context(PersistentHashArrayMappedTrie<Key<?>, Object> keyValueEntries, int generation) {
+  private Context(Node<Key<?>, Object> keyValueEntries, int generation) {
     this.cancellableAncestor = null;
     this.keyValueEntries = keyValueEntries;
     this.generation = generation;
@@ -206,7 +204,7 @@ public class Context {
    * Construct a context that cannot be cancelled but will cascade cancellation from its parent if
    * it is cancellable.
    */
-  private Context(Context parent, PersistentHashArrayMappedTrie<Key<?>, Object> keyValueEntries) {
+  private Context(Context parent, Node<Key<?>, Object> keyValueEntries) {
     this.cancellableAncestor = cancellableAncestor(parent);
     this.keyValueEntries = keyValueEntries;
     this.generation = parent.generation + 1;
@@ -218,7 +216,7 @@ public class Context {
    */
   private Context() {
     this.cancellableAncestor = null;
-    this.keyValueEntries = EMPTY_ENTRIES;
+    this.keyValueEntries = null;
     this.generation = 0;
     validateGeneration(generation);
   }
@@ -351,7 +349,8 @@ public class Context {
    * are unrelated, have separate keys for them.
    */
   public <V> Context withValue(Key<V> k1, V v1) {
-    PersistentHashArrayMappedTrie<Key<?>, Object> newKeyValueEntries = keyValueEntries.put(k1, v1);
+    Node<Key<?>, Object> newKeyValueEntries =
+        PersistentHashArrayMappedTrie.put(keyValueEntries, k1, v1);
     return new Context(this, newKeyValueEntries);
   }
 
@@ -360,8 +359,9 @@ public class Context {
    * from its parent.
    */
   public <V1, V2> Context withValues(Key<V1> k1, V1 v1, Key<V2> k2, V2 v2) {
-    PersistentHashArrayMappedTrie<Key<?>, Object> newKeyValueEntries =
-        keyValueEntries.put(k1, v1).put(k2, v2);
+    Node<Key<?>, Object> newKeyValueEntries =
+        PersistentHashArrayMappedTrie.put(keyValueEntries, k1, v1);
+    newKeyValueEntries = PersistentHashArrayMappedTrie.put(newKeyValueEntries, k2, v2);
     return new Context(this, newKeyValueEntries);
   }
 
@@ -370,8 +370,10 @@ public class Context {
    * from its parent.
    */
   public <V1, V2, V3> Context withValues(Key<V1> k1, V1 v1, Key<V2> k2, V2 v2, Key<V3> k3, V3 v3) {
-    PersistentHashArrayMappedTrie<Key<?>, Object> newKeyValueEntries =
-        keyValueEntries.put(k1, v1).put(k2, v2).put(k3, v3);
+    Node<Key<?>, Object> newKeyValueEntries =
+        PersistentHashArrayMappedTrie.put(keyValueEntries, k1, v1);
+    newKeyValueEntries = PersistentHashArrayMappedTrie.put(newKeyValueEntries, k2, v2);
+    newKeyValueEntries = PersistentHashArrayMappedTrie.put(newKeyValueEntries, k3, v3);
     return new Context(this, newKeyValueEntries);
   }
 
@@ -395,8 +397,11 @@ public class Context {
    */
   public <V1, V2, V3, V4> Context withValues(Key<V1> k1, V1 v1, Key<V2> k2, V2 v2,
       Key<V3> k3, V3 v3, Key<V4> k4, V4 v4) {
-    PersistentHashArrayMappedTrie<Key<?>, Object> newKeyValueEntries =
-        keyValueEntries.put(k1, v1).put(k2, v2).put(k3, v3).put(k4, v4);
+    Node<Key<?>, Object> newKeyValueEntries =
+        PersistentHashArrayMappedTrie.put(keyValueEntries, k1, v1);
+    newKeyValueEntries = PersistentHashArrayMappedTrie.put(newKeyValueEntries, k2, v2);
+    newKeyValueEntries = PersistentHashArrayMappedTrie.put(newKeyValueEntries, k3, v3);
+    newKeyValueEntries = PersistentHashArrayMappedTrie.put(newKeyValueEntries, k4, v4);
     return new Context(this, newKeyValueEntries);
   }
 
@@ -704,13 +709,6 @@ public class Context {
   }
 
   /**
-   * Lookup the value for a key in the context inheritance chain.
-   */
-  Object lookup(Key<?> key) {
-    return keyValueEntries.get(key);
-  }
-
-  /**
    * A context which inherits cancellation from its parent but which can also be independently
    * cancelled and which will propagate cancellation to its descendants. To avoid leaking memory,
    * every CancellableContext must have a defined lifetime, after which it is guaranteed to be
@@ -939,7 +937,7 @@ public class Context {
      */
     @SuppressWarnings("unchecked")
     public T get(Context context) {
-      T value = (T) context.lookup(this);
+      T value = (T) PersistentHashArrayMappedTrie.get(context.keyValueEntries, this);
       return value == null ? defaultValue : value;
     }
 
