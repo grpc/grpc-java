@@ -20,6 +20,11 @@ import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.xds.XdsLbPolicies.EDS_POLICY_NAME;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.BAD_CLIENT_KEY_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.BAD_CLIENT_PEM_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CA_PEM_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_KEY_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_PEM_FILE;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
@@ -49,14 +54,14 @@ import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.xds.CdsLoadBalancerProvider.CdsConfig;
+import io.grpc.xds.EdsLoadBalancerProvider.EdsConfig;
 import io.grpc.xds.XdsClient.ClusterUpdate;
 import io.grpc.xds.XdsClient.ClusterWatcher;
 import io.grpc.xds.XdsClient.EndpointUpdate;
 import io.grpc.xds.XdsClient.EndpointWatcher;
 import io.grpc.xds.XdsClient.RefCountedXdsClientObjectPool;
 import io.grpc.xds.XdsClient.XdsClientFactory;
-import io.grpc.xds.XdsLoadBalancerProvider.XdsConfig;
-import io.grpc.xds.internal.sds.SecretVolumeSslContextProviderTest;
+import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import io.grpc.xds.internal.sds.SslContextProvider;
 import io.grpc.xds.internal.sds.TlsContextManager;
 import java.net.InetSocketAddress;
@@ -79,11 +84,6 @@ import org.mockito.MockitoAnnotations;
  */
 @RunWith(JUnit4.class)
 public class CdsLoadBalancerTest {
-  private static final String CLIENT_PEM_FILE = "client.pem";
-  private static final String CLIENT_KEY_FILE = "client.key";
-  private static final String BADCLIENT_PEM_FILE = "badclient.pem";
-  private static final String BADCLIENT_KEY_FILE = "badclient.key";
-  private static final String CA_PEM_FILE = "ca.pem";
 
   private final RefCountedXdsClientObjectPool xdsClientPool = new RefCountedXdsClientObjectPool(
       new XdsClientFactory() {
@@ -251,14 +251,13 @@ public class CdsLoadBalancerTest {
     verify(edsLoadBalancer1).handleResolvedAddresses(resolvedAddressesCaptor1.capture());
     PolicySelection roundRobinPolicy = new PolicySelection(
         fakeRoundRobinLbProvider, new HashMap<String, Object>(), "fake round robin config");
-    XdsConfig expectedXdsConfig = new XdsConfig(
+    EdsConfig expectedEdsConfig = new EdsConfig(
         "foo.googleapis.com",
-        roundRobinPolicy,
-        null,
         "edsServiceFoo.googleapis.com",
-        null);
+        null,
+        roundRobinPolicy);
     ResolvedAddresses resolvedAddressesFoo = resolvedAddressesCaptor1.getValue();
-    assertThat(resolvedAddressesFoo.getLoadBalancingPolicyConfig()).isEqualTo(expectedXdsConfig);
+    assertThat(resolvedAddressesFoo.getLoadBalancingPolicyConfig()).isEqualTo(expectedEdsConfig);
     assertThat(resolvedAddressesFoo.getAttributes().get(XdsAttributes.XDS_CLIENT_POOL))
         .isSameInstanceAs(xdsClientPool);
 
@@ -293,14 +292,13 @@ public class CdsLoadBalancerTest {
     LoadBalancer edsLoadBalancer2 = edsLoadBalancers.poll();
     ArgumentCaptor<ResolvedAddresses> resolvedAddressesCaptor2 = ArgumentCaptor.forClass(null);
     verify(edsLoadBalancer2).handleResolvedAddresses(resolvedAddressesCaptor2.capture());
-    expectedXdsConfig = new XdsConfig(
+    expectedEdsConfig = new EdsConfig(
         "bar.googleapis.com",
-        roundRobinPolicy,
-        null,
         "edsServiceBar.googleapis.com",
-        "lrsBar.googleapis.com");
+        "lrsBar.googleapis.com",
+        roundRobinPolicy);
     ResolvedAddresses resolvedAddressesBar = resolvedAddressesCaptor2.getValue();
-    assertThat(resolvedAddressesBar.getLoadBalancingPolicyConfig()).isEqualTo(expectedXdsConfig);
+    assertThat(resolvedAddressesBar.getLoadBalancingPolicyConfig()).isEqualTo(expectedEdsConfig);
     assertThat(resolvedAddressesBar.getAttributes().get(XdsAttributes.XDS_CLIENT_POOL))
         .isSameInstanceAs(xdsClientPool);
 
@@ -322,14 +320,13 @@ public class CdsLoadBalancerTest {
             .setLbPolicy("round_robin")
             .build());
     verify(edsLoadBalancer2, times(2)).handleResolvedAddresses(resolvedAddressesCaptor2.capture());
-    expectedXdsConfig = new XdsConfig(
+    expectedEdsConfig = new EdsConfig(
         "bar.googleapis.com",
-        roundRobinPolicy,
-        null,
         "edsServiceBar2.googleapis.com",
-        null);
+        null,
+        roundRobinPolicy);
     ResolvedAddresses resolvedAddressesBar2 = resolvedAddressesCaptor2.getValue();
-    assertThat(resolvedAddressesBar2.getLoadBalancingPolicyConfig()).isEqualTo(expectedXdsConfig);
+    assertThat(resolvedAddressesBar2.getLoadBalancingPolicyConfig()).isEqualTo(expectedEdsConfig);
 
     cdsLoadBalancer.shutdown();
     verify(edsLoadBalancer2).shutdown();
@@ -356,7 +353,7 @@ public class CdsLoadBalancerTest {
     verify(xdsClient).watchClusterData(eq("foo.googleapis.com"), clusterWatcherCaptor1.capture());
 
     UpstreamTlsContext upstreamTlsContext =
-        SecretVolumeSslContextProviderTest.buildUpstreamTlsContextFromFilenames(
+        CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
             CLIENT_KEY_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
 
     SslContextProvider<UpstreamTlsContext> mockSslContextProvider =
@@ -415,8 +412,8 @@ public class CdsLoadBalancerTest {
     reset(mockTlsContextManager);
     reset(helper);
     UpstreamTlsContext upstreamTlsContext1 =
-        SecretVolumeSslContextProviderTest.buildUpstreamTlsContextFromFilenames(
-            BADCLIENT_KEY_FILE, BADCLIENT_PEM_FILE, CA_PEM_FILE);
+        CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
+            BAD_CLIENT_KEY_FILE, BAD_CLIENT_PEM_FILE, CA_PEM_FILE);
     SslContextProvider<UpstreamTlsContext> mockSslContextProvider1 =
         (SslContextProvider<UpstreamTlsContext>) mock(SslContextProvider.class);
     doReturn(upstreamTlsContext1).when(mockSslContextProvider1).getSource();

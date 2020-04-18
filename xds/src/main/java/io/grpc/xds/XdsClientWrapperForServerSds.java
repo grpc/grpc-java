@@ -43,7 +43,6 @@ import java.net.UnknownHostException;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
-import java.util.NoSuchElementException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
@@ -70,6 +69,19 @@ public final class XdsClientWrapperForServerSds {
   @Nullable private final XdsClient xdsClient;
   private final int port;
   private final ScheduledExecutorService timeService;
+  private final XdsClient.ListenerWatcher listenerWatcher;
+
+  /**
+   * Thrown when no suitable management server was found in the bootstrap file.
+   */
+  public static final class ManagementServerNotFoundException extends Exception {
+
+    private static final long serialVersionUID = 1;
+
+    public ManagementServerNotFoundException(String msg) {
+      super(msg);
+    }
+  }
 
   /**
    * Factory method for creating a {@link XdsClientWrapperForServerSds}.
@@ -79,11 +91,12 @@ public final class XdsClientWrapperForServerSds {
    * @param syncContext {@link SynchronizationContext} needed by {@link XdsClient}.
    */
   public static XdsClientWrapperForServerSds newInstance(
-      int port, Bootstrapper bootstrapper, SynchronizationContext syncContext) throws IOException {
+      int port, Bootstrapper bootstrapper, SynchronizationContext syncContext)
+      throws IOException, ManagementServerNotFoundException {
     Bootstrapper.BootstrapInfo bootstrapInfo = bootstrapper.readBootstrap();
     final List<Bootstrapper.ServerInfo> serverList = bootstrapInfo.getServers();
     if (serverList.isEmpty()) {
-      throw new NoSuchElementException("No management server provided by bootstrap");
+      throw new ManagementServerNotFoundException("No management server provided by bootstrap");
     }
     final Node node = bootstrapInfo.getNode();
     ScheduledExecutorService timeService = SharedResourceHolder.get(timeServiceResource);
@@ -106,15 +119,14 @@ public final class XdsClientWrapperForServerSds {
     this.port = port;
     this.xdsClient = xdsClient;
     this.timeService = timeService;
-    xdsClient.watchListenerData(
-        port,
+    this.listenerWatcher =
         new XdsClient.ListenerWatcher() {
           @Override
           public void onListenerChanged(XdsClient.ListenerUpdate update) {
             logger.log(
                 Level.INFO,
-                "Setting myListener from ConfigUpdate listener :{0}",
-                update.getListener().toString());
+                "Setting myListener from ConfigUpdate listener: {0}",
+                update.getListener());
             curListener = update.getListener();
           }
 
@@ -126,9 +138,10 @@ public final class XdsClientWrapperForServerSds {
               curListener = null;
             }
             // TODO(sanjaypujare): Implement logic for other cases based on final design.
-            logger.log(Level.SEVERE, "ListenerWatcher in XdsClientWrapperForServerSds:{0}", error);
+            logger.log(Level.SEVERE, "ListenerWatcher in XdsClientWrapperForServerSds: {0}", error);
           }
-        });
+        };
+    xdsClient.watchListenerData(port, listenerWatcher);
   }
 
   /**
@@ -155,6 +168,11 @@ public final class XdsClientWrapperForServerSds {
       }
     }
     return null;
+  }
+
+  @VisibleForTesting
+  XdsClient.ListenerWatcher getListenerWatcher() {
+    return listenerWatcher;
   }
 
   private static final class FilterChainComparator implements Comparator<FilterChain> {

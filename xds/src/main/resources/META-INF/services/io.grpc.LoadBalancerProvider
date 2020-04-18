@@ -1,5 +1,4 @@
 io.grpc.xds.CdsLoadBalancerProvider
 io.grpc.xds.EdsLoadBalancerProvider
 io.grpc.xds.WeightedTargetLoadBalancerProvider
-io.grpc.xds.XdsLoadBalancerProvider
 io.grpc.xds.XdsRoutingLoadBalancerProvider

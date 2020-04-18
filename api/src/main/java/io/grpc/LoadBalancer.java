@@ -360,7 +360,7 @@ public abstract class LoadBalancer {
   @Deprecated
   public void handleSubchannelState(
       Subchannel subchannel, ConnectivityStateInfo stateInfo) {
-    // Do nothing.  If the implemetation doesn't implement this, it will get subchannel states from
+    // Do nothing.  If the implementation doesn't implement this, it will get subchannel states from
     // the new API.  We don't throw because there may be forwarding LoadBalancers still plumb this.
   }
 
@@ -507,7 +507,7 @@ public abstract class LoadBalancer {
      * A decision to proceed the RPC on a Subchannel.
      *
      * <p>The Subchannel should either be an original Subchannel returned by {@link
-     * Helper#createSubchannel Helper.createSubchannel()}, or a wrapper of it preferrably based on
+     * Helper#createSubchannel Helper.createSubchannel()}, or a wrapper of it preferably based on
      * {@code ForwardingSubchannel}.  At the very least its {@link Subchannel#getInternalSubchannel
      * getInternalSubchannel()} must return the same object as the one returned by the original.
      * Otherwise the Channel cannot use it for the RPC.
@@ -1024,7 +1024,7 @@ public abstract class LoadBalancer {
 
     /**
      * Updates the addresses used for connections in the {@code Channel} that was created by {@link
-     * #createOobChannel(EquivalentAddressGroup, String)}. This is supperior to {@link
+     * #createOobChannel(EquivalentAddressGroup, String)}. This is superior to {@link
      * #createOobChannel(EquivalentAddressGroup, String)} when the old and new addresses overlap,
      * since the channel can continue using an existing connection.
      *
@@ -1047,8 +1047,6 @@ public abstract class LoadBalancer {
      *
      * <p>The LoadBalancer is responsible for closing unused OOB channels, and closing all OOB
      * channels within {@link #shutdown}.
-     *
-     * <P>NOT IMPLEMENTED: this method is currently a stub and not yet implemented by gRPC.
      *
      * @since 1.20.0
      */

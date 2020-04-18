@@ -17,6 +17,11 @@
 package io.grpc.xds.internal.sds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CA_PEM_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_KEY_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_PEM_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_KEY_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_PEM_FILE;
 import static io.grpc.xds.internal.sds.SdsClientTest.getOneCertificateValidationContextSecret;
 import static io.grpc.xds.internal.sds.SdsClientTest.getOneTlsCertSecret;
 import static io.grpc.xds.internal.sds.SecretVolumeSslContextProviderTest.doChecksOnSslContext;
@@ -38,12 +43,6 @@ import org.junit.runners.JUnit4;
 /** Unit tests for {@link SdsSslContextProvider}. */
 @RunWith(JUnit4.class)
 public class SdsSslContextProviderTest {
-
-  private static final String SERVER_1_PEM_FILE = "server1.pem";
-  private static final String SERVER_1_KEY_FILE = "server1.key";
-  private static final String CLIENT_PEM_FILE = "client.pem";
-  private static final String CLIENT_KEY_FILE = "client.key";
-  private static final String CA_PEM_FILE = "ca.pem";
 
   private TestSdsServer.ServerMock serverMock;
   private TestSdsServer server;
@@ -182,8 +181,7 @@ public class SdsSslContextProviderTest {
     when(serverMock.getSecretFor(/* name= */ "cert1"))
         .thenReturn(getOneTlsCertSecret(/* name= */ "cert1", CLIENT_KEY_FILE, CLIENT_PEM_FILE));
     when(serverMock.getSecretFor("valid1"))
-        .thenReturn(getOneCertificateValidationContextSecret(/* name= */ "valid1",
-            CA_PEM_FILE));
+        .thenReturn(getOneCertificateValidationContextSecret(/* name= */ "valid1", CA_PEM_FILE));
 
     SdsSslContextProvider<?> provider =
         getSdsSslContextProvider(
