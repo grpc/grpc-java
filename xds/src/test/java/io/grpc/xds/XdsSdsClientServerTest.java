@@ -133,9 +133,7 @@ public class XdsSdsClientServerTest {
   public void noClientAuth_sendBadClientCert_passes() throws IOException, URISyntaxException {
     DownstreamTlsContext downstreamTlsContext =
         CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(
-            SERVER_1_KEY_FILE,
-            SERVER_1_PEM_FILE,
-            /* trustCa= */ null);
+            SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, /* trustCa= */ null);
     buildServerWithTlsContext(downstreamTlsContext);
 
     UpstreamTlsContext upstreamTlsContext =
