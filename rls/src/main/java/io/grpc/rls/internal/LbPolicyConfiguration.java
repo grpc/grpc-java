@@ -213,15 +213,15 @@ public final class LbPolicyConfiguration {
 
     ChildPolicyWrapper createOrGet(String target) {
       // TODO(creamsoup) check if the target is valid or not
-      ObjectPool<ChildPolicyWrapper> existing = childPolicyMap.get(target);
-      if (existing != null) {
-        return existing.getObject();
+      RefCountedChildPolicyWrapper pooledChildPolicyWrapper = childPolicyMap.get(target);
+      if (pooledChildPolicyWrapper == null) {
+        ChildPolicyWrapper childPolicyWrapper =
+            new ChildPolicyWrapper(target, childLbHelperProvider, childLbStatusListener);
+        pooledChildPolicyWrapper = RefCountedChildPolicyWrapper.of(childPolicyWrapper);
+        childPolicyMap.put(target, pooledChildPolicyWrapper);
       }
-      ChildPolicyWrapper childPolicyWrapper =
-          new ChildPolicyWrapper(target, childLbHelperProvider, childLbStatusListener);
-      RefCountedChildPolicyWrapper wrapper = RefCountedChildPolicyWrapper.of(childPolicyWrapper);
-      childPolicyMap.put(target, wrapper);
-      return childPolicyWrapper;
+
+      return pooledChildPolicyWrapper.getObject();
     }
 
     void release(ChildPolicyWrapper childPolicyWrapper) {
@@ -382,7 +382,7 @@ public final class LbPolicyConfiguration {
   private static final class RefCountedChildPolicyWrapper
       implements ObjectPool<ChildPolicyWrapper> {
 
-    private final AtomicLong refCnt = new AtomicLong(1);
+    private final AtomicLong refCnt = new AtomicLong();
     @Nullable
     private ChildPolicyWrapper childPolicyWrapper;
 
@@ -392,10 +392,8 @@ public final class LbPolicyConfiguration {
 
     @Override
     public ChildPolicyWrapper getObject() {
-      long curr = refCnt.getAndIncrement();
-      if (curr <= 0) {
-        throw new IllegalStateException("ChildPolicyWrapper is already released");
-      }
+      checkState(childPolicyWrapper != null, "ChildPolicyWrapper is already released");
+      refCnt.getAndIncrement();
       return childPolicyWrapper;
     }
 
@@ -409,6 +407,7 @@ public final class LbPolicyConfiguration {
           childPolicyWrapper == object,
           "returned object doesn't match the pooled childPolicyWrapper");
       long newCnt = refCnt.decrementAndGet();
+      checkState(newCnt != -1, "Cannot return never pooled childPolicyWrapper");
       if (newCnt == 0) {
         childPolicyWrapper = null;
       }
