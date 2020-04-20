@@ -33,7 +33,6 @@ import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.internal.ObjectPool;
 import io.grpc.rls.internal.ChildLoadBalancerHelper.ChildLoadBalancerHelperProvider;
-import io.grpc.rls.internal.LbPolicyConfiguration.ChildPolicyWrapper.ChildLbStatusListener;
 import io.grpc.rls.internal.RlsProtoData.RouteLookupConfig;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.ForwardingSubchannel;
@@ -250,7 +249,7 @@ public final class LbPolicyConfiguration {
     public ChildPolicyWrapper(
         String target,
         ChildLoadBalancerHelperProvider childLbHelperProvider,
-        @Nullable  ChildLbStatusListener childLbStatusListener) {
+        @Nullable ChildLbStatusListener childLbStatusListener) {
       this.target = target;
       this.helper =
           new ChildPolicyReportingHelper(childLbHelperProvider, childLbStatusListener);
@@ -370,13 +369,13 @@ public final class LbPolicyConfiguration {
         };
       }
     }
+  }
 
-    /** Listener for child lb status change events. */
-    interface ChildLbStatusListener {
+  /** Listener for child lb status change events. */
+  interface ChildLbStatusListener {
 
-      /** Notifies when child lb status changes. */
-      void onStatusChanged(ConnectivityState newState);
-    }
+    /** Notifies when child lb status changes. */
+    void onStatusChanged(ConnectivityState newState);
   }
 
   private static final class RefCountedChildPolicyWrapper
