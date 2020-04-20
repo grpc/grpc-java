@@ -198,8 +198,8 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
   }
 
   /**
-   * Specifies a child channel option. As the underlying channel as well as network implementation may
-   * ignore this value applications should consider it a hint.
+   * Specifies a child channel option. As the underlying channel as well as network implementation
+   * may ignore this value applications should consider it a hint.
    *
    * @since 1.9.0
    */
@@ -561,12 +561,13 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
     List<NettyServer> transportServers = new ArrayList<>(listenAddresses.size());
     for (SocketAddress listenAddress : listenAddresses) {
       NettyServer transportServer = new NettyServer(
-          listenAddress, channelFactory, channelOptions, childChannelOptions, bossEventLoopGroupPool,
-          workerEventLoopGroupPool, forceHeapBuffer, negotiator, streamTracerFactories,
-          getTransportTracerFactory(), maxConcurrentCallsPerConnection, flowControlWindow,
-          maxMessageSize, maxHeaderListSize, keepAliveTimeInNanos, keepAliveTimeoutInNanos,
-          maxConnectionIdleInNanos, maxConnectionAgeInNanos, maxConnectionAgeGraceInNanos,
-          permitKeepAliveWithoutCalls, permitKeepAliveTimeInNanos, getChannelz());
+          listenAddress, channelFactory, channelOptions, childChannelOptions,
+          bossEventLoopGroupPool, workerEventLoopGroupPool, forceHeapBuffer, negotiator,
+          streamTracerFactories, getTransportTracerFactory(), maxConcurrentCallsPerConnection,
+          flowControlWindow, maxMessageSize, maxHeaderListSize, keepAliveTimeInNanos,
+          keepAliveTimeoutInNanos, maxConnectionIdleInNanos, maxConnectionAgeInNanos,
+          maxConnectionAgeGraceInNanos, permitKeepAliveWithoutCalls, permitKeepAliveTimeInNanos,
+          getChannelz());
       transportServers.add(transportServer);
     }
     return Collections.unmodifiableList(transportServers);
