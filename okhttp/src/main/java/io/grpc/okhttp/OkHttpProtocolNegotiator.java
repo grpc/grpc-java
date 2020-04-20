@@ -28,6 +28,7 @@ import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.net.IDN;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -235,7 +236,9 @@ class OkHttpProtocolNegotiator {
       SSLParameters sslParams = sslSocket.getSSLParameters();
       try {
         // Enable SNI and session tickets.
-        if (hostname != null) {
+        // Skip if hostname is not a real internet domain name, which is usually used with
+        // test certificates.
+        if (hostname != null && isValidDomainName(hostname)) {
           if (SSL_SOCKETS_IS_SUPPORTED_SOCKET != null
               && (boolean) SSL_SOCKETS_IS_SUPPORTED_SOCKET.invoke(null, sslSocket)) {
             SSL_SOCKETS_SET_USE_SESSION_TICKET.invoke(null, sslSocket, true);
@@ -355,5 +358,14 @@ class OkHttpProtocolNegotiator {
       result.add(protocol.toString());
     }
     return result.toArray(new String[0]);
+  }
+
+  private static boolean isValidDomainName(String name) {
+    try {
+      IDN.toASCII(name);
+      return true;
+    } catch (IllegalArgumentException e) {
+      return false;
+    }
   }
 }
