@@ -403,6 +403,9 @@ public final class LbPolicyConfiguration {
     @Nullable
     public ChildPolicyWrapper returnObject(Object object) {
       checkState(
+          childPolicyWrapper != null,
+          "cannot return already released ChildPolicyWrapper, this is possibly a bug.");
+      checkState(
           childPolicyWrapper == object,
           "returned object doesn't match the pooled childPolicyWrapper");
       long newCnt = refCnt.decrementAndGet();
