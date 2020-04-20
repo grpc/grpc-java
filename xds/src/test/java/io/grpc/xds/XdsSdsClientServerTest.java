@@ -92,7 +92,7 @@ public class XdsSdsClientServerTest {
   public void tlsClientServer_noClientAuthentication() throws IOException, URISyntaxException {
     DownstreamTlsContext downstreamTlsContext =
         CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(
-            SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, null, /* requireClientCert= */ false);
+            SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, null);
     buildServerWithTlsContext(downstreamTlsContext);
 
     // for TLS, client only needs trustCa
@@ -109,8 +109,8 @@ public class XdsSdsClientServerTest {
   public void requireClientAuth_noClientCert_expectException()
       throws IOException, URISyntaxException {
     DownstreamTlsContext downstreamTlsContext =
-        CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(
-            SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, CA_PEM_FILE, /* requireClientCert= */ true);
+        CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenamesWithClientCertRequired(
+            SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, CA_PEM_FILE);
     buildServerWithTlsContext(downstreamTlsContext);
 
     // for TLS, client only uses trustCa
@@ -135,8 +135,7 @@ public class XdsSdsClientServerTest {
         CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(
             SERVER_1_KEY_FILE,
             SERVER_1_PEM_FILE,
-            /* trustCa= */ null,
-            /* requireClientCert= */ false);
+            /* trustCa= */ null);
     buildServerWithTlsContext(downstreamTlsContext);
 
     UpstreamTlsContext upstreamTlsContext =
@@ -175,7 +174,7 @@ public class XdsSdsClientServerTest {
   public void tlsServer_plaintextClient_expectException() throws IOException, URISyntaxException {
     DownstreamTlsContext downstreamTlsContext =
         CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(
-            SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, null, /* requireClientCert= */ false);
+            SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, null);
     buildServerWithTlsContext(downstreamTlsContext);
 
     SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
@@ -220,7 +219,7 @@ public class XdsSdsClientServerTest {
         performMtlsTestAndGetListenerWatcher(upstreamTlsContext);
     DownstreamTlsContext downstreamTlsContext =
         CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(
-            BAD_SERVER_KEY_FILE, BAD_SERVER_PEM_FILE, CA_PEM_FILE, /* requireClientCert= */ false);
+            BAD_SERVER_KEY_FILE, BAD_SERVER_PEM_FILE, CA_PEM_FILE);
     XdsClientWrapperForServerSdsTest.generateListenerUpdateToWatcher(
         port, downstreamTlsContext, listenerWatcher);
     try {
@@ -237,8 +236,8 @@ public class XdsSdsClientServerTest {
   private XdsClient.ListenerWatcher performMtlsTestAndGetListenerWatcher(
       UpstreamTlsContext upstreamTlsContext) throws IOException, URISyntaxException {
     DownstreamTlsContext downstreamTlsContext =
-        CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(
-            SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, CA_PEM_FILE, /* requireClientCert= */ true);
+        CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenamesWithClientCertRequired(
+            SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, CA_PEM_FILE);
 
     final XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
         XdsClientWrapperForServerSdsTest.createXdsClientWrapperForServerSds(

@@ -174,6 +174,24 @@ public class CommonTlsContextTestsUtil {
    * Helper method to build DownstreamTlsContext for above tests. Called from other classes as well.
    */
   public static DownstreamTlsContext buildDownstreamTlsContextFromFilenames(
+      @Nullable String privateKey, @Nullable String certChain, @Nullable String trustCa) {
+    return buildDownstreamTlsContextFromFilenamesWithClientAuth(privateKey, certChain, trustCa,
+        false);
+  }
+
+  /**
+   * Helper method to build DownstreamTlsContext for above tests. Called from other classes as well.
+   */
+  public static DownstreamTlsContext buildDownstreamTlsContextFromFilenamesWithClientCertRequired(
+      @Nullable String privateKey,
+      @Nullable String certChain,
+      @Nullable String trustCa) {
+
+    return buildDownstreamTlsContextFromFilenamesWithClientAuth(privateKey, certChain, trustCa,
+        true);
+  }
+
+  private static DownstreamTlsContext buildDownstreamTlsContextFromFilenamesWithClientAuth(
       @Nullable String privateKey,
       @Nullable String certChain,
       @Nullable String trustCa,

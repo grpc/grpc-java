@@ -370,10 +370,7 @@ public class SecretVolumeSslContextProviderTest {
     return server
         ? SecretVolumeSslContextProvider.getProviderForServer(
             CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(
-                privateKeyFilename,
-                certChainFilename,
-                trustedCaFilename,
-                /* requireClientCert= */ false))
+                privateKeyFilename, certChainFilename, trustedCaFilename))
         : SecretVolumeSslContextProvider.getProviderForClient(
             CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
                 privateKeyFilename, certChainFilename, trustedCaFilename));

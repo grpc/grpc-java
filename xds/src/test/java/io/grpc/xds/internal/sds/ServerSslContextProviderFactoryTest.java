@@ -39,7 +39,7 @@ public class ServerSslContextProviderFactoryTest {
   public void createSslContextProvider_allFilenames() {
     DownstreamTlsContext downstreamTlsContext =
         CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(
-            SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, CA_PEM_FILE, /* requireClientCert= */ false);
+            SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, CA_PEM_FILE);
 
     SslContextProvider<DownstreamTlsContext> sslContextProvider =
         serverSslContextProviderFactory.createSslContextProvider(downstreamTlsContext);

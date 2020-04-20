@@ -16,7 +16,9 @@
 
 package io.grpc.xds.internal.sds;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 
 import io.envoyproxy.envoy.api.v2.auth.CertificateValidationContext;
 import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
@@ -55,7 +57,11 @@ public abstract class SslContextProvider<K> {
   }
 
   protected SslContextProvider(K source, boolean server) {
-    checkNotNull(source, "source");
+    if (server) {
+      checkArgument(source instanceof DownstreamTlsContext, "expecting DownstreamTlsContext");
+    } else {
+      checkArgument(source instanceof UpstreamTlsContext, "expecting UpstreamTlsContext");
+    }
     this.source = source;
     this.server = server;
   }
@@ -76,9 +82,10 @@ public abstract class SslContextProvider<K> {
   protected void setClientAuthValues(
       SslContextBuilder sslContextBuilder, CertificateValidationContext localCertValidationContext)
       throws CertificateException, IOException, CertStoreException {
+    checkState(server);
     if (localCertValidationContext != null) {
       sslContextBuilder.trustManager(new SdsTrustManagerFactory(localCertValidationContext));
-      DownstreamTlsContext downstreamTlsContext = (DownstreamTlsContext) getSource();
+      DownstreamTlsContext downstreamTlsContext = (DownstreamTlsContext)getSource();
       sslContextBuilder.clientAuth(
           downstreamTlsContext.hasRequireClientCertificate()
               ? ClientAuth.REQUIRE
