@@ -184,7 +184,9 @@ public class Context {
   }
 
   private ArrayList<ExecutableListener> listeners;
-  private CancellationListener parentListener = new ParentListener();
+  // parentListener is initialized when listeners is initialized, and uninitialized when
+  // listeners is uninitialized.
+  private ParentListener parentListener;
   final CancellableContext cancellableAncestor;
   final Node<Key<?>, Object> keyValueEntries;
   // The number parents between this context and the root context.
@@ -526,6 +528,7 @@ public class Context {
             listeners = new ArrayList<>();
             listeners.add(executableListener);
             if (cancellableAncestor != null) {
+              parentListener = new ParentListener();
               cancellableAncestor.addListener(parentListener, DirectExecutor.INSTANCE);
             }
           } else {
@@ -558,6 +561,7 @@ public class Context {
           if (cancellableAncestor != null) {
             cancellableAncestor.removeListener(parentListener);
           }
+          parentListener = null;
           listeners = null;
         }
       }
@@ -573,10 +577,13 @@ public class Context {
       return;
     }
     ArrayList<ExecutableListener> tmpListeners;
+    ParentListener tmpParentListener;
     synchronized (this) {
       if (listeners == null) {
         return;
       }
+      tmpParentListener = parentListener;
+      parentListener = null;
       tmpListeners = listeners;
       listeners = null;
     }
@@ -595,7 +602,7 @@ public class Context {
       }
     }
     if (cancellableAncestor != null) {
-      cancellableAncestor.removeListener(parentListener);
+      cancellableAncestor.removeListener(tmpParentListener);
     }
   }
 
