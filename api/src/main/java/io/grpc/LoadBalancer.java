@@ -75,18 +75,19 @@ import javax.annotation.concurrent.ThreadSafe;
  *   synchronization primitives, blocking I/O, blocking RPCs, etc.</li>
  *
  *   <li><strong>Avoid calling into other components with lock held</strong>.  The Synchronization
- *   Context may be under a lock, e.g., the transport lock of OkHttp.  If your LoadBalancer has a
- *   lock, holds the lock in a callback method (e.g., {@link #handleSubchannelState
- *   handleSubchannelState()}) while calling into another class that may involve locks, be cautious
- *   of deadlock.  Generally you wouldn't need any locking in the LoadBalancer.</li>
+ *   Context may be under a lock, e.g., the transport lock of OkHttp.  If your LoadBalancer holds a
+ *   lock in a callback method (e.g., {@link #handleResolvedAddresses handleResolvedAddresses()})
+ *   while calling into another method that also involves locks, be cautious of deadlock.  Generally
+ *   you wouldn't need any locking in the LoadBalancer if you follow the canonical implementation
+ *   pattern below.</li>
  *
  * </ol>
  *
  * <h3>The canonical implementation pattern</h3>
  *
  * <p>A {@link LoadBalancer} keeps states like the latest addresses from NameResolver, the
- * Subchannel(s) and their latest connectivity states.  These states are mutated within the Channel
- * Executor.
+ * Subchannel(s) and their latest connectivity states.  These states are mutated within the
+ * Synchronization Context,
  *
  * <p>A typical {@link SubchannelPicker SubchannelPicker} holds a snapshot of these states.  It may
  * have its own states, e.g., a picker from a round-robin load-balancer may keep a pointer to the
@@ -95,9 +96,10 @@ import javax.annotation.concurrent.ThreadSafe;
  * picker only needs to synchronize its own states, which is typically trivial to implement.
  *
  * <p>When the LoadBalancer states changes, e.g., Subchannels has become or stopped being READY, and
- * we want subsequent RPCs to use the latest list of READY Subchannels, LoadBalancer would create
- * a new picker, which holds a snapshot of the latest Subchannel list.  Refer to the javadoc of
- * {@link #handleSubchannelState handleSubchannelState()} how to do this properly.
+ * we want subsequent RPCs to use the latest list of READY Subchannels, LoadBalancer would create a
+ * new picker, which holds a snapshot of the latest Subchannel list.  Refer to the javadoc of {@link
+ * io.grpc.LoadBalancer.SubchannelStateListener#onSubchannelState onSubchannelState()} how to do
+ * this properly.
  *
  * <p>No synchronization should be necessary between LoadBalancer and its pickers if you follow
  * the pattern above.  It may be possible to implement in a different way, but that would usually
