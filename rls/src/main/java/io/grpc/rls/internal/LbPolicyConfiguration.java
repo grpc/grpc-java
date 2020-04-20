@@ -364,5 +364,11 @@ public final class LbPolicyConfiguration {
     public InvalidChildPolicyConfigException(String message) {
       super(message);
     }
+
+    @Override
+    public synchronized Throwable fillInStackTrace() {
+      // no stack trace above this point
+      return this;
+    }
   }
 }
