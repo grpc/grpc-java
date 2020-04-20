@@ -24,13 +24,13 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
-import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.internal.ObjectPool;
+import io.grpc.rls.internal.ChildLoadBalancerHelper.ChildLoadBalancerHelperProvider;
+import io.grpc.rls.internal.ChildPolicyReportingHelper.ChildLbStatusListener;
 import io.grpc.rls.internal.RlsProtoData.RouteLookupConfig;
-import java.io.Closeable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -194,13 +194,25 @@ public final class LbPolicyConfiguration {
     final Map<String /* target */, RefCountedChildPolicyWrapper> childPolicyMap =
         new HashMap<>();
 
+    private final ChildLoadBalancerHelperProvider childLbHelperProvider;
+    @Nullable
+    private final ChildLbStatusListener childLbStatusListener;
+
+    public RefCountedChildPolicyWrapperFactory(
+        ChildLoadBalancerHelperProvider childLbHelperProvider,
+        @Nullable ChildLbStatusListener childLbStatusListener) {
+      this.childLbHelperProvider = checkNotNull(childLbHelperProvider, "childLbHelperProvider");
+      this.childLbStatusListener = childLbStatusListener;
+    }
+
     ChildPolicyWrapper createOrGet(String target) {
       // TODO(creamsoup) check if the target is valid or not
       ObjectPool<ChildPolicyWrapper> existing = childPolicyMap.get(target);
       if (existing != null) {
         return existing.getObject();
       }
-      ChildPolicyWrapper childPolicyWrapper = new ChildPolicyWrapper(target);
+      ChildPolicyWrapper childPolicyWrapper =
+          new ChildPolicyWrapper(target, childLbHelperProvider, childLbStatusListener);
       RefCountedChildPolicyWrapper wrapper = RefCountedChildPolicyWrapper.of(childPolicyWrapper);
       childPolicyMap.put(target, wrapper);
       return childPolicyWrapper;
@@ -221,32 +233,25 @@ public final class LbPolicyConfiguration {
    * ChildPolicyWrapper is a wrapper class for child load balancing policy with associated helper /
    * utility classes to manage the child policy.
    */
-  static final class ChildPolicyWrapper implements Closeable {
+  static final class ChildPolicyWrapper {
 
     private final String target;
-    @Nullable
-    private ChildLoadBalancingPolicy childPolicy;
+    private final ChildPolicyReportingHelper helper;
     private ConnectivityStateInfo connectivityStateInfo =
         ConnectivityStateInfo.forNonError(ConnectivityState.IDLE);
     private SubchannelPicker picker;
-    // TODO(creamsoup) change to ChildPolicyReportingHelper when it is available
-    private Helper helper;
 
-    private ChildPolicyWrapper(String target) {
+    public ChildPolicyWrapper(
+        String target,
+        ChildLoadBalancerHelperProvider childLbHelperProvider,
+        @Nullable  ChildLbStatusListener childLbStatusListener) {
       this.target = target;
+      this.helper =
+          new ChildPolicyReportingHelper(childLbHelperProvider, this, childLbStatusListener);
     }
-
 
     String getTarget() {
       return target;
-    }
-
-    ChildLoadBalancingPolicy getChildPolicy() {
-      return childPolicy;
-    }
-
-    void setChildPolicy(ChildLoadBalancingPolicy childPolicy) {
-      this.childPolicy = childPolicy;
     }
 
     void setPicker(SubchannelPicker picker) {
@@ -257,11 +262,7 @@ public final class LbPolicyConfiguration {
       return picker;
     }
 
-    void setHelper(Helper helper) {
-      this.helper = checkNotNull(helper, "helper");
-    }
-
-    Helper getHelper() {
+    ChildPolicyReportingHelper getHelper() {
       return helper;
     }
 
@@ -274,11 +275,6 @@ public final class LbPolicyConfiguration {
     }
 
     @Override
-    public void close() {
-      childPolicy = null;
-    }
-
-    @Override
     public boolean equals(Object o) {
       if (this == o) {
         return true;
@@ -288,21 +284,21 @@ public final class LbPolicyConfiguration {
       }
       ChildPolicyWrapper that = (ChildPolicyWrapper) o;
       return Objects.equals(target, that.target)
-          && Objects.equals(childPolicy, that.childPolicy)
+          && Objects.equals(helper, that.helper)
           && Objects.equals(connectivityStateInfo, that.connectivityStateInfo)
           && Objects.equals(picker, that.picker);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hash(target, childPolicy, connectivityStateInfo, picker);
+      return Objects.hash(target, helper, connectivityStateInfo, picker);
     }
 
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(this)
           .add("target", target)
-          .add("childPolicy", childPolicy)
+          .add("helper", helper)
           .add("connectivityStateInfo", connectivityStateInfo)
           .add("picker", picker)
           .toString();
@@ -337,7 +333,6 @@ public final class LbPolicyConfiguration {
           "returned object doesn't match the pooled childPolicyWrapper");
       long newCnt = refCnt.decrementAndGet();
       if (newCnt == 0) {
-        childPolicyWrapper.close();
         childPolicyWrapper = null;
       }
       return childPolicyWrapper;

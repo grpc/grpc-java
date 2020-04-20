@@ -23,8 +23,12 @@ import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import io.grpc.LoadBalancer.Helper;
+import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
+import io.grpc.rls.internal.ChildLoadBalancerHelper.ChildLoadBalancerHelperProvider;
+import io.grpc.rls.internal.ChildPolicyReportingHelper.ChildLbStatusListener;
 import io.grpc.rls.internal.LbPolicyConfiguration.ChildLoadBalancingPolicy;
 import io.grpc.rls.internal.LbPolicyConfiguration.ChildPolicyWrapper;
 import io.grpc.rls.internal.LbPolicyConfiguration.InvalidChildPolicyConfigException;
@@ -38,7 +42,12 @@ import org.junit.runners.JUnit4;
 public class LbPolicyConfigurationTest {
 
   private final RefCountedChildPolicyWrapperFactory factory =
-      new RefCountedChildPolicyWrapperFactory();
+      new RefCountedChildPolicyWrapperFactory(
+          new ChildLoadBalancerHelperProvider(
+              mock(Helper.class),
+              mock(SubchannelStateManager.class),
+              mock(SubchannelPicker.class)),
+          mock(ChildLbStatusListener.class));
 
   @Test
   public void childPolicyWrapper_refCounted() {
