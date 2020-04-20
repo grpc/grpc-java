@@ -24,13 +24,19 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
+import io.grpc.LoadBalancer.CreateSubchannelArgs;
+import io.grpc.LoadBalancer.Helper;
+import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
+import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.internal.ObjectPool;
 import io.grpc.rls.internal.ChildLoadBalancerHelper.ChildLoadBalancerHelperProvider;
-import io.grpc.rls.internal.ChildPolicyReportingHelper.ChildLbStatusListener;
+import io.grpc.rls.internal.LbPolicyConfiguration.ChildPolicyWrapper.ChildLbStatusListener;
 import io.grpc.rls.internal.RlsProtoData.RouteLookupConfig;
+import io.grpc.util.ForwardingLoadBalancerHelper;
+import io.grpc.util.ForwardingSubchannel;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -247,7 +253,7 @@ public final class LbPolicyConfiguration {
         @Nullable  ChildLbStatusListener childLbStatusListener) {
       this.target = target;
       this.helper =
-          new ChildPolicyReportingHelper(childLbHelperProvider, this, childLbStatusListener);
+          new ChildPolicyReportingHelper(childLbHelperProvider, childLbStatusListener);
     }
 
     String getTarget() {
@@ -302,6 +308,74 @@ public final class LbPolicyConfiguration {
           .add("connectivityStateInfo", connectivityStateInfo)
           .add("picker", picker)
           .toString();
+    }
+
+    /**
+     * A delegating {@link io.grpc.LoadBalancer.Helper} maintains status of {@link
+     * ChildPolicyWrapper} when {@link Subchannel} status changed. This helper is used between child
+     * policy and parent load-balancer where each picker in child policy is governed by a governing
+     * picker (RlsPicker). The governing picker will be reported back to the parent load-balancer.
+     */
+    final class ChildPolicyReportingHelper extends ForwardingLoadBalancerHelper {
+
+      private final ChildLoadBalancerHelper delegate;
+      @Nullable
+      private final ChildLbStatusListener listener;
+
+      ChildPolicyReportingHelper(ChildLoadBalancerHelperProvider childHelperProvider) {
+        this(childHelperProvider, null);
+      }
+
+      ChildPolicyReportingHelper(
+          ChildLoadBalancerHelperProvider childHelperProvider,
+          @Nullable ChildLbStatusListener listener) {
+        checkNotNull(childHelperProvider, "childHelperProvider");
+        this.delegate = childHelperProvider.forTarget(getTarget());
+        this.listener = listener;
+      }
+
+      @Override
+      protected Helper delegate() {
+        return delegate;
+      }
+
+      @Override
+      public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
+        setPicker(newPicker);
+        super.updateBalancingState(newState, newPicker);
+        if (listener != null) {
+          listener.onStatusChanged(newState);
+        }
+      }
+
+      @Override
+      public Subchannel createSubchannel(CreateSubchannelArgs args) {
+        final Subchannel subchannel = super.createSubchannel(args);
+        return new ForwardingSubchannel() {
+          @Override
+          protected Subchannel delegate() {
+            return subchannel;
+          }
+
+          @Override
+          public void start(final SubchannelStateListener listener) {
+            super.start(new SubchannelStateListener() {
+              @Override
+              public void onSubchannelState(ConnectivityStateInfo newState) {
+                setConnectivityStateInfo(newState);
+                listener.onSubchannelState(newState);
+              }
+            });
+          }
+        };
+      }
+    }
+
+    /** Listener for child lb status change events. */
+    interface ChildLbStatusListener {
+
+      /** Notifies when child lb status changes. */
+      void onStatusChanged(ConnectivityState newState);
     }
   }
 
