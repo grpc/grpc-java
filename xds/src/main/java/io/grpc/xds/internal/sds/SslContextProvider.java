@@ -41,6 +41,8 @@ import java.util.logging.Logger;
  * stream that is receiving the requested secret(s) or it could represent file-system based
  * secret(s) that are dynamic.
  */
+// TODO(sanjaypujare): replace generic K with DownstreamTlsContext & UpstreamTlsContext in
+// separate client&server classes
 public abstract class SslContextProvider<K> {
 
   private static final Logger logger = Logger.getLogger(SslContextProvider.class.getName());
@@ -82,7 +84,7 @@ public abstract class SslContextProvider<K> {
   protected void setClientAuthValues(
       SslContextBuilder sslContextBuilder, CertificateValidationContext localCertValidationContext)
       throws CertificateException, IOException, CertStoreException {
-    checkState(server);
+    checkState(server, "server side SslContextProvider expected");
     if (localCertValidationContext != null) {
       sslContextBuilder.trustManager(new SdsTrustManagerFactory(localCertValidationContext));
       DownstreamTlsContext downstreamTlsContext = (DownstreamTlsContext)getSource();
