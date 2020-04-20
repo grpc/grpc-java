@@ -85,6 +85,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
   private ChannelFactory<? extends ServerChannel> channelFactory =
       Utils.DEFAULT_SERVER_CHANNEL_FACTORY;
   private final Map<ChannelOption<?>, Object> channelOptions = new HashMap<>();
+  private final Map<ChannelOption<?>, Object> childChannelOptions = new HashMap<>();
   private ObjectPool<? extends EventLoopGroup> bossEventLoopGroupPool =
       DEFAULT_BOSS_EVENT_LOOP_GROUP_POOL;
   private ObjectPool<? extends EventLoopGroup> workerEventLoopGroupPool =
@@ -189,10 +190,21 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * Specifies a channel option. As the underlying channel as well as network implementation may
    * ignore this value applications should consider it a hint.
    *
+   * @since 1.28.1
+   */
+  public <T> NettyServerBuilder withOption(ChannelOption<T> option, T value) {
+    this.channelOptions.put(option, value);
+    return this;
+  }
+
+  /**
+   * Specifies a child channel option. As the underlying channel as well as network implementation may
+   * ignore this value applications should consider it a hint.
+   *
    * @since 1.9.0
    */
   public <T> NettyServerBuilder withChildOption(ChannelOption<T> option, T value) {
-    this.channelOptions.put(option, value);
+    this.childChannelOptions.put(option, value);
     return this;
   }
 
@@ -549,7 +561,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
     List<NettyServer> transportServers = new ArrayList<>(listenAddresses.size());
     for (SocketAddress listenAddress : listenAddresses) {
       NettyServer transportServer = new NettyServer(
-          listenAddress, channelFactory, channelOptions, bossEventLoopGroupPool,
+          listenAddress, channelFactory, channelOptions, childChannelOptions, bossEventLoopGroupPool,
           workerEventLoopGroupPool, forceHeapBuffer, negotiator, streamTracerFactories,
           getTransportTracerFactory(), maxConcurrentCallsPerConnection, flowControlWindow,
           maxMessageSize, maxHeaderListSize, keepAliveTimeInNanos, keepAliveTimeoutInNanos,

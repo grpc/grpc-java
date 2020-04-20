@@ -769,6 +769,7 @@ public class NettyClientTransportTest {
         TestUtils.testServerAddress(new InetSocketAddress(0)),
         new ReflectiveChannelFactory<>(NioServerSocketChannel.class),
         new HashMap<ChannelOption<?>, Object>(),
+        new HashMap<ChannelOption<?>, Object>(),
         new FixedObjectPool<>(group), new FixedObjectPool<>(group), false, negotiator,
         Collections.<ServerStreamTracer.Factory>emptyList(),
         TransportTracer.getDefaultFactory(),

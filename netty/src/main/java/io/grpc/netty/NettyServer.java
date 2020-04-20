@@ -69,6 +69,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
   private final SocketAddress address;
   private final ChannelFactory<? extends ServerChannel> channelFactory;
   private final Map<ChannelOption<?>, ?> channelOptions;
+  private final Map<ChannelOption<?>, ?> childChannelOptions;
   private final ProtocolNegotiator protocolNegotiator;
   private final int maxStreamsPerConnection;
   private final ObjectPool<? extends EventLoopGroup> bossGroupPool;
@@ -99,6 +100,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
   NettyServer(
       SocketAddress address, ChannelFactory<? extends ServerChannel> channelFactory,
       Map<ChannelOption<?>, ?> channelOptions,
+      Map<ChannelOption<?>, ?> childChannelOptions,
       ObjectPool<? extends EventLoopGroup> bossGroupPool,
       ObjectPool<? extends EventLoopGroup> workerGroupPool,
       boolean forceHeapBuffer,
@@ -115,6 +117,8 @@ class NettyServer implements InternalServer, InternalWithLogId {
     this.channelFactory = checkNotNull(channelFactory, "channelFactory");
     checkNotNull(channelOptions, "channelOptions");
     this.channelOptions = new HashMap<ChannelOption<?>, Object>(channelOptions);
+    checkNotNull(childChannelOptions, "childChannelOptions");
+    this.childChannelOptions = new HashMap<ChannelOption<?>, Object>(childChannelOptions);
     this.bossGroupPool = checkNotNull(bossGroupPool, "bossGroupPool");
     this.workerGroupPool = checkNotNull(workerGroupPool, "workerGroupPool");
     this.forceHeapBuffer = forceHeapBuffer;
@@ -168,6 +172,14 @@ class NettyServer implements InternalServer, InternalWithLogId {
 
     if (channelOptions != null) {
       for (Map.Entry<ChannelOption<?>, ?> entry : channelOptions.entrySet()) {
+        @SuppressWarnings("unchecked")
+        ChannelOption<Object> key = (ChannelOption<Object>) entry.getKey();
+        b.option(key, entry.getValue());
+      }
+    }
+
+    if (childChannelOptions != null) {
+      for (Map.Entry<ChannelOption<?>, ?> entry : childChannelOptions.entrySet()) {
         @SuppressWarnings("unchecked")
         ChannelOption<Object> key = (ChannelOption<Object>) entry.getKey();
         b.childOption(key, entry.getValue());

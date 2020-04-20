@@ -92,6 +92,7 @@ public class NettyServerTest {
         addr,
         new ReflectiveChannelFactory<>(NioServerSocketChannel.class),
         new HashMap<ChannelOption<?>, Object>(),
+        new HashMap<ChannelOption<?>, Object>(),
         new FixedObjectPool<>(eventLoop),
         new FixedObjectPool<>(eventLoop),
         false,
@@ -137,6 +138,7 @@ public class NettyServerTest {
         addr,
         new ReflectiveChannelFactory<>(NioServerSocketChannel.class),
         new HashMap<ChannelOption<?>, Object>(),
+        new HashMap<ChannelOption<?>, Object>(),
         new FixedObjectPool<>(eventLoop),
         new FixedObjectPool<>(eventLoop),
         false,
@@ -175,6 +177,7 @@ public class NettyServerTest {
     NettyServer ns = new NettyServer(
         addr,
         new ReflectiveChannelFactory<>(NioServerSocketChannel.class),
+        new HashMap<ChannelOption<?>, Object>(),
         channelOptions,
         new FixedObjectPool<>(eventLoop),
         new FixedObjectPool<>(eventLoop),
@@ -226,6 +229,7 @@ public class NettyServerTest {
     NettyServer ns = new NettyServer(
         addr,
         new ReflectiveChannelFactory<>(NioServerSocketChannel.class),
+        new HashMap<ChannelOption<?>, Object>(),
         new HashMap<ChannelOption<?>, Object>(),
         new FixedObjectPool<>(eventLoop),
         new FixedObjectPool<>(eventLoop),
