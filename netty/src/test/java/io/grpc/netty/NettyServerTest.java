@@ -163,9 +163,9 @@ public class NettyServerTest {
     final int originalLowWaterMark = 2097169;
     final int originalHighWaterMark = 2097211;
 
-    Map<ChannelOption<?>, Object> channelOptions = new HashMap<>();
+    Map<ChannelOption<?>, Object> childChannelOptions = new HashMap<>();
 
-    channelOptions.put(ChannelOption.WRITE_BUFFER_WATER_MARK,
+    childChannelOptions.put(ChannelOption.WRITE_BUFFER_WATER_MARK,
         new WriteBufferWaterMark(originalLowWaterMark, originalHighWaterMark));
 
     final AtomicInteger lowWaterMark = new AtomicInteger(0);
@@ -178,7 +178,7 @@ public class NettyServerTest {
         addr,
         new ReflectiveChannelFactory<>(NioServerSocketChannel.class),
         new HashMap<ChannelOption<?>, Object>(),
-        channelOptions,
+        childChannelOptions,
         new FixedObjectPool<>(eventLoop),
         new FixedObjectPool<>(eventLoop),
         false,

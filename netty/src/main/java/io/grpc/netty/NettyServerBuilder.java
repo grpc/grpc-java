@@ -190,7 +190,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * Specifies a channel option. As the underlying channel as well as network implementation may
    * ignore this value applications should consider it a hint.
    *
-   * @since 1.28.1
+   * @since 1.30.0
    */
   public <T> NettyServerBuilder withOption(ChannelOption<T> option, T value) {
     this.channelOptions.put(option, value);
