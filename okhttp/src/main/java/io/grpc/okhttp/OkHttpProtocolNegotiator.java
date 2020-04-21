@@ -19,25 +19,17 @@ package io.grpc.okhttp;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
-import io.grpc.internal.GrpcUtil;
 import io.grpc.okhttp.internal.OptionalMethod;
 import io.grpc.okhttp.internal.Platform;
 import io.grpc.okhttp.internal.Platform.TlsExtensionType;
 import io.grpc.okhttp.internal.Protocol;
 import io.grpc.okhttp.internal.Util;
 import java.io.IOException;
-import java.lang.reflect.Constructor;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.net.Socket;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
-import javax.net.ssl.SSLParameters;
 import javax.net.ssl.SSLSocket;
 
 /**
@@ -141,69 +133,6 @@ class OkHttpProtocolNegotiator {
     private static final OptionalMethod<Socket> SET_NPN_PROTOCOLS =
         new OptionalMethod<>(null, "setNpnProtocols", byte[].class);
 
-    // Non-null on Android 10.0+.
-    // SSLSockets.isSupportedSocket(SSLSocket)
-    private static final Method SSL_SOCKETS_IS_SUPPORTED_SOCKET;
-    // SSLSockets.setUseSessionTickets(SSLSocket, boolean)
-    private static final Method SSL_SOCKETS_SET_USE_SESSION_TICKET;
-    // SSLParameters.setApplicationProtocols(String[])
-    private static final Method SET_APPLICATION_PROTOCOLS;
-    // SSLParameters.getApplicationProtocols()
-    private static final Method GET_APPLICATION_PROTOCOLS;
-    // SSLSocket.getApplicationProtocol()
-    private static final Method GET_APPLICATION_PROTOCOL;
-
-    // Non-null on Android 7.0+.
-    // SSLParameters.setServerNames(List<SNIServerName>)
-    private static final Method SET_SERVER_NAMES;
-    // SNIHostName(String)
-    private static final Constructor<?> SNI_HOST_NAME;
-
-    static {
-      // Attempt to find Android 10.0+ APIs.
-      Method setApplicationProtocolsMethod = null;
-      Method getApplicationProtocolsMethod = null;
-      Method getApplicationProtocolMethod = null;
-      Method sslSocketsIsSupportedSocketMethod = null;
-      Method sslSocketsSetUseSessionTicketsMethod = null;
-      try {
-        Class<?> sslParameters = SSLParameters.class;
-        setApplicationProtocolsMethod =
-            sslParameters.getMethod("setApplicationProtocols", String[].class);
-        getApplicationProtocolsMethod = sslParameters.getMethod("getApplicationProtocols");
-        getApplicationProtocolMethod = SSLSocket.class.getMethod("getApplicationProtocol");
-        Class<?> sslSockets = Class.forName("android.net.ssl.SSLSockets");
-        sslSocketsIsSupportedSocketMethod =
-            sslSockets.getMethod("isSupportedSocket", SSLSocket.class);
-        sslSocketsSetUseSessionTicketsMethod =
-            sslSockets.getMethod("setUseSessionTickets", SSLSocket.class, boolean.class);
-      } catch (ClassNotFoundException e) {
-        logger.log(Level.FINER, "Failed to find Android 10.0+ APIs", e);
-      } catch (NoSuchMethodException e) {
-        logger.log(Level.FINER, "Failed to find Android 10.0+ APIs", e);
-      }
-      SET_APPLICATION_PROTOCOLS = setApplicationProtocolsMethod;
-      GET_APPLICATION_PROTOCOLS = getApplicationProtocolsMethod;
-      GET_APPLICATION_PROTOCOL = getApplicationProtocolMethod;
-      SSL_SOCKETS_IS_SUPPORTED_SOCKET = sslSocketsIsSupportedSocketMethod;
-      SSL_SOCKETS_SET_USE_SESSION_TICKET = sslSocketsSetUseSessionTicketsMethod;
-
-      // Attempt to find Android 7.0+ APIs.
-      Method setServerNamesMethod = null;
-      Constructor<?> sniHostNameConstructor = null;
-      try {
-        setServerNamesMethod = SSLParameters.class.getMethod("setServerNames", List.class);
-        sniHostNameConstructor =
-            Class.forName("javax.net.ssl.SNIHostName").getConstructor(String.class);
-      } catch (ClassNotFoundException e) {
-        logger.log(Level.FINER, "Failed to find Android 7.0+ APIs", e);
-      } catch (NoSuchMethodException e) {
-        logger.log(Level.FINER, "Failed to find Android 7.0+ APIs", e);
-      }
-      SET_SERVER_NAMES = setServerNamesMethod;
-      SNI_HOST_NAME = sniHostNameConstructor;
-    }
-
     AndroidNegotiator(Platform platform) {
       super(platform);
     }
@@ -223,79 +152,21 @@ class OkHttpProtocolNegotiator {
     /**
      * Override {@link Platform}'s configureTlsExtensions for Android older than 5.0, since OkHttp
      * (2.3+) only support such function for Android 5.0+.
-     *
-     * <p>Note: Prior to Android Q, the standard way of accessing some Conscrypt features was to
-     * use reflection to call hidden APIs. Beginning in Q, there is public API for all of these
-     * features. We attempt to use the public API where possible. Otherwise, fall back to use the
-     * old reflective API.
      */
     @Override
     protected void configureTlsExtensions(
         SSLSocket sslSocket, String hostname, List<Protocol> protocols) {
-      String[] protocolNames = protocolIds(protocols);
-      SSLParameters sslParams = sslSocket.getSSLParameters();
-      try {
-        // Enable SNI and session tickets.
-        // Hostname is normally validated in the builder (see checkAuthority) and it should
-        // virtually always succeed. Check again here to avoid troubles (e.g., hostname with
-        // underscore) enabling SNI, which works around cases where checkAuthority is disabled.
-        // See b/154375837.
-        if (hostname != null && isValidHostName(hostname)) {
-          if (SSL_SOCKETS_IS_SUPPORTED_SOCKET != null
-              && (boolean) SSL_SOCKETS_IS_SUPPORTED_SOCKET.invoke(null, sslSocket)) {
-            SSL_SOCKETS_SET_USE_SESSION_TICKET.invoke(null, sslSocket, true);
-          } else {
-            SET_USE_SESSION_TICKETS.invokeOptionalWithoutCheckedException(sslSocket, true);
-          }
-          if (SET_SERVER_NAMES != null && SNI_HOST_NAME != null) {
-            SET_SERVER_NAMES
-                .invoke(sslParams, Collections.singletonList(SNI_HOST_NAME.newInstance(hostname)));
-          } else {
-            SET_HOSTNAME.invokeOptionalWithoutCheckedException(sslSocket, hostname);
-          }
-        }
-        boolean alpnEnabled = false;
-        if (GET_APPLICATION_PROTOCOL != null) {
-          try {
-            // If calling SSLSocket.getApplicationProtocol() throws UnsupportedOperationException,
-            // the underlying provider does not implement operations for enabling
-            // ALPN in the fashion of SSLParameters.setApplicationProtocols(). Fall back to
-            // use old hidden methods.
-            GET_APPLICATION_PROTOCOL.invoke(sslSocket);
-            SET_APPLICATION_PROTOCOLS.invoke(sslParams, (Object) protocolNames);
-            alpnEnabled = true;
-          } catch (InvocationTargetException e) {
-            Throwable targetException = e.getTargetException();
-            if (targetException instanceof UnsupportedOperationException) {
-              logger.log(Level.FINER, "setApplicationProtocol unsupported, will try old methods");
-            } else {
-              throw e;
-            }
-          }
-        }
-        sslSocket.setSSLParameters(sslParams);
-        // Check application protocols are configured correctly. If not, configure again with
-        // old methods.
-        // Workaround for Conscrypt bug: https://github.com/google/conscrypt/issues/832
-        if (alpnEnabled && GET_APPLICATION_PROTOCOLS != null) {
-          String[] configuredProtocols =
-              (String[]) GET_APPLICATION_PROTOCOLS.invoke(sslSocket.getSSLParameters());
-          if (Arrays.equals(protocolNames, configuredProtocols)) {
-            return;
-          }
-        }
-      } catch (IllegalAccessException e) {
-        throw new RuntimeException(e);
-      } catch (InvocationTargetException e) {
-        throw new RuntimeException(e);
-      } catch (InstantiationException e) {
-        throw new RuntimeException(e);
+      // Enable SNI and session tickets.
+      if (hostname != null) {
+        SET_USE_SESSION_TICKETS.invokeOptionalWithoutCheckedException(sslSocket, true);
+        SET_HOSTNAME.invokeOptionalWithoutCheckedException(sslSocket, hostname);
       }
 
       Object[] parameters = {Platform.concatLengthPrefixed(protocols)};
       if (platform.getTlsExtensionType() == TlsExtensionType.ALPN_AND_NPN) {
         SET_ALPN_PROTOCOLS.invokeWithoutCheckedException(sslSocket, parameters);
       }
+
       if (platform.getTlsExtensionType() != TlsExtensionType.NONE) {
         SET_NPN_PROTOCOLS.invokeWithoutCheckedException(sslSocket, parameters);
       } else {
@@ -306,23 +177,6 @@ class OkHttpProtocolNegotiator {
 
     @Override
     public String getSelectedProtocol(SSLSocket socket) {
-      if (GET_APPLICATION_PROTOCOL != null) {
-        try {
-          return (String) GET_APPLICATION_PROTOCOL.invoke(socket);
-        } catch (IllegalAccessException e) {
-          throw new RuntimeException(e);
-        } catch (InvocationTargetException e) {
-          Throwable targetException = e.getTargetException();
-          if (targetException instanceof UnsupportedOperationException) {
-            logger.log(
-                Level.FINER,
-                "Socket unsupported for getApplicationProtocol, will try old methods");
-          } else {
-            throw new RuntimeException(e);
-          }
-        }
-      }
-
       if (platform.getTlsExtensionType() == TlsExtensionType.ALPN_AND_NPN) {
         try {
           byte[] alpnResult =
@@ -351,23 +205,6 @@ class OkHttpProtocolNegotiator {
         }
       }
       return null;
-    }
-  }
-
-  private static String[] protocolIds(List<Protocol> protocols) {
-    List<String> result = new ArrayList<>();
-    for (Protocol protocol : protocols) {
-      result.add(protocol.toString());
-    }
-    return result.toArray(new String[0]);
-  }
-
-  private static boolean isValidHostName(String name) {
-    try {
-      GrpcUtil.checkAuthority(name);
-      return true;
-    } catch (IllegalArgumentException e) {
-      return false;
     }
   }
 }
