@@ -57,15 +57,11 @@ public abstract class TlsOptions {
     SkipAllVerification,
   }
 
-  private VerificationAuthType verificationType;
-
-  public TlsOptions(VerificationAuthType verificationType) {
-    this.verificationType = verificationType;
-  }
-
-  public VerificationAuthType getVerificationAuthType() {
-    return this.verificationType;
-  }
+  /**
+   * sub-classes extend this function to select proper {@code VerificationAuthType}.
+   * @return the selected VerificationAuthType
+   */
+  abstract VerificationAuthType getVerificationAuthType();
 
   /**
    * sub-classes extend this function to perform custom peer identity checking.

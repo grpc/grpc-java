@@ -31,9 +31,9 @@ import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509ExtendedTrustManager;
 
 /**
- * ConfigurableX509TrustManager is an {@code X509TrustManager} that allows users to choose different
- * level of peer checking mechanisms, as well as some customized check. It could also be used to
- * reload trust certificate bundle client/server uses.
+ * ConfigurableX509TrustManager is an {@code X509ExtendedTrustManager} that allows users to choose
+ * different level of peer checking mechanisms, as well as some customized check. It could also be
+ * used to reload trust certificate bundle client/server uses.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/XXXX")
 public final class ConfigurableX509TrustManager extends X509ExtendedTrustManager {
@@ -125,7 +125,7 @@ public final class ConfigurableX509TrustManager extends X509ExtendedTrustManager
         if (authType == VerificationAuthType.CertificateAndHostNameVerification
             && sslEngine == null) {
           throw new CertificateException(
-              "SSLEngine or SSLParameters is null. Couldn't check host name");
+              "SSLEngine is null. Couldn't check host name");
         }
         if (sslEngine != null) {
           String algorithm = authType == VerificationAuthType.CertificateAndHostNameVerification

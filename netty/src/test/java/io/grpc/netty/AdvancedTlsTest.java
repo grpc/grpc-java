@@ -210,7 +210,7 @@ public class AdvancedTlsTest {
       Assert.fail("An exception should haven been raised already.");
     } catch (CertificateException e) {
       assertEquals(
-          "SSLEngine or SSLParameters is null. Couldn't check host name", e.getMessage());
+          "SSLEngine is null. Couldn't check host name", e.getMessage());
     }
     // Expect to fail if the reloading returns an IO error.
     TlsOptions badReloadingOptions = new SimpleTlsOptions(
@@ -393,13 +393,19 @@ public class AdvancedTlsTest {
     private KeyStore ks;
     private boolean goodCheck;
     private boolean goodReload;
+    private VerificationAuthType verificationType;
 
     public SimpleTlsOptions(VerificationAuthType verificationAuthType,
         KeyStore ks, boolean goodCheck, boolean goodReload) {
-      super(verificationAuthType);
       this.ks = ks;
       this.goodCheck = goodCheck;
       this.goodReload = goodReload;
+      this.verificationType = verificationAuthType;
+    }
+
+    @Override
+    VerificationAuthType getVerificationAuthType() {
+      return this.verificationType;
     }
 
     @Override
