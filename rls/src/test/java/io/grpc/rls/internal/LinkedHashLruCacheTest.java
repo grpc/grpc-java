@@ -164,12 +164,14 @@ public class LinkedHashLruCacheTest {
     Entry entry = new Entry("Entry", Long.MAX_VALUE);
     cache.cache(0, entry);
 
-    cache.invalidate(0, new Entry("DifferentEntry", Long.MAX_VALUE));
+    boolean removed = cache.invalidate(0, new Entry("DifferentEntry", Long.MAX_VALUE));
 
+    assertThat(removed).isFalse();
     verify(evictionListener, never()).onEviction(eq(0), any(Entry.class), any(EvictionType.class));
 
-    cache.invalidate(0, entry);
+    removed = cache.invalidate(0, entry);
 
+    assertThat(removed).isTrue();
     verify(evictionListener).onEviction(0, entry, EvictionType.EXPLICIT);
   }
 
