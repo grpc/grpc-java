@@ -19,6 +19,7 @@ package io.grpc.okhttp;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.okhttp.internal.OptionalMethod;
 import io.grpc.okhttp.internal.Platform;
 import io.grpc.okhttp.internal.Platform.TlsExtensionType;
@@ -235,7 +236,11 @@ class OkHttpProtocolNegotiator {
       SSLParameters sslParams = sslSocket.getSSLParameters();
       try {
         // Enable SNI and session tickets.
-        if (hostname != null) {
+        // Hostname is normally validated in the builder (see checkAuthority) and it should
+        // virtually always succeed. Check again here to avoid troubles (e.g., hostname with
+        // underscore) enabling SNI, which works around cases where checkAuthority is disabled.
+        // See b/154375837.
+        if (hostname != null && isValidHostName(hostname)) {
           if (SSL_SOCKETS_IS_SUPPORTED_SOCKET != null
               && (boolean) SSL_SOCKETS_IS_SUPPORTED_SOCKET.invoke(null, sslSocket)) {
             SSL_SOCKETS_SET_USE_SESSION_TICKET.invoke(null, sslSocket, true);
@@ -355,5 +360,14 @@ class OkHttpProtocolNegotiator {
       result.add(protocol.toString());
     }
     return result.toArray(new String[0]);
+  }
+
+  private static boolean isValidHostName(String name) {
+    try {
+      GrpcUtil.checkAuthority(name);
+      return true;
+    } catch (IllegalArgumentException e) {
+      return false;
+    }
   }
 }
