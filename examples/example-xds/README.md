@@ -19,7 +19,7 @@ encounter issues please consult [COMPILING.md](../../COMPILING.md).
 1. The server does not use XDS, so recent releases work fine. Building using
 recent releases is much easier, so check out the most recent release tag:
 ```
-$ git checkout v1.28.1
+$ git checkout v1.29.0
 ```
 
 2. Build the hello-world example server or the hostname example server. See
@@ -40,7 +40,7 @@ $ git checkout master
 ```
 To:
 ```
-        grpc { artifact = "io.grpc:protoc-gen-grpc-java:1.28.1" }
+        grpc { artifact = "io.grpc:protoc-gen-grpc-java:1.29.0" }
 ```
 
 
