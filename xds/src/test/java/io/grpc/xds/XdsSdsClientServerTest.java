@@ -18,6 +18,8 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.xds.XdsClientWrapperForServerSdsTest.buildFilterChainMatch;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.BAD_CLIENT_KEY_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.BAD_CLIENT_PEM_FILE;
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.BAD_SERVER_KEY_FILE;
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.BAD_SERVER_PEM_FILE;
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CA_PEM_FILE;
@@ -103,6 +105,60 @@ public class XdsSdsClientServerTest {
     assertThat(unaryRpc(/* requestMessage= */ "buddy", blockingStub)).isEqualTo("Hello buddy");
   }
 
+  @Test
+  public void requireClientAuth_noClientCert_expectException()
+      throws IOException, URISyntaxException {
+    DownstreamTlsContext downstreamTlsContext =
+        CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenamesWithClientCertRequired(
+            SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, CA_PEM_FILE);
+    buildServerWithTlsContext(downstreamTlsContext);
+
+    // for TLS, client only uses trustCa
+    UpstreamTlsContext upstreamTlsContext =
+        CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
+            /* privateKey= */ null, /* certChain= */ null, CA_PEM_FILE);
+
+    SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
+        getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ "foo.test.google.fr");
+    try {
+      unaryRpc(/* requestMessage= */ "buddy", blockingStub);
+      fail("exception expected");
+    } catch (StatusRuntimeException sre) {
+      assertThat(sre).hasCauseThat().isInstanceOf(SSLHandshakeException.class);
+      assertThat(sre).hasCauseThat().hasMessageThat().contains("HANDSHAKE_FAILURE");
+    }
+  }
+
+  @Test
+  public void noClientAuth_sendBadClientCert_passes() throws IOException, URISyntaxException {
+    DownstreamTlsContext downstreamTlsContext =
+        CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(
+            SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, /* trustCa= */ null);
+    buildServerWithTlsContext(downstreamTlsContext);
+
+    UpstreamTlsContext upstreamTlsContext =
+        CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
+            BAD_CLIENT_KEY_FILE, BAD_CLIENT_PEM_FILE, CA_PEM_FILE);
+
+    SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
+        getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ "foo.test.google.fr");
+    assertThat(unaryRpc("buddy", blockingStub)).isEqualTo("Hello buddy");
+  }
+
+  @Test
+  public void mtls_badClientCert_expectException() throws IOException, URISyntaxException {
+    UpstreamTlsContext upstreamTlsContext =
+        CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
+            BAD_CLIENT_KEY_FILE, BAD_CLIENT_PEM_FILE, CA_PEM_FILE);
+    try {
+      XdsClient.ListenerWatcher unused = performMtlsTestAndGetListenerWatcher(upstreamTlsContext);
+      fail("exception expected");
+    } catch (StatusRuntimeException sre) {
+      assertThat(sre).hasCauseThat().isInstanceOf(SSLHandshakeException.class);
+      assertThat(sre).hasCauseThat().hasMessageThat().contains("HANDSHAKE_FAILURE");
+    }
+  }
+
   /** mTLS - client auth enabled. */
   @Test
   public void mtlsClientServer_withClientAuthentication() throws IOException, URISyntaxException {
@@ -178,7 +234,7 @@ public class XdsSdsClientServerTest {
   private XdsClient.ListenerWatcher performMtlsTestAndGetListenerWatcher(
       UpstreamTlsContext upstreamTlsContext) throws IOException, URISyntaxException {
     DownstreamTlsContext downstreamTlsContext =
-        CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(
+        CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenamesWithClientCertRequired(
             SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, CA_PEM_FILE);
 
     final XdsClientWrapperForServerSds xdsClientWrapperForServerSds =

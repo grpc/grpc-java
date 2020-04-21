@@ -17,6 +17,7 @@
 package io.grpc.xds.internal.sds;
 
 import com.google.common.base.Strings;
+import com.google.protobuf.BoolValue;
 import io.envoyproxy.envoy.api.v2.auth.CertificateValidationContext;
 import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
 import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext.CombinedCertificateValidationContext;
@@ -134,12 +135,14 @@ public class CommonTlsContextTestsUtil {
     return builder.build();
   }
 
-  /**
-   * Helper method to build DownstreamTlsContext for multiple test classes.
-   */
-  static DownstreamTlsContext buildDownstreamTlsContext(CommonTlsContext commonTlsContext) {
+  /** Helper method to build DownstreamTlsContext for multiple test classes. */
+  static DownstreamTlsContext buildDownstreamTlsContext(
+      CommonTlsContext commonTlsContext, boolean requireClientCert) {
     DownstreamTlsContext downstreamTlsContext =
-        DownstreamTlsContext.newBuilder().setCommonTlsContext(commonTlsContext).build();
+        DownstreamTlsContext.newBuilder()
+            .setCommonTlsContext(commonTlsContext)
+            .setRequireClientCertificate(BoolValue.of(requireClientCert))
+            .build();
     return downstreamTlsContext;
   }
 
@@ -159,7 +162,8 @@ public class CommonTlsContextTestsUtil {
             "unix:/var/run/sds/uds_path",
             Arrays.asList("spiffe://grpc-sds-testing.svc.id.goog/ns/default/sa/bob"),
             Arrays.asList("managed-tls"),
-            null));
+            null),
+        /* requireClientCert= */ false);
   }
 
   static String getTempFileNameForResourcesFile(String resFile) throws IOException {
@@ -171,6 +175,27 @@ public class CommonTlsContextTestsUtil {
    */
   public static DownstreamTlsContext buildDownstreamTlsContextFromFilenames(
       @Nullable String privateKey, @Nullable String certChain, @Nullable String trustCa) {
+    return buildDownstreamTlsContextFromFilenamesWithClientAuth(privateKey, certChain, trustCa,
+        false);
+  }
+
+  /**
+   * Helper method to build DownstreamTlsContext for above tests. Called from other classes as well.
+   */
+  public static DownstreamTlsContext buildDownstreamTlsContextFromFilenamesWithClientCertRequired(
+      @Nullable String privateKey,
+      @Nullable String certChain,
+      @Nullable String trustCa) {
+
+    return buildDownstreamTlsContextFromFilenamesWithClientAuth(privateKey, certChain, trustCa,
+        true);
+  }
+
+  private static DownstreamTlsContext buildDownstreamTlsContextFromFilenamesWithClientAuth(
+      @Nullable String privateKey,
+      @Nullable String certChain,
+      @Nullable String trustCa,
+      boolean requireClientCert) {
     // get temp file for each file
     try {
       if (certChain != null) {
@@ -186,7 +211,7 @@ public class CommonTlsContextTestsUtil {
       throw new RuntimeException(ioe);
     }
     return buildDownstreamTlsContext(
-        buildCommonTlsContextFromFilenames(privateKey, certChain, trustCa));
+        buildCommonTlsContextFromFilenames(privateKey, certChain, trustCa), requireClientCert);
   }
 
   /**

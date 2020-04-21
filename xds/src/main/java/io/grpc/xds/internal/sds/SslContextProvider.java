@@ -16,12 +16,21 @@
 
 package io.grpc.xds.internal.sds;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 
+import io.envoyproxy.envoy.api.v2.auth.CertificateValidationContext;
 import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
 import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
+import io.grpc.xds.internal.sds.trust.SdsTrustManagerFactory;
+import io.netty.handler.ssl.ClientAuth;
 import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslContextBuilder;
+import java.io.IOException;
+import java.security.cert.CertStoreException;
+import java.security.cert.CertificateException;
 import java.util.concurrent.Executor;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -32,6 +41,8 @@ import java.util.logging.Logger;
  * stream that is receiving the requested secret(s) or it could represent file-system based
  * secret(s) that are dynamic.
  */
+// TODO(sanjaypujare): replace generic K with DownstreamTlsContext & UpstreamTlsContext in
+// separate client&server classes
 public abstract class SslContextProvider<K> {
 
   private static final Logger logger = Logger.getLogger(SslContextProvider.class.getName());
@@ -48,7 +59,11 @@ public abstract class SslContextProvider<K> {
   }
 
   protected SslContextProvider(K source, boolean server) {
-    checkNotNull(source, "source");
+    if (server) {
+      checkArgument(source instanceof DownstreamTlsContext, "expecting DownstreamTlsContext");
+    } else {
+      checkArgument(source instanceof UpstreamTlsContext, "expecting UpstreamTlsContext");
+    }
     this.source = source;
     this.server = server;
   }
@@ -64,6 +79,22 @@ public abstract class SslContextProvider<K> {
       return ((DownstreamTlsContext) source).getCommonTlsContext();
     }
     return null;
+  }
+
+  protected void setClientAuthValues(
+      SslContextBuilder sslContextBuilder, CertificateValidationContext localCertValidationContext)
+      throws CertificateException, IOException, CertStoreException {
+    checkState(server, "server side SslContextProvider expected");
+    if (localCertValidationContext != null) {
+      sslContextBuilder.trustManager(new SdsTrustManagerFactory(localCertValidationContext));
+      DownstreamTlsContext downstreamTlsContext = (DownstreamTlsContext)getSource();
+      sslContextBuilder.clientAuth(
+          downstreamTlsContext.hasRequireClientCertificate()
+              ? ClientAuth.REQUIRE
+              : ClientAuth.OPTIONAL);
+    } else {
+      sslContextBuilder.clientAuth(ClientAuth.NONE);
+    }
   }
 
   /** Closes this provider and releases any resources. */

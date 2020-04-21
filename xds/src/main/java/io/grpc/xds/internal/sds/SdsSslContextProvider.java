@@ -234,9 +234,7 @@ final class SdsSslContextProvider<K> extends SslContextProvider<K>
                 tlsCertificate.hasPassword()
                     ? tlsCertificate.getPassword().getInlineString()
                     : null);
-        if (localCertValidationContext != null) {
-          sslContextBuilder.trustManager(new SdsTrustManagerFactory(localCertValidationContext));
-        }
+        setClientAuthValues(sslContextBuilder, localCertValidationContext);
       } else {
         logger.log(Level.FINEST, "for client");
         sslContextBuilder =
