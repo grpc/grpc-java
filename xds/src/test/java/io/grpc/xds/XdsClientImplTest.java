@@ -45,6 +45,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Any;
+import com.google.protobuf.BoolValue;
 import com.google.protobuf.UInt32Value;
 import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment;
@@ -106,6 +107,7 @@ import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -409,8 +411,12 @@ public class XdsClientImplTest {
     // Client sends an NACK LDS request.
     verify(requestObserver)
         .onNext(
-            argThat(new DiscoveryRequestMatcher("", TARGET_AUTHORITY,
-                XdsClientImpl.ADS_TYPE_URL_LDS, "0000")));
+            argThat(new DiscoveryRequestMatcher(
+                "",
+                ImmutableList.of(TARGET_AUTHORITY),
+                XdsClientImpl.ADS_TYPE_URL_LDS,
+                "0000",
+                "No routes found")));
 
     verify(configWatcher, never()).onConfigChanged(any(ConfigUpdate.class));
     verify(configWatcher, never()).onError(any(Status.class));
@@ -723,7 +729,11 @@ public class XdsClientImplTest {
     assertThat(routes.get(0)).isEqualTo(
         new EnvoyProtoData.Route(
             // path match with cluster route
-            new EnvoyProtoData.RouteMatch("", "/service1/method1", false),
+            new EnvoyProtoData.RouteMatch(
+                /* prefix= */ "",
+                /* path= */ "/service1/method1",
+                /* hasRegex= */ false,
+                /* caseSensitive= */ true),
             new EnvoyProtoData.RouteAction(
                 "cl1.googleapis.com",
                 "",
@@ -731,7 +741,11 @@ public class XdsClientImplTest {
     assertThat(routes.get(1)).isEqualTo(
         new EnvoyProtoData.Route(
             // path match with weighted cluster route
-            new EnvoyProtoData.RouteMatch("", "/service2/method2", false),
+            new EnvoyProtoData.RouteMatch(
+                /* prefix= */ "",
+                /* path= */ "/service2/method2",
+                /* hasRegex= */ false,
+                /* caseSensitive= */ true),
             new EnvoyProtoData.RouteAction(
                 "",
                 "",
@@ -742,7 +756,11 @@ public class XdsClientImplTest {
     assertThat(routes.get(2)).isEqualTo(
         new EnvoyProtoData.Route(
             // prefix match with cluster route
-            new EnvoyProtoData.RouteMatch("/service1/", "", false),
+            new EnvoyProtoData.RouteMatch(
+                /* prefix= */ "/service1/",
+                /* path= */ "",
+                /* hasRegex= */ false,
+                /* caseSensitive= */ true),
             new EnvoyProtoData.RouteAction(
                 "cl1.googleapis.com",
                 "",
@@ -750,7 +768,11 @@ public class XdsClientImplTest {
     assertThat(routes.get(3)).isEqualTo(
         new EnvoyProtoData.Route(
             // default match with cluster route
-            new EnvoyProtoData.RouteMatch("", "", false),
+            new EnvoyProtoData.RouteMatch(
+                /* prefix= */ "",
+                /* path= */ "",
+                /* hasRegex= */ false,
+                /* caseSensitive= */ true),
             new EnvoyProtoData.RouteAction(
                 "cluster.googleapis.com",
                 "",
@@ -813,8 +835,12 @@ public class XdsClientImplTest {
     // Client sent an NACK RDS request.
     verify(requestObserver)
         .onNext(
-            argThat(new DiscoveryRequestMatcher("", "route-foo.googleapis.com",
-                XdsClientImpl.ADS_TYPE_URL_RDS, "0000")));
+            argThat(new DiscoveryRequestMatcher(
+                "",
+                ImmutableList.of("route-foo.googleapis.com"),
+                XdsClientImpl.ADS_TYPE_URL_RDS,
+                "0000",
+                "No routes found")));
 
     verify(configWatcher, never()).onConfigChanged(any(ConfigUpdate.class));
     verify(configWatcher, never()).onError(any(Status.class));
@@ -863,7 +889,7 @@ public class XdsClientImplTest {
     VirtualHost virtualHost =
         VirtualHost.newBuilder()
             .setName("virtualhost00.googleapis.com")  // don't care
-            .addDomains("foo.googleapis.com")
+            .addDomains(TARGET_AUTHORITY)
             .addRoutes(
                 Route.newBuilder()
                     .setRedirect(
@@ -882,8 +908,84 @@ public class XdsClientImplTest {
     // Client sent an NACK RDS request.
     verify(requestObserver)
         .onNext(
-            argThat(new DiscoveryRequestMatcher("", "route-foo.googleapis.com",
-                XdsClientImpl.ADS_TYPE_URL_RDS, "0000")));
+            argThat(new DiscoveryRequestMatcher(
+                "",
+                ImmutableList.of("route-foo.googleapis.com"),
+                XdsClientImpl.ADS_TYPE_URL_RDS,
+                "0000",
+                "Route action is not specified for the default route")));
+
+    verify(configWatcher, never()).onConfigChanged(any(ConfigUpdate.class));
+    verify(configWatcher, never()).onError(any(Status.class));
+    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
+    verify(configWatcher).onError(statusCaptor.capture());
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.NOT_FOUND);
+    assertThat(fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
+  }
+
+  /**
+   * Client receives an RDS response (after a previous LDS request-response) containing a
+   * RouteConfiguration message for the requested resource. But the RouteConfiguration message
+   * is invalid as the VirtualHost with domains matching the requested hostname contains a route
+   * with a case-insensitive matcher.
+   * The RDS response is NACKed, as if the XdsClient has not received this response.
+   * The config watcher is NOT notified with an error.
+   */
+  @Test
+  public void matchingVirtualHostWithCaseInsensitiveRouteMatch() {
+    xdsClient.watchConfigData(TARGET_AUTHORITY, configWatcher);
+    StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
+    StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
+
+    Rds rdsConfig =
+        Rds.newBuilder()
+            // Must set to use ADS.
+            .setConfigSource(
+                ConfigSource.newBuilder().setAds(AggregatedConfigSource.getDefaultInstance()))
+            .setRouteConfigName("route-foo.googleapis.com")
+            .build();
+
+    List<Any> listeners = ImmutableList.of(
+        Any.pack(buildListener(TARGET_AUTHORITY, /* matching resource */
+            Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build())))
+    );
+    DiscoveryResponse response =
+        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS, "0000");
+    responseObserver.onNext(response);
+
+    // Client sends an ACK LDS request and an RDS request for "route-foo.googleapis.com". (Omitted)
+
+    assertThat(fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
+
+    // A VirtualHost with a Route with a case-insensitive matcher.
+    VirtualHost virtualHost =
+        VirtualHost.newBuilder()
+            .setName("virtualhost00.googleapis.com")  // don't care
+            .addDomains(TARGET_AUTHORITY)
+            .addRoutes(
+                Route.newBuilder()
+                    .setRoute(RouteAction.newBuilder().setCluster("cluster.googleapis.com"))
+                    .setMatch(RouteMatch.newBuilder().setPrefix("").setCaseSensitive(
+                        BoolValue.newBuilder().setValue(false))))
+            .build();
+
+    List<Any> routeConfigs = ImmutableList.of(
+        Any.pack(
+            buildRouteConfiguration("route-foo.googleapis.com",
+                ImmutableList.of(virtualHost))));
+    response = buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0000");
+    responseObserver.onNext(response);
+
+    // Client sent an NACK RDS request.
+    verify(requestObserver)
+        .onNext(
+            argThat(new DiscoveryRequestMatcher(
+                "",
+                ImmutableList.of("route-foo.googleapis.com"),
+                XdsClientImpl.ADS_TYPE_URL_RDS,
+                "0000",
+                "Case-insensitive route match not supported")));
 
     verify(configWatcher, never()).onConfigChanged(any(ConfigUpdate.class));
     verify(configWatcher, never()).onError(any(Status.class));
@@ -3733,6 +3835,8 @@ public class XdsClientImplTest {
     private final String typeUrl;
     private final Set<String> resourceNames;
     private final String responseNonce;
+    @Nullable
+    private final String nackErrorDetail;
 
     private DiscoveryRequestMatcher(String versionInfo, String resourceName, String typeUrl,
         String responseNonce) {
@@ -3741,10 +3845,17 @@ public class XdsClientImplTest {
 
     private DiscoveryRequestMatcher(String versionInfo, List<String> resourceNames, String typeUrl,
         String responseNonce) {
+      this(versionInfo, resourceNames, typeUrl, responseNonce, null);
+    }
+
+    private DiscoveryRequestMatcher(
+        String versionInfo, List<String> resourceNames, String typeUrl, String responseNonce,
+        @Nullable String nackErrorDetail) {
       this.versionInfo = versionInfo;
       this.resourceNames = new HashSet<>(resourceNames);
       this.typeUrl = typeUrl;
       this.responseNonce = responseNonce;
+      this.nackErrorDetail = nackErrorDetail;
     }
 
     @Override
@@ -3759,6 +3870,10 @@ public class XdsClientImplTest {
         return false;
       }
       if (!resourceNames.equals(new HashSet<>(argument.getResourceNamesList()))) {
+        return false;
+      }
+      if (nackErrorDetail != null
+          && !argument.getErrorDetail().getMessage().contains(nackErrorDetail)) {
         return false;
       }
       return NODE.equals(argument.getNode());

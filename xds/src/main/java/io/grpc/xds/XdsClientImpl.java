@@ -919,6 +919,9 @@ final class XdsClientImpl extends XdsClient {
       if (!routeMatch.isDefaultMatcher()) {
         return "The last route must be the default route";
       }
+      if (!routeMatch.isCaseSensitive()) {
+        return "Case-insensitive route match not supported";
+      }
       if (route.getRouteAction() == null) {
         return "Route action is not specified for the default route";
       }
@@ -940,6 +943,9 @@ final class XdsClientImpl extends XdsClient {
         return "Route action is not specified for one of the routes";
       }
       RouteMatch routeMatch = route.getRouteMatch();
+      if (!routeMatch.isCaseSensitive()) {
+        return "Case-insensitive route match not supported";
+      }
       if (!routeMatch.isDefaultMatcher()) {
         String prefix = routeMatch.getPrefix();
         String path = routeMatch.getPath();
