@@ -226,9 +226,10 @@ public final class LbPolicyConfiguration {
     void release(ChildPolicyWrapper childPolicyWrapper) {
       checkNotNull(childPolicyWrapper, "childPolicyWrapper");
       String target = childPolicyWrapper.getTarget();
-      ObjectPool<ChildPolicyWrapper> existing = childPolicyMap.get(target);
+      RefCountedChildPolicyWrapper existing = childPolicyMap.get(target);
       checkState(existing != null, "Cannot access already released object");
-      if (existing.returnObject(childPolicyWrapper) == null) {
+      existing.returnObject(childPolicyWrapper);
+      if (existing.isReleased()) {
         childPolicyMap.remove(target);
       }
     }
@@ -391,7 +392,7 @@ public final class LbPolicyConfiguration {
 
     @Override
     public ChildPolicyWrapper getObject() {
-      checkState(childPolicyWrapper != null, "ChildPolicyWrapper is already released");
+      checkState(!isReleased(), "ChildPolicyWrapper is already released");
       refCnt.getAndIncrement();
       return childPolicyWrapper;
     }
@@ -400,7 +401,7 @@ public final class LbPolicyConfiguration {
     @Nullable
     public ChildPolicyWrapper returnObject(Object object) {
       checkState(
-          childPolicyWrapper != null,
+          !isReleased(),
           "cannot return already released ChildPolicyWrapper, this is possibly a bug.");
       checkState(
           childPolicyWrapper == object,
@@ -410,7 +411,11 @@ public final class LbPolicyConfiguration {
       if (newCnt == 0) {
         childPolicyWrapper = null;
       }
-      return childPolicyWrapper;
+      return null;
+    }
+
+    boolean isReleased() {
+      return childPolicyWrapper == null;
     }
 
     static RefCountedChildPolicyWrapper of(ChildPolicyWrapper childPolicyWrapper) {
