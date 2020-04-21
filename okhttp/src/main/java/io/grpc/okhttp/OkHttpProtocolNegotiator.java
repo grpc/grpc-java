@@ -366,6 +366,7 @@ class OkHttpProtocolNegotiator {
   static boolean isValidHostName(String name) {
     // GrpcUtil.checkAuthority() depends on URI implementation, while Android's URI implementation
     // allows underscore in hostname. Manually disallow hostname with underscore to avoid troubles.
+    // See b/154375837.
     if (name.contains("_")) {
       return false;
     }
