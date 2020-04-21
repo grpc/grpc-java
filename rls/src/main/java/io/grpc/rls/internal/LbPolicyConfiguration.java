@@ -216,7 +216,7 @@ public final class LbPolicyConfiguration {
       if (pooledChildPolicyWrapper == null) {
         ChildPolicyWrapper childPolicyWrapper =
             new ChildPolicyWrapper(target, childLbHelperProvider, childLbStatusListener);
-        pooledChildPolicyWrapper = RefCountedChildPolicyWrapper.of(childPolicyWrapper);
+        pooledChildPolicyWrapper = new RefCountedChildPolicyWrapper(childPolicyWrapper);
         childPolicyMap.put(target, pooledChildPolicyWrapper);
       }
 
@@ -228,8 +228,50 @@ public final class LbPolicyConfiguration {
       String target = childPolicyWrapper.getTarget();
       ObjectPool<ChildPolicyWrapper> existing = childPolicyMap.get(target);
       checkState(existing != null, "Cannot access already released object");
-      if (existing.returnObject(childPolicyWrapper) == null) {
-        childPolicyMap.remove(target);
+      existing.returnObject(childPolicyWrapper);
+    }
+
+    private final class RefCountedChildPolicyWrapper implements ObjectPool<ChildPolicyWrapper> {
+
+      private final AtomicLong refCnt = new AtomicLong();
+      @Nullable
+      private ChildPolicyWrapper childPolicyWrapper;
+
+      private RefCountedChildPolicyWrapper(ChildPolicyWrapper childPolicyWrapper) {
+        this.childPolicyWrapper = checkNotNull(childPolicyWrapper, "childPolicyWrapper");
+      }
+
+      @Override
+      public ChildPolicyWrapper getObject() {
+        checkState(childPolicyWrapper != null, "ChildPolicyWrapper is already released");
+        refCnt.getAndIncrement();
+        return childPolicyWrapper;
+      }
+
+      @Override
+      @Nullable
+      public ChildPolicyWrapper returnObject(Object object) {
+        checkState(
+            childPolicyWrapper != null,
+            "cannot return already released ChildPolicyWrapper, this is possibly a bug.");
+        checkState(
+            childPolicyWrapper == object,
+            "returned object doesn't match the pooled childPolicyWrapper");
+        long newCnt = refCnt.decrementAndGet();
+        checkState(newCnt != -1, "Cannot return never pooled childPolicyWrapper");
+        if (newCnt == 0) {
+          childPolicyMap.remove(childPolicyWrapper.target);
+          childPolicyWrapper = null;
+        }
+        return null;
+      }
+
+      @Override
+      public String toString() {
+        return MoreObjects.toStringHelper(this)
+            .add("object", childPolicyWrapper)
+            .add("refCnt", refCnt.get())
+            .toString();
       }
     }
   }
@@ -376,54 +418,6 @@ public final class LbPolicyConfiguration {
 
     /** Notifies when child lb status changes. */
     void onStatusChanged(ConnectivityState newState);
-  }
-
-  private static final class RefCountedChildPolicyWrapper
-      implements ObjectPool<ChildPolicyWrapper> {
-
-    private final AtomicLong refCnt = new AtomicLong();
-    @Nullable
-    private ChildPolicyWrapper childPolicyWrapper;
-
-    private RefCountedChildPolicyWrapper(ChildPolicyWrapper childPolicyWrapper) {
-      this.childPolicyWrapper = checkNotNull(childPolicyWrapper, "childPolicyWrapper");
-    }
-
-    @Override
-    public ChildPolicyWrapper getObject() {
-      checkState(childPolicyWrapper != null, "ChildPolicyWrapper is already released");
-      refCnt.getAndIncrement();
-      return childPolicyWrapper;
-    }
-
-    @Override
-    @Nullable
-    public ChildPolicyWrapper returnObject(Object object) {
-      checkState(
-          childPolicyWrapper != null,
-          "cannot return already released ChildPolicyWrapper, this is possibly a bug.");
-      checkState(
-          childPolicyWrapper == object,
-          "returned object doesn't match the pooled childPolicyWrapper");
-      long newCnt = refCnt.decrementAndGet();
-      checkState(newCnt != -1, "Cannot return never pooled childPolicyWrapper");
-      if (newCnt == 0) {
-        childPolicyWrapper = null;
-      }
-      return childPolicyWrapper;
-    }
-
-    static RefCountedChildPolicyWrapper of(ChildPolicyWrapper childPolicyWrapper) {
-      return new RefCountedChildPolicyWrapper(childPolicyWrapper);
-    }
-
-    @Override
-    public String toString() {
-      return MoreObjects.toStringHelper(this)
-          .add("object", childPolicyWrapper)
-          .add("refCnt", refCnt.get())
-          .toString();
-    }
   }
 
   /** Exception thrown when attempting to parse child policy encountered parsing issue. */
