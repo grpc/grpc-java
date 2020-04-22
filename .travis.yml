@@ -36,7 +36,7 @@ before_script:
 
 script:
   - ./gradlew check :grpc-all:jacocoTestReport
-  - 'if [ "$TRAVIS_PULL_REQUEST" != "false" ]; then sh ./travis/spelling.sh ; fi'
+  - 'if [ "$TRAVIS_PULL_REQUEST" != "false" ]; then sh ./tools/spelling.sh ; fi'
 
 after_success:
     # Upload to coveralls once, instead of for each job in the matrix
