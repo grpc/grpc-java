@@ -22,7 +22,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * A strategy for deciding when to throttle requests at the client.
  */
 @ThreadSafe
-public interface Throttler {
+interface Throttler {
 
   /**
    * Checks if a given request should be throttled by the client. This should be called for every
