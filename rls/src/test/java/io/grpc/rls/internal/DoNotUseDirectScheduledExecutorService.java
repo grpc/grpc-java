@@ -58,7 +58,7 @@ abstract class DoNotUseDirectScheduledExecutorService implements ScheduledExecut
   private long nextRun;
   private AtomicReference<Runnable> repeatedCommand;
   private PriorityQueue<ScheduledRunnable> scheduledCommands;
-  private boolean initialized = false;
+  private boolean initialized;
 
   /**
    * Note: CALLS_REAL_METHODS doesn't initialize instance variables, all the methods need to call

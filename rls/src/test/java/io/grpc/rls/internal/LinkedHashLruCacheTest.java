@@ -21,7 +21,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.CALLS_REAL_METHODS;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import io.grpc.rls.internal.DoNotUseDirectScheduledExecutorService.FakeTimeProvider;
@@ -157,22 +156,6 @@ public class LinkedHashLruCacheTest {
     assertThat(cache.read(MAX_SIZE)).isNull();
     assertThat(cache.estimatedSize()).isEqualTo(MAX_SIZE - 1);
     verify(evictionListener).onEviction(eq(MAX_SIZE), any(Entry.class), eq(EvictionType.EXPIRED));
-  }
-
-  @Test
-  public void invalidate_keyValue() {
-    Entry entry = new Entry("Entry", Long.MAX_VALUE);
-    cache.cache(0, entry);
-
-    boolean removed = cache.invalidate(0, new Entry("DifferentEntry", Long.MAX_VALUE));
-
-    assertThat(removed).isFalse();
-    verify(evictionListener, never()).onEviction(eq(0), any(Entry.class), any(EvictionType.class));
-
-    removed = cache.invalidate(0, entry);
-
-    assertThat(removed).isTrue();
-    verify(evictionListener).onEviction(0, entry, EvictionType.EXPLICIT);
   }
 
   private static final class Entry {

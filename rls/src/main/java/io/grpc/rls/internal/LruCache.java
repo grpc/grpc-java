@@ -49,14 +49,6 @@ interface LruCache<K, V> {
   V invalidate(K key);
 
   /**
-   * Invalidates an entry for given key and value if exists. This operation will trigger {@link
-   * EvictionListener} with {@link EvictionType#EXPLICIT}.
-   *
-   * @return {@code true} if matching entry is removed, otherwise {@code false}
-   */
-  boolean invalidate(K key, V value);
-
-  /**
    * Invalidates cache entries for given keys. This operation will trigger {@link EvictionListener}
    * with {@link EvictionType#EXPLICIT}.
    */

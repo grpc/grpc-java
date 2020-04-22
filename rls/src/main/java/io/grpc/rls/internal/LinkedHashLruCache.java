@@ -192,22 +192,6 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
   }
 
   @Override
-  public final boolean invalidate(K key, V value) {
-    checkNotNull(key, "key");
-    checkNotNull(value, "value");
-    synchronized (lock) {
-      SizedValue existing = delegate.get(key);
-      if (existing != null && existing.value.equals(value)) {
-        delegate.remove(key);
-        evictionListener.onEviction(key, existing, EvictionType.EXPLICIT);
-        return true;
-      } else {
-        return false;
-      }
-    }
-  }
-
-  @Override
   public final void invalidateAll(Iterable<K> keys) {
     checkNotNull(keys, "keys");
     synchronized (lock) {
