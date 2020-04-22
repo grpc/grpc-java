@@ -920,7 +920,7 @@ public class XdsClientImplTest {
    * The config watcher is NOT notified with an error.
    */
   @Test
-  public void matchingVirtualHostWithCaseInsensitiveRouteMatch() {
+  public void matchingVirtualHostWithCaseInsensitiveAndSensitiveRouteMatch() {
     xdsClient.watchConfigData(TARGET_AUTHORITY, configWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
