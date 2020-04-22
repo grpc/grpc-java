@@ -68,7 +68,7 @@ abstract class DoNotUseDirectScheduledExecutorService implements ScheduledExecut
    * Note: CALLS_REAL_METHODS doesn't initialize instance variables, all the methods need to call
    * maybeInit if they access instance variables.
    */
-  private synchronized void maybeInit() {
+  private void maybeInit() {
     if (initialized) {
       return;
     }
@@ -96,7 +96,7 @@ abstract class DoNotUseDirectScheduledExecutorService implements ScheduledExecut
   }
 
   @Override
-  public ScheduledFuture<?> schedule(Runnable command, long delay, TimeUnit unit) {
+  public final ScheduledFuture<?> schedule(Runnable command, long delay, TimeUnit unit) {
     maybeInit();
     checkNotNull(command, "command");
     checkNotNull(unit, "unit");
@@ -112,7 +112,7 @@ abstract class DoNotUseDirectScheduledExecutorService implements ScheduledExecut
     return new FakeTimeProvider();
   }
 
-  void forwardTime(long delta, TimeUnit unit) {
+  private void forwardTime(long delta, TimeUnit unit) {
     maybeInit();
     checkNotNull(unit, "unit");
     checkArgument(delta > 0, "delta must be positive");
@@ -144,7 +144,6 @@ abstract class DoNotUseDirectScheduledExecutorService implements ScheduledExecut
     private final long scheduledTimeNanos;
     private final Runnable command;
     private final ScheduledFuture<?> scheduledFuture = new ScheduledRunnable.FakeScheduledFuture();
-    private final Object lock = new Object();
     private boolean running = false;
     private boolean done = false;
 
@@ -155,12 +154,10 @@ abstract class DoNotUseDirectScheduledExecutorService implements ScheduledExecut
 
     @Override
     public void run() {
-      synchronized (lock) {
-        if (!scheduledFuture.isCancelled()) {
-          running = true;
-          command.run();
-          done = true;
-        }
+      if (!scheduledFuture.isCancelled()) {
+        running = true;
+        command.run();
+        done = true;
       }
     }
 
@@ -189,11 +186,10 @@ abstract class DoNotUseDirectScheduledExecutorService implements ScheduledExecut
       }
 
       @Override
-      public synchronized boolean cancel(boolean mayInterruptIfRunning) {
+      public boolean cancel(boolean mayInterruptIfRunning) {
         if (running) {
           return false;
         }
-        running = true;
         cancelled = true;
         return true;
       }
