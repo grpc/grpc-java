@@ -60,6 +60,10 @@ abstract class DoNotUseDirectScheduledExecutorService implements ScheduledExecut
   private PriorityQueue<ScheduledRunnable> scheduledCommands;
   private boolean initialized = false;
 
+  /**
+   * Note: CALLS_REAL_METHODS doesn't initialize instance variables, all the methods need to call
+   * maybeInit if they access instance variables.
+   */
   private synchronized void maybeInit() {
     if (initialized) {
       return;
