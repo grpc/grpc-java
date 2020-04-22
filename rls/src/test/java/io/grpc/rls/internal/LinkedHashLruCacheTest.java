@@ -16,9 +16,6 @@
 
 package io.grpc.rls.internal;
 
-import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.base.Preconditions.checkNotNull;
-import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -26,14 +23,11 @@ import static org.mockito.Mockito.CALLS_REAL_METHODS;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
-import io.grpc.internal.TimeProvider;
+import io.grpc.rls.internal.DoNotUseDirectScheduledExecutorService.FakeTimeProvider;
 import io.grpc.rls.internal.LruCache.EvictionListener;
 import io.grpc.rls.internal.LruCache.EvictionType;
 import java.util.Objects;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -51,9 +45,9 @@ public class LinkedHashLruCacheTest {
   @Rule
   public final MockitoRule mocks = MockitoJUnit.rule();
 
-  private final DoNotUseFakeScheduledService fakeScheduledService =
-      mock(DoNotUseFakeScheduledService.class, CALLS_REAL_METHODS);
-  private final TimeProvider timeProvider = fakeScheduledService.getFakeTicker();
+  private final DoNotUseDirectScheduledExecutorService fakeScheduledService =
+      mock(DoNotUseDirectScheduledExecutorService.class, CALLS_REAL_METHODS);
+  private final FakeTimeProvider timeProvider = fakeScheduledService.getFakeTimeProvider();
 
   @Mock
   private EvictionListener<Integer, Entry> evictionListener;
@@ -108,10 +102,10 @@ public class LinkedHashLruCacheTest {
     cache.cache(0, toBeEvicted);
     cache.cache(1, survivor);
 
-    fakeScheduledService.advance(10, TimeUnit.NANOSECONDS);
+    timeProvider.forwardTime(10, TimeUnit.NANOSECONDS);
     verify(evictionListener).onEviction(0, toBeEvicted, EvictionType.EXPIRED);
 
-    fakeScheduledService.advance(10, TimeUnit.NANOSECONDS);
+    timeProvider.forwardTime(10, TimeUnit.NANOSECONDS);
     verify(evictionListener).onEviction(1, survivor, EvictionType.EXPIRED);
   }
 
@@ -188,68 +182,6 @@ public class LinkedHashLruCacheTest {
     @Override
     public int hashCode() {
       return Objects.hash(value, expireTime);
-    }
-  }
-
-  /**
-   * A fake minimal implementation of ScheduledExecutorService *only* supports scheduledAtFixedRate
-   * with a lot of limitation / assumptions. Only intended to be used in this test with
-   * CALL_REAL_METHODS mock.
-   */
-  private abstract static class DoNotUseFakeScheduledService implements ScheduledExecutorService {
-
-    private long currTimeNanos;
-    private long period;
-    private long nextRun;
-    private AtomicReference<Runnable> command;
-
-    @Override
-    public final ScheduledFuture<?> scheduleAtFixedRate(
-        Runnable command, long initialDelay, long period, TimeUnit unit) {
-      // hack to initialize
-      if (this.command == null) {
-        this.command = new AtomicReference<>();
-      }
-      checkState(this.command.get() == null, "only can schedule one");
-      checkState(period > 0, "period should be positive");
-      checkState(initialDelay >= 0, "initial delay should be >= 0");
-      if (initialDelay == 0) {
-        initialDelay = period;
-        command.run();
-      }
-      this.command.set(checkNotNull(command, "command"));
-      this.nextRun = checkNotNull(unit, "unit").toNanos(initialDelay) + currTimeNanos;
-      this.period = unit.toNanos(period);
-      return mock(ScheduledFuture.class);
-    }
-
-    TimeProvider getFakeTicker() {
-      return new TimeProvider() {
-        @Override
-        public long currentTimeNanos() {
-          return currTimeNanos;
-        }
-      };
-    }
-
-    void advance(long delta, TimeUnit unit) {
-      // if scheduled command, only can advance the ticker to trigger at most 1 event
-      boolean scheduled = command != null && command.get() != null;
-      long deltaNanos = unit.toNanos(delta);
-      if (scheduled) {
-        checkArgument(
-            (this.currTimeNanos + deltaNanos) < (nextRun + 2 * period),
-            "Cannot advance ticker because more than one repeated tasks will run");
-        long finalTime = this.currTimeNanos + deltaNanos;
-        if (finalTime >= nextRun) {
-          nextRun += period;
-          this.currTimeNanos = nextRun;
-          command.get().run();
-        }
-        this.currTimeNanos = finalTime;
-      } else {
-        this.currTimeNanos += deltaNanos;
-      }
     }
   }
 }
