@@ -107,7 +107,6 @@ import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -411,12 +410,8 @@ public class XdsClientImplTest {
     // Client sends an NACK LDS request.
     verify(requestObserver)
         .onNext(
-            argThat(new DiscoveryRequestMatcher(
-                "",
-                ImmutableList.of(TARGET_AUTHORITY),
-                XdsClientImpl.ADS_TYPE_URL_LDS,
-                "0000",
-                "No routes found")));
+            argThat(new DiscoveryRequestMatcher("", TARGET_AUTHORITY,
+                XdsClientImpl.ADS_TYPE_URL_LDS, "0000")));
 
     verify(configWatcher, never()).onConfigChanged(any(ConfigUpdate.class));
     verify(configWatcher, never()).onError(any(Status.class));
@@ -835,12 +830,8 @@ public class XdsClientImplTest {
     // Client sent an NACK RDS request.
     verify(requestObserver)
         .onNext(
-            argThat(new DiscoveryRequestMatcher(
-                "",
-                ImmutableList.of("route-foo.googleapis.com"),
-                XdsClientImpl.ADS_TYPE_URL_RDS,
-                "0000",
-                "No routes found")));
+            argThat(new DiscoveryRequestMatcher("", "route-foo.googleapis.com",
+                XdsClientImpl.ADS_TYPE_URL_RDS, "0000")));
 
     verify(configWatcher, never()).onConfigChanged(any(ConfigUpdate.class));
     verify(configWatcher, never()).onError(any(Status.class));
@@ -908,12 +899,8 @@ public class XdsClientImplTest {
     // Client sent an NACK RDS request.
     verify(requestObserver)
         .onNext(
-            argThat(new DiscoveryRequestMatcher(
-                "",
-                ImmutableList.of("route-foo.googleapis.com"),
-                XdsClientImpl.ADS_TYPE_URL_RDS,
-                "0000",
-                "Route action is not specified for the default route")));
+            argThat(new DiscoveryRequestMatcher("", "route-foo.googleapis.com",
+                XdsClientImpl.ADS_TYPE_URL_RDS, "0000")));
 
     verify(configWatcher, never()).onConfigChanged(any(ConfigUpdate.class));
     verify(configWatcher, never()).onError(any(Status.class));
@@ -980,20 +967,42 @@ public class XdsClientImplTest {
     // Client sent an NACK RDS request.
     verify(requestObserver)
         .onNext(
-            argThat(new DiscoveryRequestMatcher(
-                "",
-                ImmutableList.of("route-foo.googleapis.com"),
-                XdsClientImpl.ADS_TYPE_URL_RDS,
-                "0000",
-                "Case-insensitive route match not supported")));
+            argThat(new DiscoveryRequestMatcher("", "route-foo.googleapis.com",
+                XdsClientImpl.ADS_TYPE_URL_RDS, "0000")));
 
     verify(configWatcher, never()).onConfigChanged(any(ConfigUpdate.class));
     verify(configWatcher, never()).onError(any(Status.class));
-    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
-    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
-    verify(configWatcher).onError(statusCaptor.capture());
-    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.NOT_FOUND);
-    assertThat(fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
+
+    // A VirtualHost with a Route with a case-sensitive matcher.
+    virtualHost =
+        VirtualHost.newBuilder()
+            .setName("virtualhost00.googleapis.com")  // don't care
+            .addDomains(TARGET_AUTHORITY)
+            .addRoutes(
+                Route.newBuilder()
+                    .setRoute(RouteAction.newBuilder().setCluster("cluster.googleapis.com"))
+                    .setMatch(RouteMatch.newBuilder().setPrefix("").setCaseSensitive(
+                        BoolValue.newBuilder().setValue(true))))
+            .build();
+
+    routeConfigs = ImmutableList.of(
+        Any.pack(
+            buildRouteConfiguration("route-foo.googleapis.com",
+                ImmutableList.of(virtualHost))));
+    response = buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0000");
+    responseObserver.onNext(response);
+
+    // Client sent an ACK RDS request.
+    verify(requestObserver)
+        .onNext(
+            argThat(new DiscoveryRequestMatcher(
+                "0",
+                ImmutableList.of("route-foo.googleapis.com"),
+                XdsClientImpl.ADS_TYPE_URL_RDS,
+                "0000")));
+
+    verify(configWatcher).onConfigChanged(any(ConfigUpdate.class));
+    verify(configWatcher, never()).onError(any(Status.class));
   }
 
   /**
@@ -3835,27 +3844,18 @@ public class XdsClientImplTest {
     private final String typeUrl;
     private final Set<String> resourceNames;
     private final String responseNonce;
-    @Nullable
-    private final String nackErrorDetail;
 
     private DiscoveryRequestMatcher(String versionInfo, String resourceName, String typeUrl,
         String responseNonce) {
       this(versionInfo, ImmutableList.of(resourceName), typeUrl, responseNonce);
     }
 
-    private DiscoveryRequestMatcher(String versionInfo, List<String> resourceNames, String typeUrl,
-        String responseNonce) {
-      this(versionInfo, resourceNames, typeUrl, responseNonce, null);
-    }
-
     private DiscoveryRequestMatcher(
-        String versionInfo, List<String> resourceNames, String typeUrl, String responseNonce,
-        @Nullable String nackErrorDetail) {
+        String versionInfo, List<String> resourceNames, String typeUrl, String responseNonce) {
       this.versionInfo = versionInfo;
       this.resourceNames = new HashSet<>(resourceNames);
       this.typeUrl = typeUrl;
       this.responseNonce = responseNonce;
-      this.nackErrorDetail = nackErrorDetail;
     }
 
     @Override
@@ -3870,10 +3870,6 @@ public class XdsClientImplTest {
         return false;
       }
       if (!resourceNames.equals(new HashSet<>(argument.getResourceNamesList()))) {
-        return false;
-      }
-      if (nackErrorDetail != null
-          && !argument.getErrorDetail().getMessage().contains(nackErrorDetail)) {
         return false;
       }
       return NODE.equals(argument.getNode());
