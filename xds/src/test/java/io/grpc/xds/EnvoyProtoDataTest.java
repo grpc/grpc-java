@@ -19,6 +19,8 @@ package io.grpc.xds;
 import static com.google.common.truth.Truth.assertThat;
 
 import com.google.common.testing.EqualsTester;
+import com.google.protobuf.BoolValue;
+import io.envoyproxy.envoy.api.v2.route.RouteMatch;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -71,4 +73,26 @@ public class EnvoyProtoDataTest {
   }
 
   // TODO(chengyuanzhang): add test for other data types.
+
+  @Test
+  public void routeMatchCaseSensitive() {
+    assertThat(
+            EnvoyProtoData.RouteMatch.fromEnvoyProtoRouteMatch(RouteMatch.newBuilder().build())
+                .isCaseSensitive())
+        .isTrue();
+    assertThat(
+        EnvoyProtoData.RouteMatch.fromEnvoyProtoRouteMatch(
+            RouteMatch.newBuilder()
+                .setCaseSensitive(BoolValue.newBuilder().setValue(true))
+                .build())
+            .isCaseSensitive())
+        .isTrue();
+    assertThat(
+            EnvoyProtoData.RouteMatch.fromEnvoyProtoRouteMatch(
+                    RouteMatch.newBuilder()
+                        .setCaseSensitive(BoolValue.newBuilder().setValue(false))
+                        .build())
+                .isCaseSensitive())
+        .isFalse();
+  }
 }

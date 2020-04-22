@@ -467,7 +467,8 @@ final class EnvoyProtoData {
           .toString();
     }
 
-    private static RouteMatch fromEnvoyProtoRouteMatch(
+    @VisibleForTesting
+    static RouteMatch fromEnvoyProtoRouteMatch(
         io.envoyproxy.envoy.api.v2.route.RouteMatch proto) {
       return new RouteMatch(
           /* prefix= */ proto.getPrefix(),
