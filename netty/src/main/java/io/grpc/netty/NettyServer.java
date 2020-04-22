@@ -19,7 +19,6 @@ package io.grpc.netty;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_AGE_NANOS_DISABLED;
 import static io.netty.channel.ChannelOption.ALLOCATOR;
-import static io.netty.channel.ChannelOption.SO_BACKLOG;
 import static io.netty.channel.ChannelOption.SO_KEEPALIVE;
 
 import com.google.common.base.MoreObjects;
@@ -167,7 +166,6 @@ class NettyServer implements InternalServer, InternalWithLogId {
     b.group(bossGroup, workerGroup);
     b.channelFactory(channelFactory);
     // For non-socket based channel, the option will be ignored.
-    b.option(SO_BACKLOG, 128);
     b.childOption(SO_KEEPALIVE, true);
 
     if (channelOptions != null) {
