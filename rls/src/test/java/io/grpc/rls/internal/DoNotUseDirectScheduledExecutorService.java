@@ -107,7 +107,7 @@ abstract class DoNotUseDirectScheduledExecutorService implements ScheduledExecut
     return scheduledRunnable.scheduledFuture;
   }
 
-  FakeTimeProvider getFakeTimeProvider() {
+  final FakeTimeProvider getFakeTimeProvider() {
     maybeInit();
     return new FakeTimeProvider();
   }
@@ -172,7 +172,7 @@ abstract class DoNotUseDirectScheduledExecutorService implements ScheduledExecut
           .toString();
     }
 
-    private class FakeScheduledFuture implements ScheduledFuture<Object> {
+    private final class FakeScheduledFuture implements ScheduledFuture<Object> {
       boolean cancelled = false;
 
       @Override
@@ -225,7 +225,7 @@ abstract class DoNotUseDirectScheduledExecutorService implements ScheduledExecut
     }
   }
 
-  class FakeTimeProvider implements TimeProvider {
+  final class FakeTimeProvider implements TimeProvider {
 
     @Override
     public long currentTimeNanos() {
