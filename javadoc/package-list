@@ -1,10 +1,13 @@
 io.grpc
 io.grpc.auth
+io.grpc.grpclb
 io.grpc.inprocess
 io.grpc.netty
 io.grpc.okhttp
 io.grpc.protobuf
 io.grpc.protobuf.lite
+io.grpc.protobuf.services
+io.grpc.services
 io.grpc.stub
 io.grpc.stub.annotations
 io.grpc.testing
