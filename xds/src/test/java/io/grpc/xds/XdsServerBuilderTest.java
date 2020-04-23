@@ -42,7 +42,8 @@ public class XdsServerBuilderTest {
     XdsServerBuilder builder = XdsServerBuilder.forPort(port);
     XdsClient mockXdsClient = mock(XdsClient.class);
     XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
-        new XdsClientWrapperForServerSds(port, mockXdsClient, null);
+        new XdsClientWrapperForServerSds(port);
+    xdsClientWrapperForServerSds.start(mockXdsClient);
     ServerSdsProtocolNegotiator serverSdsProtocolNegotiator =
         new ServerSdsProtocolNegotiator(xdsClientWrapperForServerSds);
     Server xdsServer = builder.buildServer(serverSdsProtocolNegotiator);

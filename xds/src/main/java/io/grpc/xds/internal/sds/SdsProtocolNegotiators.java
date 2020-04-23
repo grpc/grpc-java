@@ -21,7 +21,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.annotations.VisibleForTesting;
 import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
-import io.grpc.SynchronizationContext;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
 import io.grpc.netty.InternalNettyChannelBuilder;
 import io.grpc.netty.InternalNettyChannelBuilder.ProtocolNegotiatorFactory;
@@ -31,17 +30,14 @@ import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.netty.ProtocolNegotiationEvent;
-import io.grpc.xds.Bootstrapper;
 import io.grpc.xds.XdsAttributes;
 import io.grpc.xds.XdsClientWrapperForServerSds;
-import io.grpc.xds.XdsClientWrapperForServerSds.ManagementServerNotFoundException;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerAdapter;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.handler.ssl.SslContext;
 import io.netty.util.AsciiString;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Level;
@@ -74,17 +70,8 @@ public final class SdsProtocolNegotiators {
    *
    * @param port the listening port passed to {@link XdsServerBuilder#forPort(int)}.
    */
-  public static ProtocolNegotiator serverProtocolNegotiator(
-      int port, SynchronizationContext syncContext) {
-    XdsClientWrapperForServerSds xdsClientWrapperForServerSds;
-    try {
-      xdsClientWrapperForServerSds = XdsClientWrapperForServerSds.newInstance(
-          port, Bootstrapper.getInstance(), syncContext);
-      return new ServerSdsProtocolNegotiator(xdsClientWrapperForServerSds);
-    } catch (IOException | ManagementServerNotFoundException e) {
-      logger.log(Level.INFO, "Fallback to plaintext for server at port {0}", port);
-      return InternalProtocolNegotiators.serverPlaintext();
-    }
+  public static ServerSdsProtocolNegotiator serverProtocolNegotiator(int port) {
+    return new ServerSdsProtocolNegotiator(new XdsClientWrapperForServerSds(port));
   }
 
   private static final class ClientSdsProtocolNegotiatorFactory
@@ -253,6 +240,10 @@ public final class SdsProtocolNegotiators {
           checkNotNull(xdsClientWrapperForServerSds, "xdsClientWrapperForServerSds");
     }
 
+    XdsClientWrapperForServerSds getXdsClientWrapperForServerSds() {
+      return xdsClientWrapperForServerSds;
+    }
+
     @Override
     public AsciiString scheme() {
       return SCHEME;
@@ -264,11 +255,7 @@ public final class SdsProtocolNegotiators {
     }
 
     @Override
-    public void close() {
-      if (xdsClientWrapperForServerSds != null) {
-        xdsClientWrapperForServerSds.shutdown();
-      }
-    }
+    public void close() {}
   }
 
   @VisibleForTesting

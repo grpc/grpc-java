@@ -145,7 +145,8 @@ public class XdsClientWrapperForServerSdsTest {
       int port, DownstreamTlsContext downstreamTlsContext) {
     XdsClient mockXdsClient = mock(XdsClient.class);
     XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
-        new XdsClientWrapperForServerSds(port, mockXdsClient, null);
+        new XdsClientWrapperForServerSds(port);
+    xdsClientWrapperForServerSds.start(mockXdsClient);
     generateListenerUpdateToWatcher(
         port, downstreamTlsContext, xdsClientWrapperForServerSds.getListenerWatcher());
     return xdsClientWrapperForServerSds;
@@ -163,7 +164,8 @@ public class XdsClientWrapperForServerSdsTest {
   @Before
   public void setUp() throws IOException {
     MockitoAnnotations.initMocks(this);
-    xdsClientWrapperForServerSds = new XdsClientWrapperForServerSds(PORT, xdsClient, null);
+    xdsClientWrapperForServerSds = new XdsClientWrapperForServerSds(PORT);
+    xdsClientWrapperForServerSds.start(xdsClient);
     tlsContexts[0] = null;
     tlsContexts[1] = CommonTlsContextTestsUtil.buildTestDownstreamTlsContext("CERT1", "VA1");
     tlsContexts[2] = CommonTlsContextTestsUtil.buildTestDownstreamTlsContext("CERT2", "VA2");
