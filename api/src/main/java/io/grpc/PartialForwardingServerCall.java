@@ -76,6 +76,12 @@ abstract class PartialForwardingServerCall<ReqT, RespT> extends ServerCall<ReqT,
     return delegate().getAuthority();
   }
 
+  // TODO(chengyuanzhang): add ExperimentalApi annotation.
+  @Override
+  public Server getServer() {
+    return delegate().getServer();
+  }
+
   @Override
   public String toString() {
     return MoreObjects.toStringHelper(this).add("delegate", delegate()).toString();

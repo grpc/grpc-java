@@ -229,4 +229,10 @@ public abstract class ServerCall<ReqT, RespT> {
    * The {@link MethodDescriptor} for the call.
    */
   public abstract MethodDescriptor<ReqT, RespT> getMethodDescriptor();
+
+  /**
+   * Returns the {@link Server} that dispatches the call.
+   */
+  // TODO(chengyuanzhang): add ExperimentalApi annotation.
+  public abstract Server getServer();
 }
