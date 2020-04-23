@@ -22,7 +22,6 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import com.google.protobuf.ByteString;
-import io.grpc.BindableService;
 import io.grpc.ManagedChannel;
 import io.grpc.Server;
 import io.grpc.ServerServiceDefinition;
@@ -64,7 +63,7 @@ import org.junit.runners.JUnit4;
 public class ProtoReflectionServiceTest {
   private static final String TEST_HOST = "localhost";
   private MutableHandlerRegistry handlerRegistry = new MutableHandlerRegistry();
-  private BindableService reflectionService;
+  private ServerServiceDefinition reflectionService;
   private ServerServiceDefinition dynamicService =
       new DynamicServiceGrpc.DynamicServiceImplBase() {}.bindService();
   private ServerServiceDefinition anotherDynamicService =

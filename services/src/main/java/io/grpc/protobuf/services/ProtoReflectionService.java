@@ -24,10 +24,14 @@ import com.google.protobuf.Descriptors.FieldDescriptor;
 import com.google.protobuf.Descriptors.FileDescriptor;
 import com.google.protobuf.Descriptors.MethodDescriptor;
 import com.google.protobuf.Descriptors.ServiceDescriptor;
-import io.grpc.BindableService;
 import io.grpc.ExperimentalApi;
-import io.grpc.InternalNotifyOnServerBuild;
+import io.grpc.Metadata;
 import io.grpc.Server;
+import io.grpc.ServerCall;
+import io.grpc.ServerCall.Listener;
+import io.grpc.ServerCallHandler;
+import io.grpc.ServerInterceptor;
+import io.grpc.ServerInterceptors;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
 import io.grpc.protobuf.ProtoFileDescriptorSupplier;
@@ -50,6 +54,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 
@@ -61,26 +66,30 @@ import javax.annotation.concurrent.GuardedBy;
  * extension.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2222")
-public final class ProtoReflectionService extends ServerReflectionGrpc.ServerReflectionImplBase
-    implements InternalNotifyOnServerBuild {
+public final class ProtoReflectionService extends ServerReflectionGrpc.ServerReflectionImplBase {
 
   private final Object lock = new Object();
 
+  private AtomicReference<Server> serverRef;
   @GuardedBy("lock")
   private ServerReflectionIndex serverReflectionIndex;
 
-  private Server server;
-
   private ProtoReflectionService() {}
 
-  public static BindableService newInstance() {
-    return new ProtoReflectionService();
+  /**
+   * Creates a instance of {@link ProtoReflectionService}. Intended usage is one instance per
+   * {@link Server}.
+   */
+  public static ServerServiceDefinition newInstance() {
+    AtomicReference<Server> serverCaptor = new AtomicReference<>();
+    ProtoReflectionService protoReflection = new ProtoReflectionService();
+    protoReflection.init(serverCaptor);
+    return ServerInterceptors.intercept(
+        protoReflection, new ServerCaptureInterceptor(serverCaptor));
   }
 
-  /** Receives a reference to the server at build time. */
-  @Override
-  public void notifyOnBuild(Server server) {
-    this.server = checkNotNull(server);
+  private void init(AtomicReference<Server> serverRef) {
+    this.serverRef = serverRef;
   }
 
   /**
@@ -92,6 +101,7 @@ public final class ProtoReflectionService extends ServerReflectionGrpc.ServerRef
    */
   private ServerReflectionIndex updateIndexIfNecessary() {
     synchronized (lock) {
+      Server server = serverRef.get();
       if (serverReflectionIndex == null) {
         serverReflectionIndex =
             new ServerReflectionIndex(server.getImmutableServices(), server.getMutableServices());
@@ -138,6 +148,21 @@ public final class ProtoReflectionService extends ServerReflectionGrpc.ServerRef
     serverCallStreamObserver.disableAutoInboundFlowControl();
     serverCallStreamObserver.request(1);
     return requestObserver;
+  }
+
+  private static final class ServerCaptureInterceptor implements ServerInterceptor {
+    private final AtomicReference<Server> captor;
+
+    ServerCaptureInterceptor(AtomicReference<Server> captor) {
+      this.captor = captor;
+    }
+
+    @Override
+    public <ReqT, RespT> Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> call,
+        Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+      captor.set(call.getServer());
+      return next.startCall(call, headers);
+    }
   }
 
   private static class ProtoReflectionStreamObserver
