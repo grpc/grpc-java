@@ -33,10 +33,11 @@ install:
 before_script:
   - test -z "$(git status --porcelain)" || (git status && echo Error Working directory is not clean. Forget to commit generated files? && false)
   - chmod +x ./tools/spelling.sh
+  - chmod +x ./tools/install-misspell.sh
 
 script:
   - ./gradlew check :grpc-all:jacocoTestReport
-  - 'if [ "$TRAVIS_PULL_REQUEST" != "false" ]; then sh ./tools/spelling.sh ; fi'
+  - 'if [ "$TRAVIS_PULL_REQUEST" != "false" ]; then bash ./tools/spelling.sh ; fi'
 
 after_success:
     # Upload to coveralls once, instead of for each job in the matrix
