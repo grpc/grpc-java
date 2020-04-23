@@ -70,6 +70,7 @@ public final class InProcessChannelBuilder extends
   private final String name;
   private ScheduledExecutorService scheduledExecutorService;
   private int maxInboundMetadataSize = Integer.MAX_VALUE;
+  private boolean transportIncludeStatusCause = false;
 
   private InProcessChannelBuilder(String name) {
     super(new InProcessSocketAddress(name), "localhost");
@@ -157,11 +158,22 @@ public final class InProcessChannelBuilder extends
     return this;
   }
 
+  /**
+   * Sets whether to override the default behaviour of InProcessTransport to include
+   * the cause of the status.
+   * @param enable whether to include cause in status
+   * @return this
+   */
+  public InProcessChannelBuilder transportIncludeStatusCause(boolean enable) {
+    this.transportIncludeStatusCause = enable;
+    return this;
+  }
+
   @Override
   @Internal
   protected ClientTransportFactory buildTransportFactory() {
     return new InProcessClientTransportFactory(
-        name, scheduledExecutorService, maxInboundMetadataSize);
+        name, scheduledExecutorService, maxInboundMetadataSize, transportIncludeStatusCause);
   }
 
   /**
@@ -173,16 +185,18 @@ public final class InProcessChannelBuilder extends
     private final boolean useSharedTimer;
     private final int maxInboundMetadataSize;
     private boolean closed;
+    private boolean includeCauseWithStatus;
 
     private InProcessClientTransportFactory(
         String name,
         @Nullable ScheduledExecutorService scheduledExecutorService,
-        int maxInboundMetadataSize) {
+        int maxInboundMetadataSize, boolean includeCauseWithStatus) {
       this.name = name;
       useSharedTimer = scheduledExecutorService == null;
       timerService = useSharedTimer
           ? SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE) : scheduledExecutorService;
       this.maxInboundMetadataSize = maxInboundMetadataSize;
+      this.includeCauseWithStatus = includeCauseWithStatus;
     }
 
     @Override
@@ -194,7 +208,7 @@ public final class InProcessChannelBuilder extends
       // TODO(carl-mastrangelo): Pass channelLogger in.
       return new InProcessTransport(
           name, maxInboundMetadataSize, options.getAuthority(), options.getUserAgent(),
-          options.getEagAttributes());
+          options.getEagAttributes(), includeCauseWithStatus);
     }
 
     @Override

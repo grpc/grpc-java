@@ -161,7 +161,6 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
     this.channelz = builder.channelz;
     this.serverCallTracer = builder.callTracerFactory.create();
     this.ticker = checkNotNull(builder.ticker, "ticker");
-
     channelz.addServer(this);
   }
 
@@ -759,9 +758,9 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
     /**
      * Like {@link ServerCall#close(Status, Metadata)}, but thread-safe for internal use.
      */
-    private void internalClose() {
+    private void internalClose(Throwable t) {
       // TODO(ejona86): this is not thread-safe :)
-      stream.close(Status.UNKNOWN, new Metadata());
+      stream.close(Status.UNKNOWN.withCause(t), new Metadata());
     }
 
     @Override
@@ -782,10 +781,10 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
           try {
             getListener().messagesAvailable(producer);
           } catch (RuntimeException e) {
-            internalClose();
+            internalClose(e);
             throw e;
           } catch (Error e) {
-            internalClose();
+            internalClose(e);
             throw e;
           } finally {
             PerfMark.stopTask("ServerCallListener(app).messagesAvailable", tag);
@@ -817,10 +816,10 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
           try {
             getListener().halfClosed();
           } catch (RuntimeException e) {
-            internalClose();
+            internalClose(e);
             throw e;
           } catch (Error e) {
-            internalClose();
+            internalClose(e);
             throw e;
           } finally {
             PerfMark.stopTask("ServerCallListener(app).halfClosed", tag);
@@ -891,10 +890,10 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
           try {
             getListener().onReady();
           } catch (RuntimeException e) {
-            internalClose();
+            internalClose(e);
             throw e;
           } catch (Error e) {
-            internalClose();
+            internalClose(e);
             throw e;
           } finally {
             PerfMark.stopTask("ServerCallListener(app).onReady", tag);
