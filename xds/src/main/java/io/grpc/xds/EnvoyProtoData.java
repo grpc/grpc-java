@@ -401,12 +401,14 @@ final class EnvoyProtoData {
     private final String prefix;
     private final String path;
     private final boolean hasRegex;
+    private final boolean caseSensitive;
 
     @VisibleForTesting
-    RouteMatch(String prefix, String path, boolean hasRegex) {
+    RouteMatch(String prefix, String path, boolean hasRegex, boolean caseSensitive) {
       this.prefix = prefix;
       this.path = path;
       this.hasRegex = hasRegex;
+      this.caseSensitive = caseSensitive;
     }
 
     String getPrefix() {
@@ -419,6 +421,10 @@ final class EnvoyProtoData {
 
     boolean hasRegex() {
       return hasRegex;
+    }
+
+    boolean isCaseSensitive() {
+      return caseSensitive;
     }
 
     boolean isDefaultMatcher() {
@@ -441,13 +447,14 @@ final class EnvoyProtoData {
       }
       RouteMatch that = (RouteMatch) o;
       return hasRegex == that.hasRegex
+          && caseSensitive == that.caseSensitive
           && Objects.equals(prefix, that.prefix)
           && Objects.equals(path, that.path);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hash(prefix, path, hasRegex);
+      return Objects.hash(prefix, path, caseSensitive, hasRegex);
     }
 
     @Override
@@ -456,13 +463,19 @@ final class EnvoyProtoData {
           .add("prefix", prefix)
           .add("path", path)
           .add("hasRegex", hasRegex)
+          .add("caseSensitive", caseSensitive)
           .toString();
     }
 
-    private static RouteMatch fromEnvoyProtoRouteMatch(
+    @VisibleForTesting
+    static RouteMatch fromEnvoyProtoRouteMatch(
         io.envoyproxy.envoy.api.v2.route.RouteMatch proto) {
       return new RouteMatch(
-          proto.getPrefix(), proto.getPath(), !proto.getRegex().isEmpty() || proto.hasSafeRegex());
+          /* prefix= */ proto.getPrefix(),
+          /* path= */ proto.getPath(),
+          /* hasRegex= */ !proto.getRegex().isEmpty() || proto.hasSafeRegex(),
+          // case_sensitive defaults to true if the field is not set
+          /*caseSensitive= */ !proto.hasCaseSensitive() || proto.getCaseSensitive().getValue());
     }
   }
 
