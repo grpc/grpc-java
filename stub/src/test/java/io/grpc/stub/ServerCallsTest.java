@@ -28,6 +28,7 @@ import io.grpc.ClientCall;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.Server;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerServiceDefinition;
@@ -572,6 +573,11 @@ public class ServerCallsTest {
     @Override
     public MethodDescriptor<Integer, Integer> getMethodDescriptor() {
       return methodDescriptor;
+    }
+
+    @Override
+    public Server getServer() {
+      return null;
     }
   }
 }

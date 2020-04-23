@@ -39,6 +39,7 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.MethodDescriptor.MethodType;
+import io.grpc.Server;
 import io.grpc.ServerCall;
 import io.grpc.Status;
 import io.grpc.internal.ServerCallImpl.ServerStreamListenerImpl;
@@ -60,6 +61,7 @@ import org.mockito.MockitoAnnotations;
 @RunWith(JUnit4.class)
 public class ServerCallImplTest {
   @Rule public final ExpectedException thrown = ExpectedException.none();
+  @Mock private Server server;
   @Mock private ServerStream stream;
   @Mock private ServerCall.Listener<Long> callListener;
 
@@ -89,7 +91,7 @@ public class ServerCallImplTest {
   public void setUp() {
     MockitoAnnotations.initMocks(this);
     context = Context.ROOT.withCancellation();
-    call = new ServerCallImpl<>(stream, UNARY_METHOD, requestHeaders, context,
+    call = new ServerCallImpl<>(server, stream, UNARY_METHOD, requestHeaders, context,
         DecompressorRegistry.getDefaultInstance(), CompressorRegistry.getDefaultInstance(),
         serverCallTracer, PerfMark.createTag());
   }
@@ -112,7 +114,7 @@ public class ServerCallImplTest {
     assertEquals(0, before.callsStarted);
     assertEquals(0, before.lastCallStartedNanos);
 
-    call = new ServerCallImpl<>(stream, UNARY_METHOD, requestHeaders, context,
+    call = new ServerCallImpl<>(server, stream, UNARY_METHOD, requestHeaders, context,
         DecompressorRegistry.getDefaultInstance(), CompressorRegistry.getDefaultInstance(),
         tracer, PerfMark.createTag());
 
@@ -219,6 +221,7 @@ public class ServerCallImplTest {
   private void sendMessage_serverSendsOne_closeOnSecondCall(
       MethodDescriptor<Long, Long> method) {
     ServerCallImpl<Long, Long> serverCall = new ServerCallImpl<>(
+        server,
         stream,
         method,
         requestHeaders,
@@ -254,6 +257,7 @@ public class ServerCallImplTest {
   private void sendMessage_serverSendsOne_closeOnSecondCall_appRunToCompletion(
       MethodDescriptor<Long, Long> method) {
     ServerCallImpl<Long, Long> serverCall = new ServerCallImpl<>(
+        server,
         stream,
         method,
         requestHeaders,
@@ -292,6 +296,7 @@ public class ServerCallImplTest {
   private void serverSendsOne_okFailsOnMissingResponse(
       MethodDescriptor<Long, Long> method) {
     ServerCallImpl<Long, Long> serverCall = new ServerCallImpl<>(
+        server,
         stream,
         method,
         requestHeaders,

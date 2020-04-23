@@ -22,6 +22,7 @@ import com.google.common.collect.Lists;
 import io.grpc.Attributes;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.Server;
 import io.grpc.ServerCall;
 import io.grpc.Status;
 import io.grpc.alts.internal.AltsAuthContext;
@@ -108,6 +109,11 @@ public final class AuthorizationUtilTest {
 
     @Override
     public MethodDescriptor<String, String> getMethodDescriptor() {
+      throw new AssertionError("Should not be called");
+    }
+
+    @Override
+    public Server getServer() {
       throw new AssertionError("Should not be called");
     }
   }

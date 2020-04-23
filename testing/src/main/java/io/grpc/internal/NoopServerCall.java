@@ -18,6 +18,7 @@ package io.grpc.internal;
 
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.Server;
 import io.grpc.ServerCall;
 import io.grpc.Status;
 
@@ -55,6 +56,11 @@ public class NoopServerCall<ReqT, RespT> extends ServerCall<ReqT, RespT> {
 
   @Override
   public MethodDescriptor<ReqT, RespT> getMethodDescriptor() {
+    return null;
+  }
+
+  @Override
+  public Server getServer() {
     return null;
   }
 }
