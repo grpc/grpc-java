@@ -17,6 +17,7 @@
 package io.grpc.netty;
 
 import com.google.common.base.Preconditions;
+import javax.annotation.Nullable;
 
 /**
  * Allows autoFlowControl to be turned on and off from interop testing and flow control windows to
@@ -29,7 +30,9 @@ final class NettyHandlerSettings {
   private static boolean autoFlowControlOn;
   // These will be the most recently created handlers created using NettyClientTransport and
   // NettyServerTransport
+  @Nullable
   private static AbstractNettyHandler clientHandler;
+  @Nullable
   private static AbstractNettyHandler serverHandler;
 
   static void setAutoWindow(AbstractNettyHandler handler) {
@@ -62,6 +65,11 @@ final class NettyHandlerSettings {
 
   public static synchronized int getLatestServerWindow() {
     return getLatestWindow(serverHandler);
+  }
+
+  public static synchronized void clearHandlers() {
+    clientHandler = null;
+    serverHandler = null;
   }
 
   private static synchronized int getLatestWindow(AbstractNettyHandler handler) {

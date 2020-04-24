@@ -81,8 +81,11 @@ public class NettyFlowControlTest {
   }
 
   @AfterClass
-  public static void shutDownTests() {
+  public static void shutDown() {
     executor.shutdown();
+    InternalHandlerSettings.enable(false);
+    InternalHandlerSettings.autoWindowOn(false);
+    InternalHandlerSettings.clearHandlers();
   }
 
   @Before

@@ -41,4 +41,8 @@ public final class InternalHandlerSettings {
   public static synchronized int getLatestServerWindow() {
     return NettyHandlerSettings.getLatestServerWindow();
   }
+
+  public static synchronized void clearHandlers() {
+    NettyHandlerSettings.clearHandlers();
+  }
 }

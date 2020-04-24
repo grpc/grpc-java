@@ -22,6 +22,7 @@ import io.grpc.netty.InternalHandlerSettings;
 import io.grpc.netty.NegotiationType;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.netty.NettyServerBuilder;
+import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -35,9 +36,16 @@ public class AutoWindowSizingOnTest extends AbstractInteropTest {
     InternalHandlerSettings.autoWindowOn(true);
   }
 
+  @AfterClass
+  public static void turnOffAutoWindow() {
+    InternalHandlerSettings.enable(false);
+    InternalHandlerSettings.autoWindowOn(false);
+    InternalHandlerSettings.clearHandlers();
+  }
+
   @Override
   protected AbstractServerImplBuilder<?> getServerBuilder() {
-    return NettyServerBuilder.forPort(0)
+    return NettyServerBuilder.forPort(8080)
         .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE);
   }
 
