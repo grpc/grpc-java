@@ -369,7 +369,8 @@ class NettyClientHandler extends AbstractNettyHandler {
   /**
    * Handler for an inbound HTTP/2 DATA frame.
    */
-  private void onDataRead(int streamId, ByteBuf data, int padding, boolean endOfStream) {
+  private void onDataRead(int streamId, ByteBuf data, int padding, boolean endOfStream)
+      throws Http2Exception {
     flowControlPing().onDataRead(data.readableBytes(), padding);
     NettyClientStream.TransportState stream = clientStream(requireHttp2Stream(streamId));
     PerfMark.event("NettyClientHandler.onDataRead", stream.tag());

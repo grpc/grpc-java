@@ -21,6 +21,7 @@ import static io.netty.handler.codec.http2.Http2CodecUtil.getEmbeddedHttp2Except
 import com.google.common.annotations.VisibleForTesting;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
+import io.netty.handler.codec.http2.DefaultHttp2LocalFlowController;
 import io.netty.handler.codec.http2.Http2ConnectionDecoder;
 import io.netty.handler.codec.http2.Http2ConnectionEncoder;
 import io.netty.handler.codec.http2.Http2Exception;
@@ -117,7 +118,10 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
    */
   final class FlowControlPinger {
 
+    // NOTE: Up to 16MB guarantees sending WINDOW_UPDATE for every BDP ping
     private static final int MAX_WINDOW_SIZE = 8 * 1024 * 1024;
+    // A max float value < 1.0f
+    private static final float MAX_WINDOW_UPDATE_RATIO = 0.99999997f;
     private int pingCount;
     private int pingReturn;
     private boolean pinging;
@@ -133,11 +137,24 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
       return MAX_WINDOW_SIZE;
     }
 
-    public void onDataRead(int dataLength, int paddingLength) {
+    public void onDataRead(int dataLength, int paddingLength) throws Http2Exception {
       if (!autoTuneFlowControlOn) {
         return;
       }
       if (!isPinging()) {
+        // if a bdpPing is being sent out we can piggyback connection's window update for the bytes
+        // we just received. DefaultHttp2LocalFlowController doesn't always send WINDOW_UPDATE.
+        DefaultHttp2LocalFlowController flowController =
+            (DefaultHttp2LocalFlowController) decoder().flowController();
+        Http2Stream connectionStream = connection().connectionStream();
+        decoder()
+            .flowController()
+            .incrementWindowSize(connectionStream, dataLength + paddingLength);
+        float ratio = flowController.windowUpdateRatio(connectionStream);
+        // To make it always send WINDOW_UPDATE, temporarily increase the windowUpdateRatio.
+        flowController.windowUpdateRatio(connectionStream, MAX_WINDOW_UPDATE_RATIO);
+        flowController.windowUpdateRatio(connectionStream, ratio);
+
         setPinging(true);
         sendPing(ctx());
       }
@@ -168,7 +185,6 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
         settings.initialWindowSize(targetWindow);
         frameWriter().writeSettings(ctx(), settings, ctx().newPromise());
       }
-
     }
 
     private boolean isPinging() {
