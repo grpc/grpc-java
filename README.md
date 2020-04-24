@@ -60,7 +60,7 @@ Or for Gradle with non-Android, add to your dependencies:
 ```gradle
 implementation 'io.grpc:grpc-netty-shaded:1.29.0'
 implementation 'io.grpc:grpc-protobuf:1.29.0'
-implementation 'io.grpc:grpc-stub:1.20.0'
+implementation 'io.grpc:grpc-stub:1.29.0'
 ```
 
 For Android client, use `grpc-okhttp` instead of `grpc-netty-shaded` and
