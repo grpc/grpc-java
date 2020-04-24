@@ -100,6 +100,7 @@ public class NettyServerTest {
         Collections.<ServerStreamTracer.Factory>emptyList(),
         TransportTracer.getDefaultFactory(),
         1, // ignore
+        false, // ignore
         1, // ignore
         1, // ignore
         1, // ignore
@@ -146,6 +147,7 @@ public class NettyServerTest {
         Collections.<ServerStreamTracer.Factory>emptyList(),
         TransportTracer.getDefaultFactory(),
         1, // ignore
+        false, // ignore
         1, // ignore
         1, // ignore
         1, // ignore
@@ -186,6 +188,7 @@ public class NettyServerTest {
         Collections.<ServerStreamTracer.Factory>emptyList(),
         TransportTracer.getDefaultFactory(),
         1, // ignore
+        false, // ignore
         1, // ignore
         1, // ignore
         1, // ignore
@@ -238,6 +241,7 @@ public class NettyServerTest {
         Collections.<ServerStreamTracer.Factory>emptyList(),
         TransportTracer.getDefaultFactory(),
         1, // ignore
+        false, // ignore
         1, // ignore
         1, // ignore
         1, // ignore

@@ -17,6 +17,8 @@
 package io.grpc.netty;
 
 import com.google.common.base.Preconditions;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelFutureListener;
 import javax.annotation.Nullable;
 
 /**
@@ -25,9 +27,6 @@ import javax.annotation.Nullable;
  */
 final class NettyHandlerSettings {
 
-  private static volatile boolean enabled;
-
-  private static boolean autoFlowControlOn;
   // These will be the most recently created handlers created using NettyClientTransport and
   // NettyServerTransport
   @Nullable
@@ -36,11 +35,10 @@ final class NettyHandlerSettings {
   private static AbstractNettyHandler serverHandler;
 
   static void setAutoWindow(AbstractNettyHandler handler) {
-    if (!enabled) {
+    if (!handler.isAutoTuneFlowControlOn()) {
       return;
     }
     synchronized (NettyHandlerSettings.class) {
-      handler.setAutoTuneFlowControl(autoFlowControlOn);
       if (handler instanceof NettyClientHandler) {
         clientHandler = handler;
       } else if (handler instanceof NettyServerHandler) {
@@ -51,14 +49,6 @@ final class NettyHandlerSettings {
     }
   }
 
-  public static void enable(boolean enable) {
-    enabled = enable;
-  }
-
-  public static synchronized void autoWindowOn(boolean autoFlowControl) {
-    autoFlowControlOn = autoFlowControl;
-  }
-
   public static synchronized int getLatestClientWindow() {
     return getLatestWindow(clientHandler);
   }
@@ -67,7 +57,7 @@ final class NettyHandlerSettings {
     return getLatestWindow(serverHandler);
   }
 
-  public static synchronized void clearHandlers() {
+  private static synchronized void clearHandlers() {
     clientHandler = null;
     serverHandler = null;
   }
@@ -76,5 +66,14 @@ final class NettyHandlerSettings {
     Preconditions.checkNotNull(handler);
     return handler.decoder().flowController()
         .initialWindowSize(handler.connection().connectionStream());
+  }
+
+  static ChannelFutureListener cleanUpTask() {
+    return new ChannelFutureListener() {
+      @Override
+      public void operationComplete(ChannelFuture future) throws Exception {
+        NettyHandlerSettings.clearHandlers();
+      }
+    };
   }
 }

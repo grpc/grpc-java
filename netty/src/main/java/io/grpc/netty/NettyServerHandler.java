@@ -139,6 +139,7 @@ class NettyServerHandler extends AbstractNettyHandler {
       List<? extends ServerStreamTracer.Factory> streamTracerFactories,
       TransportTracer transportTracer,
       int maxStreams,
+      boolean autoFlowControl,
       int flowControlWindow,
       int maxHeaderListSize,
       int maxMessageSize,
@@ -165,6 +166,7 @@ class NettyServerHandler extends AbstractNettyHandler {
         streamTracerFactories,
         transportTracer,
         maxStreams,
+        autoFlowControl,
         flowControlWindow,
         maxHeaderListSize,
         maxMessageSize,
@@ -186,6 +188,7 @@ class NettyServerHandler extends AbstractNettyHandler {
       List<? extends ServerStreamTracer.Factory> streamTracerFactories,
       TransportTracer transportTracer,
       int maxStreams,
+      boolean autoFlowControl,
       int flowControlWindow,
       int maxHeaderListSize,
       int maxMessageSize,
@@ -238,7 +241,8 @@ class NettyServerHandler extends AbstractNettyHandler {
         keepAliveTimeInNanos, keepAliveTimeoutInNanos,
         maxConnectionIdleInNanos,
         maxConnectionAgeInNanos, maxConnectionAgeGraceInNanos,
-        keepAliveEnforcer);
+        keepAliveEnforcer,
+        autoFlowControl);
   }
 
   private NettyServerHandler(
@@ -256,8 +260,9 @@ class NettyServerHandler extends AbstractNettyHandler {
       long maxConnectionIdleInNanos,
       long maxConnectionAgeInNanos,
       long maxConnectionAgeGraceInNanos,
-      final KeepAliveEnforcer keepAliveEnforcer) {
-    super(channelUnused, decoder, encoder, settings);
+      final KeepAliveEnforcer keepAliveEnforcer,
+      boolean autoFlowControl) {
+    super(channelUnused, decoder, encoder, settings, autoFlowControl);
 
     final MaxConnectionIdleManager maxConnectionIdleManager;
     if (maxConnectionIdleInNanos == MAX_CONNECTION_IDLE_NANOS_DISABLED) {

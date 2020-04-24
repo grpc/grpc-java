@@ -78,6 +78,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
   private EventLoopGroup workerGroup;
   private ServerListener listener;
   private Channel channel;
+  private final boolean autoFlowControl;
   private final int flowControlWindow;
   private final int maxMessageSize;
   private final int maxHeaderListSize;
@@ -106,7 +107,8 @@ class NettyServer implements InternalServer, InternalWithLogId {
       ProtocolNegotiator protocolNegotiator,
       List<? extends ServerStreamTracer.Factory> streamTracerFactories,
       TransportTracer.Factory transportTracerFactory,
-      int maxStreamsPerConnection, int flowControlWindow, int maxMessageSize, int maxHeaderListSize,
+      int maxStreamsPerConnection, boolean autoFlowControl, int flowControlWindow,
+      int maxMessageSize, int maxHeaderListSize,
       long keepAliveTimeInNanos, long keepAliveTimeoutInNanos,
       long maxConnectionIdleInNanos,
       long maxConnectionAgeInNanos, long maxConnectionAgeGraceInNanos,
@@ -127,6 +129,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
     this.streamTracerFactories = checkNotNull(streamTracerFactories, "streamTracerFactories");
     this.transportTracerFactory = transportTracerFactory;
     this.maxStreamsPerConnection = maxStreamsPerConnection;
+    this.autoFlowControl = autoFlowControl;
     this.flowControlWindow = flowControlWindow;
     this.maxMessageSize = maxMessageSize;
     this.maxHeaderListSize = maxHeaderListSize;
@@ -205,6 +208,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
                 streamTracerFactories,
                 transportTracerFactory.create(),
                 maxStreamsPerConnection,
+                autoFlowControl,
                 flowControlWindow,
                 maxMessageSize,
                 maxHeaderListSize,

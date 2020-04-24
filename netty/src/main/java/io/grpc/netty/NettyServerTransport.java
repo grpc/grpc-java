@@ -64,6 +64,7 @@ class NettyServerTransport implements ServerTransport {
   private NettyServerHandler grpcHandler;
   private ServerTransportListener listener;
   private boolean terminated;
+  private final boolean autoFlowControl;
   private final int flowControlWindow;
   private final int maxMessageSize;
   private final int maxHeaderListSize;
@@ -84,6 +85,7 @@ class NettyServerTransport implements ServerTransport {
       List<? extends ServerStreamTracer.Factory> streamTracerFactories,
       TransportTracer transportTracer,
       int maxStreams,
+      boolean autoFlowControl,
       int flowControlWindow,
       int maxMessageSize,
       int maxHeaderListSize,
@@ -101,6 +103,7 @@ class NettyServerTransport implements ServerTransport {
         Preconditions.checkNotNull(streamTracerFactories, "streamTracerFactories");
     this.transportTracer = Preconditions.checkNotNull(transportTracer, "transportTracer");
     this.maxStreams = maxStreams;
+    this.autoFlowControl = autoFlowControl;
     this.flowControlWindow = flowControlWindow;
     this.maxMessageSize = maxMessageSize;
     this.maxHeaderListSize = maxHeaderListSize;
@@ -141,7 +144,10 @@ class NettyServerTransport implements ServerTransport {
 
     ChannelFutureListener terminationNotifier = new TerminationNotifier();
     channelUnused.addListener(terminationNotifier);
-    channel.closeFuture().addListener(terminationNotifier);
+    channel
+        .closeFuture()
+        .addListener(terminationNotifier)
+        .addListener(NettyHandlerSettings.cleanUpTask());
 
     channel.pipeline().addLast(bufferingHandler);
   }
@@ -258,6 +264,7 @@ class NettyServerTransport implements ServerTransport {
         streamTracerFactories,
         transportTracer,
         maxStreams,
+        autoFlowControl,
         flowControlWindow,
         maxHeaderListSize,
         maxMessageSize,

@@ -43,7 +43,6 @@ import java.util.concurrent.TimeUnit;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -74,18 +73,10 @@ public class NettyFlowControlTest {
       new ThreadPoolExecutor(1, 10, 1, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>(),
           new DefaultThreadFactory("flowcontrol-test-pool", true));
 
-  @BeforeClass
-  public static void setUp() {
-    InternalHandlerSettings.enable(true);
-    InternalHandlerSettings.autoWindowOn(true);
-  }
 
   @AfterClass
-  public static void shutDown() {
+  public static void shutDownTests() {
     executor.shutdown();
-    InternalHandlerSettings.enable(false);
-    InternalHandlerSettings.autoWindowOn(false);
-    InternalHandlerSettings.clearHandlers();
   }
 
   @Before
@@ -172,15 +163,16 @@ public class NettyFlowControlTest {
       }
     }
     channel = NettyChannelBuilder.forAddress(new InetSocketAddress("localhost", proxyPort))
-        .flowControlWindow(clientFlowControlWindow)
+        .initialFlowControlWindow(clientFlowControlWindow)
         .negotiationType(NegotiationType.PLAINTEXT)
         .build();
   }
 
   private void startServer(int serverFlowControlWindow) {
     ServerBuilder<?> builder =
-        NettyServerBuilder.forAddress(new InetSocketAddress("localhost", 0))
-        .flowControlWindow(serverFlowControlWindow);
+        NettyServerBuilder
+            .forAddress(new InetSocketAddress("localhost", 0))
+            .initialFlowControlWindow(serverFlowControlWindow);
     builder.addService(ServerInterceptors.intercept(
         new TestServiceImpl(Executors.newScheduledThreadPool(2)),
         ImmutableList.<ServerInterceptor>of()));
@@ -231,7 +223,7 @@ public class NettyFlowControlTest {
     }
 
     public int waitFor() throws InterruptedException {
-      latch.await();
+      latch.await(5, TimeUnit.SECONDS);
       return lastWindow;
     }
   }

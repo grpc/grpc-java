@@ -191,7 +191,7 @@ public class NettyClientTransportTest {
     channelOptions.put(ChannelOption.SO_LINGER, soLinger);
     NettyClientTransport transport = new NettyClientTransport(
         address, new ReflectiveChannelFactory<>(NioSocketChannel.class), channelOptions, group,
-        newNegotiator(), DEFAULT_WINDOW_SIZE, DEFAULT_MAX_MESSAGE_SIZE,
+        newNegotiator(), false, DEFAULT_WINDOW_SIZE, DEFAULT_MAX_MESSAGE_SIZE,
         GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, KEEPALIVE_TIME_NANOS_DISABLED, 1L, false, authority,
         null /* user agent */, tooManyPingsRunnable, new TransportTracer(), Attributes.EMPTY,
         new SocketPicker(), new FakeChannelLogger(), false);
@@ -437,7 +437,7 @@ public class NettyClientTransportTest {
     NettyClientTransport transport = new NettyClientTransport(
         address, new ReflectiveChannelFactory<>(CantConstructChannel.class),
         new HashMap<ChannelOption<?>, Object>(), group,
-        newNegotiator(), DEFAULT_WINDOW_SIZE, DEFAULT_MAX_MESSAGE_SIZE,
+        newNegotiator(), false, DEFAULT_WINDOW_SIZE, DEFAULT_MAX_MESSAGE_SIZE,
         GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, KEEPALIVE_TIME_NANOS_DISABLED, 1, false, authority,
         null, tooManyPingsRunnable, new TransportTracer(), Attributes.EMPTY, new SocketPicker(),
         new FakeChannelLogger(), false);
@@ -752,7 +752,7 @@ public class NettyClientTransportTest {
     }
     NettyClientTransport transport = new NettyClientTransport(
         address, channelFactory, new HashMap<ChannelOption<?>, Object>(), group,
-        negotiator, DEFAULT_WINDOW_SIZE, maxMsgSize, maxHeaderListSize,
+        negotiator, false, DEFAULT_WINDOW_SIZE, maxMsgSize, maxHeaderListSize,
         keepAliveTimeNano, keepAliveTimeoutNano,
         false, authority, userAgent, tooManyPingsRunnable,
         new TransportTracer(), eagAttributes, new SocketPicker(), new FakeChannelLogger(), false);
@@ -774,6 +774,7 @@ public class NettyClientTransportTest {
         Collections.<ServerStreamTracer.Factory>emptyList(),
         TransportTracer.getDefaultFactory(),
         maxStreamsPerConnection,
+        false,
         DEFAULT_WINDOW_SIZE, DEFAULT_MAX_MESSAGE_SIZE, maxHeaderListSize,
         DEFAULT_SERVER_KEEPALIVE_TIME_NANOS, DEFAULT_SERVER_KEEPALIVE_TIMEOUT_NANOS,
         MAX_CONNECTION_IDLE_NANOS_DISABLED,

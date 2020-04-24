@@ -790,6 +790,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
         frameWriter(),
         lifecycleManager,
         mockKeepAliveManager,
+        false,
         flowControlWindow,
         maxHeaderListSize,
         stopwatchSupplier,

@@ -36,10 +36,13 @@ import java.util.concurrent.TimeUnit;
  */
 abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
   private static final long GRACEFUL_SHUTDOWN_NO_TIMEOUT = -1;
-  private boolean autoTuneFlowControlOn = false;
-  private int initialConnectionWindow;
-  private ChannelHandlerContext ctx;
+
+  private final int initialConnectionWindow;
   private final FlowControlPinger flowControlPing = new FlowControlPinger();
+
+  private boolean autoTuneFlowControlOn;
+  private ChannelHandlerContext ctx;
+  private boolean initialWindowSent = false;
 
   private static final long BDP_MEASUREMENT_PING = 1234;
 
@@ -47,7 +50,8 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
       ChannelPromise channelUnused,
       Http2ConnectionDecoder decoder,
       Http2ConnectionEncoder encoder,
-      Http2Settings initialSettings) {
+      Http2Settings initialSettings,
+      boolean autoFlowControl) {
     super(channelUnused, decoder, encoder, initialSettings);
 
     // During a graceful shutdown, wait until all streams are closed.
@@ -56,6 +60,7 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
     // Extract the connection window from the settings if it was set.
     this.initialConnectionWindow = initialSettings.initialWindowSize() == null ? -1 :
             initialSettings.initialWindowSize();
+    this.autoTuneFlowControlOn = autoFlowControl;
   }
 
   @Override
@@ -93,14 +98,18 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
    * Sends initial connection window to the remote endpoint if necessary.
    */
   private void sendInitialConnectionWindow() throws Http2Exception {
-    if (ctx.channel().isActive() && initialConnectionWindow > 0) {
+    if (!initialWindowSent && ctx.channel().isActive()) {
       Http2Stream connectionStream = connection().connectionStream();
       int currentSize = connection().local().flowController().windowSize(connectionStream);
       int delta = initialConnectionWindow - currentSize;
       decoder().flowController().incrementWindowSize(connectionStream, delta);
-      initialConnectionWindow = -1;
+      initialWindowSent = true;
       ctx.flush();
     }
+  }
+
+  boolean isAutoTuneFlowControlOn() {
+    return autoTuneFlowControlOn;
   }
 
   @VisibleForTesting
@@ -121,10 +130,11 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
     // NOTE: Up to 16MB guarantees sending WINDOW_UPDATE for every BDP ping
     private static final int MAX_WINDOW_SIZE = 8 * 1024 * 1024;
     // A max float value < 1.0f
-    private static final float MAX_WINDOW_UPDATE_RATIO = 0.99999997f;
+    private static final float MAX_WINDOW_UPDATE_RATIO = 0.99999994f;
     private int pingCount;
     private int pingReturn;
     private boolean pinging;
+    private int windowSent;
     private int dataSizeSincePing;
     private float lastBandwidth; // bytes per second
     private long lastPingTime;
@@ -142,23 +152,27 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
         return;
       }
       if (!isPinging()) {
-        // if a bdpPing is being sent out we can piggyback connection's window update for the bytes
-        // we just received. DefaultHttp2LocalFlowController doesn't always send WINDOW_UPDATE.
-        DefaultHttp2LocalFlowController flowController =
-            (DefaultHttp2LocalFlowController) decoder().flowController();
-        Http2Stream connectionStream = connection().connectionStream();
-        decoder()
-            .flowController()
-            .incrementWindowSize(connectionStream, dataLength + paddingLength);
-        float ratio = flowController.windowUpdateRatio(connectionStream);
-        // To make it always send WINDOW_UPDATE, temporarily increase the windowUpdateRatio.
-        flowController.windowUpdateRatio(connectionStream, MAX_WINDOW_UPDATE_RATIO);
-        flowController.windowUpdateRatio(connectionStream, ratio);
-
         setPinging(true);
+        sendWindowUpdate(dataLength, paddingLength);
         sendPing(ctx());
       }
       incrementDataSincePing(dataLength + paddingLength);
+    }
+
+    private void sendWindowUpdate(int dataLength, int paddingLength) throws Http2Exception {
+      // if a bdpPing is being sent out we can piggyback connection's window update for the bytes
+      // we just received. DefaultHttp2LocalFlowController doesn't always send WINDOW_UPDATE.
+      DefaultHttp2LocalFlowController flowController =
+          (DefaultHttp2LocalFlowController) decoder().flowController();
+      Http2Stream connectionStream = connection().connectionStream();
+      decoder()
+          .flowController()
+          .incrementWindowSize(connectionStream, dataLength + paddingLength);
+      windowSent += (dataLength + paddingLength);
+      float ratio = flowController.windowUpdateRatio(connectionStream);
+      // To make it always send WINDOW_UPDATE, temporarily increase the windowUpdateRatio.
+      flowController.windowUpdateRatio(connectionStream, MAX_WINDOW_UPDATE_RATIO);
+      flowController.windowUpdateRatio(connectionStream, ratio);
     }
 
     public void updateWindow() throws Http2Exception {
@@ -176,7 +190,8 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
       int targetWindow = Math.min(getDataSincePing() * 2, MAX_WINDOW_SIZE);
       setPinging(false);
       int currentWindow = fc.initialWindowSize(connection().connectionStream());
-      if (targetWindow > currentWindow && bandwidth > lastBandwidth) {
+      int adjustedCurrentWindow = currentWindow - windowSent;
+      if (targetWindow > adjustedCurrentWindow && bandwidth > lastBandwidth) {
         lastBandwidth = bandwidth;
         int increase = targetWindow - currentWindow;
         fc.incrementWindowSize(connection().connectionStream(), increase);
@@ -184,6 +199,7 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
         Http2Settings settings = new Http2Settings();
         settings.initialWindowSize(targetWindow);
         frameWriter().writeSettings(ctx(), settings, ctx().newPromise());
+        windowSent = 0;
       }
     }
 

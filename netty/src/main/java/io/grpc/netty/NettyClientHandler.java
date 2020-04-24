@@ -131,6 +131,7 @@ class NettyClientHandler extends AbstractNettyHandler {
   static NettyClientHandler newHandler(
       ClientTransportLifecycleManager lifecycleManager,
       @Nullable KeepAliveManager keepAliveManager,
+      boolean autoFlowControl,
       int flowControlWindow,
       int maxHeaderListSize,
       Supplier<Stopwatch> stopwatchFactory,
@@ -155,6 +156,7 @@ class NettyClientHandler extends AbstractNettyHandler {
         frameWriter,
         lifecycleManager,
         keepAliveManager,
+        autoFlowControl,
         flowControlWindow,
         maxHeaderListSize,
         stopwatchFactory,
@@ -171,6 +173,7 @@ class NettyClientHandler extends AbstractNettyHandler {
       Http2FrameWriter frameWriter,
       ClientTransportLifecycleManager lifecycleManager,
       KeepAliveManager keepAliveManager,
+      boolean autoFlowControl,
       int flowControlWindow,
       int maxHeaderListSize,
       Supplier<Stopwatch> stopwatchFactory,
@@ -230,7 +233,8 @@ class NettyClientHandler extends AbstractNettyHandler {
         tooManyPingsRunnable,
         transportTracer,
         eagAttributes,
-        authority);
+        authority,
+        autoFlowControl);
   }
 
   private NettyClientHandler(
@@ -243,8 +247,9 @@ class NettyClientHandler extends AbstractNettyHandler {
       final Runnable tooManyPingsRunnable,
       TransportTracer transportTracer,
       Attributes eagAttributes,
-      String authority) {
-    super(/* channelUnused= */ null, decoder, encoder, settings);
+      String authority,
+      boolean autoFlowControl) {
+    super(/* channelUnused= */ null, decoder, encoder, settings, autoFlowControl);
     this.lifecycleManager = lifecycleManager;
     this.keepAliveManager = keepAliveManager;
     this.stopwatchFactory = stopwatchFactory;
