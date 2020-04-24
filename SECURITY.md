@@ -48,7 +48,7 @@ Security.insertProviderAt(Conscrypt.newProvider(), 1);
 
 ## TLS on non-Android
 
-JDK versions prior to Java 9 do not support ALPN and are either missing AES GCM
+JDK versions prior to OpenJDK 8u252 do not support ALPN and are either missing AES GCM
 support or have 2% the performance of OpenSSL.
 
 We recommend most users use grpc-netty-shaded, which includes netty-tcnative on
