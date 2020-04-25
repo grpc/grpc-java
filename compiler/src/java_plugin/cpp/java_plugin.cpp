@@ -73,6 +73,27 @@ class JavaGrpcGenerator : public google::protobuf::compiler::CodeGenerator {
       java_grpc_generator::GenerateService(
           service, output.get(), flavor, disable_version);
     }
+
+    // generate service interface (OSGi)
+    for (int i = 0; i < file->service_count(); ++i) {
+        const google::protobuf::ServiceDescriptor* service = file->service(i);
+        std:string filename = package_filename + java_grpc_generator::OSGiServiceClassName(service) + ".java";
+        std::unique_ptr<google::protobuf::io::ZeroCopyOutputStream> output(
+            context->Open(filename));
+        java_grpc_generator::GenerateOSGiService(
+            service, output.get(), flavor, disable_version);
+    }
+
+    // generate abstract impl class 
+    for (int i = 0; i < file->service_count(); ++i) {
+        const google::protobuf::ServiceDescriptor* service = file->service(i);
+    std::string filename = package_filename + java_grpc_generator::OSGiAbstractImplServiceClassName(service) + ".java";
+        std::unique_ptr<google::protobuf::io::ZeroCopyOutputStream> output(
+            context->Open(filename));
+        java_grpc_generator::GenerateOSGiAbstractImplService(
+            service, output.get(), flavor, disable_version);
+    }
+
     return true;
   }
 };

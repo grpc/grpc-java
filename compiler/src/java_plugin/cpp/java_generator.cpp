@@ -161,6 +161,10 @@ static inline std::string MethodIdFieldName(const MethodDescriptor* method) {
   return "METHODID_" + ToAllUpperCase(method->name());
 }
 
+static inline bool ShouldGenerateAsLite(const Descriptor* desc) {
+  return false;
+}
+
 static inline std::string MessageFullJavaName(const Descriptor* desc) {
   return google::protobuf::compiler::java::ClassName(desc);
 }
@@ -1060,6 +1064,125 @@ static void PrintBindServiceMethodBody(const ServiceDescriptor* service,
   p->Outdent();
 }
 
+static void PrintOSGiServiceInterfaceMethods(const ServiceDescriptor* service,
+    std::map<std::string, std::string>* vars,
+    Printer* p) {
+    for (int i = 0; i < service->method_count(); i++) {
+        const google::protobuf::MethodDescriptor* method = service->method(i);
+        (*vars)["input_type"] = method->input_type()->name();
+        (*vars)["output_type"] = method->output_type()->name();
+        (*vars)["method_name"] = method->name();
+        bool client_streaming = method->client_streaming();
+        bool server_streaming = method->server_streaming();
+
+        if (client_streaming || server_streaming) {
+            continue;
+        }
+
+        p->Print(
+            *vars,
+            "public $output_type$ $method_name$($input_type$ request);\n\n");
+    }
+}
+
+static void PrintOSGiAbstractServiceInterfaceMethods(const ServiceDescriptor* service,
+    std::map<std::string, std::string>* vars,
+    Printer* p) {
+    for (int i = 0; i < service->method_count(); i++) {
+        const google::protobuf::MethodDescriptor* method = service->method(i);
+        (*vars)["input_type"] = method->input_type()->name();
+        (*vars)["output_type"] = method->output_type()->name();
+        (*vars)["method_name"] = method->name();
+        bool client_streaming = method->client_streaming();
+        bool server_streaming = method->server_streaming();
+
+        if (client_streaming || server_streaming) {
+            continue;
+        }
+
+        p->Print(
+            *vars,
+            "public abstract $output_type$ $method_name$($input_type$ request);\n\n");
+    }
+}
+static void PrintGrcpServiceInterfaceMethods(const ServiceDescriptor* service,
+    std::map<std::string, std::string>* vars,
+    Printer* p) {
+    for (int i = 0; i < service->method_count(); i++) {
+        const google::protobuf::MethodDescriptor* method = service->method(i);
+
+        if (method->client_streaming() || method->server_streaming()) {
+            continue;
+        }
+
+        (*vars)["input_type"] = method->input_type()->name();
+        (*vars)["output_type"] = method->output_type()->name();
+        (*vars)["method_name"] = method->name();
+
+        p->Print(
+            *vars,
+            "public void $method_name$($input_type$ request, StreamObserver<$output_type$> responseObserver) {\n");
+        p->Indent();
+        p->Indent();
+        p->Print(*vars,"responseObserver.onNext($method_name$(request));\n");
+        p->Print("responseObserver.onCompleted();\n");
+        p->Outdent();
+        p->Outdent();
+        p->Print("}\n");
+    }
+}
+
+static void PrintOSGiService(const ServiceDescriptor* service,
+    std::map<std::string, std::string>* vars,
+    Printer* p,
+    ProtoFlavor flavor,
+    bool disable_version) {
+    (*vars)["service_class_name"] = OSGiServiceClassName(service);
+    (*vars)["grpc_version"] = "";
+#ifdef GRPC_VERSION
+    if (!disable_version) {
+        (*vars)["grpc_version"] = " (version " XSTR(GRPC_VERSION) ")";
+    }
+#endif
+
+    p->Print(
+        *vars,
+        "public interface $service_class_name$ {\n\n");
+    p->Indent();
+    p->Indent();
+    PrintOSGiServiceInterfaceMethods(service, vars, p);
+    p->Outdent();
+    p->Outdent();
+    p->Print("}\n");
+}
+
+static void PrintOSGiAbstractImplService(const ServiceDescriptor* service,
+    std::map<std::string, std::string>* vars,
+    Printer* p,
+    ProtoFlavor flavor,
+    bool disable_version) {
+    (*vars)["service_class_name"] = OSGiAbstractImplServiceClassName(service);
+    (*vars)["service_interface_name"] = OSGiServiceClassName(service);
+    (*vars)["abstract_name"] = ServiceClassName(service) + "." + service->name() + "ImplBase";
+    (*vars)["grpc_version"] = "";
+#ifdef GRPC_VERSION
+    if (!disable_version) {
+        (*vars)["grpc_version"] = " (version " XSTR(GRPC_VERSION) ")";
+    }
+#endif
+    p->Print("import io.grpc.stub.StreamObserver;\n\n");
+    p->Print(
+        *vars,
+        "public abstract class $service_class_name$ extends $abstract_name$ implements $service_interface_name$ {\n\n");
+    p->Indent();
+    p->Indent();
+    PrintOSGiAbstractServiceInterfaceMethods(service, vars, p);
+    PrintGrcpServiceInterfaceMethods(service, vars, p);
+    p->Outdent();
+    p->Outdent();
+    p->Print("}\n");
+}
+
 static void PrintService(const ServiceDescriptor* service,
                          std::map<std::string, std::string>* vars,
                          Printer* p,
@@ -1185,6 +1308,60 @@ void PrintImports(Printer* p) {
       "io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall;\n\n");
 }
 
+void GenerateOSGiAbstractImplService(const ServiceDescriptor* service,
+    google::protobuf::io::ZeroCopyOutputStream* out,
+    ProtoFlavor flavor,
+    bool disable_version) {
+    // All non-generated classes must be referred by fully qualified names to
+ // avoid collision with generated classes.
+    std::map<std::string, std::string> vars;
+    vars["String"] = "java.lang.String";
+    vars["Deprecated"] = "java.lang.Deprecated";
+    vars["Override"] = "java.lang.Override";
+    Printer printer(out, '$');
+    std::string package_name = ServiceJavaPackage(service->file());
+    if (!package_name.empty()) {
+        printer.Print(
+            "package $package_name$;\n\n",
+            "package_name", package_name);
+    }
+
+    // Package string is used to fully qualify method names.
+    vars["Package"] = service->file()->package();
+    if (!vars["Package"].empty()) {
+        vars["Package"].append(".");
+    }
+
+    PrintOSGiAbstractImplService(service, &vars, &printer, flavor, disable_version);
+}
+
+void GenerateOSGiService(const ServiceDescriptor* service,
+    google::protobuf::io::ZeroCopyOutputStream* out,
+    ProtoFlavor flavor,
+    bool disable_version) {
+    // All non-generated classes must be referred by fully qualified names to
+ // avoid collision with generated classes.
+    std::map<std::string, std::string> vars;
+    vars["String"] = "java.lang.String";
+    vars["Deprecated"] = "java.lang.Deprecated";
+    vars["Override"] = "java.lang.Override";
+    Printer printer(out, '$');
+    std::string package_name = ServiceJavaPackage(service->file());
+    if (!package_name.empty()) {
+        printer.Print(
+            "package $package_name$;\n\n",
+            "package_name", package_name);
+    }
+
+    // Package string is used to fully qualify method names.
+    vars["Package"] = service->file()->package();
+    if (!vars["Package"].empty()) {
+        vars["Package"].append(".");
+    }
+
+    PrintOSGiService(service, &vars, &printer, flavor, disable_version);
+}
+
 void GenerateService(const ServiceDescriptor* service,
                      google::protobuf::io::ZeroCopyOutputStream* out,
                      ProtoFlavor flavor,
@@ -1256,4 +1433,11 @@ std::string ServiceClassName(const google::protobuf::ServiceDescriptor* service)
   return service->name() + "Grpc";
 }
 
+std::string OSGiServiceClassName(const google::protobuf::ServiceDescriptor* service) {
+    return service->name();
+}
+
+std::string OSGiAbstractImplServiceClassName(const google::protobuf::ServiceDescriptor* service) {
+    return "Abstract" + service->name() + "Impl";
+}
 }  // namespace java_grpc_generator

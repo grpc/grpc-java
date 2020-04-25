@@ -62,11 +62,29 @@ std::string ServiceJavaPackage(const google::protobuf::FileDescriptor* file);
 // the given service.
 std::string ServiceClassName(const google::protobuf::ServiceDescriptor* service);
 
+// Returns the name of the outer class that wraps in all the generated code for
+// the given service.
+std::string OSGiServiceClassName(const google::protobuf::ServiceDescriptor* service);
+
+std::string OSGiAbstractImplServiceClassName(const google::protobuf::ServiceDescriptor* service);
+
 // Writes the generated service interface into the given ZeroCopyOutputStream
 void GenerateService(const google::protobuf::ServiceDescriptor* service,
                      google::protobuf::io::ZeroCopyOutputStream* out,
                      ProtoFlavor flavor,
                      bool disable_version);
+
+// Writes the generated service interface into the given ZeroCopyOutputStream
+void GenerateOSGiService(const google::protobuf::ServiceDescriptor* service,
+    google::protobuf::io::ZeroCopyOutputStream* out,
+    ProtoFlavor flavor,
+    bool disable_version);
+
+// Writes the generated abstract class into the given ZeroCopyOutputStream
+void GenerateOSGiAbstractImplService(const google::protobuf::ServiceDescriptor* service,
+    google::protobuf::io::ZeroCopyOutputStream* out,
+    ProtoFlavor flavor,
+    bool disable_version);
 
 }  // namespace java_grpc_generator
 
