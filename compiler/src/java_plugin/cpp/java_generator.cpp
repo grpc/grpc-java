@@ -1435,7 +1435,7 @@ std::string ServiceClassName(const google::protobuf::ServiceDescriptor* service)
 }
 
 std::string OSGiServiceClassName(const google::protobuf::ServiceDescriptor* service) {
-    return service->name();
+    return service->name() + "Intf";
 }
 
 std::string OSGiAbstractImplServiceClassName(const google::protobuf::ServiceDescriptor* service) {
