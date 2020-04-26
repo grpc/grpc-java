@@ -338,10 +338,6 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
     return ret;
   }
 
-  public boolean getIncludeCauseWithStatus() {
-    return includeCauseWithStatus;
-  }
-
   private synchronized void notifyShutdown(Status s) {
     if (shutdown) {
       return;
