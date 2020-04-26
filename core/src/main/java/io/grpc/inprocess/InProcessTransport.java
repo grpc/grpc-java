@@ -83,7 +83,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
   private final String userAgent;
   private final Optional<ServerListener> optionalServerListener;
   private int serverMaxInboundMetadataSize;
-  private boolean includeCauseWithStatus;
+  private final boolean includeCauseWithStatus;
   private ObjectPool<ScheduledExecutorService> serverSchedulerPool;
   private ScheduledExecutorService serverScheduler;
   private ServerTransportListener serverTransportListener;
@@ -136,13 +136,6 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
 
   public InProcessTransport(
       String name, int maxInboundMetadataSize, String authority, String userAgent,
-      Attributes eagAttrs) {
-    this(name, maxInboundMetadataSize, authority, userAgent, eagAttrs,
-        Optional.<ServerListener>absent(), false);
-  }
-
-  public InProcessTransport(
-      String name, int maxInboundMetadataSize, String authority, String userAgent,
       Attributes eagAttrs, boolean includeCauseWithStatus) {
     this(name, maxInboundMetadataSize, authority, userAgent, eagAttrs,
         Optional.<ServerListener>absent(), includeCauseWithStatus);
@@ -158,10 +151,6 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
     this.serverMaxInboundMetadataSize = maxInboundMetadataSize;
     this.serverSchedulerPool = serverSchedulerPool;
     this.serverStreamTracerFactories = serverStreamTracerFactories;
-  }
-
-  public void includeStatusWithCause(boolean enable) {
-    this.includeCauseWithStatus = enable;
   }
 
   @CheckReturnValue

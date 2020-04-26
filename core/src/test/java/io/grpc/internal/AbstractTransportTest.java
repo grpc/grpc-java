@@ -157,7 +157,7 @@ public abstract class AbstractTransportTest {
    * {@code serverListener}, otherwise tearDown() can't wait for shutdown which can put following
    * tests in an indeterminate state.
    */
-  private InternalServer server;
+  protected InternalServer server;
   private ServerTransport serverTransport;
   private ManagedClientTransport client;
   private MethodDescriptor<String, String> methodDescriptor =
@@ -2064,7 +2064,7 @@ public abstract class AbstractTransportTest {
    * Verifies that the client status is as expected. By default, the code and description should
    * be present, and the cause should be stripped away.
    */
-  protected void checkClientStatus(Status expectedStatus, Status clientStreamStatus) {
+  private void checkClientStatus(Status expectedStatus, Status clientStreamStatus) {
     assertEquals(expectedStatus.getCode(), clientStreamStatus.getCode());
     assertEquals(expectedStatus.getDescription(), clientStreamStatus.getDescription());
     assertNull(clientStreamStatus.getCause());
