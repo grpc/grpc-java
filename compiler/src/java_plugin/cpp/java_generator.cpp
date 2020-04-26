@@ -1069,8 +1069,8 @@ static void PrintOSGiServiceInterfaceMethods(const ServiceDescriptor* service,
     Printer* p) {
     for (int i = 0; i < service->method_count(); i++) {
         const google::protobuf::MethodDescriptor* method = service->method(i);
-        (*vars)["input_type"] = method->input_type()->name();
-        (*vars)["output_type"] = method->output_type()->name();
+        (*vars)["input_type"] = MessageFullJavaName(method->input_type());
+        (*vars)["output_type"] = MessageFullJavaName(method->output_type());
         (*vars)["method_name"] = method->name();
         bool client_streaming = method->client_streaming();
         bool server_streaming = method->server_streaming();
@@ -1090,8 +1090,8 @@ static void PrintOSGiAbstractServiceInterfaceMethods(const ServiceDescriptor* se
     Printer* p) {
     for (int i = 0; i < service->method_count(); i++) {
         const google::protobuf::MethodDescriptor* method = service->method(i);
-        (*vars)["input_type"] = method->input_type()->name();
-        (*vars)["output_type"] = method->output_type()->name();
+        (*vars)["input_type"] = MessageFullJavaName(method->input_type());
+        (*vars)["output_type"] = MessageFullJavaName(method->output_type());
         (*vars)["method_name"] = method->name();
         bool client_streaming = method->client_streaming();
         bool server_streaming = method->server_streaming();
