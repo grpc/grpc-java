@@ -1120,7 +1120,6 @@ static void PrintGrcpServiceInterfaceMethods(const ServiceDescriptor* service,
         (*vars)["output_type"] = method->output_type()->name();
         (*vars)["method_name"] = method->name();
 
-        p->Print("@Override\n");
         p->Print(
             *vars,
             "public void $method_name$($input_type$ request, StreamObserver<$output_type$> responseObserver) {\n");
