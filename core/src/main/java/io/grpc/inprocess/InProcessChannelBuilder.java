@@ -159,12 +159,20 @@ public final class InProcessChannelBuilder extends
   }
 
   /**
-   * Sets whether to override the default behaviour of InProcessTransport to include
-   * the cause of the status.
+   * Sets whether to include the cause with the status that is propagated
+   * forward from the InProcessTransport. This was added to make debugging failing
+   * tests easier by showing the cause of the status.
+   *
+   * <p>By default, this is set to false.
+   * A default value of false maintains consistency with other transports which strip causal
+   * information from the status to avoid leaking information to untrusted clients, and
+   * to avoid sharing language-specific information with the client.
+   * For the in-process implementation, this is not a concern.
+   *
    * @param enable whether to include cause in status
    * @return this
    */
-  public InProcessChannelBuilder transportIncludeStatusCause(boolean enable) {
+  public InProcessChannelBuilder propagateCauseWithStatus(boolean enable) {
     this.transportIncludeStatusCause = enable;
     return this;
   }
