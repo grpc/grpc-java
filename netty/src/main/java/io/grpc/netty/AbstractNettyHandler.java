@@ -134,7 +134,6 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
    */
   final class FlowControlPinger {
 
-    // NOTE: Up to 16MB guarantees sending WINDOW_UPDATE for every BDP ping
     private static final int MAX_WINDOW_SIZE = 8 * 1024 * 1024;
     private final int maxAllowedPing;
     private int pingCount;
