@@ -16,12 +16,14 @@
 
 package io.grpc.netty;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static io.netty.handler.codec.http2.Http2CodecUtil.getEmbeddedHttp2Exception;
 
 import com.google.common.annotations.VisibleForTesting;
+import io.grpc.netty.ListeningEncoder.Http2OutboundFrameListener;
+import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
-import io.netty.handler.codec.http2.DefaultHttp2LocalFlowController;
 import io.netty.handler.codec.http2.Http2ConnectionDecoder;
 import io.netty.handler.codec.http2.Http2ConnectionEncoder;
 import io.netty.handler.codec.http2.Http2Exception;
@@ -36,9 +38,11 @@ import java.util.concurrent.TimeUnit;
  */
 abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
   private static final long GRACEFUL_SHUTDOWN_NO_TIMEOUT = -1;
+  private static final int MAX_ALLOWED_PING = 2;
 
   private final int initialConnectionWindow;
-  private final FlowControlPinger flowControlPing = new FlowControlPinger();
+  private final PingCountingListener pingCountingListener = new PingCountingListener();
+  private final FlowControlPinger flowControlPing = new FlowControlPinger(MAX_ALLOWED_PING);
 
   private boolean autoTuneFlowControlOn;
   private ChannelHandlerContext ctx;
@@ -61,6 +65,9 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
     this.initialConnectionWindow = initialSettings.initialWindowSize() == null ? -1 :
             initialSettings.initialWindowSize();
     this.autoTuneFlowControlOn = autoFlowControl;
+    if (encoder instanceof ListeningEncoder) {
+      ((ListeningEncoder) encoder).setListener(pingCountingListener);
+    }
   }
 
   @Override
@@ -129,15 +136,18 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
 
     // NOTE: Up to 16MB guarantees sending WINDOW_UPDATE for every BDP ping
     private static final int MAX_WINDOW_SIZE = 8 * 1024 * 1024;
-    // A max float value < 1.0f
-    private static final float MAX_WINDOW_UPDATE_RATIO = 0.99999994f;
+    private final int maxAllowedPing;
     private int pingCount;
     private int pingReturn;
     private boolean pinging;
-    private int windowSent;
     private int dataSizeSincePing;
     private float lastBandwidth; // bytes per second
     private long lastPingTime;
+
+    public FlowControlPinger(int maxAllowedPing) {
+      checkArgument(maxAllowedPing > 0, "maxAllowedPing must be positive");
+      this.maxAllowedPing = maxAllowedPing;
+    }
 
     public long payload() {
       return BDP_MEASUREMENT_PING;
@@ -147,32 +157,15 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
       return MAX_WINDOW_SIZE;
     }
 
-    public void onDataRead(int dataLength, int paddingLength) throws Http2Exception {
+    public void onDataRead(int dataLength, int paddingLength) {
       if (!autoTuneFlowControlOn) {
         return;
       }
-      if (!isPinging()) {
+      if (!isPinging() && pingCountingListener.pingCount < maxAllowedPing) {
         setPinging(true);
-        sendWindowUpdate(dataLength, paddingLength);
         sendPing(ctx());
       }
       incrementDataSincePing(dataLength + paddingLength);
-    }
-
-    private void sendWindowUpdate(int dataLength, int paddingLength) throws Http2Exception {
-      // if a bdpPing is being sent out we can piggyback connection's window update for the bytes
-      // we just received. DefaultHttp2LocalFlowController doesn't always send WINDOW_UPDATE.
-      DefaultHttp2LocalFlowController flowController =
-          (DefaultHttp2LocalFlowController) decoder().flowController();
-      Http2Stream connectionStream = connection().connectionStream();
-      decoder()
-          .flowController()
-          .incrementWindowSize(connectionStream, dataLength + paddingLength);
-      windowSent += (dataLength + paddingLength);
-      float ratio = flowController.windowUpdateRatio(connectionStream);
-      // To make it always send WINDOW_UPDATE, temporarily increase the windowUpdateRatio.
-      flowController.windowUpdateRatio(connectionStream, MAX_WINDOW_UPDATE_RATIO);
-      flowController.windowUpdateRatio(connectionStream, ratio);
     }
 
     public void updateWindow() throws Http2Exception {
@@ -190,8 +183,7 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
       int targetWindow = Math.min(getDataSincePing() * 2, MAX_WINDOW_SIZE);
       setPinging(false);
       int currentWindow = fc.initialWindowSize(connection().connectionStream());
-      int adjustedCurrentWindow = currentWindow - windowSent;
-      if (targetWindow > adjustedCurrentWindow && bandwidth > lastBandwidth) {
+      if (targetWindow > currentWindow && bandwidth > lastBandwidth) {
         lastBandwidth = bandwidth;
         int increase = targetWindow - currentWindow;
         fc.incrementWindowSize(connection().connectionStream(), increase);
@@ -199,7 +191,6 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
         Http2Settings settings = new Http2Settings();
         settings.initialWindowSize(targetWindow);
         frameWriter().writeSettings(ctx(), settings, ctx().newPromise());
-        windowSent = 0;
       }
     }
 
@@ -246,6 +237,30 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
     void setDataSizeAndSincePing(int dataSize) {
       setDataSizeSincePing(dataSize);
       lastPingTime = System.nanoTime() - TimeUnit.SECONDS.toNanos(1);
+    }
+  }
+
+  private static class PingCountingListener extends Http2OutboundFrameListener {
+    int pingCount = 0;
+
+    @Override
+    public void onWindowUpdate(int streamId, int windowSizeIncrement) {
+      pingCount = 0;
+      super.onWindowUpdate(streamId, windowSizeIncrement);
+    }
+
+    @Override
+    public void onPing(boolean ack, long data) {
+      if (!ack) {
+        pingCount++;
+      }
+      super.onPing(ack, data);
+    }
+
+    @Override
+    public void onData(int streamId, ByteBuf data, int padding, boolean endStream) {
+      pingCount = 0;
+      super.onData(streamId, data, padding, endStream);
     }
   }
 }
