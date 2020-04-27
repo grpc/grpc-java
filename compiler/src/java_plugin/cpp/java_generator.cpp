@@ -1116,8 +1116,8 @@ static void PrintGrcpServiceInterfaceMethods(const ServiceDescriptor* service,
             continue;
         }
 
-        (*vars)["input_type"] = method->input_type()->name();
-        (*vars)["output_type"] = method->output_type()->name();
+        (*vars)["input_type"] = MessageFullJavaName(method->input_type());
+        (*vars)["output_type"] = MessageFullJavaName(method->output_type());
         (*vars)["method_name"] = method->name();
 
         p->Print(
