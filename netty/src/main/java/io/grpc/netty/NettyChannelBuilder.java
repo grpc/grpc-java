@@ -179,6 +179,10 @@ public final class NettyChannelBuilder
    *
    * <p>It's an optional parameter. If the user has not provided an Channel type or ChannelFactory
    * when the channel is built, the builder will use the default one which is static.
+   *
+   * <p>You must also provide corresponding {@link #eventLoopGroup(EventLoopGroup)}. For example,
+   * {@link NioSocketChannel} based {@link ChannelFactory} must use {@link
+   * io.netty.channel.nio.NioEventLoopGroup}, otherwise your application won't start.
    */
   public NettyChannelBuilder channelFactory(ChannelFactory<? extends Channel> channelFactory) {
     this.channelFactory = checkNotNull(channelFactory, "channelFactory");
@@ -257,7 +261,7 @@ public final class NettyChannelBuilder
 
   /**
    * Sets the flow control window in bytes. Setting flowControlWindow disables auto flow control
-   * tuning, use {@link #initialFlowControlWindow(int)} to enable auto flow control tuning. If not
+   * tuning; use {@link #initialFlowControlWindow(int)} to enable auto flow control tuning. If not
    * called, the default value is {@link #DEFAULT_FLOW_CONTROL_WINDOW}).
    */
   public NettyChannelBuilder flowControlWindow(int flowControlWindow) {

@@ -360,7 +360,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
 
   /**
    * Sets the flow control window in bytes. Setting flowControlWindow disables auto flow control
-   * tuning, use {@link #initialFlowControlWindow(int)} to enable auto flow control tuning. If not
+   * tuning; use {@link #initialFlowControlWindow(int)} to enable auto flow control tuning. If not
    * called, the default value is {@link #DEFAULT_FLOW_CONTROL_WINDOW}).
    */
   public NettyServerBuilder flowControlWindow(int flowControlWindow) {
