@@ -124,7 +124,6 @@ class NettyServerTransport implements ServerTransport {
 
     // Create the Netty handler for the pipeline.
     grpcHandler = createHandler(listener, channelUnused);
-    NettyHandlerSettings.setAutoWindow(grpcHandler);
 
     // Notify when the channel closes.
     final class TerminationNotifier implements ChannelFutureListener {
@@ -144,10 +143,7 @@ class NettyServerTransport implements ServerTransport {
 
     ChannelFutureListener terminationNotifier = new TerminationNotifier();
     channelUnused.addListener(terminationNotifier);
-    channel
-        .closeFuture()
-        .addListener(terminationNotifier)
-        .addListener(NettyHandlerSettings.cleanUpTask());
+    channel.closeFuture().addListener(terminationNotifier);
 
     channel.pipeline().addLast(bufferingHandler);
   }

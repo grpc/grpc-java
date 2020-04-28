@@ -225,7 +225,6 @@ class NettyClientTransport implements ConnectionClientTransport {
         transportTracer,
         eagAttributes,
         authorityString);
-    NettyHandlerSettings.setAutoWindow(handler);
 
     ChannelHandler negotiationHandler = negotiator.newHandler(handler);
 
@@ -310,7 +309,6 @@ class NettyClientTransport implements ConnectionClientTransport {
     if (keepAliveManager != null) {
       keepAliveManager.onTransportStarted();
     }
-    channel.closeFuture().addListener(NettyHandlerSettings.cleanUpTask());
 
     return null;
   }
