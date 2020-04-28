@@ -174,13 +174,17 @@ final class ServiceConfigInterceptor implements ClientInterceptor {
   @CheckForNull
   private MethodInfo getMethodInfo(MethodDescriptor<?, ?> method) {
     ManagedChannelServiceConfig mcsc = managedChannelServiceConfig.get();
-    MethodInfo info = null;
-    if (mcsc != null) {
-      info = mcsc.getServiceMethodMap().get(method.getFullMethodName());
+    if (mcsc == null) {
+      return null;
     }
-    if (info == null && mcsc != null) {
+    MethodInfo info;
+    info = mcsc.getServiceMethodMap().get(method.getFullMethodName());
+    if (info == null) {
       String serviceName = method.getServiceName();
       info = mcsc.getServiceMap().get(serviceName);
+    }
+    if (info == null) {
+      info = mcsc.getDefaultMethodConfig();
     }
     return info;
   }

@@ -312,10 +312,7 @@ public class ServiceConfigInterceptorTest {
     thrown.expect(IllegalArgumentException.class);
     thrown.expectMessage("missing service");
 
-    ManagedChannelServiceConfig parsedServiceConfig =
-        createManagedChannelServiceConfig(serviceConfig);
-
-    interceptor.handleUpdate(parsedServiceConfig);
+    createManagedChannelServiceConfig(serviceConfig);
   }
 
   @Test
@@ -328,24 +325,89 @@ public class ServiceConfigInterceptorTest {
     thrown.expect(IllegalArgumentException.class);
     thrown.expectMessage("Duplicate method");
 
-    ManagedChannelServiceConfig parsedServiceConfig =
-        createManagedChannelServiceConfig(serviceConfig);
-
-    interceptor.handleUpdate(parsedServiceConfig);
+    createManagedChannelServiceConfig(serviceConfig);
   }
 
   @Test
-  public void handleUpdate_failsOnEmptyName() {
+  public void handleUpdate_onEmptyName() {
     JsonObj methodConfig = new JsonObj();
     JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
-
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("no names in method config");
-
     ManagedChannelServiceConfig parsedServiceConfig =
         createManagedChannelServiceConfig(serviceConfig);
 
     interceptor.handleUpdate(parsedServiceConfig);
+
+    assertThat(interceptor.managedChannelServiceConfig.get().getDefaultMethodConfig()).isNull();
+    assertThat(interceptor.managedChannelServiceConfig.get().getServiceMap()).isEmpty();
+    assertThat(interceptor.managedChannelServiceConfig.get().getServiceMethodMap()).isEmpty();
+  }
+
+  @Test
+  public void handleUpdate_onDefaultMethodConfig() {
+    JsonObj name = new JsonObj();
+    JsonObj methodConfig = new JsonObj("name", new JsonList(name));
+    JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
+    ManagedChannelServiceConfig parsedServiceConfig =
+        createManagedChannelServiceConfig(serviceConfig);
+    interceptor.handleUpdate(parsedServiceConfig);
+    assertThat(interceptor.managedChannelServiceConfig.get().getDefaultMethodConfig())
+        .isEqualTo(new MethodInfo(methodConfig, false, 1, 1));
+    assertThat(interceptor.managedChannelServiceConfig.get().getServiceMap()).isEmpty();
+    assertThat(interceptor.managedChannelServiceConfig.get().getServiceMethodMap()).isEmpty();
+
+    name = new JsonObj("method", "");
+    methodConfig = new JsonObj("name", new JsonList(name));
+    serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
+    parsedServiceConfig = createManagedChannelServiceConfig(serviceConfig);
+    interceptor.handleUpdate(parsedServiceConfig);
+    assertThat(interceptor.managedChannelServiceConfig.get().getDefaultMethodConfig())
+        .isEqualTo(new MethodInfo(methodConfig, false, 1, 1));
+    assertThat(interceptor.managedChannelServiceConfig.get().getServiceMap()).isEmpty();
+    assertThat(interceptor.managedChannelServiceConfig.get().getServiceMethodMap()).isEmpty();
+
+    name = new JsonObj("service", "");
+    methodConfig = new JsonObj("name", new JsonList(name));
+    serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
+    parsedServiceConfig = createManagedChannelServiceConfig(serviceConfig);
+    interceptor.handleUpdate(parsedServiceConfig);
+    assertThat(interceptor.managedChannelServiceConfig.get().getDefaultMethodConfig())
+        .isEqualTo(new MethodInfo(methodConfig, false, 1, 1));
+    assertThat(interceptor.managedChannelServiceConfig.get().getServiceMap()).isEmpty();
+    assertThat(interceptor.managedChannelServiceConfig.get().getServiceMethodMap()).isEmpty();
+
+    name = new JsonObj("service", "", "method", "");
+    methodConfig = new JsonObj("name", new JsonList(name));
+    serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
+    parsedServiceConfig = createManagedChannelServiceConfig(serviceConfig);
+    interceptor.handleUpdate(parsedServiceConfig);
+    assertThat(interceptor.managedChannelServiceConfig.get().getDefaultMethodConfig())
+        .isEqualTo(new MethodInfo(methodConfig, false, 1, 1));
+    assertThat(interceptor.managedChannelServiceConfig.get().getServiceMap()).isEmpty();
+    assertThat(interceptor.managedChannelServiceConfig.get().getServiceMethodMap()).isEmpty();
+  }
+
+  @Test
+  public void handleUpdate_failsOnMethodNameWithEmptyServiceName() {
+    JsonObj name = new JsonObj("service", "", "method", "method1");
+    JsonObj methodConfig = new JsonObj("name", new JsonList(name));
+    JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
+
+    thrown.expect(IllegalArgumentException.class);
+    thrown.expectMessage("missing service name for method method1");
+
+    createManagedChannelServiceConfig(serviceConfig);
+  }
+
+  @Test
+  public void handleUpdate_failsOnMethodNameWithoutServiceName() {
+    JsonObj name = new JsonObj("method", "method1");
+    JsonObj methodConfig = new JsonObj("name", new JsonList(name));
+    JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
+
+    thrown.expect(IllegalArgumentException.class);
+    thrown.expectMessage("missing service name for method method1");
+
+    createManagedChannelServiceConfig(serviceConfig);
   }
 
   @Test
@@ -358,10 +420,7 @@ public class ServiceConfigInterceptorTest {
     thrown.expect(IllegalArgumentException.class);
     thrown.expectMessage("Duplicate service");
 
-    ManagedChannelServiceConfig parsedServiceConfig =
-        createManagedChannelServiceConfig(serviceConfig);
-
-    interceptor.handleUpdate(parsedServiceConfig);
+    createManagedChannelServiceConfig(serviceConfig);
   }
 
   @Test
@@ -375,10 +434,7 @@ public class ServiceConfigInterceptorTest {
     thrown.expect(IllegalArgumentException.class);
     thrown.expectMessage("Duplicate service");
 
-    ManagedChannelServiceConfig parsedServiceConfig =
-        createManagedChannelServiceConfig(serviceConfig);
-
-    interceptor.handleUpdate(parsedServiceConfig);
+    createManagedChannelServiceConfig(serviceConfig);
   }
 
   @Test
@@ -423,6 +479,61 @@ public class ServiceConfigInterceptorTest {
             new MethodInfo(methodConfig, false, 1, 1));
     assertThat(interceptor.managedChannelServiceConfig.get().getServiceMap()).containsExactly(
         "service2", new MethodInfo(methodConfig, false, 1, 1));
+  }
+
+  @Test
+  public void interceptCall_matchNames() {
+    JsonObj name0 = new JsonObj();
+    JsonObj name1 = new JsonObj("service", "service");
+    JsonObj name2 = new JsonObj("service", "service", "method", "method");
+    JsonObj methodConfig0 = new JsonObj(
+        "name", new JsonList(name0), "maxRequestMessageBytes", 5d);
+    JsonObj methodConfig1 = new JsonObj(
+        "name", new JsonList(name1), "maxRequestMessageBytes", 6d);
+    JsonObj methodConfig2 = new JsonObj(
+        "name", new JsonList(name2), "maxRequestMessageBytes", 7d);
+    JsonObj serviceConfig =
+        new JsonObj("methodConfig", new JsonList(methodConfig0, methodConfig1, methodConfig2));
+    ManagedChannelServiceConfig parsedServiceConfig =
+        createManagedChannelServiceConfig(serviceConfig);
+
+    interceptor.handleUpdate(parsedServiceConfig);
+
+    String fullMethodName =
+        MethodDescriptor.generateFullMethodName("service", "method");
+    MethodDescriptor<Void, Void> methodDescriptor =
+        MethodDescriptor.newBuilder(new NoopMarshaller(), new NoopMarshaller())
+            .setType(MethodType.UNARY)
+            .setFullMethodName(fullMethodName)
+            .build();
+    interceptor.interceptCall(
+        methodDescriptor, CallOptions.DEFAULT, channel);
+    verify(channel).newCall(eq(methodDescriptor), callOptionsCap.capture());
+    assertThat(callOptionsCap.getValue().getMaxOutboundMessageSize()).isEqualTo(7);
+
+    fullMethodName =
+        MethodDescriptor.generateFullMethodName("service", "method2");
+    methodDescriptor =
+        MethodDescriptor.newBuilder(new NoopMarshaller(), new NoopMarshaller())
+            .setType(MethodType.UNARY)
+            .setFullMethodName(fullMethodName)
+            .build();
+    interceptor.interceptCall(
+        methodDescriptor, CallOptions.DEFAULT, channel);
+    verify(channel).newCall(eq(methodDescriptor), callOptionsCap.capture());
+    assertThat(callOptionsCap.getValue().getMaxOutboundMessageSize()).isEqualTo(6);
+
+    fullMethodName =
+        MethodDescriptor.generateFullMethodName("service2", "method");
+    methodDescriptor =
+        MethodDescriptor.newBuilder(new NoopMarshaller(), new NoopMarshaller())
+            .setType(MethodType.UNARY)
+            .setFullMethodName(fullMethodName)
+            .build();
+    interceptor.interceptCall(
+        methodDescriptor, CallOptions.DEFAULT, channel);
+    verify(channel).newCall(eq(methodDescriptor), callOptionsCap.capture());
+    assertThat(callOptionsCap.getValue().getMaxOutboundMessageSize()).isEqualTo(5);
   }
 
   @Test
