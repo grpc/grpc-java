@@ -92,7 +92,7 @@ public final class XdsClientWrapperForServerSds {
     this.port = port;
   }
 
-  private SynchronizationContext createSynchronizationContext(int port) {
+  private SynchronizationContext createSynchronizationContext() {
     final InternalLogId logId =
         InternalLogId.allocate("XdsClientWrapperForServerSds", Integer.toString(port));
     return new SynchronizationContext(
@@ -123,7 +123,7 @@ public final class XdsClientWrapperForServerSds {
   /** Creates an XdsClient and starts a watch. */
   public void start() {
     Bootstrapper.BootstrapInfo bootstrapInfo;
-    final List<Bootstrapper.ServerInfo> serverList;
+    List<Bootstrapper.ServerInfo> serverList;
     try {
       bootstrapInfo = Bootstrapper.getInstance().readBootstrap();
       serverList = bootstrapInfo.getServers();
@@ -135,7 +135,7 @@ public final class XdsClientWrapperForServerSds {
       logger.log(Level.INFO, "Fallback to plaintext for server at port {0}", port);
       return;
     }
-    final Node node = bootstrapInfo.getNode();
+    Node node = bootstrapInfo.getNode();
     timeService = SharedResourceHolder.get(timeServiceResource);
     XdsClientImpl xdsClientImpl =
         new XdsClientImpl(
@@ -143,7 +143,7 @@ public final class XdsClientWrapperForServerSds {
             serverList,
             XdsClient.XdsChannelFactory.getInstance(),
             node,
-            createSynchronizationContext(port),
+            createSynchronizationContext(),
             timeService,
             new ExponentialBackoffPolicy.Provider(),
             GrpcUtil.STOPWATCH_SUPPLIER);
