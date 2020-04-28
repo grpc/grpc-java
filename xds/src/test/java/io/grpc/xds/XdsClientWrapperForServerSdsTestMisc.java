@@ -32,6 +32,7 @@ import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.UnknownHostException;
 import java.util.Collections;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -56,6 +57,11 @@ public class XdsClientWrapperForServerSdsTestMisc {
     MockitoAnnotations.initMocks(this);
     xdsClientWrapperForServerSds = new XdsClientWrapperForServerSds(PORT);
     xdsClientWrapperForServerSds.start(xdsClient);
+  }
+
+  @After
+  public void tearDown() {
+    xdsClientWrapperForServerSds.shutdown();
   }
 
   @Test
