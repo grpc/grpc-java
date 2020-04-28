@@ -153,6 +153,7 @@ public final class XdsClientWrapperForServerSds {
   /** Accepts an XdsClient and starts a watch. */
   @VisibleForTesting
   public void start(XdsClient xdsClient) {
+    checkState(this.xdsClient == null, "start() called more than once");
     this.xdsClient = xdsClient;
     this.listenerWatcher =
         new XdsClient.ListenerWatcher() {
@@ -305,6 +306,7 @@ public final class XdsClientWrapperForServerSds {
     logger.log(Level.FINER, "Shutdown");
     if (xdsClient != null) {
       xdsClient.shutdown();
+      xdsClient = null;
     }
     if (timeService != null) {
       timeServiceResource.close(timeService);
