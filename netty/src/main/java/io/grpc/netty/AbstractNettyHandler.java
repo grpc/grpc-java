@@ -115,10 +115,6 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
     }
   }
 
-  boolean isAutoTuneFlowControlOn() {
-    return autoTuneFlowControlOn;
-  }
-
   @VisibleForTesting
   FlowControlPinger flowControlPing() {
     return flowControlPing;
