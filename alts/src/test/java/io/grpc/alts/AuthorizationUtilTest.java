@@ -111,10 +111,5 @@ public final class AuthorizationUtilTest {
     public MethodDescriptor<String, String> getMethodDescriptor() {
       throw new AssertionError("Should not be called");
     }
-
-    @Override
-    public Server getServer() {
-      throw new AssertionError("Should not be called");
-    }
   }
 }

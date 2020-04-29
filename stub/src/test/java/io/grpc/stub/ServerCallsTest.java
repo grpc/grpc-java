@@ -574,10 +574,5 @@ public class ServerCallsTest {
     public MethodDescriptor<Integer, Integer> getMethodDescriptor() {
       return methodDescriptor;
     }
-
-    @Override
-    public Server getServer() {
-      return null;
-    }
   }
 }

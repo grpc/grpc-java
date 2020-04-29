@@ -58,9 +58,4 @@ public class NoopServerCall<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   public MethodDescriptor<ReqT, RespT> getMethodDescriptor() {
     return null;
   }
-
-  @Override
-  public Server getServer() {
-    return null;
-  }
 }
