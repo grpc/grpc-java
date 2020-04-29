@@ -225,6 +225,20 @@ public class AdvancedTlsTest {
       assertEquals(
           "Failed loading trusted certs", e.getMessage());
     }
+    // Expect to succeed if choosing to not verify anything.
+    TlsOptions goodOptions = new SimpleTlsOptions(
+        VerificationAuthType.SkipAllVerification, null, true, true);
+    ConfigurableX509TrustManager goodManager = new ConfigurableX509TrustManager(
+        goodOptions);
+    try {
+      goodManager.checkServerTrusted(new X509Certificate[1], "");
+      goodManager.checkClientTrusted(new X509Certificate[1], "");
+      Socket socket = new Socket();
+      goodManager.checkServerTrusted(new X509Certificate[1], "", socket);
+      goodManager.checkClientTrusted(new X509Certificate[1], "", socket);
+    } catch (CertificateException e) {
+      fail(e.getMessage());
+    }
   }
 
   /**
@@ -374,7 +388,7 @@ public class AdvancedTlsTest {
       client.unaryRpc(SimpleRequest.getDefaultInstance());
     } catch (StatusRuntimeException e) {
       if (!expectError) {
-        fail("Didn't expect error but find error.");
+        fail("Didn't expect error but find error: " + e.getMessage());
       }
       assertEquals(
           Throwables.getStackTraceAsString(e),

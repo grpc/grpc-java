@@ -80,6 +80,9 @@ public final class ConfigurableX509TrustManager extends X509ExtendedTrustManager
     checkTrusted(x509Certificates, s, null, true);
   }
 
+  // getAcceptedIssuers returns an empty list because if we don't do so, Netty will use the
+  // certificates returned here to do some additional checks, while we want the function
+  // checkClientTrusted or checkServerTrusted to take charge of the whole trust verification.
   @Override
   public X509Certificate[] getAcceptedIssuers() {
     return new X509Certificate[0];
