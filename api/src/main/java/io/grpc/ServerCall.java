@@ -234,7 +234,7 @@ public abstract class ServerCall<ReqT, RespT> {
    * Returns the {@link Server} that dispatches the call. {@code null} if the implementation
    * choose to not expose the server.
    */
-  // TODO(chengyuanzhang): add ExperimentalApi annotation.
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6989")
   public Server getServer() {
     return null;
   }

@@ -76,8 +76,8 @@ abstract class PartialForwardingServerCall<ReqT, RespT> extends ServerCall<ReqT,
     return delegate().getAuthority();
   }
 
-  // TODO(chengyuanzhang): add ExperimentalApi annotation.
   @Override
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6989")
   public Server getServer() {
     return delegate().getServer();
   }
