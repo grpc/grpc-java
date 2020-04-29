@@ -304,31 +304,6 @@ public class ServiceConfigInterceptorTest {
   }
 
   @Test
-  public void createManagedChannelServiceConfig_failsOnMissingServiceName() {
-    JsonObj name = new JsonObj("method", "method");
-    JsonObj methodConfig = new JsonObj("name", new JsonList(name));
-    JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
-
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("missing service");
-
-    createManagedChannelServiceConfig(serviceConfig);
-  }
-
-  @Test
-  public void createManagedChannelServiceConfig_failsOnDuplicateMethod() {
-    JsonObj name1 = new JsonObj("service", "service", "method", "method");
-    JsonObj name2 = new JsonObj("service", "service", "method", "method");
-    JsonObj methodConfig = new JsonObj("name", new JsonList(name1, name2));
-    JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
-
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("Duplicate method");
-
-    createManagedChannelServiceConfig(serviceConfig);
-  }
-
-  @Test
   public void handleUpdate_onEmptyName() {
     JsonObj methodConfig = new JsonObj();
     JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
@@ -384,57 +359,6 @@ public class ServiceConfigInterceptorTest {
         .isEqualTo(new MethodInfo(methodConfig, false, 1, 1));
     assertThat(interceptor.managedChannelServiceConfig.get().getServiceMap()).isEmpty();
     assertThat(interceptor.managedChannelServiceConfig.get().getServiceMethodMap()).isEmpty();
-  }
-
-  @Test
-  public void createManagedChannelServiceConfig_failsOnMethodNameWithEmptyServiceName() {
-    JsonObj name = new JsonObj("service", "", "method", "method1");
-    JsonObj methodConfig = new JsonObj("name", new JsonList(name));
-    JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
-
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("missing service name for method method1");
-
-    createManagedChannelServiceConfig(serviceConfig);
-  }
-
-  @Test
-  public void createManagedChannelServiceConfig_failsOnMethodNameWithoutServiceName() {
-    JsonObj name = new JsonObj("method", "method1");
-    JsonObj methodConfig = new JsonObj("name", new JsonList(name));
-    JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
-
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("missing service name for method method1");
-
-    createManagedChannelServiceConfig(serviceConfig);
-  }
-
-  @Test
-  public void createManagedChannelServiceConfig_failsOnDuplicateService() {
-    JsonObj name1 = new JsonObj("service", "service");
-    JsonObj name2 = new JsonObj("service", "service");
-    JsonObj methodConfig = new JsonObj("name", new JsonList(name1, name2));
-    JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
-
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("Duplicate service");
-
-    createManagedChannelServiceConfig(serviceConfig);
-  }
-
-  @Test
-  public void createManagedChannelServiceConfig_failsOnDuplicateServiceMultipleConfig() {
-    JsonObj name1 = new JsonObj("service", "service");
-    JsonObj name2 = new JsonObj("service", "service");
-    JsonObj methodConfig1 = new JsonObj("name", new JsonList(name1));
-    JsonObj methodConfig2 = new JsonObj("name", new JsonList(name2));
-    JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig1, methodConfig2));
-
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("Duplicate service");
-
-    createManagedChannelServiceConfig(serviceConfig);
   }
 
   @Test
