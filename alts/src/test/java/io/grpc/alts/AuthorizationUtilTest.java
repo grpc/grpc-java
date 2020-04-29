@@ -22,7 +22,6 @@ import com.google.common.collect.Lists;
 import io.grpc.Attributes;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
-import io.grpc.Server;
 import io.grpc.ServerCall;
 import io.grpc.Status;
 import io.grpc.alts.internal.AltsAuthContext;

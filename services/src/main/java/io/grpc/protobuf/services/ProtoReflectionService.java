@@ -77,8 +77,7 @@ public final class ProtoReflectionService extends ServerReflectionGrpc.ServerRef
   private ProtoReflectionService() {}
 
   /**
-   * Creates a instance of {@link ProtoReflectionService}. Intended usage is one instance per
-   * {@link Server}.
+   * Creates a instance of {@link ProtoReflectionService}.
    */
   public static ServerServiceDefinition newInstance() {
     AtomicReference<Server> serverCaptor = new AtomicReference<>();
