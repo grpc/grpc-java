@@ -107,7 +107,7 @@ public final class CachingRlsLbClient {
   private final ResolvedAddressFactory childLbResolvedAddressFactory;
   private final RefCountedChildPolicyWrapperFactory refCountedChildPolicyWrapperFactory;
 
-  CachingRlsLbClient(Builder builder) {
+  private CachingRlsLbClient(Builder builder) {
     helper = checkNotNull(builder.helper, "helper");
     scheduledExecutorService = helper.getScheduledExecutorService();
     synchronizationContext = helper.getSynchronizationContext();
@@ -427,7 +427,7 @@ public final class CachingRlsLbClient {
 
     abstract int getSizeBytes();
 
-    boolean isExpired() {
+    final boolean isExpired() {
       return isExpired(timeProvider.currentTimeNanos());
     }
 
@@ -571,7 +571,7 @@ public final class CachingRlsLbClient {
     private final Status status;
     private final ScheduledFuture<?> scheduledFuture;
     private final BackoffPolicy backoffPolicy;
-    private final long expireMills;
+    private final long expireNanos;
     private boolean shutdown = false;
 
     BackoffCacheEntry(RouteLookupRequest request, Status status, BackoffPolicy backoffPolicy) {
@@ -579,7 +579,7 @@ public final class CachingRlsLbClient {
       this.status = checkNotNull(status, "status");
       this.backoffPolicy = checkNotNull(backoffPolicy, "backoffPolicy");
       long delayNanos = backoffPolicy.nextBackoffNanos();
-      this.expireMills = timeProvider.currentTimeNanos() + delayNanos;
+      this.expireNanos = timeProvider.currentTimeNanos() + delayNanos;
       this.scheduledFuture =
           scheduledExecutorService.schedule(
               new Runnable() {
@@ -634,19 +634,17 @@ public final class CachingRlsLbClient {
 
     @Override
     boolean isExpired(long now) {
-      return expireMills <= now;
+      return expireNanos <= now;
     }
 
     @Override
     void cleanup() {
-      synchronized (lock) {
-        if (shutdown) {
-          return;
-        }
-        shutdown = true;
-        if (!scheduledFuture.isCancelled()) {
-          scheduledFuture.cancel(true);
-        }
+      if (shutdown) {
+        return;
+      }
+      shutdown = true;
+      if (!scheduledFuture.isCancelled()) {
+        scheduledFuture.cancel(true);
       }
     }
 
