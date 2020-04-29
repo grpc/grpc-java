@@ -323,6 +323,20 @@ public final class CdsLoadBalancer extends LoadBalancer {
     }
 
     @Override
+    public void onResourceDoesNotExist(String resourceName) {
+      logger.log(XdsLogLevel.INFO, "Resource {0} is unavailable", resourceName);
+      // TODO(chengyuanzhang): should unconditionally propagate to downstream instances and
+      //  go to TRANSIENT_FAILURE.
+      if (edsBalancer == null) {
+        helper.updateBalancingState(
+            TRANSIENT_FAILURE,
+            new ErrorPicker(
+                Status.UNAVAILABLE.withDescription(
+                    "Resource " + resourceName + " is unavailable")));
+      }
+    }
+
+    @Override
     public void onError(Status error) {
       logger.log(
           XdsLogLevel.WARNING,
@@ -330,10 +344,6 @@ public final class CdsLoadBalancer extends LoadBalancer {
           xdsClient,
           error.getCode(),
           error.getDescription());
-
-      // Go into TRANSIENT_FAILURE if we have not yet created the child
-      // policy (i.e., we have not yet received valid data for the cluster). Otherwise,
-      // we keep running with the data we had previously.
       if (edsBalancer == null) {
         helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
       }
