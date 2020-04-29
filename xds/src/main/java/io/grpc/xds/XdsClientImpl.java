@@ -721,8 +721,7 @@ final class XdsClientImpl extends XdsClient {
       listenerWatcher.onListenerChanged(listenerUpdate);
     } else {
       if (ldsRespTimer == null) {
-        listenerWatcher.onError(Status.NOT_FOUND.withDescription("did not find listener for "
-            + listenerPort));
+        listenerWatcher.onResourceDoesNotExist(":" + listenerPort);
       }
     }
   }
@@ -1618,9 +1617,7 @@ final class XdsClientImpl extends XdsClient {
     public void run() {
       super.run();
       ldsRespTimer = null;
-      listenerWatcher.onError(
-          Status.NOT_FOUND
-              .withDescription("Listener resource for port " + resourceName + " not found."));
+      listenerWatcher.onResourceDoesNotExist(resourceName);
     }
   }
 

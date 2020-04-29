@@ -437,14 +437,12 @@ abstract class XdsClient {
   /**
    * Listener watcher interface. To be used by {@link io.grpc.xds.internal.sds.XdsServerBuilder}.
    */
-  interface ListenerWatcher {
+  interface ListenerWatcher extends ResourceWatcher {
 
     /**
      * Called when receiving an update on Listener configuration.
      */
     void onListenerChanged(ListenerUpdate update);
-
-    void onError(Status error);
   }
 
   /**
