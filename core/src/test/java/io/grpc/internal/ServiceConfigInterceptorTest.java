@@ -304,7 +304,7 @@ public class ServiceConfigInterceptorTest {
   }
 
   @Test
-  public void handleUpdate_failsOnMissingServiceName() {
+  public void createManagedChannelServiceConfig_failsOnMissingServiceName() {
     JsonObj name = new JsonObj("method", "method");
     JsonObj methodConfig = new JsonObj("name", new JsonList(name));
     JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
@@ -316,7 +316,7 @@ public class ServiceConfigInterceptorTest {
   }
 
   @Test
-  public void handleUpdate_failsOnDuplicateMethod() {
+  public void createManagedChannelServiceConfig_failsOnDuplicateMethod() {
     JsonObj name1 = new JsonObj("service", "service", "method", "method");
     JsonObj name2 = new JsonObj("service", "service", "method", "method");
     JsonObj methodConfig = new JsonObj("name", new JsonList(name1, name2));
@@ -387,7 +387,7 @@ public class ServiceConfigInterceptorTest {
   }
 
   @Test
-  public void handleUpdate_failsOnMethodNameWithEmptyServiceName() {
+  public void createManagedChannelServiceConfig_failsOnMethodNameWithEmptyServiceName() {
     JsonObj name = new JsonObj("service", "", "method", "method1");
     JsonObj methodConfig = new JsonObj("name", new JsonList(name));
     JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
@@ -399,7 +399,7 @@ public class ServiceConfigInterceptorTest {
   }
 
   @Test
-  public void handleUpdate_failsOnMethodNameWithoutServiceName() {
+  public void createManagedChannelServiceConfig_failsOnMethodNameWithoutServiceName() {
     JsonObj name = new JsonObj("method", "method1");
     JsonObj methodConfig = new JsonObj("name", new JsonList(name));
     JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
@@ -411,7 +411,7 @@ public class ServiceConfigInterceptorTest {
   }
 
   @Test
-  public void handleUpdate_failsOnDuplicateService() {
+  public void createManagedChannelServiceConfig_failsOnDuplicateService() {
     JsonObj name1 = new JsonObj("service", "service");
     JsonObj name2 = new JsonObj("service", "service");
     JsonObj methodConfig = new JsonObj("name", new JsonList(name1, name2));
@@ -424,7 +424,7 @@ public class ServiceConfigInterceptorTest {
   }
 
   @Test
-  public void handleUpdate_failsOnDuplicateServiceMultipleConfig() {
+  public void createManagedChannelServiceConfig_failsOnDuplicateServiceMultipleConfig() {
     JsonObj name1 = new JsonObj("service", "service");
     JsonObj name2 = new JsonObj("service", "service");
     JsonObj methodConfig1 = new JsonObj("name", new JsonList(name1));
