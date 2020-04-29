@@ -138,7 +138,7 @@ subprojects {
             gson: "com.google.code.gson:gson:2.8.6",
             guava: "com.google.guava:guava:${guavaVersion}",
             hpack: 'com.twitter:hpack:0.10.1',
-            javax_annotation: 'javax.annotation:javax.annotation-api:1.2',
+            javax_annotation: 'org.apache.tomcat:annotations-api:6.0.53',
             jsr305: 'com.google.code.findbugs:jsr305:3.0.2',
             google_api_protos: 'com.google.api.grpc:proto-google-common-protos:1.17.0',
             google_auth_credentials: "com.google.auth:google-auth-library-credentials:${googleauthVersion}",

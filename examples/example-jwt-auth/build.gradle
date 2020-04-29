@@ -32,7 +32,7 @@ dependencies {
     implementation "io.jsonwebtoken:jjwt:0.9.1"
     implementation "javax.xml.bind:jaxb-api:2.3.1"
 
-    compileOnly "javax.annotation:javax.annotation-api:1.2"
+    compileOnly "org.apache.tomcat:annotations-api:6.0.53"
 
     runtimeOnly "io.grpc:grpc-netty-shaded:${grpcVersion}"
 

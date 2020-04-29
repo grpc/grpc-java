@@ -39,9 +39,9 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "io.opencensus:opencensus-api:0.24.0",
     "io.opencensus:opencensus-contrib-grpc-metrics:0.24.0",
     "io.perfmark:perfmark-api:0.19.0",
-    "javax.annotation:javax.annotation-api:1.2",
     "junit:junit:4.12",
     "org.apache.commons:commons-lang3:3.5",
+    "org.apache.tomcat:annotations-api:6.0.53",
     "org.codehaus.mojo:animal-sniffer-annotations:1.18",
 ]
 
@@ -148,12 +148,12 @@ def grpc_java_repositories():
         io_opencensus_opencensus_contrib_grpc_metrics()
     if not native.existing_rule("io_perfmark_perfmark_api"):
         io_perfmark_perfmark_api()
-    if not native.existing_rule("javax_annotation_javax_annotation_api"):
-        javax_annotation_javax_annotation_api()
     if not native.existing_rule("junit_junit"):
         junit_junit()
     if not native.existing_rule("org_apache_commons_commons_lang3"):
         org_apache_commons_commons_lang3()
+    if not native.existing_rule("org_apache_tomcat_annotations_api"):
+        org_apache_tomcat_annotations_api()
     if not native.existing_rule("org_codehaus_mojo_animal_sniffer_annotations"):
         org_codehaus_mojo_animal_sniffer_annotations()
 
@@ -451,16 +451,6 @@ def io_perfmark_perfmark_api():
         licenses = ["notice"],  # Apache 2.0
     )
 
-def javax_annotation_javax_annotation_api():
-    # Use //stub:javax_annotation for neverlink=1 support.
-    jvm_maven_import_external(
-        name = "javax_annotation_javax_annotation_api",
-        artifact = "javax.annotation:javax.annotation-api:1.2",
-        server_urls = ["https://repo.maven.apache.org/maven2/"],
-        artifact_sha256 = "5909b396ca3a2be10d0eea32c74ef78d816e1b4ead21de1d78de1f890d033e04",
-        licenses = ["reciprocal"],  # CDDL License
-    )
-
 def junit_junit():
     jvm_maven_import_external(
         name = "junit_junit",
@@ -476,6 +466,16 @@ def org_apache_commons_commons_lang3():
         artifact = "org.apache.commons:commons-lang3:3.5",
         server_urls = ["https://repo.maven.apache.org/maven2/"],
         artifact_sha256 = "8ac96fc686512d777fca85e144f196cd7cfe0c0aec23127229497d1a38ff651c",
+        licenses = ["notice"],  # Apache 2.0
+    )
+
+def org_apache_tomcat_annotations_api():
+    # Use //stub:javax_annotation for neverlink=1 support.
+    jvm_maven_import_external(
+        name = "org_apache_tomcat_annotations_api",
+        artifact = "org.apache.tomcat:annotations-api:6.0.53",
+        server_urls = ["https://repo.maven.apache.org/maven2/"],
+        artifact_sha256 = "253829d3c12b7381d1044fc22c6436cff025fe0d459e4a329413e560a7d0dd13",
         licenses = ["notice"],  # Apache 2.0
     )
 
