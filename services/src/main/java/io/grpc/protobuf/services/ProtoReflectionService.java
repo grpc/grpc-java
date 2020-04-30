@@ -26,10 +26,10 @@ import com.google.protobuf.Descriptors.MethodDescriptor;
 import com.google.protobuf.Descriptors.ServiceDescriptor;
 import io.grpc.BindableService;
 import io.grpc.ExperimentalApi;
+import io.grpc.InternalServer;
 import io.grpc.Server;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
-import io.grpc.internal.InternalServerAccessor;
 import io.grpc.protobuf.ProtoFileDescriptorSupplier;
 import io.grpc.reflection.v1alpha.ErrorResponse;
 import io.grpc.reflection.v1alpha.ExtensionNumberResponse;
@@ -86,7 +86,7 @@ public final class ProtoReflectionService extends ServerReflectionGrpc.ServerRef
    */
   private ServerReflectionIndex getRefreshedIndex() {
     synchronized (lock) {
-      Server server = InternalServerAccessor.SERVER_KEY.get();
+      Server server = InternalServer.SERVER_CONTEXT_KEY.get();
       ServerReflectionIndex index = serverReflectionIndexes.get(server);
       if (index == null) {
         index =

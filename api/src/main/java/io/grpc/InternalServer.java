@@ -14,23 +14,18 @@
  * limitations under the License.
  */
 
-package io.grpc.internal;
-
-import io.grpc.Context;
-import io.grpc.Internal;
-import io.grpc.Server;
+package io.grpc;
 
 /**
  * Internal accessor for getting the {@link Server} instance inside server RPC {@link Context}.
- * This is intended for usage internal to the gRPC team, as it's unclear to us what users would
- * need. If you *really* think you need to use this, please file an issue for us to discuss a
- * public API.
+ * This is intended for usage internal to the gRPC team. If you think you need to use
+ * this, contact the gRPC team first.
  */
 @Internal
-public class InternalServerAccessor {
-  public static final Context.Key<Server> SERVER_KEY = ServerImpl.SERVER_CONTEXT_KEY;
+public class InternalServer {
+  public static final Context.Key<Server> SERVER_CONTEXT_KEY = Server.SERVER_CONTEXT_KEY;
 
   // Prevent instantiation.
-  private InternalServerAccessor() {
+  private InternalServer() {
   }
 }

@@ -45,7 +45,6 @@ import io.grpc.InternalInstrumented;
 import io.grpc.InternalLogId;
 import io.grpc.InternalServerInterceptors;
 import io.grpc.Metadata;
-import io.grpc.Server;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
@@ -92,7 +91,6 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
   private static final Logger log = Logger.getLogger(ServerImpl.class.getName());
   private static final ServerStreamListener NOOP_LISTENER = new NoopListener();
 
-  static final Context.Key<Server> SERVER_CONTEXT_KEY = Context.key("io.grpc.ServerImpl");
   private final InternalLogId logId;
   private final ObjectPool<? extends Executor> executorPool;
   /** Executor for application processing. Safe to read after {@link #start()}. */
