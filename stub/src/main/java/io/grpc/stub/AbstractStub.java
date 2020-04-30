@@ -220,7 +220,12 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
   }
 
   /**
-   * Returns a new stub that uses the 'wait for ready' call option.
+   * Returns a new stub that uses
+   * <a href="https://github.com/grpc/grpc/blob/master/doc/wait-for-ready.md">'wait for ready'</a>
+   * for the call. Wait-for-ready queues the RPC until a connection is available. This may
+   * dramatically increase the latency of the RPC, but avoids failing "unnecessarily." The default
+   * queues the RPC until an attempt to connect has completed, but fails RPCs without sending them
+   * if unable to connect.
    *
    * @since 1.1.0
    */
