@@ -35,7 +35,7 @@ public abstract class Server {
    * unclear to us what users would need. If you think you need to use this, please file an
    * issue for us to discuss a public API.
    */
-  protected static final Context.Key<Server> SERVER_CONTEXT_KEY =
+  static final Context.Key<Server> SERVER_CONTEXT_KEY =
       Context.key("io.grpc.Server");
 
   /**

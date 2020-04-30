@@ -596,7 +596,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
       Context baseContext =
           statsTraceCtx
               .serverFilterContext(rootContext)
-              .withValue(SERVER_CONTEXT_KEY, ServerImpl.this);
+              .withValue(io.grpc.InternalServer.SERVER_CONTEXT_KEY, ServerImpl.this);
 
       if (timeoutNanos == null) {
         return baseContext.withCancellation();
