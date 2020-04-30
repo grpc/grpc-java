@@ -77,12 +77,6 @@ abstract class PartialForwardingServerCall<ReqT, RespT> extends ServerCall<ReqT,
   }
 
   @Override
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6989")
-  public Server getServer() {
-    return delegate().getServer();
-  }
-
-  @Override
   public String toString() {
     return MoreObjects.toStringHelper(this).add("delegate", delegate()).toString();
   }

@@ -641,7 +641,6 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
         Tag tag) {
 
       ServerCallImpl<WReqT, WRespT> call = new ServerCallImpl<>(
-          ServerImpl.this,
           stream,
           methodDef.getMethodDescriptor(),
           headers,

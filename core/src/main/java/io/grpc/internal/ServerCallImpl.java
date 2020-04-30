@@ -35,7 +35,6 @@ import io.grpc.DecompressorRegistry;
 import io.grpc.InternalDecompressorRegistry;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
-import io.grpc.Server;
 import io.grpc.ServerCall;
 import io.grpc.Status;
 import io.perfmark.PerfMark;
@@ -53,7 +52,6 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   @VisibleForTesting
   static final String MISSING_RESPONSE = "Completed without a response";
 
-  private final Server server;
   private final ServerStream stream;
   private final MethodDescriptor<ReqT, RespT> method;
   private final Tag tag;
@@ -70,11 +68,10 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   private Compressor compressor;
   private boolean messageSent;
 
-  ServerCallImpl(Server server, ServerStream stream, MethodDescriptor<ReqT, RespT> method,
+  ServerCallImpl(ServerStream stream, MethodDescriptor<ReqT, RespT> method,
       Metadata inboundHeaders, Context.CancellableContext context,
       DecompressorRegistry decompressorRegistry, CompressorRegistry compressorRegistry,
       CallTracer serverCallTracer, Tag tag) {
-    this.server = server;
     this.stream = stream;
     this.method = method;
     this.context = context;
@@ -246,11 +243,6 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   @Override
   public MethodDescriptor<ReqT, RespT> getMethodDescriptor() {
     return method;
-  }
-
-  @Override
-  public Server getServer() {
-    return server;
   }
 
   /**
