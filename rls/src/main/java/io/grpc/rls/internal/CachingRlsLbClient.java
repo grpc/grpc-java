@@ -449,14 +449,10 @@ public final class CachingRlsLbClient {
         updateLbState();
       } else {
         createChildLbPolicy();
-        linkedHashLruCache.updateEntrySize(request);
       }
     }
 
     private void updateLbState() {
-      checkState(
-          childPolicyWrapper.getHelper() != null,
-          "incomplete childPolicyWrapper found, this is a bug");
       childPolicyWrapper
           .getHelper()
           .updateBalancingState(
