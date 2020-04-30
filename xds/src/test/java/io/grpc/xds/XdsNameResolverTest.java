@@ -290,7 +290,8 @@ public class XdsNameResolverTest {
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
     assertThat(result.getAddresses()).isEmpty();
-    assertThat(result.getServiceConfig()).isNull();
+    assertThat(result.getServiceConfig().getConfig()).isNull();
+    assertThat(result.getServiceConfig().getError().getCode()).isEqualTo(Code.UNAVAILABLE);
   }
 
   @Test

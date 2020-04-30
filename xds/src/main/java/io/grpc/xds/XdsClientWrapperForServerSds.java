@@ -131,12 +131,13 @@ public final class XdsClientWrapperForServerSds {
           }
 
           @Override
+          public void onResourceDoesNotExist(String resourceName) {
+            logger.log(Level.INFO, "Resource {0} is unavailable", resourceName);
+            curListener = null;
+          }
+
+          @Override
           public void onError(Status error) {
-            // In order to distinguish between IO error and resource not found, set curListener
-            // to null in case of NOT_FOUND
-            if (error.getCode().equals(Status.Code.NOT_FOUND)) {
-              curListener = null;
-            }
             // TODO(sanjaypujare): Implement logic for other cases based on final design.
             logger.log(Level.SEVERE, "ListenerWatcher in XdsClientWrapperForServerSds: {0}", error);
           }

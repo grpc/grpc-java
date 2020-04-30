@@ -31,6 +31,7 @@ import static io.grpc.xds.XdsClientTestHelper.buildUpstreamTlsContext;
 import static io.grpc.xds.XdsClientTestHelper.buildVirtualHost;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -319,7 +320,7 @@ public class XdsClientImplTest {
   /**
    * Client receives an LDS response that does not contain a Listener for the requested resource.
    * The LDS response is ACKed.
-   * The config watcher is notified with an error after its response timer expires.
+   * The config watcher is notified with resource unavailable after its response timer expires.
    */
   @Test
   public void ldsResponseWithoutMatchingResource() {
@@ -363,12 +364,10 @@ public class XdsClientImplTest {
             XdsClientImpl.ADS_TYPE_URL_LDS, "0000")));
 
     verify(configWatcher, never()).onConfigChanged(any(ConfigUpdate.class));
+    verify(configWatcher, never()).onResourceDoesNotExist(TARGET_AUTHORITY);
     verify(configWatcher, never()).onError(any(Status.class));
     fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
-    ArgumentCaptor<Status> errorStatusCaptor = ArgumentCaptor.forClass(null);
-    verify(configWatcher).onError(errorStatusCaptor.capture());
-    Status error = errorStatusCaptor.getValue();
-    assertThat(error.getCode()).isEqualTo(Code.NOT_FOUND);
+    verify(configWatcher).onResourceDoesNotExist(TARGET_AUTHORITY);
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
 
@@ -414,13 +413,11 @@ public class XdsClientImplTest {
                 XdsClientImpl.ADS_TYPE_URL_LDS, "0000")));
 
     verify(configWatcher, never()).onConfigChanged(any(ConfigUpdate.class));
+    verify(configWatcher, never()).onResourceDoesNotExist(TARGET_AUTHORITY);
     verify(configWatcher, never()).onError(any(Status.class));
 
     fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
-    ArgumentCaptor<Status> errorStatusCaptor = ArgumentCaptor.forClass(null);
-    verify(configWatcher).onError(errorStatusCaptor.capture());
-    Status error = errorStatusCaptor.getValue();
-    assertThat(error.getCode()).isEqualTo(Code.NOT_FOUND);
+    verify(configWatcher).onResourceDoesNotExist(TARGET_AUTHORITY);
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
 
@@ -501,7 +498,7 @@ public class XdsClientImplTest {
    * RouteConfiguration for the requested resource while each received RouteConfiguration is valid.
    * The RDS response is ACKed.
    * After the resource fetch timeout expires, watcher waiting for the resource is notified
-   * with a resource not found error.
+   * with resource unavailable.
    */
   @Test
   public void rdsResponseWithoutMatchingResource() {
@@ -567,11 +564,10 @@ public class XdsClientImplTest {
             XdsClientImpl.ADS_TYPE_URL_RDS, "0000")));
 
     verify(configWatcher, never()).onConfigChanged(any(ConfigUpdate.class));
+    verify(configWatcher, never()).onResourceDoesNotExist(anyString());
     verify(configWatcher, never()).onError(any(Status.class));
     fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
-    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
-    verify(configWatcher).onError(statusCaptor.capture());
-    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.NOT_FOUND);
+    verify(configWatcher).onResourceDoesNotExist("route-foo.googleapis.com");
     assertThat(fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
 
@@ -780,7 +776,6 @@ public class XdsClientImplTest {
    * is invalid as it does not contain any VirtualHost with domains matching the requested
    * hostname.
    * The RDS response is NACKed, as if the XdsClient has not received this response.
-   * The config watcher is NOT notified with an error.
    */
   @Test
   public void failToFindVirtualHostInRdsResponse() {
@@ -834,11 +829,10 @@ public class XdsClientImplTest {
                 XdsClientImpl.ADS_TYPE_URL_RDS, "0000")));
 
     verify(configWatcher, never()).onConfigChanged(any(ConfigUpdate.class));
+    verify(configWatcher, never()).onResourceDoesNotExist(anyString());
     verify(configWatcher, never()).onError(any(Status.class));
     fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
-    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
-    verify(configWatcher).onError(statusCaptor.capture());
-    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.NOT_FOUND);
+    verify(configWatcher).onResourceDoesNotExist("route-foo.googleapis.com");
     assertThat(fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
 
@@ -848,7 +842,6 @@ public class XdsClientImplTest {
    * is invalid as the VirtualHost with domains matching the requested hostname contains invalid
    * data, its RouteAction message is absent.
    * The RDS response is NACKed, as if the XdsClient has not received this response.
-   * The config watcher is NOT notified with an error.
    */
   @Test
   public void matchingVirtualHostDoesNotContainRouteAction() {
@@ -903,11 +896,10 @@ public class XdsClientImplTest {
                 XdsClientImpl.ADS_TYPE_URL_RDS, "0000")));
 
     verify(configWatcher, never()).onConfigChanged(any(ConfigUpdate.class));
+    verify(configWatcher, never()).onResourceDoesNotExist(anyString());
     verify(configWatcher, never()).onError(any(Status.class));
     fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
-    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
-    verify(configWatcher).onError(statusCaptor.capture());
-    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.NOT_FOUND);
+    verify(configWatcher).onResourceDoesNotExist("route-foo.googleapis.com");
     assertThat(fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
 
@@ -970,9 +962,6 @@ public class XdsClientImplTest {
             argThat(new DiscoveryRequestMatcher("", "route-foo.googleapis.com",
                 XdsClientImpl.ADS_TYPE_URL_RDS, "0000")));
 
-    verify(configWatcher, never()).onConfigChanged(any(ConfigUpdate.class));
-    verify(configWatcher, never()).onError(any(Status.class));
-
     // A VirtualHost with a Route with a case-sensitive matcher.
     virtualHost =
         VirtualHost.newBuilder()
@@ -1002,7 +991,7 @@ public class XdsClientImplTest {
                 "0000")));
 
     verify(configWatcher).onConfigChanged(any(ConfigUpdate.class));
-    verify(configWatcher, never()).onError(any(Status.class));
+    verifyNoMoreInteractions(configWatcher);
   }
 
   /**
@@ -1163,9 +1152,7 @@ public class XdsClientImplTest {
             XdsClientImpl.ADS_TYPE_URL_LDS, "0003");
     responseObserver.onNext(response);
 
-    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
-    verify(configWatcher).onError(statusCaptor.capture());
-    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.NOT_FOUND);
+    verify(configWatcher).onResourceDoesNotExist(TARGET_AUTHORITY);
   }
 
   // TODO(chengyuanzhang): tests for timeout waiting for responses for incremental
@@ -1353,11 +1340,7 @@ public class XdsClientImplTest {
         .onNext(eq(buildDiscoveryRequest(NODE, "1", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS, "0001")));
 
-    // Notify config watcher with an error.
-    ArgumentCaptor<Status> errorStatusCaptor = ArgumentCaptor.forClass(null);
-    verify(configWatcher).onError(errorStatusCaptor.capture());
-    Status error = errorStatusCaptor.getValue();
-    assertThat(error.getCode()).isEqualTo(Code.NOT_FOUND);
+    verify(configWatcher).onResourceDoesNotExist(TARGET_AUTHORITY);
   }
 
   /**
@@ -1445,7 +1428,7 @@ public class XdsClientImplTest {
   /**
    * Client receives an CDS response that does not contain a Cluster for the requested resource
    * while each received Cluster is valid. The CDS response is ACKed. Cluster watchers are notified
-   * with an error for resource not found after initial resource fetch timeout has expired.
+   * with resource unavailable after initial resource fetch timeout has expired.
    */
   @Test
   public void cdsResponseWithoutMatchingResource() {
@@ -1472,13 +1455,12 @@ public class XdsClientImplTest {
         .onNext(eq(buildDiscoveryRequest(NODE, "0", "cluster-foo.googleapis.com",
             XdsClientImpl.ADS_TYPE_URL_CDS, "0000")));
     verify(clusterWatcher, never()).onClusterChanged(any(ClusterUpdate.class));
+    verify(clusterWatcher, never()).onResourceDoesNotExist("cluster-foo.googleapis.com");
     verify(clusterWatcher, never()).onError(any(Status.class));
 
     fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
-    ArgumentCaptor<Status> errorStatusCaptor = ArgumentCaptor.forClass(null);
-    verify(clusterWatcher).onError(errorStatusCaptor.capture());
-    Status error = errorStatusCaptor.getValue();
-    assertThat(error.getCode()).isEqualTo(Code.NOT_FOUND);
+    verify(clusterWatcher).onResourceDoesNotExist("cluster-foo.googleapis.com");
+    assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
 
   /**
@@ -1635,14 +1617,12 @@ public class XdsClientImplTest {
     assertThat(clusterUpdate2.getLrsServerName()).isNull();
 
     verify(watcher3, never()).onClusterChanged(any(ClusterUpdate.class));
+    verify(watcher3, never()).onResourceDoesNotExist("cluster-bar.googleapis.com");
     verify(watcher3, never()).onError(any(Status.class));
 
     // The other watcher gets an error notification for cluster not found after its timer expired.
     fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
-    ArgumentCaptor<Status> errorStatusCaptor = ArgumentCaptor.forClass(null);
-    verify(watcher3).onError(errorStatusCaptor.capture());
-    Status error = errorStatusCaptor.getValue();
-    assertThat(error.getCode()).isEqualTo(Code.NOT_FOUND);
+    verify(watcher3).onResourceDoesNotExist("cluster-bar.googleapis.com");
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
 
     // Management server sends back another CDS response contains Clusters for all
@@ -1950,18 +1930,13 @@ public class XdsClientImplTest {
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
 
     // CDS resource "cluster-foo.googleapis.com" is known to be absent.
-    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
-    verify(watcher1).onError(statusCaptor.capture());
-    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.NOT_FOUND);
-    verify(watcher2).onError(statusCaptor.capture());
-    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.NOT_FOUND);
+    verify(watcher1).onResourceDoesNotExist("cluster-foo.googleapis.com");
+    verify(watcher2).onResourceDoesNotExist("cluster-foo.googleapis.com");
 
     // The absence result is known immediately.
     ClusterWatcher watcher5 = mock(ClusterWatcher.class);
     xdsClient.watchClusterData("cluster-foo.googleapis.com", watcher5);
-
-    verify(watcher5).onError(statusCaptor.capture());
-    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.NOT_FOUND);
+    verify(watcher5).onResourceDoesNotExist("cluster-foo.googleapis.com");
 
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
     ScheduledTask timeoutTask = Iterables.getOnlyElement(fakeClock.getPendingTasks());
@@ -2017,9 +1992,7 @@ public class XdsClientImplTest {
             XdsClientImpl.ADS_TYPE_URL_CDS, "0001");
     responseObserver.onNext(response);
 
-    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
-    verify(clusterWatcher).onError(statusCaptor.capture());
-    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.NOT_FOUND);
+    verify(clusterWatcher).onResourceDoesNotExist("cluster-foo.googleapis.com");
   }
 
   /**
@@ -2027,7 +2000,7 @@ public class XdsClientImplTest {
    * requested resource while each received ClusterLoadAssignment is valid.
    * The EDS response is ACKed.
    * After the resource fetch timeout expires, watchers waiting for the resource is notified
-   * with a resource not found error.
+   * with resource unavailable.
    */
   @Test
   public void edsResponseWithoutMatchingResource() {
@@ -2070,11 +2043,10 @@ public class XdsClientImplTest {
             XdsClientImpl.ADS_TYPE_URL_EDS, "0000")));
 
     verify(endpointWatcher, never()).onEndpointChanged(any(EndpointUpdate.class));
+    verify(endpointWatcher, never()).onResourceDoesNotExist("cluster-foo.googleapis.com");
     verify(endpointWatcher, never()).onError(any(Status.class));
     fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
-    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
-    verify(endpointWatcher).onError(statusCaptor.capture());
-    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.NOT_FOUND);
+    verify(endpointWatcher).onResourceDoesNotExist("cluster-foo.googleapis.com");
     assertThat(fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
 
@@ -2609,18 +2581,13 @@ public class XdsClientImplTest {
     assertThat(fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
 
     // EDS resource "cluster-foo.googleapis.com" is known to be absent.
-    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
-    verify(watcher1).onError(statusCaptor.capture());
-    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.NOT_FOUND);
-    verify(watcher2).onError(statusCaptor.capture());
-    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.NOT_FOUND);
+    verify(watcher1).onResourceDoesNotExist("cluster-foo.googleapis.com");
+    verify(watcher2).onResourceDoesNotExist("cluster-foo.googleapis.com");
 
     // The absence result is known immediately.
     EndpointWatcher watcher5 = mock(EndpointWatcher.class);
     xdsClient.watchEndpointData("cluster-foo.googleapis.com", watcher5);
-
-    verify(watcher5).onError(statusCaptor.capture());
-    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.NOT_FOUND);
+    verify(watcher5).onResourceDoesNotExist("cluster-foo.googleapis.com");
 
     assertThat(fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
     ScheduledTask timeoutTask = Iterables.getOnlyElement(fakeClock.getPendingTasks());
@@ -2691,9 +2658,7 @@ public class XdsClientImplTest {
     responseObserver.onNext(response);
 
     // Watcher get notification for endpoint resource "cluster-foo:service-bar" being deleted.
-    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
-    verify(endpointWatcher).onError(statusCaptor.capture());
-    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.NOT_FOUND);
+    verify(endpointWatcher).onResourceDoesNotExist("cluster-foo:service-bar");
   }
 
   /**

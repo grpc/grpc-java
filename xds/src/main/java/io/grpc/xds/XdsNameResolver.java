@@ -30,7 +30,6 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.InternalLogId;
 import io.grpc.NameResolver;
 import io.grpc.Status;
-import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.GrpcUtil;
@@ -202,19 +201,23 @@ final class XdsNameResolver extends NameResolver {
     }
 
     @Override
+    public void onResourceDoesNotExist(String resourceName) {
+      logger.log(XdsLogLevel.INFO, "Resource {0} is unavailable", resourceName);
+      ResolutionResult result =
+          ResolutionResult.newBuilder()
+              .setServiceConfig(
+                  ConfigOrError.fromError(
+                      Status.UNAVAILABLE.withDescription(
+                          "Resource " + resourceName + " is unavailable")))
+              .build();
+      listener.onResult(result);
+    }
+
+    @Override
     public void onError(Status error) {
-      // In order to distinguish between IO error and resource not found, which trigger
-      // different handling, return an empty resolution result to channel for resource not
-      // found.
-      // TODO(chengyuanzhang): Returning an empty resolution result based on status code is
-      //  a temporary solution. More design discussion needs to be done.
-      if (error.getCode().equals(Code.NOT_FOUND)) {
-        logger.log(
-            XdsLogLevel.WARNING,
-            "Received error from xDS client {0}: {1}", xdsClient, error.getDescription());
-        listener.onResult(ResolutionResult.newBuilder().build());
-        return;
-      }
+      logger.log(
+          XdsLogLevel.WARNING,
+          "Received error from xDS client {0}: {1}", xdsClient, error.getDescription());
       listener.onError(Status.UNAVAILABLE.withDescription(error.getDescription()));
     }
   }

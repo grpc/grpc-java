@@ -286,10 +286,7 @@ final class XdsClientImpl extends XdsClient {
     // If local cache contains cluster information to be watched, notify the watcher immediately.
     if (absentCdsResources.contains(clusterName)) {
       logger.log(XdsLogLevel.DEBUG, "Cluster resource {0} is known to be absent", clusterName);
-      watcher.onError(
-          Status.NOT_FOUND
-              .withDescription(
-                  "Cluster resource [" + clusterName + "] not found."));
+      watcher.onResourceDoesNotExist(clusterName);
       return;
     }
     if (clusterNamesToClusterUpdates.containsKey(clusterName)) {
@@ -365,10 +362,7 @@ final class XdsClientImpl extends XdsClient {
       logger.log(
           XdsLogLevel.DEBUG,
           "Endpoint resource for cluster {0} is known to be absent.", clusterName);
-      watcher.onError(
-          Status.NOT_FOUND
-              .withDescription(
-                  "Endpoint resource for cluster " + clusterName + " not found."));
+      watcher.onResourceDoesNotExist(clusterName);
       return;
     }
     if (clusterNamesToEndpointUpdates.containsKey(clusterName)) {
@@ -686,11 +680,8 @@ final class XdsClientImpl extends XdsClient {
     } else {
       // The requested Listener is removed by management server.
       if (ldsRespTimer == null) {
-        configWatcher.onError(
-            Status.NOT_FOUND.withDescription(
-                "Listener resource for listener " + ldsResourceName + " does not exist"));
+        configWatcher.onResourceDoesNotExist(ldsResourceName);
       }
-
     }
   }
 
@@ -730,8 +721,7 @@ final class XdsClientImpl extends XdsClient {
       listenerWatcher.onListenerChanged(listenerUpdate);
     } else {
       if (ldsRespTimer == null) {
-        listenerWatcher.onError(Status.NOT_FOUND.withDescription("did not find listener for "
-            + listenerPort));
+        listenerWatcher.onResourceDoesNotExist(":" + listenerPort);
       }
     }
   }
@@ -1093,10 +1083,7 @@ final class XdsClientImpl extends XdsClient {
         if (endpointWatchers.containsKey(clusterName)) {
           Set<EndpointWatcher> watchers = endpointWatchers.get(clusterName);
           for (EndpointWatcher watcher : watchers) {
-            watcher.onError(
-                Status.NOT_FOUND
-                    .withDescription(
-                        "Endpoint resource for cluster " + clusterName + " is deleted."));
+            watcher.onResourceDoesNotExist(clusterName);
           }
         }
       }
@@ -1121,9 +1108,7 @@ final class XdsClientImpl extends XdsClient {
       } else if (!cdsRespTimers.containsKey(clusterName)) {
         // Update for previously present resource being removed.
         for (ClusterWatcher watcher : entry.getValue()) {
-          watcher.onError(
-              Status.NOT_FOUND
-                  .withDescription("Cluster resource " + clusterName + " not found."));
+          watcher.onResourceDoesNotExist(entry.getKey());
         }
       }
     }
@@ -1617,9 +1602,7 @@ final class XdsClientImpl extends XdsClient {
     public void run() {
       super.run();
       ldsRespTimer = null;
-      configWatcher.onError(
-          Status.NOT_FOUND
-              .withDescription("Listener resource for listener " + resourceName + " not found."));
+      configWatcher.onResourceDoesNotExist(resourceName);
     }
   }
 
@@ -1634,9 +1617,7 @@ final class XdsClientImpl extends XdsClient {
     public void run() {
       super.run();
       ldsRespTimer = null;
-      listenerWatcher.onError(
-          Status.NOT_FOUND
-              .withDescription("Listener resource for port " + resourceName + " not found."));
+      listenerWatcher.onResourceDoesNotExist(resourceName);
     }
   }
 
@@ -1651,9 +1632,7 @@ final class XdsClientImpl extends XdsClient {
     public void run() {
       super.run();
       rdsRespTimer = null;
-      configWatcher.onError(Status.NOT_FOUND
-          .withDescription(
-              "RouteConfiguration resource for route " + resourceName + " not found."));
+      configWatcher.onResourceDoesNotExist(resourceName);
     }
   }
 
@@ -1670,9 +1649,7 @@ final class XdsClientImpl extends XdsClient {
       cdsRespTimers.remove(resourceName);
       absentCdsResources.add(resourceName);
       for (ClusterWatcher wat : clusterWatchers.get(resourceName)) {
-        wat.onError(
-            Status.NOT_FOUND
-                .withDescription("Cluster resource " + resourceName + " not found."));
+        wat.onResourceDoesNotExist(resourceName);
       }
     }
   }
@@ -1690,10 +1667,7 @@ final class XdsClientImpl extends XdsClient {
       edsRespTimers.remove(resourceName);
       absentEdsResources.add(resourceName);
       for (EndpointWatcher wat : endpointWatchers.get(resourceName)) {
-        wat.onError(
-            Status.NOT_FOUND
-                .withDescription(
-                    "Endpoint resource for cluster " + resourceName + " not found."));
+        wat.onResourceDoesNotExist(resourceName);
       }
     }
   }

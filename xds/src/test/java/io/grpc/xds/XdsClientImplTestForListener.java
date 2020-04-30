@@ -338,12 +338,10 @@ public class XdsClientImplTestForListener {
             XdsClientImpl.ADS_TYPE_URL_LDS, "0000")));
 
     verify(listenerWatcher, never()).onListenerChanged(any(ListenerUpdate.class));
+    verify(listenerWatcher, never()).onResourceDoesNotExist(":" + PORT);
     verify(listenerWatcher, never()).onError(any(Status.class));
     fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
-    ArgumentCaptor<Status> errorStatusCaptor = ArgumentCaptor.forClass(null);
-    verify(listenerWatcher).onError(errorStatusCaptor.capture());
-    Status error = errorStatusCaptor.getValue();
-    assertThat(error.getCode()).isEqualTo(Code.NOT_FOUND);
+    verify(listenerWatcher).onResourceDoesNotExist(":" + PORT);
     assertThat(fakeClock.getPendingTasks(LISTENER_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
 
@@ -391,12 +389,10 @@ public class XdsClientImplTestForListener {
             XdsClientImpl.ADS_TYPE_URL_LDS, "0000")));
 
     verify(listenerWatcher, never()).onListenerChanged(any(ListenerUpdate.class));
+    verify(listenerWatcher, never()).onResourceDoesNotExist(":" + PORT);
     verify(listenerWatcher, never()).onError(any(Status.class));
     fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
-    ArgumentCaptor<Status> errorStatusCaptor = ArgumentCaptor.forClass(null);
-    verify(listenerWatcher).onError(errorStatusCaptor.capture());
-    Status error = errorStatusCaptor.getValue();
-    assertThat(error.getCode()).isEqualTo(Code.NOT_FOUND);
+    verify(listenerWatcher).onResourceDoesNotExist(":" + PORT);
     assertThat(fakeClock.getPendingTasks(LISTENER_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
 
@@ -443,7 +439,6 @@ public class XdsClientImplTestForListener {
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "0",
             XdsClientImpl.ADS_TYPE_URL_LDS, "0000")));
 
-    verify(listenerWatcher, never()).onError(any(Status.class));
     ArgumentCaptor<ListenerUpdate> listenerUpdateCaptor = ArgumentCaptor.forClass(null);
     verify(listenerWatcher, times(1)).onListenerChanged(listenerUpdateCaptor.capture());
     ListenerUpdate configUpdate = listenerUpdateCaptor.getValue();
@@ -501,7 +496,6 @@ public class XdsClientImplTestForListener {
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "0",
             XdsClientImpl.ADS_TYPE_URL_LDS, "0000")));
 
-    verify(listenerWatcher, never()).onError(any(Status.class));
     ArgumentCaptor<ListenerUpdate> listenerUpdateCaptor = ArgumentCaptor.forClass(null);
     verify(listenerWatcher, times(1)).onListenerChanged(listenerUpdateCaptor.capture());
 
@@ -632,8 +626,12 @@ public class XdsClientImplTestForListener {
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "0",
             XdsClientImpl.ADS_TYPE_URL_LDS, "0000")));
 
-    verify(listenerWatcher, never()).onError(any(Status.class));
     verify(listenerWatcher, never()).onListenerChanged(any(ListenerUpdate.class));
+    verify(listenerWatcher, never()).onResourceDoesNotExist(":" + PORT);
+    verify(listenerWatcher, never()).onError(any(Status.class));
+    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    verify(listenerWatcher).onResourceDoesNotExist(":" + PORT);
+    assertThat(fakeClock.getPendingTasks(LISTENER_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
 
   /**
