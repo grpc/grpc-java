@@ -150,8 +150,10 @@ public final class CallOptions {
 
   /**
    * Enables <a href="https://github.com/grpc/grpc/blob/master/doc/wait-for-ready.md">
-   * 'wait for ready'</a> feature for the call. 'Fail fast' is the default option for gRPC calls
-   * and 'wait for ready' is the opposite to it.
+   * 'wait for ready'</a> for the call. Wait-for-ready queues the RPC until a connection is
+   * available. This may dramatically increase the latency of the RPC, but avoids failing
+   * "unnecessarily." The default queues the RPC until an attempt to connect has completed, but
+   * fails RPCs without sending them if unable to connect.
    */
   public CallOptions withWaitForReady() {
     CallOptions newOptions = new CallOptions(this);
