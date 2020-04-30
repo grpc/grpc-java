@@ -139,7 +139,7 @@ public final class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
    * getXdsClientWrapperForServerSds from the serverSdsProtocolNegotiator.
    */
   @VisibleForTesting
-  public Server buildServer(ServerSdsProtocolNegotiator serverProtocolNegotiator) {
+  public ServerWrapperForXds buildServer(ServerSdsProtocolNegotiator serverProtocolNegotiator) {
     delegate.protocolNegotiator(serverProtocolNegotiator);
     return new ServerWrapperForXds(
         delegate.build(), serverProtocolNegotiator.getXdsClientWrapperForServerSds());

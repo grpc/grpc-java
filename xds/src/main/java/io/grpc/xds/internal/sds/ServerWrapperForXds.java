@@ -18,6 +18,7 @@ package io.grpc.xds.internal.sds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Server;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.xds.XdsClientWrapperForServerSds;
@@ -31,7 +32,8 @@ import java.util.concurrent.TimeUnit;
  * Server#shutdown()} and {@link Server#start()} to shut down and start the
  * {@link XdsClientWrapperForServerSds} object.
  */
-final class ServerWrapperForXds extends Server {
+@VisibleForTesting
+public final class ServerWrapperForXds extends Server {
   private final Server delegate;
   private final XdsClientWrapperForServerSds xdsClientWrapperForServerSds;
 
@@ -45,6 +47,12 @@ final class ServerWrapperForXds extends Server {
   public Server start() throws IOException {
     delegate.start();
     xdsClientWrapperForServerSds.start();
+    return this;
+  }
+
+  @VisibleForTesting
+  public Server startForTestXdsClient() throws IOException {
+    delegate.start();
     return this;
   }
 

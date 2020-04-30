@@ -20,8 +20,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
-import io.grpc.Server;
 import io.grpc.xds.internal.sds.SdsProtocolNegotiators.ServerSdsProtocolNegotiator;
+import io.grpc.xds.internal.sds.ServerWrapperForXds;
 import io.grpc.xds.internal.sds.XdsServerBuilder;
 import java.io.IOException;
 import java.net.ServerSocket;
@@ -46,8 +46,8 @@ public class XdsServerBuilderTest {
     xdsClientWrapperForServerSds.start(mockXdsClient);
     ServerSdsProtocolNegotiator serverSdsProtocolNegotiator =
         new ServerSdsProtocolNegotiator(xdsClientWrapperForServerSds);
-    Server xdsServer = builder.buildServer(serverSdsProtocolNegotiator);
-    xdsServer.start();
+    ServerWrapperForXds xdsServer = builder.buildServer(serverSdsProtocolNegotiator);
+    xdsServer.startForTestXdsClient();
     xdsServer.shutdown();
     xdsServer.awaitTermination(500L, TimeUnit.MILLISECONDS);
     verify(mockXdsClient, times(1)).shutdown();

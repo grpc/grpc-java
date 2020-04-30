@@ -266,7 +266,7 @@ public class XdsSdsClientServerTest {
       int port, SdsProtocolNegotiators.ServerSdsProtocolNegotiator serverSdsProtocolNegotiator)
       throws IOException {
     XdsServerBuilder builder = XdsServerBuilder.forPort(port).addService(new SimpleServiceImpl());
-    cleanupRule.register(builder.buildServer(serverSdsProtocolNegotiator)).start();
+    cleanupRule.register(builder.buildServer(serverSdsProtocolNegotiator)).startForTestXdsClient();
   }
 
   private static int findFreePort() throws IOException {
