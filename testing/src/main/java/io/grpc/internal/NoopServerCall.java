@@ -18,7 +18,6 @@ package io.grpc.internal;
 
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
-import io.grpc.Server;
 import io.grpc.ServerCall;
 import io.grpc.Status;
 
