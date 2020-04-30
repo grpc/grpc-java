@@ -36,6 +36,7 @@ import io.grpc.Metadata;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
+import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.PickSubchannelArgsImpl;
@@ -60,7 +61,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
@@ -113,14 +113,6 @@ public final class CachingRlsLbClient {
     synchronizationContext = helper.getSynchronizationContext();
     lbPolicyConfig = checkNotNull(builder.lbPolicyConfig, "lbPolicyConfig");
     RouteLookupConfig rlsConfig = lbPolicyConfig.getRouteLookupConfig();
-    checkState(rlsConfig.getMaxAgeInMillis() > 0L, "maxAgeMillis should be positive");
-    checkState(rlsConfig.getStaleAgeInMillis() > 0L, "staleAgeMillis should be positive");
-    checkState(
-        rlsConfig.getMaxAgeInMillis() >= rlsConfig.getStaleAgeInMillis(),
-        "maxAgeMillis should be greater than equals to staleAgeMillis");
-    checkState(
-        rlsConfig.getLookupServiceTimeoutInMillis() > 0L,
-        "getLookupServiceTimeoutInMillis should be positive");
     maxAgeNanos = TimeUnit.MILLISECONDS.toNanos(rlsConfig.getMaxAgeInMillis());
     staleAgeNanos = TimeUnit.MILLISECONDS.toNanos(rlsConfig.getStaleAgeInMillis());
     callTimeoutNanos = TimeUnit.MILLISECONDS.toNanos(rlsConfig.getLookupServiceTimeoutInMillis());
@@ -135,6 +127,7 @@ public final class CachingRlsLbClient {
     RlsRequestFactory requestFactory = new RlsRequestFactory(lbPolicyConfig.getRouteLookupConfig());
     rlsPicker = new RlsPicker(requestFactory);
     rlsChannel = helper.createResolvingOobChannel(rlsConfig.getLookupService());
+    helper.updateBalancingState(ConnectivityState.CONNECTING, rlsPicker);
     rlsStub = RouteLookupServiceGrpc.newStub(rlsChannel);
     childLbResolvedAddressFactory =
         checkNotNull(builder.resolvedAddressFactory, "resolvedAddressFactory");
@@ -196,17 +189,15 @@ public final class CachingRlsLbClient {
         return handleNewRequest(request);
       }
 
-      long now = timeProvider.currentTimeNanos();
       if (cacheEntry instanceof DataCacheEntry) {
         // cache hit, initiate async-refresh if entry is staled
         DataCacheEntry dataEntry = ((DataCacheEntry) cacheEntry);
-        if (dataEntry.isStaled(now)) {
+        if (dataEntry.isStaled(timeProvider.currentTimeNanos())) {
           dataEntry.maybeRefresh();
         }
-      } else {
-        return CachedRouteLookupResponse.backoffEntry((BackoffCacheEntry) cacheEntry);
+        return CachedRouteLookupResponse.dataEntry((DataCacheEntry) cacheEntry);
       }
-      return CachedRouteLookupResponse.dataEntry((DataCacheEntry) cacheEntry);
+      return CachedRouteLookupResponse.backoffEntry((BackoffCacheEntry) cacheEntry);
     }
   }
 
@@ -437,7 +428,7 @@ public final class CachingRlsLbClient {
   }
 
   /** Implementation of {@link CacheEntry} contains valid data. */
-  private final class DataCacheEntry extends CacheEntry {
+  final class DataCacheEntry extends CacheEntry {
     private final RouteLookupResponse response;
     private final long expireTime;
     private final long staleTime;
@@ -494,8 +485,10 @@ public final class CachingRlsLbClient {
      * <pre>
      * Timeline                       | async refresh
      *                                V put new cache (entry2)
-     * entry1: Pending | hasValue | staled |
-     * entry2:                        | OV | pending | hasValue | staled |
+     * entry1: Pending | hasValue | staled  |
+     * entry2:                        | OV* | pending | hasValue | staled |
+     *
+     * OV: old value
      * </pre>
      */
     void maybeRefresh() {
@@ -512,6 +505,8 @@ public final class CachingRlsLbClient {
           try {
             RouteLookupResponse response = asyncCall.get();
             linkedHashLruCache.cache(request, new DataCacheEntry(request, response));
+          } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
           } catch (Exception e) {
             BackoffCacheEntry backoffEntry =
                 new BackoffCacheEntry(request, Status.fromThrowable(e), backoffProvider.get());
@@ -569,7 +564,7 @@ public final class CachingRlsLbClient {
   private final class BackoffCacheEntry extends CacheEntry {
 
     private final Status status;
-    private final ScheduledFuture<?> scheduledFuture;
+    private final ScheduledHandle scheduledHandle;
     private final BackoffPolicy backoffPolicy;
     private final long expireNanos;
     private boolean shutdown = false;
@@ -580,8 +575,8 @@ public final class CachingRlsLbClient {
       this.backoffPolicy = checkNotNull(backoffPolicy, "backoffPolicy");
       long delayNanos = backoffPolicy.nextBackoffNanos();
       this.expireNanos = timeProvider.currentTimeNanos() + delayNanos;
-      this.scheduledFuture =
-          scheduledExecutorService.schedule(
+      this.scheduledHandle =
+          synchronizationContext.schedule(
               new Runnable() {
                 @Override
                 public void run() {
@@ -589,13 +584,14 @@ public final class CachingRlsLbClient {
                 }
               },
               delayNanos,
-              TimeUnit.NANOSECONDS);
+              TimeUnit.NANOSECONDS,
+              scheduledExecutorService);
     }
 
     /** Forcefully refreshes cache entry by ignoring the backoff timer. */
     void forceRefresh() {
-      boolean cancelled = scheduledFuture.cancel(false);
-      if (cancelled) {
+      if (scheduledHandle.isPending()) {
+        scheduledHandle.cancel();
         transitionToPending();
       }
     }
@@ -614,6 +610,8 @@ public final class CachingRlsLbClient {
           try {
             RouteLookupResponse response = call.get();
             linkedHashLruCache.cache(request, new DataCacheEntry(request, response));
+          } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
           } catch (Exception e) {
             linkedHashLruCache.cache(
                 request,
@@ -643,8 +641,8 @@ public final class CachingRlsLbClient {
         return;
       }
       shutdown = true;
-      if (!scheduledFuture.isCancelled()) {
-        scheduledFuture.cancel(true);
+      if (!scheduledHandle.isPending()) {
+        scheduledHandle.cancel();
       }
     }
 
@@ -654,7 +652,7 @@ public final class CachingRlsLbClient {
           .add("request", request)
           .add("status", status)
           .add("backoffPolicy", backoffPolicy)
-          .add("scheduledFuture", scheduledFuture)
+          .add("scheduledFuture", scheduledHandle)
           .toString();
     }
   }
@@ -834,7 +832,6 @@ public final class CachingRlsLbClient {
 
     RlsPicker(RlsRequestFactory requestFactory) {
       this.requestFactory = checkNotNull(requestFactory, "requestFactory");
-      helper.updateBalancingState(ConnectivityState.CONNECTING, this);
     }
 
     @Override

@@ -218,6 +218,8 @@ public final class RlsProtoData {
       checkState(
           lookupService != null && !lookupService.isEmpty(), "lookupService must not be empty");
       this.lookupService = lookupService;
+      checkState(
+          lookupServiceTimeoutInMillis > 0, "lookupServiceTimeoutInMillis should be positive");
       this.lookupServiceTimeoutInMillis = lookupServiceTimeoutInMillis;
       if (maxAgeInMillis == null) {
         checkState(
