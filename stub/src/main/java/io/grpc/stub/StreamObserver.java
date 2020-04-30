@@ -29,8 +29,8 @@ package io.grpc.stub;
  * <a href="http://www.ibm.com/developerworks/library/j-jtp09263/">thread-compatible</a>).
  * Separate {@code StreamObserver}s do
  * not need to be synchronized together; incoming and outgoing directions are independent.
- * Since individual {@code StreamObserver}s are not thread-safe, if multiple threads will be
- * writing to a {@code StreamObserver} concurrently, the application must synchronize calls.
+ * Since individual {@code StreamObserver}s are not thread-safe, if multiple threads may call
+ * a {@code StreamObserver} concurrently, the caller must synchronize the calls.
  */
 public interface StreamObserver<V>  {
   /**
