@@ -59,7 +59,6 @@ import io.grpc.rls.internal.Throttler.ThrottledException;
 import io.grpc.stub.StreamObserver;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.CheckReturnValue;
@@ -897,19 +896,8 @@ public final class CachingRlsLbClient {
       String defaultTarget = lbPolicyConfig.getRouteLookupConfig().getDefaultTarget();
       if (fallbackChildPolicyWrapper == null
           || !fallbackChildPolicyWrapper.getTarget().equals(defaultTarget)) {
-        try {
-          startFallbackChildPolicy()
-              .await(
-                  lbPolicyConfig.getRouteLookupConfig().getLookupServiceTimeoutInMillis(),
-                  TimeUnit.MILLISECONDS);
-        } catch (InterruptedException e) {
-          Thread.currentThread().interrupt();
-          return PickResult.withError(Status.ABORTED.withDescription("interrupted"));
-        } catch (Exception e) {
-          return PickResult.withError(Status.fromThrowable(e));
-        }
+        startFallbackChildPolicy();
       }
-      SubchannelPicker picker = fallbackChildPolicyWrapper.getPicker();
       switch (fallbackChildPolicyWrapper.getConnectivityStateInfo().getState()) {
         case CONNECTING:
           return PickResult.withNoResult();
@@ -922,6 +910,7 @@ public final class CachingRlsLbClient {
         case IDLE:
           // fall through
         case READY:
+          SubchannelPicker picker = fallbackChildPolicyWrapper.getPicker();
           if (picker == null) {
             return PickResult.withNoResult();
           }
@@ -931,12 +920,9 @@ public final class CachingRlsLbClient {
       }
     }
 
-    private CountDownLatch startFallbackChildPolicy() {
+    private void startFallbackChildPolicy() {
       String defaultTarget = lbPolicyConfig.getRouteLookupConfig().getDefaultTarget();
-      fallbackChildPolicyWrapper =
-          refCountedChildPolicyWrapperFactory
-              .createOrGet(defaultTarget);
-      final CountDownLatch readyLatch = new CountDownLatch(1);
+      fallbackChildPolicyWrapper = refCountedChildPolicyWrapperFactory.createOrGet(defaultTarget);
 
       LoadBalancerProvider lbProvider =
           lbPolicyConfig.getLoadBalancingPolicy().getEffectiveLbProvider();
@@ -955,16 +941,21 @@ public final class CachingRlsLbClient {
               lb.handleResolvedAddresses(
                   childLbResolvedAddressFactory.create(lbConfig.getConfig()));
               lb.requestConnection();
-              readyLatch.countDown();
             }
           });
-      return readyLatch;
     }
 
     void close() {
       if (fallbackChildPolicyWrapper != null) {
         refCountedChildPolicyWrapperFactory.release(fallbackChildPolicyWrapper);
       }
+    }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(this)
+          .add("target", lbPolicyConfig.getRouteLookupConfig().getLookupService())
+          .toString();
     }
   }
 }
