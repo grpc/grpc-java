@@ -66,7 +66,8 @@ final class RlsLoadBalancer extends LoadBalancer {
                     resolvedAddresses.getAddresses(), resolvedAddresses.getAttributes()))
             .build();
       }
-      // TODO(creamsoup) allow service config update. for initial use case, it is not required.
+      // TODO(creamsoup) allow incremental service config update. for initial use case, it is 
+      //  not required.
       this.lbPolicyConfiguration = lbPolicyConfiguration;
       helper.getChannelLogger()
           .log(ChannelLogLevel.INFO, "LbPolicyConfiguration updated to {0}", lbPolicyConfiguration);
