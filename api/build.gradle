@@ -15,12 +15,7 @@ dependencies {
             libraries.errorprone,
             libraries.jsr305,
             libraries.animalsniffer_annotations
-    compile (libraries.guava) {
-        // prefer our own versions from libraries instead of Guava's dependency
-        exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
-        exclude group: 'com.google.code.findbugs', module: 'jsr305'
-        exclude group: 'org.codehaus.mojo', module: 'animal-sniffer-annotations'
-    }
+    guavaDependency 'compile'
 
     testCompile project(':grpc-context').sourceSets.test.output,
             project(':grpc-testing'),
