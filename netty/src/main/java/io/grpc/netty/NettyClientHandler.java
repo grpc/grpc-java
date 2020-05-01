@@ -38,6 +38,7 @@ import io.grpc.internal.InUseStateAggregator;
 import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.TransportTracer;
 import io.grpc.netty.GrpcHttp2HeadersUtils.GrpcHttp2ClientHeadersDecoder;
+import io.grpc.netty.ListeningEncoder.ListeningStreamBufferingEncoder;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
@@ -57,6 +58,7 @@ import io.netty.handler.codec.http2.Http2CodecUtil;
 import io.netty.handler.codec.http2.Http2Connection;
 import io.netty.handler.codec.http2.Http2ConnectionAdapter;
 import io.netty.handler.codec.http2.Http2ConnectionDecoder;
+import io.netty.handler.codec.http2.Http2ConnectionEncoder;
 import io.netty.handler.codec.http2.Http2Error;
 import io.netty.handler.codec.http2.Http2Exception;
 import io.netty.handler.codec.http2.Http2FlowController;
@@ -131,6 +133,7 @@ class NettyClientHandler extends AbstractNettyHandler {
   static NettyClientHandler newHandler(
       ClientTransportLifecycleManager lifecycleManager,
       @Nullable KeepAliveManager keepAliveManager,
+      boolean autoFlowControl,
       int flowControlWindow,
       int maxHeaderListSize,
       Supplier<Stopwatch> stopwatchFactory,
@@ -155,6 +158,7 @@ class NettyClientHandler extends AbstractNettyHandler {
         frameWriter,
         lifecycleManager,
         keepAliveManager,
+        autoFlowControl,
         flowControlWindow,
         maxHeaderListSize,
         stopwatchFactory,
@@ -171,6 +175,7 @@ class NettyClientHandler extends AbstractNettyHandler {
       Http2FrameWriter frameWriter,
       ClientTransportLifecycleManager lifecycleManager,
       KeepAliveManager keepAliveManager,
+      boolean autoFlowControl,
       int flowControlWindow,
       int maxHeaderListSize,
       Supplier<Stopwatch> stopwatchFactory,
@@ -192,8 +197,9 @@ class NettyClientHandler extends AbstractNettyHandler {
     frameReader = new Http2InboundFrameLogger(frameReader, frameLogger);
     frameWriter = new Http2OutboundFrameLogger(frameWriter, frameLogger);
 
-    StreamBufferingEncoder encoder = new StreamBufferingEncoder(
-        new DefaultHttp2ConnectionEncoder(connection, frameWriter));
+    StreamBufferingEncoder encoder =
+        new ListeningStreamBufferingEncoder(
+            new DefaultHttp2ConnectionEncoder(connection, frameWriter));
 
     // Create the local flow controller configured to auto-refill the connection window.
     connection.local().flowController(
@@ -230,12 +236,13 @@ class NettyClientHandler extends AbstractNettyHandler {
         tooManyPingsRunnable,
         transportTracer,
         eagAttributes,
-        authority);
+        authority,
+        autoFlowControl);
   }
 
   private NettyClientHandler(
       Http2ConnectionDecoder decoder,
-      StreamBufferingEncoder encoder,
+      Http2ConnectionEncoder encoder,
       Http2Settings settings,
       ClientTransportLifecycleManager lifecycleManager,
       KeepAliveManager keepAliveManager,
@@ -243,8 +250,9 @@ class NettyClientHandler extends AbstractNettyHandler {
       final Runnable tooManyPingsRunnable,
       TransportTracer transportTracer,
       Attributes eagAttributes,
-      String authority) {
-    super(/* channelUnused= */ null, decoder, encoder, settings);
+      String authority,
+      boolean autoFlowControl) {
+    super(/* channelUnused= */ null, decoder, encoder, settings, autoFlowControl);
     this.lifecycleManager = lifecycleManager;
     this.keepAliveManager = keepAliveManager;
     this.stopwatchFactory = stopwatchFactory;

@@ -94,6 +94,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
   private SslContext sslContext;
   private ProtocolNegotiator protocolNegotiator;
   private int maxConcurrentCallsPerConnection = Integer.MAX_VALUE;
+  private boolean autoFlowControl = false;
   private int flowControlWindow = DEFAULT_FLOW_CONTROL_WINDOW;
   private int maxMessageSize = DEFAULT_MAX_MESSAGE_SIZE;
   private int maxHeaderListSize = GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE;
@@ -346,13 +347,27 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
   }
 
   /**
-   * Sets the HTTP/2 flow control window. If not called, the default value
-   * is {@link #DEFAULT_FLOW_CONTROL_WINDOW}).
+   * Sets the initial flow control window in bytes. Setting initial flow control window enables auto
+   * flow control tuning using bandwidth-delay product algorithm. To disable auto flow control
+   * tuning, use {@link #flowControlWindow(int)}.
+   */
+  public NettyServerBuilder initialFlowControlWindow(int initialFlowControlWindow) {
+    checkArgument(initialFlowControlWindow > 0, "initialFlowControlWindow must be positive");
+    this.flowControlWindow = initialFlowControlWindow;
+    this.autoFlowControl = true;
+    return this;
+  }
+
+  /**
+   * Sets the flow control window in bytes. Setting flowControlWindow disables auto flow control
+   * tuning; use {@link #initialFlowControlWindow(int)} to enable auto flow control tuning. If not
+   * called, the default value is {@link #DEFAULT_FLOW_CONTROL_WINDOW}).
    */
   public NettyServerBuilder flowControlWindow(int flowControlWindow) {
     checkArgument(flowControlWindow > 0, "flowControlWindow must be positive: %s",
         flowControlWindow);
     this.flowControlWindow = flowControlWindow;
+    this.autoFlowControl = false;
     return this;
   }
 
@@ -564,8 +579,9 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
           listenAddress, channelFactory, channelOptions, childChannelOptions,
           bossEventLoopGroupPool, workerEventLoopGroupPool, forceHeapBuffer, negotiator,
           streamTracerFactories, getTransportTracerFactory(), maxConcurrentCallsPerConnection,
-          flowControlWindow, maxMessageSize, maxHeaderListSize, keepAliveTimeInNanos,
-          keepAliveTimeoutInNanos, maxConnectionIdleInNanos, maxConnectionAgeInNanos,
+          autoFlowControl, flowControlWindow, maxMessageSize, maxHeaderListSize,
+          keepAliveTimeInNanos, keepAliveTimeoutInNanos,
+          maxConnectionIdleInNanos, maxConnectionAgeInNanos,
           maxConnectionAgeGraceInNanos, permitKeepAliveWithoutCalls, permitKeepAliveTimeInNanos,
           getChannelz());
       transportServers.add(transportServer);

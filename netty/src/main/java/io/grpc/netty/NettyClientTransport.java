@@ -79,6 +79,7 @@ class NettyClientTransport implements ConnectionClientTransport {
   private final String authorityString;
   private final AsciiString authority;
   private final AsciiString userAgent;
+  private final boolean autoFlowControl;
   private final int flowControlWindow;
   private final int maxMessageSize;
   private final int maxHeaderListSize;
@@ -106,8 +107,9 @@ class NettyClientTransport implements ConnectionClientTransport {
   NettyClientTransport(
       SocketAddress address, ChannelFactory<? extends Channel> channelFactory,
       Map<ChannelOption<?>, ?> channelOptions, EventLoopGroup group,
-      ProtocolNegotiator negotiator, int flowControlWindow, int maxMessageSize,
-      int maxHeaderListSize, long keepAliveTimeNanos, long keepAliveTimeoutNanos,
+      ProtocolNegotiator negotiator, boolean autoFlowControl, int flowControlWindow,
+      int maxMessageSize, int maxHeaderListSize,
+      long keepAliveTimeNanos, long keepAliveTimeoutNanos,
       boolean keepAliveWithoutCalls, String authority, @Nullable String userAgent,
       Runnable tooManyPingsRunnable, TransportTracer transportTracer, Attributes eagAttributes,
       LocalSocketPicker localSocketPicker, ChannelLogger channelLogger,
@@ -118,6 +120,7 @@ class NettyClientTransport implements ConnectionClientTransport {
     this.group = Preconditions.checkNotNull(group, "group");
     this.channelFactory = channelFactory;
     this.channelOptions = Preconditions.checkNotNull(channelOptions, "channelOptions");
+    this.autoFlowControl = autoFlowControl;
     this.flowControlWindow = flowControlWindow;
     this.maxMessageSize = maxMessageSize;
     this.maxHeaderListSize = maxHeaderListSize;
@@ -214,6 +217,7 @@ class NettyClientTransport implements ConnectionClientTransport {
     handler = NettyClientHandler.newHandler(
         lifecycleManager,
         keepAliveManager,
+        autoFlowControl,
         flowControlWindow,
         maxHeaderListSize,
         GrpcUtil.STOPWATCH_SUPPLIER,
@@ -221,7 +225,6 @@ class NettyClientTransport implements ConnectionClientTransport {
         transportTracer,
         eagAttributes,
         authorityString);
-    NettyHandlerSettings.setAutoWindow(handler);
 
     ChannelHandler negotiationHandler = negotiator.newHandler(handler);
 
