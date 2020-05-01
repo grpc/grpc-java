@@ -896,6 +896,7 @@ public final class CachingRlsLbClient {
       String defaultTarget = lbPolicyConfig.getRouteLookupConfig().getDefaultTarget();
       if (fallbackChildPolicyWrapper == null
           || !fallbackChildPolicyWrapper.getTarget().equals(defaultTarget)) {
+        // TODO(creamsoup) wait until lb is ready
         startFallbackChildPolicy();
       }
       switch (fallbackChildPolicyWrapper.getConnectivityStateInfo().getState()) {
