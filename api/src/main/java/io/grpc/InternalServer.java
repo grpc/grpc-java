@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 The gRPC Authors
+ * Copyright 2020 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,12 +17,15 @@
 package io.grpc;
 
 /**
- * Provides a callback method for a service to receive a reference to its server. The contract with
- * {@link ServerBuilder} is that this method will be called on all registered services implementing
- * the interface after build() has been called and before the {@link Server} instance is returned.
+ * Internal accessor for getting the {@link Server} instance inside server RPC {@link Context}.
+ * This is intended for usage internal to the gRPC team. If you think you need to use
+ * this, contact the gRPC team first.
  */
 @Internal
-public interface InternalNotifyOnServerBuild {
-  /** Notifies the service that the server has been built. */
-  void notifyOnBuild(Server server);
+public class InternalServer {
+  public static final Context.Key<Server> SERVER_CONTEXT_KEY = Server.SERVER_CONTEXT_KEY;
+
+  // Prevent instantiation.
+  private InternalServer() {
+  }
 }

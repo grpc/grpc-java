@@ -561,6 +561,7 @@ public class ServerImplTest {
     Context callContext = callContextReference.get();
     assertNotNull(callContext);
     assertEquals("context added by tracer", SERVER_TRACER_ADDED_KEY.get(callContext));
+    assertEquals(server, io.grpc.InternalServer.SERVER_CONTEXT_KEY.get(callContext));
 
     streamListener.messagesAvailable(new SingleMessageProducer(STRING_MARSHALLER.stream(request)));
     assertEquals(1, executor.runDueTasks());

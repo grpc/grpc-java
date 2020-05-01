@@ -26,7 +26,7 @@ import com.google.protobuf.Descriptors.MethodDescriptor;
 import com.google.protobuf.Descriptors.ServiceDescriptor;
 import io.grpc.BindableService;
 import io.grpc.ExperimentalApi;
-import io.grpc.InternalNotifyOnServerBuild;
+import io.grpc.InternalServer;
 import io.grpc.Server;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
@@ -50,6 +50,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
+import java.util.WeakHashMap;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 
@@ -61,41 +62,37 @@ import javax.annotation.concurrent.GuardedBy;
  * extension.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2222")
-public final class ProtoReflectionService extends ServerReflectionGrpc.ServerReflectionImplBase
-    implements InternalNotifyOnServerBuild {
+public final class ProtoReflectionService extends ServerReflectionGrpc.ServerReflectionImplBase {
 
   private final Object lock = new Object();
 
   @GuardedBy("lock")
-  private ServerReflectionIndex serverReflectionIndex;
-
-  private Server server;
+  private final Map<Server, ServerReflectionIndex> serverReflectionIndexes = new WeakHashMap<>();
 
   private ProtoReflectionService() {}
 
+  /**
+   * Creates a instance of {@link ProtoReflectionService}.
+   */
   public static BindableService newInstance() {
     return new ProtoReflectionService();
   }
 
-  /** Receives a reference to the server at build time. */
-  @Override
-  public void notifyOnBuild(Server server) {
-    this.server = checkNotNull(server);
-  }
-
   /**
-   * Checks for updates to the server's mutable services and updates the index if any changes are
+   * Retrieves the index for services of the server that dispatches the current call. Computes
+   * one if not exist. The index is updated if any changes to the server's mutable services are
    * detected. A change is any addition or removal in the set of file descriptors attached to the
    * mutable services or a change in the service names.
-   *
-   * @return The (potentially updated) index.
    */
-  private ServerReflectionIndex updateIndexIfNecessary() {
+  private ServerReflectionIndex getRefreshedIndex() {
     synchronized (lock) {
-      if (serverReflectionIndex == null) {
-        serverReflectionIndex =
+      Server server = InternalServer.SERVER_CONTEXT_KEY.get();
+      ServerReflectionIndex index = serverReflectionIndexes.get(server);
+      if (index == null) {
+        index =
             new ServerReflectionIndex(server.getImmutableServices(), server.getMutableServices());
-        return serverReflectionIndex;
+        serverReflectionIndexes.put(server, index);
+        return index;
       }
 
       Set<FileDescriptor> serverFileDescriptors = new HashSet<>();
@@ -116,14 +113,15 @@ public final class ProtoReflectionService extends ServerReflectionGrpc.ServerRef
       // Replace the index if the underlying mutable services have changed. Check both the file
       // descriptors and the service names, because one file descriptor can define multiple
       // services.
-      FileDescriptorIndex mutableServicesIndex = serverReflectionIndex.getMutableServicesIndex();
+      FileDescriptorIndex mutableServicesIndex = index.getMutableServicesIndex();
       if (!mutableServicesIndex.getServiceFileDescriptors().equals(serverFileDescriptors)
           || !mutableServicesIndex.getServiceNames().equals(serverServiceNames)) {
-        serverReflectionIndex =
+        index =
             new ServerReflectionIndex(server.getImmutableServices(), serverMutableServices);
+        serverReflectionIndexes.put(server, index);
       }
 
-      return serverReflectionIndex;
+      return index;
     }
   }
 
@@ -133,7 +131,7 @@ public final class ProtoReflectionService extends ServerReflectionGrpc.ServerRef
     final ServerCallStreamObserver<ServerReflectionResponse> serverCallStreamObserver =
         (ServerCallStreamObserver<ServerReflectionResponse>) responseObserver;
     ProtoReflectionStreamObserver requestObserver =
-        new ProtoReflectionStreamObserver(updateIndexIfNecessary(), serverCallStreamObserver);
+        new ProtoReflectionStreamObserver(getRefreshedIndex(), serverCallStreamObserver);
     serverCallStreamObserver.setOnReadyHandler(requestObserver);
     serverCallStreamObserver.disableAutoInboundFlowControl();
     serverCallStreamObserver.request(1);
