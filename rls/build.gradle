@@ -14,6 +14,8 @@ dependencies {
             project(':grpc-stub')
     compileOnly libraries.javax_annotation
     testCompile libraries.truth,
+            project(':grpc-testing'),
+            project(':grpc-testing-proto'),
             project(':grpc-core').sourceSets.test.output  // for FakeClock
 }
 

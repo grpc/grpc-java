@@ -66,7 +66,7 @@ public class RlsRequestFactoryTest {
           /* cacheSize= */ 1000,
           /* validTargets= */ ImmutableList.of("a valid target"),
           /* defaultTarget= */ "us_east_1.cloudbigtable.googleapis.com",
-          RequestProcessingStrategy.ASYNC_LOOKUP_DEFAULT_TARGET_ON_MISS);
+          RequestProcessingStrategy.SYNC_LOOKUP_CLIENT_SEES_ERROR);
 
   private final RlsRequestFactory factory = new RlsRequestFactory(RLS_CONFIG);
 

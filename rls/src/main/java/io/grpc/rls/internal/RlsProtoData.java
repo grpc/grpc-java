@@ -38,7 +38,7 @@ public final class RlsProtoData {
 
   /** A request object sent to route lookup service. */
   @Immutable
-  public static final class RouteLookupRequest {
+  static final class RouteLookupRequest {
 
     private final String server;
 
@@ -119,7 +119,7 @@ public final class RlsProtoData {
 
   /** A response from route lookup service. */
   @Immutable
-  public static final class RouteLookupResponse {
+  static final class RouteLookupResponse {
 
     private final String target;
 
@@ -218,6 +218,8 @@ public final class RlsProtoData {
       checkState(
           lookupService != null && !lookupService.isEmpty(), "lookupService must not be empty");
       this.lookupService = lookupService;
+      checkState(
+          lookupServiceTimeoutInMillis > 0, "lookupServiceTimeoutInMillis should be positive");
       this.lookupServiceTimeoutInMillis = lookupServiceTimeoutInMillis;
       if (maxAgeInMillis == null) {
         checkState(
@@ -238,9 +240,7 @@ public final class RlsProtoData {
       this.requestProcessingStrategy = requestProcessingStrategy;
       checkNotNull(requestProcessingStrategy, "requestProcessingStrategy");
       checkState(
-          !((requestProcessingStrategy == RequestProcessingStrategy.SYNC_LOOKUP_CLIENT_SEES_ERROR
-              || requestProcessingStrategy
-              == RequestProcessingStrategy.ASYNC_LOOKUP_DEFAULT_TARGET_ON_MISS)
+          !(requestProcessingStrategy == RequestProcessingStrategy.SYNC_LOOKUP_CLIENT_SEES_ERROR
               && defaultTarget.isEmpty()),
           "defaultTarget cannot be empty if strategy is %s",
           requestProcessingStrategy);
@@ -303,13 +303,10 @@ public final class RlsProtoData {
     }
 
     /**
-     * Returns the default target to use. It will be used for request processing strategy
-     * {@link RequestProcessingStrategy#SYNC_LOOKUP_DEFAULT_TARGET_ON_ERROR} if RLS
-     * returns an error, or strategy {@link
-     * RequestProcessingStrategy#ASYNC_LOOKUP_DEFAULT_TARGET_ON_MISS} if RLS returns an error or
-     * there is a cache miss in the client.  It will also be used if there are no healthy backends
-     * for an RLS target. Note that requests can be routed only to a subdomain of the original
-     * target, {@literal e.g.} "us_east_1.cloudbigtable.googleapis.com".
+     * Returns the default target to use if needed.  If nonempty (implies request processing
+     * strategy SYNC_LOOKUP_DEFAULT_TARGET_ON_ERROR is set), it will be used if RLS returns an
+     * error.  Note that requests can be routed only to a subdomain of the original target,
+     * {@literal e.g.} "us_east_1.cloudbigtable.googleapis.com".
      */
     public String getDefaultTarget() {
       return defaultTarget;
@@ -379,7 +376,7 @@ public final class RlsProtoData {
   }
 
   /** RequestProcessingStrategy specifies how to process a request when not already in the cache. */
-  enum RequestProcessingStrategy {
+  public enum RequestProcessingStrategy {
     /**
      * Query the RLS and process the request using target returned by the lookup. The target will
      * then be cached and used for processing subsequent requests for the same key. Any errors
@@ -394,13 +391,6 @@ public final class RlsProtoData {
      * strict regional routing requirements should use this strategy.
      */
     SYNC_LOOKUP_CLIENT_SEES_ERROR,
-
-    /**
-     * Query the RLS asynchronously but respond with the default target.  The target in the lookup
-     * response will then be cached and used for subsequent requests.  Services with strict latency
-     * requirements (but not strict regional routing requirements) should use this strategy.
-     */
-    ASYNC_LOOKUP_DEFAULT_TARGET_ON_MISS;
   }
 
   /**
