@@ -24,7 +24,8 @@ import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 
-final class PickSubchannelArgsImpl extends PickSubchannelArgs {
+/** Implementation of {@link PickSubchannelArgs}. */
+public final class PickSubchannelArgsImpl extends PickSubchannelArgs {
   private final CallOptions callOptions;
   private final Metadata headers;
   private final MethodDescriptor<?, ?> method;
@@ -32,7 +33,8 @@ final class PickSubchannelArgsImpl extends PickSubchannelArgs {
   /**
    * Creates call args object for given method with its call options, metadata.
    */
-  PickSubchannelArgsImpl(MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions) {
+  public PickSubchannelArgsImpl(
+      MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions) {
     this.method = checkNotNull(method, "method");
     this.headers = checkNotNull(headers, "headers");
     this.callOptions = checkNotNull(callOptions, "callOptions");
