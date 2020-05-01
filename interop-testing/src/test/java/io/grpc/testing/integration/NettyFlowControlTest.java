@@ -273,7 +273,7 @@ public class NettyFlowControlTest {
 
       @Override
       public void close() {
-        delegate.close();;
+        delegate.close();
       }
     }
   }
