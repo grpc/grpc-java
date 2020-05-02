@@ -187,6 +187,57 @@ subprojects {
             // Jetty ALPN dependencies
             jetty_alpn_agent: 'org.mortbay.jetty.alpn:jetty-alpn-agent:2.0.9'
         ]
+
+        // A util function to config guava dependency with transitive dependencies
+        // properly resolved for the failOnVersionConflict strategy.
+        guavaDependency = { configurationName ->
+            dependencies."$configurationName"(libraries.guava) {
+                exclude group: 'com.google.code.findbugs', module: 'jsr305'
+                exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
+                exclude group: 'org.codehaus.mojo', module: 'animal-sniffer-annotations'
+            }
+            dependencies."$configurationName" libraries.errorprone
+            dependencies.runtimeOnly libraries.animalsniffer_annotations
+            dependencies.runtimeOnly libraries.jsr305
+        }
+
+        // A util function to config opencensus_api dependency with transitive
+        // dependencies properly resolved for the failOnVersionConflict strategy.
+        censusApiDependency = { configurationName ->
+            dependencies."$configurationName"(libraries.opencensus_api) {
+                exclude group: 'com.google.code.findbugs', module: 'jsr305'
+                exclude group: 'com.google.guava', module: 'guava'
+                // we'll always be more up-to-date
+                exclude group: 'io.grpc', module: 'grpc-context'
+            }
+            dependencies.runtimeOnly project(':grpc-context')
+            dependencies.runtimeOnly libraries.jsr305
+            guavaDependency 'runtimeOnly'
+        }
+
+        // A util function to config opencensus_contrib_grpc_metrics dependency
+        // with transitive dependencies properly resolved for the failOnVersionConflict
+        // strategy.
+        censusGrpcMetricDependency = { configurationName ->
+            dependencies."$configurationName"(libraries.opencensus_contrib_grpc_metrics) {
+                exclude group: 'com.google.code.findbugs', module: 'jsr305'
+                exclude group: 'com.google.guava', module: 'guava'
+                // we'll always be more up-to-date
+                exclude group: 'io.grpc', module: 'grpc-context'
+            }
+            dependencies.runtimeOnly project(':grpc-context')
+            dependencies.runtimeOnly libraries.jsr305
+            guavaDependency 'runtimeOnly'
+        }
+
+        // A util function to config perfmark dependency with transitive
+        // dependencies properly resolved for the failOnVersionConflict strategy.
+        perfmarkDependency = { configurationName ->
+            dependencies."$configurationName"(libraries.perfmark) {
+                exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
+            }
+            dependencies.runtimeOnly libraries.errorprone
+        }
     }
 
     configurations {
