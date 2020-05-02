@@ -20,6 +20,7 @@ dependencies {
             libraries.netty,
             libraries.netty_proxy_handler
     guavaDependency 'implementation'
+    perfmarkDependency 'implementation'
 
     // Tests depend on base class defined by core module.
     testCompile project(':grpc-core').sourceSets.test.output,

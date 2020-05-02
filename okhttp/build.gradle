@@ -19,6 +19,7 @@ dependencies {
         exclude group: 'com.squareup.okio', module: 'okio'
     }
     guavaDependency 'implementation'
+    perfmarkDependency 'implementation'
     // Tests depend on base class defined by core module.
     testCompile project(':grpc-core').sourceSets.test.output,
             project(':grpc-testing'),
