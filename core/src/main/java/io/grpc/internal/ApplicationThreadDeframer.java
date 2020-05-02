@@ -19,6 +19,7 @@ package io.grpc.internal;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import io.grpc.Decompressor;
+import io.grpc.Status;
 import java.io.InputStream;
 import java.util.ArrayDeque;
 import java.util.Queue;
@@ -69,7 +70,7 @@ public class ApplicationThreadDeframer implements Deframer, MessageDeframer.List
   }
 
   @Override
-  public void request(final int numMessages) {
+  public StatusHolder request(final int numMessages) {
     storedListener.messagesAvailable(
         new InitializingMessageProducer(
             new Runnable() {
@@ -78,31 +79,43 @@ public class ApplicationThreadDeframer implements Deframer, MessageDeframer.List
                 if (deframer.isClosed()) {
                   return;
                 }
+                StatusHolder sh;
                 try {
-                  deframer.request(numMessages);
+                  sh = deframer.request(numMessages);
                 } catch (Throwable t) {
-                  storedListener.deframeFailed(t);
+                  sh = new StatusHolder(Status.UNKNOWN.withCause(t).withDescription(
+                      "unexpected error requesting messages"));
+                }
+                if (sh != StatusHolder.NO_STATUS) {
+                  storedListener.deframeFailed(sh.status);
                   deframer.close(); // unrecoverable state
                 }
               }
             }));
+    return StatusHolder.NO_STATUS;
   }
 
   @Override
-  public void deframe(final ReadableBuffer data) {
+  public StatusHolder deframe(final ReadableBuffer data) {
     storedListener.messagesAvailable(
         new InitializingMessageProducer(
             new Runnable() {
               @Override
               public void run() {
+                StatusHolder sh;
                 try {
-                  deframer.deframe(data);
+                  sh = deframer.deframe(data);
                 } catch (Throwable t) {
-                  deframeFailed(t);
+                  sh = new StatusHolder(Status.UNKNOWN.withCause(t).withDescription(
+                      "unexpected error deframing messages"));
+                }
+                if (sh != StatusHolder.NO_STATUS) {
+                  deframeFailed(sh.status);
                   deframer.close(); // unrecoverable state
                 }
               }
             }));
+    return StatusHolder.NO_STATUS;
   }
 
   @Override
@@ -161,12 +174,12 @@ public class ApplicationThreadDeframer implements Deframer, MessageDeframer.List
   }
 
   @Override
-  public void deframeFailed(final Throwable cause) {
+  public void deframeFailed(final Status status) {
     transportExecutor.runOnTransportThread(
         new Runnable() {
           @Override
           public void run() {
-            storedListener.deframeFailed(cause);
+            storedListener.deframeFailed(status);
           }
         });
   }

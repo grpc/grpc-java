@@ -381,8 +381,7 @@ public class AbstractServerStreamTest {
       }
 
       @Override
-      public void deframeFailed(Throwable cause) {
-        Status status = Status.fromThrowable(cause);
+      public void deframeFailed(Status status) {
         transportReportStatus(status);
       }
 

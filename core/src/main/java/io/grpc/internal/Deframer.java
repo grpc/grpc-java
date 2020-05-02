@@ -16,7 +16,10 @@
 
 package io.grpc.internal;
 
+import static com.google.common.base.Preconditions.checkArgument;
+
 import io.grpc.Decompressor;
+import io.grpc.Status;
 
 /** Interface for deframing gRPC messages. */
 public interface Deframer {
@@ -42,20 +45,22 @@ public interface Deframer {
 
   /**
    * Requests up to the given number of messages from the call. No additional messages will be
-   * delivered.
+   * delivered.  Returns a NO_STATUS {@link StatusHolder} if there were no problems, or an error
+   * status otherwise.
    *
    * <p>If {@link #close()} has been called, this method will have no effect.
    *
    * @param numMessages the requested number of messages to be delivered to the listener.
    */
-  void request(int numMessages);
+  StatusHolder request(int numMessages);
 
   /**
-   * Adds the given data to this deframer and attempts delivery to the listener.
+   * Adds the given data to this deframer and attempts delivery to the listener.  Returns an Ok
+   * {@link Status} if there were no problems, or an error status otherwise.
    *
    * @param data the raw data read from the remote endpoint. Must be non-null.
    */
-  void deframe(ReadableBuffer data);
+  StatusHolder deframe(ReadableBuffer data);
 
   /** Close when any messages currently queued have been requested and delivered. */
   void closeWhenComplete();
@@ -65,4 +70,24 @@ public interface Deframer {
    * will have no effect.
    */
   void close();
+
+
+  final class StatusHolder {
+
+    /**
+     * Sentinel value to indicate there was not a problem.
+     */
+    static final StatusHolder NO_STATUS = new StatusHolder();
+
+    final Status status;
+
+    StatusHolder(Status status) {
+      checkArgument(!status.isOk(), "can't use non-ok status %s", status);
+      this.status = status;
+    }
+
+    private StatusHolder() {
+      this.status = null;
+    }
+  }
 }

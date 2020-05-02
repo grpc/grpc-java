@@ -21,13 +21,18 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.verifyZeroInteractions;
+import static org.mockito.Mockito.when;
 
 import com.google.common.io.ByteStreams;
 import com.google.common.primitives.Bytes;
+import io.grpc.Status;
+import io.grpc.internal.Deframer.StatusHolder;
 import io.grpc.internal.StreamListener.MessageProducer;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
@@ -50,6 +55,8 @@ public class ApplicationThreadDeframerTest {
 
   @Before
   public void setUp() {
+    when(mockDeframer.request(anyInt())).thenReturn(StatusHolder.NO_STATUS);
+    when(mockDeframer.deframe(any(ReadableBuffer.class))).thenReturn(StatusHolder.NO_STATUS);
     // ApplicationThreadDeframer constructor injects itself as the wrapped deframer's listener.
     verify(mockDeframer).setListener(applicationThreadDeframer);
   }
@@ -106,11 +113,11 @@ public class ApplicationThreadDeframerTest {
 
   @Test
   public void deframeFailedInvokesTransportExecutor() {
-    Throwable cause = new Throwable("error");
-    applicationThreadDeframer.deframeFailed(cause);
-    assertNull(listener.deframeFailedCause);
+    Status status = Status.UNAVAILABLE;
+    applicationThreadDeframer.deframeFailed(status);
+    assertNull(listener.deframeFailedStatus);
     transportExecutor.runStoredRunnable();
-    assertEquals(cause, listener.deframeFailedCause);
+    assertEquals(status, listener.deframeFailedStatus);
   }
 
   @Test
@@ -136,7 +143,7 @@ public class ApplicationThreadDeframerTest {
     private MessageProducer storedProducer;
     private int bytesRead;
     private boolean deframerClosedWithPartialMessage;
-    private Throwable deframeFailedCause;
+    private Status deframeFailedStatus;
 
     private void runStoredProducer() {
       assertNotNull(storedProducer);
@@ -162,9 +169,9 @@ public class ApplicationThreadDeframerTest {
     }
 
     @Override
-    public void deframeFailed(Throwable cause) {
-      assertNull(deframeFailedCause);
-      deframeFailedCause = cause;
+    public void deframeFailed(Status status) {
+      assertNull(deframeFailedStatus);
+      deframeFailedStatus = status;
     }
   }
 

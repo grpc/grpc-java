@@ -255,13 +255,11 @@ public class AbstractClientStreamTest {
     stream.transportState().inboundHeadersReceived(headers);
 
     verifyNoMoreInteractions(mockListener);
-    Throwable t = ((BaseTransportState) stream.transportState()).getDeframeFailedCause();
-    assertEquals(Status.INTERNAL.getCode(), Status.fromThrowable(t).getCode());
+    Status s = ((BaseTransportState) stream.transportState()).getDeframeFailedStatus();
+    assertEquals(Status.INTERNAL.getCode(), s.getCode());
     assertTrue(
         "unexpected deframe failed description",
-        Status.fromThrowable(t)
-            .getDescription()
-            .startsWith("Can't find full stream decompressor for"));
+        s.getDescription().startsWith("Can't find full stream decompressor for"));
   }
 
   @Test
@@ -277,13 +275,11 @@ public class AbstractClientStreamTest {
     stream.transportState().inboundHeadersReceived(headers);
 
     verifyNoMoreInteractions(mockListener);
-    Throwable t = ((BaseTransportState) stream.transportState()).getDeframeFailedCause();
-    assertEquals(Status.INTERNAL.getCode(), Status.fromThrowable(t).getCode());
+    Status s = ((BaseTransportState) stream.transportState()).getDeframeFailedStatus();
+    assertEquals(Status.INTERNAL.getCode(), s.getCode());
     assertTrue(
         "unexpected deframe failed description",
-        Status.fromThrowable(t)
-            .getDescription()
-            .equals("Full stream and gRPC message encoding cannot both be set"));
+        s.getDescription().equals("Full stream and gRPC message encoding cannot both be set"));
   }
 
   @Test
@@ -321,11 +317,11 @@ public class AbstractClientStreamTest {
     stream.transportState().inboundHeadersReceived(headers);
 
     verifyNoMoreInteractions(mockListener);
-    Throwable t = ((BaseTransportState) stream.transportState()).getDeframeFailedCause();
-    assertEquals(Status.INTERNAL.getCode(), Status.fromThrowable(t).getCode());
+    Status s = ((BaseTransportState) stream.transportState()).getDeframeFailedStatus();
+    assertEquals(Status.INTERNAL.getCode(), s.getCode());
     assertTrue(
         "unexpected deframe failed description",
-        Status.fromThrowable(t).getDescription().startsWith("Can't find decompressor for"));
+        s.getDescription().startsWith("Can't find decompressor for"));
   }
 
   @Test
@@ -563,10 +559,10 @@ public class AbstractClientStreamTest {
   }
 
   private static class BaseTransportState extends AbstractClientStream.TransportState {
-    private Throwable deframeFailedCause;
+    private Status deframeFailedStatus;
 
-    private Throwable getDeframeFailedCause() {
-      return deframeFailedCause;
+    private Status getDeframeFailedStatus() {
+      return deframeFailedStatus;
     }
 
     public BaseTransportState(StatsTraceContext statsTraceCtx, TransportTracer transportTracer) {
@@ -574,9 +570,9 @@ public class AbstractClientStreamTest {
     }
 
     @Override
-    public void deframeFailed(Throwable cause) {
-      assertNull("deframeFailed already called", deframeFailedCause);
-      deframeFailedCause = cause;
+    public void deframeFailed(Status status) {
+      assertNull("deframeFailed already called", deframeFailedStatus);
+      deframeFailedStatus = status;
     }
 
     @Override
