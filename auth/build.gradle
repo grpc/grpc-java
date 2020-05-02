@@ -10,6 +10,7 @@ description = "gRPC: Auth"
 dependencies {
     compile project(':grpc-api'),
             libraries.google_auth_credentials
+    guavaDependency 'implementation'
     testCompile project(':grpc-testing'),
             libraries.google_auth_oauth2_http
     signature "org.codehaus.mojo.signature:java17:1.0@signature"

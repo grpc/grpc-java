@@ -9,7 +9,7 @@ evaluationDependsOn(project(':grpc-api').path)
 
 dependencies {
     compile project(':grpc-api')
-
+    guavaDependency 'implementation'
     censusApiDependency 'compile'
     censusGrpcMetricDependency 'compile'
 

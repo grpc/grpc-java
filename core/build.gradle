@@ -16,7 +16,9 @@ dependencies {
     compile project(':grpc-api'),
             libraries.gson,
             libraries.android_annotations,
-            libraries.errorprone // prefer our version to perfmark's 2.3.3
+            libraries.animalsniffer_annotations,
+            libraries.errorprone
+    guavaDependency 'implementation'
     perfmarkDependency 'compile'
     testCompile project(':grpc-context').sourceSets.test.output,
             project(':grpc-api').sourceSets.test.output,
