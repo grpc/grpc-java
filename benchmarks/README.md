@@ -7,9 +7,9 @@ The "Queries Per Second Benchmark" allows you to get a quick overview of the thr
 
 To build the benchmark type
 
-```  
-$ ./gradlew :grpc-benchmarks:installDist  
-```  
+```
+$ ./gradlew :grpc-benchmarks:installDist
+```
 
 from the grpc-java directory.
 
