@@ -46,13 +46,9 @@ public final class ServerWrapperForXds extends Server {
   @Override
   public Server start() throws IOException {
     delegate.start();
-    xdsClientWrapperForServerSds.start();
-    return this;
-  }
-
-  @VisibleForTesting
-  public Server startForTestXdsClient() throws IOException {
-    delegate.start();
+    if (!xdsClientWrapperForServerSds.hasXdsClient()) {
+      xdsClientWrapperForServerSds.createXdsClientAndStart();
+    }
     return this;
   }
 

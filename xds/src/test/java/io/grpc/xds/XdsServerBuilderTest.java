@@ -47,7 +47,7 @@ public class XdsServerBuilderTest {
     ServerSdsProtocolNegotiator serverSdsProtocolNegotiator =
         new ServerSdsProtocolNegotiator(xdsClientWrapperForServerSds);
     ServerWrapperForXds xdsServer = builder.buildServer(serverSdsProtocolNegotiator);
-    xdsServer.startForTestXdsClient();
+    xdsServer.start();
     xdsServer.shutdown();
     xdsServer.awaitTermination(500L, TimeUnit.MILLISECONDS);
     verify(mockXdsClient, times(1)).shutdown();
