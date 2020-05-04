@@ -19,7 +19,7 @@ dependencies {
         // 'com.google.api:api-common' transitively depends on auto-value, which breaks our
         // annotations.
         exclude group: 'com.google.api', module: 'api-common'
-        // prefer our own version from libraries.protobuf
+        // Prefer our more up-to-date protobuf over 3.2.0
         exclude group: 'com.google.protobuf', module: 'protobuf-java'
     }
 
