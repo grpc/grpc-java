@@ -30,11 +30,15 @@ udpa/data/orca/v1/orca_load_report.proto
 udpa/service/orca/v1/orca.proto
 )
 
+pushd `git rev-parse --show-toplevel`/xds/third_party/udpa
+
 # clone the udpa github repo in a tmp directory
 tmpdir="$(mktemp -d)"
+trap "rm -rf $tmpdir" EXIT
+
 pushd "${tmpdir}"
-rm -rf $GIT_BASE_DIR
 git clone -b $BRANCH $GIT_REPO
+trap "rm -rf $GIT_BASE_DIR" EXIT
 cd "$GIT_BASE_DIR"
 git checkout $VERSION
 popd
@@ -53,4 +57,4 @@ do
 done
 popd
 
-rm -rf "$tmpdir"
+popd

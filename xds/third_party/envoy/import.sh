@@ -59,6 +59,8 @@ envoy/api/v2/route/route_components.proto
 envoy/api/v2/scoped_route.proto
 envoy/api/v2/srds.proto
 envoy/config/filter/accesslog/v2/accesslog.proto
+envoy/config/filter/fault/v2/fault.proto
+envoy/config/filter/http/fault/v2/fault.proto
 envoy/config/filter/network/http_connection_manager/v2/http_connection_manager.proto
 envoy/config/listener/v2/api_listener.proto
 envoy/config/trace/v2/trace.proto
@@ -75,11 +77,15 @@ envoy/type/semantic_version.proto
 envoy/type/tracing/v2/custom_tag.proto
 )
 
+pushd `git rev-parse --show-toplevel`/xds/third_party/envoy
+
 # clone the envoy github repo in a tmp directory
 tmpdir="$(mktemp -d)"
+trap "rm -rf ${tmpdir}" EXIT
+
 pushd "${tmpdir}"
-rm -rf $GIT_BASE_DIR
 git clone -b $BRANCH $GIT_REPO
+trap "rm -rf $GIT_BASE_DIR" EXIT
 cd "$GIT_BASE_DIR"
 git checkout $VERSION
 popd
@@ -99,4 +105,4 @@ do
 done
 popd
 
-rm -rf "$tmpdir"
+popd
