@@ -38,7 +38,6 @@ import io.grpc.Attributes;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
 import io.grpc.netty.InternalProtocolNegotiationEvent;
-import io.grpc.netty.InternalProtocolNegotiator;
 import io.grpc.xds.XdsAttributes;
 import io.grpc.xds.XdsClientWrapperForServerSds;
 import io.grpc.xds.XdsClientWrapperForServerSdsTest;
@@ -282,14 +281,6 @@ public class SdsProtocolNegotiatorsTest {
     pipeline.fireUserEventTriggered(sslEvent);
     channel.runPendingTasks(); // need this for tasks to execute on eventLoop
     assertTrue(channel.isOpen());
-  }
-
-  @Test
-  public void serverSdsProtocolNegotiator_nullSyncContext_expectPlaintext() {
-    InternalProtocolNegotiator.ProtocolNegotiator protocolNegotiator =
-        SdsProtocolNegotiators.serverProtocolNegotiator(/* port= */ 7000, /* syncContext= */ null);
-    assertThat(protocolNegotiator.getClass().getSimpleName())
-        .isEqualTo("ServerPlaintextNegotiator");
   }
 
   private static final class FakeGrpcHttp2ConnectionHandler extends GrpcHttp2ConnectionHandler {
