@@ -17,10 +17,17 @@ You can now find the client and the server executables in `benchmarks/build/inst
 
 The `C++` counterpart can be found at https://github.com/grpc/grpc/tree/master/test/cpp/qps
 
-This [netty](https://github.com/RiyaTyagi/grpc-java/tree/master/benchmarks/src/jmh/java/io/grpc/benchmarks/netty) directory contains the standard benchmarks used to assess the performance of GRPC. Since these benchmarks run on localhost over loopback, the performance of the underlying network is considerably different to real networks and their behavior. To address this issue we recommend the use of a network emulator to make loopback behave more like a real network. To this end the benchmark code looks for a loopback interface with 'benchmark' in its name and attempts to use the address bound to that interface when creating the client and server. If it cannot find such an interface it
+The [netty benchmark](src/jmh/java/io/grpc/benchmarks/netty) directory contains
+the standard benchmarks used to assess the performance of GRPC. Since these
+benchmarks run on localhost over loopback the performance of the underlying network is considerably
+different to real networks and their behavior. To address this issue we recommend the use of
+a network emulator to make loopback behave more like a real network. To this end the benchmark
+code looks for a loopback interface with 'benchmark' in its name and attempts to use the address
+bound to that interface when creating the client and server. If it cannot find such an interface it
 will print a warning and continue with the default localhost address.
 
-To attempt to standardize benchmark behavior across machines we attempt to emulate a 10gbit ethernet interface with a packet delay of 0.1ms.
+To attempt to standardize benchmark behavior across machines we attempt to emulate a 10gbit
+ethernet interface with a packet delay of 0.1ms.
 
 ### Linux
 
