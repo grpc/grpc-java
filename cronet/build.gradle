@@ -38,7 +38,6 @@ dependencies {
     guavaDependency 'implementation'
     testImplementation project(':grpc-testing')
 
-    implementation libraries.cronet_api
     testImplementation libraries.cronet_embedded
 
     testImplementation libraries.junit
