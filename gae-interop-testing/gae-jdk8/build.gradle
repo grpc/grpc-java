@@ -50,8 +50,8 @@ dependencies {
     implementation (project(':grpc-interop-testing')) {
         exclude group: 'io.grpc', module: 'grpc-alts'
     }
+    implementation libraries.junit
     implementation libraries.protobuf
-    implementation libraries.truth
     runtimeOnly libraries.netty_tcnative
 }
 
