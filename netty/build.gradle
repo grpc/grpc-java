@@ -1,5 +1,5 @@
 plugins {
-    id "java"
+    id "java-library"
     id "maven-publish"
 
     id "me.champeau.gradle.japicmp"
@@ -16,15 +16,17 @@ configurations {
 evaluationDependsOn(project(':grpc-core').path)
 
 dependencies {
-    compile project(':grpc-core'),
-            libraries.netty,
-            libraries.netty_proxy_handler
+    api project(':grpc-core'),
+            libraries.netty
+    implementation libraries.netty_proxy_handler
+    guavaDependency 'implementation'
+    perfmarkDependency 'implementation'
 
     // Tests depend on base class defined by core module.
-    testCompile project(':grpc-core').sourceSets.test.output,
+    testImplementation project(':grpc-core').sourceSets.test.output,
             project(':grpc-testing'),
             project(':grpc-testing-proto')
-    testRuntime libraries.netty_tcnative,
+    testRuntimeOnly libraries.netty_tcnative,
             libraries.conscrypt,
             libraries.netty_epoll
     signature "org.codehaus.mojo.signature:java17:1.0@signature"

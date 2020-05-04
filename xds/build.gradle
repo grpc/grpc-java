@@ -19,42 +19,42 @@ description = "gRPC: XDS plugin"
 evaluationDependsOn(project(':grpc-core').path)
 
 dependencies {
-    compile project(':grpc-protobuf'),
+    implementation project(':grpc-protobuf'),
             project(':grpc-stub'),
             project(':grpc-core'),
             project(':grpc-services'),
             project(path: ':grpc-alts', configuration: 'shadow'),
             libraries.gson
-    def nettyDependency = compile project(':grpc-netty')
+    def nettyDependency = implementation project(':grpc-netty')
 
-    compile (libraries.opencensus_proto) {
+    implementation (libraries.opencensus_proto) {
         // prefer our own versions instead of opencensus_proto's
         exclude group: 'com.google.protobuf', module: 'protobuf-java'
         exclude group: 'io.grpc', module: 'grpc-protobuf'
         exclude group: 'io.grpc', module: 'grpc-stub'
     }
-    compile (libraries.protobuf_util) {
+    implementation (libraries.protobuf_util) {
         // prefer our own versions instead of protobuf-util's dependency
         exclude group: 'com.google.guava', module: 'guava'
         exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
     }
 
-    testCompile project(':grpc-core').sourceSets.test.output
+    testImplementation project(':grpc-core').sourceSets.test.output
 
     compileOnly libraries.javax_annotation,
             // At runtime use the epoll included in grpc-netty-shaded
             libraries.netty_epoll
-    
-    testCompile project(':grpc-testing'), 
+
+    testImplementation project(':grpc-testing'),
             project(':grpc-testing-proto'),
             libraries.guava_testlib,
             libraries.netty_epoll
 
-    shadow configurations.compile.getDependencies().minus([nettyDependency])
+    shadow configurations.implementation.getDependencies().minus([nettyDependency])
     shadow project(path: ':grpc-netty-shaded', configuration: 'shadow')
 
     signature "org.codehaus.mojo.signature:java17:1.0@signature"
-    testRuntime libraries.netty_tcnative
+    testRuntimeOnly libraries.netty_tcnative
 }
 
 sourceSets {

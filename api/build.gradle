@@ -1,5 +1,5 @@
 plugins {
-    id "java"
+    id "java-library"
     id "maven-publish"
 
     id "me.champeau.gradle.jmh"
@@ -11,13 +11,11 @@ description = 'gRPC: API'
 evaluationDependsOn(project(':grpc-context').path)
 
 dependencies {
-    compile project(':grpc-context'),
-            libraries.errorprone,
-            libraries.jsr305,
-            libraries.animalsniffer_annotations
-    guavaDependency 'compile'
+    api project(':grpc-context'),
+            libraries.jsr305
+    guavaDependency 'implementation'
 
-    testCompile project(':grpc-context').sourceSets.test.output,
+    testImplementation project(':grpc-context').sourceSets.test.output,
             project(':grpc-testing'),
             project(':grpc-grpclb'),
             libraries.guava_testlib

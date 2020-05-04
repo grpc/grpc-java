@@ -17,7 +17,7 @@ configurations {
 evaluationDependsOn(project(':grpc-context').path)
 
 dependencies {
-    compile project(path: ':grpc-alts', configuration: 'shadow'),
+    implementation project(path: ':grpc-alts', configuration: 'shadow'),
             project(':grpc-auth'),
             project(':grpc-census'),
             project(':grpc-core'),
@@ -30,12 +30,13 @@ dependencies {
             libraries.google_auth_oauth2_http,
             libraries.junit,
             libraries.truth
+    censusGrpcMetricDependency 'implementation'
     compileOnly libraries.javax_annotation
-    runtime libraries.opencensus_impl,
+    runtimeOnly libraries.opencensus_impl,
             libraries.netty_tcnative,
             project(':grpc-grpclb')
     xdsRuntime project(path: ':grpc-xds', configuration: 'shadow')
-    testCompile project(':grpc-context').sourceSets.test.output,
+    testImplementation project(':grpc-context').sourceSets.test.output,
             libraries.mockito
     alpnagent libraries.jetty_alpn_agent
 }

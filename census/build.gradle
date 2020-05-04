@@ -1,5 +1,5 @@
 plugins {
-    id "java"
+    id "java-library"
     id "maven-publish"
 }
 
@@ -8,12 +8,12 @@ description = 'gRPC: Census'
 evaluationDependsOn(project(':grpc-api').path)
 
 dependencies {
-    compile project(':grpc-api')
+    api project(':grpc-api')
+    guavaDependency 'implementation'
+    censusApiDependency 'implementation'
+    censusGrpcMetricDependency 'implementation'
 
-    censusApiDependency 'compile'
-    censusGrpcMetricDependency 'compile'
-
-    testCompile project(':grpc-api').sourceSets.test.output,
+    testImplementation project(':grpc-api').sourceSets.test.output,
             project(':grpc-context').sourceSets.test.output,
             project(':grpc-core').sourceSets.test.output,
             project(':grpc-testing'),

@@ -1,5 +1,5 @@
 plugins {
-    id "java"
+    id "java-library"
     id "maven-publish"
 
     id "me.champeau.gradle.japicmp"
@@ -13,12 +13,14 @@ evaluationDependsOn(project(':grpc-context').path)
 evaluationDependsOn(project(':grpc-api').path)
 
 dependencies {
-    compile project(':grpc-api'),
-            libraries.gson,
+    api project(':grpc-api')
+    implementation libraries.gson,
             libraries.android_annotations,
-            libraries.errorprone // prefer our version to perfmark's 2.3.3
-    perfmarkDependency 'compile'
-    testCompile project(':grpc-context').sourceSets.test.output,
+            libraries.animalsniffer_annotations,
+            libraries.errorprone
+    guavaDependency 'implementation'
+    perfmarkDependency 'implementation'
+    testImplementation project(':grpc-context').sourceSets.test.output,
             project(':grpc-api').sourceSets.test.output,
             project(':grpc-testing'),
             project(':grpc-grpclb'),
