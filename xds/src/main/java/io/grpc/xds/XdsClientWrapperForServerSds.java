@@ -159,6 +159,7 @@ public final class XdsClientWrapperForServerSds {
   @VisibleForTesting
   public void start(XdsClient xdsClient) {
     checkState(this.xdsClient == null, "start() called more than once");
+    checkNotNull(xdsClient, "xdsClient");
     this.xdsClient = xdsClient;
     this.listenerWatcher =
         new XdsClient.ListenerWatcher() {
@@ -314,7 +315,7 @@ public final class XdsClientWrapperForServerSds {
       xdsClient = null;
     }
     if (timeService != null) {
-      timeServiceResource.close(timeService);
+      timeService = SharedResourceHolder.release(timeServiceResource, timeService);
     }
   }
 
