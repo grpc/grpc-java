@@ -308,7 +308,7 @@ public final class ServerCalls {
     final ServerCall<ReqT, RespT> call;
     volatile boolean cancelled;
     private boolean frozen;
-    private int initialRequest;
+    private int initialRequest = 1;
     private boolean autoRequestEnabled = true;
     private boolean sentHeaders;
     private Runnable onReadyHandler;
