@@ -34,6 +34,10 @@ import java.util.logging.Logger;
 /**
  * Test client that verifies that grpclb failover into fallback mode works under
  * different failure modes.
+ * This client is suitable for testing fallback with any "grpclb" load-balanced
+ * service, but is particularly meant to implement a set of test cases described
+ * in an internal doc titled "DirectPath Cloud-to-Prod End-to-End Test Cases",
+ * section "gRPC DirectPath-to-CFE fallback".
  */
 public final class GrpclbFallbackTestClient {
   private static final Logger logger =
