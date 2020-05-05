@@ -34,7 +34,6 @@ dependencies {
     compileOnly libraries.javax_annotation
     runtimeOnly libraries.opencensus_impl,
             libraries.netty_tcnative,
-            libraries.netty_epoll,
             project(':grpc-grpclb')
     xdsRuntime project(path: ':grpc-xds', configuration: 'shadow')
     testImplementation project(':grpc-context').sourceSets.test.output,
@@ -121,7 +120,6 @@ task grpclb_fallback_test_client (type: CreateStartScripts) {
     outputDir = new File(project.buildDir, 'tmp')
     classpath = jar.outputs.files + configurations.runtime
     defaultJvmOpts = [
-        "-Dio.grpc.internal.DnsNameResolverProvider.enable_grpclb=true",
         "-Dio.grpc.internal.DnsNameResolverProvider.enable_service_config=true"
     ]
 }
