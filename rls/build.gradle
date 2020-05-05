@@ -21,6 +21,7 @@ dependencies {
 }
 
 javadoc {
+    exclude 'io/grpc/rls/internal/**'
     // do not publish javadoc since it is not published yet
     exclude 'io/grpc/rls/**'
 }
@@ -35,11 +36,3 @@ configureProtoCompilation()
 
 // do not publish 'grpc-rls'
 [publishMavenPublicationToMavenRepository]*.onlyIf { false }
-
-jacocoTestReport {
-    reports {
-        xml.enabled false
-        csv.enabled false
-        html.destination file("${buildDir}/jacocoHtml")
-    }
-}
