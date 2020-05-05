@@ -48,8 +48,8 @@ final class RlsLoadBalancer extends LoadBalancer {
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     LbPolicyConfiguration lbPolicyConfiguration =
         (LbPolicyConfiguration) resolvedAddresses.getLoadBalancingPolicyConfig();
-    if (lbPolicyConfiguration != null
-        && !lbPolicyConfiguration.equals(this.lbPolicyConfiguration)) {
+    checkNotNull(lbPolicyConfiguration, "Missing rls lb config");
+    if (!lbPolicyConfiguration.equals(this.lbPolicyConfiguration)) {
       boolean needToConnect = this.lbPolicyConfiguration == null
           || !this.lbPolicyConfiguration.getRouteLookupConfig().getLookupService().equals(
           lbPolicyConfiguration.getRouteLookupConfig().getLookupService());
@@ -89,7 +89,9 @@ final class RlsLoadBalancer extends LoadBalancer {
 
       @Override
       public String toString() {
-        return MoreObjects.toStringHelper(this).toString();
+        return MoreObjects.toStringHelper(this)
+            .add("error", error)
+            .toString();
       }
     }
 
