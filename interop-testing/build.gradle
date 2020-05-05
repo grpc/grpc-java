@@ -114,6 +114,16 @@ task grpclb_long_lived_affinity_test_client(type: CreateStartScripts) {
     ]
 }
 
+task grpclb_fallback_test_client (type: CreateStartScripts) {
+    mainClassName = "io.grpc.testing.integration.GrpclbFallbackTestClient"
+    applicationName = "grpclb-fallback-test-client"
+    outputDir = new File(project.buildDir, 'tmp')
+    classpath = jar.outputs.files + configurations.runtime
+    defaultJvmOpts = [
+        "-Dio.grpc.internal.DnsNameResolverProvider.enable_service_config=true"
+    ]
+}
+
 task xds_test_client(type: CreateStartScripts) {
     mainClassName = "io.grpc.testing.integration.XdsTestClient"
     applicationName = "xds-test-client"
@@ -135,6 +145,7 @@ applicationDistribution.into("bin") {
     from(stresstest_client)
     from(http2_client)
     from(grpclb_long_lived_affinity_test_client)
+    from(grpclb_fallback_test_client)
     from(xds_test_client)
     from(xds_test_server)
     fileMode = 0755

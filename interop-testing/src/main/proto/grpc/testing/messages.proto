@@ -86,6 +86,9 @@ message SimpleRequest {
 
   // Whether SimpleResponse should include server_id.
   bool fill_server_id = 9;
+
+  // Whether SimpleResponse should include grpclb_route_type.
+  bool fill_grpclb_route_type = 10;
 }
 
 // Unary response, as configured by the request.
