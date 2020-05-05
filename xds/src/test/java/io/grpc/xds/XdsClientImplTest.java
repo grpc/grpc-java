@@ -19,6 +19,7 @@ package io.grpc.xds;
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.xds.XdsClientTestHelper.buildCluster;
 import static io.grpc.xds.XdsClientTestHelper.buildClusterLoadAssignment;
+import static io.grpc.xds.XdsClientTestHelper.buildDeprecatedSecureCluster;
 import static io.grpc.xds.XdsClientTestHelper.buildDiscoveryRequest;
 import static io.grpc.xds.XdsClientTestHelper.buildDiscoveryResponse;
 import static io.grpc.xds.XdsClientTestHelper.buildDropOverload;
@@ -1543,6 +1544,38 @@ public class XdsClientImplTest {
     List<Any> clusters = ImmutableList.of(
         Any.pack(buildCluster("cluster-bar.googleapis.com", null, false)),
         Any.pack(buildSecureCluster("cluster-foo.googleapis.com",
+            "eds-cluster-foo.googleapis.com", true, testUpstreamTlsContext)),
+        Any.pack(buildCluster("cluster-baz.googleapis.com", null, false)));
+    DiscoveryResponse response =
+        buildDiscoveryResponse("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS, "0000");
+    responseObserver.onNext(response);
+
+    // Client sent an ACK CDS request.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest(NODE, "0", "cluster-foo.googleapis.com",
+            XdsClientImpl.ADS_TYPE_URL_CDS, "0000")));
+    ArgumentCaptor<ClusterUpdate> clusterUpdateCaptor = ArgumentCaptor.forClass(null);
+    verify(clusterWatcher, times(1)).onClusterChanged(clusterUpdateCaptor.capture());
+    ClusterUpdate clusterUpdate = clusterUpdateCaptor.getValue();
+    assertThat(clusterUpdate.getUpstreamTlsContext()).isEqualTo(testUpstreamTlsContext);
+  }
+
+  /**
+   * CDS response containing UpstreamTlsContext for a cluster in a deprecated field.
+   */
+  // TODO(sanjaypujare): remove once we move to envoy proto v3
+  @Test
+  public void cdsResponseWithDeprecatedUpstreamTlsContext() {
+    xdsClient.watchClusterData("cluster-foo.googleapis.com", clusterWatcher);
+    StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
+    StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
+
+    // Management server sends back CDS response with UpstreamTlsContext.
+    UpstreamTlsContext testUpstreamTlsContext =
+        buildUpstreamTlsContext("secret1", "unix:/var/uds2");
+    List<Any> clusters = ImmutableList.of(
+        Any.pack(buildCluster("cluster-bar.googleapis.com", null, false)),
+        Any.pack(buildDeprecatedSecureCluster("cluster-foo.googleapis.com",
             "eds-cluster-foo.googleapis.com", true, testUpstreamTlsContext)),
         Any.pack(buildCluster("cluster-baz.googleapis.com", null, false)));
     DiscoveryResponse response =

@@ -36,6 +36,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Any;
+import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Struct;
 import com.google.protobuf.UInt32Value;
 import com.google.protobuf.Value;
@@ -47,6 +48,7 @@ import io.envoyproxy.envoy.api.v2.core.Address;
 import io.envoyproxy.envoy.api.v2.core.CidrRange;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.api.v2.core.SocketAddress;
+import io.envoyproxy.envoy.api.v2.core.TransportSocket;
 import io.envoyproxy.envoy.api.v2.listener.Filter;
 import io.envoyproxy.envoy.api.v2.listener.FilterChain;
 import io.envoyproxy.envoy.api.v2.listener.FilterChainMatch;
@@ -398,7 +400,7 @@ public class XdsClientImplTestForListener {
 
   /** Client receives a Listener with all match. */
   @Test
-  public void ldsResponseWith_matchingListenerFound() {
+  public void ldsResponseWith_matchingListenerFound() throws InvalidProtocolBufferException {
     xdsClient.watchListenerData(PORT, listenerWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
@@ -455,7 +457,7 @@ public class XdsClientImplTestForListener {
 
   /** Client receives LDS responses for updating Listener previously received. */
   @Test
-  public void notifyUpdatedListener() {
+  public void notifyUpdatedListener() throws InvalidProtocolBufferException {
     xdsClient.watchListenerData(PORT, listenerWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
@@ -794,8 +796,10 @@ public class XdsClientImplTestForListener {
     return
         FilterChain.newBuilder()
             .setFilterChainMatch(filterChainMatch)
-            .setTlsContext(tlsContext == null
-                ? DownstreamTlsContext.getDefaultInstance() : tlsContext)
+            .setTransportSocket(tlsContext == null
+                ? TransportSocket.getDefaultInstance()
+                : TransportSocket.newBuilder().setName("tls").setTypedConfig(Any.pack(tlsContext))
+                    .build())
             .addAllFilters(Arrays.asList(filters))
             .build();
   }

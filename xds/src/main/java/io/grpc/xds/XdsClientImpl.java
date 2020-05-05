@@ -25,6 +25,7 @@ import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
+import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.MessageOrBuilder;
 import com.google.protobuf.Struct;
@@ -40,6 +41,7 @@ import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
 import io.envoyproxy.envoy.api.v2.Listener;
 import io.envoyproxy.envoy.api.v2.RouteConfiguration;
+import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.core.Address;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.api.v2.core.SocketAddress;
@@ -708,22 +710,30 @@ final class XdsClientImpl extends XdsClient {
           ldsResponse.getVersionInfo(), "Malformed LDS response: " + e);
       return;
     }
-    adsStream.sendAckRequest(ADS_TYPE_URL_LDS, ImmutableList.<String>of(),
-        ldsResponse.getVersionInfo());
     if (requestedListener != null) {
       if (ldsRespTimer != null) {
         ldsRespTimer.cancel();
         ldsRespTimer = null;
       }
-      ListenerUpdate listenerUpdate = ListenerUpdate.newBuilder()
-          .setListener(EnvoyServerProtoData.Listener.fromEnvoyProtoListener(requestedListener))
-          .build();
-      listenerWatcher.onListenerChanged(listenerUpdate);
+      try {
+        ListenerUpdate listenerUpdate = ListenerUpdate.newBuilder()
+            .setListener(EnvoyServerProtoData.Listener.fromEnvoyProtoListener(requestedListener))
+            .build();
+        listenerWatcher.onListenerChanged(listenerUpdate);
+      } catch (InvalidProtocolBufferException e) {
+        logger.log(XdsLogLevel.WARNING, "Failed to unpack Listener in LDS response {0}", e);
+        adsStream.sendNackRequest(
+            ADS_TYPE_URL_LDS, ImmutableList.<String>of(),
+            ldsResponse.getVersionInfo(), "Malformed LDS response: " + e);
+        return;
+      }
     } else {
       if (ldsRespTimer == null) {
         listenerWatcher.onResourceDoesNotExist(":" + listenerPort);
       }
     }
+    adsStream.sendAckRequest(ADS_TYPE_URL_LDS, ImmutableList.<String>of(),
+        ldsResponse.getVersionInfo());
   }
 
   private boolean isRequestedListener(Listener listener) {
@@ -1051,8 +1061,14 @@ final class XdsClientImpl extends XdsClient {
         }
         updateBuilder.setLrsServerName("");
       }
-      if (cluster.hasTlsContext()) {
-        updateBuilder.setUpstreamTlsContext(cluster.getTlsContext());
+      try {
+        UpstreamTlsContext upstreamTlsContext = getTlsContextFromCluster(cluster);
+        if (upstreamTlsContext != null && upstreamTlsContext.isInitialized()) {
+          updateBuilder.setUpstreamTlsContext(upstreamTlsContext);
+        }
+      } catch (InvalidProtocolBufferException e) {
+        errorMessage = "Cluster " + clusterName + " : " + e.getMessage();
+        break;
       }
       clusterUpdates.put(clusterName, updateBuilder.build());
     }
@@ -1112,6 +1128,16 @@ final class XdsClientImpl extends XdsClient {
         }
       }
     }
+  }
+
+  private static UpstreamTlsContext getTlsContextFromCluster(Cluster cluster)
+      throws InvalidProtocolBufferException {
+    if (cluster.hasTransportSocket() && "tls".equals(cluster.getTransportSocket().getName())) {
+      Any any = cluster.getTransportSocket().getTypedConfig();
+      return UpstreamTlsContext.parseFrom(any.getValue());
+    }
+    // TODO(sanjaypujare): remove when we move to envoy protos v3
+    return cluster.getTlsContext();
   }
 
   /**
