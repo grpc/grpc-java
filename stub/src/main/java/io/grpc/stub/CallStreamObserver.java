@@ -112,11 +112,7 @@ public abstract class CallStreamObserver<V> implements StreamObserver<V> {
    * already disables all inbound requests.  On the client side, {@code
    * disableAutoRequestWithInitial(1)} should be called to maintain existing behavior as
    * {@code disableAutoInboundFlowControl} does not disable the initial request.
-   * 
-   * @deprecated Use {@link #disableAutoRequest} instead (see note above about migrating). This
-   *     method will be removed.
    */
-  @Deprecated
   public abstract void disableAutoInboundFlowControl();
 
   /**
@@ -136,6 +132,8 @@ public abstract class CallStreamObserver<V> implements StreamObserver<V> {
    *   <li>{@link io.grpc.MethodDescriptor.MethodType#SERVER_STREAMING} operations.</li>
    * </ul>
    * </p>
+
+   <p>This API is still a work in-progress and will likely change in the future.
    */
   public abstract void disableAutoRequestWithInitial(int request);
 

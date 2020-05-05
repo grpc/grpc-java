@@ -289,7 +289,6 @@ public class ServerCallsTest {
         ServerCalls.asyncBidiStreamingCall(
             new ServerCalls.BidiStreamingMethod<Integer, Integer>() {
               @Override
-              @SuppressWarnings("deprecation")
               public StreamObserver<Integer> invoke(StreamObserver<Integer> responseObserver) {
                 ServerCallStreamObserver<Integer> serverCallObserver =
                     (ServerCallStreamObserver<Integer>) responseObserver;

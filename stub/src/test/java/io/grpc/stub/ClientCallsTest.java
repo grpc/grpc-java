@@ -331,7 +331,6 @@ public class ClientCallsTest {
     };
     ClientCalls.asyncBidiStreamingCall(call, new ClientResponseObserver<Integer, String>() {
       @Override
-      @SuppressWarnings("deprecation")
       public void beforeStart(ClientCallStreamObserver<Integer> requestStream) {
         requestStream.disableAutoInboundFlowControl();
       }
