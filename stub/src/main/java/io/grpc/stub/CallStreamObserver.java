@@ -132,8 +132,8 @@ public abstract class CallStreamObserver<V> implements StreamObserver<V> {
    *   <li>{@link io.grpc.MethodDescriptor.MethodType#SERVER_STREAMING} operations.</li>
    * </ul>
    * </p>
-
-   <p>This API is still a work in-progress and will likely change in the future.
+   *
+   * <p>This API is still a work in-progress and will likely change in the future.
    */
   public abstract void disableAutoRequestWithInitial(int request);
 
