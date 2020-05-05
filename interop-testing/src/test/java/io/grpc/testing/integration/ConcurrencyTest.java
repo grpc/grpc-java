@@ -61,7 +61,7 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class ConcurrencyTest {
 
-  @Rule public final Timeout globalTimeout = Timeout.seconds(10);
+  @Rule public final Timeout globalTimeout = Timeout.seconds(60);
   
   /**
    * A response observer that signals a {@code CountDownLatch} when the proper number of responses

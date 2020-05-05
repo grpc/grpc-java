@@ -1,16 +1,12 @@
-apply plugin: "cpp"
-apply plugin: "com.google.protobuf"
+plugins {
+    id "cpp"
+    id "java"
+    id "maven-publish"
+
+    id "com.google.protobuf"
+}
 
 description = 'The protoc plugin for gRPC Java'
-
-buildscript {
-    repositories {
-        maven { // The google mirror is less flaky than mavenCentral()
-            url "https://maven-central.storage-download.googleapis.com/repos/central/data/" }
-        mavenLocal()
-    }
-    dependencies { classpath libraries.protobuf_plugin }
-}
 
 def artifactStagingPath = "$buildDir/artifacts" as File
 // Adds space-delimited arguments from the environment variable env to the
@@ -55,7 +51,11 @@ model {
         }
         gcc(Gcc) {
             target("ppcle_64")
-            target("aarch_64")
+            target("aarch_64") {
+                cppCompiler.executable = 'aarch64-linux-gnu-g++'
+                linker.executable = 'aarch64-linux-gnu-g++'
+            }
+            target("s390_64")
         }
         clang(Clang) {
         }
@@ -66,6 +66,7 @@ model {
         x86_64 { architecture "x86_64" }
         ppcle_64 { architecture "ppcle_64" }
         aarch_64 { architecture "aarch_64" }
+        s390_64 { architecture "s390_64" }
     }
 
     components {
@@ -74,7 +75,8 @@ model {
                 'x86_32',
                 'x86_64',
                 'ppcle_64',
-                'aarch_64'
+                'aarch_64',
+                's390_64'
             ]) {
                 // If arch is not within the defined platforms, we do not specify the
                 // targetPlatform so that Gradle will choose what is appropriate.
@@ -124,14 +126,14 @@ model {
 }
 
 configurations {
-    testLiteCompile
+    testLiteImplementation
 }
 
 dependencies {
-    testCompile project(':grpc-protobuf'),
+    testImplementation project(':grpc-protobuf'),
             project(':grpc-stub'),
             libraries.javax_annotation
-    testLiteCompile project(':grpc-protobuf-lite'),
+    testLiteImplementation project(':grpc-protobuf-lite'),
             project(':grpc-stub'),
             libraries.javax_annotation
 }
@@ -143,19 +145,13 @@ sourceSets {
 }
 
 compileTestJava {
-    options.compilerArgs += [
-        "-Xlint:-cast"
-    ]
     options.errorprone.excludedPaths = ".*/build/generated/source/proto/.*"
 }
 
 compileTestLiteJava {
     options.compilerArgs = compileTestJava.options.compilerArgs
-    // Protobuf-generated Lite produces quite a few warnings.
     options.compilerArgs += [
-        "-Xlint:-rawtypes",
-        "-Xlint:-unchecked",
-        "-Xlint:-fallthrough"
+        "-Xlint:-cast"
     ]
     options.errorprone.excludedPaths = ".*/build/generated/source/proto/.*"
 }
@@ -169,13 +165,6 @@ protobuf {
         }
     }
     plugins {
-        javalite {
-            if (project.hasProperty('protoc-gen-javalite')) {
-                path = project['protoc-gen-javalite']
-            } else {
-                artifact = libraries.protoc_lite
-            }
-        }
         grpc { path = javaPluginPath }
     }
     generateProtoTasks {
@@ -185,9 +174,10 @@ protobuf {
         }
         ofSourceSet('test')*.plugins { grpc {} }
         ofSourceSet('testLite')*.each { task ->
-            task.builtins { remove java }
+            task.builtins {
+                java { option 'lite' }
+            }
             task.plugins {
-                javalite {}
                 grpc { option 'lite' }
             }
         }

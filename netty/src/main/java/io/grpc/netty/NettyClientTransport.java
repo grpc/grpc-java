@@ -17,6 +17,7 @@
 package io.grpc.netty;
 
 import static io.grpc.internal.GrpcUtil.KEEPALIVE_TIME_NANOS_DISABLED;
+import static io.netty.channel.ChannelOption.ALLOCATOR;
 import static io.netty.channel.ChannelOption.SO_KEEPALIVE;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -78,6 +79,7 @@ class NettyClientTransport implements ConnectionClientTransport {
   private final String authorityString;
   private final AsciiString authority;
   private final AsciiString userAgent;
+  private final boolean autoFlowControl;
   private final int flowControlWindow;
   private final int maxMessageSize;
   private final int maxHeaderListSize;
@@ -100,21 +102,25 @@ class NettyClientTransport implements ConnectionClientTransport {
   private final Attributes eagAttributes;
   private final LocalSocketPicker localSocketPicker;
   private final ChannelLogger channelLogger;
+  private final boolean useGetForSafeMethods;
 
   NettyClientTransport(
       SocketAddress address, ChannelFactory<? extends Channel> channelFactory,
       Map<ChannelOption<?>, ?> channelOptions, EventLoopGroup group,
-      ProtocolNegotiator negotiator, int flowControlWindow, int maxMessageSize,
-      int maxHeaderListSize, long keepAliveTimeNanos, long keepAliveTimeoutNanos,
+      ProtocolNegotiator negotiator, boolean autoFlowControl, int flowControlWindow,
+      int maxMessageSize, int maxHeaderListSize,
+      long keepAliveTimeNanos, long keepAliveTimeoutNanos,
       boolean keepAliveWithoutCalls, String authority, @Nullable String userAgent,
       Runnable tooManyPingsRunnable, TransportTracer transportTracer, Attributes eagAttributes,
-      LocalSocketPicker localSocketPicker, ChannelLogger channelLogger) {
+      LocalSocketPicker localSocketPicker, ChannelLogger channelLogger,
+      boolean useGetForSafeMethods) {
     this.negotiator = Preconditions.checkNotNull(negotiator, "negotiator");
     this.negotiationScheme = this.negotiator.scheme();
     this.remoteAddress = Preconditions.checkNotNull(address, "address");
     this.group = Preconditions.checkNotNull(group, "group");
     this.channelFactory = channelFactory;
     this.channelOptions = Preconditions.checkNotNull(channelOptions, "channelOptions");
+    this.autoFlowControl = autoFlowControl;
     this.flowControlWindow = flowControlWindow;
     this.maxMessageSize = maxMessageSize;
     this.maxHeaderListSize = maxHeaderListSize;
@@ -131,6 +137,7 @@ class NettyClientTransport implements ConnectionClientTransport {
     this.localSocketPicker = Preconditions.checkNotNull(localSocketPicker, "localSocketPicker");
     this.logId = InternalLogId.allocate(getClass(), remoteAddress.toString());
     this.channelLogger = Preconditions.checkNotNull(channelLogger, "channelLogger");
+    this.useGetForSafeMethods = useGetForSafeMethods;
   }
 
   @Override
@@ -191,7 +198,8 @@ class NettyClientTransport implements ConnectionClientTransport {
         userAgent,
         statsTraceCtx,
         transportTracer,
-        callOptions);
+        callOptions,
+        useGetForSafeMethods);
   }
 
   @SuppressWarnings("unchecked")
@@ -209,6 +217,7 @@ class NettyClientTransport implements ConnectionClientTransport {
     handler = NettyClientHandler.newHandler(
         lifecycleManager,
         keepAliveManager,
+        autoFlowControl,
         flowControlWindow,
         maxHeaderListSize,
         GrpcUtil.STOPWATCH_SUPPLIER,
@@ -216,11 +225,11 @@ class NettyClientTransport implements ConnectionClientTransport {
         transportTracer,
         eagAttributes,
         authorityString);
-    NettyHandlerSettings.setAutoWindow(handler);
 
     ChannelHandler negotiationHandler = negotiator.newHandler(handler);
 
     Bootstrap b = new Bootstrap();
+    b.option(ALLOCATOR, Utils.getByteBufAllocator(false));
     b.attr(LOGGER_KEY, channelLogger);
     b.group(eventLoop);
     b.channelFactory(channelFactory);

@@ -150,7 +150,7 @@ class NettyServerStream extends AbstractServerStream {
         writeQueue.scheduleFlush();
         return;
       }
-      ByteBuf bytebuf = ((NettyWritableBuffer) frame).bytebuf();
+      ByteBuf bytebuf = ((NettyWritableBuffer) frame).bytebuf().touch();
       final int numBytes = bytebuf.readableBytes();
       // Add the bytes to outbound flow control.
       onSendingBytes(numBytes);

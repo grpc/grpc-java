@@ -38,6 +38,7 @@ import io.grpc.internal.InUseStateAggregator;
 import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.TransportTracer;
 import io.grpc.netty.GrpcHttp2HeadersUtils.GrpcHttp2ClientHeadersDecoder;
+import io.grpc.netty.ListeningEncoder.ListeningStreamBufferingEncoder;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
@@ -57,6 +58,7 @@ import io.netty.handler.codec.http2.Http2CodecUtil;
 import io.netty.handler.codec.http2.Http2Connection;
 import io.netty.handler.codec.http2.Http2ConnectionAdapter;
 import io.netty.handler.codec.http2.Http2ConnectionDecoder;
+import io.netty.handler.codec.http2.Http2ConnectionEncoder;
 import io.netty.handler.codec.http2.Http2Error;
 import io.netty.handler.codec.http2.Http2Exception;
 import io.netty.handler.codec.http2.Http2FlowController;
@@ -131,6 +133,7 @@ class NettyClientHandler extends AbstractNettyHandler {
   static NettyClientHandler newHandler(
       ClientTransportLifecycleManager lifecycleManager,
       @Nullable KeepAliveManager keepAliveManager,
+      boolean autoFlowControl,
       int flowControlWindow,
       int maxHeaderListSize,
       Supplier<Stopwatch> stopwatchFactory,
@@ -155,6 +158,7 @@ class NettyClientHandler extends AbstractNettyHandler {
         frameWriter,
         lifecycleManager,
         keepAliveManager,
+        autoFlowControl,
         flowControlWindow,
         maxHeaderListSize,
         stopwatchFactory,
@@ -171,6 +175,7 @@ class NettyClientHandler extends AbstractNettyHandler {
       Http2FrameWriter frameWriter,
       ClientTransportLifecycleManager lifecycleManager,
       KeepAliveManager keepAliveManager,
+      boolean autoFlowControl,
       int flowControlWindow,
       int maxHeaderListSize,
       Supplier<Stopwatch> stopwatchFactory,
@@ -192,8 +197,9 @@ class NettyClientHandler extends AbstractNettyHandler {
     frameReader = new Http2InboundFrameLogger(frameReader, frameLogger);
     frameWriter = new Http2OutboundFrameLogger(frameWriter, frameLogger);
 
-    StreamBufferingEncoder encoder = new StreamBufferingEncoder(
-        new DefaultHttp2ConnectionEncoder(connection, frameWriter));
+    StreamBufferingEncoder encoder =
+        new ListeningStreamBufferingEncoder(
+            new DefaultHttp2ConnectionEncoder(connection, frameWriter));
 
     // Create the local flow controller configured to auto-refill the connection window.
     connection.local().flowController(
@@ -230,12 +236,13 @@ class NettyClientHandler extends AbstractNettyHandler {
         tooManyPingsRunnable,
         transportTracer,
         eagAttributes,
-        authority);
+        authority,
+        autoFlowControl);
   }
 
   private NettyClientHandler(
       Http2ConnectionDecoder decoder,
-      StreamBufferingEncoder encoder,
+      Http2ConnectionEncoder encoder,
       Http2Settings settings,
       ClientTransportLifecycleManager lifecycleManager,
       KeepAliveManager keepAliveManager,
@@ -243,8 +250,9 @@ class NettyClientHandler extends AbstractNettyHandler {
       final Runnable tooManyPingsRunnable,
       TransportTracer transportTracer,
       Attributes eagAttributes,
-      String authority) {
-    super(/* channelUnused= */ null, decoder, encoder, settings);
+      String authority,
+      boolean autoFlowControl) {
+    super(/* channelUnused= */ null, decoder, encoder, settings, autoFlowControl);
     this.lifecycleManager = lifecycleManager;
     this.keepAliveManager = keepAliveManager;
     this.stopwatchFactory = stopwatchFactory;
@@ -268,7 +276,7 @@ class NettyClientHandler extends AbstractNettyHandler {
         if (errorCode == Http2Error.ENHANCE_YOUR_CALM.code()) {
           String data = new String(debugDataBytes, UTF_8);
           logger.log(
-              Level.WARNING, "Received GOAWAY with ENHANCE_YOUR_CALM. Debug data: {1}", data);
+              Level.WARNING, "Received GOAWAY with ENHANCE_YOUR_CALM. Debug data: {0}", data);
           if ("too_many_pings".equals(data)) {
             tooManyPingsRunnable.run();
           }
@@ -755,10 +763,21 @@ class NettyClientHandler extends AbstractNettyHandler {
 
   /**
    * Handler for a GOAWAY being received. Fails any streams created after the
-   * last known stream.
+   * last known stream. May only be called during a read.
    */
   private void goingAway(Status status) {
+    lifecycleManager.notifyGracefulShutdown(status);
+    // Try to allocate as many in-flight streams as possible, to reduce race window of
+    // https://github.com/grpc/grpc-java/issues/2562 . To be of any help, the server has to
+    // gracefully shut down the connection with two GOAWAYs. gRPC servers generally send a PING
+    // after the first GOAWAY, so they can very precisely detect when the GOAWAY has been
+    // processed and thus this processing must be in-line before processing additional reads.
+
+    // This can cause reentrancy, but should be minor since it is normal to handle writes in
+    // response to a read. Also, the call stack is rather shallow at this point
+    clientWriteQueue.drainNow();
     lifecycleManager.notifyShutdown(status);
+
     final Status goAwayStatus = lifecycleManager.getShutdownStatus();
     final int lastKnownStream = connection().local().lastStreamKnownByPeer();
     try {

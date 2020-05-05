@@ -1,7 +1,5 @@
 """Build rule for java_grpc_library."""
 
-load("@bazel_tools//tools/jdk:toolchain_utils.bzl", "find_java_runtime_toolchain", "find_java_toolchain")
-
 _JavaRpcToolchainInfo = provider(
     fields = [
         "host_javabase",
@@ -93,7 +91,7 @@ def _java_rpc_library_impl(ctx):
     args = ctx.actions.args()
     args.add(toolchain.plugin, format = "--plugin=protoc-gen-rpc-plugin=%s")
     args.add("--rpc-plugin_out={0}:{1}".format(toolchain.plugin_arg, srcjar.path))
-    args.add_joined("--descriptor_set_in", descriptor_set_in, join_with = ":")
+    args.add_joined("--descriptor_set_in", descriptor_set_in, join_with = ctx.host_configuration.host_path_separator)
     args.add_all(srcs, map_each = _path_ignoring_repository)
 
     ctx.actions.run(
@@ -107,8 +105,8 @@ def _java_rpc_library_impl(ctx):
 
     java_info = java_common.compile(
         ctx,
-        java_toolchain = find_java_toolchain(ctx, toolchain.java_toolchain),
-        host_javabase = find_java_runtime_toolchain(ctx, toolchain.host_javabase),
+        java_toolchain = toolchain.java_toolchain[java_common.JavaToolchainInfo],
+        host_javabase = toolchain.host_javabase[java_common.JavaRuntimeInfo],
         source_jars = [srcjar],
         output = ctx.outputs.jar,
         output_source_jar = ctx.outputs.srcjar,
@@ -149,7 +147,7 @@ _java_lite_grpc_library = rule(
         "srcs": attr.label_list(
             mandatory = True,
             allow_empty = False,
-            providers = ["proto"],
+            providers = [ProtoInfo],
         ),
         "deps": attr.label_list(
             mandatory = True,

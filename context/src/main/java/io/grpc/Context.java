@@ -17,6 +17,7 @@
 package io.grpc;
 
 import io.grpc.Context.CheckReturnValue;
+import io.grpc.PersistentHashArrayMappedTrie.Node;
 import java.io.Closeable;
 import java.util.ArrayList;
 import java.util.concurrent.Callable;
@@ -99,9 +100,6 @@ public class Context {
 
   static final Logger log = Logger.getLogger(Context.class.getName());
 
-  private static final PersistentHashArrayMappedTrie<Key<?>, Object> EMPTY_ENTRIES =
-      new PersistentHashArrayMappedTrie<>();
-
   // Long chains of contexts are suspicious and usually indicate a misuse of Context.
   // The threshold is arbitrarily chosen.
   // VisibleForTesting
@@ -114,7 +112,7 @@ public class Context {
    * <p>Never assume this is the default context for new threads, because {@link Storage} may define
    * a default context that is different from ROOT.
    */
-  public static final Context ROOT = new Context(null, EMPTY_ENTRIES);
+  public static final Context ROOT = new Context();
 
   // Visible For testing
   static Storage storage() {
@@ -185,18 +183,16 @@ public class Context {
     return current;
   }
 
-  private ArrayList<ExecutableListener> listeners;
-  private CancellationListener parentListener = new ParentListener();
   final CancellableContext cancellableAncestor;
-  final PersistentHashArrayMappedTrie<Key<?>, Object> keyValueEntries;
+  final Node<Key<?>, Object> keyValueEntries;
   // The number parents between this context and the root context.
   final int generation;
 
   /**
    * Construct a context that cannot be cancelled and will not cascade cancellation from its parent.
    */
-  private Context(PersistentHashArrayMappedTrie<Key<?>, Object> keyValueEntries, int generation) {
-    cancellableAncestor = null;
+  private Context(Node<Key<?>, Object> keyValueEntries, int generation) {
+    this.cancellableAncestor = null;
     this.keyValueEntries = keyValueEntries;
     this.generation = generation;
     validateGeneration(generation);
@@ -206,10 +202,20 @@ public class Context {
    * Construct a context that cannot be cancelled but will cascade cancellation from its parent if
    * it is cancellable.
    */
-  private Context(Context parent, PersistentHashArrayMappedTrie<Key<?>, Object> keyValueEntries) {
-    cancellableAncestor = cancellableAncestor(parent);
+  private Context(Context parent, Node<Key<?>, Object> keyValueEntries) {
+    this.cancellableAncestor = cancellableAncestor(parent);
     this.keyValueEntries = keyValueEntries;
-    this.generation = parent == null ? 0 : parent.generation + 1;
+    this.generation = parent.generation + 1;
+    validateGeneration(generation);
+  }
+
+  /**
+   * Construct for {@link #ROOT}.
+   */
+  private Context() {
+    this.cancellableAncestor = null;
+    this.keyValueEntries = null;
+    this.generation = 0;
     validateGeneration(generation);
   }
 
@@ -326,9 +332,23 @@ public class Context {
    *   });
    * </pre>
    *
+   * <p>Note that multiple calls to {@link #withValue} can be chained together.
+   * That is,
+   *
+   * <pre>
+   * context.withValues(K1, V1, K2, V2);
+   * // is the same as
+   * context.withValue(K1, V1).withValue(K2, V2);
+   * </pre>
+   *
+   * <p>Nonetheless, {@link Context} should not be treated like a general purpose
+   * map with a large number of keys and values — combine multiple related items
+   * together into a single key instead of separating them. But if the items
+   * are unrelated, have separate keys for them.
    */
   public <V> Context withValue(Key<V> k1, V v1) {
-    PersistentHashArrayMappedTrie<Key<?>, Object> newKeyValueEntries = keyValueEntries.put(k1, v1);
+    Node<Key<?>, Object> newKeyValueEntries =
+        PersistentHashArrayMappedTrie.put(keyValueEntries, k1, v1);
     return new Context(this, newKeyValueEntries);
   }
 
@@ -337,8 +357,9 @@ public class Context {
    * from its parent.
    */
   public <V1, V2> Context withValues(Key<V1> k1, V1 v1, Key<V2> k2, V2 v2) {
-    PersistentHashArrayMappedTrie<Key<?>, Object> newKeyValueEntries =
-        keyValueEntries.put(k1, v1).put(k2, v2);
+    Node<Key<?>, Object> newKeyValueEntries =
+        PersistentHashArrayMappedTrie.put(keyValueEntries, k1, v1);
+    newKeyValueEntries = PersistentHashArrayMappedTrie.put(newKeyValueEntries, k2, v2);
     return new Context(this, newKeyValueEntries);
   }
 
@@ -347,19 +368,38 @@ public class Context {
    * from its parent.
    */
   public <V1, V2, V3> Context withValues(Key<V1> k1, V1 v1, Key<V2> k2, V2 v2, Key<V3> k3, V3 v3) {
-    PersistentHashArrayMappedTrie<Key<?>, Object> newKeyValueEntries =
-        keyValueEntries.put(k1, v1).put(k2, v2).put(k3, v3);
+    Node<Key<?>, Object> newKeyValueEntries =
+        PersistentHashArrayMappedTrie.put(keyValueEntries, k1, v1);
+    newKeyValueEntries = PersistentHashArrayMappedTrie.put(newKeyValueEntries, k2, v2);
+    newKeyValueEntries = PersistentHashArrayMappedTrie.put(newKeyValueEntries, k3, v3);
     return new Context(this, newKeyValueEntries);
   }
 
   /**
    * Create a new context with the given key value set. The new context will cascade cancellation
    * from its parent.
+   *
+   * <p>For more than 4 key-value pairs, note that multiple calls to
+   * {@link #withValue} can be chained together. That is,
+   *
+   * <pre>
+   * context.withValues(K1, V1, K2, V2);
+   * // is the same as
+   * context.withValue(K1, V1).withValue(K2, V2);
+   * </pre>
+   *
+   * <p>Nonetheless, {@link Context} should not be treated like a general purpose
+   * map with a large number of keys and values — combine multiple related items
+   * together into a single key instead of separating them. But if the items
+   * are unrelated, have separate keys for them.
    */
   public <V1, V2, V3, V4> Context withValues(Key<V1> k1, V1 v1, Key<V2> k2, V2 v2,
       Key<V3> k3, V3 v3, Key<V4> k4, V4 v4) {
-    PersistentHashArrayMappedTrie<Key<?>, Object> newKeyValueEntries =
-        keyValueEntries.put(k1, v1).put(k2, v2).put(k3, v3).put(k4, v4);
+    Node<Key<?>, Object> newKeyValueEntries =
+        PersistentHashArrayMappedTrie.put(keyValueEntries, k1, v1);
+    newKeyValueEntries = PersistentHashArrayMappedTrie.put(newKeyValueEntries, k2, v2);
+    newKeyValueEntries = PersistentHashArrayMappedTrie.put(newKeyValueEntries, k3, v3);
+    newKeyValueEntries = PersistentHashArrayMappedTrie.put(newKeyValueEntries, k4, v4);
     return new Context(this, newKeyValueEntries);
   }
 
@@ -369,10 +409,6 @@ public class Context {
    */
   public Context fork() {
     return new Context(keyValueEntries, generation + 1);
-  }
-
-  boolean canBeCancelled() {
-    return cancellableAncestor != null;
   }
 
   /**
@@ -471,98 +507,30 @@ public class Context {
                           final Executor executor) {
     checkNotNull(cancellationListener, "cancellationListener");
     checkNotNull(executor, "executor");
-    if (canBeCancelled()) {
-      ExecutableListener executableListener =
-          new ExecutableListener(executor, cancellationListener);
-      synchronized (this) {
-        if (isCancelled()) {
-          executableListener.deliver();
-        } else {
-          if (listeners == null) {
-            // Now that we have a listener we need to listen to our parent so
-            // we can cascade listener notification.
-            listeners = new ArrayList<>();
-            listeners.add(executableListener);
-            if (cancellableAncestor != null) {
-              cancellableAncestor.addListener(parentListener, DirectExecutor.INSTANCE);
-            }
-          } else {
-            listeners.add(executableListener);
-          }
-        }
-      }
+    if (cancellableAncestor == null) {
+      return;
     }
+    cancellableAncestor.addListenerInternal(
+        new ExecutableListener(executor, cancellationListener, this));
   }
 
   /**
    * Remove a {@link CancellationListener}.
    */
   public void removeListener(CancellationListener cancellationListener) {
-    if (!canBeCancelled()) {
+    if (cancellableAncestor == null) {
       return;
     }
-    synchronized (this) {
-      if (listeners != null) {
-        for (int i = listeners.size() - 1; i >= 0; i--) {
-          if (listeners.get(i).listener == cancellationListener) {
-            listeners.remove(i);
-            // Just remove the first matching listener, given that we allow duplicate
-            // adds we should allow for duplicates after remove.
-            break;
-          }
-        }
-        // We have no listeners so no need to listen to our parent
-        if (listeners.isEmpty()) {
-          if (cancellableAncestor != null) {
-            cancellableAncestor.removeListener(parentListener);
-          }
-          listeners = null;
-        }
-      }
-    }
-  }
-
-  /**
-   * Notify all listeners that this context has been cancelled and immediately release
-   * any reference to them so that they may be garbage collected.
-   */
-  void notifyAndClearListeners() {
-    if (!canBeCancelled()) {
-      return;
-    }
-    ArrayList<ExecutableListener> tmpListeners;
-    synchronized (this) {
-      if (listeners == null) {
-        return;
-      }
-      tmpListeners = listeners;
-      listeners = null;
-    }
-    // Deliver events to non-child context listeners before we notify child contexts. We do this
-    // to cancel higher level units of work before child units. This allows for a better error
-    // handling paradigm where the higher level unit of work knows it is cancelled and so can
-    // ignore errors that bubble up as a result of cancellation of lower level units.
-    for (int i = 0; i < tmpListeners.size(); i++) {
-      if (!(tmpListeners.get(i).listener instanceof ParentListener)) {
-        tmpListeners.get(i).deliver();
-      }
-    }
-    for (int i = 0; i < tmpListeners.size(); i++) {
-      if (tmpListeners.get(i).listener instanceof ParentListener) {
-        tmpListeners.get(i).deliver();
-      }
-    }
-    if (cancellableAncestor != null) {
-      cancellableAncestor.removeListener(parentListener);
-    }
+    cancellableAncestor.removeListenerInternal(cancellationListener, this);
   }
 
   // Used in tests to ensure that listeners are defined and released when cancellation cascades.
   // It's very important to ensure that we do not accidentally retain listeners.
   int listenerCount() {
-    synchronized (this) {
-      return listeners == null ? 0 : listeners.size();
+    if (cancellableAncestor == null) {
+      return 0;
     }
+    return cancellableAncestor.listenerCount();
   }
 
   /**
@@ -667,13 +635,6 @@ public class Context {
   }
 
   /**
-   * Lookup the value for a key in the context inheritance chain.
-   */
-  Object lookup(Key<?> key) {
-    return keyValueEntries.get(key);
-  }
-
-  /**
    * A context which inherits cancellation from its parent but which can also be independently
    * cancelled and which will propagate cancellation to its descendants. To avoid leaking memory,
    * every CancellableContext must have a defined lifetime, after which it is guaranteed to be
@@ -705,9 +666,13 @@ public class Context {
     private final Deadline deadline;
     private final Context uncancellableSurrogate;
 
-    private boolean cancelled;
+    private ArrayList<ExecutableListener> listeners;
+    // parentListener is initialized when listeners is initialized (only if there is a
+    // cancellable ancestor), and uninitialized when listeners is uninitialized.
+    private CancellationListener parentListener;
     private Throwable cancellationCause;
     private ScheduledFuture<?> pendingDeadline;
+    private boolean cancelled;
 
     /**
      * Create a cancellable context that does not have a deadline.
@@ -761,6 +726,73 @@ public class Context {
       uncancellableSurrogate.detach(toAttach);
     }
 
+    @Override
+    public void addListener(
+        final CancellationListener cancellationListener, final Executor executor) {
+      checkNotNull(cancellationListener, "cancellationListener");
+      checkNotNull(executor, "executor");
+      addListenerInternal(new ExecutableListener(executor, cancellationListener, this));
+    }
+
+    private void addListenerInternal(ExecutableListener executableListener) {
+      synchronized (this) {
+        if (isCancelled()) {
+          executableListener.deliver();
+        } else {
+          if (listeners == null) {
+            // Now that we have a listener we need to listen to our parent so
+            // we can cascade listener notification.
+            listeners = new ArrayList<>();
+            listeners.add(executableListener);
+            if (cancellableAncestor != null) {
+              parentListener =
+                  new CancellationListener() {
+                    @Override
+                    public void cancelled(Context context) {
+                      CancellableContext.this.cancel(context.cancellationCause());
+                    }
+                  };
+              cancellableAncestor.addListenerInternal(
+                  new ExecutableListener(DirectExecutor.INSTANCE, parentListener, this));
+            }
+          } else {
+            listeners.add(executableListener);
+          }
+        }
+      }
+    }
+
+    @Override
+    public void removeListener(CancellationListener cancellationListener) {
+      removeListenerInternal(cancellationListener, this);
+    }
+
+    private void removeListenerInternal(CancellationListener cancellationListener,
+        Context context) {
+      synchronized (this) {
+        if (listeners != null) {
+          for (int i = listeners.size() - 1; i >= 0; i--) {
+            ExecutableListener executableListener = listeners.get(i);
+            if (executableListener.listener == cancellationListener
+                && executableListener.context == context) {
+              listeners.remove(i);
+              // Just remove the first matching listener, given that we allow duplicate
+              // adds we should allow for duplicates after remove.
+              break;
+            }
+          }
+          // We have no listeners so no need to listen to our parent
+          if (listeners.isEmpty()) {
+            if (cancellableAncestor != null) {
+              cancellableAncestor.removeListener(parentListener);
+            }
+            parentListener = null;
+            listeners = null;
+          }
+        }
+      }
+    }
+
     /**
      * Returns true if the Context is the current context.
      *
@@ -807,6 +839,48 @@ public class Context {
     }
 
     /**
+     * Notify all listeners that this context has been cancelled and immediately release
+     * any reference to them so that they may be garbage collected.
+     */
+    private void notifyAndClearListeners() {
+      ArrayList<ExecutableListener> tmpListeners;
+      CancellationListener tmpParentListener;
+      synchronized (this) {
+        if (listeners == null) {
+          return;
+        }
+        tmpParentListener = parentListener;
+        parentListener = null;
+        tmpListeners = listeners;
+        listeners = null;
+      }
+      // Deliver events to this context listeners before we notify child contexts. We do this
+      // to cancel higher level units of work before child units. This allows for a better error
+      // handling paradigm where the higher level unit of work knows it is cancelled and so can
+      // ignore errors that bubble up as a result of cancellation of lower level units.
+      for (ExecutableListener tmpListener : tmpListeners) {
+        if (tmpListener.context == this) {
+          tmpListener.deliver();
+        }
+      }
+      for (ExecutableListener tmpListener : tmpListeners) {
+        if (!(tmpListener.context == this)) {
+          tmpListener.deliver();
+        }
+      }
+      if (cancellableAncestor != null) {
+        cancellableAncestor.removeListener(tmpParentListener);
+      }
+    }
+
+    @Override
+    int listenerCount() {
+      synchronized (this) {
+        return listeners == null ? 0 : listeners.size();
+      }
+    }
+
+    /**
      * Cancel this context and detach it as the current context.
      *
      * @param toAttach context to make current.
@@ -847,11 +921,6 @@ public class Context {
     @Override
     public Deadline getDeadline() {
       return deadline;
-    }
-
-    @Override
-    boolean canBeCancelled() {
-      return true;
     }
 
     /**
@@ -902,7 +971,7 @@ public class Context {
      */
     @SuppressWarnings("unchecked")
     public T get(Context context) {
-      T value = (T) context.lookup(this);
+      T value = (T) PersistentHashArrayMappedTrie.get(context.keyValueEntries, this);
       return value == null ? defaultValue : value;
     }
 
@@ -983,13 +1052,15 @@ public class Context {
   /**
    * Stores listener and executor pair.
    */
-  private final class ExecutableListener implements Runnable {
+  private static final class ExecutableListener implements Runnable {
     private final Executor executor;
     final CancellationListener listener;
+    private final Context context;
 
-    ExecutableListener(Executor executor, CancellationListener listener) {
+    ExecutableListener(Executor executor, CancellationListener listener, Context context) {
       this.executor = executor;
       this.listener = listener;
+      this.context = context;
     }
 
     void deliver() {
@@ -1002,19 +1073,7 @@ public class Context {
 
     @Override
     public void run() {
-      listener.cancelled(Context.this);
-    }
-  }
-
-  private final class ParentListener implements CancellationListener {
-    @Override
-    public void cancelled(Context context) {
-      if (Context.this instanceof CancellableContext) {
-        // Record cancellation with its cancellationCause.
-        ((CancellableContext) Context.this).cancel(context.cancellationCause());
-      } else {
-        notifyAndClearListeners();
-      }
+      listener.cancelled(context);
     }
   }
 
@@ -1045,9 +1104,6 @@ public class Context {
    * {@link #cancellableAncestor}.
    */
   static CancellableContext cancellableAncestor(Context parent) {
-    if (parent == null) {
-      return null;
-    }
     if (parent instanceof CancellableContext) {
       return (CancellableContext) parent;
     }

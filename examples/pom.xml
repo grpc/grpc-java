@@ -6,15 +6,15 @@
   <packaging>jar</packaging>
   <!-- Feel free to delete the comment at the end of these lines. It is just
        for safely updating the version in our release process. -->
-  <version>1.23.0-SNAPSHOT</version><!-- CURRENT_GRPC_VERSION -->
+  <version>1.30.0-SNAPSHOT</version><!-- CURRENT_GRPC_VERSION -->
   <name>examples</name>
   <url>https://github.com/grpc/grpc-java</url>
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <grpc.version>1.23.0-SNAPSHOT</grpc.version><!-- CURRENT_GRPC_VERSION -->
-    <protobuf.version>3.7.1</protobuf.version>
-    <protoc.version>3.7.1</protoc.version>
+    <grpc.version>1.30.0-SNAPSHOT</grpc.version><!-- CURRENT_GRPC_VERSION -->
+    <protobuf.version>3.11.0</protobuf.version>
+    <protoc.version>3.11.0</protoc.version>
     <!-- required for jdk9 -->
     <maven.compiler.source>1.7</maven.compiler.source>
     <maven.compiler.target>1.7</maven.compiler.target>
@@ -47,9 +47,9 @@
       <artifactId>grpc-stub</artifactId>
     </dependency>
     <dependency>
-      <groupId>javax.annotation</groupId>
-      <artifactId>javax.annotation-api</artifactId>
-      <version>1.2</version>
+      <groupId>org.apache.tomcat</groupId>
+      <artifactId>annotations-api</artifactId>
+      <version>6.0.53</version>
       <scope>provided</scope> <!-- not needed at runtime -->
     </dependency>
     <dependency>
@@ -63,6 +63,11 @@
       <version>${protobuf.version}</version>
     </dependency>
     <dependency>
+      <groupId>com.google.errorprone</groupId>
+      <artifactId>error_prone_annotations</artifactId>
+      <version>2.3.4</version> <!-- prefer to use 2.3.3 or later -->
+    </dependency>
+    <dependency>
       <groupId>junit</groupId>
       <artifactId>junit</artifactId>
       <version>4.12</version>
@@ -71,7 +76,7 @@
     <dependency>
       <groupId>org.mockito</groupId>
       <artifactId>mockito-core</artifactId>
-      <version>2.25.1</version>
+      <version>2.28.2</version>
       <scope>test</scope>
     </dependency>
   </dependencies>
@@ -81,14 +86,14 @@
       <extension>
         <groupId>kr.motd.maven</groupId>
         <artifactId>os-maven-plugin</artifactId>
-        <version>1.5.0.Final</version>
+        <version>1.6.2</version>
       </extension>
     </extensions>
     <plugins>
       <plugin>
         <groupId>org.xolstice.maven.plugins</groupId>
         <artifactId>protobuf-maven-plugin</artifactId>
-        <version>0.5.1</version>
+        <version>0.6.1</version>
         <configuration>
           <protocArtifact>com.google.protobuf:protoc:${protoc.version}:exe:${os.detected.classifier}</protocArtifact>
           <pluginId>grpc-java</pluginId>

@@ -18,9 +18,9 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.github.udpa.udpa.data.orca.v1.OrcaLoadReport;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
-import io.envoyproxy.udpa.data.orca.v1.OrcaLoadReport;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.LoadBalancer.PickResult;
@@ -413,6 +413,13 @@ final class ClientLoadCounter {
         ClientStreamTracer.Factory originFactory) {
       return new LoadRecordingStreamTracerFactory(counter, originFactory);
     }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(LoadRecordingSubchannelPicker.class)
+          .add("delegate", delegate)
+          .toString();
+    }
   }
 
   /**
@@ -444,6 +451,13 @@ final class ClientLoadCounter {
     protected ClientStreamTracer.Factory wrapTracerFactory(
         ClientStreamTracer.Factory originFactory) {
       return orcaPerRequestUtil.newOrcaClientStreamTracerFactory(originFactory, listener);
+    }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(MetricsObservingSubchannelPicker.class)
+          .add("delegate", delegate)
+          .toString();
     }
   }
 }

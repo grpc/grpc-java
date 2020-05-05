@@ -18,6 +18,7 @@ package io.grpc.internal;
 
 import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.truth.Truth.assertThat;
+import static com.google.common.truth.Truth.assertWithMessage;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
@@ -53,7 +54,6 @@ import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
-import com.google.common.truth.Truth;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
@@ -106,6 +106,7 @@ import io.grpc.StringMarshaller;
 import io.grpc.internal.ClientTransportFactory.ClientTransportOptions;
 import io.grpc.internal.InternalSubchannel.TransportLogger;
 import io.grpc.internal.ManagedChannelImpl.ScParser;
+import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.internal.TestUtils.MockClientTransportInfo;
 import io.grpc.stub.ClientCalls;
 import io.grpc.testing.TestMethodDescriptors;
@@ -153,6 +154,8 @@ import org.mockito.stubbing.Answer;
 
 /** Unit tests for {@link ManagedChannelImpl}. */
 @RunWith(JUnit4.class)
+// TODO(creamsoup) remove backward compatible check when fully migrated
+@SuppressWarnings("deprecation")
 public class ManagedChannelImplTest {
   private static final int DEFAULT_PORT = 447;
 
@@ -265,10 +268,14 @@ public class ManagedChannelImplTest {
   private ObjectPool<Executor> balancerRpcExecutorPool;
   @Mock
   private CallCredentials creds;
+  @Mock
+  private Executor offloadExecutor;
   private ChannelBuilder channelBuilder;
   private boolean requestConnection = true;
   private BlockingQueue<MockClientTransportInfo> transports;
   private boolean panicExpected;
+  @Captor
+  private ArgumentCaptor<ResolvedAddresses> resolvedAddressCaptor;
 
   private ArgumentCaptor<ClientStreamListener> streamListenerCaptor =
       ArgumentCaptor.forClass(ClientStreamListener.class);
@@ -319,11 +326,14 @@ public class ManagedChannelImplTest {
     when(balancerRpcExecutorPool.getObject())
         .thenReturn(balancerRpcExecutor.getScheduledExecutorService());
 
-    channelBuilder = new ChannelBuilder()
-        .nameResolverFactory(new FakeNameResolverFactory.Builder(expectedUri).build())
-        .defaultLoadBalancingPolicy(MOCK_POLICY_NAME)
-        .userAgent(USER_AGENT)
-        .idleTimeout(AbstractManagedChannelImplBuilder.IDLE_MODE_MAX_TIMEOUT_DAYS, TimeUnit.DAYS);
+    channelBuilder =
+        new ChannelBuilder()
+            .nameResolverFactory(new FakeNameResolverFactory.Builder(expectedUri).build())
+            .defaultLoadBalancingPolicy(MOCK_POLICY_NAME)
+            .userAgent(USER_AGENT)
+            .idleTimeout(
+                AbstractManagedChannelImplBuilder.IDLE_MODE_MAX_TIMEOUT_DAYS, TimeUnit.DAYS)
+            .offloadExecutor(offloadExecutor);
     channelBuilder.executorPool = executorPool;
     channelBuilder.binlog = null;
     channelBuilder.channelz = channelz;
@@ -448,7 +458,6 @@ public class ManagedChannelImplTest {
   }
 
   @Test
-  @SuppressWarnings("unchecked")
   public void idleModeDisabled() {
     channelBuilder.nameResolverFactory(
         new FakeNameResolverFactory.Builder(expectedUri)
@@ -744,11 +753,8 @@ public class ManagedChannelImplTest {
 
     FakeNameResolverFactory.FakeNameResolver resolver = nameResolverFactory.resolvers.get(0);
     verify(mockLoadBalancerProvider).newLoadBalancer(any(Helper.class));
-    verify(mockLoadBalancer).handleResolvedAddresses(
-        ResolvedAddresses.newBuilder()
-            .setAddresses(Arrays.asList(addressGroup))
-            .setAttributes(Attributes.EMPTY)
-            .build());
+    verify(mockLoadBalancer).handleResolvedAddresses(resolvedAddressCaptor.capture());
+    assertThat(resolvedAddressCaptor.getValue().getAddresses()).containsExactly(addressGroup);
 
     SubchannelStateListener stateListener1 = mock(SubchannelStateListener.class);
     SubchannelStateListener stateListener2 = mock(SubchannelStateListener.class);
@@ -965,13 +971,11 @@ public class ManagedChannelImplTest {
     // Pass a FakeNameResolverFactory with an empty list and LB config
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri).build();
-    Map<String, Object> serviceConfig =
+    Map<String, Object> rawServiceConfig =
         parseConfig("{\"loadBalancingConfig\": [ {\"mock_lb\": { \"setting1\": \"high\" } } ] }");
-    Attributes serviceConfigAttrs =
-        Attributes.newBuilder()
-            .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig)
-            .build();
-    nameResolverFactory.nextResolvedAttributes.set(serviceConfigAttrs);
+    ManagedChannelServiceConfig parsedServiceConfig =
+        createManagedChannelServiceConfig(rawServiceConfig, null);
+    nameResolverFactory.nextConfigOrError.set(ConfigOrError.fromConfig(parsedServiceConfig));
     channelBuilder.nameResolverFactory(nameResolverFactory);
     createChannel();
 
@@ -980,7 +984,7 @@ public class ManagedChannelImplTest {
     verify(mockLoadBalancer).handleNameResolutionError(statusCaptor.capture());
     Status status = statusCaptor.getValue();
     assertSame(Status.Code.UNAVAILABLE, status.getCode());
-    Truth.assertThat(status.getDescription()).startsWith(errorDescription);
+    assertThat(status.getDescription()).startsWith(errorDescription);
 
     // A resolution retry has been scheduled
     assertEquals(1, timer.numPendingTasks(NAME_RESOLVER_REFRESH_TASK_FILTER));
@@ -993,13 +997,17 @@ public class ManagedChannelImplTest {
     // Pass a FakeNameResolverFactory with an empty list and LB config
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri).build();
-    Map<String, Object> serviceConfig =
-        parseConfig("{\"loadBalancingConfig\": [ {\"mock_lb\": { \"setting1\": \"high\" } } ] }");
-    Attributes serviceConfigAttrs =
-        Attributes.newBuilder()
-            .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig)
-            .build();
-    nameResolverFactory.nextResolvedAttributes.set(serviceConfigAttrs);
+    String rawLbConfig = "{ \"setting1\": \"high\" }";
+    Map<String, Object> rawServiceConfig =
+        parseConfig("{\"loadBalancingConfig\": [ {\"mock_lb\": " + rawLbConfig + " } ] }");
+    ManagedChannelServiceConfig parsedServiceConfig =
+        createManagedChannelServiceConfig(
+            rawServiceConfig,
+            new PolicySelection(
+                mockLoadBalancerProvider,
+                parseConfig(rawLbConfig),
+                new Object()));
+    nameResolverFactory.nextConfigOrError.set(ConfigOrError.fromConfig(parsedServiceConfig));
     channelBuilder.nameResolverFactory(nameResolverFactory);
     createChannel();
 
@@ -1012,8 +1020,6 @@ public class ManagedChannelImplTest {
     Attributes actualAttrs = resultCaptor.getValue().getAttributes();
     Map<String, ?> lbConfig = actualAttrs.get(LoadBalancer.ATTR_LOAD_BALANCING_CONFIG);
     assertEquals(ImmutableMap.of("setting1", "high"), lbConfig);
-    assertSame(
-        serviceConfig, actualAttrs.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG));
 
     // A no resolution retry
     assertEquals(0, timer.numPendingTasks(NAME_RESOLVER_REFRESH_TASK_FILTER));
@@ -1094,10 +1100,8 @@ public class ManagedChannelImplTest {
 
     // Simulate name resolution results
     EquivalentAddressGroup addressGroup = new EquivalentAddressGroup(resolvedAddrs);
-    inOrder.verify(mockLoadBalancer).handleResolvedAddresses(
-        ResolvedAddresses.newBuilder()
-            .setAddresses(Arrays.asList(addressGroup))
-            .build());
+    inOrder.verify(mockLoadBalancer).handleResolvedAddresses(resolvedAddressCaptor.capture());
+    assertThat(resolvedAddressCaptor.getValue().getAddresses()).containsExactly(addressGroup);
     Subchannel subchannel =
         createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
     when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class)))
@@ -1243,10 +1247,9 @@ public class ManagedChannelImplTest {
 
     // Simulate name resolution results
     EquivalentAddressGroup addressGroup = new EquivalentAddressGroup(resolvedAddrs);
-    inOrder.verify(mockLoadBalancer).handleResolvedAddresses(
-        ResolvedAddresses.newBuilder()
-            .setAddresses(Arrays.asList(addressGroup))
-            .build());
+    inOrder.verify(mockLoadBalancer).handleResolvedAddresses(resolvedAddressCaptor.capture());
+    assertThat(resolvedAddressCaptor.getValue().getAddresses()).containsExactly(addressGroup);
+
     Subchannel subchannel =
         createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
     when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class)))
@@ -2755,7 +2758,6 @@ public class ManagedChannelImplTest {
         .setAddresses(Collections.singletonList(
             new EquivalentAddressGroup(
                 Arrays.asList(new SocketAddress() {}, new SocketAddress() {}))))
-        .setAttributes(Attributes.EMPTY)
         .build();
     nameResolverFactory.resolvers.get(0).listener.onResult(resolutionResult1);
     assertThat(getStats(channel).channelTrace.events).hasSize(prevSize);
@@ -2773,7 +2775,6 @@ public class ManagedChannelImplTest {
         .setAddresses(Collections.singletonList(
             new EquivalentAddressGroup(
               Arrays.asList(new SocketAddress() {}, new SocketAddress() {}))))
-        .setAttributes(Attributes.EMPTY)
         .build();
     nameResolverFactory.resolvers.get(0).listener.onResult(resolutionResult2);
     assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 1);
@@ -2791,15 +2792,15 @@ public class ManagedChannelImplTest {
     createChannel();
 
     int prevSize = getStats(channel).channelTrace.events.size();
-    Attributes attributes =
-        Attributes.newBuilder()
-            .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, new HashMap<String, Object>())
-            .build();
+    ManagedChannelServiceConfig mcsc1 = createManagedChannelServiceConfig(
+        ImmutableMap.<String, Object>of(),
+        new PolicySelection(
+            mockLoadBalancerProvider, ImmutableMap.of("foo", "bar"), null));
     ResolutionResult resolutionResult1 = ResolutionResult.newBuilder()
         .setAddresses(Collections.singletonList(
             new EquivalentAddressGroup(
                 Arrays.asList(new SocketAddress() {}, new SocketAddress() {}))))
-        .setAttributes(attributes)
+        .setServiceConfig(ConfigOrError.fromConfig(mcsc1))
         .build();
     nameResolverFactory.resolvers.get(0).listener.onResult(resolutionResult1);
     assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 1);
@@ -2815,24 +2816,18 @@ public class ManagedChannelImplTest {
         Collections.singletonList(
             new EquivalentAddressGroup(
                 Arrays.asList(new SocketAddress() {}, new SocketAddress() {}))))
-        .setAttributes(attributes)
+        .setServiceConfig(ConfigOrError.fromConfig(mcsc1))
         .build();
     nameResolverFactory.resolvers.get(0).listener.onResult(resolutionResult2);
     assertThat(getStats(channel).channelTrace.events).hasSize(prevSize);
 
     prevSize = getStats(channel).channelTrace.events.size();
-    Map<String, Object> serviceConfig = new HashMap<>();
-    serviceConfig.put("methodConfig", new HashMap<String, Object>());
-    attributes =
-        Attributes.newBuilder()
-            .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig)
-            .build();
     timer.forwardNanos(1234);
     ResolutionResult resolutionResult3 = ResolutionResult.newBuilder()
         .setAddresses(Collections.singletonList(
             new EquivalentAddressGroup(
                 Arrays.asList(new SocketAddress() {}, new SocketAddress() {}))))
-        .setAttributes(attributes)
+        .setServiceConfig(ConfigOrError.fromConfig(ManagedChannelServiceConfig.empty()))
         .build();
     nameResolverFactory.resolvers.get(0).listener.onResult(resolutionResult3);
     assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 1);
@@ -2851,7 +2846,7 @@ public class ManagedChannelImplTest {
     timer.forwardNanos(1234);
     updateBalancingStateSafely(helper, CONNECTING, mockPicker);
     assertThat(getStats(channel).channelTrace.events).contains(new ChannelTrace.Event.Builder()
-        .setDescription("Entering CONNECTING state")
+        .setDescription("Entering CONNECTING state with picker: mockPicker")
         .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
         .setTimestampNanos(timer.getTicker().read())
         .build());
@@ -3182,16 +3177,18 @@ public class ManagedChannelImplTest {
     name.put("service", "service");
     methodConfig.put("name", Arrays.<Object>asList(name));
     methodConfig.put("retryPolicy", retryPolicy);
-    Map<String, Object> serviceConfig = new HashMap<>();
-    serviceConfig.put("methodConfig", Arrays.<Object>asList(methodConfig));
-    Attributes attributesWithRetryPolicy = Attributes
-        .newBuilder().set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig).build();
+    Map<String, Object> rawServiceConfig = new HashMap<>();
+    rawServiceConfig.put("methodConfig", Arrays.<Object>asList(methodConfig));
 
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri)
             .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
             .build();
-    nameResolverFactory.nextResolvedAttributes.set(attributesWithRetryPolicy);
+    ManagedChannelServiceConfig managedChannelServiceConfig =
+        createManagedChannelServiceConfig(rawServiceConfig, null);
+    nameResolverFactory.nextConfigOrError.set(
+        ConfigOrError.fromConfig(managedChannelServiceConfig));
+
     channelBuilder.nameResolverFactory(nameResolverFactory);
     channelBuilder.executor(MoreExecutors.directExecutor());
     channelBuilder.enableRetry();
@@ -3215,7 +3212,6 @@ public class ManagedChannelImplTest {
     verify(mockLoadBalancer).handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(nameResolverFactory.servers)
-            .setAttributes(attributesWithRetryPolicy)
             .build());
 
     // simulating request connection and then transport ready after resolved address
@@ -3291,16 +3287,18 @@ public class ManagedChannelImplTest {
     name.put("service", "service");
     methodConfig.put("name", Arrays.<Object>asList(name));
     methodConfig.put("hedgingPolicy", hedgingPolicy);
-    Map<String, Object> serviceConfig = new HashMap<>();
-    serviceConfig.put("methodConfig", Arrays.<Object>asList(methodConfig));
-    Attributes attributesWithRetryPolicy = Attributes
-        .newBuilder().set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig).build();
+    Map<String, Object> rawServiceConfig = new HashMap<>();
+    rawServiceConfig.put("methodConfig", Arrays.<Object>asList(methodConfig));
 
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri)
             .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
             .build();
-    nameResolverFactory.nextResolvedAttributes.set(attributesWithRetryPolicy);
+    ManagedChannelServiceConfig managedChannelServiceConfig =
+        createManagedChannelServiceConfig(rawServiceConfig, null);
+    nameResolverFactory.nextConfigOrError.set(
+        ConfigOrError.fromConfig(managedChannelServiceConfig));
+
     channelBuilder.nameResolverFactory(nameResolverFactory);
     channelBuilder.executor(MoreExecutors.directExecutor());
     channelBuilder.enableRetry();
@@ -3316,7 +3314,6 @@ public class ManagedChannelImplTest {
     verify(mockLoadBalancer).handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(nameResolverFactory.servers)
-            .setAttributes(attributesWithRetryPolicy)
             .build());
 
     // simulating request connection and then transport ready after resolved address
@@ -3399,12 +3396,9 @@ public class ManagedChannelImplTest {
         listener.onResult(
             ResolutionResult.newBuilder()
                 .setAddresses(addresses)
-                .setAttributes(
-                    Attributes.newBuilder()
-                        .set(
-                            GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG,
-                            ImmutableMap.<String, Object>of("loadBalancingPolicy", "kaboom"))
-                        .build())
+                .setServiceConfig(
+                    ConfigOrError.fromError(
+                        Status.INTERNAL.withDescription("kaboom is invalid")))
                 .build());
       }
 
@@ -3412,7 +3406,7 @@ public class ManagedChannelImplTest {
       public void shutdown() {}
     }
 
-    final class FakeNameResolverFactory extends NameResolver.Factory {
+    final class FakeNameResolverFactory2 extends NameResolver.Factory {
       FakeNameResolver resolver;
 
       @Nullable
@@ -3427,7 +3421,7 @@ public class ManagedChannelImplTest {
       }
     }
 
-    FakeNameResolverFactory factory = new FakeNameResolverFactory();
+    FakeNameResolverFactory2 factory = new FakeNameResolverFactory2();
     final class CustomBuilder extends AbstractManagedChannelImplBuilder<CustomBuilder> {
 
       CustomBuilder() {
@@ -3449,23 +3443,26 @@ public class ManagedChannelImplTest {
     ListenableFuture<Void> future1 = ClientCalls.futureUnaryCall(call1, null);
     executor.runDueTasks();
     try {
-      future1.get();
+      future1.get(1, TimeUnit.SECONDS);
       Assert.fail();
     } catch (ExecutionException e) {
       assertThat(Throwables.getStackTraceAsString(e.getCause())).contains("kaboom");
     }
 
     // ok the service config is bad, let's fix it.
-
+    Map<String, Object> rawServiceConfig =
+        parseConfig("{\"loadBalancingConfig\": [{\"round_robin\": {}}]}");
+    Object fakeLbConfig = new Object();
+    PolicySelection lbConfigs =
+        new PolicySelection(
+            mockLoadBalancerProvider, rawServiceConfig, fakeLbConfig);
+    mockLoadBalancerProvider.parseLoadBalancingPolicyConfig(rawServiceConfig);
+    ManagedChannelServiceConfig managedChannelServiceConfig =
+        createManagedChannelServiceConfig(rawServiceConfig, lbConfigs);
     factory.resolver.listener.onResult(
         ResolutionResult.newBuilder()
             .setAddresses(addresses)
-            .setAttributes(
-                Attributes.newBuilder()
-                    .set(
-                        GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG,
-                        ImmutableMap.<String, Object>of("loadBalancingPolicy", "round_robin"))
-                    .build())
+            .setServiceConfig(ConfigOrError.fromConfig(managedChannelServiceConfig))
             .build());
 
     ClientCall<Void, Void> call2 = mychannel.newCall(
@@ -3473,7 +3470,7 @@ public class ManagedChannelImplTest {
         CallOptions.DEFAULT.withDeadlineAfter(5, TimeUnit.SECONDS));
     ListenableFuture<Void> future2 = ClientCalls.futureUnaryCall(call2, null);
 
-    timer.forwardTime(1234, TimeUnit.SECONDS);
+    timer.forwardTime(5, TimeUnit.SECONDS);
 
     executor.runDueTasks();
     try {
@@ -3484,6 +3481,9 @@ public class ManagedChannelImplTest {
     }
 
     mychannel.shutdownNow();
+    // Now for Deadline_exceeded, stream shutdown is delayed, calling shutdownNow() on a open stream
+    // will add a task to executor. Cleaning that task here.
+    executor.runDueTasks();
   }
 
   @Deprecated
@@ -3582,6 +3582,15 @@ public class ManagedChannelImplTest {
     assertThat(args).isNotNull();
     assertThat(args.getDefaultPort()).isEqualTo(DEFAULT_PORT);
     assertThat(args.getProxyDetector()).isSameInstanceAs(neverProxy);
+
+    verify(offloadExecutor, never()).execute(any(Runnable.class));
+    args.getOffloadExecutor()
+        .execute(
+            new Runnable() {
+              @Override
+              public void run() {}
+            });
+    verify(offloadExecutor, times(1)).execute(any(Runnable.class));
   }
 
   @Test
@@ -3604,7 +3613,8 @@ public class ManagedChannelImplTest {
         retryEnabled,
         maxRetryAttemptsLimit,
         maxHedgedAttemptsLimit,
-        autoConfiguredLoadBalancerFactory);
+        autoConfiguredLoadBalancerFactory,
+        mock(ChannelLogger.class));
 
     ConfigOrError coe = parser.parseServiceConfig(ImmutableMap.<String, Object>of());
 
@@ -3626,7 +3636,8 @@ public class ManagedChannelImplTest {
         retryEnabled,
         maxRetryAttemptsLimit,
         maxHedgedAttemptsLimit,
-        autoConfiguredLoadBalancerFactory);
+        autoConfiguredLoadBalancerFactory,
+        mock(ChannelLogger.class));
 
     ConfigOrError coe =
         parser.parseServiceConfig(ImmutableMap.<String, Object>of("methodConfig", "bogus"));
@@ -3649,14 +3660,15 @@ public class ManagedChannelImplTest {
         retryEnabled,
         maxRetryAttemptsLimit,
         maxHedgedAttemptsLimit,
-        autoConfiguredLoadBalancerFactory);
+        autoConfiguredLoadBalancerFactory,
+        mock(ChannelLogger.class));
 
     ConfigOrError coe =
         parser.parseServiceConfig(ImmutableMap.of("loadBalancingConfig", ImmutableList.of()));
 
     assertThat(coe.getError()).isNull();
     ManagedChannelServiceConfig cfg = (ManagedChannelServiceConfig) coe.getConfig();
-    assertThat(cfg.getLoadBalancingConfig()).isEqualTo(null);
+    assertThat(cfg.getLoadBalancingConfig()).isNull();
   }
 
   @Test
@@ -3669,15 +3681,14 @@ public class ManagedChannelImplTest {
       channelBuilder.nameResolverFactory(nameResolverFactory);
       channelBuilder.disableServiceConfigLookUp();
 
-      Map<String, Object> serviceConfig =
+      Map<String, Object> rawServiceConfig =
           parseConfig("{\"methodConfig\":[{"
               + "\"name\":[{\"service\":\"SimpleService1\"}],"
               + "\"waitForReady\":true}]}");
-      Attributes serviceConfigAttrs =
-          Attributes.newBuilder()
-              .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig)
-              .build();
-      nameResolverFactory.nextResolvedAttributes.set(serviceConfigAttrs);
+      ManagedChannelServiceConfig managedChannelServiceConfig =
+          createManagedChannelServiceConfig(rawServiceConfig, null);
+      nameResolverFactory.nextConfigOrError.set(
+          ConfigOrError.fromConfig(managedChannelServiceConfig));
 
       createChannel();
 
@@ -3685,8 +3696,6 @@ public class ManagedChannelImplTest {
           ArgumentCaptor.forClass(ResolvedAddresses.class);
       verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
       assertThat(resultCaptor.getValue().getAddresses()).containsExactly(addressGroup);
-      Attributes actualAttrs = resultCaptor.getValue().getAttributes();
-      assertThat(actualAttrs.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG)).isNull();
       verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
     } finally {
       LoadBalancerRegistry.getDefaultRegistry().deregister(mockLoadBalancerProvider);
@@ -3708,12 +3717,11 @@ public class ManagedChannelImplTest {
               + "\"waitForReady\":true}]}");
       channelBuilder.defaultServiceConfig(defaultServiceConfig);
 
-      Map<String, Object> serviceConfig = new HashMap<>();
-      Attributes serviceConfigAttrs =
-          Attributes.newBuilder()
-              .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig)
-              .build();
-      nameResolverFactory.nextResolvedAttributes.set(serviceConfigAttrs);
+      Map<String, Object> rawServiceConfig = new HashMap<>();
+      ManagedChannelServiceConfig managedChannelServiceConfig =
+          createManagedChannelServiceConfig(rawServiceConfig, null);
+      nameResolverFactory.nextConfigOrError.set(
+          ConfigOrError.fromConfig(managedChannelServiceConfig));
 
       createChannel();
 
@@ -3721,10 +3729,6 @@ public class ManagedChannelImplTest {
           ArgumentCaptor.forClass(ResolvedAddresses.class);
       verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
       assertThat(resultCaptor.getValue().getAddresses()).containsExactly(addressGroup);
-      Attributes actualAttrs = resultCaptor.getValue().getAttributes();
-
-      assertThat(actualAttrs.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG))
-          .isEqualTo(defaultServiceConfig);
       verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
     } finally {
       LoadBalancerRegistry.getDefaultRegistry().deregister(mockLoadBalancerProvider);
@@ -3740,45 +3744,36 @@ public class ManagedChannelImplTest {
               .setServers(ImmutableList.of(addressGroup)).build();
       channelBuilder.nameResolverFactory(nameResolverFactory);
 
-      Map<String, Object> serviceConfig =
+      Map<String, Object> rawServiceConfig =
           parseConfig("{\"methodConfig\":[{"
               + "\"name\":[{\"service\":\"SimpleService1\"}],"
               + "\"waitForReady\":true}]}");
-      Attributes serviceConfigAttrs =
-          Attributes.newBuilder()
-              .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig)
-              .build();
-      nameResolverFactory.nextResolvedAttributes.set(serviceConfigAttrs);
+      ManagedChannelServiceConfig managedChannelServiceConfig =
+          createManagedChannelServiceConfig(rawServiceConfig, null);
+      nameResolverFactory.nextConfigOrError.set(
+          ConfigOrError.fromConfig(managedChannelServiceConfig));
 
       createChannel();
       ArgumentCaptor<ResolvedAddresses> resultCaptor =
           ArgumentCaptor.forClass(ResolvedAddresses.class);
       verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
       assertThat(resultCaptor.getValue().getAddresses()).containsExactly(addressGroup);
-      Attributes actualAttrs = resultCaptor.getValue().getAttributes();
-
-      assertThat(actualAttrs.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG))
-          .isEqualTo(serviceConfig);
       verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
 
       // new config
-      serviceConfig =
+      rawServiceConfig =
           parseConfig("{\"methodConfig\":[{"
               + "\"name\":[{\"service\":\"SimpleService1\"}],"
               + "\"waitForReady\":false}]}");
-      serviceConfigAttrs =
-          Attributes.newBuilder()
-              .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig)
-              .build();
-      nameResolverFactory.nextResolvedAttributes.set(serviceConfigAttrs);
+      managedChannelServiceConfig =
+          createManagedChannelServiceConfig(rawServiceConfig, null);
+      nameResolverFactory.nextConfigOrError.set(
+          ConfigOrError.fromConfig(managedChannelServiceConfig));
       nameResolverFactory.allResolved();
 
       resultCaptor = ArgumentCaptor.forClass(ResolvedAddresses.class);
       verify(mockLoadBalancer, times(2)).handleResolvedAddresses(resultCaptor.capture());
       assertThat(resultCaptor.getValue().getAddresses()).containsExactly(addressGroup);
-      actualAttrs = resultCaptor.getValue().getAttributes();
-      assertThat(actualAttrs.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG))
-          .isEqualTo(serviceConfig);
       verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
     } finally {
       LoadBalancerRegistry.getDefaultRegistry().deregister(mockLoadBalancerProvider);
@@ -3799,24 +3794,20 @@ public class ManagedChannelImplTest {
               + "\"waitForReady\":true}]}");
       channelBuilder.defaultServiceConfig(defaultServiceConfig);
 
-      Map<String, Object> serviceConfig =
+      Map<String, Object> rawServiceConfig =
           parseConfig("{\"methodConfig\":[{"
               + "\"name\":[{\"service\":\"SimpleService2\"}],"
               + "\"waitForReady\":false}]}");
-      Attributes serviceConfigAttrs =
-          Attributes.newBuilder()
-              .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig)
-              .build();
-      nameResolverFactory.nextResolvedAttributes.set(serviceConfigAttrs);
+      ManagedChannelServiceConfig managedChannelServiceConfig =
+          createManagedChannelServiceConfig(rawServiceConfig, null);
+      nameResolverFactory.nextConfigOrError.set(
+          ConfigOrError.fromConfig(managedChannelServiceConfig));
 
       createChannel();
       ArgumentCaptor<ResolvedAddresses> resultCaptor =
           ArgumentCaptor.forClass(ResolvedAddresses.class);
       verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
       assertThat(resultCaptor.getValue().getAddresses()).containsExactly(addressGroup);
-      Attributes actualAttrs = resultCaptor.getValue().getAttributes();
-      assertThat(actualAttrs.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG))
-          .isEqualTo(serviceConfig);
       verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
     } finally {
       LoadBalancerRegistry.getDefaultRegistry().deregister(mockLoadBalancerProvider);
@@ -3838,17 +3829,13 @@ public class ManagedChannelImplTest {
               + "\"waitForReady\":true}]}");
       channelBuilder.defaultServiceConfig(defaultServiceConfig);
 
-      Attributes serviceConfigAttrs = Attributes.EMPTY;
-      nameResolverFactory.nextResolvedAttributes.set(serviceConfigAttrs);
+      nameResolverFactory.nextConfigOrError.set(null);
 
       createChannel();
       ArgumentCaptor<ResolvedAddresses> resultCaptor =
           ArgumentCaptor.forClass(ResolvedAddresses.class);
       verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
       assertThat(resultCaptor.getValue().getAddresses()).containsExactly(addressGroup);
-      Attributes actualAttrs = resultCaptor.getValue().getAttributes();
-      assertThat(actualAttrs.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG))
-          .isEqualTo(defaultServiceConfig);
       verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
     } finally {
       LoadBalancerRegistry.getDefaultRegistry().deregister(mockLoadBalancerProvider);
@@ -3864,16 +3851,17 @@ public class ManagedChannelImplTest {
               .setServers(ImmutableList.of(addressGroup)).build();
       channelBuilder.nameResolverFactory(nameResolverFactory);
 
-      Attributes serviceConfigAttrs = Attributes.EMPTY;
-      nameResolverFactory.nextResolvedAttributes.set(serviceConfigAttrs);
+      Map<String, Object> rawServiceConfig = Collections.emptyMap();
+      ManagedChannelServiceConfig managedChannelServiceConfig =
+          createManagedChannelServiceConfig(rawServiceConfig, null);
+      nameResolverFactory.nextConfigOrError.set(
+          ConfigOrError.fromConfig(managedChannelServiceConfig));
 
       createChannel();
       ArgumentCaptor<ResolvedAddresses> resultCaptor =
           ArgumentCaptor.forClass(ResolvedAddresses.class);
       verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
       assertThat(resultCaptor.getValue().getAddresses()).containsExactly(addressGroup);
-      Attributes actualAttrs = resultCaptor.getValue().getAttributes();
-      assertThat(actualAttrs.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG)).isNull();
       verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
     } finally {
       LoadBalancerRegistry.getDefaultRegistry().deregister(mockLoadBalancerProvider);
@@ -3931,6 +3919,58 @@ public class ManagedChannelImplTest {
             .build());
   }
 
+  @Test
+  public void healthCheckingConfigPropagated() throws Exception {
+    LoadBalancerRegistry.getDefaultRegistry().register(mockLoadBalancerProvider);
+    try {
+      FakeNameResolverFactory nameResolverFactory =
+          new FakeNameResolverFactory.Builder(expectedUri)
+              .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
+              .build();
+      channelBuilder.nameResolverFactory(nameResolverFactory);
+
+      Map<String, Object> rawServiceConfig =
+          parseConfig("{\"healthCheckConfig\": {\"serviceName\": \"service1\"}}");
+      ManagedChannelServiceConfig managedChannelServiceConfig =
+          createManagedChannelServiceConfig(rawServiceConfig, null);
+      nameResolverFactory.nextConfigOrError.set(
+          ConfigOrError.fromConfig(managedChannelServiceConfig));
+
+      createChannel();
+
+      ArgumentCaptor<ResolvedAddresses> resultCaptor =
+          ArgumentCaptor.forClass(ResolvedAddresses.class);
+      verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
+      assertThat(resultCaptor.getValue().getAttributes()
+          .get(LoadBalancer.ATTR_HEALTH_CHECKING_CONFIG))
+          .containsExactly("serviceName", "service1");
+    } finally {
+      LoadBalancerRegistry.getDefaultRegistry().deregister(mockLoadBalancerProvider);
+    }
+  }
+
+  @Test
+  public void createResolvingOobChannel() throws Exception {
+    String oobTarget = "fake://second.example.com";
+    URI oobUri = new URI(oobTarget);
+    channelBuilder
+        .nameResolverFactory(new FakeNameResolverFactory.Builder(expectedUri, oobUri).build());
+    createChannel();
+
+    ManagedChannel resolvedOobChannel = null;
+    try {
+      resolvedOobChannel = helper.createResolvingOobChannel(oobTarget);
+
+      assertWithMessage("resolving oob channel should have same authority")
+          .that(resolvedOobChannel.authority())
+          .isEqualTo(channel.authority());
+    } finally {
+      if (resolvedOobChannel != null) {
+        resolvedOobChannel.shutdownNow();
+      }
+    }
+  }
+
   private static final class ChannelBuilder
       extends AbstractManagedChannelImplBuilder<ChannelBuilder> {
 
@@ -3962,21 +4002,19 @@ public class ManagedChannelImplTest {
   }
 
   private static final class FakeNameResolverFactory extends NameResolver.Factory {
-    final URI expectedUri;
+    final List<URI> expectedUris;
     final List<EquivalentAddressGroup> servers;
     final boolean resolvedAtStart;
     final Status error;
-    final ArrayList<FakeNameResolver> resolvers = new ArrayList<>();
-    // The Attributes argument of the next invocation of listener.onAddresses(servers, attrs)
-    final AtomicReference<Attributes> nextResolvedAttributes =
-        new AtomicReference<>(Attributes.EMPTY);
+    final ArrayList<FakeNameResolverFactory.FakeNameResolver> resolvers = new ArrayList<>();
+    final AtomicReference<ConfigOrError> nextConfigOrError = new AtomicReference<>();
 
     FakeNameResolverFactory(
-        URI expectedUri,
+        List<URI> expectedUris,
         List<EquivalentAddressGroup> servers,
         boolean resolvedAtStart,
         Status error) {
-      this.expectedUri = expectedUri;
+      this.expectedUris = expectedUris;
       this.servers = servers;
       this.resolvedAtStart = resolvedAtStart;
       this.error = error;
@@ -3984,11 +4022,12 @@ public class ManagedChannelImplTest {
 
     @Override
     public NameResolver newNameResolver(final URI targetUri, NameResolver.Args args) {
-      if (!expectedUri.equals(targetUri)) {
+      if (!expectedUris.contains(targetUri)) {
         return null;
       }
       assertEquals(DEFAULT_PORT, args.getDefaultPort());
-      FakeNameResolver resolver = new FakeNameResolver(error);
+      FakeNameResolverFactory.FakeNameResolver resolver =
+          new FakeNameResolverFactory.FakeNameResolver(targetUri, error);
       resolvers.add(resolver);
       return resolver;
     }
@@ -3999,23 +4038,25 @@ public class ManagedChannelImplTest {
     }
 
     void allResolved() {
-      for (FakeNameResolver resolver : resolvers) {
+      for (FakeNameResolverFactory.FakeNameResolver resolver : resolvers) {
         resolver.resolved();
       }
     }
 
     final class FakeNameResolver extends NameResolver {
+      final URI targetUri;
       Listener2 listener;
       boolean shutdown;
       int refreshCalled;
       Status error;
 
-      FakeNameResolver(Status error) {
+      FakeNameResolver(URI targetUri, Status error) {
+        this.targetUri = targetUri;
         this.error = error;
       }
 
       @Override public String getServiceAuthority() {
-        return expectedUri.getAuthority();
+        return targetUri.getAuthority();
       }
 
       @Override public void start(Listener2 listener) {
@@ -4035,11 +4076,14 @@ public class ManagedChannelImplTest {
           listener.onError(error);
           return;
         }
-        listener.onResult(
+        ResolutionResult.Builder builder =
             ResolutionResult.newBuilder()
-                .setAddresses(servers)
-                .setAttributes(nextResolvedAttributes.get())
-                .build());
+                .setAddresses(servers);
+        ConfigOrError configOrError = nextConfigOrError.get();
+        if (configOrError != null) {
+          builder.setServiceConfig(configOrError);
+        }
+        listener.onResult(builder.build());
       }
 
       @Override public void shutdown() {
@@ -4053,32 +4097,32 @@ public class ManagedChannelImplTest {
     }
 
     static final class Builder {
-      final URI expectedUri;
+      List<URI> expectedUris;
       List<EquivalentAddressGroup> servers = ImmutableList.of();
       boolean resolvedAtStart = true;
       Status error = null;
 
-      Builder(URI expectedUri) {
-        this.expectedUri = expectedUri;
+      Builder(URI... expectedUris) {
+        this.expectedUris = Collections.unmodifiableList(Arrays.asList(expectedUris));
       }
 
-      Builder setServers(List<EquivalentAddressGroup> servers) {
+      FakeNameResolverFactory.Builder setServers(List<EquivalentAddressGroup> servers) {
         this.servers = servers;
         return this;
       }
 
-      Builder setResolvedAtStart(boolean resolvedAtStart) {
+      FakeNameResolverFactory.Builder setResolvedAtStart(boolean resolvedAtStart) {
         this.resolvedAtStart = resolvedAtStart;
         return this;
       }
 
-      Builder setError(Status error) {
+      FakeNameResolverFactory.Builder setError(Status error) {
         this.error = error;
         return this;
       }
 
       FakeNameResolverFactory build() {
-        return new FakeNameResolverFactory(expectedUri, servers, resolvedAtStart, error);
+        return new FakeNameResolverFactory(expectedUris, servers, resolvedAtStart, error);
       }
     }
   }
@@ -4189,5 +4233,12 @@ public class ManagedChannelImplTest {
   @SuppressWarnings("unchecked")
   private static Map<String, Object> parseConfig(String json) throws Exception {
     return (Map<String, Object>) JsonParser.parse(json);
+  }
+
+  private static ManagedChannelServiceConfig createManagedChannelServiceConfig(
+      Map<String, Object> rawServiceConfig, PolicySelection policySelection) {
+    // Provides dummy variable for retry related params (not used in this test class)
+    return ManagedChannelServiceConfig
+        .fromServiceConfig(rawServiceConfig, true, 3, 4, policySelection);
   }
 }

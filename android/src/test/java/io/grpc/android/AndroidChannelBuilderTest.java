@@ -21,62 +21,66 @@ import static android.os.Build.VERSION_CODES.N;
 import static com.google.common.truth.Truth.assertThat;
 import static org.robolectric.RuntimeEnvironment.getApiLevel;
 import static org.robolectric.Shadows.shadowOf;
+import static org.robolectric.annotation.LooperMode.Mode.LEGACY;
 
 import android.content.Context;
 import android.content.Intent;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkInfo;
+import androidx.test.core.app.ApplicationProvider;
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
 import io.grpc.ManagedChannel;
 import io.grpc.MethodDescriptor;
 import io.grpc.okhttp.OkHttpChannelBuilder;
-import java.util.Collection;
 import java.util.HashSet;
-import java.util.List;
-import java.util.concurrent.Callable;
-import java.util.concurrent.Executor;
-import java.util.concurrent.Future;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-import javax.net.ssl.SSLSocketFactory;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
-import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.Implementation;
 import org.robolectric.annotation.Implements;
+import org.robolectric.annotation.LooperMode;
 import org.robolectric.shadows.ShadowConnectivityManager;
 import org.robolectric.shadows.ShadowNetwork;
 import org.robolectric.shadows.ShadowNetworkInfo;
 
+@LooperMode(LEGACY)
 @RunWith(RobolectricTestRunner.class)
 @Config(shadows = {AndroidChannelBuilderTest.ShadowDefaultNetworkListenerConnectivityManager.class})
+@SuppressWarnings("deprecation")
 public final class AndroidChannelBuilderTest {
   private final NetworkInfo WIFI_CONNECTED =
       ShadowNetworkInfo.newInstance(
-          NetworkInfo.DetailedState.CONNECTED, ConnectivityManager.TYPE_WIFI, 0, true, true);
+          NetworkInfo.DetailedState.CONNECTED,
+          ConnectivityManager.TYPE_WIFI,
+          0,
+          true,
+          NetworkInfo.State.CONNECTED);
   private final NetworkInfo WIFI_DISCONNECTED =
       ShadowNetworkInfo.newInstance(
-          NetworkInfo.DetailedState.DISCONNECTED, ConnectivityManager.TYPE_WIFI, 0, true, false);
+          NetworkInfo.DetailedState.DISCONNECTED,
+          ConnectivityManager.TYPE_WIFI,
+          0,
+          true,
+          NetworkInfo.State.DISCONNECTED);
   private final NetworkInfo MOBILE_CONNECTED =
       ShadowNetworkInfo.newInstance(
           NetworkInfo.DetailedState.CONNECTED,
           ConnectivityManager.TYPE_MOBILE,
           ConnectivityManager.TYPE_MOBILE_MMS,
           true,
-          true);
+          NetworkInfo.State.CONNECTED);
   private final NetworkInfo MOBILE_DISCONNECTED =
       ShadowNetworkInfo.newInstance(
           NetworkInfo.DetailedState.DISCONNECTED,
           ConnectivityManager.TYPE_MOBILE,
           ConnectivityManager.TYPE_MOBILE_MMS,
           true,
-          false);
+          NetworkInfo.State.DISCONNECTED);
 
   private ConnectivityManager connectivityManager;
 
@@ -84,7 +88,9 @@ public final class AndroidChannelBuilderTest {
   public void setUp() {
     connectivityManager =
         (ConnectivityManager)
-            RuntimeEnvironment.application.getSystemService(Context.CONNECTIVITY_SERVICE);
+            ApplicationProvider
+                .getApplicationContext()
+                .getSystemService(Context.CONNECTIVITY_SERVICE);
   }
 
   @Test
@@ -94,31 +100,10 @@ public final class AndroidChannelBuilderTest {
   }
 
   @Test
-  public void fromBuilderConstructor() {
+  public void usingBuilderConstructor() {
     OkHttpChannelBuilder wrappedBuilder = OkHttpChannelBuilder.forTarget("target");
-    AndroidChannelBuilder androidBuilder = AndroidChannelBuilder.fromBuilder(wrappedBuilder);
+    AndroidChannelBuilder androidBuilder = AndroidChannelBuilder.usingBuilder(wrappedBuilder);
     assertThat(androidBuilder.delegate()).isSameInstanceAs(wrappedBuilder);
-  }
-
-  @Test
-  public void transportExecutor() {
-    AndroidChannelBuilder.forTarget("target")
-        .transportExecutor(
-            new Executor() {
-              @Override
-              public void execute(Runnable r) {}
-            });
-  }
-
-  @Test
-  public void sslSocketFactory() {
-    AndroidChannelBuilder.forTarget("target")
-        .sslSocketFactory((SSLSocketFactory) SSLSocketFactory.getDefault());
-  }
-
-  @Test
-  public void scheduledExecutorService() {
-    AndroidChannelBuilder.forTarget("target").scheduledExecutorService(new ScheduledExecutorImpl());
   }
 
   @Test
@@ -129,8 +114,9 @@ public final class AndroidChannelBuilderTest {
 
     // Network change and shutdown should be no-op for the channel without an Android Context
     shadowOf(connectivityManager).setActiveNetworkInfo(WIFI_CONNECTED);
-    RuntimeEnvironment.application.sendBroadcast(
-        new Intent(ConnectivityManager.CONNECTIVITY_ACTION));
+    ApplicationProvider
+        .getApplicationContext()
+        .sendBroadcast(new Intent(ConnectivityManager.CONNECTIVITY_ACTION));
     androidChannel.shutdown();
 
     assertThat(delegateChannel.resetCount).isEqualTo(0);
@@ -157,48 +143,55 @@ public final class AndroidChannelBuilderTest {
     TestChannel delegateChannel = new TestChannel();
     ManagedChannel androidChannel =
         new AndroidChannelBuilder.AndroidChannel(
-            delegateChannel, RuntimeEnvironment.application.getApplicationContext());
+            delegateChannel, ApplicationProvider.getApplicationContext());
     assertThat(delegateChannel.resetCount).isEqualTo(0);
 
     // On API levels < 24, the broadcast receiver will invoke resetConnectBackoff() on the first
     // connectivity action broadcast regardless of previous connection status
     shadowOf(connectivityManager).setActiveNetworkInfo(WIFI_CONNECTED);
-    RuntimeEnvironment.application.sendBroadcast(
-        new Intent(ConnectivityManager.CONNECTIVITY_ACTION));
+    ApplicationProvider
+        .getApplicationContext()
+        .sendBroadcast(new Intent(ConnectivityManager.CONNECTIVITY_ACTION));
     assertThat(delegateChannel.resetCount).isEqualTo(1);
 
     // The broadcast receiver may fire when the active network status has not actually changed
-    RuntimeEnvironment.application.sendBroadcast(
-        new Intent(ConnectivityManager.CONNECTIVITY_ACTION));
+    ApplicationProvider
+        .getApplicationContext()
+        .sendBroadcast(new Intent(ConnectivityManager.CONNECTIVITY_ACTION));
     assertThat(delegateChannel.resetCount).isEqualTo(1);
 
     // Drop the connection
     shadowOf(connectivityManager).setActiveNetworkInfo(null);
-    RuntimeEnvironment.application.sendBroadcast(
-        new Intent(ConnectivityManager.CONNECTIVITY_ACTION));
+    ApplicationProvider
+        .getApplicationContext()
+        .sendBroadcast(new Intent(ConnectivityManager.CONNECTIVITY_ACTION));
     assertThat(delegateChannel.resetCount).isEqualTo(1);
 
     // Notify that a new but not connected network is available
     shadowOf(connectivityManager).setActiveNetworkInfo(MOBILE_DISCONNECTED);
-    RuntimeEnvironment.application.sendBroadcast(
-        new Intent(ConnectivityManager.CONNECTIVITY_ACTION));
+    ApplicationProvider
+        .getApplicationContext()
+        .sendBroadcast(new Intent(ConnectivityManager.CONNECTIVITY_ACTION));
     assertThat(delegateChannel.resetCount).isEqualTo(1);
 
     // Establish a connection
     shadowOf(connectivityManager).setActiveNetworkInfo(MOBILE_CONNECTED);
-    RuntimeEnvironment.application.sendBroadcast(
-        new Intent(ConnectivityManager.CONNECTIVITY_ACTION));
+    ApplicationProvider
+        .getApplicationContext()
+        .sendBroadcast(new Intent(ConnectivityManager.CONNECTIVITY_ACTION));
     assertThat(delegateChannel.resetCount).isEqualTo(2);
 
     // Disconnect, then shutdown the channel and verify that the broadcast receiver has been
     // unregistered
     shadowOf(connectivityManager).setActiveNetworkInfo(null);
-    RuntimeEnvironment.application.sendBroadcast(
-        new Intent(ConnectivityManager.CONNECTIVITY_ACTION));
+    ApplicationProvider
+        .getApplicationContext()
+        .sendBroadcast(new Intent(ConnectivityManager.CONNECTIVITY_ACTION));
     androidChannel.shutdown();
     shadowOf(connectivityManager).setActiveNetworkInfo(MOBILE_CONNECTED);
-    RuntimeEnvironment.application.sendBroadcast(
-        new Intent(ConnectivityManager.CONNECTIVITY_ACTION));
+    ApplicationProvider
+        .getApplicationContext()
+        .sendBroadcast(new Intent(ConnectivityManager.CONNECTIVITY_ACTION));
 
     assertThat(delegateChannel.resetCount).isEqualTo(2);
     // enterIdle is not called on API levels < 24
@@ -212,7 +205,7 @@ public final class AndroidChannelBuilderTest {
     TestChannel delegateChannel = new TestChannel();
     ManagedChannel androidChannel =
         new AndroidChannelBuilder.AndroidChannel(
-            delegateChannel, RuntimeEnvironment.application.getApplicationContext());
+            delegateChannel, ApplicationProvider.getApplicationContext());
     assertThat(delegateChannel.resetCount).isEqualTo(0);
     assertThat(delegateChannel.enterIdleCount).isEqualTo(0);
 
@@ -253,7 +246,7 @@ public final class AndroidChannelBuilderTest {
     TestChannel delegateChannel = new TestChannel();
     ManagedChannel androidChannel =
         new AndroidChannelBuilder.AndroidChannel(
-            delegateChannel, RuntimeEnvironment.application.getApplicationContext());
+            delegateChannel, ApplicationProvider.getApplicationContext());
 
     // The first onAvailable() may just signal that the device was connected when the callback is
     // registered, rather than indicating a changed network, so we do not enter idle.
@@ -274,15 +267,17 @@ public final class AndroidChannelBuilderTest {
     TestChannel delegateChannel = new TestChannel();
     ManagedChannel androidChannel =
         new AndroidChannelBuilder.AndroidChannel(
-            delegateChannel, RuntimeEnvironment.application.getApplicationContext());
+            delegateChannel, ApplicationProvider.getApplicationContext());
 
     shadowOf(connectivityManager).setActiveNetworkInfo(null);
-    RuntimeEnvironment.application.sendBroadcast(
-        new Intent(ConnectivityManager.CONNECTIVITY_ACTION));
+    ApplicationProvider
+        .getApplicationContext()
+        .sendBroadcast(new Intent(ConnectivityManager.CONNECTIVITY_ACTION));
     androidChannel.shutdownNow();
     shadowOf(connectivityManager).setActiveNetworkInfo(WIFI_CONNECTED);
-    RuntimeEnvironment.application.sendBroadcast(
-        new Intent(ConnectivityManager.CONNECTIVITY_ACTION));
+    ApplicationProvider
+        .getApplicationContext()
+        .sendBroadcast(new Intent(ConnectivityManager.CONNECTIVITY_ACTION));
 
     assertThat(delegateChannel.resetCount).isEqualTo(0);
   }
@@ -294,7 +289,7 @@ public final class AndroidChannelBuilderTest {
     TestChannel delegateChannel = new TestChannel();
     ManagedChannel androidChannel =
         new AndroidChannelBuilder.AndroidChannel(
-            delegateChannel, RuntimeEnvironment.application.getApplicationContext());
+            delegateChannel, ApplicationProvider.getApplicationContext());
 
     androidChannel.shutdownNow();
     shadowOf(connectivityManager).setActiveNetworkInfo(WIFI_CONNECTED);
@@ -344,6 +339,7 @@ public final class AndroidChannelBuilderTest {
     }
 
     @Implementation(minSdk = N)
+    @Override
     protected void registerDefaultNetworkCallback(
         ConnectivityManager.NetworkCallback networkCallback) {
       defaultNetworkCallbacks.add(networkCallback);
@@ -409,96 +405,6 @@ public final class AndroidChannelBuilderTest {
     @Override
     public void enterIdle() {
       enterIdleCount++;
-    }
-  }
-
-  private static class ScheduledExecutorImpl implements ScheduledExecutorService {
-    @Override
-    public <V> ScheduledFuture<V> schedule(Callable<V> callable, long delay, TimeUnit unit) {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public ScheduledFuture<?> schedule(Runnable cmd, long delay, TimeUnit unit) {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public ScheduledFuture<?> scheduleAtFixedRate(
-        Runnable command, long initialDelay, long period, TimeUnit unit) {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public ScheduledFuture<?> scheduleWithFixedDelay(
-        Runnable command, long initialDelay, long delay, TimeUnit unit) {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public boolean awaitTermination(long timeout, TimeUnit unit) {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public <T> List<Future<T>> invokeAll(Collection<? extends Callable<T>> tasks) {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public <T> List<Future<T>> invokeAll(
-        Collection<? extends Callable<T>> tasks, long timeout, TimeUnit unit) {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public <T> T invokeAny(Collection<? extends Callable<T>> tasks) {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public <T> T invokeAny(Collection<? extends Callable<T>> tasks, long timeout, TimeUnit unit) {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public boolean isShutdown() {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public boolean isTerminated() {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public void shutdown() {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public List<Runnable> shutdownNow() {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public <T> Future<T> submit(Callable<T> task) {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public Future<?> submit(Runnable task) {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public <T> Future<T> submit(Runnable task, T result) {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public void execute(Runnable command) {
-      throw new UnsupportedOperationException();
     }
   }
 }

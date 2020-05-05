@@ -129,6 +129,7 @@ public final class ServerCalls {
       private final ServerCall<ReqT, RespT> call;
       private final ServerCallStreamObserverImpl<ReqT, RespT> responseObserver;
       private boolean canInvoke = true;
+      private boolean wasReady;
       private ReqT request;
 
       // Non private to avoid synthetic class
@@ -171,7 +172,7 @@ public final class ServerCalls {
         method.invoke(request, responseObserver);
         request = null;
         responseObserver.freeze();
-        if (call.isReady()) {
+        if (wasReady) {
           // Since we are calling invoke in halfClose we have missed the onReady
           // event from the transport so recover it here.
           onReady();
@@ -188,6 +189,7 @@ public final class ServerCalls {
 
       @Override
       public void onReady() {
+        wasReady = true;
         if (responseObserver.onReadyHandler != null) {
           responseObserver.onReadyHandler.run();
         }
@@ -378,7 +380,9 @@ public final class ServerCalls {
 
     @Override
     public void setOnReadyHandler(Runnable r) {
-      checkState(!frozen, "Cannot alter onReadyHandler after initialization");
+      checkState(!frozen, "Cannot alter onReadyHandler after initialization. May only be called "
+          + "during the initial call to the application, before the service returns its "
+          + "StreamObserver");
       this.onReadyHandler = r;
     }
 
@@ -389,7 +393,9 @@ public final class ServerCalls {
 
     @Override
     public void setOnCancelHandler(Runnable onCancelHandler) {
-      checkState(!frozen, "Cannot alter onCancelHandler after initialization");
+      checkState(!frozen, "Cannot alter onCancelHandler after initialization. May only be called "
+          + "during the initial call to the application, before the service returns its "
+          + "StreamObserver");
       this.onCancelHandler = onCancelHandler;
     }
 

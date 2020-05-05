@@ -44,22 +44,21 @@ public final class ClusterDiscoveryServiceGrpc {
     if ((getStreamClustersMethod = ClusterDiscoveryServiceGrpc.getStreamClustersMethod) == null) {
       synchronized (ClusterDiscoveryServiceGrpc.class) {
         if ((getStreamClustersMethod = ClusterDiscoveryServiceGrpc.getStreamClustersMethod) == null) {
-          ClusterDiscoveryServiceGrpc.getStreamClustersMethod = getStreamClustersMethod = 
+          ClusterDiscoveryServiceGrpc.getStreamClustersMethod = getStreamClustersMethod =
               io.grpc.MethodDescriptor.<io.envoyproxy.envoy.api.v2.DiscoveryRequest, io.envoyproxy.envoy.api.v2.DiscoveryResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING)
-              .setFullMethodName(generateFullMethodName(
-                  "envoy.api.v2.ClusterDiscoveryService", "StreamClusters"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "StreamClusters"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.envoyproxy.envoy.api.v2.DiscoveryRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.envoyproxy.envoy.api.v2.DiscoveryResponse.getDefaultInstance()))
-                  .setSchemaDescriptor(new ClusterDiscoveryServiceMethodDescriptorSupplier("StreamClusters"))
-                  .build();
-          }
+              .setSchemaDescriptor(new ClusterDiscoveryServiceMethodDescriptorSupplier("StreamClusters"))
+              .build();
         }
-     }
-     return getStreamClustersMethod;
+      }
+    }
+    return getStreamClustersMethod;
   }
 
   private static volatile io.grpc.MethodDescriptor<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest,
@@ -76,22 +75,21 @@ public final class ClusterDiscoveryServiceGrpc {
     if ((getDeltaClustersMethod = ClusterDiscoveryServiceGrpc.getDeltaClustersMethod) == null) {
       synchronized (ClusterDiscoveryServiceGrpc.class) {
         if ((getDeltaClustersMethod = ClusterDiscoveryServiceGrpc.getDeltaClustersMethod) == null) {
-          ClusterDiscoveryServiceGrpc.getDeltaClustersMethod = getDeltaClustersMethod = 
+          ClusterDiscoveryServiceGrpc.getDeltaClustersMethod = getDeltaClustersMethod =
               io.grpc.MethodDescriptor.<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest, io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING)
-              .setFullMethodName(generateFullMethodName(
-                  "envoy.api.v2.ClusterDiscoveryService", "DeltaClusters"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "DeltaClusters"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse.getDefaultInstance()))
-                  .setSchemaDescriptor(new ClusterDiscoveryServiceMethodDescriptorSupplier("DeltaClusters"))
-                  .build();
-          }
+              .setSchemaDescriptor(new ClusterDiscoveryServiceMethodDescriptorSupplier("DeltaClusters"))
+              .build();
         }
-     }
-     return getDeltaClustersMethod;
+      }
+    }
+    return getDeltaClustersMethod;
   }
 
   private static volatile io.grpc.MethodDescriptor<io.envoyproxy.envoy.api.v2.DiscoveryRequest,
@@ -108,29 +106,35 @@ public final class ClusterDiscoveryServiceGrpc {
     if ((getFetchClustersMethod = ClusterDiscoveryServiceGrpc.getFetchClustersMethod) == null) {
       synchronized (ClusterDiscoveryServiceGrpc.class) {
         if ((getFetchClustersMethod = ClusterDiscoveryServiceGrpc.getFetchClustersMethod) == null) {
-          ClusterDiscoveryServiceGrpc.getFetchClustersMethod = getFetchClustersMethod = 
+          ClusterDiscoveryServiceGrpc.getFetchClustersMethod = getFetchClustersMethod =
               io.grpc.MethodDescriptor.<io.envoyproxy.envoy.api.v2.DiscoveryRequest, io.envoyproxy.envoy.api.v2.DiscoveryResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
-              .setFullMethodName(generateFullMethodName(
-                  "envoy.api.v2.ClusterDiscoveryService", "FetchClusters"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "FetchClusters"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.envoyproxy.envoy.api.v2.DiscoveryRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.envoyproxy.envoy.api.v2.DiscoveryResponse.getDefaultInstance()))
-                  .setSchemaDescriptor(new ClusterDiscoveryServiceMethodDescriptorSupplier("FetchClusters"))
-                  .build();
-          }
+              .setSchemaDescriptor(new ClusterDiscoveryServiceMethodDescriptorSupplier("FetchClusters"))
+              .build();
         }
-     }
-     return getFetchClustersMethod;
+      }
+    }
+    return getFetchClustersMethod;
   }
 
   /**
    * Creates a new async stub that supports all call types for the service
    */
   public static ClusterDiscoveryServiceStub newStub(io.grpc.Channel channel) {
-    return new ClusterDiscoveryServiceStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<ClusterDiscoveryServiceStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<ClusterDiscoveryServiceStub>() {
+        @java.lang.Override
+        public ClusterDiscoveryServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new ClusterDiscoveryServiceStub(channel, callOptions);
+        }
+      };
+    return ClusterDiscoveryServiceStub.newStub(factory, channel);
   }
 
   /**
@@ -138,7 +142,14 @@ public final class ClusterDiscoveryServiceGrpc {
    */
   public static ClusterDiscoveryServiceBlockingStub newBlockingStub(
       io.grpc.Channel channel) {
-    return new ClusterDiscoveryServiceBlockingStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<ClusterDiscoveryServiceBlockingStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<ClusterDiscoveryServiceBlockingStub>() {
+        @java.lang.Override
+        public ClusterDiscoveryServiceBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new ClusterDiscoveryServiceBlockingStub(channel, callOptions);
+        }
+      };
+    return ClusterDiscoveryServiceBlockingStub.newStub(factory, channel);
   }
 
   /**
@@ -146,7 +157,14 @@ public final class ClusterDiscoveryServiceGrpc {
    */
   public static ClusterDiscoveryServiceFutureStub newFutureStub(
       io.grpc.Channel channel) {
-    return new ClusterDiscoveryServiceFutureStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<ClusterDiscoveryServiceFutureStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<ClusterDiscoveryServiceFutureStub>() {
+        @java.lang.Override
+        public ClusterDiscoveryServiceFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new ClusterDiscoveryServiceFutureStub(channel, callOptions);
+        }
+      };
+    return ClusterDiscoveryServiceFutureStub.newStub(factory, channel);
   }
 
   /**
@@ -209,19 +227,15 @@ public final class ClusterDiscoveryServiceGrpc {
    * Return list of all clusters this proxy will load balance to.
    * </pre>
    */
-  public static final class ClusterDiscoveryServiceStub extends io.grpc.stub.AbstractStub<ClusterDiscoveryServiceStub> {
-    private ClusterDiscoveryServiceStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
-    private ClusterDiscoveryServiceStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+  public static final class ClusterDiscoveryServiceStub extends io.grpc.stub.AbstractAsyncStub<ClusterDiscoveryServiceStub> {
+    private ClusterDiscoveryServiceStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected ClusterDiscoveryServiceStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+    protected ClusterDiscoveryServiceStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       return new ClusterDiscoveryServiceStub(channel, callOptions);
     }
 
@@ -255,19 +269,15 @@ public final class ClusterDiscoveryServiceGrpc {
    * Return list of all clusters this proxy will load balance to.
    * </pre>
    */
-  public static final class ClusterDiscoveryServiceBlockingStub extends io.grpc.stub.AbstractStub<ClusterDiscoveryServiceBlockingStub> {
-    private ClusterDiscoveryServiceBlockingStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
-    private ClusterDiscoveryServiceBlockingStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+  public static final class ClusterDiscoveryServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<ClusterDiscoveryServiceBlockingStub> {
+    private ClusterDiscoveryServiceBlockingStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected ClusterDiscoveryServiceBlockingStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+    protected ClusterDiscoveryServiceBlockingStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       return new ClusterDiscoveryServiceBlockingStub(channel, callOptions);
     }
 
@@ -284,19 +294,15 @@ public final class ClusterDiscoveryServiceGrpc {
    * Return list of all clusters this proxy will load balance to.
    * </pre>
    */
-  public static final class ClusterDiscoveryServiceFutureStub extends io.grpc.stub.AbstractStub<ClusterDiscoveryServiceFutureStub> {
-    private ClusterDiscoveryServiceFutureStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
-    private ClusterDiscoveryServiceFutureStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+  public static final class ClusterDiscoveryServiceFutureStub extends io.grpc.stub.AbstractFutureStub<ClusterDiscoveryServiceFutureStub> {
+    private ClusterDiscoveryServiceFutureStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected ClusterDiscoveryServiceFutureStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+    protected ClusterDiscoveryServiceFutureStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       return new ClusterDiscoveryServiceFutureStub(channel, callOptions);
     }
 

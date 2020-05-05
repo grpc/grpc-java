@@ -1,32 +1,34 @@
+plugins {
+    id "java-library"
+    id "maven-publish"
+
+    id "me.champeau.gradle.japicmp"
+    id "me.champeau.gradle.jmh"
+    id "ru.vyarus.animalsniffer"
+}
+
 description = 'gRPC: Core'
 
-dependencies {
-    compile project(':grpc-api'),
-            libraries.gson,
-            libraries.android_annotations,
-            libraries.perfmark
-    compile (libraries.opencensus_api) {
-        // prefer 3.0.2 from libraries instead of 3.0.1
-        exclude group: 'com.google.code.findbugs', module: 'jsr305'
-        // prefer 20.0 from libraries instead of 19.0
-        exclude group: 'com.google.guava', module: 'guava'
-        // we'll always be more up-to-date
-        exclude group: 'io.grpc', module: 'grpc-context'
-    }
-    compile (libraries.opencensus_contrib_grpc_metrics) {
-        // prefer 3.0.2 from libraries instead of 3.0.1
-        exclude group: 'com.google.code.findbugs', module: 'jsr305'
-        // we'll always be more up-to-date
-        exclude group: 'io.grpc', module: 'grpc-context'
-        // prefer 20.0 from libraries instead of 19.0
-        exclude group: 'com.google.guava', module: 'guava'
-    }
+evaluationDependsOn(project(':grpc-context').path)
+evaluationDependsOn(project(':grpc-api').path)
 
-    testCompile project(':grpc-context').sourceSets.test.output,
+dependencies {
+    api project(':grpc-api')
+    implementation libraries.gson,
+            libraries.android_annotations,
+            libraries.animalsniffer_annotations,
+            libraries.errorprone
+    guavaDependency 'implementation'
+    perfmarkDependency 'implementation'
+    testImplementation project(':grpc-context').sourceSets.test.output,
             project(':grpc-api').sourceSets.test.output,
             project(':grpc-testing'),
             project(':grpc-grpclb'),
             libraries.guava_testlib
+    
+    testRuntimeOnly project(':grpc-census')
+
+    jmh project(':grpc-testing')
 
     signature "org.codehaus.mojo.signature:java17:1.0@signature"
     signature "net.sf.androidscents.signature:android-api-level-14:4.0_r4@signature"
@@ -44,4 +46,13 @@ animalsniffer {
         sourceSets.main,
         sourceSets.test
     ]
+}
+
+import net.ltgt.gradle.errorprone.CheckSeverity
+
+plugins.withId("java") {
+    compileJmhJava {
+        // This project targets Java 7 (no method references)
+        options.errorprone.check("UnnecessaryAnonymousClass", CheckSeverity.OFF)
+    }
 }

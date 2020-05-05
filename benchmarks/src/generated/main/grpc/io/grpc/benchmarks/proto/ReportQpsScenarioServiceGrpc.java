@@ -41,29 +41,35 @@ public final class ReportQpsScenarioServiceGrpc {
     if ((getReportScenarioMethod = ReportQpsScenarioServiceGrpc.getReportScenarioMethod) == null) {
       synchronized (ReportQpsScenarioServiceGrpc.class) {
         if ((getReportScenarioMethod = ReportQpsScenarioServiceGrpc.getReportScenarioMethod) == null) {
-          ReportQpsScenarioServiceGrpc.getReportScenarioMethod = getReportScenarioMethod = 
+          ReportQpsScenarioServiceGrpc.getReportScenarioMethod = getReportScenarioMethod =
               io.grpc.MethodDescriptor.<io.grpc.benchmarks.proto.Control.ScenarioResult, io.grpc.benchmarks.proto.Control.Void>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.testing.ReportQpsScenarioService", "ReportScenario"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "ReportScenario"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.benchmarks.proto.Control.ScenarioResult.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.benchmarks.proto.Control.Void.getDefaultInstance()))
-                  .setSchemaDescriptor(new ReportQpsScenarioServiceMethodDescriptorSupplier("ReportScenario"))
-                  .build();
-          }
+              .setSchemaDescriptor(new ReportQpsScenarioServiceMethodDescriptorSupplier("ReportScenario"))
+              .build();
         }
-     }
-     return getReportScenarioMethod;
+      }
+    }
+    return getReportScenarioMethod;
   }
 
   /**
    * Creates a new async stub that supports all call types for the service
    */
   public static ReportQpsScenarioServiceStub newStub(io.grpc.Channel channel) {
-    return new ReportQpsScenarioServiceStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<ReportQpsScenarioServiceStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<ReportQpsScenarioServiceStub>() {
+        @java.lang.Override
+        public ReportQpsScenarioServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new ReportQpsScenarioServiceStub(channel, callOptions);
+        }
+      };
+    return ReportQpsScenarioServiceStub.newStub(factory, channel);
   }
 
   /**
@@ -71,7 +77,14 @@ public final class ReportQpsScenarioServiceGrpc {
    */
   public static ReportQpsScenarioServiceBlockingStub newBlockingStub(
       io.grpc.Channel channel) {
-    return new ReportQpsScenarioServiceBlockingStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<ReportQpsScenarioServiceBlockingStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<ReportQpsScenarioServiceBlockingStub>() {
+        @java.lang.Override
+        public ReportQpsScenarioServiceBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new ReportQpsScenarioServiceBlockingStub(channel, callOptions);
+        }
+      };
+    return ReportQpsScenarioServiceBlockingStub.newStub(factory, channel);
   }
 
   /**
@@ -79,7 +92,14 @@ public final class ReportQpsScenarioServiceGrpc {
    */
   public static ReportQpsScenarioServiceFutureStub newFutureStub(
       io.grpc.Channel channel) {
-    return new ReportQpsScenarioServiceFutureStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<ReportQpsScenarioServiceFutureStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<ReportQpsScenarioServiceFutureStub>() {
+        @java.lang.Override
+        public ReportQpsScenarioServiceFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new ReportQpsScenarioServiceFutureStub(channel, callOptions);
+        }
+      };
+    return ReportQpsScenarioServiceFutureStub.newStub(factory, channel);
   }
 
   /**
@@ -111,19 +131,15 @@ public final class ReportQpsScenarioServiceGrpc {
 
   /**
    */
-  public static final class ReportQpsScenarioServiceStub extends io.grpc.stub.AbstractStub<ReportQpsScenarioServiceStub> {
-    private ReportQpsScenarioServiceStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
-    private ReportQpsScenarioServiceStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+  public static final class ReportQpsScenarioServiceStub extends io.grpc.stub.AbstractAsyncStub<ReportQpsScenarioServiceStub> {
+    private ReportQpsScenarioServiceStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected ReportQpsScenarioServiceStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+    protected ReportQpsScenarioServiceStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       return new ReportQpsScenarioServiceStub(channel, callOptions);
     }
 
@@ -141,19 +157,15 @@ public final class ReportQpsScenarioServiceGrpc {
 
   /**
    */
-  public static final class ReportQpsScenarioServiceBlockingStub extends io.grpc.stub.AbstractStub<ReportQpsScenarioServiceBlockingStub> {
-    private ReportQpsScenarioServiceBlockingStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
-    private ReportQpsScenarioServiceBlockingStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+  public static final class ReportQpsScenarioServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<ReportQpsScenarioServiceBlockingStub> {
+    private ReportQpsScenarioServiceBlockingStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected ReportQpsScenarioServiceBlockingStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+    protected ReportQpsScenarioServiceBlockingStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       return new ReportQpsScenarioServiceBlockingStub(channel, callOptions);
     }
 
@@ -170,19 +182,15 @@ public final class ReportQpsScenarioServiceGrpc {
 
   /**
    */
-  public static final class ReportQpsScenarioServiceFutureStub extends io.grpc.stub.AbstractStub<ReportQpsScenarioServiceFutureStub> {
-    private ReportQpsScenarioServiceFutureStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
-    private ReportQpsScenarioServiceFutureStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+  public static final class ReportQpsScenarioServiceFutureStub extends io.grpc.stub.AbstractFutureStub<ReportQpsScenarioServiceFutureStub> {
+    private ReportQpsScenarioServiceFutureStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected ReportQpsScenarioServiceFutureStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+    protected ReportQpsScenarioServiceFutureStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       return new ReportQpsScenarioServiceFutureStub(channel, callOptions);
     }
 

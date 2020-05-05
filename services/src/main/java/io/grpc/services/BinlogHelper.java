@@ -46,7 +46,6 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.ServerCall;
-import io.grpc.ServerCall.Listener;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.Status;
@@ -408,7 +407,7 @@ final class BinlogHelper {
 
         return new SimpleForwardingClientCall<ReqT, RespT>(next.newCall(method, callOptions)) {
           @Override
-          public void start(final Listener<RespT> responseListener, Metadata headers) {
+          public void start(final ClientCall.Listener<RespT> responseListener, Metadata headers) {
             final Duration timeout = deadline == null ? null
                 : Durations.fromNanos(deadline.timeRemaining(TimeUnit.NANOSECONDS));
             writer.logClientHeader(
@@ -500,7 +499,7 @@ final class BinlogHelper {
   public ServerInterceptor getServerInterceptor(final long callId) {
     return new ServerInterceptor() {
       @Override
-      public <ReqT, RespT> Listener<ReqT> interceptCall(
+      public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
           final ServerCall<ReqT, RespT> call,
           Metadata headers,
           ServerCallHandler<ReqT, RespT> next) {

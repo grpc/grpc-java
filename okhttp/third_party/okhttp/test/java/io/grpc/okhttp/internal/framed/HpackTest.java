@@ -16,9 +16,13 @@
 
 package io.grpc.okhttp.internal.framed;
 
+import static okio.ByteString.decodeHex;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
+
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import okio.Buffer;
 import okio.ByteString;
@@ -26,10 +30,6 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
-
-import static okio.ByteString.decodeHex;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
 
 @RunWith(JUnit4.class)
 public class HpackTest {
@@ -49,7 +49,7 @@ public class HpackTest {
 
   @Before public void reset() {
     hpackReader = newReader(bytesIn);
-    hpackWriter = new Hpack.Writer(bytesOut);
+    hpackWriter = new Hpack.Writer(4096, false, bytesOut);
   }
 
   /**
@@ -77,6 +77,7 @@ public class HpackTest {
    * Ensure the larger header content is not lost.
    */
   @Test public void tooLargeToHPackIsStillEmitted() throws IOException {
+    bytesIn.writeByte(0x21); // Dynamic table size update (size = 1).
     bytesIn.writeByte(0x00); // Literal indexed
     bytesIn.writeByte(0x0a); // Literal name (len = 10)
     bytesIn.writeUtf8("custom-key");
@@ -109,7 +110,14 @@ public class HpackTest {
   }
 
   /** Oldest entries are evicted to support newer ones. */
-  @Test public void testEviction() throws IOException {
+  @Test
+  public void writerEviction() throws IOException {
+    List<Header> headerBlock =
+        headerEntries(
+            "custom-foo", "custom-header",
+            "custom-bar", "custom-header",
+            "custom-baz", "custom-header");
+
     bytesIn.writeByte(0x40); // Literal indexed
     bytesIn.writeByte(0x0a); // Literal name (len = 10)
     bytesIn.writeUtf8("custom-foo");
@@ -132,33 +140,84 @@ public class HpackTest {
     bytesIn.writeUtf8("custom-header");
 
     // Set to only support 110 bytes (enough for 2 headers).
-    hpackReader.headerTableSizeSetting(110);
+    // Use a new Writer because we don't support change the dynamic table
+    // size after Writer constructed.
+    Hpack.Writer writer = new Hpack.Writer(110, false, bytesOut);
+    writer.writeHeaders(headerBlock);
+
+    assertEquals(bytesIn, bytesOut);
+    assertEquals(2, writer.dynamicTableHeaderCount);
+
+    int tableLength = writer.dynamicTable.length;
+    Header entry = writer.dynamicTable[tableLength - 1];
+    checkEntry(entry, "custom-bar", "custom-header", 55);
+
+    entry = writer.dynamicTable[tableLength - 2];
+    checkEntry(entry, "custom-baz", "custom-header", 55);
+  }
+
+  @Test
+  public void readerEviction() throws IOException {
+    List<Header> headerBlock =
+        headerEntries(
+            "custom-foo", "custom-header",
+            "custom-bar", "custom-header",
+            "custom-baz", "custom-header");
+
+    // Set to only support 110 bytes (enough for 2 headers).
+    bytesIn.writeByte(0x3F); // Dynamic table size update (size = 110).
+    bytesIn.writeByte(0x4F);
+
+    bytesIn.writeByte(0x40); // Literal indexed
+    bytesIn.writeByte(0x0a); // Literal name (len = 10)
+    bytesIn.writeUtf8("custom-foo");
+
+    bytesIn.writeByte(0x0d); // Literal value (len = 13)
+    bytesIn.writeUtf8("custom-header");
+
+    bytesIn.writeByte(0x40); // Literal indexed
+    bytesIn.writeByte(0x0a); // Literal name (len = 10)
+    bytesIn.writeUtf8("custom-bar");
+
+    bytesIn.writeByte(0x0d); // Literal value (len = 13)
+    bytesIn.writeUtf8("custom-header");
+
+    bytesIn.writeByte(0x40); // Literal indexed
+    bytesIn.writeByte(0x0a); // Literal name (len = 10)
+    bytesIn.writeUtf8("custom-baz");
+
+    bytesIn.writeByte(0x0d); // Literal value (len = 13)
+    bytesIn.writeUtf8("custom-header");
+
     hpackReader.readHeaders();
 
     assertEquals(2, hpackReader.dynamicTableHeaderCount);
 
-    Header entry = hpackReader.dynamicTable[headerTableLength() - 1];
-    checkEntry(entry, "custom-bar", "custom-header", 55);
+    Header entry1 = hpackReader.dynamicTable[readerHeaderTableLength() - 1];
+    checkEntry(entry1, "custom-bar", "custom-header", 55);
 
-    entry = hpackReader.dynamicTable[headerTableLength() - 2];
-    checkEntry(entry, "custom-baz", "custom-header", 55);
+    Header entry2 = hpackReader.dynamicTable[readerHeaderTableLength() - 2];
+    checkEntry(entry2, "custom-baz", "custom-header", 55);
 
     // Once a header field is decoded and added to the reconstructed header
     // list, it cannot be removed from it. Hence, foo is here.
-    assertEquals(
-        headerEntries(
-            "custom-foo", "custom-header",
-            "custom-bar", "custom-header",
-            "custom-baz", "custom-header"),
-        hpackReader.getAndResetHeaderList());
+    assertEquals(headerBlock, hpackReader.getAndResetHeaderList());
 
-    // Simulate receiving a small settings frame, that implies eviction.
-    hpackReader.headerTableSizeSetting(55);
+    // Simulate receiving a small dynamic table size update, that implies eviction.
+    bytesIn.writeByte(0x3F); // Dynamic table size update (size = 55).
+    bytesIn.writeByte(0x18);
+    hpackReader.readHeaders();
     assertEquals(1, hpackReader.dynamicTableHeaderCount);
   }
 
   /** Header table backing array is initially 8 long, let's ensure it grows. */
   @Test public void dynamicallyGrowsBeyond64Entries() throws IOException {
+    // Lots of headers need more room!
+    hpackReader = new Hpack.Reader(16384, 4096, bytesIn);
+    bytesIn.writeByte(0x3F); // Dynamic table size update (size = 16384).
+    bytesIn.writeByte(0xE1);
+    bytesIn.writeByte(0x7F);
+
     for (int i = 0; i < 256; i++) {
       bytesIn.writeByte(0x40); // Literal indexed
       bytesIn.writeByte(0x0a); // Literal name (len = 10)
@@ -168,7 +227,6 @@ public class HpackTest {
       bytesIn.writeUtf8("custom-header");
     }
 
-    hpackReader.headerTableSizeSetting(16384); // Lots of headers need more room!
     hpackReader.readHeaders();
 
     assertEquals(256, hpackReader.dynamicTableHeaderCount);
@@ -186,7 +244,7 @@ public class HpackTest {
     assertEquals(1, hpackReader.dynamicTableHeaderCount);
     assertEquals(52, hpackReader.dynamicTableByteCount);
 
-    Header entry = hpackReader.dynamicTable[headerTableLength() - 1];
+    Header entry = hpackReader.dynamicTable[readerHeaderTableLength() - 1];
     checkEntry(entry, ":path", "www.example.com", 52);
   }
 
@@ -206,7 +264,7 @@ public class HpackTest {
     assertEquals(1, hpackReader.dynamicTableHeaderCount);
     assertEquals(55, hpackReader.dynamicTableByteCount);
 
-    Header entry = hpackReader.dynamicTable[headerTableLength() - 1];
+    Header entry = hpackReader.dynamicTable[readerHeaderTableLength() - 1];
     checkEntry(entry, "custom-key", "custom-header", 55);
 
     assertEquals(headerEntries("custom-key", "custom-header"), hpackReader.getAndResetHeaderList());
@@ -243,9 +301,6 @@ public class HpackTest {
     bytesIn.writeByte(0x0d); // Literal value (len = 13)
     bytesIn.writeUtf8("custom-header");
 
-    hpackWriter.writeHeaders(headerBlock);
-    assertEquals(bytesIn, bytesOut);
-
     hpackReader.readHeaders();
 
     assertEquals(0, hpackReader.dynamicTableHeaderCount);
@@ -281,6 +336,78 @@ public class HpackTest {
     assertEquals(headerEntries("custom-key", "custom-header"), hpackReader.getAndResetHeaderList());
   }
 
+  @Test
+  public void literalHeaderFieldWithIncrementalIndexingIndexedName() throws IOException {
+    List<Header> headerBlock = headerEntries(":path", "/sample/path");
+
+    bytesIn.writeByte(0x44); // Indexed name (idx = 4) -> :path
+    bytesIn.writeByte(0x0c); // Literal value (len = 12)
+    bytesIn.writeUtf8("/sample/path");
+
+    hpackReader.readHeaders();
+
+    assertEquals(1, hpackReader.dynamicTableHeaderCount);
+
+    assertEquals(headerBlock, hpackReader.getAndResetHeaderList());
+  }
+
+  @Test
+  public void literalHeaderFieldWithIncrementalIndexingNewName() throws IOException {
+    List<Header> headerBlock = headerEntries("custom-key", "custom-header");
+
+    bytesIn.writeByte(0x40); // Never indexed
+    bytesIn.writeByte(0x0a); // Literal name (len = 10)
+    bytesIn.writeUtf8("custom-key");
+
+    bytesIn.writeByte(0x0d); // Literal value (len = 13)
+    bytesIn.writeUtf8("custom-header");
+
+    hpackWriter.writeHeaders(headerBlock);
+    assertEquals(bytesIn, bytesOut);
+
+    assertEquals(1, hpackWriter.dynamicTableHeaderCount);
+
+    Header entry = hpackWriter.dynamicTable[hpackWriter.dynamicTable.length - 1];
+    checkEntry(entry, "custom-key", "custom-header", 55);
+
+    hpackReader.readHeaders();
+
+    assertEquals(1, hpackWriter.dynamicTableHeaderCount);
+
+    assertEquals(headerBlock, hpackReader.getAndResetHeaderList());
+  }
+
+  @Test
+  public void theSameHeaderAfterOneIncrementalIndexed() throws IOException {
+    List<Header> headerBlock =
+        headerEntries(
+            "custom-key", "custom-header",
+            "custom-key", "custom-header");
+
+    bytesIn.writeByte(0x40); // Never indexed
+    bytesIn.writeByte(0x0a); // Literal name (len = 10)
+    bytesIn.writeUtf8("custom-key");
+
+    bytesIn.writeByte(0x0d); // Literal value (len = 13)
+    bytesIn.writeUtf8("custom-header");
+
+    bytesIn.writeByte(0xbe); // Indexed name and value (idx = 63)
+
+    hpackWriter.writeHeaders(headerBlock);
+    assertEquals(bytesIn, bytesOut);
+
+    assertEquals(1, hpackWriter.dynamicTableHeaderCount);
+
+    Header entry = hpackWriter.dynamicTable[hpackWriter.dynamicTable.length - 1];
+    checkEntry(entry, "custom-key", "custom-header", 55);
+
+    hpackReader.readHeaders();
+
+    assertEquals(1, hpackReader.dynamicTableHeaderCount);
+
+    assertEquals(headerBlock, hpackReader.getAndResetHeaderList());
+  }
+
   @Test public void staticHeaderIsNotCopiedIntoTheIndexedTable() throws IOException {
     bytesIn.writeByte(0x82); // == Indexed - Add ==
     // idx = 2 -> :method: GET
@@ -290,7 +417,7 @@ public class HpackTest {
     assertEquals(0, hpackReader.dynamicTableHeaderCount);
     assertEquals(0, hpackReader.dynamicTableByteCount);
 
-    assertEquals(null, hpackReader.dynamicTable[headerTableLength() - 1]);
+    assertEquals(null, hpackReader.dynamicTable[readerHeaderTableLength() - 1]);
 
     assertEquals(headerEntries(":method", "GET"), hpackReader.getAndResetHeaderList());
   }
@@ -378,10 +505,10 @@ public class HpackTest {
    * http://tools.ietf.org/html/draft-ietf-httpbis-header-compression-12#appendix-C.2.4
    */
   @Test public void readIndexedHeaderFieldFromStaticTableWithoutBuffering() throws IOException {
+    bytesIn.writeByte(0x20); // Dynamic table size update (size = 0).
     bytesIn.writeByte(0x82); // == Indexed - Add ==
     // idx = 2 -> :method: GET
 
-    hpackReader.headerTableSizeSetting(0); // SETTINGS_HEADER_TABLE_SIZE == 0
     hpackReader.readHeaders();
 
     // Not buffered in header table.
@@ -389,6 +516,38 @@ public class HpackTest {
 
     assertEquals(headerEntries(":method", "GET"), hpackReader.getAndResetHeaderList());
   }
+
+  @Test
+  public void readLiteralHeaderWithIncrementalIndexingStaticName() throws IOException {
+    bytesIn.writeByte(0x7d); // == Literal indexed ==
+    // Indexed name (idx = 60) -> "www-authenticate"
+    bytesIn.writeByte(0x05); // Literal value (len = 5)
+    bytesIn.writeUtf8("Basic");
+
+    hpackReader.readHeaders();
+
+    assertEquals(headerEntries("www-authenticate", "Basic"),
+        hpackReader.getAndResetHeaderList());
+  }
+
+  @Test
+  public void readLiteralHeaderWithIncrementalIndexingDynamicName() throws IOException {
+    bytesIn.writeByte(0x40);
+    bytesIn.writeByte(0x0a); // Literal name (len = 10)
+    bytesIn.writeUtf8("custom-foo");
+    bytesIn.writeByte(0x05); // Literal value (len = 5)
+    bytesIn.writeUtf8("Basic");
+
+    bytesIn.writeByte(0x7e);
+    bytesIn.writeByte(0x06); // Literal value (len = 6)
+    bytesIn.writeUtf8("Basic2");
+
+    hpackReader.readHeaders();
+
+    assertEquals(headerEntries("custom-foo", "Basic", "custom-foo", "Basic2"),
+        hpackReader.getAndResetHeaderList());
+  }
+
 
   /**
    * http://tools.ietf.org/html/draft-ietf-httpbis-header-compression-12#appendix-C.2
@@ -405,6 +564,28 @@ public class HpackTest {
     thirdRequestWithoutHuffman();
     hpackReader.readHeaders();
     checkReadThirdRequestWithoutHuffman();
+  }
+
+  @Test
+  public void readFailingRequestExample() throws IOException {
+    bytesIn.writeByte(0x82); // == Indexed - Add ==
+    // idx = 2 -> :method: GET
+    bytesIn.writeByte(0x86); // == Indexed - Add ==
+    // idx = 7 -> :scheme: http
+    bytesIn.writeByte(0x84); // == Indexed - Add ==
+
+    bytesIn.writeByte(0x7f); // == Bad index! ==
+
+    // Indexed name (idx = 4) -> :authority
+    bytesIn.writeByte(0x0f); // Literal value (len = 15)
+    bytesIn.writeUtf8("www.example.com");
+
+    try {
+      hpackReader.readHeaders();
+      fail();
+    } catch (IOException e) {
+      assertEquals("Header index too large 78", e.getMessage());
+    }
   }
 
   private void firstRequestWithoutHuffman() {
@@ -424,7 +605,7 @@ public class HpackTest {
     assertEquals(1, hpackReader.dynamicTableHeaderCount);
 
     // [  1] (s =  57) :authority: www.example.com
-    Header entry = hpackReader.dynamicTable[headerTableLength() - 1];
+    Header entry = hpackReader.dynamicTable[readerHeaderTableLength() - 1];
     checkEntry(entry, ":authority", "www.example.com", 57);
 
     // Table size: 57
@@ -457,11 +638,11 @@ public class HpackTest {
     assertEquals(2, hpackReader.dynamicTableHeaderCount);
 
     // [  1] (s =  53) cache-control: no-cache
-    Header entry = hpackReader.dynamicTable[headerTableLength() - 2];
+    Header entry = hpackReader.dynamicTable[readerHeaderTableLength() - 2];
     checkEntry(entry, "cache-control", "no-cache", 53);
 
     // [  2] (s =  57) :authority: www.example.com
-    entry = hpackReader.dynamicTable[headerTableLength() - 1];
+    entry = hpackReader.dynamicTable[readerHeaderTableLength() - 1];
     checkEntry(entry, ":authority", "www.example.com", 57);
 
     // Table size: 110
@@ -496,15 +677,15 @@ public class HpackTest {
     assertEquals(3, hpackReader.dynamicTableHeaderCount);
 
     // [  1] (s =  54) custom-key: custom-value
-    Header entry = hpackReader.dynamicTable[headerTableLength() - 3];
+    Header entry = hpackReader.dynamicTable[readerHeaderTableLength() - 3];
     checkEntry(entry, "custom-key", "custom-value", 54);
 
     // [  2] (s =  53) cache-control: no-cache
-    entry = hpackReader.dynamicTable[headerTableLength() - 2];
+    entry = hpackReader.dynamicTable[readerHeaderTableLength() - 2];
     checkEntry(entry, "cache-control", "no-cache", 53);
 
     // [  3] (s =  57) :authority: www.example.com
-    entry = hpackReader.dynamicTable[headerTableLength() - 1];
+    entry = hpackReader.dynamicTable[readerHeaderTableLength() - 1];
     checkEntry(entry, ":authority", "www.example.com", 57);
 
     // Table size: 164
@@ -554,7 +735,7 @@ public class HpackTest {
     assertEquals(1, hpackReader.dynamicTableHeaderCount);
 
     // [  1] (s =  57) :authority: www.example.com
-    Header entry = hpackReader.dynamicTable[headerTableLength() - 1];
+    Header entry = hpackReader.dynamicTable[readerHeaderTableLength() - 1];
     checkEntry(entry, ":authority", "www.example.com", 57);
 
     // Table size: 57
@@ -588,11 +769,11 @@ public class HpackTest {
     assertEquals(2, hpackReader.dynamicTableHeaderCount);
 
     // [  1] (s =  53) cache-control: no-cache
-    Header entry = hpackReader.dynamicTable[headerTableLength() - 2];
+    Header entry = hpackReader.dynamicTable[readerHeaderTableLength() - 2];
     checkEntry(entry, "cache-control", "no-cache", 53);
 
     // [  2] (s =  57) :authority: www.example.com
-    entry = hpackReader.dynamicTable[headerTableLength() - 1];
+    entry = hpackReader.dynamicTable[readerHeaderTableLength() - 1];
     checkEntry(entry, ":authority", "www.example.com", 57);
 
     // Table size: 110
@@ -629,15 +810,15 @@ public class HpackTest {
     assertEquals(3, hpackReader.dynamicTableHeaderCount);
 
     // [  1] (s =  54) custom-key: custom-value
-    Header entry = hpackReader.dynamicTable[headerTableLength() - 3];
+    Header entry = hpackReader.dynamicTable[readerHeaderTableLength() - 3];
     checkEntry(entry, "custom-key", "custom-value", 54);
 
     // [  2] (s =  53) cache-control: no-cache
-    entry = hpackReader.dynamicTable[headerTableLength() - 2];
+    entry = hpackReader.dynamicTable[readerHeaderTableLength() - 2];
     checkEntry(entry, "cache-control", "no-cache", 53);
 
     // [  3] (s =  57) :authority: www.example.com
-    entry = hpackReader.dynamicTable[headerTableLength() - 1];
+    entry = hpackReader.dynamicTable[readerHeaderTableLength() - 1];
     checkEntry(entry, ":authority", "www.example.com", 57);
 
     // Table size: 164
@@ -702,7 +883,7 @@ public class HpackTest {
 
   @Test public void lowercaseHeaderNameBeforeEmit() throws IOException {
     hpackWriter.writeHeaders(Arrays.asList(new Header("FoO", "BaR")));
-    assertBytes(0, 3, 'f', 'o', 'o', 3, 'B', 'a', 'R');
+    assertBytes(0x40, 3, 'f', 'o', 'o', 3, 'B', 'a', 'R');
   }
 
   @Test public void mixedCaseHeaderNameIsMalformed() throws IOException {
@@ -719,6 +900,224 @@ public class HpackTest {
     assertBytes(0);
     assertEquals(ByteString.EMPTY, newReader(byteStream(0)).readByteString());
   }
+
+  @Test
+  public void emitsDynamicTableSizeUpdate() throws IOException {
+    hpackWriter.resizeHeaderTable(2048);
+    hpackWriter.writeHeaders(Arrays.asList(new Header("foo", "bar")));
+    assertBytes(
+        0x3F, 0xE1, 0xF, // Dynamic table size update (size = 2048).
+        0x40, 3, 'f', 'o', 'o', 3, 'b', 'a', 'r');
+
+    hpackWriter.resizeHeaderTable(8192);
+    hpackWriter.writeHeaders(Arrays.asList(new Header("bar", "foo")));
+    assertBytes(
+        0x3F, 0xE1, 0x3F, // Dynamic table size update (size = 8192).
+        0x40, 3, 'b', 'a', 'r', 3, 'f', 'o', 'o');
+
+    // No more dynamic table updates should be emitted.
+    hpackWriter.writeHeaders(Arrays.asList(new Header("far", "boo")));
+    assertBytes(0x40, 3, 'f', 'a', 'r', 3, 'b', 'o', 'o');
+  }
+
+  @Test
+  public void noDynamicTableSizeUpdateWhenSizeIsEqual() throws IOException {
+    int currentSize = hpackWriter.headerTableSizeSetting;
+    hpackWriter.resizeHeaderTable(currentSize);
+    hpackWriter.writeHeaders(Arrays.asList(new Header("foo", "bar")));
+
+    assertBytes(0x40, 3, 'f', 'o', 'o', 3, 'b', 'a', 'r');
+  }
+
+  @Test
+  public void growDynamicTableSize() throws IOException {
+    hpackWriter.resizeHeaderTable(8192);
+    hpackWriter.resizeHeaderTable(16384);
+    hpackWriter.writeHeaders(Arrays.asList(new Header("foo", "bar")));
+
+    assertBytes(
+        0x3F, 0xE1, 0x7F, // Dynamic table size update (size = 16384).
+        0x40, 3, 'f', 'o', 'o', 3, 'b', 'a', 'r');
+  }
+
+  @Test
+  public void shrinkDynamicTableSize() throws IOException {
+    hpackWriter.resizeHeaderTable(2048);
+    hpackWriter.resizeHeaderTable(0);
+    hpackWriter.writeHeaders(Arrays.asList(new Header("foo", "bar")));
+
+    assertBytes(
+        0x20, // Dynamic size update (size = 0).
+        0x40, 3, 'f', 'o', 'o', 3, 'b', 'a', 'r');
+  }
+
+  @Test
+  public void manyDynamicTableSizeChanges() throws IOException {
+    hpackWriter.resizeHeaderTable(16384);
+    hpackWriter.resizeHeaderTable(8096);
+    hpackWriter.resizeHeaderTable(0);
+    hpackWriter.resizeHeaderTable(4096);
+    hpackWriter.resizeHeaderTable(2048);
+    hpackWriter.writeHeaders(Arrays.asList(new Header("foo", "bar")));
+
+    assertBytes(
+        0x20, // Dynamic size update (size = 0).
+        0x3F, 0xE1, 0xF, // Dynamic size update (size = 2048).
+        0x40, 3, 'f', 'o', 'o', 3, 'b', 'a', 'r');
+  }
+
+  @Test
+  public void dynamicTableEvictionWhenSizeLowered() throws IOException {
+    List<Header> headerBlock =
+        headerEntries(
+            "custom-key1", "custom-header",
+            "custom-key2", "custom-header");
+    hpackWriter.writeHeaders(headerBlock);
+    assertEquals(2, hpackWriter.dynamicTableHeaderCount);
+
+    hpackWriter.resizeHeaderTable(56);
+    assertEquals(1, hpackWriter.dynamicTableHeaderCount);
+
+    hpackWriter.resizeHeaderTable(0);
+    assertEquals(0, hpackWriter.dynamicTableHeaderCount);
+  }
+
+  @Test
+  public void noEvictionOnDynamicTableSizeIncrease() throws IOException {
+    List<Header> headerBlock =
+        headerEntries(
+            "custom-key1", "custom-header",
+            "custom-key2", "custom-header");
+    hpackWriter.writeHeaders(headerBlock);
+    assertEquals(2, hpackWriter.dynamicTableHeaderCount);
+
+    hpackWriter.resizeHeaderTable(8192);
+    assertEquals(2, hpackWriter.dynamicTableHeaderCount);
+  }
+
+  @Test
+  public void dynamicTableSizeHasAnUpperBound() {
+    hpackWriter.resizeHeaderTable(1048576);
+    assertEquals(16384, hpackWriter.maxDynamicTableByteCount());
+  }
+
+  @Test
+  public void huffmanEncode() throws IOException {
+    hpackWriter = new Hpack.Writer(4096, true, bytesOut);
+    hpackWriter.writeHeaders(headerEntries("foo", "bar"));
+
+    ByteString expected = new Buffer()
+        .writeByte(0x40) // Literal header, new name.
+        .writeByte(0x82) // String literal is Huffman encoded (len = 2).
+        .writeByte(0x94) // 'foo' Huffman encoded.
+        .writeByte(0xE7)
+        .writeByte(3) // String literal not Huffman encoded (len = 3).
+        .writeByte('b')
+        .writeByte('a')
+        .writeByte('r')
+        .readByteString();
+
+    ByteString actual = bytesOut.readByteString();
+    assertEquals(expected, actual);
+  }
+
+  @Test
+  public void staticTableIndexedHeaders() throws IOException {
+    hpackWriter.writeHeaders(headerEntries(":method", "GET"));
+    assertBytes(0x82);
+    assertEquals(0, hpackWriter.dynamicTableHeaderCount);
+
+    hpackWriter.writeHeaders(headerEntries(":method", "POST"));
+    assertBytes(0x83);
+    assertEquals(0, hpackWriter.dynamicTableHeaderCount);
+
+    hpackWriter.writeHeaders(headerEntries(":path", "/"));
+    assertBytes(0x84);
+    assertEquals(0, hpackWriter.dynamicTableHeaderCount);
+
+    hpackWriter.writeHeaders(headerEntries(":path", "/index.html"));
+    assertBytes(0x85);
+    assertEquals(0, hpackWriter.dynamicTableHeaderCount);
+
+    hpackWriter.writeHeaders(headerEntries(":scheme", "http"));
+    assertBytes(0x86);
+    assertEquals(0, hpackWriter.dynamicTableHeaderCount);
+
+    hpackWriter.writeHeaders(headerEntries(":scheme", "https"));
+    assertBytes(0x87);
+    assertEquals(0, hpackWriter.dynamicTableHeaderCount);
+  }
+
+  @Test
+  public void dynamicTableIndexedHeader() throws IOException {
+    hpackWriter.writeHeaders(headerEntries("custom-key", "custom-header"));
+    assertBytes(0x40,
+        10, 'c', 'u', 's', 't', 'o', 'm', '-', 'k', 'e', 'y',
+        13, 'c', 'u', 's', 't', 'o', 'm', '-', 'h', 'e', 'a', 'd', 'e', 'r');
+    assertEquals(1, hpackWriter.dynamicTableHeaderCount);
+
+    hpackWriter.writeHeaders(headerEntries("custom-key", "custom-header"));
+    assertBytes(0xbe);
+    assertEquals(1, hpackWriter.dynamicTableHeaderCount);
+  }
+
+  @Test
+  public void doNotIndexPseudoHeaders() throws IOException {
+    hpackWriter.writeHeaders(headerEntries(":method", "PUT"));
+    assertBytes(0x02, 3, 'P', 'U', 'T');
+    assertEquals(0, hpackWriter.dynamicTableHeaderCount);
+
+    hpackWriter.writeHeaders(headerEntries(":path", "/okhttp"));
+    assertBytes(0x04, 7, '/', 'o', 'k', 'h', 't', 't', 'p');
+    assertEquals(0, hpackWriter.dynamicTableHeaderCount);
+  }
+
+  @Test
+  public void incrementalIndexingWithAuthorityPseudoHeader() throws IOException {
+    hpackWriter.writeHeaders(headerEntries(":authority", "foo.com"));
+    assertBytes(0x41, 7, 'f', 'o', 'o', '.', 'c', 'o', 'm');
+    assertEquals(1, hpackWriter.dynamicTableHeaderCount);
+
+    hpackWriter.writeHeaders(headerEntries(":authority", "foo.com"));
+    assertBytes(0xbe);
+    assertEquals(1, hpackWriter.dynamicTableHeaderCount);
+
+    // If the :authority header somehow changes, it should be re-added to the dynamic table.
+    hpackWriter.writeHeaders(headerEntries(":authority", "bar.com"));
+    assertBytes(0x41, 7, 'b', 'a', 'r', '.', 'c', 'o', 'm');
+    assertEquals(2, hpackWriter.dynamicTableHeaderCount);
+
+    hpackWriter.writeHeaders(headerEntries(":authority", "bar.com"));
+    assertBytes(0xbe);
+    assertEquals(2, hpackWriter.dynamicTableHeaderCount);
+  }
+
+  @Test
+  public void incrementalIndexingWithStaticTableIndexedName() throws IOException {
+    hpackWriter.writeHeaders(headerEntries("accept-encoding", "gzip"));
+    assertBytes(0x50, 4, 'g', 'z', 'i', 'p');
+    assertEquals(1, hpackWriter.dynamicTableHeaderCount);
+
+    hpackWriter.writeHeaders(headerEntries("accept-encoding", "gzip"));
+    assertBytes(0xbe);
+    assertEquals(1, hpackWriter.dynamicTableHeaderCount);
+  }
+
+  @Test
+  public void incrementalIndexingWithDynamcTableIndexedName() throws IOException {
+    hpackWriter.writeHeaders(headerEntries("foo", "bar"));
+    assertBytes(0x40, 3, 'f', 'o', 'o', 3, 'b', 'a', 'r');
+    assertEquals(1, hpackWriter.dynamicTableHeaderCount);
+
+    hpackWriter.writeHeaders(headerEntries("foo", "bar1"));
+    assertBytes(0x7e, 4, 'b', 'a', 'r', '1');
+    assertEquals(2, hpackWriter.dynamicTableHeaderCount);
+
+    hpackWriter.writeHeaders(headerEntries("foo", "bar1"));
+    assertBytes(0xbe);
+    assertEquals(2, hpackWriter.dynamicTableHeaderCount);
+  }
+
 
   private Hpack.Reader newReader(Buffer source) {
     return new Hpack.Reader(4096, source);
@@ -748,7 +1147,7 @@ public class HpackTest {
     return ByteString.of(data);
   }
 
-  private int headerTableLength() {
+  private int readerHeaderTableLength() {
     return hpackReader.dynamicTable.length;
   }
 }

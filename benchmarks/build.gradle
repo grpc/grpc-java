@@ -1,12 +1,11 @@
-buildscript {
-    repositories {
-        maven { // The google mirror is less flaky than mavenCentral()
-            url "https://maven-central.storage-download.googleapis.com/repos/central/data/" }
-    }
-    dependencies { classpath libraries.protobuf_plugin }
-}
+plugins {
+    id "application"
+    id "java"
+    id "maven-publish"
 
-apply plugin: 'application'
+    id "com.google.protobuf"
+    id "me.champeau.gradle.jmh"
+}
 
 description = "grpc Benchmarks"
 
@@ -15,25 +14,28 @@ run.enabled = false
 
 jmh {
     jvmArgs = "-server -Xms2g -Xmx2g"
-    // Workaround
-    // https://github.com/melix/jmh-gradle-plugin/issues/97#issuecomment-316664026
-    includeTests = true
+}
+
+configurations {
+    alpnagent
 }
 
 dependencies {
-    compile project(':grpc-core'),
+    implementation project(':grpc-core'),
             project(':grpc-netty'),
             project(':grpc-okhttp'),
             project(':grpc-stub'),
             project(':grpc-protobuf'),
             project(':grpc-testing'),
-            libraries.junit,
-            libraries.mockito,
             libraries.hdrhistogram,
             libraries.netty_tcnative,
             libraries.netty_epoll,
             libraries.math
     compileOnly libraries.javax_annotation
+    alpnagent libraries.jetty_alpn_agent
+
+    testImplementation libraries.junit,
+            libraries.mockito
 }
 
 import net.ltgt.gradle.errorprone.CheckSeverity
@@ -95,4 +97,13 @@ applicationDistribution.into("bin") {
     from(qps_server)
     from(benchmark_worker)
     fileMode = 0755
+}
+
+publishing {
+    publications {
+        maven(MavenPublication) {
+            artifact distZip
+            artifact distTar
+        }
+    }
 }

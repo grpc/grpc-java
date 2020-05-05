@@ -62,7 +62,8 @@ public abstract class ClientStreamTracer extends StreamTracer {
      *        method.  It should not be saved because it is not safe for read or write after the
      *        method returns.
      *
-     * @deprecated use {@link #newClientStreamTracer(StreamInfo, Metadata)} instead
+     * @deprecated use {@link
+     * #newClientStreamTracer(io.grpc.ClientStreamTracer.StreamInfo, io.grpc.Metadata)} instead.
      */
     @Deprecated
     public ClientStreamTracer newClientStreamTracer(CallOptions callOptions, Metadata headers) {

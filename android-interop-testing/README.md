@@ -3,8 +3,6 @@ gRPC Android test App
 
 Implements gRPC integration tests in an Android App.
 
-TODO(madongfly) integrate this App into the gRPC-Java build system.
-
 In order to build this app, you need a local.properties file under this directory which specifies
 the location of your android sdk:
 ```

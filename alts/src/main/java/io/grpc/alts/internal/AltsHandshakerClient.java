@@ -82,6 +82,7 @@ class AltsHandshakerClient {
         startClientReq.addTargetIdentitiesBuilder().setServiceAccount(serviceAccount);
       }
     }
+    startClientReq.setMaxFrameSize(AltsTsiFrameProtector.getMaxFrameSize());
     req.setClientStart(startClientReq);
   }
 
@@ -97,6 +98,7 @@ class AltsHandshakerClient {
     if (handshakerOptions.getRpcProtocolVersions() != null) {
       startServerReq.setRpcVersions(handshakerOptions.getRpcProtocolVersions());
     }
+    startServerReq.setMaxFrameSize(AltsTsiFrameProtector.getMaxFrameSize());
     req.setServerStart(startServerReq);
   }
 
@@ -229,8 +231,14 @@ class AltsHandshakerClient {
     return resp.getOutFrames().asReadOnlyByteBuffer();
   }
 
+  private boolean closed = false;
+
   /** Closes the connection. */
   public void close() {
+    if (closed) {
+      return;
+    }
+    closed = true;
     handshakerStub.close();
   }
 }

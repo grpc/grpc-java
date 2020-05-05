@@ -17,6 +17,7 @@
 package io.grpc.examples.experimental;
 
 import java.io.IOException;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
 import io.grpc.Metadata;
@@ -33,7 +34,7 @@ import io.grpc.stub.StreamObserver;
 
 /**
  * Server that manages startup/shutdown of a {@code Greeter} server
- * with an interceptor to enable compression for all responses. 
+ * with an interceptor to enable compression for all responses.
  */
 public class CompressingHelloWorldServerAllMethods {
   private static final Logger logger = Logger.getLogger(CompressingHelloWorldServerAllMethods.class.getName());
@@ -62,15 +63,19 @@ public class CompressingHelloWorldServerAllMethods {
       public void run() {
         // Use stderr here since the logger may have been reset by its JVM shutdown hook.
         System.err.println("*** shutting down gRPC server since JVM is shutting down");
-        CompressingHelloWorldServerAllMethods.this.stop();
+        try {
+          CompressingHelloWorldServerAllMethods.this.stop();
+        } catch (InterruptedException e) {
+          e.printStackTrace(System.err);
+        }
         System.err.println("*** server shut down");
       }
     });
   }
 
-  private void stop() {
+  private void stop() throws InterruptedException {
     if (server != null) {
-      server.shutdown();
+      server.shutdown().awaitTermination(30, TimeUnit.SECONDS);
     }
   }
 

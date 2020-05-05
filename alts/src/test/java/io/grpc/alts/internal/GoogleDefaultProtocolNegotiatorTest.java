@@ -24,8 +24,8 @@ import com.google.common.collect.ImmutableList;
 import io.grpc.Attributes;
 import io.grpc.Channel;
 import io.grpc.ManagedChannel;
+import io.grpc.grpclb.GrpclbConstants;
 import io.grpc.inprocess.InProcessChannelBuilder;
-import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.ObjectPool;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
 import io.grpc.netty.GrpcSslContexts;
@@ -80,7 +80,7 @@ public final class GoogleDefaultProtocolNegotiatorTest {
   @Test
   public void altsHandler() {
     Attributes eagAttributes =
-        Attributes.newBuilder().set(GrpcAttributes.ATTR_LB_PROVIDED_BACKEND, true).build();
+        Attributes.newBuilder().set(GrpclbConstants.ATTR_LB_PROVIDED_BACKEND, true).build();
     GrpcHttp2ConnectionHandler mockHandler = mock(GrpcHttp2ConnectionHandler.class);
     when(mockHandler.getEagAttributes()).thenReturn(eagAttributes);
 

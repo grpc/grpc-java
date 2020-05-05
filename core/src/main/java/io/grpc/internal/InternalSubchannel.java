@@ -111,6 +111,10 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
 
   @Nullable
   private ScheduledHandle reconnectTask;
+  @Nullable
+  private ScheduledHandle shutdownDueToUpdateTask;
+  @Nullable
+  private ManagedClientTransport shutdownDueToUpdateTransport;
 
   /**
    * All transports that are not terminated. At the very least the value of {@link #activeTransport}
@@ -231,10 +235,13 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
       address = proxiedAddr.getTargetAddress();
     }
 
+    Attributes currentEagAttributes = addressIndex.getCurrentEagAttributes();
+    String eagChannelAuthority = currentEagAttributes
+            .get(EquivalentAddressGroup.ATTR_AUTHORITY_OVERRIDE);
     ClientTransportFactory.ClientTransportOptions options =
         new ClientTransportFactory.ClientTransportOptions()
-          .setAuthority(authority)
-          .setEagAttributes(addressIndex.getCurrentEagAttributes())
+          .setAuthority(eagChannelAuthority != null ? eagChannelAuthority : authority)
+          .setEagAttributes(currentEagAttributes)
           .setUserAgent(userAgent)
           .setHttpConnectProxiedSocketAddress(proxiedAddr);
     TransportLogger transportLogger = new TransportLogger();
@@ -351,7 +358,9 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
               addressIndex.reset();
               gotoNonErrorState(IDLE);
             } else {
-              savedTransport = pendingTransport;
+              pendingTransport.shutdown(
+                  Status.UNAVAILABLE.withDescription(
+                    "InternalSubchannel closed pending transport due to address change"));
               pendingTransport = null;
               addressIndex.reset();
               startNewTransport();
@@ -359,9 +368,33 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
           }
         }
         if (savedTransport != null) {
-          savedTransport.shutdown(
-              Status.UNAVAILABLE.withDescription(
-                  "InternalSubchannel closed transport due to address change"));
+          if (shutdownDueToUpdateTask != null) {
+            // Keeping track of multiple shutdown tasks adds complexity, and shouldn't generally be
+            // necessary. This transport has probably already had plenty of time.
+            shutdownDueToUpdateTransport.shutdown(
+                Status.UNAVAILABLE.withDescription(
+                    "InternalSubchannel closed transport early due to address change"));
+            shutdownDueToUpdateTask.cancel();
+            shutdownDueToUpdateTask = null;
+            shutdownDueToUpdateTransport = null;
+          }
+          // Avoid needless RPC failures by delaying the shutdown. See
+          // https://github.com/grpc/grpc-java/issues/2562
+          shutdownDueToUpdateTransport = savedTransport;
+          shutdownDueToUpdateTask = syncContext.schedule(
+              new Runnable() {
+                @Override public void run() {
+                  ManagedClientTransport transport = shutdownDueToUpdateTransport;
+                  shutdownDueToUpdateTask = null;
+                  shutdownDueToUpdateTransport = null;
+                  transport.shutdown(
+                      Status.UNAVAILABLE.withDescription(
+                          "InternalSubchannel closed transport due to address change"));
+                }
+              },
+              ManagedChannelImpl.SUBCHANNEL_SHUTDOWN_DELAY_SECONDS,
+              TimeUnit.SECONDS,
+              scheduledExecutor);
         }
       }
     });
@@ -387,6 +420,12 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
           handleTermination();
         }  // else: the callback will be run once all transports have been terminated
         cancelReconnectTask();
+        if (shutdownDueToUpdateTask != null) {
+          shutdownDueToUpdateTask.cancel();
+          shutdownDueToUpdateTransport.shutdown(reason);
+          shutdownDueToUpdateTask = null;
+          shutdownDueToUpdateTransport = null;
+        }
         if (savedActiveTransport != null) {
           savedActiveTransport.shutdown(reason);
         }

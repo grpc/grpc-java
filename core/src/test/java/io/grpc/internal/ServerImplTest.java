@@ -19,6 +19,7 @@ package io.grpc.internal;
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.InternalChannelz.id;
 import static io.grpc.internal.GrpcUtil.MESSAGE_ENCODING_KEY;
+import static io.grpc.internal.GrpcUtil.TIMEOUT_KEY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -35,6 +36,7 @@ import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -108,6 +110,7 @@ import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Captor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
@@ -199,6 +202,7 @@ public class ServerImplTest {
   public void startUp() throws IOException {
     MockitoAnnotations.initMocks(this);
     builder.channelz = channelz;
+    builder.ticker = timer.getDeadlineTicker();
     streamTracerFactories = Arrays.asList(streamTracerFactory);
     when(executorPool.getObject()).thenReturn(executor.getScheduledExecutorService());
     when(streamTracerFactory.newServerStreamTracer(anyString(), any(Metadata.class)))
@@ -483,6 +487,7 @@ public class ServerImplTest {
 
     transportListener.streamCreated(stream, "Waiter/nonexist", requestHeaders);
 
+    verify(stream).setListener(isA(ServerStreamListener.class));
     verify(stream).streamId();
     verify(stream).close(statusCaptor.capture(), any(Metadata.class));
     Status status = statusCaptor.getValue();
@@ -556,6 +561,7 @@ public class ServerImplTest {
     Context callContext = callContextReference.get();
     assertNotNull(callContext);
     assertEquals("context added by tracer", SERVER_TRACER_ADDED_KEY.get(callContext));
+    assertEquals(server, io.grpc.InternalServer.SERVER_CONTEXT_KEY.get(callContext));
 
     streamListener.messagesAvailable(new SingleMessageProducer(STRING_MARSHALLER.stream(request)));
     assertEquals(1, executor.runDueTasks());
@@ -977,10 +983,11 @@ public class ServerImplTest {
     verify(stream, times(0)).close(isA(Status.class), ArgumentMatchers.<Metadata>isNotNull());
   }
 
-  private ServerStreamListener testClientClose_setup(
+  private ServerStreamListener testStreamClose_setup(
       final AtomicReference<ServerCall<String, Integer>> callReference,
       final AtomicReference<Context> context,
-      final AtomicBoolean contextCancelled) throws Exception {
+      final AtomicBoolean contextCancelled,
+      @Nullable Long timeoutNanos) throws Exception {
     createAndStartServer();
     callListener = new ServerCall.Listener<String>() {
       @Override
@@ -1011,6 +1018,9 @@ public class ServerImplTest {
         = transportServer.registerNewServerTransport(new SimpleServerTransport());
     transportListener.transportReady(Attributes.EMPTY);
     Metadata requestHeaders = new Metadata();
+    if (timeoutNanos != null) {
+      requestHeaders.put(TIMEOUT_KEY, timeoutNanos);
+    }
     StatsTraceContext statsTraceCtx =
         StatsTraceContext.newServerContext(streamTracerFactories, "Waitier/serve", requestHeaders);
     when(stream.statsTraceContext()).thenReturn(statsTraceCtx);
@@ -1025,14 +1035,33 @@ public class ServerImplTest {
   }
 
   @Test
-  public void testClientClose_cancelTriggersImmediateCancellation() throws Exception {
+  public void testContextExpiredBeforeStreamCreate_StreamCancelNotCalledBeforeSetListener()
+      throws Exception {
     AtomicBoolean contextCancelled = new AtomicBoolean(false);
     AtomicReference<Context> context = new AtomicReference<>();
-    AtomicReference<ServerCall<String, Integer>> callReference
-        = new AtomicReference<>();
+    AtomicReference<ServerCall<String, Integer>> callReference = new AtomicReference<>();
 
-    ServerStreamListener streamListener = testClientClose_setup(callReference,
-        context, contextCancelled);
+    testStreamClose_setup(callReference, context, contextCancelled, 0L);
+
+    // This assert that stream.setListener(jumpListener) is called before stream.cancel(), which
+    // prevents extremely short deadlines causing NPEs.
+    InOrder inOrder = inOrder(stream);
+    inOrder.verify(stream).setListener(any(ServerStreamListener.class));
+    inOrder.verify(stream).cancel(statusCaptor.capture());
+
+    assertThat(statusCaptor.getValue().asException())
+        .hasMessageThat().contains("context timed out");
+    assertTrue(callReference.get().isCancelled());
+  }
+
+  @Test
+  public void testStreamClose_clientCancelTriggersImmediateCancellation() throws Exception {
+    AtomicBoolean contextCancelled = new AtomicBoolean(false);
+    AtomicReference<Context> context = new AtomicReference<>();
+    AtomicReference<ServerCall<String, Integer>> callReference = new AtomicReference<>();
+
+    ServerStreamListener streamListener = testStreamClose_setup(callReference,
+        context, contextCancelled, null);
 
     // For close status being non OK:
     // isCancelled is expected to be true immediately after calling closed(), without needing
@@ -1048,14 +1077,13 @@ public class ServerImplTest {
   }
 
   @Test
-  public void testClientClose_OkTriggersDelayedCancellation() throws Exception {
+  public void testStreamClose_clientOkTriggersDelayedCancellation() throws Exception {
     AtomicBoolean contextCancelled = new AtomicBoolean(false);
     AtomicReference<Context> context = new AtomicReference<>();
-    AtomicReference<ServerCall<String, Integer>> callReference
-        = new AtomicReference<>();
+    AtomicReference<ServerCall<String, Integer>> callReference = new AtomicReference<>();
 
-    ServerStreamListener streamListener = testClientClose_setup(callReference,
-        context, contextCancelled);
+    ServerStreamListener streamListener = testStreamClose_setup(callReference,
+        context, contextCancelled, null);
 
     // For close status OK:
     // isCancelled is expected to be true after all pending work is done
@@ -1066,6 +1094,26 @@ public class ServerImplTest {
     assertFalse(context.get().isCancelled());
 
     assertEquals(1, executor.runDueTasks());
+    assertTrue(callReference.get().isCancelled());
+    assertTrue(context.get().isCancelled());
+    assertTrue(contextCancelled.get());
+  }
+
+  @Test
+  public void testStreamClose_deadlineExceededTriggersImmediateCancellation() throws Exception {
+    AtomicBoolean contextCancelled = new AtomicBoolean(false);
+    AtomicReference<Context> context = new AtomicReference<>();
+    AtomicReference<ServerCall<String, Integer>> callReference = new AtomicReference<>();
+
+    testStreamClose_setup(callReference, context, contextCancelled, 50L);
+
+    timer.forwardNanos(49);
+
+    assertFalse(callReference.get().isCancelled());
+    assertFalse(context.get().isCancelled());
+
+    assertEquals(1, timer.forwardNanos(1));
+    
     assertTrue(callReference.get().isCancelled());
     assertTrue(context.get().isCancelled());
     assertTrue(contextCancelled.get());

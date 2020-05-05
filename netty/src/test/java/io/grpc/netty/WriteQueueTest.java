@@ -48,7 +48,7 @@ import org.mockito.stubbing.Answer;
 public class WriteQueueTest {
 
   @Rule
-  public final Timeout globalTimeout = Timeout.seconds(10);
+  public final Timeout globalTimeout = Timeout.seconds(60);
 
   private final Object lock = new Object();
 

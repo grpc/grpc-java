@@ -17,33 +17,30 @@
 package io.grpc.xds;
 
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
+import io.grpc.xds.EnvoyProtoData.Locality;
 import javax.annotation.Nullable;
 
 /**
- * Interface for client side load stats store. An {@code LoadStatsStore} maintains load stats for
- * a service cluster (i.e., GSLB service) exposed by traffic director from a gRPC client's
- * perspective, including dropped calls instructed by traffic director. Load stats for endpoints
- * (i.e., Google backends) are aggregated in locality granularity (i.e., Google cluster) while the
- * numbers of dropped calls are aggregated in cluster granularity.
+ * Interface for client side load stats store. An {@code LoadStatsStore} maintains load stats per
+ * cluster:cluster_service exposed by traffic director from a gRPC client's perspective,
+ * including dropped calls. Load stats for endpoints (i.e., Google backends) are aggregated in
+ * locality granularity (i.e., Google cluster) while the numbers of dropped calls are aggregated
+ * in cluster:cluster_service granularity.
  *
- * <p>An {@code LoadStatsStore} lives the same span of lifecycle as {@link XdsLoadBalancer} and
- * only tracks loads for localities exposed by remote traffic director. A proper usage should be
+ * <p>An {@code LoadStatsStore} only tracks loads for localities exposed by remote traffic
+ * director. A proper usage should be
  *
  * <ol>
  *   <li>Let {@link LoadStatsStore} track the locality newly exposed by traffic director by
- *       calling {@link #addLocality(XdsLocality)}.
- *   <li>Use the locality counter returned by {@link #getLocalityCounter(XdsLocality)} to record
+ *       calling {@link #addLocality(Locality)}.
+ *   <li>Use the locality counter returned by {@link #getLocalityCounter(Locality)} to record
  *       load stats for the corresponding locality.
  *   <li>Tell {@link LoadStatsStore} to stop tracking the locality no longer exposed by traffic
- *       director by calling {@link #removeLocality(XdsLocality)}.
+ *       director by calling {@link #removeLocality(Locality)}.
  * </ol>
  *
  * <p>No locality information is needed for recording dropped calls since they are aggregated in
  * cluster granularity.
- *
- * <p>Note implementations should only be responsible for keeping track of loads and generating
- * load reports with load data, any load reporting information should be opaque to {@code
- * LoadStatsStore} and be set outside.
  */
 interface LoadStatsStore {
 
@@ -56,11 +53,11 @@ interface LoadStatsStore {
    * once all of theirs loads are completed and reported.
    *
    * <p>The fields {@code cluster_name} and {@code load_report_interval} in the returned {@link
-   * ClusterStats} needs to be set before it is ready to be sent to the traffic directory for load
+   * ClusterStats} needs to be set before it is ready to be sent to the traffic director for load
    * reporting.
    *
    * <p>This method is not thread-safe and should be called from the same synchronized context
-   * returned by {@link XdsLoadBalancer.Helper#getSynchronizationContext}.
+   * used by {@link LoadReportClient}.
    */
   ClusterStats generateLoadReport();
 
@@ -69,12 +66,12 @@ interface LoadStatsStore {
    * endpoints in added localities will be recorded and included in generated load reports.
    *
    * <p>This method needs to be called at locality updates only for newly assigned localities in
-   * balancer discovery responses before recording loads for those localities.
+   * endpoint discovery responses before recording loads for those localities.
    *
    * <p>This method is not thread-safe and should be called from the same synchronized context
-   * returned by {@link XdsLoadBalancer.Helper#getSynchronizationContext}.
+   * used by {@link LoadReportClient}.
    */
-  void addLocality(XdsLocality locality);
+  void addLocality(Locality locality);
 
   /**
    * Stops tracking load stats for endpoints in the provided locality. gRPC clients are expected not
@@ -87,9 +84,9 @@ interface LoadStatsStore {
    * waste and keep including zero-load upstream locality stats in generated load reports.
    *
    * <p>This method is not thread-safe and should be called from the same synchronized context
-   * returned by {@link XdsLoadBalancer.Helper#getSynchronizationContext}.
+   * used by {@link LoadReportClient}.
    */
-  void removeLocality(XdsLocality locality);
+  void removeLocality(Locality locality);
 
   /**
    * Returns the locality counter that does locality level stats aggregation for the provided
@@ -98,7 +95,7 @@ interface LoadStatsStore {
    * <p>This method is thread-safe.
    */
   @Nullable
-  ClientLoadCounter getLocalityCounter(XdsLocality locality);
+  ClientLoadCounter getLocalityCounter(Locality locality);
 
   /**
    * Records a drop decision made by a {@link io.grpc.LoadBalancer.SubchannelPicker} instance

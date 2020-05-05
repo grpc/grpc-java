@@ -224,6 +224,11 @@ public class FakeTsiHandshaker implements TsiHandshaker {
 
   @Override
   public TsiFrameProtector createFrameProtector(ByteBufAllocator alloc) {
-    return createFrameProtector(AltsTsiFrameProtector.getMaxAllowedFrameBytes(), alloc);
+    return createFrameProtector(AltsTsiFrameProtector.getMinFrameSize(), alloc);
+  }
+
+  @Override
+  public void close() {
+    // No-op
   }
 }

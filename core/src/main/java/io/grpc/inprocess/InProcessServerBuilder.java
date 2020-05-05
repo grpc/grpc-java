@@ -19,6 +19,7 @@ package io.grpc.inprocess;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.Preconditions;
+import io.grpc.Deadline;
 import io.grpc.ExperimentalApi;
 import io.grpc.ServerStreamTracer;
 import io.grpc.internal.AbstractServerImplBuilder;
@@ -122,6 +123,24 @@ public final class InProcessServerBuilder
       ScheduledExecutorService scheduledExecutorService) {
     schedulerPool = new FixedObjectPool<>(
         checkNotNull(scheduledExecutorService, "scheduledExecutorService"));
+    return this;
+  }
+
+  /**
+   * Provides a custom deadline ticker that this server will use to create incoming {@link
+   * Deadline}s.
+   *
+   * <p>This is intended for unit tests that fake out the clock.  You should also have a fake {@link
+   * ScheduledExecutorService} whose clock is synchronized with this ticker and set it to {@link
+   * #scheduledExecutorService}. DO NOT use this in production.
+   *
+   * @return this
+   * @see Deadline#after(long, TimeUnit, Deadline.Ticker)
+   *
+   * @since 1.24.0
+   */
+  public InProcessServerBuilder deadlineTicker(Deadline.Ticker ticker) {
+    setDeadlineTicker(ticker);
     return this;
   }
 

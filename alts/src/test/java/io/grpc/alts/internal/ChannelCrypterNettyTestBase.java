@@ -35,7 +35,7 @@ import org.junit.Test;
 
 /** Abstract class for unit tests of {@link ChannelCrypterNetty}. */
 public abstract class ChannelCrypterNettyTestBase {
-  private static final String DECRYPTION_FAILURE_MESSAGE = "Tag mismatch";
+  private static final String DECRYPTION_FAILURE_MESSAGE_RE = "Tag mismatch|BAD_DECRYPT";
 
   protected final List<ReferenceCounted> references = new ArrayList<>();
   public ChannelCrypterNetty client;
@@ -169,7 +169,7 @@ public abstract class ChannelCrypterNettyTestBase {
       client.decrypt(frameDecrypt.out, frameDecrypt.tag, frameDecrypt.ciphertext);
       fail("Exception expected");
     } catch (AEADBadTagException ex) {
-      assertThat(ex).hasMessageThat().contains(DECRYPTION_FAILURE_MESSAGE);
+      assertThat(ex).hasMessageThat().containsMatch(DECRYPTION_FAILURE_MESSAGE_RE);
     }
   }
 
@@ -186,7 +186,7 @@ public abstract class ChannelCrypterNettyTestBase {
       client.decrypt(frameDecrypt.out, frameDecrypt.tag, frameDecrypt.ciphertext);
       fail("Exception expected");
     } catch (AEADBadTagException ex) {
-      assertThat(ex).hasMessageThat().contains(DECRYPTION_FAILURE_MESSAGE);
+      assertThat(ex).hasMessageThat().containsMatch(DECRYPTION_FAILURE_MESSAGE_RE);
     }
   }
 
@@ -202,7 +202,7 @@ public abstract class ChannelCrypterNettyTestBase {
       client.decrypt(frameDecrypt.out, frameDecrypt.tag, frameDecrypt.ciphertext);
       fail("Exception expected");
     } catch (AEADBadTagException ex) {
-      assertThat(ex).hasMessageThat().contains(DECRYPTION_FAILURE_MESSAGE);
+      assertThat(ex).hasMessageThat().containsMatch(DECRYPTION_FAILURE_MESSAGE_RE);
     }
   }
 
@@ -220,7 +220,7 @@ public abstract class ChannelCrypterNettyTestBase {
       server.decrypt(frameDecrypt2.out, frameDecrypt2.tag, frameDecrypt2.ciphertext);
       fail("Exception expected");
     } catch (AEADBadTagException ex) {
-      assertThat(ex).hasMessageThat().contains(DECRYPTION_FAILURE_MESSAGE);
+      assertThat(ex).hasMessageThat().containsMatch(DECRYPTION_FAILURE_MESSAGE_RE);
     }
   }
 }

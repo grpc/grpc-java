@@ -10,18 +10,22 @@ BASE_DIR="$(pwd)"
 
 cd "$BASE_DIR/github/grpc-java"
 
-export GRADLE_OPTS=-Xmx512m
 export LDFLAGS=-L/tmp/protobuf/lib
 export CXXFLAGS=-I/tmp/protobuf/include
 export LD_LIBRARY_PATH=/tmp/protobuf/lib
 export OS_NAME=$(uname)
 
+cat <<EOF >> gradle.properties
+# defaults to -Xmx512m -XX:MaxMetaspaceSize=256m
+# https://docs.gradle.org/current/userguide/build_environment.html#sec:configuring_jvm_memory
+# Increased due to java.lang.OutOfMemoryError: Metaspace failures
+org.gradle.jvmargs=-Xmx512m -XX:MaxMetaspaceSize=512m
+EOF
+
 echo y | ${ANDROID_HOME}/tools/bin/sdkmanager "build-tools;28.0.3"
 
 # Proto deps
 buildscripts/make_dependencies.sh
-
-./gradlew publishToMavenLocal
 
 # Build grpc-cronet
 
@@ -40,6 +44,9 @@ pushd android-interop-testing
 ../gradlew build
 popd
 
+# Examples pull dependencies from maven local
+./gradlew publishToMavenLocal
+
 # Build examples
 
 cd ./examples/android/clientcache
@@ -48,9 +55,6 @@ cd ../routeguide
 ../../gradlew build
 cd ../helloworld
 ../../gradlew build
-
-cd "$BASE_DIR/github/grpc-java/examples/example-kotlin/android/helloworld/"
-../../../gradlew build
 
 # Skip APK size and dex count comparisons for non-PR builds
 
@@ -86,6 +90,7 @@ new_apk_size="$(stat --printf=%s $HELLO_WORLD_OUTPUT_DIR/apk/release/app-release
 
 cd $BASE_DIR/github/grpc-java
 git checkout HEAD^
+./gradlew clean
 ./gradlew publishToMavenLocal
 cd examples/android/helloworld/
 ../../gradlew build

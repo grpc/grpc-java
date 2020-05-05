@@ -60,8 +60,8 @@ public class ServiceConfigInterceptorTest {
     MockitoAnnotations.initMocks(this);
   }
 
-  private final ServiceConfigInterceptor interceptor = new ServiceConfigInterceptor(
-      /* retryEnabled = */ true, /* maxRetryAttemptsLimit = */ 5, /* maxHedgedAttemptsLimit = */ 6);
+  private final ServiceConfigInterceptor interceptor =
+      new ServiceConfigInterceptor(/* retryEnabled = */ true);
 
   private final String fullMethodName =
       MethodDescriptor.generateFullMethodName("service", "method");
@@ -70,8 +70,6 @@ public class ServiceConfigInterceptorTest {
           .setType(MethodType.UNARY)
           .setFullMethodName(fullMethodName)
           .build();
-
-
 
   private static final class JsonObj extends HashMap<String, Object> {
     private JsonObj(Object ... kv) {
@@ -92,8 +90,10 @@ public class ServiceConfigInterceptorTest {
     JsonObj name = new JsonObj("service", "service");
     JsonObj methodConfig = new JsonObj("name", new JsonList(name), "waitForReady", true);
     JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
+    ManagedChannelServiceConfig parsedServiceConfig =
+        createManagedChannelServiceConfig(serviceConfig);
 
-    interceptor.handleUpdate(serviceConfig);
+    interceptor.handleUpdate(parsedServiceConfig);
 
     interceptor.interceptCall(methodDescriptor, CallOptions.DEFAULT.withoutWaitForReady(), channel);
 
@@ -107,7 +107,7 @@ public class ServiceConfigInterceptorTest {
     JsonObj methodConfig = new JsonObj("name", new JsonList(name), "waitForReady", true);
     JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
 
-    interceptor.handleUpdate(serviceConfig);
+    interceptor.handleUpdate(createManagedChannelServiceConfig(serviceConfig));
     interceptor.handleUpdate(null);
 
     interceptor.interceptCall(methodDescriptor, CallOptions.DEFAULT.withoutWaitForReady(), channel);
@@ -133,8 +133,10 @@ public class ServiceConfigInterceptorTest {
     JsonObj name = new JsonObj("service", "service");
     JsonObj methodConfig = new JsonObj("name", new JsonList(name), "maxRequestMessageBytes", 1d);
     JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
+    ManagedChannelServiceConfig parsedServiceConfig =
+        createManagedChannelServiceConfig(serviceConfig);
 
-    interceptor.handleUpdate(serviceConfig);
+    interceptor.handleUpdate(parsedServiceConfig);
 
     interceptor.interceptCall(methodDescriptor, CallOptions.DEFAULT, channel);
 
@@ -147,8 +149,10 @@ public class ServiceConfigInterceptorTest {
     JsonObj name = new JsonObj("service", "service");
     JsonObj methodConfig = new JsonObj("name", new JsonList(name), "maxRequestMessageBytes", 10d);
     JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
+    ManagedChannelServiceConfig parsedServiceConfig =
+        createManagedChannelServiceConfig(serviceConfig);
 
-    interceptor.handleUpdate(serviceConfig);
+    interceptor.handleUpdate(parsedServiceConfig);
 
     interceptor.interceptCall(
         methodDescriptor, CallOptions.DEFAULT.withMaxOutboundMessageSize(5), channel);
@@ -162,8 +166,10 @@ public class ServiceConfigInterceptorTest {
     JsonObj name = new JsonObj("service", "service");
     JsonObj methodConfig = new JsonObj("name", new JsonList(name), "maxRequestMessageBytes", 5d);
     JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
+    ManagedChannelServiceConfig parsedServiceConfig =
+        createManagedChannelServiceConfig(serviceConfig);
 
-    interceptor.handleUpdate(serviceConfig);
+    interceptor.handleUpdate(parsedServiceConfig);
 
     interceptor.interceptCall(
         methodDescriptor, CallOptions.DEFAULT.withMaxOutboundMessageSize(10), channel);
@@ -177,8 +183,10 @@ public class ServiceConfigInterceptorTest {
     JsonObj name = new JsonObj("service", "service");
     JsonObj methodConfig = new JsonObj("name", new JsonList(name), "maxResponseMessageBytes", 1d);
     JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
+    ManagedChannelServiceConfig parsedServiceConfig =
+        createManagedChannelServiceConfig(serviceConfig);
 
-    interceptor.handleUpdate(serviceConfig);
+    interceptor.handleUpdate(parsedServiceConfig);
 
     interceptor.interceptCall(methodDescriptor, CallOptions.DEFAULT, channel);
 
@@ -191,8 +199,10 @@ public class ServiceConfigInterceptorTest {
     JsonObj name = new JsonObj("service", "service");
     JsonObj methodConfig = new JsonObj("name", new JsonList(name), "maxResponseMessageBytes", 5d);
     JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
+    ManagedChannelServiceConfig parsedServiceConfig =
+        createManagedChannelServiceConfig(serviceConfig);
 
-    interceptor.handleUpdate(serviceConfig);
+    interceptor.handleUpdate(parsedServiceConfig);
 
     interceptor.interceptCall(
         methodDescriptor, CallOptions.DEFAULT.withMaxInboundMessageSize(10), channel);
@@ -206,8 +216,10 @@ public class ServiceConfigInterceptorTest {
     JsonObj name = new JsonObj("service", "service");
     JsonObj methodConfig = new JsonObj("name", new JsonList(name), "maxResponseMessageBytes", 10d);
     JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
+    ManagedChannelServiceConfig parsedServiceConfig =
+        createManagedChannelServiceConfig(serviceConfig);
 
-    interceptor.handleUpdate(serviceConfig);
+    interceptor.handleUpdate(parsedServiceConfig);
 
     interceptor.interceptCall(
         methodDescriptor, CallOptions.DEFAULT.withMaxInboundMessageSize(5), channel);
@@ -221,8 +233,10 @@ public class ServiceConfigInterceptorTest {
     JsonObj name = new JsonObj("service", "service");
     JsonObj methodConfig = new JsonObj("name", new JsonList(name), "waitForReady", false);
     JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
+    ManagedChannelServiceConfig parsedServiceConfig =
+        createManagedChannelServiceConfig(serviceConfig);
 
-    interceptor.handleUpdate(serviceConfig);
+    interceptor.handleUpdate(parsedServiceConfig);
 
     interceptor.interceptCall(methodDescriptor, CallOptions.DEFAULT.withWaitForReady(), channel);
 
@@ -240,8 +254,10 @@ public class ServiceConfigInterceptorTest {
     JsonObj methodConfig2 = new JsonObj("name", new JsonList(name2), "timeout", "1s");
 
     JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig1, methodConfig2));
+    ManagedChannelServiceConfig parsedServiceConfig =
+        createManagedChannelServiceConfig(serviceConfig);
 
-    interceptor.handleUpdate(serviceConfig);
+    interceptor.handleUpdate(parsedServiceConfig);
 
     interceptor.interceptCall(methodDescriptor, CallOptions.DEFAULT, channel);
 
@@ -254,8 +270,10 @@ public class ServiceConfigInterceptorTest {
     JsonObj name = new JsonObj("service", "service");
     JsonObj methodConfig = new JsonObj("name", new JsonList(name), "timeout", "100000s");
     JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
+    ManagedChannelServiceConfig parsedServiceConfig =
+        createManagedChannelServiceConfig(serviceConfig);
 
-    interceptor.handleUpdate(serviceConfig);
+    interceptor.handleUpdate(parsedServiceConfig);
 
     Deadline existingDeadline = Deadline.after(1000, TimeUnit.NANOSECONDS);
     interceptor.interceptCall(
@@ -272,8 +290,10 @@ public class ServiceConfigInterceptorTest {
     JsonObj name = new JsonObj("service", "service");
     JsonObj methodConfig = new JsonObj("name", new JsonList(name), "timeout", "1s");
     JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
+    ManagedChannelServiceConfig parsedServiceConfig =
+        createManagedChannelServiceConfig(serviceConfig);
 
-    interceptor.handleUpdate(serviceConfig);
+    interceptor.handleUpdate(parsedServiceConfig);
 
     Deadline existingDeadline = Deadline.after(1234567890, TimeUnit.NANOSECONDS);
     interceptor.interceptCall(
@@ -283,69 +303,62 @@ public class ServiceConfigInterceptorTest {
     assertThat(callOptionsCap.getValue().getDeadline()).isNotEqualTo(existingDeadline);
   }
 
-
   @Test
-  public void handleUpdate_failsOnMissingServiceName() {
-    JsonObj name = new JsonObj("method", "method");
-    JsonObj methodConfig = new JsonObj("name", new JsonList(name));
-    JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
-
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("missing service");
-
-    interceptor.handleUpdate(serviceConfig);
-  }
-
-
-  @Test
-  public void handleUpdate_failsOnDuplicateMethod() {
-    JsonObj name1 = new JsonObj("service", "service", "method", "method");
-    JsonObj name2 = new JsonObj("service", "service", "method", "method");
-    JsonObj methodConfig = new JsonObj("name", new JsonList(name1, name2));
-    JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
-
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("Duplicate method");
-
-    interceptor.handleUpdate(serviceConfig);
-  }
-
-  @Test
-  public void handleUpdate_failsOnEmptyName() {
+  public void handleUpdate_onEmptyName() {
     JsonObj methodConfig = new JsonObj();
     JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
+    ManagedChannelServiceConfig parsedServiceConfig =
+        createManagedChannelServiceConfig(serviceConfig);
 
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("no names in method config");
+    interceptor.handleUpdate(parsedServiceConfig);
 
-    interceptor.handleUpdate(serviceConfig);
+    assertThat(interceptor.managedChannelServiceConfig.get().getDefaultMethodConfig()).isNull();
+    assertThat(interceptor.managedChannelServiceConfig.get().getServiceMap()).isEmpty();
+    assertThat(interceptor.managedChannelServiceConfig.get().getServiceMethodMap()).isEmpty();
   }
 
   @Test
-  public void handleUpdate_failsOnDuplicateService() {
-    JsonObj name1 = new JsonObj("service", "service");
-    JsonObj name2 = new JsonObj("service", "service");
-    JsonObj methodConfig = new JsonObj("name", new JsonList(name1, name2));
+  public void handleUpdate_onDefaultMethodConfig() {
+    JsonObj name = new JsonObj();
+    JsonObj methodConfig = new JsonObj("name", new JsonList(name));
     JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
+    ManagedChannelServiceConfig parsedServiceConfig =
+        createManagedChannelServiceConfig(serviceConfig);
+    interceptor.handleUpdate(parsedServiceConfig);
+    assertThat(interceptor.managedChannelServiceConfig.get().getDefaultMethodConfig())
+        .isEqualTo(new MethodInfo(methodConfig, false, 1, 1));
+    assertThat(interceptor.managedChannelServiceConfig.get().getServiceMap()).isEmpty();
+    assertThat(interceptor.managedChannelServiceConfig.get().getServiceMethodMap()).isEmpty();
 
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("Duplicate service");
+    name = new JsonObj("method", "");
+    methodConfig = new JsonObj("name", new JsonList(name));
+    serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
+    parsedServiceConfig = createManagedChannelServiceConfig(serviceConfig);
+    interceptor.handleUpdate(parsedServiceConfig);
+    assertThat(interceptor.managedChannelServiceConfig.get().getDefaultMethodConfig())
+        .isEqualTo(new MethodInfo(methodConfig, false, 1, 1));
+    assertThat(interceptor.managedChannelServiceConfig.get().getServiceMap()).isEmpty();
+    assertThat(interceptor.managedChannelServiceConfig.get().getServiceMethodMap()).isEmpty();
 
-    interceptor.handleUpdate(serviceConfig);
-  }
+    name = new JsonObj("service", "");
+    methodConfig = new JsonObj("name", new JsonList(name));
+    serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
+    parsedServiceConfig = createManagedChannelServiceConfig(serviceConfig);
+    interceptor.handleUpdate(parsedServiceConfig);
+    assertThat(interceptor.managedChannelServiceConfig.get().getDefaultMethodConfig())
+        .isEqualTo(new MethodInfo(methodConfig, false, 1, 1));
+    assertThat(interceptor.managedChannelServiceConfig.get().getServiceMap()).isEmpty();
+    assertThat(interceptor.managedChannelServiceConfig.get().getServiceMethodMap()).isEmpty();
 
-  @Test
-  public void handleUpdate_failsOnDuplicateServiceMultipleConfig() {
-    JsonObj name1 = new JsonObj("service", "service");
-    JsonObj name2 = new JsonObj("service", "service");
-    JsonObj methodConfig1 = new JsonObj("name", new JsonList(name1));
-    JsonObj methodConfig2 = new JsonObj("name", new JsonList(name2));
-    JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig1, methodConfig2));
-
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("Duplicate service");
-
-    interceptor.handleUpdate(serviceConfig);
+    name = new JsonObj("service", "", "method", "");
+    methodConfig = new JsonObj("name", new JsonList(name));
+    serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
+    parsedServiceConfig = createManagedChannelServiceConfig(serviceConfig);
+    interceptor.handleUpdate(parsedServiceConfig);
+    assertThat(interceptor.managedChannelServiceConfig.get().getDefaultMethodConfig())
+        .isEqualTo(new MethodInfo(methodConfig, false, 1, 1));
+    assertThat(interceptor.managedChannelServiceConfig.get().getServiceMap()).isEmpty();
+    assertThat(interceptor.managedChannelServiceConfig.get().getServiceMethodMap()).isEmpty();
   }
 
   @Test
@@ -357,13 +370,17 @@ public class ServiceConfigInterceptorTest {
     JsonObj name2 = new JsonObj("service", "service", "method", "method");
     JsonObj methodConfig2 = new JsonObj("name", new JsonList(name2));
     JsonObj serviceConfig2 = new JsonObj("methodConfig", new JsonList(methodConfig2));
+    ManagedChannelServiceConfig parsedServiceConfig1 =
+        createManagedChannelServiceConfig(serviceConfig1);
+    ManagedChannelServiceConfig parsedServiceConfig2 =
+        createManagedChannelServiceConfig(serviceConfig2);
 
-    interceptor.handleUpdate(serviceConfig1);
+    interceptor.handleUpdate(parsedServiceConfig1);
 
     assertThat(interceptor.managedChannelServiceConfig.get().getServiceMap()).isNotEmpty();
     assertThat(interceptor.managedChannelServiceConfig.get().getServiceMethodMap()).isEmpty();
 
-    interceptor.handleUpdate(serviceConfig2);
+    interceptor.handleUpdate(parsedServiceConfig2);
 
     assertThat(interceptor.managedChannelServiceConfig.get().getServiceMap()).isEmpty();
     assertThat(interceptor.managedChannelServiceConfig.get().getServiceMethodMap()).isNotEmpty();
@@ -375,8 +392,10 @@ public class ServiceConfigInterceptorTest {
     JsonObj name2 = new JsonObj("service", "service", "method", "method");
     JsonObj methodConfig = new JsonObj("name", new JsonList(name1, name2));
     JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
+    ManagedChannelServiceConfig parsedServiceConfig =
+        createManagedChannelServiceConfig(serviceConfig);
 
-    interceptor.handleUpdate(serviceConfig);
+    interceptor.handleUpdate(parsedServiceConfig);
 
     assertThat(interceptor.managedChannelServiceConfig.get().getServiceMethodMap())
         .containsExactly(
@@ -386,6 +405,60 @@ public class ServiceConfigInterceptorTest {
         "service2", new MethodInfo(methodConfig, false, 1, 1));
   }
 
+  @Test
+  public void interceptCall_matchNames() {
+    JsonObj name0 = new JsonObj();
+    JsonObj name1 = new JsonObj("service", "service");
+    JsonObj name2 = new JsonObj("service", "service", "method", "method");
+    JsonObj methodConfig0 = new JsonObj(
+        "name", new JsonList(name0), "maxRequestMessageBytes", 5d);
+    JsonObj methodConfig1 = new JsonObj(
+        "name", new JsonList(name1), "maxRequestMessageBytes", 6d);
+    JsonObj methodConfig2 = new JsonObj(
+        "name", new JsonList(name2), "maxRequestMessageBytes", 7d);
+    JsonObj serviceConfig =
+        new JsonObj("methodConfig", new JsonList(methodConfig0, methodConfig1, methodConfig2));
+    ManagedChannelServiceConfig parsedServiceConfig =
+        createManagedChannelServiceConfig(serviceConfig);
+
+    interceptor.handleUpdate(parsedServiceConfig);
+
+    String fullMethodName =
+        MethodDescriptor.generateFullMethodName("service", "method");
+    MethodDescriptor<Void, Void> methodDescriptor =
+        MethodDescriptor.newBuilder(new NoopMarshaller(), new NoopMarshaller())
+            .setType(MethodType.UNARY)
+            .setFullMethodName(fullMethodName)
+            .build();
+    interceptor.interceptCall(
+        methodDescriptor, CallOptions.DEFAULT, channel);
+    verify(channel).newCall(eq(methodDescriptor), callOptionsCap.capture());
+    assertThat(callOptionsCap.getValue().getMaxOutboundMessageSize()).isEqualTo(7);
+
+    fullMethodName =
+        MethodDescriptor.generateFullMethodName("service", "method2");
+    methodDescriptor =
+        MethodDescriptor.newBuilder(new NoopMarshaller(), new NoopMarshaller())
+            .setType(MethodType.UNARY)
+            .setFullMethodName(fullMethodName)
+            .build();
+    interceptor.interceptCall(
+        methodDescriptor, CallOptions.DEFAULT, channel);
+    verify(channel).newCall(eq(methodDescriptor), callOptionsCap.capture());
+    assertThat(callOptionsCap.getValue().getMaxOutboundMessageSize()).isEqualTo(6);
+
+    fullMethodName =
+        MethodDescriptor.generateFullMethodName("service2", "method");
+    methodDescriptor =
+        MethodDescriptor.newBuilder(new NoopMarshaller(), new NoopMarshaller())
+            .setType(MethodType.UNARY)
+            .setFullMethodName(fullMethodName)
+            .build();
+    interceptor.interceptCall(
+        methodDescriptor, CallOptions.DEFAULT, channel);
+    verify(channel).newCall(eq(methodDescriptor), callOptionsCap.capture());
+    assertThat(callOptionsCap.getValue().getMaxOutboundMessageSize()).isEqualTo(5);
+  }
 
   @Test
   public void methodInfo_validateDeadline() {
@@ -407,7 +480,6 @@ public class ServiceConfigInterceptorTest {
     assertThat(info.timeoutNanos).isEqualTo(Long.MAX_VALUE);
   }
 
-
   @Test
   public void methodInfo_badMaxRequestSize() {
     JsonObj name = new JsonObj("service", "service");
@@ -428,6 +500,17 @@ public class ServiceConfigInterceptorTest {
     thrown.expectMessage("exceeds bounds");
 
     new MethodInfo(methodConfig, false, 1, 1);
+  }
+
+  private static ManagedChannelServiceConfig createManagedChannelServiceConfig(
+      JsonObj rawServiceConfig) {
+    // current tests doesn't use any other values except rawServiceConfig, so provide dummy values.
+    return ManagedChannelServiceConfig.fromServiceConfig(
+        rawServiceConfig,
+        /* retryEnabled= */ true,
+        /* maxRetryAttemptsLimit= */ 3,
+        /* maxHedgedAttemptsLimit= */ 4,
+        /* loadBalancingConfig= */ null);
   }
 
   private static final class NoopMarshaller implements MethodDescriptor.Marshaller<Void> {

@@ -35,9 +35,6 @@ import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
 import io.grpc.MethodDescriptor;
 import io.grpc.NameResolver;
-import io.grpc.internal.testing.StatsTestUtils.FakeStatsRecorder;
-import io.grpc.internal.testing.StatsTestUtils.FakeTagContextBinarySerializer;
-import io.grpc.internal.testing.StatsTestUtils.FakeTagger;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.URI;
@@ -97,6 +94,21 @@ public class AbstractManagedChannelImplBuilderTest {
   public void directExecutor() {
     assertEquals(builder, builder.directExecutor());
     assertEquals(MoreExecutors.directExecutor(), builder.executorPool.getObject());
+  }
+
+  @Test
+  public void offloadExecutor_normal() {
+    Executor executor = mock(Executor.class);
+    assertEquals(builder, builder.offloadExecutor(executor));
+    assertEquals(executor, builder.offloadExecutorPool.getObject());
+  }
+
+  @Test
+  public void offloadExecutor_null() {
+    ObjectPool<? extends Executor> defaultValue = builder.offloadExecutorPool;
+    builder.offloadExecutor(mock(Executor.class));
+    assertEquals(builder, builder.offloadExecutor(null));
+    assertEquals(defaultValue, builder.offloadExecutorPool);
   }
 
   @Test
@@ -268,10 +280,10 @@ public class AbstractManagedChannelImplBuilderTest {
     builder.intercept(DUMMY_USER_INTERCEPTOR);
     List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors();
     assertEquals(3, effectiveInterceptors.size());
-    assertThat(effectiveInterceptors.get(0))
-        .isInstanceOf(CensusTracingModule.TracingClientInterceptor.class);
-    assertThat(effectiveInterceptors.get(1))
-        .isInstanceOf(CensusStatsModule.StatsClientInterceptor.class);
+    assertThat(effectiveInterceptors.get(0).getClass().getName())
+        .isEqualTo("io.grpc.census.CensusTracingModule$TracingClientInterceptor");
+    assertThat(effectiveInterceptors.get(1).getClass().getName())
+        .isEqualTo("io.grpc.census.CensusStatsModule$StatsClientInterceptor");
     assertThat(effectiveInterceptors.get(2)).isSameInstanceAs(DUMMY_USER_INTERCEPTOR);
   }
 
@@ -281,8 +293,8 @@ public class AbstractManagedChannelImplBuilderTest {
     builder.setStatsEnabled(false);
     List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors();
     assertEquals(2, effectiveInterceptors.size());
-    assertThat(effectiveInterceptors.get(0))
-        .isInstanceOf(CensusTracingModule.TracingClientInterceptor.class);
+    assertThat(effectiveInterceptors.get(0).getClass().getName())
+        .isEqualTo("io.grpc.census.CensusTracingModule$TracingClientInterceptor");
     assertThat(effectiveInterceptors.get(1)).isSameInstanceAs(DUMMY_USER_INTERCEPTOR);
   }
 
@@ -292,8 +304,8 @@ public class AbstractManagedChannelImplBuilderTest {
     builder.setTracingEnabled(false);
     List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors();
     assertEquals(2, effectiveInterceptors.size());
-    assertThat(effectiveInterceptors.get(0))
-        .isInstanceOf(CensusStatsModule.StatsClientInterceptor.class);
+    assertThat(effectiveInterceptors.get(0).getClass().getName())
+        .isEqualTo("io.grpc.census.CensusStatsModule$StatsClientInterceptor");
     assertThat(effectiveInterceptors.get(1)).isSameInstanceAs(DUMMY_USER_INTERCEPTOR);
   }
 
@@ -471,24 +483,10 @@ public class AbstractManagedChannelImplBuilderTest {
   static class Builder extends AbstractManagedChannelImplBuilder<Builder> {
     Builder(String target) {
       super(target);
-      overrideCensusStatsModule(
-          new CensusStatsModule(
-              new FakeTagger(),
-              new FakeTagContextBinarySerializer(),
-              new FakeStatsRecorder(),
-              GrpcUtil.STOPWATCH_SUPPLIER,
-              true, true, true, true));
     }
 
     Builder(SocketAddress directServerAddress, String authority) {
       super(directServerAddress, authority);
-      overrideCensusStatsModule(
-          new CensusStatsModule(
-              new FakeTagger(),
-              new FakeTagContextBinarySerializer(),
-              new FakeStatsRecorder(),
-              GrpcUtil.STOPWATCH_SUPPLIER,
-              true, true, true, true));
     }
 
     @Override

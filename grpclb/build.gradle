@@ -1,25 +1,43 @@
-description = "gRPC: GRPCLB LoadBalancer plugin"
+plugins {
+    id "java"
+    id "maven-publish"
 
-buildscript {
-    repositories {
-        maven { // The google mirror is less flaky than mavenCentral()
-            url "https://maven-central.storage-download.googleapis.com/repos/central/data/" }
-    }
-    dependencies { classpath libraries.protobuf_plugin }
+    id "com.google.protobuf"
+    id "me.champeau.gradle.japicmp"
 }
 
+description = "gRPC: GRPCLB LoadBalancer plugin"
+
+evaluationDependsOn(project(':grpc-core').path)
+
 dependencies {
-    compile project(':grpc-core'),
+    implementation project(':grpc-core'),
             project(':grpc-protobuf'),
             project(':grpc-stub'),
             libraries.protobuf
-    compile (libraries.protobuf_util) {
-        // prefer 26.0-android from libraries instead of 20.0
+    implementation (libraries.protobuf_util) {
+        // prefer our own versions instead of protobuf-util's dependency
         exclude group: 'com.google.guava', module: 'guava'
+        exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
     }
+    guavaDependency 'implementation'
+    runtimeOnly libraries.errorprone
     compileOnly libraries.javax_annotation
-    testCompile libraries.truth,
+    testImplementation libraries.truth,
             project(':grpc-core').sourceSets.test.output
 }
 
 configureProtoCompilation()
+
+javadoc {
+    exclude 'io/grpc/grpclb/Internal*'
+}
+
+jacocoTestReport {
+    classDirectories.from = sourceSets.main.output.collect {
+        fileTree(dir: it,
+        exclude: [
+                '**/io/grpc/lb/v1/**',
+        ])
+    }
+}

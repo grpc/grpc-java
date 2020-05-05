@@ -24,6 +24,7 @@ import java.lang.ref.SoftReference;
 import java.lang.ref.WeakReference;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
@@ -54,15 +55,13 @@ final class ManagedChannelOrphanWrapper extends ForwardingManagedChannel {
 
   @Override
   public ManagedChannel shutdown() {
-    phantom.shutdown = true;
-    phantom.clear();
+    phantom.clearSafely();
     return super.shutdown();
   }
 
   @Override
   public ManagedChannel shutdownNow() {
-    phantom.shutdown = true;
-    phantom.clear();
+    phantom.clearSafely();
     return super.shutdownNow();
   }
 
@@ -81,7 +80,7 @@ final class ManagedChannelOrphanWrapper extends ForwardingManagedChannel {
 
     private final String channelStr;
     private final Reference<RuntimeException> allocationSite;
-    private volatile boolean shutdown;
+    private final AtomicBoolean shutdown = new AtomicBoolean();
 
     ManagedChannelReference(
         ManagedChannelOrphanWrapper orphanable,
@@ -113,6 +112,15 @@ final class ManagedChannelOrphanWrapper extends ForwardingManagedChannel {
       cleanQueue(refqueue);
     }
 
+    /**
+     * Safe to call concurrently.
+     */
+    private void clearSafely() {
+      if (!shutdown.getAndSet(true)) {
+        clear();
+      }
+    }
+
     // avoid reentrancy
     private void clearInternal() {
       super.clear();
@@ -135,7 +143,7 @@ final class ManagedChannelOrphanWrapper extends ForwardingManagedChannel {
       while ((ref = (ManagedChannelReference) refqueue.poll()) != null) {
         RuntimeException maybeAllocationSite = ref.allocationSite.get();
         ref.clearInternal(); // technically the reference is gone already.
-        if (!ref.shutdown) {
+        if (!ref.shutdown.get()) {
           orphanedChannels++;
           Level level = Level.SEVERE;
           if (logger.isLoggable(level)) {

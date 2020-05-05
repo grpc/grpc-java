@@ -21,6 +21,8 @@ import static com.google.common.base.Preconditions.checkState;
 
 import io.grpc.internal.SerializingExecutor;
 import io.grpc.okhttp.ExceptionHandlingFrameWriter.TransportExceptionHandler;
+import io.perfmark.Link;
+import io.perfmark.PerfMark;
 import java.io.IOException;
 import java.net.Socket;
 import javax.annotation.Nullable;
@@ -78,24 +80,36 @@ final class AsyncSink implements Sink {
     if (closed) {
       throw new IOException("closed");
     }
-    synchronized (lock) {
-      buffer.write(source, byteCount);
-      if (writeEnqueued || flushEnqueued || buffer.completeSegmentByteCount() <= 0) {
-        return;
-      }
-      writeEnqueued = true;
-    }
-    serializingExecutor.execute(new WriteRunnable() {
-      @Override
-      public void doRun() throws IOException {
-        Buffer buf = new Buffer();
-        synchronized (lock) {
-          buf.write(buffer, buffer.completeSegmentByteCount());
-          writeEnqueued = false;
+    PerfMark.startTask("AsyncSink.write");
+    try {
+      synchronized (lock) {
+        buffer.write(source, byteCount);
+        if (writeEnqueued || flushEnqueued || buffer.completeSegmentByteCount() <= 0) {
+          return;
         }
-        sink.write(buf, buf.size());
+        writeEnqueued = true;
       }
-    });
+      serializingExecutor.execute(new WriteRunnable() {
+        final Link link = PerfMark.linkOut();
+        @Override
+        public void doRun() throws IOException {
+          PerfMark.startTask("WriteRunnable.runWrite");
+          PerfMark.linkIn(link);
+          Buffer buf = new Buffer();
+          try {
+            synchronized (lock) {
+              buf.write(buffer, buffer.completeSegmentByteCount());
+              writeEnqueued = false;
+            }
+            sink.write(buf, buf.size());
+          } finally {
+            PerfMark.stopTask("WriteRunnable.runWrite");
+          }
+        }
+      });
+    } finally {
+      PerfMark.stopTask("AsyncSink.write");
+    }
   }
 
   @Override
@@ -103,24 +117,36 @@ final class AsyncSink implements Sink {
     if (closed) {
       throw new IOException("closed");
     }
-    synchronized (lock) {
-      if (flushEnqueued) {
-        return;
-      }
-      flushEnqueued = true;
-    }
-    serializingExecutor.execute(new WriteRunnable() {
-      @Override
-      public void doRun() throws IOException {
-        Buffer buf = new Buffer();
-        synchronized (lock) {
-          buf.write(buffer, buffer.size());
-          flushEnqueued = false;
+    PerfMark.startTask("AsyncSink.flush");
+    try {
+      synchronized (lock) {
+        if (flushEnqueued) {
+          return;
         }
-        sink.write(buf, buf.size());
-        sink.flush();
+        flushEnqueued = true;
       }
-    });
+      serializingExecutor.execute(new WriteRunnable() {
+        final Link link = PerfMark.linkOut();
+        @Override
+        public void doRun() throws IOException {
+          PerfMark.startTask("WriteRunnable.runFlush");
+          PerfMark.linkIn(link);
+          Buffer buf = new Buffer();
+          try {
+            synchronized (lock) {
+              buf.write(buffer, buffer.size());
+              flushEnqueued = false;
+            }
+            sink.write(buf, buf.size());
+            sink.flush();
+          } finally {
+            PerfMark.stopTask("WriteRunnable.runFlush");
+          }
+        }
+      });
+    } finally {
+      PerfMark.stopTask("AsyncSink.flush");
+    }
   }
 
   @Override

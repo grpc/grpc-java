@@ -78,12 +78,13 @@ public final class HelloJsonClient {
    * greeting.
    */
   public static void main(String[] args) throws Exception {
+    // Access a service running on the local machine on port 50051
     HelloJsonClient client = new HelloJsonClient("localhost", 50051);
     try {
-      /* Access a service running on the local machine on port 50051 */
       String user = "world";
+      // Use the arg as the name to greet if provided
       if (args.length > 0) {
-        user = args[0]; /* Use the arg as the name to greet if provided */
+        user = args[0];
       }
       client.greet(user);
     } finally {

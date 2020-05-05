@@ -16,6 +16,7 @@
 
 package io.grpc.internal;
 
+import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.util.concurrent.MoreExecutors.directExecutor;
 import static io.grpc.Contexts.statusFromCancelled;
@@ -33,6 +34,7 @@ import io.grpc.Attributes;
 import io.grpc.BinaryLog;
 import io.grpc.CompressorRegistry;
 import io.grpc.Context;
+import io.grpc.Deadline;
 import io.grpc.Decompressor;
 import io.grpc.DecompressorRegistry;
 import io.grpc.HandlerRegistry;
@@ -123,12 +125,13 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
 
   private final InternalChannelz channelz;
   private final CallTracer serverCallTracer;
+  private final Deadline.Ticker ticker;
 
   /**
    * Construct a server.
    *
    * @param builder builder with configuration for server
-   * @param transportServer transport server that will create new incoming transports
+   * @param transportServers transport servers that will create new incoming transports
    * @param rootContext context that callbacks for new RPCs should be derived from
    */
   ServerImpl(
@@ -157,6 +160,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
     this.binlog = builder.binlog;
     this.channelz = builder.channelz;
     this.serverCallTracer = builder.callTracerFactory.create();
+    this.ticker = checkNotNull(builder.ticker, "ticker");
 
     channelz.addServer(this);
   }
@@ -482,6 +486,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
         String encoding = headers.get(MESSAGE_ENCODING_KEY);
         Decompressor decompressor = decompressorRegistry.lookupDecompressor(encoding);
         if (decompressor == null) {
+          stream.setListener(NOOP_LISTENER);
           stream.close(
               Status.UNIMPLEMENTED.withDescription(
                   String.format("Can't find decompressor for %s", encoding)),
@@ -494,7 +499,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
       final StatsTraceContext statsTraceCtx = Preconditions.checkNotNull(
           stream.statsTraceContext(), "statsTraceCtx not present from stream");
 
-      final Context.CancellableContext context = createContext(stream, headers, statsTraceCtx);
+      final Context.CancellableContext context = createContext(headers, statsTraceCtx);
       final Executor wrappedExecutor;
       // This is a performance optimization that avoids the synchronization and queuing overhead
       // that comes with SerializingExecutor.
@@ -549,8 +554,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
               context.cancel(null);
               return;
             }
-            listener =
-                startCall(stream, methodName, method, headers, context, statsTraceCtx, tag);
+            listener = startCall(stream, methodName, method, headers, context, statsTraceCtx, tag);
           } catch (RuntimeException e) {
             stream.close(Status.fromThrowable(e), new Metadata());
             context.cancel(null);
@@ -562,6 +566,23 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
           } finally {
             jumpListener.setListener(listener);
           }
+
+          // An extremely short deadline may expire before stream.setListener(jumpListener).
+          // This causes NPE as in issue: https://github.com/grpc/grpc-java/issues/6300
+          // Delay of setting cancellationListener to context will fix the issue.
+          final class ServerStreamCancellationListener implements Context.CancellationListener {
+            @Override
+            public void cancelled(Context context) {
+              Status status = statusFromCancelled(context);
+              if (DEADLINE_EXCEEDED.getCode().equals(status.getCode())) {
+                // This should rarely get run, since the client will likely cancel the stream
+                // before the timeout is reached.
+                stream.cancel(status);
+              }
+            }
+          }
+
+          context.addListener(new ServerStreamCancellationListener(), directExecutor());
         }
       }
 
@@ -569,30 +590,22 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
     }
 
     private Context.CancellableContext createContext(
-        final ServerStream stream, Metadata headers, StatsTraceContext statsTraceCtx) {
+        Metadata headers, StatsTraceContext statsTraceCtx) {
       Long timeoutNanos = headers.get(TIMEOUT_KEY);
 
-      Context baseContext = statsTraceCtx.serverFilterContext(rootContext);
+      Context baseContext =
+          statsTraceCtx
+              .serverFilterContext(rootContext)
+              .withValue(io.grpc.InternalServer.SERVER_CONTEXT_KEY, ServerImpl.this);
 
       if (timeoutNanos == null) {
         return baseContext.withCancellation();
       }
 
-      Context.CancellableContext context = baseContext.withDeadlineAfter(
-          timeoutNanos, NANOSECONDS, transport.getScheduledExecutorService());
-      final class ServerStreamCancellationListener implements Context.CancellationListener {
-        @Override
-        public void cancelled(Context context) {
-          Status status = statusFromCancelled(context);
-          if (DEADLINE_EXCEEDED.getCode().equals(status.getCode())) {
-            // This should rarely get run, since the client will likely cancel the stream before
-            // the timeout is reached.
-            stream.cancel(status);
-          }
-        }
-      }
-
-      context.addListener(new ServerStreamCancellationListener(), directExecutor());
+      Context.CancellableContext context =
+          baseContext.withDeadline(
+              Deadline.after(timeoutNanos, NANOSECONDS, ticker),
+              transport.getScheduledExecutorService());
 
       return context;
     }

@@ -24,6 +24,7 @@ import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats.DroppedRequests;
 import io.envoyproxy.envoy.api.v2.endpoint.EndpointLoadMetricStats;
 import io.envoyproxy.envoy.api.v2.endpoint.UpstreamLocalityStats;
 import io.grpc.xds.ClientLoadCounter.MetricValue;
+import io.grpc.xds.EnvoyProtoData.Locality;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -43,11 +44,12 @@ import org.junit.runners.JUnit4;
 /** Unit tests for {@link LoadStatsStore}. */
 @RunWith(JUnit4.class)
 public class LoadStatsStoreImplTest {
-  private static final XdsLocality LOCALITY1 =
-      new XdsLocality("test_region1", "test_zone", "test_subzone");
-  private static final XdsLocality LOCALITY2 =
-      new XdsLocality("test_region2", "test_zone", "test_subzone");
-  private ConcurrentMap<XdsLocality, ClientLoadCounter> localityLoadCounters;
+  private static final String CLUSTER_NAME = "cluster-test.googleapis.com";
+  private static final Locality LOCALITY1 =
+      new Locality("test_region1", "test_zone", "test_subzone");
+  private static final Locality LOCALITY2 =
+      new Locality("test_region2", "test_zone", "test_subzone");
+  private ConcurrentMap<Locality, ClientLoadCounter> localityLoadCounters;
   private ConcurrentMap<String, AtomicLong> dropCounters;
   private LoadStatsStore loadStatsStore;
 
@@ -55,7 +57,8 @@ public class LoadStatsStoreImplTest {
   public void setUp() {
     localityLoadCounters = new ConcurrentHashMap<>();
     dropCounters = new ConcurrentHashMap<>();
-    loadStatsStore = new LoadStatsStoreImpl(localityLoadCounters, dropCounters);
+    loadStatsStore =
+        new LoadStatsStoreImpl(CLUSTER_NAME, null, localityLoadCounters, dropCounters);
   }
 
   private static List<EndpointLoadMetricStats> buildEndpointLoadMetricStatsList(
@@ -71,7 +74,8 @@ public class LoadStatsStoreImplTest {
     return res;
   }
 
-  private static UpstreamLocalityStats buildUpstreamLocalityStats(XdsLocality locality,
+  private static UpstreamLocalityStats buildUpstreamLocalityStats(
+      Locality locality,
       long callsSucceed,
       long callsInProgress,
       long callsFailed,
@@ -79,7 +83,7 @@ public class LoadStatsStoreImplTest {
       @Nullable List<EndpointLoadMetricStats> metrics) {
     UpstreamLocalityStats.Builder builder =
         UpstreamLocalityStats.newBuilder()
-            .setLocality(locality.toLocalityProto())
+            .setLocality(locality.toEnvoyProtoLocality())
             .setTotalSuccessfulRequests(callsSucceed)
             .setTotalErrorRequests(callsFailed)
             .setTotalRequestsInProgress(callsInProgress)
@@ -101,6 +105,7 @@ public class LoadStatsStoreImplTest {
       @Nullable List<UpstreamLocalityStats> upstreamLocalityStatsList,
       @Nullable List<DroppedRequests> droppedRequestsList) {
     ClusterStats.Builder clusterStatsBuilder = ClusterStats.newBuilder();
+    clusterStatsBuilder.setClusterName(CLUSTER_NAME);
     if (upstreamLocalityStatsList != null) {
       clusterStatsBuilder.addAllUpstreamLocalityStats(upstreamLocalityStatsList);
     }
