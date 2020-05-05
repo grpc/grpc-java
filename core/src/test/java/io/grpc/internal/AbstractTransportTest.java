@@ -1210,6 +1210,9 @@ public abstract class AbstractTransportTest {
     assertNotNull(clientStreamListener.trailers.get(TIMEOUT_MS, TimeUnit.MILLISECONDS));
     Status serverStatus = serverStreamListener.status.get(TIMEOUT_MS, TimeUnit.MILLISECONDS);
     assertNotEquals(Status.Code.OK, serverStatus.getCode());
+    // Cause should not be transmitted between client and server by default
+    assertNull(serverStatus.getCause());
+
     clientStream.cancel(status);
     assertTrue(clientStreamTracer1.getOutboundHeaders());
     assertNull(clientStreamTracer1.getInboundTrailers());
