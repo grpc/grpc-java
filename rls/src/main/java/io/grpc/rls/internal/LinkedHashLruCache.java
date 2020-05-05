@@ -130,6 +130,14 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
     }
   }
 
+  /**
+   * Returns estimated cache size bytes. Each entry size is calculated by {@link
+   * #estimateSizeOf(java.lang.Object, java.lang.Object)}.
+   */
+  public long estimatedSizeBytes() {
+    return estimatedSizeBytes.get();
+  }
+
   @Override
   @Nullable
   public final V cache(K key, V value) {
@@ -229,9 +237,8 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
   public final void resize(int newSizeBytes) {
     long now = timeProvider.currentTimeNanos();
     synchronized (lock) {
-      long estimatedSizeBytesCopy = estimatedMaxSizeBytes;
       this.estimatedMaxSizeBytes = newSizeBytes;
-      if (estimatedSizeBytesCopy <= newSizeBytes) {
+      if (estimatedSizeBytes.get() <= newSizeBytes) {
         // new size is larger no need to do cleanup
         return;
       }
@@ -240,7 +247,7 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
 
       // cleanup eldest entry until new size limit
       Iterator<Map.Entry<K, SizedValue>> lruIter = delegate.entrySet().iterator();
-      while (lruIter.hasNext() && estimatedMaxSizeBytes > this.estimatedSizeBytes.get()) {
+      while (lruIter.hasNext() && estimatedMaxSizeBytes < this.estimatedSizeBytes.get()) {
         Map.Entry<K, SizedValue> entry = lruIter.next();
         lruIter.remove();
         // eviction listener will update the estimatedSizeBytes

@@ -23,6 +23,7 @@ import static org.mockito.Mockito.CALLS_REAL_METHODS;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
+import com.google.common.collect.ImmutableList;
 import io.grpc.rls.internal.DoNotUseDirectScheduledExecutorService.FakeTimeProvider;
 import io.grpc.rls.internal.LruCache.EvictionListener;
 import io.grpc.rls.internal.LruCache.EvictionType;
@@ -65,6 +66,11 @@ public class LinkedHashLruCacheTest {
       @Override
       protected boolean isExpired(Integer key, Entry value, long nowNanos) {
         return value.expireTime <= nowNanos;
+      }
+
+      @Override
+      protected int estimateSizeOf(Integer key, Entry value) {
+        return value.size;
       }
     };
   }
@@ -158,13 +164,89 @@ public class LinkedHashLruCacheTest {
     verify(evictionListener).onEviction(eq(MAX_SIZE), any(Entry.class), eq(EvictionType.EXPIRED));
   }
 
+  @Test
+  public void updateEntrySize() {
+    Entry entry = new Entry("Entry", timeProvider.currentTimeNanos() + 10);
+
+    cache.cache(1, entry);
+
+    assertThat(cache.estimatedSizeBytes()).isEqualTo(1);
+    entry.size = 10;
+    assertThat(cache.estimatedSizeBytes()).isEqualTo(1);
+
+    cache.updateEntrySize(1);
+
+    assertThat(cache.estimatedSizeBytes()).isEqualTo(10);
+
+    cache.updateEntrySize(1);
+
+    assertThat(cache.estimatedSizeBytes()).isEqualTo(10);
+  }
+
+  @Test
+  public void updateEntrySize_multipleEntries() {
+    Entry entry1 = new Entry("Entry", timeProvider.currentTimeNanos() + 10, 2);
+    Entry entry2 = new Entry("Entry2", timeProvider.currentTimeNanos() + 10, 3);
+
+    cache.cache(1, entry1);
+    cache.cache(2, entry2);
+
+    assertThat(cache.estimatedSizeBytes()).isEqualTo(5);
+    entry2.size = 1;
+    assertThat(cache.estimatedSizeBytes()).isEqualTo(5);
+
+    cache.updateEntrySize(2);
+
+    assertThat(cache.estimatedSizeBytes()).isEqualTo(3);
+  }
+
+  @Test
+  public void invalidateAll() {
+    Entry entry1 = new Entry("Entry", timeProvider.currentTimeNanos() + 10);
+    Entry entry2 = new Entry("Entry2", timeProvider.currentTimeNanos() + 10);
+
+    cache.cache(1, entry1);
+    cache.cache(2, entry2);
+
+    assertThat(cache.estimatedSize()).isEqualTo(2);
+
+    cache.invalidateAll(ImmutableList.of(1, 2));
+
+    assertThat(cache.estimatedSize()).isEqualTo(0);
+  }
+
+  @Test
+  public void resize() {
+    Entry entry1 = new Entry("Entry", timeProvider.currentTimeNanos() + 10);
+    Entry entry2 = new Entry("Entry2", timeProvider.currentTimeNanos() + 10);
+    Entry entry3 = new Entry("Entry3", timeProvider.currentTimeNanos() + 10);
+
+    cache.cache(1, entry1);
+    cache.cache(2, entry2);
+    cache.cache(3, entry3);
+
+    assertThat(cache.estimatedSize()).isEqualTo(3);
+
+    cache.resize(2);
+
+    assertThat(cache.estimatedSize()).isEqualTo(2);
+    // eldest entry should be evicted
+    assertThat(cache.hasCacheEntry(1)).isFalse();
+  }
+
   private static final class Entry {
     String value;
     long expireTime;
+    int size;
 
     Entry(String value, long expireTime) {
+      this(value, expireTime, 1);
+    }
+
+    Entry(String value, long expireTime, int size) {
       this.value = value;
       this.expireTime = expireTime;
+      this.size = size;
     }
 
     @Override
