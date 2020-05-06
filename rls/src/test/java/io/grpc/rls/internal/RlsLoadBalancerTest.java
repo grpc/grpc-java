@@ -79,6 +79,7 @@ import java.util.concurrent.TimeUnit;
 import javax.annotation.Nonnull;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -166,6 +167,7 @@ public class RlsLoadBalancerTest {
   }
 
   @Test
+  @Ignore
   public void lb_working() throws Exception {
     final InOrder inOrder = inOrder(helper);
 
