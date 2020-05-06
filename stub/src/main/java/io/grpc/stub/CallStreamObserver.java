@@ -106,8 +106,36 @@ public abstract class CallStreamObserver<V> implements StreamObserver<V> {
    *   </li>
    * </ul>
    * </p>
+   * 
+   * <p>To migrate to {@link #disableAutoRequestWithInitial} on the server side, call
+   * {@code disableAutoRequestWithInitial(0)} as {@code disableAutoInboundFlowControl}
+   * already disables all inbound requests.  On the client side, {@code
+   * disableAutoRequestWithInitial(1)} should be called to maintain existing behavior as
+   * {@code disableAutoInboundFlowControl} does not disable the initial request.
    */
   public abstract void disableAutoInboundFlowControl();
+
+  /**
+   * Disables automatic flow control where an additional message is requested to be read after a
+   * call to the 'inbound' {@link io.grpc.stub.StreamObserver#onNext(Object)} has completed. A
+   * number of initial requests to make when the call is started may be specified.
+   *
+   * <p>On client-side this method may only be called during {@link
+   * ClientResponseObserver#beforeStart}. On server-side it may only be called during the initial
+   * call to the application, before the service returns its {@code StreamObserver}.
+   *
+   * <p>Note that for server-side cases where the message is received before the handler is invoked,
+   * this method will have no effect. This is true for:
+   *
+   * <ul>
+   *   <li>{@link io.grpc.MethodDescriptor.MethodType#UNARY} operations.</li>
+   *   <li>{@link io.grpc.MethodDescriptor.MethodType#SERVER_STREAMING} operations.</li>
+   * </ul>
+   * </p>
+   *
+   * <p>This API is still a work in-progress and will likely change in the future.
+   */
+  public abstract void disableAutoRequestWithInitial(int request);
 
   /**
    * Requests the peer to produce {@code count} more messages to be delivered to the 'inbound'

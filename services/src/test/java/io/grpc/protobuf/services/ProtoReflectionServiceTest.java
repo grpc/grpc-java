@@ -564,8 +564,11 @@ public class ProtoReflectionServiceTest {
         (ClientCallStreamObserver<ServerReflectionRequest>)
             stub.serverReflectionInfo(clientResponseObserver);
 
-    // ClientCalls.startCall() calls request(1) initially, so we should get an immediate response.
+    // Verify we don't receive a response until we request it.
     requestObserver.onNext(flowControlRequest);
+    assertEquals(0, clientResponseObserver.getResponses().size());
+
+    requestObserver.request(1);
     assertEquals(1, clientResponseObserver.getResponses().size());
     assertEquals(flowControlGoldenResponse, clientResponseObserver.getResponses().get(0));
 
@@ -589,17 +592,15 @@ public class ProtoReflectionServiceTest {
         (ClientCallStreamObserver<ServerReflectionRequest>)
             stub.serverReflectionInfo(clientResponseObserver);
 
-    // ClientCalls.startCall() calls request(1) initially, so make additional request.
-    requestObserver.onNext(flowControlRequest);
     requestObserver.onNext(flowControlRequest);
     requestObserver.onCompleted();
-    assertEquals(1, clientResponseObserver.getResponses().size());
+    assertEquals(0, clientResponseObserver.getResponses().size());
     assertFalse(clientResponseObserver.onCompleteCalled());
 
     requestObserver.request(1);
     assertTrue(clientResponseObserver.onCompleteCalled());
-    assertEquals(2, clientResponseObserver.getResponses().size());
-    assertEquals(flowControlGoldenResponse, clientResponseObserver.getResponses().get(1));
+    assertEquals(1, clientResponseObserver.getResponses().size());
+    assertEquals(flowControlGoldenResponse, clientResponseObserver.getResponses().get(0));
   }
 
   private final ServerReflectionRequest flowControlRequest =
@@ -626,7 +627,7 @@ public class ProtoReflectionServiceTest {
 
     @Override
     public void beforeStart(final ClientCallStreamObserver<ServerReflectionRequest> requestStream) {
-      requestStream.disableAutoInboundFlowControl();
+      requestStream.disableAutoRequestWithInitial(0);
     }
 
     @Override
