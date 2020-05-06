@@ -18,6 +18,7 @@ package io.grpc.rls;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.NameResolver.ConfigOrError;
@@ -33,6 +34,7 @@ import java.util.Map;
  * referenced in code.  The policy should be accessed through {@link
  * io.grpc.LoadBalancerRegistry#getProvider} with the name "rls-experimental".
  */
+@Internal
 public final class RlsLoadBalancerProvider extends LoadBalancerProvider {
 
   @Override
