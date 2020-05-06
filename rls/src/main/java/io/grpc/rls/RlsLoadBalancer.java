@@ -18,6 +18,7 @@ package io.grpc.rls;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ConnectivityState;
@@ -31,6 +32,9 @@ import javax.annotation.Nullable;
 final class RlsLoadBalancer extends LoadBalancer {
 
   private final Helper helper;
+  @VisibleForTesting
+  CachingRlsLbClientBuilderProvider cachingRlsLbClientBuilderProvider =
+      new DefaultCachingRlsLbClientBuilderProvider();
   @Nullable
   private LbPolicyConfiguration lbPolicyConfiguration;
   @Nullable
@@ -53,14 +57,15 @@ final class RlsLoadBalancer extends LoadBalancer {
         if (routeLookupClient != null) {
           routeLookupClient.close();
         }
-        routeLookupClient = CachingRlsLbClient.newBuilder()
-            .setHelper(helper)
-            .setLbPolicyConfig(lbPolicyConfiguration)
-            .setThrottler(AdaptiveThrottler.builder().build())
-            .setResolvedAddressesFactory(
-                new ChildLbResolvedAddressFactory(
-                    resolvedAddresses.getAddresses(), resolvedAddresses.getAttributes()))
-            .build();
+        routeLookupClient =
+            cachingRlsLbClientBuilderProvider
+                .get()
+                .setHelper(helper)
+                .setLbPolicyConfig(lbPolicyConfiguration)
+                .setResolvedAddressesFactory(
+                    new ChildLbResolvedAddressFactory(
+                        resolvedAddresses.getAddresses(), resolvedAddresses.getAttributes()))
+                .build();
       }
       // TODO(creamsoup) allow incremental service config update. for initial use case, it is 
       //  not required.
@@ -104,6 +109,23 @@ final class RlsLoadBalancer extends LoadBalancer {
     if (routeLookupClient != null) {
       routeLookupClient.close();
       routeLookupClient = null;
+    }
+  }
+
+  /**
+   * Provides {@link CachingRlsLbClient.Builder} with default settings. This is useful for
+   * testing.
+   */
+  interface CachingRlsLbClientBuilderProvider {
+    CachingRlsLbClient.Builder get();
+  }
+
+  static final class DefaultCachingRlsLbClientBuilderProvider
+      implements CachingRlsLbClientBuilderProvider {
+
+    @Override
+    public CachingRlsLbClient.Builder get() {
+      return CachingRlsLbClient.newBuilder().setThrottler(AdaptiveThrottler.builder().build());
     }
   }
 }
