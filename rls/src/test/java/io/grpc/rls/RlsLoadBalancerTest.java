@@ -37,7 +37,6 @@ import io.grpc.ChannelLogger;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
@@ -60,6 +59,7 @@ import io.grpc.internal.JsonParser;
 import io.grpc.internal.PickSubchannelArgsImpl;
 import io.grpc.lookup.v1.RouteLookupServiceGrpc;
 import io.grpc.rls.CachingRlsLbClient.RlsPicker;
+import io.grpc.rls.RlsLoadBalancer.CachingRlsLbClientBuilderProvider;
 import io.grpc.rls.RlsProtoConverters.RouteLookupResponseConverter;
 import io.grpc.rls.RlsProtoData.RouteLookupRequest;
 import io.grpc.rls.RlsProtoData.RouteLookupResponse;
@@ -78,7 +78,6 @@ import java.util.concurrent.TimeUnit;
 import javax.annotation.Nonnull;
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -119,7 +118,7 @@ public class RlsLoadBalancerTest {
   private ArgumentCaptor<SubchannelPicker> pickerCaptor;
   private MethodDescriptor<Object, Object> fakeSearchMethod;
   private MethodDescriptor<Object, Object> fakeRescueMethod;
-  private LoadBalancer rlsLb;
+  private RlsLoadBalancer rlsLb;
 
   @Before
   public void setUp() throws Exception {
@@ -152,7 +151,14 @@ public class RlsLoadBalancerTest {
         provider.parseLoadBalancingPolicyConfig(getServiceConfig());
 
     assertThat(parsedConfigOrError.getConfig()).isNotNull();
-    rlsLb = provider.newLoadBalancer(helper);
+    rlsLb = (RlsLoadBalancer) provider.newLoadBalancer(helper);
+    rlsLb.cachingRlsLbClientBuilderProvider = new CachingRlsLbClientBuilderProvider() {
+      @Override
+      public CachingRlsLbClient.Builder get() {
+        // using default throttler which doesn't throttle
+        return CachingRlsLbClient.newBuilder();
+      }
+    };
     rlsLb.handleResolvedAddresses(ResolvedAddresses.newBuilder()
         .setAddresses(ImmutableList.of(new EquivalentAddressGroup(mock(SocketAddress.class))))
         .setLoadBalancingPolicyConfig(parsedConfigOrError.getConfig())
@@ -166,7 +172,6 @@ public class RlsLoadBalancerTest {
   }
 
   @Test
-  @Ignore
   public void lb_working() throws Exception {
     final InOrder inOrder = inOrder(helper);
 
