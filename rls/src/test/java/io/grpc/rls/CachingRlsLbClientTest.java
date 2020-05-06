@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.rls.internal;
+package io.grpc.rls;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -47,22 +47,22 @@ import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.lookup.v1.RouteLookupServiceGrpc;
-import io.grpc.rls.internal.CachingRlsLbClient.CacheEntry;
-import io.grpc.rls.internal.CachingRlsLbClient.CachedRouteLookupResponse;
-import io.grpc.rls.internal.CachingRlsLbClient.RlsPicker;
-import io.grpc.rls.internal.DoNotUseDirectScheduledExecutorService.FakeTimeProvider;
-import io.grpc.rls.internal.LbPolicyConfiguration.ChildLoadBalancingPolicy;
-import io.grpc.rls.internal.LbPolicyConfiguration.ChildPolicyWrapper;
-import io.grpc.rls.internal.LruCache.EvictionListener;
-import io.grpc.rls.internal.LruCache.EvictionType;
-import io.grpc.rls.internal.RlsProtoConverters.RouteLookupResponseConverter;
-import io.grpc.rls.internal.RlsProtoData.GrpcKeyBuilder;
-import io.grpc.rls.internal.RlsProtoData.GrpcKeyBuilder.Name;
-import io.grpc.rls.internal.RlsProtoData.NameMatcher;
-import io.grpc.rls.internal.RlsProtoData.RequestProcessingStrategy;
-import io.grpc.rls.internal.RlsProtoData.RouteLookupConfig;
-import io.grpc.rls.internal.RlsProtoData.RouteLookupRequest;
-import io.grpc.rls.internal.RlsProtoData.RouteLookupResponse;
+import io.grpc.rls.CachingRlsLbClient.CacheEntry;
+import io.grpc.rls.CachingRlsLbClient.CachedRouteLookupResponse;
+import io.grpc.rls.CachingRlsLbClient.RlsPicker;
+import io.grpc.rls.DoNotUseDirectScheduledExecutorService.FakeTimeProvider;
+import io.grpc.rls.LbPolicyConfiguration.ChildLoadBalancingPolicy;
+import io.grpc.rls.LbPolicyConfiguration.ChildPolicyWrapper;
+import io.grpc.rls.LruCache.EvictionListener;
+import io.grpc.rls.LruCache.EvictionType;
+import io.grpc.rls.RlsProtoConverters.RouteLookupResponseConverter;
+import io.grpc.rls.RlsProtoData.GrpcKeyBuilder;
+import io.grpc.rls.RlsProtoData.GrpcKeyBuilder.Name;
+import io.grpc.rls.RlsProtoData.NameMatcher;
+import io.grpc.rls.RlsProtoData.RequestProcessingStrategy;
+import io.grpc.rls.RlsProtoData.RouteLookupConfig;
+import io.grpc.rls.RlsProtoData.RouteLookupRequest;
+import io.grpc.rls.RlsProtoData.RouteLookupResponse;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import java.io.IOException;

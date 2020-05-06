@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.rls.internal;
+package io.grpc.rls;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -24,7 +24,7 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import io.grpc.rls.internal.RlsProtoData.GrpcKeyBuilder.Name;
+import io.grpc.rls.RlsProtoData.GrpcKeyBuilder.Name;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -34,7 +34,7 @@ import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 
 /** RlsProtoData is a collection of internal representation of RouteLookupService proto messages. */
-public final class RlsProtoData {
+final class RlsProtoData {
 
   /** A request object sent to route lookup service. */
   @Immutable
@@ -48,8 +48,7 @@ public final class RlsProtoData {
 
     private final ImmutableMap<String, String> keyMap;
 
-    /** Constructor for RouteLookupRequest. */
-    public RouteLookupRequest(
+    RouteLookupRequest(
         String server, String path, String targetType, Map<String, String> keyMap) {
       this.server = checkNotNull(server, "server");
       this.path = checkNotNull(path, "path");
@@ -61,7 +60,7 @@ public final class RlsProtoData {
      * Returns a full host name of the target server, {@literal e.g.} firestore.googleapis.com. Only
      * set for gRPC requests; HTTP requests must use key_map explicitly.
      */
-    public String getServer() {
+    String getServer() {
       return server;
     }
 
@@ -69,7 +68,7 @@ public final class RlsProtoData {
      * Returns a full path of the request, {@literal i.e.} "/service/method". Only set for gRPC
      * requests; HTTP requests must use key_map explicitly.
      */
-    public String getPath() {
+    String getPath() {
       return path;
     }
 
@@ -77,12 +76,12 @@ public final class RlsProtoData {
      * Returns the target type allows the client to specify what kind of target format it would like
      * from RLS to allow it to find the regional server, {@literal e.g.} "grpc".
      */
-    public String getTargetType() {
+    String getTargetType() {
       return targetType;
     }
 
     /** Returns a map of key values extracted via key builders for the gRPC or HTTP request. */
-    public ImmutableMap<String, String> getKeyMap() {
+    ImmutableMap<String, String> getKeyMap() {
       return keyMap;
     }
 
@@ -125,7 +124,7 @@ public final class RlsProtoData {
 
     private final String headerData;
 
-    public RouteLookupResponse(String target, String headerData) {
+    RouteLookupResponse(String target, String headerData) {
       this.target = checkNotNull(target, "target");
       this.headerData = checkNotNull(headerData, "headerData");
     }
@@ -134,7 +133,7 @@ public final class RlsProtoData {
      * Returns target. A target is an actual addressable entity to use for routing decision, using
      * syntax requested by the request target_type.
      */
-    public String getTarget() {
+    String getTarget() {
       return target;
     }
 
@@ -143,7 +142,7 @@ public final class RlsProtoData {
      * with "target" and sent with all requests that match the request key. Allows the RLS to pass
      * its work product to the eventual target.
      */
-    public String getHeaderData() {
+    String getHeaderData() {
       return headerData;
     }
 
@@ -176,7 +175,7 @@ public final class RlsProtoData {
 
   /** A config object for gRPC RouteLookupService. */
   @Immutable
-  public static final class RouteLookupConfig {
+  static final class RouteLookupConfig {
 
     private static final long MAX_AGE_MILLIS = TimeUnit.MINUTES.toMillis(5);
 
@@ -198,8 +197,7 @@ public final class RlsProtoData {
 
     private final RequestProcessingStrategy requestProcessingStrategy;
 
-    /** Constructs RouteLookupConfig. */
-    public RouteLookupConfig(
+    RouteLookupConfig(
         List<GrpcKeyBuilder> grpcKeyBuilders,
         String lookupService,
         long lookupServiceTimeoutInMillis,
@@ -252,7 +250,7 @@ public final class RlsProtoData {
      * keyed by name. If no GrpcKeyBuilder matches, an empty key_map will be sent to the lookup
      * service; it should likely reply with a global default route and raise an alert.
      */
-    public ImmutableList<GrpcKeyBuilder> getGrpcKeyBuilders() {
+    ImmutableList<GrpcKeyBuilder> getGrpcKeyBuilders() {
       return grpcKeyBuilders;
     }
 
@@ -260,18 +258,18 @@ public final class RlsProtoData {
      * Returns the name of the lookup service as a gRPC URI. Typically, this will be a subdomain of
      * the target, such as "lookup.datastore.googleapis.com".
      */
-    public String getLookupService() {
+    String getLookupService() {
       return lookupService;
     }
 
     /** Returns the timeout value for lookup service requests. */
-    public long getLookupServiceTimeoutInMillis() {
+    long getLookupServiceTimeoutInMillis() {
       return lookupServiceTimeoutInMillis;
     }
 
 
     /** Returns the maximum age the result will be cached. */
-    public long getMaxAgeInMillis() {
+    long getMaxAgeInMillis() {
       return maxAgeInMillis;
     }
 
@@ -279,7 +277,7 @@ public final class RlsProtoData {
      * Returns the time when an entry will be in a staled status. When cache is accessed whgen the
      * entry is in staled status, it will
      */
-    public long getStaleAgeInMillis() {
+    long getStaleAgeInMillis() {
       return staleAgeInMillis;
     }
 
@@ -289,7 +287,7 @@ public final class RlsProtoData {
      * than this value.  If this field is omitted or set to zero, a client default will be used.
      * The value may be capped to a lower amount based on client configuration.
      */
-    public long getCacheSizeBytes() {
+    long getCacheSizeBytes() {
       return cacheSizeBytes;
     }
 
@@ -298,7 +296,7 @@ public final class RlsProtoData {
      * a target not on this list is returned, it will be treated the same as an RPC error from the
      * RLS.
      */
-    public ImmutableList<String> getValidTargets() {
+    ImmutableList<String> getValidTargets() {
       return validTargets;
     }
 
@@ -308,12 +306,12 @@ public final class RlsProtoData {
      * error.  Note that requests can be routed only to a subdomain of the original target,
      * {@literal e.g.} "us_east_1.cloudbigtable.googleapis.com".
      */
-    public String getDefaultTarget() {
+    String getDefaultTarget() {
       return defaultTarget;
     }
 
     /** Returns {@link RequestProcessingStrategy} to process RLS response. */
-    public RequestProcessingStrategy getRequestProcessingStrategy() {
+    RequestProcessingStrategy getRequestProcessingStrategy() {
       return requestProcessingStrategy;
     }
 
@@ -376,7 +374,7 @@ public final class RlsProtoData {
   }
 
   /** RequestProcessingStrategy specifies how to process a request when not already in the cache. */
-  public enum RequestProcessingStrategy {
+  enum RequestProcessingStrategy {
     /**
      * Query the RLS and process the request using target returned by the lookup. The target will
      * then be cached and used for processing subsequent requests for the same key. Any errors
@@ -414,19 +412,19 @@ public final class RlsProtoData {
     }
 
     /** The name that will be used in the RLS key_map to refer to this value. */
-    public String getKey() {
+    String getKey() {
       return key;
     }
 
     /** Returns ordered list of names; the first non-empty value will be used. */
-    public ImmutableList<String> names() {
+    ImmutableList<String> names() {
       return names;
     }
 
     /**
      * Indicates if this extraction optional. A key builder will still match if no value is found.
      */
-    public boolean isOptional() {
+    boolean isOptional() {
       return optional;
     }
 
@@ -486,7 +484,7 @@ public final class RlsProtoData {
      * package name. The method name may be omitted, in which case any method on the given service
      * is matched.
      */
-    public ImmutableList<Name> getNames() {
+    ImmutableList<Name> getNames() {
       return names;
     }
 
@@ -494,7 +492,7 @@ public final class RlsProtoData {
      * Returns a list of NameMatchers for header. Extract keys from all listed headers. For gRPC, it
      * is an error to specify "required_match" on the NameMatcher protos, and we ignore it if set.
      */
-    public ImmutableList<NameMatcher> getHeaders() {
+    ImmutableList<NameMatcher> getHeaders() {
       return headers;
     }
 
@@ -535,11 +533,11 @@ public final class RlsProtoData {
 
       private final String method;
 
-      public Name(String service) {
+      Name(String service) {
         this(service, "*");
       }
 
-      public Name(String service, String method) {
+      Name(String service, String method) {
         checkState(
             !checkNotNull(service, "service").isEmpty(),
             "service must not be empty or null");
@@ -547,11 +545,11 @@ public final class RlsProtoData {
         this.method = method;
       }
 
-      public String getService() {
+      String getService() {
         return service;
       }
 
-      public String getMethod() {
+      String getMethod() {
         return method;
       }
 

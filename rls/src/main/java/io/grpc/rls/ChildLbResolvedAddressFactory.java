@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.rls.internal;
+package io.grpc.rls;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -26,13 +26,12 @@ import java.util.Collections;
 import java.util.List;
 
 /** Factory to create {@link io.grpc.LoadBalancer.ResolvedAddresses} from child load-balancers. */
-public final class ChildLbResolvedAddressFactory implements ResolvedAddressFactory {
+final class ChildLbResolvedAddressFactory implements ResolvedAddressFactory {
 
   private final List<EquivalentAddressGroup> addresses;
   private final Attributes attributes;
 
-  /** Constructor. */
-  public ChildLbResolvedAddressFactory(
+  ChildLbResolvedAddressFactory(
       List<EquivalentAddressGroup> addresses, Attributes attributes) {
     checkArgument(addresses != null && !addresses.isEmpty(), "Address must be provided");
     this.addresses = Collections.unmodifiableList(addresses);

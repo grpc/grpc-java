@@ -23,10 +23,9 @@ import io.grpc.LoadBalancerProvider;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.internal.JsonUtil;
-import io.grpc.rls.internal.LbPolicyConfiguration;
-import io.grpc.rls.internal.LbPolicyConfiguration.ChildLoadBalancingPolicy;
-import io.grpc.rls.internal.RlsProtoConverters.RouteLookupConfigConverter;
-import io.grpc.rls.internal.RlsProtoData.RouteLookupConfig;
+import io.grpc.rls.LbPolicyConfiguration.ChildLoadBalancingPolicy;
+import io.grpc.rls.RlsProtoConverters.RouteLookupConfigConverter;
+import io.grpc.rls.RlsProtoData.RouteLookupConfig;
 import java.util.Map;
 
 /**

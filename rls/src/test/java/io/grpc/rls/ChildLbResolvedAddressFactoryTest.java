@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.rls.internal;
+package io.grpc.rls;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.Mockito.mock;

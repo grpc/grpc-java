@@ -23,10 +23,6 @@ import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ConnectivityState;
 import io.grpc.LoadBalancer;
 import io.grpc.Status;
-import io.grpc.rls.internal.AdaptiveThrottler;
-import io.grpc.rls.internal.CachingRlsLbClient;
-import io.grpc.rls.internal.ChildLbResolvedAddressFactory;
-import io.grpc.rls.internal.LbPolicyConfiguration;
 import javax.annotation.Nullable;
 
 /**

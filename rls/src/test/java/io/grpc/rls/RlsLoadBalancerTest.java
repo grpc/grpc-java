@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.rls.internal;
+package io.grpc.rls;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.truth.Truth.assertThat;
@@ -59,11 +59,10 @@ import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.PickSubchannelArgsImpl;
 import io.grpc.lookup.v1.RouteLookupServiceGrpc;
-import io.grpc.rls.RlsLoadBalancerProvider;
-import io.grpc.rls.internal.CachingRlsLbClient.RlsPicker;
-import io.grpc.rls.internal.RlsProtoConverters.RouteLookupResponseConverter;
-import io.grpc.rls.internal.RlsProtoData.RouteLookupRequest;
-import io.grpc.rls.internal.RlsProtoData.RouteLookupResponse;
+import io.grpc.rls.CachingRlsLbClient.RlsPicker;
+import io.grpc.rls.RlsProtoConverters.RouteLookupResponseConverter;
+import io.grpc.rls.RlsProtoData.RouteLookupRequest;
+import io.grpc.rls.RlsProtoData.RouteLookupResponse;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import java.io.IOException;

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.rls.internal;
+package io.grpc.rls;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -32,8 +32,8 @@ import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.internal.ObjectPool;
-import io.grpc.rls.internal.ChildLoadBalancerHelper.ChildLoadBalancerHelperProvider;
-import io.grpc.rls.internal.RlsProtoData.RouteLookupConfig;
+import io.grpc.rls.ChildLoadBalancerHelper.ChildLoadBalancerHelperProvider;
+import io.grpc.rls.RlsProtoData.RouteLookupConfig;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.ForwardingSubchannel;
 import java.util.ArrayList;
@@ -46,22 +46,22 @@ import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nullable;
 
 /** Configuration for RLS load balancing policy. */
-public final class LbPolicyConfiguration {
+final class LbPolicyConfiguration {
 
   private final RouteLookupConfig routeLookupConfig;
   private final ChildLoadBalancingPolicy policy;
 
-  public LbPolicyConfiguration(
+  LbPolicyConfiguration(
       RouteLookupConfig routeLookupConfig, ChildLoadBalancingPolicy policy) {
     this.routeLookupConfig = checkNotNull(routeLookupConfig, "routeLookupConfig");
     this.policy = checkNotNull(policy, "policy");
   }
 
-  public RouteLookupConfig getRouteLookupConfig() {
+  RouteLookupConfig getRouteLookupConfig() {
     return routeLookupConfig;
   }
 
-  public ChildLoadBalancingPolicy getLoadBalancingPolicy() {
+  ChildLoadBalancingPolicy getLoadBalancingPolicy() {
     return policy;
   }
 
@@ -92,7 +92,7 @@ public final class LbPolicyConfiguration {
   }
 
   /** ChildLoadBalancingPolicy is an elected child policy to delegate requests. */
-  public static final class ChildLoadBalancingPolicy {
+  static final class ChildLoadBalancingPolicy {
 
     private final Map<String, Object> effectiveRawChildPolicy;
     private final LoadBalancerProvider effectiveLbProvider;
@@ -114,7 +114,7 @@ public final class LbPolicyConfiguration {
 
     /** Creates ChildLoadBalancingPolicy. */
     @SuppressWarnings("unchecked")
-    public static ChildLoadBalancingPolicy create(
+    static ChildLoadBalancingPolicy create(
         String childPolicyConfigTargetFieldName, List<Map<String, ?>> childPolicies)
         throws InvalidChildPolicyConfigException {
       Map<String, Object> effectiveChildPolicy = null;
@@ -153,14 +153,14 @@ public final class LbPolicyConfiguration {
     }
 
     /** Creates a child load balancer config for given target from elected raw child policy. */
-    public Map<String, ?> getEffectiveChildPolicy(String target) {
+    Map<String, ?> getEffectiveChildPolicy(String target) {
       Map<String, Object> childPolicy = new HashMap<>(effectiveRawChildPolicy);
       childPolicy.put(targetFieldName, target);
       return childPolicy;
     }
 
     /** Returns the elected child {@link LoadBalancerProvider}. */
-    public LoadBalancerProvider getEffectiveLbProvider() {
+    LoadBalancerProvider getEffectiveLbProvider() {
       return effectiveLbProvider;
     }
 
@@ -432,11 +432,11 @@ public final class LbPolicyConfiguration {
   }
 
   /** Exception thrown when attempting to parse child policy encountered parsing issue. */
-  public static final class InvalidChildPolicyConfigException extends Exception {
+  static final class InvalidChildPolicyConfigException extends Exception {
 
     private static final long serialVersionUID = 0L;
 
-    public InvalidChildPolicyConfigException(String message) {
+    InvalidChildPolicyConfigException(String message) {
       super(message);
     }
 
