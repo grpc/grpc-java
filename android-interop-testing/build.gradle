@@ -58,6 +58,7 @@ dependencies {
     implementation 'com.android.support:support-fragment:26.1.0'
     implementation 'com.google.android.gms:play-services-base:15.0.1'
     implementation 'com.google.android.gms:play-services-basement:15.0.1'
+    implementation 'org.hamcrest:hamcrest-core:1.3'
 
     implementation project(':grpc-api'),
             project(':grpc-auth'),
@@ -69,6 +70,8 @@ dependencies {
             project(':grpc-stub'),
             project(':grpc-testing'),
             libraries.google_auth_credentials,
+            libraries.guava_failureaccess,
+            libraries.j2objc_annotations,
             libraries.jsr305,
             libraries.junit,
             libraries.protobuf_lite,
@@ -81,10 +84,7 @@ dependencies {
     censusGrpcMetricDependency 'implementation'
     guavaDependency 'implementation'
 
-    compileOnly 'org.hamcrest:hamcrest-core:1.3',
-            libraries.guava_failureaccess,
-            libraries.j2objc_annotations,
-            libraries.javax_annotation
+    compileOnly libraries.javax_annotation
 
     androidTestImplementation 'androidx.test:rules:1.1.0-alpha1'
     androidTestImplementation 'androidx.test:runner:1.1.0-alpha1'

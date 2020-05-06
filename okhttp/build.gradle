@@ -18,11 +18,11 @@ dependencies {
         // prefer our own versions instead of okhttp's dependency
         exclude group: 'com.squareup.okio', module: 'okio'
     }
-    implementation libraries.okio
+    implementation libraries.guava_failureaccess,
+            libraries.j2objc_annotations,
+            libraries.okio
     guavaDependency 'implementation'
     perfmarkDependency 'implementation'
-    compileOnly libraries.guava_failureaccess,
-            libraries.j2objc_annotations
     // Tests depend on base class defined by core module.
     testImplementation project(':grpc-core').sourceSets.test.output,
             project(':grpc-testing'),

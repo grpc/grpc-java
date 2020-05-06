@@ -18,6 +18,8 @@ evaluationDependsOn(project(':grpc-core').path)
 dependencies {
     api project(':grpc-api'),
             project(':grpc-core'),
+            libraries.guava_failureaccess,
+            libraries.j2objc_annotations,
             libraries.jsr305,
             libraries.netty,
             libraries.netty_handler
@@ -29,8 +31,6 @@ dependencies {
             libraries.netty_proxy_handler
     guavaDependency 'implementation'
     perfmarkDependency 'implementation'
-    compileOnly libraries.guava_failureaccess,
-            libraries.j2objc_annotations
     // Tests depend on base class defined by core module.
     testImplementation project(':grpc-core').sourceSets.test.output,
             project(':grpc-testing'),

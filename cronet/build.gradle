@@ -36,10 +36,10 @@ dependencies {
     api project(':grpc-api'),
             project(':grpc-core'),
             libraries.cronet_api
-    implementation libraries.jsr305
+    implementation libraries.guava_failureaccess,
+            libraries.j2objc_annotations,
+            libraries.jsr305
     guavaDependency 'implementation'
-    compileOnly libraries.guava_failureaccess,
-            libraries.j2objc_annotations
     testImplementation project(':grpc-testing')
 
     testImplementation libraries.cronet_embedded

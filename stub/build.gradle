@@ -11,9 +11,9 @@ dependencies {
     api project(':grpc-api'),
             project(':grpc-context'),
             libraries.jsr305
-    compileOnly libraries.guava_failureaccess,
-            libraries.j2objc_annotations
     guavaDependency 'api'
+    implementation libraries.guava_failureaccess,
+            libraries.j2objc_annotations
     testImplementation libraries.truth,
             project(':grpc-testing')
     signature "org.codehaus.mojo.signature:java17:1.0@signature"

@@ -19,11 +19,11 @@ dependencies {
     implementation libraries.gson,
             libraries.android_annotations,
             libraries.animalsniffer_annotations,
-            libraries.errorprone
+            libraries.errorprone,
+            libraries.guava_failureaccess,
+            libraries.j2objc_annotations
     guavaDependency 'implementation'
     perfmarkDependency 'implementation'
-    compileOnly libraries.guava_failureaccess,
-            libraries.j2objc_annotations
     testImplementation project(':grpc-context').sourceSets.test.output,
             project(':grpc-api').sourceSets.test.output,
             project(':grpc-testing'),
