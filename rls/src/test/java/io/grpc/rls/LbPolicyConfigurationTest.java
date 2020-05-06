@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.rls.internal;
+package io.grpc.rls;
 
 import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.truth.Truth.assertThat;
@@ -37,13 +37,13 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
-import io.grpc.rls.internal.ChildLoadBalancerHelper.ChildLoadBalancerHelperProvider;
-import io.grpc.rls.internal.LbPolicyConfiguration.ChildLbStatusListener;
-import io.grpc.rls.internal.LbPolicyConfiguration.ChildLoadBalancingPolicy;
-import io.grpc.rls.internal.LbPolicyConfiguration.ChildPolicyWrapper;
-import io.grpc.rls.internal.LbPolicyConfiguration.ChildPolicyWrapper.ChildPolicyReportingHelper;
-import io.grpc.rls.internal.LbPolicyConfiguration.InvalidChildPolicyConfigException;
-import io.grpc.rls.internal.LbPolicyConfiguration.RefCountedChildPolicyWrapperFactory;
+import io.grpc.rls.ChildLoadBalancerHelper.ChildLoadBalancerHelperProvider;
+import io.grpc.rls.LbPolicyConfiguration.ChildLbStatusListener;
+import io.grpc.rls.LbPolicyConfiguration.ChildLoadBalancingPolicy;
+import io.grpc.rls.LbPolicyConfiguration.ChildPolicyWrapper;
+import io.grpc.rls.LbPolicyConfiguration.ChildPolicyWrapper.ChildPolicyReportingHelper;
+import io.grpc.rls.LbPolicyConfiguration.InvalidChildPolicyConfigException;
+import io.grpc.rls.LbPolicyConfiguration.RefCountedChildPolicyWrapperFactory;
 import java.net.SocketAddress;
 import java.util.Map;
 import org.junit.Test;

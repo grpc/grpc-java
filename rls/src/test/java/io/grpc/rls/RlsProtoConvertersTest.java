@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.rls.internal;
+package io.grpc.rls;
 
 import static com.google.common.truth.Truth.assertThat;
 
@@ -24,14 +24,14 @@ import com.google.common.collect.ImmutableMap;
 import io.grpc.internal.JsonParser;
 import io.grpc.lookup.v1.RouteLookupRequest;
 import io.grpc.lookup.v1.RouteLookupResponse;
-import io.grpc.rls.internal.RlsProtoConverters.RouteLookupConfigConverter;
-import io.grpc.rls.internal.RlsProtoConverters.RouteLookupRequestConverter;
-import io.grpc.rls.internal.RlsProtoConverters.RouteLookupResponseConverter;
-import io.grpc.rls.internal.RlsProtoData.GrpcKeyBuilder;
-import io.grpc.rls.internal.RlsProtoData.GrpcKeyBuilder.Name;
-import io.grpc.rls.internal.RlsProtoData.NameMatcher;
-import io.grpc.rls.internal.RlsProtoData.RequestProcessingStrategy;
-import io.grpc.rls.internal.RlsProtoData.RouteLookupConfig;
+import io.grpc.rls.RlsProtoConverters.RouteLookupConfigConverter;
+import io.grpc.rls.RlsProtoConverters.RouteLookupRequestConverter;
+import io.grpc.rls.RlsProtoConverters.RouteLookupResponseConverter;
+import io.grpc.rls.RlsProtoData.GrpcKeyBuilder;
+import io.grpc.rls.RlsProtoData.GrpcKeyBuilder.Name;
+import io.grpc.rls.RlsProtoData.NameMatcher;
+import io.grpc.rls.RlsProtoData.RequestProcessingStrategy;
+import io.grpc.rls.RlsProtoData.RouteLookupConfig;
 import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;

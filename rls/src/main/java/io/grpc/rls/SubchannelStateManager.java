@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.rls.internal;
+package io.grpc.rls;
 
 import io.grpc.ConnectivityState;
 import javax.annotation.Nullable;

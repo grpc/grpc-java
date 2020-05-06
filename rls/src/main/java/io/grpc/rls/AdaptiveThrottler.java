@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.rls.internal;
+package io.grpc.rls;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -40,7 +40,7 @@ import java.util.concurrent.atomic.AtomicReferenceArray;
  * backend has accepted and ratio_for_accepts is just a constant multiplier passed to the
  * constructor (see the description of ratio_for_accepts for more information).
  */
-public final class AdaptiveThrottler implements Throttler {
+final class AdaptiveThrottler implements Throttler {
 
   private static final int DEFAULT_HISTORY_SECONDS = 30;
   private static final int DEFAULT_REQUEST_PADDING = 8;
@@ -145,7 +145,7 @@ public final class AdaptiveThrottler implements Throttler {
   }
 
   /** Builder for {@link AdaptiveThrottler}. */
-  public static final class Builder {
+  static final class Builder {
 
     private float ratioForAccepts = DEFAULT_RATIO_FOR_ACCEPT;
     private int historySeconds = DEFAULT_HISTORY_SECONDS;
@@ -285,7 +285,7 @@ public final class AdaptiveThrottler implements Throttler {
      *
      * @return the interval
      */
-    public long getInterval() {
+    long getInterval() {
       return this.interval;
     }
 
@@ -304,7 +304,7 @@ public final class AdaptiveThrottler implements Throttler {
      * @param now the current time
      * @return the statistic count
      */
-    public final long get(long now) {
+    final long get(long now) {
       long intervalEnd = getSlotEndTime(now);
       long intervalStart = intervalEnd - interval;
       // This is the point at which increments to new slots will be ignored.

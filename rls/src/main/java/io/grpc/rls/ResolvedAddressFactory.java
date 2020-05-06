@@ -14,11 +14,13 @@
  * limitations under the License.
  */
 
-/**
- * Interfaces and implementations that are internal to gRPC.
- *
- * <p>All the content under this package and its subpackages are considered annotated with {@link
- * io.grpc.Internal}.
- */
-@io.grpc.Internal
-package io.grpc.internal;
+package io.grpc.rls;
+
+import io.grpc.LoadBalancer.ResolvedAddresses;
+
+/** A factory to create {@link ResolvedAddresses}. */
+interface ResolvedAddressFactory {
+
+  /** Creates ResolvedAddress with given childLbConfig. */
+  ResolvedAddresses create(Object childLbConfig);
+}

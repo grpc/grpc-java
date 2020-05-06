@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.rls.internal;
+package io.grpc.rls;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
@@ -43,19 +43,19 @@ import io.grpc.internal.PickSubchannelArgsImpl;
 import io.grpc.internal.TimeProvider;
 import io.grpc.lookup.v1.RouteLookupServiceGrpc;
 import io.grpc.lookup.v1.RouteLookupServiceGrpc.RouteLookupServiceStub;
-import io.grpc.rls.internal.ChildLoadBalancerHelper.ChildLoadBalancerHelperProvider;
-import io.grpc.rls.internal.LbPolicyConfiguration.ChildLbStatusListener;
-import io.grpc.rls.internal.LbPolicyConfiguration.ChildLoadBalancingPolicy;
-import io.grpc.rls.internal.LbPolicyConfiguration.ChildPolicyWrapper;
-import io.grpc.rls.internal.LbPolicyConfiguration.RefCountedChildPolicyWrapperFactory;
-import io.grpc.rls.internal.LruCache.EvictionListener;
-import io.grpc.rls.internal.LruCache.EvictionType;
-import io.grpc.rls.internal.RlsProtoConverters.RouteLookupResponseConverter;
-import io.grpc.rls.internal.RlsProtoData.RequestProcessingStrategy;
-import io.grpc.rls.internal.RlsProtoData.RouteLookupConfig;
-import io.grpc.rls.internal.RlsProtoData.RouteLookupRequest;
-import io.grpc.rls.internal.RlsProtoData.RouteLookupResponse;
-import io.grpc.rls.internal.Throttler.ThrottledException;
+import io.grpc.rls.ChildLoadBalancerHelper.ChildLoadBalancerHelperProvider;
+import io.grpc.rls.LbPolicyConfiguration.ChildLbStatusListener;
+import io.grpc.rls.LbPolicyConfiguration.ChildLoadBalancingPolicy;
+import io.grpc.rls.LbPolicyConfiguration.ChildPolicyWrapper;
+import io.grpc.rls.LbPolicyConfiguration.RefCountedChildPolicyWrapperFactory;
+import io.grpc.rls.LruCache.EvictionListener;
+import io.grpc.rls.LruCache.EvictionType;
+import io.grpc.rls.RlsProtoConverters.RouteLookupResponseConverter;
+import io.grpc.rls.RlsProtoData.RequestProcessingStrategy;
+import io.grpc.rls.RlsProtoData.RouteLookupConfig;
+import io.grpc.rls.RlsProtoData.RouteLookupRequest;
+import io.grpc.rls.RlsProtoData.RouteLookupResponse;
+import io.grpc.rls.Throttler.ThrottledException;
 import io.grpc.stub.StreamObserver;
 import java.util.HashMap;
 import java.util.Map;
@@ -72,7 +72,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * the server's decision. To reduce the performance penalty, {@link LruCache} is used.
  */
 @ThreadSafe
-public final class CachingRlsLbClient {
+final class CachingRlsLbClient {
 
   private static final Converter<RouteLookupRequest, io.grpc.lookup.v1.RouteLookupRequest>
       REQUEST_CONVERTER = new RlsProtoConverters.RouteLookupRequestConverter().reverse();
@@ -180,7 +180,7 @@ public final class CachingRlsLbClient {
    * changed after the return.
    */
   @CheckReturnValue
-  public final CachedRouteLookupResponse get(final RouteLookupRequest request) {
+  final CachedRouteLookupResponse get(final RouteLookupRequest request) {
     synchronizationContext.throwIfNotInThisSynchronizationContext();
     synchronized (lock) {
       final CacheEntry cacheEntry;
@@ -202,7 +202,7 @@ public final class CachingRlsLbClient {
   }
 
   /** Performs any pending maintenance operations needed by the cache. */
-  public void close() {
+  void close() {
     synchronized (lock) {
       // all childPolicyWrapper will be returned via AutoCleaningEvictionListener
       linkedHashLruCache.close();
@@ -247,7 +247,7 @@ public final class CachingRlsLbClient {
     }
   }
 
-  public void requestConnection() {
+  void requestConnection() {
     rlsChannel.getState(true);
   }
 
@@ -304,7 +304,7 @@ public final class CachingRlsLbClient {
     }
 
     @Nullable
-    public String getHeaderData() {
+    String getHeaderData() {
       if (!hasData()) {
         return null;
       }
@@ -654,12 +654,12 @@ public final class CachingRlsLbClient {
   }
 
   /** Returns a Builder for {@link CachingRlsLbClient}. */
-  public static Builder newBuilder() {
+  static Builder newBuilder() {
     return new Builder();
   }
 
   /** A Builder for {@link CachingRlsLbClient}. */
-  public static final class Builder {
+  static final class Builder {
 
     private Helper helper;
     private LbPolicyConfiguration lbPolicyConfig;
@@ -669,17 +669,17 @@ public final class CachingRlsLbClient {
     private EvictionListener<RouteLookupRequest, CacheEntry> evictionListener;
     private BackoffPolicy.Provider backoffProvider = new ExponentialBackoffPolicy.Provider();
 
-    public Builder setHelper(Helper helper) {
+    Builder setHelper(Helper helper) {
       this.helper = checkNotNull(helper, "helper");
       return this;
     }
 
-    public Builder setLbPolicyConfig(LbPolicyConfiguration lbPolicyConfig) {
+    Builder setLbPolicyConfig(LbPolicyConfiguration lbPolicyConfig) {
       this.lbPolicyConfig = checkNotNull(lbPolicyConfig, "lbPolicyConfig");
       return this;
     }
 
-    public Builder setThrottler(Throttler throttler) {
+    Builder setThrottler(Throttler throttler) {
       this.throttler = checkNotNull(throttler, "throttler");
       return this;
     }
@@ -687,30 +687,30 @@ public final class CachingRlsLbClient {
     /**
      * Sets a factory to create {@link ResolvedAddresses} for child load balancer.
      */
-    public Builder setResolvedAddressesFactory(
+    Builder setResolvedAddressesFactory(
         ResolvedAddressFactory resolvedAddressFactory) {
       this.resolvedAddressFactory =
           checkNotNull(resolvedAddressFactory, "resolvedAddressFactory");
       return this;
     }
 
-    public Builder setTimeProvider(TimeProvider timeProvider) {
+    Builder setTimeProvider(TimeProvider timeProvider) {
       this.timeProvider = checkNotNull(timeProvider, "timeProvider");
       return this;
     }
 
-    public Builder setEvictionListener(
+    Builder setEvictionListener(
         @Nullable EvictionListener<RouteLookupRequest, CacheEntry> evictionListener) {
       this.evictionListener = evictionListener;
       return this;
     }
 
-    public Builder setBackoffProvider(BackoffPolicy.Provider provider) {
+    Builder setBackoffProvider(BackoffPolicy.Provider provider) {
       this.backoffProvider = checkNotNull(provider, "provider");
       return this;
     }
 
-    public CachingRlsLbClient build() {
+    CachingRlsLbClient build() {
       return new CachingRlsLbClient(this);
     }
   }
@@ -819,7 +819,7 @@ public final class CachingRlsLbClient {
   }
 
   /** A header will be added when RLS server respond with additional header data. */
-  public static final Metadata.Key<String> RLS_DATA_KEY =
+  static final Metadata.Key<String> RLS_DATA_KEY =
       Metadata.Key.of("X-Google-RLS-Data", Metadata.ASCII_STRING_MARSHALLER);
 
   final class RlsPicker extends SubchannelPicker {

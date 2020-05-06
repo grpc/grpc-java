@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.rls.internal;
+package io.grpc.rls;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -23,11 +23,11 @@ import com.google.common.base.Converter;
 import io.grpc.internal.JsonUtil;
 import io.grpc.lookup.v1.RouteLookupRequest;
 import io.grpc.lookup.v1.RouteLookupResponse;
-import io.grpc.rls.internal.RlsProtoData.GrpcKeyBuilder;
-import io.grpc.rls.internal.RlsProtoData.GrpcKeyBuilder.Name;
-import io.grpc.rls.internal.RlsProtoData.NameMatcher;
-import io.grpc.rls.internal.RlsProtoData.RequestProcessingStrategy;
-import io.grpc.rls.internal.RlsProtoData.RouteLookupConfig;
+import io.grpc.rls.RlsProtoData.GrpcKeyBuilder;
+import io.grpc.rls.RlsProtoData.GrpcKeyBuilder.Name;
+import io.grpc.rls.RlsProtoData.NameMatcher;
+import io.grpc.rls.RlsProtoData.RequestProcessingStrategy;
+import io.grpc.rls.RlsProtoData.RouteLookupConfig;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -38,13 +38,13 @@ import javax.annotation.Nullable;
  * RlsProtoConverters is a collection of {@link Converter} between RouteLookupService proto / json
  * messages to internal representation in {@link RlsProtoData}.
  */
-public final class RlsProtoConverters {
+final class RlsProtoConverters {
 
   /**
    * RouteLookupRequestConverter converts between {@link RouteLookupRequest} and {@link
    * RlsProtoData.RouteLookupRequest}.
    */
-  public static final class RouteLookupRequestConverter
+  static final class RouteLookupRequestConverter
       extends Converter<RouteLookupRequest, RlsProtoData.RouteLookupRequest> {
 
     @Override
@@ -73,7 +73,7 @@ public final class RlsProtoConverters {
    * RouteLookupResponseConverter converts between {@link RouteLookupResponse} and {@link
    * RlsProtoData.RouteLookupResponse}.
    */
-  public static final class RouteLookupResponseConverter
+  static final class RouteLookupResponseConverter
       extends Converter<RouteLookupResponse, RlsProtoData.RouteLookupResponse> {
 
     @Override
@@ -96,7 +96,7 @@ public final class RlsProtoConverters {
   /**
    * RouteLookupConfigConverter converts between json map to {@link RouteLookupConfig}.
    */
-  public static final class RouteLookupConfigConverter
+  static final class RouteLookupConfigConverter
       extends Converter<Map<String, ?>, RouteLookupConfig> {
 
     @Override
@@ -164,7 +164,7 @@ public final class RlsProtoConverters {
     }
 
     @SuppressWarnings("unchecked")
-    public static GrpcKeyBuilder convert(Map<String, ?> keyBuilder) {
+    static GrpcKeyBuilder convert(Map<String, ?> keyBuilder) {
       List<Map<String, ?>> rawNames =
           JsonUtil.checkObjectList(JsonUtil.getList(keyBuilder, "names"));
       List<Name> names = new ArrayList<>();

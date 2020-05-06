@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.rls.internal;
+package io.grpc.rls;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -24,9 +24,9 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
 import com.google.common.collect.ImmutableList;
-import io.grpc.rls.internal.DoNotUseDirectScheduledExecutorService.FakeTimeProvider;
-import io.grpc.rls.internal.LruCache.EvictionListener;
-import io.grpc.rls.internal.LruCache.EvictionType;
+import io.grpc.rls.DoNotUseDirectScheduledExecutorService.FakeTimeProvider;
+import io.grpc.rls.LruCache.EvictionListener;
+import io.grpc.rls.LruCache.EvictionType;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import org.junit.Before;

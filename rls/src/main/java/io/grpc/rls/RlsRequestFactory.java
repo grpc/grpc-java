@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.rls.internal;
+package io.grpc.rls;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
@@ -24,11 +24,11 @@ import com.google.common.collect.Table;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
-import io.grpc.rls.internal.RlsProtoData.GrpcKeyBuilder;
-import io.grpc.rls.internal.RlsProtoData.GrpcKeyBuilder.Name;
-import io.grpc.rls.internal.RlsProtoData.NameMatcher;
-import io.grpc.rls.internal.RlsProtoData.RouteLookupConfig;
-import io.grpc.rls.internal.RlsProtoData.RouteLookupRequest;
+import io.grpc.rls.RlsProtoData.GrpcKeyBuilder;
+import io.grpc.rls.RlsProtoData.GrpcKeyBuilder.Name;
+import io.grpc.rls.RlsProtoData.NameMatcher;
+import io.grpc.rls.RlsProtoData.RouteLookupConfig;
+import io.grpc.rls.RlsProtoData.RouteLookupRequest;
 import java.util.HashMap;
 import java.util.Map;
 import javax.annotation.CheckReturnValue;
@@ -45,8 +45,7 @@ final class RlsRequestFactory {
    */
   private final Table<String, String, NameMatcher> keyBuilderTable;
 
-  /** Constructor. */
-  public RlsRequestFactory(RouteLookupConfig rlsConfig) {
+  RlsRequestFactory(RouteLookupConfig rlsConfig) {
     checkNotNull(rlsConfig, "rlsConfig");
     this.target = rlsConfig.getLookupService();
     this.keyBuilderTable = createKeyBuilderTable(rlsConfig);
@@ -71,7 +70,7 @@ final class RlsRequestFactory {
 
   /** Creates a {@link RouteLookupRequest} for given request's metadata. */
   @CheckReturnValue
-  public RouteLookupRequest create(String service, String method, Metadata metadata) {
+  RouteLookupRequest create(String service, String method, Metadata metadata) {
     checkNotNull(service, "service");
     checkNotNull(method, "method");
     String path = service + "/" + method;
