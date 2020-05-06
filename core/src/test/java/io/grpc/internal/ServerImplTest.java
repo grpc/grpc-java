@@ -1441,8 +1441,9 @@ public class ServerImplTest {
 
   private void ensureServerStateNotLeaked() {
     verify(stream).close(statusCaptor.capture(), metadataCaptor.capture());
-    assertEquals(Status.UNKNOWN, statusCaptor.getValue());
-    assertNull(statusCaptor.getValue().getCause());
+    assertEquals(Status.UNKNOWN.getCode(), statusCaptor.getValue().getCode());
+    // Used in InProcessTransport when set to include the cause with the status
+    assertNotNull(statusCaptor.getValue().getCause());
     assertTrue(metadataCaptor.getValue().keys().isEmpty());
   }
 
