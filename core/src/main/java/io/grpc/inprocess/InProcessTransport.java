@@ -568,7 +568,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
 
       /** clientStream.serverClosed() must be called before this method */
       private void notifyClientClose(Status status, Metadata trailers) {
-        Status clientStatus = stripCause(status, includeCauseWithStatus);
+        Status clientStatus = cleanStatus(status, includeCauseWithStatus);
         synchronized (this) {
           if (closed) {
             return;
@@ -748,7 +748,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       // Must be thread-safe for shutdownNow()
       @Override
       public void cancel(Status reason) {
-        Status serverStatus = stripCause(reason, includeCauseWithStatus);
+        Status serverStatus = cleanStatus(reason, includeCauseWithStatus);
         if (!internalCancel(serverStatus, serverStatus)) {
           return;
         }
@@ -847,13 +847,15 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
   }
 
   /**
-   * Returns a new status with the same code and description, but stripped of any other information
-   * (i.e. cause).
+   * Returns a new status with the same code and description.
+   * If includeCauseWithStatus is true, cause is also included.
    *
-   * <p>This is, so that the InProcess transport behaves in the same way as the other transports,
-   * when exchanging statuses between client and server and vice versa.
+   * <p>For InProcess transport to behave in the same way as the other transports,
+   * when exchanging statuses between client and server and vice versa,
+   * the cause should be excluded from the status.
+   * For easier debugging, the status may be optionally included.
    */
-  private static Status stripCause(Status status, boolean includeCauseWithStatus) {
+  private static Status cleanStatus(Status status, boolean includeCauseWithStatus) {
     if (status == null) {
       return null;
     }
