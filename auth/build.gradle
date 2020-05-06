@@ -9,7 +9,8 @@ plugins {
 description = "gRPC: Auth"
 dependencies {
     api project(':grpc-api'),
-            libraries.google_auth_credentials
+            libraries.google_auth_credentials,
+            libraries.jsr305
     guavaDependency 'implementation'
     testImplementation project(':grpc-testing'),
             libraries.google_auth_oauth2_http

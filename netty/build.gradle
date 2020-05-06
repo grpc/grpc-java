@@ -16,12 +16,21 @@ configurations {
 evaluationDependsOn(project(':grpc-core').path)
 
 dependencies {
-    api project(':grpc-core'),
-            libraries.netty
-    implementation libraries.netty_proxy_handler
+    api project(':grpc-api'),
+            project(':grpc-core'),
+            libraries.jsr305,
+            libraries.netty,
+            libraries.netty_handler
+    implementation libraries.netty_buffer,
+            libraries.netty_codec,
+            libraries.netty_codec_http,
+            libraries.netty_common,
+            libraries.netty_transport,
+            libraries.netty_proxy_handler
     guavaDependency 'implementation'
     perfmarkDependency 'implementation'
-
+    compileOnly libraries.guava_failureaccess,
+            libraries.j2objc_annotations
     // Tests depend on base class defined by core module.
     testImplementation project(':grpc-core').sourceSets.test.output,
             project(':grpc-testing'),

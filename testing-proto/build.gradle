@@ -8,9 +8,12 @@ plugins {
 description = "gRPC: Testing Protos"
 
 dependencies {
-    api project(':grpc-protobuf'),
+    api project(':grpc-api'),
+            project(':grpc-protobuf'),
             project(':grpc-stub')
+    guavaDependency 'api'
     compileOnly libraries.javax_annotation
+    implementation libraries.protobuf
     testImplementation libraries.truth
     testRuntime libraries.javax_annotation
 }

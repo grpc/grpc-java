@@ -139,7 +139,9 @@ subprojects {
             cronet_embedded: 'org.chromium.net:cronet-embedded:66.3359.158',
             gson: "com.google.code.gson:gson:2.8.6",
             guava: "com.google.guava:guava:${guavaVersion}",
+            guava_failureaccess: 'com.google.guava:failureaccess:1.0.1',
             hpack: 'com.twitter:hpack:0.10.1',
+            j2objc_annotations: 'com.google.j2objc:j2objc-annotations:1.3',
             javax_annotation: 'org.apache.tomcat:annotations-api:6.0.53',
             jsr305: 'com.google.code.findbugs:jsr305:3.0.2',
             google_api_protos: 'com.google.api.grpc:proto-google-common-protos:1.17.0',
@@ -160,8 +162,15 @@ subprojects {
             lang: "org.apache.commons:commons-lang3:3.5",
 
             netty: "io.netty:netty-codec-http2:[${nettyVersion}]",
+            netty_buffer: "io.netty:netty-buffer:${nettyVersion}",
+            netty_codec: "io.netty:netty-codec:${nettyVersion}",
+            netty_codec_http: "io.netty:netty-codec-http:${nettyVersion}",
+            netty_common: "io.netty:netty-common:${nettyVersion}",
             netty_epoll: "io.netty:netty-transport-native-epoll:${nettyVersion}:linux-x86_64",
+            netty_handler: "io.netty:netty-handler:${nettyVersion}",
             netty_proxy_handler: "io.netty:netty-handler-proxy:${nettyVersion}",
+            netty_transport: "io.netty:netty-transport:${nettyVersion}",
+            netty_transport_uds: "io.netty:netty-transport-native-unix-common:${nettyVersion}",
 
             // Keep the following references of tcnative version in sync whenever it's updated
             // SECURITY.md (multiple occurrences)
@@ -230,6 +239,19 @@ subprojects {
             guavaDependency 'runtimeOnly'
         }
 
+        // A util function to config google_api_protos dependency with some
+        // harmful transitive dependencies properly cleaned up.
+        googleApiProtosDependency = { configurationName ->
+            dependencies."$configurationName"(libraries.google_api_protos) {
+                // 'com.google.api:api-common' transitively depends on auto-value, which breaks our
+                // annotations.
+                exclude group: 'com.google.api', module: 'api-common'
+                // Prefer our more up-to-date protobuf over that from google_api_protos
+                exclude group: 'com.google.protobuf', module: 'protobuf-java'
+            }
+            dependencies.runtimeOnly libraries.protobuf
+        }
+
         // A util function to config perfmark dependency with transitive
         // dependencies properly resolved for the failOnVersionConflict strategy.
         perfmarkDependency = { configurationName ->
@@ -241,6 +263,12 @@ subprojects {
     }
 
     configurations {
+        if (isAndroid) {
+            debugCompileClasspath.transitive = false
+            releaseCompileClasspath.transitive = false
+        } else {
+            compileClasspath.transitive = false
+        }
         // Detect Maven Enforcer's dependencyConvergence failures. We only
         // care for artifacts used as libraries by others.
         if (isAndroid && !(project.name in ['grpc-android-interop-testing'])) {

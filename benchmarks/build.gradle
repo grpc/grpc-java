@@ -21,16 +21,25 @@ configurations {
 }
 
 dependencies {
-    implementation project(':grpc-core'),
+    implementation project(':grpc-api'),
+            project(':grpc-core'),
             project(':grpc-netty'),
             project(':grpc-okhttp'),
             project(':grpc-stub'),
             project(':grpc-protobuf'),
             project(':grpc-testing'),
             libraries.hdrhistogram,
+            libraries.jsr305,
             libraries.netty_tcnative,
+            libraries.netty_buffer,
+            libraries.netty_common,
             libraries.netty_epoll,
-            libraries.math
+            libraries.netty_handler,
+            libraries.netty_transport,
+            libraries.netty_transport_uds,
+            libraries.math,
+            libraries.protobuf
+    guavaDependency 'implementation'
     compileOnly libraries.javax_annotation
     alpnagent libraries.jetty_alpn_agent
 

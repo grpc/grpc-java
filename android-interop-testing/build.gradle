@@ -48,26 +48,42 @@ android {
 }
 
 dependencies {
+    implementation 'android.arch.lifecycle:common:1.0.0'
     implementation 'com.android.support:appcompat-v7:26.1.0'
     implementation 'com.android.support:multidex:1.0.3'
     implementation 'com.android.support:support-annotations:27.1.1'
+    implementation 'com.android.support:support-compat:26.1.0'
+    implementation 'com.android.support:support-core-ui:26.1.0'
+    implementation 'com.android.support:support-core-utils:26.1.0'
+    implementation 'com.android.support:support-fragment:26.1.0'
     implementation 'com.google.android.gms:play-services-base:15.0.1'
+    implementation 'com.google.android.gms:play-services-basement:15.0.1'
 
-    implementation project(':grpc-auth'),
+    implementation project(':grpc-api'),
+            project(':grpc-auth'),
             project(':grpc-census'),
+            project(':grpc-context'),
+            project(':grpc-core'),
             project(':grpc-okhttp'),
             project(':grpc-protobuf-lite'),
             project(':grpc-stub'),
             project(':grpc-testing'),
+            libraries.google_auth_credentials,
+            libraries.jsr305,
             libraries.junit,
+            libraries.protobuf_lite,
             libraries.truth
 
     implementation (libraries.google_auth_oauth2_http) {
         exclude group: 'org.apache.httpcomponents'
     }
+    censusApiDependency 'implementation'
     censusGrpcMetricDependency 'implementation'
+    guavaDependency 'implementation'
 
-    compileOnly libraries.javax_annotation
+    compileOnly libraries.guava_failureaccess,
+            libraries.j2objc_annotations,
+            libraries.javax_annotation
 
     androidTestImplementation 'androidx.test:rules:1.1.0-alpha1'
     androidTestImplementation 'androidx.test:runner:1.1.0-alpha1'

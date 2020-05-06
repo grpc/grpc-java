@@ -45,6 +45,8 @@ apply plugin: 'com.google.cloud.tools.appengine'  // App Engine tasks
 dependencies {
     providedCompile group: 'javax.servlet', name: 'servlet-api', version:'2.5'
     runtimeOnly 'com.google.appengine:appengine-api-1.0-sdk:1.9.59'
+    implementation project(':grpc-api')
+    implementation project(':grpc-core')
     implementation project(':grpc-netty')
     implementation project(":grpc-stub")
     implementation (project(':grpc-interop-testing')) {

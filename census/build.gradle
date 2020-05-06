@@ -8,7 +8,9 @@ description = 'gRPC: Census'
 evaluationDependsOn(project(':grpc-api').path)
 
 dependencies {
-    api project(':grpc-api')
+    api project(':grpc-api'),
+            project(':grpc-context'),
+            libraries.jsr305
     guavaDependency 'implementation'
     censusApiDependency 'implementation'
     censusGrpcMetricDependency 'implementation'

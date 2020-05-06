@@ -19,13 +19,23 @@ description = "gRPC: XDS plugin"
 evaluationDependsOn(project(':grpc-core').path)
 
 dependencies {
-    implementation project(':grpc-protobuf'),
+    implementation project(':grpc-api'),
+            project(':grpc-context'),
+            project(':grpc-protobuf'),
             project(':grpc-stub'),
             project(':grpc-core'),
             project(':grpc-services'),
             project(path: ':grpc-alts', configuration: 'shadow'),
-            libraries.gson
-    def nettyDependency = implementation project(':grpc-netty')
+            libraries.jsr305,
+            libraries.gson,
+            libraries.protobuf
+    def nettyDependency = implementation project(':grpc-netty'),
+            libraries.netty,
+            libraries.netty_codec,
+            libraries.netty_common,
+            libraries.netty_handler,
+            libraries.netty_transport,
+            libraries.netty_transport_uds
 
     implementation (libraries.opencensus_proto) {
         // prefer our own versions instead of opencensus_proto's
@@ -38,6 +48,8 @@ dependencies {
         exclude group: 'com.google.guava', module: 'guava'
         exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
     }
+    googleApiProtosDependency 'implementation'
+    guavaDependency 'implementation'
 
     testImplementation project(':grpc-core').sourceSets.test.output
 

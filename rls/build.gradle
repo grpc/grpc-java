@@ -10,11 +10,16 @@ description = "gRPC: RouteLookupService Loadbalancing plugin"
 evaluationDependsOn(project(':grpc-core').path)
 
 dependencies {
-    implementation project(':grpc-core'),
+    implementation project(':grpc-api'),
+            project(':grpc-core'),
             project(':grpc-protobuf'),
-            project(':grpc-stub')
+            project(':grpc-stub'),
+            libraries.jsr305,
+            libraries.protobuf
     guavaDependency 'implementation'
-    compileOnly libraries.javax_annotation
+    compileOnly libraries.guava_failureaccess,
+            libraries.j2objc_annotations,
+            libraries.javax_annotation
     testImplementation libraries.truth,
             project(':grpc-testing'),
             project(':grpc-testing-proto'),

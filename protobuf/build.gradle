@@ -15,13 +15,7 @@ dependencies {
             libraries.protobuf
     guavaDependency 'implementation'
 
-    api (libraries.google_api_protos) {
-        // 'com.google.api:api-common' transitively depends on auto-value, which breaks our
-        // annotations.
-        exclude group: 'com.google.api', module: 'api-common'
-        // Prefer our more up-to-date protobuf over 3.2.0
-        exclude group: 'com.google.protobuf', module: 'protobuf-java'
-    }
+    googleApiProtosDependency 'api'
 
     api (project(':grpc-protobuf-lite')) {
         exclude group: 'com.google.protobuf', module: 'protobuf-javalite'

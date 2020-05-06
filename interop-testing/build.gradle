@@ -18,20 +18,33 @@ evaluationDependsOn(project(':grpc-context').path)
 
 dependencies {
     implementation project(path: ':grpc-alts', configuration: 'shadow'),
+            project(':grpc-api'),
             project(':grpc-auth'),
             project(':grpc-census'),
             project(':grpc-core'),
+            project(':grpc-context'),
             project(':grpc-netty'),
             project(':grpc-okhttp'),
             project(':grpc-protobuf'),
             project(':grpc-services'),
             project(':grpc-stub'),
             project(':grpc-testing'),
+            libraries.google_auth_credentials,
             libraries.google_auth_oauth2_http,
+            libraries.jsr305,
             libraries.junit,
+            libraries.netty_handler,
+            libraries.protobuf,
             libraries.truth
+    implementation (project(':grpc-protobuf-lite')) {
+        exclude group: 'com.google.protobuf', module: 'protobuf-javalite'
+    }
+    censusApiDependency 'implementation'
     censusGrpcMetricDependency 'implementation'
-    compileOnly libraries.javax_annotation
+    guavaDependency 'implementation'
+    compileOnly libraries.guava_failureaccess,
+            libraries.j2objc_annotations,
+            libraries.javax_annotation
     runtimeOnly libraries.opencensus_impl,
             libraries.netty_tcnative,
             project(':grpc-grpclb')

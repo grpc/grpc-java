@@ -13,15 +13,24 @@ sourceCompatibility = 1.7
 targetCompatibility = 1.7
 
 dependencies {
-    api project(':grpc-core')
+    api project(':grpc-api'),
+            project(':grpc-core'),
+            libraries.jsr305
     implementation project(':grpc-auth'),
             project(':grpc-grpclb'),
             project(':grpc-protobuf'),
             project(':grpc-stub'),
+            libraries.google_auth_credentials,
             libraries.lang,
             libraries.protobuf,
             libraries.conscrypt
-    def nettyDependency = implementation project(':grpc-netty')
+    def nettyDependency = implementation project(':grpc-netty'),
+            libraries.netty,
+            libraries.netty_buffer,
+            libraries.netty_codec,
+            libraries.netty_common,
+            libraries.netty_handler,
+            libraries.netty_transport
     implementation (libraries.google_auth_oauth2_http) {
         // prefer our own versions instead of google-auth-oauth2-http's dependency
         exclude group: 'com.google.guava', module: 'guava'

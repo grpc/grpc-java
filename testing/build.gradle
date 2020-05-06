@@ -10,10 +10,15 @@ description = "gRPC: Testing"
 evaluationDependsOn(project(':grpc-core').path)
 
 dependencies {
-    api project(':grpc-core'),
+    api project(':grpc-api'),
+            project(':grpc-core'),
+            project(':grpc-context'),
             project(':grpc-stub'),
+            libraries.jsr305,
             libraries.junit
-
+    compileOnly libraries.guava_failureaccess,
+            libraries.j2objc_annotations
+    guavaDependency 'implementation'
     censusApiDependency 'implementation'
 
     testImplementation (libraries.mockito) {

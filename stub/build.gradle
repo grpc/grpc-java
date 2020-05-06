@@ -8,7 +8,11 @@ plugins {
 
 description = "gRPC: Stub"
 dependencies {
-    api project(':grpc-api')
+    api project(':grpc-api'),
+            project(':grpc-context'),
+            libraries.jsr305
+    compileOnly libraries.guava_failureaccess,
+            libraries.j2objc_annotations
     guavaDependency 'api'
     testImplementation libraries.truth,
             project(':grpc-testing')
