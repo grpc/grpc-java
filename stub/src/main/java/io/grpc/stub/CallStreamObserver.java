@@ -135,7 +135,9 @@ public abstract class CallStreamObserver<V> implements StreamObserver<V> {
    *
    * <p>This API is still a work in-progress and will likely change in the future.
    */
-  public abstract void disableAutoRequestWithInitial(int request);
+  public void disableAutoRequestWithInitial(int request) {
+    throw new UnsupportedOperationException();
+  }
 
   /**
    * Requests the peer to produce {@code count} more messages to be delivered to the 'inbound'
