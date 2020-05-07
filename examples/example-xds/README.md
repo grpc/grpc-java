@@ -12,19 +12,13 @@ environment.__
 
 ### Build the example
 
-1. The server does not use XDS, so recent releases work fine. Building using
-recent releases is much easier, so check out the most recent release tag:
-```
-$ git checkout v1.29.0
-```
-
-2. Build the hello-world example server or the hostname example server. See
+1. Build the hello-world example server or the hostname example server. See
    [the examples README](../README.md) or the
    [hostname example README](../example-hostname/README.md).
 
-3. Build the xds hello-world example client. From the `grpc-java/examples/examples-xds` directory:
+2. Build the xds hello-world example client. From the `grpc-java/examples/examples-xds` directory:
 ```
-$ ../gradlew -PskipCodegen=true -PskipAndroid=true --include-build ../.. installDist
+$ ../gradlew installDist
 ```
 
 This creates the script `build/install/example-xds/bin/xds-hello-world-client`
