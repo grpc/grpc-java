@@ -193,7 +193,7 @@ public final class InProcessChannelBuilder extends
     private final boolean useSharedTimer;
     private final int maxInboundMetadataSize;
     private boolean closed;
-    private boolean includeCauseWithStatus;
+    private final boolean includeCauseWithStatus;
 
     private InProcessClientTransportFactory(
         String name,

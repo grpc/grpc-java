@@ -2067,7 +2067,7 @@ public abstract class AbstractTransportTest {
    * Verifies that the client status is as expected. By default, the code and description should
    * be present, and the cause should be stripped away.
    */
-  private void checkClientStatus(Status expectedStatus, Status clientStreamStatus) {
+  private static void checkClientStatus(Status expectedStatus, Status clientStreamStatus) {
     assertEquals(expectedStatus.getCode(), clientStreamStatus.getCode());
     assertEquals(expectedStatus.getDescription(), clientStreamStatus.getDescription());
     assertNull(clientStreamStatus.getCause());

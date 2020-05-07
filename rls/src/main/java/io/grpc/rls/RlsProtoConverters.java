@@ -189,4 +189,6 @@ final class RlsProtoConverters {
       return new GrpcKeyBuilder(names, nameMatchers);
     }
   }
+
+  private RlsProtoConverters() {}
 }

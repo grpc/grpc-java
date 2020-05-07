@@ -172,7 +172,7 @@ public final class GrpclbFallbackTestClient {
     }
   }
 
-  private void runShellCmd(String cmd) throws Exception {
+  private static void runShellCmd(String cmd) throws Exception {
     logger.info("Run shell command: " + cmd);
     ProcessBuilder pb = new ProcessBuilder("bash", "-c", cmd);
     pb.redirectErrorStream(true);
