@@ -1,0 +1,27 @@
+load("//:java_grpc_library.bzl", "java_grpc_library")
+
+java_library(
+    name = "rls",
+    srcs = glob([
+        "src/main/java/io/grpc/rls/*.java",
+    ]),
+    visibility = ["//visibility:public"],
+    deps = [
+        ":rls_java_grpc",
+        "//api",
+        "//core",
+        "//core:internal",
+        "//core:util",
+        "//stub",
+        "@com_google_code_findbugs_jsr305//jar",
+        "@com_google_guava_guava//jar",
+        "@io_grpc_grpc_proto//:rls_java_proto",
+        "@io_grpc_grpc_proto//:rls_config_java_proto",
+    ],
+)
+
+java_grpc_library(
+    name = "rls_java_grpc",
+    srcs = ["@io_grpc_grpc_proto//:rls_proto"],
+    deps = ["@io_grpc_grpc_proto//:rls_java_proto"],
+)
