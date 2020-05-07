@@ -10,43 +10,15 @@ will be very hard to produce a working enviornment just by this example. Please
 refer to documentation specific for your XDS management server and
 environment.__
 
-The example requires grpc-xds, but grpc-xds is not currently being published.
-You will thus need to build it yourself. This should guide you, but if you
-encounter issues please consult [COMPILING.md](../../COMPILING.md).
-
 ### Build the example
 
-1. The server does not use XDS, so recent releases work fine. Building using
-recent releases is much easier, so check out the most recent release tag:
-```
-$ git checkout v1.29.0
-```
-
-2. Build the hello-world example server or the hostname example server. See
+1. Build the hello-world example server or the hostname example server. See
    [the examples README](../README.md) or the
    [hostname example README](../example-hostname/README.md).
 
-3. Since XDS is still developing rapidly, XDS-using code should be built from
-master:
+2. Build the xds hello-world example client. From the `grpc-java/examples/examples-xds` directory:
 ```
-$ git checkout master
-```
-
-4. Building protoc-gen-grpc-java (the protoc plugin) requires a bit of work and
-   isn't necessary. So change the hello-world example to use the last released
-   version of the plugin. In `grpc-java/examples/build.gradle`, change:
-```
-        grpc { artifact = "io.grpc:protoc-gen-grpc-java:${grpcVersion}" }
-```
-To:
-```
-        grpc { artifact = "io.grpc:protoc-gen-grpc-java:1.29.0" }
-```
-
-
-5. Build this client. From the `grpc-java/examples/examples-xds` directory:
-```
-$ ../gradlew -PskipCodegen=true -PskipAndroid=true --include-build ../.. installDist
+$ ../gradlew installDist
 ```
 
 This creates the script `build/install/example-xds/bin/xds-hello-world-client`
