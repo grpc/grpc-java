@@ -710,16 +710,16 @@ final class XdsClientImpl extends XdsClient {
           ldsResponse.getVersionInfo(), "Malformed LDS response: " + e);
       return;
     }
+    ListenerUpdate listenerUpdate = null;
     if (requestedListener != null) {
       if (ldsRespTimer != null) {
         ldsRespTimer.cancel();
         ldsRespTimer = null;
       }
       try {
-        ListenerUpdate listenerUpdate = ListenerUpdate.newBuilder()
+        listenerUpdate = ListenerUpdate.newBuilder()
             .setListener(EnvoyServerProtoData.Listener.fromEnvoyProtoListener(requestedListener))
             .build();
-        listenerWatcher.onListenerChanged(listenerUpdate);
       } catch (InvalidProtocolBufferException e) {
         logger.log(XdsLogLevel.WARNING, "Failed to unpack Listener in LDS response {0}", e);
         adsStream.sendNackRequest(
@@ -734,6 +734,9 @@ final class XdsClientImpl extends XdsClient {
     }
     adsStream.sendAckRequest(ADS_TYPE_URL_LDS, ImmutableList.<String>of(),
         ldsResponse.getVersionInfo());
+    if (listenerUpdate != null) {
+      listenerWatcher.onListenerChanged(listenerUpdate);
+    }
   }
 
   private boolean isRequestedListener(Listener listener) {
