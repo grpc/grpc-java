@@ -187,8 +187,8 @@ final class EnvoyServerProtoData {
     private static DownstreamTlsContext getTlsContextFromFilterChain(
         io.envoyproxy.envoy.api.v2.listener.FilterChain filterChain)
         throws InvalidProtocolBufferException {
-      if (filterChain.hasTransportSocket() && "tls"
-          .equals(filterChain.getTransportSocket().getName())) {
+      if (filterChain.hasTransportSocket()
+          && "tls".equals(filterChain.getTransportSocket().getName())) {
         Any any = filterChain.getTransportSocket().getTypedConfig();
         return DownstreamTlsContext.parseFrom(any.getValue());
       }

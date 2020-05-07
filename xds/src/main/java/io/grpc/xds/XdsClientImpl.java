@@ -1063,7 +1063,7 @@ final class XdsClientImpl extends XdsClient {
       }
       try {
         UpstreamTlsContext upstreamTlsContext = getTlsContextFromCluster(cluster);
-        if (upstreamTlsContext != null && upstreamTlsContext.isInitialized()) {
+        if (upstreamTlsContext != null && upstreamTlsContext.hasCommonTlsContext()) {
           updateBuilder.setUpstreamTlsContext(upstreamTlsContext);
         }
       } catch (InvalidProtocolBufferException e) {

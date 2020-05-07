@@ -113,15 +113,14 @@ public class EnvoyServerProtoDataTest {
             .build();
     Listener xdsListener = Listener.fromEnvoyProtoListener(listener);
     List<EnvoyServerProtoData.FilterChain> filterChains = xdsListener.getFilterChains();
+    assertThat(filterChains).hasSize(1);
     EnvoyServerProtoData.FilterChain inFilter = filterChains.get(0);
-    assertThat(inFilter).isNotNull();
     DownstreamTlsContext inFilterTlsContext = inFilter.getDownstreamTlsContext();
     assertThat(inFilterTlsContext).isNotNull();
     CommonTlsContext commonTlsContext = inFilterTlsContext.getCommonTlsContext();
     assertThat(commonTlsContext).isNotNull();
     List<SdsSecretConfig> tlsCertSdsConfigs = commonTlsContext
         .getTlsCertificateSdsSecretConfigsList();
-    assertThat(tlsCertSdsConfigs).isNotNull();
     assertThat(tlsCertSdsConfigs).hasSize(1);
     assertThat(tlsCertSdsConfigs.get(0).getName()).isEqualTo("google-sds-config-default");
   }
