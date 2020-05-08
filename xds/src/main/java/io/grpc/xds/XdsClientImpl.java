@@ -96,10 +96,9 @@ final class XdsClientImpl extends XdsClient {
   static final String ADS_TYPE_URL_EDS =
       "type.googleapis.com/envoy.api.v2.ClusterLoadAssignment";
 
-  // For now we do not support path matching unless enabled manually.
   // Mutable for testing.
-  static boolean enablePathMatching = Boolean.parseBoolean(
-      System.getenv("ENABLE_EXPERIMENTAL_PATH_MATCHING"));
+  static boolean enableExperimentalRouting = Boolean.parseBoolean(
+      System.getenv("GRPC_XDS_EXPERIMENTAL_ROUTING"));
 
   private final MessagePrinter respPrinter = new MessagePrinter();
 
@@ -645,7 +644,7 @@ final class XdsClientImpl extends XdsClient {
     if (routes != null) {
       // Found  routes in the in-lined RouteConfiguration.
       ConfigUpdate configUpdate;
-      if (!enablePathMatching) {
+      if (!enableExperimentalRouting) {
         EnvoyProtoData.Route defaultRoute = Iterables.getLast(routes);
         configUpdate =
             ConfigUpdate.newBuilder()
@@ -828,7 +827,7 @@ final class XdsClientImpl extends XdsClient {
 
       // Found routes in the in-lined RouteConfiguration.
       ConfigUpdate configUpdate;
-      if (!enablePathMatching) {
+      if (!enableExperimentalRouting) {
         EnvoyProtoData.Route defaultRoute = Iterables.getLast(routes);
         configUpdate =
             ConfigUpdate.newBuilder()
@@ -916,7 +915,7 @@ final class XdsClientImpl extends XdsClient {
     }
 
     // We only validate the default route unless path matching is enabled.
-    if (!enablePathMatching) {
+    if (!enableExperimentalRouting) {
       EnvoyProtoData.Route route = routes.get(routes.size() - 1);
       RouteMatch routeMatch = route.getRouteMatch();
       if (!routeMatch.isDefaultMatcher()) {
