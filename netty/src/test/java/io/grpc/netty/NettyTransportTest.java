@@ -16,16 +16,30 @@
 
 package io.grpc.netty;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import io.grpc.CallOptions;
+import io.grpc.ManagedChannel;
 import io.grpc.ServerStreamTracer;
+import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
 import io.grpc.internal.AbstractTransportTest;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.InternalServer;
 import io.grpc.internal.ManagedClientTransport;
+import io.grpc.stub.ClientCalls;
+import io.grpc.testing.GrpcCleanupRule;
+import io.grpc.testing.TestMethodDescriptors;
 import java.net.InetSocketAddress;
+import java.nio.channels.UnresolvedAddressException;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import org.junit.After;
+import org.junit.Rule;
+import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -43,6 +57,9 @@ public class NettyTransportTest extends AbstractTransportTest {
       .negotiationType(NegotiationType.PLAINTEXT)
       .setTransportTracerFactory(fakeClockTransportTracer)
       .buildTransportFactory();
+
+  @Rule
+  public final GrpcCleanupRule grpcCleanupRule = new GrpcCleanupRule();
 
   @Override
   protected boolean haveTransportTracer() {
@@ -105,5 +122,24 @@ public class NettyTransportTest extends AbstractTransportTest {
   @Override
   public void clientChecksInboundMetadataSize_trailer() throws Exception {
     // Server-side is flaky due to https://github.com/netty/netty/pull/8332
+  }
+
+  @Test
+  public void channelHasUnresolvedHostname() throws Exception {
+    server = null;
+    ManagedChannel channel = NettyChannelBuilder
+        .forAddress(new InetSocketAddress("invalid", 1234))
+        .build();
+    grpcCleanupRule.register(channel);
+    try {
+      ClientCalls.blockingUnaryCall(channel, TestMethodDescriptors.voidMethod(),
+          CallOptions.DEFAULT, null);
+      fail("exception should have been thrown");
+    } catch (StatusRuntimeException e) {
+      Status status = e.getStatus();
+      assertEquals(Status.Code.UNAVAILABLE, status.getCode());
+      assertTrue(status.getCause() instanceof UnresolvedAddressException);
+      assertEquals("unresolved address", status.getDescription());
+    }
   }
 }
