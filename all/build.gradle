@@ -1,5 +1,5 @@
 plugins {
-    id "java"
+    id "java-library"
     id "maven-publish"
 
     id "com.github.kt3k.coveralls"
@@ -32,7 +32,7 @@ for (subproject in rootProject.subprojects) {
 }
 
 dependencies {
-    implementation subprojects.minus(project(':grpc-protobuf-lite'))
+    api subprojects.minus(project(':grpc-protobuf-lite'))
 }
 
 javadoc {
