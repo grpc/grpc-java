@@ -303,7 +303,7 @@ public class XdsClientImplTest {
 
   @After
   public void tearDown() {
-    XdsClientImpl.enablePathMatching = false;
+    XdsClientImpl.enableExperimentalRouting = false;
     xdsClient.shutdown();
     assertThat(adsEnded.get()).isTrue();
     assertThat(lrsEnded.get()).isTrue();
@@ -643,7 +643,7 @@ public class XdsClientImplTest {
    */
   @Test
   public void resolveVirtualHostWithPathMatchingInRdsResponse() {
-    XdsClientImpl.enablePathMatching = true;
+    XdsClientImpl.enableExperimentalRouting = true;
     xdsClient.watchConfigData(TARGET_AUTHORITY, configWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();

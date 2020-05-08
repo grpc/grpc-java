@@ -185,7 +185,7 @@ public class XdsNameResolverTest {
   @After
   public void tearDown() {
     xdsNameResolver.shutdown();
-    XdsClientImpl.enablePathMatching = false;
+    XdsClientImpl.enableExperimentalRouting = false;
   }
 
   @Test
@@ -345,7 +345,7 @@ public class XdsNameResolverTest {
   @Test
   @SuppressWarnings("unchecked")
   public void resolve_resourceUpdated_multipleRoutes() {
-    XdsClientImpl.enablePathMatching = true;
+    XdsClientImpl.enableExperimentalRouting = true;
     xdsNameResolver.start(mockListener);
     assertThat(responseObservers).hasSize(1);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
@@ -482,7 +482,7 @@ public class XdsNameResolverTest {
   @Test
   @SuppressWarnings("unchecked")
   public void resolve_resourceUpdated_allowDuplicateMatchers() {
-    XdsClientImpl.enablePathMatching = true;
+    XdsClientImpl.enableExperimentalRouting = true;
     xdsNameResolver.start(mockListener);
     assertThat(responseObservers).hasSize(1);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
