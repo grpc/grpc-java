@@ -153,6 +153,14 @@ public class Context {
   }
 
   /**
+   * Create a {@link Key} with {@value io.grpc.Context.Key#DEFAULT_NAME} value as a debug name. Multiple different keys may have the same name;
+   * the name is intended for debugging purposes and does not impact behavior.
+   */
+  public static <T> Key<T> key() {
+    return new Key<>();
+  }
+
+  /**
    * Create a {@link Key} with the given debug name. Multiple different keys may have the same name;
    * the name is intended for debugging purposes and does not impact behavior.
    */
@@ -946,8 +954,13 @@ public class Context {
    * Key for indexing values stored in a context.
    */
   public static final class Key<T> {
+    public final static String DEFAULT_NAME = "default";
     private final String name;
     private final T defaultValue;
+
+    Key() {
+      this(DEFAULT_NAME, null);
+    }
 
     Key(String name) {
       this(name, null);
