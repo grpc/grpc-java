@@ -18,27 +18,21 @@ package io.grpc.netty;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
-import io.grpc.CallOptions;
-import io.grpc.ManagedChannel;
+import com.google.common.util.concurrent.SettableFuture;
+import io.grpc.ChannelLogger;
 import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
-import io.grpc.StatusRuntimeException;
 import io.grpc.internal.AbstractTransportTest;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.InternalServer;
 import io.grpc.internal.ManagedClientTransport;
-import io.grpc.stub.ClientCalls;
-import io.grpc.testing.GrpcCleanupRule;
-import io.grpc.testing.TestMethodDescriptors;
 import java.net.InetSocketAddress;
 import java.nio.channels.UnresolvedAddressException;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import org.junit.After;
-import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -57,9 +51,6 @@ public class NettyTransportTest extends AbstractTransportTest {
       .negotiationType(NegotiationType.PLAINTEXT)
       .setTransportTracerFactory(fakeClockTransportTracer)
       .buildTransportFactory();
-
-  @Rule
-  public final GrpcCleanupRule grpcCleanupRule = new GrpcCleanupRule();
 
   @Override
   protected boolean haveTransportTracer() {
@@ -127,19 +118,44 @@ public class NettyTransportTest extends AbstractTransportTest {
   @Test
   public void channelHasUnresolvedHostname() throws Exception {
     server = null;
-    ManagedChannel channel = NettyChannelBuilder
-        .forAddress(new InetSocketAddress("invalid", 1234))
-        .build();
-    grpcCleanupRule.register(channel);
+    final SettableFuture<Status> future = SettableFuture.create();
+    ChannelLogger logger = transportLogger();
+    ManagedClientTransport transport = clientFactory.newClientTransport(
+        InetSocketAddress.createUnresolved("invalid", 1234),
+        new ClientTransportFactory.ClientTransportOptions()
+            .setChannelLogger(logger), logger);
+    Runnable runnable = transport.start(new ManagedClientTransport.Listener() {
+      final Throwable failTestException =
+          new Throwable("transport should have failed and shutdown but didnt");
+      @Override
+      public void transportShutdown(Status s) {
+        future.set(s);
+      }
+
+      @Override
+      public void transportTerminated() {}
+
+      @Override
+      public void transportReady() {
+        future.setException(failTestException);
+      }
+
+      @Override
+      public void transportInUse(boolean inUse) {
+        future.setException(failTestException);
+      }
+    });
+    if (runnable != null) {
+      runnable.run();
+    }
     try {
-      ClientCalls.blockingUnaryCall(channel, TestMethodDescriptors.voidMethod(),
-          CallOptions.DEFAULT, null);
-      fail("exception should have been thrown");
-    } catch (StatusRuntimeException e) {
-      Status status = e.getStatus();
+      Status status = future.get();
       assertEquals(Status.Code.UNAVAILABLE, status.getCode());
       assertTrue(status.getCause() instanceof UnresolvedAddressException);
       assertEquals("unresolved address", status.getDescription());
+    } catch (Exception e) {
+      transport.shutdown(Status.UNAVAILABLE.withDescription("test shutdown"));
+      throw e;
     }
   }
 }
