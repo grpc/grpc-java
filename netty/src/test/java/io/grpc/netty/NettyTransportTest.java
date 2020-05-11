@@ -16,8 +16,8 @@
 
 package io.grpc.netty;
 
+import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
 
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.ChannelLogger;
@@ -125,8 +125,6 @@ public class NettyTransportTest extends AbstractTransportTest {
         new ClientTransportFactory.ClientTransportOptions()
             .setChannelLogger(logger), logger);
     Runnable runnable = transport.start(new ManagedClientTransport.Listener() {
-      final Throwable failTestException =
-          new Throwable("transport should have failed and shutdown but didnt");
       @Override
       public void transportShutdown(Status s) {
         future.set(s);
@@ -137,12 +135,14 @@ public class NettyTransportTest extends AbstractTransportTest {
 
       @Override
       public void transportReady() {
-        future.setException(failTestException);
+        Throwable t = new Throwable("transport should have failed and shutdown but didnt");
+        future.setException(t);
       }
 
       @Override
       public void transportInUse(boolean inUse) {
-        future.setException(failTestException);
+        Throwable t = new Throwable("transport should have failed and shutdown but didnt");
+        future.setException(t);
       }
     });
     if (runnable != null) {
@@ -151,11 +151,10 @@ public class NettyTransportTest extends AbstractTransportTest {
     try {
       Status status = future.get();
       assertEquals(Status.Code.UNAVAILABLE, status.getCode());
-      assertTrue(status.getCause() instanceof UnresolvedAddressException);
+      assertThat(status.getCause()).isInstanceOf(UnresolvedAddressException.class);
       assertEquals("unresolved address", status.getDescription());
-    } catch (Exception e) {
+    } finally {
       transport.shutdown(Status.UNAVAILABLE.withDescription("test shutdown"));
-      throw e;
     }
   }
 }
