@@ -84,7 +84,7 @@ public final class NettyChannelBuilder
   private ChannelFactory<? extends Channel> channelFactory = DEFAULT_CHANNEL_FACTORY;
   private ObjectPool<? extends EventLoopGroup> eventLoopGroupPool = DEFAULT_EVENT_LOOP_GROUP_POOL;
   private SslContext sslContext;
-  private boolean autoFlowControl;
+  private boolean autoFlowControl = true;
   private int flowControlWindow = DEFAULT_FLOW_CONTROL_WINDOW;
   private int maxHeaderListSize = GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE;
   private long keepAliveTimeNanos = KEEPALIVE_TIME_NANOS_DISABLED;
@@ -250,7 +250,8 @@ public final class NettyChannelBuilder
   /**
    * Sets the initial flow control window in bytes. Setting initial flow control window enables auto
    * flow control tuning using bandwidth-delay product algorithm. To disable auto flow control
-   * tuning, use {@link #flowControlWindow(int)}.
+   * tuning, use {@link #flowControlWindow(int)}. By default, auto flow control is enabled with
+   * initial flow control window size of {@link #DEFAULT_FLOW_CONTROL_WINDOW}.
    */
   public NettyChannelBuilder initialFlowControlWindow(int initialFlowControlWindow) {
     checkArgument(initialFlowControlWindow > 0, "initialFlowControlWindow must be positive");
@@ -262,7 +263,8 @@ public final class NettyChannelBuilder
   /**
    * Sets the flow control window in bytes. Setting flowControlWindow disables auto flow control
    * tuning; use {@link #initialFlowControlWindow(int)} to enable auto flow control tuning. If not
-   * called, the default value is {@link #DEFAULT_FLOW_CONTROL_WINDOW}).
+   * called, the default value is {@link #DEFAULT_FLOW_CONTROL_WINDOW}) with auto flow control
+   * tuning.
    */
   public NettyChannelBuilder flowControlWindow(int flowControlWindow) {
     checkArgument(flowControlWindow > 0, "flowControlWindow must be positive");
