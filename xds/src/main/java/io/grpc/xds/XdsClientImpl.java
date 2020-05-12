@@ -22,6 +22,7 @@ import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
+import com.google.common.base.Strings;
 import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
@@ -97,8 +98,9 @@ final class XdsClientImpl extends XdsClient {
       "type.googleapis.com/envoy.api.v2.ClusterLoadAssignment";
 
   // Mutable for testing.
-  static boolean enableExperimentalRouting = Boolean.parseBoolean(
-      System.getenv("GRPC_XDS_EXPERIMENTAL_ROUTING"));
+  static boolean enableExperimentalRouting =
+      Strings.isNullOrEmpty(System.getenv("GRPC_XDS_EXPERIMENTAL_ROUTING"))
+          || Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_ROUTING"));
 
   private final MessagePrinter respPrinter = new MessagePrinter();
 

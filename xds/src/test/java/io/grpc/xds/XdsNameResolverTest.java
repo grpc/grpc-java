@@ -129,9 +129,12 @@ public class XdsNameResolverTest {
 
   private XdsChannelFactory channelFactory;
   private XdsNameResolver xdsNameResolver;
+  private boolean enableExperimentalRoutingOriginal;
 
   @Before
   public void setUp() throws IOException {
+    enableExperimentalRoutingOriginal = XdsClientImpl.enableExperimentalRouting;
+    XdsClientImpl.enableExperimentalRouting = false;
     final String serverName = InProcessServerBuilder.generateName();
     AggregatedDiscoveryServiceImplBase serviceImpl = new AggregatedDiscoveryServiceImplBase() {
       @Override
@@ -185,7 +188,7 @@ public class XdsNameResolverTest {
   @After
   public void tearDown() {
     xdsNameResolver.shutdown();
-    XdsClientImpl.enableExperimentalRouting = false;
+    XdsClientImpl.enableExperimentalRouting = enableExperimentalRoutingOriginal;
   }
 
   @Test

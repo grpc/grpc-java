@@ -210,9 +210,12 @@ public class XdsClientImplTest {
 
   private ManagedChannel channel;
   private XdsClientImpl xdsClient;
+  private boolean enableExperimentalRoutingOriginal;
 
   @Before
   public void setUp() throws IOException {
+    enableExperimentalRoutingOriginal = XdsClientImpl.enableExperimentalRouting;
+    XdsClientImpl.enableExperimentalRouting = false;
     MockitoAnnotations.initMocks(this);
     when(backoffPolicyProvider.get()).thenReturn(backoffPolicy1, backoffPolicy2);
     when(backoffPolicy1.nextBackoffNanos()).thenReturn(10L, 100L);
@@ -303,7 +306,7 @@ public class XdsClientImplTest {
 
   @After
   public void tearDown() {
-    XdsClientImpl.enableExperimentalRouting = false;
+    XdsClientImpl.enableExperimentalRouting = enableExperimentalRoutingOriginal;
     xdsClient.shutdown();
     assertThat(adsEnded.get()).isTrue();
     assertThat(lrsEnded.get()).isTrue();
