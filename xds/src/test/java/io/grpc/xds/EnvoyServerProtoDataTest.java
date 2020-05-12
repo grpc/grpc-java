@@ -24,6 +24,7 @@ import com.google.protobuf.UInt32Value;
 import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
 import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.auth.SdsSecretConfig;
+import io.envoyproxy.envoy.api.v2.core.Address;
 import io.envoyproxy.envoy.api.v2.core.CidrRange;
 import io.envoyproxy.envoy.api.v2.core.SocketAddress;
 import io.envoyproxy.envoy.api.v2.core.TransportSocket;
@@ -45,12 +46,10 @@ public class EnvoyServerProtoDataTest {
 
   @Test
   public void listener_convertFromListenerProto() throws InvalidProtocolBufferException {
-    io.envoyproxy.envoy.api.v2.core.Address address =
-        io.envoyproxy.envoy.api.v2.core.Address.newBuilder()
-            .setSocketAddress(SocketAddress.newBuilder()
-                .setPortValue(8000)
-                .setAddress("10.2.1.34")
-                .build())
+    Address address =
+        Address.newBuilder()
+            .setSocketAddress(
+                SocketAddress.newBuilder().setPortValue(8000).setAddress("10.2.1.34").build())
             .build();
     io.envoyproxy.envoy.api.v2.Listener listener =
         io.envoyproxy.envoy.api.v2.Listener.newBuilder()
@@ -85,12 +84,10 @@ public class EnvoyServerProtoDataTest {
     assertThat(inFilterChainMatch.getPrefixRanges()).containsExactly(
         new EnvoyServerProtoData.CidrRange("10.20.0.15", 32));
     DownstreamTlsContext inFilterTlsContext = inFilter.getDownstreamTlsContext();
-    assertThat(inFilterTlsContext).isNotNull();
+    assertThat(inFilterTlsContext.hasCommonTlsContext()).isTrue();
     CommonTlsContext commonTlsContext = inFilterTlsContext.getCommonTlsContext();
-    assertThat(commonTlsContext).isNotNull();
     List<SdsSecretConfig> tlsCertSdsConfigs = commonTlsContext
         .getTlsCertificateSdsSecretConfigsList();
-    assertThat(tlsCertSdsConfigs).isNotNull();
     assertThat(tlsCertSdsConfigs).hasSize(1);
     assertThat(tlsCertSdsConfigs.get(0).getName()).isEqualTo("google-sds-config-default");
   }
@@ -98,12 +95,10 @@ public class EnvoyServerProtoDataTest {
   // TODO(sanjaypujare): remove when we move to envoy protos v3
   @Test
   public void listener_convertFromDeprecatedListenerProto() throws InvalidProtocolBufferException {
-    io.envoyproxy.envoy.api.v2.core.Address address =
-        io.envoyproxy.envoy.api.v2.core.Address.newBuilder()
-            .setSocketAddress(SocketAddress.newBuilder()
-                .setPortValue(8000)
-                .setAddress("10.2.1.34")
-                .build())
+    Address address =
+        Address.newBuilder()
+            .setSocketAddress(
+                SocketAddress.newBuilder().setPortValue(8000).setAddress("10.2.1.34").build())
             .build();
     io.envoyproxy.envoy.api.v2.Listener listener =
         io.envoyproxy.envoy.api.v2.Listener.newBuilder()
@@ -116,9 +111,8 @@ public class EnvoyServerProtoDataTest {
     assertThat(filterChains).hasSize(1);
     EnvoyServerProtoData.FilterChain inFilter = filterChains.get(0);
     DownstreamTlsContext inFilterTlsContext = inFilter.getDownstreamTlsContext();
-    assertThat(inFilterTlsContext).isNotNull();
+    assertThat(inFilterTlsContext.hasCommonTlsContext()).isTrue();
     CommonTlsContext commonTlsContext = inFilterTlsContext.getCommonTlsContext();
-    assertThat(commonTlsContext).isNotNull();
     List<SdsSecretConfig> tlsCertSdsConfigs = commonTlsContext
         .getTlsCertificateSdsSecretConfigsList();
     assertThat(tlsCertSdsConfigs).hasSize(1);
@@ -130,7 +124,7 @@ public class EnvoyServerProtoDataTest {
         FilterChain.newBuilder()
             .setFilterChainMatch(
                 FilterChainMatch.newBuilder()
-                    .setDestinationPort(UInt32Value.newBuilder().setValue(8000).build())
+                    .setDestinationPort(UInt32Value.of(8000))
                     .build())
             .addFilters(Filter.newBuilder()
                 .setName("envoy.http_connection_manager")
@@ -144,12 +138,11 @@ public class EnvoyServerProtoDataTest {
         FilterChain.newBuilder()
             .setFilterChainMatch(
                 FilterChainMatch.newBuilder()
-                    .setDestinationPort(UInt32Value.newBuilder().setValue(8000)
-                        .build())
+                    .setDestinationPort(UInt32Value.of(8000))
                     .addPrefixRanges(CidrRange.newBuilder()
                         .setAddressPrefix("10.20.0.15")
-                        .setPrefixLen(UInt32Value.newBuilder().setValue(32)
-                            .build()).build())
+                        .setPrefixLen(UInt32Value.of(32))
+                        .build())
                     .addApplicationProtocols("managed-mtls")
                     .build())
             .setTransportSocket(TransportSocket.newBuilder().setName("tls")
@@ -173,12 +166,10 @@ public class EnvoyServerProtoDataTest {
         FilterChain.newBuilder()
             .setFilterChainMatch(
                 FilterChainMatch.newBuilder()
-                    .setDestinationPort(UInt32Value.newBuilder().setValue(8000)
-                        .build())
+                    .setDestinationPort(UInt32Value.of(8000))
                     .addPrefixRanges(CidrRange.newBuilder()
                         .setAddressPrefix("10.20.0.15")
-                        .setPrefixLen(UInt32Value.newBuilder().setValue(32)
-                            .build()).build())
+                        .setPrefixLen(UInt32Value.of(32)).build())
                     .addApplicationProtocols("managed-mtls")
                     .build())
             .setTlsContext(CommonTlsContextTestsUtil.buildTestDownstreamTlsContext())
