@@ -40,6 +40,10 @@ import javax.annotation.Nullable;
  *
  * <p>For data types that need to be sent as protobuf messages, a {@code toEnvoyProtoXXX} instance
  * method is defined to convert an instance to Envoy proto message.
+ *
+ * <p>Data conversion should follow the invariant: converted data is guaranteed to be valid for
+ * gRPC. If the protobuf message contains invalid data, the conversion should fail and no object
+ * should be instantiated.
  */
 final class EnvoyProtoData {
 
