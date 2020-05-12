@@ -793,11 +793,13 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
         false,
         flowControlWindow,
         maxHeaderListSize,
+        maxFrameSize,
         stopwatchSupplier,
         tooManyPingsRunnable,
         transportTracer,
         Attributes.EMPTY,
-        "someauthority");
+        "someauthority"
+    );
   }
 
   @Override

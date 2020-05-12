@@ -136,11 +136,13 @@ class NettyClientHandler extends AbstractNettyHandler {
       boolean autoFlowControl,
       int flowControlWindow,
       int maxHeaderListSize,
+      int maxFrameSize,
       Supplier<Stopwatch> stopwatchFactory,
       Runnable tooManyPingsRunnable,
       TransportTracer transportTracer,
       Attributes eagAttributes,
-      String authority) {
+      String authority
+  ) {
     Preconditions.checkArgument(maxHeaderListSize > 0, "maxHeaderListSize must be positive");
     Http2HeadersDecoder headersDecoder = new GrpcHttp2ClientHeadersDecoder(maxHeaderListSize);
     Http2FrameReader frameReader = new DefaultHttp2FrameReader(headersDecoder);
@@ -161,28 +163,32 @@ class NettyClientHandler extends AbstractNettyHandler {
         autoFlowControl,
         flowControlWindow,
         maxHeaderListSize,
+        maxFrameSize,
         stopwatchFactory,
         tooManyPingsRunnable,
         transportTracer,
         eagAttributes,
-        authority);
+        authority
+    );
   }
 
   @VisibleForTesting
   static NettyClientHandler newHandler(
-      final Http2Connection connection,
-      Http2FrameReader frameReader,
-      Http2FrameWriter frameWriter,
-      ClientTransportLifecycleManager lifecycleManager,
-      KeepAliveManager keepAliveManager,
-      boolean autoFlowControl,
-      int flowControlWindow,
-      int maxHeaderListSize,
-      Supplier<Stopwatch> stopwatchFactory,
-      Runnable tooManyPingsRunnable,
-      TransportTracer transportTracer,
-      Attributes eagAttributes,
-      String authority) {
+          final Http2Connection connection,
+          Http2FrameReader frameReader,
+          Http2FrameWriter frameWriter,
+          ClientTransportLifecycleManager lifecycleManager,
+          KeepAliveManager keepAliveManager,
+          boolean autoFlowControl,
+          int flowControlWindow,
+          int maxHeaderListSize,
+          int maxFrameSeize,
+          Supplier<Stopwatch> stopwatchFactory,
+          Runnable tooManyPingsRunnable,
+          TransportTracer transportTracer,
+          Attributes eagAttributes,
+          String authority
+  ) {
     Preconditions.checkNotNull(connection, "connection");
     Preconditions.checkNotNull(frameReader, "frameReader");
     Preconditions.checkNotNull(lifecycleManager, "lifecycleManager");
@@ -225,6 +231,7 @@ class NettyClientHandler extends AbstractNettyHandler {
     settings.initialWindowSize(flowControlWindow);
     settings.maxConcurrentStreams(0);
     settings.maxHeaderListSize(maxHeaderListSize);
+    settings.maxFrameSize(maxFrameSeize);
 
     return new NettyClientHandler(
         decoder,

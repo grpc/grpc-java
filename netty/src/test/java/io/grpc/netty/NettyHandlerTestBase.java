@@ -18,6 +18,7 @@ package io.grpc.netty;
 
 import static com.google.common.base.Charsets.UTF_8;
 import static io.netty.handler.codec.http2.Http2CodecUtil.DEFAULT_WINDOW_SIZE;
+import static io.netty.handler.codec.http2.Http2CodecUtil.MAX_FRAME_SIZE_LOWER_BOUND;
 import static org.junit.Assert.assertEquals;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
@@ -101,6 +102,7 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
 
   protected final TransportTracer transportTracer = new TransportTracer();
   protected int flowControlWindow = DEFAULT_WINDOW_SIZE;
+  protected int maxFrameSize = MAX_FRAME_SIZE_LOWER_BOUND;
   protected boolean autoFlowControl = false;
 
   private final FakeClock fakeClock = new FakeClock();

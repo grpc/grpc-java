@@ -220,6 +220,7 @@ class NettyClientTransport implements ConnectionClientTransport {
         autoFlowControl,
         flowControlWindow,
         maxHeaderListSize,
+        maxMessageSize,
         GrpcUtil.STOPWATCH_SUPPLIER,
         tooManyPingsRunnable,
         transportTracer,
