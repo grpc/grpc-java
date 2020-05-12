@@ -506,11 +506,11 @@ final class EnvoyProtoData {
   static final class RouteMatch {
     // Exactly one of the following fields is non-null.
     @Nullable
-    private final String prefixPathMatch;
+    private final String pathPrefixMatch;
     @Nullable
-    private final String exactPathMatch;
+    private final String pathExactMatch;
     @Nullable
-    private final String safeRegExPathMatch;
+    private final String pathSafeRegExMatch;
 
     private final List<HeaderMatcher> headerMatchers;
     @Nullable
@@ -518,44 +518,44 @@ final class EnvoyProtoData {
 
     @VisibleForTesting
     RouteMatch(
-        @Nullable String prefixPathMatch, @Nullable String exactPathMatch,
-        @Nullable String safeRegExPathMatch, @Nullable Fraction fractionMatch,
+        @Nullable String pathPrefixMatch, @Nullable String pathExactMatch,
+        @Nullable String pathSafeRegExMatch, @Nullable Fraction fractionMatch,
         List<HeaderMatcher> headerMatchers) {
-      this.prefixPathMatch = prefixPathMatch;
-      this.exactPathMatch = exactPathMatch;
-      this.safeRegExPathMatch = safeRegExPathMatch;
+      this.pathPrefixMatch = pathPrefixMatch;
+      this.pathExactMatch = pathExactMatch;
+      this.pathSafeRegExMatch = pathSafeRegExMatch;
       this.fractionMatch = fractionMatch;
       this.headerMatchers = headerMatchers;
     }
 
-    RouteMatch(@Nullable String prefixPathMatch, @Nullable String exactPathMatch) {
+    RouteMatch(@Nullable String pathPrefixMatch, @Nullable String pathExactMatch) {
       this(
-          prefixPathMatch, exactPathMatch, null, null,
+          pathPrefixMatch, pathExactMatch, null, null,
           Collections.<HeaderMatcher>emptyList());
     }
 
     @Nullable
-    String getPrefixPathMatch() {
-      return prefixPathMatch;
+    String getPathPrefixMatch() {
+      return pathPrefixMatch;
     }
 
     @Nullable
-    String getExactPathMatch() {
-      return exactPathMatch;
+    String getPathExactMatch() {
+      return pathExactMatch;
     }
 
     boolean isMatchAll() {
-      if (safeRegExPathMatch != null || fractionMatch != null) {
+      if (pathSafeRegExMatch != null || fractionMatch != null) {
         return false;
       }
       if (headerMatchers != null && !headerMatchers.isEmpty()) {
         return false;
       }
-      if (exactPathMatch != null) {
-        return exactPathMatch.isEmpty();
+      if (pathExactMatch != null) {
+        return pathExactMatch.isEmpty();
       }
-      if (prefixPathMatch != null) {
-        return prefixPathMatch.isEmpty() || prefixPathMatch.equals("/");
+      if (pathPrefixMatch != null) {
+        return pathPrefixMatch.isEmpty() || pathPrefixMatch.equals("/");
       }
       // TODO (chengyuanzhang): can path match with regex be a default route?
       return false;
@@ -570,24 +570,24 @@ final class EnvoyProtoData {
         return false;
       }
       RouteMatch that = (RouteMatch) o;
-      return Objects.equal(prefixPathMatch, that.prefixPathMatch)
-          && Objects.equal(exactPathMatch, that.exactPathMatch)
-          && Objects.equal(safeRegExPathMatch, that.safeRegExPathMatch)
+      return Objects.equal(pathPrefixMatch, that.pathPrefixMatch)
+          && Objects.equal(pathExactMatch, that.pathExactMatch)
+          && Objects.equal(pathSafeRegExMatch, that.pathSafeRegExMatch)
           && Objects.equal(fractionMatch, that.fractionMatch)
           && Objects.equal(headerMatchers, that.headerMatchers);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hashCode(prefixPathMatch, exactPathMatch, headerMatchers, fractionMatch);
+      return Objects.hashCode(pathPrefixMatch, pathExactMatch, headerMatchers, fractionMatch);
     }
 
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(this)
-          .add("prefixPathMatch", prefixPathMatch)
-          .add("exactPathMatch", exactPathMatch)
-          .add("safeRegExPathMatch", safeRegExPathMatch)
+          .add("prefixPathMatch", pathPrefixMatch)
+          .add("exactPathMatch", pathExactMatch)
+          .add("safeRegExPathMatch", pathSafeRegExMatch)
           .add("headerMatchers", headerMatchers)
           .add("fractionMatch", fractionMatch)
           .toString();
@@ -595,6 +595,7 @@ final class EnvoyProtoData {
 
     @VisibleForTesting
     @SuppressWarnings("deprecation")
+    @Nullable
     static StructOrError<RouteMatch> fromEnvoyProtoRouteMatch(
         io.envoyproxy.envoy.api.v2.route.RouteMatch proto) {
       if (proto.getQueryParametersCount() != 0) {
@@ -747,7 +748,8 @@ final class EnvoyProtoData {
 
     private final boolean isInvertedMatch;
 
-    private HeaderMatcher(
+    @VisibleForTesting
+    HeaderMatcher(
         String name,
         @Nullable String exactMatch, @Nullable String safeRegExMatch, @Nullable Range rangeMatch,
         @Nullable Boolean presentMatch, @Nullable String prefixMatch, @Nullable String suffixMatch,
@@ -764,8 +766,9 @@ final class EnvoyProtoData {
 
     // TODO (chengyuanzhang): add getters when needed.
 
+    @VisibleForTesting
     @SuppressWarnings("deprecation")
-    private static StructOrError<HeaderMatcher> fromEnvoyProtoHeaderMatcher(
+    static StructOrError<HeaderMatcher> fromEnvoyProtoHeaderMatcher(
         io.envoyproxy.envoy.api.v2.route.HeaderMatcher proto) {
       String exactMatch = null;
       String safeRegExMatch = null;
@@ -805,6 +808,46 @@ final class EnvoyProtoData {
           new HeaderMatcher(
               proto.getName(), exactMatch, safeRegExMatch, rangeMatch, presentMatch,
               prefixMatch, suffixMatch, proto.getInvertMatch()));
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      HeaderMatcher that = (HeaderMatcher) o;
+      return Objects.equal(name, that.name)
+          && Objects.equal(exactMatch, that.exactMatch)
+          && Objects.equal(safeRegExMatch, that.safeRegExMatch)
+          && Objects.equal(rangeMatch, that.rangeMatch)
+          && Objects.equal(presentMatch, that.presentMatch)
+          && Objects.equal(prefixMatch, that.prefixMatch)
+          && Objects.equal(suffixMatch, that.suffixMatch)
+          && Objects.equal(isInvertedMatch, that.isInvertedMatch);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hashCode(
+          name, exactMatch, safeRegExMatch, rangeMatch, presentMatch, prefixMatch,
+          suffixMatch, isInvertedMatch);
+    }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(this)
+          .add("name", name)
+          .add("exactMatch", exactMatch)
+          .add("safeRegExMatch", safeRegExMatch)
+          .add("rangeMatch", rangeMatch)
+          .add("presentMatch", presentMatch)
+          .add("prefixMatch", prefixMatch)
+          .add("suffixMatch", suffixMatch)
+          .add("isInvertedMatch", isInvertedMatch)
+          .toString();
     }
 
     static final class Range {
@@ -906,7 +949,8 @@ final class EnvoyProtoData {
               .toString();
     }
 
-    private static StructOrError<RouteAction> fromEnvoyProtoRouteAction(
+    @VisibleForTesting
+    static StructOrError<RouteAction> fromEnvoyProtoRouteAction(
         io.envoyproxy.envoy.api.v2.route.RouteAction proto) {
       String cluster = null;
       String clusterHeader = null;
@@ -984,7 +1028,8 @@ final class EnvoyProtoData {
           .toString();
     }
 
-    private static ClusterWeight fromEnvoyProtoClusterWeight(
+    @VisibleForTesting
+    static ClusterWeight fromEnvoyProtoClusterWeight(
         io.envoyproxy.envoy.api.v2.route.WeightedCluster.ClusterWeight proto) {
       return new ClusterWeight(proto.getName(), proto.getWeight().getValue());
     }

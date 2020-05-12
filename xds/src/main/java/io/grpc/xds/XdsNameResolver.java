@@ -236,8 +236,8 @@ final class XdsNameResolver extends NameResolver {
       String service = "";
       String method = "";
       if (!route.isDefaultRoute()) {
-        String prefix = route.getRouteMatch().getPrefixPathMatch();
-        String path = route.getRouteMatch().getExactPathMatch();
+        String prefix = route.getRouteMatch().getPathPrefixMatch();
+        String path = route.getRouteMatch().getPathExactMatch();
         if (prefix != null) {
           service = prefix.substring(1, prefix.length() - 1);
         } else if (path != null) {
