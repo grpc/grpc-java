@@ -149,6 +149,27 @@ final class XdsNameResolver extends NameResolver {
 
     @Override
     public void onConfigChanged(ConfigUpdate update) {
+      Attributes attrs =
+          Attributes.newBuilder()
+              .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
+              .build();
+      Route defaultRoute = Iterables.getLast(update.getRoutes());
+      if (!defaultRoute.getRouteMatch().isDefaultMatcher()) {
+        logger.log(
+            XdsLogLevel.INFO,
+            "Received config update with invalid default route from xDS client {1}",
+            xdsClient);
+        ConfigOrError configError = ConfigOrError.fromError(
+            Status.UNAUTHENTICATED.withDescription("Invalid default route"));
+        ResolutionResult result =
+            ResolutionResult.newBuilder()
+                .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+                .setAttributes(attrs)
+                .setServiceConfig(configError)
+                .build();
+        listener.onResult(result);
+        return;
+      }
       Map<String, ?> rawLbConfig;
       if (update.getRoutes().size() > 1) {
         logger.log(
@@ -158,7 +179,6 @@ final class XdsNameResolver extends NameResolver {
             xdsClient);
         rawLbConfig = generateXdsRoutingRawConfig(update.getRoutes());
       } else {
-        Route defaultRoute = Iterables.getOnlyElement(update.getRoutes());
         String clusterName = defaultRoute.getRouteAction().getCluster();
         if (!clusterName.isEmpty()) {
           logger.log(
@@ -185,11 +205,6 @@ final class XdsNameResolver extends NameResolver {
             "Generated service config:\n{0}",
             new Gson().toJson(serviceConfig));
       }
-
-      Attributes attrs =
-          Attributes.newBuilder()
-              .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
-              .build();
       ConfigOrError parsedServiceConfig = serviceConfigParser.parseServiceConfig(serviceConfig);
       ResolutionResult result =
           ResolutionResult.newBuilder()

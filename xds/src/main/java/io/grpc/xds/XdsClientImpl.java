@@ -964,11 +964,6 @@ final class XdsClientImpl extends XdsClient {
           return "Regex route match not supported";
         }
       }
-      if (i == routes.size() - 1) {
-        if (!routeMatch.isDefaultMatcher()) {
-          return "The last route must be the default route";
-        }
-      }
       if (routeAction.getCluster().isEmpty() && routeAction.getWeightedCluster().isEmpty()) {
         return "Either cluster or weighted cluster route action must be provided";
       }
