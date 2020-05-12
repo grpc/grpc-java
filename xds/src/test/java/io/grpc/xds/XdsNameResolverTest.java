@@ -744,7 +744,7 @@ public class XdsNameResolverTest {
       builder.addClusters(
           ClusterWeight.newBuilder()
             .setName(entry.getKey())
-            .setWeight(UInt32Value.newBuilder().setValue(entry.getValue())));
+            .setWeight(UInt32Value.of(entry.getValue())));
     }
     return RouteAction.newBuilder()
         .setWeightedClusters(builder)
