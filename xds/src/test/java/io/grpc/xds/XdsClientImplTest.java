@@ -722,25 +722,21 @@ public class XdsClientImplTest {
         new EnvoyProtoData.Route(
             // path match with cluster route
             new EnvoyProtoData.RouteMatch(
-                /* prefix= */ "",
-                /* path= */ "/service1/method1",
-                /* hasRegex= */ false,
-                /* caseSensitive= */ true),
+                /* prefix= */ null,
+                /* path= */ "/service1/method1"),
             new EnvoyProtoData.RouteAction(
                 "cl1.googleapis.com",
-                "",
-                ImmutableList.<EnvoyProtoData.ClusterWeight>of())));
+                null,
+                null)));
     assertThat(routes.get(1)).isEqualTo(
         new EnvoyProtoData.Route(
             // path match with weighted cluster route
             new EnvoyProtoData.RouteMatch(
-                /* prefix= */ "",
-                /* path= */ "/service2/method2",
-                /* hasRegex= */ false,
-                /* caseSensitive= */ true),
+                /* prefix= */ null,
+                /* path= */ "/service2/method2"),
             new EnvoyProtoData.RouteAction(
-                "",
-                "",
+                null,
+                null,
                 ImmutableList.of(
                     new EnvoyProtoData.ClusterWeight("cl21.googleapis.com", 30),
                     new EnvoyProtoData.ClusterWeight("cl22.googleapis.com", 70)
@@ -750,25 +746,21 @@ public class XdsClientImplTest {
             // prefix match with cluster route
             new EnvoyProtoData.RouteMatch(
                 /* prefix= */ "/service1/",
-                /* path= */ "",
-                /* hasRegex= */ false,
-                /* caseSensitive= */ true),
+                /* path= */ null),
             new EnvoyProtoData.RouteAction(
                 "cl1.googleapis.com",
-                "",
-                ImmutableList.<EnvoyProtoData.ClusterWeight>of())));
+                null,
+                null)));
     assertThat(routes.get(3)).isEqualTo(
         new EnvoyProtoData.Route(
             // default match with cluster route
             new EnvoyProtoData.RouteMatch(
                 /* prefix= */ "",
-                /* path= */ "",
-                /* hasRegex= */ false,
-                /* caseSensitive= */ true),
+                /* path= */ null),
             new EnvoyProtoData.RouteAction(
                 "cluster.googleapis.com",
-                "",
-                ImmutableList.<EnvoyProtoData.ClusterWeight>of())));
+                null,
+                null)));
   }
 
   /**
@@ -3464,16 +3456,15 @@ public class XdsClientImplTest {
   }
 
   @Test
-  public void findClusterNameInRouteConfig_exactMatchFirst() {
+  public void findVirtualHostForHostName_exactMatchFirst() {
     String hostname = "a.googleapis.com";
-    String targetClusterName = "cluster-hello.googleapis.com";
     VirtualHost vHost1 =
         VirtualHost.newBuilder()
             .setName("virtualhost01.googleapis.com")  // don't care
             .addAllDomains(ImmutableList.of("a.googleapis.com", "b.googleapis.com"))
             .addRoutes(
                 Route.newBuilder()
-                    .setRoute(RouteAction.newBuilder().setCluster(targetClusterName))
+                    .setRoute(RouteAction.newBuilder().setCluster("cluster-wow.googleapis.com"))
                     .setMatch(RouteMatch.newBuilder().setPrefix("")))
             .build();
     VirtualHost vHost2 =
@@ -3497,24 +3488,19 @@ public class XdsClientImplTest {
     RouteConfiguration routeConfig =
         buildRouteConfiguration(
             "route-foo.googleapis.com", ImmutableList.of(vHost1, vHost2, vHost3));
-    List<EnvoyProtoData.Route> routes =
-        XdsClientImpl.findRoutesInRouteConfig(routeConfig, hostname);
-    assertThat(routes).hasSize(1);
-    assertThat(routes.get(0).getRouteAction().getCluster())
-        .isEqualTo(targetClusterName);
+    assertThat(XdsClientImpl.findVirtualHostForHostName(routeConfig, hostname)).isEqualTo(vHost1);
   }
 
   @Test
-  public void findClusterNameInRouteConfig_preferSuffixDomainOverPrefixDomain() {
+  public void findVirtualHostForHostName_preferSuffixDomainOverPrefixDomain() {
     String hostname = "a.googleapis.com";
-    String targetClusterName = "cluster-hello.googleapis.com";
     VirtualHost vHost1 =
         VirtualHost.newBuilder()
             .setName("virtualhost01.googleapis.com")  // don't care
             .addAllDomains(ImmutableList.of("*.googleapis.com", "b.googleapis.com"))
             .addRoutes(
                 Route.newBuilder()
-                    .setRoute(RouteAction.newBuilder().setCluster(targetClusterName))
+                    .setRoute(RouteAction.newBuilder().setCluster("cluster-hello.googleapis.com"))
                     .setMatch(RouteMatch.newBuilder().setPrefix("")))
             .build();
     VirtualHost vHost2 =
@@ -3538,24 +3524,19 @@ public class XdsClientImplTest {
     RouteConfiguration routeConfig =
         buildRouteConfiguration(
             "route-foo.googleapis.com", ImmutableList.of(vHost1, vHost2, vHost3));
-    List<EnvoyProtoData.Route> routes =
-        XdsClientImpl.findRoutesInRouteConfig(routeConfig, hostname);
-    assertThat(routes).hasSize(1);
-    assertThat(routes.get(0).getRouteAction().getCluster())
-        .isEqualTo(targetClusterName);
+    assertThat(XdsClientImpl.findVirtualHostForHostName(routeConfig, hostname)).isEqualTo(vHost1);
   }
 
   @Test
-  public void findClusterNameInRouteConfig_asteriskMatchAnyDomain() {
+  public void findVirtualHostForHostName_asteriskMatchAnyDomain() {
     String hostname = "a.googleapis.com";
-    String targetClusterName = "cluster-hello.googleapis.com";
     VirtualHost vHost1 =
         VirtualHost.newBuilder()
             .setName("virtualhost01.googleapis.com")  // don't care
             .addAllDomains(ImmutableList.of("*"))
             .addRoutes(
                 Route.newBuilder()
-                    .setRoute(RouteAction.newBuilder().setCluster(targetClusterName))
+                    .setRoute(RouteAction.newBuilder().setCluster("cluster-hello.googleapis.com"))
                     .setMatch(RouteMatch.newBuilder().setPrefix("")))
             .build();
     VirtualHost vHost2 =
@@ -3570,11 +3551,7 @@ public class XdsClientImplTest {
     RouteConfiguration routeConfig =
         buildRouteConfiguration(
             "route-foo.googleapis.com", ImmutableList.of(vHost1, vHost2));
-    List<EnvoyProtoData.Route> routes =
-        XdsClientImpl.findRoutesInRouteConfig(routeConfig, hostname);
-    assertThat(routes).hasSize(1);
-    assertThat(routes.get(0).getRouteAction().getCluster())
-        .isEqualTo(targetClusterName);
+    assertThat(XdsClientImpl.findVirtualHostForHostName(routeConfig, hostname)).isEqualTo(vHost1);
   }
 
   @Test
