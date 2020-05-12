@@ -20,7 +20,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
-import com.google.common.base.Objects;
 import com.google.common.collect.ImmutableList;
 import io.envoyproxy.envoy.type.FractionalPercent;
 import io.envoyproxy.envoy.type.FractionalPercent.DenominatorType;
@@ -29,6 +28,7 @@ import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import javax.annotation.Nullable;
 
 /**
@@ -101,12 +101,12 @@ final class EnvoyProtoData {
         return false;
       }
       StructOrError<?> that = (StructOrError<?>) o;
-      return Objects.equal(errorDetail, that.errorDetail) && Objects.equal(struct, that.struct);
+      return Objects.equals(errorDetail, that.errorDetail) && Objects.equals(struct, that.struct);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hashCode(errorDetail, struct);
+      return Objects.hash(errorDetail, struct);
     }
 
     @Override
@@ -174,14 +174,14 @@ final class EnvoyProtoData {
         return false;
       }
       Locality locality = (Locality) o;
-      return Objects.equal(region, locality.region)
-          && Objects.equal(zone, locality.zone)
-          && Objects.equal(subZone, locality.subZone);
+      return Objects.equals(region, locality.region)
+          && Objects.equals(zone, locality.zone)
+          && Objects.equals(subZone, locality.subZone);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hashCode(region, zone, subZone);
+      return Objects.hash(region, zone, subZone);
     }
 
     @Override
@@ -247,12 +247,12 @@ final class EnvoyProtoData {
       LocalityLbEndpoints that = (LocalityLbEndpoints) o;
       return localityWeight == that.localityWeight
           && priority == that.priority
-          && Objects.equal(endpoints, that.endpoints);
+          && Objects.equals(endpoints, that.endpoints);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hashCode(endpoints, localityWeight, priority);
+      return Objects.hash(endpoints, localityWeight, priority);
     }
 
     @Override
@@ -325,13 +325,13 @@ final class EnvoyProtoData {
       }
       LbEndpoint that = (LbEndpoint) o;
       return loadBalancingWeight == that.loadBalancingWeight
-          && Objects.equal(eag, that.eag)
+          && Objects.equals(eag, that.eag)
           && isHealthy == that.isHealthy;
     }
 
     @Override
     public int hashCode() {
-      return Objects.hashCode(eag, loadBalancingWeight, isHealthy);
+      return Objects.hash(eag, loadBalancingWeight, isHealthy);
     }
 
     @Override
@@ -401,12 +401,12 @@ final class EnvoyProtoData {
         return false;
       }
       DropOverload that = (DropOverload) o;
-      return dropsPerMillion == that.dropsPerMillion && Objects.equal(category, that.category);
+      return dropsPerMillion == that.dropsPerMillion && Objects.equals(category, that.category);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hashCode(category, dropsPerMillion);
+      return Objects.hash(category, dropsPerMillion);
     }
 
     @Override
@@ -450,13 +450,13 @@ final class EnvoyProtoData {
         return false;
       }
       Route route = (Route) o;
-      return Objects.equal(routeMatch, route.routeMatch)
-          && Objects.equal(routeAction, route.routeAction);
+      return Objects.equals(routeMatch, route.routeMatch)
+          && Objects.equals(routeAction, route.routeAction);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hashCode(routeMatch, routeAction);
+      return Objects.hash(routeMatch, routeAction);
     }
 
     @Override
@@ -570,16 +570,16 @@ final class EnvoyProtoData {
         return false;
       }
       RouteMatch that = (RouteMatch) o;
-      return Objects.equal(pathPrefixMatch, that.pathPrefixMatch)
-          && Objects.equal(pathExactMatch, that.pathExactMatch)
-          && Objects.equal(pathSafeRegExMatch, that.pathSafeRegExMatch)
-          && Objects.equal(fractionMatch, that.fractionMatch)
-          && Objects.equal(headerMatchers, that.headerMatchers);
+      return Objects.equals(pathPrefixMatch, that.pathPrefixMatch)
+          && Objects.equals(pathExactMatch, that.pathExactMatch)
+          && Objects.equals(pathSafeRegExMatch, that.pathSafeRegExMatch)
+          && Objects.equals(fractionMatch, that.fractionMatch)
+          && Objects.equals(headerMatchers, that.headerMatchers);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hashCode(pathPrefixMatch, pathExactMatch, headerMatchers, fractionMatch);
+      return Objects.hash(pathPrefixMatch, pathExactMatch, headerMatchers, fractionMatch);
     }
 
     @Override
@@ -699,7 +699,7 @@ final class EnvoyProtoData {
 
       @Override
       public int hashCode() {
-        return Objects.hashCode(numerator, denominator);
+        return Objects.hash(numerator, denominator);
       }
 
       @Override
@@ -711,8 +711,8 @@ final class EnvoyProtoData {
           return false;
         }
         Fraction that = (Fraction) o;
-        return Objects.equal(numerator, that.numerator)
-            && Objects.equal(denominator, that.denominator);
+        return Objects.equals(numerator, that.numerator)
+            && Objects.equals(denominator, that.denominator);
       }
 
       @Override
@@ -819,19 +819,19 @@ final class EnvoyProtoData {
         return false;
       }
       HeaderMatcher that = (HeaderMatcher) o;
-      return Objects.equal(name, that.name)
-          && Objects.equal(exactMatch, that.exactMatch)
-          && Objects.equal(safeRegExMatch, that.safeRegExMatch)
-          && Objects.equal(rangeMatch, that.rangeMatch)
-          && Objects.equal(presentMatch, that.presentMatch)
-          && Objects.equal(prefixMatch, that.prefixMatch)
-          && Objects.equal(suffixMatch, that.suffixMatch)
-          && Objects.equal(isInvertedMatch, that.isInvertedMatch);
+      return Objects.equals(name, that.name)
+          && Objects.equals(exactMatch, that.exactMatch)
+          && Objects.equals(safeRegExMatch, that.safeRegExMatch)
+          && Objects.equals(rangeMatch, that.rangeMatch)
+          && Objects.equals(presentMatch, that.presentMatch)
+          && Objects.equals(prefixMatch, that.prefixMatch)
+          && Objects.equals(suffixMatch, that.suffixMatch)
+          && Objects.equals(isInvertedMatch, that.isInvertedMatch);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hashCode(
+      return Objects.hash(
           name, exactMatch, safeRegExMatch, rangeMatch, presentMatch, prefixMatch,
           suffixMatch, isInvertedMatch);
     }
@@ -861,7 +861,7 @@ final class EnvoyProtoData {
 
       @Override
       public int hashCode() {
-        return Objects.hashCode(start, end);
+        return Objects.hash(start, end);
       }
 
       @Override
@@ -873,8 +873,8 @@ final class EnvoyProtoData {
           return false;
         }
         Range that = (Range) o;
-        return Objects.equal(start, that.start)
-            && Objects.equal(end, that.end);
+        return Objects.equals(start, that.start)
+            && Objects.equals(end, that.end);
       }
 
       @Override
@@ -930,14 +930,14 @@ final class EnvoyProtoData {
         return false;
       }
       RouteAction that = (RouteAction) o;
-      return Objects.equal(cluster, that.cluster)
-              && Objects.equal(clusterHeader, that.clusterHeader)
-              && Objects.equal(weightedClusters, that.weightedClusters);
+      return Objects.equals(cluster, that.cluster)
+              && Objects.equals(clusterHeader, that.clusterHeader)
+              && Objects.equals(weightedClusters, that.weightedClusters);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hashCode(cluster, clusterHeader, weightedClusters);
+      return Objects.hash(cluster, clusterHeader, weightedClusters);
     }
 
     @Override
@@ -1012,12 +1012,12 @@ final class EnvoyProtoData {
         return false;
       }
       ClusterWeight that = (ClusterWeight) o;
-      return weight == that.weight && Objects.equal(name, that.name);
+      return weight == that.weight && Objects.equals(name, that.name);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hashCode(name, weight);
+      return Objects.hash(name, weight);
     }
 
     @Override
