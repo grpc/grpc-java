@@ -790,6 +790,8 @@ public abstract class AbstractInteropTest {
         = asyncStub.fullDuplexCall(responseObserver);
     requestObserver.onCompleted();
     responseObserver.awaitCompletion(operationTimeoutMillis(), TimeUnit.MILLISECONDS);
+    assertSuccess(responseObserver);
+    assertTrue("Expected an empty stream", responseObserver.getValues().isEmpty());
   }
 
   @Test
