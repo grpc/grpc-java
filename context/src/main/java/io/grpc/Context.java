@@ -18,8 +18,6 @@ package io.grpc;
 
 import io.grpc.Context.CheckReturnValue;
 import io.grpc.PersistentHashArrayMappedTrie.Node;
-
-import javax.annotation.Nonnull;
 import java.io.Closeable;
 import java.util.ArrayList;
 import java.util.concurrent.Callable;
@@ -159,8 +157,9 @@ public class Context {
    *
    * @param debugString a name intended for debugging purposes and does not impact behavior.
    *                    multiple different keys may have the same debugString.
+   *                    a value should be not null.
    */
-  public static <T> Key<T> key(@Nonnull String debugString) {
+  public static <T> Key<T> key(String debugString) {
     return new Key<>(debugString);
   }
 
@@ -169,8 +168,9 @@ public class Context {
    *
    * @param debugString a name intended for debugging purposes and does not impact behavior.
    *                    multiple different keys may have the same debugString.
+   *                    a value should be not null.
    */
-  public static <T> Key<T> keyWithDefault(@Nonnull String debugString, T defaultValue) {
+  public static <T> Key<T> keyWithDefault(String debugString, T defaultValue) {
     return new Key<>(debugString, defaultValue);
   }
 
