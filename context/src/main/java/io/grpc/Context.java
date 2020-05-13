@@ -156,8 +156,9 @@ public class Context {
 
   /**
    * Create a {@link Key} with the given debug name.
-   * @param debugString a name is intended for debugging purposes and does not impact behavior;
-   *                    Multiple different keys may have the same debugString.
+   *
+   * @param debugString a name intended for debugging purposes and does not impact behavior.
+   *                    multiple different keys may have the same debugString.
    */
   public static <T> Key<T> key(@Nonnull String debugString) {
     return new Key<>(debugString);
@@ -165,8 +166,9 @@ public class Context {
 
   /**
    * Create a {@link Key} with the given debug name and default value.
-   * @param debugString a name is intended for debugging purposes and does not impact behavior;
-   *                    Multiple different keys may have the same debugString.
+   *
+   * @param debugString a name intended for debugging purposes and does not impact behavior.
+   *                    multiple different keys may have the same debugString.
    */
   public static <T> Key<T> keyWithDefault(@Nonnull String debugString, T defaultValue) {
     return new Key<>(debugString, defaultValue);
