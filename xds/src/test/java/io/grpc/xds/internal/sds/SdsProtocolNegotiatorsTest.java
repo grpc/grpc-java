@@ -38,6 +38,8 @@ import io.grpc.Attributes;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
 import io.grpc.netty.InternalProtocolNegotiationEvent;
+import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
+import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.xds.XdsAttributes;
 import io.grpc.xds.XdsClientWrapperForServerSds;
 import io.grpc.xds.XdsClientWrapperForServerSdsTest;
@@ -58,6 +60,7 @@ import io.netty.handler.codec.http2.Http2ConnectionEncoder;
 import io.netty.handler.codec.http2.Http2Settings;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.ssl.SslHandshakeCompletionEvent;
+import io.netty.util.AsciiString;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
@@ -215,7 +218,8 @@ public class SdsProtocolNegotiatorsTest {
         XdsClientWrapperForServerSdsTest.createXdsClientWrapperForServerSds(
             80, downstreamTlsContext);
     SdsProtocolNegotiators.HandlerPickerHandler handlerPickerHandler =
-        new SdsProtocolNegotiators.HandlerPickerHandler(grpcHandler, xdsClientWrapperForServerSds);
+        new SdsProtocolNegotiators.HandlerPickerHandler(grpcHandler, xdsClientWrapperForServerSds,
+            InternalProtocolNegotiators.serverPlaintext());
     pipeline.addLast(handlerPickerHandler);
     channelHandlerCtx = pipeline.context(handlerPickerHandler);
     assertThat(channelHandlerCtx).isNotNull(); // should find HandlerPickerHandler
@@ -239,10 +243,11 @@ public class SdsProtocolNegotiatorsTest {
   }
 
   @Test
-  public void serverSdsHandler_nullTlsContext_expectPlaintext() throws IOException {
+  public void serverSdsHandler_nullTlsContext_expectFallbackProtocolNegotiator() {
     SdsProtocolNegotiators.HandlerPickerHandler handlerPickerHandler =
         new SdsProtocolNegotiators.HandlerPickerHandler(
-            grpcHandler, /* xdsClientWrapperForServerSds= */ null);
+            grpcHandler, /* xdsClientWrapperForServerSds= */ null,
+            new FallbackProtocolNegotiator());
     pipeline.addLast(handlerPickerHandler);
     channelHandlerCtx = pipeline.context(handlerPickerHandler);
     assertThat(channelHandlerCtx).isNotNull(); // should find HandlerPickerHandler
@@ -253,7 +258,7 @@ public class SdsProtocolNegotiatorsTest {
     assertThat(channelHandlerCtx).isNull();
     channel.runPendingTasks(); // need this for tasks to execute on eventLoop
     Iterator<Map.Entry<String, ChannelHandler>> iterator = pipeline.iterator();
-    assertThat(iterator.next().getValue()).isInstanceOf(FakeGrpcHttp2ConnectionHandler.class);
+    assertThat(iterator.next().getValue()).isInstanceOf(FakeFallbackHandler.class);
     // no more handlers in the pipeline
     assertThat(iterator.hasNext()).isFalse();
   }
@@ -281,6 +286,35 @@ public class SdsProtocolNegotiatorsTest {
     pipeline.fireUserEventTriggered(sslEvent);
     channel.runPendingTasks(); // need this for tasks to execute on eventLoop
     assertTrue(channel.isOpen());
+  }
+
+  private static class FallbackProtocolNegotiator implements ProtocolNegotiator {
+
+    @Override
+    public AsciiString scheme() {
+      return null;
+    }
+
+    @Override
+    public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
+      return new FakeFallbackHandler();
+    }
+
+    @Override
+    public void close() { }
+  }
+
+  private static final class FakeFallbackHandler implements ChannelHandler {
+
+    @Override
+    public void handlerAdded(ChannelHandlerContext ctx) throws Exception { }
+
+    @Override
+    public void handlerRemoved(ChannelHandlerContext ctx) throws Exception { }
+
+    @SuppressWarnings("deprecation")
+    @Override
+    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) { }
   }
 
   private static final class FakeGrpcHttp2ConnectionHandler extends GrpcHttp2ConnectionHandler {

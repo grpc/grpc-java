@@ -16,6 +16,8 @@
 
 package io.grpc.xds.internal.sds;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.BindableService;
 import io.grpc.CompressorRegistry;
@@ -27,6 +29,7 @@ import io.grpc.ServerInterceptor;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerStreamTracer;
 import io.grpc.ServerTransportFilter;
+import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import io.grpc.netty.NettyServerBuilder;
 import io.grpc.xds.internal.sds.SdsProtocolNegotiators.ServerSdsProtocolNegotiator;
 import java.io.File;
@@ -43,6 +46,7 @@ public final class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
 
   private final NettyServerBuilder delegate;
   private final int port;
+  private ProtocolNegotiator fallbackProtocolNegotiator;
 
   private XdsServerBuilder(NettyServerBuilder nettyDelegate, int port) {
     this.delegate = nettyDelegate;
@@ -120,6 +124,12 @@ public final class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
     return this;
   }
 
+  public XdsServerBuilder fallbackProtocolNegotiator(
+      ProtocolNegotiator fallbackProtocolNegotiator) {
+    this.fallbackProtocolNegotiator = fallbackProtocolNegotiator;
+    return this;
+  }
+
   /** Creates a gRPC server builder for the given port. */
   public static XdsServerBuilder forPort(int port) {
     NettyServerBuilder nettyDelegate = NettyServerBuilder.forAddress(new InetSocketAddress(port));
@@ -129,8 +139,9 @@ public final class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
   @Override
   public Server build() {
     // note: doing it in build() will overwrite any previously set ProtocolNegotiator
+    checkNotNull(fallbackProtocolNegotiator, "fallbackProtocolNegotiator");
     ServerSdsProtocolNegotiator serverProtocolNegotiator =
-        SdsProtocolNegotiators.serverProtocolNegotiator(port);
+        SdsProtocolNegotiators.serverProtocolNegotiator(port, fallbackProtocolNegotiator);
     return buildServer(serverProtocolNegotiator);
   }
 

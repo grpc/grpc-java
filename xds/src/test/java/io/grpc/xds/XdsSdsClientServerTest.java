@@ -37,6 +37,9 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
+import io.grpc.netty.GrpcHttp2ConnectionHandler;
+import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
+import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.testing.protobuf.SimpleRequest;
@@ -46,7 +49,9 @@ import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import io.grpc.xds.internal.sds.SdsProtocolNegotiators;
 import io.grpc.xds.internal.sds.XdsChannelBuilder;
 import io.grpc.xds.internal.sds.XdsServerBuilder;
+import io.netty.channel.ChannelHandler;
 import io.netty.handler.ssl.NotSslRecordException;
+import io.netty.util.AsciiString;
 import java.io.IOException;
 import java.net.Inet4Address;
 import java.net.InetSocketAddress;
@@ -85,6 +90,34 @@ public class XdsSdsClientServerTest {
     SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
         getBlockingStub(/* upstreamTlsContext= */ null, /* overrideAuthority= */ null);
     assertThat(unaryRpc("buddy", blockingStub)).isEqualTo("Hello buddy");
+  }
+
+  @Test
+  public void fallbackProtocolNegotiator_expectException() throws IOException, URISyntaxException {
+    buildServerWithTlsContext(/* downstreamTlsContext= */ null,
+        new ProtocolNegotiator() {
+          @Override
+          public AsciiString scheme() {
+            return null;
+          }
+
+          @Override
+          public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
+            throw new RuntimeException("No fallback negotiator!");
+          }
+
+          @Override
+          public void close() { }
+        });
+
+    SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
+        getBlockingStub(/* upstreamTlsContext= */ null, /* overrideAuthority= */ null);
+    try {
+      unaryRpc("buddy", blockingStub);
+      fail("exception expected");
+    } catch (StatusRuntimeException sre) {
+      assertThat(sre.getStatus().getCode()).isEqualTo(Status.UNAVAILABLE.getCode());
+    }
   }
 
   /** TLS channel - no mTLS. */
@@ -240,9 +273,8 @@ public class XdsSdsClientServerTest {
     final XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
         XdsClientWrapperForServerSdsTest.createXdsClientWrapperForServerSds(
             port, /* downstreamTlsContext= */ downstreamTlsContext);
-    SdsProtocolNegotiators.ServerSdsProtocolNegotiator serverSdsProtocolNegotiator =
-        new SdsProtocolNegotiators.ServerSdsProtocolNegotiator(xdsClientWrapperForServerSds);
-    buildServer(port, serverSdsProtocolNegotiator);
+    buildServerWithFallbackProtocolNegotiator(xdsClientWrapperForServerSds,
+        InternalProtocolNegotiators.serverPlaintext());
 
     XdsClient.ListenerWatcher listenerWatcher = xdsClientWrapperForServerSds.getListenerWatcher();
 
@@ -254,11 +286,26 @@ public class XdsSdsClientServerTest {
 
   private void buildServerWithTlsContext(DownstreamTlsContext downstreamTlsContext)
       throws IOException {
+    buildServerWithTlsContext(downstreamTlsContext,
+        InternalProtocolNegotiators.serverPlaintext());
+  }
+
+  private void buildServerWithTlsContext(DownstreamTlsContext downstreamTlsContext,
+      ProtocolNegotiator fallbackProtocolNegotiator)
+      throws IOException {
     final XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
         XdsClientWrapperForServerSdsTest.createXdsClientWrapperForServerSds(
             port, /* downstreamTlsContext= */ downstreamTlsContext);
+    buildServerWithFallbackProtocolNegotiator(xdsClientWrapperForServerSds,
+        fallbackProtocolNegotiator);
+  }
+
+  private void buildServerWithFallbackProtocolNegotiator(
+      XdsClientWrapperForServerSds xdsClientWrapperForServerSds,
+      ProtocolNegotiator fallbackProtocolNegotiator) throws IOException {
     SdsProtocolNegotiators.ServerSdsProtocolNegotiator serverSdsProtocolNegotiator =
-        new SdsProtocolNegotiators.ServerSdsProtocolNegotiator(xdsClientWrapperForServerSds);
+        new SdsProtocolNegotiators.ServerSdsProtocolNegotiator(xdsClientWrapperForServerSds,
+            fallbackProtocolNegotiator);
     buildServer(port, serverSdsProtocolNegotiator);
   }
 

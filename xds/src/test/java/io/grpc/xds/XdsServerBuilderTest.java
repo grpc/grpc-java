@@ -16,10 +16,13 @@
 
 package io.grpc.xds;
 
+import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
+import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.xds.internal.sds.SdsProtocolNegotiators.ServerSdsProtocolNegotiator;
 import io.grpc.xds.internal.sds.ServerWrapperForXds;
 import io.grpc.xds.internal.sds.XdsServerBuilder;
@@ -45,12 +48,24 @@ public class XdsServerBuilderTest {
         new XdsClientWrapperForServerSds(port);
     xdsClientWrapperForServerSds.start(mockXdsClient);
     ServerSdsProtocolNegotiator serverSdsProtocolNegotiator =
-        new ServerSdsProtocolNegotiator(xdsClientWrapperForServerSds);
+        new ServerSdsProtocolNegotiator(xdsClientWrapperForServerSds,
+            InternalProtocolNegotiators.serverPlaintext());
     ServerWrapperForXds xdsServer = builder.buildServer(serverSdsProtocolNegotiator);
     xdsServer.start();
     xdsServer.shutdown();
     xdsServer.awaitTermination(500L, TimeUnit.MILLISECONDS);
     verify(mockXdsClient, times(1)).shutdown();
+  }
+
+  @Test
+  public void missingFallbackNegotiator_expectException() throws IOException, InterruptedException {
+    XdsServerBuilder builder = XdsServerBuilder.forPort(80);
+    try {
+      builder.build();
+      fail("exception expected");
+    } catch (NullPointerException npe) {
+      assertThat(npe.getMessage()).contains("fallbackProtocolNegotiator");
+    }
   }
 
   private static int findFreePort() throws IOException {
