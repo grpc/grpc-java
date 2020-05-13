@@ -696,6 +696,7 @@ final class EnvoyProtoData {
       private final int numerator;
       private final int denominator;
 
+      @VisibleForTesting
       Fraction(int numerator, int denominator) {
         this.numerator = numerator;
         this.denominator = denominator;
@@ -858,6 +859,7 @@ final class EnvoyProtoData {
       private final long start;
       private final long end;
 
+      @VisibleForTesting
       Range(long start, long end) {
         this.start = start;
         this.end = end;

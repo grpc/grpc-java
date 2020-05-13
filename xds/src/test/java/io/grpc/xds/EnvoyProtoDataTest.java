@@ -30,6 +30,7 @@ import io.grpc.xds.EnvoyProtoData.Route;
 import io.grpc.xds.EnvoyProtoData.RouteAction;
 import io.grpc.xds.EnvoyProtoData.RouteMatch;
 import io.grpc.xds.EnvoyProtoData.StructOrError;
+import java.util.Arrays;
 import java.util.Collections;
 import javax.annotation.Nullable;
 import org.junit.Test;
@@ -151,7 +152,7 @@ public class EnvoyProtoDataTest {
   }
 
   @Test
-  public void convertRouteMatch() {
+  public void convertRouteMatch_pathMatching() {
     // path_specifier = prefix
     io.envoyproxy.envoy.api.v2.route.RouteMatch proto1 =
         io.envoyproxy.envoy.api.v2.route.RouteMatch.newBuilder().setPrefix("/").build();
@@ -203,8 +204,6 @@ public class EnvoyProtoDataTest {
     StructOrError<RouteMatch> struct6 = RouteMatch.fromEnvoyProtoRouteMatch(proto6);
     assertThat(struct6).isNull();
 
-    // TODO (chengyuanzhang): cover other path matching types.
-
     // path_specifier unset
     io.envoyproxy.envoy.api.v2.route.RouteMatch unsetProto =
         io.envoyproxy.envoy.api.v2.route.RouteMatch.getDefaultInstance();
@@ -249,6 +248,53 @@ public class EnvoyProtoDataTest {
       builder.setPath(path);
     }
     return builder.build();
+  }
+
+  @Test
+  public void convertRouteMatch_withHeaderMatching() {
+    io.envoyproxy.envoy.api.v2.route.RouteMatch proto =
+        io.envoyproxy.envoy.api.v2.route.RouteMatch.newBuilder()
+            .setPrefix("")
+            .addHeaders(
+                io.envoyproxy.envoy.api.v2.route.HeaderMatcher.newBuilder()
+                    .setName(":scheme")
+                    .setPrefixMatch("http"))
+            .addHeaders(
+                io.envoyproxy.envoy.api.v2.route.HeaderMatcher.newBuilder()
+                    .setName(":method")
+                    .setExactMatch("PUT"))
+            .build();
+    StructOrError<RouteMatch> struct = RouteMatch.fromEnvoyProtoRouteMatch(proto);
+    assertThat(struct.getErrorDetail()).isNull();
+    assertThat(struct.getStruct())
+        .isEqualTo(
+            new RouteMatch("", null, null, null,
+                Arrays.asList(
+                    new HeaderMatcher(":scheme", null, null, null, null, "http", null, false),
+                    new HeaderMatcher(":method", "PUT", null, null, null, null, null, false))));
+  }
+
+  @Test
+  public void convertRouteMatch_withRuntimeFraction() {
+    io.envoyproxy.envoy.api.v2.route.RouteMatch proto =
+        io.envoyproxy.envoy.api.v2.route.RouteMatch.newBuilder()
+            .setPrefix("")
+            .setRuntimeFraction(
+                io.envoyproxy.envoy.api.v2.core.RuntimeFractionalPercent.newBuilder()
+                    .setDefaultValue(
+                        io.envoyproxy.envoy.type.FractionalPercent.newBuilder()
+                            .setNumerator(30)
+                            .setDenominator(
+                                io.envoyproxy.envoy.type.FractionalPercent.DenominatorType
+                                    .HUNDRED)))
+            .build();
+    StructOrError<RouteMatch> struct = RouteMatch.fromEnvoyProtoRouteMatch(proto);
+    assertThat(struct.getErrorDetail()).isNull();
+    assertThat(struct.getStruct())
+        .isEqualTo(
+            new RouteMatch(
+                "", null, null, new RouteMatch.Fraction(30, 100),
+                Collections.<HeaderMatcher>emptyList()));
   }
 
   @Test
@@ -336,7 +382,52 @@ public class EnvoyProtoDataTest {
     assertThat(struct3.getStruct()).isEqualTo(
         new HeaderMatcher(":method", null, "P*", null, null, null, null, false));
 
-    // TODO (chengyuanzhang): cover other header_match types.
+    // header_match_specifier = range_match
+    io.envoyproxy.envoy.api.v2.route.HeaderMatcher proto4 =
+        io.envoyproxy.envoy.api.v2.route.HeaderMatcher.newBuilder()
+            .setName("timeout")
+            .setRangeMatch(
+                io.envoyproxy.envoy.type.Int64Range.newBuilder().setStart(10L).setEnd(20L))
+            .build();
+    StructOrError<HeaderMatcher> struct4 = HeaderMatcher.fromEnvoyProtoHeaderMatcher(proto4);
+    assertThat(struct4.getErrorDetail()).isNull();
+    assertThat(struct4.getStruct()).isEqualTo(
+        new HeaderMatcher(
+            "timeout", null, null, new HeaderMatcher.Range(10L, 20L), null, null, null, false));
+
+    // header_match_specifier = present_match
+    io.envoyproxy.envoy.api.v2.route.HeaderMatcher proto5 =
+        io.envoyproxy.envoy.api.v2.route.HeaderMatcher.newBuilder()
+            .setName("user-agent")
+            .setPresentMatch(true)
+            .build();
+    StructOrError<HeaderMatcher> struct5 = HeaderMatcher.fromEnvoyProtoHeaderMatcher(proto5);
+    assertThat(struct5.getErrorDetail()).isNull();
+    assertThat(struct5.getStruct()).isEqualTo(
+        new HeaderMatcher("user-agent", null, null, null, true, null, null, false));
+
+    // header_match_specifier = prefix_match
+    io.envoyproxy.envoy.api.v2.route.HeaderMatcher proto6 =
+        io.envoyproxy.envoy.api.v2.route.HeaderMatcher.newBuilder()
+            .setName("authority")
+            .setPrefixMatch("service-foo")
+            .build();
+    StructOrError<HeaderMatcher> struct6 = HeaderMatcher.fromEnvoyProtoHeaderMatcher(proto6);
+    assertThat(struct6.getErrorDetail()).isNull();
+    assertThat(struct6.getStruct()).isEqualTo(
+        new HeaderMatcher("authority", null, null, null, null, "service-foo", null, false));
+
+    // header_match_specifier = suffix_match
+    io.envoyproxy.envoy.api.v2.route.HeaderMatcher proto7 =
+        io.envoyproxy.envoy.api.v2.route.HeaderMatcher.newBuilder()
+            .setName("authority")
+            .setSuffixMatch("googleapis.com")
+            .build();
+    StructOrError<HeaderMatcher> struct7 = HeaderMatcher.fromEnvoyProtoHeaderMatcher(proto7);
+    assertThat(struct7.getErrorDetail()).isNull();
+    assertThat(struct7.getStruct()).isEqualTo(
+        new HeaderMatcher(
+            "authority", null, null, null, null, null, "googleapis.com", false));
 
     // header_match_specifier unset
     io.envoyproxy.envoy.api.v2.route.HeaderMatcher unsetProto =
