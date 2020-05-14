@@ -825,7 +825,7 @@ final class XdsClientImpl extends XdsClient {
    * @throws InvalidProtoDataException if the message contains invalid data.
    */
   @VisibleForTesting
-  static List<EnvoyProtoData.Route> findRoutesInRouteConfig(
+  private static List<EnvoyProtoData.Route> findRoutesInRouteConfig(
       RouteConfiguration config, String hostName) throws InvalidProtoDataException {
     VirtualHost targetVirtualHost = findVirtualHostForHostName(config, hostName);
     if (targetVirtualHost == null) {
@@ -835,8 +835,14 @@ final class XdsClientImpl extends XdsClient {
     // Note we would consider upstream cluster not found if the virtual host is not configured
     // correctly for gRPC, even if there exist other virtual hosts with (lower priority)
     // matching domains.
+    return populateRoutesInVirtualHost(targetVirtualHost);
+  }
+
+  @VisibleForTesting
+  static List<EnvoyProtoData.Route> populateRoutesInVirtualHost(VirtualHost virtualHost)
+      throws InvalidProtoDataException {
     List<EnvoyProtoData.Route> routes = new ArrayList<>();
-    List<Route> routesProto = targetVirtualHost.getRoutesList();
+    List<Route> routesProto = virtualHost.getRoutesList();
     for (Route routeProto : routesProto) {
       StructOrError<EnvoyProtoData.Route> route =
           EnvoyProtoData.Route.fromEnvoyProtoRoute(routeProto);
@@ -844,18 +850,19 @@ final class XdsClientImpl extends XdsClient {
         continue;
       } else if (route.getErrorDetail() != null) {
         throw new InvalidProtoDataException(
-            "Virtual host [" + targetVirtualHost.getName() + "] contains invalid route : "
+            "Virtual host [" + virtualHost.getName() + "] contains invalid route : "
                 + route.getErrorDetail());
       }
       routes.add(route.getStruct());
     }
     if (routes.isEmpty()) {
       throw new InvalidProtoDataException(
-          "Virtual host [" + targetVirtualHost.getName() + "] contains no usable route");
+          "Virtual host [" + virtualHost.getName() + "] contains no usable route");
     }
+    // The last route must be a default route.
     if (!Iterables.getLast(routes).isDefaultRoute()) {
       throw new InvalidProtoDataException(
-          "Virtual host [" + targetVirtualHost.getName()
+          "Virtual host [" + virtualHost.getName()
               + "] contains non-default route as the last route");
     }
     // We only validate the default route unless path matching is enabled.
@@ -863,7 +870,7 @@ final class XdsClientImpl extends XdsClient {
       EnvoyProtoData.Route defaultRoute = Iterables.getLast(routes);
       if (defaultRoute.getRouteAction().getCluster() == null) {
         throw new InvalidProtoDataException(
-            "Virtual host [" + targetVirtualHost.getName()
+            "Virtual host [" + virtualHost.getName()
                 + "] default route contains no cluster name");
       }
       return Collections.singletonList(defaultRoute);
@@ -878,7 +885,7 @@ final class XdsClientImpl extends XdsClient {
       if (route.getRouteAction().getCluster() == null
           && route.getRouteAction().getWeightedCluster() == null) {
         throw new InvalidProtoDataException(
-            "Virtual host [" + targetVirtualHost.getName()
+            "Virtual host [" + virtualHost.getName()
                 + "] contains route without cluster or weighted cluster");
       }
     }
@@ -1744,7 +1751,8 @@ final class XdsClientImpl extends XdsClient {
     }
   }
 
-  private static final class InvalidProtoDataException extends RuntimeException {
+  @VisibleForTesting
+  static final class InvalidProtoDataException extends RuntimeException {
     private static final long serialVersionUID = 1L;
 
     private InvalidProtoDataException(String message) {
