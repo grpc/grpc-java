@@ -200,14 +200,13 @@ final class LbPolicyConfiguration {
         new HashMap<>();
 
     private final ChildLoadBalancerHelperProvider childLbHelperProvider;
-    @Nullable
     private final ChildLbStatusListener childLbStatusListener;
 
     public RefCountedChildPolicyWrapperFactory(
         ChildLoadBalancerHelperProvider childLbHelperProvider,
-        @Nullable ChildLbStatusListener childLbStatusListener) {
+        ChildLbStatusListener childLbStatusListener) {
       this.childLbHelperProvider = checkNotNull(childLbHelperProvider, "childLbHelperProvider");
-      this.childLbStatusListener = childLbStatusListener;
+      this.childLbStatusListener = checkNotNull(childLbStatusListener, "childLbStatusListener");
     }
 
     ChildPolicyWrapper createOrGet(String target) {
@@ -250,7 +249,7 @@ final class LbPolicyConfiguration {
     public ChildPolicyWrapper(
         String target,
         ChildLoadBalancerHelperProvider childLbHelperProvider,
-        @Nullable ChildLbStatusListener childLbStatusListener) {
+        ChildLbStatusListener childLbStatusListener) {
       this.target = target;
       this.helper =
           new ChildPolicyReportingHelper(childLbHelperProvider, childLbStatusListener);
@@ -319,19 +318,14 @@ final class LbPolicyConfiguration {
     final class ChildPolicyReportingHelper extends ForwardingLoadBalancerHelper {
 
       private final ChildLoadBalancerHelper delegate;
-      @Nullable
       private final ChildLbStatusListener listener;
-
-      ChildPolicyReportingHelper(ChildLoadBalancerHelperProvider childHelperProvider) {
-        this(childHelperProvider, null);
-      }
 
       ChildPolicyReportingHelper(
           ChildLoadBalancerHelperProvider childHelperProvider,
-          @Nullable ChildLbStatusListener listener) {
+          ChildLbStatusListener listener) {
         checkNotNull(childHelperProvider, "childHelperProvider");
         this.delegate = childHelperProvider.forTarget(getTarget());
-        this.listener = listener;
+        this.listener = checkNotNull(listener, "listener");
       }
 
       @Override
@@ -343,9 +337,7 @@ final class LbPolicyConfiguration {
       public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
         setPicker(newPicker);
         super.updateBalancingState(newState, newPicker);
-        if (listener != null) {
-          listener.onStatusChanged(newState);
-        }
+        listener.onStatusChanged(newState);
       }
 
       @Override

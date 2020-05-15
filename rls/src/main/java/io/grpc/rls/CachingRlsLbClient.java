@@ -839,13 +839,11 @@ final class CachingRlsLbClient {
             childPolicyWrapper.getConnectivityStateInfo().getState();
         switch (connectivityState) {
           case IDLE:
-            // fall-through
           case CONNECTING:
             return PickResult.withNoResult();
           case READY:
             return childPolicyWrapper.getPicker().pickSubchannel(rlsAppliedArgs);
           case TRANSIENT_FAILURE:
-            // fall-through
           case SHUTDOWN:
           default:
             return useFallback(rlsAppliedArgs);
