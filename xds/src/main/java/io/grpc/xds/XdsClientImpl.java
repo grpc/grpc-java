@@ -824,7 +824,6 @@ final class XdsClientImpl extends XdsClient {
    *
    * @throws InvalidProtoDataException if the message contains invalid data.
    */
-  @VisibleForTesting
   private static List<EnvoyProtoData.Route> findRoutesInRouteConfig(
       RouteConfiguration config, String hostName) throws InvalidProtoDataException {
     VirtualHost targetVirtualHost = findVirtualHostForHostName(config, hostName);
@@ -893,6 +892,7 @@ final class XdsClientImpl extends XdsClient {
   }
 
   @VisibleForTesting
+  @Nullable
   static VirtualHost findVirtualHostForHostName(
       RouteConfiguration config, String hostName) {
     List<VirtualHost> virtualHosts = config.getVirtualHostsList();
