@@ -121,17 +121,15 @@ public class EnvoyProtoDataTest {
   public void isDefaultRoute() {
     StructOrError<Route> struct1 = Route.fromEnvoyProtoRoute(buildSimpleRouteProto("", null));
     StructOrError<Route> struct2 = Route.fromEnvoyProtoRoute(buildSimpleRouteProto("/", null));
-    StructOrError<Route> struct3 = Route.fromEnvoyProtoRoute(buildSimpleRouteProto(null, ""));
-    StructOrError<Route> struct4 =
+    StructOrError<Route> struct3 =
         Route.fromEnvoyProtoRoute(buildSimpleRouteProto("/service/", null));
-    StructOrError<Route> struct5 =
+    StructOrError<Route> struct4 =
         Route.fromEnvoyProtoRoute(buildSimpleRouteProto(null, "/service/method"));
 
     assertThat(struct1.getStruct().isDefaultRoute()).isTrue();
     assertThat(struct2.getStruct().isDefaultRoute()).isTrue();
-    assertThat(struct3.getStruct().isDefaultRoute()).isTrue();
+    assertThat(struct3.getStruct().isDefaultRoute()).isFalse();
     assertThat(struct4.getStruct().isDefaultRoute()).isFalse();
-    assertThat(struct5.getStruct().isDefaultRoute()).isFalse();
   }
 
   private static io.envoyproxy.envoy.api.v2.route.Route buildSimpleRouteProto(
@@ -163,11 +161,12 @@ public class EnvoyProtoDataTest {
 
     // path_specifier = path
     io.envoyproxy.envoy.api.v2.route.RouteMatch proto2 =
-        io.envoyproxy.envoy.api.v2.route.RouteMatch.newBuilder().setPath("").build();
+        io.envoyproxy.envoy.api.v2.route.RouteMatch.newBuilder().setPath("/service/method").build();
     StructOrError<RouteMatch> struct2 = RouteMatch.fromEnvoyProtoRouteMatch(proto2);
     assertThat(struct2.getErrorDetail()).isNull();
     assertThat(struct2.getStruct()).isEqualTo(
-        new RouteMatch(null, "", null, null, Collections.<HeaderMatcher>emptyList()));
+        new RouteMatch(
+            null, "/service/method", null, null, Collections.<HeaderMatcher>emptyList()));
 
     // path_specifier = regex
     @SuppressWarnings("deprecation")
@@ -233,7 +232,7 @@ public class EnvoyProtoDataTest {
     assertThat(struct2.getStruct()).isNotNull();
     assertThat(struct3.getStruct()).isNull();
     assertThat(struct4.getStruct()).isNotNull();
-    assertThat(struct5.getStruct()).isNotNull();
+    assertThat(struct5.getStruct()).isNull();
     assertThat(struct6.getStruct()).isNotNull();
     assertThat(struct7.getStruct()).isNull();
   }

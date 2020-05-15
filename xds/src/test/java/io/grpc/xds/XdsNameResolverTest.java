@@ -451,7 +451,7 @@ public class XdsNameResolverTest {
     // with a route resolution for a single weighted cluster route.
     Route weightedClustersDefaultRoute =
         Route.newBuilder()
-            .setMatch(RouteMatch.newBuilder().setPath(""))
+            .setMatch(RouteMatch.newBuilder().setPrefix(""))
             .setRoute(buildWeightedClusterRoute(
                 ImmutableMap.of(
                     "cluster-foo.googleapis.com", 20, "cluster-bar.googleapis.com", 80)))
@@ -521,7 +521,7 @@ public class XdsNameResolverTest {
                 .build(),
             // default, routed to cluster
             Route.newBuilder()
-                .setMatch(RouteMatch.newBuilder().setPath(""))
+                .setMatch(RouteMatch.newBuilder().setPrefix(""))
                 .setRoute(buildClusterRoute("cluster-hello.googleapis.com"))
                 .build());
     List<Any> routeConfigs = ImmutableList.of(

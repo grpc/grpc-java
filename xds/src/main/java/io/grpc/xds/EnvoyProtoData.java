@@ -551,11 +551,11 @@ final class EnvoyProtoData {
       if (pathSafeRegExMatch != null || fractionMatch != null) {
         return false;
       }
-      if (headerMatchers != null && !headerMatchers.isEmpty()) {
+      if (!headerMatchers.isEmpty()) {
         return false;
       }
       if (pathExactMatch != null) {
-        return pathExactMatch.isEmpty();
+        return false;
       }
       if (pathPrefixMatch != null) {
         return pathPrefixMatch.isEmpty() || pathPrefixMatch.equals("/");
@@ -652,14 +652,11 @@ final class EnvoyProtoData {
           exactPathMatch = proto.getPath();
           int lastSlash = exactPathMatch.lastIndexOf('/');
           // Supported exact match format:
-          // "" (default)
           // "/service/method"
-          if (!exactPathMatch.isEmpty()) {
-            if (!exactPathMatch.startsWith("/") || lastSlash == 0
-                || lastSlash == exactPathMatch.length() - 1) {
-              return StructOrError.fromError(
-                  "Invalid format of exact path match: " + exactPathMatch);
-            }
+          if (!exactPathMatch.startsWith("/") || lastSlash == 0
+              || lastSlash == exactPathMatch.length() - 1) {
+            return StructOrError.fromError(
+                "Invalid format of exact path match: " + exactPathMatch);
           }
           break;
         case REGEX:
