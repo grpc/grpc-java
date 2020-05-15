@@ -21,6 +21,8 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.ImmutableList;
+import com.google.re2j.Pattern;
+import com.google.re2j.PatternSyntaxException;
 import io.envoyproxy.envoy.type.FractionalPercent;
 import io.envoyproxy.envoy.type.FractionalPercent.DenominatorType;
 import io.grpc.EquivalentAddressGroup;
@@ -513,7 +515,7 @@ final class EnvoyProtoData {
     @Nullable
     private final String pathExactMatch;
     @Nullable
-    private final String pathSafeRegExMatch;
+    private final Pattern pathSafeRegExMatch;
 
     private final List<HeaderMatcher> headerMatchers;
     @Nullable
@@ -522,7 +524,7 @@ final class EnvoyProtoData {
     @VisibleForTesting
     RouteMatch(
         @Nullable String pathPrefixMatch, @Nullable String pathExactMatch,
-        @Nullable String pathSafeRegExMatch, @Nullable Fraction fractionMatch,
+        @Nullable Pattern pathSafeRegExMatch, @Nullable Fraction fractionMatch,
         List<HeaderMatcher> headerMatchers) {
       this.pathPrefixMatch = pathPrefixMatch;
       this.pathExactMatch = pathExactMatch;
@@ -574,7 +576,9 @@ final class EnvoyProtoData {
       RouteMatch that = (RouteMatch) o;
       return Objects.equals(pathPrefixMatch, that.pathPrefixMatch)
           && Objects.equals(pathExactMatch, that.pathExactMatch)
-          && Objects.equals(pathSafeRegExMatch, that.pathSafeRegExMatch)
+          && Objects.equals(
+              pathSafeRegExMatch == null ? null : pathSafeRegExMatch.pattern(),
+              that.pathSafeRegExMatch == null  ? null : that.pathSafeRegExMatch.pattern())
           && Objects.equals(fractionMatch, that.fractionMatch)
           && Objects.equals(headerMatchers, that.headerMatchers);
     }
@@ -587,9 +591,9 @@ final class EnvoyProtoData {
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(this)
-          .add("prefixPathMatch", pathPrefixMatch)
-          .add("exactPathMatch", pathExactMatch)
-          .add("safeRegExPathMatch", pathSafeRegExMatch)
+          .add("pathPrefixMatch", pathPrefixMatch)
+          .add("pathExactMatch", pathExactMatch)
+          .add("pathSafeRegExMatch", pathSafeRegExMatch)
           .add("headerMatchers", headerMatchers)
           .add("fractionMatch", fractionMatch)
           .toString();
@@ -633,7 +637,7 @@ final class EnvoyProtoData {
 
       String prefixPathMatch = null;
       String exactPathMatch = null;
-      String safeRegExPathMatch = null;
+      Pattern safeRegExPathMatch = null;
       switch (proto.getPathSpecifierCase()) {
         case PREFIX:
           prefixPathMatch = proto.getPrefix();
@@ -662,7 +666,12 @@ final class EnvoyProtoData {
         case REGEX:
           return StructOrError.fromError("Unsupported path match type: regex");
         case SAFE_REGEX:
-          safeRegExPathMatch = proto.getSafeRegex().getRegex();
+          String rawPattern = proto.getSafeRegex().getRegex();
+          try {
+            safeRegExPathMatch = Pattern.compile(rawPattern);
+          } catch (PatternSyntaxException e) {
+            return StructOrError.fromError("Malformed safe regex pattern: " + e.getMessage());
+          }
           break;
         case PATHSPECIFIER_NOT_SET:
         default:
@@ -734,7 +743,7 @@ final class EnvoyProtoData {
     @Nullable
     private final String exactMatch;
     @Nullable
-    private final String safeRegExMatch;
+    private final Pattern safeRegExMatch;
     @Nullable
     private final Range rangeMatch;
     @Nullable
@@ -749,7 +758,7 @@ final class EnvoyProtoData {
     @VisibleForTesting
     HeaderMatcher(
         String name,
-        @Nullable String exactMatch, @Nullable String safeRegExMatch, @Nullable Range rangeMatch,
+        @Nullable String exactMatch, @Nullable Pattern safeRegExMatch, @Nullable Range rangeMatch,
         @Nullable Boolean presentMatch, @Nullable String prefixMatch, @Nullable String suffixMatch,
         boolean isInvertedMatch) {
       this.name = name;
@@ -769,7 +778,7 @@ final class EnvoyProtoData {
     static StructOrError<HeaderMatcher> fromEnvoyProtoHeaderMatcher(
         io.envoyproxy.envoy.api.v2.route.HeaderMatcher proto) {
       String exactMatch = null;
-      String safeRegExMatch = null;
+      Pattern safeRegExMatch = null;
       Range rangeMatch = null;
       Boolean presentMatch = null;
       String prefixMatch = null;
@@ -783,7 +792,14 @@ final class EnvoyProtoData {
           return StructOrError.fromError(
               "HeaderMatcher [" + proto.getName() + "] has unsupported match type: regex");
         case SAFE_REGEX_MATCH:
-          safeRegExMatch = proto.getSafeRegexMatch().getRegex();
+          String rawPattern = proto.getSafeRegexMatch().getRegex();
+          try {
+            safeRegExMatch = Pattern.compile(rawPattern);
+          } catch (PatternSyntaxException e) {
+            return StructOrError.fromError(
+                "HeaderMatcher [" + proto.getName() + "] contains malformed safe regex pattern: "
+                    + e.getMessage());
+          }
           break;
         case RANGE_MATCH:
           rangeMatch = new Range(proto.getRangeMatch().getStart(), proto.getRangeMatch().getEnd());
@@ -818,7 +834,9 @@ final class EnvoyProtoData {
       HeaderMatcher that = (HeaderMatcher) o;
       return Objects.equals(name, that.name)
           && Objects.equals(exactMatch, that.exactMatch)
-          && Objects.equals(safeRegExMatch, that.safeRegExMatch)
+          && Objects.equals(
+              safeRegExMatch == null ? null : safeRegExMatch.pattern(),
+              that.safeRegExMatch == null ? null : that.safeRegExMatch.pattern())
           && Objects.equals(rangeMatch, that.rangeMatch)
           && Objects.equals(presentMatch, that.presentMatch)
           && Objects.equals(prefixMatch, that.prefixMatch)

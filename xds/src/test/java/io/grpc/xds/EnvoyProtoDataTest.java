@@ -21,6 +21,7 @@ import static com.google.common.truth.Truth.assertThat;
 import com.google.common.testing.EqualsTester;
 import com.google.protobuf.BoolValue;
 import com.google.protobuf.UInt32Value;
+import com.google.re2j.Pattern;
 import io.envoyproxy.envoy.api.v2.route.QueryParameterMatcher;
 import io.envoyproxy.envoy.api.v2.route.RedirectAction;
 import io.grpc.xds.EnvoyProtoData.ClusterWeight;
@@ -180,11 +181,12 @@ public class EnvoyProtoDataTest {
     io.envoyproxy.envoy.api.v2.route.RouteMatch proto4 =
         io.envoyproxy.envoy.api.v2.route.RouteMatch.newBuilder()
             .setSafeRegex(
-                io.envoyproxy.envoy.type.matcher.RegexMatcher.newBuilder().setRegex("*")).build();
+                io.envoyproxy.envoy.type.matcher.RegexMatcher.newBuilder().setRegex(".")).build();
     StructOrError<RouteMatch> struct4 = RouteMatch.fromEnvoyProtoRouteMatch(proto4);
     assertThat(struct4.getErrorDetail()).isNull();
     assertThat(struct4.getStruct()).isEqualTo(
-        new RouteMatch(null, null, "*", null, Collections.<HeaderMatcher>emptyList()));
+        new RouteMatch(
+            null, null, Pattern.compile("."), null, Collections.<HeaderMatcher>emptyList()));
 
     // case_sensitive = false
     io.envoyproxy.envoy.api.v2.route.RouteMatch proto5 =
@@ -227,6 +229,12 @@ public class EnvoyProtoDataTest {
         RouteMatch.fromEnvoyProtoRouteMatch(buildSimpleRouteMatchProto(null, "/service/method"));
     StructOrError<RouteMatch> struct7 =
         RouteMatch.fromEnvoyProtoRouteMatch(buildSimpleRouteMatchProto(null, "/service/method/"));
+    StructOrError<RouteMatch> struct8 =
+        RouteMatch.fromEnvoyProtoRouteMatch(
+            io.envoyproxy.envoy.api.v2.route.RouteMatch.newBuilder()
+                .setSafeRegex(
+                    io.envoyproxy.envoy.type.matcher.RegexMatcher.newBuilder().setRegex("["))
+                .build());
 
     assertThat(struct1.getStruct()).isNotNull();
     assertThat(struct2.getStruct()).isNotNull();
@@ -235,6 +243,7 @@ public class EnvoyProtoDataTest {
     assertThat(struct5.getStruct()).isNull();
     assertThat(struct6.getStruct()).isNotNull();
     assertThat(struct7.getStruct()).isNull();
+    assertThat(struct8.getStruct()).isNull();
   }
 
   private static io.envoyproxy.envoy.api.v2.route.RouteMatch buildSimpleRouteMatchProto(
@@ -379,7 +388,7 @@ public class EnvoyProtoDataTest {
     StructOrError<HeaderMatcher> struct3 = HeaderMatcher.fromEnvoyProtoHeaderMatcher(proto3);
     assertThat(struct3.getErrorDetail()).isNull();
     assertThat(struct3.getStruct()).isEqualTo(
-        new HeaderMatcher(":method", null, "P*", null, null, null, null, false));
+        new HeaderMatcher(":method", null, Pattern.compile("P*"), null, null, null, null, false));
 
     // header_match_specifier = range_match
     io.envoyproxy.envoy.api.v2.route.HeaderMatcher proto4 =
@@ -435,6 +444,19 @@ public class EnvoyProtoDataTest {
         HeaderMatcher.fromEnvoyProtoHeaderMatcher(unsetProto);
     assertThat(unsetStruct.getErrorDetail()).isNotNull();
     assertThat(unsetStruct.getStruct()).isNull();
+  }
+
+  @Test
+  public void convertHeaderMatcher_malformedRegExPattern() {
+    io.envoyproxy.envoy.api.v2.route.HeaderMatcher proto =
+        io.envoyproxy.envoy.api.v2.route.HeaderMatcher.newBuilder()
+            .setName(":method")
+            .setSafeRegexMatch(
+                io.envoyproxy.envoy.type.matcher.RegexMatcher.newBuilder().setRegex("["))
+            .build();
+    StructOrError<HeaderMatcher> struct = HeaderMatcher.fromEnvoyProtoHeaderMatcher(proto);
+    assertThat(struct.getErrorDetail()).isNotNull();
+    assertThat(struct.getStruct()).isNull();
   }
 
   @Test
