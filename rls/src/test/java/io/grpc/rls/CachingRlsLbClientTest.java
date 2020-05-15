@@ -59,7 +59,6 @@ import io.grpc.rls.RlsProtoConverters.RouteLookupResponseConverter;
 import io.grpc.rls.RlsProtoData.GrpcKeyBuilder;
 import io.grpc.rls.RlsProtoData.GrpcKeyBuilder.Name;
 import io.grpc.rls.RlsProtoData.NameMatcher;
-import io.grpc.rls.RlsProtoData.RequestProcessingStrategy;
 import io.grpc.rls.RlsProtoData.RouteLookupConfig;
 import io.grpc.rls.RlsProtoData.RouteLookupRequest;
 import io.grpc.rls.RlsProtoData.RouteLookupResponse;
@@ -352,8 +351,7 @@ public class CachingRlsLbClientTest {
         /* staleAgeInMillis= */ TimeUnit.SECONDS.toMillis(240),
         /* cacheSize= */ 1000,
         /* validTargets= */ ImmutableList.of("a valid target"),
-        /* defaultTarget= */ "us_east_1.cloudbigtable.googleapis.com",
-        RequestProcessingStrategy.SYNC_LOOKUP_CLIENT_SEES_ERROR);
+        /* defaultTarget= */ "us_east_1.cloudbigtable.googleapis.com");
   }
 
   private static BackoffPolicy createBackoffPolicy(final long delay, final TimeUnit unit) {

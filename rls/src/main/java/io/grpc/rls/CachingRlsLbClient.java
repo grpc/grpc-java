@@ -51,7 +51,6 @@ import io.grpc.rls.LbPolicyConfiguration.RefCountedChildPolicyWrapperFactory;
 import io.grpc.rls.LruCache.EvictionListener;
 import io.grpc.rls.LruCache.EvictionType;
 import io.grpc.rls.RlsProtoConverters.RouteLookupResponseConverter;
-import io.grpc.rls.RlsProtoData.RequestProcessingStrategy;
 import io.grpc.rls.RlsProtoData.RouteLookupConfig;
 import io.grpc.rls.RlsProtoData.RouteLookupRequest;
 import io.grpc.rls.RlsProtoData.RouteLookupResponse;
@@ -133,15 +132,9 @@ final class CachingRlsLbClient {
     backoffProvider = builder.backoffProvider;
     ChildLoadBalancerHelperProvider childLbHelperProvider =
         new ChildLoadBalancerHelperProvider(helper, new SubchannelStateManagerImpl(), rlsPicker);
-    if (rlsConfig.getRequestProcessingStrategy()
-        == RequestProcessingStrategy.SYNC_LOOKUP_CLIENT_SEES_ERROR) {
-      refCountedChildPolicyWrapperFactory =
-          new RefCountedChildPolicyWrapperFactory(
-              childLbHelperProvider, new BackoffRefreshListener());
-    } else {
-      refCountedChildPolicyWrapperFactory =
-          new RefCountedChildPolicyWrapperFactory(childLbHelperProvider, null);
-    }
+    refCountedChildPolicyWrapperFactory =
+        new RefCountedChildPolicyWrapperFactory(
+            childLbHelperProvider, new BackoffRefreshListener());
   }
 
   @CheckReturnValue
@@ -852,13 +845,13 @@ final class CachingRlsLbClient {
           case READY:
             return childPolicyWrapper.getPicker().pickSubchannel(rlsAppliedArgs);
           case TRANSIENT_FAILURE:
-            return handleError(rlsAppliedArgs, Status.INTERNAL);
+            // fall-through
           case SHUTDOWN:
           default:
-            return handleError(rlsAppliedArgs, Status.ABORTED);
+            return useFallback(rlsAppliedArgs);
         }
       } else if (response.hasError()) {
-        return handleError(rlsAppliedArgs, response.getStatus());
+        return useFallback(rlsAppliedArgs);
       } else {
         return PickResult.withNoResult();
       }
@@ -874,19 +867,6 @@ final class CachingRlsLbClient {
       headers.merge(args.getHeaders());
       headers.put(RLS_DATA_KEY, response.getHeaderData());
       return new PickSubchannelArgsImpl(args.getMethodDescriptor(), headers, args.getCallOptions());
-    }
-
-    private PickResult handleError(PickSubchannelArgs args, Status cause) {
-      RequestProcessingStrategy strategy =
-          lbPolicyConfig.getRouteLookupConfig().getRequestProcessingStrategy();
-      switch (strategy) {
-        case SYNC_LOOKUP_CLIENT_SEES_ERROR:
-          return PickResult.withError(cause);
-        case SYNC_LOOKUP_DEFAULT_TARGET_ON_ERROR:
-          return useFallback(args);
-        default:
-          throw new AssertionError("Unknown RequestProcessingStrategy: " + strategy);
-      }
     }
 
     private ChildPolicyWrapper fallbackChildPolicyWrapper;

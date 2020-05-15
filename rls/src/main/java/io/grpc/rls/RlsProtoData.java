@@ -197,8 +197,6 @@ final class RlsProtoData {
 
     private final String defaultTarget;
 
-    private final RequestProcessingStrategy requestProcessingStrategy;
-
     RouteLookupConfig(
         List<GrpcKeyBuilder> grpcKeyBuilders,
         String lookupService,
@@ -207,8 +205,7 @@ final class RlsProtoData {
         @Nullable Long staleAgeInMillis,
         long cacheSizeBytes,
         List<String> validTargets,
-        String defaultTarget,
-        RequestProcessingStrategy requestProcessingStrategy) {
+        String defaultTarget) {
       checkState(
           !checkNotNull(grpcKeyBuilders, "grpcKeyBuilders").isEmpty(),
           "must have at least one GrpcKeyBuilder");
@@ -237,13 +234,6 @@ final class RlsProtoData {
       this.cacheSizeBytes = cacheSizeBytes;
       this.validTargets = ImmutableList.copyOf(checkNotNull(validTargets, "validTargets"));
       this.defaultTarget = checkNotNull(defaultTarget, "defaultTarget");
-      this.requestProcessingStrategy = requestProcessingStrategy;
-      checkNotNull(requestProcessingStrategy, "requestProcessingStrategy");
-      checkState(
-          !(requestProcessingStrategy == RequestProcessingStrategy.SYNC_LOOKUP_CLIENT_SEES_ERROR
-              && defaultTarget.isEmpty()),
-          "defaultTarget cannot be empty if strategy is %s",
-          requestProcessingStrategy);
     }
 
     /**
@@ -312,11 +302,6 @@ final class RlsProtoData {
       return defaultTarget;
     }
 
-    /** Returns {@link RequestProcessingStrategy} to process RLS response. */
-    RequestProcessingStrategy getRequestProcessingStrategy() {
-      return requestProcessingStrategy;
-    }
-
     @Override
     public boolean equals(Object o) {
       if (this == o) {
@@ -332,8 +317,7 @@ final class RlsProtoData {
           && cacheSizeBytes == that.cacheSizeBytes
           && Objects.equal(grpcKeyBuilders, that.grpcKeyBuilders)
           && Objects.equal(lookupService, that.lookupService)
-          && Objects.equal(defaultTarget, that.defaultTarget)
-          && requestProcessingStrategy == that.requestProcessingStrategy;
+          && Objects.equal(defaultTarget, that.defaultTarget);
     }
 
     @Override
@@ -345,8 +329,7 @@ final class RlsProtoData {
           maxAgeInMillis,
           staleAgeInMillis,
           cacheSizeBytes,
-          defaultTarget,
-          requestProcessingStrategy);
+          defaultTarget);
     }
 
     @Override
@@ -359,7 +342,6 @@ final class RlsProtoData {
           .add("staleAgeInMillis", staleAgeInMillis)
           .add("cacheSize", cacheSizeBytes)
           .add("defaultTarget", defaultTarget)
-          .add("requestProcessingStrategy", requestProcessingStrategy)
           .toString();
     }
   }
@@ -373,24 +355,6 @@ final class RlsProtoData {
         throw new IllegalStateException("Names in the GrpcKeyBuilders should be unique");
       }
     }
-  }
-
-  /** RequestProcessingStrategy specifies how to process a request when not already in the cache. */
-  enum RequestProcessingStrategy {
-    /**
-     * Query the RLS and process the request using target returned by the lookup. The target will
-     * then be cached and used for processing subsequent requests for the same key. Any errors
-     * during lookup service processing will fall back to default target for request processing.
-     */
-    SYNC_LOOKUP_DEFAULT_TARGET_ON_ERROR,
-
-    /**
-     * Query the RLS and process the request using target returned by the lookup. The target will
-     * then be cached and used for processing subsequent requests for the same key. Any errors
-     * during lookup service processing will return an error back to the client.  Services with
-     * strict regional routing requirements should use this strategy.
-     */
-    SYNC_LOOKUP_CLIENT_SEES_ERROR,
   }
 
   /**
