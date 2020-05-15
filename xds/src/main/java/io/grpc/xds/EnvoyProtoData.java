@@ -479,7 +479,7 @@ final class EnvoyProtoData {
       }
       if (routeMatch.getErrorDetail() != null) {
         return StructOrError.fromError(
-            "Invalid route [" + proto.getName() + "] : " + routeMatch.getErrorDetail());
+            "Invalid route [" + proto.getName() + "]: " + routeMatch.getErrorDetail());
       }
 
       StructOrError<RouteAction> routeAction;
@@ -494,13 +494,12 @@ final class EnvoyProtoData {
         case FILTER_ACTION:
           return StructOrError.fromError("Unsupported action type: filter_action");
         case ACTION_NOT_SET:
-          // fall through
         default:
           return StructOrError.fromError("Unknown action type: " + proto.getActionCase());
       }
       if (routeAction.getErrorDetail() != null) {
         return StructOrError.fromError(
-            "Invalid route [" + proto.getName() + "] : " + routeAction.getErrorDetail());
+            "Invalid route [" + proto.getName() + "]: " + routeAction.getErrorDetail());
       }
       return StructOrError.fromStruct(new Route(routeMatch.getStruct(), routeAction.getStruct()));
     }
@@ -561,7 +560,6 @@ final class EnvoyProtoData {
       if (pathPrefixMatch != null) {
         return pathPrefixMatch.isEmpty() || pathPrefixMatch.equals("/");
       }
-      // TODO (chengyuanzhang): can path match with regex be a default route?
       return false;
     }
 
@@ -626,7 +624,6 @@ final class EnvoyProtoData {
             denominator = 1_000_000;
             break;
           case UNRECOGNIZED:
-            // fall through
           default:
             return StructOrError.fromError(
                 "Unrecognized fractional percent denominator: " + percent.getDenominator());
@@ -671,7 +668,6 @@ final class EnvoyProtoData {
           safeRegExPathMatch = proto.getSafeRegex().getRegex();
           break;
         case PATHSPECIFIER_NOT_SET:
-          // fall through
         default:
           return StructOrError.fromError("Unknown path match type");
       }
@@ -805,7 +801,6 @@ final class EnvoyProtoData {
           suffixMatch = proto.getSuffixMatch();
           break;
         case HEADERMATCHSPECIFIER_NOT_SET:
-          // fall through
         default:
           return StructOrError.fromError("Unknown header matcher type");
       }
@@ -978,7 +973,6 @@ final class EnvoyProtoData {
           }
           break;
         case CLUSTERSPECIFIER_NOT_SET:
-          // fall through
         default:
           return StructOrError.fromError(
               "Unknown cluster specifier: " + proto.getClusterSpecifierCase());
