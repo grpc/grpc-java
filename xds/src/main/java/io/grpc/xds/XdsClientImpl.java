@@ -1756,7 +1756,7 @@ final class XdsClientImpl extends XdsClient {
     private static final long serialVersionUID = 1L;
 
     private InvalidProtoDataException(String message) {
-      super(message);
+      super(message, null, false, false);
     }
   }
 }
