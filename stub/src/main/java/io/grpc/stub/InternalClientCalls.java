@@ -36,6 +36,11 @@ public final class InternalClientCalls {
     return StubType.of(callOptions.getOption(ClientCalls.STUB_TYPE_OPTION));
   }
 
+  /** Returns {@link CallOptions} with the corresponding {@link ClientCalls.StubType} set. */
+  public static CallOptions setStubType(CallOptions callOptions, StubType stubType) {
+    return callOptions.withOption(ClientCalls.STUB_TYPE_OPTION, stubType.internalType);
+  }
+
   /** Companion enum for internal enum {@link ClientCalls.StubType}. */
   public enum StubType {
     BLOCKING(ClientCalls.StubType.BLOCKING),
