@@ -125,7 +125,7 @@ final class RlsProtoData {
     private final String headerData;
 
     RouteLookupResponse(List<String> targets, String headerData) {
-      checkState(targets != null && !targets.isEmpty(), "target cannot be empty or null");
+      checkState(targets != null && !targets.isEmpty(), "targets cannot be empty or null");
       this.targets = ImmutableList.copyOf(targets);
       this.headerData = checkNotNull(headerData, "headerData");
     }
