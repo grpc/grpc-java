@@ -38,6 +38,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.handler.ssl.SslContext;
 import io.netty.util.AsciiString;
+import java.security.cert.CertStoreException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Level;
@@ -243,8 +244,7 @@ public final class SdsProtocolNegotiators {
         ProtocolNegotiator fallbackProtocolNegotiator) {
       this.xdsClientWrapperForServerSds =
           checkNotNull(xdsClientWrapperForServerSds, "xdsClientWrapperForServerSds");
-      this.fallbackProtocolNegotiator =
-          checkNotNull(fallbackProtocolNegotiator, "fallbackProtocolNegotiator");
+      this.fallbackProtocolNegotiator = fallbackProtocolNegotiator;
     }
 
     XdsClientWrapperForServerSds getXdsClientWrapperForServerSds() {
@@ -279,8 +279,7 @@ public final class SdsProtocolNegotiators {
         ProtocolNegotiator fallbackProtocolNegotiator) {
       this.grpcHandler = checkNotNull(grpcHandler, "grpcHandler");
       this.xdsClientWrapperForServerSds = xdsClientWrapperForServerSds;
-      this.fallbackProtocolNegotiator =
-          checkNotNull(fallbackProtocolNegotiator, "fallbackProtocolNegotiator");
+      this.fallbackProtocolNegotiator = fallbackProtocolNegotiator;
     }
 
     private static boolean isTlsContextEmpty(DownstreamTlsContext downstreamTlsContext) {
@@ -295,7 +294,11 @@ public final class SdsProtocolNegotiators {
                 ? null
                 : xdsClientWrapperForServerSds.getDownstreamTlsContext(ctx.channel());
         if (isTlsContextEmpty(downstreamTlsContext)) {
-          logger.log(Level.INFO, "Fallback to plaintext for {0}", ctx.channel().localAddress());
+          if (fallbackProtocolNegotiator == null) {
+            ctx.fireExceptionCaught(new CertStoreException("No certificate source found!"));
+            return;
+          }
+          logger.log(Level.INFO, "Using fallback for {0}", ctx.channel().localAddress());
           ctx.pipeline()
               .replace(
                   this,

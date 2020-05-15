@@ -37,7 +37,6 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
-import io.grpc.netty.GrpcHttp2ConnectionHandler;
 import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.stub.StreamObserver;
@@ -49,9 +48,7 @@ import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import io.grpc.xds.internal.sds.SdsProtocolNegotiators;
 import io.grpc.xds.internal.sds.XdsChannelBuilder;
 import io.grpc.xds.internal.sds.XdsServerBuilder;
-import io.netty.channel.ChannelHandler;
 import io.netty.handler.ssl.NotSslRecordException;
-import io.netty.util.AsciiString;
 import java.io.IOException;
 import java.net.Inet4Address;
 import java.net.InetSocketAddress;
@@ -93,22 +90,10 @@ public class XdsSdsClientServerTest {
   }
 
   @Test
-  public void fallbackProtocolNegotiator_expectException() throws IOException, URISyntaxException {
+  public void nullFallbackProtocolNegotiator_expectException()
+      throws IOException, URISyntaxException {
     buildServerWithTlsContext(/* downstreamTlsContext= */ null,
-        new ProtocolNegotiator() {
-          @Override
-          public AsciiString scheme() {
-            return null;
-          }
-
-          @Override
-          public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
-            throw new RuntimeException("No fallback negotiator!");
-          }
-
-          @Override
-          public void close() { }
-        });
+        /* fallbackProtocolNegotiator= */ null);
 
     SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
         getBlockingStub(/* upstreamTlsContext= */ null, /* overrideAuthority= */ null);

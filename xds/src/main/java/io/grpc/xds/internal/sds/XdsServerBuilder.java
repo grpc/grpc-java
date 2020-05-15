@@ -16,8 +16,6 @@
 
 package io.grpc.xds.internal.sds;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.BindableService;
 import io.grpc.CompressorRegistry;
@@ -124,6 +122,7 @@ public final class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
     return this;
   }
 
+  /** Set the fallback protocolNegotiator. */
   public XdsServerBuilder fallbackProtocolNegotiator(
       ProtocolNegotiator fallbackProtocolNegotiator) {
     this.fallbackProtocolNegotiator = fallbackProtocolNegotiator;
@@ -138,8 +137,6 @@ public final class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
 
   @Override
   public Server build() {
-    // note: doing it in build() will overwrite any previously set ProtocolNegotiator
-    checkNotNull(fallbackProtocolNegotiator, "fallbackProtocolNegotiator");
     ServerSdsProtocolNegotiator serverProtocolNegotiator =
         SdsProtocolNegotiators.serverProtocolNegotiator(port, fallbackProtocolNegotiator);
     return buildServer(serverProtocolNegotiator);

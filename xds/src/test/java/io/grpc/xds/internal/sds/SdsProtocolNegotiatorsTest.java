@@ -24,6 +24,7 @@ import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_KEY_FI
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_PEM_FILE;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -64,6 +65,7 @@ import io.netty.util.AsciiString;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.security.cert.CertStoreException;
 import java.util.Iterator;
 import java.util.Map;
 import org.junit.Test;
@@ -261,6 +263,29 @@ public class SdsProtocolNegotiatorsTest {
     assertThat(iterator.next().getValue()).isInstanceOf(FakeFallbackHandler.class);
     // no more handlers in the pipeline
     assertThat(iterator.hasNext()).isFalse();
+  }
+
+  @Test
+  public void nullTlsContext_nullFallbackProtocolNegotiator_expectException() {
+    SdsProtocolNegotiators.HandlerPickerHandler handlerPickerHandler =
+        new SdsProtocolNegotiators.HandlerPickerHandler(
+            grpcHandler, /* xdsClientWrapperForServerSds= */ null,
+            null);
+    pipeline.addLast(handlerPickerHandler);
+    channelHandlerCtx = pipeline.context(handlerPickerHandler);
+    assertThat(channelHandlerCtx).isNotNull(); // should find HandlerPickerHandler
+
+    // kick off protocol negotiation
+    pipeline.fireUserEventTriggered(InternalProtocolNegotiationEvent.getDefault());
+    channelHandlerCtx = pipeline.context(handlerPickerHandler);
+    assertThat(channelHandlerCtx).isNotNull(); // HandlerPickerHandler still there
+    try {
+      channel.checkException();
+      fail("exception expected!");
+    } catch (Exception e) {
+      assertThat(e).isInstanceOf(CertStoreException.class);
+      assertThat(e).hasMessageThat().contains("No certificate source found!");
+    }
   }
 
   @Test
