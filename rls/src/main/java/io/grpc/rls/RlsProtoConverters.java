@@ -26,7 +26,6 @@ import io.grpc.lookup.v1.RouteLookupResponse;
 import io.grpc.rls.RlsProtoData.GrpcKeyBuilder;
 import io.grpc.rls.RlsProtoData.GrpcKeyBuilder.Name;
 import io.grpc.rls.RlsProtoData.NameMatcher;
-import io.grpc.rls.RlsProtoData.RequestProcessingStrategy;
 import io.grpc.rls.RlsProtoData.RouteLookupConfig;
 import java.util.ArrayList;
 import java.util.List;
@@ -80,14 +79,14 @@ final class RlsProtoConverters {
     protected RlsProtoData.RouteLookupResponse doForward(RouteLookupResponse routeLookupResponse) {
       return
           new RlsProtoData.RouteLookupResponse(
-              routeLookupResponse.getTarget(),
+              routeLookupResponse.getTargetsList(),
               routeLookupResponse.getHeaderData());
     }
 
     @Override
     protected RouteLookupResponse doBackward(RlsProtoData.RouteLookupResponse routeLookupResponse) {
       return RouteLookupResponse.newBuilder()
-          .setTarget(routeLookupResponse.getTarget())
+          .addAllTargets(routeLookupResponse.getTargets())
           .setHeaderData(routeLookupResponse.getHeaderData())
           .build();
     }
@@ -119,9 +118,6 @@ final class RlsProtoConverters {
       long cacheSize = orDefault(JsonUtil.getNumberAsLong(json, "cacheSizeBytes"), Long.MAX_VALUE);
       List<String> validTargets = JsonUtil.checkStringList(JsonUtil.getList(json, "validTargets"));
       String defaultTarget = JsonUtil.getString(json, "defaultTarget");
-      RequestProcessingStrategy strategy =
-          RequestProcessingStrategy
-              .valueOf(JsonUtil.getString(json, "requestProcessingStrategy").toUpperCase());
       return new RouteLookupConfig(
           grpcKeyBuilders,
           lookupService,
@@ -130,8 +126,7 @@ final class RlsProtoConverters {
           /* staleAgeInMillis= */ staleAge,
           /* cacheSizeBytes= */ cacheSize,
           validTargets,
-          defaultTarget,
-          strategy);
+          defaultTarget);
     }
 
     private static <T> T orDefault(@Nullable T value, T defaultValue) {

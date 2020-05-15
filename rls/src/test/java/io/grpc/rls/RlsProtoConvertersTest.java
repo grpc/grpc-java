@@ -30,7 +30,6 @@ import io.grpc.rls.RlsProtoConverters.RouteLookupResponseConverter;
 import io.grpc.rls.RlsProtoData.GrpcKeyBuilder;
 import io.grpc.rls.RlsProtoData.GrpcKeyBuilder.Name;
 import io.grpc.rls.RlsProtoData.NameMatcher;
-import io.grpc.rls.RlsProtoData.RequestProcessingStrategy;
 import io.grpc.rls.RlsProtoData.RouteLookupConfig;
 import java.io.IOException;
 import java.util.Map;
@@ -82,13 +81,13 @@ public class RlsProtoConvertersTest {
     Converter<RouteLookupResponse, RlsProtoData.RouteLookupResponse> converter =
         new RouteLookupResponseConverter();
     RouteLookupResponse proto = RouteLookupResponse.newBuilder()
-        .setTarget("target")
+        .addTargets("target")
         .setHeaderData("some header data")
         .build();
 
     RlsProtoData.RouteLookupResponse object = converter.convert(proto);
 
-    assertThat(object.getTarget()).isEqualTo("target");
+    assertThat(object.getTargets()).containsExactly("target");
     assertThat(object.getHeaderData()).isEqualTo("some header data");
   }
 
@@ -98,11 +97,11 @@ public class RlsProtoConvertersTest {
         new RouteLookupResponseConverter().reverse();
 
     RlsProtoData.RouteLookupResponse object =
-        new RlsProtoData.RouteLookupResponse("target", "some header data");
+        new RlsProtoData.RouteLookupResponse(ImmutableList.of("target"), "some header data");
 
     RouteLookupResponse proto = converter.convert(object);
 
-    assertThat(proto.getTarget()).isEqualTo("target");
+    assertThat(proto.getTargetsList()).containsExactly("target");
     assertThat(proto.getHeaderData()).isEqualTo("some header data");
   }
 
@@ -172,8 +171,7 @@ public class RlsProtoConvertersTest {
         + "  \"staleAge\": 240,\n"
         + "  \"validTargets\": [\"a valid target\"],"
         + "  \"cacheSizeBytes\": 1000,\n"
-        + "  \"defaultTarget\": \"us_east_1.cloudbigtable.googleapis.com\",\n"
-        + "  \"requestProcessingStrategy\": \"SYNC_LOOKUP_CLIENT_SEES_ERROR\"\n"
+        + "  \"defaultTarget\": \"us_east_1.cloudbigtable.googleapis.com\"\n"
         + "}";
 
     RouteLookupConfig expectedConfig =
@@ -199,8 +197,7 @@ public class RlsProtoConvertersTest {
             /* staleAgeInMillis= */ TimeUnit.SECONDS.toMillis(240),
             /* cacheSize= */ 1000,
             /* validTargets= */ ImmutableList.of("a valid target"),
-            /* defaultTarget= */ "us_east_1.cloudbigtable.googleapis.com",
-            RequestProcessingStrategy.SYNC_LOOKUP_CLIENT_SEES_ERROR);
+            /* defaultTarget= */ "us_east_1.cloudbigtable.googleapis.com");
 
     RouteLookupConfigConverter converter = new RouteLookupConfigConverter();
     @SuppressWarnings("unchecked")

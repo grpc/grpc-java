@@ -51,7 +51,6 @@ import io.grpc.rls.LbPolicyConfiguration.RefCountedChildPolicyWrapperFactory;
 import io.grpc.rls.LruCache.EvictionListener;
 import io.grpc.rls.LruCache.EvictionType;
 import io.grpc.rls.RlsProtoConverters.RouteLookupResponseConverter;
-import io.grpc.rls.RlsProtoData.RequestProcessingStrategy;
 import io.grpc.rls.RlsProtoData.RouteLookupConfig;
 import io.grpc.rls.RlsProtoData.RouteLookupRequest;
 import io.grpc.rls.RlsProtoData.RouteLookupResponse;
@@ -133,15 +132,9 @@ final class CachingRlsLbClient {
     backoffProvider = builder.backoffProvider;
     ChildLoadBalancerHelperProvider childLbHelperProvider =
         new ChildLoadBalancerHelperProvider(helper, new SubchannelStateManagerImpl(), rlsPicker);
-    if (rlsConfig.getRequestProcessingStrategy()
-        == RequestProcessingStrategy.SYNC_LOOKUP_CLIENT_SEES_ERROR) {
-      refCountedChildPolicyWrapperFactory =
-          new RefCountedChildPolicyWrapperFactory(
-              childLbHelperProvider, new BackoffRefreshListener());
-    } else {
-      refCountedChildPolicyWrapperFactory =
-          new RefCountedChildPolicyWrapperFactory(childLbHelperProvider, null);
-    }
+    refCountedChildPolicyWrapperFactory =
+        new RefCountedChildPolicyWrapperFactory(
+            childLbHelperProvider, new BackoffRefreshListener());
   }
 
   @CheckReturnValue
@@ -437,9 +430,10 @@ final class CachingRlsLbClient {
     DataCacheEntry(RouteLookupRequest request, final RouteLookupResponse response) {
       super(request);
       this.response = checkNotNull(response, "response");
+      // TODO(creamsoup) fallback to other targets if first one is not available
       childPolicyWrapper =
           refCountedChildPolicyWrapperFactory
-              .createOrGet(response.getTarget());
+              .createOrGet(response.getTargets().get(0));
       long now = timeProvider.currentTimeNanos();
       expireTime = now + maxAgeNanos;
       staleTime = now + staleAgeNanos;
@@ -524,7 +518,8 @@ final class CachingRlsLbClient {
     @Override
     int getSizeBytes() {
       // size of strings and java object overhead, actual memory usage is more than this.
-      return (response.getTarget().length() + response.getHeaderData().length()) * 2 + 38 * 2;
+      return
+          (response.getTargets().get(0).length() + response.getHeaderData().length()) * 2 + 38 * 2;
     }
 
     @Override
@@ -844,19 +839,17 @@ final class CachingRlsLbClient {
             childPolicyWrapper.getConnectivityStateInfo().getState();
         switch (connectivityState) {
           case IDLE:
-            // fall-through
           case CONNECTING:
             return PickResult.withNoResult();
           case READY:
             return childPolicyWrapper.getPicker().pickSubchannel(rlsAppliedArgs);
           case TRANSIENT_FAILURE:
-            return handleError(rlsAppliedArgs, Status.INTERNAL);
           case SHUTDOWN:
           default:
-            return handleError(rlsAppliedArgs, Status.ABORTED);
+            return useFallback(rlsAppliedArgs);
         }
       } else if (response.hasError()) {
-        return handleError(rlsAppliedArgs, response.getStatus());
+        return useFallback(rlsAppliedArgs);
       } else {
         return PickResult.withNoResult();
       }
@@ -872,19 +865,6 @@ final class CachingRlsLbClient {
       headers.merge(args.getHeaders());
       headers.put(RLS_DATA_KEY, response.getHeaderData());
       return new PickSubchannelArgsImpl(args.getMethodDescriptor(), headers, args.getCallOptions());
-    }
-
-    private PickResult handleError(PickSubchannelArgs args, Status cause) {
-      RequestProcessingStrategy strategy =
-          lbPolicyConfig.getRouteLookupConfig().getRequestProcessingStrategy();
-      switch (strategy) {
-        case SYNC_LOOKUP_CLIENT_SEES_ERROR:
-          return PickResult.withError(cause);
-        case SYNC_LOOKUP_DEFAULT_TARGET_ON_ERROR:
-          return useFallback(args);
-        default:
-          throw new AssertionError("Unknown RequestProcessingStrategy: " + strategy);
-      }
     }
 
     private ChildPolicyWrapper fallbackChildPolicyWrapper;
