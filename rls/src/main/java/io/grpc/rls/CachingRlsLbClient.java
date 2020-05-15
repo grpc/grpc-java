@@ -437,9 +437,10 @@ final class CachingRlsLbClient {
     DataCacheEntry(RouteLookupRequest request, final RouteLookupResponse response) {
       super(request);
       this.response = checkNotNull(response, "response");
+      // TODO(creamsoup) fallback to other targets if first one is not available
       childPolicyWrapper =
           refCountedChildPolicyWrapperFactory
-              .createOrGet(response.getTarget());
+              .createOrGet(response.getTargets().get(0));
       long now = timeProvider.currentTimeNanos();
       expireTime = now + maxAgeNanos;
       staleTime = now + staleAgeNanos;
@@ -524,7 +525,8 @@ final class CachingRlsLbClient {
     @Override
     int getSizeBytes() {
       // size of strings and java object overhead, actual memory usage is more than this.
-      return (response.getTarget().length() + response.getHeaderData().length()) * 2 + 38 * 2;
+      return
+          (response.getTargets().get(0).length() + response.getHeaderData().length()) * 2 + 38 * 2;
     }
 
     @Override

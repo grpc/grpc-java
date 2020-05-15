@@ -141,10 +141,10 @@ public class RlsLoadBalancerTest {
         ImmutableMap.of(
             new RouteLookupRequest(
                 "localhost:8972", "com.google/Search", "grpc", ImmutableMap.<String, String>of()),
-            new RouteLookupResponse("wilderness", "where are you?"),
+            new RouteLookupResponse(ImmutableList.of("wilderness"), "where are you?"),
             new RouteLookupRequest(
                 "localhost:8972", "com.google/Rescue", "grpc", ImmutableMap.<String, String>of()),
-            new RouteLookupResponse("civilization", "you are safe")));
+            new RouteLookupResponse(ImmutableList.of("civilization"), "you are safe")));
 
     RlsLoadBalancerProvider provider = new RlsLoadBalancerProvider();
     ConfigOrError parsedConfigOrError =

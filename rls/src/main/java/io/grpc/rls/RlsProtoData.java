@@ -120,21 +120,23 @@ final class RlsProtoData {
   @Immutable
   static final class RouteLookupResponse {
 
-    private final String target;
+    private final ImmutableList<String> targets;
 
     private final String headerData;
 
-    RouteLookupResponse(String target, String headerData) {
-      this.target = checkNotNull(target, "target");
+    RouteLookupResponse(List<String> targets, String headerData) {
+      checkState(targets != null && !targets.isEmpty(), "target cannot be empty or null");
+      this.targets = ImmutableList.copyOf(targets);
       this.headerData = checkNotNull(headerData, "headerData");
     }
 
     /**
-     * Returns target. A target is an actual addressable entity to use for routing decision, using
-     * syntax requested by the request target_type.
+     * Returns list of targets. Prioritized list (best one first) of addressable entities to use for
+     * routing, using syntax requested by the request target_type. The targets will be tried in
+     * order until a healthy one is found.
      */
-    String getTarget() {
-      return target;
+    ImmutableList<String> getTargets() {
+      return targets;
     }
 
     /**
@@ -155,19 +157,19 @@ final class RlsProtoData {
         return false;
       }
       RouteLookupResponse that = (RouteLookupResponse) o;
-      return java.util.Objects.equals(target, that.target)
+      return java.util.Objects.equals(targets, that.targets)
           && java.util.Objects.equals(headerData, that.headerData);
     }
 
     @Override
     public int hashCode() {
-      return java.util.Objects.hash(target, headerData);
+      return java.util.Objects.hash(targets, headerData);
     }
 
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(this)
-          .add("target", target)
+          .add("targets", targets)
           .add("headerData", headerData)
           .toString();
     }

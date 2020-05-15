@@ -80,14 +80,14 @@ final class RlsProtoConverters {
     protected RlsProtoData.RouteLookupResponse doForward(RouteLookupResponse routeLookupResponse) {
       return
           new RlsProtoData.RouteLookupResponse(
-              routeLookupResponse.getTarget(),
+              routeLookupResponse.getTargetsList(),
               routeLookupResponse.getHeaderData());
     }
 
     @Override
     protected RouteLookupResponse doBackward(RlsProtoData.RouteLookupResponse routeLookupResponse) {
       return RouteLookupResponse.newBuilder()
-          .setTarget(routeLookupResponse.getTarget())
+          .addAllTargets(routeLookupResponse.getTargets())
           .setHeaderData(routeLookupResponse.getHeaderData())
           .build();
     }

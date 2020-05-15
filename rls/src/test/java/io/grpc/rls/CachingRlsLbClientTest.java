@@ -176,7 +176,7 @@ public class CachingRlsLbClientTest {
     rlsServerImpl.setLookupTable(
         ImmutableMap.of(
             routeLookupRequest,
-            new RouteLookupResponse("target", "header")));
+            new RouteLookupResponse(ImmutableList.of("target"), "header")));
 
     // initial request
     CachedRouteLookupResponse resp = getInSyncContext(routeLookupRequest);
@@ -224,7 +224,7 @@ public class CachingRlsLbClientTest {
     rlsServerImpl.setLookupTable(
         ImmutableMap.of(
             routeLookupRequest,
-            new RouteLookupResponse("target", "header")));
+            new RouteLookupResponse(ImmutableList.of("target"), "header")));
 
     fakeThrottler.nextResult = true;
     fakeBackoffProvider.nextPolicy = createBackoffPolicy(10, TimeUnit.MILLISECONDS);
@@ -266,7 +266,7 @@ public class CachingRlsLbClientTest {
     rlsServerImpl.setLookupTable(
         ImmutableMap.of(
             routeLookupRequest,
-            new RouteLookupResponse("target", "header")));
+            new RouteLookupResponse(ImmutableList.of("target"), "header")));
 
     // valid channel
     CachedRouteLookupResponse resp = getInSyncContext(routeLookupRequest);
@@ -312,8 +312,8 @@ public class CachingRlsLbClientTest {
         new RouteLookupRequest("server", "/foo/baz", "grpc", ImmutableMap.<String, String>of());
     rlsServerImpl.setLookupTable(
         ImmutableMap.of(
-            routeLookupRequest, new RouteLookupResponse("target", "header"),
-            routeLookupRequest2, new RouteLookupResponse("target", "header2")));
+            routeLookupRequest, new RouteLookupResponse(ImmutableList.of("target"), "header"),
+            routeLookupRequest2, new RouteLookupResponse(ImmutableList.of("target"), "header2")));
 
     CachedRouteLookupResponse resp = getInSyncContext(routeLookupRequest);
     assertThat(resp.isPending()).isTrue();

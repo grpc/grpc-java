@@ -82,13 +82,13 @@ public class RlsProtoConvertersTest {
     Converter<RouteLookupResponse, RlsProtoData.RouteLookupResponse> converter =
         new RouteLookupResponseConverter();
     RouteLookupResponse proto = RouteLookupResponse.newBuilder()
-        .setTarget("target")
+        .addTargets("target")
         .setHeaderData("some header data")
         .build();
 
     RlsProtoData.RouteLookupResponse object = converter.convert(proto);
 
-    assertThat(object.getTarget()).isEqualTo("target");
+    assertThat(object.getTargets()).containsExactly("target");
     assertThat(object.getHeaderData()).isEqualTo("some header data");
   }
 
@@ -98,11 +98,11 @@ public class RlsProtoConvertersTest {
         new RouteLookupResponseConverter().reverse();
 
     RlsProtoData.RouteLookupResponse object =
-        new RlsProtoData.RouteLookupResponse("target", "some header data");
+        new RlsProtoData.RouteLookupResponse(ImmutableList.of("target"), "some header data");
 
     RouteLookupResponse proto = converter.convert(object);
 
-    assertThat(proto.getTarget()).isEqualTo("target");
+    assertThat(proto.getTargetsList()).containsExactly("target");
     assertThat(proto.getHeaderData()).isEqualTo("some header data");
   }
 
