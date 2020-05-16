@@ -56,3 +56,9 @@ plugins.withId("java") {
         options.errorprone.check("UnnecessaryAnonymousClass", CheckSeverity.OFF)
     }
 }
+
+task versionFile() {
+    doLast {
+        new File(buildDir, "version").write("${project.version}\n")
+    }
+}

@@ -3,6 +3,7 @@ plugins {
     id 'java'
 
     id "com.google.protobuf" version "0.8.10"
+    id 'com.google.cloud.tools.jib' version '2.1.0' // For releasing to Docker Hub
 }
 
 repositories {
@@ -52,3 +53,13 @@ protobuf {
 
 applicationName = 'hostname-server'
 mainClassName = 'io.grpc.examples.hostname.HostnameServer'
+
+// For releasing to Docker Hub
+jib {
+  container.ports = ['50051']
+  outputPaths {
+    tar = 'build/example-hostname.tar'
+    digest = 'build/example-hostname.digest'
+    imageId = 'build/example-hostname.id'
+  }
+}

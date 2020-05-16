@@ -213,7 +213,7 @@ class XdsClientTestHelper {
                     .setZone(zone)
                     .setSubZone(subZone))
             .addAllLbEndpoints(lbEndpoints)
-            .setLoadBalancingWeight(UInt32Value.newBuilder().setValue(loadBalancingWeight))
+            .setLoadBalancingWeight(UInt32Value.of(loadBalancingWeight))
             .setPriority(priority)
             .build();
   }
@@ -226,8 +226,8 @@ class XdsClientTestHelper {
                 io.envoyproxy.envoy.api.v2.endpoint.Endpoint.newBuilder().setAddress(
                     Address.newBuilder().setSocketAddress(
                         SocketAddress.newBuilder().setAddress(address).setPortValue(port))))
-            .setHealthStatus(healthStatus).setLoadBalancingWeight(
-            UInt32Value.newBuilder().setValue(loadbalancingWeight))
+            .setHealthStatus(healthStatus)
+            .setLoadBalancingWeight(UInt32Value.of(loadbalancingWeight))
             .build();
   }
 

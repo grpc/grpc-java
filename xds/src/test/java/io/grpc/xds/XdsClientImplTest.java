@@ -688,10 +688,10 @@ public class XdsClientImplTest {
                             .setRoute(RouteAction.newBuilder().setWeightedClusters(
                                 WeightedCluster.newBuilder()
                                     .addClusters(WeightedCluster.ClusterWeight.newBuilder()
-                                        .setWeight(UInt32Value.newBuilder().setValue(30))
+                                        .setWeight(UInt32Value.of(30))
                                         .setName("cl21.googleapis.com"))
                                     .addClusters(WeightedCluster.ClusterWeight.newBuilder()
-                                        .setWeight(UInt32Value.newBuilder().setValue(70))
+                                        .setWeight(UInt32Value.of(70))
                                         .setName("cl22.googleapis.com"))))
                             .setMatch(RouteMatch.newBuilder().setPath("/service2/method2")))
                         .addRoutes(Route.newBuilder()

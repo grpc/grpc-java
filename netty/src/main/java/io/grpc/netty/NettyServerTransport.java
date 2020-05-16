@@ -38,6 +38,7 @@ import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 import java.io.IOException;
 import java.net.SocketAddress;
+import java.net.SocketException;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.logging.Level;
@@ -186,6 +187,7 @@ class NettyServerTransport implements ServerTransport {
   @VisibleForTesting
   static Level getLogLevel(Throwable t) {
     if (t.getClass().equals(IOException.class)
+        || t.getClass().equals(SocketException.class)
         || QUIET_EXCEPTIONS.contains(t.getClass().getSimpleName())) {
       return Level.FINE;
     }

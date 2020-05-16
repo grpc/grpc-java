@@ -54,7 +54,7 @@ message GrpcKeyBuilder {
 
   // Extract keys from all listed headers.
   // For gRPC, it is an error to specify "required_match" on the NameMatcher
-  // protos, and we ignore it if set.
+  // protos.
   repeated NameMatcher headers = 2;
 }
 
@@ -156,7 +156,7 @@ message RouteLookupConfig {
   google.protobuf.Duration lookup_service_timeout = 4;
 
   // How long are responses valid for (like HTTP Cache-Control).
-  // If omitted (i.e. 0), a default value of 5 minutes will be used.
+  // If omitted or zero, the longest valid cache time is used.
   // This value is clamped to 5 minutes to avoid unflushable bad responses.
   google.protobuf.Duration max_age = 5;
 
