@@ -122,7 +122,7 @@ public final class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
     return this;
   }
 
-  /** Set the fallback protocolNegotiator. */
+  /** Set the fallback protocolNegotiator. Pass null to unset a previously set value. */
   public XdsServerBuilder fallbackProtocolNegotiator(
       ProtocolNegotiator fallbackProtocolNegotiator) {
     this.fallbackProtocolNegotiator = fallbackProtocolNegotiator;

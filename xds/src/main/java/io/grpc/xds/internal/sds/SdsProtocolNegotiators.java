@@ -73,7 +73,7 @@ public final class SdsProtocolNegotiators {
    * @param fallbackProtocolNegotiator protocol negotiator to use as fallback.
    */
   public static ServerSdsProtocolNegotiator serverProtocolNegotiator(int port,
-      ProtocolNegotiator fallbackProtocolNegotiator) {
+      @Nullable ProtocolNegotiator fallbackProtocolNegotiator) {
     return new ServerSdsProtocolNegotiator(new XdsClientWrapperForServerSds(port),
         fallbackProtocolNegotiator);
   }
@@ -236,12 +236,12 @@ public final class SdsProtocolNegotiators {
   public static final class ServerSdsProtocolNegotiator implements ProtocolNegotiator {
 
     private final XdsClientWrapperForServerSds xdsClientWrapperForServerSds;
-    private final ProtocolNegotiator fallbackProtocolNegotiator;
+    @Nullable private final ProtocolNegotiator fallbackProtocolNegotiator;
 
     /** Constructor. */
     @VisibleForTesting
     public ServerSdsProtocolNegotiator(XdsClientWrapperForServerSds xdsClientWrapperForServerSds,
-        ProtocolNegotiator fallbackProtocolNegotiator) {
+        @Nullable ProtocolNegotiator fallbackProtocolNegotiator) {
       this.xdsClientWrapperForServerSds =
           checkNotNull(xdsClientWrapperForServerSds, "xdsClientWrapperForServerSds");
       this.fallbackProtocolNegotiator = fallbackProtocolNegotiator;
@@ -271,7 +271,7 @@ public final class SdsProtocolNegotiators {
       extends ChannelInboundHandlerAdapter {
     private final GrpcHttp2ConnectionHandler grpcHandler;
     private final XdsClientWrapperForServerSds xdsClientWrapperForServerSds;
-    private final ProtocolNegotiator fallbackProtocolNegotiator;
+    @Nullable private final ProtocolNegotiator fallbackProtocolNegotiator;
 
     HandlerPickerHandler(
         GrpcHttp2ConnectionHandler grpcHandler,
