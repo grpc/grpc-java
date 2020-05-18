@@ -847,8 +847,8 @@ final class EnvoyProtoData {
     @Override
     public int hashCode() {
       return Objects.hash(
-          name, exactMatch, safeRegExMatch, rangeMatch, presentMatch, prefixMatch,
-          suffixMatch, isInvertedMatch);
+          name, exactMatch, safeRegExMatch == null ? null : safeRegExMatch.pattern(),
+          rangeMatch, presentMatch, prefixMatch, suffixMatch, isInvertedMatch);
     }
 
     @Override
