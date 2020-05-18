@@ -159,21 +159,27 @@ final class XdsNameResolver extends NameResolver {
         rawLbConfig = generateXdsRoutingRawConfig(update.getRoutes());
       } else {
         Route defaultRoute = Iterables.getOnlyElement(update.getRoutes());
+        RouteAction action = defaultRoute.getRouteAction();
         String clusterName = defaultRoute.getRouteAction().getCluster();
-        if (!clusterName.isEmpty()) {
+        if (action.getCluster() != null) {
           logger.log(
               XdsLogLevel.INFO,
               "Received config update from xDS client {0}: cluster_name={1}",
               xdsClient,
               clusterName);
           rawLbConfig = generateCdsRawConfig(clusterName);
-        } else {
+        } else if (action.getWeightedCluster() != null) {
           logger.log(
               XdsLogLevel.INFO,
               "Received config update with one weighted cluster route from xDS client {0}",
               xdsClient);
           List<ClusterWeight> clusterWeights = defaultRoute.getRouteAction().getWeightedCluster();
           rawLbConfig = generateWeightedTargetRawConfig(clusterWeights);
+        } else {
+          // TODO (chengyuanzhang): route with cluster_header
+          logger.log(
+              XdsLogLevel.WARNING, "Route action with cluster_header is not implemented");
+          return;
         }
       }
 
@@ -229,15 +235,18 @@ final class XdsNameResolver extends NameResolver {
     for (Route route : routesUpdate) {
       String service = "";
       String method = "";
-      if (!route.getRouteMatch().isDefaultMatcher()) {
-        String prefix = route.getRouteMatch().getPrefix();
-        String path = route.getRouteMatch().getPath();
-        if (!prefix.isEmpty()) {
+      if (!route.isDefaultRoute()) {
+        String prefix = route.getRouteMatch().getPathPrefixMatch();
+        String path = route.getRouteMatch().getPathExactMatch();
+        if (prefix != null) {
           service = prefix.substring(1, prefix.length() - 1);
-        } else if (!path.isEmpty()) {
+        } else if (path != null) {
           int splitIndex = path.lastIndexOf('/');
           service = path.substring(1, splitIndex);
           method = path.substring(splitIndex + 1);
+        } else {
+          // TODO (chengyuanzhang): match with regex.
+          continue;
         }
       }
       Map<String, String> methodName = ImmutableMap.of("service", service, "method", method);
@@ -247,10 +256,10 @@ final class XdsNameResolver extends NameResolver {
       if (exitingActions.containsKey(routeAction)) {
         actionName = exitingActions.get(routeAction);
       } else {
-        if (!routeAction.getCluster().isEmpty()) {
+        if (routeAction.getCluster() != null) {
           actionName = "cds:" + routeAction.getCluster();
           actionPolicy = generateCdsRawConfig(routeAction.getCluster());
-        } else {
+        } else if (routeAction.getWeightedCluster() != null) {
           StringBuilder sb = new StringBuilder("weighted:");
           List<ClusterWeight> clusterWeights = routeAction.getWeightedCluster();
           for (ClusterWeight clusterWeight : clusterWeights) {
@@ -266,6 +275,9 @@ final class XdsNameResolver extends NameResolver {
             actionName = actionName + "_" + exitingActions.size();
           }
           actionPolicy = generateWeightedTargetRawConfig(clusterWeights);
+        } else {
+          // TODO (chengyuanzhang): route with cluster_header.
+          continue;
         }
         exitingActions.put(routeAction, actionName);
         List<?> childPolicies = ImmutableList.of(actionPolicy);

@@ -113,6 +113,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
@@ -177,6 +178,8 @@ public class XdsClientImplTest {
 
   @Rule
   public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
+  @Rule
+  public ExpectedException thrown = ExpectedException.none();
 
   private final SynchronizationContext syncContext = new SynchronizationContext(
       new Thread.UncaughtExceptionHandler() {
@@ -722,25 +725,21 @@ public class XdsClientImplTest {
         new EnvoyProtoData.Route(
             // path match with cluster route
             new EnvoyProtoData.RouteMatch(
-                /* prefix= */ "",
-                /* path= */ "/service1/method1",
-                /* hasRegex= */ false,
-                /* caseSensitive= */ true),
+                /* prefix= */ null,
+                /* path= */ "/service1/method1"),
             new EnvoyProtoData.RouteAction(
                 "cl1.googleapis.com",
-                "",
-                ImmutableList.<EnvoyProtoData.ClusterWeight>of())));
+                null,
+                null)));
     assertThat(routes.get(1)).isEqualTo(
         new EnvoyProtoData.Route(
             // path match with weighted cluster route
             new EnvoyProtoData.RouteMatch(
-                /* prefix= */ "",
-                /* path= */ "/service2/method2",
-                /* hasRegex= */ false,
-                /* caseSensitive= */ true),
+                /* prefix= */ null,
+                /* path= */ "/service2/method2"),
             new EnvoyProtoData.RouteAction(
-                "",
-                "",
+                null,
+                null,
                 ImmutableList.of(
                     new EnvoyProtoData.ClusterWeight("cl21.googleapis.com", 30),
                     new EnvoyProtoData.ClusterWeight("cl22.googleapis.com", 70)
@@ -750,25 +749,21 @@ public class XdsClientImplTest {
             // prefix match with cluster route
             new EnvoyProtoData.RouteMatch(
                 /* prefix= */ "/service1/",
-                /* path= */ "",
-                /* hasRegex= */ false,
-                /* caseSensitive= */ true),
+                /* path= */ null),
             new EnvoyProtoData.RouteAction(
                 "cl1.googleapis.com",
-                "",
-                ImmutableList.<EnvoyProtoData.ClusterWeight>of())));
+                null,
+                null)));
     assertThat(routes.get(3)).isEqualTo(
         new EnvoyProtoData.Route(
             // default match with cluster route
             new EnvoyProtoData.RouteMatch(
                 /* prefix= */ "",
-                /* path= */ "",
-                /* hasRegex= */ false,
-                /* caseSensitive= */ true),
+                /* path= */ null),
             new EnvoyProtoData.RouteAction(
                 "cluster.googleapis.com",
-                "",
-                ImmutableList.<EnvoyProtoData.ClusterWeight>of())));
+                null,
+                null)));
   }
 
   /**
@@ -902,97 +897,6 @@ public class XdsClientImplTest {
     fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(configWatcher).onResourceDoesNotExist("route-foo.googleapis.com");
     assertThat(fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
-  }
-
-  /**
-   * Client receives an RDS response (after a previous LDS request-response) containing a
-   * RouteConfiguration message for the requested resource. But the RouteConfiguration message
-   * is invalid as the VirtualHost with domains matching the requested hostname contains a route
-   * with a case-insensitive matcher.
-   * The RDS response is NACKed, as if the XdsClient has not received this response.
-   * The config watcher is NOT notified with an error.
-   */
-  @Test
-  public void matchingVirtualHostWithCaseInsensitiveAndSensitiveRouteMatch() {
-    xdsClient.watchConfigData(TARGET_AUTHORITY, configWatcher);
-    StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
-    StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
-
-    Rds rdsConfig =
-        Rds.newBuilder()
-            // Must set to use ADS.
-            .setConfigSource(
-                ConfigSource.newBuilder().setAds(AggregatedConfigSource.getDefaultInstance()))
-            .setRouteConfigName("route-foo.googleapis.com")
-            .build();
-
-    List<Any> listeners = ImmutableList.of(
-        Any.pack(buildListener(TARGET_AUTHORITY, /* matching resource */
-            Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build())))
-    );
-    DiscoveryResponse response =
-        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS, "0000");
-    responseObserver.onNext(response);
-
-    // Client sends an ACK LDS request and an RDS request for "route-foo.googleapis.com". (Omitted)
-
-    assertThat(fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
-
-    // A VirtualHost with a Route with a case-insensitive matcher.
-    VirtualHost virtualHost =
-        VirtualHost.newBuilder()
-            .setName("virtualhost00.googleapis.com")  // don't care
-            .addDomains(TARGET_AUTHORITY)
-            .addRoutes(
-                Route.newBuilder()
-                    .setRoute(RouteAction.newBuilder().setCluster("cluster.googleapis.com"))
-                    .setMatch(RouteMatch.newBuilder().setPrefix("").setCaseSensitive(
-                        BoolValue.newBuilder().setValue(false))))
-            .build();
-
-    List<Any> routeConfigs = ImmutableList.of(
-        Any.pack(
-            buildRouteConfiguration("route-foo.googleapis.com",
-                ImmutableList.of(virtualHost))));
-    response = buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0000");
-    responseObserver.onNext(response);
-
-    // Client sent an NACK RDS request.
-    verify(requestObserver)
-        .onNext(
-            argThat(new DiscoveryRequestMatcher("", "route-foo.googleapis.com",
-                XdsClientImpl.ADS_TYPE_URL_RDS, "0000")));
-
-    // A VirtualHost with a Route with a case-sensitive matcher.
-    virtualHost =
-        VirtualHost.newBuilder()
-            .setName("virtualhost00.googleapis.com")  // don't care
-            .addDomains(TARGET_AUTHORITY)
-            .addRoutes(
-                Route.newBuilder()
-                    .setRoute(RouteAction.newBuilder().setCluster("cluster.googleapis.com"))
-                    .setMatch(RouteMatch.newBuilder().setPrefix("").setCaseSensitive(
-                        BoolValue.newBuilder().setValue(true))))
-            .build();
-
-    routeConfigs = ImmutableList.of(
-        Any.pack(
-            buildRouteConfiguration("route-foo.googleapis.com",
-                ImmutableList.of(virtualHost))));
-    response = buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0000");
-    responseObserver.onNext(response);
-
-    // Client sent an ACK RDS request.
-    verify(requestObserver)
-        .onNext(
-            argThat(new DiscoveryRequestMatcher(
-                "0",
-                ImmutableList.of("route-foo.googleapis.com"),
-                XdsClientImpl.ADS_TYPE_URL_RDS,
-                "0000")));
-
-    verify(configWatcher).onConfigChanged(any(ConfigUpdate.class));
-    verifyNoMoreInteractions(configWatcher);
   }
 
   /**
@@ -3464,117 +3368,108 @@ public class XdsClientImplTest {
   }
 
   @Test
-  public void findClusterNameInRouteConfig_exactMatchFirst() {
+  public void findVirtualHostForHostName_exactMatchFirst() {
     String hostname = "a.googleapis.com";
-    String targetClusterName = "cluster-hello.googleapis.com";
     VirtualHost vHost1 =
         VirtualHost.newBuilder()
             .setName("virtualhost01.googleapis.com")  // don't care
             .addAllDomains(ImmutableList.of("a.googleapis.com", "b.googleapis.com"))
-            .addRoutes(
-                Route.newBuilder()
-                    .setRoute(RouteAction.newBuilder().setCluster(targetClusterName))
-                    .setMatch(RouteMatch.newBuilder().setPrefix("")))
             .build();
     VirtualHost vHost2 =
         VirtualHost.newBuilder()
             .setName("virtualhost02.googleapis.com")  // don't care
             .addAllDomains(ImmutableList.of("*.googleapis.com"))
-            .addRoutes(
-                Route.newBuilder()
-                    .setRoute(RouteAction.newBuilder().setCluster("cluster-hi.googleapis.com"))
-                    .setMatch(RouteMatch.newBuilder().setPrefix("")))
             .build();
     VirtualHost vHost3 =
         VirtualHost.newBuilder()
             .setName("virtualhost03.googleapis.com")  // don't care
             .addAllDomains(ImmutableList.of("*"))
-            .addRoutes(
-                Route.newBuilder()
-                    .setRoute(RouteAction.newBuilder().setCluster("cluster-hey.googleapis.com"))
-                    .setMatch(RouteMatch.newBuilder().setPrefix("")))
             .build();
     RouteConfiguration routeConfig =
         buildRouteConfiguration(
             "route-foo.googleapis.com", ImmutableList.of(vHost1, vHost2, vHost3));
-    List<EnvoyProtoData.Route> routes =
-        XdsClientImpl.findRoutesInRouteConfig(routeConfig, hostname);
-    assertThat(routes).hasSize(1);
-    assertThat(routes.get(0).getRouteAction().getCluster())
-        .isEqualTo(targetClusterName);
+    assertThat(XdsClientImpl.findVirtualHostForHostName(routeConfig, hostname)).isEqualTo(vHost1);
   }
 
   @Test
-  public void findClusterNameInRouteConfig_preferSuffixDomainOverPrefixDomain() {
+  public void findVirtualHostForHostName_preferSuffixDomainOverPrefixDomain() {
     String hostname = "a.googleapis.com";
-    String targetClusterName = "cluster-hello.googleapis.com";
     VirtualHost vHost1 =
         VirtualHost.newBuilder()
             .setName("virtualhost01.googleapis.com")  // don't care
             .addAllDomains(ImmutableList.of("*.googleapis.com", "b.googleapis.com"))
-            .addRoutes(
-                Route.newBuilder()
-                    .setRoute(RouteAction.newBuilder().setCluster(targetClusterName))
-                    .setMatch(RouteMatch.newBuilder().setPrefix("")))
             .build();
     VirtualHost vHost2 =
         VirtualHost.newBuilder()
             .setName("virtualhost02.googleapis.com")  // don't care
             .addAllDomains(ImmutableList.of("a.googleapis.*"))
-            .addRoutes(
-                Route.newBuilder()
-                    .setRoute(RouteAction.newBuilder().setCluster("cluster-hi.googleapis.com"))
-                    .setMatch(RouteMatch.newBuilder().setPrefix("")))
             .build();
     VirtualHost vHost3 =
         VirtualHost.newBuilder()
             .setName("virtualhost03.googleapis.com")  // don't care
             .addAllDomains(ImmutableList.of("*"))
-            .addRoutes(
-                Route.newBuilder()
-                    .setRoute(RouteAction.newBuilder().setCluster("cluster-hey.googleapis.com"))
-                    .setMatch(RouteMatch.newBuilder().setPrefix("")))
             .build();
     RouteConfiguration routeConfig =
         buildRouteConfiguration(
             "route-foo.googleapis.com", ImmutableList.of(vHost1, vHost2, vHost3));
-    List<EnvoyProtoData.Route> routes =
-        XdsClientImpl.findRoutesInRouteConfig(routeConfig, hostname);
-    assertThat(routes).hasSize(1);
-    assertThat(routes.get(0).getRouteAction().getCluster())
-        .isEqualTo(targetClusterName);
+    assertThat(XdsClientImpl.findVirtualHostForHostName(routeConfig, hostname)).isEqualTo(vHost1);
   }
 
   @Test
-  public void findClusterNameInRouteConfig_asteriskMatchAnyDomain() {
+  public void findVirtualHostForHostName_asteriskMatchAnyDomain() {
     String hostname = "a.googleapis.com";
-    String targetClusterName = "cluster-hello.googleapis.com";
     VirtualHost vHost1 =
         VirtualHost.newBuilder()
             .setName("virtualhost01.googleapis.com")  // don't care
             .addAllDomains(ImmutableList.of("*"))
-            .addRoutes(
-                Route.newBuilder()
-                    .setRoute(RouteAction.newBuilder().setCluster(targetClusterName))
-                    .setMatch(RouteMatch.newBuilder().setPrefix("")))
             .build();
     VirtualHost vHost2 =
         VirtualHost.newBuilder()
             .setName("virtualhost02.googleapis.com")  // don't care
             .addAllDomains(ImmutableList.of("b.googleapis.com"))
-            .addRoutes(
-                Route.newBuilder()
-                    .setRoute(RouteAction.newBuilder().setCluster("cluster-hi.googleapis.com"))
-                    .setMatch(RouteMatch.newBuilder().setPrefix("")))
             .build();
     RouteConfiguration routeConfig =
         buildRouteConfiguration(
             "route-foo.googleapis.com", ImmutableList.of(vHost1, vHost2));
-    List<EnvoyProtoData.Route> routes =
-        XdsClientImpl.findRoutesInRouteConfig(routeConfig, hostname);
-    assertThat(routes).hasSize(1);
-    assertThat(routes.get(0).getRouteAction().getCluster())
-        .isEqualTo(targetClusterName);
+    assertThat(XdsClientImpl.findVirtualHostForHostName(routeConfig, hostname)).isEqualTo(vHost1);
+  }
+
+  @Test
+  public void populateRoutesInVirtualHost_routeWithCaseInsensitiveMatch() {
+    VirtualHost virtualHost =
+        VirtualHost.newBuilder()
+            .setName("virtualhost00.googleapis.com")  // don't care
+            .addDomains(TARGET_AUTHORITY)
+            .addRoutes(
+                Route.newBuilder()
+                    .setRoute(RouteAction.newBuilder().setCluster("cluster.googleapis.com"))
+                    .setMatch(
+                        RouteMatch.newBuilder()
+                            .setPrefix("")
+                            .setCaseSensitive(BoolValue.newBuilder().setValue(false))))
+            .build();
+
+    thrown.expect(XdsClientImpl.InvalidProtoDataException.class);
+    XdsClientImpl.populateRoutesInVirtualHost(virtualHost);
+  }
+
+  @Test
+  public void populateRoutesInVirtualHost_lastRouteIsNotDefaultRoute() {
+    VirtualHost virtualHost =
+        VirtualHost.newBuilder()
+            .setName("virtualhost00.googleapis.com")  // don't care
+            .addDomains(TARGET_AUTHORITY)
+            .addRoutes(
+                Route.newBuilder()
+                    .setRoute(RouteAction.newBuilder().setCluster("cluster.googleapis.com"))
+                    .setMatch(
+                        RouteMatch.newBuilder()
+                            .setPrefix("/service/method")
+                            .setCaseSensitive(BoolValue.newBuilder().setValue(true))))
+            .build();
+
+    thrown.expect(XdsClientImpl.InvalidProtoDataException.class);
+    XdsClientImpl.populateRoutesInVirtualHost(virtualHost);
   }
 
   @Test

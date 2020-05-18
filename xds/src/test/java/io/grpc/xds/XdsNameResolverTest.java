@@ -355,23 +355,23 @@ public class XdsNameResolverTest {
         ImmutableList.of(
             // path match, routed to cluster
             Route.newBuilder()
-                .setMatch(buildPathMatch("fooSvc", "hello"))
+                .setMatch(buildPathExactMatch("fooSvc", "hello"))
                 .setRoute(buildClusterRoute("cluster-hello.googleapis.com"))
                 .build(),
             // prefix match, routed to cluster
             Route.newBuilder()
-                .setMatch(buildPrefixMatch("fooSvc"))
+                .setMatch(buildPathPrefixMatch("fooSvc"))
                 .setRoute(buildClusterRoute("cluster-foo.googleapis.com"))
                 .build(),
             // path match, routed to weighted clusters
             Route.newBuilder()
-                .setMatch(buildPathMatch("barSvc", "hello"))
+                .setMatch(buildPathExactMatch("barSvc", "hello"))
                 .setRoute(buildWeightedClusterRoute(ImmutableMap.of(
                     "cluster-hello.googleapis.com", 40,  "cluster-hello2.googleapis.com", 60)))
                 .build(),
             // prefix match, routed to weighted clusters
             Route.newBuilder()
-                .setMatch(buildPrefixMatch("barSvc"))
+                .setMatch(buildPathPrefixMatch("barSvc"))
                 .setRoute(
                     buildWeightedClusterRoute(
                         ImmutableMap.of(
@@ -451,6 +451,7 @@ public class XdsNameResolverTest {
     // with a route resolution for a single weighted cluster route.
     Route weightedClustersDefaultRoute =
         Route.newBuilder()
+            .setMatch(RouteMatch.newBuilder().setPrefix(""))
             .setRoute(buildWeightedClusterRoute(
                 ImmutableMap.of(
                     "cluster-foo.googleapis.com", 20, "cluster-bar.googleapis.com", 80)))
@@ -496,23 +497,23 @@ public class XdsNameResolverTest {
         ImmutableList.of(
             // path match, routed to cluster
             Route.newBuilder()
-                .setMatch(buildPathMatch("fooSvc", "hello"))
+                .setMatch(buildPathExactMatch("fooSvc", "hello"))
                 .setRoute(buildClusterRoute("cluster-hello.googleapis.com"))
                 .build(),
             // prefix match, routed to cluster
             Route.newBuilder()
-                .setMatch(buildPrefixMatch("fooSvc"))
+                .setMatch(buildPathPrefixMatch("fooSvc"))
                 .setRoute(buildClusterRoute("cluster-foo.googleapis.com"))
                 .build(),
             // duplicate path match, routed to weighted clusters
             Route.newBuilder()
-                .setMatch(buildPathMatch("fooSvc", "hello"))
+                .setMatch(buildPathExactMatch("fooSvc", "hello"))
                 .setRoute(buildWeightedClusterRoute(ImmutableMap.of(
                     "cluster-hello.googleapis.com", 40,  "cluster-hello2.googleapis.com", 60)))
                 .build(),
-            // duplicage prefix match, routed to weighted clusters
+            // duplicate prefix match, routed to weighted clusters
             Route.newBuilder()
-                .setMatch(buildPrefixMatch("fooSvc"))
+                .setMatch(buildPathPrefixMatch("fooSvc"))
                 .setRoute(
                     buildWeightedClusterRoute(
                         ImmutableMap.of(
@@ -520,6 +521,7 @@ public class XdsNameResolverTest {
                 .build(),
             // default, routed to cluster
             Route.newBuilder()
+                .setMatch(RouteMatch.newBuilder().setPrefix(""))
                 .setRoute(buildClusterRoute("cluster-hello.googleapis.com"))
                 .build());
     List<Any> routeConfigs = ImmutableList.of(
@@ -722,11 +724,11 @@ public class XdsNameResolverTest {
     return buildDiscoveryResponse(versionInfo, routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, nonce);
   }
 
-  private static RouteMatch buildPrefixMatch(String service) {
+  private static RouteMatch buildPathPrefixMatch(String service) {
     return RouteMatch.newBuilder().setPrefix("/" + service + "/").build();
   }
 
-  private static RouteMatch buildPathMatch(String service, String method) {
+  private static RouteMatch buildPathExactMatch(String service, String method) {
     return RouteMatch.newBuilder().setPath("/" + service + "/" + method).build();
   }
 

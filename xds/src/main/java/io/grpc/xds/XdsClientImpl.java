@@ -63,12 +63,12 @@ import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
-import io.grpc.xds.EnvoyProtoData.RouteAction;
-import io.grpc.xds.EnvoyProtoData.RouteMatch;
+import io.grpc.xds.EnvoyProtoData.StructOrError;
 import io.grpc.xds.LoadReportClient.LoadReportCallback;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -601,14 +601,13 @@ final class XdsClientImpl extends XdsClient {
       //  data or one supersedes the other. TBD.
       if (requestedHttpConnManager.hasRouteConfig()) {
         RouteConfiguration rc = requestedHttpConnManager.getRouteConfig();
-        routes = findRoutesInRouteConfig(rc, ldsResourceName);
-        String errorDetail = validateRoutes(routes);
-        if (errorDetail != null) {
+        try {
+          routes = findRoutesInRouteConfig(rc, ldsResourceName);
+        } catch (InvalidProtoDataException e) {
           errorMessage =
               "Listener " + ldsResourceName + " : cannot find a valid cluster name in any "
-                  + "virtual hosts inside RouteConfiguration with domains matching: "
-                  + ldsResourceName
-                  + " with the reason : " + errorDetail;
+                  + "virtual hosts domains matching: " + ldsResourceName
+                  + " with the reason : " + e.getMessage();
         }
       } else if (requestedHttpConnManager.hasRds()) {
         Rds rds = requestedHttpConnManager.getRds();
@@ -643,23 +642,10 @@ final class XdsClientImpl extends XdsClient {
     }
     if (routes != null) {
       // Found  routes in the in-lined RouteConfiguration.
-      ConfigUpdate configUpdate;
-      if (!enableExperimentalRouting) {
-        EnvoyProtoData.Route defaultRoute = Iterables.getLast(routes);
-        configUpdate =
-            ConfigUpdate.newBuilder()
-                .addRoutes(ImmutableList.of(defaultRoute))
-                .build();
-        logger.log(
-            XdsLogLevel.INFO,
-            "Found cluster name (inlined in route config): {0}",
-            defaultRoute.getRouteAction().getCluster());
-      } else {
-        configUpdate = ConfigUpdate.newBuilder().addRoutes(routes).build();
-        logger.log(
-            XdsLogLevel.INFO,
-            "Found routes (inlined in route config): {0}", routes);
-      }
+      logger.log(
+          XdsLogLevel.DEBUG,
+          "Found routes (inlined in route config): {0}", routes);
+      ConfigUpdate configUpdate = ConfigUpdate.newBuilder().addRoutes(routes).build();
       configWatcher.onConfigChanged(configUpdate);
     } else if (rdsRouteConfigName != null) {
       // Send an RDS request if the resource to request has changed.
@@ -800,9 +786,10 @@ final class XdsClientImpl extends XdsClient {
     // Resolved cluster name for the requested resource, if exists.
     List<EnvoyProtoData.Route> routes = null;
     if (requestedRouteConfig != null) {
-      routes = findRoutesInRouteConfig(requestedRouteConfig, ldsResourceName);
-      String errorDetail = validateRoutes(routes);
-      if (errorDetail != null) {
+      try {
+        routes = findRoutesInRouteConfig(requestedRouteConfig, ldsResourceName);
+      } catch (InvalidProtoDataException e) {
+        String errorDetail = e.getMessage();
         adsStream.sendNackRequest(
             ADS_TYPE_URL_RDS, ImmutableList.of(adsStream.rdsResourceName),
             rdsResponse.getVersionInfo(),
@@ -824,24 +811,9 @@ final class XdsClientImpl extends XdsClient {
         rdsRespTimer.cancel();
         rdsRespTimer = null;
       }
-
-      // Found routes in the in-lined RouteConfiguration.
-      ConfigUpdate configUpdate;
-      if (!enableExperimentalRouting) {
-        EnvoyProtoData.Route defaultRoute = Iterables.getLast(routes);
-        configUpdate =
-            ConfigUpdate.newBuilder()
-                .addRoutes(ImmutableList.of(defaultRoute))
-                .build();
-        logger.log(
-            XdsLogLevel.INFO,
-            "Found cluster name: {0}",
-            defaultRoute.getRouteAction().getCluster());
-      } else {
-        configUpdate = ConfigUpdate.newBuilder().addRoutes(routes).build();
-        logger.log(XdsLogLevel.INFO, "Found {0} routes", routes.size());
-        logger.log(XdsLogLevel.DEBUG, "Found routes: {0}", routes);
-      }
+      logger.log(XdsLogLevel.DEBUG, "Found routes: {0}", routes);
+      ConfigUpdate configUpdate  =
+          ConfigUpdate.newBuilder().addRoutes(routes).build();
       configWatcher.onConfigChanged(configUpdate);
     }
   }
@@ -849,9 +821,79 @@ final class XdsClientImpl extends XdsClient {
   /**
    * Processes a RouteConfiguration message to find the routes that requests for the given host will
    * be routed to.
+   *
+   * @throws InvalidProtoDataException if the message contains invalid data.
    */
+  private static List<EnvoyProtoData.Route> findRoutesInRouteConfig(
+      RouteConfiguration config, String hostName) throws InvalidProtoDataException {
+    VirtualHost targetVirtualHost = findVirtualHostForHostName(config, hostName);
+    if (targetVirtualHost == null) {
+      throw new InvalidProtoDataException("Unable to find virtual host for " + hostName);
+    }
+
+    // Note we would consider upstream cluster not found if the virtual host is not configured
+    // correctly for gRPC, even if there exist other virtual hosts with (lower priority)
+    // matching domains.
+    return populateRoutesInVirtualHost(targetVirtualHost);
+  }
+
   @VisibleForTesting
-  static List<EnvoyProtoData.Route> findRoutesInRouteConfig(
+  static List<EnvoyProtoData.Route> populateRoutesInVirtualHost(VirtualHost virtualHost)
+      throws InvalidProtoDataException {
+    List<EnvoyProtoData.Route> routes = new ArrayList<>();
+    List<Route> routesProto = virtualHost.getRoutesList();
+    for (Route routeProto : routesProto) {
+      StructOrError<EnvoyProtoData.Route> route =
+          EnvoyProtoData.Route.fromEnvoyProtoRoute(routeProto);
+      if (route == null) {
+        continue;
+      } else if (route.getErrorDetail() != null) {
+        throw new InvalidProtoDataException(
+            "Virtual host [" + virtualHost.getName() + "] contains invalid route : "
+                + route.getErrorDetail());
+      }
+      routes.add(route.getStruct());
+    }
+    if (routes.isEmpty()) {
+      throw new InvalidProtoDataException(
+          "Virtual host [" + virtualHost.getName() + "] contains no usable route");
+    }
+    // The last route must be a default route.
+    if (!Iterables.getLast(routes).isDefaultRoute()) {
+      throw new InvalidProtoDataException(
+          "Virtual host [" + virtualHost.getName()
+              + "] contains non-default route as the last route");
+    }
+    // We only validate the default route unless path matching is enabled.
+    if (!enableExperimentalRouting) {
+      EnvoyProtoData.Route defaultRoute = Iterables.getLast(routes);
+      if (defaultRoute.getRouteAction().getCluster() == null) {
+        throw new InvalidProtoDataException(
+            "Virtual host [" + virtualHost.getName()
+                + "] default route contains no cluster name");
+      }
+      return Collections.singletonList(defaultRoute);
+    }
+
+    // We do more validation if path matching is enabled, but whether every single route is
+    // required to be valid for grpc is TBD.
+    // For now we consider the whole list invalid if anything invalid for grpc is found.
+    // TODO(zdapeng): Fix it if the decision is different from current implementation.
+    // TODO(zdapeng): Add test for validation.
+    for (EnvoyProtoData.Route route : routes) {
+      if (route.getRouteAction().getCluster() == null
+          && route.getRouteAction().getWeightedCluster() == null) {
+        throw new InvalidProtoDataException(
+            "Virtual host [" + virtualHost.getName()
+                + "] contains route without cluster or weighted cluster");
+      }
+    }
+    return Collections.unmodifiableList(routes);
+  }
+
+  @VisibleForTesting
+  @Nullable
+  static VirtualHost findVirtualHostForHostName(
       RouteConfiguration config, String hostName) {
     List<VirtualHost> virtualHosts = config.getVirtualHostsList();
     // Domain search order:
@@ -889,91 +931,7 @@ final class XdsClientImpl extends XdsClient {
         break;
       }
     }
-
-    List<EnvoyProtoData.Route> routes = new ArrayList<>();
-    // Proceed with the virtual host that has longest wildcard matched domain name with the
-    // hostname in original "xds:" URI.
-    // Note we would consider upstream cluster not found if the virtual host is not configured
-    // correctly for gRPC, even if there exist other virtual hosts with (lower priority)
-    // matching domains.
-    if (targetVirtualHost != null) {
-      List<Route> routesProto = targetVirtualHost.getRoutesList();
-      for (Route route : routesProto) {
-        routes.add(EnvoyProtoData.Route.fromEnvoyProtoRoute(route));
-      }
-    }
-    return routes;
-  }
-
-  /**
-   * Validates the given list of routes and returns error details if there's any error.
-   */
-  @Nullable
-  private static String validateRoutes(List<EnvoyProtoData.Route> routes) {
-    if (routes.isEmpty()) {
-      return "No routes found";
-    }
-
-    // We only validate the default route unless path matching is enabled.
-    if (!enableExperimentalRouting) {
-      EnvoyProtoData.Route route = routes.get(routes.size() - 1);
-      RouteMatch routeMatch = route.getRouteMatch();
-      if (!routeMatch.isDefaultMatcher()) {
-        return "The last route must be the default route";
-      }
-      if (!routeMatch.isCaseSensitive()) {
-        return "Case-insensitive route match not supported";
-      }
-      if (route.getRouteAction() == null) {
-        return "Route action is not specified for the default route";
-      }
-      if (route.getRouteAction().getCluster().isEmpty()) {
-        return "Cluster is not specified for the default route";
-      }
-      return null;
-    }
-
-    // We do more validation if path matching is enabled, but whether every single route is required
-    // to be valid for grpc is TBD.
-    // For now we consider the whole list invalid if anything invalid for grpc is found.
-    // TODO(zdapeng): Fix it if the decision is different from current implementation.
-    // TODO(zdapeng): Add test for validation.
-    for (int i = 0; i < routes.size(); i++) {
-      EnvoyProtoData.Route route = routes.get(i);
-      RouteAction routeAction = route.getRouteAction();
-      if (routeAction == null) {
-        return "Route action is not specified for one of the routes";
-      }
-      RouteMatch routeMatch = route.getRouteMatch();
-      if (!routeMatch.isCaseSensitive()) {
-        return "Case-insensitive route match not supported";
-      }
-      if (!routeMatch.isDefaultMatcher()) {
-        String prefix = routeMatch.getPrefix();
-        String path = routeMatch.getPath();
-        if (!prefix.isEmpty()) {
-          if (!prefix.startsWith("/") || !prefix.endsWith("/") || prefix.length() < 3) {
-            return "Prefix route match must be in the format of '/service/'";
-          }
-        } else if (!path.isEmpty()) {
-          int lastSlash = path.lastIndexOf('/');
-          if (!path.startsWith("/") || lastSlash == 0 || lastSlash == path.length() - 1) {
-            return "Path route match must be in the format of '/service/method'";
-          }
-        } else if (routeMatch.hasRegex()) {
-          return "Regex route match not supported";
-        }
-      }
-      if (i == routes.size() - 1) {
-        if (!routeMatch.isDefaultMatcher()) {
-          return "The last route must be the default route";
-        }
-      }
-      if (routeAction.getCluster().isEmpty() && routeAction.getWeightedCluster().isEmpty()) {
-        return "Either cluster or weighted cluster route action must be provided";
-      }
-    }
-    return null;
+    return targetVirtualHost;
   }
 
   /**
@@ -1790,6 +1748,15 @@ final class XdsClientImpl extends XdsClient {
         res = message + " (failed to pretty-print: " + e + ")";
       }
       return res;
+    }
+  }
+
+  @VisibleForTesting
+  static final class InvalidProtoDataException extends RuntimeException {
+    private static final long serialVersionUID = 1L;
+
+    private InvalidProtoDataException(String message) {
+      super(message, null, false, false);
     }
   }
 }
