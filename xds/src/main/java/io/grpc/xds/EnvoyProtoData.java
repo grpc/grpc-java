@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
+import com.google.common.base.MoreObjects.ToStringHelper;
 import com.google.common.collect.ImmutableList;
 import com.google.re2j.Pattern;
 import com.google.re2j.PatternSyntaxException;
@@ -585,18 +586,28 @@ final class EnvoyProtoData {
 
     @Override
     public int hashCode() {
-      return Objects.hash(pathPrefixMatch, pathExactMatch, headerMatchers, fractionMatch);
+      return Objects.hash(
+          pathPrefixMatch, pathExactMatch,
+          pathSafeRegExMatch == null ? null : pathSafeRegExMatch.pattern(), headerMatchers,
+          fractionMatch);
     }
 
     @Override
     public String toString() {
-      return MoreObjects.toStringHelper(this)
-          .add("pathPrefixMatch", pathPrefixMatch)
-          .add("pathExactMatch", pathExactMatch)
-          .add("pathSafeRegExMatch", pathSafeRegExMatch)
-          .add("headerMatchers", headerMatchers)
-          .add("fractionMatch", fractionMatch)
-          .toString();
+      ToStringHelper toStringHelper = MoreObjects.toStringHelper(this);
+      if (pathPrefixMatch != null) {
+        toStringHelper.add("pathPrefixMatch", pathPrefixMatch);
+      }
+      if (pathExactMatch != null) {
+        toStringHelper.add("pathExactMatch", pathExactMatch);
+      }
+      if (pathSafeRegExMatch != null) {
+        toStringHelper.add("pathSafeRegExMatch",pathSafeRegExMatch.pattern());
+      }
+      if (fractionMatch != null) {
+        toStringHelper.add("fractionMatch", fractionMatch);
+      }
+      return toStringHelper.add("headerMatchers", headerMatchers).toString();
     }
 
     @VisibleForTesting
@@ -853,16 +864,27 @@ final class EnvoyProtoData {
 
     @Override
     public String toString() {
-      return MoreObjects.toStringHelper(this)
-          .add("name", name)
-          .add("exactMatch", exactMatch)
-          .add("safeRegExMatch", safeRegExMatch)
-          .add("rangeMatch", rangeMatch)
-          .add("presentMatch", presentMatch)
-          .add("prefixMatch", prefixMatch)
-          .add("suffixMatch", suffixMatch)
-          .add("isInvertedMatch", isInvertedMatch)
-          .toString();
+      ToStringHelper toStringHelper =
+          MoreObjects.toStringHelper(this).add("name", name);
+      if (exactMatch !=null) {
+        toStringHelper.add("exactMatch", exactMatch);
+      }
+      if (safeRegExMatch != null) {
+        toStringHelper.add("safeRegExMatch", safeRegExMatch.pattern());
+      }
+      if (rangeMatch != null) {
+        toStringHelper.add("rangeMatch", rangeMatch);
+      }
+      if (presentMatch != null) {
+        toStringHelper.add("presentMatch", presentMatch);
+      }
+      if (prefixMatch != null) {
+        toStringHelper.add("prefixMatch", prefixMatch);
+      }
+      if (suffixMatch != null) {
+        toStringHelper.add("suffixMatch", suffixMatch);
+      }
+      return toStringHelper.add("isInvertedMatch", isInvertedMatch).toString();
     }
 
     static final class Range {
@@ -958,11 +980,17 @@ final class EnvoyProtoData {
 
     @Override
     public String toString() {
-      return MoreObjects.toStringHelper(this)
-              .add("cluster", cluster)
-              .add("clusterHeader", clusterHeader)
-              .add("weightedCluster", weightedClusters)
-              .toString();
+      ToStringHelper toStringHelper = MoreObjects.toStringHelper(this);
+      if (cluster != null) {
+        toStringHelper.add("cluster", cluster);
+      }
+      if (clusterHeader != null) {
+        toStringHelper.add("clusterHeader", clusterHeader);
+      }
+      if (weightedClusters != null) {
+        toStringHelper.add("weightedClusters", weightedClusters);
+      }
+      return toStringHelper.toString();
     }
 
     @VisibleForTesting
