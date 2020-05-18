@@ -105,7 +105,7 @@ public class EnvoyProtoDataTest {
             new Route(
                 new RouteMatch(
                     null, "/service/method", null, null, Collections.<HeaderMatcher>emptyList()),
-                new RouteAction("cluster-foo", null, null)));
+                new RouteAction("cluster-foo", null)));
 
     io.envoyproxy.envoy.api.v2.route.Route unsupportedProto =
         io.envoyproxy.envoy.api.v2.route.Route.newBuilder()
@@ -116,6 +116,39 @@ public class EnvoyProtoDataTest {
     StructOrError<Route> unsupportedStruct = Route.fromEnvoyProtoRoute(unsupportedProto);
     assertThat(unsupportedStruct.getErrorDetail()).isNotNull();
     assertThat(unsupportedStruct.getStruct()).isNull();
+  }
+
+  @Test
+  public void convertRoute_skipWithUnsupportedMatcher() {
+    io.envoyproxy.envoy.api.v2.route.Route proto =
+        io.envoyproxy.envoy.api.v2.route.Route.newBuilder()
+            .setName("ignore me")
+            .setMatch(
+                io.envoyproxy.envoy.api.v2.route.RouteMatch.newBuilder()
+                    .setPath("/service/method")
+                    .addQueryParameters(
+                        io.envoyproxy.envoy.api.v2.route.QueryParameterMatcher
+                            .getDefaultInstance()))
+            .setRoute(
+                io.envoyproxy.envoy.api.v2.route.RouteAction.newBuilder()
+                    .setCluster("cluster-foo"))
+            .build();
+    assertThat(Route.fromEnvoyProtoRoute(proto)).isNull();
+  }
+
+  @Test
+  public void convertRoute_skipWithUnsupportedAction() {
+    io.envoyproxy.envoy.api.v2.route.Route proto =
+        io.envoyproxy.envoy.api.v2.route.Route.newBuilder()
+            .setName("ignore me")
+            .setMatch(
+                io.envoyproxy.envoy.api.v2.route.RouteMatch.newBuilder()
+                    .setPath("/service/method"))
+            .setRoute(
+                io.envoyproxy.envoy.api.v2.route.RouteAction.newBuilder()
+                    .setClusterHeader("some cluster header"))
+            .build();
+    assertThat(Route.fromEnvoyProtoRoute(proto)).isNull();
   }
 
   @Test
@@ -315,7 +348,6 @@ public class EnvoyProtoDataTest {
     StructOrError<RouteAction> struct1 = RouteAction.fromEnvoyProtoRouteAction(proto1);
     assertThat(struct1.getErrorDetail()).isNull();
     assertThat(struct1.getStruct().getCluster()).isEqualTo("cluster-foo");
-    assertThat(struct1.getStruct().getClusterHeader()).isNull();
     assertThat(struct1.getStruct().getWeightedCluster()).isNull();
 
     // cluster_specifier = cluster_header
@@ -324,10 +356,7 @@ public class EnvoyProtoDataTest {
             .setClusterHeader("cluster-bar")
             .build();
     StructOrError<RouteAction> struct2 = RouteAction.fromEnvoyProtoRouteAction(proto2);
-    assertThat(struct2.getErrorDetail()).isNull();
-    assertThat(struct2.getStruct().getCluster()).isNull();
-    assertThat(struct2.getStruct().getClusterHeader()).isEqualTo("cluster-bar");
-    assertThat(struct2.getStruct().getWeightedCluster()).isNull();
+    assertThat(struct2).isNull();
 
     // cluster_specifier = weighted_cluster
     io.envoyproxy.envoy.api.v2.route.RouteAction proto3 =
@@ -342,7 +371,6 @@ public class EnvoyProtoDataTest {
     StructOrError<RouteAction> struct3 = RouteAction.fromEnvoyProtoRouteAction(proto3);
     assertThat(struct3.getErrorDetail()).isNull();
     assertThat(struct3.getStruct().getCluster()).isNull();
-    assertThat(struct3.getStruct().getClusterHeader()).isNull();
     assertThat(struct3.getStruct().getWeightedCluster())
         .containsExactly(new ClusterWeight("cluster-baz", 100));
 

@@ -500,6 +500,9 @@ final class EnvoyProtoData {
         default:
           return StructOrError.fromError("Unknown action type: " + proto.getActionCase());
       }
+      if (routeAction == null) {
+        return null;
+      }
       if (routeAction.getErrorDetail() != null) {
         return StructOrError.fromError(
             "Invalid route [" + proto.getName() + "]: " + routeAction.getErrorDetail());
@@ -931,27 +934,17 @@ final class EnvoyProtoData {
     @Nullable
     private final String cluster;
     @Nullable
-    private final String clusterHeader;
-    @Nullable
     private final List<ClusterWeight> weightedClusters;
 
     @VisibleForTesting
-    RouteAction(
-        @Nullable String cluster, @Nullable String clusterHeader,
-        @Nullable List<ClusterWeight> weightedClusters) {
+    RouteAction(@Nullable String cluster, @Nullable List<ClusterWeight> weightedClusters) {
       this.cluster = cluster;
-      this.clusterHeader = clusterHeader;
       this.weightedClusters = weightedClusters;
     }
 
     @Nullable
     String getCluster() {
       return cluster;
-    }
-
-    @Nullable
-    String getClusterHeader() {
-      return clusterHeader;
     }
 
     @Nullable
@@ -969,13 +962,12 @@ final class EnvoyProtoData {
       }
       RouteAction that = (RouteAction) o;
       return Objects.equals(cluster, that.cluster)
-              && Objects.equals(clusterHeader, that.clusterHeader)
-              && Objects.equals(weightedClusters, that.weightedClusters);
+          && Objects.equals(weightedClusters, that.weightedClusters);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hash(cluster, clusterHeader, weightedClusters);
+      return Objects.hash(cluster, weightedClusters);
     }
 
     @Override
@@ -984,28 +976,24 @@ final class EnvoyProtoData {
       if (cluster != null) {
         toStringHelper.add("cluster", cluster);
       }
-      if (clusterHeader != null) {
-        toStringHelper.add("clusterHeader", clusterHeader);
-      }
       if (weightedClusters != null) {
         toStringHelper.add("weightedClusters", weightedClusters);
       }
       return toStringHelper.toString();
     }
 
+    @Nullable
     @VisibleForTesting
     static StructOrError<RouteAction> fromEnvoyProtoRouteAction(
         io.envoyproxy.envoy.api.v2.route.RouteAction proto) {
       String cluster = null;
-      String clusterHeader = null;
       List<ClusterWeight> weightedClusters = null;
       switch (proto.getClusterSpecifierCase()) {
         case CLUSTER:
           cluster = proto.getCluster();
           break;
         case CLUSTER_HEADER:
-          clusterHeader = proto.getClusterHeader();
-          break;
+          return null;
         case WEIGHTED_CLUSTERS:
           List<io.envoyproxy.envoy.api.v2.route.WeightedCluster.ClusterWeight> clusterWeights
               = proto.getWeightedClusters().getClustersList();
@@ -1020,7 +1008,7 @@ final class EnvoyProtoData {
           return StructOrError.fromError(
               "Unknown cluster specifier: " + proto.getClusterSpecifierCase());
       }
-      return StructOrError.fromStruct(new RouteAction(cluster, clusterHeader, weightedClusters));
+      return StructOrError.fromStruct(new RouteAction(cluster, weightedClusters));
     }
   }
 
