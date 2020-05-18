@@ -251,7 +251,7 @@ public class SdsProtocolNegotiatorsTest {
     SdsProtocolNegotiators.HandlerPickerHandler handlerPickerHandler =
         new SdsProtocolNegotiators.HandlerPickerHandler(
             grpcHandler, /* xdsClientWrapperForServerSds= */ null,
-            mockProtocolNegotiator);  // new FallbackProtocolNegotiator()
+            mockProtocolNegotiator);
     pipeline.addLast(handlerPickerHandler);
     channelHandlerCtx = pipeline.context(handlerPickerHandler);
     assertThat(channelHandlerCtx).isNotNull(); // should find HandlerPickerHandler
