@@ -866,7 +866,7 @@ final class EnvoyProtoData {
     public String toString() {
       ToStringHelper toStringHelper =
           MoreObjects.toStringHelper(this).add("name", name);
-      if (exactMatch !=null) {
+      if (exactMatch != null) {
         toStringHelper.add("exactMatch", exactMatch);
       }
       if (safeRegExMatch != null) {
