@@ -38,6 +38,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.handler.ssl.SslContext;
 import io.netty.util.AsciiString;
+import java.security.cert.CertStoreException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Level;
@@ -69,9 +70,12 @@ public final class SdsProtocolNegotiators {
    * If xDS returns no DownstreamTlsContext, it will fall back to plaintext.
    *
    * @param port the listening port passed to {@link XdsServerBuilder#forPort(int)}.
+   * @param fallbackProtocolNegotiator protocol negotiator to use as fallback.
    */
-  public static ServerSdsProtocolNegotiator serverProtocolNegotiator(int port) {
-    return new ServerSdsProtocolNegotiator(new XdsClientWrapperForServerSds(port));
+  public static ServerSdsProtocolNegotiator serverProtocolNegotiator(int port,
+      @Nullable ProtocolNegotiator fallbackProtocolNegotiator) {
+    return new ServerSdsProtocolNegotiator(new XdsClientWrapperForServerSds(port),
+        fallbackProtocolNegotiator);
   }
 
   private static final class ClientSdsProtocolNegotiatorFactory
@@ -232,12 +236,15 @@ public final class SdsProtocolNegotiators {
   public static final class ServerSdsProtocolNegotiator implements ProtocolNegotiator {
 
     private final XdsClientWrapperForServerSds xdsClientWrapperForServerSds;
+    @Nullable private final ProtocolNegotiator fallbackProtocolNegotiator;
 
     /** Constructor. */
     @VisibleForTesting
-    public ServerSdsProtocolNegotiator(XdsClientWrapperForServerSds xdsClientWrapperForServerSds) {
+    public ServerSdsProtocolNegotiator(XdsClientWrapperForServerSds xdsClientWrapperForServerSds,
+        @Nullable ProtocolNegotiator fallbackProtocolNegotiator) {
       this.xdsClientWrapperForServerSds =
           checkNotNull(xdsClientWrapperForServerSds, "xdsClientWrapperForServerSds");
+      this.fallbackProtocolNegotiator = fallbackProtocolNegotiator;
     }
 
     XdsClientWrapperForServerSds getXdsClientWrapperForServerSds() {
@@ -251,7 +258,8 @@ public final class SdsProtocolNegotiators {
 
     @Override
     public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
-      return new HandlerPickerHandler(grpcHandler, xdsClientWrapperForServerSds);
+      return new HandlerPickerHandler(grpcHandler, xdsClientWrapperForServerSds,
+          fallbackProtocolNegotiator);
     }
 
     @Override
@@ -263,13 +271,15 @@ public final class SdsProtocolNegotiators {
       extends ChannelInboundHandlerAdapter {
     private final GrpcHttp2ConnectionHandler grpcHandler;
     private final XdsClientWrapperForServerSds xdsClientWrapperForServerSds;
+    @Nullable private final ProtocolNegotiator fallbackProtocolNegotiator;
 
     HandlerPickerHandler(
         GrpcHttp2ConnectionHandler grpcHandler,
-        @Nullable XdsClientWrapperForServerSds xdsClientWrapperForServerSds) {
-      checkNotNull(grpcHandler, "grpcHandler");
-      this.grpcHandler = grpcHandler;
+        @Nullable XdsClientWrapperForServerSds xdsClientWrapperForServerSds,
+        ProtocolNegotiator fallbackProtocolNegotiator) {
+      this.grpcHandler = checkNotNull(grpcHandler, "grpcHandler");
       this.xdsClientWrapperForServerSds = xdsClientWrapperForServerSds;
+      this.fallbackProtocolNegotiator = fallbackProtocolNegotiator;
     }
 
     private static boolean isTlsContextEmpty(DownstreamTlsContext downstreamTlsContext) {
@@ -284,12 +294,16 @@ public final class SdsProtocolNegotiators {
                 ? null
                 : xdsClientWrapperForServerSds.getDownstreamTlsContext(ctx.channel());
         if (isTlsContextEmpty(downstreamTlsContext)) {
-          logger.log(Level.INFO, "Fallback to plaintext for {0}", ctx.channel().localAddress());
+          if (fallbackProtocolNegotiator == null) {
+            ctx.fireExceptionCaught(new CertStoreException("No certificate source found!"));
+            return;
+          }
+          logger.log(Level.INFO, "Using fallback for {0}", ctx.channel().localAddress());
           ctx.pipeline()
               .replace(
                   this,
                   null,
-                  InternalProtocolNegotiators.serverPlaintext().newHandler(grpcHandler));
+                  fallbackProtocolNegotiator.newHandler(grpcHandler));
           ProtocolNegotiationEvent pne = InternalProtocolNegotiationEvent.getDefault();
           ctx.fireUserEventTriggered(pne);
           return;
