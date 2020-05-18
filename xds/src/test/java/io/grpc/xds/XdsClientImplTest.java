@@ -61,6 +61,7 @@ import io.envoyproxy.envoy.api.v2.core.ConfigSource;
 import io.envoyproxy.envoy.api.v2.core.HealthStatus;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
+import io.envoyproxy.envoy.api.v2.route.QueryParameterMatcher;
 import io.envoyproxy.envoy.api.v2.route.RedirectAction;
 import io.envoyproxy.envoy.api.v2.route.Route;
 import io.envoyproxy.envoy.api.v2.route.RouteAction;
@@ -727,10 +728,7 @@ public class XdsClientImplTest {
             new EnvoyProtoData.RouteMatch(
                 /* prefix= */ null,
                 /* path= */ "/service1/method1"),
-            new EnvoyProtoData.RouteAction(
-                "cl1.googleapis.com",
-                null,
-                null)));
+            new EnvoyProtoData.RouteAction("cl1.googleapis.com", null)));
     assertThat(routes.get(1)).isEqualTo(
         new EnvoyProtoData.Route(
             // path match with weighted cluster route
@@ -738,7 +736,6 @@ public class XdsClientImplTest {
                 /* prefix= */ null,
                 /* path= */ "/service2/method2"),
             new EnvoyProtoData.RouteAction(
-                null,
                 null,
                 ImmutableList.of(
                     new EnvoyProtoData.ClusterWeight("cl21.googleapis.com", 30),
@@ -750,10 +747,7 @@ public class XdsClientImplTest {
             new EnvoyProtoData.RouteMatch(
                 /* prefix= */ "/service1/",
                 /* path= */ null),
-            new EnvoyProtoData.RouteAction(
-                "cl1.googleapis.com",
-                null,
-                null)));
+            new EnvoyProtoData.RouteAction("cl1.googleapis.com", null)));
     assertThat(routes.get(3)).isEqualTo(
         new EnvoyProtoData.Route(
             // default match with cluster route
@@ -761,9 +755,7 @@ public class XdsClientImplTest {
                 /* prefix= */ "",
                 /* path= */ null),
             new EnvoyProtoData.RouteAction(
-                "cluster.googleapis.com",
-                null,
-                null)));
+                "cluster.googleapis.com", null)));
   }
 
   /**
@@ -3466,6 +3458,31 @@ public class XdsClientImplTest {
                         RouteMatch.newBuilder()
                             .setPrefix("/service/method")
                             .setCaseSensitive(BoolValue.newBuilder().setValue(true))))
+            .build();
+
+    thrown.expect(XdsClientImpl.InvalidProtoDataException.class);
+    XdsClientImpl.populateRoutesInVirtualHost(virtualHost);
+  }
+
+  @Test
+  public void populateRoutesInVirtualHost_NoUsableRoute() {
+    VirtualHost virtualHost =
+        VirtualHost.newBuilder()
+            .setName("virtualhost00.googleapis.com")  // don't care
+            .addDomains(TARGET_AUTHORITY)
+            .addRoutes(
+                // route with unsupported action
+                Route.newBuilder()
+                    .setRoute(RouteAction.newBuilder().setClusterHeader("cluster header string"))
+                    .setMatch(RouteMatch.newBuilder().setPrefix("/")))
+            .addRoutes(
+                // route with unsupported matcher type
+                Route.newBuilder()
+                    .setRoute(RouteAction.newBuilder().setCluster("cluster.googleapis.com"))
+                    .setMatch(
+                        RouteMatch.newBuilder()
+                            .setPrefix("/")
+                            .addQueryParameters(QueryParameterMatcher.getDefaultInstance())))
             .build();
 
     thrown.expect(XdsClientImpl.InvalidProtoDataException.class);

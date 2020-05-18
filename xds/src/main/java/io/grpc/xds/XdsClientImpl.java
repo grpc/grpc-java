@@ -864,29 +864,9 @@ final class XdsClientImpl extends XdsClient {
           "Virtual host [" + virtualHost.getName()
               + "] contains non-default route as the last route");
     }
-    // We only validate the default route unless path matching is enabled.
     if (!enableExperimentalRouting) {
       EnvoyProtoData.Route defaultRoute = Iterables.getLast(routes);
-      if (defaultRoute.getRouteAction().getCluster() == null) {
-        throw new InvalidProtoDataException(
-            "Virtual host [" + virtualHost.getName()
-                + "] default route contains no cluster name");
-      }
       return Collections.singletonList(defaultRoute);
-    }
-
-    // We do more validation if path matching is enabled, but whether every single route is
-    // required to be valid for grpc is TBD.
-    // For now we consider the whole list invalid if anything invalid for grpc is found.
-    // TODO(zdapeng): Fix it if the decision is different from current implementation.
-    // TODO(zdapeng): Add test for validation.
-    for (EnvoyProtoData.Route route : routes) {
-      if (route.getRouteAction().getCluster() == null
-          && route.getRouteAction().getWeightedCluster() == null) {
-        throw new InvalidProtoDataException(
-            "Virtual host [" + virtualHost.getName()
-                + "] contains route without cluster or weighted cluster");
-      }
     }
     return Collections.unmodifiableList(routes);
   }
