@@ -26,6 +26,7 @@ import io.grpc.LoadBalancerProvider;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 
@@ -68,6 +69,12 @@ final class PriorityLoadBalancerProvider extends LoadBalancerProvider {
       checkArgument(
           childConfigs.keySet().containsAll(priorities),
           "missing child config for at lease one of the priorities");
+      checkArgument(
+          priorities.size() == new HashSet<>(priorities).size(),
+          "duplicate names in priorities");
+      checkArgument(
+          priorities.size() == childConfigs.keySet().size(),
+          "some names in childConfigs are not referenced by priorities");
     }
 
     @Override
