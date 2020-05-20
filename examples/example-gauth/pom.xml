@@ -13,7 +13,7 @@
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <grpc.version>1.31.0-SNAPSHOT</grpc.version><!-- CURRENT_GRPC_VERSION -->
-    <protobuf.version>3.11.0</protobuf.version>
+    <protobuf.version>3.12.0</protobuf.version>
     <!-- required for jdk9 -->
     <maven.compiler.source>1.7</maven.compiler.source>
     <maven.compiler.target>1.7</maven.compiler.target>
@@ -32,6 +32,11 @@
   </dependencyManagement>
 
   <dependencies>
+    <dependency>
+      <groupId>com.google.protobuf</groupId>
+      <artifactId>protobuf-java-util</artifactId>
+      <version>${protobuf.version}</version>
+    </dependency>
     <dependency>
       <groupId>io.grpc</groupId>
       <artifactId>grpc-netty-shaded</artifactId>
@@ -59,11 +64,6 @@
       <groupId>io.grpc</groupId>
       <artifactId>grpc-testing</artifactId>
       <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>com.google.protobuf</groupId>
-      <artifactId>protobuf-java-util</artifactId>
-      <version>${protobuf.version}</version>
     </dependency>
     <dependency>
       <groupId>com.google.auth</groupId>
