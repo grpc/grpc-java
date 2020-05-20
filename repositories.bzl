@@ -267,18 +267,18 @@ def com_google_protobuf():
     # This statement defines the @com_google_protobuf repo.
     http_archive(
         name = "com_google_protobuf",
-        sha256 = "60d2012e3922e429294d3a4ac31f336016514a91e5a63fd33f35743ccfe1bd7d",
-        strip_prefix = "protobuf-3.11.0",
-        urls = ["https://github.com/protocolbuffers/protobuf/archive/v3.11.0.zip"],
+        sha256 = "b37e96e81842af659605908a421960a5dc809acbc888f6b947bc320f8628e5b1",
+        strip_prefix = "protobuf-3.12.0",
+        urls = ["https://github.com/protocolbuffers/protobuf/archive/v3.12.0.zip"],
     )
 
 def com_google_protobuf_javalite():
     # java_lite_proto_library rules implicitly depend on @com_google_protobuf_javalite
     http_archive(
         name = "com_google_protobuf_javalite",
-        sha256 = "e60211a40473f6be95b53f64559f82a3b2971672b11710db2fc9081708e25699",
-        strip_prefix = "protobuf-0425fa932ce95a32bb9f88b2c09b995e9ff8207b",
-        urls = ["https://github.com/google/protobuf/archive/0425fa932ce95a32bb9f88b2c09b995e9ff8207b.zip"],  # Commit with fixed javalite on 3.11.x branch
+        sha256 = "b37e96e81842af659605908a421960a5dc809acbc888f6b947bc320f8628e5b1",
+        strip_prefix = "protobuf-3.12.0",
+        urls = ["https://github.com/protocolbuffers/protobuf/archive/v3.12.0.zip"],
     )
 
 def com_google_truth_truth():
