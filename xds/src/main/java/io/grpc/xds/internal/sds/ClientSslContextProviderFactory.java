@@ -28,22 +28,21 @@ import java.util.concurrent.Executors;
 
 /** Factory to create client-side SslContextProvider from UpstreamTlsContext. */
 final class ClientSslContextProviderFactory
-    implements SslContextProviderFactory<UpstreamTlsContext> {
+    implements SslContextProviderFactory<UpstreamTlsContext, ClientSslContextProvider> {
 
-  /** Creates an SslContextProvider from the given UpstreamTlsContext. */
+  /** Creates a ClientSslContextProvider from the given UpstreamTlsContext. */
   @Override
-  public SslContextProvider<UpstreamTlsContext> createSslContextProvider(
-      UpstreamTlsContext upstreamTlsContext) {
+  public ClientSslContextProvider createSslContextProvider(UpstreamTlsContext upstreamTlsContext) {
     checkNotNull(upstreamTlsContext, "upstreamTlsContext");
     checkArgument(
         upstreamTlsContext.hasCommonTlsContext(),
         "upstreamTlsContext should have CommonTlsContext");
     if (CommonTlsContextUtil.hasAllSecretsUsingFilename(upstreamTlsContext.getCommonTlsContext())) {
-      return SecretVolumeSslContextProvider.getProviderForClient(upstreamTlsContext);
+      return SecretVolumeClientSslContextProvider.getProvider(upstreamTlsContext);
     } else if (CommonTlsContextUtil.hasAllSecretsUsingSds(
         upstreamTlsContext.getCommonTlsContext())) {
       try {
-        return SdsSslContextProvider.getProviderForClient(
+        return SdsClientSslContextProvider.getProvider(
             upstreamTlsContext,
             Bootstrapper.getInstance().readBootstrap().getNode(),
             Executors.newSingleThreadExecutor(new ThreadFactoryBuilder()

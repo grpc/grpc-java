@@ -16,21 +16,10 @@
 
 package io.grpc.xds.internal.sds;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
-import static com.google.common.base.Preconditions.checkState;
 
-import io.envoyproxy.envoy.api.v2.auth.CertificateValidationContext;
 import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
-import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
-import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
-import io.grpc.xds.internal.sds.trust.SdsTrustManagerFactory;
-import io.netty.handler.ssl.ClientAuth;
 import io.netty.handler.ssl.SslContext;
-import io.netty.handler.ssl.SslContextBuilder;
-import java.io.IOException;
-import java.security.cert.CertStoreException;
-import java.security.cert.CertificateException;
 import java.util.concurrent.Executor;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -41,14 +30,9 @@ import java.util.logging.Logger;
  * stream that is receiving the requested secret(s) or it could represent file-system based
  * secret(s) that are dynamic.
  */
-// TODO(sanjaypujare): replace generic K with DownstreamTlsContext & UpstreamTlsContext in
-// separate client&server classes
-public abstract class SslContextProvider<K> {
+public abstract class SslContextProvider {
 
   private static final Logger logger = Logger.getLogger(SslContextProvider.class.getName());
-
-  protected final boolean server;
-  private final K source;
 
   public interface Callback {
     /** Informs callee of new/updated SslContext. */
@@ -58,44 +42,7 @@ public abstract class SslContextProvider<K> {
     void onException(Throwable throwable);
   }
 
-  protected SslContextProvider(K source, boolean server) {
-    if (server) {
-      checkArgument(source instanceof DownstreamTlsContext, "expecting DownstreamTlsContext");
-    } else {
-      checkArgument(source instanceof UpstreamTlsContext, "expecting UpstreamTlsContext");
-    }
-    this.source = source;
-    this.server = server;
-  }
-
-  public K getSource() {
-    return source;
-  }
-
-  CommonTlsContext getCommonTlsContext() {
-    if (source instanceof UpstreamTlsContext) {
-      return ((UpstreamTlsContext) source).getCommonTlsContext();
-    } else if (source instanceof DownstreamTlsContext) {
-      return ((DownstreamTlsContext) source).getCommonTlsContext();
-    }
-    return null;
-  }
-
-  protected void setClientAuthValues(
-      SslContextBuilder sslContextBuilder, CertificateValidationContext localCertValidationContext)
-      throws CertificateException, IOException, CertStoreException {
-    checkState(server, "server side SslContextProvider expected");
-    if (localCertValidationContext != null) {
-      sslContextBuilder.trustManager(new SdsTrustManagerFactory(localCertValidationContext));
-      DownstreamTlsContext downstreamTlsContext = (DownstreamTlsContext)getSource();
-      sslContextBuilder.clientAuth(
-          downstreamTlsContext.hasRequireClientCertificate()
-              ? ClientAuth.REQUIRE
-              : ClientAuth.OPTIONAL);
-    } else {
-      sslContextBuilder.clientAuth(ClientAuth.NONE);
-    }
-  }
+  abstract CommonTlsContext getCommonTlsContext();
 
   /** Closes this provider and releases any resources. */
   void close() {}
@@ -106,7 +53,7 @@ public abstract class SslContextProvider<K> {
    */
   public abstract void addCallback(Callback callback, Executor executor);
 
-  protected void performCallback(
+  final void performCallback(
       final SslContextGetter sslContextGetter, final Callback callback, Executor executor) {
     checkNotNull(sslContextGetter, "sslContextGetter");
     checkNotNull(callback, "callback");

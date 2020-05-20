@@ -28,11 +28,11 @@ import java.util.concurrent.Executors;
 
 /** Factory to create server-side SslContextProvider from DownstreamTlsContext. */
 final class ServerSslContextProviderFactory
-    implements SslContextProviderFactory<DownstreamTlsContext> {
+    implements SslContextProviderFactory<DownstreamTlsContext, ServerSslContextProvider> {
 
-  /** Creates an SslContextProvider from the given DownstreamTlsContext. */
+  /** Creates a ServerSslContextProvider from the given DownstreamTlsContext. */
   @Override
-  public SslContextProvider<DownstreamTlsContext> createSslContextProvider(
+  public ServerSslContextProvider createSslContextProvider(
       DownstreamTlsContext downstreamTlsContext) {
     checkNotNull(downstreamTlsContext, "downstreamTlsContext");
     checkArgument(
@@ -40,11 +40,11 @@ final class ServerSslContextProviderFactory
         "downstreamTlsContext should have CommonTlsContext");
     if (CommonTlsContextUtil.hasAllSecretsUsingFilename(
         downstreamTlsContext.getCommonTlsContext())) {
-      return SecretVolumeSslContextProvider.getProviderForServer(downstreamTlsContext);
+      return SecretVolumeServerSslContextProvider.getProvider(downstreamTlsContext);
     } else if (CommonTlsContextUtil.hasAllSecretsUsingSds(
         downstreamTlsContext.getCommonTlsContext())) {
       try {
-        return SdsSslContextProvider.getProviderForServer(
+        return SdsServerSslContextProvider.getProvider(
             downstreamTlsContext,
             Bootstrapper.getInstance().readBootstrap().getNode(),
             Executors.newSingleThreadExecutor(new ThreadFactoryBuilder()

@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 The gRPC Authors
+ * Copyright 2020 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,12 +21,9 @@ import static com.google.common.base.Preconditions.checkState;
 
 import io.envoyproxy.envoy.api.v2.auth.CertificateValidationContext;
 import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
-import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext.CombinedCertificateValidationContext;
-import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.auth.SdsSecretConfig;
 import io.envoyproxy.envoy.api.v2.auth.Secret;
 import io.envoyproxy.envoy.api.v2.auth.TlsCertificate;
-import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.grpc.Status;
 import io.grpc.netty.GrpcSslContexts;
@@ -44,14 +41,11 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
-/**
- * An SslContext provider that uses SDS to fetch secrets. Used for both server and client
- * SslContexts
- */
-final class SdsSslContextProvider<K> extends SslContextProvider<K>
-    implements SdsClient.SecretWatcher {
+/** A helper for Sds*SslContextProvider classes. */
+final class SdsSslContextProviderHelper implements SdsClient.SecretWatcher {
 
-  private static final Logger logger = Logger.getLogger(SdsSslContextProvider.class.getName());
+  private static final Logger logger =
+      Logger.getLogger(SdsSslContextProviderHelper.class.getName());
 
   @Nullable private final SdsClient certSdsClient;
   @Nullable private final SdsClient validationContextSdsClient;
@@ -62,17 +56,17 @@ final class SdsSslContextProvider<K> extends SslContextProvider<K>
   @Nullable private TlsCertificate tlsCertificate;
   @Nullable private CertificateValidationContext certificateValidationContext;
   @Nullable private SslContext sslContext;
+  SslContextProvider sslContextProvider;
 
-  private SdsSslContextProvider(
+  SdsSslContextProviderHelper(
       Node node,
       SdsSecretConfig certSdsConfig,
       SdsSecretConfig validationContextSdsConfig,
       CertificateValidationContext staticCertValidationContext,
       Executor watcherExecutor,
       Executor channelExecutor,
-      boolean server,
-      K source) {
-    super(source, server);
+      SslContextProvider sslContextProvider) {
+    this.sslContextProvider = sslContextProvider;
     this.certSdsConfig = certSdsConfig;
     this.validationContextSdsConfig = validationContextSdsConfig;
     this.staticCertificateValidationContext = staticCertValidationContext;
@@ -95,75 +89,7 @@ final class SdsSslContextProvider<K> extends SslContextProvider<K>
     }
   }
 
-  static SdsSslContextProvider<UpstreamTlsContext> getProviderForClient(
-      UpstreamTlsContext upstreamTlsContext,
-      Node node,
-      Executor watcherExecutor,
-      Executor channelExecutor) {
-    checkNotNull(upstreamTlsContext, "upstreamTlsContext");
-    CommonTlsContext commonTlsContext = upstreamTlsContext.getCommonTlsContext();
-    SdsSecretConfig validationContextSdsConfig = null;
-    CertificateValidationContext staticCertValidationContext = null;
-    if (commonTlsContext.hasCombinedValidationContext()) {
-      CombinedCertificateValidationContext combinedValidationContext =
-          commonTlsContext.getCombinedValidationContext();
-      if (combinedValidationContext.hasValidationContextSdsSecretConfig()) {
-        validationContextSdsConfig =
-            combinedValidationContext.getValidationContextSdsSecretConfig();
-      }
-      if (combinedValidationContext.hasDefaultValidationContext()) {
-        staticCertValidationContext = combinedValidationContext.getDefaultValidationContext();
-      }
-    } else if (commonTlsContext.hasValidationContextSdsSecretConfig()) {
-      validationContextSdsConfig = commonTlsContext.getValidationContextSdsSecretConfig();
-    } else if (commonTlsContext.hasValidationContext()) {
-      staticCertValidationContext = commonTlsContext.getValidationContext();
-    }
-    SdsSecretConfig certSdsConfig = null;
-    if (commonTlsContext.getTlsCertificateSdsSecretConfigsCount() > 0) {
-      certSdsConfig = commonTlsContext.getTlsCertificateSdsSecretConfigs(0);
-    }
-    return new SdsSslContextProvider<>(
-        node,
-        certSdsConfig,
-        validationContextSdsConfig,
-        staticCertValidationContext,
-        watcherExecutor,
-        channelExecutor,
-        false,
-        upstreamTlsContext);
-  }
-
-  static SdsSslContextProvider<DownstreamTlsContext> getProviderForServer(
-      DownstreamTlsContext downstreamTlsContext,
-      Node node,
-      Executor watcherExecutor,
-      Executor channelExecutor) {
-    checkNotNull(downstreamTlsContext, "downstreamTlsContext");
-    CommonTlsContext commonTlsContext = downstreamTlsContext.getCommonTlsContext();
-
-    SdsSecretConfig certSdsConfig = null;
-    if (commonTlsContext.getTlsCertificateSdsSecretConfigsCount() > 0) {
-      certSdsConfig = commonTlsContext.getTlsCertificateSdsSecretConfigs(0);
-    }
-
-    SdsSecretConfig validationContextSdsConfig = null;
-    if (commonTlsContext.hasValidationContextSdsSecretConfig()) {
-      validationContextSdsConfig = commonTlsContext.getValidationContextSdsSecretConfig();
-    }
-    return new SdsSslContextProvider<>(
-        node,
-        certSdsConfig,
-        validationContextSdsConfig,
-        null,
-        watcherExecutor,
-        channelExecutor,
-        true,
-        downstreamTlsContext);
-  }
-
-  @Override
-  public void addCallback(Callback callback, Executor executor) {
+  public void addCallback(SslContextProvider.Callback callback, Executor executor) {
     checkNotNull(callback, "callback");
     checkNotNull(executor, "executor");
     // if there is a computed sslContext just send it
@@ -178,9 +104,9 @@ final class SdsSslContextProvider<K> extends SslContextProvider<K>
   }
 
   private void callPerformCallback(
-      Callback callback, Executor executor, final SslContext sslContextCopy) {
-    performCallback(
-        new SslContextGetter() {
+      SslContextProvider.Callback callback, Executor executor, final SslContext sslContextCopy) {
+    sslContextProvider.performCallback(
+        new SslContextProvider.SslContextGetter() {
           @Override
           public SslContext get() {
             return sslContextCopy;
@@ -223,10 +149,12 @@ final class SdsSslContextProvider<K> extends SslContextProvider<K>
   private void updateSslContext() {
     try {
       SslContextBuilder sslContextBuilder;
-      CertificateValidationContext localCertValidationContext =
-          mergeStaticAndDynamicCertContexts();
+      CertificateValidationContext localCertValidationContext = mergeStaticAndDynamicCertContexts();
+      boolean server = sslContextProvider instanceof ServerSslContextProvider;
       if (server) {
         logger.log(Level.FINEST, "for server");
+        ServerSslContextProvider serverSslContextProvider =
+            (ServerSslContextProvider)sslContextProvider;
         sslContextBuilder =
             GrpcSslContexts.forServer(
                 tlsCertificate.getCertificateChain().getInlineBytes().newInput(),
@@ -234,7 +162,7 @@ final class SdsSslContextProvider<K> extends SslContextProvider<K>
                 tlsCertificate.hasPassword()
                     ? tlsCertificate.getPassword().getInlineString()
                     : null);
-        setClientAuthValues(sslContextBuilder, localCertValidationContext);
+        serverSslContextProvider.setClientAuthValues(sslContextBuilder, localCertValidationContext);
       } else {
         logger.log(Level.FINEST, "for client");
         sslContextBuilder =
@@ -247,7 +175,7 @@ final class SdsSslContextProvider<K> extends SslContextProvider<K>
               tlsCertificate.hasPassword() ? tlsCertificate.getPassword().getInlineString() : null);
         }
       }
-      CommonTlsContext commonTlsContext = getCommonTlsContext();
+      CommonTlsContext commonTlsContext = sslContextProvider.getCommonTlsContext();
       if (commonTlsContext != null && commonTlsContext.getAlpnProtocolsCount() > 0) {
         List<String> alpnList = commonTlsContext.getAlpnProtocolsList();
         ApplicationProtocolConfig apn = new ApplicationProtocolConfig(
@@ -296,7 +224,6 @@ final class SdsSslContextProvider<K> extends SslContextProvider<K>
     }
   }
 
-  @Override
   void close() {
     if (certSdsClient != null) {
       certSdsClient.cancelSecretWatch(this);
@@ -309,10 +236,10 @@ final class SdsSslContextProvider<K> extends SslContextProvider<K>
   }
 
   private static class CallbackPair {
-    private final Callback callback;
+    private final SslContextProvider.Callback callback;
     private final Executor executor;
 
-    private CallbackPair(Callback callback, Executor executor) {
+    private CallbackPair(SslContextProvider.Callback callback, Executor executor) {
       this.callback = callback;
       this.executor = executor;
     }

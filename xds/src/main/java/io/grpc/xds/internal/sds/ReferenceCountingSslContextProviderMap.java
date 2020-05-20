@@ -36,12 +36,13 @@ import javax.annotation.concurrent.ThreadSafe;
  * @param <K> Key type for the map
  */
 @ThreadSafe
-final class ReferenceCountingSslContextProviderMap<K> {
+final class ReferenceCountingSslContextProviderMap<K, P extends SslContextProvider> {
 
-  private final Map<K, Instance<K>> instances = new HashMap<>();
-  private final SslContextProviderFactory<K> sslContextProviderFactory;
+  private final Map<K, Instance<K, P>> instances = new HashMap<>();
+  private final SslContextProviderFactory<K, P> sslContextProviderFactory;
 
-  ReferenceCountingSslContextProviderMap(SslContextProviderFactory<K> sslContextProviderFactory) {
+  ReferenceCountingSslContextProviderMap(
+      SslContextProviderFactory<K, P> sslContextProviderFactory) {
     checkNotNull(sslContextProviderFactory, "sslContextProviderFactory");
     this.sslContextProviderFactory = sslContextProviderFactory;
   }
@@ -51,7 +52,7 @@ final class ReferenceCountingSslContextProviderMap<K> {
    * using the provided {@link SslContextProviderFactory&lt;K&gt;}
    */
   @CheckReturnValue
-  public SslContextProvider<K> get(K key) {
+  public P get(K key) {
     checkNotNull(key, "key");
     return getInternal(key);
   }
@@ -65,19 +66,20 @@ final class ReferenceCountingSslContextProviderMap<K> {
    * <p>Caller must not release a reference more than once. It's advised that you clear the
    * reference to the instance with the null returned by this method.
    *
+   * @param key for the instance to be released
    * @param value the instance to be released
    * @return a null which the caller can use to clear the reference to that instance.
    */
-  public SslContextProvider<K> release(final SslContextProvider<K> value) {
+  public P release(K key, final P value) {
+    checkNotNull(key, "key");
     checkNotNull(value, "value");
-    K key = value.getSource();
     return releaseInternal(key, value);
   }
 
-  private synchronized SslContextProvider<K> getInternal(K key) {
-    Instance<K> instance = instances.get(key);
+  private synchronized P getInternal(K key) {
+    Instance<K, P> instance = instances.get(key);
     if (instance == null) {
-      instance = new Instance<>(sslContextProviderFactory.createSslContextProvider(key));
+      instance = new Instance<K, P>(sslContextProviderFactory.createSslContextProvider(key));
       instances.put(key, instance);
       return instance.sslContextProvider;
     } else {
@@ -85,9 +87,8 @@ final class ReferenceCountingSslContextProviderMap<K> {
     }
   }
 
-  private synchronized SslContextProvider<K> releaseInternal(
-      final K key, final SslContextProvider<K> instance) {
-    final Instance<K> cached = instances.get(key);
+  private synchronized P releaseInternal(final K key, final P instance) {
+    final Instance<K, P> cached = instances.get(key);
     checkArgument(cached != null, "No cached instance found for %s", key);
     checkArgument(instance == cached.sslContextProvider, "Releasing the wrong instance");
     if (cached.release()) {
@@ -102,16 +103,16 @@ final class ReferenceCountingSslContextProviderMap<K> {
   }
 
   /** A factory to create an SslContextProvider from the given key. */
-  public interface SslContextProviderFactory<K> {
-    SslContextProvider<K> createSslContextProvider(K key);
+  public interface SslContextProviderFactory<K, P extends SslContextProvider> {
+    P createSslContextProvider(K key);
   }
 
-  private static class Instance<K> {
-    final SslContextProvider<K> sslContextProvider;
+  private static class Instance<K, P extends SslContextProvider> {
+    final P sslContextProvider;
     private int refCount;
 
     /** Increment refCount and acquire a reference to sslContextProvider. */
-    SslContextProvider<K> acquire() {
+    P acquire() {
       refCount++;
       return sslContextProvider;
     }
@@ -122,7 +123,7 @@ final class ReferenceCountingSslContextProviderMap<K> {
       return --refCount == 0;
     }
 
-    Instance(SslContextProvider<K> sslContextProvider) {
+    Instance(P sslContextProvider) {
       this.sslContextProvider = sslContextProvider;
       this.refCount = 1;
     }
