@@ -43,10 +43,14 @@ class JavaGrpcGenerator : public google::protobuf::compiler::CodeGenerator {
   JavaGrpcGenerator() {}
   virtual ~JavaGrpcGenerator() {}
 
+  uint64_t GetSupportedFeatures() const override {
+    return FEATURE_PROTO3_OPTIONAL;
+  }
+
   virtual bool Generate(const google::protobuf::FileDescriptor* file,
                         const std::string& parameter,
                         google::protobuf::compiler::GeneratorContext* context,
-                        std::string* error) const {
+                        std::string* error) const override {
     std::vector<std::pair<std::string, std::string> > options;
     google::protobuf::compiler::ParseGeneratorParameter(parameter, &options);
 
