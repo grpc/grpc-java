@@ -75,9 +75,8 @@ class NettyClientTransport implements ConnectionClientTransport {
    */
   private static final AttributeKey<ChannelLogger> getOrCreateChannelLogger() {
     String name = "channelLogger";
-    AttributeKey<ChannelLogger> key = AttributeKey.exists(name)
-        ? AttributeKey.valueOf(name) : AttributeKey.newInstance(name);
-    return key;
+    return AttributeKey.exists(name) ?
+      AttributeKey<ChannelLogger>.valueOf(name) : AttributeKey<ChannelLogger>.newInstance(name);
   }
 
   static final AttributeKey<ChannelLogger> LOGGER_KEY = getOrCreateChannelLogger();
