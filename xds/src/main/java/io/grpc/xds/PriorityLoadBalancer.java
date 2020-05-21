@@ -95,7 +95,7 @@ final class PriorityLoadBalancer extends LoadBalancer {
         children.get(priority).updateResolvedAddresses();
       }
     }
-    tryNextPriority(0);
+    tryNextPriority();
   }
 
   @Override
@@ -117,8 +117,8 @@ final class PriorityLoadBalancer extends LoadBalancer {
     }
   }
 
-  private void tryNextPriority(int startIdx) {
-    for (int i = startIdx; i < priorities.size(); i++) {
+  private void tryNextPriority() {
+    for (int i = 0; i < priorities.size(); i++) {
       String priority = priorities.get(i);
       if (!children.containsKey(priority)) {
         ChildLbState child = new ChildLbState(priority);
@@ -183,14 +183,13 @@ final class PriorityLoadBalancer extends LoadBalancer {
             // The child is deactivated.
             return;
           }
-          int idx = priorityToIndex.get(priority);
           updateOverallState(
               TRANSIENT_FAILURE,
               new ErrorPicker(
                   Status.UNAVAILABLE.withDescription(
                       "Resources for priority " + priority + " not reachable in 10 seconds")));
           logger.log(XdsLogLevel.DEBUG, "Priority {0} failed over to next", priority);
-          tryNextPriority(idx + 1);
+          tryNextPriority();
         }
       }
 
@@ -285,7 +284,7 @@ final class PriorityLoadBalancer extends LoadBalancer {
         if (newState.equals(TRANSIENT_FAILURE) && priority.equals(currentPriority)) {
           updateOverallState(newState, newPicker);
         }
-        tryNextPriority(priorityToIndex.get(priority));
+        tryNextPriority();
       }
 
       @Override
