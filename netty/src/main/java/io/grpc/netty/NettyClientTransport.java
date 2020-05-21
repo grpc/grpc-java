@@ -68,7 +68,20 @@ import javax.annotation.Nullable;
  * A Netty-based {@link ConnectionClientTransport} implementation.
  */
 class NettyClientTransport implements ConnectionClientTransport {
-  static final AttributeKey<ChannelLogger> LOGGER_KEY = AttributeKey.newInstance("channelLogger");
+
+  /**
+   * Get the existing {@link ChannelLogger} key in case a separate, isolated class loader has
+   * already created {@link LOGGER_KEY}.
+   */
+  private static final AttributeKey<ChannelLogger> getOrCreateChannelLogger() {
+    AttributeKey<ChannelLogger> key = AttributeKey.valueOf("channelLogger");
+    if (key == null) {
+      key = AttributeKey.newInstance("channelLogger");
+    }
+    return key;
+  }
+
+  static final AttributeKey<ChannelLogger> LOGGER_KEY = getOrCreateChannelLogger();
 
   private final InternalLogId logId;
   private final Map<ChannelOption<?>, ?> channelOptions;
