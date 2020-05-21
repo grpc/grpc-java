@@ -54,6 +54,7 @@ import io.netty.util.concurrent.DefaultThreadFactory;
 import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.nio.channels.ClosedChannelException;
+import java.nio.channels.UnresolvedAddressException;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.ThreadFactory;
@@ -269,6 +270,9 @@ class Utils {
     }
     if (t instanceof IOException) {
       return Status.UNAVAILABLE.withDescription("io exception").withCause(t);
+    }
+    if (t instanceof UnresolvedAddressException) {
+      return Status.UNAVAILABLE.withDescription("unresolved address").withCause(t);
     }
     if (t instanceof Http2Exception) {
       return Status.INTERNAL.withDescription("http2 exception").withCause(t);

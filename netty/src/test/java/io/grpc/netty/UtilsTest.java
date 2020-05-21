@@ -42,6 +42,7 @@ import io.netty.handler.codec.http2.Http2Error;
 import io.netty.handler.codec.http2.Http2Exception;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.util.AsciiString;
+import java.nio.channels.UnresolvedAddressException;
 import java.util.Map;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -60,6 +61,8 @@ public class UtilsTest {
     assertSame(s, Utils.statusFromThrowable(new Exception(s.asException())));
     Throwable t;
     t = new ConnectTimeoutException("msg");
+    assertStatusEquals(Status.UNAVAILABLE.withCause(t), Utils.statusFromThrowable(t));
+    t = new UnresolvedAddressException();
     assertStatusEquals(Status.UNAVAILABLE.withCause(t), Utils.statusFromThrowable(t));
     t = new Http2Exception(Http2Error.INTERNAL_ERROR, "msg");
     assertStatusEquals(Status.INTERNAL.withCause(t), Utils.statusFromThrowable(t));
