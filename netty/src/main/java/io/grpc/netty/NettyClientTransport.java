@@ -70,8 +70,8 @@ import javax.annotation.Nullable;
 class NettyClientTransport implements ConnectionClientTransport {
 
   /**
-   * Get the existing {@link ChannelLogger} key in case a separate, isolated class loader has already created
-   * {@link LOGGER_KEY}.
+   * Get the existing {@link ChannelLogger} key in case a separate, isolated class loader has
+   * already created {@link LOGGER_KEY}.
    */
   private final static AttributeKey<ChannelLogger> getOrCreateChannelLogger() {
     AttributeKey<ChannelLogger> key = AttributeKey.valueOf("channelLogger");
