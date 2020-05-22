@@ -94,7 +94,7 @@ final class PriorityLoadBalancer extends LoadBalancer {
         children.get(priority).updateResolvedAddresses();
       }
     }
-    // Not to request connecting in case a pending priority bumps up on top of the current READY
+    // Not to report connecting in case a pending priority bumps up on top of the current READY
     // priority.
     tryNextPriority(false);
   }
