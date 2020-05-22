@@ -62,7 +62,6 @@ final class PriorityLoadBalancer extends LoadBalancer {
   private Map<String, Integer> priorityToIndex;
   private ConnectivityState currentConnectivityState;
   private SubchannelPicker currentPicker;
-  private String currentPriority;
 
   PriorityLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
@@ -95,7 +94,9 @@ final class PriorityLoadBalancer extends LoadBalancer {
         children.get(priority).updateResolvedAddresses();
       }
     }
-    tryNextPriority();
+    // Not to request connecting in case a pending priority bumps up on top of the current READY
+    // priority.
+    tryNextPriority(false);
   }
 
   @Override
@@ -117,20 +118,20 @@ final class PriorityLoadBalancer extends LoadBalancer {
     }
   }
 
-  private void tryNextPriority() {
+  private void tryNextPriority(boolean reportConnecting) {
     for (int i = 0; i < priorities.size(); i++) {
       String priority = priorities.get(i);
       if (!children.containsKey(priority)) {
         ChildLbState child = new ChildLbState(priority);
         children.put(priority, child);
         child.updateResolvedAddresses();
+        updateOverallState(CONNECTING, BUFFER_PICKER);
         return; // Give priority i time to connect.
       }
       ChildLbState child = children.get(priority);
       child.reactivate();
       if (child.connectivityState.equals(READY) || child.connectivityState.equals(IDLE)) {
         logger.log(XdsLogLevel.DEBUG, "Shifted to priority {0}", priority);
-        currentPriority = priority;
         updateOverallState(child.connectivityState, child.picker);
         for (int j = i + 1; j < priorities.size(); j++) {
           String p = priorities.get(j);
@@ -141,6 +142,9 @@ final class PriorityLoadBalancer extends LoadBalancer {
         return;
       }
       if (child.failOverTimer != null && child.failOverTimer.isPending()) {
+        if (reportConnecting) {
+          updateOverallState(CONNECTING, BUFFER_PICKER);
+        }
         return; // Give priority i time to connect.
       }
     }
@@ -183,13 +187,8 @@ final class PriorityLoadBalancer extends LoadBalancer {
             // The child is deactivated.
             return;
           }
-          updateOverallState(
-              TRANSIENT_FAILURE,
-              new ErrorPicker(
-                  Status.UNAVAILABLE.withDescription(
-                      "Resources for priority " + priority + " not reachable in 10 seconds")));
           logger.log(XdsLogLevel.DEBUG, "Priority {0} failed over to next", priority);
-          tryNextPriority();
+          tryNextPriority(true);
         }
       }
 
@@ -281,10 +280,7 @@ final class PriorityLoadBalancer extends LoadBalancer {
             failOverTimer.cancel();
           }
         }
-        if (newState.equals(TRANSIENT_FAILURE) && priority.equals(currentPriority)) {
-          updateOverallState(newState, newPicker);
-        }
-        tryNextPriority();
+        tryNextPriority(true);
       }
 
       @Override

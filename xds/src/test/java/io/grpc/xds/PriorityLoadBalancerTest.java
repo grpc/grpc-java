@@ -20,7 +20,6 @@ import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
-import static io.grpc.xds.XdsSubchannelPickers.BUFFER_PICKER;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
@@ -242,16 +241,14 @@ public class PriorityLoadBalancerTest {
 
     // p0 fails over to p1 immediately.
     helper0.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(Status.ABORTED));
-    assertLatestConnectivityState(TRANSIENT_FAILURE);
+    assertLatestConnectivityState(CONNECTING);
     assertThat(fooBalancers).hasSize(2);
     assertThat(fooHelpers).hasSize(2);
     LoadBalancer balancer1 = Iterables.getLast(fooBalancers);
-    Helper helper1 = Iterables.getLast(fooHelpers);
 
     // p1 timeout, and fails over to p2
-    helper1.updateBalancingState(CONNECTING, BUFFER_PICKER);
-    assertLatestConnectivityState(TRANSIENT_FAILURE);
     fakeClock.forwardTime(10, TimeUnit.SECONDS);
+    assertLatestConnectivityState(CONNECTING);
     assertThat(fooBalancers).hasSize(3);
     assertThat(fooHelpers).hasSize(3);
     LoadBalancer balancer2 = Iterables.getLast(fooBalancers);
@@ -287,12 +284,14 @@ public class PriorityLoadBalancerTest {
 
     // p0 fails over to p3 immediately since p1 already timeout and p2 already in TRANSIENT_FAILURE.
     helper0.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(Status.UNAVAILABLE));
-    assertLatestConnectivityState(TRANSIENT_FAILURE);
+    assertLatestConnectivityState(CONNECTING);
     assertThat(fooBalancers).hasSize(4);
     assertThat(fooHelpers).hasSize(4);
     LoadBalancer balancer3 = Iterables.getLast(fooBalancers);
     Helper helper3 = Iterables.getLast(fooHelpers);
-    helper3.updateBalancingState(CONNECTING, BUFFER_PICKER);
+
+    // p3 fails then the channel should go to TRANSIENT_FAILURE
+    helper3.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(Status.UNAVAILABLE));
     assertLatestConnectivityState(TRANSIENT_FAILURE);
 
     // p2 gets back to READY
