@@ -135,6 +135,37 @@ final class RouteMatchers {
     }
 
     // TODO (chengyuanzhang): add getters when needed.
+    String getName() {
+      return name;
+    }
+
+    String getExactMatch() {
+      return exactMatch;
+    }
+
+    Pattern getRegExMatch() {
+      return safeRegExMatch;
+    }
+
+    Range getRangeMatch() {
+      return rangeMatch;
+    }
+
+    Boolean getPresentMatch() {
+      return presentMatch;
+    }
+
+    String getPrefixMatch() {
+      return prefixMatch;
+    }
+
+    String getSuffixMatch() {
+      return suffixMatch;
+    }
+
+    boolean isInvertedMatch() {
+      return isInvertedMatch;
+    }
 
     @Override
     public boolean equals(Object o) {
@@ -198,6 +229,14 @@ final class RouteMatchers {
         this.end = end;
       }
 
+      long getStart() {
+        return start;
+      }
+
+      long getEnd() {
+        return end;
+      }
+
       @Override
       public int hashCode() {
         return Objects.hash(start, end);
@@ -233,6 +272,14 @@ final class RouteMatchers {
     FractionMatcher(int numerator, int denominator) {
       this.numerator = numerator;
       this.denominator = denominator;
+    }
+
+    int getNumerator() {
+      return numerator;
+    }
+
+    int getDenominator() {
+      return denominator;
     }
 
     @Override

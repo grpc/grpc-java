@@ -517,7 +517,6 @@ final class EnvoyProtoData {
   /** See corresponding Envoy proto message {@link io.envoyproxy.envoy.api.v2.route.RouteMatch}. */
   static final class RouteMatch {
     private final PathMatcher pathMatch;
-
     private final List<HeaderMatcher> headerMatchers;
     @Nullable
     private final FractionMatcher fractionMatch;
@@ -536,14 +535,17 @@ final class EnvoyProtoData {
           Collections.<HeaderMatcher>emptyList());
     }
 
-    @Nullable
-    String getPathPrefixMatch() {
-      return pathMatch.getPrefix();
+    PathMatcher getPathMatch() {
+      return pathMatch;
+    }
+
+    List<HeaderMatcher> getHeaderMatchers() {
+      return Collections.unmodifiableList(headerMatchers);
     }
 
     @Nullable
-    String getPathExactMatch() {
-      return pathMatch.getPath();
+    FractionMatcher getFractionMatch() {
+      return fractionMatch;
     }
 
     boolean isMatchAll() {
@@ -830,6 +832,7 @@ final class EnvoyProtoData {
               : clusterWeights) {
             weightedClusters.add(ClusterWeight.fromEnvoyProtoClusterWeight(clusterWeight));
           }
+          // TODO(chengyuanzhang): validate if the sum of weights equals to total weight.
           break;
         case CLUSTERSPECIFIER_NOT_SET:
         default:
