@@ -558,9 +558,6 @@ final class EnvoyProtoData {
     private boolean isMatchAll() {
       // For backward compatibility, all the other matchers are ignored. When routing is enabled,
       // we should never care if a matcher matches all requests.
-      if (pathExactMatch != null) {
-        return false;
-      }
       if (pathPrefixMatch != null) {
         return pathPrefixMatch.isEmpty() || pathPrefixMatch.equals("/");
       }
