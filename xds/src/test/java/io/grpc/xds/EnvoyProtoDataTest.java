@@ -247,51 +247,6 @@ public class EnvoyProtoDataTest {
   }
 
   @Test
-  public void convertRouteMatch_pathMatchFormat() {
-    StructOrError<RouteMatch> struct1 =
-        RouteMatch.fromEnvoyProtoRouteMatch(buildSimpleRouteMatchProto("", null));
-    StructOrError<RouteMatch> struct2 =
-        RouteMatch.fromEnvoyProtoRouteMatch(buildSimpleRouteMatchProto("/", null));
-    StructOrError<RouteMatch> struct3 =
-        RouteMatch.fromEnvoyProtoRouteMatch(buildSimpleRouteMatchProto("/service", null));
-    StructOrError<RouteMatch> struct4 =
-        RouteMatch.fromEnvoyProtoRouteMatch(buildSimpleRouteMatchProto("/service/", null));
-    StructOrError<RouteMatch> struct5 =
-        RouteMatch.fromEnvoyProtoRouteMatch(buildSimpleRouteMatchProto(null, ""));
-    StructOrError<RouteMatch> struct6 =
-        RouteMatch.fromEnvoyProtoRouteMatch(buildSimpleRouteMatchProto(null, "/service/method"));
-    StructOrError<RouteMatch> struct7 =
-        RouteMatch.fromEnvoyProtoRouteMatch(buildSimpleRouteMatchProto(null, "/service/method/"));
-    StructOrError<RouteMatch> struct8 =
-        RouteMatch.fromEnvoyProtoRouteMatch(
-            io.envoyproxy.envoy.api.v2.route.RouteMatch.newBuilder()
-                .setSafeRegex(
-                    io.envoyproxy.envoy.type.matcher.RegexMatcher.newBuilder().setRegex("["))
-                .build());
-
-    assertThat(struct1.getStruct()).isNotNull();
-    assertThat(struct2.getStruct()).isNotNull();
-    assertThat(struct3.getStruct()).isNull();
-    assertThat(struct4.getStruct()).isNotNull();
-    assertThat(struct5.getStruct()).isNull();
-    assertThat(struct6.getStruct()).isNotNull();
-    assertThat(struct7.getStruct()).isNull();
-    assertThat(struct8.getStruct()).isNull();
-  }
-
-  private static io.envoyproxy.envoy.api.v2.route.RouteMatch buildSimpleRouteMatchProto(
-      @Nullable String pathPrefix, @Nullable String path) {
-    io.envoyproxy.envoy.api.v2.route.RouteMatch.Builder builder =
-        io.envoyproxy.envoy.api.v2.route.RouteMatch.newBuilder();
-    if (pathPrefix != null) {
-      builder.setPrefix(pathPrefix);
-    } else if (path != null) {
-      builder.setPath(path);
-    }
-    return builder.build();
-  }
-
-  @Test
   public void convertRouteMatch_withHeaderMatching() {
     io.envoyproxy.envoy.api.v2.route.RouteMatch proto =
         io.envoyproxy.envoy.api.v2.route.RouteMatch.newBuilder()
