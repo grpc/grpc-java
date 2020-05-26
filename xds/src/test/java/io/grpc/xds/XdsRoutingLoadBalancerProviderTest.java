@@ -31,6 +31,7 @@ import io.grpc.xds.RouteMatchers.FractionMatcher;
 import io.grpc.xds.RouteMatchers.HeaderMatcher;
 import io.grpc.xds.RouteMatchers.PathMatcher;
 import io.grpc.xds.XdsRoutingLoadBalancerProvider.Route;
+import io.grpc.xds.XdsRoutingLoadBalancerProvider.RouteMatch;
 import io.grpc.xds.XdsRoutingLoadBalancerProvider.XdsRoutingConfig;
 import java.util.Arrays;
 import java.util.Collections;
@@ -186,31 +187,39 @@ public class XdsRoutingLoadBalancerProviderTest {
     assertThat(configRoutes).hasSize(4);
     assertThat(configRoutes.get(0)).isEqualTo(
         new Route(
-            new PathMatcher("/service_1/method_1", null, null),
-            Collections.<HeaderMatcher>emptyList(), null, "action_foo"));
+            new RouteMatch(
+                new PathMatcher("/service_1/method_1", null, null),
+                Collections.<HeaderMatcher>emptyList(), null),
+            "action_foo"));
     assertThat(configRoutes.get(1)).isEqualTo(
         new Route(
-            new PathMatcher("/service_1/method_2", null, null),
-            Arrays.asList(
-                new HeaderMatcher(":scheme", "https", null, null, null, null,
-                    null, false)),
-            null, "action_bar"));
+            new RouteMatch(
+                new PathMatcher("/service_1/method_2", null, null),
+                Arrays.asList(
+                    new HeaderMatcher(":scheme", "https", null, null, null, null,
+                        null, false)),
+                null),
+            "action_bar"));
     assertThat(configRoutes.get(2)).isEqualTo(
         new Route(
-            new PathMatcher(null, "/service_2/", null),
-            Arrays.asList(
-                new HeaderMatcher(":path", null, Pattern.compile("google.*"), null,
-                    null, null, null, false)),
-            new FractionMatcher(10, 100), "action_bar"));
+            new RouteMatch(
+                new PathMatcher(null, "/service_2/", null),
+                Arrays.asList(
+                    new HeaderMatcher(":path", null, Pattern.compile("google.*"), null,
+                        null, null, null, false)),
+                new FractionMatcher(10, 100)),
+            "action_bar"));
     assertThat(configRoutes.get(3)).isEqualTo(
         new Route(
-            new PathMatcher(null, null, Pattern.compile("^/service_2/method_3$")),
-            Arrays.asList(
-                new HeaderMatcher(":method", null, null, null,
-                    true, null, null, true),
-                new HeaderMatcher("timeout", null, null,
-                    new HeaderMatcher.Range(0, 10), null, null, null, false)),
-            new FractionMatcher(55, 1000), "action_foo"));
+            new RouteMatch(
+                new PathMatcher(null, null, Pattern.compile("^/service_2/method_3$")),
+                Arrays.asList(
+                    new HeaderMatcher(":method", null, null, null,
+                        true, null, null, true),
+                    new HeaderMatcher("timeout", null, null,
+                        new HeaderMatcher.Range(0, 10), null, null, null, false)),
+                new FractionMatcher(55, 1000)),
+            "action_foo"));
 
     Map<String, PolicySelection> configActions = config.actions;
     assertThat(configActions).hasSize(2);

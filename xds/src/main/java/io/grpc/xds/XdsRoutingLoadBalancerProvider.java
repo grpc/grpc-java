@@ -183,7 +183,7 @@ public final class XdsRoutingLoadBalancerProvider extends LoadBalancerProvider {
       if (actionName == null) {
         throw new RuntimeException("action name not specified");
       }
-      return new Route(pathMatcher, headers, matchFraction, actionName);
+      return new Route(new RouteMatch(pathMatcher, headers, matchFraction), actionName);
     } catch (RuntimeException e) {
       throw new RuntimeException("Failed to parse Route: " + e);
     }
@@ -308,18 +308,11 @@ public final class XdsRoutingLoadBalancerProvider extends LoadBalancerProvider {
   }
 
   static final class Route {
-    private final PathMatcher pathMatcher;
-    private final List<HeaderMatcher> headers;
-    @Nullable
-    private final FractionMatcher matchFraction;
+    private final RouteMatch routeMatch;
     private final String actionName;
 
-    Route(
-        PathMatcher pathMatcher, List<HeaderMatcher> headers,
-        @Nullable FractionMatcher matchFraction, String actionName) {
-      this.pathMatcher = pathMatcher;
-      this.headers = headers;
-      this.matchFraction = matchFraction;
+    Route(RouteMatch routeMatch, String actionName) {
+      this.routeMatch = routeMatch;
       this.actionName = actionName;
     }
 
@@ -327,9 +320,13 @@ public final class XdsRoutingLoadBalancerProvider extends LoadBalancerProvider {
       return actionName;
     }
 
+    RouteMatch getRouteMatch() {
+      return routeMatch;
+    }
+
     @Override
     public int hashCode() {
-      return Objects.hash(pathMatcher, headers, matchFraction, actionName);
+      return Objects.hash(routeMatch, actionName);
     }
 
     @Override
@@ -342,7 +339,48 @@ public final class XdsRoutingLoadBalancerProvider extends LoadBalancerProvider {
       }
       Route that = (Route) o;
       return Objects.equals(actionName, that.actionName)
-          && Objects.equals(pathMatcher, that.pathMatcher)
+          && Objects.equals(routeMatch, that.routeMatch);
+    }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(this)
+          .add("routeMatch", routeMatch)
+          .add("actionName", actionName)
+          .toString();
+    }
+  }
+
+  static final class RouteMatch {
+    private final PathMatcher pathMatcher;
+    private final List<HeaderMatcher> headers;
+    @Nullable
+    private final FractionMatcher matchFraction;
+
+    RouteMatch(
+        PathMatcher pathMatcher, List<HeaderMatcher> headers,
+        @Nullable FractionMatcher matchFraction) {
+      this.pathMatcher = pathMatcher;
+      this.headers = headers;
+      this.matchFraction = matchFraction;
+    }
+
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(pathMatcher, headers, matchFraction);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      RouteMatch that = (RouteMatch) o;
+      return Objects.equals(pathMatcher, that.pathMatcher)
           && Objects.equals(matchFraction, that.matchFraction)
           && Objects.equals(headers, that.headers);
     }
@@ -352,8 +390,7 @@ public final class XdsRoutingLoadBalancerProvider extends LoadBalancerProvider {
       ToStringHelper toStringHelper =
           MoreObjects.toStringHelper(this)
               .add("pathMatcher", pathMatcher)
-              .add("headers", headers)
-              .add("actionName", actionName);
+              .add("headers", headers);
       if (matchFraction != null) {
         toStringHelper.add("matchFraction", matchFraction);
       }

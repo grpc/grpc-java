@@ -34,9 +34,11 @@ import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsRoutingLoadBalancerProvider.Route;
+import io.grpc.xds.XdsRoutingLoadBalancerProvider.RouteMatch;
 import io.grpc.xds.XdsRoutingLoadBalancerProvider.XdsRoutingConfig;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import javax.annotation.Nullable;
@@ -50,7 +52,6 @@ final class XdsRoutingLoadBalancer extends LoadBalancer {
   private final Map<String, RouteHelper> routeHelpers = new HashMap<>();
 
   private Map<String, PolicySelection> actions = ImmutableMap.of();
-  @SuppressWarnings("unused")
   private List<Route> routes = ImmutableList.of();
 
   XdsRoutingLoadBalancer(Helper helper) {
@@ -127,10 +128,21 @@ final class XdsRoutingLoadBalancer extends LoadBalancer {
   }
 
   private void updateOverallBalancingState() {
-    // TODO(chengyuanzhang)
+    ConnectivityState overallState = null;
+    // Use LinkedHashMap to preserve the order of routes.
+    Map<RouteMatch, SubchannelPicker> routePickers = new LinkedHashMap<>();
+    for (Route route : routes) {
+      RouteHelper routeHelper = routeHelpers.get(route.getActionName());
+      routePickers.put(route.getRouteMatch(), routeHelper.currentPicker);
+      ConnectivityState routeState = routeHelper.currentState;
+      overallState = aggregateState(overallState, routeState);
+    }
+    if (overallState != null) {
+      SubchannelPicker picker = new RouteMatchingSubchannelPicker(routePickers);
+      helper.updateBalancingState(overallState, picker);
+    }
   }
 
-  @SuppressWarnings("unused")
   @Nullable
   private static ConnectivityState aggregateState(
       @Nullable ConnectivityState overallState, ConnectivityState childState) {
@@ -166,6 +178,21 @@ final class XdsRoutingLoadBalancer extends LoadBalancer {
     @Override
     protected Helper delegate() {
       return helper;
+    }
+  }
+
+  private static final class RouteMatchingSubchannelPicker extends SubchannelPicker {
+
+    final Map<RouteMatch, SubchannelPicker> routePickers;
+
+    RouteMatchingSubchannelPicker(Map<RouteMatch, SubchannelPicker> routePickers) {
+      this.routePickers = routePickers;
+    }
+
+    @Override
+    public PickResult pickSubchannel(PickSubchannelArgs args) {
+      // TODO(chengyuanzhang): to be implemented.
+      return PickResult.withError(Status.INTERNAL.withDescription("routing picker unimplemented"));
     }
   }
 }
