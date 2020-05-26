@@ -7,6 +7,12 @@ env:
     - CXXFLAGS=-I/tmp/protobuf/include
     - LD_LIBRARY_PATH=/tmp/protobuf/lib
 
+addons:
+  apt:
+    update: true
+    packages:
+    - openjdk-8-jre
+
 before_install:
   - rm ~/.m2/settings.xml || true # Avoid repository.apache.org, which has QPS limits and is useless
   - mkdir -p $HOME/.gradle/caches &&
