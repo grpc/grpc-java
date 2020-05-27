@@ -452,7 +452,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       checkArgument(numMessages >= 0, "Number requested must be non-negative");
       stream.request(numMessages);
     } finally {
-      PerfMark.stopTask("ClientCall.cancel", tag);
+      PerfMark.stopTask("ClientCall.request", tag);
     }
   }
 
