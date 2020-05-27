@@ -21,16 +21,16 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
 import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
 
-class DownstreamTlsContextHolder implements TlsContextHolder {
-
-  public DownstreamTlsContext getDownstreamTlsContext() {
-    return downstreamTlsContext;
-  }
+final class DownstreamTlsContextHolder implements TlsContextHolder {
 
   private final DownstreamTlsContext downstreamTlsContext;
 
   DownstreamTlsContextHolder(DownstreamTlsContext downstreamTlsContext) {
     this.downstreamTlsContext = checkNotNull(downstreamTlsContext, "downstreamTlsContext");
+  }
+
+  public DownstreamTlsContext getDownstreamTlsContext() {
+    return downstreamTlsContext;
   }
 
   @Override
