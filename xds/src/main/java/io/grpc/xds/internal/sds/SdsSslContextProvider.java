@@ -42,8 +42,7 @@ import javax.annotation.Nullable;
 /** Base class for  SdsClientSslContextProvider and SdsServerSslContextProvider. */
 abstract class SdsSslContextProvider extends SslContextProvider implements SdsClient.SecretWatcher {
 
-  private static final Logger logger =
-      Logger.getLogger(SdsSslContextProvider.class.getName());
+  private static final Logger logger = Logger.getLogger(SdsSslContextProvider.class.getName());
 
   @Nullable private final SdsClient certSdsClient;
   @Nullable private final SdsClient validationContextSdsClient;
