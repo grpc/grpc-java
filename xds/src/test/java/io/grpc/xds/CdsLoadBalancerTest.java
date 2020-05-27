@@ -61,8 +61,8 @@ import io.grpc.xds.XdsClient.EndpointUpdate;
 import io.grpc.xds.XdsClient.EndpointWatcher;
 import io.grpc.xds.XdsClient.RefCountedXdsClientObjectPool;
 import io.grpc.xds.XdsClient.XdsClientFactory;
-import io.grpc.xds.internal.sds.ClientSslContextProvider;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
+import io.grpc.xds.internal.sds.SslContextProvider;
 import io.grpc.xds.internal.sds.TlsContextManager;
 import java.net.InetSocketAddress;
 import java.util.ArrayDeque;
@@ -356,7 +356,7 @@ public class CdsLoadBalancerTest {
         CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
             CLIENT_KEY_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
 
-    ClientSslContextProvider mockSslContextProvider = mock(ClientSslContextProvider.class);
+    SslContextProvider mockSslContextProvider = mock(SslContextProvider.class);
     doReturn(upstreamTlsContext).when(mockSslContextProvider).getUpstreamTlsContext();
     doReturn(mockSslContextProvider).when(mockTlsContextManager)
         .findOrCreateClientSslContextProvider(same(upstreamTlsContext));
@@ -373,7 +373,7 @@ public class CdsLoadBalancerTest {
     assertThat(edsLbHelpers).hasSize(1);
     assertThat(edsLoadBalancers).hasSize(1);
     verify(mockTlsContextManager, never())
-        .releaseClientSslContextProvider(any(ClientSslContextProvider.class));
+        .releaseClientSslContextProvider(any(SslContextProvider.class));
     Helper edsLbHelper1 = edsLbHelpers.poll();
 
     ArrayList<EquivalentAddressGroup> eagList = new ArrayList<>();
@@ -403,7 +403,7 @@ public class CdsLoadBalancerTest {
             .build());
 
     verify(mockTlsContextManager, never())
-        .releaseClientSslContextProvider(any(ClientSslContextProvider.class));
+        .releaseClientSslContextProvider(any(SslContextProvider.class));
     verify(mockTlsContextManager, never()).findOrCreateClientSslContextProvider(
         any(UpstreamTlsContext.class));
 
@@ -413,7 +413,7 @@ public class CdsLoadBalancerTest {
     UpstreamTlsContext upstreamTlsContext1 =
         CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
             BAD_CLIENT_KEY_FILE, BAD_CLIENT_PEM_FILE, CA_PEM_FILE);
-    ClientSslContextProvider mockSslContextProvider1 = mock(ClientSslContextProvider.class);
+    SslContextProvider mockSslContextProvider1 = mock(SslContextProvider.class);
     doReturn(upstreamTlsContext1).when(mockSslContextProvider1).getUpstreamTlsContext();
     doReturn(mockSslContextProvider1).when(mockTlsContextManager)
         .findOrCreateClientSslContextProvider(same(upstreamTlsContext1));

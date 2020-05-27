@@ -16,27 +16,14 @@
 
 package io.grpc.xds.internal.sds;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-
 import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
 import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
-import io.netty.handler.ssl.SslContext;
 
-/** A subclass of SslContextProvider used for client side {@link SslContext}s. */
-public abstract class ClientSslContextProvider extends SslContextProvider {
+/**
+ * A holder of {@link UpstreamTlsContext} or
+ * {@link io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext}.
+ */
+public interface TlsContextHolder {
 
-  private final UpstreamTlsContext upstreamTlsContext;
-
-  protected ClientSslContextProvider(UpstreamTlsContext upstreamTlsContext) {
-    this.upstreamTlsContext = checkNotNull(upstreamTlsContext, "upstreamTlsContext");
-  }
-
-  @Override
-  CommonTlsContext getCommonTlsContext() {
-    return upstreamTlsContext.getCommonTlsContext();
-  }
-
-  public UpstreamTlsContext getUpstreamTlsContext() {
-    return upstreamTlsContext;
-  }
+  CommonTlsContext getCommonTlsContext();
 }

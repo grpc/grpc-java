@@ -17,9 +17,19 @@
 package io.grpc.xds.internal.sds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 
+import io.envoyproxy.envoy.api.v2.auth.CertificateValidationContext;
 import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
+import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
+import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
+import io.grpc.xds.internal.sds.trust.SdsTrustManagerFactory;
+import io.netty.handler.ssl.ClientAuth;
 import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslContextBuilder;
+import java.io.IOException;
+import java.security.cert.CertStoreException;
+import java.security.cert.CertificateException;
 import java.util.concurrent.Executor;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -34,6 +44,8 @@ public abstract class SslContextProvider {
 
   private static final Logger logger = Logger.getLogger(SslContextProvider.class.getName());
 
+  protected final TlsContextHolder tlsContextHolder;
+
   public interface Callback {
     /** Informs callee of new/updated SslContext. */
     void updateSecret(SslContext sslContext);
@@ -42,7 +54,27 @@ public abstract class SslContextProvider {
     void onException(Throwable throwable);
   }
 
-  abstract CommonTlsContext getCommonTlsContext();
+  SslContextProvider(TlsContextHolder tlsContextHolder) {
+    this.tlsContextHolder = checkNotNull(tlsContextHolder, "tlsContextHolder");
+  }
+
+  CommonTlsContext getCommonTlsContext() {
+    return tlsContextHolder.getCommonTlsContext();
+  }
+
+  /** Returns the UpstreamTlsContext in this SslContextProvider if this is client side. **/
+  public UpstreamTlsContext getUpstreamTlsContext() {
+    checkState(tlsContextHolder instanceof UpstreamTlsContextHolder,
+        "expected UpstreamTlsContextHolder");
+    return ((UpstreamTlsContextHolder)tlsContextHolder).getUpstreamTlsContext();
+  }
+
+  /** Returns the DownstreamTlsContext in this SslContextProvider if this is server side. **/
+  public DownstreamTlsContext getDownstreamTlsContext() {
+    checkState(tlsContextHolder instanceof DownstreamTlsContextHolder,
+        "expected DownstreamTlsContextHolder");
+    return ((DownstreamTlsContextHolder)tlsContextHolder).getDownstreamTlsContext();
+  }
 
   /** Closes this provider and releases any resources. */
   void close() {}
@@ -77,8 +109,30 @@ public abstract class SslContextProvider {
         });
   }
 
+  public TlsContextHolder getTlsContextHolder() {
+    return tlsContextHolder;
+  }
+
   /** Allows implementations to compute or get SslContext. */
   protected interface SslContextGetter {
     SslContext get() throws Exception;
+  }
+
+  protected void setClientAuthValues(
+      SslContextBuilder sslContextBuilder, CertificateValidationContext localCertValidationContext)
+      throws CertificateException, IOException, CertStoreException {
+    checkState(tlsContextHolder instanceof DownstreamTlsContextHolder,
+        "expected DownstreamTlsContextHolder");
+    DownstreamTlsContext downstreamTlsContext = ((DownstreamTlsContextHolder) tlsContextHolder)
+        .getDownstreamTlsContext();
+    if (localCertValidationContext != null) {
+      sslContextBuilder.trustManager(new SdsTrustManagerFactory(localCertValidationContext));
+      sslContextBuilder.clientAuth(
+          downstreamTlsContext.hasRequireClientCertificate()
+              ? ClientAuth.REQUIRE
+              : ClientAuth.OPTIONAL);
+    } else {
+      sslContextBuilder.clientAuth(ClientAuth.NONE);
+    }
   }
 }

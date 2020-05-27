@@ -28,11 +28,11 @@ import java.util.concurrent.Executors;
 
 /** Factory to create client-side SslContextProvider from UpstreamTlsContext. */
 final class ClientSslContextProviderFactory
-    implements SslContextProviderFactory<UpstreamTlsContext, ClientSslContextProvider> {
+    implements SslContextProviderFactory<UpstreamTlsContext> {
 
   /** Creates a ClientSslContextProvider from the given UpstreamTlsContext. */
   @Override
-  public ClientSslContextProvider createSslContextProvider(UpstreamTlsContext upstreamTlsContext) {
+  public SslContextProvider createSslContextProvider(UpstreamTlsContext upstreamTlsContext) {
     checkNotNull(upstreamTlsContext, "upstreamTlsContext");
     checkArgument(
         upstreamTlsContext.hasCommonTlsContext(),

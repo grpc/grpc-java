@@ -24,12 +24,16 @@ import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext.CombinedCertificateValid
 import io.envoyproxy.envoy.api.v2.auth.SdsSecretConfig;
 import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.core.Node;
+import io.grpc.netty.GrpcSslContexts;
+import io.grpc.xds.internal.sds.trust.SdsTrustManagerFactory;
+import io.netty.handler.ssl.SslContextBuilder;
+import java.io.IOException;
+import java.security.cert.CertStoreException;
+import java.security.cert.CertificateException;
 import java.util.concurrent.Executor;
 
 /** A client SslContext provider that uses SDS to fetch secrets. */
-final class SdsClientSslContextProvider extends ClientSslContextProvider {
-
-  private SdsSslContextProviderHelper sdsSslContextProviderHelper;
+final class SdsClientSslContextProvider extends SdsSslContextProvider {
 
   private SdsClientSslContextProvider(
       Node node,
@@ -39,16 +43,12 @@ final class SdsClientSslContextProvider extends ClientSslContextProvider {
       Executor watcherExecutor,
       Executor channelExecutor,
       UpstreamTlsContext upstreamTlsContext) {
-    super(upstreamTlsContext);
-    this.sdsSslContextProviderHelper =
-        new SdsSslContextProviderHelper(
-            node,
-            certSdsConfig,
-            validationContextSdsConfig,
-            staticCertValidationContext,
-            watcherExecutor,
-            channelExecutor,
-            this);
+    super(node,
+        certSdsConfig,
+        validationContextSdsConfig,
+        staticCertValidationContext,
+        watcherExecutor,
+        channelExecutor, new UpstreamTlsContextHolder(upstreamTlsContext));
   }
 
   static SdsClientSslContextProvider getProvider(
@@ -90,12 +90,18 @@ final class SdsClientSslContextProvider extends ClientSslContextProvider {
   }
 
   @Override
-  public void addCallback(Callback callback, Executor executor) {
-    sdsSslContextProviderHelper.addCallback(callback, executor);
-  }
-
-  @Override
-  void close() {
-    sdsSslContextProviderHelper.close();
+  SslContextBuilder getSpecificSslContextBuilder(
+      CertificateValidationContext localCertValidationContext)
+      throws CertificateException, IOException, CertStoreException {
+    SslContextBuilder sslContextBuilder =
+        GrpcSslContexts.forClient()
+            .trustManager(new SdsTrustManagerFactory(localCertValidationContext));
+    if (tlsCertificate != null) {
+      sslContextBuilder.keyManager(
+          tlsCertificate.getCertificateChain().getInlineBytes().newInput(),
+          tlsCertificate.getPrivateKey().getInlineBytes().newInput(),
+          tlsCertificate.hasPassword() ? tlsCertificate.getPassword().getInlineString() : null);
+    }
+    return sslContextBuilder;
   }
 }

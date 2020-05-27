@@ -40,9 +40,9 @@ public class ReferenceCountingSslContextProviderMapTest {
 
   @Rule public final MockitoRule mockitoRule = MockitoJUnit.rule();
 
-  @Mock SslContextProviderFactory<Integer, SslContextProvider> mockFactory;
+  @Mock SslContextProviderFactory<Integer> mockFactory;
 
-  ReferenceCountingSslContextProviderMap<Integer, SslContextProvider> map;
+  ReferenceCountingSslContextProviderMap<Integer> map;
 
   @Before
   public void setUp() {

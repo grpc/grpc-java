@@ -41,7 +41,7 @@ public class ClientSslContextProviderFactoryTest {
         CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
             CLIENT_KEY_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
 
-    ClientSslContextProvider sslContextProvider =
+    SslContextProvider sslContextProvider =
         clientSslContextProviderFactory.createSslContextProvider(upstreamTlsContext);
     assertThat(sslContextProvider).isNotNull();
   }

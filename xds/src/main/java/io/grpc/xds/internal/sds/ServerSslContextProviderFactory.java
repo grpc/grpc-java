@@ -28,11 +28,11 @@ import java.util.concurrent.Executors;
 
 /** Factory to create server-side SslContextProvider from DownstreamTlsContext. */
 final class ServerSslContextProviderFactory
-    implements SslContextProviderFactory<DownstreamTlsContext, ServerSslContextProvider> {
+    implements SslContextProviderFactory<DownstreamTlsContext> {
 
   /** Creates a ServerSslContextProvider from the given DownstreamTlsContext. */
   @Override
-  public ServerSslContextProvider createSslContextProvider(
+  public SslContextProvider createSslContextProvider(
       DownstreamTlsContext downstreamTlsContext) {
     checkNotNull(downstreamTlsContext, "downstreamTlsContext");
     checkArgument(

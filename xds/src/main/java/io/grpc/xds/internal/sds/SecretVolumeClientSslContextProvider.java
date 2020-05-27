@@ -38,7 +38,7 @@ import java.util.concurrent.Executor;
 import javax.annotation.Nullable;
 
 /** A client SslContext provider that uses file-based secrets (secret volume). */
-final class SecretVolumeClientSslContextProvider extends ClientSslContextProvider {
+final class SecretVolumeClientSslContextProvider extends SslContextProvider {
 
   @Nullable private final String privateKey;
   @Nullable private final String privateKeyPassword;
@@ -51,7 +51,7 @@ final class SecretVolumeClientSslContextProvider extends ClientSslContextProvide
       @Nullable String certificateChain,
       @Nullable CertificateValidationContext certContext,
       UpstreamTlsContext upstreamTlsContext) {
-    super(upstreamTlsContext);
+    super(new UpstreamTlsContextHolder(upstreamTlsContext));
     this.privateKey = privateKey;
     this.privateKeyPassword = privateKeyPassword;
     this.certificateChain = certificateChain;

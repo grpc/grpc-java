@@ -49,9 +49,9 @@ public class TlsContextManagerTest {
 
   @Rule public final MockitoRule mockitoRule = MockitoJUnit.rule();
 
-  @Mock SslContextProviderFactory<UpstreamTlsContext, ClientSslContextProvider> mockClientFactory;
+  @Mock SslContextProviderFactory<UpstreamTlsContext> mockClientFactory;
 
-  @Mock SslContextProviderFactory<DownstreamTlsContext, ServerSslContextProvider> mockServerFactory;
+  @Mock SslContextProviderFactory<DownstreamTlsContext> mockServerFactory;
 
   @Before
   public void clearInstance() throws NoSuchFieldException, IllegalAccessException {
@@ -67,11 +67,11 @@ public class TlsContextManagerTest {
             SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, /* trustCa= */ null);
 
     TlsContextManagerImpl tlsContextManagerImpl = TlsContextManagerImpl.getInstance();
-    ServerSslContextProvider serverSecretProvider =
+    SslContextProvider serverSecretProvider =
         tlsContextManagerImpl.findOrCreateServerSslContextProvider(downstreamTlsContext);
     assertThat(serverSecretProvider).isNotNull();
 
-    ServerSslContextProvider serverSecretProvider1 =
+    SslContextProvider serverSecretProvider1 =
         tlsContextManagerImpl.findOrCreateServerSslContextProvider(downstreamTlsContext);
     assertThat(serverSecretProvider1).isSameInstanceAs(serverSecretProvider);
   }
@@ -83,11 +83,11 @@ public class TlsContextManagerTest {
             /* privateKey= */ null, /* certChain= */ null, CA_PEM_FILE);
 
     TlsContextManagerImpl tlsContextManagerImpl = TlsContextManagerImpl.getInstance();
-    ClientSslContextProvider clientSecretProvider =
+    SslContextProvider clientSecretProvider =
         tlsContextManagerImpl.findOrCreateClientSslContextProvider(upstreamTlsContext);
     assertThat(clientSecretProvider).isNotNull();
 
-    ClientSslContextProvider clientSecretProvider1 =
+    SslContextProvider clientSecretProvider1 =
         tlsContextManagerImpl.findOrCreateClientSslContextProvider(upstreamTlsContext);
     assertThat(clientSecretProvider1).isSameInstanceAs(clientSecretProvider);
   }
@@ -99,14 +99,14 @@ public class TlsContextManagerTest {
             SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, /* trustCa= */ null);
 
     TlsContextManagerImpl tlsContextManagerImpl = TlsContextManagerImpl.getInstance();
-    ServerSslContextProvider serverSecretProvider =
+    SslContextProvider serverSecretProvider =
         tlsContextManagerImpl.findOrCreateServerSslContextProvider(downstreamTlsContext);
     assertThat(serverSecretProvider).isNotNull();
 
     DownstreamTlsContext downstreamTlsContext1 =
         CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(
             SERVER_0_KEY_FILE, SERVER_0_PEM_FILE, CA_PEM_FILE);
-    ServerSslContextProvider serverSecretProvider1 =
+    SslContextProvider serverSecretProvider1 =
         tlsContextManagerImpl.findOrCreateServerSslContextProvider(downstreamTlsContext1);
     assertThat(serverSecretProvider1).isNotNull();
     assertThat(serverSecretProvider1).isNotSameInstanceAs(serverSecretProvider);
@@ -119,7 +119,7 @@ public class TlsContextManagerTest {
             /* privateKey= */ null, /* certChain= */ null, CA_PEM_FILE);
 
     TlsContextManagerImpl tlsContextManagerImpl = TlsContextManagerImpl.getInstance();
-    ClientSslContextProvider clientSecretProvider =
+    SslContextProvider clientSecretProvider =
         tlsContextManagerImpl.findOrCreateClientSslContextProvider(upstreamTlsContext);
     assertThat(clientSecretProvider).isNotNull();
 
@@ -127,7 +127,7 @@ public class TlsContextManagerTest {
         CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
             CLIENT_KEY_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
 
-    ClientSslContextProvider clientSecretProvider1 =
+    SslContextProvider clientSecretProvider1 =
         tlsContextManagerImpl.findOrCreateClientSslContextProvider(upstreamTlsContext1);
     assertThat(clientSecretProvider1).isNotSameInstanceAs(clientSecretProvider);
   }
@@ -141,9 +141,9 @@ public class TlsContextManagerTest {
     TlsContextManagerImpl tlsContextManagerImpl =
         new TlsContextManagerImpl(mockClientFactory, mockServerFactory);
     @SuppressWarnings("unchecked")
-    ServerSslContextProvider mockProvider = mock(ServerSslContextProvider.class);
+    SslContextProvider mockProvider = mock(SslContextProvider.class);
     when(mockServerFactory.createSslContextProvider(downstreamTlsContext)).thenReturn(mockProvider);
-    ServerSslContextProvider serverSecretProvider =
+    SslContextProvider serverSecretProvider =
         tlsContextManagerImpl.findOrCreateServerSslContextProvider(downstreamTlsContext);
     assertThat(serverSecretProvider).isSameInstanceAs(mockProvider);
     verify(mockProvider, never()).close();
@@ -161,9 +161,9 @@ public class TlsContextManagerTest {
     TlsContextManagerImpl tlsContextManagerImpl =
         new TlsContextManagerImpl(mockClientFactory, mockServerFactory);
     @SuppressWarnings("unchecked")
-    ClientSslContextProvider mockProvider = mock(ClientSslContextProvider.class);
+    SslContextProvider mockProvider = mock(SslContextProvider.class);
     when(mockClientFactory.createSslContextProvider(upstreamTlsContext)).thenReturn(mockProvider);
-    ClientSslContextProvider clientSecretProvider =
+    SslContextProvider clientSecretProvider =
         tlsContextManagerImpl.findOrCreateClientSslContextProvider(upstreamTlsContext);
     assertThat(clientSecretProvider).isSameInstanceAs(mockProvider);
     verify(mockProvider, never()).close();
