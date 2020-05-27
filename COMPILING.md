@@ -43,7 +43,7 @@ This section is only necessary if you are making changes to the code
 generation. Most users only need to use `skipCodegen=true` as discussed above.
 
 ### Build Protobuf
-The codegen plugin is C++ code and requires protobuf 3.0.0 or later.
+The codegen plugin is C++ code and requires protobuf 3.12.0 or later.
 
 For Linux, Mac and MinGW:
 ```
