@@ -41,8 +41,7 @@ final class ReferenceCountingSslContextProviderMap<K> {
   private final Map<K, Instance> instances = new HashMap<>();
   private final SslContextProviderFactory<K> sslContextProviderFactory;
 
-  ReferenceCountingSslContextProviderMap(
-      SslContextProviderFactory<K> sslContextProviderFactory) {
+  ReferenceCountingSslContextProviderMap(SslContextProviderFactory<K> sslContextProviderFactory) {
     checkNotNull(sslContextProviderFactory, "sslContextProviderFactory");
     this.sslContextProviderFactory = sslContextProviderFactory;
   }

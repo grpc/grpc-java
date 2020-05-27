@@ -62,11 +62,19 @@ public abstract class SslContextProvider {
     return tlsContextHolder.getCommonTlsContext();
   }
 
-  /** Returns the UpstreamTlsContext in this SslContextProvider if this is client side. **/
-  public UpstreamTlsContext getUpstreamTlsContext() {
-    checkState(tlsContextHolder instanceof UpstreamTlsContextHolder,
-        "expected UpstreamTlsContextHolder");
-    return ((UpstreamTlsContextHolder)tlsContextHolder).getUpstreamTlsContext();
+  protected void setClientAuthValues(
+      SslContextBuilder sslContextBuilder, CertificateValidationContext localCertValidationContext)
+      throws CertificateException, IOException, CertStoreException {
+    DownstreamTlsContext downstreamTlsContext = getDownstreamTlsContext();
+    if (localCertValidationContext != null) {
+      sslContextBuilder.trustManager(new SdsTrustManagerFactory(localCertValidationContext));
+      sslContextBuilder.clientAuth(
+          downstreamTlsContext.hasRequireClientCertificate()
+              ? ClientAuth.REQUIRE
+              : ClientAuth.OPTIONAL);
+    } else {
+      sslContextBuilder.clientAuth(ClientAuth.NONE);
+    }
   }
 
   /** Returns the DownstreamTlsContext in this SslContextProvider if this is server side. **/
@@ -74,6 +82,13 @@ public abstract class SslContextProvider {
     checkState(tlsContextHolder instanceof DownstreamTlsContextHolder,
         "expected DownstreamTlsContextHolder");
     return ((DownstreamTlsContextHolder)tlsContextHolder).getDownstreamTlsContext();
+  }
+
+  /** Returns the UpstreamTlsContext in this SslContextProvider if this is client side. **/
+  public UpstreamTlsContext getUpstreamTlsContext() {
+    checkState(tlsContextHolder instanceof UpstreamTlsContextHolder,
+        "expected UpstreamTlsContextHolder");
+    return ((UpstreamTlsContextHolder)tlsContextHolder).getUpstreamTlsContext();
   }
 
   /** Closes this provider and releases any resources. */
@@ -109,30 +124,8 @@ public abstract class SslContextProvider {
         });
   }
 
-  public TlsContextHolder getTlsContextHolder() {
-    return tlsContextHolder;
-  }
-
   /** Allows implementations to compute or get SslContext. */
   protected interface SslContextGetter {
     SslContext get() throws Exception;
-  }
-
-  protected void setClientAuthValues(
-      SslContextBuilder sslContextBuilder, CertificateValidationContext localCertValidationContext)
-      throws CertificateException, IOException, CertStoreException {
-    checkState(tlsContextHolder instanceof DownstreamTlsContextHolder,
-        "expected DownstreamTlsContextHolder");
-    DownstreamTlsContext downstreamTlsContext = ((DownstreamTlsContextHolder) tlsContextHolder)
-        .getDownstreamTlsContext();
-    if (localCertValidationContext != null) {
-      sslContextBuilder.trustManager(new SdsTrustManagerFactory(localCertValidationContext));
-      sslContextBuilder.clientAuth(
-          downstreamTlsContext.hasRequireClientCertificate()
-              ? ClientAuth.REQUIRE
-              : ClientAuth.OPTIONAL);
-    } else {
-      sslContextBuilder.clientAuth(ClientAuth.NONE);
-    }
   }
 }

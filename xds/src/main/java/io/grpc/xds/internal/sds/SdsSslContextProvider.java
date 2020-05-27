@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 The gRPC Authors
+ * Copyright 2019 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -39,7 +39,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
-/** Base class for  SdsClientSslContextProvider and SdsServerSslContextProvider classes. */
+/** Base class for  SdsClientSslContextProvider and SdsServerSslContextProvider. */
 abstract class SdsSslContextProvider extends SslContextProvider implements SdsClient.SecretWatcher {
 
   private static final Logger logger =
@@ -87,7 +87,7 @@ abstract class SdsSslContextProvider extends SslContextProvider implements SdsCl
   }
 
   @Override
-  public void addCallback(SslContextProvider.Callback callback, Executor executor) {
+  public void addCallback(Callback callback, Executor executor) {
     checkNotNull(callback, "callback");
     checkNotNull(executor, "executor");
     // if there is a computed sslContext just send it
@@ -102,9 +102,9 @@ abstract class SdsSslContextProvider extends SslContextProvider implements SdsCl
   }
 
   private void callPerformCallback(
-      SslContextProvider.Callback callback, Executor executor, final SslContext sslContextCopy) {
+      Callback callback, Executor executor, final SslContext sslContextCopy) {
     performCallback(
-        new SslContextProvider.SslContextGetter() {
+        new SslContextGetter() {
           @Override
           public SslContext get() {
             return sslContextCopy;
@@ -143,7 +143,8 @@ abstract class SdsSslContextProvider extends SslContextProvider implements SdsCl
     }
   }
 
-  abstract SslContextBuilder getSpecificSslContextBuilder(
+  /** Gets a server or client side SslContextBuilder. */
+  abstract SslContextBuilder getSslContextBuilder(
       CertificateValidationContext localCertValidationContext)
       throws CertificateException, IOException, CertStoreException;
 
@@ -151,8 +152,7 @@ abstract class SdsSslContextProvider extends SslContextProvider implements SdsCl
   private void updateSslContext() {
     try {
       CertificateValidationContext localCertValidationContext = mergeStaticAndDynamicCertContexts();
-      SslContextBuilder sslContextBuilder = getSpecificSslContextBuilder(
-          localCertValidationContext);
+      SslContextBuilder sslContextBuilder = getSslContextBuilder(localCertValidationContext);
       CommonTlsContext commonTlsContext = getCommonTlsContext();
       if (commonTlsContext != null && commonTlsContext.getAlpnProtocolsCount() > 0) {
         List<String> alpnList = commonTlsContext.getAlpnProtocolsList();
@@ -215,10 +215,10 @@ abstract class SdsSslContextProvider extends SslContextProvider implements SdsCl
   }
 
   private static class CallbackPair {
-    private final SslContextProvider.Callback callback;
+    private final Callback callback;
     private final Executor executor;
 
-    private CallbackPair(SslContextProvider.Callback callback, Executor executor) {
+    private CallbackPair(Callback callback, Executor executor) {
       this.callback = callback;
       this.executor = executor;
     }

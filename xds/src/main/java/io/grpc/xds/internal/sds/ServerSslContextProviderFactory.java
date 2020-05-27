@@ -30,7 +30,7 @@ import java.util.concurrent.Executors;
 final class ServerSslContextProviderFactory
     implements SslContextProviderFactory<DownstreamTlsContext> {
 
-  /** Creates a ServerSslContextProvider from the given DownstreamTlsContext. */
+  /** Creates a SslContextProvider from the given DownstreamTlsContext. */
   @Override
   public SslContextProvider createSslContextProvider(
       DownstreamTlsContext downstreamTlsContext) {

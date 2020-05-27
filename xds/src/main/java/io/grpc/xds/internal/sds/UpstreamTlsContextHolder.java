@@ -21,7 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
 import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 
-public class UpstreamTlsContextHolder implements TlsContextHolder {
+class UpstreamTlsContextHolder implements TlsContextHolder {
 
   public UpstreamTlsContext getUpstreamTlsContext() {
     return upstreamTlsContext;
