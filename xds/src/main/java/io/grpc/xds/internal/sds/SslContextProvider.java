@@ -16,7 +16,6 @@
 
 package io.grpc.xds.internal.sds;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
@@ -41,14 +40,11 @@ import java.util.logging.Logger;
  * stream that is receiving the requested secret(s) or it could represent file-system based
  * secret(s) that are dynamic.
  */
-// TODO(sanjaypujare): replace generic K with DownstreamTlsContext & UpstreamTlsContext in
-// separate client&server classes
-public abstract class SslContextProvider<K> {
+public abstract class SslContextProvider {
 
   private static final Logger logger = Logger.getLogger(SslContextProvider.class.getName());
 
-  protected final boolean server;
-  private final K source;
+  protected final TlsContextHolder tlsContextHolder;
 
   public interface Callback {
     /** Informs callee of new/updated SslContext. */
@@ -58,36 +54,20 @@ public abstract class SslContextProvider<K> {
     void onException(Throwable throwable);
   }
 
-  protected SslContextProvider(K source, boolean server) {
-    if (server) {
-      checkArgument(source instanceof DownstreamTlsContext, "expecting DownstreamTlsContext");
-    } else {
-      checkArgument(source instanceof UpstreamTlsContext, "expecting UpstreamTlsContext");
-    }
-    this.source = source;
-    this.server = server;
-  }
-
-  public K getSource() {
-    return source;
+  SslContextProvider(TlsContextHolder tlsContextHolder) {
+    this.tlsContextHolder = checkNotNull(tlsContextHolder, "tlsContextHolder");
   }
 
   CommonTlsContext getCommonTlsContext() {
-    if (source instanceof UpstreamTlsContext) {
-      return ((UpstreamTlsContext) source).getCommonTlsContext();
-    } else if (source instanceof DownstreamTlsContext) {
-      return ((DownstreamTlsContext) source).getCommonTlsContext();
-    }
-    return null;
+    return tlsContextHolder.getCommonTlsContext();
   }
 
   protected void setClientAuthValues(
       SslContextBuilder sslContextBuilder, CertificateValidationContext localCertValidationContext)
       throws CertificateException, IOException, CertStoreException {
-    checkState(server, "server side SslContextProvider expected");
+    DownstreamTlsContext downstreamTlsContext = getDownstreamTlsContext();
     if (localCertValidationContext != null) {
       sslContextBuilder.trustManager(new SdsTrustManagerFactory(localCertValidationContext));
-      DownstreamTlsContext downstreamTlsContext = (DownstreamTlsContext)getSource();
       sslContextBuilder.clientAuth(
           downstreamTlsContext.hasRequireClientCertificate()
               ? ClientAuth.REQUIRE
@@ -95,6 +75,20 @@ public abstract class SslContextProvider<K> {
     } else {
       sslContextBuilder.clientAuth(ClientAuth.NONE);
     }
+  }
+
+  /** Returns the DownstreamTlsContext in this SslContextProvider if this is server side. **/
+  public DownstreamTlsContext getDownstreamTlsContext() {
+    checkState(tlsContextHolder instanceof DownstreamTlsContextHolder,
+        "expected DownstreamTlsContextHolder");
+    return ((DownstreamTlsContextHolder) tlsContextHolder).getDownstreamTlsContext();
+  }
+
+  /** Returns the UpstreamTlsContext in this SslContextProvider if this is client side. **/
+  public UpstreamTlsContext getUpstreamTlsContext() {
+    checkState(tlsContextHolder instanceof UpstreamTlsContextHolder,
+        "expected UpstreamTlsContextHolder");
+    return ((UpstreamTlsContextHolder) tlsContextHolder).getUpstreamTlsContext();
   }
 
   /** Closes this provider and releases any resources. */
@@ -106,7 +100,7 @@ public abstract class SslContextProvider<K> {
    */
   public abstract void addCallback(Callback callback, Executor executor);
 
-  protected void performCallback(
+  final void performCallback(
       final SslContextGetter sslContextGetter, final Callback callback, Executor executor) {
     checkNotNull(sslContextGetter, "sslContextGetter");
     checkNotNull(callback, "callback");

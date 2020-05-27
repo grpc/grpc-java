@@ -356,9 +356,8 @@ public class CdsLoadBalancerTest {
         CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
             CLIENT_KEY_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
 
-    SslContextProvider<UpstreamTlsContext> mockSslContextProvider =
-        (SslContextProvider<UpstreamTlsContext>) mock(SslContextProvider.class);
-    doReturn(upstreamTlsContext).when(mockSslContextProvider).getSource();
+    SslContextProvider mockSslContextProvider = mock(SslContextProvider.class);
+    doReturn(upstreamTlsContext).when(mockSslContextProvider).getUpstreamTlsContext();
     doReturn(mockSslContextProvider).when(mockTlsContextManager)
         .findOrCreateClientSslContextProvider(same(upstreamTlsContext));
 
@@ -373,8 +372,8 @@ public class CdsLoadBalancerTest {
 
     assertThat(edsLbHelpers).hasSize(1);
     assertThat(edsLoadBalancers).hasSize(1);
-    verify(mockTlsContextManager, never()).releaseClientSslContextProvider(
-        (SslContextProvider<UpstreamTlsContext>) any(SslContextProvider.class));
+    verify(mockTlsContextManager, never())
+        .releaseClientSslContextProvider(any(SslContextProvider.class));
     Helper edsLbHelper1 = edsLbHelpers.poll();
 
     ArrayList<EquivalentAddressGroup> eagList = new ArrayList<>();
@@ -403,8 +402,8 @@ public class CdsLoadBalancerTest {
             .setUpstreamTlsContext(upstreamTlsContext)
             .build());
 
-    verify(mockTlsContextManager, never()).releaseClientSslContextProvider(
-        (SslContextProvider<UpstreamTlsContext>) any(SslContextProvider.class));
+    verify(mockTlsContextManager, never())
+        .releaseClientSslContextProvider(any(SslContextProvider.class));
     verify(mockTlsContextManager, never()).findOrCreateClientSslContextProvider(
         any(UpstreamTlsContext.class));
 
@@ -414,9 +413,8 @@ public class CdsLoadBalancerTest {
     UpstreamTlsContext upstreamTlsContext1 =
         CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
             BAD_CLIENT_KEY_FILE, BAD_CLIENT_PEM_FILE, CA_PEM_FILE);
-    SslContextProvider<UpstreamTlsContext> mockSslContextProvider1 =
-        (SslContextProvider<UpstreamTlsContext>) mock(SslContextProvider.class);
-    doReturn(upstreamTlsContext1).when(mockSslContextProvider1).getSource();
+    SslContextProvider mockSslContextProvider1 = mock(SslContextProvider.class);
+    doReturn(upstreamTlsContext1).when(mockSslContextProvider1).getUpstreamTlsContext();
     doReturn(mockSslContextProvider1).when(mockTlsContextManager)
         .findOrCreateClientSslContextProvider(same(upstreamTlsContext1));
     clusterWatcher1.onClusterChanged(
