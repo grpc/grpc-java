@@ -81,7 +81,7 @@ public abstract class SslContextProvider {
   public DownstreamTlsContext getDownstreamTlsContext() {
     checkState(tlsContextHolder instanceof DownstreamTlsContextHolder,
         "expected DownstreamTlsContextHolder");
-    return ((DownstreamTlsContextHolder)tlsContextHolder).getDownstreamTlsContext();
+    return ((DownstreamTlsContextHolder) tlsContextHolder).getDownstreamTlsContext();
   }
 
   /** Returns the UpstreamTlsContext in this SslContextProvider if this is client side. **/
