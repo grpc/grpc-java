@@ -70,7 +70,7 @@ final class ReferenceCountingSslContextProviderMap<K, P extends SslContextProvid
    * @param value the instance to be released
    * @return a null which the caller can use to clear the reference to that instance.
    */
-  public P release(K key, final P value) {
+  public P release(K key, P value) {
     checkNotNull(key, "key");
     checkNotNull(value, "value");
     return releaseInternal(key, value);
@@ -87,8 +87,8 @@ final class ReferenceCountingSslContextProviderMap<K, P extends SslContextProvid
     }
   }
 
-  private synchronized P releaseInternal(final K key, final P instance) {
-    final Instance<K, P> cached = instances.get(key);
+  private synchronized P releaseInternal(K key, P instance) {
+    Instance<K, P> cached = instances.get(key);
     checkArgument(cached != null, "No cached instance found for %s", key);
     checkArgument(instance == cached.sslContextProvider, "Releasing the wrong instance");
     if (cached.release()) {
