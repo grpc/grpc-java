@@ -447,6 +447,7 @@ final class EnvoyProtoData {
       return routeAction;
     }
 
+    // TODO(chengyuanzhang): delete and do not use after routing feature is always ON.
     boolean isDefaultRoute() {
       return routeMatch.isMatchAll();
     }
@@ -548,19 +549,13 @@ final class EnvoyProtoData {
       return fractionMatch;
     }
 
-    boolean isMatchAll() {
-      if (pathMatch.getRegEx() != null || fractionMatch != null) {
-        return false;
-      }
-      if (!headerMatchers.isEmpty()) {
-        return false;
-      }
-      if (pathMatch.getPath() != null) {
-        return false;
-      }
-      String pathPrefixMatch = pathMatch.getPrefix();
-      if (pathPrefixMatch != null) {
-        return pathPrefixMatch.isEmpty() || pathPrefixMatch.equals("/");
+    // TODO(chengyuanzhang): delete and do not use after routing feature is always ON.
+    private boolean isMatchAll() {
+      // For backward compatibility, all the other matchers are ignored. When routing is enabled,
+      // we should never care if a matcher matches all requests.
+      String prefix = pathMatch.getPrefix();
+      if (prefix != null) {
+        return prefix.isEmpty() || prefix.equals("/");
       }
       return false;
     }
@@ -644,27 +639,9 @@ final class EnvoyProtoData {
       switch (proto.getPathSpecifierCase()) {
         case PREFIX:
           prefix = proto.getPrefix();
-          // Supported prefix match format:
-          // "", "/" (default)
-          // "/service/"
-          if (!prefix.isEmpty() && !prefix.equals("/")) {
-            if (!prefix.startsWith("/") || !prefix.endsWith("/")
-                || prefix.length() < 3) {
-              return StructOrError.fromError(
-                  "Invalid format of prefix path match: " + prefix);
-            }
-          }
           break;
         case PATH:
           path = proto.getPath();
-          int lastSlash = path.lastIndexOf('/');
-          // Supported exact match format:
-          // "/service/method"
-          if (!path.startsWith("/") || lastSlash == 0
-              || lastSlash == path.length() - 1) {
-            return StructOrError.fromError(
-                "Invalid format of exact path match: " + path);
-          }
           break;
         case REGEX:
           return StructOrError.fromError("Unsupported path match type: regex");

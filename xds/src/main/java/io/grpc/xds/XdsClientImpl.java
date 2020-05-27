@@ -858,14 +858,14 @@ final class XdsClientImpl extends XdsClient {
       throw new InvalidProtoDataException(
           "Virtual host [" + virtualHost.getName() + "] contains no usable route");
     }
-    // The last route must be a default route.
-    if (!Iterables.getLast(routes).isDefaultRoute()) {
-      throw new InvalidProtoDataException(
-          "Virtual host [" + virtualHost.getName()
-              + "] contains non-default route as the last route");
-    }
+
     if (!enableExperimentalRouting) {
       EnvoyProtoData.Route defaultRoute = Iterables.getLast(routes);
+      if (!defaultRoute.isDefaultRoute()) {
+        throw new InvalidProtoDataException(
+            "Virtual host [" + virtualHost.getName()
+                + "] contains non-default route as the last route");
+      }
       return Collections.singletonList(defaultRoute);
     }
     return Collections.unmodifiableList(routes);
