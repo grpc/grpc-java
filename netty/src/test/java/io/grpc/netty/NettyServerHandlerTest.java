@@ -1116,6 +1116,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         Arrays.asList(streamTracerFactory),
         transportTracer,
         maxConcurrentStreams,
+        autoFlowControl,
         flowControlWindow,
         maxHeaderListSize,
         DEFAULT_MAX_MESSAGE_SIZE,

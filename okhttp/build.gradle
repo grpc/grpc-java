@@ -1,5 +1,5 @@
 plugins {
-    id "java"
+    id "java-library"
     id "maven-publish"
 
     id "me.champeau.gradle.japicmp"
@@ -11,16 +11,16 @@ description = "gRPC: OkHttp"
 evaluationDependsOn(project(':grpc-core').path)
 
 dependencies {
-    compile project(':grpc-core'),
-            libraries.okio
-
-    compile (libraries.okhttp) {
+    api project(':grpc-core')
+    api (libraries.okhttp) {
         // prefer our own versions instead of okhttp's dependency
         exclude group: 'com.squareup.okio', module: 'okio'
     }
-
+    implementation libraries.okio
+    guavaDependency 'implementation'
+    perfmarkDependency 'implementation'
     // Tests depend on base class defined by core module.
-    testCompile project(':grpc-core').sourceSets.test.output,
+    testImplementation project(':grpc-core').sourceSets.test.output,
             project(':grpc-testing'),
             project(':grpc-netty')
     signature "org.codehaus.mojo.signature:java17:1.0@signature"

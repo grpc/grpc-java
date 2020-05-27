@@ -30,7 +30,6 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.InternalLogId;
 import io.grpc.NameResolver;
 import io.grpc.Status;
-import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.GrpcUtil;
@@ -160,21 +159,27 @@ final class XdsNameResolver extends NameResolver {
         rawLbConfig = generateXdsRoutingRawConfig(update.getRoutes());
       } else {
         Route defaultRoute = Iterables.getOnlyElement(update.getRoutes());
+        RouteAction action = defaultRoute.getRouteAction();
         String clusterName = defaultRoute.getRouteAction().getCluster();
-        if (!clusterName.isEmpty()) {
+        if (action.getCluster() != null) {
           logger.log(
               XdsLogLevel.INFO,
               "Received config update from xDS client {0}: cluster_name={1}",
               xdsClient,
               clusterName);
           rawLbConfig = generateCdsRawConfig(clusterName);
-        } else {
+        } else if (action.getWeightedCluster() != null) {
           logger.log(
               XdsLogLevel.INFO,
               "Received config update with one weighted cluster route from xDS client {0}",
               xdsClient);
           List<ClusterWeight> clusterWeights = defaultRoute.getRouteAction().getWeightedCluster();
           rawLbConfig = generateWeightedTargetRawConfig(clusterWeights);
+        } else {
+          // TODO (chengyuanzhang): route with cluster_header
+          logger.log(
+              XdsLogLevel.WARNING, "Route action with cluster_header is not implemented");
+          return;
         }
       }
 
@@ -202,19 +207,23 @@ final class XdsNameResolver extends NameResolver {
     }
 
     @Override
+    public void onResourceDoesNotExist(String resourceName) {
+      logger.log(XdsLogLevel.INFO, "Resource {0} is unavailable", resourceName);
+      ResolutionResult result =
+          ResolutionResult.newBuilder()
+              .setServiceConfig(
+                  ConfigOrError.fromError(
+                      Status.UNAVAILABLE.withDescription(
+                          "Resource " + resourceName + " is unavailable")))
+              .build();
+      listener.onResult(result);
+    }
+
+    @Override
     public void onError(Status error) {
-      // In order to distinguish between IO error and resource not found, which trigger
-      // different handling, return an empty resolution result to channel for resource not
-      // found.
-      // TODO(chengyuanzhang): Returning an empty resolution result based on status code is
-      //  a temporary solution. More design discussion needs to be done.
-      if (error.getCode().equals(Code.NOT_FOUND)) {
-        logger.log(
-            XdsLogLevel.WARNING,
-            "Received error from xDS client {0}: {1}", xdsClient, error.getDescription());
-        listener.onResult(ResolutionResult.newBuilder().build());
-        return;
-      }
+      logger.log(
+          XdsLogLevel.WARNING,
+          "Received error from xDS client {0}: {1}", xdsClient, error.getDescription());
       listener.onError(Status.UNAVAILABLE.withDescription(error.getDescription()));
     }
   }
@@ -226,14 +235,19 @@ final class XdsNameResolver extends NameResolver {
     for (Route route : routesUpdate) {
       String service = "";
       String method = "";
-      String prefix = route.getRouteMatch().getPrefix();
-      String path = route.getRouteMatch().getPath();
-      if (!prefix.isEmpty()) {
-        service = prefix.substring(1, prefix.length() - 1);
-      } else if (!path.isEmpty()) {
-        int splitIndex = path.lastIndexOf('/');
-        service = path.substring(1, splitIndex);
-        method = path.substring(splitIndex + 1);
+      if (!route.isDefaultRoute()) {
+        String prefix = route.getRouteMatch().getPathPrefixMatch();
+        String path = route.getRouteMatch().getPathExactMatch();
+        if (prefix != null) {
+          service = prefix.substring(1, prefix.length() - 1);
+        } else if (path != null) {
+          int splitIndex = path.lastIndexOf('/');
+          service = path.substring(1, splitIndex);
+          method = path.substring(splitIndex + 1);
+        } else {
+          // TODO (chengyuanzhang): match with regex.
+          continue;
+        }
       }
       Map<String, String> methodName = ImmutableMap.of("service", service, "method", method);
       String actionName;
@@ -242,10 +256,10 @@ final class XdsNameResolver extends NameResolver {
       if (exitingActions.containsKey(routeAction)) {
         actionName = exitingActions.get(routeAction);
       } else {
-        if (!routeAction.getCluster().isEmpty()) {
+        if (routeAction.getCluster() != null) {
           actionName = "cds:" + routeAction.getCluster();
           actionPolicy = generateCdsRawConfig(routeAction.getCluster());
-        } else {
+        } else if (routeAction.getWeightedCluster() != null) {
           StringBuilder sb = new StringBuilder("weighted:");
           List<ClusterWeight> clusterWeights = routeAction.getWeightedCluster();
           for (ClusterWeight clusterWeight : clusterWeights) {
@@ -261,6 +275,9 @@ final class XdsNameResolver extends NameResolver {
             actionName = actionName + "_" + exitingActions.size();
           }
           actionPolicy = generateWeightedTargetRawConfig(clusterWeights);
+        } else {
+          // TODO (chengyuanzhang): route with cluster_header.
+          continue;
         }
         exitingActions.put(routeAction, actionName);
         List<?> childPolicies = ImmutableList.of(actionPolicy);

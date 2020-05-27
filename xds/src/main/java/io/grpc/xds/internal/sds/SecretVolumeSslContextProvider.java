@@ -205,9 +205,7 @@ final class SecretVolumeSslContextProvider<K> extends SslContextProvider<K> {
       sslContextBuilder =
           GrpcSslContexts.forServer(
               new File(certificateChain), new File(privateKey), privateKeyPassword);
-      if (certContext != null) {
-        sslContextBuilder.trustManager(new SdsTrustManagerFactory(certContext));
-      }
+      setClientAuthValues(sslContextBuilder, certContext);
     } else {
       sslContextBuilder =
           GrpcSslContexts.forClient().trustManager(new SdsTrustManagerFactory(certContext));

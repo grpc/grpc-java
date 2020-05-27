@@ -21,7 +21,7 @@ configurations {
 }
 
 dependencies {
-    compile project(':grpc-core'),
+    implementation project(':grpc-core'),
             project(':grpc-netty'),
             project(':grpc-okhttp'),
             project(':grpc-stub'),
@@ -34,7 +34,7 @@ dependencies {
     compileOnly libraries.javax_annotation
     alpnagent libraries.jetty_alpn_agent
 
-    testCompile libraries.junit,
+    testImplementation libraries.junit,
             libraries.mockito
 }
 

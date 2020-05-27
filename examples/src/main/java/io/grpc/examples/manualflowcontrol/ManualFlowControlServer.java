@@ -39,7 +39,7 @@ public class ManualFlowControlServer {
         // stream's flow control using the response stream's observer, but this is the way it is.
         final ServerCallStreamObserver<HelloReply> serverCallStreamObserver =
             (ServerCallStreamObserver<HelloReply>) responseObserver;
-        serverCallStreamObserver.disableAutoInboundFlowControl();
+        serverCallStreamObserver.disableAutoRequestWithInitial(0);
 
         // Set up a back-pressure-aware consumer for the request stream. The onReadyHandler will be invoked
         // when the consuming side has enough buffer space to receive more messages.

@@ -85,6 +85,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
   private ChannelFactory<? extends ServerChannel> channelFactory =
       Utils.DEFAULT_SERVER_CHANNEL_FACTORY;
   private final Map<ChannelOption<?>, Object> channelOptions = new HashMap<>();
+  private final Map<ChannelOption<?>, Object> childChannelOptions = new HashMap<>();
   private ObjectPool<? extends EventLoopGroup> bossEventLoopGroupPool =
       DEFAULT_BOSS_EVENT_LOOP_GROUP_POOL;
   private ObjectPool<? extends EventLoopGroup> workerEventLoopGroupPool =
@@ -93,6 +94,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
   private SslContext sslContext;
   private ProtocolNegotiator protocolNegotiator;
   private int maxConcurrentCallsPerConnection = Integer.MAX_VALUE;
+  private boolean autoFlowControl = true;
   private int flowControlWindow = DEFAULT_FLOW_CONTROL_WINDOW;
   private int maxMessageSize = DEFAULT_MAX_MESSAGE_SIZE;
   private int maxHeaderListSize = GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE;
@@ -189,10 +191,21 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * Specifies a channel option. As the underlying channel as well as network implementation may
    * ignore this value applications should consider it a hint.
    *
+   * @since 1.30.0
+   */
+  public <T> NettyServerBuilder withOption(ChannelOption<T> option, T value) {
+    this.channelOptions.put(option, value);
+    return this;
+  }
+
+  /**
+   * Specifies a child channel option. As the underlying channel as well as network implementation
+   * may ignore this value applications should consider it a hint.
+   *
    * @since 1.9.0
    */
   public <T> NettyServerBuilder withChildOption(ChannelOption<T> option, T value) {
-    this.channelOptions.put(option, value);
+    this.childChannelOptions.put(option, value);
     return this;
   }
 
@@ -334,13 +347,29 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
   }
 
   /**
-   * Sets the HTTP/2 flow control window. If not called, the default value
-   * is {@link #DEFAULT_FLOW_CONTROL_WINDOW}).
+   * Sets the initial flow control window in bytes. Setting initial flow control window enables auto
+   * flow control tuning using bandwidth-delay product algorithm. To disable auto flow control
+   * tuning, use {@link #flowControlWindow(int)}. By default, auto flow control is enabled with
+   * initial flow control window size of {@link #DEFAULT_FLOW_CONTROL_WINDOW}.
+   */
+  public NettyServerBuilder initialFlowControlWindow(int initialFlowControlWindow) {
+    checkArgument(initialFlowControlWindow > 0, "initialFlowControlWindow must be positive");
+    this.flowControlWindow = initialFlowControlWindow;
+    this.autoFlowControl = true;
+    return this;
+  }
+
+  /**
+   * Sets the flow control window in bytes. Setting flowControlWindow disables auto flow control
+   * tuning; use {@link #initialFlowControlWindow(int)} to enable auto flow control tuning. If not
+   * called, the default value is {@link #DEFAULT_FLOW_CONTROL_WINDOW}) with auto flow control
+   * tuning.
    */
   public NettyServerBuilder flowControlWindow(int flowControlWindow) {
     checkArgument(flowControlWindow > 0, "flowControlWindow must be positive: %s",
         flowControlWindow);
     this.flowControlWindow = flowControlWindow;
+    this.autoFlowControl = false;
     return this;
   }
 
@@ -549,12 +578,14 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
     List<NettyServer> transportServers = new ArrayList<>(listenAddresses.size());
     for (SocketAddress listenAddress : listenAddresses) {
       NettyServer transportServer = new NettyServer(
-          listenAddress, channelFactory, channelOptions, bossEventLoopGroupPool,
-          workerEventLoopGroupPool, forceHeapBuffer, negotiator, streamTracerFactories,
-          getTransportTracerFactory(), maxConcurrentCallsPerConnection, flowControlWindow,
-          maxMessageSize, maxHeaderListSize, keepAliveTimeInNanos, keepAliveTimeoutInNanos,
-          maxConnectionIdleInNanos, maxConnectionAgeInNanos, maxConnectionAgeGraceInNanos,
-          permitKeepAliveWithoutCalls, permitKeepAliveTimeInNanos, getChannelz());
+          listenAddress, channelFactory, channelOptions, childChannelOptions,
+          bossEventLoopGroupPool, workerEventLoopGroupPool, forceHeapBuffer, negotiator,
+          streamTracerFactories, getTransportTracerFactory(), maxConcurrentCallsPerConnection,
+          autoFlowControl, flowControlWindow, maxMessageSize, maxHeaderListSize,
+          keepAliveTimeInNanos, keepAliveTimeoutInNanos,
+          maxConnectionIdleInNanos, maxConnectionAgeInNanos,
+          maxConnectionAgeGraceInNanos, permitKeepAliveWithoutCalls, permitKeepAliveTimeInNanos,
+          getChannelz());
       transportServers.add(transportServer);
     }
     return Collections.unmodifiableList(transportServers);

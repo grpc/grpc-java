@@ -39,9 +39,9 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "io.opencensus:opencensus-api:0.24.0",
     "io.opencensus:opencensus-contrib-grpc-metrics:0.24.0",
     "io.perfmark:perfmark-api:0.19.0",
-    "javax.annotation:javax.annotation-api:1.2",
     "junit:junit:4.12",
     "org.apache.commons:commons-lang3:3.5",
+    "org.apache.tomcat:annotations-api:6.0.53",
     "org.codehaus.mojo:animal-sniffer-annotations:1.18",
 ]
 
@@ -148,12 +148,12 @@ def grpc_java_repositories():
         io_opencensus_opencensus_contrib_grpc_metrics()
     if not native.existing_rule("io_perfmark_perfmark_api"):
         io_perfmark_perfmark_api()
-    if not native.existing_rule("javax_annotation_javax_annotation_api"):
-        javax_annotation_javax_annotation_api()
     if not native.existing_rule("junit_junit"):
         junit_junit()
     if not native.existing_rule("org_apache_commons_commons_lang3"):
         org_apache_commons_commons_lang3()
+    if not native.existing_rule("org_apache_tomcat_annotations_api"):
+        org_apache_tomcat_annotations_api()
     if not native.existing_rule("org_codehaus_mojo_animal_sniffer_annotations"):
         org_codehaus_mojo_animal_sniffer_annotations()
 
@@ -267,18 +267,18 @@ def com_google_protobuf():
     # This statement defines the @com_google_protobuf repo.
     http_archive(
         name = "com_google_protobuf",
-        sha256 = "60d2012e3922e429294d3a4ac31f336016514a91e5a63fd33f35743ccfe1bd7d",
-        strip_prefix = "protobuf-3.11.0",
-        urls = ["https://github.com/protocolbuffers/protobuf/archive/v3.11.0.zip"],
+        sha256 = "b37e96e81842af659605908a421960a5dc809acbc888f6b947bc320f8628e5b1",
+        strip_prefix = "protobuf-3.12.0",
+        urls = ["https://github.com/protocolbuffers/protobuf/archive/v3.12.0.zip"],
     )
 
 def com_google_protobuf_javalite():
     # java_lite_proto_library rules implicitly depend on @com_google_protobuf_javalite
     http_archive(
         name = "com_google_protobuf_javalite",
-        sha256 = "e60211a40473f6be95b53f64559f82a3b2971672b11710db2fc9081708e25699",
-        strip_prefix = "protobuf-0425fa932ce95a32bb9f88b2c09b995e9ff8207b",
-        urls = ["https://github.com/google/protobuf/archive/0425fa932ce95a32bb9f88b2c09b995e9ff8207b.zip"],  # Commit with fixed javalite on 3.11.x branch
+        sha256 = "b37e96e81842af659605908a421960a5dc809acbc888f6b947bc320f8628e5b1",
+        strip_prefix = "protobuf-3.12.0",
+        urls = ["https://github.com/protocolbuffers/protobuf/archive/v3.12.0.zip"],
     )
 
 def com_google_truth_truth():
@@ -311,9 +311,9 @@ def com_squareup_okio_okio():
 def io_grpc_grpc_proto():
     http_archive(
         name = "io_grpc_grpc_proto",
-        sha256 = "e3f2bf5caa217b8a703acb52cc5a503f06545b6be7889e44ea428f29e7320e9d",
-        strip_prefix = "grpc-proto-1ff7890719cea62825beeff16d6c2c66cf51ea90",
-        urls = ["https://github.com/grpc/grpc-proto/archive/1ff7890719cea62825beeff16d6c2c66cf51ea90.zip"],
+        sha256 = "5848a4e034126bece0c37c16554fb80625615aedf1acad4e2a3cdbaaa76944eb",
+        strip_prefix = "grpc-proto-cf828d0e1155e5ea58b46d7184ee5596e03ddcb8",
+        urls = ["https://github.com/grpc/grpc-proto/archive/cf828d0e1155e5ea58b46d7184ee5596e03ddcb8.zip"],
     )
 
 def io_netty_netty_buffer():
@@ -451,16 +451,6 @@ def io_perfmark_perfmark_api():
         licenses = ["notice"],  # Apache 2.0
     )
 
-def javax_annotation_javax_annotation_api():
-    # Use //stub:javax_annotation for neverlink=1 support.
-    jvm_maven_import_external(
-        name = "javax_annotation_javax_annotation_api",
-        artifact = "javax.annotation:javax.annotation-api:1.2",
-        server_urls = ["https://repo.maven.apache.org/maven2/"],
-        artifact_sha256 = "5909b396ca3a2be10d0eea32c74ef78d816e1b4ead21de1d78de1f890d033e04",
-        licenses = ["reciprocal"],  # CDDL License
-    )
-
 def junit_junit():
     jvm_maven_import_external(
         name = "junit_junit",
@@ -476,6 +466,16 @@ def org_apache_commons_commons_lang3():
         artifact = "org.apache.commons:commons-lang3:3.5",
         server_urls = ["https://repo.maven.apache.org/maven2/"],
         artifact_sha256 = "8ac96fc686512d777fca85e144f196cd7cfe0c0aec23127229497d1a38ff651c",
+        licenses = ["notice"],  # Apache 2.0
+    )
+
+def org_apache_tomcat_annotations_api():
+    # Use //stub:javax_annotation for neverlink=1 support.
+    jvm_maven_import_external(
+        name = "org_apache_tomcat_annotations_api",
+        artifact = "org.apache.tomcat:annotations-api:6.0.53",
+        server_urls = ["https://repo.maven.apache.org/maven2/"],
+        artifact_sha256 = "253829d3c12b7381d1044fc22c6436cff025fe0d459e4a329413e560a7d0dd13",
         licenses = ["notice"],  # Apache 2.0
     )
 

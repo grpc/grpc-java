@@ -126,14 +126,14 @@ model {
 }
 
 configurations {
-    testLiteCompile
+    testLiteImplementation
 }
 
 dependencies {
-    testCompile project(':grpc-protobuf'),
+    testImplementation project(':grpc-protobuf'),
             project(':grpc-stub'),
             libraries.javax_annotation
-    testLiteCompile project(':grpc-protobuf-lite'),
+    testLiteImplementation project(':grpc-protobuf-lite'),
             project(':grpc-stub'),
             libraries.javax_annotation
 }

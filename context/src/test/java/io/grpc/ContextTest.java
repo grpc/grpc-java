@@ -33,6 +33,9 @@ import com.google.common.util.concurrent.SettableFuture;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
@@ -71,30 +74,31 @@ public class ContextTest {
 
   private Context listenerNotifedContext;
   private CountDownLatch deadlineLatch = new CountDownLatch(1);
-  private Context.CancellationListener cancellationListener = new Context.CancellationListener() {
-    @Override
-    public void cancelled(Context context) {
-      listenerNotifedContext = context;
-      deadlineLatch.countDown();
-    }
-  };
+  private final Context.CancellationListener cancellationListener =
+      new Context.CancellationListener() {
+        @Override
+        public void cancelled(Context context) {
+          listenerNotifedContext = context;
+          deadlineLatch.countDown();
+        }
+      };
 
   private Context observed;
-  private Runnable runner = new Runnable() {
+  private final Runnable runner = new Runnable() {
     @Override
     public void run() {
       observed = Context.current();
     }
   };
-  private ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+  private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
 
   @Before
-  public void setUp() throws Exception {
+  public void setUp() {
     Context.ROOT.attach();
   }
 
   @After
-  public void tearDown() throws Exception {
+  public void tearDown()  {
     scheduler.shutdown();
     assertEquals(Context.ROOT, Context.current());
   }
@@ -300,6 +304,35 @@ public class ContextTest {
   }
 
   @Test
+  public void removeListenersFromContextAndChildContext() {
+    class SetContextCancellationListener implements Context.CancellationListener {
+      private final List<Context> observedContexts;
+
+      SetContextCancellationListener() {
+        this.observedContexts = Collections.synchronizedList(new ArrayList<Context>());
+      }
+
+      @Override
+      public void cancelled(Context context) {
+        observedContexts.add(context);
+      }
+    }
+
+    Context.CancellableContext base = Context.current().withCancellation();
+    Context child = base.withValue(PET, "tiger");
+    Context childOfChild = base.withValue(PET, "lion");
+    final SetContextCancellationListener listener = new SetContextCancellationListener();
+    base.addListener(listener, MoreExecutors.directExecutor());
+    child.addListener(listener, MoreExecutors.directExecutor());
+    childOfChild.addListener(listener, MoreExecutors.directExecutor());
+    base.removeListener(listener);
+    childOfChild.removeListener(listener);
+    base.cancel(null);
+    assertEquals(1, listener.observedContexts.size());
+    assertSame(child, listener.observedContexts.get(0));
+  }
+
+  @Test
   public void exceptionOfExecutorDoesntThrow() {
     final AtomicReference<Throwable> loggedThrowable = new AtomicReference<>();
     Handler logHandler = new Handler() {
@@ -403,7 +436,6 @@ public class ContextTest {
     assertSame("fish", FOOD.get());
     assertFalse(attached.isCancelled());
     assertNull(attached.cancellationCause());
-    assertTrue(attached.canBeCancelled());
     assertTrue(attached.isCurrent());
     assertTrue(base.isCurrent());
 
@@ -450,7 +482,7 @@ public class ContextTest {
   }
 
   @Test
-  public void testWrapRunnable() throws Exception {
+  public void testWrapRunnable() {
     Context base = Context.current().withValue(PET, "cat");
     Context current = Context.current().withValue(PET, "fish");
     current.attach();
@@ -521,7 +553,7 @@ public class ContextTest {
   }
 
   @Test
-  public void currentContextExecutor() throws Exception {
+  public void currentContextExecutor() {
     QueuedExecutor queuedExecutor = new QueuedExecutor();
     Executor executor = Context.currentContextExecutor(queuedExecutor);
     Context base = Context.current().withValue(PET, "cat");
@@ -537,7 +569,7 @@ public class ContextTest {
   }
 
   @Test
-  public void fixedContextExecutor() throws Exception {
+  public void fixedContextExecutor() {
     Context base = Context.current().withValue(PET, "cat");
     QueuedExecutor queuedExecutor = new QueuedExecutor();
     base.fixedContextExecutor(queuedExecutor).execute(runner);
@@ -547,7 +579,7 @@ public class ContextTest {
   }
 
   @Test
-  public void typicalTryFinallyHandling() throws Exception {
+  public void typicalTryFinallyHandling() {
     Context base = Context.current().withValue(COLOR, "blue");
     Context previous = base.attach();
     try {
@@ -560,7 +592,7 @@ public class ContextTest {
   }
 
   @Test
-  public void typicalCancellableTryCatchFinallyHandling() throws Exception {
+  public void typicalCancellableTryCatchFinallyHandling() {
     Context.CancellableContext base = Context.current().withCancellation();
     Context previous = base.attach();
     try {
@@ -830,7 +862,7 @@ public class ContextTest {
                 return COLOR.get();
               }
             });
-        assertEquals(null, workerThreadVal.get());
+        assertNull(workerThreadVal.get());
 
         assertEquals("blue", COLOR.get());
         return null;
@@ -890,11 +922,8 @@ public class ContextTest {
 
   @Test
   public void cancellableAncestorTest() {
-    assertEquals(null, cancellableAncestor(null));
-
     Context c = Context.current();
-    assertFalse(c.canBeCancelled());
-    assertEquals(null, cancellableAncestor(c));
+    assertNull(cancellableAncestor(c));
 
     Context.CancellableContext withCancellation = c.withCancellation();
     assertEquals(withCancellation, cancellableAncestor(withCancellation));
@@ -935,7 +964,7 @@ public class ContextTest {
   }
 
   @Test
-  public void cancellableContext_closeCancelsWithNullCause() throws Exception {
+  public void cancellableContext_closeCancelsWithNullCause() {
     Context.CancellableContext cancellable = Context.current().withCancellation();
     cancellable.close();
     assertTrue(cancellable.isCancelled());

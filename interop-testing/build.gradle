@@ -17,7 +17,7 @@ configurations {
 evaluationDependsOn(project(':grpc-context').path)
 
 dependencies {
-    compile project(path: ':grpc-alts', configuration: 'shadow'),
+    implementation project(path: ':grpc-alts', configuration: 'shadow'),
             project(':grpc-auth'),
             project(':grpc-census'),
             project(':grpc-core'),
@@ -30,12 +30,13 @@ dependencies {
             libraries.google_auth_oauth2_http,
             libraries.junit,
             libraries.truth
+    censusGrpcMetricDependency 'implementation'
     compileOnly libraries.javax_annotation
-    runtime libraries.opencensus_impl,
+    runtimeOnly libraries.opencensus_impl,
             libraries.netty_tcnative,
             project(':grpc-grpclb')
     xdsRuntime project(path: ':grpc-xds', configuration: 'shadow')
-    testCompile project(':grpc-context').sourceSets.test.output,
+    testImplementation project(':grpc-context').sourceSets.test.output,
             libraries.mockito
     alpnagent libraries.jetty_alpn_agent
 }
@@ -113,6 +114,16 @@ task grpclb_long_lived_affinity_test_client(type: CreateStartScripts) {
     ]
 }
 
+task grpclb_fallback_test_client (type: CreateStartScripts) {
+    mainClassName = "io.grpc.testing.integration.GrpclbFallbackTestClient"
+    applicationName = "grpclb-fallback-test-client"
+    outputDir = new File(project.buildDir, 'tmp')
+    classpath = jar.outputs.files + configurations.runtime
+    defaultJvmOpts = [
+        "-Dio.grpc.internal.DnsNameResolverProvider.enable_service_config=true"
+    ]
+}
+
 task xds_test_client(type: CreateStartScripts) {
     mainClassName = "io.grpc.testing.integration.XdsTestClient"
     applicationName = "xds-test-client"
@@ -134,6 +145,7 @@ applicationDistribution.into("bin") {
     from(stresstest_client)
     from(http2_client)
     from(grpclb_long_lived_affinity_test_client)
+    from(grpclb_fallback_test_client)
     from(xds_test_client)
     from(xds_test_server)
     fileMode = 0755

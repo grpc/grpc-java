@@ -1,5 +1,5 @@
 plugins {
-    id "java"
+    id "java-library"
     id "maven-publish"
 
     id "com.google.protobuf"
@@ -19,17 +19,19 @@ description = "gRPC: Services"
 evaluationDependsOn(project(':grpc-core').path)
 
 dependencies {
-    compile project(':grpc-protobuf'),
+    api project(':grpc-protobuf'),
             project(':grpc-stub'),
             project(':grpc-core')
-    compile (libraries.protobuf_util) {
+    implementation (libraries.protobuf_util) {
         // prefer our own versions instead of protobuf-util's dependency
         exclude group: 'com.google.guava', module: 'guava'
         exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
     }
+    guavaDependency 'implementation'
+    runtimeOnly libraries.errorprone
 
     compileOnly libraries.javax_annotation
-    testCompile project(':grpc-testing'),
+    testImplementation project(':grpc-testing'),
             libraries.netty_epoll, // for DomainSocketAddress
             project(':grpc-core').sourceSets.test.output  // for FakeClock
     testCompileOnly libraries.javax_annotation

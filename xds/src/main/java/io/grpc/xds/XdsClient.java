@@ -390,49 +390,59 @@ abstract class XdsClient {
   }
 
   /**
+   * Watcher interface for a single requested xDS resource.
+   */
+  private interface ResourceWatcher {
+
+    /**
+     * Called when the resource discovery RPC encounters some transient error.
+     */
+    void onError(Status error);
+
+    /**
+     * Called when the requested resource is not available.
+     *
+     * @param resourceName name of the resource requested in discovery request.
+     */
+    void onResourceDoesNotExist(String resourceName);
+  }
+
+  /**
    * Config watcher interface. To be implemented by the xDS resolver.
    */
-  interface ConfigWatcher {
+  interface ConfigWatcher extends ResourceWatcher {
 
     /**
      * Called when receiving an update on virtual host configurations.
      */
     void onConfigChanged(ConfigUpdate update);
-
-    void onError(Status error);
   }
 
   /**
    * Cluster watcher interface.
    */
-  interface ClusterWatcher {
+  interface ClusterWatcher extends ResourceWatcher {
 
     void onClusterChanged(ClusterUpdate update);
-
-    void onError(Status error);
   }
 
   /**
    * Endpoint watcher interface.
    */
-  interface EndpointWatcher {
+  interface EndpointWatcher extends ResourceWatcher {
 
     void onEndpointChanged(EndpointUpdate update);
-
-    void onError(Status error);
   }
 
   /**
    * Listener watcher interface. To be used by {@link io.grpc.xds.internal.sds.XdsServerBuilder}.
    */
-  interface ListenerWatcher {
+  interface ListenerWatcher extends ResourceWatcher {
 
     /**
      * Called when receiving an update on Listener configuration.
      */
     void onListenerChanged(ListenerUpdate update);
-
-    void onError(Status error);
   }
 
   /**

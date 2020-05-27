@@ -19,7 +19,7 @@ subprojects {
     apply plugin: "net.ltgt.errorprone"
 
     group = "io.grpc"
-    version = "1.30.0-SNAPSHOT" // CURRENT_GRPC_VERSION
+    version = "1.31.0-SNAPSHOT" // CURRENT_GRPC_VERSION
 
     repositories {
         maven { // The google mirror is less flaky than mavenCentral()
@@ -41,6 +41,9 @@ subprojects {
         }
     }
 
+    def isAndroid = project.name in [
+            'grpc-android', 'grpc-android-interop-testing', 'grpc-cronet']
+
     ext {
         def exeSuffix = osdetector.os == 'windows' ? ".exe" : ""
         protocPluginBaseName = 'protoc-gen-grpc-java'
@@ -49,12 +52,11 @@ subprojects {
         nettyVersion = '4.1.48.Final'
         guavaVersion = '28.2-android'
         googleauthVersion = '0.20.0'
-        protobufVersion = '3.11.0'
+        protobufVersion = '3.12.0'
         protocVersion = protobufVersion
         opencensusVersion = '0.24.0'
 
         configureProtoCompilation = {
-            boolean isAndroid = project.getName().contains('android')
             String generatedSourcePath = "${projectDir}/src/generated"
             project.protobuf {
                 protoc {
@@ -138,7 +140,7 @@ subprojects {
             gson: "com.google.code.gson:gson:2.8.6",
             guava: "com.google.guava:guava:${guavaVersion}",
             hpack: 'com.twitter:hpack:0.10.1',
-            javax_annotation: 'javax.annotation:javax.annotation-api:1.2',
+            javax_annotation: 'org.apache.tomcat:annotations-api:6.0.53',
             jsr305: 'com.google.code.findbugs:jsr305:3.0.2',
             google_api_protos: 'com.google.api.grpc:proto-google-common-protos:1.17.0',
             google_auth_credentials: "com.google.auth:google-auth-library-credentials:${googleauthVersion}",
@@ -185,18 +187,73 @@ subprojects {
             // Jetty ALPN dependencies
             jetty_alpn_agent: 'org.mortbay.jetty.alpn:jetty-alpn-agent:2.0.9'
         ]
+
+        // A util function to config guava dependency with transitive dependencies
+        // properly resolved for the failOnVersionConflict strategy.
+        guavaDependency = { configurationName ->
+            dependencies."$configurationName"(libraries.guava) {
+                exclude group: 'com.google.code.findbugs', module: 'jsr305'
+                exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
+                exclude group: 'org.codehaus.mojo', module: 'animal-sniffer-annotations'
+            }
+            dependencies."$configurationName" libraries.errorprone
+            dependencies.runtimeOnly libraries.animalsniffer_annotations
+            dependencies.runtimeOnly libraries.jsr305
+        }
+
+        // A util function to config opencensus_api dependency with transitive
+        // dependencies properly resolved for the failOnVersionConflict strategy.
+        censusApiDependency = { configurationName ->
+            dependencies."$configurationName"(libraries.opencensus_api) {
+                exclude group: 'com.google.code.findbugs', module: 'jsr305'
+                exclude group: 'com.google.guava', module: 'guava'
+                // we'll always be more up-to-date
+                exclude group: 'io.grpc', module: 'grpc-context'
+            }
+            dependencies.runtimeOnly project(':grpc-context')
+            dependencies.runtimeOnly libraries.jsr305
+            guavaDependency 'runtimeOnly'
+        }
+
+        // A util function to config opencensus_contrib_grpc_metrics dependency
+        // with transitive dependencies properly resolved for the failOnVersionConflict
+        // strategy.
+        censusGrpcMetricDependency = { configurationName ->
+            dependencies."$configurationName"(libraries.opencensus_contrib_grpc_metrics) {
+                exclude group: 'com.google.code.findbugs', module: 'jsr305'
+                exclude group: 'com.google.guava', module: 'guava'
+                // we'll always be more up-to-date
+                exclude group: 'io.grpc', module: 'grpc-context'
+            }
+            dependencies.runtimeOnly project(':grpc-context')
+            dependencies.runtimeOnly libraries.jsr305
+            guavaDependency 'runtimeOnly'
+        }
+
+        // A util function to config perfmark dependency with transitive
+        // dependencies properly resolved for the failOnVersionConflict strategy.
+        perfmarkDependency = { configurationName ->
+            dependencies."$configurationName"(libraries.perfmark) {
+                exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
+            }
+            dependencies.runtimeOnly libraries.errorprone
+        }
     }
 
-    // Define a separate configuration for managing the dependency on Jetty ALPN agent.
     configurations {
-        compile {
-            // Detect Maven Enforcer's dependencyConvergence failures. We only
-            // care for artifacts used as libraries by others.
-            if (!(project.name in [
+        // Detect Maven Enforcer's dependencyConvergence failures. We only
+        // care for artifacts used as libraries by others.
+        if (isAndroid && !(project.name in ['grpc-android-interop-testing'])) {
+            releaseRuntimeClasspath {
+                resolutionStrategy.failOnVersionConflict()
+            }
+        }
+        if (!isAndroid && !(project.name in [
                 'grpc-benchmarks',
                 'grpc-interop-testing',
                 'grpc-gae-interop-testing-jdk8',
-            ])) {
+        ])) {
+            runtimeClasspath {
                 resolutionStrategy.failOnVersionConflict()
             }
         }

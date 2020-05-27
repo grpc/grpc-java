@@ -19,5 +19,5 @@ java_library(
     name = "javax_annotation",
     neverlink = 1,  # @Generated is source-retention
     visibility = ["//visibility:public"],
-    exports = ["@javax_annotation_javax_annotation_api//jar"],
+    exports = ["@org_apache_tomcat_annotations_api//jar"],
 )

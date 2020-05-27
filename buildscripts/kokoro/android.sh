@@ -56,9 +56,6 @@ cd ../routeguide
 cd ../helloworld
 ../../gradlew build
 
-cd "$BASE_DIR/github/grpc-java/examples/example-kotlin/android/helloworld/"
-../../../gradlew build
-
 # Skip APK size and dex count comparisons for non-PR builds
 
 if [[ -z "${KOKORO_GITHUB_PULL_REQUEST_COMMIT:-}" ]]; then

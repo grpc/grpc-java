@@ -413,13 +413,55 @@ public class ClientCallsTest {
   }
 
   @Test
+  public void disablingAutoRequestSuppressesRequests()
+      throws Exception {
+    final AtomicReference<ClientCall.Listener<String>> listener =
+        new AtomicReference<>();
+    final List<Integer> requests = new ArrayList<>();
+    NoopClientCall<Integer, String> call = new NoopClientCall<Integer, String>() {
+      @Override
+      public void start(io.grpc.ClientCall.Listener<String> responseListener, Metadata headers) {
+        listener.set(responseListener);
+      }
+
+      @Override
+      public void request(int numMessages) {
+        requests.add(numMessages);
+      }
+    };
+    ClientCalls.asyncBidiStreamingCall(call, new ClientResponseObserver<Integer, String>() {
+      @Override
+      public void beforeStart(ClientCallStreamObserver<Integer> requestStream) {
+        requestStream.disableAutoRequestWithInitial(0);
+      }
+
+      @Override
+      public void onNext(String value) {
+
+      }
+
+      @Override
+      public void onError(Throwable t) {
+
+      }
+
+      @Override
+      public void onCompleted() {
+
+      }
+    });
+    listener.get().onMessage("message");
+    assertThat(requests).isEmpty();
+  }
+
+  @Test
   public void callStreamObserverPropagatesFlowControlRequestsToCall()
       throws Exception {
     ClientResponseObserver<Integer, String> responseObserver =
         new ClientResponseObserver<Integer, String>() {
           @Override
           public void beforeStart(ClientCallStreamObserver<Integer> requestStream) {
-            requestStream.disableAutoInboundFlowControl();
+            requestStream.disableAutoRequestWithInitial(0);
           }
 
           @Override
@@ -460,26 +502,34 @@ public class ClientCallsTest {
   public void canCaptureInboundFlowControlForServerStreamingObserver()
       throws Exception {
 
-    ClientResponseObserver<Integer, String> responseObserver =
-        new ClientResponseObserver<Integer, String>() {
-          @Override
-          public void beforeStart(ClientCallStreamObserver<Integer> requestStream) {
-            requestStream.disableAutoInboundFlowControl();
-            requestStream.request(5);
-          }
+    class ResponseObserver implements ClientResponseObserver<Integer, String> {
 
-          @Override
-          public void onNext(String value) {
-          }
+      private ClientCallStreamObserver<Integer> requestStream;
 
-          @Override
-          public void onError(Throwable t) {
-          }
+      @Override
+      public void beforeStart(ClientCallStreamObserver<Integer> requestStream) {
+        this.requestStream = requestStream;
+        requestStream.disableAutoRequestWithInitial(0);
+      }
 
-          @Override
-          public void onCompleted() {
-          }
-        };
+      @Override
+      public void onNext(String value) {
+      }
+
+      @Override
+      public void onError(Throwable t) {
+      }
+
+      @Override
+      public void onCompleted() {
+      }
+
+      void request(int numMessages) {
+        requestStream.request(numMessages);
+      }
+    }
+
+    ResponseObserver responseObserver = new ResponseObserver();
     final AtomicReference<ClientCall.Listener<String>> listener =
         new AtomicReference<>();
     final List<Integer> requests = new ArrayList<>();
@@ -495,8 +545,9 @@ public class ClientCallsTest {
       }
     };
     ClientCalls.asyncServerStreamingCall(call, 1, responseObserver);
+    responseObserver.request(5);
     listener.get().onMessage("message");
-    assertThat(requests).containsExactly(5, 1).inOrder();
+    assertThat(requests).containsExactly(5).inOrder();
   }
 
   @Test
@@ -544,7 +595,7 @@ public class ClientCallsTest {
         new ClientResponseObserver<Integer, Integer>() {
           @Override
           public void beforeStart(final ClientCallStreamObserver<Integer> requestStream) {
-            requestStream.disableAutoInboundFlowControl();
+            requestStream.disableAutoRequestWithInitial(0);
           }
 
           @Override
@@ -566,14 +617,15 @@ public class ClientCallsTest {
 
     CallStreamObserver<Integer> integerStreamObserver = (CallStreamObserver<Integer>)
         ClientCalls.asyncBidiStreamingCall(clientCall, responseObserver);
-    semaphore.acquire();
+    integerStreamObserver.request(1);
+    assertTrue(semaphore.tryAcquire(5, TimeUnit.SECONDS));
     integerStreamObserver.request(2);
-    semaphore.acquire();
+    assertTrue(semaphore.tryAcquire(5, TimeUnit.SECONDS));
     integerStreamObserver.request(3);
     integerStreamObserver.onCompleted();
     assertTrue(latch.await(5, TimeUnit.SECONDS));
     // Verify that number of messages produced in each onReady handler call matches the number
-    // requested by the client. Note that ClientCalls.asyncBidiStreamingCall will request(1)
+    // requested by the client.
     assertEquals(Arrays.asList(0, 1, 1, 2, 2, 2), receivedMessages);
   }
 
@@ -591,7 +643,7 @@ public class ClientCallsTest {
               public StreamObserver<Integer> invoke(StreamObserver<Integer> responseObserver) {
                 final ServerCallStreamObserver<Integer> serverCallObserver =
                     (ServerCallStreamObserver<Integer>) responseObserver;
-                serverCallObserver.disableAutoInboundFlowControl();
+                serverCallObserver.disableAutoRequestWithInitial(0);
                 observerFuture.set(serverCallObserver);
                 return new StreamObserver<Integer>() {
                   @Override

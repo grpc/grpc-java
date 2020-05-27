@@ -29,7 +29,6 @@ import io.grpc.Deadline;
 import io.grpc.DecompressorRegistry;
 import io.grpc.HandlerRegistry;
 import io.grpc.InternalChannelz;
-import io.grpc.InternalNotifyOnServerBuild;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerInterceptor;
@@ -77,7 +76,6 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
       new InternalHandlerRegistry.Builder();
   final List<ServerTransportFilter> transportFilters = new ArrayList<>();
   final List<ServerInterceptor> interceptors = new ArrayList<>();
-  private final List<InternalNotifyOnServerBuild> notifyOnBuildList = new ArrayList<>();
   private final List<ServerStreamTracer.Factory> streamTracerFactories = new ArrayList<>();
   HandlerRegistry fallbackRegistry = DEFAULT_FALLBACK_REGISTRY;
   ObjectPool<? extends Executor> executorPool = DEFAULT_EXECUTOR_POOL;
@@ -114,9 +112,6 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
 
   @Override
   public final T addService(BindableService bindableService) {
-    if (bindableService instanceof InternalNotifyOnServerBuild) {
-      notifyOnBuildList.add((InternalNotifyOnServerBuild) bindableService);
-    }
     return addService(checkNotNull(bindableService, "bindableService").bindService());
   }
 
@@ -222,14 +217,7 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
 
   @Override
   public final Server build() {
-    ServerImpl server = new ServerImpl(
-        this,
-        buildTransportServers(getTracerFactories()),
-        Context.ROOT);
-    for (InternalNotifyOnServerBuild notifyTarget : notifyOnBuildList) {
-      notifyTarget.notifyOnBuild(server);
-    }
-    return server;
+    return new ServerImpl(this, buildTransportServers(getTracerFactories()), Context.ROOT);
   }
 
   @VisibleForTesting

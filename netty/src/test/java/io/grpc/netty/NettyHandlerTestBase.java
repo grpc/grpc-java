@@ -101,6 +101,7 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
 
   protected final TransportTracer transportTracer = new TransportTracer();
   protected int flowControlWindow = DEFAULT_WINDOW_SIZE;
+  protected boolean autoFlowControl = false;
 
   private final FakeClock fakeClock = new FakeClock();
 

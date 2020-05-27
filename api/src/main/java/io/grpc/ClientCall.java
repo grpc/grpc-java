@@ -205,8 +205,8 @@ public abstract class ClientCall<ReqT, RespT> {
   /**
    * Prevent any further processing for this {@code ClientCall}. No further messages may be sent or
    * will be received. The server is informed of cancellations, but may not stop processing the
-   * call. Cancellation is permitted if previously {@link #halfClose}d. Cancelling an already {@code
-   * cancel()}ed {@code ClientCall} has no effect.
+   * call. Cancellation is permitted even if previously {@link #halfClose}d. Cancelling an already
+   * {@code cancel()}ed {@code ClientCall} has no effect.
    *
    * <p>No other methods on this class can be called after this method has been called.
    *

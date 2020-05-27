@@ -68,7 +68,20 @@ import javax.annotation.Nullable;
  * A Netty-based {@link ConnectionClientTransport} implementation.
  */
 class NettyClientTransport implements ConnectionClientTransport {
-  static final AttributeKey<ChannelLogger> LOGGER_KEY = AttributeKey.newInstance("channelLogger");
+
+  /**
+   * Get the existing {@link ChannelLogger} key in case a separate, isolated class loader has
+   * already created {@link LOGGER_KEY}.
+   */
+  private static final AttributeKey<ChannelLogger> getOrCreateChannelLogger() {
+    AttributeKey<ChannelLogger> key = AttributeKey.valueOf("channelLogger");
+    if (key == null) {
+      key = AttributeKey.newInstance("channelLogger");
+    }
+    return key;
+  }
+
+  static final AttributeKey<ChannelLogger> LOGGER_KEY = getOrCreateChannelLogger();
 
   private final InternalLogId logId;
   private final Map<ChannelOption<?>, ?> channelOptions;
@@ -79,6 +92,7 @@ class NettyClientTransport implements ConnectionClientTransport {
   private final String authorityString;
   private final AsciiString authority;
   private final AsciiString userAgent;
+  private final boolean autoFlowControl;
   private final int flowControlWindow;
   private final int maxMessageSize;
   private final int maxHeaderListSize;
@@ -106,8 +120,9 @@ class NettyClientTransport implements ConnectionClientTransport {
   NettyClientTransport(
       SocketAddress address, ChannelFactory<? extends Channel> channelFactory,
       Map<ChannelOption<?>, ?> channelOptions, EventLoopGroup group,
-      ProtocolNegotiator negotiator, int flowControlWindow, int maxMessageSize,
-      int maxHeaderListSize, long keepAliveTimeNanos, long keepAliveTimeoutNanos,
+      ProtocolNegotiator negotiator, boolean autoFlowControl, int flowControlWindow,
+      int maxMessageSize, int maxHeaderListSize,
+      long keepAliveTimeNanos, long keepAliveTimeoutNanos,
       boolean keepAliveWithoutCalls, String authority, @Nullable String userAgent,
       Runnable tooManyPingsRunnable, TransportTracer transportTracer, Attributes eagAttributes,
       LocalSocketPicker localSocketPicker, ChannelLogger channelLogger,
@@ -118,6 +133,7 @@ class NettyClientTransport implements ConnectionClientTransport {
     this.group = Preconditions.checkNotNull(group, "group");
     this.channelFactory = channelFactory;
     this.channelOptions = Preconditions.checkNotNull(channelOptions, "channelOptions");
+    this.autoFlowControl = autoFlowControl;
     this.flowControlWindow = flowControlWindow;
     this.maxMessageSize = maxMessageSize;
     this.maxHeaderListSize = maxHeaderListSize;
@@ -214,6 +230,7 @@ class NettyClientTransport implements ConnectionClientTransport {
     handler = NettyClientHandler.newHandler(
         lifecycleManager,
         keepAliveManager,
+        autoFlowControl,
         flowControlWindow,
         maxHeaderListSize,
         GrpcUtil.STOPWATCH_SUPPLIER,
@@ -221,7 +238,6 @@ class NettyClientTransport implements ConnectionClientTransport {
         transportTracer,
         eagAttributes,
         authorityString);
-    NettyHandlerSettings.setAutoWindow(handler);
 
     ChannelHandler negotiationHandler = negotiator.newHandler(handler);
 

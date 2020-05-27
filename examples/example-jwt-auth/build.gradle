@@ -22,8 +22,8 @@ targetCompatibility = 1.7
 
 // Feel free to delete the comment at the next line. It is just for safely
 // updating the version in our release process.
-def grpcVersion = '1.30.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-def protobufVersion = '3.11.0'
+def grpcVersion = '1.31.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+def protobufVersion = '3.12.0'
 def protocVersion = protobufVersion
 
 dependencies {
@@ -32,7 +32,7 @@ dependencies {
     implementation "io.jsonwebtoken:jjwt:0.9.1"
     implementation "javax.xml.bind:jaxb-api:2.3.1"
 
-    compileOnly "javax.annotation:javax.annotation-api:1.2"
+    compileOnly "org.apache.tomcat:annotations-api:6.0.53"
 
     runtimeOnly "io.grpc:grpc-netty-shaded:${grpcVersion}"
 

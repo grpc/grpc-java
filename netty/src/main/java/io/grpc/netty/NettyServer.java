@@ -19,7 +19,6 @@ package io.grpc.netty;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_AGE_NANOS_DISABLED;
 import static io.netty.channel.ChannelOption.ALLOCATOR;
-import static io.netty.channel.ChannelOption.SO_BACKLOG;
 import static io.netty.channel.ChannelOption.SO_KEEPALIVE;
 
 import com.google.common.base.MoreObjects;
@@ -69,6 +68,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
   private final SocketAddress address;
   private final ChannelFactory<? extends ServerChannel> channelFactory;
   private final Map<ChannelOption<?>, ?> channelOptions;
+  private final Map<ChannelOption<?>, ?> childChannelOptions;
   private final ProtocolNegotiator protocolNegotiator;
   private final int maxStreamsPerConnection;
   private final ObjectPool<? extends EventLoopGroup> bossGroupPool;
@@ -78,6 +78,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
   private EventLoopGroup workerGroup;
   private ServerListener listener;
   private Channel channel;
+  private final boolean autoFlowControl;
   private final int flowControlWindow;
   private final int maxMessageSize;
   private final int maxHeaderListSize;
@@ -99,13 +100,15 @@ class NettyServer implements InternalServer, InternalWithLogId {
   NettyServer(
       SocketAddress address, ChannelFactory<? extends ServerChannel> channelFactory,
       Map<ChannelOption<?>, ?> channelOptions,
+      Map<ChannelOption<?>, ?> childChannelOptions,
       ObjectPool<? extends EventLoopGroup> bossGroupPool,
       ObjectPool<? extends EventLoopGroup> workerGroupPool,
       boolean forceHeapBuffer,
       ProtocolNegotiator protocolNegotiator,
       List<? extends ServerStreamTracer.Factory> streamTracerFactories,
       TransportTracer.Factory transportTracerFactory,
-      int maxStreamsPerConnection, int flowControlWindow, int maxMessageSize, int maxHeaderListSize,
+      int maxStreamsPerConnection, boolean autoFlowControl, int flowControlWindow,
+      int maxMessageSize, int maxHeaderListSize,
       long keepAliveTimeInNanos, long keepAliveTimeoutInNanos,
       long maxConnectionIdleInNanos,
       long maxConnectionAgeInNanos, long maxConnectionAgeGraceInNanos,
@@ -115,6 +118,8 @@ class NettyServer implements InternalServer, InternalWithLogId {
     this.channelFactory = checkNotNull(channelFactory, "channelFactory");
     checkNotNull(channelOptions, "channelOptions");
     this.channelOptions = new HashMap<ChannelOption<?>, Object>(channelOptions);
+    checkNotNull(childChannelOptions, "childChannelOptions");
+    this.childChannelOptions = new HashMap<ChannelOption<?>, Object>(childChannelOptions);
     this.bossGroupPool = checkNotNull(bossGroupPool, "bossGroupPool");
     this.workerGroupPool = checkNotNull(workerGroupPool, "workerGroupPool");
     this.forceHeapBuffer = forceHeapBuffer;
@@ -124,6 +129,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
     this.streamTracerFactories = checkNotNull(streamTracerFactories, "streamTracerFactories");
     this.transportTracerFactory = transportTracerFactory;
     this.maxStreamsPerConnection = maxStreamsPerConnection;
+    this.autoFlowControl = autoFlowControl;
     this.flowControlWindow = flowControlWindow;
     this.maxMessageSize = maxMessageSize;
     this.maxHeaderListSize = maxHeaderListSize;
@@ -163,11 +169,18 @@ class NettyServer implements InternalServer, InternalWithLogId {
     b.group(bossGroup, workerGroup);
     b.channelFactory(channelFactory);
     // For non-socket based channel, the option will be ignored.
-    b.option(SO_BACKLOG, 128);
     b.childOption(SO_KEEPALIVE, true);
 
     if (channelOptions != null) {
       for (Map.Entry<ChannelOption<?>, ?> entry : channelOptions.entrySet()) {
+        @SuppressWarnings("unchecked")
+        ChannelOption<Object> key = (ChannelOption<Object>) entry.getKey();
+        b.option(key, entry.getValue());
+      }
+    }
+
+    if (childChannelOptions != null) {
+      for (Map.Entry<ChannelOption<?>, ?> entry : childChannelOptions.entrySet()) {
         @SuppressWarnings("unchecked")
         ChannelOption<Object> key = (ChannelOption<Object>) entry.getKey();
         b.childOption(key, entry.getValue());
@@ -195,6 +208,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
                 streamTracerFactories,
                 transportTracerFactory.create(),
                 maxStreamsPerConnection,
+                autoFlowControl,
                 flowControlWindow,
                 maxMessageSize,
                 maxHeaderListSize,
