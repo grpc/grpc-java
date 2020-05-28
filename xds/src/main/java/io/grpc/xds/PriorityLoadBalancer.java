@@ -57,8 +57,8 @@ final class PriorityLoadBalancer extends LoadBalancer {
 
   // Following fields are only null initially.
   private ResolvedAddresses resolvedAddresses;
-  private List<String> priorities;
-  private Map<String, Integer> priorityToIndex;
+  private List<String> priorityNames;
+  private Map<String, Integer> priorityNameToIndex;
   private ConnectivityState currentConnectivityState;
   private SubchannelPicker currentPicker;
 
@@ -77,18 +77,18 @@ final class PriorityLoadBalancer extends LoadBalancer {
     this.resolvedAddresses = resolvedAddresses;
     PriorityLbConfig config = (PriorityLbConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
     checkNotNull(config, "missing priority lb config");
-    priorities = config.priorities;
+    priorityNames = config.priorities;
     Map<String, Integer> pToI = new HashMap<>();
-    for (int i = 0; i < priorities.size(); i++) {
-      pToI.put(priorities.get(i), i);
+    for (int i = 0; i < priorityNames.size(); i++) {
+      pToI.put(priorityNames.get(i), i);
     }
-    priorityToIndex = Collections.unmodifiableMap(pToI);
+    priorityNameToIndex = Collections.unmodifiableMap(pToI);
     for (String priority : children.keySet()) {
-      if (!priorityToIndex.containsKey(priority)) {
+      if (!priorityNameToIndex.containsKey(priority)) {
         children.get(priority).deactivate();
       }
     }
-    for (String priority : priorities) {
+    for (String priority : priorityNames) {
       if (children.containsKey(priority)) {
         children.get(priority).updateResolvedAddresses();
       }
@@ -118,8 +118,8 @@ final class PriorityLoadBalancer extends LoadBalancer {
   }
 
   private void tryNextPriority(boolean reportConnecting) {
-    for (int i = 0; i < priorities.size(); i++) {
-      String priority = priorities.get(i);
+    for (int i = 0; i < priorityNames.size(); i++) {
+      String priority = priorityNames.get(i);
       if (!children.containsKey(priority)) {
         ChildLbState child = new ChildLbState(priority);
         children.put(priority, child);
@@ -132,8 +132,8 @@ final class PriorityLoadBalancer extends LoadBalancer {
       if (child.connectivityState.equals(READY) || child.connectivityState.equals(IDLE)) {
         logger.log(XdsLogLevel.DEBUG, "Shifted to priority {0}", priority);
         updateOverallState(child.connectivityState, child.picker);
-        for (int j = i + 1; j < priorities.size(); j++) {
-          String p = priorities.get(j);
+        for (int j = i + 1; j < priorityNames.size(); j++) {
+          String p = priorityNames.get(j);
           if (children.containsKey(p)) {
             children.get(p).deactivate();
           }
