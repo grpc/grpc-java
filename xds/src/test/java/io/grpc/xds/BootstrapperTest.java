@@ -29,17 +29,14 @@ import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import java.io.IOException;
 import java.util.List;
-import org.junit.Rule;
+import org.junit.Assert;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 /** Unit tests for {@link Bootstrapper}. */
 @RunWith(JUnit4.class)
 public class BootstrapperTest {
-
-  @Rule public ExpectedException thrown = ExpectedException.none();
 
   @Test
   public void parseBootstrap_validData_singleXdsServer() throws IOException {
@@ -218,8 +215,12 @@ public class BootstrapperTest {
   public void parseBootstrap_emptyData() throws IOException {
     String rawData = "";
 
-    thrown.expect(IOException.class);
-    Bootstrapper.parseConfig(rawData);
+    try {
+      Bootstrapper.parseConfig(rawData);
+      Assert.fail();
+    } catch (IOException expected) {
+    }
+
   }
 
   @Test
@@ -269,9 +270,12 @@ public class BootstrapperTest {
         + "  }\n"
         + "}";
 
-    thrown.expect(IOException.class);
-    thrown.expectMessage("Invalid bootstrap: 'xds_servers' does not exist.");
-    Bootstrapper.parseConfig(rawData);
+    try {
+      Bootstrapper.parseConfig(rawData);
+      Assert.fail();
+    } catch (IOException ex) {
+      Assert.assertEquals("Invalid bootstrap: 'xds_servers' does not exist.", ex.getMessage());
+    }
   }
 
   @Test
@@ -299,9 +303,13 @@ public class BootstrapperTest {
         + "  ]\n "
         + "}";
 
-    thrown.expect(IOException.class);
-    thrown.expectMessage("Invalid bootstrap: 'xds_servers' contains unknown server.");
-    Bootstrapper.parseConfig(rawData);
+    try {
+      Bootstrapper.parseConfig(rawData);
+      Assert.fail();
+    } catch (IOException ex) {
+      Assert.assertEquals("Invalid bootstrap: 'xds_servers' contains unknown server.",
+          ex.getMessage());
+    }
   }
 
   @SuppressWarnings("deprecation")

@@ -111,10 +111,10 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
@@ -179,8 +179,6 @@ public class XdsClientImplTest {
 
   @Rule
   public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
-  @Rule
-  public ExpectedException thrown = ExpectedException.none();
 
   private final SynchronizationContext syncContext = new SynchronizationContext(
       new Thread.UncaughtExceptionHandler() {
@@ -3441,8 +3439,11 @@ public class XdsClientImplTest {
                             .setCaseSensitive(BoolValue.newBuilder().setValue(false))))
             .build();
 
-    thrown.expect(XdsClientImpl.InvalidProtoDataException.class);
-    XdsClientImpl.populateRoutesInVirtualHost(virtualHost);
+    try {
+      XdsClientImpl.populateRoutesInVirtualHost(virtualHost);
+      Assert.fail();
+    } catch (XdsClientImpl.InvalidProtoDataException expected) {
+    }
   }
 
   @Test
@@ -3460,8 +3461,11 @@ public class XdsClientImplTest {
                             .setCaseSensitive(BoolValue.newBuilder().setValue(true))))
             .build();
 
-    thrown.expect(XdsClientImpl.InvalidProtoDataException.class);
-    XdsClientImpl.populateRoutesInVirtualHost(virtualHost);
+    try {
+      XdsClientImpl.populateRoutesInVirtualHost(virtualHost);
+      Assert.fail();
+    } catch (XdsClientImpl.InvalidProtoDataException expected) {
+    }
   }
 
   @Test
@@ -3485,8 +3489,11 @@ public class XdsClientImplTest {
                             .addQueryParameters(QueryParameterMatcher.getDefaultInstance())))
             .build();
 
-    thrown.expect(XdsClientImpl.InvalidProtoDataException.class);
-    XdsClientImpl.populateRoutesInVirtualHost(virtualHost);
+    try {
+      XdsClientImpl.populateRoutesInVirtualHost(virtualHost);
+      Assert.fail();
+    } catch (XdsClientImpl.InvalidProtoDataException expected) {
+    }
   }
 
   @Test

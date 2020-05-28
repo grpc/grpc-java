@@ -26,9 +26,7 @@ import static org.junit.Assert.assertTrue;
 import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.testing.TestMethodDescriptors;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -37,8 +35,6 @@ import org.junit.runners.JUnit4;
  */
 @RunWith(JUnit4.class)
 public class MethodDescriptorTest {
-  @Rule
-  public final ExpectedException thrown = ExpectedException.none();
 
   @Test
   public void createMethodDescriptor() {

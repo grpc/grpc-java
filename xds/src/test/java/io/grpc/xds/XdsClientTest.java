@@ -23,9 +23,8 @@ import static org.mockito.Mockito.verify;
 
 import io.grpc.xds.XdsClient.RefCountedXdsClientObjectPool;
 import io.grpc.xds.XdsClient.XdsClientFactory;
-import org.junit.Rule;
+import org.junit.Assert;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -34,8 +33,6 @@ import org.junit.runners.JUnit4;
  */
 @RunWith(JUnit4.class)
 public class XdsClientTest {
-  @Rule
-  public final ExpectedException thrown = ExpectedException.none();
 
   @Test
   public void refCountedXdsClientObjectPool_getObjectShouldMatchReturnObject() {
@@ -61,9 +58,12 @@ public class XdsClientTest {
     verify(xdsClient).shutdown();
     assertThat(xdsClientPool.xdsClient).isNull();
 
-    thrown.expect(IllegalStateException.class);
-    // returnOject for the 3rd time
-    xdsClientPool.returnObject(xdsClient);
+    // returnObject for the 3rd time
+    try {
+      xdsClientPool.returnObject(xdsClient);
+      Assert.fail();
+    } catch (IllegalStateException expected) {
+    }
   }
 
   @Test
@@ -79,8 +79,11 @@ public class XdsClientTest {
 
     xdsClientPool.getObject();
 
-    thrown.expect(IllegalStateException.class);
-    xdsClientPool.returnObject(mock(XdsClient.class));
+    try {
+      xdsClientPool.returnObject(mock(XdsClient.class));
+      Assert.fail();
+    } catch (IllegalStateException expected) {
+    }
   }
 
   @Test

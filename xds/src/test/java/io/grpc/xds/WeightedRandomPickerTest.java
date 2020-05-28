@@ -28,9 +28,9 @@ import io.grpc.xds.WeightedRandomPicker.WeightedChildPicker;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.Mock;
@@ -42,8 +42,6 @@ import org.mockito.junit.MockitoRule;
  */
 @RunWith(JUnit4.class)
 public class WeightedRandomPickerTest {
-  @Rule
-  public final ExpectedException thrown = ExpectedException.none();
 
   @Rule
   public final MockitoRule mockitoRule = MockitoJUnit.rule();
@@ -104,14 +102,20 @@ public class WeightedRandomPickerTest {
   public void emptyList() {
     List<WeightedChildPicker> emptyList = new ArrayList<>();
 
-    thrown.expect(IllegalArgumentException.class);
-    new WeightedRandomPicker(emptyList);
+    try {
+      new WeightedRandomPicker(emptyList);
+      Assert.fail();
+    } catch (IllegalArgumentException expected) {
+    }
   }
 
   @Test
   public void negativeWeight() {
-    thrown.expect(IllegalArgumentException.class);
-    new WeightedChildPicker(-1, childPicker0);
+    try {
+      new WeightedChildPicker(-1, childPicker0);
+      Assert.fail();
+    } catch (IllegalArgumentException expected) {
+    }
   }
 
   @Test
