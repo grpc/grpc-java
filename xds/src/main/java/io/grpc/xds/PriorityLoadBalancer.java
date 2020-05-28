@@ -52,8 +52,7 @@ final class PriorityLoadBalancer extends LoadBalancer {
   private final XdsLogger logger;
 
   // Includes all active and deactivated children. Mutable. New entries are only added from priority
-  // 0 up to the selected priority. Entries are only deleted when priority lb is shutdown or 15
-  // minutes after the entry's deactivation.
+  // 0 up to the selected priority. An entry is only deleted 15 minutes after the its deactivation.
   private final Map<String, ChildLbState> children = new HashMap<>();
 
   // Following fields are only null initially.
