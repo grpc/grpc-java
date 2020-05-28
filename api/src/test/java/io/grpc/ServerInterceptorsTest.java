@@ -38,10 +38,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentMatchers;
@@ -55,9 +55,6 @@ import org.mockito.junit.MockitoRule;
 public class ServerInterceptorsTest {
   @Rule
   public final MockitoRule mocks = MockitoJUnit.rule();
-
-  @Rule
-  public final ExpectedException thrown = ExpectedException.none();
 
   @Mock
   private Marshaller<String> requestMarshaller;
@@ -111,21 +108,32 @@ public class ServerInterceptorsTest {
   public void npeForNullServiceDefinition() {
     ServerServiceDefinition serviceDef = null;
     List<ServerInterceptor> interceptors = Arrays.asList();
-    thrown.expect(NullPointerException.class);
-    ServerInterceptors.intercept(serviceDef, interceptors);
+
+    try {
+      ServerInterceptors.intercept(serviceDef, interceptors);
+      Assert.fail();
+    } catch (NullPointerException expected) {
+    }
   }
 
   @Test
   public void npeForNullInterceptorList() {
-    thrown.expect(NullPointerException.class);
-    ServerInterceptors.intercept(serviceDefinition, (List<ServerInterceptor>) null);
+
+    try {
+      ServerInterceptors.intercept(serviceDefinition, (List<ServerInterceptor>) null);
+      Assert.fail();
+    } catch (NullPointerException expected) {
+    }
   }
 
   @Test
   public void npeForNullInterceptor() {
     List<ServerInterceptor> interceptors = Arrays.asList((ServerInterceptor) null);
-    thrown.expect(NullPointerException.class);
-    ServerInterceptors.intercept(serviceDefinition, interceptors);
+    try {
+      ServerInterceptors.intercept(serviceDefinition, interceptors);
+      Assert.fail();
+    } catch (NullPointerException expected) {
+    }
   }
 
   @Test

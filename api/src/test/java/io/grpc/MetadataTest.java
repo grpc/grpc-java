@@ -38,7 +38,7 @@ import java.io.InputStream;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.Locale;
-import org.junit.Rule;
+import org.junit.Assert;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
@@ -49,8 +49,6 @@ import org.junit.runners.JUnit4;
  */
 @RunWith(JUnit4.class)
 public class MetadataTest {
-
-  @Rule public final ExpectedException thrown = ExpectedException.none();
 
   private static final Metadata.BinaryMarshaller<Fish> FISH_MARSHALLER =
       new Metadata.BinaryMarshaller<Fish>() {
@@ -121,10 +119,12 @@ public class MetadataTest {
 
   @Test
   public void noPseudoHeaders() {
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("Invalid character");
-
-    Metadata.Key.of(":test-bin", FISH_MARSHALLER);
+    try {
+      Metadata.Key.of(":test-bin", FISH_MARSHALLER);
+      Assert.fail();
+    } catch (IllegalArgumentException ex) {
+      assertEquals("Invalid character ':' in key name ':test-bin'", ex.getMessage());
+    }
   }
 
   @Test
@@ -186,8 +186,12 @@ public class MetadataTest {
     Iterator<Fish> i = metadata.getAll(KEY).iterator();
     assertEquals(lance, i.next());
 
-    thrown.expect(UnsupportedOperationException.class);
-    i.remove();
+    try {
+      i.remove();
+      Assert.fail();
+    } catch (UnsupportedOperationException expected) {
+
+    }
   }
 
   @Test
@@ -271,17 +275,24 @@ public class MetadataTest {
 
   @Test
   public void shortBinaryKeyName() {
-    thrown.expect(IllegalArgumentException.class);
 
-    Metadata.Key.of("-bin", FISH_MARSHALLER);
+    try {
+      Metadata.Key.of("-bin", FISH_MARSHALLER);
+      Assert.fail();
+    } catch (IllegalArgumentException expected) {
+
+    }
   }
 
   @Test
   public void invalidSuffixBinaryKeyName() {
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("Binary header is named");
-
-    Metadata.Key.of("nonbinary", FISH_MARSHALLER);
+    try {
+      Metadata.Key.of("nonbinary", FISH_MARSHALLER);
+      Assert.fail();
+    } catch (IllegalArgumentException expected) {
+     Assert.assertEquals("Binary header is named nonbinary. It must end with -bin",
+         expected.getMessage());
+    }
   }
 
   @Test

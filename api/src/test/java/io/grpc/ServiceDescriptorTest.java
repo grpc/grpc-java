@@ -24,7 +24,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
-import org.junit.Rule;
+import org.junit.Assert;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
@@ -36,31 +36,34 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class ServiceDescriptorTest {
 
-  @Rule
-  public final ExpectedException thrown = ExpectedException.none();
-
   @Test
   public void failsOnNullName() {
-    thrown.expect(NullPointerException.class);
-    thrown.expectMessage("name");
-
-    new ServiceDescriptor(null, Collections.<MethodDescriptor<?, ?>>emptyList());
+    try {
+      new ServiceDescriptor(null, Collections.<MethodDescriptor<?, ?>>emptyList());
+      Assert.fail();
+    } catch (NullPointerException ex) {
+      Assert.assertEquals("name", ex.getMessage());
+    }
   }
 
   @Test
   public void failsOnNullMethods() {
-    thrown.expect(NullPointerException.class);
-    thrown.expectMessage("methods");
-
-    new ServiceDescriptor("name", (Collection<MethodDescriptor<?, ?>>) null);
+    try {
+      new ServiceDescriptor("name", (Collection<MethodDescriptor<?, ?>>) null);
+      Assert.fail();
+    } catch (NullPointerException ex) {
+      Assert.assertEquals("methods", ex.getMessage());
+    }
   }
 
   @Test
   public void failsOnNullMethod() {
-    thrown.expect(NullPointerException.class);
-    thrown.expectMessage("method");
-
-    new ServiceDescriptor("name", Collections.<MethodDescriptor<?, ?>>singletonList(null));
+    try {
+      new ServiceDescriptor("name", Collections.<MethodDescriptor<?, ?>>singletonList(null));
+      Assert.fail();
+    } catch (NullPointerException ex) {
+      Assert.assertEquals("method", ex.getMessage());
+    }
   }
 
   @Test
@@ -73,10 +76,12 @@ public class ServiceDescriptorTest {
           .setResponseMarshaller(TestMethodDescriptors.voidMarshaller())
           .build());
 
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("service names");
-
-    new ServiceDescriptor("name", descriptors);
+    try {
+      new ServiceDescriptor("name", descriptors);
+      Assert.fail();
+    } catch (IllegalArgumentException ex) {
+      Assert.assertEquals("service names wrongservice != name", ex.getMessage());
+    }
   }
 
   @Test
@@ -95,10 +100,12 @@ public class ServiceDescriptorTest {
           .setResponseMarshaller(TestMethodDescriptors.voidMarshaller())
           .build());
 
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("duplicate");
-
-    new ServiceDescriptor("name", descriptors);
+    try {
+      new ServiceDescriptor("name", descriptors);
+      Assert.fail();
+    } catch (IllegalArgumentException ex) {
+      Assert.assertEquals("duplicate name name/method", ex.getMessage());
+    }
   }
 
   @Test

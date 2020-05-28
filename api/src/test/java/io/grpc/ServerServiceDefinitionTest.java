@@ -23,7 +23,7 @@ import static org.junit.Assert.fail;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
-import org.junit.Rule;
+import org.junit.Assert;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
@@ -52,9 +52,6 @@ public class ServerServiceDefinitionTest {
         = ServerMethodDefinition.create(method1, methodHandler1);
   private ServerMethodDefinition<String, Integer> methodDef2
         = ServerMethodDefinition.create(method2, methodHandler2);
-  @Rule
-  public ExpectedException thrown = ExpectedException.none();
-
   @Test
   public void noMethods() {
     ServiceDescriptor sd = new ServiceDescriptor(serviceName);
@@ -90,9 +87,13 @@ public class ServerServiceDefinitionTest {
     ServiceDescriptor sd = new ServiceDescriptor(serviceName, method1);
     ServerServiceDefinition.Builder ssd = ServerServiceDefinition.builder(sd)
         .addMethod(method1, methodHandler1);
-    thrown.expect(IllegalStateException.class);
-    ssd.addMethod(diffMethod1, methodHandler2)
-        .build();
+    try {
+      ssd.addMethod(diffMethod1, methodHandler2)
+          .build();
+      Assert.fail();
+    } catch (IllegalStateException ex) {
+
+    }
   }
 
   @Test
@@ -100,8 +101,11 @@ public class ServerServiceDefinitionTest {
     ServiceDescriptor sd = new ServiceDescriptor(serviceName);
     ServerServiceDefinition.Builder ssd = ServerServiceDefinition.builder(sd)
         .addMethod(methodDef1);
-    thrown.expect(IllegalStateException.class);
-    ssd.build();
+    try {
+      ssd.build();
+      Assert.fail();
+    } catch (IllegalStateException ex) {
+    }
   }
 
   @Test
@@ -109,16 +113,22 @@ public class ServerServiceDefinitionTest {
     ServiceDescriptor sd = new ServiceDescriptor(serviceName, method1);
     ServerServiceDefinition.Builder ssd = ServerServiceDefinition.builder(sd)
         .addMethod(diffMethod1, methodHandler1);
-    thrown.expect(IllegalStateException.class);
-    ssd.build();
+    try {
+      ssd.build();
+      Assert.fail();
+    } catch (IllegalStateException ex) {
+    }
   }
 
   @Test
   public void buildMisaligned_missingMethod() {
     ServiceDescriptor sd = new ServiceDescriptor(serviceName, method1);
     ServerServiceDefinition.Builder ssd = ServerServiceDefinition.builder(sd);
-    thrown.expect(IllegalStateException.class);
-    ssd.build();
+    try {
+      ssd.build();
+      Assert.fail();
+    } catch (IllegalStateException ex) {
+    }
   }
 
   @Test
