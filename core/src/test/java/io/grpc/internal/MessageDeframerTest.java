@@ -369,16 +369,17 @@ public class MessageDeframerTest {
     @Test
     public void sizeEnforcingInputStream_readByteAboveLimit() throws IOException {
       ByteArrayInputStream in = new ByteArrayInputStream("foo".getBytes(Charsets.UTF_8));
-
-      try (SizeEnforcingInputStream stream =
-          new MessageDeframer.SizeEnforcingInputStream(in, 2, statsTraceCtx)) {
-
+      SizeEnforcingInputStream stream =
+          new MessageDeframer.SizeEnforcingInputStream(in, 2, statsTraceCtx);
+      try {
         while (stream.read() != -1) {
         }
         Assert.fail();
       } catch (StatusRuntimeException ex) {
         assertTrue(
             ex.getMessage().startsWith("RESOURCE_EXHAUSTED: Compressed gRPC message exceeds"));
+      } finally {
+        stream.close();
       }
     }
 
@@ -414,15 +415,16 @@ public class MessageDeframerTest {
     public void sizeEnforcingInputStream_readAboveLimit() throws IOException {
       ByteArrayInputStream in = new ByteArrayInputStream("foo".getBytes(Charsets.UTF_8));
       byte[] buf = new byte[10];
-
-      try (SizeEnforcingInputStream stream =
-          new MessageDeframer.SizeEnforcingInputStream(in, 2, statsTraceCtx)) {
-
+      SizeEnforcingInputStream stream =
+          new MessageDeframer.SizeEnforcingInputStream(in, 2, statsTraceCtx);
+      try {
         stream.read(buf, 0, buf.length);
         Assert.fail();
       } catch (StatusRuntimeException ex) {
         assertTrue(
             ex.getMessage().startsWith("RESOURCE_EXHAUSTED: Compressed gRPC message exceeds"));
+      } finally {
+        stream.close();
       }
     }
 
@@ -456,13 +458,16 @@ public class MessageDeframerTest {
     @Test
     public void sizeEnforcingInputStream_skipAboveLimit() throws IOException {
       ByteArrayInputStream in = new ByteArrayInputStream("foo".getBytes(Charsets.UTF_8));
-      try (SizeEnforcingInputStream stream =
-          new MessageDeframer.SizeEnforcingInputStream(in, 2, statsTraceCtx)) {
+      SizeEnforcingInputStream stream =
+          new MessageDeframer.SizeEnforcingInputStream(in, 2, statsTraceCtx);
+      try {
         stream.skip(4);
         Assert.fail();
       } catch (StatusRuntimeException ex) {
         assertTrue(
             ex.getMessage().startsWith("RESOURCE_EXHAUSTED: Compressed gRPC message exceeds"));
+      } finally {
+        stream.close();
       }
     }
 
