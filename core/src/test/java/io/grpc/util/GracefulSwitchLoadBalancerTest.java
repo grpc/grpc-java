@@ -50,9 +50,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
@@ -63,7 +61,6 @@ import org.mockito.InOrder;
  */
 @RunWith(JUnit4.class)
 public class GracefulSwitchLoadBalancerTest {
-
 
   private final LoadBalancerRegistry lbRegistry = new LoadBalancerRegistry();
   // maps policy name to lb provide

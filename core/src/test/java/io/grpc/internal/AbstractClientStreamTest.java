@@ -135,7 +135,7 @@ public class AbstractClientStreamTest {
     try {
       stream.cancel(null);
       fail();
-    } catch (NullPointerException ex) {
+    } catch (NullPointerException expected) {
     }
   }
 
@@ -164,7 +164,7 @@ public class AbstractClientStreamTest {
     try {
       stream.start(null);
       fail();
-    } catch (NullPointerException ex) {
+    } catch (NullPointerException expected) {
     }
   }
 
@@ -176,7 +176,7 @@ public class AbstractClientStreamTest {
     try {
       stream.start(mockListener);
       fail();
-    } catch (IllegalStateException ex) {
+    } catch (IllegalStateException expected) {
     }
   }
 
@@ -192,7 +192,7 @@ public class AbstractClientStreamTest {
     try {
       state.inboundDataReceived(null);
       fail();
-    } catch (NullPointerException ex) {
+    } catch (NullPointerException expected) {
     }
   }
 
@@ -219,7 +219,7 @@ public class AbstractClientStreamTest {
     try {
       state.inboundHeadersReceived(new Metadata());
       fail();
-    } catch (IllegalStateException ex) {
+    } catch (IllegalStateException expected) {
     }
   }
 

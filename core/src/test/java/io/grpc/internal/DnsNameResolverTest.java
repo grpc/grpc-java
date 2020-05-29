@@ -1035,7 +1035,8 @@ public class DnsNameResolverTest {
       fail();
     } catch (ClassCastException ex) {
       assertTrue(ex.getMessage().contains("wrong type"));
-    }  }
+    }
+  }
 
   @Test
   public void parseTxtResults_badInnerTypeFails() throws Exception {

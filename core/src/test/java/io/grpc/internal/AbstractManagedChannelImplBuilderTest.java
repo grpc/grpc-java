@@ -51,7 +51,7 @@ import org.junit.runners.JUnit4;
 
 /** Unit tests for {@link AbstractManagedChannelImplBuilder}. */
 @RunWith(JUnit4.class)
-public class AbstractManagedChannelImplBuilderTest {
+public class  {
 
   private static final ClientInterceptor DUMMY_USER_INTERCEPTOR =
       new ClientInterceptor() {

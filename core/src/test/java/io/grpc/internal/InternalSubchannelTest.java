@@ -496,7 +496,7 @@ public class InternalSubchannelTest {
     try {
       internalSubchannel.updateAddresses(Arrays.<EquivalentAddressGroup>asList());
       fail();
-    } catch (IllegalArgumentException ex) {
+    } catch (IllegalArgumentException expected) {
     }
   }
 
@@ -509,7 +509,7 @@ public class InternalSubchannelTest {
     try {
       internalSubchannel.updateAddresses(eags);
       fail();
-    } catch (NullPointerException ex) {
+    } catch (NullPointerException expected) {
     }
   }
 

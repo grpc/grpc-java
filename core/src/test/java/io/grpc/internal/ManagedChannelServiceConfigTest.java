@@ -109,7 +109,7 @@ public class ManagedChannelServiceConfigTest {
     Map<String, ?> methodConfig = ImmutableMap.of("name", ImmutableList.of(name));
     Map<String, ?> serviceConfig = ImmutableMap.of("methodConfig", ImmutableList.of(methodConfig));
 
-     try {
+    try {
       ManagedChannelServiceConfig.fromServiceConfig(serviceConfig, true, 3, 4, null);
       fail();
     } catch (IllegalArgumentException ex) {
