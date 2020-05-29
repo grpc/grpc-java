@@ -731,7 +731,10 @@ public class ProtocolNegotiatorsTest {
     serverContext.writeAndFlush(bb(response, serverContext.channel())).sync();
     try {
       negotiationFuture.sync();
-    } finally {
+      fail();
+    } catch (Exception expected) {
+    }
+    finally {
       channel.close();
     }
   }

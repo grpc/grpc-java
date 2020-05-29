@@ -76,7 +76,7 @@ public class NettyServerBuilderTest {
       builder.keepAliveTime(-10L, TimeUnit.HOURS);
       fail();
     } catch (IllegalArgumentException ex) {
-      assertEquals("keepalive time must be positive", ex.getMessage());
+      assertEquals("keepalive time must be positive: -10", ex.getMessage());
     }
   }
 
@@ -86,7 +86,7 @@ public class NettyServerBuilderTest {
       builder.keepAliveTimeout(-10L, TimeUnit.HOURS);
       fail();
     } catch (IllegalArgumentException ex) {
-      assertEquals("keepalive time must be positive", ex.getMessage());
+      assertEquals("keepalive timeout must be positive: -10", ex.getMessage());
     }
   }
 
@@ -96,7 +96,7 @@ public class NettyServerBuilderTest {
       builder.maxConcurrentCallsPerConnection(0);
       fail();
     } catch (IllegalArgumentException ex) {
-      assertEquals("max must be positive", ex.getMessage());
+      assertEquals("max must be positive: 0", ex.getMessage());
     }
   }
 
@@ -106,7 +106,7 @@ public class NettyServerBuilderTest {
       builder.maxInboundMetadataSize(0);
       fail();
     } catch (IllegalArgumentException ex) {
-      assertEquals("maxInboundMetadataSize must be positive", ex.getMessage());
+      assertEquals("maxInboundMetadataSize must be positive: 0", ex.getMessage());
     }
   }
 
@@ -116,7 +116,7 @@ public class NettyServerBuilderTest {
       builder.maxConnectionIdle(-1, TimeUnit.HOURS);
       fail();
     } catch (IllegalArgumentException ex) {
-      assertEquals("max connection idle must be positive", ex.getMessage());
+      assertEquals("max connection idle must be positive: -1", ex.getMessage());
     }
   }
 
@@ -126,7 +126,7 @@ public class NettyServerBuilderTest {
       builder.maxConnectionAge(-1, TimeUnit.HOURS);
       fail();
     } catch (IllegalArgumentException ex) {
-      assertEquals("max connection age must be positive", ex.getMessage());
+      assertEquals("max connection age must be positive: -1", ex.getMessage());
     }
   }
 
@@ -136,7 +136,7 @@ public class NettyServerBuilderTest {
       builder.maxConnectionAgeGrace(-1, TimeUnit.HOURS);
       fail();
     } catch (IllegalArgumentException ex) {
-      assertEquals("max connection age grace must be non-negative", ex.getMessage());
+      assertEquals("max connection age grace must be non-negative: -1", ex.getMessage());
     }
   }
 
@@ -146,7 +146,7 @@ public class NettyServerBuilderTest {
       builder.permitKeepAliveTime(-1, TimeUnit.HOURS);
       fail();
     } catch (IllegalArgumentException ex) {
-      assertEquals("permit keepalive time must be non-negative", ex.getMessage());
+      assertEquals("permit keepalive time must be non-negative: -1", ex.getMessage());
     }
   }
 
@@ -160,7 +160,7 @@ public class NettyServerBuilderTest {
       fail();
     } catch (IllegalStateException ex) {
       assertEquals(
-          "All of BossEventLoopGroup, WorkerEventLoopGroup and ChannelType should be provided",
+          "All of BossEventLoopGroup, WorkerEventLoopGroup and ChannelType should be provided or neither should be",
           ex.getMessage());
     }
   }
@@ -174,7 +174,7 @@ public class NettyServerBuilderTest {
       fail();
     } catch (IllegalStateException ex) {
       assertEquals(
-          "All of BossEventLoopGroup, WorkerEventLoopGroup and ChannelType should be provided",
+          "All of BossEventLoopGroup, WorkerEventLoopGroup and ChannelType should be provided or neither should be",
           ex.getMessage());
     }
   }
@@ -187,7 +187,7 @@ public class NettyServerBuilderTest {
       fail();
     } catch (IllegalStateException ex) {
       assertEquals(
-          "All of BossEventLoopGroup, WorkerEventLoopGroup and ChannelType should be provided",
+          "All of BossEventLoopGroup, WorkerEventLoopGroup and ChannelType should be provided or neither should be",
           ex.getMessage());
     }
   }
