@@ -238,7 +238,8 @@ public class NettyChannelBuilderTest {
       builder.assertEventLoopAndChannelType();
       fail();
     } catch (IllegalStateException ex) {
-      assertTrue(ex.getMessage().contains("Both EventLoopGroup and ChannelType should be provided"));
+      assertTrue(ex.getMessage().contains(
+          "Both EventLoopGroup and ChannelType should be provided"));
     }
   }
 
@@ -251,7 +252,8 @@ public class NettyChannelBuilderTest {
       builder.assertEventLoopAndChannelType();
       fail();
     } catch (IllegalStateException ex) {
-      assertTrue(ex.getMessage().contains("Both EventLoopGroup and ChannelType should be provided"));
+      assertTrue(ex.getMessage().contains(
+          "Both EventLoopGroup and ChannelType should be provided"));
     }
   }
 
@@ -269,7 +271,8 @@ public class NettyChannelBuilderTest {
       builder.assertEventLoopAndChannelType();
       fail();
     } catch (IllegalStateException ex) {
-      assertTrue(ex.getMessage().contains("Both EventLoopGroup and ChannelType should be provided"));
+      assertTrue(ex.getMessage().contains(
+          "Both EventLoopGroup and ChannelType should be provided"));
     }
   }
 

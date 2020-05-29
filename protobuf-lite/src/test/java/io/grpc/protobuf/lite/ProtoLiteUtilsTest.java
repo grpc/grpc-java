@@ -45,7 +45,6 @@ import java.util.Arrays;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
-import org.mockito.internal.matchers.Null;
 
 /** Unit tests for {@link ProtoLiteUtils}. */
 @RunWith(JUnit4.class)

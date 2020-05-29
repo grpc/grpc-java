@@ -161,7 +161,8 @@ public class NettyServerBuilderTest {
       fail();
     } catch (IllegalStateException ex) {
       assertEquals(
-          "All of BossEventLoopGroup, WorkerEventLoopGroup and ChannelType should be provided or neither should be",
+          "All of BossEventLoopGroup, WorkerEventLoopGroup and ChannelType should be "
+              + "provided or neither should be",
           ex.getMessage());
     }
   }
@@ -175,7 +176,8 @@ public class NettyServerBuilderTest {
       fail();
     } catch (IllegalStateException ex) {
       assertEquals(
-          "All of BossEventLoopGroup, WorkerEventLoopGroup and ChannelType should be provided or neither should be",
+          "All of BossEventLoopGroup, WorkerEventLoopGroup and ChannelType should be "
+              + "provided or neither should be",
           ex.getMessage());
     }
   }
@@ -188,7 +190,8 @@ public class NettyServerBuilderTest {
       fail();
     } catch (IllegalStateException ex) {
       assertEquals(
-          "All of BossEventLoopGroup, WorkerEventLoopGroup and ChannelType should be provided or neither should be",
+          "All of BossEventLoopGroup, WorkerEventLoopGroup and ChannelType should be "
+              + "provided or neither should be",
           ex.getMessage());
     }
   }

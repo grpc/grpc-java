@@ -51,7 +51,7 @@ import org.junit.runners.JUnit4;
 
 /** Unit tests for {@link AbstractManagedChannelImplBuilder}. */
 @RunWith(JUnit4.class)
-public class  {
+public class AbstractManagedChannelImplBuilderTest {
 
   private static final ClientInterceptor DUMMY_USER_INTERCEPTOR =
       new ClientInterceptor() {
@@ -385,7 +385,7 @@ public class  {
     try {
       builder.retryBufferSize(0L);
       fail();
-    } catch (IllegalArgumentException ex) {
+    } catch (IllegalArgumentException expected) {
     }
   }
 
@@ -396,7 +396,7 @@ public class  {
     try {
       builder.perRpcBufferLimit(0L);
       fail();
-    } catch (IllegalArgumentException ex) {
+    } catch (IllegalArgumentException expected) {
     }
   }
 
@@ -426,7 +426,7 @@ public class  {
     try {
       builder.defaultServiceConfig(config);
       fail();
-    } catch (IllegalArgumentException ex) {
+    } catch (IllegalArgumentException expected) {
     }
   }
 
@@ -441,7 +441,7 @@ public class  {
     try {
       builder.defaultServiceConfig(config);
       fail();
-    } catch (IllegalArgumentException ex) {
+    } catch (IllegalArgumentException expected) {
     }
   }
 
@@ -454,7 +454,7 @@ public class  {
     try {
       builder.defaultServiceConfig(config);
       fail();
-    } catch (IllegalArgumentException ex) {
+    } catch (IllegalArgumentException expected) {
     }
   }
 

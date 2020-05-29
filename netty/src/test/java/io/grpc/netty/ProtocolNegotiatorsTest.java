@@ -77,7 +77,6 @@ import io.netty.handler.codec.http2.Http2ConnectionDecoder;
 import io.netty.handler.codec.http2.Http2ConnectionEncoder;
 import io.netty.handler.codec.http2.Http2ServerUpgradeCodec;
 import io.netty.handler.codec.http2.Http2Settings;
-import io.netty.handler.proxy.ProxyConnectException;
 import io.netty.handler.ssl.ApplicationProtocolConfig;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
@@ -733,8 +732,7 @@ public class ProtocolNegotiatorsTest {
       negotiationFuture.sync();
       fail();
     } catch (Exception expected) {
-    }
-    finally {
+    } finally {
       channel.close();
     }
   }
