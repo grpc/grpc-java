@@ -76,7 +76,7 @@ public class NettyServerBuilderTest {
       builder.keepAliveTime(-10L, TimeUnit.HOURS);
       fail();
     } catch (IllegalArgumentException ex) {
-      assertEquals("keepalive time must be positive: -10", ex.getMessage());
+      assertEquals("keepalive time must be positive:-10", ex.getMessage());
     }
   }
 
