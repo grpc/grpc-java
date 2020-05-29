@@ -20,6 +20,7 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import com.google.common.io.ByteStreams;
@@ -41,10 +42,10 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Arrays;
-import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.mockito.internal.matchers.Null;
 
 /** Unit tests for {@link ProtoLiteUtils}. */
 @RunWith(JUnit4.class)
@@ -208,10 +209,12 @@ public class ProtoLiteUtilsTest {
 
   @Test
   public void extensionRegistry_notNull() {
-    thrown.expect(NullPointerException.class);
-    thrown.expectMessage("newRegistry");
-
-    ProtoLiteUtils.setExtensionRegistry(null);
+    try {
+      ProtoLiteUtils.setExtensionRegistry(null);
+      fail();
+    } catch (NullPointerException ex) {
+      assertTrue(ex.getMessage().contains("newRegistry"));
+    }
   }
 
   @Test
