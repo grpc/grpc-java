@@ -182,6 +182,8 @@ public class AbstractServerStreamTest {
   @Test
   public void setListener_setOnlyOnce() {
     TransportState state = stream.transportState();
+    state.setListener(new ServerStreamListenerBase());
+
     try {
       state.setListener(new ServerStreamListenerBase());
       fail();
