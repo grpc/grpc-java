@@ -16,6 +16,8 @@
 
 package io.grpc.netty;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -28,9 +30,7 @@ import io.netty.handler.ssl.SslContext;
 import java.net.InetSocketAddress;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -39,8 +39,6 @@ import org.junit.runners.JUnit4;
  */
 @RunWith(JUnit4.class)
 public class NettyServerBuilderTest {
-
-  @Rule public final ExpectedException thrown = ExpectedException.none();
 
   private NettyServerBuilder builder = NettyServerBuilder.forPort(8080);
 
@@ -62,105 +60,136 @@ public class NettyServerBuilderTest {
     SslContext sslContext = mock(SslContext.class);
     when(sslContext.isClient()).thenReturn(true);
 
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("Client SSL context can not be used for server");
-    builder.sslContext(sslContext);
+    try {
+      builder.sslContext(sslContext);
+      fail();
+    } catch (IllegalArgumentException ex) {
+      assertEquals("Client SSL context can not be used for server", ex.getMessage());
+    }
+
   }
 
   @Test
   public void failIfKeepAliveTimeNegative() {
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("keepalive time must be positive");
 
-    builder.keepAliveTime(-10L, TimeUnit.HOURS);
+    try {
+      builder.keepAliveTime(-10L, TimeUnit.HOURS);
+      fail();
+    } catch (IllegalArgumentException ex) {
+      assertEquals("keepalive time must be positive", ex.getMessage());
+    }
   }
 
   @Test
   public void failIfKeepAliveTimeoutNegative() {
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("keepalive timeout must be positive");
-
-    builder.keepAliveTimeout(-10L, TimeUnit.HOURS);
+    try {
+      builder.keepAliveTimeout(-10L, TimeUnit.HOURS);
+      fail();
+    } catch (IllegalArgumentException ex) {
+      assertEquals("keepalive time must be positive", ex.getMessage());
+    }
   }
 
   @Test
   public void failIfMaxConcurrentCallsPerConnectionNegative() {
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("max must be positive");
-
-    builder.maxConcurrentCallsPerConnection(0);
+    try {
+      builder.maxConcurrentCallsPerConnection(0);
+      fail();
+    } catch (IllegalArgumentException ex) {
+      assertEquals("max must be positive", ex.getMessage());
+    }
   }
 
   @Test
   public void failIfMaxInboundMetadataSizeNonPositive() {
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("maxInboundMetadataSize must be positive");
-
-    builder.maxInboundMetadataSize(0);
+    try {
+      builder.maxInboundMetadataSize(0);
+      fail();
+    } catch (IllegalArgumentException ex) {
+      assertEquals("maxInboundMetadataSize must be positive", ex.getMessage());
+    }
   }
 
   @Test
   public void failIfMaxConnectionIdleNegative() {
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("max connection idle must be positive");
-
-    builder.maxConnectionIdle(-1, TimeUnit.HOURS);
+    try {
+      builder.maxConnectionIdle(-1, TimeUnit.HOURS);
+      fail();
+    } catch (IllegalArgumentException ex) {
+      assertEquals("max connection idle must be positive", ex.getMessage());
+    }
   }
 
   @Test
   public void failIfMaxConnectionAgeNegative() {
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("max connection age must be positive");
-
-    builder.maxConnectionAge(-1, TimeUnit.HOURS);
+    try {
+      builder.maxConnectionAge(-1, TimeUnit.HOURS);
+      fail();
+    } catch (IllegalArgumentException ex) {
+      assertEquals("max connection age must be positive", ex.getMessage());
+    }
   }
 
   @Test
   public void failIfMaxConnectionAgeGraceNegative() {
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("max connection age grace must be non-negative");
-
-    builder.maxConnectionAgeGrace(-1, TimeUnit.HOURS);
+    try {
+      builder.maxConnectionAgeGrace(-1, TimeUnit.HOURS);
+      fail();
+    } catch (IllegalArgumentException ex) {
+      assertEquals("max connection age grace must be non-negative", ex.getMessage());
+    }
   }
 
   @Test
   public void failIfPermitKeepAliveTimeNegative() {
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("permit keepalive time must be non-negative");
-
-    builder.permitKeepAliveTime(-1, TimeUnit.HOURS);
+    try {
+      builder.permitKeepAliveTime(-1, TimeUnit.HOURS);
+      fail();
+    } catch (IllegalArgumentException ex) {
+      assertEquals("permit keepalive time must be non-negative", ex.getMessage());
+    }
   }
 
   @Test
   public void assertEventLoopsAndChannelType_onlyBossGroupProvided() {
     EventLoopGroup mockEventLoopGroup = mock(EventLoopGroup.class);
     builder.bossEventLoopGroup(mockEventLoopGroup);
-    thrown.expect(IllegalStateException.class);
-    thrown.expectMessage(
-        "All of BossEventLoopGroup, WorkerEventLoopGroup and ChannelType should be provided");
 
-    builder.assertEventLoopsAndChannelType();
+    try {
+      builder.assertEventLoopsAndChannelType();
+      fail();
+    } catch (IllegalStateException ex) {
+      assertEquals(
+          "All of BossEventLoopGroup, WorkerEventLoopGroup and ChannelType should be provided",
+          ex.getMessage());
+    }
   }
 
   @Test
   public void assertEventLoopsAndChannelType_onlyWorkerGroupProvided() {
     EventLoopGroup mockEventLoopGroup = mock(EventLoopGroup.class);
     builder.workerEventLoopGroup(mockEventLoopGroup);
-    thrown.expect(IllegalStateException.class);
-    thrown.expectMessage(
-        "All of BossEventLoopGroup, WorkerEventLoopGroup and ChannelType should be provided");
-
-    builder.assertEventLoopsAndChannelType();
+    try {
+      builder.assertEventLoopsAndChannelType();
+      fail();
+    } catch (IllegalStateException ex) {
+      assertEquals(
+          "All of BossEventLoopGroup, WorkerEventLoopGroup and ChannelType should be provided",
+          ex.getMessage());
+    }
   }
 
   @Test
   public void assertEventLoopsAndChannelType_onlyTypeProvided() {
     builder.channelType(LocalServerChannel.class);
-    thrown.expect(IllegalStateException.class);
-    thrown.expectMessage(
-        "All of BossEventLoopGroup, WorkerEventLoopGroup and ChannelType should be provided");
-
-    builder.assertEventLoopsAndChannelType();
+    try {
+      builder.assertEventLoopsAndChannelType();
+      fail();
+    } catch (IllegalStateException ex) {
+      assertEquals(
+          "All of BossEventLoopGroup, WorkerEventLoopGroup and ChannelType should be provided",
+          ex.getMessage());
+    }
   }
 
   @Test

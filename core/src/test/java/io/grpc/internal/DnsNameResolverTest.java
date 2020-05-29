@@ -81,7 +81,6 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.DisableOnDebug;
-import org.junit.rules.ExpectedException;
 import org.junit.rules.TestRule;
 import org.junit.rules.Timeout;
 import org.junit.runner.RunWith;
@@ -98,7 +97,6 @@ public class DnsNameResolverTest {
 
   @Rule public final TestRule globalTimeout = new DisableOnDebug(Timeout.seconds(10));
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
-  @Rule public final ExpectedException thrown = ExpectedException.none();
 
   private final Map<String, ?> serviceConfig = new LinkedHashMap<>();
 
@@ -782,9 +780,13 @@ public class DnsNameResolverTest {
   public void maybeChooseServiceConfig_failsOnMisspelling() {
     Map<String, Object> bad = new LinkedHashMap<>();
     bad.put("parcentage", 1.0);
-    thrown.expectMessage("Bad key");
 
-    DnsNameResolver.maybeChooseServiceConfig(bad, new Random(), "host");
+    try {
+      DnsNameResolver.maybeChooseServiceConfig(bad, new Random(), "host");
+      fail();
+    } catch (Exception ex) {
+      assertTrue(ex.getMessage().contains("Bad key"));
+    }
   }
 
   @Test
@@ -1028,10 +1030,12 @@ public class DnsNameResolverTest {
     txtRecords.add("some_record");
     txtRecords.add("grpc_config={}");
 
-    thrown.expect(ClassCastException.class);
-    thrown.expectMessage("wrong type");
-    DnsNameResolver.parseTxtResults(txtRecords);
-  }
+    try {
+      DnsNameResolver.parseTxtResults(txtRecords);
+      fail();
+    } catch (ClassCastException ex) {
+      assertTrue(ex.getMessage().contains("wrong type"));
+    }  }
 
   @Test
   public void parseTxtResults_badInnerTypeFails() throws Exception {
@@ -1039,9 +1043,12 @@ public class DnsNameResolverTest {
     txtRecords.add("some_record");
     txtRecords.add("grpc_config=[\"bogus\"]");
 
-    thrown.expect(ClassCastException.class);
-    thrown.expectMessage("not object");
-    DnsNameResolver.parseTxtResults(txtRecords);
+    try {
+      DnsNameResolver.parseTxtResults(txtRecords);
+      fail();
+    } catch (ClassCastException ex) {
+      assertTrue(ex.getMessage().contains("not object"));
+    }
   }
 
   @Test

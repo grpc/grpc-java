@@ -28,6 +28,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isA;
@@ -63,7 +64,6 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.Mock;
@@ -77,8 +77,6 @@ import org.mockito.junit.MockitoRule;
 public class InternalSubchannelTest {
   @Rule
   public final MockitoRule mocks = MockitoJUnit.rule();
-  @Rule
-  public final ExpectedException thrown = ExpectedException.none();
 
   private static final String AUTHORITY = "fakeauthority";
   private static final String USER_AGENT = "mosaic";
@@ -494,8 +492,12 @@ public class InternalSubchannelTest {
   public void updateAddresses_emptyEagList_throws() {
     SocketAddress addr = new FakeSocketAddress();
     createInternalSubchannel(addr);
-    thrown.expect(IllegalArgumentException.class);
-    internalSubchannel.updateAddresses(Arrays.<EquivalentAddressGroup>asList());
+
+    try {
+      internalSubchannel.updateAddresses(Arrays.<EquivalentAddressGroup>asList());
+      fail();
+    } catch (IllegalArgumentException ex) {
+    }
   }
 
   @Test
@@ -503,8 +505,12 @@ public class InternalSubchannelTest {
     SocketAddress addr = new FakeSocketAddress();
     createInternalSubchannel(addr);
     List<EquivalentAddressGroup> eags = Arrays.asList((EquivalentAddressGroup) null);
-    thrown.expect(NullPointerException.class);
-    internalSubchannel.updateAddresses(eags);
+
+    try {
+      internalSubchannel.updateAddresses(eags);
+      fail();
+    } catch (NullPointerException ex) {
+    }
   }
 
   @Test public void updateAddresses_intersecting_ready() {

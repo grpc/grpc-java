@@ -18,6 +18,7 @@ package io.grpc.internal;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.fail;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
@@ -44,7 +45,6 @@ import java.util.concurrent.TimeUnit;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
@@ -56,8 +56,6 @@ import org.mockito.ArgumentCaptor;
 public class AbstractServerStreamTest {
   private static final int TIMEOUT_MS = 1000;
   private static final int MAX_MESSAGE_SIZE = 100;
-
-  @Rule public final ExpectedException thrown = ExpectedException.none();
 
   private final WritableBufferAllocator allocator = new WritableBufferAllocator() {
     @Override
@@ -184,10 +182,11 @@ public class AbstractServerStreamTest {
   @Test
   public void setListener_setOnlyOnce() {
     TransportState state = stream.transportState();
-    state.setListener(new ServerStreamListenerBase());
-    thrown.expect(IllegalStateException.class);
-
-    state.setListener(new ServerStreamListenerBase());
+    try {
+      state.setListener(new ServerStreamListenerBase());
+      fail();
+    } catch (IllegalStateException expected) {
+    }
   }
 
   @Test
@@ -197,8 +196,11 @@ public class AbstractServerStreamTest {
 
     TransportState state = stream.transportState();
 
-    thrown.expect(IllegalStateException.class);
-    state.onStreamAllocated();
+    try {
+      state.onStreamAllocated();
+      fail();
+    } catch (IllegalStateException expected) {
+    }
   }
 
   @Test
@@ -214,8 +216,11 @@ public class AbstractServerStreamTest {
   public void setListener_failsOnNull() {
     TransportState state = stream.transportState();
 
-    thrown.expect(NullPointerException.class);
-    state.setListener(null);
+    try {
+      state.setListener(null);
+      fail();
+    } catch (NullPointerException expected) {
+    }
   }
 
   // TODO(ericgribkoff) This test is only valid if deframeInTransportThread=true, as otherwise the
@@ -243,9 +248,11 @@ public class AbstractServerStreamTest {
 
   @Test
   public void writeHeaders_failsOnNullHeaders() {
-    thrown.expect(NullPointerException.class);
-
-    stream.writeHeaders(null);
+    try {
+      stream.writeHeaders(null);
+      fail();
+    } catch (NullPointerException expected) {
+    }
   }
 
   @Test
@@ -295,16 +302,21 @@ public class AbstractServerStreamTest {
 
   @Test
   public void close_failsOnNullStatus() {
-    thrown.expect(NullPointerException.class);
-
-    stream.close(null, new Metadata());
+    try {
+      stream.close(null, new Metadata());
+      fail();
+    } catch (NullPointerException expected) {
+    }
   }
 
   @Test
   public void close_failsOnNullMetadata() {
-    thrown.expect(NullPointerException.class);
+    try {
+      stream.close(Status.INTERNAL, null);
+      fail();
+    } catch (NullPointerException expected) {
+    }
 
-    stream.close(Status.INTERNAL, null);
   }
 
   @Test

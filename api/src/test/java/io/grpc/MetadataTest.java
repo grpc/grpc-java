@@ -290,8 +290,8 @@ public class MetadataTest {
       Metadata.Key.of("nonbinary", FISH_MARSHALLER);
       Assert.fail();
     } catch (IllegalArgumentException expected) {
-     Assert.assertEquals("Binary header is named nonbinary. It must end with -bin",
-         expected.getMessage());
+      Assert.assertEquals("Binary header is named nonbinary. It must end with -bin",
+          expected.getMessage());
     }
   }
 

@@ -19,6 +19,8 @@ package io.grpc.internal;
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.internal.ServiceConfigInterceptor.HEDGING_POLICY_KEY;
 import static io.grpc.internal.ServiceConfigInterceptor.RETRY_POLICY_KEY;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 
@@ -34,9 +36,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.concurrent.TimeUnit;
 import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
@@ -49,8 +49,6 @@ import org.mockito.MockitoAnnotations;
  */
 @RunWith(JUnit4.class)
 public class ServiceConfigInterceptorTest {
-
-  @Rule public final ExpectedException thrown = ExpectedException.none();
 
   @Mock private Channel channel;
   @Captor private ArgumentCaptor<CallOptions> callOptionsCap;
@@ -465,9 +463,14 @@ public class ServiceConfigInterceptorTest {
     JsonObj name = new JsonObj("service", "service");
     JsonObj methodConfig = new JsonObj("name", new JsonList(name), "timeout", "10000000000000000s");
 
-    thrown.expectMessage("Duration value is out of range");
+    try {
+      new MethodInfo(methodConfig, false, 1, 1);
+      fail();
+    } catch (IllegalArgumentException ex) {
+      assertTrue(ex.getMessage().contains("Duration value is out of range"));
+    }
 
-    new MethodInfo(methodConfig, false, 1, 1);
+
   }
 
   @Test
@@ -485,10 +488,12 @@ public class ServiceConfigInterceptorTest {
     JsonObj name = new JsonObj("service", "service");
     JsonObj methodConfig = new JsonObj("name", new JsonList(name), "maxRequestMessageBytes", -1d);
 
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("exceeds bounds");
-
-    new MethodInfo(methodConfig, false, 1, 1);
+    try {
+      new MethodInfo(methodConfig, false, 1, 1);
+      fail();
+    } catch (IllegalArgumentException ex) {
+      assertTrue(ex.getMessage().contains("exceeds bounds"));
+    }
   }
 
   @Test
@@ -496,10 +501,12 @@ public class ServiceConfigInterceptorTest {
     JsonObj name = new JsonObj("service", "service");
     JsonObj methodConfig = new JsonObj("name", new JsonList(name), "maxResponseMessageBytes", -1d);
 
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("exceeds bounds");
-
-    new MethodInfo(methodConfig, false, 1, 1);
+    try {
+      new MethodInfo(methodConfig, false, 1, 1);
+      fail();
+    } catch (IllegalArgumentException ex) {
+      assertTrue(ex.getMessage().contains("exceeds bounds"));
+    }
   }
 
   private static ManagedChannelServiceConfig createManagedChannelServiceConfig(

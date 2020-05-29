@@ -139,8 +139,6 @@ public class ServerImplTest {
       };
   private static final String AUTHORITY = "some_authority";
 
-  @Rule public final ExpectedException thrown = ExpectedException.none();
-
   @BeforeClass
   public static void beforeStartUp() {
     // Cancel the root context. Server will fork it so the per-call context should not
@@ -1137,9 +1135,14 @@ public class ServerImplTest {
   public void getPortBeforeStartedFails() {
     transportServer = new SimpleServer();
     createServer();
-    thrown.expect(IllegalStateException.class);
-    thrown.expectMessage("started");
-    server.getPort();
+
+    try {
+      server.getPort();
+      fail();
+    } catch (IllegalStateException ex) {
+      assertTrue(ex.getMessage().contains("started"));
+    }
+
   }
 
   @Test
@@ -1148,9 +1151,13 @@ public class ServerImplTest {
     createAndStartServer();
     server.shutdown();
     server.awaitTermination();
-    thrown.expect(IllegalStateException.class);
-    thrown.expectMessage("terminated");
-    server.getPort();
+
+    try {
+      server.getPort();
+      fail();
+    } catch (IllegalStateException ex) {
+      assertTrue(ex.getMessage().contains("terminated"));
+    }
   }
 
   @Test

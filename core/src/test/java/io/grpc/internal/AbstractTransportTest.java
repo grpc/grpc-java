@@ -77,9 +77,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
@@ -217,9 +215,6 @@ public abstract class AbstractTransportTest {
             return new TestServerStreamTracer();
           }
         }));
-
-  @Rule
-  public ExpectedException thrown = ExpectedException.none();
 
   @Before
   public void setUp() {
@@ -396,8 +391,11 @@ public abstract class AbstractTransportTest {
     }
     InternalServer server2 =
         Iterables.getOnlyElement(newServer(port, Arrays.asList(serverStreamTracerFactory)));
-    thrown.expect(IOException.class);
-    server2.start(new MockServerListener());
+    try {
+      server2.start(new MockServerListener());
+      fail();
+    } catch (IOException expected) {
+    }
   }
 
   @Test

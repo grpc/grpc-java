@@ -17,6 +17,7 @@
 package io.grpc;
 
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.testing.TestMethodDescriptors;
@@ -26,7 +27,6 @@ import java.util.Collections;
 import java.util.List;
 import org.junit.Assert;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -102,7 +102,7 @@ public class ServiceDescriptorTest {
 
     try {
       new ServiceDescriptor("name", descriptors);
-      Assert.fail();
+      fail();
     } catch (IllegalArgumentException ex) {
       Assert.assertEquals("duplicate name name/method", ex.getMessage());
     }

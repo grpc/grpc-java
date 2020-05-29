@@ -21,6 +21,7 @@ import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.util.GracefulSwitchLoadBalancer.BUFFER_PICKER;
+import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.inOrder;
@@ -62,8 +63,7 @@ import org.mockito.InOrder;
  */
 @RunWith(JUnit4.class)
 public class GracefulSwitchLoadBalancerTest {
-  @Rule
-  public final ExpectedException thrown = ExpectedException.none();
+
 
   private final LoadBalancerRegistry lbRegistry = new LoadBalancerRegistry();
   // maps policy name to lb provide
@@ -491,8 +491,12 @@ public class GracefulSwitchLoadBalancerTest {
     gracefulSwitchLb.switchTo(lbProviders.get(lbPolicies[0]));
     Subchannel subchannel = mock(Subchannel.class);
     ConnectivityStateInfo connectivityStateInfo = ConnectivityStateInfo.forNonError(READY);
-    thrown.expect(UnsupportedOperationException.class);
-    gracefulSwitchLb.handleSubchannelState(subchannel, connectivityStateInfo);
+
+    try {
+      gracefulSwitchLb.handleSubchannelState(subchannel, connectivityStateInfo);
+      fail();
+    } catch (UnsupportedOperationException expected) {
+    }
   }
 
   private final class FakeLoadBalancerProvider extends LoadBalancerProvider {

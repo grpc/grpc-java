@@ -22,6 +22,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -36,15 +37,12 @@ import io.grpc.internal.GrpcUtil.Http2Error;
 import io.grpc.testing.TestMethodDescriptors;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 /** Unit tests for {@link GrpcUtil}. */
 @RunWith(JUnit4.class)
 public class GrpcUtilTest {
-
-  @Rule public final ExpectedException thrown = ExpectedException.none();
 
   @Test
   public void http2ErrorForCode() {
@@ -146,9 +144,11 @@ public class GrpcUtilTest {
 
   @Test
   public void checkAuthority_failsOnNull() {
-    thrown.expect(NullPointerException.class);
-
-    GrpcUtil.checkAuthority(null);
+    try {
+      GrpcUtil.checkAuthority(null);
+      fail();
+    } catch (NullPointerException expected) {
+    }
   }
 
   @Test
@@ -174,26 +174,32 @@ public class GrpcUtilTest {
 
   @Test
   public void checkAuthority_failsOnInvalidAuthority() {
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("Invalid authority");
-
-    GrpcUtil.checkAuthority("[ : : 1]");
+    try {
+      GrpcUtil.checkAuthority("[ : : 1]");
+      fail();
+    } catch (IllegalArgumentException ex) {
+      assertTrue(ex.getMessage().contains("Invalid authority"));
+    }
   }
 
   @Test
   public void checkAuthority_failsOnInvalidHost() {
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("No host in authority");
-
-    GrpcUtil.checkAuthority("bad_host");
+    try {
+      GrpcUtil.checkAuthority("bad_host");
+      fail();
+    } catch (IllegalArgumentException ex) {
+      assertTrue(ex.getMessage().contains("No host in authority"));
+    }
   }
 
   @Test
   public void checkAuthority_userInfoNotAllowed() {
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("Userinfo");
-
-    GrpcUtil.checkAuthority("foo@valid");
+    try {
+      GrpcUtil.checkAuthority("foo@valid");
+      fail();
+    } catch (IllegalArgumentException ex) {
+      assertTrue(ex.getMessage().contains("Userinfo"));
+    }
   }
 
   @Test

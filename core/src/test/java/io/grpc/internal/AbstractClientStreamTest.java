@@ -56,7 +56,6 @@ import java.util.concurrent.TimeUnit;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
@@ -75,7 +74,6 @@ import org.mockito.stubbing.Answer;
 public class AbstractClientStreamTest {
 
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
-  @Rule public final ExpectedException thrown = ExpectedException.none();
 
   private final StatsTraceContext statsTraceCtx = StatsTraceContext.NOOP;
   private final TransportTracer transportTracer = new TransportTracer();
@@ -134,9 +132,11 @@ public class AbstractClientStreamTest {
     AbstractClientStream stream =
         new BaseAbstractClientStream(allocator, statsTraceCtx, transportTracer);
     stream.start(listener);
-    thrown.expect(NullPointerException.class);
-
-    stream.cancel(null);
+    try {
+      stream.cancel(null);
+      fail();
+    } catch (NullPointerException ex) {
+    }
   }
 
   @Test
@@ -161,10 +161,11 @@ public class AbstractClientStreamTest {
   public void startFailsOnNullListener() {
     AbstractClientStream stream =
         new BaseAbstractClientStream(allocator, statsTraceCtx, transportTracer);
-
-    thrown.expect(NullPointerException.class);
-
-    stream.start(null);
+    try {
+      stream.start(null);
+      fail();
+    } catch (NullPointerException ex) {
+    }
   }
 
   @Test
@@ -172,9 +173,11 @@ public class AbstractClientStreamTest {
     AbstractClientStream stream =
         new BaseAbstractClientStream(allocator, statsTraceCtx, transportTracer);
     stream.start(mockListener);
-    thrown.expect(IllegalStateException.class);
-
-    stream.start(mockListener);
+    try {
+      stream.start(mockListener);
+      fail();
+    } catch (IllegalStateException ex) {
+    }
   }
 
   @Test
@@ -186,8 +189,11 @@ public class AbstractClientStreamTest {
 
     TransportState state = stream.transportState();
 
-    thrown.expect(NullPointerException.class);
-    state.inboundDataReceived(null);
+    try {
+      state.inboundDataReceived(null);
+      fail();
+    } catch (NullPointerException ex) {
+    }
   }
 
   @Test
@@ -210,8 +216,11 @@ public class AbstractClientStreamTest {
 
     TransportState state = stream.transportState();
 
-    thrown.expect(IllegalStateException.class);
-    state.inboundHeadersReceived(new Metadata());
+    try {
+      state.inboundHeadersReceived(new Metadata());
+      fail();
+    } catch (IllegalStateException ex) {
+    }
   }
 
   @Test

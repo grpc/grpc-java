@@ -48,9 +48,7 @@ import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
@@ -59,7 +57,6 @@ import org.mockito.MockitoAnnotations;
 
 @RunWith(JUnit4.class)
 public class ServerCallImplTest {
-  @Rule public final ExpectedException thrown = ExpectedException.none();
   @Mock private ServerStream stream;
   @Mock private ServerCall.Listener<Long> callListener;
 
@@ -152,20 +149,25 @@ public class ServerCallImplTest {
   @Test
   public void sendHeader_failsOnSecondCall() {
     call.sendHeaders(new Metadata());
-    thrown.expect(IllegalStateException.class);
-    thrown.expectMessage("sendHeaders has already been called");
 
-    call.sendHeaders(new Metadata());
+    try {
+      call.sendHeaders(new Metadata());
+      fail();
+    } catch (IllegalStateException ex) {
+      assertTrue(ex.getMessage().contains("sendHeaders has already been called"));
+    }
   }
 
   @Test
   public void sendHeader_failsOnClosed() {
     call.close(Status.CANCELLED, new Metadata());
 
-    thrown.expect(IllegalStateException.class);
-    thrown.expectMessage("call is closed");
-
-    call.sendHeaders(new Metadata());
+    try {
+      call.sendHeaders(new Metadata());
+      fail();
+    } catch (IllegalStateException ex) {
+      assertTrue(ex.getMessage().contains("call is closed"));
+    }
   }
 
   @Test
@@ -182,18 +184,22 @@ public class ServerCallImplTest {
     call.sendHeaders(new Metadata());
     call.close(Status.CANCELLED, new Metadata());
 
-    thrown.expect(IllegalStateException.class);
-    thrown.expectMessage("call is closed");
-
-    call.sendMessage(1234L);
+    try {
+      call.sendMessage(1234L);
+      fail();
+    } catch (IllegalStateException ex) {
+      assertTrue(ex.getMessage().contains("call is closed"));
+    }
   }
 
   @Test
   public void sendMessage_failsIfheadersUnsent() {
-    thrown.expect(IllegalStateException.class);
-    thrown.expectMessage("sendHeaders has not been called");
-
-    call.sendMessage(1234L);
+    try {
+      call.sendMessage(1234L);
+      fail();
+    } catch (IllegalStateException ex) {
+      assertTrue(ex.getMessage().contains("sendHeaders has not been called"));
+    }
   }
 
   @Test
@@ -446,9 +452,12 @@ public class ServerCallImplTest {
 
     InputStream inputStream = UNARY_METHOD.streamRequest(1234L);
 
-    thrown.expect(RuntimeException.class);
-    thrown.expectMessage("unexpected exception");
-    streamListener.messagesAvailable(new SingleMessageProducer(inputStream));
+    try {
+      streamListener.messagesAvailable(new SingleMessageProducer(inputStream));
+      fail();
+    } catch (RuntimeException ex) {
+      assertTrue(ex.getMessage().contains("unexpected exception"));
+    }
   }
 
   private static class LongMarshaller implements Marshaller<Long> {

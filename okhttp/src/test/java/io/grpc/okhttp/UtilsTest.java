@@ -27,7 +27,6 @@ import java.net.Socket;
 import java.util.List;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -37,15 +36,15 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class UtilsTest {
 
-  @Rule
-  public final ExpectedException thrown = ExpectedException.none();
-
   @Test
   public void convertSpecRejectsPlaintext() {
     com.squareup.okhttp.ConnectionSpec plaintext = com.squareup.okhttp.ConnectionSpec.CLEARTEXT;
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("plaintext ConnectionSpec is not accepted");
-    Utils.convertSpec(plaintext);
+    try {
+      Utils.convertSpec(plaintext);
+      fail();
+    } catch (IllegalArgumentException ex) {
+      assertEquals("plaintext ConnectionSpec is not accepted", ex.getMessage());
+    }
   }
 
   @Test

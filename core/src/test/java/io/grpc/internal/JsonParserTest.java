@@ -17,15 +17,14 @@
 package io.grpc.internal;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
 
 import com.google.gson.stream.MalformedJsonException;
 import java.io.EOFException;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -34,9 +33,6 @@ import org.junit.runners.JUnit4;
  */
 @RunWith(JUnit4.class)
 public class JsonParserTest {
-
-  @Rule
-  public final ExpectedException thrown = ExpectedException.none();
 
   @Test
   public void emptyObject() throws IOException {
@@ -75,44 +71,56 @@ public class JsonParserTest {
 
   @Test
   public void nanFails() throws IOException {
-    thrown.expect(MalformedJsonException.class);
-
-    JsonParser.parse("NaN");
+    try {
+      JsonParser.parse("NaN");
+      fail();
+    } catch (MalformedJsonException expected) {
+    }
   }
 
   @Test
   public void objectEarlyEnd() throws IOException {
-    thrown.expect(MalformedJsonException.class);
-
-    JsonParser.parse("{foo:}");
+    try {
+      JsonParser.parse("{foo:}");
+      fail();
+    } catch (MalformedJsonException expected) {
+    }
   }
 
   @Test
   public void earlyEndArray() throws IOException {
-    thrown.expect(EOFException.class);
-
-    JsonParser.parse("[1, 2, ");
+    try {
+      JsonParser.parse("[1, 2, ");
+      fail();
+    } catch (EOFException expected) {
+    }
   }
 
   @Test
   public void arrayMissingElement() throws IOException {
-    thrown.expect(MalformedJsonException.class);
-
-    JsonParser.parse("[1, 2, ]");
+    try {
+      JsonParser.parse("[1, 2, ]");
+      fail();
+    } catch (MalformedJsonException expected) {
+    }
   }
 
   @Test
   public void objectMissingElement() throws IOException {
-    thrown.expect(MalformedJsonException.class);
-
-    JsonParser.parse("{1: ");
+    try {
+      JsonParser.parse("{1: ");
+      fail();
+    } catch (MalformedJsonException expected) {
+    }
   }
 
   @Test
   public void objectNoName() throws IOException {
-    thrown.expect(MalformedJsonException.class);
-
-    JsonParser.parse("{: 1");
+    try {
+      JsonParser.parse("{: 1");
+      fail();
+    } catch (MalformedJsonException expected) {
+    }
   }
 
   @Test

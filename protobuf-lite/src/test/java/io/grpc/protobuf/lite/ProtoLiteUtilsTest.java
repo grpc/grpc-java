@@ -43,15 +43,12 @@ import java.io.InputStream;
 import java.util.Arrays;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 /** Unit tests for {@link ProtoLiteUtils}. */
 @RunWith(JUnit4.class)
 public class ProtoLiteUtilsTest {
-
-  @Rule public final ExpectedException thrown = ExpectedException.none();
 
   private Marshaller<Type> marshaller = ProtoLiteUtils.marshaller(Type.getDefaultInstance());
   private Type proto = Type.newBuilder().setName("name").build();

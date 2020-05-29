@@ -35,14 +35,12 @@ import java.util.concurrent.TimeUnit;
 import javax.net.ssl.SSLException;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 @RunWith(JUnit4.class)
 public class NettyChannelBuilderTest {
 
-  @Rule public final ExpectedException thrown = ExpectedException.none();
   private final SslContext noSslContext = null;
   
   private void shutdown(ManagedChannel mc) throws Exception {
