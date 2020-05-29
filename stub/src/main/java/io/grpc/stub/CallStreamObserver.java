@@ -108,9 +108,8 @@ public abstract class CallStreamObserver<V> implements StreamObserver<V> {
    * </p>
    * 
    * <p>This API is being replaced, but is not yet deprecated. On server-side it being replaced
-   * with {@link ServerCallStreamObserver#disableAutoRequest} followed by {@link #request
-   * request(1)}. On client-side {@link ClientCallStreamObserver#disableAutoRequestWithInitial
-   * disableAutoRequestWithInitial(1)}.
+   * with {@link ServerCallStreamObserver#disableAutoRequest}. On client-side {@link
+   * ClientCallStreamObserver#disableAutoRequestWithInitial disableAutoRequestWithInitial(1)}.
    */
   public abstract void disableAutoInboundFlowControl();
 

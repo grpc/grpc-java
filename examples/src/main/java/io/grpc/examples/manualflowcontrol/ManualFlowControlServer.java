@@ -35,8 +35,11 @@ public class ManualFlowControlServer {
     StreamingGreeterGrpc.StreamingGreeterImplBase svc = new StreamingGreeterGrpc.StreamingGreeterImplBase() {
       @Override
       public StreamObserver<HelloRequest> sayHelloStreaming(final StreamObserver<HelloReply> responseObserver) {
+        // Set up manual flow control for the request stream. It feels backwards to configure the request
+        // stream's flow control using the response stream's observer, but this is the way it is.
         final ServerCallStreamObserver<HelloReply> serverCallStreamObserver =
             (ServerCallStreamObserver<HelloReply>) responseObserver;
+        serverCallStreamObserver.disableAutoRequest();
 
         // Set up a back-pressure-aware consumer for the request stream. The onReadyHandler will be invoked
         // when the consuming side has enough buffer space to receive more messages.
@@ -66,11 +69,6 @@ public class ManualFlowControlServer {
         }
         final OnReadyHandler onReadyHandler = new OnReadyHandler();
         serverCallStreamObserver.setOnReadyHandler(onReadyHandler);
-        // Set up manual flow control for the request stream. It feels backwards to configure the request
-        // stream's flow control using the response stream's observer, but this is the way it is.
-        serverCallStreamObserver.disableAutoRequest();
-        // Trigger request(1) for initial message, if ready
-        onReadyHandler.run();
 
         // Give gRPC a StreamObserver that can observe and process incoming requests.
         return new StreamObserver<HelloRequest>() {
