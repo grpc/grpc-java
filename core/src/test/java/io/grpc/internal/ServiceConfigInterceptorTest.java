@@ -466,11 +466,9 @@ public class ServiceConfigInterceptorTest {
     try {
       new MethodInfo(methodConfig, false, 1, 1);
       fail();
-    } catch (IllegalArgumentException ex) {
+    } catch (RuntimeException ex) {
       assertTrue(ex.getMessage().contains("Duration value is out of range"));
     }
-
-
   }
 
   @Test
