@@ -19,6 +19,7 @@ package io.grpc.netty;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 
 import io.grpc.ManagedChannel;
@@ -33,7 +34,6 @@ import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.concurrent.TimeUnit;
 import javax.net.ssl.SSLException;
-import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -107,19 +107,22 @@ public class NettyChannelBuilderTest {
   public void failOverrideInvalidAuthority() {
     NettyChannelBuilder builder = new NettyChannelBuilder(new SocketAddress(){});
 
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("Invalid authority:");
-
-    builder.overrideAuthority("[invalidauthority");
+    try {
+      builder.overrideAuthority("[invalidauthority");
+      fail();
+    } catch (IllegalArgumentException ex) {
+      assertTrue(ex.getMessage().contains("[invalidauthority"));
+    }
   }
 
   @Test
   public void failInvalidAuthority() {
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("Invalid host or port");
-
-    Object unused =
-        NettyChannelBuilder.forAddress(new InetSocketAddress("invalid_authority", 1234));
+    try {
+      NettyChannelBuilder.forAddress(new InetSocketAddress("invalid_authority", 1234));
+      fail();
+    } catch (IllegalArgumentException ex) {
+      assertTrue(ex.getMessage().contains("Invalid host or port"));
+    }
   }
 
   @Test
@@ -133,10 +136,12 @@ public class NettyChannelBuilderTest {
     SslContext sslContext = mock(SslContext.class);
     NettyChannelBuilder builder = new NettyChannelBuilder(new SocketAddress(){});
 
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("Server SSL context can not be used for client channel");
-
-    builder.sslContext(sslContext);
+    try {
+      builder.sslContext(sslContext);
+      fail();
+    } catch (IllegalArgumentException ex) {
+      assertTrue(ex.getMessage().contains("Server SSL context can not be used for client channel"));
+    }
   }
 
   @Test
@@ -161,10 +166,13 @@ public class NettyChannelBuilderTest {
 
   @Test
   public void createProtocolNegotiatorByType_tlsWithNoContext() {
-    thrown.expect(NullPointerException.class);
-    NettyChannelBuilder.createProtocolNegotiatorByType(
-        NegotiationType.TLS,
-        noSslContext, null);
+    try {
+      NettyChannelBuilder.createProtocolNegotiatorByType(
+          NegotiationType.TLS,
+          noSslContext, null);
+      fail();
+    } catch (NullPointerException expected) {
+    }
   }
 
   @Test
@@ -201,38 +209,50 @@ public class NettyChannelBuilderTest {
   public void negativeKeepAliveTime() {
     NettyChannelBuilder builder = NettyChannelBuilder.forTarget("fakeTarget");
 
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("keepalive time must be positive");
-    builder.keepAliveTime(-1L, TimeUnit.HOURS);
+    try {
+      builder.keepAliveTime(-1L, TimeUnit.HOURS);
+      fail();
+    } catch (IllegalArgumentException ex) {
+      assertTrue(ex.getMessage().contains("keepalive time must be positive"));
+    }
   }
 
   @Test
   public void negativeKeepAliveTimeout() {
     NettyChannelBuilder builder = NettyChannelBuilder.forTarget("fakeTarget");
 
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("keepalive timeout must be positive");
-    builder.keepAliveTimeout(-1L, TimeUnit.HOURS);
+    try {
+      builder.keepAliveTimeout(-1L, TimeUnit.HOURS);
+      fail();
+    } catch (IllegalArgumentException ex) {
+      assertTrue(ex.getMessage().contains("keepalive timeout must be positive"));
+    }
   }
 
   @Test
   public void assertEventLoopAndChannelType_onlyGroupProvided() {
     NettyChannelBuilder builder = NettyChannelBuilder.forTarget("fakeTarget");
     builder.eventLoopGroup(mock(EventLoopGroup.class));
-    thrown.expect(IllegalStateException.class);
-    thrown.expectMessage("Both EventLoopGroup and ChannelType should be provided");
 
-    builder.assertEventLoopAndChannelType();
+    try {
+      builder.assertEventLoopAndChannelType();
+      fail();
+    } catch (IllegalStateException ex) {
+      assertTrue(ex.getMessage().contains("Both EventLoopGroup and ChannelType should be provided"));
+    }
   }
 
   @Test
   public void assertEventLoopAndChannelType_onlyTypeProvided() {
     NettyChannelBuilder builder = NettyChannelBuilder.forTarget("fakeTarget");
     builder.channelType(LocalChannel.class);
-    thrown.expect(IllegalStateException.class);
-    thrown.expectMessage("Both EventLoopGroup and ChannelType should be provided");
 
-    builder.assertEventLoopAndChannelType();
+    try {
+      builder.assertEventLoopAndChannelType();
+      fail();
+    } catch (IllegalStateException ex) {
+      assertTrue(ex.getMessage().contains("Both EventLoopGroup and ChannelType should be provided"));
+    }
   }
 
   @Test
@@ -244,10 +264,13 @@ public class NettyChannelBuilderTest {
         return null;
       }
     });
-    thrown.expect(IllegalStateException.class);
-    thrown.expectMessage("Both EventLoopGroup and ChannelType should be provided");
 
-    builder.assertEventLoopAndChannelType();
+    try {
+      builder.assertEventLoopAndChannelType();
+      fail();
+    } catch (IllegalStateException ex) {
+      assertTrue(ex.getMessage().contains("Both EventLoopGroup and ChannelType should be provided"));
+    }
   }
 
   @Test

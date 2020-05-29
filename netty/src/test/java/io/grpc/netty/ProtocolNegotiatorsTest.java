@@ -25,6 +25,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -121,7 +122,6 @@ public class ProtocolNegotiatorsTest {
 
   private static final int TIMEOUT_SECONDS = 60;
   @Rule public final TestRule globalTimeout = new DisableOnDebug(Timeout.seconds(TIMEOUT_SECONDS));
-  @Rule public final ExpectedException thrown = ExpectedException.none();
 
   private final EventLoopGroup group = new DefaultEventLoop();
   private Channel chan;
@@ -239,16 +239,18 @@ public class ProtocolNegotiatorsTest {
   }
 
   @Test
-  public void tlsHandler_failsOnNullEngine() throws Exception {
-    thrown.expect(NullPointerException.class);
-    thrown.expectMessage("ssl");
-
-    Object unused = ProtocolNegotiators.serverTls(null);
+  public void tlsHandler_failsOnNullEngine() {
+    try {
+      Object unused = ProtocolNegotiators.serverTls(null);
+      fail();
+    } catch (NullPointerException expected) {
+      assertTrue(expected.getMessage().contains("ssl"));
+    }
   }
 
 
   @Test
-  public void tlsHandler_handlerAddedAddsSslHandler() throws Exception {
+  public void tlsHandler_handlerAddedAddsSslHandler() {
     ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext, null);
 
     pipeline.addLast(handler);
@@ -558,9 +560,11 @@ public class ProtocolNegotiatorsTest {
 
   @Test
   public void tls_failsOnNullSslContext() {
-    thrown.expect(NullPointerException.class);
-
-    Object unused = ProtocolNegotiators.tls(null);
+    try {
+      Object unused = ProtocolNegotiators.tls(null);
+      fail();
+    } catch (NullPointerException expected) {
+    }
   }
 
   @Test
@@ -591,16 +595,23 @@ public class ProtocolNegotiatorsTest {
 
   @Test
   public void httpProxy_nullAddressNpe() throws Exception {
-    thrown.expect(NullPointerException.class);
-    Object unused =
-        ProtocolNegotiators.httpProxy(null, "user", "pass", ProtocolNegotiators.plaintext());
+
+    try {
+      Object unused =
+          ProtocolNegotiators.httpProxy(null, "user", "pass", ProtocolNegotiators.plaintext());
+      fail();
+    } catch (NullPointerException expected) {
+    }
   }
 
   @Test
-  public void httpProxy_nullNegotiatorNpe() throws Exception {
-    thrown.expect(NullPointerException.class);
-    Object unused = ProtocolNegotiators.httpProxy(
-        InetSocketAddress.createUnresolved("localhost", 80), "user", "pass", null);
+  public void httpProxy_nullNegotiatorNpe() {
+    try {
+      ProtocolNegotiators.httpProxy(InetSocketAddress.createUnresolved("localhost", 80),
+          "user", "pass", null);
+      fail();
+    } catch (NullPointerException expected) {
+    }
   }
 
   @Test
@@ -718,7 +729,6 @@ public class ProtocolNegotiatorsTest {
     assertFalse(negotiationFuture.isDone());
     String response = "HTTP/1.1 500 OMG\r\nContent-Length: 4\r\n\r\noops";
     serverContext.writeAndFlush(bb(response, serverContext.channel())).sync();
-    thrown.expect(ProxyConnectException.class);
     try {
       negotiationFuture.sync();
     } finally {
