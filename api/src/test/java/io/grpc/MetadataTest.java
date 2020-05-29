@@ -40,7 +40,6 @@ import java.util.Iterator;
 import java.util.Locale;
 import org.junit.Assert;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 

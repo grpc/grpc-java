@@ -18,8 +18,8 @@ package io.grpc;
 
 import static io.grpc.Contexts.interceptCall;
 import static io.grpc.Contexts.statusFromCancelled;
-import static org.hamcrest.core.IsInstanceOf.instanceOf;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.core.IsInstanceOf.instanceOf;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -49,6 +49,7 @@ public class ContextsTest {
   private static Context.Key<Object> contextKey = Context.key("key");
   /** For use in comparing context by reference. */
   private Context uniqueContext = Context.ROOT.withValue(contextKey, new Object());
+
   @SuppressWarnings("unchecked")
   private ServerCall<Object, Object> call = new NoopServerCall<>();
   private Metadata headers = new Metadata();

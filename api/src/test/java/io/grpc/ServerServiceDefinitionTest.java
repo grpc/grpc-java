@@ -51,6 +51,7 @@ public class ServerServiceDefinitionTest {
         = ServerMethodDefinition.create(method1, methodHandler1);
   private ServerMethodDefinition<String, Integer> methodDef2
         = ServerMethodDefinition.create(method2, methodHandler2);
+
   @Test
   public void noMethods() {
     ServiceDescriptor sd = new ServiceDescriptor(serviceName);
@@ -90,7 +91,7 @@ public class ServerServiceDefinitionTest {
       ssd.addMethod(diffMethod1, methodHandler2)
           .build();
       Assert.fail();
-    } catch (IllegalStateException ex) {
+    } catch (IllegalStateException expected) {
 
     }
   }
@@ -103,7 +104,7 @@ public class ServerServiceDefinitionTest {
     try {
       ssd.build();
       Assert.fail();
-    } catch (IllegalStateException ex) {
+    } catch (IllegalStateException expected) {
     }
   }
 
@@ -115,7 +116,7 @@ public class ServerServiceDefinitionTest {
     try {
       ssd.build();
       Assert.fail();
-    } catch (IllegalStateException ex) {
+    } catch (IllegalStateException expected) {
     }
   }
 
@@ -126,7 +127,7 @@ public class ServerServiceDefinitionTest {
     try {
       ssd.build();
       Assert.fail();
-    } catch (IllegalStateException ex) {
+    } catch (IllegalStateException expected) {
     }
   }
 
