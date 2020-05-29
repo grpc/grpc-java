@@ -643,7 +643,7 @@ public class ClientCallsTest {
               public StreamObserver<Integer> invoke(StreamObserver<Integer> responseObserver) {
                 final ServerCallStreamObserver<Integer> serverCallObserver =
                     (ServerCallStreamObserver<Integer>) responseObserver;
-                serverCallObserver.disableAutoRequestWithInitial(0);
+                serverCallObserver.disableAutoRequest();
                 observerFuture.set(serverCallObserver);
                 return new StreamObserver<Integer>() {
                   @Override
