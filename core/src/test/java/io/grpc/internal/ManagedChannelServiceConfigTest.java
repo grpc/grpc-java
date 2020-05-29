@@ -67,7 +67,7 @@ public class ManagedChannelServiceConfigTest {
       ManagedChannelServiceConfig.fromServiceConfig(serviceConfig, true, 3, 4, null);
       fail();
     } catch (IllegalArgumentException ex) {
-      assertEquals("Duplicate service", ex.getMessage());
+      assertEquals("Duplicate method name service/method", ex.getMessage());
     }
   }
 
@@ -82,7 +82,7 @@ public class ManagedChannelServiceConfigTest {
       ManagedChannelServiceConfig.fromServiceConfig(serviceConfig, true, 3, 4, null);
       fail();
     } catch (IllegalArgumentException ex) {
-      assertEquals("Duplicate service", ex.getMessage());
+      assertEquals("Duplicate service service", ex.getMessage());
     }
   }
 
@@ -99,7 +99,7 @@ public class ManagedChannelServiceConfigTest {
       ManagedChannelServiceConfig.fromServiceConfig(serviceConfig, true, 3, 4, null);
       fail();
     } catch (IllegalArgumentException ex) {
-      assertEquals("Duplicate service", ex.getMessage());
+      assertEquals("Duplicate service service", ex.getMessage());
     }
   }
 
@@ -141,7 +141,7 @@ public class ManagedChannelServiceConfigTest {
       ManagedChannelServiceConfig.fromServiceConfig(serviceConfig, true, 3, 4, null);
       fail();
     } catch (IllegalArgumentException ex) {
-      assertEquals("missing service", ex.getMessage());
+      assertEquals("missing service name for method method", ex.getMessage());
     }
   }
 
