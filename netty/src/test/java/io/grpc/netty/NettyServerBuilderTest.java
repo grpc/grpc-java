@@ -17,6 +17,7 @@
 package io.grpc.netty;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -76,7 +77,7 @@ public class NettyServerBuilderTest {
       builder.keepAliveTime(-10L, TimeUnit.HOURS);
       fail();
     } catch (IllegalArgumentException ex) {
-      assertEquals("keepalive time must be positive:-10", ex.getMessage());
+      assertTrue(ex.getMessage().startsWith("keepalive time must be positive"));
     }
   }
 
