@@ -140,7 +140,6 @@ public class TlsContextManagerTest {
 
     TlsContextManagerImpl tlsContextManagerImpl =
         new TlsContextManagerImpl(mockClientFactory, mockServerFactory);
-    @SuppressWarnings("unchecked")
     SslContextProvider mockProvider = mock(SslContextProvider.class);
     when(mockServerFactory.createSslContextProvider(downstreamTlsContext)).thenReturn(mockProvider);
     SslContextProvider serverSecretProvider =
@@ -160,7 +159,6 @@ public class TlsContextManagerTest {
 
     TlsContextManagerImpl tlsContextManagerImpl =
         new TlsContextManagerImpl(mockClientFactory, mockServerFactory);
-    @SuppressWarnings("unchecked")
     SslContextProvider mockProvider = mock(SslContextProvider.class);
     when(mockClientFactory.createSslContextProvider(upstreamTlsContext)).thenReturn(mockProvider);
     SslContextProvider clientSecretProvider =
