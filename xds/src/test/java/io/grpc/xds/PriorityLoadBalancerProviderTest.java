@@ -36,6 +36,7 @@ import org.junit.runners.JUnit4;
 public class PriorityLoadBalancerProviderTest {
   @Rule public final ExpectedException thrown = ExpectedException.none();
 
+  @SuppressWarnings("ExpectedExceptionChecker")
   @Test
   public void priorityLbConfig_emptyPriorities() {
     Map<String, PolicySelection> childConfigs =
@@ -46,6 +47,7 @@ public class PriorityLoadBalancerProviderTest {
     new PriorityLbConfig(childConfigs, priorities);
   }
 
+  @SuppressWarnings("ExpectedExceptionChecker")
   @Test
   public void priorityLbConfig_missingChildConfig() {
     Map<String, PolicySelection> childConfigs =
