@@ -50,7 +50,7 @@ subprojects {
         javaPluginPath = "$rootDir/compiler/build/exe/java_plugin/$protocPluginBaseName$exeSuffix"
 
         nettyVersion = '4.1.48.Final'
-        guavaVersion = '28.2-android'
+        guavaVersion = '29.0-android'
         googleauthVersion = '0.20.0'
         protobufVersion = '3.12.0'
         protocVersion = protobufVersion
@@ -187,7 +187,7 @@ subprojects {
             // Jetty ALPN dependencies
             jetty_alpn_agent: 'org.mortbay.jetty.alpn:jetty-alpn-agent:2.0.9'
         ]
-
+        
         // A util function to config guava dependency with transitive dependencies
         // properly resolved for the failOnVersionConflict strategy.
         guavaDependency = { configurationName ->
@@ -312,6 +312,9 @@ subprojects {
             testCompile libraries.junit,
                     libraries.mockito,
                     libraries.truth
+            testImplementation (libraries.guava_testlib) {
+              exclude group: 'junit', module: 'junit'
+            }
         }
 
         compileTestJava {
