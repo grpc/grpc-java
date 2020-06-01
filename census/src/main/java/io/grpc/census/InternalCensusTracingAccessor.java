@@ -16,8 +16,12 @@
 
 package io.grpc.census;
 
+import io.grpc.CallOptions;
+import io.grpc.Channel;
+import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.Internal;
+import io.grpc.MethodDescriptor;
 import io.grpc.ServerStreamTracer;
 import io.opencensus.trace.Tracing;
 
@@ -40,7 +44,18 @@ public final class InternalCensusTracingAccessor {
         new CensusTracingModule(
             Tracing.getTracer(),
             Tracing.getPropagationComponent().getBinaryFormat());
-    return censusTracing.getClientInterceptor();
+    final ClientInterceptor interceptor = censusTracing.getClientInterceptor();
+    return new ClientInterceptor() {
+      @Override
+      public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+          MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+        if (callOptions.getOption(
+            CensusClientInterceptor.DISABLE_CLIENT_DEFAULT_CENSUS_TRACING) != null) {
+          return next.newCall(method, callOptions);
+        }
+        return interceptor.interceptCall(method, callOptions, next);
+      }
+    };
   }
 
   /**

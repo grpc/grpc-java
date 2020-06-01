@@ -18,8 +18,12 @@ package io.grpc.census;
 
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
+import io.grpc.CallOptions;
+import io.grpc.Channel;
+import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.Internal;
+import io.grpc.MethodDescriptor;
 import io.grpc.ServerStreamTracer;
 import io.opencensus.stats.StatsRecorder;
 import io.opencensus.tags.Tagger;
@@ -57,7 +61,7 @@ public final class InternalCensusStatsAccessor {
             recordStartedRpcs,
             recordFinishedRpcs,
             recordRealTimeMetrics);
-    return censusStats.getClientInterceptor();
+    return getClientInterceptor(censusStats);
   }
 
   /**
@@ -76,7 +80,22 @@ public final class InternalCensusStatsAccessor {
         new CensusStatsModule(
             tagger, tagCtxSerializer, statsRecorder, stopwatchSupplier,
             propagateTags, recordStartedRpcs, recordFinishedRpcs, recordRealTimeMetrics);
-    return censusStats.getClientInterceptor();
+    return getClientInterceptor(censusStats);
+  }
+
+  private static ClientInterceptor getClientInterceptor(CensusStatsModule module) {
+    final ClientInterceptor interceptor = module.getClientInterceptor();
+    return new ClientInterceptor() {
+      @Override
+      public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+          MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+        if (callOptions.getOption(
+            CensusClientInterceptor.DISABLE_CLIENT_DEFAULT_CENSUS_STATS) != null) {
+          return next.newCall(method, callOptions);
+        }
+        return interceptor.interceptCall(method, callOptions, next);
+      }
+    };
   }
 
   /**
