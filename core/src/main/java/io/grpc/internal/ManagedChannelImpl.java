@@ -1369,7 +1369,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
               "Resolved address: {0}, config={1}",
               servers,
               resolutionResult.getAttributes());
-          ResolutionState lastResolutionStateCopy = lastResolutionState;
 
           if (lastResolutionState != ResolutionState.SUCCESS) {
             channelLogger.log(ChannelLogLevel.INFO, "Address resolved: {0}", servers);
@@ -1457,14 +1456,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
                     .build());
 
             if (!handleResult.isOk()) {
-              if (servers.isEmpty() && lastResolutionStateCopy == ResolutionState.SUCCESS) {
-                // lb doesn't expose that it needs address or not, because for some LB it is not
-                // deterministic. Assuming lb needs address if LB returns error when the address is
-                // empty and it is not the first resolution.
-                scheduleExponentialBackOffInSyncContext();
-              } else {
-                handleErrorInSyncContext(handleResult.augmentDescription(resolver + " was used"));
-              }
+              handleErrorInSyncContext(handleResult.augmentDescription(resolver + " was used"));
             }
           }
         }

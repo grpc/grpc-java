@@ -22,11 +22,11 @@ import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 public interface TlsContextManager {
 
   /** Creates a SslContextProvider. Used for retrieving a server-side SslContext. */
-  SslContextProvider<DownstreamTlsContext> findOrCreateServerSslContextProvider(
+  SslContextProvider findOrCreateServerSslContextProvider(
       DownstreamTlsContext downstreamTlsContext);
 
   /** Creates a SslContextProvider. Used for retrieving a client-side SslContext. */
-  SslContextProvider<UpstreamTlsContext> findOrCreateClientSslContextProvider(
+  SslContextProvider findOrCreateClientSslContextProvider(
       UpstreamTlsContext upstreamTlsContext);
 
   /**
@@ -38,8 +38,7 @@ public interface TlsContextManager {
    * <p>Caller must not release a reference more than once. It's advised that you clear the
    * reference to the instance with the null returned by this method.
    */
-  SslContextProvider<UpstreamTlsContext> releaseClientSslContextProvider(
-      SslContextProvider<UpstreamTlsContext> sslContextProvider);
+  SslContextProvider releaseClientSslContextProvider(SslContextProvider sslContextProvider);
 
   /**
    * Releases an instance of the given server-side {@link SslContextProvider}.
@@ -50,6 +49,5 @@ public interface TlsContextManager {
    * <p>Caller must not release a reference more than once. It's advised that you clear the
    * reference to the instance with the null returned by this method.
    */
-  SslContextProvider<DownstreamTlsContext> releaseServerSslContextProvider(
-      SslContextProvider<DownstreamTlsContext> sslContextProvider);
+  SslContextProvider releaseServerSslContextProvider(SslContextProvider sslContextProvider);
 }

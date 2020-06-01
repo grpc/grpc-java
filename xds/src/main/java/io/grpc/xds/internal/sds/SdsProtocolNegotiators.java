@@ -192,7 +192,7 @@ public final class SdsProtocolNegotiators {
       final BufferReadsHandler bufferReads = new BufferReadsHandler();
       ctx.pipeline().addBefore(ctx.name(), null, bufferReads);
 
-      final SslContextProvider<UpstreamTlsContext> sslContextProvider =
+      final SslContextProvider sslContextProvider =
           TlsContextManagerImpl.getInstance()
               .findOrCreateClientSslContextProvider(upstreamTlsContext);
 
@@ -349,7 +349,7 @@ public final class SdsProtocolNegotiators {
       final BufferReadsHandler bufferReads = new BufferReadsHandler();
       ctx.pipeline().addBefore(ctx.name(), null, bufferReads);
 
-      final SslContextProvider<DownstreamTlsContext> sslContextProvider =
+      final SslContextProvider sslContextProvider =
               TlsContextManagerImpl.getInstance()
                       .findOrCreateServerSslContextProvider(downstreamTlsContext);
 
