@@ -34,7 +34,6 @@ import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsRoutingLoadBalancerProvider.Route;
-import io.grpc.xds.XdsRoutingLoadBalancerProvider.RouteMatch;
 import io.grpc.xds.XdsRoutingLoadBalancerProvider.XdsRoutingConfig;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.HashMap;

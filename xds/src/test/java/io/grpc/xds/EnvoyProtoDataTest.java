@@ -28,11 +28,10 @@ import io.grpc.xds.EnvoyProtoData.ClusterWeight;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.Route;
 import io.grpc.xds.EnvoyProtoData.RouteAction;
-import io.grpc.xds.EnvoyProtoData.RouteMatch;
 import io.grpc.xds.EnvoyProtoData.StructOrError;
-import io.grpc.xds.RouteMatchers.FractionMatcher;
-import io.grpc.xds.RouteMatchers.HeaderMatcher;
-import io.grpc.xds.RouteMatchers.PathMatcher;
+import io.grpc.xds.RouteMatch.FractionMatcher;
+import io.grpc.xds.RouteMatch.HeaderMatcher;
+import io.grpc.xds.RouteMatch.PathMatcher;
 import java.util.Arrays;
 import java.util.Collections;
 import javax.annotation.Nullable;
@@ -106,7 +105,7 @@ public class EnvoyProtoDataTest {
         .isEqualTo(
             new Route(
                 new RouteMatch(new PathMatcher("/service/method", null, null),
-                    null, Collections.<HeaderMatcher>emptyList()),
+                    Collections.<HeaderMatcher>emptyList(), null),
                 new RouteAction("cluster-foo", null)));
 
     io.envoyproxy.envoy.api.v2.route.Route unsupportedProto =
@@ -190,27 +189,27 @@ public class EnvoyProtoDataTest {
     // path_specifier = prefix
     io.envoyproxy.envoy.api.v2.route.RouteMatch proto1 =
         io.envoyproxy.envoy.api.v2.route.RouteMatch.newBuilder().setPrefix("/").build();
-    StructOrError<RouteMatch> struct1 = RouteMatch.fromEnvoyProtoRouteMatch(proto1);
+    StructOrError<RouteMatch> struct1 = Route.convertEnvoyProtoRouteMatch(proto1);
     assertThat(struct1.getErrorDetail()).isNull();
     assertThat(struct1.getStruct()).isEqualTo(
         new RouteMatch(
-            new PathMatcher(null, "/", null), null, Collections.<HeaderMatcher>emptyList()));
+            new PathMatcher(null, "/", null), Collections.<HeaderMatcher>emptyList(), null));
 
     // path_specifier = path
     io.envoyproxy.envoy.api.v2.route.RouteMatch proto2 =
         io.envoyproxy.envoy.api.v2.route.RouteMatch.newBuilder().setPath("/service/method").build();
-    StructOrError<RouteMatch> struct2 = RouteMatch.fromEnvoyProtoRouteMatch(proto2);
+    StructOrError<RouteMatch> struct2 = Route.convertEnvoyProtoRouteMatch(proto2);
     assertThat(struct2.getErrorDetail()).isNull();
     assertThat(struct2.getStruct()).isEqualTo(
         new RouteMatch(
-            new PathMatcher("/service/method", null, null), null,
-            Collections.<HeaderMatcher>emptyList()));
+            new PathMatcher("/service/method", null, null),
+            Collections.<HeaderMatcher>emptyList(), null));
 
     // path_specifier = regex
     @SuppressWarnings("deprecation")
     io.envoyproxy.envoy.api.v2.route.RouteMatch proto3 =
         io.envoyproxy.envoy.api.v2.route.RouteMatch.newBuilder().setRegex("*").build();
-    StructOrError<RouteMatch> struct3 = RouteMatch.fromEnvoyProtoRouteMatch(proto3);
+    StructOrError<RouteMatch> struct3 = Route.convertEnvoyProtoRouteMatch(proto3);
     assertThat(struct3.getErrorDetail()).isNotNull();
     assertThat(struct3.getStruct()).isNull();
 
@@ -219,19 +218,19 @@ public class EnvoyProtoDataTest {
         io.envoyproxy.envoy.api.v2.route.RouteMatch.newBuilder()
             .setSafeRegex(
                 io.envoyproxy.envoy.type.matcher.RegexMatcher.newBuilder().setRegex(".")).build();
-    StructOrError<RouteMatch> struct4 = RouteMatch.fromEnvoyProtoRouteMatch(proto4);
+    StructOrError<RouteMatch> struct4 = Route.convertEnvoyProtoRouteMatch(proto4);
     assertThat(struct4.getErrorDetail()).isNull();
     assertThat(struct4.getStruct()).isEqualTo(
         new RouteMatch(
-            new PathMatcher(null, null, Pattern.compile(".")), null,
-            Collections.<HeaderMatcher>emptyList()));
+            new PathMatcher(null, null, Pattern.compile(".")),
+            Collections.<HeaderMatcher>emptyList(), null));
 
     // case_sensitive = false
     io.envoyproxy.envoy.api.v2.route.RouteMatch proto5 =
         io.envoyproxy.envoy.api.v2.route.RouteMatch.newBuilder()
             .setCaseSensitive(BoolValue.newBuilder().setValue(false))
             .build();
-    StructOrError<RouteMatch> struct5 = RouteMatch.fromEnvoyProtoRouteMatch(proto5);
+    StructOrError<RouteMatch> struct5 = Route.convertEnvoyProtoRouteMatch(proto5);
     assertThat(struct5.getErrorDetail()).isNotNull();
     assertThat(struct5.getStruct()).isNull();
 
@@ -240,13 +239,13 @@ public class EnvoyProtoDataTest {
         io.envoyproxy.envoy.api.v2.route.RouteMatch.newBuilder()
             .addQueryParameters(QueryParameterMatcher.getDefaultInstance())
             .build();
-    StructOrError<RouteMatch> struct6 = RouteMatch.fromEnvoyProtoRouteMatch(proto6);
+    StructOrError<RouteMatch> struct6 = Route.convertEnvoyProtoRouteMatch(proto6);
     assertThat(struct6).isNull();
 
     // path_specifier unset
     io.envoyproxy.envoy.api.v2.route.RouteMatch unsetProto =
         io.envoyproxy.envoy.api.v2.route.RouteMatch.getDefaultInstance();
-    StructOrError<RouteMatch> unsetStruct = RouteMatch.fromEnvoyProtoRouteMatch(unsetProto);
+    StructOrError<RouteMatch> unsetStruct = Route.convertEnvoyProtoRouteMatch(unsetProto);
     assertThat(unsetStruct.getErrorDetail()).isNotNull();
     assertThat(unsetStruct.getStruct()).isNull();
   }
@@ -265,15 +264,16 @@ public class EnvoyProtoDataTest {
                     .setName(":method")
                     .setExactMatch("PUT"))
             .build();
-    StructOrError<RouteMatch> struct = RouteMatch.fromEnvoyProtoRouteMatch(proto);
+    StructOrError<RouteMatch> struct = Route.convertEnvoyProtoRouteMatch(proto);
     assertThat(struct.getErrorDetail()).isNull();
     assertThat(struct.getStruct())
         .isEqualTo(
             new RouteMatch(
-                new PathMatcher(null, "", null), null,
+                new PathMatcher(null, "", null),
                 Arrays.asList(
                     new HeaderMatcher(":scheme", null, null, null, null, "http", null, false),
-                    new HeaderMatcher(":method", "PUT", null, null, null, null, null, false))));
+                    new HeaderMatcher(":method", "PUT", null, null, null, null, null, false)),
+                null));
   }
 
   @Test
@@ -290,13 +290,13 @@ public class EnvoyProtoDataTest {
                                 io.envoyproxy.envoy.type.FractionalPercent.DenominatorType
                                     .HUNDRED)))
             .build();
-    StructOrError<RouteMatch> struct = RouteMatch.fromEnvoyProtoRouteMatch(proto);
+    StructOrError<RouteMatch> struct = Route.convertEnvoyProtoRouteMatch(proto);
     assertThat(struct.getErrorDetail()).isNull();
     assertThat(struct.getStruct())
         .isEqualTo(
             new RouteMatch(
-                new PathMatcher(null, "", null), new FractionMatcher(30, 100),
-                Collections.<HeaderMatcher>emptyList()));
+                new PathMatcher(null, "", null), Collections.<HeaderMatcher>emptyList(),
+                new FractionMatcher(30, 100)));
   }
 
   @Test
@@ -351,7 +351,7 @@ public class EnvoyProtoDataTest {
             .setName(":method")
             .setExactMatch("PUT")
             .build();
-    StructOrError<HeaderMatcher> struct1 = RouteMatch.convertEnvoyProtoHeaderMatcher(proto1);
+    StructOrError<HeaderMatcher> struct1 = Route.convertEnvoyProtoHeaderMatcher(proto1);
     assertThat(struct1.getErrorDetail()).isNull();
     assertThat(struct1.getStruct()).isEqualTo(
         new HeaderMatcher(":method", "PUT", null, null, null, null, null, false));
@@ -363,7 +363,7 @@ public class EnvoyProtoDataTest {
             .setName(":method")
             .setRegexMatch("*")
             .build();
-    StructOrError<HeaderMatcher> struct2 = RouteMatch.convertEnvoyProtoHeaderMatcher(proto2);
+    StructOrError<HeaderMatcher> struct2 = Route.convertEnvoyProtoHeaderMatcher(proto2);
     assertThat(struct2.getErrorDetail()).isNotNull();
     assertThat(struct2.getStruct()).isNull();
 
@@ -374,7 +374,7 @@ public class EnvoyProtoDataTest {
             .setSafeRegexMatch(
                 io.envoyproxy.envoy.type.matcher.RegexMatcher.newBuilder().setRegex("P*"))
             .build();
-    StructOrError<HeaderMatcher> struct3 = RouteMatch.convertEnvoyProtoHeaderMatcher(proto3);
+    StructOrError<HeaderMatcher> struct3 = Route.convertEnvoyProtoHeaderMatcher(proto3);
     assertThat(struct3.getErrorDetail()).isNull();
     assertThat(struct3.getStruct()).isEqualTo(
         new HeaderMatcher(":method", null, Pattern.compile("P*"), null, null, null, null, false));
@@ -386,7 +386,7 @@ public class EnvoyProtoDataTest {
             .setRangeMatch(
                 io.envoyproxy.envoy.type.Int64Range.newBuilder().setStart(10L).setEnd(20L))
             .build();
-    StructOrError<HeaderMatcher> struct4 = RouteMatch.convertEnvoyProtoHeaderMatcher(proto4);
+    StructOrError<HeaderMatcher> struct4 = Route.convertEnvoyProtoHeaderMatcher(proto4);
     assertThat(struct4.getErrorDetail()).isNull();
     assertThat(struct4.getStruct()).isEqualTo(
         new HeaderMatcher(
@@ -398,7 +398,7 @@ public class EnvoyProtoDataTest {
             .setName("user-agent")
             .setPresentMatch(true)
             .build();
-    StructOrError<HeaderMatcher> struct5 = RouteMatch.convertEnvoyProtoHeaderMatcher(proto5);
+    StructOrError<HeaderMatcher> struct5 = Route.convertEnvoyProtoHeaderMatcher(proto5);
     assertThat(struct5.getErrorDetail()).isNull();
     assertThat(struct5.getStruct()).isEqualTo(
         new HeaderMatcher("user-agent", null, null, null, true, null, null, false));
@@ -409,7 +409,7 @@ public class EnvoyProtoDataTest {
             .setName("authority")
             .setPrefixMatch("service-foo")
             .build();
-    StructOrError<HeaderMatcher> struct6 = RouteMatch.convertEnvoyProtoHeaderMatcher(proto6);
+    StructOrError<HeaderMatcher> struct6 = Route.convertEnvoyProtoHeaderMatcher(proto6);
     assertThat(struct6.getErrorDetail()).isNull();
     assertThat(struct6.getStruct()).isEqualTo(
         new HeaderMatcher("authority", null, null, null, null, "service-foo", null, false));
@@ -420,7 +420,7 @@ public class EnvoyProtoDataTest {
             .setName("authority")
             .setSuffixMatch("googleapis.com")
             .build();
-    StructOrError<HeaderMatcher> struct7 = RouteMatch.convertEnvoyProtoHeaderMatcher(proto7);
+    StructOrError<HeaderMatcher> struct7 = Route.convertEnvoyProtoHeaderMatcher(proto7);
     assertThat(struct7.getErrorDetail()).isNull();
     assertThat(struct7.getStruct()).isEqualTo(
         new HeaderMatcher(
@@ -429,8 +429,7 @@ public class EnvoyProtoDataTest {
     // header_match_specifier unset
     io.envoyproxy.envoy.api.v2.route.HeaderMatcher unsetProto =
         io.envoyproxy.envoy.api.v2.route.HeaderMatcher.getDefaultInstance();
-    StructOrError<HeaderMatcher> unsetStruct =
-        RouteMatch.convertEnvoyProtoHeaderMatcher(unsetProto);
+    StructOrError<HeaderMatcher> unsetStruct = Route.convertEnvoyProtoHeaderMatcher(unsetProto);
     assertThat(unsetStruct.getErrorDetail()).isNotNull();
     assertThat(unsetStruct.getStruct()).isNull();
   }
@@ -443,7 +442,7 @@ public class EnvoyProtoDataTest {
             .setSafeRegexMatch(
                 io.envoyproxy.envoy.type.matcher.RegexMatcher.newBuilder().setRegex("["))
             .build();
-    StructOrError<HeaderMatcher> struct = RouteMatch.convertEnvoyProtoHeaderMatcher(proto);
+    StructOrError<HeaderMatcher> struct = Route.convertEnvoyProtoHeaderMatcher(proto);
     assertThat(struct.getErrorDetail()).isNotNull();
     assertThat(struct.getStruct()).isNull();
   }

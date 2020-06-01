@@ -28,10 +28,9 @@ import io.grpc.internal.JsonParser;
 import io.grpc.xds.EnvoyProtoData.ClusterWeight;
 import io.grpc.xds.EnvoyProtoData.Route;
 import io.grpc.xds.EnvoyProtoData.RouteAction;
-import io.grpc.xds.EnvoyProtoData.RouteMatch;
-import io.grpc.xds.RouteMatchers.FractionMatcher;
-import io.grpc.xds.RouteMatchers.HeaderMatcher;
-import io.grpc.xds.RouteMatchers.PathMatcher;
+import io.grpc.xds.RouteMatch.FractionMatcher;
+import io.grpc.xds.RouteMatch.HeaderMatcher;
+import io.grpc.xds.RouteMatch.PathMatcher;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collections;
@@ -82,15 +81,16 @@ public class XdsNameResolverTest {
     Route r1 =
         new Route(
             new RouteMatch(
-                new PathMatcher(null, "", null), new FractionMatcher(10, 20),
-                Collections.<HeaderMatcher>emptyList()),
+                new PathMatcher(null, "", null), Collections.<HeaderMatcher>emptyList(),
+                new FractionMatcher(10, 20)),
             new RouteAction("cluster-foo", null));
     Route r2 =
         new Route(
             new RouteMatch(
-                new PathMatcher("/service/method", null, null), null,
+                new PathMatcher("/service/method", null, null),
                 Arrays.asList(
-                    new HeaderMatcher(":scheme", "https", null, null, null, null, null, false))),
+                    new HeaderMatcher(":scheme", "https", null, null, null, null, null, false)),
+                null),
             new RouteAction(
                 null,
                 Arrays.asList(
@@ -132,8 +132,8 @@ public class XdsNameResolverTest {
     Route route =
         new Route(
             new RouteMatch(
-                new PathMatcher("/service/method", null, null), null,
-                Collections.<HeaderMatcher>emptyList()),
+                new PathMatcher("/service/method", null, null),
+                Collections.<HeaderMatcher>emptyList(), null),
             new RouteAction("cluster-foo", null));
 
     Map<String, ?> config =
@@ -153,8 +153,8 @@ public class XdsNameResolverTest {
   public void convertToRawRoute() throws IOException {
     RouteMatch routeMatch1 =
         new RouteMatch(
-            new PathMatcher("/service/method", null, null), null,
-            Collections.<HeaderMatcher>emptyList());
+            new PathMatcher("/service/method", null, null),
+            Collections.<HeaderMatcher>emptyList(), null);
     String expectedJson1 = "{\n"
         + "  \"path\": \"/service/method\",\n"
         + "  \"action\": \"action_foo\""
@@ -164,17 +164,19 @@ public class XdsNameResolverTest {
 
     RouteMatch routeMatch2 =
         new RouteMatch(
-            new PathMatcher(null, "/", null), new FractionMatcher(10, 100),
-            Collections.<HeaderMatcher>emptyList());
+            new PathMatcher(null, "/", null), Collections.<HeaderMatcher>emptyList(),
+            new FractionMatcher(10, 100));
     Map<String, ?> rawRoute2 = XdsNameResolver.convertToRawRoute(routeMatch2, "action_foo");
     Map<String, ?> rawMatchFraction = (Map<String, ?>) rawRoute2.get("matchFraction");
     assertThat(rawMatchFraction).containsExactly("numerator", 10, "denominator", 100);
 
     RouteMatch routeMatch3 =
-        new RouteMatch(new PathMatcher(null, "/", null), null,
+        new RouteMatch(
+            new PathMatcher(null, "/", null),
             Arrays.asList(
                 new HeaderMatcher("timeout", null, null, new HeaderMatcher.Range(0L, 10L),
-                    null, null, null, false)));
+                    null, null, null, false)),
+            null);
     Map<String, ?> rawRoute3 = XdsNameResolver.convertToRawRoute(routeMatch3, "action_foo");
     Map<String, ?> header =
         (Map<String, ?>) Iterables.getOnlyElement((List<?>) rawRoute3.get("headers"));
@@ -182,14 +184,15 @@ public class XdsNameResolverTest {
 
     RouteMatch routeMatch4 =
         new RouteMatch(
-            new PathMatcher(null, "/", null), null,
+            new PathMatcher(null, "/", null),
             Arrays.asList(
                 new HeaderMatcher(":scheme", "https", null, null, null, null, null, false),
                 new HeaderMatcher(
                     ":path", null, Pattern.compile("google.*"), null, null, null, null, true),
                 new HeaderMatcher("timeout", null, null, null, true, null, null, false),
                 new HeaderMatcher(":authority", null, null, null, null, "google", null, false),
-                new HeaderMatcher(":authority", null, null, null, null, null, "grpc.io", false)));
+                new HeaderMatcher(":authority", null, null, null, null, null, "grpc.io", false)),
+            null);
 
     String expectedJson4 = "{\n"
         + "  \"prefix\": \"/\",\n"

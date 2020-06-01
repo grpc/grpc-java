@@ -16,16 +16,75 @@
 
 package io.grpc.xds;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.MoreObjects.ToStringHelper;
 import com.google.re2j.Pattern;
+import java.util.Collections;
+import java.util.List;
 import java.util.Objects;
 import javax.annotation.Nullable;
 
-final class RouteMatchers {
+final class RouteMatch {
+  private final PathMatcher pathMatch;
+  private final List<HeaderMatcher> headerMatchers;
+  @Nullable
+  private final FractionMatcher fractionMatch;
 
-  // Prevent instantiation
-  private RouteMatchers() {
+  @VisibleForTesting
+  RouteMatch(PathMatcher pathMatch, List<HeaderMatcher> headerMatchers,
+      @Nullable FractionMatcher fractionMatch) {
+    this.pathMatch = pathMatch;
+    this.fractionMatch = fractionMatch;
+    this.headerMatchers = headerMatchers;
+  }
+
+  RouteMatch(@Nullable String pathPrefixMatch, @Nullable String pathExactMatch) {
+    this(
+        new PathMatcher(pathExactMatch, pathPrefixMatch, null),
+        Collections.<HeaderMatcher>emptyList(), null);
+  }
+
+  PathMatcher getPathMatch() {
+    return pathMatch;
+  }
+
+  List<HeaderMatcher> getHeaderMatchers() {
+    return Collections.unmodifiableList(headerMatchers);
+  }
+
+  @Nullable
+  FractionMatcher getFractionMatch() {
+    return fractionMatch;
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    RouteMatch that = (RouteMatch) o;
+    return Objects.equals(pathMatch, that.pathMatch)
+        && Objects.equals(fractionMatch, that.fractionMatch)
+        && Objects.equals(headerMatchers, that.headerMatchers);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(pathMatch, fractionMatch, headerMatchers);
+  }
+
+  @Override
+  public String toString() {
+    ToStringHelper toStringHelper =
+        MoreObjects.toStringHelper(this).add("pathMatch", pathMatch);
+    if (fractionMatch != null) {
+      toStringHelper.add("fractionMatch", fractionMatch);
+    }
+    return toStringHelper.add("headerMatchers", headerMatchers).toString();
   }
 
   static final class PathMatcher {

@@ -27,9 +27,9 @@ import com.google.re2j.PatternSyntaxException;
 import io.envoyproxy.envoy.type.FractionalPercent;
 import io.envoyproxy.envoy.type.FractionalPercent.DenominatorType;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.xds.RouteMatchers.FractionMatcher;
-import io.grpc.xds.RouteMatchers.HeaderMatcher;
-import io.grpc.xds.RouteMatchers.PathMatcher;
+import io.grpc.xds.RouteMatch.FractionMatcher;
+import io.grpc.xds.RouteMatch.HeaderMatcher;
+import io.grpc.xds.RouteMatch.PathMatcher;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -449,7 +449,12 @@ final class EnvoyProtoData {
 
     // TODO(chengyuanzhang): delete and do not use after routing feature is always ON.
     boolean isDefaultRoute() {
-      return routeMatch.isMatchAll();
+      // For backward compatibility, all the other matchers are ignored.
+      String prefix = routeMatch.getPathMatch().getPrefix();
+      if (prefix != null) {
+        return prefix.isEmpty() || prefix.equals("/");
+      }
+      return false;
     }
 
     @Override
@@ -480,7 +485,7 @@ final class EnvoyProtoData {
 
     @Nullable
     static StructOrError<Route> fromEnvoyProtoRoute(io.envoyproxy.envoy.api.v2.route.Route proto) {
-      StructOrError<RouteMatch> routeMatch = RouteMatch.fromEnvoyProtoRouteMatch(proto.getMatch());
+      StructOrError<RouteMatch> routeMatch = convertEnvoyProtoRouteMatch(proto.getMatch());
       if (routeMatch == null) {
         return null;
       }
@@ -513,86 +518,11 @@ final class EnvoyProtoData {
       }
       return StructOrError.fromStruct(new Route(routeMatch.getStruct(), routeAction.getStruct()));
     }
-  }
-
-  /** See corresponding Envoy proto message {@link io.envoyproxy.envoy.api.v2.route.RouteMatch}. */
-  static final class RouteMatch {
-    private final PathMatcher pathMatch;
-    private final List<HeaderMatcher> headerMatchers;
-    @Nullable
-    private final FractionMatcher fractionMatch;
-
-    @VisibleForTesting
-    RouteMatch(PathMatcher pathMatch, @Nullable FractionMatcher fractionMatch,
-        List<HeaderMatcher> headerMatchers) {
-      this.pathMatch = pathMatch;
-      this.fractionMatch = fractionMatch;
-      this.headerMatchers = headerMatchers;
-    }
-
-    RouteMatch(@Nullable String pathPrefixMatch, @Nullable String pathExactMatch) {
-      this(
-          new PathMatcher(pathExactMatch, pathPrefixMatch, null), null,
-          Collections.<HeaderMatcher>emptyList());
-    }
-
-    PathMatcher getPathMatch() {
-      return pathMatch;
-    }
-
-    List<HeaderMatcher> getHeaderMatchers() {
-      return Collections.unmodifiableList(headerMatchers);
-    }
-
-    @Nullable
-    FractionMatcher getFractionMatch() {
-      return fractionMatch;
-    }
-
-    // TODO(chengyuanzhang): delete and do not use after routing feature is always ON.
-    private boolean isMatchAll() {
-      // For backward compatibility, all the other matchers are ignored. When routing is enabled,
-      // we should never care if a matcher matches all requests.
-      String prefix = pathMatch.getPrefix();
-      if (prefix != null) {
-        return prefix.isEmpty() || prefix.equals("/");
-      }
-      return false;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (o == null || getClass() != o.getClass()) {
-        return false;
-      }
-      RouteMatch that = (RouteMatch) o;
-      return Objects.equals(pathMatch, that.pathMatch)
-          && Objects.equals(fractionMatch, that.fractionMatch)
-          && Objects.equals(headerMatchers, that.headerMatchers);
-    }
-
-    @Override
-    public int hashCode() {
-      return Objects.hash(pathMatch, fractionMatch, headerMatchers);
-    }
-
-    @Override
-    public String toString() {
-      ToStringHelper toStringHelper =
-          MoreObjects.toStringHelper(this).add("pathMatch", pathMatch);
-      if (fractionMatch != null) {
-        toStringHelper.add("fractionMatch", fractionMatch);
-      }
-      return toStringHelper.add("headerMatchers", headerMatchers).toString();
-    }
 
     @VisibleForTesting
     @SuppressWarnings("deprecation")
     @Nullable
-    static StructOrError<RouteMatch> fromEnvoyProtoRouteMatch(
+    static StructOrError<RouteMatch> convertEnvoyProtoRouteMatch(
         io.envoyproxy.envoy.api.v2.route.RouteMatch proto) {
       if (proto.getQueryParametersCount() != 0) {
         return null;
@@ -626,8 +556,8 @@ final class EnvoyProtoData {
       }
 
       return StructOrError.fromStruct(
-          new RouteMatch(pathMatch.getStruct(), fractionMatch,
-              Collections.unmodifiableList(headerMatchers)));
+          new RouteMatch(
+              pathMatch.getStruct(), Collections.unmodifiableList(headerMatchers), fractionMatch));
     }
 
     @SuppressWarnings("deprecation")

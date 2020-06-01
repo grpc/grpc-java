@@ -18,7 +18,6 @@ package io.grpc.xds;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
-import com.google.common.base.MoreObjects.ToStringHelper;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.re2j.Pattern;
@@ -34,9 +33,9 @@ import io.grpc.internal.JsonUtil;
 import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
-import io.grpc.xds.RouteMatchers.FractionMatcher;
-import io.grpc.xds.RouteMatchers.HeaderMatcher;
-import io.grpc.xds.RouteMatchers.PathMatcher;
+import io.grpc.xds.RouteMatch.FractionMatcher;
+import io.grpc.xds.RouteMatch.HeaderMatcher;
+import io.grpc.xds.RouteMatch.PathMatcher;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -348,53 +347,6 @@ public final class XdsRoutingLoadBalancerProvider extends LoadBalancerProvider {
           .add("routeMatch", routeMatch)
           .add("actionName", actionName)
           .toString();
-    }
-  }
-
-  static final class RouteMatch {
-    private final PathMatcher pathMatcher;
-    private final List<HeaderMatcher> headers;
-    @Nullable
-    private final FractionMatcher matchFraction;
-
-    RouteMatch(
-        PathMatcher pathMatcher, List<HeaderMatcher> headers,
-        @Nullable FractionMatcher matchFraction) {
-      this.pathMatcher = pathMatcher;
-      this.headers = headers;
-      this.matchFraction = matchFraction;
-    }
-
-
-    @Override
-    public int hashCode() {
-      return Objects.hash(pathMatcher, headers, matchFraction);
-    }
-
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (o == null || getClass() != o.getClass()) {
-        return false;
-      }
-      RouteMatch that = (RouteMatch) o;
-      return Objects.equals(pathMatcher, that.pathMatcher)
-          && Objects.equals(matchFraction, that.matchFraction)
-          && Objects.equals(headers, that.headers);
-    }
-
-    @Override
-    public String toString() {
-      ToStringHelper toStringHelper =
-          MoreObjects.toStringHelper(this)
-              .add("pathMatcher", pathMatcher)
-              .add("headers", headers);
-      if (matchFraction != null) {
-        toStringHelper.add("matchFraction", matchFraction);
-      }
-      return toStringHelper.toString();
     }
   }
 }
