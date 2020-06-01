@@ -25,6 +25,9 @@ import java.util.List;
 import java.util.Objects;
 import javax.annotation.Nullable;
 
+/**
+ * A {@link RouteMatch} represents a group of routing rules used by a logical route to filter RPCs.
+ */
 final class RouteMatch {
   private final PathMatcher pathMatch;
   private final List<HeaderMatcher> headerMatchers;
