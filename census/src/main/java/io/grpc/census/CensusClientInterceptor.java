@@ -38,9 +38,9 @@ import java.util.List;
 
 public final class CensusClientInterceptor {
   static final CallOptions.Key<Boolean> DISABLE_CLIENT_DEFAULT_CENSUS_STATS =
-      CallOptions.Key.create("Disable default census stats");
+      CallOptions.Key.createWithDefault("Disable default census stats", true);
   static final CallOptions.Key<Boolean> DISABLE_CLIENT_DEFAULT_CENSUS_TRACING =
-      CallOptions.Key.create("Disable default census tracing");
+      CallOptions.Key.createWithDefault("Disable default census tracing", true);
 
   private static final Supplier<Stopwatch> STOPWATCH_SUPPLIER = new Supplier<Stopwatch>() {
     @Override
@@ -51,6 +51,10 @@ public final class CensusClientInterceptor {
 
   // Prevent instantiation
   private CensusClientInterceptor() {
+  }
+
+  public static Builder newBuilder() {
+    return new Builder();
   }
 
   public static class Builder {
