@@ -22,6 +22,7 @@ import com.google.common.base.MoreObjects.ToStringHelper;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.re2j.Pattern;
+import com.google.re2j.PatternSyntaxException;
 import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
@@ -41,7 +42,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.regex.PatternSyntaxException;
 import javax.annotation.Nullable;
 
 /**
