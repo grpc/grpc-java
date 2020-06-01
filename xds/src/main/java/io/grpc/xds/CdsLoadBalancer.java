@@ -325,15 +325,14 @@ public final class CdsLoadBalancer extends LoadBalancer {
     @Override
     public void onResourceDoesNotExist(String resourceName) {
       logger.log(XdsLogLevel.INFO, "Resource {0} is unavailable", resourceName);
-      // TODO(chengyuanzhang): should unconditionally propagate to downstream instances and
-      //  go to TRANSIENT_FAILURE.
-      if (edsBalancer == null) {
-        helper.updateBalancingState(
-            TRANSIENT_FAILURE,
-            new ErrorPicker(
-                Status.UNAVAILABLE.withDescription(
-                    "Resource " + resourceName + " is unavailable")));
+      if (edsBalancer != null) {
+        edsBalancer.shutdown();
+        edsBalancer = null;
       }
+      helper.updateBalancingState(
+          TRANSIENT_FAILURE,
+          new ErrorPicker(
+              Status.UNAVAILABLE.withDescription("Resource " + resourceName + " is unavailable")));
     }
 
     @Override
