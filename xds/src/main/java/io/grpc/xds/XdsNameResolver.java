@@ -46,6 +46,7 @@ import io.grpc.xds.XdsClient.XdsChannelFactory;
 import io.grpc.xds.XdsClient.XdsClientFactory;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -209,12 +210,11 @@ final class XdsNameResolver extends NameResolver {
     @Override
     public void onResourceDoesNotExist(String resourceName) {
       logger.log(XdsLogLevel.INFO, "Resource {0} is unavailable", resourceName);
+      ConfigOrError parsedServiceConfig =
+          serviceConfigParser.parseServiceConfig(Collections.<String, Object>emptyMap());
       ResolutionResult result =
           ResolutionResult.newBuilder()
-              .setServiceConfig(
-                  ConfigOrError.fromError(
-                      Status.UNAVAILABLE.withDescription(
-                          "Resource " + resourceName + " is unavailable")))
+              .setServiceConfig(parsedServiceConfig)
               .build();
       listener.onResult(result);
     }
