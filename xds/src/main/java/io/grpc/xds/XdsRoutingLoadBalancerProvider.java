@@ -159,7 +159,7 @@ public final class XdsRoutingLoadBalancerProvider extends LoadBalancerProvider {
         }
       }
       if (!isOneOf(pathExact, pathPrefix, pathRegex)) {
-        throw new RuntimeException("malformed path matcher");
+        throw new RuntimeException("must specify exactly one patch match type");
       }
       PathMatcher pathMatcher = new PathMatcher(pathExact, pathPrefix, pathRegex);
 
@@ -184,7 +184,7 @@ public final class XdsRoutingLoadBalancerProvider extends LoadBalancerProvider {
       }
       return new Route(new RouteMatch(pathMatcher, headers, matchFraction), actionName);
     } catch (RuntimeException e) {
-      throw new RuntimeException("Failed to parse Route: " + e);
+      throw new RuntimeException("Failed to parse Route: " + e.getMessage());
     }
   }
 
@@ -211,14 +211,14 @@ public final class XdsRoutingLoadBalancerProvider extends LoadBalancerProvider {
       String prefixMatch = JsonUtil.getString(rawHeaderMatcher, "prefixMatch");
       String suffixMatch = JsonUtil.getString(rawHeaderMatcher, "suffixMatch");
       if (!isOneOf(exactMatch, regexMatch, rangeMatch, presentMatch, prefixMatch, suffixMatch)) {
-        throw new RuntimeException("malformed header matcher: " + rawHeaderMatcher);
+        throw new RuntimeException("must specify exactly one match type");
       }
       Boolean inverted = JsonUtil.getBoolean(rawHeaderMatcher, "invertMatch");
       return new HeaderMatcher(
           name, exactMatch, regexMatch, rangeMatch, presentMatch, prefixMatch, suffixMatch,
           inverted == null ? false : inverted);
     } catch (RuntimeException e) {
-      throw new RuntimeException("Failed to parse HeaderMatcher: " + e);
+      throw new RuntimeException("Failed to parse HeaderMatcher: " + e.getMessage());
     }
   }
 
@@ -244,7 +244,7 @@ public final class XdsRoutingLoadBalancerProvider extends LoadBalancerProvider {
       }
       return new HeaderMatcher.Range(start, end);
     } catch (RuntimeException e) {
-      throw new RuntimeException("Failed to parse Fraction: " + e);
+      throw new RuntimeException("Failed to parse Range: " + e.getMessage());
     }
   }
 
@@ -260,7 +260,7 @@ public final class XdsRoutingLoadBalancerProvider extends LoadBalancerProvider {
       }
       return new FractionMatcher(numerator, denominator);
     } catch (RuntimeException e) {
-      throw new RuntimeException("Failed to parse Fraction: " + e);
+      throw new RuntimeException("Failed to parse Fraction: " + e.getMessage());
     }
   }
 
@@ -269,12 +269,7 @@ public final class XdsRoutingLoadBalancerProvider extends LoadBalancerProvider {
     final List<Route> routes;
     final Map<String, PolicySelection> actions;
 
-    /**
-     * Constructs a deeply parsed xds_routing config with the given non-empty list of routes, the
-     * action of each of which is provided by the given map of actions.
-     */
-    @VisibleForTesting
-    XdsRoutingConfig(List<Route> routes, Map<String, PolicySelection> actions) {
+    private XdsRoutingConfig(List<Route> routes, Map<String, PolicySelection> actions) {
       this.routes = ImmutableList.copyOf(routes);
       this.actions = ImmutableMap.copyOf(actions);
     }
