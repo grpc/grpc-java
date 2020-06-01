@@ -134,7 +134,6 @@ final class RouteMatchers {
       this.isInvertedMatch = isInvertedMatch;
     }
 
-    // TODO (chengyuanzhang): add getters when needed.
     String getName() {
       return name;
     }
