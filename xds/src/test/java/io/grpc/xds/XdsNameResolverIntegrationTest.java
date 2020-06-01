@@ -259,6 +259,7 @@ public class XdsNameResolverIntegrationTest {
     assertThat(xdsClientPool).isNotNull();
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void resolve_ResourceNotFound() {
     xdsNameResolver.start(mockListener);
