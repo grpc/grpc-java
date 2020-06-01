@@ -274,6 +274,7 @@ public class XdsNameResolverTest {
     assertThat(result.getAddresses()).isEmpty();
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void resolve_ResourceNotFound() {
     xdsNameResolver.start(mockListener);
@@ -290,8 +291,7 @@ public class XdsNameResolverTest {
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
     assertThat(result.getAddresses()).isEmpty();
-    assertThat(result.getServiceConfig().getConfig()).isNull();
-    assertThat(result.getServiceConfig().getError().getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat((Map<String, ?>) result.getServiceConfig().getConfig()).isEmpty();
   }
 
   @Test
