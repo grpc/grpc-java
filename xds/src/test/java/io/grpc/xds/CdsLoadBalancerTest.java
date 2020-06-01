@@ -335,7 +335,6 @@ public class CdsLoadBalancerTest {
   }
 
   @Test
-  @SuppressWarnings({"unchecked"})
   public void handleCdsConfigs_withUpstreamTlsContext()  {
     assertThat(xdsClient).isNull();
     ResolvedAddresses resolvedAddresses1 =
