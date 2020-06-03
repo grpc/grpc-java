@@ -37,7 +37,9 @@ dependencies {
     testImplementation project(':grpc-testing'),
             project(':grpc-testing-proto'),
             libraries.guava,
-            libraries.guava_testlib,
+            libraries.guava_testlib {
+                exclude group: 'junit', module: 'junit'
+            },
             libraries.junit,
             libraries.mockito,
             libraries.truth

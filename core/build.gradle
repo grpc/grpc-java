@@ -24,7 +24,9 @@ dependencies {
             project(':grpc-api').sourceSets.test.output,
             project(':grpc-testing'),
             project(':grpc-grpclb'),
-            libraries.guava_testlib
+            libraries.guava_testlib {
+                exclude group: 'junit', module: 'junit'
+            }
     
     testRuntimeOnly project(':grpc-census')
 

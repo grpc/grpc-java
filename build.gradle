@@ -312,9 +312,6 @@ subprojects {
             testCompile libraries.junit,
                     libraries.mockito,
                     libraries.truth
-            testImplementation (libraries.guava_testlib) {
-              exclude group: 'junit', module: 'junit'
-            }
         }
 
         compileTestJava {

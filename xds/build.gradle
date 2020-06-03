@@ -48,7 +48,9 @@ dependencies {
 
     testImplementation project(':grpc-testing'),
             project(':grpc-testing-proto'),
-            libraries.guava_testlib,
+            libraries.guava_testlib {
+                exclude group: 'junit', module: 'junit'
+            },
             libraries.netty_epoll
 
     shadow configurations.implementation.getDependencies().minus([nettyDependency])

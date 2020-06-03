@@ -18,7 +18,9 @@ dependencies {
     testImplementation project(':grpc-context').sourceSets.test.output,
             project(':grpc-testing'),
             project(':grpc-grpclb'),
-            libraries.guava_testlib
+            libraries.guava_testlib {
+                exclude group: 'junit', module: 'junit'
+            }
 
     jmh project(':grpc-core')
 
