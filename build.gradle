@@ -187,7 +187,7 @@ subprojects {
             // Jetty ALPN dependencies
             jetty_alpn_agent: 'org.mortbay.jetty.alpn:jetty-alpn-agent:2.0.9'
         ]
-        
+
         // A util function to config guava dependency with transitive dependencies
         // properly resolved for the failOnVersionConflict strategy.
         guavaDependency = { configurationName ->
