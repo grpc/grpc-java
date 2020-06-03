@@ -50,6 +50,16 @@ jdk:
   - openjdk8
   - openjdk11
 
+
+## Added in https://github.com/grpc/grpc-java/pull/7060
+## Bump jre8 to u252 or later tu use the in-JDK ALPN implementation
+addons:
+  apt:
+    update: true
+    packages:
+    - openjdk-8-jre-headless
+
+
 notifications:
   email: false
 
