@@ -59,30 +59,32 @@ public final class TlsContextManagerImpl implements TlsContextManager {
   }
 
   @Override
-  public SslContextProvider<DownstreamTlsContext> findOrCreateServerSslContextProvider(
+  public SslContextProvider findOrCreateServerSslContextProvider(
       DownstreamTlsContext downstreamTlsContext) {
     checkNotNull(downstreamTlsContext, "downstreamTlsContext");
     return mapForServers.get(downstreamTlsContext);
   }
 
   @Override
-  public SslContextProvider<UpstreamTlsContext> findOrCreateClientSslContextProvider(
+  public SslContextProvider findOrCreateClientSslContextProvider(
       UpstreamTlsContext upstreamTlsContext) {
     checkNotNull(upstreamTlsContext, "upstreamTlsContext");
     return mapForClients.get(upstreamTlsContext);
   }
 
   @Override
-  public SslContextProvider<UpstreamTlsContext> releaseClientSslContextProvider(
-      SslContextProvider<UpstreamTlsContext> sslContextProvider) {
-    checkNotNull(sslContextProvider, "sslContextProvider");
-    return mapForClients.release(sslContextProvider);
+  public SslContextProvider releaseClientSslContextProvider(
+      SslContextProvider clientSslContextProvider) {
+    checkNotNull(clientSslContextProvider, "clientSslContextProvider");
+    return mapForClients.release(clientSslContextProvider.getUpstreamTlsContext(),
+        clientSslContextProvider);
   }
 
   @Override
-  public SslContextProvider<DownstreamTlsContext> releaseServerSslContextProvider(
-      SslContextProvider<DownstreamTlsContext> sslContextProvider) {
-    checkNotNull(sslContextProvider, "sslContextProvider");
-    return mapForServers.release(sslContextProvider);
+  public SslContextProvider releaseServerSslContextProvider(
+      SslContextProvider serverSslContextProvider) {
+    checkNotNull(serverSslContextProvider, "serverSslContextProvider");
+    return mapForServers.release(serverSslContextProvider.getDownstreamTlsContext(),
+        serverSslContextProvider);
   }
 }

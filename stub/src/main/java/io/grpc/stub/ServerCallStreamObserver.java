@@ -64,4 +64,26 @@ public abstract class ServerCallStreamObserver<V> extends CallStreamObserver<V> 
    * @throws IllegalArgumentException if the compressor name can not be found.
    */
   public abstract void setCompression(String compression);
+
+  /**
+   * Swaps to manual flow control where no message will be delivered to {@link
+   * StreamObserver#onNext(Object)} unless it is {@link #request request()}ed.
+   *
+   * <p>It may only be called during the initial call to the application, before the service returns
+   * its {@code StreamObserver}.
+   *
+   * <p>Note that for cases where the message is received before the service handler is invoked,
+   * this method will have no effect. This is true for:
+   *
+   * <ul>
+   *   <li>{@link io.grpc.MethodDescriptor.MethodType#UNARY} operations.</li>
+   *   <li>{@link io.grpc.MethodDescriptor.MethodType#SERVER_STREAMING} operations.</li>
+   * </ul>
+   * </p>
+   *
+   * <p>This API is still a work in-progress and may change in the future.
+   */
+  public void disableAutoRequest() {
+    throw new UnsupportedOperationException();
+  }
 }

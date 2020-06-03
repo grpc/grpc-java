@@ -48,4 +48,19 @@ public abstract class ClientCallStreamObserver<V> extends CallStreamObserver<V> 
    * @param cause if not {@code null}, will appear as the cause of the CANCELLED status
    */
   public abstract void cancel(@Nullable String message, @Nullable Throwable cause);
+
+  /**
+   * Swaps to manual flow control where no message will be delivered to {@link
+   * StreamObserver#onNext(Object)} unless it is {@link #request request()}ed. Since {@code
+   * request()} may not be called before the call is started, a number of initial requests may be
+   * specified.
+   *
+   * <p>This method may only be called during {@link ClientResponseObserver#beforeStart
+   * ClientResponseObserver.beforeStart()}.
+   *
+   * <p>This API is still a work in-progress and may change in the future.
+   */
+  public void disableAutoRequestWithInitial(int request) {
+    throw new UnsupportedOperationException();
+  }
 }
