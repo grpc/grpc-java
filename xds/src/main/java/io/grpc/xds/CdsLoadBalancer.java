@@ -259,9 +259,6 @@ public final class CdsLoadBalancer extends LoadBalancer {
     final EdsLoadBalancingHelper helper;
     final ResolvedAddresses resolvedAddresses;
 
-    // EDS balancer for the cluster.
-    // Becomes non-null once handleResolvedAddresses() successfully.
-    // Assigned at most once.
     @Nullable
     LoadBalancer edsBalancer;
 
