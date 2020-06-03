@@ -259,9 +259,6 @@ public final class CdsLoadBalancer extends LoadBalancer {
     final EdsLoadBalancingHelper helper;
     final ResolvedAddresses resolvedAddresses;
 
-    // EDS balancer for the cluster.
-    // Becomes non-null once handleResolvedAddresses() successfully.
-    // Assigned at most once.
     @Nullable
     LoadBalancer edsBalancer;
 
@@ -325,15 +322,14 @@ public final class CdsLoadBalancer extends LoadBalancer {
     @Override
     public void onResourceDoesNotExist(String resourceName) {
       logger.log(XdsLogLevel.INFO, "Resource {0} is unavailable", resourceName);
-      // TODO(chengyuanzhang): should unconditionally propagate to downstream instances and
-      //  go to TRANSIENT_FAILURE.
-      if (edsBalancer == null) {
-        helper.updateBalancingState(
-            TRANSIENT_FAILURE,
-            new ErrorPicker(
-                Status.UNAVAILABLE.withDescription(
-                    "Resource " + resourceName + " is unavailable")));
+      if (edsBalancer != null) {
+        edsBalancer.shutdown();
+        edsBalancer = null;
       }
+      helper.updateBalancingState(
+          TRANSIENT_FAILURE,
+          new ErrorPicker(
+              Status.UNAVAILABLE.withDescription("Resource " + resourceName + " is unavailable")));
     }
 
     @Override
