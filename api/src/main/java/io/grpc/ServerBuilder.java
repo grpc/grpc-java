@@ -81,9 +81,7 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
   public abstract T addService(ServerServiceDefinition service);
 
   /**
-   * Adds a service implementation to the handler registry. If bindableService implements
-   * {@link InternalNotifyOnServerBuild}, the service will receive a reference to the generated
-   * server instance upon build().
+   * Adds a service implementation to the handler registry.
    *
    * @param bindableService BindableService object
    * @return this

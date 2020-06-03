@@ -41,7 +41,7 @@ public class ServerSslContextProviderFactoryTest {
         CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(
             SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, CA_PEM_FILE);
 
-    SslContextProvider<DownstreamTlsContext> sslContextProvider =
+    SslContextProvider sslContextProvider =
         serverSslContextProviderFactory.createSslContextProvider(downstreamTlsContext);
     assertThat(sslContextProvider).isNotNull();
   }
@@ -56,7 +56,7 @@ public class ServerSslContextProviderFactoryTest {
             commonTlsContext, /* requireClientCert= */ false);
 
     try {
-      SslContextProvider<DownstreamTlsContext> unused =
+      SslContextProvider unused =
           serverSslContextProviderFactory.createSslContextProvider(downstreamTlsContext);
       Assert.fail("no exception thrown");
     } catch (UnsupportedOperationException expected) {
@@ -76,7 +76,7 @@ public class ServerSslContextProviderFactoryTest {
             commonTlsContext, /* requireClientCert= */ false);
 
     try {
-      SslContextProvider<DownstreamTlsContext> unused =
+      SslContextProvider unused =
           serverSslContextProviderFactory.createSslContextProvider(downstreamTlsContext);
       Assert.fail("no exception thrown");
     } catch (UnsupportedOperationException expected) {

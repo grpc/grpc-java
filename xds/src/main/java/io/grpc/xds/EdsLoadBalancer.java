@@ -364,16 +364,21 @@ final class EdsLoadBalancer extends LoadBalancer {
         @Override
         public void onResourceDoesNotExist(String resourceName) {
           logger.log(XdsLogLevel.INFO, "Resource {0} is unavailable", resourceName);
-          // TODO(chengyuanzhang): should unconditionally propagate to downstream instances and
-          //  go to TRANSIENT_FAILURE. This can only be achieved after LocalityStore is refactored
-          //  to LoadBalancer.
-          if (!endpointsReceived) {
-            helper.updateBalancingState(
-                TRANSIENT_FAILURE,
-                new ErrorPicker(
-                    Status.UNAVAILABLE.withDescription(
-                        "Resource " + resourceName + " is unavailable")));
+          if (isReportingLoad) {
+            logger.log(
+                XdsLogLevel.INFO,
+                "Stop reporting loads for cluster: {0}, cluster_service: {1}",
+                clusterName,
+                clusterServiceName);
+            xdsClient.cancelClientStatsReport(clusterName, clusterServiceName);
+            isReportingLoad = false;
           }
+          localityStore.reset();
+          helper.updateBalancingState(
+              TRANSIENT_FAILURE,
+              new ErrorPicker(
+                  Status.UNAVAILABLE.withDescription(
+                      "Resource " + resourceName + " is unavailable")));
         }
 
         @Override
