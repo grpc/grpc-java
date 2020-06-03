@@ -947,10 +947,10 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
     @Override
     public void onReady() {
-      // TODO(zdapeng): the more correct way to handle onReady
-      if (state.drainedSubstreams.contains(substream)) {
-        masterListener.onReady();
-      }
+      // FIXME(#7089): hedging case is broken.
+      // TODO(zdapeng): optimization: if the substream is not drained yet, delay onReady() once
+      // drained and if is still ready.
+      masterListener.onReady();
     }
   }
 
