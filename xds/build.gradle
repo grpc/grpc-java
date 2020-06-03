@@ -48,8 +48,10 @@ dependencies {
 
     testImplementation project(':grpc-testing'),
             project(':grpc-testing-proto'),
-            libraries.guava_testlib,
             libraries.netty_epoll
+    testImplementation (libraries.guava_testlib) {
+        exclude group: 'junit', module: 'junit'
+    }
 
     shadow configurations.implementation.getDependencies().minus([nettyDependency])
     shadow project(path: ':grpc-netty-shaded', configuration: 'shadow')
