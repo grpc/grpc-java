@@ -28,13 +28,11 @@ import com.google.common.collect.ImmutableMap;
 import io.grpc.ConnectivityState;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
-import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
-import io.grpc.xds.XdsRoutingLoadBalancerProvider.MethodName;
 import io.grpc.xds.XdsRoutingLoadBalancerProvider.Route;
 import io.grpc.xds.XdsRoutingLoadBalancerProvider.XdsRoutingConfig;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
@@ -131,15 +129,15 @@ final class XdsRoutingLoadBalancer extends LoadBalancer {
   private void updateOverallBalancingState() {
     ConnectivityState overallState = null;
     // Use LinkedHashMap to preserve the order of routes.
-    Map<MethodName, SubchannelPicker> routePickers = new LinkedHashMap<>();
+    Map<RouteMatch, SubchannelPicker> routePickers = new LinkedHashMap<>();
     for (Route route : routes) {
-      RouteHelper routeHelper = routeHelpers.get(route.actionName);
-      routePickers.put(route.methodName, routeHelper.currentPicker);
+      RouteHelper routeHelper = routeHelpers.get(route.getActionName());
+      routePickers.put(route.getRouteMatch(), routeHelper.currentPicker);
       ConnectivityState routeState = routeHelper.currentState;
       overallState = aggregateState(overallState, routeState);
     }
     if (overallState != null) {
-      SubchannelPicker picker = new PathMatchingSubchannelPicker(routePickers);
+      SubchannelPicker picker = new RouteMatchingSubchannelPicker(routePickers);
       helper.updateBalancingState(overallState, picker);
     }
   }
@@ -182,39 +180,18 @@ final class XdsRoutingLoadBalancer extends LoadBalancer {
     }
   }
 
-  private static final class PathMatchingSubchannelPicker extends SubchannelPicker {
+  private static final class RouteMatchingSubchannelPicker extends SubchannelPicker {
 
-    final Map<MethodName, SubchannelPicker> routePickers;
+    final Map<RouteMatch, SubchannelPicker> routePickers;
 
-    /**
-     * Constructs a picker that will match the path of PickSubchannelArgs with the given map.
-     * The order of the map entries matters. First match will be picked even if second match is an
-     * exact (service + method) path match.
-     */
-    PathMatchingSubchannelPicker(Map<MethodName, SubchannelPicker> routePickers) {
+    RouteMatchingSubchannelPicker(Map<RouteMatch, SubchannelPicker> routePickers) {
       this.routePickers = routePickers;
     }
 
     @Override
     public PickResult pickSubchannel(PickSubchannelArgs args) {
-      for (MethodName methodName : routePickers.keySet()) {
-        if (match(args.getMethodDescriptor(), methodName)) {
-          return routePickers.get(methodName).pickSubchannel(args);
-        }
-      }
-      // At least the default route should match, otherwise there is a bug.
-      throw new IllegalStateException("PathMatchingSubchannelPicker: error in matching path");
-    }
-
-    boolean match(MethodDescriptor<?, ?> methodDescriptor, MethodName methodName) {
-      if (methodName.service.isEmpty() && methodName.method.isEmpty()) {
-        return true;
-      }
-      if (methodName.method.isEmpty()) {
-        return methodName.service.equals(methodDescriptor.getServiceName());
-      }
-      return (methodName.service + '/' + methodName.method)
-          .equals(methodDescriptor.getFullMethodName());
+      // TODO(chengyuanzhang): to be implemented.
+      return PickResult.withError(Status.INTERNAL.withDescription("routing picker unimplemented"));
     }
   }
 }

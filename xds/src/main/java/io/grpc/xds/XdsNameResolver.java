@@ -18,12 +18,14 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import com.google.gson.Gson;
+import com.google.re2j.Pattern;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
@@ -39,6 +41,9 @@ import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.ClusterWeight;
 import io.grpc.xds.EnvoyProtoData.Route;
 import io.grpc.xds.EnvoyProtoData.RouteAction;
+import io.grpc.xds.RouteMatch.FractionMatcher;
+import io.grpc.xds.RouteMatch.HeaderMatcher;
+import io.grpc.xds.RouteMatch.PathMatcher;
 import io.grpc.xds.XdsClient.ConfigUpdate;
 import io.grpc.xds.XdsClient.ConfigWatcher;
 import io.grpc.xds.XdsClient.RefCountedXdsClientObjectPool;
@@ -169,18 +174,13 @@ final class XdsNameResolver extends NameResolver {
               xdsClient,
               clusterName);
           rawLbConfig = generateCdsRawConfig(clusterName);
-        } else if (action.getWeightedCluster() != null) {
+        } else {
           logger.log(
               XdsLogLevel.INFO,
               "Received config update with one weighted cluster route from xDS client {0}",
               xdsClient);
           List<ClusterWeight> clusterWeights = defaultRoute.getRouteAction().getWeightedCluster();
           rawLbConfig = generateWeightedTargetRawConfig(clusterWeights);
-        } else {
-          // TODO (chengyuanzhang): route with cluster_header
-          logger.log(
-              XdsLogLevel.WARNING, "Route action with cluster_header is not implemented");
-          return;
         }
       }
 
@@ -228,38 +228,22 @@ final class XdsNameResolver extends NameResolver {
     }
   }
 
-  private static ImmutableMap<String, ?> generateXdsRoutingRawConfig(List<Route> routesUpdate) {
-    List<Object> routes = new ArrayList<>(routesUpdate.size());
-    Map<String, Object> actions = new LinkedHashMap<>();
-    Map<RouteAction, String> exitingActions = new HashMap<>();
-    for (Route route : routesUpdate) {
-      String service = "";
-      String method = "";
-      if (!route.isDefaultRoute()) {
-        String prefix = route.getRouteMatch().getPathPrefixMatch();
-        String path = route.getRouteMatch().getPathExactMatch();
-        if (prefix != null) {
-          service = prefix.substring(1, prefix.length() - 1);
-        } else if (path != null) {
-          int splitIndex = path.lastIndexOf('/');
-          service = path.substring(1, splitIndex);
-          method = path.substring(splitIndex + 1);
-        } else {
-          // TODO (chengyuanzhang): match with regex.
-          continue;
-        }
-      }
-      Map<String, String> methodName = ImmutableMap.of("service", service, "method", method);
-      String actionName;
+  @VisibleForTesting
+  static ImmutableMap<String, ?> generateXdsRoutingRawConfig(List<Route> routes) {
+    List<Object> rawRoutes = new ArrayList<>();
+    Map<String, Object> rawActions = new LinkedHashMap<>();
+    Map<RouteAction, String> existingActions = new HashMap<>();
+    for (Route route : routes) {
       RouteAction routeAction = route.getRouteAction();
+      String actionName;
       Map<String, ?> actionPolicy;
-      if (exitingActions.containsKey(routeAction)) {
-        actionName = exitingActions.get(routeAction);
+      if (existingActions.containsKey(routeAction)) {
+        actionName = existingActions.get(routeAction);
       } else {
         if (routeAction.getCluster() != null) {
           actionName = "cds:" + routeAction.getCluster();
           actionPolicy = generateCdsRawConfig(routeAction.getCluster());
-        } else if (routeAction.getWeightedCluster() != null) {
+        } else {
           StringBuilder sb = new StringBuilder("weighted:");
           List<ClusterWeight> clusterWeights = routeAction.getWeightedCluster();
           for (ClusterWeight clusterWeight : clusterWeights) {
@@ -267,31 +251,103 @@ final class XdsNameResolver extends NameResolver {
           }
           sb.append(routeAction.hashCode());
           actionName = sb.toString();
-          if (actions.containsKey(actionName)) {
-            // Just in case of hash collision, append exitingActions.size() to make actionName
+          if (rawActions.containsKey(actionName)) {
+            // Just in case of hash collision, append existingActions.size() to make actionName
             // unique. However, in case of collision, when new ConfigUpdate is received, actions
             // and actionNames might be associated differently from the previous update, but it
             // is just suboptimal and won't cause a problem.
-            actionName = actionName + "_" + exitingActions.size();
+            actionName = actionName + "_" + existingActions.size();
           }
           actionPolicy = generateWeightedTargetRawConfig(clusterWeights);
-        } else {
-          // TODO (chengyuanzhang): route with cluster_header.
-          continue;
         }
-        exitingActions.put(routeAction, actionName);
+        existingActions.put(routeAction, actionName);
         List<?> childPolicies = ImmutableList.of(actionPolicy);
-        actions.put(actionName, ImmutableMap.of("childPolicy", childPolicies));
+        rawActions.put(actionName, ImmutableMap.of("childPolicy", childPolicies));
       }
-      routes.add(ImmutableMap.of("methodName", methodName, "action", actionName));
+      ImmutableMap<String, ?> configRoute = convertToRawRoute(route.getRouteMatch(), actionName);
+      rawRoutes.add(configRoute);
     }
-
     return ImmutableMap.of(
         XdsLbPolicies.XDS_ROUTING_POLICY_NAME,
-        ImmutableMap.of("route", routes, "action", actions));
+        ImmutableMap.of(
+            "route", Collections.unmodifiableList(rawRoutes),
+            "action", Collections.unmodifiableMap(rawActions)));
   }
 
-  private static ImmutableMap<String, ?> generateWeightedTargetRawConfig(
+  @VisibleForTesting
+  static ImmutableMap<String, ?> convertToRawRoute(RouteMatch routeMatch, String actionName) {
+    ImmutableMap.Builder<String, Object> configRouteBuilder = new ImmutableMap.Builder<>();
+
+    PathMatcher pathMatcher = routeMatch.getPathMatch();
+    String path = pathMatcher.getPath();
+    String prefix = pathMatcher.getPrefix();
+    Pattern regex = pathMatcher.getRegEx();
+    if (path != null) {
+      configRouteBuilder.put("path", path);
+    }
+    if (prefix != null) {
+      configRouteBuilder.put("prefix", prefix);
+    }
+    if (regex != null) {
+      configRouteBuilder.put("regex", regex.pattern());
+    }
+
+    ImmutableList.Builder<Object> rawHeaderMatcherListBuilder = new ImmutableList.Builder<>();
+    List<HeaderMatcher> headerMatchers = routeMatch.getHeaderMatchers();
+    for (HeaderMatcher headerMatcher : headerMatchers) {
+      ImmutableMap.Builder<String, Object> rawHeaderMatcherBuilder = new ImmutableMap.Builder<>();
+      rawHeaderMatcherBuilder.put("name", headerMatcher.getName());
+      String exactMatch = headerMatcher.getExactMatch();
+      Pattern regexMatch = headerMatcher.getRegExMatch();
+      HeaderMatcher.Range rangeMatch = headerMatcher.getRangeMatch();
+      Boolean presentMatch = headerMatcher.getPresentMatch();
+      String prefixMatch = headerMatcher.getPrefixMatch();
+      String suffixMatch = headerMatcher.getSuffixMatch();
+      if (exactMatch != null) {
+        rawHeaderMatcherBuilder.put("exactMatch", exactMatch);
+      }
+      if (regexMatch != null) {
+        rawHeaderMatcherBuilder.put("regexMatch", regexMatch.pattern());
+      }
+      if (rangeMatch != null) {
+        rawHeaderMatcherBuilder
+            .put(
+                "rangeMatch",
+                ImmutableMap.of("start", rangeMatch.getStart(), "end", rangeMatch.getEnd()));
+      }
+      if (presentMatch != null) {
+        rawHeaderMatcherBuilder.put("presentMatch", presentMatch);
+      }
+      if (prefixMatch != null) {
+        rawHeaderMatcherBuilder.put("prefixMatch", prefixMatch);
+      }
+      if (suffixMatch != null) {
+        rawHeaderMatcherBuilder.put("suffixMatch", suffixMatch);
+      }
+      rawHeaderMatcherBuilder.put("invertMatch", headerMatcher.isInvertedMatch());
+      rawHeaderMatcherListBuilder.add(rawHeaderMatcherBuilder.build());
+    }
+    ImmutableList<?> rawHeaderMatchers = rawHeaderMatcherListBuilder.build();
+    if (!rawHeaderMatchers.isEmpty()) {
+      configRouteBuilder.put("headers", rawHeaderMatchers);
+    }
+
+    FractionMatcher matchFraction = routeMatch.getFractionMatch();
+    if (matchFraction != null) {
+      configRouteBuilder
+          .put(
+              "matchFraction",
+              ImmutableMap.of(
+                  "numerator", matchFraction.getNumerator(),
+                  "denominator", matchFraction.getDenominator()));
+    }
+
+    configRouteBuilder.put("action", actionName);
+    return configRouteBuilder.build();
+  }
+
+  @VisibleForTesting
+  static ImmutableMap<String, ?> generateWeightedTargetRawConfig(
       List<ClusterWeight> clusterWeights) {
     Map<String, Object> targets = new LinkedHashMap<>();
     for (ClusterWeight clusterWeight : clusterWeights) {

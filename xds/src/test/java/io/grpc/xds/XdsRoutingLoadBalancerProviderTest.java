@@ -19,8 +19,7 @@ package io.grpc.xds;
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.Mockito.mock;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
+import com.google.re2j.Pattern;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancerProvider;
@@ -28,10 +27,15 @@ import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
-import io.grpc.xds.XdsRoutingLoadBalancerProvider.MethodName;
+import io.grpc.xds.RouteMatch.FractionMatcher;
+import io.grpc.xds.RouteMatch.HeaderMatcher;
+import io.grpc.xds.RouteMatch.PathMatcher;
 import io.grpc.xds.XdsRoutingLoadBalancerProvider.Route;
 import io.grpc.xds.XdsRoutingLoadBalancerProvider.XdsRoutingConfig;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -42,7 +46,7 @@ import org.junit.runners.JUnit4;
 public class XdsRoutingLoadBalancerProviderTest {
 
   @Test
-  public void parseWeightedTargetConfig() throws Exception {
+  public void parseXdsRoutingLoadBalancingPolicyConfig() throws Exception {
     LoadBalancerRegistry lbRegistry = new LoadBalancerRegistry();
     XdsRoutingLoadBalancerProvider xdsRoutingLoadBalancerProvider =
         new XdsRoutingLoadBalancerProvider(lbRegistry);
@@ -103,48 +107,126 @@ public class XdsRoutingLoadBalancerProviderTest {
     lbRegistry.register(lbProviderFoo);
     lbRegistry.register(lbProviderBar);
 
-    String xdsRoutingConfigJson = ("{"
-        + "  'route' : ["
-        + "    {"
-        + "      'methodName' : {'service' : 'service_foo', 'method' : 'method_foo'},"
-        + "      'action' : 'action_foo'"
-        + "    },"
-        + "    {"
-        + "      'methodName' : {'service' : '', 'method' : ''},"
-        + "      'action' : 'action_bar'"
-        + "    }"
-        + "  ],"
-        + "  'action' : {"
-        + "    'action_foo' : {"
-        + "      'childPolicy' : ["
-        + "        {'unsupported_policy' : {}},"
-        + "        {'foo_policy' : {}}"
-        + "      ]"
-        + "    },"
-        + "    'action_bar' : {"
-        + "      'childPolicy' : ["
-        + "        {'unsupported_policy' : {}},"
-        + "        {'bar_policy' : {}}"
-        + "      ]"
-        + "    }"
-        + "  }"
-        + "}").replace("'", "\"");
+    String xdsRoutingConfigJson = ("{\n"
+        + "  'route' : [\n"
+        + "    {\n"
+        + "      'path' : '/service_1/method_1',\n"
+        + "      'action' : 'action_foo'\n"
+        + "    },\n"
+        + "    {\n"
+        + "      'path' : '/service_1/method_2',\n"
+        + "      'headers' : [\n"
+        + "          {\n"
+        + "              'name' : ':scheme',\n"
+        + "              'exactMatch' : 'https'\n"
+        + "          }\n"
+        + "      ],\n"
+        + "      'action' : 'action_bar'\n"
+        + "    },\n"
+        + "    {\n"
+        + "      'prefix' : '/service_2/',\n"
+        + "      'headers' : [\n"
+        + "          {\n"
+        + "              'name' : ':path',\n"
+        + "              'regexMatch' : 'google.*'\n"
+        + "          }\n"
+        + "      ],\n"
+        + "      'matchFraction' : {\n"
+        + "          'numerator' : 10,\n"
+        + "          'denominator' : 100\n"
+        + "      },\n"
+        + "      'action' : 'action_bar'\n"
+        + "    },\n"
+        + "    {\n"
+        + "      'regex' : '^/service_2/method_3$',\n"
+        + "      'headers' : [\n"
+        + "          {\n"
+        + "              'name' : ':method',\n"
+        + "              'presentMatch' : true,\n"
+        + "              'invertMatch' : true\n"
+        + "          },\n"
+        + "          {\n"
+        + "              'name' : 'timeout',\n"
+        + "              'rangeMatch' : {\n"
+        + "                  'start' : 0,\n"
+        + "                  'end' : 10\n"
+        + "              }\n"
+        + "          }\n"
+        + "      ],\n"
+        + "      'matchFraction' : {\n"
+        + "          'numerator' : 55,\n"
+        + "          'denominator' : 1000\n"
+        + "      },\n"
+        + "      'action' : 'action_foo'\n"
+        + "    }\n"
+        + "  ],\n"
+        + "  'action' : {\n"
+        + "    'action_foo' : {\n"
+        + "      'childPolicy' : [\n"
+        + "        {'unsupported_policy' : {}},\n"
+        + "        {'foo_policy' : {}}\n"
+        + "      ]\n"
+        + "    },\n"
+        + "    'action_bar' : {\n"
+        + "      'childPolicy' : [\n"
+        + "        {'unsupported_policy' : {}},\n"
+        + "        {'bar_policy' : {}}\n"
+        + "      ]\n"
+        + "    }\n"
+        + "  }\n"
+        + "}\n").replace("'", "\"");
 
     @SuppressWarnings("unchecked")
     Map<String, ?> rawLbConfigMap = (Map<String, ?>) JsonParser.parse(xdsRoutingConfigJson);
     ConfigOrError configOrError =
         xdsRoutingLoadBalancerProvider.parseLoadBalancingPolicyConfig(rawLbConfigMap);
-    assertThat(configOrError).isEqualTo(
-        ConfigOrError.fromConfig(
-            new XdsRoutingConfig(
-                ImmutableList.of(
-                    new Route("action_foo", new MethodName("service_foo", "method_foo")),
-                    new Route("action_bar", new MethodName("", ""))),
-                ImmutableMap.of(
-                    "action_foo",
-                    new PolicySelection(lbProviderFoo, new HashMap<String, Object>(), fooConfig),
-                    "action_bar",
-                    new PolicySelection(
-                        lbProviderBar, new HashMap<String, Object>(), barConfig)))));
+    assertThat(configOrError.getConfig()).isNotNull();
+    XdsRoutingConfig config = (XdsRoutingConfig) configOrError.getConfig();
+    List<Route> configRoutes = config.routes;
+    assertThat(configRoutes).hasSize(4);
+    assertThat(configRoutes.get(0)).isEqualTo(
+        new Route(
+            new RouteMatch(
+                new PathMatcher("/service_1/method_1", null, null),
+                Collections.<HeaderMatcher>emptyList(), null),
+            "action_foo"));
+    assertThat(configRoutes.get(1)).isEqualTo(
+        new Route(
+            new RouteMatch(
+                new PathMatcher("/service_1/method_2", null, null),
+                Arrays.asList(
+                    new HeaderMatcher(":scheme", "https", null, null, null, null,
+                        null, false)),
+                null),
+            "action_bar"));
+    assertThat(configRoutes.get(2)).isEqualTo(
+        new Route(
+            new RouteMatch(
+                new PathMatcher(null, "/service_2/", null),
+                Arrays.asList(
+                    new HeaderMatcher(":path", null, Pattern.compile("google.*"), null,
+                        null, null, null, false)),
+                new FractionMatcher(10, 100)),
+            "action_bar"));
+    assertThat(configRoutes.get(3)).isEqualTo(
+        new Route(
+            new RouteMatch(
+                new PathMatcher(null, null, Pattern.compile("^/service_2/method_3$")),
+                Arrays.asList(
+                    new HeaderMatcher(":method", null, null, null,
+                        true, null, null, true),
+                    new HeaderMatcher("timeout", null, null,
+                        new HeaderMatcher.Range(0, 10), null, null, null, false)),
+                new FractionMatcher(55, 1000)),
+            "action_foo"));
+
+    Map<String, PolicySelection> configActions = config.actions;
+    assertThat(configActions).hasSize(2);
+    assertThat(configActions).containsExactly(
+        "action_foo",
+        new PolicySelection(lbProviderFoo, new HashMap<String, Object>(), fooConfig),
+        "action_bar",
+        new PolicySelection(
+            lbProviderBar, new HashMap<String, Object>(), barConfig));
   }
 }

@@ -20,6 +20,8 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.re2j.Pattern;
+import com.google.re2j.PatternSyntaxException;
 import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
@@ -31,13 +33,14 @@ import io.grpc.internal.JsonUtil;
 import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
+import io.grpc.xds.RouteMatch.FractionMatcher;
+import io.grpc.xds.RouteMatch.HeaderMatcher;
+import io.grpc.xds.RouteMatch.PathMatcher;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import javax.annotation.Nullable;
 
 /**
@@ -97,72 +100,28 @@ public final class XdsRoutingLoadBalancerProvider extends LoadBalancerProvider {
           return ConfigOrError.fromError(Status.INTERNAL.withDescription(
               "No config for action " + name + " in xds_routing LB policy: " + rawConfig));
         }
-        List<LbConfig> childConfigCandidates = ServiceConfigUtil.unwrapLoadBalancingConfigList(
-            JsonUtil.getListOfObjects(rawAction, "childPolicy"));
-        if (childConfigCandidates == null || childConfigCandidates.isEmpty()) {
-          return ConfigOrError.fromError(Status.INTERNAL.withDescription(
-              "No child policy for action " + name + " in xds_routing LB policy: "
-                  + rawConfig));
-        }
-
-        LoadBalancerRegistry lbRegistry =
-            this.lbRegistry == null ? LoadBalancerRegistry.getDefaultRegistry() : this.lbRegistry;
-        ConfigOrError selectedConfigOrError =
-            ServiceConfigUtil.selectLbPolicyFromList(childConfigCandidates, lbRegistry);
-        if (selectedConfigOrError.getError() != null) {
-          return selectedConfigOrError;
-        }
-
-        parsedActions.put(name, (PolicySelection) selectedConfigOrError.getConfig());
+        PolicySelection parsedAction =
+            parseAction(
+                rawAction,
+                this.lbRegistry == null
+                    ? LoadBalancerRegistry.getDefaultRegistry() : this.lbRegistry);
+        parsedActions.put(name, parsedAction);
       }
 
-      List<Map<String, ?>> routes = JsonUtil.getListOfObjects(rawConfig, "route");
-      if (routes == null || routes.isEmpty()) {
+      List<Route> parsedRoutes = new ArrayList<>();
+      List<Map<String, ?>> rawRoutes = JsonUtil.getListOfObjects(rawConfig, "route");
+      if (rawRoutes == null || rawRoutes.isEmpty()) {
         return ConfigOrError.fromError(Status.INTERNAL.withDescription(
             "No routes provided for xds_routing LB policy: " + rawConfig));
       }
-      List<Route> parsedRoutes = new ArrayList<>();
-      Set<MethodName> methodNames = new HashSet<>();
-      for (int i = 0; i < routes.size(); i++) {
-        Map<String, ?> route = routes.get(i);
-        String actionName = JsonUtil.getString(route, "action");
-        if (actionName == null) {
-          return ConfigOrError.fromError(Status.INTERNAL.withDescription(
-              "No action name provided for one of the routes in xds_routing LB policy: "
-                  + rawConfig));
-        }
-        if (!parsedActions.containsKey(actionName)) {
+      for (Map<String, ?> rawRoute: rawRoutes) {
+        Route route = parseRoute(rawRoute);
+        if (!parsedActions.containsKey(route.getActionName())) {
           return ConfigOrError.fromError(Status.INTERNAL.withDescription(
               "No action defined for route " + route + " in xds_routing LB policy: " + rawConfig));
         }
-        Map<String, ?> methodName = JsonUtil.getObject(route, "methodName");
-        if (methodName == null) {
-          return ConfigOrError.fromError(Status.INTERNAL.withDescription(
-              "No method_name provided for one of the routes in xds_routing LB policy: "
-                  + rawConfig));
-        }
-        String service = JsonUtil.getString(methodName, "service");
-        String method = JsonUtil.getString(methodName, "method");
-        if (service == null || method == null) {
-          return ConfigOrError.fromError(Status.INTERNAL.withDescription(
-              "No service or method provided for one of the routes in xds_routing LB policy: "
-                  + rawConfig));
-        }
-        MethodName parseMethodName = new MethodName(service, method);
-        if (i == routes.size() - 1 && !parseMethodName.isDefault()) {
-          return ConfigOrError.fromError(Status.INTERNAL.withDescription(
-              "The last route in routes is not the default route in xds_routing LB policy: "
-                  + rawConfig));
-        }
-        if (methodNames.contains(parseMethodName)) {
-          return ConfigOrError.fromError(Status.INTERNAL.withDescription(
-              "Duplicate methodName found in routes in xds_routing LB policy: " + rawConfig));
-        }
-        methodNames.add(parseMethodName);
-
-        parsedRoutes.add(new Route(actionName, parseMethodName));
+        parsedRoutes.add(route);
       }
-
       return ConfigOrError.fromConfig(new XdsRoutingConfig(parsedRoutes, parsedActions));
     } catch (RuntimeException e) {
       return ConfigOrError.fromError(
@@ -171,17 +130,146 @@ public final class XdsRoutingLoadBalancerProvider extends LoadBalancerProvider {
     }
   }
 
+  private static PolicySelection parseAction(
+      Map<String, ?> rawAction, LoadBalancerRegistry registry) {
+    List<LbConfig> childConfigCandidates = ServiceConfigUtil.unwrapLoadBalancingConfigList(
+        JsonUtil.getListOfObjects(rawAction, "childPolicy"));
+    if (childConfigCandidates == null || childConfigCandidates.isEmpty()) {
+      throw new RuntimeException("childPolicy not specified");
+    }
+    ConfigOrError selectedConfigOrError =
+        ServiceConfigUtil.selectLbPolicyFromList(childConfigCandidates, registry);
+    if (selectedConfigOrError.getError() != null) {
+      throw selectedConfigOrError.getError().asRuntimeException();
+    }
+    return (PolicySelection) selectedConfigOrError.getConfig();
+  }
+
+  private static Route parseRoute(Map<String, ?> rawRoute) {
+    try {
+      String pathExact = JsonUtil.getString(rawRoute, "path");
+      String pathPrefix = JsonUtil.getString(rawRoute, "prefix");
+      Pattern pathRegex = null;
+      String rawPathRegex = JsonUtil.getString(rawRoute, "regex");
+      if (rawPathRegex != null) {
+        try {
+          pathRegex = Pattern.compile(rawPathRegex);
+        } catch (PatternSyntaxException e) {
+          throw new RuntimeException(e);
+        }
+      }
+      if (!isOneOf(pathExact, pathPrefix, pathRegex)) {
+        throw new RuntimeException("must specify exactly one patch match type");
+      }
+      PathMatcher pathMatcher = new PathMatcher(pathExact, pathPrefix, pathRegex);
+
+      List<HeaderMatcher> headers = new ArrayList<>();
+      List<Map<String, ?>> rawHeaders = JsonUtil.getListOfObjects(rawRoute, "headers");
+      if (rawHeaders != null) {
+        for (Map<String, ?> rawHeader : rawHeaders) {
+          HeaderMatcher headerMatcher = parseHeaderMatcher(rawHeader);
+          headers.add(headerMatcher);
+        }
+      }
+
+      FractionMatcher matchFraction = null;
+      Map<String, ?> rawFraction = JsonUtil.getObject(rawRoute, "matchFraction");
+      if (rawFraction != null) {
+        matchFraction = parseFractionMatcher(rawFraction);
+      }
+
+      String actionName = JsonUtil.getString(rawRoute, "action");
+      if (actionName == null) {
+        throw new RuntimeException("action name not specified");
+      }
+      return new Route(new RouteMatch(pathMatcher, headers, matchFraction), actionName);
+    } catch (RuntimeException e) {
+      throw new RuntimeException("Failed to parse Route: " + e.getMessage());
+    }
+  }
+
+  private static HeaderMatcher parseHeaderMatcher(Map<String, ?> rawHeaderMatcher) {
+    try {
+      String name = JsonUtil.getString(rawHeaderMatcher, "name");
+      if (name == null) {
+        throw new RuntimeException("header name not specified");
+      }
+      String exactMatch = JsonUtil.getString(rawHeaderMatcher, "exactMatch");
+      Pattern regexMatch = null;
+      String rawRegex = JsonUtil.getString(rawHeaderMatcher, "regexMatch");
+      if (rawRegex != null) {
+        try {
+          regexMatch = Pattern.compile(rawRegex);
+        } catch (PatternSyntaxException e) {
+          throw new RuntimeException(e);
+        }
+      }
+      Map<String, ?> rawRangeMatch = JsonUtil.getObject(rawHeaderMatcher, "rangeMatch");
+      HeaderMatcher.Range rangeMatch =
+          rawRangeMatch == null ? null : parseHeaderRange(rawRangeMatch);
+      Boolean presentMatch = JsonUtil.getBoolean(rawHeaderMatcher, "presentMatch");
+      String prefixMatch = JsonUtil.getString(rawHeaderMatcher, "prefixMatch");
+      String suffixMatch = JsonUtil.getString(rawHeaderMatcher, "suffixMatch");
+      if (!isOneOf(exactMatch, regexMatch, rangeMatch, presentMatch, prefixMatch, suffixMatch)) {
+        throw new RuntimeException("must specify exactly one match type");
+      }
+      Boolean inverted = JsonUtil.getBoolean(rawHeaderMatcher, "invertMatch");
+      return new HeaderMatcher(
+          name, exactMatch, regexMatch, rangeMatch, presentMatch, prefixMatch, suffixMatch,
+          inverted == null ? false : inverted);
+    } catch (RuntimeException e) {
+      throw new RuntimeException("Failed to parse HeaderMatcher: " + e.getMessage());
+    }
+  }
+
+  private static boolean isOneOf(Object... objects) {
+    int count = 0;
+    for (Object o : objects) {
+      if (o != null) {
+        count++;
+      }
+    }
+    return count == 1;
+  }
+
+  private static HeaderMatcher.Range parseHeaderRange(Map<String, ?> rawRange) {
+    try {
+      Long start = JsonUtil.getNumberAsLong(rawRange, "start");
+      if (start == null) {
+        throw new RuntimeException("start not specified");
+      }
+      Long end = JsonUtil.getNumberAsLong(rawRange, "end");
+      if (end == null) {
+        throw new RuntimeException("end not specified");
+      }
+      return new HeaderMatcher.Range(start, end);
+    } catch (RuntimeException e) {
+      throw new RuntimeException("Failed to parse Range: " + e.getMessage());
+    }
+  }
+
+  private static FractionMatcher parseFractionMatcher(Map<String, ?> rawFraction) {
+    try {
+      Integer numerator = JsonUtil.getNumberAsInteger(rawFraction, "numerator");
+      if (numerator == null) {
+        throw new RuntimeException("numerator not specified");
+      }
+      Integer denominator = JsonUtil.getNumberAsInteger(rawFraction, "denominator");
+      if (denominator == null) {
+        throw new RuntimeException("denominator not specified");
+      }
+      return new FractionMatcher(numerator, denominator);
+    } catch (RuntimeException e) {
+      throw new RuntimeException("Failed to parse Fraction: " + e.getMessage());
+    }
+  }
+
   static final class XdsRoutingConfig {
 
     final List<Route> routes;
     final Map<String, PolicySelection> actions;
 
-    /**
-     * Constructs a deeply parsed xds_routing config with the given non-empty list of routes, the
-     * action of each of which is provided by the given map of actions.
-     */
-    @VisibleForTesting
-    XdsRoutingConfig(List<Route> routes, Map<String, PolicySelection> actions) {
+    private XdsRoutingConfig(List<Route> routes, Map<String, PolicySelection> actions) {
       this.routes = ImmutableList.copyOf(routes);
       this.actions = ImmutableMap.copyOf(actions);
     }
@@ -214,14 +302,25 @@ public final class XdsRoutingLoadBalancerProvider extends LoadBalancerProvider {
   }
 
   static final class Route {
+    private final RouteMatch routeMatch;
+    private final String actionName;
 
-    final String actionName;
-    final MethodName methodName;
-
-    @VisibleForTesting
-    Route(String actionName, MethodName methodName) {
+    Route(RouteMatch routeMatch, String actionName) {
+      this.routeMatch = routeMatch;
       this.actionName = actionName;
-      this.methodName = methodName;
+    }
+
+    String getActionName() {
+      return actionName;
+    }
+
+    RouteMatch getRouteMatch() {
+      return routeMatch;
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(routeMatch, actionName);
     }
 
     @Override
@@ -232,63 +331,16 @@ public final class XdsRoutingLoadBalancerProvider extends LoadBalancerProvider {
       if (o == null || getClass() != o.getClass()) {
         return false;
       }
-      Route route = (Route) o;
-      return Objects.equals(actionName, route.actionName)
-          && Objects.equals(methodName, route.methodName);
-    }
-
-    @Override
-    public int hashCode() {
-      return Objects.hash(actionName, methodName);
+      Route that = (Route) o;
+      return Objects.equals(actionName, that.actionName)
+          && Objects.equals(routeMatch, that.routeMatch);
     }
 
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(this)
+          .add("routeMatch", routeMatch)
           .add("actionName", actionName)
-          .add("methodName", methodName)
-          .toString();
-    }
-  }
-
-  static final class MethodName {
-
-    final String service;
-    final String method;
-
-    @VisibleForTesting
-    MethodName(String service, String method) {
-      this.service = service;
-      this.method = method;
-    }
-
-    boolean isDefault() {
-      return service.isEmpty() && method.isEmpty();
-    }
-
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (o == null || getClass() != o.getClass()) {
-        return false;
-      }
-      MethodName that = (MethodName) o;
-      return Objects.equals(service, that.service)
-          && Objects.equals(method, that.method);
-    }
-
-    @Override
-    public int hashCode() {
-      return Objects.hash(service, method);
-    }
-
-    @Override
-    public String toString() {
-      return MoreObjects.toStringHelper(this)
-          .add("service", service)
-          .add("method", method)
           .toString();
     }
   }
