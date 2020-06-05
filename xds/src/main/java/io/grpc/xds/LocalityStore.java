@@ -26,7 +26,6 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableSet;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.InternalLogId;
@@ -114,8 +113,6 @@ interface LocalityStore {
     private final OrcaOobUtil orcaOobUtil;
     private final PriorityManager priorityManager = new PriorityManager();
     private final Map<Locality, LocalityLbState> localityMap = new HashMap<>();
-    // Most current set of localities instructed by traffic director
-    private Set<Locality> localities = ImmutableSet.of();
     private List<DropOverload> dropOverloads = ImmutableList.of();
     private long metricsReportIntervalNano = -1;
 
@@ -201,7 +198,6 @@ interface LocalityStore {
         localityMap.get(locality).shutdown();
       }
       localityMap.clear();
-      localities = ImmutableSet.of();
       priorityManager.reset();
     }
 
@@ -215,7 +211,6 @@ interface LocalityStore {
           localityLbState.refreshEndpoints(localityInfoMap.get(locality));
         }
       }
-      localities = newLocalities;
       priorityManager.updateLocalities(localityInfoMap);
       for (Locality oldLocality : localityMap.keySet()) {
         if (!newLocalities.contains(oldLocality)) {
@@ -572,7 +567,6 @@ interface LocalityStore {
         logger.log(XdsLogLevel.INFO, "Create child balancer for locality {0}", locality);
         LocalityLbState localityLbState = new LocalityLbState(locality);
         localityMap.put(locality, localityLbState);
-        LocalityLbEndpoints localityLbEndpoints = localityInfoMap.get(locality);
         localityLbState.refreshEndpoints(localityInfoMap.get(locality));
       }
     }
