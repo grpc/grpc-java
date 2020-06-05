@@ -94,4 +94,13 @@ public final class AltsAuthContext {
   public RpcProtocolVersions getPeerRpcVersions() {
     return context.getPeerRpcVersions();
   }
+
+  /**
+   * Get peer attributes.
+   *
+   * @return the context's peer attributes.
+   */
+  public java.util.Map<String, String> getPeerAttributes() {
+    return context.getPeerAttributes();
+  }
 }
