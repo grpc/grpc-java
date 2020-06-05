@@ -5,50 +5,30 @@ if [[ -f /VERSION ]]; then
   cat /VERSION
 fi
 
-KOKORO_GAE_SERVICE="java-gae-interop-test"
+cd github
 
-# We deploy as different versions of a single service, this way any stale
-# lingering deploys can be easily cleaned up by purging all running versions
-# of this service.
-KOKORO_GAE_APP_VERSION=$(hostname)
+pushd grpc-java/interop-testing
+branch=$(git branch --all --no-color --contains "${KOKORO_GITHUB_COMMIT}" \
+      | grep -v HEAD | head -1)
+shopt -s extglob
+branch="${branch//[[:space:]]}"
+branch="${branch##remotes/origin/}"
+shopt -u extglob
+../gradlew installDist -x test -PskipCodegen=true -PskipAndroid=true
+popd
 
-# A dummy version that can be the recipient of all traffic, so that the kokoro test version can be
-# set to 0 traffic. This is a requirement in order to delete it.
-DUMMY_DEFAULT_VERSION='dummy-default'
+git clone -b "${branch}" --single-branch --depth=1 https://github.com/grpc/grpc.git
 
-function cleanup() {
-  echo "Performing cleanup now."
-  gcloud app services delete $KOKORO_GAE_SERVICE --version $KOKORO_GAE_APP_VERSION --quiet
-}
-trap cleanup SIGHUP SIGINT SIGTERM EXIT
-
-readonly GRPC_JAVA_DIR="$(cd "$(dirname "$0")"/../.. && pwd)"
-cd "$GRPC_JAVA_DIR"
-
-##
-## Deploy the dummy 'default' version of the service
-##
-GRADLE_FLAGS="--stacktrace -DgaeStopPreviousVersion=false -PskipCodegen=true -PskipAndroid=true"
-
-# Deploy the dummy 'default' version. We only require that it exists when cleanup() is called.
-# It ok if we race with another run and fail here, because the end result is idempotent.
-set +e
-if ! gcloud app versions describe "$DUMMY_DEFAULT_VERSION" --service="$KOKORO_GAE_SERVICE"; then
-  ./gradlew $GRADLE_FLAGS -DgaeDeployVersion="$DUMMY_DEFAULT_VERSION" -DgaePromote=true :grpc-gae-interop-testing-jdk8:appengineDeploy
-else
-  echo "default version already exists: $DUMMY_DEFAULT_VERSION"
-fi
-set -e
-
-# Deploy and test the real app (jdk8)
-./gradlew $GRADLE_FLAGS -DgaeDeployVersion="$KOKORO_GAE_APP_VERSION" :grpc-gae-interop-testing-jdk8:runInteropTestRemote
-
-set +e
-echo "Cleaning out stale deploys from previous runs, it is ok if this part fails"
-
-# Sometimes the trap based cleanup fails.
-# Delete all versions whose name is not 'dummy-default' and is older than 1 hour.
-# This expression is an ISO8601 relative date:
-# https://cloud.google.com/sdk/gcloud/reference/topic/datetimes
-gcloud app versions list --format="get(version.id)" --filter="service=$KOKORO_GAE_SERVICE AND NOT version : 'dummy-default' AND version.createTime<'-p1h'" | xargs -i gcloud app services delete "$KOKORO_GAE_SERVICE" --version {} --quiet
-exit 0
+grpc/tools/run_tests/helper_scripts/prep_xds.sh
+JAVA_OPTS=-Djava.util.logging.config.file=grpc-java/buildscripts/xds_logging.properties \
+  python3 grpc/tools/run_tests/run_xds_tests.py \
+    --test_case=all \
+    --project_id=grpc-testing \
+    --source_image=projects/grpc-testing/global/images/xds-test-server \
+    --path_to_server_binary=/java_server/grpc-java/interop-testing/build/install/grpc-interop-testing/bin/xds-test-server \
+    --gcp_suffix=$(date '+%s') \
+    --verbose \
+    --client_cmd="grpc-java/interop-testing/build/install/grpc-interop-testing/bin/xds-test-client \
+      --server=xds:///{server_uri} \
+      --stats_port={stats_port} \
+      --qps={qps}"
