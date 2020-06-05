@@ -10,7 +10,10 @@ plugins {
 description = 'gRPC: Context'
 
 dependencies {
-    testImplementation libraries.jsr305, libraries.guava_testlib
+    testImplementation libraries.jsr305
+    testImplementation (libraries.guava_testlib) {
+        exclude group: 'junit', module: 'junit'
+    }
     signature "org.codehaus.mojo.signature:java17:1.0@signature"
     signature "net.sf.androidscents.signature:android-api-level-14:4.0_r4@signature"
 }

@@ -27,8 +27,8 @@ Getting Started
 ---------------
 
 For a guided tour, take a look at the [quick start
-guide](https://grpc.io/docs/quickstart/java.html) or the more explanatory [gRPC
-basics](https://grpc.io/docs/tutorials/basic/java.html).
+guide](https://grpc.io/docs/languages/java/quickstart) or the more explanatory [gRPC
+basics](https://grpc.io/docs/languages/java/basics).
 
 The [examples](https://github.com/grpc/grpc-java/tree/v1.29.0/examples) and the
 [Android example](https://github.com/grpc/grpc-java/tree/v1.29.0/examples/android)

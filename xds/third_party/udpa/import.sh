@@ -26,6 +26,7 @@ TARGET_PROTO_BASE_DIR=src/main/proto
 FILES=(
 udpa/annotations/migrate.proto
 udpa/annotations/sensitive.proto
+udpa/annotations/versioning.proto
 udpa/data/orca/v1/orca_load_report.proto
 udpa/service/orca/v1/orca.proto
 )
