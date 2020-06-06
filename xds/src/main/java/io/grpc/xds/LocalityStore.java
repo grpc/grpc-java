@@ -112,7 +112,7 @@ interface LocalityStore {
     private final OrcaPerRequestUtil orcaPerRequestUtil;
     private final OrcaOobUtil orcaOobUtil;
     private final PriorityManager priorityManager = new PriorityManager();
-    private final Map<Locality, LocalityLbState> localityMap = new HashMap<>();
+    private final Map<Locality, LocalityLbInfo> localityMap = new HashMap<>();
     private List<DropOverload> dropOverloads = ImmutableList.of();
     private long metricsReportIntervalNano = -1;
 
@@ -207,8 +207,8 @@ interface LocalityStore {
       // TODO: put endPointWeights into attributes for WRR.
       for (Locality locality : newLocalities) {
         if (localityMap.containsKey(locality)) {
-          LocalityLbState localityLbState = localityMap.get(locality);
-          localityLbState.refreshEndpoints(localityInfoMap.get(locality));
+          LocalityLbInfo localityLbInfo = localityMap.get(locality);
+          localityLbInfo.refreshEndpoints(localityInfoMap.get(locality));
         }
       }
       priorityManager.updateLocalities(localityInfoMap);
@@ -229,12 +229,12 @@ interface LocalityStore {
         return;
       }
 
-      final LocalityLbState localityLbState = localityMap.get(locality);
+      final LocalityLbInfo localityLbInfo = localityMap.get(locality);
       class DeletionTask implements Runnable {
 
         @Override
         public void run() {
-          localityLbState.shutdown();
+          localityLbInfo.shutdown();
           localityMap.remove(locality);
         }
 
@@ -244,7 +244,7 @@ interface LocalityStore {
         }
       }
 
-      localityLbState.delayedDeletionTimer = helper.getSynchronizationContext().schedule(
+      localityLbInfo.delayedDeletionTimer = helper.getSynchronizationContext().schedule(
           new DeletionTask(), DELAYED_DELETION_TIMEOUT_MINUTES,
           TimeUnit.MINUTES, helper.getScheduledExecutorService());
     }
@@ -252,7 +252,7 @@ interface LocalityStore {
     @Override
     public void updateOobMetricsReportInterval(long reportIntervalNano) {
       metricsReportIntervalNano = reportIntervalNano;
-      for (LocalityLbState lbInfo : localityMap.values()) {
+      for (LocalityLbInfo lbInfo : localityMap.values()) {
         lbInfo.childHelper.updateMetricsReportInterval(reportIntervalNano);
       }
     }
@@ -297,7 +297,11 @@ interface LocalityStore {
       }
     }
 
-    private final class LocalityLbState {
+    /**
+     * State of a single Locality.
+     */
+    // TODO(zdapeng): rename it to LocalityLbState
+    private final class LocalityLbInfo {
 
       final Locality locality;
       final LoadBalancer childBalancer;
@@ -305,7 +309,7 @@ interface LocalityStore {
       @Nullable
       private ScheduledHandle delayedDeletionTimer;
 
-      LocalityLbState(Locality locality) {
+      LocalityLbInfo(Locality locality) {
         this.locality = checkNotNull(locality, "locality");
         loadStatsStore.addLocality(locality);
         childHelper = new ChildHelper();
@@ -469,10 +473,10 @@ interface LocalityStore {
           if (!localityMap.containsKey(l)) {
             initLocality(l);
           }
-          LocalityLbState localityLbState = localityMap.get(l);
-          localityLbState.reactivate();
-          ConnectivityState childState = localityLbState.childHelper.currentChildState;
-          SubchannelPicker childPicker = localityLbState.childHelper.currentChildPicker;
+          LocalityLbInfo localityLbInfo = localityMap.get(l);
+          localityLbInfo.reactivate();
+          ConnectivityState childState = localityLbInfo.childHelper.currentChildState;
+          SubchannelPicker childPicker = localityLbInfo.childHelper.currentChildPicker;
 
           overallState = aggregateState(overallState, childState);
 
@@ -565,9 +569,9 @@ interface LocalityStore {
 
       private void initLocality(Locality locality) {
         logger.log(XdsLogLevel.INFO, "Create child balancer for locality {0}", locality);
-        LocalityLbState localityLbState = new LocalityLbState(locality);
-        localityMap.put(locality, localityLbState);
-        localityLbState.refreshEndpoints(localityInfoMap.get(locality));
+        LocalityLbInfo localityLbInfo = new LocalityLbInfo(locality);
+        localityMap.put(locality, localityLbInfo);
+        localityLbInfo.refreshEndpoints(localityInfoMap.get(locality));
       }
     }
   }
