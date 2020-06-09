@@ -18,10 +18,14 @@ package io.grpc.alts.internal;
 
 import static org.junit.Assert.assertEquals;
 
+
+import java.util.HashMap;
+import java.util.Map;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+
 
 /** Unit tests for {@link AltsAuthContext}. */
 @RunWith(JUnit4.class)
@@ -35,6 +39,8 @@ public final class AltsAuthContextTest {
   private static final String TEST_LOCAL_SERVICE_ACCOUNT = "local@gserviceaccount.com";
   private static final String TEST_PEER_SERVICE_ACCOUNT = "peer@gserviceaccount.com";
   private static final String TEST_RECORD_PROTOCOL = "ALTSRP_GCM_AES128";
+
+  private static final Map<String, String> TEST_PEER_ATTRIBUTES = new HashMap<String, String>();
 
   private HandshakerResult handshakerResult;
   private RpcProtocolVersions rpcVersions;
@@ -54,11 +60,14 @@ public final class AltsAuthContextTest {
                     .setMinor(TEST_MIN_RPC_VERSION_MINOR)
                     .build())
             .build();
+    Identity.Builder peerIdentity = Identity.newBuilder()
+        .setServiceAccount(TEST_PEER_SERVICE_ACCOUNT);
+    peerIdentity.putAllAttributes(TEST_PEER_ATTRIBUTES);
     handshakerResult =
         HandshakerResult.newBuilder()
             .setApplicationProtocol(TEST_APPLICATION_PROTOCOL)
             .setRecordProtocol(TEST_RECORD_PROTOCOL)
-            .setPeerIdentity(Identity.newBuilder().setServiceAccount(TEST_PEER_SERVICE_ACCOUNT))
+            .setPeerIdentity(peerIdentity)
             .setLocalIdentity(Identity.newBuilder().setServiceAccount(TEST_LOCAL_SERVICE_ACCOUNT))
             .setPeerRpcVersions(rpcVersions)
             .build();
@@ -73,5 +82,6 @@ public final class AltsAuthContextTest {
     assertEquals(TEST_PEER_SERVICE_ACCOUNT, authContext.getPeerServiceAccount());
     assertEquals(TEST_LOCAL_SERVICE_ACCOUNT, authContext.getLocalServiceAccount());
     assertEquals(rpcVersions, authContext.getPeerRpcVersions());
+    assertEquals(TEST_PEER_ATTRIBUTES, authContext.getPeerAttributes());
   }
 }
