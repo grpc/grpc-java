@@ -41,6 +41,7 @@ public final class AltsAuthContextTest {
   private static final String TEST_RECORD_PROTOCOL = "ALTSRP_GCM_AES128";
 
   private static final Map<String, String> TEST_PEER_ATTRIBUTES = new HashMap<String, String>();
+  TEST_PEER_ATTRIBUTES["peer"] = "attributes";
 
   private HandshakerResult handshakerResult;
   private RpcProtocolVersions rpcVersions;
@@ -83,5 +84,6 @@ public final class AltsAuthContextTest {
     assertEquals(TEST_LOCAL_SERVICE_ACCOUNT, authContext.getLocalServiceAccount());
     assertEquals(rpcVersions, authContext.getPeerRpcVersions());
     assertEquals(TEST_PEER_ATTRIBUTES, authContext.getPeerAttributes());
+    assertEquals(TEST_PEER_ATTRIBUTES["peer"], authContext.getPeerAttributes()["peer"]);
   }
 }
