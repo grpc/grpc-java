@@ -53,6 +53,7 @@ import java.io.InputStream;
 import java.nio.charset.Charset;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -402,7 +403,11 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         new LogExceptionRunnable(new DeadlineExceededSendCancelToServerTimer()),
         DEADLINE_EXPIRATION_CANCEL_DELAY_NANOS,
         TimeUnit.NANOSECONDS);
-    executeCloseObserverInContext(observer, status);
+    try {
+      executeCloseObserverInContext(observer, status);
+    } catch (RejectedExecutionException ree) {
+      // call close race
+    }
   }
 
   private void executeCloseObserverInContext(final Listener<RespT> observer, final Status status) {
@@ -620,6 +625,8 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
       try {
         callExecutor.execute(new HeadersRead());
+      } catch (RejectedExecutionException ree) {
+        // call close race
       } finally {
         PerfMark.stopTask("ClientStreamListener.headersRead", tag);
       }
@@ -674,6 +681,8 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
       try {
         callExecutor.execute(new MessagesAvailable());
+      } catch (RejectedExecutionException ree) {
+        GrpcUtil.closeQuietly(producer); // call close race - don't leak messages
       } finally {
         PerfMark.stopTask("ClientStreamListener.messagesAvailable", tag);
       }
@@ -751,8 +760,11 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
           close(savedStatus, savedTrailers);
         }
       }
-
-      callExecutor.execute(new StreamClosed());
+      try {
+        callExecutor.execute(new StreamClosed());
+      } catch (RejectedExecutionException ree) {
+        // call close race
+      }
     }
 
     @Override
@@ -794,6 +806,8 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
       try {
         callExecutor.execute(new StreamOnReady());
+      } catch (RejectedExecutionException ree) {
+        // call close race
       } finally {
         PerfMark.stopTask("ClientStreamListener.onReady", tag);
       }

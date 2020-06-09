@@ -35,6 +35,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
@@ -294,13 +295,17 @@ final class DelayedClientTransport implements ManagedClientTransport {
         if (callOptions.getExecutor() != null) {
           executor = callOptions.getExecutor();
         }
-        executor.execute(new Runnable() {
+        try {
+          executor.execute(new Runnable() {
             @Override
             public void run() {
               stream.createRealStream(transport);
             }
           });
-        toRemove.add(stream);
+          toRemove.add(stream);
+        } catch (RejectedExecutionException ree) {
+          // call closed race
+        }
       }  // else: stay pending
     }
 

@@ -311,7 +311,10 @@ public abstract class AbstractClientStream extends AbstractStream
      * @param headers the parsed headers
      */
     protected void inboundHeadersReceived(Metadata headers) {
-      checkState(!statusReported, "Received headers on closed stream");
+      // checkState(!statusReported, "Received headers on closed stream");
+      if (statusReported) {
+        return; // possible due to call close race
+      }
       statsTraceCtx.clientInboundHeaders();
 
       boolean compressedStream = false;
