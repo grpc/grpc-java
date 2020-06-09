@@ -54,6 +54,7 @@ import java.io.InputStream;
 import java.net.SocketAddress;
 import java.util.concurrent.TimeUnit;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -201,8 +202,8 @@ public class AbstractClientStreamTest {
     verify(mockListener).headersRead(headers);
   }
 
-  //@Test
-  // No longer applicable due to deadline/close race condition
+  @Test
+  @Ignore  // No longer applicable due to deadline/close race condition
   public void inboundHeadersReceived_failsIfStatusReported() {
     AbstractClientStream stream =
         new BaseAbstractClientStream(allocator, statsTraceCtx, transportTracer);
