@@ -726,7 +726,7 @@ public final class ClientCalls {
     }
 
     /**
-     * Called after final call to {@link #waitAndDrain()}, from same thread
+     * Called after final call to {@link #waitAndDrain()}, from same thread.
      */
     public void shutdown() {
       waiter = SHUTDOWN;
