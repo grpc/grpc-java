@@ -760,6 +760,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
           close(savedStatus, savedTrailers);
         }
       }
+
       try {
         callExecutor.execute(new StreamClosed());
       } catch (RejectedExecutionException ree) {
