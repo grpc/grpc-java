@@ -64,12 +64,17 @@ envoy/config/filter/http/fault/v2/fault.proto
 envoy/config/filter/network/http_connection_manager/v2/http_connection_manager.proto
 envoy/config/listener/v2/api_listener.proto
 envoy/config/trace/v2/trace.proto
+envoy/config/rbac/v2/rbac.proto
 envoy/service/discovery/v2/ads.proto
 envoy/service/discovery/v2/sds.proto
 envoy/service/load_stats/v2/lrs.proto
 envoy/type/http.proto
 envoy/type/matcher/regex.proto
 envoy/type/matcher/string.proto
+envoy/type/matcher/metadata.proto
+envoy/type/matcher/path.proto
+envoy/type/matcher/value.proto
+envoy/type/matcher/number.proto
 envoy/type/metadata/v2/metadata.proto
 envoy/type/percent.proto
 envoy/type/range.proto
