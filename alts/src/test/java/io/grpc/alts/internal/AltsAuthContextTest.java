@@ -40,14 +40,15 @@ public final class AltsAuthContextTest {
   private static final String TEST_PEER_SERVICE_ACCOUNT = "peer@gserviceaccount.com";
   private static final String TEST_RECORD_PROTOCOL = "ALTSRP_GCM_AES128";
 
-  private static final Map<String, String> TEST_PEER_ATTRIBUTES = new HashMap<String, String>();
-  TEST_PEER_ATTRIBUTES["peer"] = "attributes";
+  private Map<String, String> testPeerAttributes = new HashMap<String, String>();
+  
 
   private HandshakerResult handshakerResult;
   private RpcProtocolVersions rpcVersions;
 
   @Before
   public void setUp() {
+    testPeerAttributes.put("peer", "attributes");
     rpcVersions =
         RpcProtocolVersions.newBuilder()
             .setMaxRpcVersion(
@@ -63,7 +64,7 @@ public final class AltsAuthContextTest {
             .build();
     Identity.Builder peerIdentity = Identity.newBuilder()
         .setServiceAccount(TEST_PEER_SERVICE_ACCOUNT);
-    peerIdentity.putAllAttributes(TEST_PEER_ATTRIBUTES);
+    peerIdentity.putAllAttributes(testPeerAttributes);
     handshakerResult =
         HandshakerResult.newBuilder()
             .setApplicationProtocol(TEST_APPLICATION_PROTOCOL)
@@ -83,7 +84,7 @@ public final class AltsAuthContextTest {
     assertEquals(TEST_PEER_SERVICE_ACCOUNT, authContext.getPeerServiceAccount());
     assertEquals(TEST_LOCAL_SERVICE_ACCOUNT, authContext.getLocalServiceAccount());
     assertEquals(rpcVersions, authContext.getPeerRpcVersions());
-    assertEquals(TEST_PEER_ATTRIBUTES, authContext.getPeerAttributes());
-    assertEquals(TEST_PEER_ATTRIBUTES["peer"], authContext.getPeerAttributes()["peer"]);
+    assertEquals(testPeerAttributes, authContext.getPeerAttributes());
+    assertEquals("attributes", authContext.getPeerAttributes().get("peer"));
   }
 }
