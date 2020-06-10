@@ -39,7 +39,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
  * A client that requests a greeting from the {@link RetryingHelloWorldServer} with a retrying policy.
  */
 public class RetryingHelloWorldClient {
-  static final String ENV_DISABLE_RETRIES = "DISABLE_RETRIES_IN_RETRIES_EXAMPLE";
+  static final String ENV_DISABLE_RETRYING = "DISABLE_RETRYING_IN_RETRYING_EXAMPLE";
 
   private static final Logger logger = Logger.getLogger(RetryingHelloWorldClient.class.getName());
 
@@ -117,17 +117,17 @@ public class RetryingHelloWorldClient {
       logger.log(
           Level.INFO,
           "Retrying enabled. To disable retries, run the client with environment variable {0}=true.",
-          ENV_DISABLE_RETRIES);
+          ENV_DISABLE_RETRYING);
     } else {
       logger.log(
           Level.INFO,
           "Retrying disabled. To enable retries, unset environment variable {0} and then run the client.",
-          ENV_DISABLE_RETRIES);
+          ENV_DISABLE_RETRYING);
     }
   }
 
   public static void main(String[] args) throws Exception {
-    boolean enableRetries = !Boolean.parseBoolean(System.getenv(ENV_DISABLE_RETRIES));
+    boolean enableRetries = !Boolean.parseBoolean(System.getenv(ENV_DISABLE_RETRYING));
     final RetryingHelloWorldClient client = new RetryingHelloWorldClient("localhost", 50051, enableRetries);
     ForkJoinPool executor = new ForkJoinPool();
 
