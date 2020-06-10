@@ -81,6 +81,10 @@ envoy/type/range.proto
 envoy/type/semantic_version.proto
 envoy/type/tracing/v2/custom_tag.proto
 )
+# import info for GoogleAPIs dependency
+GIT_REPO_GOOGLEAPIS="https://github.com/googleapis/googleapis.git"
+BASE_DIR_GOOGLEAPIS=googleapis
+FILE_GOOGLEAPIS=google/api/expr/v1alpha1/syntax.proto
 
 pushd `git rev-parse --show-toplevel`/xds/third_party/envoy
 
@@ -89,12 +93,15 @@ tmpdir="$(mktemp -d)"
 trap "rm -rf ${tmpdir}" EXIT
 
 pushd "${tmpdir}"
+git clone -b $BRANCH $GIT_REPO_GOOGLEAPIS
+trap "rm -rf $BASE_DIR_GOOGLEAPIS" EXIT
 git clone -b $BRANCH $GIT_REPO
 trap "rm -rf $GIT_BASE_DIR" EXIT
 cd "$GIT_BASE_DIR"
 git checkout $VERSION
 popd
 
+cp -p "${tmpdir}/${BASE_DIR_GOOGLEAPIS}/LICENSE" LICENSE
 cp -p "${tmpdir}/${GIT_BASE_DIR}/LICENSE" LICENSE
 cp -p "${tmpdir}/${GIT_BASE_DIR}/NOTICE" NOTICE
 
@@ -108,6 +115,9 @@ do
   mkdir -p "$(dirname "${file}")"
   cp -p "${tmpdir}/${SOURCE_PROTO_BASE_DIR}/${file}" "${file}"
 done
+# copy proto files to project directory from GoogleAPIs
+mkdir -p "$(dirname "${FILE_GOOGLEAPIS}")"
+cp -p "${tmpdir}/${BASE_DIR_GOOGLEAPIS}/${FILE_GOOGLEAPIS}" "${FILE_GOOGLEAPIS}"
 popd
 
 popd
