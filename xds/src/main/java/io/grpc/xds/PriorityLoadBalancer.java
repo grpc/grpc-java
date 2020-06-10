@@ -260,6 +260,7 @@ final class PriorityLoadBalancer extends LoadBalancer {
               lb.handleResolvedAddresses(
                   addresses
                       .toBuilder()
+                      .setAddresses(AddressFiltering.filter(addresses.getAddresses(), priority))
                       .setLoadBalancingPolicyConfig(childPolicySelection.getConfig())
                       .build());
             }
