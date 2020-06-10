@@ -224,7 +224,7 @@ final class XdsNameResolver extends NameResolver {
       logger.log(
           XdsLogLevel.WARNING,
           "Received error from xDS client {0}: {1}", xdsClient, error.getDescription());
-      listener.onError(Status.UNAVAILABLE.withDescription(error.getDescription()));
+      listener.onError(error);
     }
   }
 
