@@ -82,6 +82,7 @@ envoy/type/semantic_version.proto
 envoy/type/tracing/v2/custom_tag.proto
 )
 # import info for GoogleAPIs dependency
+VERSION_GOOGLEAPIS=ca1372c6d7bcb199638ebfdb40d2b2660bab7b88
 GIT_REPO_GOOGLEAPIS="https://github.com/googleapis/googleapis.git"
 BASE_DIR_GOOGLEAPIS=googleapis
 FILE_GOOGLEAPIS=google/api/expr/v1alpha1/syntax.proto
@@ -95,6 +96,9 @@ trap "rm -rf ${tmpdir}" EXIT
 pushd "${tmpdir}"
 git clone -b $BRANCH $GIT_REPO_GOOGLEAPIS
 trap "rm -rf $BASE_DIR_GOOGLEAPIS" EXIT
+cd "$BASE_DIR_GOOGLEAPIS"
+git checkout $VERSION_GOOGLEAPIS
+cd "../"
 git clone -b $BRANCH $GIT_REPO
 trap "rm -rf $GIT_BASE_DIR" EXIT
 cd "$GIT_BASE_DIR"
