@@ -62,6 +62,7 @@ import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
+import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
@@ -82,6 +83,7 @@ import java.net.InetSocketAddress;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -436,7 +438,7 @@ public class EdsLoadBalancerTest {
   }
 
   @Test
-  public void handleAllDropUpdates_pickersAreDropped() {
+  public void edsResourceUpdate_allDrop() {
     deliverResolvedAddresses(null, null, fakeEndpointPickingPolicy);
 
     ClusterLoadAssignment clusterLoadAssignment = buildClusterLoadAssignment(
@@ -485,7 +487,7 @@ public class EdsLoadBalancerTest {
   }
 
   @Test
-  public void handleLocalityAssignmentUpdates_pickersUpdatedFromChildBalancer() {
+  public void edsResourceUpdate_localityAssignmentChange() {
     deliverResolvedAddresses(null, null, fakeEndpointPickingPolicy);
 
     LbEndpoint endpoint11 = buildLbEndpoint("addr11.example.com", 8011, HEALTHY, 11);
@@ -549,7 +551,7 @@ public class EdsLoadBalancerTest {
   // Uses a fake LocalityStoreFactory that creates a mock LocalityStore, and verifies interaction
   // between the EDS balancer and LocalityStore.
   @Test
-  public void handleEndpointUpdates_delegateUpdatesToLocalityStore() {
+  public void edsResourceUpdate_endpointAssignmentChange() {
     final ArrayDeque<LocalityStore> localityStores = new ArrayDeque<>();
     localityStoreFactory = new LocalityStoreFactory() {
       @Override
@@ -632,7 +634,67 @@ public class EdsLoadBalancerTest {
   }
 
   @Test
-  public void verifyErrorPropagation_noPreviousEndpointUpdateReceived() {
+  public void edsResourceNotExist() {
+    deliverResolvedAddresses(null, null, fakeEndpointPickingPolicy);
+
+    // Forwarding 20 seconds so that the xds client will deem EDS resource not available.
+    fakeClock.forwardTime(20, TimeUnit.SECONDS);
+    assertThat(childBalancers).isEmpty();
+    verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+    PickResult result = pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class));
+    assertThat(result.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat(result.getStatus().getDescription())
+        .isEqualTo("Resource " + CLUSTER_NAME + " is unavailable");
+  }
+
+  @Test
+  public void edsResourceRemoved() {
+    deliverResolvedAddresses(null, null, fakeEndpointPickingPolicy);
+    ClusterLoadAssignment clusterLoadAssignment =
+        buildClusterLoadAssignment(CLUSTER_NAME,
+            ImmutableList.of(
+                buildLocalityLbEndpoints("region", "zone", "subzone",
+                    ImmutableList.of(
+                        buildLbEndpoint("192.168.0.1", 8080, HEALTHY, 2)),
+                    1, 0)),
+            ImmutableList.<DropOverload>of());
+    deliverClusterLoadAssignments(clusterLoadAssignment);
+
+    assertThat(childBalancers).hasSize(1);
+    assertThat(childHelpers).hasSize(1);
+    LoadBalancer localityBalancer = childBalancers.get("subzone");
+    Helper localityBalancerHelper = childHelpers.get("subzone");
+    final Subchannel subchannel = mock(Subchannel.class);
+    SubchannelPicker picker = new SubchannelPicker() {
+      @Override
+      public PickResult pickSubchannel(PickSubchannelArgs args) {
+        return PickResult.withSubchannel(subchannel);
+      }
+    };
+    localityBalancerHelper.updateBalancingState(READY, picker);
+    verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
+    PickResult result = pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class));
+    assertThat(result.getSubchannel()).isSameInstanceAs(subchannel);
+
+    // The whole cluster is no longer accessible.
+    // Note that EDS resource removal is achieved by CDS resource update.
+    responseObserver.onNext(
+        buildDiscoveryResponse(
+            String.valueOf(versionIno++),
+            Collections.<Any>emptyList(),
+            XdsClientImpl.ADS_TYPE_URL_CDS,
+            String.valueOf(nonce++)));
+
+    verify(localityBalancer).shutdown();
+    verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+    result = pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class));
+    assertThat(result.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat(result.getStatus().getDescription())
+        .isEqualTo("Resource " + CLUSTER_NAME + " is unavailable");
+  }
+
+  @Test
+  public void transientError_noPreviousEndpointUpdateReceived() {
     deliverResolvedAddresses(null, null, fakeEndpointPickingPolicy);
 
     // Forwarding 20 seconds so that the xds client will deem EDS resource not available.
@@ -641,7 +703,7 @@ public class EdsLoadBalancerTest {
   }
 
   @Test
-  public void verifyErrorPropagation_withPreviousEndpointUpdateReceived() {
+  public void transientError_withPreviousEndpointUpdateReceived() {
     deliverResolvedAddresses(null, null, fakeEndpointPickingPolicy);
     // Endpoint update received.
     ClusterLoadAssignment clusterLoadAssignment =

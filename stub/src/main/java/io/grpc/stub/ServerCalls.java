@@ -84,22 +84,30 @@ public final class ServerCalls {
   /**
    * Adaptor to a unary call method.
    */
-  public interface UnaryMethod<ReqT, RespT> extends UnaryRequestMethod<ReqT, RespT> {}
+  public interface UnaryMethod<ReqT, RespT> extends UnaryRequestMethod<ReqT, RespT> {
+    @Override void invoke(ReqT request, StreamObserver<RespT> responseObserver);
+  }
 
   /**
    * Adaptor to a server streaming method.
    */
-  public interface ServerStreamingMethod<ReqT, RespT> extends UnaryRequestMethod<ReqT, RespT> {}
+  public interface ServerStreamingMethod<ReqT, RespT> extends UnaryRequestMethod<ReqT, RespT> {
+    @Override void invoke(ReqT request, StreamObserver<RespT> responseObserver);
+  }
 
   /**
    * Adaptor to a client streaming method.
    */
-  public interface ClientStreamingMethod<ReqT, RespT> extends StreamingRequestMethod<ReqT, RespT> {}
+  public interface ClientStreamingMethod<ReqT, RespT> extends StreamingRequestMethod<ReqT, RespT> {
+    @Override StreamObserver<ReqT> invoke(StreamObserver<RespT> responseObserver);
+  }
 
   /**
    * Adaptor to a bidirectional streaming method.
    */
-  public interface BidiStreamingMethod<ReqT, RespT> extends StreamingRequestMethod<ReqT, RespT> {}
+  public interface BidiStreamingMethod<ReqT, RespT> extends StreamingRequestMethod<ReqT, RespT> {
+    @Override StreamObserver<ReqT> invoke(StreamObserver<RespT> responseObserver);
+  }
 
   private static final class UnaryServerCallHandler<ReqT, RespT>
       implements ServerCallHandler<ReqT, RespT> {
@@ -296,10 +304,16 @@ public final class ServerCalls {
   }
 
   private interface UnaryRequestMethod<ReqT, RespT> {
+    /**
+     * The provided {@code responseObserver} will extend {@link ServerCallStreamObserver}.
+     */
     void invoke(ReqT request, StreamObserver<RespT> responseObserver);
   }
 
   private interface StreamingRequestMethod<ReqT, RespT> {
+    /**
+     * The provided {@code responseObserver} will extend {@link ServerCallStreamObserver}.
+     */
     StreamObserver<ReqT> invoke(StreamObserver<RespT> responseObserver);
   }
 

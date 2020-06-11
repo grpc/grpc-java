@@ -725,14 +725,14 @@ public class XdsClientImplTest {
     assertThat(routes.get(0)).isEqualTo(
         new EnvoyProtoData.Route(
             // path match with cluster route
-            new EnvoyProtoData.RouteMatch(
+            new io.grpc.xds.RouteMatch(
                 /* prefix= */ null,
                 /* path= */ "/service1/method1"),
             new EnvoyProtoData.RouteAction("cl1.googleapis.com", null)));
     assertThat(routes.get(1)).isEqualTo(
         new EnvoyProtoData.Route(
             // path match with weighted cluster route
-            new EnvoyProtoData.RouteMatch(
+            new io.grpc.xds.RouteMatch(
                 /* prefix= */ null,
                 /* path= */ "/service2/method2"),
             new EnvoyProtoData.RouteAction(
@@ -744,14 +744,14 @@ public class XdsClientImplTest {
     assertThat(routes.get(2)).isEqualTo(
         new EnvoyProtoData.Route(
             // prefix match with cluster route
-            new EnvoyProtoData.RouteMatch(
+            new io.grpc.xds.RouteMatch(
                 /* prefix= */ "/service1/",
                 /* path= */ null),
             new EnvoyProtoData.RouteAction("cl1.googleapis.com", null)));
     assertThat(routes.get(3)).isEqualTo(
         new EnvoyProtoData.Route(
             // default match with cluster route
-            new EnvoyProtoData.RouteMatch(
+            new io.grpc.xds.RouteMatch(
                 /* prefix= */ "",
                 /* path= */ null),
             new EnvoyProtoData.RouteAction(

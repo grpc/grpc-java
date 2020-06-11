@@ -16,4 +16,7 @@ dependencies {
     signature "net.sf.androidscents.signature:android-api-level-14:4.0_r4@signature"
 }
 
-javadoc.options.links "https://google.github.io/guava/releases/${guavaVersion}/api/docs/"
+javadoc {
+    options.links "https://google.github.io/guava/releases/${guavaVersion}/api/docs/"
+    exclude 'io/grpc/stub/Internal*'
+}
