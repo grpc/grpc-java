@@ -28,7 +28,7 @@ google/api/expr/v1alpha1/syntax.proto
 
 pushd `git rev-parse --show-toplevel`/xds/third_party/googleapis
 
-# clone the envoy github repo in a tmp directory
+# clone the googleapis github repo in a tmp directory
 tmpdir="$(mktemp -d)"
 trap "rm -rf ${tmpdir}" EXIT
 
