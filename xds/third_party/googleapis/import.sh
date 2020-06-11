@@ -17,7 +17,6 @@
 
 set -e
 BRANCH=master
-# import VERSION from one of the google internal CLs
 VERSION=ca1372c6d7bcb199638ebfdb40d2b2660bab7b88
 GIT_REPO="https://github.com/googleapis/googleapis.git"
 GIT_BASE_DIR=googleapis
@@ -54,4 +53,4 @@ do
 done
 popd
 
-
+popd
