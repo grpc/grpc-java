@@ -17,7 +17,6 @@ dependencies {
             project(':grpc-context').sourceSets.test.output,
             project(':grpc-core').sourceSets.test.output,
             project(':grpc-testing'),
-            libraries.guava_testlib,
             libraries.opencensus_impl
 }
 
