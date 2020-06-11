@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 The gRPC Authors
+ * Copyright 2020 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,16 +16,16 @@
 
 package io.grpc.examples.retrying;
 
-import io.grpc.*;
-
 import java.text.DecimalFormat;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
+import io.grpc.Server;
+import io.grpc.ServerBuilder;
+import io.grpc.Status;
 import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
 import io.grpc.examples.helloworld.HelloRequest;
 import io.grpc.stub.StreamObserver;
-
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;

@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 The gRPC Authors
+ * Copyright 2020 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,8 @@
 
 package io.grpc.examples.retrying;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+
 import com.google.gson.Gson;
 import com.google.gson.stream.JsonReader;
 import io.grpc.ManagedChannel;
@@ -24,7 +26,6 @@ import io.grpc.StatusRuntimeException;
 import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
 import io.grpc.examples.helloworld.HelloRequest;
-
 import java.io.InputStreamReader;
 import java.util.Map;
 import java.util.concurrent.ForkJoinPool;
@@ -32,8 +33,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
-import static java.nio.charset.StandardCharsets.UTF_8;
 
 /**
  * A client that requests a greeting from the {@link RetryingHelloWorldServer} with a retrying policy.
@@ -80,7 +79,7 @@ public class RetryingHelloWorldClient {
   }
 
   public void shutdown() throws InterruptedException {
-    channel.shutdown().awaitTermination(30, TimeUnit.SECONDS);
+    channel.shutdown().awaitTermination(60, TimeUnit.SECONDS);
   }
 
   /**
