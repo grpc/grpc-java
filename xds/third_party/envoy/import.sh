@@ -85,6 +85,7 @@ envoy/config/listener/v3/listener_components.proto
 envoy/config/listener/v3/udp_listener_config.proto
 envoy/config/route/v3/route_components.proto
 envoy/config/trace/v2/trace.proto
+envoy/config/rbac/v2/rbac.proto
 envoy/extensions/transport_sockets/tls/v3/cert.proto
 envoy/service/discovery/v2/ads.proto
 envoy/service/discovery/v2/sds.proto
@@ -92,6 +93,10 @@ envoy/service/load_stats/v2/lrs.proto
 envoy/type/http.proto
 envoy/type/matcher/regex.proto
 envoy/type/matcher/string.proto
+envoy/type/matcher/metadata.proto
+envoy/type/matcher/path.proto
+envoy/type/matcher/value.proto
+envoy/type/matcher/number.proto
 envoy/type/matcher/v3/regex.proto
 envoy/type/matcher/v3/string.proto
 envoy/type/metadata/v2/metadata.proto
