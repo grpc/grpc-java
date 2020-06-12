@@ -18,7 +18,7 @@
 set -e
 BRANCH=master
 # import VERSION from one of the google internal CLs
-VERSION=b16ce6d5ea0d2da73e764d145623e7367dc59ed3
+VERSION=440899714143b6a143917cbd8e3f0ccba0847cd4
 GIT_REPO="https://github.com/envoyproxy/envoy.git"
 GIT_BASE_DIR=envoy
 SOURCE_PROTO_BASE_DIR=envoy/api
@@ -27,6 +27,9 @@ FILES=(
 envoy/annotations/deprecation.proto
 envoy/annotations/resource.proto
 envoy/api/v2/auth/cert.proto
+envoy/api/v2/auth/common.proto
+envoy/api/v2/auth/secret.proto
+envoy/api/v2/auth/tls.proto
 envoy/api/v2/cds.proto
 envoy/api/v2/cluster.proto
 envoy/api/v2/cluster/circuit_breaker.proto
@@ -36,6 +39,7 @@ envoy/api/v2/core/address.proto
 envoy/api/v2/core/backoff.proto
 envoy/api/v2/core/base.proto
 envoy/api/v2/core/config_source.proto
+envoy/api/v2/core/event_service_config.proto
 envoy/api/v2/core/grpc_service.proto
 envoy/api/v2/core/health_check.proto
 envoy/api/v2/core/http_uri.proto
@@ -67,10 +71,13 @@ envoy/config/core/v3/address.proto
 envoy/config/core/v3/backoff.proto
 envoy/config/core/v3/base.proto
 envoy/config/core/v3/config_source.proto
+envoy/config/core/v3/event_service_config.proto
+envoy/config/core/v3/extension.proto
 envoy/config/core/v3/grpc_service.proto
 envoy/config/core/v3/health_check.proto
 envoy/config/core/v3/http_uri.proto
 envoy/config/core/v3/protocol.proto
+envoy/config/core/v3/proxy_protocol.proto
 envoy/config/core/v3/socket_option.proto
 envoy/config/endpoint/v3/endpoint.proto
 envoy/config/endpoint/v3/endpoint_components.proto
@@ -84,9 +91,19 @@ envoy/config/listener/v3/listener.proto
 envoy/config/listener/v3/listener_components.proto
 envoy/config/listener/v3/udp_listener_config.proto
 envoy/config/route/v3/route_components.proto
+envoy/config/trace/v2/http_tracer.proto
 envoy/config/trace/v2/trace.proto
+envoy/config/trace/v2/datadog.proto
+envoy/config/trace/v2/dynamic_ot.proto
+envoy/config/trace/v2/lightstep.proto
+envoy/config/trace/v2/opencensus.proto
+envoy/config/trace/v2/service.proto
+envoy/config/trace/v2/zipkin.proto
 envoy/config/rbac/v2/rbac.proto
 envoy/extensions/transport_sockets/tls/v3/cert.proto
+envoy/extensions/transport_sockets/tls/v3/common.proto
+envoy/extensions/transport_sockets/tls/v3/secret.proto
+envoy/extensions/transport_sockets/tls/v3/tls.proto
 envoy/service/discovery/v2/ads.proto
 envoy/service/discovery/v2/sds.proto
 envoy/service/load_stats/v2/lrs.proto
