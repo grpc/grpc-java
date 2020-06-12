@@ -101,6 +101,7 @@ jacocoTestReport {
     classDirectories.from = sourceSets.main.output.collect {
         fileTree(dir: it,
         exclude: [
+                '**/com/google/api/**',
                 '**/com/github/**',
                 '**/envoy/annotations/**',
                 '**/io/envoyproxy/**',
