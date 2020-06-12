@@ -93,7 +93,7 @@ before trying out the examples.
   The [retrying example](src/main/java/io/grpc/examples/retrying) provides a HelloWorld GRPC client & 
   server which demos the effect of client retry policy configured on the [ManagedChannel](
   ../api/src/main/java/io/grpc/ManagedChannel.java) via [GRPC ServiceConfig](
-  ../core/src/main/java/io/grpc/internal/ManagedChannelServiceConfig.java). Retry policy implementation & 
+  https://github.com/grpc/grpc/blob/master/doc/service_config.md). Retry policy implementation & 
   configuration details are outlined in the [proposal](https://github.com/grpc/proposal/blob/master/A6-client-retries.md).
    
   This retrying example is very similar to the [hedging example](src/main/java/io/grpc/examples/hedging) in its setup. 
