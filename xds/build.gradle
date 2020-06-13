@@ -89,7 +89,7 @@ shadowJar {
     dependencies {
         include(project(':grpc-xds'))
     }
-    relocate 'com.github.googleapis', 'io.grpc.xds.shaded.com.github.googleapis'
+    relocate 'com.google.api.expr', 'io.grpc.xds.shaded.com.google.api.expr'
     relocate 'com.github.udpa', 'io.grpc.xds.shaded.com.github.udpa'
     relocate 'io.envoyproxy', 'io.grpc.xds.shaded.io.envoyproxy'
     relocate 'io.grpc.netty', 'io.grpc.netty.shaded.io.grpc.netty'
@@ -101,6 +101,7 @@ jacocoTestReport {
     classDirectories.from = sourceSets.main.output.collect {
         fileTree(dir: it,
         exclude: [
+                '**/com/google/api/**',
                 '**/com/github/**',
                 '**/envoy/annotations/**',
                 '**/io/envoyproxy/**',
