@@ -30,8 +30,8 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
+import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.internal.sds.ReferenceCountingSslContextProviderMap.SslContextProviderFactory;
 import java.lang.reflect.Field;
 import org.junit.Before;

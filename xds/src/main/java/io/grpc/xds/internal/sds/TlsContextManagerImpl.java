@@ -19,8 +19,8 @@ package io.grpc.xds.internal.sds;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
-import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
+import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.internal.sds.ReferenceCountingSslContextProviderMap.SslContextProviderFactory;
 
 /**

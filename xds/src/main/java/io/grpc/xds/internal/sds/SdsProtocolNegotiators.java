@@ -19,7 +19,6 @@ package io.grpc.xds.internal.sds;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
-import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
 import io.grpc.netty.InternalNettyChannelBuilder;
@@ -30,6 +29,7 @@ import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.netty.ProtocolNegotiationEvent;
+import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.XdsAttributes;
 import io.grpc.xds.XdsClientWrapperForServerSds;
 import io.netty.channel.ChannelHandler;
@@ -282,10 +282,6 @@ public final class SdsProtocolNegotiators {
       this.fallbackProtocolNegotiator = fallbackProtocolNegotiator;
     }
 
-    private static boolean isTlsContextEmpty(DownstreamTlsContext downstreamTlsContext) {
-      return downstreamTlsContext == null || !downstreamTlsContext.hasCommonTlsContext();
-    }
-
     @Override
     public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
       if (evt instanceof ProtocolNegotiationEvent) {
@@ -293,7 +289,7 @@ public final class SdsProtocolNegotiators {
             xdsClientWrapperForServerSds == null
                 ? null
                 : xdsClientWrapperForServerSds.getDownstreamTlsContext(ctx.channel());
-        if (isTlsContextEmpty(downstreamTlsContext)) {
+        if (downstreamTlsContext == null) {
           if (fallbackProtocolNegotiator == null) {
             ctx.fireExceptionCaught(new CertStoreException("No certificate source found!"));
             return;
