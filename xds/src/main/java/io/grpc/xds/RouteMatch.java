@@ -20,9 +20,12 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.MoreObjects.ToStringHelper;
 import com.google.re2j.Pattern;
+import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import javax.annotation.Nullable;
 
 /**
@@ -46,6 +49,37 @@ final class RouteMatch {
     this(
         new PathMatcher(pathExactMatch, pathPrefixMatch, null),
         Collections.<HeaderMatcher>emptyList(), null);
+  }
+
+  /**
+   * Returns {@code true} if a request with the given path and headers passes all the rules
+   * specified by this RouteMatch.
+   *
+   * <p>The request's headers are given as a key-values mapping, where multiple values can
+   * be mapped to the same key.
+   *
+   * <p>Match is not deterministic if a runtime fraction match rule presents in this RouteMatch.
+   */
+  boolean matches(String path, Map<String, Set<String>> headers) {
+    if (!pathMatch.matches(path)) {
+      return false;
+    }
+    for (HeaderMatcher headerMatcher : headerMatchers) {
+      if (!headers.containsKey(headerMatcher.getName())) {
+        return false;
+      }
+      boolean containsMatchingValue = false;
+      for (String value : headers.get(headerMatcher.getName())) {
+        if (headerMatcher.matchesValue(value)) {
+          containsMatchingValue = true;
+          break;
+        }
+      }
+      if (!containsMatchingValue) {
+        return false;
+      }
+    }
+    return fractionMatch == null || fractionMatch.matches();
   }
 
   PathMatcher getPathMatch() {
@@ -103,6 +137,15 @@ final class RouteMatch {
       this.path = path;
       this.prefix = prefix;
       this.regEx = regEx;
+    }
+
+    private boolean matches(String fullMethodName) {
+      if (path != null) {
+        return path.equals(fullMethodName);
+      } else if (prefix != null) {
+        return fullMethodName.startsWith(prefix);
+      }
+      return regEx.matches(fullMethodName);
     }
 
     @Nullable
@@ -194,6 +237,29 @@ final class RouteMatch {
       this.prefixMatch = prefixMatch;
       this.suffixMatch = suffixMatch;
       this.isInvertedMatch = isInvertedMatch;
+    }
+
+    private boolean matchesValue(String value) {
+      boolean baseMatch;
+      if (exactMatch != null) {
+        baseMatch = exactMatch.equals(value);
+      } else if (safeRegExMatch != null) {
+        baseMatch = safeRegExMatch.matches(value);
+      } else if (rangeMatch != null) {
+        try {
+          Integer numValue = Integer.parseInt(value);
+          baseMatch = rangeMatch.contains(numValue);
+        } catch (NumberFormatException ignored) {
+          baseMatch = false;
+        }
+      } else if (presentMatch != null) {
+        baseMatch = presentMatch;
+      } else if (prefixMatch != null) {
+        baseMatch = value.startsWith(prefixMatch);
+      } else {
+        baseMatch = value.endsWith(suffixMatch);
+      }
+      return baseMatch != isInvertedMatch;
     }
 
     String getName() {
@@ -290,6 +356,10 @@ final class RouteMatch {
         this.end = end;
       }
 
+      boolean contains(int value) {
+        return value >= start && value < end;
+      }
+
       long getStart() {
         return start;
       }
@@ -329,10 +399,21 @@ final class RouteMatch {
   static final class FractionMatcher {
     private final int numerator;
     private final int denominator;
+    private final ThreadSafeRandom rand;
 
     FractionMatcher(int numerator, int denominator) {
+      this(numerator, denominator, ThreadSafeRandomImpl.instance);
+    }
+
+    @VisibleForTesting
+    FractionMatcher(int numerator, int denominator, ThreadSafeRandom rand) {
       this.numerator = numerator;
       this.denominator = denominator;
+      this.rand = rand;
+    }
+
+    private boolean matches() {
+      return rand.nextInt(denominator) < numerator;
     }
 
     int getNumerator() {
