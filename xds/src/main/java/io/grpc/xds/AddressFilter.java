@@ -26,13 +26,13 @@ import java.util.Collections;
 import java.util.List;
 import javax.annotation.Nullable;
 
-final class AddressFiltering {
+final class AddressFilter {
   @ResolutionResultAttr
   private static final Attributes.Key<PathChain> PATH_CHAIN_KEY =
       Attributes.Key.create("io.grpc.xds.AddressFilter.PATH_CHAIN_KEY");
 
   // Prevent instantiation.
-  private AddressFiltering() {}
+  private AddressFilter() {}
 
   /**
    * Sets a path filter to an EquivalentAddressGroup. Any preexisting path filter will be discarded.

@@ -132,7 +132,7 @@ public class PriorityLoadBalancerTest {
   public void handleResolvedAddresses() {
     SocketAddress socketAddress = new InetSocketAddress(8080);
     EquivalentAddressGroup eag = new EquivalentAddressGroup(socketAddress);
-    eag = AddressFiltering.setPathFilter(eag, ImmutableList.of("p1"));
+    eag = AddressFilter.setPathFilter(eag, ImmutableList.of("p1"));
     List<EquivalentAddressGroup> addresses = ImmutableList.of(eag);
     Attributes attributes =
         Attributes.newBuilder().set(Attributes.Key.create("fakeKey"), "fakeValue").build();
@@ -187,7 +187,7 @@ public class PriorityLoadBalancerTest {
     // New update: p0 and p2 deleted; p1 config changed.
     SocketAddress newSocketAddress = new InetSocketAddress(8081);
     EquivalentAddressGroup newEag = new EquivalentAddressGroup(newSocketAddress);
-    newEag = AddressFiltering.setPathFilter(newEag, ImmutableList.of("p1"));
+    newEag = AddressFilter.setPathFilter(newEag, ImmutableList.of("p1"));
     List<EquivalentAddressGroup> newAddresses = ImmutableList.of(newEag);
     Object newBarConfig = new Object();
     PolicySelection newBarPolicy = new PolicySelection(barLbProvider, null, newBarConfig);

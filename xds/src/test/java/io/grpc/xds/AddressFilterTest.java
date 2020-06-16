@@ -28,9 +28,9 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-/** Tests for {@link AddressFiltering}. */
+/** Tests for {@link AddressFilter}. */
 @RunWith(JUnit4.class)
-public class AddressFilteringTest {
+public class AddressFilterTest {
   @Test
   public void filterAddresses() {
     Attributes.Key<String> key1 = Attributes.Key.create("key1");
@@ -42,15 +42,15 @@ public class AddressFilteringTest {
     EquivalentAddressGroup eag3 =
         new EquivalentAddressGroup(
             Arrays.<SocketAddress>asList(new InetSocketAddress(8003), new InetSocketAddress(8083)));
-    eag0 = AddressFiltering.setPathFilter(eag0, Arrays.asList("A", "C"));
-    eag1 = AddressFiltering.setPathFilter(eag1, Arrays.asList("A", "B"));
-    eag2 = AddressFiltering.setPathFilter(eag2, Arrays.asList("D", "C"));
-    eag3 = AddressFiltering.setPathFilter(eag3, Arrays.asList("A", "B"));
+    eag0 = AddressFilter.setPathFilter(eag0, Arrays.asList("A", "C"));
+    eag1 = AddressFilter.setPathFilter(eag1, Arrays.asList("A", "B"));
+    eag2 = AddressFilter.setPathFilter(eag2, Arrays.asList("D", "C"));
+    eag3 = AddressFilter.setPathFilter(eag3, Arrays.asList("A", "B"));
 
     List<EquivalentAddressGroup> addresses =
-        AddressFiltering.filter(Arrays.asList(eag0, eag1, eag2, eag3), "A");
+        AddressFilter.filter(Arrays.asList(eag0, eag1, eag2, eag3), "A");
     assertThat(addresses).hasSize(3);
-    addresses = AddressFiltering.filter(addresses, "B");
+    addresses = AddressFilter.filter(addresses, "B");
     assertThat(addresses).hasSize(2);
     EquivalentAddressGroup filteredAddress0 = addresses.get(0);
     EquivalentAddressGroup filteredAddress1 = addresses.get(1);

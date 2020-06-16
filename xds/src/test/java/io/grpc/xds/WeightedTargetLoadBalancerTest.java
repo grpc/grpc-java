@@ -185,13 +185,13 @@ public class WeightedTargetLoadBalancerTest {
         // {foo, 40, config3}
         "target3", weightedLbConfig3);
     EquivalentAddressGroup eag0 = new EquivalentAddressGroup(socketAddresses[0]);
-    eag0 = AddressFiltering.setPathFilter(eag0, ImmutableList.of("target0"));
+    eag0 = AddressFilter.setPathFilter(eag0, ImmutableList.of("target0"));
     EquivalentAddressGroup eag1 = new EquivalentAddressGroup(socketAddresses[1]);
-    eag1 = AddressFiltering.setPathFilter(eag1, ImmutableList.of("target1"));
+    eag1 = AddressFilter.setPathFilter(eag1, ImmutableList.of("target1"));
     EquivalentAddressGroup eag2 = new EquivalentAddressGroup(socketAddresses[2]);
-    eag2 = AddressFiltering.setPathFilter(eag2, ImmutableList.of("target2"));
+    eag2 = AddressFilter.setPathFilter(eag2, ImmutableList.of("target2"));
     EquivalentAddressGroup eag3 = new EquivalentAddressGroup(socketAddresses[3]);
-    eag3 = AddressFiltering.setPathFilter(eag3, ImmutableList.of("target3"));
+    eag3 = AddressFilter.setPathFilter(eag3, ImmutableList.of("target3"));
     weightedTargetLb.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(ImmutableList.of(eag0, eag1, eag2, eag3))
