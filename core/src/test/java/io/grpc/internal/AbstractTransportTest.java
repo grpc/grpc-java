@@ -157,7 +157,7 @@ public abstract class AbstractTransportTest {
    * {@code serverListener}, otherwise tearDown() can't wait for shutdown which can put following
    * tests in an indeterminate state.
    */
-  private InternalServer server;
+  protected InternalServer server;
   private ServerTransport serverTransport;
   private ManagedClientTransport client;
   private MethodDescriptor<String, String> methodDescriptor =
@@ -398,6 +398,36 @@ public abstract class AbstractTransportTest {
         Iterables.getOnlyElement(newServer(port, Arrays.asList(serverStreamTracerFactory)));
     thrown.expect(IOException.class);
     server2.start(new MockServerListener());
+  }
+
+  @Test
+  public void serverStartInterrupted() throws Exception {
+    client = null;
+
+    // Just get free port
+    server.start(serverListener);
+    int port = -1;
+    SocketAddress addr = server.getListenSocketAddress();
+    if (addr instanceof InetSocketAddress) {
+      port = ((InetSocketAddress) addr).getPort();
+    }
+    assumeTrue("transport is not using InetSocketAddress", port != -1);
+    server.shutdown();
+
+    server = Iterables.getOnlyElement(newServer(port, Arrays.asList(serverStreamTracerFactory)));
+    boolean success;
+    Thread.currentThread().interrupt();
+    try {
+      server.start(serverListener);
+      success = true;
+    } catch (Exception ex) {
+      success = false;
+    } finally {
+      Thread.interrupted(); // clear interruption
+    }
+    assumeTrue("apparently start is not impacted by interruption, so nothing to test", !success);
+    // second time should not throw, as the first time should not have bound to the port
+    server.start(serverListener);
   }
 
   @Test
@@ -1028,9 +1058,7 @@ public abstract class AbstractTransportTest {
     Metadata clientStreamTrailers =
         clientStreamListener.trailers.get(TIMEOUT_MS, TimeUnit.MILLISECONDS);
     assertNotNull(clientStreamTrailers);
-    assertEquals(status.getCode(), clientStreamStatus.getCode());
-    assertEquals("Hello. Goodbye.", clientStreamStatus.getDescription());
-    assertNull(clientStreamStatus.getCause());
+    checkClientStatus(status, clientStreamStatus);
     assertTrue(clientStreamTracer1.getOutboundHeaders());
     assertTrue(clientStreamTracer1.getInboundHeaders());
     assertSame(clientStreamTrailers, clientStreamTracer1.getInboundTrailers());
@@ -1067,10 +1095,7 @@ public abstract class AbstractTransportTest {
     Status clientStreamStatus = clientStreamListener.status.get(TIMEOUT_MS, TimeUnit.MILLISECONDS);
     Metadata clientStreamTrailers =
         clientStreamListener.trailers.get(TIMEOUT_MS, TimeUnit.MILLISECONDS);
-    assertEquals(status.getCode(), clientStreamStatus.getCode());
-    assertEquals("Hellogoodbye", clientStreamStatus.getDescription());
-    // Cause should not be transmitted to the client.
-    assertNull(clientStreamStatus.getCause());
+    checkClientStatus(status, clientStreamStatus);
     assertEquals(
         Lists.newArrayList(trailers.getAll(asciiKey)),
         Lists.newArrayList(clientStreamTrailers.getAll(asciiKey)));
@@ -1108,9 +1133,7 @@ public abstract class AbstractTransportTest {
     Metadata clientStreamTrailers =
         clientStreamListener.trailers.get(TIMEOUT_MS, TimeUnit.MILLISECONDS);
     assertNotNull(clientStreamTrailers);
-    assertEquals(status.getCode(), clientStreamStatus.getCode());
-    assertEquals(status.getDescription(), clientStreamStatus.getDescription());
-    assertNull(clientStreamStatus.getCause());
+    checkClientStatus(status, clientStreamStatus);
     assertTrue(clientStreamTracer1.getOutboundHeaders());
     assertSame(clientStreamTrailers, clientStreamTracer1.getInboundTrailers());
     assertSame(clientStreamStatus, clientStreamTracer1.getStatus());
@@ -1158,9 +1181,7 @@ public abstract class AbstractTransportTest {
     Metadata clientStreamTrailers =
         clientStreamListener.trailers.get(TIMEOUT_MS, TimeUnit.MILLISECONDS);
     assertNotNull(clientStreamTrailers);
-    assertEquals(status.getCode(), clientStreamStatus.getCode());
-    assertEquals(status.getDescription(), clientStreamStatus.getDescription());
-    assertNull(clientStreamStatus.getCause());
+    checkClientStatus(status, clientStreamStatus);
     assertTrue(clientStreamTracer1.getOutboundHeaders());
     assertSame(clientStreamTrailers, clientStreamTracer1.getInboundTrailers());
     assertSame(clientStreamStatus, clientStreamTracer1.getStatus());
@@ -1189,7 +1210,7 @@ public abstract class AbstractTransportTest {
     assertNotNull(clientStreamListener.trailers.get(TIMEOUT_MS, TimeUnit.MILLISECONDS));
     Status serverStatus = serverStreamListener.status.get(TIMEOUT_MS, TimeUnit.MILLISECONDS);
     assertNotEquals(Status.Code.OK, serverStatus.getCode());
-    // Cause should not be transmitted between client and server
+    // Cause should not be transmitted between client and server by default
     assertNull(serverStatus.getCause());
 
     clientStream.cancel(status);
@@ -2040,6 +2061,16 @@ public abstract class AbstractTransportTest {
         || !Objects.equal(expected.getCause(), actual.getCause())) {
       assertEquals(expected, actual);
     }
+  }
+
+  /**
+   * Verifies that the client status is as expected. By default, the code and description should
+   * be present, and the cause should be stripped away.
+   */
+  private static void checkClientStatus(Status expectedStatus, Status clientStreamStatus) {
+    assertEquals(expectedStatus.getCode(), clientStreamStatus.getCode());
+    assertEquals(expectedStatus.getDescription(), clientStreamStatus.getDescription());
+    assertNull(clientStreamStatus.getCause());
   }
 
   private static boolean waitForFuture(Future<?> future, long timeout, TimeUnit unit)

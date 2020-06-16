@@ -1,0 +1,27 @@
+plugins {
+    id "java-library"
+    id "maven-publish"
+}
+
+description = 'gRPC: Census'
+
+evaluationDependsOn(project(':grpc-api').path)
+
+dependencies {
+    api project(':grpc-api')
+    guavaDependency 'implementation'
+    censusApiDependency 'implementation'
+    censusGrpcMetricDependency 'implementation'
+
+    testImplementation project(':grpc-api').sourceSets.test.output,
+            project(':grpc-context').sourceSets.test.output,
+            project(':grpc-core').sourceSets.test.output,
+            project(':grpc-testing'),
+            libraries.opencensus_impl
+}
+
+javadoc {
+    failOnError false  // no public or protected classes found to document
+    exclude 'io/grpc/census/internal/**'
+    exclude 'io/grpc/census/Internal*'
+}

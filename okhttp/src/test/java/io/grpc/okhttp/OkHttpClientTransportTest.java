@@ -22,8 +22,8 @@ import static io.grpc.internal.ClientStreamListener.RpcProgress.PROCESSED;
 import static io.grpc.internal.ClientStreamListener.RpcProgress.REFUSED;
 import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
 import static io.grpc.okhttp.Headers.CONTENT_TYPE_HEADER;
+import static io.grpc.okhttp.Headers.HTTP_SCHEME_HEADER;
 import static io.grpc.okhttp.Headers.METHOD_HEADER;
-import static io.grpc.okhttp.Headers.SCHEME_HEADER;
 import static io.grpc.okhttp.Headers.TE_HEADER;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -264,7 +264,8 @@ public class OkHttpClientTransportTest {
         NO_PROXY,
         tooManyPingsRunnable,
         DEFAULT_MAX_INBOUND_METADATA_SIZE,
-        transportTracer);
+        transportTracer,
+        false);
     String s = clientTransport.toString();
     assertTrue("Unexpected: " + s, s.contains("OkHttpClientTransport"));
     assertTrue("Unexpected: " + s, s.contains(address.toString()));
@@ -401,6 +402,36 @@ public class OkHttpClientTransportTest {
     listener.waitUntilStreamClosed();
     assertEquals(Code.RESOURCE_EXHAUSTED, listener.status.getCode());
     shutdownAndVerify();
+  }
+
+  @Test
+  public void includeInitialWindowSizeInFirstSettings() throws Exception {
+    int initialWindowSize = 65535;
+    startTransport(
+            DEFAULT_START_STREAM_ID, null, true, DEFAULT_MAX_MESSAGE_SIZE, initialWindowSize, null);
+    clientTransport.sendConnectionPrefaceAndSettings();
+
+    ArgumentCaptor<Settings> settings = ArgumentCaptor.forClass(Settings.class);
+    verify(frameWriter, timeout(TIME_OUT_MS)).settings(settings.capture());
+    assertEquals(65535, settings.getValue().get(7));
+  }
+
+  /**
+   * A "large" window size is anything over 65535 (the starting size for any connection-level
+   * flow control value).
+   */
+  @Test
+  public void includeInitialWindowSizeInFirstSettings_largeWindowSize() throws Exception {
+    int initialWindowSize = 75535; // 65535 + 10000
+    startTransport(
+            DEFAULT_START_STREAM_ID, null, true, DEFAULT_MAX_MESSAGE_SIZE, initialWindowSize, null);
+    clientTransport.sendConnectionPrefaceAndSettings();
+
+    ArgumentCaptor<Settings> settings = ArgumentCaptor.forClass(Settings.class);
+    verify(frameWriter, timeout(TIME_OUT_MS)).settings(settings.capture());
+    assertEquals(75535, settings.getValue().get(7));
+
+    verify(frameWriter, timeout(TIME_OUT_MS)).windowUpdate(0, 10000);
   }
 
   /**
@@ -649,7 +680,7 @@ public class OkHttpClientTransportTest {
     stream.start(listener);
     Header userAgentHeader = new Header(GrpcUtil.USER_AGENT_KEY.name(),
             GrpcUtil.getGrpcUserAgent("okhttp", null));
-    List<Header> expectedHeaders = Arrays.asList(SCHEME_HEADER, METHOD_HEADER,
+    List<Header> expectedHeaders = Arrays.asList(HTTP_SCHEME_HEADER, METHOD_HEADER,
             new Header(Header.TARGET_AUTHORITY, "notarealauthority:80"),
             new Header(Header.TARGET_PATH, "/" + method.getFullMethodName()),
             userAgentHeader, CONTENT_TYPE_HEADER, TE_HEADER);
@@ -666,7 +697,7 @@ public class OkHttpClientTransportTest {
     OkHttpClientStream stream =
         clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream.start(listener);
-    List<Header> expectedHeaders = Arrays.asList(SCHEME_HEADER, METHOD_HEADER,
+    List<Header> expectedHeaders = Arrays.asList(HTTP_SCHEME_HEADER, METHOD_HEADER,
         new Header(Header.TARGET_AUTHORITY, "notarealauthority:80"),
         new Header(Header.TARGET_PATH, "/" + method.getFullMethodName()),
         new Header(GrpcUtil.USER_AGENT_KEY.name(),
@@ -835,39 +866,39 @@ public class OkHttpClientTransportTest {
     shutdownAndVerify();
   }
 
+  /**
+   * Outbound flow control where the initial flow control window stays at the default size of 65535.
+   */
   @Test
   public void outboundFlowControl() throws Exception {
-    outboundFlowControl(INITIAL_WINDOW_SIZE);
-  }
-
-  private void outboundFlowControl(int windowSize) throws Exception {
-    startTransport(
-        DEFAULT_START_STREAM_ID, null, true, DEFAULT_MAX_MESSAGE_SIZE, windowSize, null);
+    initTransport();
     MockStreamListener listener = new MockStreamListener();
     OkHttpClientStream stream =
         clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream.start(listener);
+
+    // Outbound window always starts at 65535 until changed by Settings.INITIAL_WINDOW_SIZE
+    int initialOutboundWindowSize = 65535;
+    int messageLength = initialOutboundWindowSize / 2 + 1;
+
     // The first message should be sent out.
-    int messageLength = windowSize / 2 + 1;
     InputStream input = new ByteArrayInputStream(new byte[messageLength]);
     stream.writeMessage(input);
     stream.flush();
     verify(frameWriter, timeout(TIME_OUT_MS)).data(
         eq(false), eq(3), any(Buffer.class), eq(messageLength + HEADER_LENGTH));
 
-
     // The second message should be partially sent out.
     input = new ByteArrayInputStream(new byte[messageLength]);
     stream.writeMessage(input);
     stream.flush();
-    int partiallySentSize =
-        windowSize - messageLength - HEADER_LENGTH;
+    int partiallySentSize = initialOutboundWindowSize - messageLength - HEADER_LENGTH;
     verify(frameWriter, timeout(TIME_OUT_MS))
         .data(eq(false), eq(3), any(Buffer.class), eq(partiallySentSize));
 
-    // Get more credit, the rest data should be sent out.
-    frameHandler().windowUpdate(3, windowSize);
-    frameHandler().windowUpdate(0, windowSize);
+    // Get more credit so the rest of the data should be sent out.
+    frameHandler().windowUpdate(3, initialOutboundWindowSize);
+    frameHandler().windowUpdate(0, initialOutboundWindowSize);
     verify(frameWriter, timeout(TIME_OUT_MS)).data(
         eq(false), eq(3), any(Buffer.class),
         eq(messageLength + HEADER_LENGTH - partiallySentSize));
@@ -877,14 +908,90 @@ public class OkHttpClientTransportTest {
     shutdownAndVerify();
   }
 
+  /**
+   * Outbound flow control where the initial window size is reduced before a stream is started.
+   */
   @Test
   public void outboundFlowControl_smallWindowSize() throws Exception {
-    outboundFlowControl(100);
+    initTransport();
+
+    int initialOutboundWindowSize = 100;
+    setInitialWindowSize(initialOutboundWindowSize);
+
+    MockStreamListener listener = new MockStreamListener();
+    OkHttpClientStream stream =
+            clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
+    stream.start(listener);
+
+    int messageLength = 75;
+    // The first message should be sent out.
+    InputStream input = new ByteArrayInputStream(new byte[messageLength]);
+    stream.writeMessage(input);
+    stream.flush();
+    verify(frameWriter, timeout(TIME_OUT_MS)).data(
+            eq(false), eq(3), any(Buffer.class), eq(messageLength + HEADER_LENGTH));
+
+    // The second message should be partially sent out.
+    input = new ByteArrayInputStream(new byte[messageLength]);
+    stream.writeMessage(input);
+    stream.flush();
+    int partiallySentSize = initialOutboundWindowSize - messageLength - HEADER_LENGTH;
+    verify(frameWriter, timeout(TIME_OUT_MS))
+            .data(eq(false), eq(3), any(Buffer.class), eq(partiallySentSize));
+
+    // Get more credit so the rest of the data should be sent out.
+    frameHandler().windowUpdate(3, initialOutboundWindowSize);
+    verify(frameWriter, timeout(TIME_OUT_MS)).data(
+            eq(false), eq(3), any(Buffer.class),
+            eq(messageLength + HEADER_LENGTH - partiallySentSize));
+
+    stream.cancel(Status.CANCELLED);
+    listener.waitUntilStreamClosed();
+    shutdownAndVerify();
   }
 
+  /**
+   * Outbound flow control where the initial window size is increased before a stream is started.
+   */
   @Test
   public void outboundFlowControl_bigWindowSize() throws Exception {
-    outboundFlowControl(INITIAL_WINDOW_SIZE * 2);
+    initTransport();
+
+    int initialOutboundWindowSize = 131070; // 65535 * 2
+    setInitialWindowSize(initialOutboundWindowSize);
+    frameHandler().windowUpdate(0, 65535);
+
+    MockStreamListener listener = new MockStreamListener();
+    OkHttpClientStream stream =
+            clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
+    stream.start(listener);
+
+    int messageLength = 100000;
+    // The first message should be sent out.
+    InputStream input = new ByteArrayInputStream(new byte[messageLength]);
+    stream.writeMessage(input);
+    stream.flush();
+    verify(frameWriter, timeout(TIME_OUT_MS)).data(
+            eq(false), eq(3), any(Buffer.class), eq(messageLength + HEADER_LENGTH));
+
+    // The second message should be partially sent out.
+    input = new ByteArrayInputStream(new byte[messageLength]);
+    stream.writeMessage(input);
+    stream.flush();
+    int partiallySentSize = initialOutboundWindowSize - messageLength - HEADER_LENGTH;
+    verify(frameWriter, timeout(TIME_OUT_MS))
+            .data(eq(false), eq(3), any(Buffer.class), eq(partiallySentSize));
+
+    // Get more credit so the rest of the data should be sent out.
+    frameHandler().windowUpdate(0, initialOutboundWindowSize);
+    frameHandler().windowUpdate(3, initialOutboundWindowSize);
+    verify(frameWriter, timeout(TIME_OUT_MS)).data(
+            eq(false), eq(3), any(Buffer.class),
+            eq(messageLength + HEADER_LENGTH - partiallySentSize));
+
+    stream.cancel(Status.CANCELLED);
+    listener.waitUntilStreamClosed();
+    shutdownAndVerify();
   }
 
   @Test
@@ -1664,7 +1771,8 @@ public class OkHttpClientTransportTest {
         NO_PROXY,
         tooManyPingsRunnable,
         DEFAULT_MAX_INBOUND_METADATA_SIZE,
-        transportTracer);
+        transportTracer,
+        false);
 
     String host = clientTransport.getOverridenHost();
     int port = clientTransport.getOverridenPort();
@@ -1690,7 +1798,8 @@ public class OkHttpClientTransportTest {
         NO_PROXY,
         tooManyPingsRunnable,
         DEFAULT_MAX_INBOUND_METADATA_SIZE,
-        new TransportTracer());
+        new TransportTracer(),
+        false);
 
     ManagedClientTransport.Listener listener = mock(ManagedClientTransport.Listener.class);
     clientTransport.start(listener);
@@ -1727,7 +1836,8 @@ public class OkHttpClientTransportTest {
             NO_PROXY,
             tooManyPingsRunnable,
             DEFAULT_MAX_INBOUND_METADATA_SIZE,
-            new TransportTracer());
+            new TransportTracer(),
+            false);
 
     ManagedClientTransport.Listener listener = mock(ManagedClientTransport.Listener.class);
     clientTransport.start(listener);
@@ -1759,7 +1869,8 @@ public class OkHttpClientTransportTest {
             .setProxyAddress(serverSocket.getLocalSocketAddress()).build(),
         tooManyPingsRunnable,
         DEFAULT_MAX_INBOUND_METADATA_SIZE,
-        transportTracer);
+        transportTracer,
+        false);
     clientTransport.start(transportListener);
 
     Socket sock = serverSocket.accept();
@@ -1815,7 +1926,8 @@ public class OkHttpClientTransportTest {
             .setProxyAddress(serverSocket.getLocalSocketAddress()).build(),
         tooManyPingsRunnable,
         DEFAULT_MAX_INBOUND_METADATA_SIZE,
-        transportTracer);
+        transportTracer,
+        false);
     clientTransport.start(transportListener);
 
     Socket sock = serverSocket.accept();
@@ -1870,7 +1982,8 @@ public class OkHttpClientTransportTest {
             .setProxyAddress(serverSocket.getLocalSocketAddress()).build(),
         tooManyPingsRunnable,
         DEFAULT_MAX_INBOUND_METADATA_SIZE,
-        transportTracer);
+        transportTracer,
+        false);
     clientTransport.start(transportListener);
 
     Socket sock = serverSocket.accept();
@@ -2120,7 +2233,7 @@ public class OkHttpClientTransportTest {
     // The wait is safe; nextFrame is called in a loop and can have spurious wakeups
     @SuppressWarnings("WaitNotInLoop")
     @Override
-    public boolean nextFrame(Handler handler) throws IOException {
+    public boolean nextFrame(FrameReader.Handler handler) throws IOException {
       Result result;
       try {
         result = nextResults.take();

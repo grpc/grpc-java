@@ -31,6 +31,14 @@ import javax.annotation.concurrent.ThreadSafe;
 public abstract class Server {
 
   /**
+   * Key for accessing the {@link Server} instance inside server RPC {@link Context}. It's
+   * unclear to us what users would need. If you think you need to use this, please file an
+   * issue for us to discuss a public API.
+   */
+  static final Context.Key<Server> SERVER_CONTEXT_KEY =
+      Context.key("io.grpc.Server");
+
+  /**
    * Bind and start the server.  After this call returns, clients may begin connecting to the
    * listening socket(s).
    *
@@ -106,6 +114,10 @@ public abstract class Server {
    * Initiates an orderly shutdown in which preexisting calls continue but new calls are rejected.
    * After this call returns, this server has released the listening socket(s) and may be reused by
    * another server.
+   *
+   * <p>Note that this method will not wait for preexisting calls to finish before returning.
+   * {@link #awaitTermination()} or {@link #awaitTermination(long, TimeUnit)} needs to be called to
+   * wait for existing calls to finish.
    *
    * @return {@code this} object
    * @since 1.0.0

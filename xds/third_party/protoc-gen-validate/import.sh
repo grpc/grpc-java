@@ -18,8 +18,8 @@
 set -e
 BRANCH=master
 # import GIT_ORIGIN_REV_ID from one of the google internal CLs
-GIT_ORIGIN_REV_ID=8e6aaf55f4954f1ef9d3ee2e8f5a50e79cc04f8f
-GIT_REPO="https://github.com/lyft/protoc-gen-validate.git"
+GIT_ORIGIN_REV_ID=ab56c3dd1cf9b516b62c5087e1ec1471bd63631e
+GIT_REPO="https://github.com/envoyproxy/protoc-gen-validate.git"
 GIT_BASE_DIR=protoc-gen-validate
 SOURCE_PROTO_BASE_DIR=protoc-gen-validate
 TARGET_PROTO_BASE_DIR=src/main/proto
@@ -37,6 +37,7 @@ git checkout $GIT_ORIGIN_REV_ID
 popd
 
 cp -p "${tmpdir}/${GIT_BASE_DIR}/LICENSE" LICENSE
+cp -p "${tmpdir}/${GIT_BASE_DIR}/NOTICE" NOTICE
 
 mkdir -p "${TARGET_PROTO_BASE_DIR}"
 pushd "${TARGET_PROTO_BASE_DIR}"

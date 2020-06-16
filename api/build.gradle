@@ -1,5 +1,5 @@
 plugins {
-    id "java"
+    id "java-library"
     id "maven-publish"
 
     id "me.champeau.gradle.jmh"
@@ -8,25 +8,19 @@ plugins {
 
 description = 'gRPC: API'
 
+evaluationDependsOn(project(':grpc-context').path)
+
 dependencies {
-    compile project(':grpc-context'),
-            libraries.errorprone,
-            libraries.jsr305,
-            libraries.animalsniffer_annotations
-    compile (libraries.guava) {
-        // prefer 2.3.3 from libraries instead of 2.1.3
-        exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
-        // prefer 3.0.2 from libraries instead of 3.0.1
-        exclude group: 'com.google.code.findbugs', module: 'jsr305'
-        // prefer 1.17 from libraries instead of 1.14
-        exclude group: 'org.codehaus.mojo', module: 'animal-sniffer-annotations'
-    }
+    api project(':grpc-context'),
+            libraries.jsr305
+    guavaDependency 'implementation'
 
-    testCompile project(':grpc-context').sourceSets.test.output,
+    testImplementation project(':grpc-context').sourceSets.test.output,
             project(':grpc-testing'),
-            project(':grpc-grpclb'),
-            libraries.guava_testlib
-
+            project(':grpc-grpclb')
+    testImplementation (libraries.guava_testlib) {
+        exclude group: 'junit', module: 'junit'
+    }
     jmh project(':grpc-core')
 
     signature "org.codehaus.mojo.signature:java17:1.0@signature"

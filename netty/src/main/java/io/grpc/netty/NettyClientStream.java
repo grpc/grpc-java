@@ -54,7 +54,9 @@ import javax.annotation.Nullable;
  */
 class NettyClientStream extends AbstractClientStream {
   private static final InternalMethodDescriptor methodDescriptorAccessor =
-      new InternalMethodDescriptor(InternalKnownTransport.NETTY);
+      new InternalMethodDescriptor(
+          NettyClientTransport.class.getName().contains("grpc.netty.shaded")
+              ? InternalKnownTransport.NETTY_SHADED : InternalKnownTransport.NETTY);
 
   private final Sink sink = new Sink();
   private final TransportState state;
@@ -75,14 +77,15 @@ class NettyClientStream extends AbstractClientStream {
       AsciiString userAgent,
       StatsTraceContext statsTraceCtx,
       TransportTracer transportTracer,
-      CallOptions callOptions) {
+      CallOptions callOptions,
+      boolean useGetForSafeMethods) {
     super(
         new NettyWritableBufferAllocator(channel.alloc()),
         statsTraceCtx,
         transportTracer,
         headers,
         callOptions,
-        useGet(method));
+        useGetForSafeMethods && method.isSafe());
     this.state = checkNotNull(state, "transportState");
     this.writeQueue = state.handler.getWriteQueue();
     this.method = checkNotNull(method, "method");
@@ -110,10 +113,6 @@ class NettyClientStream extends AbstractClientStream {
   @Override
   public Attributes getAttributes() {
     return state.handler.getAttributes();
-  }
-
-  private static boolean useGet(MethodDescriptor<?, ?> method) {
-    return method.isSafe();
   }
 
   private class Sink implements AbstractClientStream.Sink {

@@ -70,7 +70,8 @@ public abstract class LoadBalancerProvider extends LoadBalancer.Factory {
    *     policy choice.
    * @return a tuple of the fully parsed and validated balancer configuration, else the Status.
    * @since 1.20.0
-   * @see https://github.com/grpc/proposal/blob/master/A24-lb-policy-config.md
+   * @see <a href="https://github.com/grpc/proposal/blob/master/A24-lb-policy-config.md">
+   *   A24-lb-policy-config.md</a>
    */
   public ConfigOrError parseLoadBalancingPolicyConfig(Map<String, ?> rawLoadBalancingPolicyConfig) {
     return UNKNOWN_CONFIG;

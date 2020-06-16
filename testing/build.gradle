@@ -1,5 +1,5 @@
 plugins {
-    id "java"
+    id "java-library"
     id "maven-publish"
 
     id "me.champeau.gradle.japicmp"
@@ -7,18 +7,31 @@ plugins {
 
 description = "gRPC: Testing"
 
+evaluationDependsOn(project(':grpc-core').path)
+
 dependencies {
-    compile project(':grpc-core'),
+    api project(':grpc-core'),
             project(':grpc-stub'),
             libraries.junit
 
-    testCompile (libraries.mockito) {
-        // prefer 1.3 from JUnit instead of 1.1
+    censusApiDependency 'implementation'
+
+    testImplementation (libraries.mockito) {
+        // prefer our own versions instead of mockito's dependency
         exclude group: 'org.hamcrest', module: 'hamcrest-core'
     }
 
-    testCompile project(':grpc-testing-proto'),
+    testImplementation project(':grpc-testing-proto'),
             project(':grpc-core').sourceSets.test.output
 }
 
 javadoc { exclude 'io/grpc/internal/**' }
+
+jacocoTestReport {
+    classDirectories.from = sourceSets.main.output.collect {
+        fileTree(dir: it,
+        exclude: [
+                '**/io/grpc/internal/testing/**',
+        ])
+    }
+}

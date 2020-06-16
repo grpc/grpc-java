@@ -2,18 +2,17 @@ syntax = "proto3";
 
 package envoy.service.discovery.v2;
 
-option java_outer_classname = "AdsProto";
-option java_multiple_files = true;
-option java_package = "io.envoyproxy.envoy.service.discovery.v2";
-option go_package = "v2";
-option java_generic_services = true;
-
 import "envoy/api/v2/discovery.proto";
 
-// [#not-implemented-hide:] Not configuration. Workaround c++ protobuf issue with importing
-// services: https://github.com/google/protobuf/issues/4221
-message AdsDummy {
-}
+import "udpa/annotations/status.proto";
+
+option java_package = "io.envoyproxy.envoy.service.discovery.v2";
+option java_outer_classname = "AdsProto";
+option java_multiple_files = true;
+option java_generic_services = true;
+option (udpa.annotations.file_status).package_version_status = FROZEN;
+
+// [#protodoc-title: Aggregated Discovery Service (ADS)]
 
 // [#not-implemented-hide:] Discovery services for endpoints, clusters, routes,
 // and listeners are retained in the package `envoy.api.v2` for backwards
@@ -28,11 +27,16 @@ message AdsDummy {
 // the multiplexed singleton APIs at the Envoy instance and management server.
 service AggregatedDiscoveryService {
   // This is a gRPC-only API.
-  rpc StreamAggregatedResources(stream envoy.api.v2.DiscoveryRequest)
-      returns (stream envoy.api.v2.DiscoveryResponse) {
+  rpc StreamAggregatedResources(stream api.v2.DiscoveryRequest)
+      returns (stream api.v2.DiscoveryResponse) {
   }
 
-  rpc DeltaAggregatedResources(stream envoy.api.v2.DeltaDiscoveryRequest)
-      returns (stream envoy.api.v2.DeltaDiscoveryResponse) {
+  rpc DeltaAggregatedResources(stream api.v2.DeltaDiscoveryRequest)
+      returns (stream api.v2.DeltaDiscoveryResponse) {
   }
+}
+
+// [#not-implemented-hide:] Not configuration. Workaround c++ protobuf issue with importing
+// services: https://github.com/google/protobuf/issues/4221
+message AdsDummy {
 }

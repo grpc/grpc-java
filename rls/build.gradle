@@ -1,0 +1,39 @@
+plugins {
+    id "java"
+    id "maven-publish"
+    id "com.google.protobuf"
+    id "jacoco"
+}
+
+description = "gRPC: RouteLookupService Loadbalancing plugin"
+
+evaluationDependsOn(project(':grpc-core').path)
+
+dependencies {
+    implementation project(':grpc-core'),
+            project(':grpc-protobuf'),
+            project(':grpc-stub')
+    guavaDependency 'implementation'
+    compileOnly libraries.javax_annotation
+    testImplementation libraries.truth,
+            project(':grpc-testing'),
+            project(':grpc-testing-proto'),
+            project(':grpc-core').sourceSets.test.output  // for FakeClock
+}
+
+javadoc {
+    exclude 'io/grpc/rls/internal/**'
+    // do not publish javadoc since it is not published yet
+    exclude 'io/grpc/rls/**'
+}
+
+jacocoTestReport {
+    classDirectories.from = sourceSets.main.output.collect {
+        fileTree(dir: it, exclude: ['**/io/grpc/lookup/**'])
+    }
+}
+
+configureProtoCompilation()
+
+// do not publish 'grpc-rls'
+[publishMavenPublicationToMavenRepository]*.onlyIf { false }

@@ -20,11 +20,13 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 
+import io.grpc.ChannelLogger;
 import io.grpc.InternalServiceProviders;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.ServiceConfigParser;
 import io.grpc.NameResolverProvider;
 import io.grpc.SynchronizationContext;
+import io.grpc.internal.FakeClock;
 import io.grpc.internal.GrpcUtil;
 import java.net.URI;
 import org.junit.Test;
@@ -41,11 +43,15 @@ public class XdsNameResolverProviderTest {
           throw new AssertionError(e);
         }
       });
+
+  private final FakeClock fakeClock = new FakeClock();
   private final NameResolver.Args args = NameResolver.Args.newBuilder()
       .setDefaultPort(8080)
       .setProxyDetector(GrpcUtil.NOOP_PROXY_DETECTOR)
       .setSynchronizationContext(syncContext)
       .setServiceConfigParser(mock(ServiceConfigParser.class))
+      .setScheduledExecutorService(fakeClock.getScheduledExecutorService())
+      .setChannelLogger(mock(ChannelLogger.class))
       .build();
 
   private XdsNameResolverProvider provider = new XdsNameResolverProvider();
@@ -70,14 +76,42 @@ public class XdsNameResolverProviderTest {
   @Test
   public void newNameResolver() {
     assertThat(
-        provider.newNameResolver(URI.create("xds-experimental://1.1.1.1/foo.googleapis.com"), args))
+        provider.newNameResolver(URI.create("xds://1.1.1.1/foo.googleapis.com"), args))
         .isInstanceOf(XdsNameResolver.class);
     assertThat(
-        provider.newNameResolver(URI.create("xds-experimental:///foo.googleapis.com"), args))
+        provider.newNameResolver(URI.create("xds:///foo.googleapis.com"), args))
         .isInstanceOf(XdsNameResolver.class);
     assertThat(
-        provider.newNameResolver(URI.create("notxds-experimental://1.1.1.1/foo.googleapis.com"),
+        provider.newNameResolver(URI.create("notxds://1.1.1.1/foo.googleapis.com"),
             args))
         .isNull();
+  }
+
+  @Test
+  public void validName_withAuthority() {
+    XdsNameResolver resolver =
+        provider.newNameResolver(
+            URI.create("xds://trafficdirector.google.com/foo.googleapis.com"), args);
+    assertThat(resolver).isNotNull();
+    assertThat(resolver.getServiceAuthority()).isEqualTo("foo.googleapis.com");
+  }
+
+  @Test
+  public void validName_noAuthority() {
+    XdsNameResolver resolver =
+        provider.newNameResolver(URI.create("xds:///foo.googleapis.com"), args);
+    assertThat(resolver).isNotNull();
+    assertThat(resolver.getServiceAuthority()).isEqualTo("foo.googleapis.com");
+  }
+
+  @Test
+  public void invalidName_hostnameContainsUnderscore() {
+    URI uri = URI.create("xds:///foo_bar.googleapis.com");
+    try {
+      provider.newNameResolver(uri, args);
+      fail("Expected IllegalArgumentException");
+    } catch (IllegalArgumentException e) {
+      // Expected
+    }
   }
 }

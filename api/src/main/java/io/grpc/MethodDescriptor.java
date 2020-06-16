@@ -51,8 +51,7 @@ public final class MethodDescriptor<ReqT, RespT> {
 
   // Must be set to InternalKnownTransport.values().length
   // Not referenced to break the dependency.
-  private final AtomicReferenceArray<Object> rawMethodNames = new AtomicReferenceArray<>(1);
-
+  private final AtomicReferenceArray<Object> rawMethodNames = new AtomicReferenceArray<>(2);
 
   /**
    * Gets the cached "raw" method name for this Method Descriptor.  The raw name is transport
@@ -86,7 +85,7 @@ public final class MethodDescriptor<ReqT, RespT> {
     UNARY,
 
     /**
-     * Zero or more request messages followed by one response message.
+     * Zero or more request messages with one response message.
      */
     CLIENT_STREAMING,
 
@@ -107,9 +106,8 @@ public final class MethodDescriptor<ReqT, RespT> {
     UNKNOWN;
 
     /**
-     * Returns {@code true} if the client will immediately send one request message to the server
-     * after calling {@link ClientCall#start(io.grpc.ClientCall.Listener, io.grpc.Metadata)}
-     * and then immediately half-close the stream by calling {@link io.grpc.ClientCall#halfClose()}.
+     * Returns {@code true} for {@code UNARY} and {@code SERVER_STREAMING}, which do not permit the
+     * client to stream.
      *
      * @since 1.0.0
      */
@@ -118,9 +116,8 @@ public final class MethodDescriptor<ReqT, RespT> {
     }
 
     /**
-     * Returns {@code true} if the server will immediately send one response message to the client
-     * upon receipt of {@link io.grpc.ServerCall.Listener#onHalfClose()} and then immediately
-     * close the stream by calling {@link ServerCall#close(Status, io.grpc.Metadata)}.
+     * Returns {@code true} for {@code UNARY} and {@code CLIENT_STREAMING}, which do not permit the
+     * server to stream.
      *
      * @since 1.0.0
      */
@@ -224,7 +221,7 @@ public final class MethodDescriptor<ReqT, RespT> {
       boolean idempotent,
       boolean safe,
       boolean sampledToLocalTracing) {
-
+    assert !safe || idempotent : "safe should imply idempotent";
     this.type = Preconditions.checkNotNull(type, "type");
     this.fullMethodName = Preconditions.checkNotNull(fullMethodName, "fullMethodName");
     this.serviceName = extractFullServiceName(fullMethodName);
@@ -234,8 +231,6 @@ public final class MethodDescriptor<ReqT, RespT> {
     this.idempotent = idempotent;
     this.safe = safe;
     this.sampledToLocalTracing = sampledToLocalTracing;
-    Preconditions.checkArgument(!safe || type == MethodType.UNARY,
-        "Only unary methods can be specified safe");
   }
 
   /**
@@ -352,7 +347,6 @@ public final class MethodDescriptor<ReqT, RespT> {
    *
    * @since 1.0.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1775")
   public boolean isIdempotent() {
     return idempotent;
   }
@@ -364,7 +358,6 @@ public final class MethodDescriptor<ReqT, RespT> {
    *
    * @since 1.1.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1775")
   public boolean isSafe() {
     return safe;
   }
@@ -492,7 +485,6 @@ public final class MethodDescriptor<ReqT, RespT> {
      * @param responseMarshaller the marshaller to use.
      * @since 1.1.0
      */
-    @SuppressWarnings("unchecked")
     public Builder<ReqT, RespT> setResponseMarshaller(Marshaller<RespT> responseMarshaller) {
       this.responseMarshaller = responseMarshaller;
       return this;
@@ -536,25 +528,32 @@ public final class MethodDescriptor<ReqT, RespT> {
 
     /**
      * Sets whether the method is idempotent.  If true, calling this method more than once doesn't
-     * have additional side effects.
+     * have additional side effects. If {@code false}, method is also not safe. Note that implies
+     * calling {@code builder.setIdempotent(false).setIdempotent(true)} will leave {@code
+     * isSafe() == false}.
      *
      * @since 1.1.0
      */
-    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1775")
     public Builder<ReqT, RespT> setIdempotent(boolean idempotent) {
       this.idempotent = idempotent;
+      if (!idempotent) {
+        this.safe = false;
+      }
       return this;
     }
 
     /**
      * Sets whether this method is safe.  If true, calling this method any number of times doesn't
-     * have side effects.
+     * have side effects. If {@code true}, method is also idempotent. Note that implies calling
+     * {@code builder.setSafe(true).setSafe(false)} will leave {@code isIdempotent() == true}.
      *
      * @since 1.1.0
      */
-    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1775")
     public Builder<ReqT, RespT> setSafe(boolean safe) {
       this.safe = safe;
+      if (safe) {
+        this.idempotent = true;
+      }
       return this;
     }
 

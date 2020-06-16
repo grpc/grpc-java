@@ -84,10 +84,15 @@ import io.netty.handler.codec.http2.Http2Settings;
 import io.netty.handler.codec.http2.Http2Stream;
 import io.netty.util.AsciiString;
 import java.io.InputStream;
+import java.text.MessageFormat;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.logging.Handler;
+import java.util.logging.LogRecord;
+import java.util.logging.Logger;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -357,6 +362,19 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   }
 
   @Test
+  public void receivedGoAwayShouldNotAffectRacingQueuedStreamId() throws Exception {
+    // This command has not actually been executed yet
+    ChannelFuture future = writeQueue().enqueue(
+        newCreateStreamCommand(grpcHeaders, streamTransportState), true);
+    channelRead(goAwayFrame(streamId));
+    verify(streamListener, never())
+        .closed(any(Status.class), any(Metadata.class));
+    verify(streamListener, never())
+        .closed(any(Status.class), any(RpcProgress.class), any(Metadata.class));
+    assertTrue(future.isDone());
+  }
+
+  @Test
   public void receivedResetWithRefuseCode() throws Exception {
     ChannelFuture future = enqueue(newCreateStreamCommand(grpcHeaders, streamTransportState));
     channelRead(rstStreamFrame(streamId, (int) Http2Error.REFUSED_STREAM.code() ));
@@ -457,6 +475,37 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     channelRead(goAwayFrame(0, 11 /* ENHANCE_YOUR_CALM */,
           Unpooled.copiedBuffer("too_many_pings", UTF_8)));
     assertTrue(b.get());
+  }
+
+  @Test
+  public void receivedGoAway_enhanceYourCalmShouldLogDebugData() throws Exception {
+    final AtomicReference<LogRecord> logRef = new AtomicReference<>();
+    Handler handler = new Handler() {
+      @Override
+      public void publish(LogRecord record) {
+        logRef.set(record);
+      }
+
+      @Override
+      public void flush() {
+      }
+
+      @Override
+      public void close() throws SecurityException {
+      }
+    };
+    Logger logger = Logger.getLogger(NettyClientHandler.class.getName());
+    try {
+      logger.addHandler(handler);
+      enqueue(newCreateStreamCommand(grpcHeaders, streamTransportState));
+      channelRead(goAwayFrame(0, 11 /* Enhance your calm */,
+          Unpooled.copiedBuffer("this is a test", UTF_8)));
+      assertNotNull(logRef.get());
+      assertTrue(MessageFormat.format(logRef.get().getMessage(), logRef.get().getParameters())
+          .contains("Debug data: this is a test"));
+    } finally {
+      logger.removeHandler(handler);
+    }
   }
 
   @Test
@@ -741,6 +790,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
         frameWriter(),
         lifecycleManager,
         mockKeepAliveManager,
+        false,
         flowControlWindow,
         maxHeaderListSize,
         stopwatchSupplier,

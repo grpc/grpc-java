@@ -51,6 +51,7 @@ import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.CheckReturnValue;
@@ -65,7 +66,8 @@ import javax.net.ssl.SSLException;
 public final class NettyChannelBuilder
     extends AbstractManagedChannelImplBuilder<NettyChannelBuilder> {
 
-  public static final int DEFAULT_FLOW_CONTROL_WINDOW = 1048576; // 1MiB
+  // 1MiB.
+  public static final int DEFAULT_FLOW_CONTROL_WINDOW = 1024 * 1024;
 
   private static final long AS_LARGE_AS_INFINITE = TimeUnit.DAYS.toNanos(1000L);
 
@@ -82,6 +84,7 @@ public final class NettyChannelBuilder
   private ChannelFactory<? extends Channel> channelFactory = DEFAULT_CHANNEL_FACTORY;
   private ObjectPool<? extends EventLoopGroup> eventLoopGroupPool = DEFAULT_EVENT_LOOP_GROUP_POOL;
   private SslContext sslContext;
+  private boolean autoFlowControl = true;
   private int flowControlWindow = DEFAULT_FLOW_CONTROL_WINDOW;
   private int maxHeaderListSize = GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE;
   private long keepAliveTimeNanos = KEEPALIVE_TIME_NANOS_DISABLED;
@@ -91,10 +94,17 @@ public final class NettyChannelBuilder
   private LocalSocketPicker localSocketPicker;
 
   /**
+   * If true, indicates that the transport may use the GET method for RPCs, and may include the
+   * request body in the query params.
+   */
+  private final boolean useGetForSafeMethods = false;
+
+  /**
    * Creates a new builder with the given server address. This factory method is primarily intended
    * for using Netty Channel types other than SocketChannel. {@link #forAddress(String, int)} should
    * generally be preferred over this method, since that API permits delaying DNS lookups and
-   * noticing changes to DNS.
+   * noticing changes to DNS. If an unresolved InetSocketAddress is passed in, then it will remain
+   * unresolved.
    */
   @CheckReturnValue
   public static NettyChannelBuilder forAddress(SocketAddress serverAddress) {
@@ -239,12 +249,28 @@ public final class NettyChannelBuilder
   }
 
   /**
-   * Sets the flow control window in bytes. If not called, the default value
-   * is {@link #DEFAULT_FLOW_CONTROL_WINDOW}).
+   * Sets the initial flow control window in bytes. Setting initial flow control window enables auto
+   * flow control tuning using bandwidth-delay product algorithm. To disable auto flow control
+   * tuning, use {@link #flowControlWindow(int)}. By default, auto flow control is enabled with
+   * initial flow control window size of {@link #DEFAULT_FLOW_CONTROL_WINDOW}.
+   */
+  public NettyChannelBuilder initialFlowControlWindow(int initialFlowControlWindow) {
+    checkArgument(initialFlowControlWindow > 0, "initialFlowControlWindow must be positive");
+    this.flowControlWindow = initialFlowControlWindow;
+    this.autoFlowControl = true;
+    return this;
+  }
+
+  /**
+   * Sets the flow control window in bytes. Setting flowControlWindow disables auto flow control
+   * tuning; use {@link #initialFlowControlWindow(int)} to enable auto flow control tuning. If not
+   * called, the default value is {@link #DEFAULT_FLOW_CONTROL_WINDOW}) with auto flow control
+   * tuning.
    */
   public NettyChannelBuilder flowControlWindow(int flowControlWindow) {
     checkArgument(flowControlWindow > 0, "flowControlWindow must be positive");
     this.flowControlWindow = flowControlWindow;
+    this.autoFlowControl = false;
     return this;
   }
 
@@ -276,23 +302,6 @@ public final class NettyChannelBuilder
   public NettyChannelBuilder maxInboundMetadataSize(int bytes) {
     checkArgument(bytes > 0, "maxInboundMetadataSize must be > 0");
     this.maxHeaderListSize = bytes;
-    return this;
-  }
-
-  /**
-   * Equivalent to using {@link #negotiationType(NegotiationType)} with {@code PLAINTEXT} or
-   * {@code PLAINTEXT_UPGRADE}.
-   *
-   * @deprecated use {@link #usePlaintext()} instead.
-   */
-  @Override
-  @Deprecated
-  public NettyChannelBuilder usePlaintext(boolean skipNegotiation) {
-    if (skipNegotiation) {
-      negotiationType(NegotiationType.PLAINTEXT);
-    } else {
-      negotiationType(NegotiationType.PLAINTEXT_UPGRADE);
-    }
     return this;
   }
 
@@ -408,14 +417,15 @@ public final class NettyChannelBuilder
           throw new RuntimeException(ex);
         }
       }
-      negotiator = createProtocolNegotiatorByType(negotiationType, localSslContext);
+      negotiator = createProtocolNegotiatorByType(negotiationType, localSslContext,
+          this.getOffloadExecutorPool());
     }
 
     return new NettyTransportFactory(
         negotiator, channelFactory, channelOptions,
-        eventLoopGroupPool, flowControlWindow, maxInboundMessageSize(),
+        eventLoopGroupPool, autoFlowControl, flowControlWindow, maxInboundMessageSize(),
         maxHeaderListSize, keepAliveTimeNanos, keepAliveTimeoutNanos, keepAliveWithoutCalls,
-        transportTracerFactory, localSocketPicker);
+        transportTracerFactory, localSocketPicker, useGetForSafeMethods);
   }
 
   @VisibleForTesting
@@ -451,14 +461,15 @@ public final class NettyChannelBuilder
   @CheckReturnValue
   static ProtocolNegotiator createProtocolNegotiatorByType(
       NegotiationType negotiationType,
-      SslContext sslContext) {
+      SslContext sslContext,
+      ObjectPool<? extends Executor> executorPool) {
     switch (negotiationType) {
       case PLAINTEXT:
         return ProtocolNegotiators.plaintext();
       case PLAINTEXT_UPGRADE:
         return ProtocolNegotiators.plaintextUpgrade();
       case TLS:
-        return ProtocolNegotiators.tls(sslContext);
+        return ProtocolNegotiators.tls(sslContext, executorPool);
       default:
         throw new IllegalArgumentException("Unsupported negotiationType: " + negotiationType);
     }
@@ -528,6 +539,7 @@ public final class NettyChannelBuilder
     private final Map<ChannelOption<?>, ?> channelOptions;
     private final ObjectPool<? extends EventLoopGroup> groupPool;
     private final EventLoopGroup group;
+    private final boolean autoFlowControl;
     private final int flowControlWindow;
     private final int maxMessageSize;
     private final int maxHeaderListSize;
@@ -536,20 +548,23 @@ public final class NettyChannelBuilder
     private final boolean keepAliveWithoutCalls;
     private final TransportTracer.Factory transportTracerFactory;
     private final LocalSocketPicker localSocketPicker;
+    private final boolean useGetForSafeMethods;
 
     private boolean closed;
 
     NettyTransportFactory(ProtocolNegotiator protocolNegotiator,
         ChannelFactory<? extends Channel> channelFactory,
         Map<ChannelOption<?>, ?> channelOptions, ObjectPool<? extends EventLoopGroup> groupPool,
-        int flowControlWindow, int maxMessageSize, int maxHeaderListSize,
+        boolean autoFlowControl, int flowControlWindow, int maxMessageSize, int maxHeaderListSize,
         long keepAliveTimeNanos, long keepAliveTimeoutNanos, boolean keepAliveWithoutCalls,
-        TransportTracer.Factory transportTracerFactory, LocalSocketPicker localSocketPicker) {
+        TransportTracer.Factory transportTracerFactory, LocalSocketPicker localSocketPicker,
+        boolean useGetForSafeMethods) {
       this.protocolNegotiator = checkNotNull(protocolNegotiator, "protocolNegotiator");
       this.channelFactory = channelFactory;
       this.channelOptions = new HashMap<ChannelOption<?>, Object>(channelOptions);
       this.groupPool = groupPool;
       this.group = groupPool.getObject();
+      this.autoFlowControl = autoFlowControl;
       this.flowControlWindow = flowControlWindow;
       this.maxMessageSize = maxMessageSize;
       this.maxHeaderListSize = maxHeaderListSize;
@@ -559,6 +574,7 @@ public final class NettyChannelBuilder
       this.transportTracerFactory = transportTracerFactory;
       this.localSocketPicker =
           localSocketPicker != null ? localSocketPicker : new LocalSocketPicker();
+      this.useGetForSafeMethods = useGetForSafeMethods;
     }
 
     @Override
@@ -588,11 +604,11 @@ public final class NettyChannelBuilder
       // TODO(carl-mastrangelo): Pass channelLogger in.
       NettyClientTransport transport = new NettyClientTransport(
           serverAddress, channelFactory, channelOptions, group,
-          localNegotiator, flowControlWindow,
+          localNegotiator, autoFlowControl, flowControlWindow,
           maxMessageSize, maxHeaderListSize, keepAliveTimeNanosState.get(), keepAliveTimeoutNanos,
           keepAliveWithoutCalls, options.getAuthority(), options.getUserAgent(),
           tooManyPingsRunnable, transportTracerFactory.create(), options.getEagAttributes(),
-          localSocketPicker, channelLogger);
+          localSocketPicker, channelLogger, useGetForSafeMethods);
       return transport;
     }
 

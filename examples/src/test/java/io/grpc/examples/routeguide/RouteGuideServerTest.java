@@ -85,7 +85,7 @@ public class RouteGuideServerTest {
   }
 
   @After
-  public void tearDown() {
+  public void tearDown() throws Exception {
     server.stop();
   }
 

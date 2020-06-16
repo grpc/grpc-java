@@ -260,7 +260,7 @@ public class ServerCallsTest {
   }
 
   @Test
-  public void cannotDisableAutoFlowControlAfterServiceInvocation() throws Exception {
+  public void cannotDisableAutoRequestAfterServiceInvocation() throws Exception {
     final AtomicReference<ServerCallStreamObserver<Integer>> callObserver =
         new AtomicReference<>();
     ServerCallHandler<Integer, Integer> callHandler =
@@ -276,7 +276,7 @@ public class ServerCallsTest {
         callHandler.startCall(serverCall, new Metadata());
     callListener.onMessage(1);
     try {
-      callObserver.get().disableAutoInboundFlowControl();
+      callObserver.get().disableAutoRequest();
       fail("Cannot set onCancel handler after service invocation");
     } catch (IllegalStateException expected) {
       // Expected
@@ -307,7 +307,30 @@ public class ServerCallsTest {
   }
 
   @Test
-  public void disablingInboundAutoFlowControlForUnaryHasNoEffect() throws Exception {
+  public void disablingInboundAutoRequestSuppressesRequestsForMoreMessages() throws Exception {
+    ServerCallHandler<Integer, Integer> callHandler =
+        ServerCalls.asyncBidiStreamingCall(
+            new ServerCalls.BidiStreamingMethod<Integer, Integer>() {
+              @Override
+              public StreamObserver<Integer> invoke(StreamObserver<Integer> responseObserver) {
+                ServerCallStreamObserver<Integer> serverCallObserver =
+                    (ServerCallStreamObserver<Integer>) responseObserver;
+                serverCallObserver.disableAutoRequest();
+                return new ServerCalls.NoopStreamObserver<>();
+              }
+            });
+    ServerCall.Listener<Integer> callListener =
+        callHandler.startCall(serverCall, new Metadata());
+    callListener.onReady();
+    // Transport should not call this if nothing has been requested but forcing it here
+    // to verify that message delivery does not trigger a call to request(1).
+    callListener.onMessage(1);
+    // Should never be called
+    assertThat(serverCall.requestCalls).isEmpty();
+  }
+
+  @Test
+  public void disablingInboundAutoRequestForUnaryHasNoEffect() throws Exception {
     ServerCallHandler<Integer, Integer> callHandler =
         ServerCalls.asyncUnaryCall(
             new ServerCalls.UnaryMethod<Integer, Integer>() {
@@ -315,7 +338,7 @@ public class ServerCallsTest {
               public void invoke(Integer req, StreamObserver<Integer> responseObserver) {
                 ServerCallStreamObserver<Integer> serverCallObserver =
                     (ServerCallStreamObserver<Integer>) responseObserver;
-                serverCallObserver.disableAutoInboundFlowControl();
+                serverCallObserver.disableAutoRequest();
               }
             });
     callHandler.startCall(serverCall, new Metadata());
@@ -498,7 +521,7 @@ public class ServerCallsTest {
     semaphore.acquire();
     clientCall.request(3);
     clientCall.halfClose();
-    latch.await(5, TimeUnit.SECONDS);
+    assertThat(latch.await(5, TimeUnit.SECONDS)).isTrue();
     // Very that number of messages produced in each onReady handler call matches the number
     // requested by the client.
     assertArrayEquals(new int[]{0, 1, 1, 2, 2, 2}, receivedMessages);

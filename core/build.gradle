@@ -1,5 +1,5 @@
 plugins {
-    id "java"
+    id "java-library"
     id "maven-publish"
 
     id "me.champeau.gradle.japicmp"
@@ -13,33 +13,22 @@ evaluationDependsOn(project(':grpc-context').path)
 evaluationDependsOn(project(':grpc-api').path)
 
 dependencies {
-    compile project(':grpc-api'),
-            libraries.gson,
+    api project(':grpc-api')
+    implementation libraries.gson,
             libraries.android_annotations,
-            libraries.perfmark
-    compile (libraries.opencensus_api) {
-        // prefer 3.0.2 from libraries instead of 3.0.1
-        exclude group: 'com.google.code.findbugs', module: 'jsr305'
-        // prefer 20.0 from libraries instead of 19.0
-        exclude group: 'com.google.guava', module: 'guava'
-        // we'll always be more up-to-date
-        exclude group: 'io.grpc', module: 'grpc-context'
-    }
-    compile (libraries.opencensus_contrib_grpc_metrics) {
-        // prefer 3.0.2 from libraries instead of 3.0.1
-        exclude group: 'com.google.code.findbugs', module: 'jsr305'
-        // we'll always be more up-to-date
-        exclude group: 'io.grpc', module: 'grpc-context'
-        // prefer 20.0 from libraries instead of 19.0
-        exclude group: 'com.google.guava', module: 'guava'
-    }
-
-    testCompile project(':grpc-context').sourceSets.test.output,
+            libraries.animalsniffer_annotations,
+            libraries.errorprone
+    guavaDependency 'implementation'
+    perfmarkDependency 'implementation'
+    testImplementation project(':grpc-context').sourceSets.test.output,
             project(':grpc-api').sourceSets.test.output,
             project(':grpc-testing'),
-            project(':grpc-grpclb'),
-            libraries.guava_testlib,
-            libraries.opencensus_impl
+            project(':grpc-grpclb')
+    testImplementation (libraries.guava_testlib) {
+        exclude group: 'junit', module: 'junit'
+    }
+
+    testRuntimeOnly project(':grpc-census')
 
     jmh project(':grpc-testing')
 
@@ -59,4 +48,19 @@ animalsniffer {
         sourceSets.main,
         sourceSets.test
     ]
+}
+
+import net.ltgt.gradle.errorprone.CheckSeverity
+
+plugins.withId("java") {
+    compileJmhJava {
+        // This project targets Java 7 (no method references)
+        options.errorprone.check("UnnecessaryAnonymousClass", CheckSeverity.OFF)
+    }
+}
+
+task versionFile() {
+    doLast {
+        new File(buildDir, "version").write("${project.version}\n")
+    }
 }

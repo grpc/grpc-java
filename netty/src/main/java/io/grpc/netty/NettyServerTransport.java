@@ -38,6 +38,7 @@ import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 import java.io.IOException;
 import java.net.SocketAddress;
+import java.net.SocketException;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.logging.Level;
@@ -50,11 +51,10 @@ class NettyServerTransport implements ServerTransport {
   // connectionLog is for connection related messages only
   private static final Logger connectionLog = Logger.getLogger(
       String.format("%s.connections", NettyServerTransport.class.getName()));
+
   // Some exceptions are not very useful and add too much noise to the log
-  private static final ImmutableList<String> QUIET_ERRORS = ImmutableList.of(
-      "Connection reset by peer",
-      "An existing connection was forcibly closed by the remote host",
-      "An established connection was aborted by the software in your host machine");
+  private static final ImmutableList<String> QUIET_EXCEPTIONS = ImmutableList.of(
+      "NativeIoException" /* Netty exceptions */);
 
   private final InternalLogId logId;
   private final Channel channel;
@@ -65,6 +65,7 @@ class NettyServerTransport implements ServerTransport {
   private NettyServerHandler grpcHandler;
   private ServerTransportListener listener;
   private boolean terminated;
+  private final boolean autoFlowControl;
   private final int flowControlWindow;
   private final int maxMessageSize;
   private final int maxHeaderListSize;
@@ -85,6 +86,7 @@ class NettyServerTransport implements ServerTransport {
       List<? extends ServerStreamTracer.Factory> streamTracerFactories,
       TransportTracer transportTracer,
       int maxStreams,
+      boolean autoFlowControl,
       int flowControlWindow,
       int maxMessageSize,
       int maxHeaderListSize,
@@ -102,6 +104,7 @@ class NettyServerTransport implements ServerTransport {
         Preconditions.checkNotNull(streamTracerFactories, "streamTracerFactories");
     this.transportTracer = Preconditions.checkNotNull(transportTracer, "transportTracer");
     this.maxStreams = maxStreams;
+    this.autoFlowControl = autoFlowControl;
     this.flowControlWindow = flowControlWindow;
     this.maxMessageSize = maxMessageSize;
     this.maxHeaderListSize = maxHeaderListSize;
@@ -122,7 +125,6 @@ class NettyServerTransport implements ServerTransport {
 
     // Create the Netty handler for the pipeline.
     grpcHandler = createHandler(listener, channelUnused);
-    NettyHandlerSettings.setAutoWindow(grpcHandler);
 
     // Notify when the channel closes.
     final class TerminationNotifier implements ChannelFutureListener {
@@ -184,12 +186,10 @@ class NettyServerTransport implements ServerTransport {
    */
   @VisibleForTesting
   static Level getLogLevel(Throwable t) {
-    if (t instanceof IOException && t.getMessage() != null) {
-      for (String msg : QUIET_ERRORS) {
-        if (t.getMessage().contains(msg)) {
-          return Level.FINE;
-        }
-      }
+    if (t.getClass().equals(IOException.class)
+        || t.getClass().equals(SocketException.class)
+        || QUIET_EXCEPTIONS.contains(t.getClass().getSimpleName())) {
+      return Level.FINE;
     }
     return Level.INFO;
   }
@@ -262,6 +262,7 @@ class NettyServerTransport implements ServerTransport {
         streamTracerFactories,
         transportTracer,
         maxStreams,
+        autoFlowControl,
         flowControlWindow,
         maxHeaderListSize,
         maxMessageSize,

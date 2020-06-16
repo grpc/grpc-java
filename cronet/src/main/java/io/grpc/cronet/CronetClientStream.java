@@ -47,10 +47,8 @@ import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Queue;
 import java.util.concurrent.Executor;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
@@ -107,10 +105,12 @@ class CronetClientStream extends AbstractClientStream {
       MethodDescriptor<?, ?> method,
       StatsTraceContext statsTraceCtx,
       CallOptions callOptions,
-      TransportTracer transportTracer) {
+      TransportTracer transportTracer,
+      boolean useGetForSafeMethods,
+      boolean usePutForIdempotentMethods) {
     super(
         new CronetWritableBufferAllocator(), statsTraceCtx, transportTracer, headers, callOptions,
-        method.isSafe());
+        useGetForSafeMethods && method.isSafe());
     this.url = Preconditions.checkNotNull(url, "url");
     this.userAgent = Preconditions.checkNotNull(userAgent, "userAgent");
     this.statsTraceCtx = Preconditions.checkNotNull(statsTraceCtx, "statsTraceCtx");
@@ -118,7 +118,7 @@ class CronetClientStream extends AbstractClientStream {
     this.headers = Preconditions.checkNotNull(headers, "headers");
     this.transport = Preconditions.checkNotNull(transport, "transport");
     this.startCallback = Preconditions.checkNotNull(startCallback, "startCallback");
-    this.idempotent = method.isIdempotent() || alwaysUsePut;
+    this.idempotent = (usePutForIdempotentMethods && method.isIdempotent()) || alwaysUsePut;
     // Only delay flushing header for unary rpcs.
     this.delayRequestHeader = (method.getType() == MethodDescriptor.MethodType.UNARY);
     this.annotation = callOptions.getOption(CRONET_ANNOTATION_KEY);
@@ -256,7 +256,7 @@ class CronetClientStream extends AbstractClientStream {
   class TransportState extends Http2ClientStreamTransportState {
     private final Object lock;
     @GuardedBy("lock")
-    private Queue<PendingData> pendingData = new LinkedList<PendingData>();
+    private Collection<PendingData> pendingData = new ArrayList<PendingData>();
     @GuardedBy("lock")
     private boolean streamReady;
     @GuardedBy("lock")

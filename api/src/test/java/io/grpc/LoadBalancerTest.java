@@ -25,6 +25,7 @@ import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.Subchannel;
 import java.net.SocketAddress;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
@@ -358,6 +359,41 @@ public class LoadBalancerTest {
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(attrs).build());
     assertThat(serversCapture.get()).isEqualTo(servers);
     assertThat(attrsCapture.get()).isEqualTo(attrs);
+  }
+
+  @Deprecated
+  @Test
+  public void handleResolvedAddresses_noInfiniteLoop() {
+    final List<List<EquivalentAddressGroup>> serversCapture = new ArrayList<>();
+    final List<Attributes> attrsCapture = new ArrayList<>();
+
+    LoadBalancer balancer = new LoadBalancer() {
+      @Override
+      public void handleResolvedAddressGroups(
+          List<EquivalentAddressGroup> servers, Attributes attrs) {
+        serversCapture.add(servers);
+        attrsCapture.add(attrs);
+        super.handleResolvedAddressGroups(servers, attrs);
+      }
+
+      @Override
+      public void handleNameResolutionError(Status error) {
+      }
+
+      @Override
+      public void shutdown() {
+      }
+    };
+
+    List<EquivalentAddressGroup> servers = Arrays.asList(
+        new EquivalentAddressGroup(new SocketAddress(){}),
+        new EquivalentAddressGroup(new SocketAddress(){}));
+    balancer.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(attrs).build());
+    assertThat(serversCapture).hasSize(1);
+    assertThat(attrsCapture).hasSize(1);
+    assertThat(serversCapture.get(0)).isEqualTo(servers);
+    assertThat(attrsCapture.get(0)).isEqualTo(attrs);
   }
 
   private static class NoopHelper extends LoadBalancer.Helper {

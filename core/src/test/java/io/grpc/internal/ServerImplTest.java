@@ -36,6 +36,7 @@ import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -109,6 +110,7 @@ import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Captor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
@@ -485,6 +487,7 @@ public class ServerImplTest {
 
     transportListener.streamCreated(stream, "Waiter/nonexist", requestHeaders);
 
+    verify(stream).setListener(isA(ServerStreamListener.class));
     verify(stream).streamId();
     verify(stream).close(statusCaptor.capture(), any(Metadata.class));
     Status status = statusCaptor.getValue();
@@ -558,6 +561,7 @@ public class ServerImplTest {
     Context callContext = callContextReference.get();
     assertNotNull(callContext);
     assertEquals("context added by tracer", SERVER_TRACER_ADDED_KEY.get(callContext));
+    assertEquals(server, io.grpc.InternalServer.SERVER_CONTEXT_KEY.get(callContext));
 
     streamListener.messagesAvailable(new SingleMessageProducer(STRING_MARSHALLER.stream(request)));
     assertEquals(1, executor.runDueTasks());
@@ -1031,11 +1035,30 @@ public class ServerImplTest {
   }
 
   @Test
+  public void testContextExpiredBeforeStreamCreate_StreamCancelNotCalledBeforeSetListener()
+      throws Exception {
+    AtomicBoolean contextCancelled = new AtomicBoolean(false);
+    AtomicReference<Context> context = new AtomicReference<>();
+    AtomicReference<ServerCall<String, Integer>> callReference = new AtomicReference<>();
+
+    testStreamClose_setup(callReference, context, contextCancelled, 0L);
+
+    // This assert that stream.setListener(jumpListener) is called before stream.cancel(), which
+    // prevents extremely short deadlines causing NPEs.
+    InOrder inOrder = inOrder(stream);
+    inOrder.verify(stream).setListener(any(ServerStreamListener.class));
+    inOrder.verify(stream).cancel(statusCaptor.capture());
+
+    assertThat(statusCaptor.getValue().asException())
+        .hasMessageThat().contains("context timed out");
+    assertTrue(callReference.get().isCancelled());
+  }
+
+  @Test
   public void testStreamClose_clientCancelTriggersImmediateCancellation() throws Exception {
     AtomicBoolean contextCancelled = new AtomicBoolean(false);
     AtomicReference<Context> context = new AtomicReference<>();
-    AtomicReference<ServerCall<String, Integer>> callReference
-        = new AtomicReference<>();
+    AtomicReference<ServerCall<String, Integer>> callReference = new AtomicReference<>();
 
     ServerStreamListener streamListener = testStreamClose_setup(callReference,
         context, contextCancelled, null);
@@ -1057,8 +1080,7 @@ public class ServerImplTest {
   public void testStreamClose_clientOkTriggersDelayedCancellation() throws Exception {
     AtomicBoolean contextCancelled = new AtomicBoolean(false);
     AtomicReference<Context> context = new AtomicReference<>();
-    AtomicReference<ServerCall<String, Integer>> callReference
-        = new AtomicReference<>();
+    AtomicReference<ServerCall<String, Integer>> callReference = new AtomicReference<>();
 
     ServerStreamListener streamListener = testStreamClose_setup(callReference,
         context, contextCancelled, null);
@@ -1081,8 +1103,7 @@ public class ServerImplTest {
   public void testStreamClose_deadlineExceededTriggersImmediateCancellation() throws Exception {
     AtomicBoolean contextCancelled = new AtomicBoolean(false);
     AtomicReference<Context> context = new AtomicReference<>();
-    AtomicReference<ServerCall<String, Integer>> callReference
-        = new AtomicReference<>();
+    AtomicReference<ServerCall<String, Integer>> callReference = new AtomicReference<>();
 
     testStreamClose_setup(callReference, context, contextCancelled, 50L);
 
@@ -1420,8 +1441,9 @@ public class ServerImplTest {
 
   private void ensureServerStateNotLeaked() {
     verify(stream).close(statusCaptor.capture(), metadataCaptor.capture());
-    assertEquals(Status.UNKNOWN, statusCaptor.getValue());
-    assertNull(statusCaptor.getValue().getCause());
+    assertEquals(Status.UNKNOWN.getCode(), statusCaptor.getValue().getCode());
+    // Used in InProcessTransport when set to include the cause with the status
+    assertNotNull(statusCaptor.getValue().getCause());
     assertTrue(metadataCaptor.getValue().keys().isEmpty());
   }
 

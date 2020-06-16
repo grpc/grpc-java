@@ -29,6 +29,9 @@ import java.lang.Thread.UncaughtExceptionHandler;
 import java.net.URI;
 import java.util.Collections;
 import java.util.Map;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.Before;
 import org.junit.Test;
@@ -43,6 +46,10 @@ public class NameResolverTest {
   private final SynchronizationContext syncContext =
       new SynchronizationContext(mock(UncaughtExceptionHandler.class));
   private final ServiceConfigParser parser = mock(ServiceConfigParser.class);
+  private final ScheduledExecutorService scheduledExecutorService =
+      mock(ScheduledExecutorService.class);
+  private final ChannelLogger channelLogger = mock(ChannelLogger.class);
+  private final Executor executor = Executors.newSingleThreadExecutor();
   private URI uri;
   private final NameResolver nameResolver = mock(NameResolver.class);
 
@@ -58,12 +65,18 @@ public class NameResolverTest {
     assertThat(args.getProxyDetector()).isSameInstanceAs(proxyDetector);
     assertThat(args.getSynchronizationContext()).isSameInstanceAs(syncContext);
     assertThat(args.getServiceConfigParser()).isSameInstanceAs(parser);
+    assertThat(args.getScheduledExecutorService()).isSameInstanceAs(scheduledExecutorService);
+    assertThat(args.getChannelLogger()).isSameInstanceAs(channelLogger);
+    assertThat(args.getOffloadExecutor()).isSameInstanceAs(executor);
 
     NameResolver.Args args2 = args.toBuilder().build();
     assertThat(args2.getDefaultPort()).isEqualTo(defaultPort);
     assertThat(args2.getProxyDetector()).isSameInstanceAs(proxyDetector);
     assertThat(args2.getSynchronizationContext()).isSameInstanceAs(syncContext);
     assertThat(args2.getServiceConfigParser()).isSameInstanceAs(parser);
+    assertThat(args2.getScheduledExecutorService()).isSameInstanceAs(scheduledExecutorService);
+    assertThat(args2.getChannelLogger()).isSameInstanceAs(channelLogger);
+    assertThat(args2.getOffloadExecutor()).isSameInstanceAs(executor);
 
     assertThat(args2).isNotSameInstanceAs(args);
     assertThat(args2).isNotEqualTo(args);
@@ -246,6 +259,9 @@ public class NameResolverTest {
         .setProxyDetector(proxyDetector)
         .setSynchronizationContext(syncContext)
         .setServiceConfigParser(parser)
+        .setScheduledExecutorService(scheduledExecutorService)
+        .setChannelLogger(channelLogger)
+        .setOffloadExecutor(executor)
         .build();
   }
 }

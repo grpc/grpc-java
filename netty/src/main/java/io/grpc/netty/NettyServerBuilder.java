@@ -63,7 +63,8 @@ import javax.net.ssl.SSLException;
 @CanIgnoreReturnValue
 public final class NettyServerBuilder extends AbstractServerImplBuilder<NettyServerBuilder> {
 
-  public static final int DEFAULT_FLOW_CONTROL_WINDOW = 1048576; // 1MiB
+  // 1MiB
+  public static final int DEFAULT_FLOW_CONTROL_WINDOW = 1024 * 1024;
 
   static final long MAX_CONNECTION_IDLE_NANOS_DISABLED = Long.MAX_VALUE;
   static final long MAX_CONNECTION_AGE_NANOS_DISABLED = Long.MAX_VALUE;
@@ -84,13 +85,16 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
   private ChannelFactory<? extends ServerChannel> channelFactory =
       Utils.DEFAULT_SERVER_CHANNEL_FACTORY;
   private final Map<ChannelOption<?>, Object> channelOptions = new HashMap<>();
+  private final Map<ChannelOption<?>, Object> childChannelOptions = new HashMap<>();
   private ObjectPool<? extends EventLoopGroup> bossEventLoopGroupPool =
       DEFAULT_BOSS_EVENT_LOOP_GROUP_POOL;
   private ObjectPool<? extends EventLoopGroup> workerEventLoopGroupPool =
       DEFAULT_WORKER_EVENT_LOOP_GROUP_POOL;
+  private boolean forceHeapBuffer;
   private SslContext sslContext;
   private ProtocolNegotiator protocolNegotiator;
   private int maxConcurrentCallsPerConnection = Integer.MAX_VALUE;
+  private boolean autoFlowControl = true;
   private int flowControlWindow = DEFAULT_FLOW_CONTROL_WINDOW;
   private int maxMessageSize = DEFAULT_MAX_MESSAGE_SIZE;
   private int maxHeaderListSize = GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE;
@@ -187,10 +191,21 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * Specifies a channel option. As the underlying channel as well as network implementation may
    * ignore this value applications should consider it a hint.
    *
+   * @since 1.30.0
+   */
+  public <T> NettyServerBuilder withOption(ChannelOption<T> option, T value) {
+    this.channelOptions.put(option, value);
+    return this;
+  }
+
+  /**
+   * Specifies a child channel option. As the underlying channel as well as network implementation
+   * may ignore this value applications should consider it a hint.
+   *
    * @since 1.9.0
    */
   public <T> NettyServerBuilder withChildOption(ChannelOption<T> option, T value) {
-    this.channelOptions.put(option, value);
+    this.childChannelOptions.put(option, value);
     return this;
   }
 
@@ -268,6 +283,13 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
   }
 
   /**
+   * Force using heap buffer when custom allocator is enabled.
+   */
+  void setForceHeapBuffer(boolean value) {
+    forceHeapBuffer = value;
+  }
+
+  /**
    * Sets the TLS context to use for encryption. Providing a context enables encryption. It must
    * have been configured with {@link GrpcSslContexts}, but options could have been overridden.
    */
@@ -325,12 +347,29 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
   }
 
   /**
-   * Sets the HTTP/2 flow control window. If not called, the default value
-   * is {@link #DEFAULT_FLOW_CONTROL_WINDOW}).
+   * Sets the initial flow control window in bytes. Setting initial flow control window enables auto
+   * flow control tuning using bandwidth-delay product algorithm. To disable auto flow control
+   * tuning, use {@link #flowControlWindow(int)}. By default, auto flow control is enabled with
+   * initial flow control window size of {@link #DEFAULT_FLOW_CONTROL_WINDOW}.
+   */
+  public NettyServerBuilder initialFlowControlWindow(int initialFlowControlWindow) {
+    checkArgument(initialFlowControlWindow > 0, "initialFlowControlWindow must be positive");
+    this.flowControlWindow = initialFlowControlWindow;
+    this.autoFlowControl = true;
+    return this;
+  }
+
+  /**
+   * Sets the flow control window in bytes. Setting flowControlWindow disables auto flow control
+   * tuning; use {@link #initialFlowControlWindow(int)} to enable auto flow control tuning. If not
+   * called, the default value is {@link #DEFAULT_FLOW_CONTROL_WINDOW}) with auto flow control
+   * tuning.
    */
   public NettyServerBuilder flowControlWindow(int flowControlWindow) {
-    checkArgument(flowControlWindow > 0, "flowControlWindow must be positive");
+    checkArgument(flowControlWindow > 0, "flowControlWindow must be positive: %s",
+        flowControlWindow);
     this.flowControlWindow = flowControlWindow;
+    this.autoFlowControl = false;
     return this;
   }
 
@@ -351,7 +390,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
   /** {@inheritDoc} */
   @Override
   public NettyServerBuilder maxInboundMessageSize(int bytes) {
-    checkArgument(bytes >= 0, "bytes must be >= 0");
+    checkArgument(bytes >= 0, "bytes must be non-negative: %s", bytes);
     this.maxMessageSize = bytes;
     return this;
   }
@@ -382,7 +421,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    */
   @Override
   public NettyServerBuilder maxInboundMetadataSize(int bytes) {
-    checkArgument(bytes > 0, "maxInboundMetadataSize must be > 0");
+    checkArgument(bytes > 0, "maxInboundMetadataSize must be positive: %s", bytes);
     this.maxHeaderListSize = bytes;
     return this;
   }
@@ -395,7 +434,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * @since 1.3.0
    */
   public NettyServerBuilder keepAliveTime(long keepAliveTime, TimeUnit timeUnit) {
-    checkArgument(keepAliveTime > 0L, "keepalive time must be positive");
+    checkArgument(keepAliveTime > 0L, "keepalive time must be positive：%s", keepAliveTime);
     keepAliveTimeInNanos = timeUnit.toNanos(keepAliveTime);
     keepAliveTimeInNanos = KeepAliveManager.clampKeepAliveTimeInNanos(keepAliveTimeInNanos);
     if (keepAliveTimeInNanos >= AS_LARGE_AS_INFINITE) {
@@ -416,7 +455,8 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * @since 1.3.0
    */
   public NettyServerBuilder keepAliveTimeout(long keepAliveTimeout, TimeUnit timeUnit) {
-    checkArgument(keepAliveTimeout > 0L, "keepalive timeout must be positive");
+    checkArgument(keepAliveTimeout > 0L, "keepalive timeout must be positive: %s",
+        keepAliveTimeout);
     keepAliveTimeoutInNanos = timeUnit.toNanos(keepAliveTimeout);
     keepAliveTimeoutInNanos =
         KeepAliveManager.clampKeepAliveTimeoutInNanos(keepAliveTimeoutInNanos);
@@ -437,7 +477,8 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * @since 1.4.0
    */
   public NettyServerBuilder maxConnectionIdle(long maxConnectionIdle, TimeUnit timeUnit) {
-    checkArgument(maxConnectionIdle > 0L, "max connection idle must be positive");
+    checkArgument(maxConnectionIdle > 0L, "max connection idle must be positive: %s",
+        maxConnectionIdle);
     maxConnectionIdleInNanos = timeUnit.toNanos(maxConnectionIdle);
     if (maxConnectionIdleInNanos >= AS_LARGE_AS_INFINITE) {
       maxConnectionIdleInNanos = MAX_CONNECTION_IDLE_NANOS_DISABLED;
@@ -457,7 +498,8 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * @since 1.3.0
    */
   public NettyServerBuilder maxConnectionAge(long maxConnectionAge, TimeUnit timeUnit) {
-    checkArgument(maxConnectionAge > 0L, "max connection age must be positive");
+    checkArgument(maxConnectionAge > 0L, "max connection age must be positive: %s",
+        maxConnectionAge);
     maxConnectionAgeInNanos = timeUnit.toNanos(maxConnectionAge);
     if (maxConnectionAgeInNanos >= AS_LARGE_AS_INFINITE) {
       maxConnectionAgeInNanos = MAX_CONNECTION_AGE_NANOS_DISABLED;
@@ -478,7 +520,8 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * @since 1.3.0
    */
   public NettyServerBuilder maxConnectionAgeGrace(long maxConnectionAgeGrace, TimeUnit timeUnit) {
-    checkArgument(maxConnectionAgeGrace >= 0L, "max connection age grace must be non-negative");
+    checkArgument(maxConnectionAgeGrace >= 0L, "max connection age grace must be non-negative: %s",
+        maxConnectionAgeGrace);
     maxConnectionAgeGraceInNanos = timeUnit.toNanos(maxConnectionAgeGrace);
     if (maxConnectionAgeGraceInNanos >= AS_LARGE_AS_INFINITE) {
       maxConnectionAgeGraceInNanos = MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE;
@@ -501,7 +544,8 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * @since 1.3.0
    */
   public NettyServerBuilder permitKeepAliveTime(long keepAliveTime, TimeUnit timeUnit) {
-    checkArgument(keepAliveTime >= 0, "permit keepalive time must be non-negative");
+    checkArgument(keepAliveTime >= 0, "permit keepalive time must be non-negative: %s",
+        keepAliveTime);
     permitKeepAliveTimeInNanos = timeUnit.toNanos(keepAliveTime);
     return this;
   }
@@ -526,19 +570,22 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
 
     ProtocolNegotiator negotiator = protocolNegotiator;
     if (negotiator == null) {
-      negotiator = sslContext != null ? ProtocolNegotiators.serverTls(sslContext) :
-          ProtocolNegotiators.serverPlaintext();
+      negotiator = sslContext != null
+          ? ProtocolNegotiators.serverTls(sslContext, this.getExecutorPool())
+          : ProtocolNegotiators.serverPlaintext();
     }
 
     List<NettyServer> transportServers = new ArrayList<>(listenAddresses.size());
     for (SocketAddress listenAddress : listenAddresses) {
       NettyServer transportServer = new NettyServer(
-          listenAddress, channelFactory, channelOptions, bossEventLoopGroupPool,
-          workerEventLoopGroupPool, negotiator, streamTracerFactories,
-          getTransportTracerFactory(), maxConcurrentCallsPerConnection, flowControlWindow,
-          maxMessageSize, maxHeaderListSize, keepAliveTimeInNanos, keepAliveTimeoutInNanos,
-          maxConnectionIdleInNanos, maxConnectionAgeInNanos, maxConnectionAgeGraceInNanos,
-          permitKeepAliveWithoutCalls, permitKeepAliveTimeInNanos, getChannelz());
+          listenAddress, channelFactory, channelOptions, childChannelOptions,
+          bossEventLoopGroupPool, workerEventLoopGroupPool, forceHeapBuffer, negotiator,
+          streamTracerFactories, getTransportTracerFactory(), maxConcurrentCallsPerConnection,
+          autoFlowControl, flowControlWindow, maxMessageSize, maxHeaderListSize,
+          keepAliveTimeInNanos, keepAliveTimeoutInNanos,
+          maxConnectionIdleInNanos, maxConnectionAgeInNanos,
+          maxConnectionAgeGraceInNanos, permitKeepAliveWithoutCalls, permitKeepAliveTimeInNanos,
+          getChannelz());
       transportServers.add(transportServer);
     }
     return Collections.unmodifiableList(transportServers);

@@ -18,21 +18,30 @@
 set -e
 BRANCH=master
 # import VERSION from one of the google internal CLs
-VERSION=94324803a497c8f76dbc78df393ef629d3a9f3c3
+VERSION=3b31d022a144b334eb2224838e4d6952ab5253aa
 GIT_REPO="https://github.com/cncf/udpa.git"
 GIT_BASE_DIR=udpa
 SOURCE_PROTO_BASE_DIR=udpa
 TARGET_PROTO_BASE_DIR=src/main/proto
 FILES=(
+udpa/annotations/migrate.proto
+udpa/annotations/security.proto
+udpa/annotations/sensitive.proto
+udpa/annotations/status.proto
+udpa/annotations/versioning.proto
 udpa/data/orca/v1/orca_load_report.proto
 udpa/service/orca/v1/orca.proto
 )
 
+pushd `git rev-parse --show-toplevel`/xds/third_party/udpa
+
 # clone the udpa github repo in a tmp directory
 tmpdir="$(mktemp -d)"
+trap "rm -rf $tmpdir" EXIT
+
 pushd "${tmpdir}"
-rm -rf $GIT_BASE_DIR
 git clone -b $BRANCH $GIT_REPO
+trap "rm -rf $GIT_BASE_DIR" EXIT
 cd "$GIT_BASE_DIR"
 git checkout $VERSION
 popd
@@ -51,4 +60,4 @@ do
 done
 popd
 
-rm -rf "$tmpdir"
+popd

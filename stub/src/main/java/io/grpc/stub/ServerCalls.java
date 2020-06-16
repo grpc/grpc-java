@@ -84,22 +84,30 @@ public final class ServerCalls {
   /**
    * Adaptor to a unary call method.
    */
-  public interface UnaryMethod<ReqT, RespT> extends UnaryRequestMethod<ReqT, RespT> {}
+  public interface UnaryMethod<ReqT, RespT> extends UnaryRequestMethod<ReqT, RespT> {
+    @Override void invoke(ReqT request, StreamObserver<RespT> responseObserver);
+  }
 
   /**
    * Adaptor to a server streaming method.
    */
-  public interface ServerStreamingMethod<ReqT, RespT> extends UnaryRequestMethod<ReqT, RespT> {}
+  public interface ServerStreamingMethod<ReqT, RespT> extends UnaryRequestMethod<ReqT, RespT> {
+    @Override void invoke(ReqT request, StreamObserver<RespT> responseObserver);
+  }
 
   /**
    * Adaptor to a client streaming method.
    */
-  public interface ClientStreamingMethod<ReqT, RespT> extends StreamingRequestMethod<ReqT, RespT> {}
+  public interface ClientStreamingMethod<ReqT, RespT> extends StreamingRequestMethod<ReqT, RespT> {
+    @Override StreamObserver<ReqT> invoke(StreamObserver<RespT> responseObserver);
+  }
 
   /**
    * Adaptor to a bidirectional streaming method.
    */
-  public interface BidiStreamingMethod<ReqT, RespT> extends StreamingRequestMethod<ReqT, RespT> {}
+  public interface BidiStreamingMethod<ReqT, RespT> extends StreamingRequestMethod<ReqT, RespT> {
+    @Override StreamObserver<ReqT> invoke(StreamObserver<RespT> responseObserver);
+  }
 
   private static final class UnaryServerCallHandler<ReqT, RespT>
       implements ServerCallHandler<ReqT, RespT> {
@@ -223,7 +231,7 @@ public final class ServerCalls {
           new ServerCallStreamObserverImpl<>(call);
       StreamObserver<ReqT> requestObserver = method.invoke(responseObserver);
       responseObserver.freeze();
-      if (responseObserver.autoFlowControlEnabled) {
+      if (responseObserver.autoRequestEnabled) {
         call.request(1);
       }
       return new StreamingServerCallListener(requestObserver, responseObserver, call);
@@ -251,7 +259,7 @@ public final class ServerCalls {
         requestObserver.onNext(request);
 
         // Request delivery of the next inbound message.
-        if (responseObserver.autoFlowControlEnabled) {
+        if (responseObserver.autoRequestEnabled) {
           call.request(1);
         }
       }
@@ -296,10 +304,16 @@ public final class ServerCalls {
   }
 
   private interface UnaryRequestMethod<ReqT, RespT> {
+    /**
+     * The provided {@code responseObserver} will extend {@link ServerCallStreamObserver}.
+     */
     void invoke(ReqT request, StreamObserver<RespT> responseObserver);
   }
 
   private interface StreamingRequestMethod<ReqT, RespT> {
+    /**
+     * The provided {@code responseObserver} will extend {@link ServerCallStreamObserver}.
+     */
     StreamObserver<ReqT> invoke(StreamObserver<RespT> responseObserver);
   }
 
@@ -308,7 +322,7 @@ public final class ServerCalls {
     final ServerCall<ReqT, RespT> call;
     volatile boolean cancelled;
     private boolean frozen;
-    private boolean autoFlowControlEnabled = true;
+    private boolean autoRequestEnabled = true;
     private boolean sentHeaders;
     private Runnable onReadyHandler;
     private Runnable onCancelHandler;
@@ -380,7 +394,9 @@ public final class ServerCalls {
 
     @Override
     public void setOnReadyHandler(Runnable r) {
-      checkState(!frozen, "Cannot alter onReadyHandler after initialization");
+      checkState(!frozen, "Cannot alter onReadyHandler after initialization. May only be called "
+          + "during the initial call to the application, before the service returns its "
+          + "StreamObserver");
       this.onReadyHandler = r;
     }
 
@@ -391,14 +407,22 @@ public final class ServerCalls {
 
     @Override
     public void setOnCancelHandler(Runnable onCancelHandler) {
-      checkState(!frozen, "Cannot alter onCancelHandler after initialization");
+      checkState(!frozen, "Cannot alter onCancelHandler after initialization. May only be called "
+          + "during the initial call to the application, before the service returns its "
+          + "StreamObserver");
       this.onCancelHandler = onCancelHandler;
     }
 
+    @Deprecated
     @Override
     public void disableAutoInboundFlowControl() {
+      disableAutoRequest();
+    }
+
+    @Override
+    public void disableAutoRequest() {
       checkState(!frozen, "Cannot disable auto flow control after initialization");
-      autoFlowControlEnabled = false;
+      autoRequestEnabled = false;
     }
 
     @Override

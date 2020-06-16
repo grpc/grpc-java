@@ -74,14 +74,15 @@ class OkHttpClientStream extends AbstractClientStream {
       String userAgent,
       StatsTraceContext statsTraceCtx,
       TransportTracer transportTracer,
-      CallOptions callOptions) {
+      CallOptions callOptions,
+      boolean useGetForSafeMethods) {
     super(
         new OkHttpWritableBufferAllocator(),
         statsTraceCtx,
         transportTracer,
         headers,
         callOptions,
-        method.isSafe());
+        useGetForSafeMethods && method.isSafe());
     this.statsTraceCtx = checkNotNull(statsTraceCtx, "statsTraceCtx");
     this.method = method;
     this.authority = authority;
@@ -255,10 +256,13 @@ class OkHttpClientStream extends AbstractClientStream {
       tag = PerfMark.createTag(methodName);
     }
 
+    @SuppressWarnings("GuardedBy")
     @GuardedBy("lock")
     public void start(int streamId) {
       checkState(id == ABSENT_ID, "the stream has been started with id %s", streamId);
       id = streamId;
+      // TODO(b/145386688): This access should be guarded by 'OkHttpClientStream.this.state.lock';
+      // instead found: 'this.lock'
       state.onStreamAllocated();
 
       if (canStart) {
@@ -364,6 +368,7 @@ class OkHttpClientStream extends AbstractClientStream {
       }
     }
 
+    @SuppressWarnings("GuardedBy")
     @GuardedBy("lock")
     private void cancel(Status reason, boolean stopDelivery, Metadata trailers) {
       if (cancelSent) {
@@ -372,6 +377,8 @@ class OkHttpClientStream extends AbstractClientStream {
       cancelSent = true;
       if (canStart) {
         // stream is pending.
+        // TODO(b/145386688): This access should be guarded by 'this.transport.lock'; instead found:
+        // 'this.lock'
         transport.removePendingStream(OkHttpClientStream.this);
         // release holding data, so they can be GCed or returned to pool earlier.
         requestHeaders = null;
@@ -405,9 +412,19 @@ class OkHttpClientStream extends AbstractClientStream {
       }
     }
 
+    @SuppressWarnings("GuardedBy")
     @GuardedBy("lock")
     private void streamReady(Metadata metadata, String path) {
-      requestHeaders = Headers.createRequestHeaders(metadata, path, authority, userAgent, useGet);
+      requestHeaders =
+          Headers.createRequestHeaders(
+              metadata,
+              path,
+              authority,
+              userAgent,
+              useGet,
+              transport.isUsingPlaintext());
+      // TODO(b/145386688): This access should be guarded by 'this.transport.lock'; instead found:
+      // 'this.lock'
       transport.streamReadyToStart(OkHttpClientStream.this);
     }
 

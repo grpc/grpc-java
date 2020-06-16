@@ -18,6 +18,7 @@ package io.grpc.internal;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.util.ArrayDeque;
 import java.util.Queue;
@@ -101,16 +102,18 @@ public class CompositeReadableBuffer extends AbstractReadableBuffer {
 
   @Override
   public void readBytes(final ByteBuffer dest) {
+    // Use Buffer instead of ByteBuffer for JDK 9+ compatibility.
+    final Buffer destAsBuffer = dest;
     execute(new ReadOperation() {
       @Override
       public int readInternal(ReadableBuffer buffer, int length) {
         // Change the limit so that only lengthToCopy bytes are available.
-        int prevLimit = dest.limit();
-        dest.limit(dest.position() + length);
+        int prevLimit = destAsBuffer.limit();
+        destAsBuffer.limit(destAsBuffer.position() + length);
 
         // Write the bytes and restore the original limit.
         buffer.readBytes(dest);
-        dest.limit(prevLimit);
+        destAsBuffer.limit(prevLimit);
         return 0;
       }
     }, dest.remaining());

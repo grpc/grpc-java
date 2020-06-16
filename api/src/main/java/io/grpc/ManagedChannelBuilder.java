@@ -55,8 +55,11 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * </ul>
    *
    * <p>An authority string will be converted to a {@code NameResolver}-compliant URI, which has
-   * {@code "dns"} as the scheme, no authority, and the original authority string as its path after
-   * properly escaped. Example authority strings:
+   * the scheme from the name resolver with the highest priority (e.g. {@code "dns"}),
+   * no authority, and the original authority string as its path after properly escaped.
+   * We recommend libraries to specify the schema explicitly if it is known, since libraries cannot
+   * know which NameResolver will be default during runtime.
+   * Example authority strings:
    * <ul>
    *   <li>{@code "localhost"}</li>
    *   <li>{@code "127.0.0.1"}</li>
@@ -102,6 +105,30 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * @since 1.0.0
    */
   public abstract T executor(Executor executor);
+
+  /**
+   * Provides a custom executor that will be used for operations that block or are expensive.
+   *
+   * <p>It's an optional parameter. If the user has not provided an executor when the channel is
+   * built, the builder will use a static cached thread pool.
+   *
+   * <p>The channel won't take ownership of the given executor. It's caller's responsibility to shut
+   * down the executor when it's desired.
+   *
+   * @return this
+   * @throws UnsupportedOperationException if unsupported
+   * @since 1.25.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6279")
+  public T offloadExecutor(Executor executor) {
+    throw new UnsupportedOperationException();
+  }
+
+  @Deprecated
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6279")
+  public T blockingExecutor(Executor executor) {
+    return offloadExecutor(executor);
+  }
 
   /**
    * Adds interceptors that will be called before the channel performs its real work. This is
@@ -157,27 +184,6 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * <p>Should only be used for testing or for APIs where the use of such API or the data
    * exchanged is not sensitive.
    *
-   * @param skipNegotiation @{code true} if there is a priori knowledge that the endpoint supports
-   *                        plaintext, {@code false} if plaintext use must be negotiated.
-   * @deprecated Use {@link #usePlaintext()} instead.
-   *
-   * @throws UnsupportedOperationException if plaintext mode is not supported.
-   * @return this
-   * @since 1.0.0
-   */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1772")
-  @Deprecated
-  public T usePlaintext(boolean skipNegotiation) {
-    throw new UnsupportedOperationException();
-  }
-
-  /**
-   * Use of a plaintext connection to the server. By default a secure connection mechanism
-   * such as TLS will be used.
-   *
-   * <p>Should only be used for testing or for APIs where the use of such API or the data
-   * exchanged is not sensitive.
-   *
    * <p>This assumes prior knowledge that the target of this channel is using plaintext.  It will
    * not perform HTTP/1.1 upgrades.
    *
@@ -203,8 +209,8 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
 
   /**
    * Provides a custom {@link NameResolver.Factory} for the channel. If this method is not called,
-   * the builder will try the providers listed by {@link NameResolverProvider#providers()} for the
-   * given target.
+   * the builder will try the providers registered in the default {@link NameResolverRegistry} for
+   * the given target.
    *
    * <p>This method should rarely be used, as name resolvers should provide a {@code
    * NameResolverProvider} and users rely on service loading to find implementations in the class

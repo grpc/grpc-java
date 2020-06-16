@@ -29,6 +29,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ScheduledExecutorService;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 
@@ -314,6 +316,7 @@ public abstract class NameResolver {
     @Deprecated
     public final void onAddresses(
         List<EquivalentAddressGroup> servers, @ResolutionResultAttr Attributes attributes) {
+      // TODO(jihuncho) need to promote Listener2 if we want to use ConfigOrError
       onResult(
           ResolutionResult.newBuilder().setAddresses(servers).setAttributes(attributes).build());
     }
@@ -328,8 +331,8 @@ public abstract class NameResolver {
     public abstract void onResult(ResolutionResult resolutionResult);
 
     /**
-     * Handles an error from the resolver. The listener is responsible for eventually invoking
-     * {@link NameResolver#refresh()} to re-attempt resolution.
+     * Handles a name resolving error from the resolver. The listener is responsible for eventually
+     * invoking {@link NameResolver#refresh()} to re-attempt resolution.
      *
      * @param error a non-OK status
      * @since 1.21.0
@@ -411,13 +414,25 @@ public abstract class NameResolver {
     private final ProxyDetector proxyDetector;
     private final SynchronizationContext syncContext;
     private final ServiceConfigParser serviceConfigParser;
+    @Nullable private final ScheduledExecutorService scheduledExecutorService;
+    @Nullable private final ChannelLogger channelLogger;
+    @Nullable private final Executor executor;
 
-    Args(Integer defaultPort, ProxyDetector proxyDetector,
-        SynchronizationContext syncContext, ServiceConfigParser serviceConfigParser) {
+    private Args(
+        Integer defaultPort,
+        ProxyDetector proxyDetector,
+        SynchronizationContext syncContext,
+        ServiceConfigParser serviceConfigParser,
+        @Nullable ScheduledExecutorService scheduledExecutorService,
+        @Nullable ChannelLogger channelLogger,
+        @Nullable Executor executor) {
       this.defaultPort = checkNotNull(defaultPort, "defaultPort not set");
       this.proxyDetector = checkNotNull(proxyDetector, "proxyDetector not set");
       this.syncContext = checkNotNull(syncContext, "syncContext not set");
       this.serviceConfigParser = checkNotNull(serviceConfigParser, "serviceConfigParser not set");
+      this.scheduledExecutorService = scheduledExecutorService;
+      this.channelLogger = channelLogger;
+      this.executor = executor;
     }
 
     /**
@@ -451,12 +466,56 @@ public abstract class NameResolver {
     }
 
     /**
+     * Returns a {@link ScheduledExecutorService} for scheduling delayed tasks.
+     *
+     * <p>This service is a shared resource and is only meant for quick tasks. DO NOT block or run
+     * time-consuming tasks.
+     *
+     * <p>The returned service doesn't support {@link ScheduledExecutorService#shutdown shutdown()}
+     *  and {@link ScheduledExecutorService#shutdownNow shutdownNow()}. They will throw if called.
+     *
+     * @since 1.26.0
+     */
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6454")
+    public ScheduledExecutorService getScheduledExecutorService() {
+      if (scheduledExecutorService == null) {
+        throw new IllegalStateException("ScheduledExecutorService not set in Builder");
+      }
+      return scheduledExecutorService;
+    }
+
+    /**
      * Returns the {@link ServiceConfigParser}.
      *
      * @since 1.21.0
      */
     public ServiceConfigParser getServiceConfigParser() {
       return serviceConfigParser;
+    }
+
+    /**
+     * Returns the {@link ChannelLogger} for the Channel served by this NameResolver.
+     *
+     * @since 1.26.0
+     */
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6438")
+    public ChannelLogger getChannelLogger() {
+      if (channelLogger == null) {
+        throw new IllegalStateException("ChannelLogger is not set in Builder");
+      }
+      return channelLogger;
+    }
+
+    /**
+     * Returns the Executor on which this resolver should execute long-running or I/O bound work.
+     * Null if no Executor was set.
+     *
+     * @since 1.25.0
+     */
+    @Nullable
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6279")
+    public Executor getOffloadExecutor() {
+      return executor;
     }
 
     @Override
@@ -466,6 +525,9 @@ public abstract class NameResolver {
           .add("proxyDetector", proxyDetector)
           .add("syncContext", syncContext)
           .add("serviceConfigParser", serviceConfigParser)
+          .add("scheduledExecutorService", scheduledExecutorService)
+          .add("channelLogger", channelLogger)
+          .add("executor", executor)
           .toString();
     }
 
@@ -480,6 +542,9 @@ public abstract class NameResolver {
       builder.setProxyDetector(proxyDetector);
       builder.setSynchronizationContext(syncContext);
       builder.setServiceConfigParser(serviceConfigParser);
+      builder.setScheduledExecutorService(scheduledExecutorService);
+      builder.setChannelLogger(channelLogger);
+      builder.setOffloadExecutor(executor);
       return builder;
     }
 
@@ -502,6 +567,9 @@ public abstract class NameResolver {
       private ProxyDetector proxyDetector;
       private SynchronizationContext syncContext;
       private ServiceConfigParser serviceConfigParser;
+      private ScheduledExecutorService scheduledExecutorService;
+      private ChannelLogger channelLogger;
+      private Executor executor;
 
       Builder() {
       }
@@ -537,6 +605,16 @@ public abstract class NameResolver {
       }
 
       /**
+       * See {@link Args#getScheduledExecutorService}.
+       */
+      @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6454")
+      public Builder setScheduledExecutorService(
+          ScheduledExecutorService scheduledExecutorService) {
+        this.scheduledExecutorService = checkNotNull(scheduledExecutorService);
+        return this;
+      }
+
+      /**
        * See {@link Args#getServiceConfigParser}.  This is a required field.
        *
        * @since 1.21.0
@@ -547,12 +625,37 @@ public abstract class NameResolver {
       }
 
       /**
+       * See {@link Args#getChannelLogger}.
+       *
+       * @since 1.26.0
+       */
+      @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6438")
+      public Builder setChannelLogger(ChannelLogger channelLogger) {
+        this.channelLogger = checkNotNull(channelLogger);
+        return this;
+      }
+
+      /**
+       * See {@link Args#getOffloadExecutor}. This is an optional field.
+       *
+       * @since 1.25.0
+       */
+      @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6279")
+      public Builder setOffloadExecutor(Executor executor) {
+        this.executor = executor;
+        return this;
+      }
+
+      /**
        * Builds an {@link Args}.
        *
        * @since 1.21.0
        */
       public Args build() {
-        return new Args(defaultPort, proxyDetector, syncContext, serviceConfigParser);
+        return
+            new Args(
+                defaultPort, proxyDetector, syncContext, serviceConfigParser,
+                scheduledExecutorService, channelLogger, executor);
       }
     }
   }
@@ -793,6 +896,23 @@ public abstract class NameResolver {
     @Nullable
     public Status getError() {
       return status;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      ConfigOrError that = (ConfigOrError) o;
+      return Objects.equal(status, that.status) && Objects.equal(config, that.config);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hashCode(status, config);
     }
 
     @Override

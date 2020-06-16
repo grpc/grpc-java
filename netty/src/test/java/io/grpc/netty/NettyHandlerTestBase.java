@@ -101,6 +101,7 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
 
   protected final TransportTracer transportTracer = new TransportTracer();
   protected int flowControlWindow = DEFAULT_WINDOW_SIZE;
+  protected boolean autoFlowControl = false;
 
   private final FakeClock fakeClock = new FakeClock();
 
@@ -201,6 +202,10 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
     public int compareTo(Delayed o) {
       return future.compareTo(o);
     }
+  }
+
+  protected final WriteQueue writeQueue() {
+    return writeQueue;
   }
 
   protected final T handler() {

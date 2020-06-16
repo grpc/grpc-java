@@ -17,7 +17,6 @@
 package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
-import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
@@ -32,84 +31,10 @@ import org.junit.runners.JUnit4;
  */
 @RunWith(JUnit4.class)
 public class ServiceConfigUtilTest {
-  @Test
-  public void getBalancerNameFromXdsConfig() throws Exception {
-    String rawLbConfig = "{"
-        + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
-        + "\"childPolicy\" : [{\"round_robin\" : {}}, {\"lbPolicy2\" : {\"key\" : \"val\"}}],"
-        + "\"fallbackPolicy\" : [{\"lbPolicy3\" : {\"key\" : \"val\"}}, {\"lbPolicy4\" : {}}]"
-        + "}";
-    assertEquals(
-        "dns:///balancer.example.com:8080",
-        ServiceConfigUtil.getBalancerNameFromXdsConfig(checkObject(JsonParser.parse(rawLbConfig))));
-  }
-
-  @Test
-  public void getChildPolicyFromXdsConfig() throws Exception {
-    String rawLbConfig = "{"
-        + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
-        + "\"childPolicy\" : [{\"round_robin\" : {}}, {\"lbPolicy2\" : {\"key\" : \"val\"}}],"
-        + "\"fallbackPolicy\" : [{\"lbPolicy3\" : {\"key\" : \"val\"}}, {\"lbPolicy4\" : {}}]"
-        + "}";
-    LbConfig expectedChildPolicy1 = ServiceConfigUtil.unwrapLoadBalancingConfig(
-        checkObject(JsonParser.parse("{\"round_robin\" : {}}")));
-    LbConfig expectedChildPolicy2 = ServiceConfigUtil.unwrapLoadBalancingConfig(
-        checkObject(JsonParser.parse("{\"lbPolicy2\" : {\"key\" : \"val\"}}")));
-
-    List<LbConfig> childPolicies = ServiceConfigUtil.getChildPolicyFromXdsConfig(
-        checkObject(JsonParser.parse(rawLbConfig)));
-
-    assertThat(childPolicies).containsExactly(expectedChildPolicy1, expectedChildPolicy2);
-  }
-
-  @Test
-  public void getChildPolicyFromXdsConfig_null() throws Exception {
-    String rawLbConfig = "{"
-        + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
-        + "\"fallbackPolicy\" : [{\"lbPolicy3\" : {\"key\" : \"val\"}}, {\"lbPolicy4\" : {}}]"
-        + "}";
-
-    List<LbConfig> childPolicies = ServiceConfigUtil.getChildPolicyFromXdsConfig(
-        checkObject(JsonParser.parse(rawLbConfig)));
-
-    assertThat(childPolicies).isNull();
-  }
-
-  @Test
-  public void getFallbackPolicyFromXdsConfig() throws Exception {
-    String rawLbConfig = "{"
-        + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
-        + "\"childPolicy\" : [{\"round_robin\" : {}}, {\"lbPolicy2\" : {\"key\" : \"val\"}}],"
-        + "\"fallbackPolicy\" : [{\"lbPolicy3\" : {\"key\" : \"val\"}}, {\"lbPolicy4\" : {}}]"
-        + "}";
-    LbConfig expectedFallbackPolicy1 = ServiceConfigUtil.unwrapLoadBalancingConfig(
-        checkObject(JsonParser.parse("{\"lbPolicy3\" : {\"key\" : \"val\"}}")));
-    LbConfig expectedFallbackPolicy2 = ServiceConfigUtil.unwrapLoadBalancingConfig(
-        checkObject(JsonParser.parse("{\"lbPolicy4\" : {}}")));
-
-    List<LbConfig> childPolicies = ServiceConfigUtil.getFallbackPolicyFromXdsConfig(
-        checkObject(JsonParser.parse(rawLbConfig)));
-
-    assertThat(childPolicies).containsExactly(expectedFallbackPolicy1, expectedFallbackPolicy2);
-  }
-
-  @Test
-  public void getFallbackPolicyFromXdsConfig_null() throws Exception {
-    String rawLbConfig = "{"
-        + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
-        + "\"childPolicy\" : [{\"round_robin\" : {}}, {\"lbPolicy2\" : {\"key\" : \"val\"}}]"
-        + "}";
-
-    List<LbConfig> fallbackPolicies = ServiceConfigUtil.getFallbackPolicyFromXdsConfig(
-        checkObject(JsonParser.parse(rawLbConfig)));
-
-    assertThat(fallbackPolicies).isNull();
-  }
 
   @Test
   public void unwrapLoadBalancingConfig() throws Exception {
     String lbConfig = "{\"xds_experimental\" : { "
-        + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
         + "\"childPolicy\" : [{\"round_robin\" : {}}, {\"lbPolicy2\" : {\"key\" : \"val\"}}]"
         + "}}";
 
@@ -117,8 +42,7 @@ public class ServiceConfigUtilTest {
         ServiceConfigUtil.unwrapLoadBalancingConfig(checkObject(JsonParser.parse(lbConfig)));
     assertThat(config.getPolicyName()).isEqualTo("xds_experimental");
     assertThat(config.getRawConfigValue()).isEqualTo(JsonParser.parse(
-            "{\"balancerName\" : \"dns:///balancer.example.com:8080\","
-            + "\"childPolicy\" : [{\"round_robin\" : {}}, {\"lbPolicy2\" : {\"key\" : \"val\"}}]"
+            "{\"childPolicy\" : [{\"round_robin\" : {}}, {\"lbPolicy2\" : {\"key\" : \"val\"}}]"
             + "}"));
   }
 
@@ -126,7 +50,6 @@ public class ServiceConfigUtilTest {
   public void unwrapLoadBalancingConfig_failOnTooManyFields() throws Exception {
     // A LoadBalancingConfig should not have more than one field.
     String lbConfig = "{\"xds_experimental\" : { "
-        + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
         + "\"childPolicy\" : [{\"round_robin\" : {}}, {\"lbPolicy2\" : {\"key\" : \"val\"}}]"
         + "},"
         + "\"grpclb\" : {} }";
@@ -165,7 +88,7 @@ public class ServiceConfigUtilTest {
   @Test
   public void unwrapLoadBalancingConfigList() throws Exception {
     String lbConfig = "[ "
-        + "{\"xds_experimental\" : {\"balancerName\" : \"dns:///balancer.example.com:8080\"} },"
+        + "{\"xds_experimental\" : {\"unknown_field\" : \"dns:///balancer.example.com:8080\"} },"
         + "{\"grpclb\" : {} } ]";
     List<LbConfig> configs =
         ServiceConfigUtil.unwrapLoadBalancingConfigList(
@@ -173,7 +96,7 @@ public class ServiceConfigUtilTest {
     assertThat(configs).containsExactly(
         ServiceConfigUtil.unwrapLoadBalancingConfig(checkObject(JsonParser.parse(
                 "{\"xds_experimental\" : "
-                + "{\"balancerName\" : \"dns:///balancer.example.com:8080\"} }"))),
+                + "{\"unknown_field\" : \"dns:///balancer.example.com:8080\"} }"))),
         ServiceConfigUtil.unwrapLoadBalancingConfig(checkObject(JsonParser.parse(
                 "{\"grpclb\" : {} }")))).inOrder();
   }

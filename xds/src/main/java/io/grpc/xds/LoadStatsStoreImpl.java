@@ -26,10 +26,12 @@ import io.envoyproxy.envoy.api.v2.endpoint.EndpointLoadMetricStats;
 import io.envoyproxy.envoy.api.v2.endpoint.UpstreamLocalityStats;
 import io.grpc.xds.ClientLoadCounter.ClientLoadSnapshot;
 import io.grpc.xds.ClientLoadCounter.MetricValue;
+import io.grpc.xds.EnvoyProtoData.Locality;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 
 /**
@@ -39,19 +41,27 @@ import javax.annotation.concurrent.NotThreadSafe;
  */
 @NotThreadSafe
 final class LoadStatsStoreImpl implements LoadStatsStore {
-
-  private final ConcurrentMap<XdsLocality, ClientLoadCounter> localityLoadCounters;
+  private final String clusterName;
+  @Nullable
+  @SuppressWarnings("unused")
+  private final String clusterServiceName;
+  private final ConcurrentMap<Locality, ClientLoadCounter> localityLoadCounters;
   // Cluster level dropped request counts for each category decision made by xDS load balancer.
   private final ConcurrentMap<String, AtomicLong> dropCounters;
 
-  LoadStatsStoreImpl() {
-    this(new ConcurrentHashMap<XdsLocality, ClientLoadCounter>(),
+  LoadStatsStoreImpl(String clusterName, @Nullable String clusterServiceName) {
+    this(clusterName, clusterServiceName, new ConcurrentHashMap<Locality, ClientLoadCounter>(),
         new ConcurrentHashMap<String, AtomicLong>());
   }
 
   @VisibleForTesting
-  LoadStatsStoreImpl(ConcurrentMap<XdsLocality, ClientLoadCounter> localityLoadCounters,
+  LoadStatsStoreImpl(
+      String clusterName,
+      @Nullable String clusterServiceName,
+      ConcurrentMap<Locality, ClientLoadCounter> localityLoadCounters,
       ConcurrentMap<String, AtomicLong> dropCounters) {
+    this.clusterName = checkNotNull(clusterName, "clusterName");
+    this.clusterServiceName = clusterServiceName;
     this.localityLoadCounters = checkNotNull(localityLoadCounters, "localityLoadCounters");
     this.dropCounters = checkNotNull(dropCounters, "dropCounters");
   }
@@ -59,10 +69,12 @@ final class LoadStatsStoreImpl implements LoadStatsStore {
   @Override
   public ClusterStats generateLoadReport() {
     ClusterStats.Builder statsBuilder = ClusterStats.newBuilder();
-    for (Map.Entry<XdsLocality, ClientLoadCounter> entry : localityLoadCounters.entrySet()) {
+    statsBuilder.setClusterName(clusterName);
+    // TODO(chengyuangzhang): also set cluster_service_name if provided.
+    for (Map.Entry<Locality, ClientLoadCounter> entry : localityLoadCounters.entrySet()) {
       ClientLoadSnapshot snapshot = entry.getValue().snapshot();
       UpstreamLocalityStats.Builder localityStatsBuilder =
-          UpstreamLocalityStats.newBuilder().setLocality(entry.getKey().toLocalityProto());
+          UpstreamLocalityStats.newBuilder().setLocality(entry.getKey().toEnvoyProtoLocality());
       localityStatsBuilder
           .setTotalSuccessfulRequests(snapshot.getCallsSucceeded())
           .setTotalErrorRequests(snapshot.getCallsFailed())
@@ -95,7 +107,7 @@ final class LoadStatsStoreImpl implements LoadStatsStore {
   }
 
   @Override
-  public void addLocality(final XdsLocality locality) {
+  public void addLocality(final Locality locality) {
     ClientLoadCounter counter = localityLoadCounters.get(locality);
     checkState(counter == null || !counter.isActive(),
         "An active counter for locality %s already exists", locality);
@@ -107,7 +119,7 @@ final class LoadStatsStoreImpl implements LoadStatsStore {
   }
 
   @Override
-  public void removeLocality(final XdsLocality locality) {
+  public void removeLocality(final Locality locality) {
     ClientLoadCounter counter = localityLoadCounters.get(locality);
     checkState(counter != null && counter.isActive(),
         "No active counter for locality %s exists", locality);
@@ -115,7 +127,7 @@ final class LoadStatsStoreImpl implements LoadStatsStore {
   }
 
   @Override
-  public ClientLoadCounter getLocalityCounter(final XdsLocality locality) {
+  public ClientLoadCounter getLocalityCounter(final Locality locality) {
     return localityLoadCounters.get(locality);
   }
 

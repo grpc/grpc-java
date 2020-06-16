@@ -91,7 +91,7 @@ before trying out the examples.
 
 1. **[Install gRPC Java library SNAPSHOT locally, including code generation plugin](../COMPILING.md) (Only need this step for non-released versions, e.g. master HEAD).**
 
-2. Run in this directory:
+2. From grpc-java/examples directory:
 ```
 $ ./gradlew installDist
 ```
@@ -156,9 +156,7 @@ $ bazel-bin/hello-world-client
 
 - [Google Authentication](example-gauth)
 
-- [Kotlin examples](example-kotlin)
-
-- [Kotlin Android examples](example-kotlin/android)
+- [JWT-based Authentication](example-jwt-auth)
 
 ## Unit test examples
 
@@ -172,7 +170,7 @@ examples to write unit tests. `InProcessTransport` is light-weight and runs the 
 and client in the same process without any socket/TCP connection.
 
 Mocking the client stub provides a false sense of security when writing tests. Mocking stubs and responses
-allows for tests that don't map to reality, causing the tests to pass, but the system-under-test to fail. 
+allows for tests that don't map to reality, causing the tests to pass, but the system-under-test to fail.
 The gRPC client library is complicated, and accurately reproducing that complexity with mocks is very hard.
 You will be better off and write less code by using `InProcessTransport` instead.
 
