@@ -18,14 +18,12 @@ package io.grpc.alts.internal;
 
 import static org.junit.Assert.assertEquals;
 
-
 import java.util.HashMap;
 import java.util.Map;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
-
 
 /** Unit tests for {@link AltsAuthContext}. */
 @RunWith(JUnit4.class)
@@ -39,16 +37,17 @@ public final class AltsAuthContextTest {
   private static final String TEST_LOCAL_SERVICE_ACCOUNT = "local@gserviceaccount.com";
   private static final String TEST_PEER_SERVICE_ACCOUNT = "peer@gserviceaccount.com";
   private static final String TEST_RECORD_PROTOCOL = "ALTSRP_GCM_AES128";
+  private static final String TEST_PEER_ATTRIBUTES_KEY = "peer";
+  private static final String TEST_PEER_ATTRIBUTES_VALUE = "attributes";
 
   private Map<String, String> testPeerAttributes = new HashMap<String, String>();
   
-
   private HandshakerResult handshakerResult;
   private RpcProtocolVersions rpcVersions;
 
   @Before
   public void setUp() {
-    testPeerAttributes.put("peer", "attributes");
+    testPeerAttributes.put(TEST_PEER_ATTRIBUTES_KEY, TEST_PEER_ATTRIBUTES_VALUE);
     rpcVersions =
         RpcProtocolVersions.newBuilder()
             .setMaxRpcVersion(
@@ -85,6 +84,7 @@ public final class AltsAuthContextTest {
     assertEquals(TEST_LOCAL_SERVICE_ACCOUNT, authContext.getLocalServiceAccount());
     assertEquals(rpcVersions, authContext.getPeerRpcVersions());
     assertEquals(testPeerAttributes, authContext.getPeerAttributes());
-    assertEquals("attributes", authContext.getPeerAttributes().get("peer"));
+    assertEquals(TEST_PEER_ATTRIBUTES_VALUE, authContext.getPeerAttributes()
+        .get(TEST_PEER_ATTRIBUTES_KEY));
   }
 }
