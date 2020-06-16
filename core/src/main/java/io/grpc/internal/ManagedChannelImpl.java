@@ -1299,7 +1299,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
       ResolvingOobChannelBuilder builder = new ResolvingOobChannelBuilder(target);
       builder.offloadExecutorPool = offloadExecutorHolder.pool;
       builder.overrideAuthority(getAuthority());
-      builder.nameResolverFactory(nameResolverFactory);
+      @SuppressWarnings("deprecation")
+      ResolvingOobChannelBuilder unused = builder.nameResolverFactory(nameResolverFactory);
       builder.executorPool = executorPool;
       builder.maxTraceEvents = maxTraceEvents;
       builder.proxyDetector = nameResolverArgs.getProxyDetector();

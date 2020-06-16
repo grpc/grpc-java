@@ -33,6 +33,8 @@ import com.google.common.collect.ImmutableList;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
+import io.grpc.NameResolverProvider;
+import io.grpc.NameResolverRegistry;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
@@ -59,6 +61,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import javax.net.ssl.SSLHandshakeException;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -74,10 +77,18 @@ public class XdsSdsClientServerTest {
 
   @Rule public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
   private int port;
+  private FakeNameResolverFactory fakeNameResolverFactory;
 
   @Before
   public void setUp() throws IOException {
     port = findFreePort();
+  }
+
+  @After
+  public void tearDown() {
+    if (fakeNameResolverFactory != null) {
+      NameResolverRegistry.getDefaultRegistry().deregister(fakeNameResolverFactory);
+    }
   }
 
   @Test
@@ -334,11 +345,10 @@ public class XdsSdsClientServerTest {
       final UpstreamTlsContext upstreamTlsContext, String overrideAuthority)
       throws URISyntaxException {
     URI expectedUri = new URI("sdstest://localhost:" + port);
-    FakeNameResolverFactory fakeNameResolverFactory = new FakeNameResolverFactory.Builder(
-        expectedUri).build();
+    fakeNameResolverFactory = new FakeNameResolverFactory.Builder(expectedUri).build();
+    NameResolverRegistry.getDefaultRegistry().register(fakeNameResolverFactory);
     XdsChannelBuilder channelBuilder =
-        XdsChannelBuilder.forTarget("sdstest://localhost:" + port)
-            .nameResolverFactory(fakeNameResolverFactory);
+        XdsChannelBuilder.forTarget("sdstest://localhost:" + port);
     if (overrideAuthority != null) {
       channelBuilder = channelBuilder.overrideAuthority(overrideAuthority);
     }
@@ -376,7 +386,7 @@ public class XdsSdsClientServerTest {
     }
   }
 
-  private static final class FakeNameResolverFactory extends NameResolver.Factory {
+  private static final class FakeNameResolverFactory extends NameResolverProvider {
     final URI expectedUri;
     List<EquivalentAddressGroup> servers = ImmutableList.of();
     final ArrayList<FakeNameResolver> resolvers = new ArrayList<>();
@@ -402,6 +412,16 @@ public class XdsSdsClientServerTest {
     @Override
     public String getDefaultScheme() {
       return "sdstest";
+    }
+
+    @Override
+    protected boolean isAvailable() {
+      return true;
+    }
+
+    @Override
+    protected int priority() {
+      return 5;
     }
 
     final class FakeNameResolver extends NameResolver {
