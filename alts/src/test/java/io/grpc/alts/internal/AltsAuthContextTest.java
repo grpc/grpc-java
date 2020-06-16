@@ -40,13 +40,13 @@ public final class AltsAuthContextTest {
   private static final String TEST_PEER_ATTRIBUTES_KEY = "peer";
   private static final String TEST_PEER_ATTRIBUTES_VALUE = "attributes";
 
-  private Map<String, String> testPeerAttributes = new HashMap<String, String>();
-  
+  private Map<String, String> testPeerAttributes;
   private HandshakerResult handshakerResult;
   private RpcProtocolVersions rpcVersions;
 
   @Before
   public void setUp() {
+    testPeerAttributes = new HashMap<String, String>();
     testPeerAttributes.put(TEST_PEER_ATTRIBUTES_KEY, TEST_PEER_ATTRIBUTES_VALUE);
     rpcVersions =
         RpcProtocolVersions.newBuilder()
