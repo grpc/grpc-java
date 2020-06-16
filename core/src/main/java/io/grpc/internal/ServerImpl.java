@@ -554,14 +554,10 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
               return;
             }
             listener = startCall(stream, methodName, method, headers, context, statsTraceCtx, tag);
-          } catch (RuntimeException e) {
-            stream.close(Status.fromThrowable(e), new Metadata());
+          } catch (Throwable t) {
+            stream.close(Status.fromThrowable(t), new Metadata());
             context.cancel(null);
-            throw e;
-          } catch (Error e) {
-            stream.close(Status.fromThrowable(e), new Metadata());
-            context.cancel(null);
-            throw e;
+            throw t;
           } finally {
             jumpListener.setListener(listener);
           }
@@ -783,12 +779,9 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
           PerfMark.linkIn(link);
           try {
             getListener().messagesAvailable(producer);
-          } catch (RuntimeException e) {
-            internalClose(e);
-            throw e;
-          } catch (Error e) {
-            internalClose(e);
-            throw e;
+          } catch (Throwable t) {
+            internalClose(t);
+            throw t;
           } finally {
             PerfMark.stopTask("ServerCallListener(app).messagesAvailable", tag);
           }
@@ -818,12 +811,9 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
           PerfMark.linkIn(link);
           try {
             getListener().halfClosed();
-          } catch (RuntimeException e) {
-            internalClose(e);
-            throw e;
-          } catch (Error e) {
-            internalClose(e);
-            throw e;
+          } catch (Throwable t) {
+            internalClose(t);
+            throw t;
           } finally {
             PerfMark.stopTask("ServerCallListener(app).halfClosed", tag);
           }
@@ -892,12 +882,9 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
           PerfMark.linkIn(link);
           try {
             getListener().onReady();
-          } catch (RuntimeException e) {
-            internalClose(e);
-            throw e;
-          } catch (Error e) {
-            internalClose(e);
-            throw e;
+          } catch (Throwable t) {
+            internalClose(t);
+            throw t;
           } finally {
             PerfMark.stopTask("ServerCallListener(app).onReady", tag);
           }
