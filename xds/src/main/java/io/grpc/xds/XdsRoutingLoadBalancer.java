@@ -23,11 +23,13 @@ import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.xds.XdsSubchannelPickers.BUFFER_PICKER;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.ConnectivityState;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
+import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.util.ForwardingLoadBalancerHelper;
@@ -37,9 +39,11 @@ import io.grpc.xds.XdsRoutingLoadBalancerProvider.Route;
 import io.grpc.xds.XdsRoutingLoadBalancerProvider.XdsRoutingConfig;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import javax.annotation.Nullable;
 
 /** Load balancer for xds_routing policy. */
@@ -66,7 +70,6 @@ final class XdsRoutingLoadBalancer extends LoadBalancer {
     XdsRoutingConfig xdsRoutingConfig =
         (XdsRoutingConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
     checkNotNull(xdsRoutingConfig, "Missing xds_routing lb config");
-
     Map<String, PolicySelection> newActions = xdsRoutingConfig.actions;
     for (String actionName : newActions.keySet()) {
       PolicySelection action = newActions.get(actionName);
@@ -80,10 +83,8 @@ final class XdsRoutingLoadBalancer extends LoadBalancer {
         routeBalancers.get(actionName).switchTo(action.getProvider());
       }
     }
-
     this.routes = xdsRoutingConfig.routes;
     this.actions = newActions;
-
     for (String actionName : actions.keySet()) {
       routeBalancers.get(actionName).handleResolvedAddresses(
           resolvedAddresses.toBuilder()
@@ -91,8 +92,6 @@ final class XdsRoutingLoadBalancer extends LoadBalancer {
               .build());
     }
 
-    // Cleanup removed actions.
-    // TODO(zdapeng): cache removed actions for 15 minutes.
     for (String actionName : routeBalancers.keySet()) {
       if (!actions.containsKey(actionName)) {
         routeBalancers.get(actionName).shutdown();
@@ -142,8 +141,9 @@ final class XdsRoutingLoadBalancer extends LoadBalancer {
     }
   }
 
+  @VisibleForTesting
   @Nullable
-  private static ConnectivityState aggregateState(
+  static ConnectivityState aggregateState(
       @Nullable ConnectivityState overallState, ConnectivityState childState) {
     if (overallState == null) {
       return childState;
@@ -180,8 +180,10 @@ final class XdsRoutingLoadBalancer extends LoadBalancer {
     }
   }
 
-  private static final class RouteMatchingSubchannelPicker extends SubchannelPicker {
+  @VisibleForTesting
+  static final class RouteMatchingSubchannelPicker extends SubchannelPicker {
 
+    @VisibleForTesting
     final Map<RouteMatch, SubchannelPicker> routePickers;
 
     RouteMatchingSubchannelPicker(Map<RouteMatch, SubchannelPicker> routePickers) {
@@ -190,8 +192,27 @@ final class XdsRoutingLoadBalancer extends LoadBalancer {
 
     @Override
     public PickResult pickSubchannel(PickSubchannelArgs args) {
-      // TODO(chengyuanzhang): to be implemented.
-      return PickResult.withError(Status.INTERNAL.withDescription("routing picker unimplemented"));
+      // Index ASCII headers by keys.
+      Map<String, Set<String>> asciiHeaders = new HashMap<>();
+      Metadata headers = args.getHeaders();
+      for (String headerName : headers.keys()) {
+        if (headerName.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
+          continue;
+        }
+        Set<String> headerValues = new HashSet<>();
+        Metadata.Key<String> key = Metadata.Key.of(headerName, Metadata.ASCII_STRING_MARSHALLER);
+        for (String value : headers.getAll(key)) {
+          headerValues.add(value);
+        }
+        asciiHeaders.put(headerName, headerValues);
+      }
+      for (Map.Entry<RouteMatch, SubchannelPicker> entry : routePickers.entrySet()) {
+        RouteMatch routeMatch = entry.getKey();
+        if (routeMatch.matches(args.getMethodDescriptor().getFullMethodName(), asciiHeaders)) {
+          return entry.getValue().pickSubchannel(args);
+        }
+      }
+      return PickResult.withError(Status.UNAVAILABLE.withDescription("no matching route found"));
     }
   }
 }

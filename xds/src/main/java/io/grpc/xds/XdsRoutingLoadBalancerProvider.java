@@ -269,7 +269,8 @@ public final class XdsRoutingLoadBalancerProvider extends LoadBalancerProvider {
     final List<Route> routes;
     final Map<String, PolicySelection> actions;
 
-    private XdsRoutingConfig(List<Route> routes, Map<String, PolicySelection> actions) {
+    @VisibleForTesting
+    XdsRoutingConfig(List<Route> routes, Map<String, PolicySelection> actions) {
       this.routes = ImmutableList.copyOf(routes);
       this.actions = ImmutableMap.copyOf(actions);
     }
