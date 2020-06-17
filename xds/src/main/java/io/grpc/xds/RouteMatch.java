@@ -65,17 +65,7 @@ final class RouteMatch {
       return false;
     }
     for (HeaderMatcher headerMatcher : headerMatchers) {
-      if (!headers.containsKey(headerMatcher.getName())) {
-        return false;
-      }
-      boolean containsMatchingValue = false;
-      for (String value : headers.get(headerMatcher.getName())) {
-        if (headerMatcher.matchesValue(value)) {
-          containsMatchingValue = true;
-          break;
-        }
-      }
-      if (!containsMatchingValue) {
+      if (!headerMatcher.matchesValue(headers.get(headerMatcher.getName()))) {
         return false;
       }
     }
@@ -239,25 +229,32 @@ final class RouteMatch {
       this.isInvertedMatch = isInvertedMatch;
     }
 
-    private boolean matchesValue(String value) {
-      boolean baseMatch;
-      if (exactMatch != null) {
-        baseMatch = exactMatch.equals(value);
-      } else if (safeRegExMatch != null) {
-        baseMatch = safeRegExMatch.matches(value);
-      } else if (rangeMatch != null) {
-        try {
-          Integer numValue = Integer.parseInt(value);
-          baseMatch = rangeMatch.contains(numValue);
-        } catch (NumberFormatException ignored) {
-          baseMatch = false;
+    private boolean matchesValue(@Nullable Set<String> values) {
+      if (presentMatch != null) {
+        return (values == null) == presentMatch.equals(isInvertedMatch);
+      }
+      if (values == null) {
+        return false;
+      }
+      boolean baseMatch = false;
+      for (String value : values) {
+        if (exactMatch != null) {
+          baseMatch |= exactMatch.equals(value);
+        } else if (safeRegExMatch != null) {
+          baseMatch |= safeRegExMatch.matches(value);
+        } else if (rangeMatch != null) {
+          int numValue;
+          try {
+            numValue = Integer.parseInt(value);
+          } catch (NumberFormatException ignored) {
+            continue;
+          }
+          baseMatch |= rangeMatch.contains(numValue);
+        } else if (prefixMatch != null) {
+          baseMatch |= value.startsWith(prefixMatch);
+        } else {
+          baseMatch |= value.endsWith(suffixMatch);
         }
-      } else if (presentMatch != null) {
-        baseMatch = presentMatch;
-      } else if (prefixMatch != null) {
-        baseMatch = value.startsWith(prefixMatch);
-      } else {
-        baseMatch = value.endsWith(suffixMatch);
       }
       return baseMatch != isInvertedMatch;
     }

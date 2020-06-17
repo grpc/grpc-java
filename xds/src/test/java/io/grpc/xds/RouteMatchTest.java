@@ -105,6 +105,33 @@ public class RouteMatchTest {
                 null, false)),
         null);
     assertThat(routeMatch3.matches("/FooService/barMethod", headers)).isFalse();
+
+    RouteMatch routeMatch4 = new RouteMatch(
+        new PathMatcher("/FooService/barMethod", null, null),
+        Collections.singletonList(
+            new HeaderMatcher(
+                "user-agent", null, null, null, false, null,
+                null, false)),
+        null);
+    assertThat(routeMatch4.matches("/FooService/barMethod", headers)).isFalse();
+
+    RouteMatch routeMatch5 = new RouteMatch(
+        new PathMatcher("/FooService/barMethod", null, null),
+        Collections.singletonList(
+            new HeaderMatcher(
+                "user-agent", null, null, null, false, null,
+                null, true)),
+        null);
+    assertThat(routeMatch5.matches("/FooService/barMethod", headers)).isTrue();
+
+    RouteMatch routeMatch6 = new RouteMatch(
+        new PathMatcher("/FooService/barMethod", null, null),
+        Collections.singletonList(
+            new HeaderMatcher(
+                "user-agent", null, null, null, true, null,
+                null, true)),
+        null);
+    assertThat(routeMatch6.matches("/FooService/barMethod", headers)).isFalse();
   }
 
   @Test
