@@ -1044,8 +1044,7 @@ public abstract class LoadBalancer {
      * {@link ManagedChannelBuilder#forTarget} for the format of a target string.
      *
      * <p>The target string will be resolved by a {@link NameResolver} created according to the
-     * target string.  If multiple addresses are resolved for the target, the first working address
-     * will be used.
+     * target string.
      *
      * <p>The LoadBalancer is responsible for closing unused OOB channels, and closing all OOB
      * channels within {@link #shutdown}.
@@ -1062,8 +1061,7 @@ public abstract class LoadBalancer {
      * on {@link ManagedChannelBuilder#forTarget} for the format of a target string.
      *
      * <p>The target string will be resolved by a {@link NameResolver} created according to the
-     * target string.  If multiple addresses are resolved for the target, the first working address
-     * will be used.
+     * target string.
      *
      * <p>The LoadBalancer is responsible for closing unused OOB channels, and closing all OOB
      * channels within {@link #shutdown}.

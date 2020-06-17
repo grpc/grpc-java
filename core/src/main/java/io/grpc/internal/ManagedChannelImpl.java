@@ -1282,7 +1282,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
         @Override
         public ManagedChannel build() {
-          // TODO(creamsoup) prevents main channel to shutdown if oob channel is not terminated
+          // TODO(creamsoup) prevent main channel to shutdown if oob channel is not terminated
           return new ManagedChannelImpl(
                   this,
                   transportFactory,
@@ -1306,11 +1306,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
       builder.defaultPort = nameResolverArgs.getDefaultPort();
       builder.userAgent = userAgent;
       return builder;
-    }
-
-    @Override
-    public ManagedChannel createResolvingOobChannel(String target) {
-      return createResolvingOobChannelBuilder(target).build();
     }
 
     @Override
