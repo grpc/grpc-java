@@ -16,12 +16,11 @@
 
 package io.grpc.xds.internal.sds;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
 import io.grpc.xds.Bootstrapper;
+import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.internal.sds.ReferenceCountingSslContextProviderMap.SslContextProviderFactory;
 import java.io.IOException;
 import java.util.concurrent.Executors;
@@ -35,8 +34,8 @@ final class ServerSslContextProviderFactory
   public SslContextProvider createSslContextProvider(
       DownstreamTlsContext downstreamTlsContext) {
     checkNotNull(downstreamTlsContext, "downstreamTlsContext");
-    checkArgument(
-        downstreamTlsContext.hasCommonTlsContext(),
+    checkNotNull(
+        downstreamTlsContext.getCommonTlsContext(),
         "downstreamTlsContext should have CommonTlsContext");
     if (CommonTlsContextUtil.hasAllSecretsUsingFilename(
         downstreamTlsContext.getCommonTlsContext())) {

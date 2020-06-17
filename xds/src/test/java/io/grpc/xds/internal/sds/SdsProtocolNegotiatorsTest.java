@@ -31,7 +31,6 @@ import static org.mockito.Mockito.when;
 import com.google.common.base.Strings;
 import io.envoyproxy.envoy.api.v2.auth.CertificateValidationContext;
 import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
-import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.auth.TlsCertificate;
 import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.core.DataSource;
@@ -41,6 +40,7 @@ import io.grpc.netty.GrpcHttp2ConnectionHandler;
 import io.grpc.netty.InternalProtocolNegotiationEvent;
 import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiators;
+import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.XdsAttributes;
 import io.grpc.xds.XdsClientWrapperForServerSds;
 import io.grpc.xds.XdsClientWrapperForServerSdsTest;
@@ -109,9 +109,11 @@ public class SdsProtocolNegotiatorsTest {
 
   /** Builds DownstreamTlsContext from commonTlsContext. */
   private static DownstreamTlsContext buildDownstreamTlsContext(CommonTlsContext commonTlsContext) {
-    DownstreamTlsContext downstreamTlsContext =
-        DownstreamTlsContext.newBuilder().setCommonTlsContext(commonTlsContext).build();
-    return downstreamTlsContext;
+    io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext downstreamTlsContext =
+        io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext.newBuilder()
+            .setCommonTlsContext(commonTlsContext)
+            .build();
+    return DownstreamTlsContext.fromEnvoyProtoDownstreamTlsContext(downstreamTlsContext);
   }
 
   private static CommonTlsContext buildCommonTlsContextFromFilenames(

@@ -27,6 +27,7 @@ import io.envoyproxy.envoy.api.v2.auth.TlsCertificate;
 import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.core.DataSource;
 import io.grpc.internal.testing.TestUtils;
+import io.grpc.xds.EnvoyServerProtoData;
 import java.io.IOException;
 import java.util.Arrays;
 import javax.annotation.Nullable;
@@ -146,6 +147,13 @@ public class CommonTlsContextTestsUtil {
     return downstreamTlsContext;
   }
 
+  /** Helper method to build internal DownstreamTlsContext for multiple test classes. */
+  static EnvoyServerProtoData.DownstreamTlsContext buildInternalDownstreamTlsContext(
+      CommonTlsContext commonTlsContext, boolean requireClientCert) {
+    return EnvoyServerProtoData.DownstreamTlsContext.fromEnvoyProtoDownstreamTlsContext(
+        buildDownstreamTlsContext(commonTlsContext, requireClientCert));
+  }
+
   /** Helper method for creating DownstreamTlsContext values for tests. */
   public static DownstreamTlsContext buildTestDownstreamTlsContext() {
     return buildTestDownstreamTlsContext("google-sds-config-default", "ROOTCA");
@@ -166,6 +174,12 @@ public class CommonTlsContextTestsUtil {
         /* requireClientCert= */ false);
   }
 
+  public static EnvoyServerProtoData.DownstreamTlsContext buildTestInternalDownstreamTlsContext(
+      String certName, String validationContextName) {
+    return EnvoyServerProtoData.DownstreamTlsContext.fromEnvoyProtoDownstreamTlsContext(
+        buildTestDownstreamTlsContext(certName, validationContextName));
+  }
+
   static String getTempFileNameForResourcesFile(String resFile) throws IOException {
     return TestUtils.loadCert(resFile).getAbsolutePath();
   }
@@ -173,7 +187,7 @@ public class CommonTlsContextTestsUtil {
   /**
    * Helper method to build DownstreamTlsContext for above tests. Called from other classes as well.
    */
-  public static DownstreamTlsContext buildDownstreamTlsContextFromFilenames(
+  public static EnvoyServerProtoData.DownstreamTlsContext buildDownstreamTlsContextFromFilenames(
       @Nullable String privateKey, @Nullable String certChain, @Nullable String trustCa) {
     return buildDownstreamTlsContextFromFilenamesWithClientAuth(privateKey, certChain, trustCa,
         false);
@@ -182,20 +196,19 @@ public class CommonTlsContextTestsUtil {
   /**
    * Helper method to build DownstreamTlsContext for above tests. Called from other classes as well.
    */
-  public static DownstreamTlsContext buildDownstreamTlsContextFromFilenamesWithClientCertRequired(
-      @Nullable String privateKey,
-      @Nullable String certChain,
-      @Nullable String trustCa) {
-
+  public static EnvoyServerProtoData.DownstreamTlsContext
+      buildDownstreamTlsContextFromFilenamesWithClientCertRequired(
+          @Nullable String privateKey, @Nullable String certChain, @Nullable String trustCa) {
     return buildDownstreamTlsContextFromFilenamesWithClientAuth(privateKey, certChain, trustCa,
         true);
   }
 
-  private static DownstreamTlsContext buildDownstreamTlsContextFromFilenamesWithClientAuth(
-      @Nullable String privateKey,
-      @Nullable String certChain,
-      @Nullable String trustCa,
-      boolean requireClientCert) {
+  private static EnvoyServerProtoData.DownstreamTlsContext
+      buildDownstreamTlsContextFromFilenamesWithClientAuth(
+          @Nullable String privateKey,
+          @Nullable String certChain,
+          @Nullable String trustCa,
+          boolean requireClientCert) {
     // get temp file for each file
     try {
       if (certChain != null) {
@@ -210,7 +223,7 @@ public class CommonTlsContextTestsUtil {
     } catch (IOException ioe) {
       throw new RuntimeException(ioe);
     }
-    return buildDownstreamTlsContext(
+    return buildInternalDownstreamTlsContext(
         buildCommonTlsContextFromFilenames(privateKey, certChain, trustCa), requireClientCert);
   }
 

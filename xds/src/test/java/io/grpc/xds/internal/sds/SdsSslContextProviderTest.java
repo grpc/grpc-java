@@ -106,7 +106,7 @@ public class SdsSslContextProviderTest {
             /* channelType= */ "inproc");
 
     return SdsServerSslContextProvider.getProvider(
-        CommonTlsContextTestsUtil.buildDownstreamTlsContext(
+        CommonTlsContextTestsUtil.buildInternalDownstreamTlsContext(
             commonTlsContext, /* requireClientCert= */ false),
         node,
         MoreExecutors.directExecutor(),

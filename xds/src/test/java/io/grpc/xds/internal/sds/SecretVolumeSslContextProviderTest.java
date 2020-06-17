@@ -260,7 +260,7 @@ public class SecretVolumeSslContextProviderTest {
     TlsCertificate tlsCert = TlsCertificate.getDefaultInstance();
     try {
       SecretVolumeServerSslContextProvider.getProvider(
-          CommonTlsContextTestsUtil.buildDownstreamTlsContext(
+          CommonTlsContextTestsUtil.buildInternalDownstreamTlsContext(
               CommonTlsContextTestsUtil.getCommonTlsContext(tlsCert, /* certContext= */ null),
               /* requireClientCert= */ false));
       Assert.fail("no exception thrown");
@@ -282,7 +282,7 @@ public class SecretVolumeSslContextProviderTest {
             .build();
     try {
       SecretVolumeServerSslContextProvider.getProvider(
-          CommonTlsContextTestsUtil.buildDownstreamTlsContext(
+          CommonTlsContextTestsUtil.buildInternalDownstreamTlsContext(
               CommonTlsContextTestsUtil.getCommonTlsContext(tlsCert, certContext),
               /* requireClientCert= */ false));
       Assert.fail("no exception thrown");
