@@ -224,7 +224,7 @@ public class XdsRoutingLoadBalancerTest {
       String service, String method, Map<String, String> headers) {
     MethodDescriptor<Void, Void> methodDescriptor =
         MethodDescriptor.<Void, Void>newBuilder()
-            .setType(MethodType.UNARY).setFullMethodName("/" + service + "/" + method)
+            .setType(MethodType.UNARY).setFullMethodName(service + "/" + method)
             .setRequestMarshaller(TestMethodDescriptors.voidMarshaller())
             .setResponseMarshaller(TestMethodDescriptors.voidMarshaller())
             .build();

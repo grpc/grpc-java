@@ -208,7 +208,8 @@ final class XdsRoutingLoadBalancer extends LoadBalancer {
       }
       for (Map.Entry<RouteMatch, SubchannelPicker> entry : routePickers.entrySet()) {
         RouteMatch routeMatch = entry.getKey();
-        if (routeMatch.matches(args.getMethodDescriptor().getFullMethodName(), asciiHeaders)) {
+        if (routeMatch.matches(
+            "/" + args.getMethodDescriptor().getFullMethodName(), asciiHeaders)) {
           return entry.getValue().pickSubchannel(args);
         }
       }
