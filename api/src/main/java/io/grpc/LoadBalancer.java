@@ -1044,8 +1044,8 @@ public abstract class LoadBalancer {
      * {@link ManagedChannelBuilder#forTarget} for the format of a target string.
      *
      * <p>The target string will be resolved by a {@link NameResolver} created according to the
-     * target string.  The out-of-band channel doesn't have load-balancing.  If multiple addresses
-     * are resolved for the target, the first working address will be used.
+     * target string.  If multiple addresses are resolved for the target, the first working address
+     * will be used.
      *
      * <p>The LoadBalancer is responsible for closing unused OOB channels, and closing all OOB
      * channels within {@link #shutdown}.
@@ -1053,6 +1053,24 @@ public abstract class LoadBalancer {
      * @since 1.20.0
      */
     public ManagedChannel createResolvingOobChannel(String target) {
+      return createResolvingOobChannelBuilder(target).build();
+    }
+
+    /**
+     * Creates an out-of-band channel builder for LoadBalancer's own RPC needs, e.g., talking to an
+     * external load-balancer service, that is specified by a target string.  See the documentation
+     * on {@link ManagedChannelBuilder#forTarget} for the format of a target string.
+     *
+     * <p>The target string will be resolved by a {@link NameResolver} created according to the
+     * target string.  If multiple addresses are resolved for the target, the first working address
+     * will be used.
+     *
+     * <p>The LoadBalancer is responsible for closing unused OOB channels, and closing all OOB
+     * channels within {@link #shutdown}.
+     *
+     * @since 1.31.0
+     */
+    public ManagedChannelBuilder<?> createResolvingOobChannelBuilder(String target) {
       throw new UnsupportedOperationException("Not implemented");
     }
 
