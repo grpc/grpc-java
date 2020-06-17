@@ -243,9 +243,9 @@ final class RouteMatch {
         } else if (safeRegExMatch != null) {
           baseMatch |= safeRegExMatch.matches(value);
         } else if (rangeMatch != null) {
-          int numValue;
+          long numValue;
           try {
-            numValue = Integer.parseInt(value);
+            numValue = Long.parseLong(value);
           } catch (NumberFormatException ignored) {
             continue;
           }
@@ -353,7 +353,7 @@ final class RouteMatch {
         this.end = end;
       }
 
-      boolean contains(int value) {
+      boolean contains(long value) {
         return value >= start && value < end;
       }
 
