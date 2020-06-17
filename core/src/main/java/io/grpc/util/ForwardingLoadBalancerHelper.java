@@ -27,6 +27,7 @@ import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancer;
 import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.NameResolver;
 import io.grpc.NameResolverRegistry;
 import io.grpc.SynchronizationContext;
@@ -66,6 +67,11 @@ public abstract class ForwardingLoadBalancerHelper extends LoadBalancer.Helper {
   @Override
   public void updateOobChannelAddresses(ManagedChannel channel, EquivalentAddressGroup eag) {
     delegate().updateOobChannelAddresses(channel, eag);
+  }
+
+  @Override
+  public ManagedChannelBuilder<?> createResolvingOobChannelBuilder(String target) {
+    return delegate().createResolvingOobChannelBuilder(target);
   }
 
   @Override
