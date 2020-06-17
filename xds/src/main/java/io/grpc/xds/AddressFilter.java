@@ -56,16 +56,16 @@ final class AddressFilter {
 
   /**
    * Returns the next level hierarchical addresses derived from the given hierarchical addresses
-   * with the given filter name. This method does not modify the input addresses.
+   * with the given filter name (any non-hierarchical addresses in the input will be ignored).
+   * This method does not modify the input addresses.
    */
   static List<EquivalentAddressGroup> filter(List<EquivalentAddressGroup> addresses, String name) {
     checkNotNull(addresses, "addresses");
     checkNotNull(name, "name");
     List<EquivalentAddressGroup> filteredAddresses = new ArrayList<>();
     for (EquivalentAddressGroup address : addresses) {
-      PathChain pathChain =
-          checkNotNull(address.getAttributes().get(PATH_CHAIN_KEY), "Not a hierarchical address");
-      if (pathChain.name.equals(name)) {
+      PathChain pathChain = address.getAttributes().get(PATH_CHAIN_KEY);
+      if (pathChain != null && pathChain.name.equals(name)) {
         Attributes filteredAddressAttrs =
             address.getAttributes().toBuilder().set(PATH_CHAIN_KEY, pathChain.next).build();
         filteredAddresses.add(
