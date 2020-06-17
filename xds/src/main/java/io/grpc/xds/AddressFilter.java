@@ -35,7 +35,8 @@ final class AddressFilter {
   private AddressFilter() {}
 
   /**
-   * Sets a path filter to an EquivalentAddressGroup. Any preexisting path filter will be discarded.
+   * Returns a new EquivalentAddressGroup by setting a path filter to the given
+   * EquivalentAddressGroup. This method does not modify the input address.
    */
   static EquivalentAddressGroup setPathFilter(EquivalentAddressGroup address, List<String> names) {
     checkNotNull(address, "address");
@@ -54,9 +55,8 @@ final class AddressFilter {
   }
 
   /**
-   * Selects addresses from the given list such that the first element in the path filter is
-   * identical to the given name, and returns the selected addresses with that first element removed
-   * from the path filter.
+   * Returns the next level hierarchical addresses derived from the given hierarchical addresses
+   * with the given filter name. This method does not modify the input addresses.
    */
   static List<EquivalentAddressGroup> filter(List<EquivalentAddressGroup> addresses, String name) {
     checkNotNull(addresses, "addresses");
