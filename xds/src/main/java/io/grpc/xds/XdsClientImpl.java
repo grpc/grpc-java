@@ -1195,6 +1195,8 @@ final class XdsClientImpl extends XdsClient {
     absentEdsResources.removeAll(endpointUpdates.keySet());
 
     // Notify watchers waiting for updates of endpoint information received in this EDS response.
+    // Based on xDS protocol, the management server should not send endpoint data again if
+    // nothing has changed.
     for (Map.Entry<String, EndpointUpdate> entry : endpointUpdates.entrySet()) {
       String clusterName = entry.getKey();
       // Cancel and delete response timeout timer.
