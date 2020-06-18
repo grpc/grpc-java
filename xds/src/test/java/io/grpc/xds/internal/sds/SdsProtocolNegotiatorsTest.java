@@ -246,6 +246,46 @@ public class SdsProtocolNegotiatorsTest {
   }
 
   @Test
+  public void serverSdsHandler_defaultDownstreamTlsContext_expectFallbackProtocolNegotiator()
+      throws IOException {
+    ChannelHandler mockChannelHandler = mock(ChannelHandler.class);
+    ProtocolNegotiator mockProtocolNegotiator = mock(ProtocolNegotiator.class);
+    when(mockProtocolNegotiator.newHandler(grpcHandler)).thenReturn(mockChannelHandler);
+    // we need InetSocketAddress instead of EmbeddedSocketAddress as localAddress for this test
+    channel =
+        new EmbeddedChannel() {
+          @Override
+          public SocketAddress localAddress() {
+            return new InetSocketAddress("172.168.1.1", 80);
+          }
+        };
+    pipeline = channel.pipeline();
+    DownstreamTlsContext downstreamTlsContext =
+        DownstreamTlsContext.fromEnvoyProtoDownstreamTlsContext(
+            io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext.getDefaultInstance());
+
+    XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
+        XdsClientWrapperForServerSdsTest.createXdsClientWrapperForServerSds(
+            80, downstreamTlsContext);
+    SdsProtocolNegotiators.HandlerPickerHandler handlerPickerHandler =
+        new SdsProtocolNegotiators.HandlerPickerHandler(
+            grpcHandler, xdsClientWrapperForServerSds, mockProtocolNegotiator);
+    pipeline.addLast(handlerPickerHandler);
+    channelHandlerCtx = pipeline.context(handlerPickerHandler);
+    assertThat(channelHandlerCtx).isNotNull(); // should find HandlerPickerHandler
+
+    // kick off protocol negotiation: should replace HandlerPickerHandler with ServerSdsHandler
+    pipeline.fireUserEventTriggered(InternalProtocolNegotiationEvent.getDefault());
+    channelHandlerCtx = pipeline.context(handlerPickerHandler);
+    assertThat(channelHandlerCtx).isNull();
+    channel.runPendingTasks(); // need this for tasks to execute on eventLoop
+    Iterator<Map.Entry<String, ChannelHandler>> iterator = pipeline.iterator();
+    assertThat(iterator.next().getValue()).isSameInstanceAs(mockChannelHandler);
+    // no more handlers in the pipeline
+    assertThat(iterator.hasNext()).isFalse();
+  }
+
+  @Test
   public void serverSdsHandler_nullTlsContext_expectFallbackProtocolNegotiator() {
     ChannelHandler mockChannelHandler = mock(ChannelHandler.class);
     ProtocolNegotiator mockProtocolNegotiator = mock(ProtocolNegotiator.class);
