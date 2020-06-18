@@ -239,9 +239,9 @@ final class RouteMatch {
       boolean baseMatch = false;
       for (String value : values) {
         if (exactMatch != null) {
-          baseMatch |= exactMatch.equals(value);
+          baseMatch = exactMatch.equals(value);
         } else if (safeRegExMatch != null) {
-          baseMatch |= safeRegExMatch.matches(value);
+          baseMatch = safeRegExMatch.matches(value);
         } else if (rangeMatch != null) {
           long numValue;
           try {
@@ -249,11 +249,14 @@ final class RouteMatch {
           } catch (NumberFormatException ignored) {
             continue;
           }
-          baseMatch |= rangeMatch.contains(numValue);
+          baseMatch = rangeMatch.contains(numValue);
         } else if (prefixMatch != null) {
-          baseMatch |= value.startsWith(prefixMatch);
+          baseMatch = value.startsWith(prefixMatch);
         } else {
-          baseMatch |= value.endsWith(suffixMatch);
+          baseMatch = value.endsWith(suffixMatch);
+        }
+        if (baseMatch) {
+          break;
         }
       }
       return baseMatch != isInvertedMatch;
