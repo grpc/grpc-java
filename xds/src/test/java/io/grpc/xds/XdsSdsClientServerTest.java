@@ -90,6 +90,18 @@ public class XdsSdsClientServerTest {
   }
 
   @Test
+  public void plaintextClientServer_withDefaultTlsContext() throws IOException, URISyntaxException {
+    DownstreamTlsContext defaultTlsContext =
+        EnvoyServerProtoData.DownstreamTlsContext.fromEnvoyProtoDownstreamTlsContext(
+            io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext.getDefaultInstance());
+    buildServerWithTlsContext(/* downstreamTlsContext= */ defaultTlsContext);
+
+    SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
+            getBlockingStub(/* upstreamTlsContext= */ null, /* overrideAuthority= */ null);
+    assertThat(unaryRpc("buddy", blockingStub)).isEqualTo("Hello buddy");
+  }
+
+  @Test
   public void nullFallbackProtocolNegotiator_expectException()
       throws IOException, URISyntaxException {
     buildServerWithTlsContext(/* downstreamTlsContext= */ null,
