@@ -1573,24 +1573,7 @@ public class XdsClientImplTest {
                     ImmutableList.of("cluster-foo.googleapis.com", "cluster-bar.googleapis.com"),
                     XdsClientImpl.ADS_TYPE_URL_CDS, "0001")));
 
-    // All watchers received notification for cluster update.
-    verify(watcher1, times(2)).onClusterChanged(clusterUpdateCaptor1.capture());
-    clusterUpdate1 = clusterUpdateCaptor1.getValue();
-    assertThat(clusterUpdate1.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
-    assertThat(clusterUpdate1.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
-    assertThat(clusterUpdate1.getEdsServiceName()).isNull();
-    assertThat(clusterUpdate1.getLbPolicy()).isEqualTo("round_robin");
-    assertThat(clusterUpdate1.getLrsServerName()).isNull();
-
-    clusterUpdateCaptor2 = ArgumentCaptor.forClass(null);
-    verify(watcher2, times(2)).onClusterChanged(clusterUpdateCaptor2.capture());
-    clusterUpdate2 = clusterUpdateCaptor2.getValue();
-    assertThat(clusterUpdate2.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
-    assertThat(clusterUpdate2.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
-    assertThat(clusterUpdate2.getEdsServiceName()).isNull();
-    assertThat(clusterUpdate2.getLbPolicy()).isEqualTo("round_robin");
-    assertThat(clusterUpdate2.getLrsServerName()).isNull();
-
+    verifyNoMoreInteractions(watcher1, watcher2); // resource has no change
     ArgumentCaptor<ClusterUpdate> clusterUpdateCaptor3 = ArgumentCaptor.forClass(null);
     verify(watcher3).onClusterChanged(clusterUpdateCaptor3.capture());
     ClusterUpdate clusterUpdate3 = clusterUpdateCaptor3.getValue();
@@ -1728,14 +1711,7 @@ public class XdsClientImplTest {
                 new DiscoveryRequestMatcher("1",
                     ImmutableList.of("cluster-foo.googleapis.com", "cluster-bar.googleapis.com"),
                     XdsClientImpl.ADS_TYPE_URL_CDS, "0001")));
-
-    verify(watcher1, times(2)).onClusterChanged(clusterUpdateCaptor1.capture());
-    clusterUpdate1 = clusterUpdateCaptor1.getValue();
-    assertThat(clusterUpdate1.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
-    assertThat(clusterUpdate1.getEdsServiceName()).isNull();
-    assertThat(clusterUpdate1.getLbPolicy()).isEqualTo("round_robin");
-    assertThat(clusterUpdate1.getLrsServerName()).isNull();
-
+    verifyNoMoreInteractions(watcher1);  // resource has no change
     ArgumentCaptor<ClusterUpdate> clusterUpdateCaptor2 = ArgumentCaptor.forClass(null);
     verify(watcher2).onClusterChanged(clusterUpdateCaptor2.capture());
     ClusterUpdate clusterUpdate2 = clusterUpdateCaptor2.getValue();
