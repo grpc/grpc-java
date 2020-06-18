@@ -364,15 +364,8 @@ public final class SdsProtocolNegotiators {
         }
         logger.log(Level.INFO, "Using fallback for {0}", ctx.channel().localAddress());
         // Delegate rest of handshake to fallback handler
-        ctx.executor()
-            .execute(
-                new Runnable() {
-                  @Override
-                  public void run() {
-                    replaceHandler(
-                        fallbackProtocolNegotiator.newHandler(grpcHandler), ctx, bufferReads);
-                  }
-                });
+        ctx.pipeline().replace(this, null, fallbackProtocolNegotiator.newHandler(grpcHandler));
+        ctx.pipeline().remove(bufferReads);
         return;
       }
       final SslContextProvider sslContextProvider = sslContextProviderTemp;
@@ -381,12 +374,13 @@ public final class SdsProtocolNegotiators {
 
             @Override
             public void updateSecret(SslContext sslContext) {
+              ChannelHandler handler =
+                  InternalProtocolNegotiators.serverTls(sslContext).newHandler(grpcHandler);
 
               // Delegate rest of handshake to TLS handler
-              replaceHandler(
-                  InternalProtocolNegotiators.serverTls(sslContext).newHandler(grpcHandler),
-                  ctx,
-                  bufferReads);
+              ctx.pipeline().addAfter(ctx.name(), null, handler);
+              fireProtocolNegotiationEvent(ctx);
+              ctx.pipeline().remove(bufferReads);
               TlsContextManagerImpl.getInstance()
                   .releaseServerSslContextProvider(sslContextProvider);
             }
@@ -397,13 +391,6 @@ public final class SdsProtocolNegotiators {
             }
           },
           ctx.executor());
-    }
-
-    private void replaceHandler(
-        ChannelHandler handler, ChannelHandlerContext ctx, BufferReadsHandler bufferReads) {
-      ctx.pipeline().addAfter(ctx.name(), null, handler);
-      fireProtocolNegotiationEvent(ctx);
-      ctx.pipeline().remove(bufferReads);
     }
   }
 }
