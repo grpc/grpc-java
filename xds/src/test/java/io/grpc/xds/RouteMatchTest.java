@@ -39,10 +39,10 @@ public class RouteMatchTest {
 
   @Before
   public void setUp() {
-    headers.put("content-type", new HashSet<>(Collections.singletonList("application/grpc")));
-    headers.put("grpc-encoding", new HashSet<>(Collections.singletonList("gzip")));
-    headers.put("user-agent", new HashSet<>(Collections.singletonList("gRPC-Java")));
-    headers.put("content-length", new HashSet<>(Collections.singletonList("1000")));
+    headers.put("content-type", Collections.singleton("application/grpc"));
+    headers.put("grpc-encoding", Collections.singleton("gzip"));
+    headers.put("user-agent", Collections.singleton("gRPC-Java"));
+    headers.put("content-length", Collections.singleton("1000"));
     headers.put("custom-key", new HashSet<>(Arrays.asList("custom-value1", "custom-value2")));
   }
 
