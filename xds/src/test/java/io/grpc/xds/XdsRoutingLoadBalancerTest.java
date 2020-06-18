@@ -20,6 +20,7 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableMap;
 import io.grpc.CallOptions;
@@ -37,6 +38,8 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.Status;
+import io.grpc.SynchronizationContext;
+import io.grpc.internal.FakeClock;
 import io.grpc.internal.PickSubchannelArgsImpl;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.testing.TestMethodDescriptors;
@@ -50,6 +53,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -61,6 +65,15 @@ import org.mockito.MockitoAnnotations;
 /** Tests for {@link XdsRoutingLoadBalancer}. */
 @RunWith(JUnit4.class)
 public class XdsRoutingLoadBalancerTest {
+
+  private final SynchronizationContext syncContext = new SynchronizationContext(
+      new Thread.UncaughtExceptionHandler() {
+        @Override
+        public void uncaughtException(Thread t, Throwable e) {
+          throw new AssertionError(e);
+        }
+      });
+  private final FakeClock fakeClock = new FakeClock();
 
   @Mock
   private LoadBalancer.Helper helper;
@@ -88,6 +101,8 @@ public class XdsRoutingLoadBalancerTest {
   @Before
   public void setUp() {
     MockitoAnnotations.initMocks(this);
+    when(helper.getSynchronizationContext()).thenReturn(syncContext);
+    when(helper.getScheduledExecutorService()).thenReturn(fakeClock.getScheduledExecutorService());
     xdsRoutingLoadBalancer = new XdsRoutingLoadBalancer(helper);
   }
 
@@ -139,18 +154,25 @@ public class XdsRoutingLoadBalancerTest {
                 .setLoadBalancingPolicyConfig(config)
                 .build());
 
-    assertThat(childBalancer1.shutdown).isTrue();  // shutdown because "action_a" is removed
-    assertThat(childBalancer2.shutdown).isTrue();  // shutdown because "action_b" changes policy
-    assertThat(childBalancers).hasSize(2);
-    assertThat(childBalancers.get(0).name).isEqualTo("policy_a");
-    assertThat(childBalancers.get(0)).isNotSameInstanceAs(childBalancer1);
-    assertThat(childBalancers.get(1).name).isEqualTo("policy_c");
+    assertThat(childBalancer2.shutdown)
+        .isTrue();  // (immediate) shutdown because "action_b" changes policy (before ready)
+    assertThat(fakeClock.numPendingTasks())
+        .isEqualTo(1);  // (delayed) shutdown because "action_a" is removed
+    assertThat(childBalancer1.shutdown).isFalse();
+    assertThat(childBalancers).hasSize(3);
+    FakeLoadBalancer childBalancer3 = childBalancers.get(1);
+    FakeLoadBalancer childBalancer4 = childBalancers.get(2);
+    assertThat(childBalancer3.name).isEqualTo("policy_a");
+    assertThat(childBalancer3).isNotSameInstanceAs(childBalancer1);
+    assertThat(childBalancer4.name).isEqualTo("policy_c");
 
     // Simulate subchannel state update from the leaf policy.
     Subchannel subchannel1 = mock(Subchannel.class);
     Subchannel subchannel2 = mock(Subchannel.class);
-    childBalancers.get(0).deliverSubchannelState(subchannel1, ConnectivityState.CONNECTING);
-    childBalancers.get(1).deliverSubchannelState(subchannel2, ConnectivityState.READY);
+    Subchannel subchannel3 = mock(Subchannel.class);
+    childBalancer1.deliverSubchannelState(subchannel1, ConnectivityState.READY);
+    childBalancer3.deliverSubchannelState(subchannel2, ConnectivityState.CONNECTING);
+    childBalancer4.deliverSubchannelState(subchannel3, ConnectivityState.READY);
 
     ArgumentCaptor<SubchannelPicker> pickerCaptor = ArgumentCaptor.forClass(null);
     verify(helper).updateBalancingState(eq(ConnectivityState.READY), pickerCaptor.capture());
@@ -159,15 +181,29 @@ public class XdsRoutingLoadBalancerTest {
     assertThat(
         picker.routePickers.get(routeMatch1)
             .pickSubchannel(mock(PickSubchannelArgs.class)).getSubchannel())
-        .isSameInstanceAs(subchannel1);  // routeMatch1 -> action_b -> policy_a -> subchannel1
+        .isSameInstanceAs(subchannel2);  // routeMatch1 -> action_b -> policy_a -> subchannel2
     assertThat(
         picker.routePickers.get(routeMatch2)
             .pickSubchannel(mock(PickSubchannelArgs.class)).getSubchannel())
-        .isSameInstanceAs(subchannel2);  // routeMatch2 -> action_c -> policy_c -> subchannel2
+        .isSameInstanceAs(subchannel3);  // routeMatch2 -> action_c -> policy_c -> subchannel3
     assertThat(
         picker.routePickers.get(routeMatch3)
             .pickSubchannel(mock(PickSubchannelArgs.class)).getSubchannel())
-        .isSameInstanceAs(subchannel2);  // routeMatch3 -> action_c -> policy_c -> subchannel2
+        .isSameInstanceAs(subchannel3);  // routeMatch3 -> action_c -> policy_c -> subchannel3
+
+    // Error propagation from upstream policies.
+    Status error = Status.UNAVAILABLE.withDescription("network error");
+    xdsRoutingLoadBalancer.handleNameResolutionError(error);
+    assertThat(childBalancer1.upstreamError).isNull();
+    assertThat(childBalancer3.upstreamError).isEqualTo(error);
+    assertThat(childBalancer4.upstreamError).isEqualTo(error);
+    fakeClock.forwardTime(
+        XdsRoutingLoadBalancer.DELAYED_ACTION_DELETION_TIME_MINUTES, TimeUnit.MINUTES);
+    assertThat(childBalancer1.shutdown).isTrue();
+
+    xdsRoutingLoadBalancer.shutdown();
+    assertThat(childBalancer3.shutdown).isTrue();
+    assertThat(childBalancer4.shutdown).isTrue();
   }
 
   @Test
@@ -270,6 +306,7 @@ public class XdsRoutingLoadBalancerTest {
     private final String name;
     private final Helper helper;
     private Object config;
+    private Status upstreamError;
     private boolean shutdown;
 
     FakeLoadBalancer(String name, Helper helper) {
@@ -283,14 +320,8 @@ public class XdsRoutingLoadBalancerTest {
     }
 
     @Override
-    public void handleNameResolutionError(final Status error) {
-      SubchannelPicker picker = new SubchannelPicker() {
-        @Override
-        public PickResult pickSubchannel(PickSubchannelArgs args) {
-          return PickResult.withError(error.augmentDescription("handled by downstream balancer"));
-        }
-      };
-      helper.updateBalancingState(ConnectivityState.TRANSIENT_FAILURE, picker);
+    public void handleNameResolutionError(Status error) {
+      upstreamError = error;
     }
 
     @Override
