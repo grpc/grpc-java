@@ -41,7 +41,7 @@ final class RlsRequestFactory {
 
   private final String target;
   /**
-   * schema: Path(serviceName/methodName or serviceName/*), rls request headerName, header fields.
+   * schema: Path(/serviceName/methodName or serviceName/*), rls request headerName, header fields.
    */
   private final Table<String, String, NameMatcher> keyBuilderTable;
 
