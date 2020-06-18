@@ -40,6 +40,7 @@ import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.NameResolver.Factory;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
@@ -133,9 +134,13 @@ public class CachingRlsLbClientTest {
       new LbPolicyConfiguration(ROUTE_LOOKUP_CONFIG, childLbPolicy);
 
   private CachingRlsLbClient rlsLbClient;
+  private String existingEnableOobChannelDirectPath;
 
   @Before
   public void setUp() throws Exception {
+    existingEnableOobChannelDirectPath =
+        System.getProperty(CachingRlsLbClient.RLS_ENABLE_OOB_CHANNEL_DIRECTPATH_PROPERTY);
+    System.setProperty(CachingRlsLbClient.RLS_ENABLE_OOB_CHANNEL_DIRECTPATH_PROPERTY, "false");
     rlsLbClient =
         CachingRlsLbClient.newBuilder()
             .setBackoffProvider(fakeBackoffProvider)
@@ -151,6 +156,13 @@ public class CachingRlsLbClientTest {
   @After
   public void tearDown() throws Exception {
     rlsLbClient.close();
+    if (existingEnableOobChannelDirectPath == null) {
+      System.clearProperty(CachingRlsLbClient.RLS_ENABLE_OOB_CHANNEL_DIRECTPATH_PROPERTY);
+    } else {
+      System.setProperty(
+          CachingRlsLbClient.RLS_ENABLE_OOB_CHANNEL_DIRECTPATH_PROPERTY,
+          existingEnableOobChannelDirectPath);
+    }
   }
 
   private CachedRouteLookupResponse getInSyncContext(
@@ -471,7 +483,7 @@ public class CachingRlsLbClientTest {
   private final class FakeHelper extends Helper {
 
     @Override
-    public ManagedChannel createResolvingOobChannel(String target) {
+    public ManagedChannelBuilder<?> createResolvingOobChannelBuilder(String target) {
       try {
         grpcCleanupRule.register(
             InProcessServerBuilder.forName(target)
@@ -482,7 +494,12 @@ public class CachingRlsLbClientTest {
       } catch (IOException e) {
         throw new RuntimeException("cannot create server: " + target, e);
       }
-      return InProcessChannelBuilder.forName(target).directExecutor().build();
+      return InProcessChannelBuilder.forName(target).directExecutor();
+    }
+
+    @Override
+    public ManagedChannel createResolvingOobChannel(String target) {
+      return grpcCleanupRule.register(createResolvingOobChannelBuilder(target).build());
     }
 
     @Override
