@@ -140,10 +140,10 @@ public class RlsLoadBalancerTest {
     fakeRlsServerImpl.setLookupTable(
         ImmutableMap.of(
             new RouteLookupRequest(
-                "localhost:8972", "com.google/Search", "grpc", ImmutableMap.<String, String>of()),
+                "localhost:8972", "/com.google/Search", "grpc", ImmutableMap.<String, String>of()),
             new RouteLookupResponse(ImmutableList.of("wilderness"), "where are you?"),
             new RouteLookupRequest(
-                "localhost:8972", "com.google/Rescue", "grpc", ImmutableMap.<String, String>of()),
+                "localhost:8972", "/com.google/Rescue", "grpc", ImmutableMap.<String, String>of()),
             new RouteLookupResponse(ImmutableList.of("civilization"), "you are safe")));
 
     RlsLoadBalancerProvider provider = new RlsLoadBalancerProvider();
