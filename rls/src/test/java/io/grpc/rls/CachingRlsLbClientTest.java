@@ -134,13 +134,13 @@ public class CachingRlsLbClientTest {
       new LbPolicyConfiguration(ROUTE_LOOKUP_CONFIG, childLbPolicy);
 
   private CachingRlsLbClient rlsLbClient;
-  private String existingEnableOobChannelDirectPath;
+  private boolean existingEnableOobChannelDirectPath;
 
   @Before
   public void setUp() throws Exception {
-    existingEnableOobChannelDirectPath =
-        System.getProperty(CachingRlsLbClient.RLS_ENABLE_OOB_CHANNEL_DIRECTPATH_PROPERTY);
-    System.setProperty(CachingRlsLbClient.RLS_ENABLE_OOB_CHANNEL_DIRECTPATH_PROPERTY, "false");
+    existingEnableOobChannelDirectPath = CachingRlsLbClient.enableOobChannelDirectPath;
+    CachingRlsLbClient.enableOobChannelDirectPath = false;
+
     rlsLbClient =
         CachingRlsLbClient.newBuilder()
             .setBackoffProvider(fakeBackoffProvider)
@@ -156,13 +156,7 @@ public class CachingRlsLbClientTest {
   @After
   public void tearDown() throws Exception {
     rlsLbClient.close();
-    if (existingEnableOobChannelDirectPath == null) {
-      System.clearProperty(CachingRlsLbClient.RLS_ENABLE_OOB_CHANNEL_DIRECTPATH_PROPERTY);
-    } else {
-      System.setProperty(
-          CachingRlsLbClient.RLS_ENABLE_OOB_CHANNEL_DIRECTPATH_PROPERTY,
-          existingEnableOobChannelDirectPath);
-    }
+    CachingRlsLbClient.enableOobChannelDirectPath = existingEnableOobChannelDirectPath;
   }
 
   private CachedRouteLookupResponse getInSyncContext(

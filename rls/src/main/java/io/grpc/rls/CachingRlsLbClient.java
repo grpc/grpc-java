@@ -83,9 +83,11 @@ final class CachingRlsLbClient {
       RESPONSE_CONVERTER = new RouteLookupResponseConverter().reverse();
 
   // System property to use direct path enabled OobChannel, by default direct path is enabled.
-  @VisibleForTesting
-  static final String RLS_ENABLE_OOB_CHANNEL_DIRECTPATH_PROPERTY =
+  private static final String RLS_ENABLE_OOB_CHANNEL_DIRECTPATH_PROPERTY =
       "io.grpc.rls.CachingRlsLbClient.enable_oobchannel_directpath";
+  @VisibleForTesting
+  static boolean enableOobChannelDirectPath =
+      Boolean.parseBoolean(System.getProperty(RLS_ENABLE_OOB_CHANNEL_DIRECTPATH_PROPERTY, "true"));
 
   // All cache status changes (pending, backoff, success) must be under this lock
   private final Object lock = new Object();
@@ -135,7 +137,7 @@ final class CachingRlsLbClient {
     rlsPicker = new RlsPicker(requestFactory);
     ManagedChannelBuilder<?> rlsChannelBuilder =
         helper.createResolvingOobChannelBuilder(rlsConfig.getLookupService());
-    if (isOobChannelDirectpathEnabled()) {
+    if (enableOobChannelDirectPath) {
       rlsChannelBuilder.defaultServiceConfig(getDirectpathServiceConfig());
       rlsChannelBuilder.disableServiceConfigLookUp();
     }
@@ -150,10 +152,6 @@ final class CachingRlsLbClient {
     refCountedChildPolicyWrapperFactory =
         new RefCountedChildPolicyWrapperFactory(
             childLbHelperProvider, new BackoffRefreshListener());
-  }
-
-  private static boolean isOobChannelDirectpathEnabled() {
-    return System.getProperty(RLS_ENABLE_OOB_CHANNEL_DIRECTPATH_PROPERTY, "true").equals("true");
   }
 
   private static ImmutableMap<String, Object> getDirectpathServiceConfig() {

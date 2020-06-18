@@ -120,11 +120,15 @@ public class RlsLoadBalancerTest {
   private MethodDescriptor<Object, Object> fakeSearchMethod;
   private MethodDescriptor<Object, Object> fakeRescueMethod;
   private RlsLoadBalancer rlsLb;
-  private String existingEnableOobChannelDirectPath;
+  private boolean existingEnableOobChannelDirectPath;
 
   @Before
   public void setUp() throws Exception {
     MockitoAnnotations.initMocks(this);
+
+    existingEnableOobChannelDirectPath = CachingRlsLbClient.enableOobChannelDirectPath;
+    CachingRlsLbClient.enableOobChannelDirectPath = false;
+
     fakeSearchMethod =
         MethodDescriptor.newBuilder()
             .setFullMethodName("com.google/Search")
@@ -171,24 +175,7 @@ public class RlsLoadBalancerTest {
   @After
   public void tearDown() throws Exception {
     rlsLb.shutdown();
-  }
-
-  @Before
-  public void setUpProperties() throws Exception {
-    existingEnableOobChannelDirectPath =
-        System.getProperty(CachingRlsLbClient.RLS_ENABLE_OOB_CHANNEL_DIRECTPATH_PROPERTY);
-    System.setProperty(CachingRlsLbClient.RLS_ENABLE_OOB_CHANNEL_DIRECTPATH_PROPERTY, "false");
-  }
-
-  @After
-  public void restoreProperties() throws Exception {
-    if (existingEnableOobChannelDirectPath == null) {
-      System.clearProperty(CachingRlsLbClient.RLS_ENABLE_OOB_CHANNEL_DIRECTPATH_PROPERTY);
-    } else {
-      System.setProperty(
-          CachingRlsLbClient.RLS_ENABLE_OOB_CHANNEL_DIRECTPATH_PROPERTY,
-          existingEnableOobChannelDirectPath);
-    }
+    CachingRlsLbClient.enableOobChannelDirectPath = existingEnableOobChannelDirectPath;
   }
 
   @Test
