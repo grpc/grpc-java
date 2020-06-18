@@ -182,6 +182,28 @@ abstract class XdsClient {
               .toString();
     }
 
+    @Override
+    public int hashCode() {
+      return Objects.hash(
+          clusterName, edsServiceName, lbPolicy, lrsServerName, upstreamTlsContext);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      ClusterUpdate that = (ClusterUpdate) o;
+      return Objects.equals(clusterName, that.clusterName)
+          && Objects.equals(edsServiceName, that.edsServiceName)
+          && Objects.equals(lbPolicy, that.lbPolicy)
+          && Objects.equals(lrsServerName, that.lrsServerName)
+          && Objects.equals(upstreamTlsContext, that.upstreamTlsContext);
+    }
+
     static Builder newBuilder() {
       return new Builder();
     }
@@ -287,9 +309,9 @@ abstract class XdsClient {
         return false;
       }
       EndpointUpdate that = (EndpointUpdate) o;
-      return clusterName.equals(that.clusterName)
-          && localityLbEndpointsMap.equals(that.localityLbEndpointsMap)
-          && dropPolicies.equals(that.dropPolicies);
+      return Objects.equals(clusterName, that.clusterName)
+          && Objects.equals(localityLbEndpointsMap, that.localityLbEndpointsMap)
+          && Objects.equals(dropPolicies, that.dropPolicies);
     }
 
     @Override
