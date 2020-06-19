@@ -19,7 +19,7 @@ package io.grpc.xds.internal.sds;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
-import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
+import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 
 final class UpstreamTlsContextHolder implements TlsContextHolder {
 

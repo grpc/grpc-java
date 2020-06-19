@@ -81,7 +81,7 @@ public class SdsSslContextProviderTest {
             /* channelType= */ "inproc");
 
     return SdsClientSslContextProvider.getProvider(
-        SecretVolumeSslContextProviderTest.buildUpstreamTlsContext(commonTlsContext),
+        CommonTlsContextTestsUtil.buildUpstreamTlsContext(commonTlsContext),
         node,
         MoreExecutors.directExecutor(),
         MoreExecutors.directExecutor());

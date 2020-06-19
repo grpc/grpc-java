@@ -22,7 +22,7 @@ import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_KEY_FILE
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_PEM_FILE;
 
 import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
-import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
+import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -52,7 +52,7 @@ public class ClientSslContextProviderFactoryTest {
         CommonTlsContextTestsUtil.buildCommonTlsContextFromSdsConfigForTlsCertificate(
             /* name= */ "name", /* targetUri= */ "unix:/tmp/sds/path", CA_PEM_FILE);
     UpstreamTlsContext upstreamTlsContext =
-        SecretVolumeSslContextProviderTest.buildUpstreamTlsContext(commonTlsContext);
+        CommonTlsContextTestsUtil.buildUpstreamTlsContext(commonTlsContext);
 
     try {
       SslContextProvider unused =
@@ -74,7 +74,7 @@ public class ClientSslContextProviderFactoryTest {
             CLIENT_KEY_FILE,
             CLIENT_PEM_FILE);
     UpstreamTlsContext upstreamTlsContext =
-        SecretVolumeSslContextProviderTest.buildUpstreamTlsContext(commonTlsContext);
+        CommonTlsContextTestsUtil.buildUpstreamTlsContext(commonTlsContext);
 
     try {
       SslContextProvider unused =

@@ -21,8 +21,8 @@ import static com.google.common.base.Preconditions.checkState;
 
 import io.envoyproxy.envoy.api.v2.auth.CertificateValidationContext;
 import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
-import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
+import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.internal.sds.trust.SdsTrustManagerFactory;
 import io.netty.handler.ssl.ClientAuth;
 import io.netty.handler.ssl.SslContext;

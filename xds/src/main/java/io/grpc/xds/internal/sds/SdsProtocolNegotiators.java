@@ -19,7 +19,6 @@ package io.grpc.xds.internal.sds;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
-import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
 import io.grpc.netty.InternalNettyChannelBuilder;
 import io.grpc.netty.InternalNettyChannelBuilder.ProtocolNegotiatorFactory;
@@ -30,6 +29,7 @@ import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.netty.ProtocolNegotiationEvent;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
+import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.XdsAttributes;
 import io.grpc.xds.XdsClientWrapperForServerSds;
 import io.netty.channel.ChannelHandler;
@@ -126,7 +126,7 @@ public final class SdsProtocolNegotiators {
     }
 
     private static boolean isTlsContextEmpty(UpstreamTlsContext upstreamTlsContext) {
-      return upstreamTlsContext == null || !upstreamTlsContext.hasCommonTlsContext();
+      return upstreamTlsContext == null || upstreamTlsContext.getCommonTlsContext() == null;
     }
 
     @Override

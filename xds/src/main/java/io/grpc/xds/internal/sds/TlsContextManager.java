@@ -16,8 +16,8 @@
 
 package io.grpc.xds.internal.sds;
 
-import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
+import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 
 public interface TlsContextManager {
 
