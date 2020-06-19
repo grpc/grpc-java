@@ -35,6 +35,7 @@ import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.ForwardingChannelBuilder;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.SubchannelPicker;
@@ -488,12 +489,23 @@ public class CachingRlsLbClientTest {
       } catch (IOException e) {
         throw new RuntimeException("cannot create server: " + target, e);
       }
-      return InProcessChannelBuilder.forName(target).directExecutor();
-    }
+      final InProcessChannelBuilder builder =
+          InProcessChannelBuilder.forName(target).directExecutor();
 
-    @Override
-    public ManagedChannel createResolvingOobChannel(String target) {
-      return grpcCleanupRule.register(createResolvingOobChannelBuilder(target).build());
+      class CleaningChannelBuilder extends ForwardingChannelBuilder<CleaningChannelBuilder> {
+
+        @Override
+        protected ManagedChannelBuilder<?> delegate() {
+          return builder;
+        }
+
+        @Override
+        public ManagedChannel build() {
+          return grpcCleanupRule.register(super.build());
+        }
+      }
+
+      return new CleaningChannelBuilder();
     }
 
     @Override
