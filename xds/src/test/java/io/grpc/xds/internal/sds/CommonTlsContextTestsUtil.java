@@ -230,7 +230,7 @@ public class CommonTlsContextTestsUtil {
   /**
    * Helper method to build UpstreamTlsContext for above tests. Called from other classes as well.
    */
-  public static UpstreamTlsContext buildUpstreamTlsContextFromFilenames(
+  public static EnvoyServerProtoData.UpstreamTlsContext buildUpstreamTlsContextFromFilenames(
       @Nullable String privateKey, @Nullable String certChain, @Nullable String trustCa) {
     try {
       if (certChain != null) {
@@ -245,7 +245,7 @@ public class CommonTlsContextTestsUtil {
     } catch (IOException ioe) {
       throw new RuntimeException(ioe);
     }
-    return SecretVolumeSslContextProviderTest.buildUpstreamTlsContext(
+    return buildUpstreamTlsContext(
         buildCommonTlsContextFromFilenames(privateKey, certChain, trustCa));
   }
 
@@ -279,5 +279,16 @@ public class CommonTlsContextTestsUtil {
       builder = builder.setValidationContext(certContext);
     }
     return builder.build();
+  }
+
+  /**
+   * Helper method to build UpstreamTlsContext for above tests. Called from other classes as well.
+   */
+  static EnvoyServerProtoData.UpstreamTlsContext buildUpstreamTlsContext(
+      CommonTlsContext commonTlsContext) {
+    UpstreamTlsContext upstreamTlsContext =
+        UpstreamTlsContext.newBuilder().setCommonTlsContext(commonTlsContext).build();
+    return EnvoyServerProtoData.UpstreamTlsContext.fromEnvoyProtoUpstreamTlsContext(
+        upstreamTlsContext);
   }
 }

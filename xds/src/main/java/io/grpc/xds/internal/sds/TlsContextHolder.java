@@ -21,7 +21,7 @@ import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 
 /**
  * A holder of {@link UpstreamTlsContext} or
- * {@link io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext}.
+ * {@link io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext}.
  */
 public interface TlsContextHolder {
 

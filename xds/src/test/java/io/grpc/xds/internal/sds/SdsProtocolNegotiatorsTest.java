@@ -32,7 +32,6 @@ import com.google.common.base.Strings;
 import io.envoyproxy.envoy.api.v2.auth.CertificateValidationContext;
 import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
 import io.envoyproxy.envoy.api.v2.auth.TlsCertificate;
-import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.core.DataSource;
 import io.grpc.Attributes;
 import io.grpc.internal.testing.TestUtils;
@@ -41,6 +40,7 @@ import io.grpc.netty.InternalProtocolNegotiationEvent;
 import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
+import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.XdsAttributes;
 import io.grpc.xds.XdsClientWrapperForServerSds;
 import io.grpc.xds.XdsClientWrapperForServerSdsTest;
@@ -96,15 +96,8 @@ public class SdsProtocolNegotiatorsTest {
   /** Builds UpstreamTlsContext from file-names. */
   private static UpstreamTlsContext buildUpstreamTlsContextFromFilenames(
       String privateKey, String certChain, String trustCa) throws IOException {
-    return buildUpstreamTlsContext(
+    return CommonTlsContextTestsUtil.buildUpstreamTlsContext(
         buildCommonTlsContextFromFilenames(privateKey, certChain, trustCa));
-  }
-
-  /** Builds UpstreamTlsContext from commonTlsContext. */
-  private static UpstreamTlsContext buildUpstreamTlsContext(CommonTlsContext commonTlsContext) {
-    UpstreamTlsContext upstreamTlsContext =
-        UpstreamTlsContext.newBuilder().setCommonTlsContext(commonTlsContext).build();
-    return upstreamTlsContext;
   }
 
   /** Builds DownstreamTlsContext from commonTlsContext. */
@@ -164,7 +157,7 @@ public class SdsProtocolNegotiatorsTest {
   @Test
   public void clientSdsProtocolNegotiatorNewHandler_withTlsContextAttribute() {
     UpstreamTlsContext upstreamTlsContext =
-        buildUpstreamTlsContext(
+        CommonTlsContextTestsUtil.buildUpstreamTlsContext(
             getCommonTlsContext(/* tlsCertificate= */ null, /* certContext= */ null));
     ClientSdsProtocolNegotiator pn = new ClientSdsProtocolNegotiator();
     GrpcHttp2ConnectionHandler mockHandler = mock(GrpcHttp2ConnectionHandler.class);

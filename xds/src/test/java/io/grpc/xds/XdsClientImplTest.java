@@ -1453,7 +1453,10 @@ public class XdsClientImplTest {
     ArgumentCaptor<ClusterUpdate> clusterUpdateCaptor = ArgumentCaptor.forClass(null);
     verify(clusterWatcher, times(1)).onClusterChanged(clusterUpdateCaptor.capture());
     ClusterUpdate clusterUpdate = clusterUpdateCaptor.getValue();
-    assertThat(clusterUpdate.getUpstreamTlsContext()).isEqualTo(testUpstreamTlsContext);
+    assertThat(clusterUpdate.getUpstreamTlsContext())
+        .isEqualTo(
+            EnvoyServerProtoData.UpstreamTlsContext.fromEnvoyProtoUpstreamTlsContext(
+                testUpstreamTlsContext));
   }
 
   /**
@@ -1485,7 +1488,10 @@ public class XdsClientImplTest {
     ArgumentCaptor<ClusterUpdate> clusterUpdateCaptor = ArgumentCaptor.forClass(null);
     verify(clusterWatcher, times(1)).onClusterChanged(clusterUpdateCaptor.capture());
     ClusterUpdate clusterUpdate = clusterUpdateCaptor.getValue();
-    assertThat(clusterUpdate.getUpstreamTlsContext()).isEqualTo(testUpstreamTlsContext);
+    assertThat(clusterUpdate.getUpstreamTlsContext())
+        .isEqualTo(
+            EnvoyServerProtoData.UpstreamTlsContext.fromEnvoyProtoUpstreamTlsContext(
+                testUpstreamTlsContext));
   }
 
   @Test

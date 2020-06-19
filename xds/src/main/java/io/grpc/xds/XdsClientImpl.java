@@ -41,7 +41,6 @@ import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
 import io.envoyproxy.envoy.api.v2.Listener;
 import io.envoyproxy.envoy.api.v2.RouteConfiguration;
-import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.core.Address;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.api.v2.core.SocketAddress;
@@ -64,6 +63,7 @@ import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyProtoData.StructOrError;
+import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.LoadReportClient.LoadReportCallback;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.util.ArrayList;
@@ -1003,7 +1003,7 @@ final class XdsClientImpl extends XdsClient {
       }
       try {
         UpstreamTlsContext upstreamTlsContext = getTlsContextFromCluster(cluster);
-        if (upstreamTlsContext != null && upstreamTlsContext.hasCommonTlsContext()) {
+        if (upstreamTlsContext != null && upstreamTlsContext.getCommonTlsContext() != null) {
           updateBuilder.setUpstreamTlsContext(upstreamTlsContext);
         }
       } catch (InvalidProtocolBufferException e) {
@@ -1077,10 +1077,11 @@ final class XdsClientImpl extends XdsClient {
       throws InvalidProtocolBufferException {
     if (cluster.hasTransportSocket() && "tls".equals(cluster.getTransportSocket().getName())) {
       Any any = cluster.getTransportSocket().getTypedConfig();
-      return UpstreamTlsContext.parseFrom(any.getValue());
+      return UpstreamTlsContext.fromEnvoyProtoUpstreamTlsContext(
+          io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext.parseFrom(any.getValue()));
     }
     // TODO(sanjaypujare): remove when we move to envoy protos v3
-    return cluster.getTlsContext();
+    return UpstreamTlsContext.fromEnvoyProtoUpstreamTlsContext(cluster.getTlsContext());
   }
 
   /**

@@ -25,9 +25,7 @@ import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_PEM_FI
 
 import com.google.common.util.concurrent.MoreExecutors;
 import io.envoyproxy.envoy.api.v2.auth.CertificateValidationContext;
-import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
 import io.envoyproxy.envoy.api.v2.auth.TlsCertificate;
-import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.core.DataSource;
 import io.netty.handler.ssl.SslContext;
 import java.io.IOException;
@@ -296,7 +294,7 @@ public class SecretVolumeSslContextProviderTest {
     CertificateValidationContext certContext = CertificateValidationContext.getDefaultInstance();
     try {
       SecretVolumeClientSslContextProvider.getProvider(
-          buildUpstreamTlsContext(
+          CommonTlsContextTestsUtil.buildUpstreamTlsContext(
               CommonTlsContextTestsUtil.getCommonTlsContext(
                   /* tlsCertificate= */ null, certContext)));
       Assert.fail("no exception thrown");
@@ -318,7 +316,7 @@ public class SecretVolumeSslContextProviderTest {
             .build();
     try {
       SecretVolumeClientSslContextProvider.getProvider(
-          buildUpstreamTlsContext(
+          CommonTlsContextTestsUtil.buildUpstreamTlsContext(
               CommonTlsContextTestsUtil.getCommonTlsContext(tlsCert, certContext)));
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
@@ -339,7 +337,7 @@ public class SecretVolumeSslContextProviderTest {
             .build();
     try {
       SecretVolumeClientSslContextProvider.getProvider(
-          buildUpstreamTlsContext(
+          CommonTlsContextTestsUtil.buildUpstreamTlsContext(
               CommonTlsContextTestsUtil.getCommonTlsContext(tlsCert, certContext)));
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
@@ -387,15 +385,6 @@ public class SecretVolumeSslContextProviderTest {
     } else {
       assertThat(apnProtos).contains("h2");
     }
-  }
-
-  /**
-   * Helper method to build UpstreamTlsContext for above tests. Called from other classes as well.
-   */
-  static UpstreamTlsContext buildUpstreamTlsContext(CommonTlsContext commonTlsContext) {
-    UpstreamTlsContext upstreamTlsContext =
-        UpstreamTlsContext.newBuilder().setCommonTlsContext(commonTlsContext).build();
-    return upstreamTlsContext;
   }
 
   @Test

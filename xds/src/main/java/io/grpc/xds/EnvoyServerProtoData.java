@@ -38,14 +38,60 @@ public final class EnvoyServerProtoData {
   private EnvoyServerProtoData() {
   }
 
-  public static final class DownstreamTlsContext {
+  public abstract static class BaseTlsContext {
+    @Nullable protected final CommonTlsContext commonTlsContext;
 
-    private final CommonTlsContext commonTlsContext;
+    public BaseTlsContext(@Nullable CommonTlsContext commonTlsContext) {
+      this.commonTlsContext = commonTlsContext;
+    }
+
+    @Nullable public CommonTlsContext getCommonTlsContext() {
+      return commonTlsContext;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || !(o instanceof BaseTlsContext)) {
+        return false;
+      }
+      BaseTlsContext that = (BaseTlsContext) o;
+      return Objects.equals(commonTlsContext, that.commonTlsContext);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(commonTlsContext);
+    }
+  }
+
+  public static final class UpstreamTlsContext extends BaseTlsContext {
+
+    @VisibleForTesting
+    UpstreamTlsContext(CommonTlsContext commonTlsContext) {
+      super(commonTlsContext);
+    }
+
+    public static UpstreamTlsContext fromEnvoyProtoUpstreamTlsContext(
+            io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext upstreamTlsContext) {
+      return new UpstreamTlsContext(upstreamTlsContext.getCommonTlsContext());
+    }
+
+    @Override
+    public String toString() {
+      return "UpstreamTlsContext{" + "commonTlsContext=" + commonTlsContext + '}';
+    }
+  }
+
+  public static final class DownstreamTlsContext extends BaseTlsContext {
+
     private final boolean requireClientCertificate;
 
     @VisibleForTesting
     DownstreamTlsContext(CommonTlsContext commonTlsContext, boolean requireClientCertificate) {
-      this.commonTlsContext = commonTlsContext;
+      super(commonTlsContext);
       this.requireClientCertificate = requireClientCertificate;
     }
 
@@ -53,10 +99,6 @@ public final class EnvoyServerProtoData {
         io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext downstreamTlsContext) {
       return new DownstreamTlsContext(downstreamTlsContext.getCommonTlsContext(),
         downstreamTlsContext.hasRequireClientCertificate());
-    }
-
-    public CommonTlsContext getCommonTlsContext() {
-      return commonTlsContext;
     }
 
     public boolean isRequireClientCertificate() {
@@ -81,14 +123,16 @@ public final class EnvoyServerProtoData {
       if (o == null || getClass() != o.getClass()) {
         return false;
       }
+      if (!super.equals(o)) {
+        return false;
+      }
       DownstreamTlsContext that = (DownstreamTlsContext) o;
-      return requireClientCertificate == that.requireClientCertificate
-          && Objects.equals(commonTlsContext, that.commonTlsContext);
+      return requireClientCertificate == that.requireClientCertificate;
     }
 
     @Override
     public int hashCode() {
-      return Objects.hash(commonTlsContext, requireClientCertificate);
+      return Objects.hash(super.hashCode(), requireClientCertificate);
     }
   }
 
