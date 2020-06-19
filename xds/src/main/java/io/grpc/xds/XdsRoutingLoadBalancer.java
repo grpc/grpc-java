@@ -23,12 +23,17 @@ import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.xds.XdsSubchannelPickers.BUFFER_PICKER;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Sets;
 import io.grpc.ConnectivityState;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancerProvider;
+import io.grpc.Metadata;
 import io.grpc.Status;
+import io.grpc.SynchronizationContext;
+import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.GracefulSwitchLoadBalancer;
@@ -37,87 +42,89 @@ import io.grpc.xds.XdsRoutingLoadBalancerProvider.Route;
 import io.grpc.xds.XdsRoutingLoadBalancerProvider.XdsRoutingConfig;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
 /** Load balancer for xds_routing policy. */
 final class XdsRoutingLoadBalancer extends LoadBalancer {
 
+  @VisibleForTesting
+  static final int DELAYED_ACTION_DELETION_TIME_MINUTES = 15;
+
   private final XdsLogger logger;
   private final Helper helper;
-  private final Map<String, GracefulSwitchLoadBalancer> routeBalancers = new HashMap<>();
-  private final Map<String, RouteHelper> routeHelpers = new HashMap<>();
+  private final SynchronizationContext syncContext;
+  private final ScheduledExecutorService timeService;
+  private final Map<String, ChildLbState> childLbStates = new HashMap<>(); // keyed by action names
 
-  private Map<String, PolicySelection> actions = ImmutableMap.of();
   private List<Route> routes = ImmutableList.of();
 
   XdsRoutingLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
+    this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
+    this.timeService = checkNotNull(helper.getScheduledExecutorService(), "timeService");
     logger = XdsLogger.withLogId(
         InternalLogId.allocate("xds-routing-lb", helper.getAuthority()));
     logger.log(XdsLogLevel.INFO, "Created");
   }
 
   @Override
-  public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public void handleResolvedAddresses(final ResolvedAddresses resolvedAddresses) {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     XdsRoutingConfig xdsRoutingConfig =
         (XdsRoutingConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
-    checkNotNull(xdsRoutingConfig, "Missing xds_routing lb config");
-
     Map<String, PolicySelection> newActions = xdsRoutingConfig.actions;
-    for (String actionName : newActions.keySet()) {
-      PolicySelection action = newActions.get(actionName);
-      if (!actions.containsKey(actionName)) {
-        RouteHelper routeHelper = new RouteHelper();
-        GracefulSwitchLoadBalancer routeBalancer = new GracefulSwitchLoadBalancer(routeHelper);
-        routeBalancer.switchTo(action.getProvider());
-        routeHelpers.put(actionName, routeHelper);
-        routeBalancers.put(actionName, routeBalancer);
-      } else if (!action.getProvider().equals(actions.get(actionName).getProvider())) {
-        routeBalancers.get(actionName).switchTo(action.getProvider());
+    for (final String actionName : newActions.keySet()) {
+      final PolicySelection action = newActions.get(actionName);
+      if (!childLbStates.containsKey(actionName)) {
+        childLbStates.put(actionName, new ChildLbState(actionName, action.getProvider()));
+      } else {
+        childLbStates.get(actionName).reactivate(action.getProvider());
       }
+      syncContext.execute(new Runnable() {
+        @Override
+        public void run() {
+          childLbStates.get(actionName).lb
+              .handleResolvedAddresses(
+                  resolvedAddresses.toBuilder()
+                      .setLoadBalancingPolicyConfig(action.getConfig())
+                      .build());
+        }
+      });
     }
-
     this.routes = xdsRoutingConfig.routes;
-    this.actions = newActions;
-
-    for (String actionName : actions.keySet()) {
-      routeBalancers.get(actionName).handleResolvedAddresses(
-          resolvedAddresses.toBuilder()
-              .setLoadBalancingPolicyConfig(actions.get(actionName).getConfig())
-              .build());
+    Set<String> diff = Sets.difference(childLbStates.keySet(), newActions.keySet());
+    for (String actionName : diff) {
+      childLbStates.get(actionName).deactivate();
     }
-
-    // Cleanup removed actions.
-    // TODO(zdapeng): cache removed actions for 15 minutes.
-    for (String actionName : routeBalancers.keySet()) {
-      if (!actions.containsKey(actionName)) {
-        routeBalancers.get(actionName).shutdown();
-      }
-    }
-    routeBalancers.keySet().retainAll(actions.keySet());
-    routeHelpers.keySet().retainAll(actions.keySet());
   }
 
   @Override
   public void handleNameResolutionError(Status error) {
     logger.log(XdsLogLevel.WARNING, "Received name resolution error: {0}", error);
-    if (routeBalancers.isEmpty()) {
-      helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
+    boolean gotoTransientFailure = true;
+    for (ChildLbState state : childLbStates.values()) {
+      if (!state.deactivated) {
+        gotoTransientFailure = false;
+        state.lb.handleNameResolutionError(error);
+      }
     }
-    for (LoadBalancer routeBalancer : routeBalancers.values()) {
-      routeBalancer.handleNameResolutionError(error);
+    if (gotoTransientFailure) {
+      helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
     }
   }
 
   @Override
   public void shutdown() {
     logger.log(XdsLogLevel.INFO, "Shutdown");
-    for (LoadBalancer routeBalancer : routeBalancers.values()) {
-      routeBalancer.shutdown();
+    for (ChildLbState state : childLbStates.values()) {
+      state.tearDown();
     }
   }
 
@@ -131,10 +138,9 @@ final class XdsRoutingLoadBalancer extends LoadBalancer {
     // Use LinkedHashMap to preserve the order of routes.
     Map<RouteMatch, SubchannelPicker> routePickers = new LinkedHashMap<>();
     for (Route route : routes) {
-      RouteHelper routeHelper = routeHelpers.get(route.getActionName());
-      routePickers.put(route.getRouteMatch(), routeHelper.currentPicker);
-      ConnectivityState routeState = routeHelper.currentState;
-      overallState = aggregateState(overallState, routeState);
+      ChildLbState state = childLbStates.get(route.getActionName());
+      routePickers.put(route.getRouteMatch(), state.currentPicker);
+      overallState = aggregateState(overallState, state.currentState);
     }
     if (overallState != null) {
       SubchannelPicker picker = new RouteMatchingSubchannelPicker(routePickers);
@@ -142,8 +148,9 @@ final class XdsRoutingLoadBalancer extends LoadBalancer {
     }
   }
 
+  @VisibleForTesting
   @Nullable
-  private static ConnectivityState aggregateState(
+  static ConnectivityState aggregateState(
       @Nullable ConnectivityState overallState, ConnectivityState childState) {
     if (overallState == null) {
       return childState;
@@ -160,28 +167,94 @@ final class XdsRoutingLoadBalancer extends LoadBalancer {
     return overallState;
   }
 
-  /**
-   * The lb helper for a single route balancer.
-   */
-  private final class RouteHelper extends ForwardingLoadBalancerHelper {
-    ConnectivityState currentState = CONNECTING;
-    SubchannelPicker currentPicker = BUFFER_PICKER;
+  private final class ChildLbState {
+    private final String name;
+    private final GracefulSwitchLoadBalancer lb;
+    private LoadBalancerProvider policyProvider;
+    private ConnectivityState currentState = CONNECTING;
+    private SubchannelPicker currentPicker = BUFFER_PICKER;
+    private boolean deactivated;
+    @Nullable
+    ScheduledHandle deletionTimer;
 
-    @Override
-    public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
-      currentState = newState;
-      currentPicker = newPicker;
-      updateOverallBalancingState();
+    private ChildLbState(String name, LoadBalancerProvider policyProvider) {
+      this.name = name;
+      this.policyProvider = policyProvider;
+      lb = new GracefulSwitchLoadBalancer(new RouteHelper());
+      lb.switchTo(policyProvider);
     }
 
-    @Override
-    protected Helper delegate() {
-      return helper;
+    void deactivate() {
+      if (deactivated) {
+        return;
+      }
+
+      class DeletionTask implements Runnable {
+        @Override
+        public void run() {
+          tearDown();
+          childLbStates.remove(name);
+        }
+      }
+
+      deletionTimer =
+          syncContext.schedule(
+              new DeletionTask(),
+              DELAYED_ACTION_DELETION_TIME_MINUTES,
+              TimeUnit.MINUTES,
+              timeService);
+      deactivated = true;
+      logger.log(XdsLogLevel.DEBUG, "Route action {0} deactivated", name);
+    }
+
+    void reactivate(LoadBalancerProvider policyProvider) {
+      if (deletionTimer != null && deletionTimer.isPending()) {
+        deletionTimer.cancel();
+        deactivated = false;
+        logger.log(XdsLogLevel.DEBUG, "Route action {0} reactivated", name);
+      }
+      if (!this.policyProvider.getPolicyName().equals(policyProvider.getPolicyName())) {
+        logger.log(
+            XdsLogLevel.DEBUG,
+            "Action {0} switching policy from {1} to {2}",
+            name, this.policyProvider.getPolicyName(), policyProvider.getPolicyName());
+        lb.switchTo(policyProvider);
+        this.policyProvider = policyProvider;
+      }
+    }
+
+    void tearDown() {
+      deactivated = true;
+      if (deletionTimer != null && deletionTimer.isPending()) {
+        deletionTimer.cancel();
+      }
+      lb.shutdown();
+      logger.log(XdsLogLevel.DEBUG, "Route action {0} deleted", name);
+    }
+
+    private final class RouteHelper extends ForwardingLoadBalancerHelper {
+
+      @Override
+      public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
+        if (deactivated) {
+          return;
+        }
+        currentState = newState;
+        currentPicker = newPicker;
+        updateOverallBalancingState();
+      }
+
+      @Override
+      protected Helper delegate() {
+        return helper;
+      }
     }
   }
 
-  private static final class RouteMatchingSubchannelPicker extends SubchannelPicker {
+  @VisibleForTesting
+  static final class RouteMatchingSubchannelPicker extends SubchannelPicker {
 
+    @VisibleForTesting
     final Map<RouteMatch, SubchannelPicker> routePickers;
 
     RouteMatchingSubchannelPicker(Map<RouteMatch, SubchannelPicker> routePickers) {
@@ -190,8 +263,28 @@ final class XdsRoutingLoadBalancer extends LoadBalancer {
 
     @Override
     public PickResult pickSubchannel(PickSubchannelArgs args) {
-      // TODO(chengyuanzhang): to be implemented.
-      return PickResult.withError(Status.INTERNAL.withDescription("routing picker unimplemented"));
+      // Index ASCII headers by keys.
+      Map<String, Set<String>> asciiHeaders = new HashMap<>();
+      Metadata headers = args.getHeaders();
+      for (String headerName : headers.keys()) {
+        if (headerName.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
+          continue;
+        }
+        Set<String> headerValues = new HashSet<>();
+        Metadata.Key<String> key = Metadata.Key.of(headerName, Metadata.ASCII_STRING_MARSHALLER);
+        for (String value : headers.getAll(key)) {
+          headerValues.add(value);
+        }
+        asciiHeaders.put(headerName, headerValues);
+      }
+      for (Map.Entry<RouteMatch, SubchannelPicker> entry : routePickers.entrySet()) {
+        RouteMatch routeMatch = entry.getKey();
+        if (routeMatch.matches(
+            "/" + args.getMethodDescriptor().getFullMethodName(), asciiHeaders)) {
+          return entry.getValue().pickSubchannel(args);
+        }
+      }
+      return PickResult.withError(Status.UNAVAILABLE.withDescription("no matching route found"));
     }
   }
 }
