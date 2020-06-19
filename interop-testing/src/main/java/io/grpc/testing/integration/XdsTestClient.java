@@ -59,10 +59,11 @@ public final class XdsTestClient {
   private final Object lock = new Object();
   private final List<ManagedChannel> channels = new ArrayList<>();
 
+  private boolean failOnFailedRpc = false;
   private int numChannels = 1;
   private boolean printResponse = false;
   private int qps = 1;
-  private int rpcTimeoutSec = 2;
+  private int rpcTimeoutSec = 30;
   private String server = "localhost:8080";
   private int statsPort = 8081;
   private Server statsServer;
@@ -111,7 +112,9 @@ public final class XdsTestClient {
         break;
       }
       String value = parts[1];
-      if ("num_channels".equals(key)) {
+      if ("fail_on_failed_rpc".equals(key)) {
+        failOnFailedRpc = Boolean.valueOf(value);
+      } else if ("num_channels".equals(key)) {
         numChannels = Integer.valueOf(value);
       } else if ("print_response".equals(key)) {
         printResponse = Boolean.valueOf(value);
@@ -135,6 +138,8 @@ public final class XdsTestClient {
       System.err.println(
           "Usage: [ARGS...]"
               + "\n"
+              + "\n  --fail_on_failed_rpc=BOOL Fail client if any RPCs fail. Default "
+              + c.failOnFailedRpc
               + "\n  --num_channels=INT     Default: "
               + c.numChannels
               + "\n  --print_response=BOOL  Write RPC response to stdout. Default: "
@@ -210,8 +215,6 @@ public final class XdsTestClient {
               @Override
               public void onMessage(SimpleResponse response) {
                 hostname = response.getHostname();
-                // TODO(ericgribkoff) Currently some test environments cannot access the stats RPC
-                // service and rely on parsing stdout.
                 if (printResponse) {
                   System.out.println(
                       "Greeting: Hello world, this is "
@@ -223,8 +226,13 @@ public final class XdsTestClient {
 
               @Override
               public void onClose(Status status, Metadata trailers) {
-                if (printResponse && !status.isOk()) {
-                  logger.log(Level.WARNING, "Greeting RPC failed with status {0}", status);
+                if (!status.isOk()) {
+                  if (failOnFailedRpc) {
+                    failure.setException(status.asException());
+                  }
+                  if (printResponse) {
+                    logger.log(Level.WARNING, "Greeting RPC failed with status {0}", status);
+                  }
                 }
                 for (XdsStatsWatcher watcher : savedWatchers) {
                   watcher.rpcCompleted(requestId, hostname);

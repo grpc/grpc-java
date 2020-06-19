@@ -31,4 +31,5 @@ JAVA_OPTS=-Djava.util.logging.config.file=grpc-java/buildscripts/xds_logging.pro
     --client_cmd="grpc-java/interop-testing/build/install/grpc-interop-testing/bin/xds-test-client \
       --server=xds:///{server_uri} \
       --stats_port={stats_port} \
-      --qps={qps}"
+      --qps={qps} \
+      {fail_on_failed_rpc}"
