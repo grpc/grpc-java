@@ -37,6 +37,7 @@ import io.grpc.ChannelLogger;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.ForwardingChannelBuilder;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
@@ -45,6 +46,7 @@ import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.Marshaller;
@@ -119,10 +121,15 @@ public class RlsLoadBalancerTest {
   private MethodDescriptor<Object, Object> fakeSearchMethod;
   private MethodDescriptor<Object, Object> fakeRescueMethod;
   private RlsLoadBalancer rlsLb;
+  private boolean existingEnableOobChannelDirectPath;
 
   @Before
   public void setUp() throws Exception {
     MockitoAnnotations.initMocks(this);
+
+    existingEnableOobChannelDirectPath = CachingRlsLbClient.enableOobChannelDirectPath;
+    CachingRlsLbClient.enableOobChannelDirectPath = false;
+
     fakeSearchMethod =
         MethodDescriptor.newBuilder()
             .setFullMethodName("com.google/Search")
@@ -163,12 +170,13 @@ public class RlsLoadBalancerTest {
         .setAddresses(ImmutableList.of(new EquivalentAddressGroup(mock(SocketAddress.class))))
         .setLoadBalancingPolicyConfig(parsedConfigOrError.getConfig())
         .build());
-    verify(helper).createResolvingOobChannel(anyString());
+    verify(helper).createResolvingOobChannelBuilder(anyString());
   }
 
   @After
   public void tearDown() throws Exception {
     rlsLb.shutdown();
+    CachingRlsLbClient.enableOobChannelDirectPath = existingEnableOobChannelDirectPath;
   }
 
   @Test
@@ -458,7 +466,7 @@ public class RlsLoadBalancerTest {
     }
 
     @Override
-    public ManagedChannel createResolvingOobChannel(String target) {
+    public ManagedChannelBuilder<?> createResolvingOobChannelBuilder(String target) {
       try {
         grpcCleanupRule.register(
             InProcessServerBuilder.forName(target)
@@ -469,8 +477,23 @@ public class RlsLoadBalancerTest {
       } catch (IOException e) {
         throw new RuntimeException("cannot create server: " + target, e);
       }
-      return grpcCleanupRule.register(
-          InProcessChannelBuilder.forName(target).directExecutor().build());
+      final InProcessChannelBuilder builder =
+          InProcessChannelBuilder.forName(target).directExecutor();
+
+      class CleaningChannelBuilder extends ForwardingChannelBuilder<CleaningChannelBuilder> {
+
+        @Override
+        protected ManagedChannelBuilder<?> delegate() {
+          return builder;
+        }
+
+        @Override
+        public ManagedChannel build() {
+          return grpcCleanupRule.register(super.build());
+        }
+      }
+
+      return new CleaningChannelBuilder();
     }
 
     @Override

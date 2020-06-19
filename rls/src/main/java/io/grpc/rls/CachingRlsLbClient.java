@@ -19,8 +19,11 @@ package io.grpc.rls;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Converter;
 import com.google.common.base.MoreObjects;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.ConnectivityState;
@@ -32,6 +35,7 @@ import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
@@ -77,6 +81,13 @@ final class CachingRlsLbClient {
       REQUEST_CONVERTER = new RlsProtoConverters.RouteLookupRequestConverter().reverse();
   private static final Converter<RouteLookupResponse, io.grpc.lookup.v1.RouteLookupResponse>
       RESPONSE_CONVERTER = new RouteLookupResponseConverter().reverse();
+
+  // System property to use direct path enabled OobChannel, by default direct path is enabled.
+  private static final String RLS_ENABLE_OOB_CHANNEL_DIRECTPATH_PROPERTY =
+      "io.grpc.rls.CachingRlsLbClient.enable_oobchannel_directpath";
+  @VisibleForTesting
+  static boolean enableOobChannelDirectPath =
+      Boolean.parseBoolean(System.getProperty(RLS_ENABLE_OOB_CHANNEL_DIRECTPATH_PROPERTY, "true"));
 
   // All cache status changes (pending, backoff, success) must be under this lock
   private final Object lock = new Object();
@@ -124,7 +135,13 @@ final class CachingRlsLbClient {
             timeProvider);
     RlsRequestFactory requestFactory = new RlsRequestFactory(lbPolicyConfig.getRouteLookupConfig());
     rlsPicker = new RlsPicker(requestFactory);
-    rlsChannel = helper.createResolvingOobChannel(rlsConfig.getLookupService());
+    ManagedChannelBuilder<?> rlsChannelBuilder =
+        helper.createResolvingOobChannelBuilder(rlsConfig.getLookupService());
+    if (enableOobChannelDirectPath) {
+      rlsChannelBuilder.defaultServiceConfig(getDirectpathServiceConfig());
+      rlsChannelBuilder.disableServiceConfigLookUp();
+    }
+    rlsChannel = rlsChannelBuilder.build();
     helper.updateBalancingState(ConnectivityState.CONNECTING, rlsPicker);
     rlsStub = RouteLookupServiceGrpc.newStub(rlsChannel);
     childLbResolvedAddressFactory =
@@ -135,6 +152,19 @@ final class CachingRlsLbClient {
     refCountedChildPolicyWrapperFactory =
         new RefCountedChildPolicyWrapperFactory(
             childLbHelperProvider, new BackoffRefreshListener());
+  }
+
+  private static ImmutableMap<String, Object> getDirectpathServiceConfig() {
+    ImmutableMap<String, Object> pickFirstStrategy =
+        ImmutableMap.<String, Object>of("pick_first", ImmutableMap.of());
+
+    ImmutableMap<String, Object> childPolicy =
+        ImmutableMap.<String, Object>of("childPolicy", ImmutableList.of(pickFirstStrategy));
+
+    ImmutableMap<String, Object> grpcLbPolicy =
+        ImmutableMap.<String, Object>of("grpclb", childPolicy);
+
+    return ImmutableMap.<String, Object>of("loadBalancingConfig", ImmutableList.of(grpcLbPolicy));
   }
 
   @CheckReturnValue

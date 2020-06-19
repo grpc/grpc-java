@@ -35,11 +35,13 @@ import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.ForwardingChannelBuilder;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.NameResolver.Factory;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
@@ -133,9 +135,13 @@ public class CachingRlsLbClientTest {
       new LbPolicyConfiguration(ROUTE_LOOKUP_CONFIG, childLbPolicy);
 
   private CachingRlsLbClient rlsLbClient;
+  private boolean existingEnableOobChannelDirectPath;
 
   @Before
   public void setUp() throws Exception {
+    existingEnableOobChannelDirectPath = CachingRlsLbClient.enableOobChannelDirectPath;
+    CachingRlsLbClient.enableOobChannelDirectPath = false;
+
     rlsLbClient =
         CachingRlsLbClient.newBuilder()
             .setBackoffProvider(fakeBackoffProvider)
@@ -151,6 +157,7 @@ public class CachingRlsLbClientTest {
   @After
   public void tearDown() throws Exception {
     rlsLbClient.close();
+    CachingRlsLbClient.enableOobChannelDirectPath = existingEnableOobChannelDirectPath;
   }
 
   private CachedRouteLookupResponse getInSyncContext(
@@ -471,7 +478,7 @@ public class CachingRlsLbClientTest {
   private final class FakeHelper extends Helper {
 
     @Override
-    public ManagedChannel createResolvingOobChannel(String target) {
+    public ManagedChannelBuilder<?> createResolvingOobChannelBuilder(String target) {
       try {
         grpcCleanupRule.register(
             InProcessServerBuilder.forName(target)
@@ -482,7 +489,23 @@ public class CachingRlsLbClientTest {
       } catch (IOException e) {
         throw new RuntimeException("cannot create server: " + target, e);
       }
-      return InProcessChannelBuilder.forName(target).directExecutor().build();
+      final InProcessChannelBuilder builder =
+          InProcessChannelBuilder.forName(target).directExecutor();
+
+      class CleaningChannelBuilder extends ForwardingChannelBuilder<CleaningChannelBuilder> {
+
+        @Override
+        protected ManagedChannelBuilder<?> delegate() {
+          return builder;
+        }
+
+        @Override
+        public ManagedChannel build() {
+          return grpcCleanupRule.register(super.build());
+        }
+      }
+
+      return new CleaningChannelBuilder();
     }
 
     @Override
