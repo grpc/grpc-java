@@ -75,23 +75,28 @@ final class XdsRoutingLoadBalancer extends LoadBalancer {
   }
 
   @Override
-  public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public void handleResolvedAddresses(final ResolvedAddresses resolvedAddresses) {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     XdsRoutingConfig xdsRoutingConfig =
         (XdsRoutingConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
     Map<String, PolicySelection> newActions = xdsRoutingConfig.actions;
-    for (String actionName : newActions.keySet()) {
-      PolicySelection action = newActions.get(actionName);
+    for (final String actionName : newActions.keySet()) {
+      final PolicySelection action = newActions.get(actionName);
       if (!childLbStates.containsKey(actionName)) {
         childLbStates.put(actionName, new ChildLbState(actionName, action.getProvider()));
       } else {
         childLbStates.get(actionName).reactivate(action.getProvider());
       }
-      childLbStates.get(actionName).lb
-          .handleResolvedAddresses(
-              resolvedAddresses.toBuilder()
-                  .setLoadBalancingPolicyConfig(action.getConfig())
-                  .build());
+      syncContext.execute(new Runnable() {
+        @Override
+        public void run() {
+          childLbStates.get(actionName).lb
+              .handleResolvedAddresses(
+                  resolvedAddresses.toBuilder()
+                      .setLoadBalancingPolicyConfig(action.getConfig())
+                      .build());
+        }
+      });
     }
     this.routes = xdsRoutingConfig.routes;
     Set<String> diff = Sets.difference(childLbStates.keySet(), newActions.keySet());
