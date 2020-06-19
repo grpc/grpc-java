@@ -39,13 +39,13 @@ public final class EnvoyServerProtoData {
   }
 
   public abstract static class BaseTlsContext {
-    protected final CommonTlsContext commonTlsContext;
+    @Nullable protected final CommonTlsContext commonTlsContext;
 
-    public BaseTlsContext(CommonTlsContext commonTlsContext) {
+    public BaseTlsContext(@Nullable CommonTlsContext commonTlsContext) {
       this.commonTlsContext = commonTlsContext;
     }
 
-    public CommonTlsContext getCommonTlsContext() {
+    @Nullable public CommonTlsContext getCommonTlsContext() {
       return commonTlsContext;
     }
 
@@ -419,6 +419,4 @@ public final class EnvoyServerProtoData {
           + '}';
     }
   }
-
-
 }

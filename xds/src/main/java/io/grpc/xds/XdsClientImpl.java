@@ -1075,7 +1075,7 @@ final class XdsClientImpl extends XdsClient {
     if (cluster.hasTransportSocket() && "tls".equals(cluster.getTransportSocket().getName())) {
       Any any = cluster.getTransportSocket().getTypedConfig();
       return UpstreamTlsContext.fromEnvoyProtoUpstreamTlsContext(
-              io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext.parseFrom(any.getValue()));
+          io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext.parseFrom(any.getValue()));
     }
     // TODO(sanjaypujare): remove when we move to envoy protos v3
     return UpstreamTlsContext.fromEnvoyProtoUpstreamTlsContext(cluster.getTlsContext());
