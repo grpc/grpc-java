@@ -50,7 +50,7 @@ final class SecretVolumeServerSslContextProvider extends SslContextProvider {
       @Nullable String certificateChain,
       @Nullable CertificateValidationContext certContext,
       DownstreamTlsContext downstreamTlsContext) {
-    super(new DownstreamTlsContextHolder(downstreamTlsContext));
+    super(downstreamTlsContext);
     this.privateKey = privateKey;
     this.privateKeyPassword = privateKeyPassword;
     this.certificateChain = certificateChain;

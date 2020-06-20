@@ -26,6 +26,7 @@ import io.envoyproxy.envoy.api.v2.auth.Secret;
 import io.envoyproxy.envoy.api.v2.auth.TlsCertificate;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.grpc.Status;
+import io.grpc.xds.EnvoyServerProtoData.BaseTlsContext;
 import io.netty.handler.ssl.ApplicationProtocolConfig;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
@@ -61,8 +62,8 @@ abstract class SdsSslContextProvider extends SslContextProvider implements SdsCl
       CertificateValidationContext staticCertValidationContext,
       Executor watcherExecutor,
       Executor channelExecutor,
-      TlsContextHolder tlsContextHolder) {
-    super(tlsContextHolder);
+      BaseTlsContext tlsContext) {
+    super(tlsContext);
     this.certSdsConfig = certSdsConfig;
     this.validationContextSdsConfig = validationContextSdsConfig;
     this.staticCertificateValidationContext = staticCertValidationContext;
