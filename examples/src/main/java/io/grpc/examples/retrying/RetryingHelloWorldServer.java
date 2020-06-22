@@ -35,8 +35,8 @@ import java.util.logging.Logger;
  */
 public class RetryingHelloWorldServer {
   private static final Logger logger = Logger.getLogger(RetryingHelloWorldServer.class.getName());
-  private static final float unavailablePercentage = 0.5F;
-  private static Random random = new Random();
+  private static final float UNAVAILABLE_PERCENTAGE = 0.5F;
+  private static final Random random = new Random();
 
   private Server server;
 
@@ -50,7 +50,7 @@ public class RetryingHelloWorldServer {
     logger.info("Server started, listening on " + port);
 
     DecimalFormat df = new DecimalFormat("#%");
-    logger.info("Responding as UNAVAILABLE to " + df.format(unavailablePercentage) + " requests");
+    logger.info("Responding as UNAVAILABLE to " + df.format(UNAVAILABLE_PERCENTAGE) + " requests");
     Runtime.getRuntime().addShutdownHook(new Thread() {
       @Override
       public void run() {
@@ -96,7 +96,7 @@ public class RetryingHelloWorldServer {
     @Override
     public void sayHello(HelloRequest request, StreamObserver<HelloReply> responseObserver) {
       int count = retryCounter.incrementAndGet();
-      if (random.nextFloat() < unavailablePercentage) {
+      if (random.nextFloat() < UNAVAILABLE_PERCENTAGE) {
         logger.info("Returning stubbed UNAVAILABLE error. count: " + count);
         responseObserver.onError(Status.UNAVAILABLE
             .withDescription("Greeter temporarily unavailable...").asRuntimeException());

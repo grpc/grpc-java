@@ -41,7 +41,7 @@ public final class EnvoyServerProtoData {
   public abstract static class BaseTlsContext {
     @Nullable protected final CommonTlsContext commonTlsContext;
 
-    public BaseTlsContext(@Nullable CommonTlsContext commonTlsContext) {
+    protected BaseTlsContext(@Nullable CommonTlsContext commonTlsContext) {
       this.commonTlsContext = commonTlsContext;
     }
 
@@ -54,7 +54,7 @@ public final class EnvoyServerProtoData {
       if (this == o) {
         return true;
       }
-      if (o == null || !(o instanceof BaseTlsContext)) {
+      if (!(o instanceof BaseTlsContext)) {
         return false;
       }
       BaseTlsContext that = (BaseTlsContext) o;
@@ -63,7 +63,7 @@ public final class EnvoyServerProtoData {
 
     @Override
     public int hashCode() {
-      return Objects.hash(commonTlsContext);
+      return Objects.hashCode(commonTlsContext);
     }
   }
 
