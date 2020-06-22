@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkState;
 
 import io.envoyproxy.envoy.api.v2.auth.CertificateValidationContext;
 import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
+import io.grpc.xds.EnvoyServerProtoData.BaseTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.internal.sds.trust.SdsTrustManagerFactory;
@@ -44,7 +45,7 @@ public abstract class SslContextProvider {
 
   private static final Logger logger = Logger.getLogger(SslContextProvider.class.getName());
 
-  protected final TlsContextHolder tlsContextHolder;
+  protected final BaseTlsContext tlsContext;
 
   public interface Callback {
     /** Informs callee of new/updated SslContext. */
@@ -54,12 +55,12 @@ public abstract class SslContextProvider {
     void onException(Throwable throwable);
   }
 
-  SslContextProvider(TlsContextHolder tlsContextHolder) {
-    this.tlsContextHolder = checkNotNull(tlsContextHolder, "tlsContextHolder");
+  SslContextProvider(BaseTlsContext tlsContext) {
+    this.tlsContext = checkNotNull(tlsContext, "tlsContext");
   }
 
   CommonTlsContext getCommonTlsContext() {
-    return tlsContextHolder.getCommonTlsContext();
+    return tlsContext.getCommonTlsContext();
   }
 
   protected void setClientAuthValues(
@@ -79,16 +80,16 @@ public abstract class SslContextProvider {
 
   /** Returns the DownstreamTlsContext in this SslContextProvider if this is server side. **/
   public DownstreamTlsContext getDownstreamTlsContext() {
-    checkState(tlsContextHolder instanceof DownstreamTlsContextHolder,
-        "expected DownstreamTlsContextHolder");
-    return ((DownstreamTlsContextHolder) tlsContextHolder).getDownstreamTlsContext();
+    checkState(tlsContext instanceof DownstreamTlsContext,
+        "expected DownstreamTlsContext");
+    return ((DownstreamTlsContext)tlsContext);
   }
 
   /** Returns the UpstreamTlsContext in this SslContextProvider if this is client side. **/
   public UpstreamTlsContext getUpstreamTlsContext() {
-    checkState(tlsContextHolder instanceof UpstreamTlsContextHolder,
-        "expected UpstreamTlsContextHolder");
-    return ((UpstreamTlsContextHolder) tlsContextHolder).getUpstreamTlsContext();
+    checkState(tlsContext instanceof UpstreamTlsContext,
+        "expected UpstreamTlsContext");
+    return ((UpstreamTlsContext)tlsContext);
   }
 
   /** Closes this provider and releases any resources. */

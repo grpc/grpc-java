@@ -45,7 +45,7 @@ final class SdsServerSslContextProvider extends SdsSslContextProvider {
         validationContextSdsConfig,
         null,
         watcherExecutor,
-        channelExecutor, new DownstreamTlsContextHolder(downstreamTlsContext));
+        channelExecutor, downstreamTlsContext);
   }
 
   static SdsServerSslContextProvider getProvider(
