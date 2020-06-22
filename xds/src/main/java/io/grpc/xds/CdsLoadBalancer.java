@@ -290,7 +290,9 @@ public final class CdsLoadBalancer extends LoadBalancer {
               /* edsServiceName = */ newUpdate.getEdsServiceName(),
               /* lrsServerName = */ newUpdate.getLrsServerName(),
               new PolicySelection(lbProvider, ImmutableMap.<String, Object>of(), lbConfig));
-      updateSslContextProvider(newUpdate.getUpstreamTlsContext());
+      if (false) {
+        updateSslContextProvider(newUpdate.getUpstreamTlsContext());
+      }
       if (edsBalancer == null) {
         edsBalancer = lbRegistry.getProvider(EDS_POLICY_NAME).newLoadBalancer(helper);
       }
