@@ -159,8 +159,8 @@ final class MigratingThreadDeframer implements ThreadOptimizedDeframer {
           });
           return;
         }
+        PerfMark.startTask("MigratingThreadDeframer.request");
         try {
-          PerfMark.startTask("MigratingThreadDeframer.request");
           deframer.request(numMessages);
         } catch (Throwable t) {
           appListener.deframeFailed(t);
