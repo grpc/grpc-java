@@ -23,6 +23,7 @@ import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.Internal;
+import io.grpc.InternalCensus;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerStreamTracer;
 import io.opencensus.stats.StatsRecorder;
@@ -36,13 +37,6 @@ import io.opencensus.tags.propagation.TagContextBinarySerializer;
 @Internal
 public final class InternalCensusStatsAccessor {
 
-  private static final Supplier<Stopwatch> STOPWATCH_SUPPLIER = new Supplier<Stopwatch>() {
-    @Override
-    public Stopwatch get() {
-      return Stopwatch.createUnstarted();
-    }
-  };
-
   // Prevent instantiation.
   private InternalCensusStatsAccessor() {
   }
@@ -55,12 +49,7 @@ public final class InternalCensusStatsAccessor {
       boolean recordFinishedRpcs,
       boolean recordRealTimeMetrics) {
     CensusStatsModule censusStats =
-        new CensusStatsModule(
-            STOPWATCH_SUPPLIER,
-            true, /* propagateTags */
-            recordStartedRpcs,
-            recordFinishedRpcs,
-            recordRealTimeMetrics);
+        new CensusStatsModule(recordStartedRpcs, recordFinishedRpcs, recordRealTimeMetrics);
     return getClientInterceptor(censusStats);
   }
 
@@ -90,7 +79,7 @@ public final class InternalCensusStatsAccessor {
       public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
           MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
         if (callOptions.getOption(
-            CensusClientInterceptor.DISABLE_CLIENT_DEFAULT_CENSUS_STATS) != null) {
+            InternalCensus.DISABLE_CLIENT_DEFAULT_CENSUS) != null) {
           return next.newCall(method, callOptions);
         }
         return interceptor.interceptCall(method, callOptions, next);
@@ -106,12 +95,7 @@ public final class InternalCensusStatsAccessor {
       boolean recordFinishedRpcs,
       boolean recordRealTimeMetrics) {
     CensusStatsModule censusStats =
-        new CensusStatsModule(
-            STOPWATCH_SUPPLIER,
-            true, /* propagateTags */
-            recordStartedRpcs,
-            recordFinishedRpcs,
-            recordRealTimeMetrics);
+        new CensusStatsModule(recordStartedRpcs, recordFinishedRpcs, recordRealTimeMetrics);
     return censusStats.getServerTracerFactory();
   }
 
