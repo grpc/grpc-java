@@ -23,6 +23,8 @@ import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Codec;
 import io.grpc.Compressor;
 import io.grpc.Decompressor;
+import io.perfmark.Link;
+import io.perfmark.PerfMark;
 import java.io.InputStream;
 import javax.annotation.concurrent.GuardedBy;
 
@@ -219,15 +221,25 @@ public abstract class AbstractStream implements Stream {
      */
     private void requestMessagesFromDeframer(final int numMessages) {
       if (deframer instanceof ThreadOptimizedDeframer) {
-        deframer.request(numMessages);
+        PerfMark.startTask("AbstractStream.request");
+        try {
+          deframer.request(numMessages);
+        } finally {
+          PerfMark.stopTask("AbstractStream.request");
+        }
         return;
       }
+      final Link link = PerfMark.linkOut();
       class RequestRunnable implements Runnable {
         @Override public void run() {
+          PerfMark.startTask("AbstractStream.request");
+          PerfMark.linkIn(link);
           try {
             deframer.request(numMessages);
           } catch (Throwable t) {
             deframeFailed(t);
+          } finally {
+            PerfMark.stopTask("AbstractStream.request");
           }
         }
       }
