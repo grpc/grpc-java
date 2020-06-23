@@ -201,7 +201,7 @@ Update version referenced by tutorials
 --------------------------------------
 
 Update the `grpc_java_release_tag` in
-[config.toml](https://github.com/grpc/grpc.io/blob/master/config.toml)
+[config.yaml](https://github.com/grpc/grpc.io/blob/master/config.yaml)
 of the grpc.io repository.
 
 Notify the Community
