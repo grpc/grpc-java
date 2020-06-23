@@ -24,14 +24,12 @@ import javax.annotation.Nullable;
 public class InterpreterException extends Exception {
   /** Builder for InterpreterException. */
   public static class Builder {
-    private final String message;
+    @Nullable private String message;
     @Nullable private String location;
     private int position;
     private Throwable cause;
 
-    public Builder(String message, Object... args) {
-      this.message = args.length > 0 ? String.format(message, args) : message;
-    }
+    public Builder(String message, Object... args) {}
 
     /** Build function for InterpreterException. */
     public InterpreterException build() {
