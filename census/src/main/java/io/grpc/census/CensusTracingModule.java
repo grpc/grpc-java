@@ -39,6 +39,7 @@ import io.opencensus.trace.Span;
 import io.opencensus.trace.SpanContext;
 import io.opencensus.trace.Status;
 import io.opencensus.trace.Tracer;
+import io.opencensus.trace.Tracing;
 import io.opencensus.trace.propagation.BinaryFormat;
 import io.opencensus.trace.unsafe.ContextUtils;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
@@ -91,6 +92,10 @@ final class CensusTracingModule {
   final Metadata.Key<SpanContext> tracingHeader;
   private final TracingClientInterceptor clientInterceptor = new TracingClientInterceptor();
   private final ServerTracerFactory serverTracerFactory = new ServerTracerFactory();
+
+  CensusTracingModule() {
+    this(Tracing.getTracer(), Tracing.getPropagationComponent().getBinaryFormat());
+  }
 
   CensusTracingModule(
       Tracer censusTracer, final BinaryFormat censusPropagationBinaryFormat) {

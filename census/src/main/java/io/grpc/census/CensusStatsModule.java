@@ -71,6 +71,12 @@ import javax.annotation.Nullable;
 final class CensusStatsModule {
   private static final Logger logger = Logger.getLogger(CensusStatsModule.class.getName());
   private static final double NANOS_PER_MILLI = TimeUnit.MILLISECONDS.toNanos(1);
+  private static final Supplier<Stopwatch> STOPWATCH_SUPPLIER = new Supplier<Stopwatch>() {
+    @Override
+    public Stopwatch get() {
+      return Stopwatch.createUnstarted();
+    }
+  };
 
   private final Tagger tagger;
   private final StatsRecorder statsRecorder;
@@ -78,22 +84,24 @@ final class CensusStatsModule {
   @VisibleForTesting
   final Metadata.Key<TagContext> statsHeader;
   private final boolean propagateTags;
-  private final boolean recordStartedRpcs;
-  private final boolean recordFinishedRpcs;
-  private final boolean recordRealTimeMetrics;
+  @VisibleForTesting
+  final boolean recordStartedRpcs;
+  @VisibleForTesting
+  final boolean recordFinishedRpcs;
+  @VisibleForTesting
+  final boolean recordRealTimeMetrics;
 
   /**
    * Creates a {@link CensusStatsModule} with the default OpenCensus implementation.
    */
-  CensusStatsModule(Supplier<Stopwatch> stopwatchSupplier,
-      boolean propagateTags, boolean recordStartedRpcs, boolean recordFinishedRpcs,
-      boolean recordRealTimeMetrics) {
+  CensusStatsModule(
+      boolean recordStartedRpcs, boolean recordFinishedRpcs, boolean recordRealTimeMetrics) {
     this(
         Tags.getTagger(),
         Tags.getTagPropagationComponent().getBinarySerializer(),
         Stats.getStatsRecorder(),
-        stopwatchSupplier,
-        propagateTags, recordStartedRpcs, recordFinishedRpcs, recordRealTimeMetrics);
+        STOPWATCH_SUPPLIER,
+        true, recordStartedRpcs, recordFinishedRpcs, recordRealTimeMetrics);
   }
 
   /**
@@ -345,7 +353,8 @@ final class CensusStatsModule {
       callEndedUpdater = tmpCallEndedUpdater;
     }
 
-    private final CensusStatsModule module;
+    @VisibleForTesting
+    final CensusStatsModule module;
     private final Stopwatch stopwatch;
     private volatile ClientTracer streamTracer;
     private volatile int callEnded;
