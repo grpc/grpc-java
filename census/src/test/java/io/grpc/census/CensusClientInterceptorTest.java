@@ -18,23 +18,17 @@ package io.grpc.census;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import com.google.common.collect.Iterables;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
 import io.grpc.ManagedChannel;
-import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
-import io.grpc.ServerCall;
-import io.grpc.ServerCallHandler;
-import io.grpc.ServerServiceDefinition;
-import io.grpc.Status;
 import io.grpc.inprocess.InProcessChannelBuilder;
-import io.grpc.inprocess.InProcessServerBuilder;
+import io.grpc.inprocess.InternalInProcess;
 import io.grpc.testing.GrpcCleanupRule;
-import io.opencensus.trace.Tracer;
-import io.opencensus.trace.propagation.BinaryFormat;
 import java.io.InputStream;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.Before;
@@ -42,18 +36,13 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
-import org.mockito.Mock;
-import org.mockito.junit.MockitoJUnit;
-import org.mockito.junit.MockitoRule;
 
 /**
- * Test for {@link CensusClientInterceptor} and {@link CensusTracingModule}.
+ * Test for {@link CensusClientInterceptor}.
  */
 @RunWith(JUnit4.class)
 public class CensusClientInterceptorTest {
 
-  @Rule
-  public final MockitoRule mocks = MockitoJUnit.rule();
   @Rule
   public final GrpcCleanupRule grpcCleanupRule = new GrpcCleanupRule();
 
@@ -61,6 +50,7 @@ public class CensusClientInterceptorTest {
       CallOptions.Key.createWithDefault("option", "default");
   private static final CallOptions CALL_OPTIONS =
       CallOptions.DEFAULT.withOption(CUSTOM_OPTION, "customvalue");
+
   private static class StringInputStream extends InputStream {
     final String string;
 
@@ -97,92 +87,76 @@ public class CensusClientInterceptorTest {
           .setFullMethodName("package1.service2/method3")
           .build();
 
-  @Mock
-  private Tracer tracer;
-  @Mock
-  private BinaryFormat mockTracingPropagationHandler;
-  @Mock
-  private ClientCall.Listener<String> mockClientCallListener;
-  @Mock
-  private ServerCall.Listener<String> mockServerCallListener;
+  private final AtomicReference<CallOptions> callOptionsCaptor = new AtomicReference<>();
 
   private ManagedChannel channel;
 
+
+  @SuppressWarnings("unchecked")
   @Before
   public void setUp() {
-    String serverName = InProcessServerBuilder.generateName();
-    grpcCleanupRule.register(
-        InProcessServerBuilder.forName(serverName)
-            .addService(
-                ServerServiceDefinition.builder("package1.service2")
-                    .addMethod(method, new ServerCallHandler<String, String>() {
-                      @Override
-                      public ServerCall.Listener<String> startCall(
-                          ServerCall<String, String> call, Metadata headers) {
-                        call.sendHeaders(new Metadata());
-                        call.sendMessage("Hello");
-                        call.close(
-                            Status.PERMISSION_DENIED.withDescription("No you don't"), new Metadata());
-                        return mockServerCallListener;
-                      }
-                    }).build())
-            .directExecutor()
-            .build());
-    channel =
-        grpcCleanupRule.register(
-            InProcessChannelBuilder.forName(serverName).directExecutor().build());
-  }
-
-  @Test
-  public void disableDefaultClientStatsByInterceptor() {
-    ClientInterceptor interceptor =
-        CensusClientInterceptor.newBuilder().setStatsEnabled(false).build();
-    testDisableDefaultCensus(interceptor);
-  }
-
-  @Test
-  public void disableDefaultClientTracingByInterceptor() {
-
-  }
-
-  private void testDisableDefaultCensus(ClientInterceptor interceptor) {
-    final AtomicReference<CallOptions> capturedCallOptions = new AtomicReference<>();
-    ClientInterceptor callOptionsCaptureInterceptor = new ClientInterceptor() {
+    ClientInterceptor callOptionCaptureInterceptor = new ClientInterceptor() {
       @Override
       public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
           MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
-        capturedCallOptions.set(callOptions);
+        callOptionsCaptor.set(callOptions);
         return next.newCall(method, callOptions);
       }
     };
-    Channel interceptedChannel =
-        ClientInterceptors.intercept(channel, interceptor, callOptionsCaptureInterceptor);
-    ClientCall<String, String> call = interceptedChannel.newCall(method, CALL_OPTIONS);
-    assertThat(capturedCallOptions.get().getStreamTracerFactories()).isEmpty();
+    InProcessChannelBuilder builder =
+        InProcessChannelBuilder.forName("non-existing server").directExecutor();
+    InternalInProcess.setTestInterceptor(builder, callOptionCaptureInterceptor);
+    channel = grpcCleanupRule.register(builder.build());
   }
 
   @Test
-  public void stats_starts_finishes_realTime() {
-
+  public void usingCensusInterceptorDisablesDefaultCensus() {
+    ClientInterceptor interceptor =
+        CensusClientInterceptor.newBuilder().build();
+    Channel interceptedChannel = ClientInterceptors.intercept(channel, interceptor);
+    interceptedChannel.newCall(method, CALL_OPTIONS);
+    assertThat(callOptionsCaptor.get().getStreamTracerFactories()).isEmpty();
   }
 
   @Test
-  public void stats_starts_finishes_noReaLTime() {
-
+  public void customStatsConfig() {
+    ClientInterceptor interceptor =
+        CensusClientInterceptor.newBuilder()
+            .setStatsEnabled(true)
+            .setRecordStartedRpcs(false)
+            .setRecordFinishedRpcs(false)
+            .setRecordRealTimeMetrics(true)
+            .build();
+    Channel interceptedChannel = ClientInterceptors.intercept(channel, interceptor);
+    interceptedChannel.newCall(method, CALL_OPTIONS);
+    CensusStatsModule.ClientCallTracer callTracer =
+        (CensusStatsModule.ClientCallTracer) Iterables.getOnlyElement(
+            callOptionsCaptor.get().getStreamTracerFactories());
+    assertThat(callTracer.module.recordStartedRpcs).isEqualTo(false);
+    assertThat(callTracer.module.recordFinishedRpcs).isEqualTo(false);
+    assertThat(callTracer.module.recordRealTimeMetrics).isEqualTo(true);
   }
 
   @Test
-  public void stats_starts_noFinishes_noRealTime() {
-
+  public void onlyEnableTracing() {
+    ClientInterceptor interceptor =
+        CensusClientInterceptor.newBuilder().setTracingEnabled(true).build();
+    Channel interceptedChannel = ClientInterceptors.intercept(channel, interceptor);
+    interceptedChannel.newCall(method, CALL_OPTIONS);
+    assertThat(Iterables.getOnlyElement(callOptionsCaptor.get().getStreamTracerFactories()))
+        .isInstanceOf(CensusTracingModule.ClientCallTracer.class);
   }
 
   @Test
-  public void stats_noStarts_finishes_noRealTime() {
-
-  }
-
-  @Test
-  public void stats_noStarts_noFinishes_noRealTime() {
-
+  public void enableStatsAndTracing() {
+    ClientInterceptor interceptor =
+        CensusClientInterceptor.newBuilder().setStatsEnabled(true).setTracingEnabled(true).build();
+    Channel interceptedChannel = ClientInterceptors.intercept(channel, interceptor);
+    interceptedChannel.newCall(method, CALL_OPTIONS);
+    assertThat(callOptionsCaptor.get().getStreamTracerFactories()).hasSize(2);
+    assertThat(callOptionsCaptor.get().getStreamTracerFactories().get(0))
+        .isInstanceOf(CensusTracingModule.ClientCallTracer.class);
+    assertThat(callOptionsCaptor.get().getStreamTracerFactories().get(1))
+        .isInstanceOf(CensusStatsModule.ClientCallTracer.class);
   }
 }
