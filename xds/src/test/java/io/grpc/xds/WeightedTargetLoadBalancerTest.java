@@ -32,6 +32,7 @@ import static org.mockito.Mockito.verify;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Iterables;
 import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
 import io.grpc.EquivalentAddressGroup;
@@ -49,6 +50,8 @@ import io.grpc.xds.WeightedRandomPicker.WeightedChildPicker;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedPolicySelection;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedTargetConfig;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -68,8 +71,14 @@ public class WeightedTargetLoadBalancerTest {
   private final LoadBalancerRegistry lbRegistry = new LoadBalancerRegistry();
   private final List<LoadBalancer> childBalancers = new ArrayList<>();
   private final List<Helper> childHelpers = new ArrayList<>();
-  private final int[] weights = new int[]{10, 20, 30, 40};
-  private final Object[] configs = new Object[]{"config0", "config1", "config3", "config4"};
+  private final int[] weights = {10, 20, 30, 40};
+  private final Object[] configs = {"config0", "config1", "config3", "config4"};
+  private final SocketAddress[] socketAddresses = {
+    new InetSocketAddress(8080),
+    new InetSocketAddress(8081),
+    new InetSocketAddress(8083),
+    new InetSocketAddress(8084)
+  };
 
   private final LoadBalancerProvider fooLbProvider = new LoadBalancerProvider() {
     @Override
@@ -175,9 +184,17 @@ public class WeightedTargetLoadBalancerTest {
         "target2", weightedLbConfig2,
         // {foo, 40, config3}
         "target3", weightedLbConfig3);
+    EquivalentAddressGroup eag0 = new EquivalentAddressGroup(socketAddresses[0]);
+    eag0 = AddressFilter.setPathFilter(eag0, ImmutableList.of("target0"));
+    EquivalentAddressGroup eag1 = new EquivalentAddressGroup(socketAddresses[1]);
+    eag1 = AddressFilter.setPathFilter(eag1, ImmutableList.of("target1"));
+    EquivalentAddressGroup eag2 = new EquivalentAddressGroup(socketAddresses[2]);
+    eag2 = AddressFilter.setPathFilter(eag2, ImmutableList.of("target2"));
+    EquivalentAddressGroup eag3 = new EquivalentAddressGroup(socketAddresses[3]);
+    eag3 = AddressFilter.setPathFilter(eag3, ImmutableList.of("target3"));
     weightedTargetLb.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
-            .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+            .setAddresses(ImmutableList.of(eag0, eag1, eag2, eag3))
             .setAttributes(Attributes.newBuilder().set(fakeKey, fakeValue).build())
             .setLoadBalancingPolicyConfig(new WeightedTargetConfig(targets))
             .build());
@@ -189,10 +206,11 @@ public class WeightedTargetLoadBalancerTest {
 
     for (int i = 0; i < childBalancers.size(); i++) {
       verify(childBalancers.get(i)).handleResolvedAddresses(resolvedAddressesCaptor.capture());
-      assertThat(resolvedAddressesCaptor.getValue().getLoadBalancingPolicyConfig())
-          .isEqualTo(configs[i]);
-      assertThat(resolvedAddressesCaptor.getValue().getAttributes().get(fakeKey))
-          .isEqualTo(fakeValue);
+      ResolvedAddresses resolvedAddresses = resolvedAddressesCaptor.getValue();
+      assertThat(resolvedAddresses.getLoadBalancingPolicyConfig()).isEqualTo(configs[i]);
+      assertThat(resolvedAddresses.getAttributes().get(fakeKey)).isEqualTo(fakeValue);
+      assertThat(Iterables.getOnlyElement(resolvedAddresses.getAddresses()).getAddresses())
+          .containsExactly(socketAddresses[i]);
     }
 
     // Update new weighted target config for a typical workflow.

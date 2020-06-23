@@ -480,6 +480,15 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
 
     private void streamCreatedInternal(
         final ServerStream stream, final String methodName, final Metadata headers, final Tag tag) {
+      final Executor wrappedExecutor;
+      // This is a performance optimization that avoids the synchronization and queuing overhead
+      // that comes with SerializingExecutor.
+      if (executor == directExecutor()) {
+        wrappedExecutor = new SerializeReentrantCallsDirectExecutor();
+        stream.optimizeForDirectExecutor();
+      } else {
+        wrappedExecutor = new SerializingExecutor(executor);
+      }
 
       if (headers.containsKey(MESSAGE_ENCODING_KEY)) {
         String encoding = headers.get(MESSAGE_ENCODING_KEY);
@@ -499,14 +508,6 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
           stream.statsTraceContext(), "statsTraceCtx not present from stream");
 
       final Context.CancellableContext context = createContext(headers, statsTraceCtx);
-      final Executor wrappedExecutor;
-      // This is a performance optimization that avoids the synchronization and queuing overhead
-      // that comes with SerializingExecutor.
-      if (executor == directExecutor()) {
-        wrappedExecutor = new SerializeReentrantCallsDirectExecutor();
-      } else {
-        wrappedExecutor = new SerializingExecutor(executor);
-      }
 
       final Link link = PerfMark.linkOut();
 
@@ -554,14 +555,10 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
               return;
             }
             listener = startCall(stream, methodName, method, headers, context, statsTraceCtx, tag);
-          } catch (RuntimeException e) {
-            stream.close(Status.fromThrowable(e), new Metadata());
+          } catch (Throwable t) {
+            stream.close(Status.fromThrowable(t), new Metadata());
             context.cancel(null);
-            throw e;
-          } catch (Error e) {
-            stream.close(Status.fromThrowable(e), new Metadata());
-            context.cancel(null);
-            throw e;
+            throw t;
           } finally {
             jumpListener.setListener(listener);
           }
@@ -783,12 +780,9 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
           PerfMark.linkIn(link);
           try {
             getListener().messagesAvailable(producer);
-          } catch (RuntimeException e) {
-            internalClose(e);
-            throw e;
-          } catch (Error e) {
-            internalClose(e);
-            throw e;
+          } catch (Throwable t) {
+            internalClose(t);
+            throw t;
           } finally {
             PerfMark.stopTask("ServerCallListener(app).messagesAvailable", tag);
           }
@@ -818,12 +812,9 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
           PerfMark.linkIn(link);
           try {
             getListener().halfClosed();
-          } catch (RuntimeException e) {
-            internalClose(e);
-            throw e;
-          } catch (Error e) {
-            internalClose(e);
-            throw e;
+          } catch (Throwable t) {
+            internalClose(t);
+            throw t;
           } finally {
             PerfMark.stopTask("ServerCallListener(app).halfClosed", tag);
           }
@@ -892,12 +883,9 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
           PerfMark.linkIn(link);
           try {
             getListener().onReady();
-          } catch (RuntimeException e) {
-            internalClose(e);
-            throw e;
-          } catch (Error e) {
-            internalClose(e);
-            throw e;
+          } catch (Throwable t) {
+            internalClose(t);
+            throw t;
           } finally {
             PerfMark.stopTask("ServerCallListener(app).onReady", tag);
           }

@@ -60,6 +60,7 @@ import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.NameResolver;
@@ -1260,7 +1261,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
 
     @Override
-    public ManagedChannel createResolvingOobChannel(String target) {
+    public ManagedChannelBuilder<?> createResolvingOobChannelBuilder(String target) {
       final class ResolvingOobChannelBuilder
           extends AbstractManagedChannelImplBuilder<ResolvingOobChannelBuilder> {
         int defaultPort = -1;
@@ -1278,6 +1279,19 @@ final class ManagedChannelImpl extends ManagedChannel implements
         protected ClientTransportFactory buildTransportFactory() {
           throw new UnsupportedOperationException();
         }
+
+        @Override
+        public ManagedChannel build() {
+          // TODO(creamsoup) prevent main channel to shutdown if oob channel is not terminated
+          return new ManagedChannelImpl(
+                  this,
+                  transportFactory,
+                  backoffPolicyProvider,
+                  balancerRpcExecutorPool,
+                  stopwatchSupplier,
+                  Collections.<ClientInterceptor>emptyList(),
+                  timeProvider);
+        }
       }
 
       checkState(!terminated, "Channel is terminated");
@@ -1291,15 +1305,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       builder.proxyDetector = nameResolverArgs.getProxyDetector();
       builder.defaultPort = nameResolverArgs.getDefaultPort();
       builder.userAgent = userAgent;
-      return
-          new ManagedChannelImpl(
-              builder,
-              transportFactory,
-              backoffPolicyProvider,
-              balancerRpcExecutorPool,
-              stopwatchSupplier,
-              Collections.<ClientInterceptor>emptyList(),
-              timeProvider);
+      return builder;
     }
 
     @Override

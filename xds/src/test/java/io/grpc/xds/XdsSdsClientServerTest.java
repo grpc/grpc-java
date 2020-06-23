@@ -30,8 +30,6 @@ import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_PEM_FI
 import static org.junit.Assert.fail;
 
 import com.google.common.collect.ImmutableList;
-import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
-import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
@@ -44,6 +42,8 @@ import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.testing.protobuf.SimpleRequest;
 import io.grpc.testing.protobuf.SimpleResponse;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
+import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
+import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import io.grpc.xds.internal.sds.SdsProtocolNegotiators;
 import io.grpc.xds.internal.sds.XdsChannelBuilder;
@@ -86,6 +86,18 @@ public class XdsSdsClientServerTest {
 
     SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
         getBlockingStub(/* upstreamTlsContext= */ null, /* overrideAuthority= */ null);
+    assertThat(unaryRpc("buddy", blockingStub)).isEqualTo("Hello buddy");
+  }
+
+  @Test
+  public void plaintextClientServer_withDefaultTlsContext() throws IOException, URISyntaxException {
+    DownstreamTlsContext defaultTlsContext =
+        EnvoyServerProtoData.DownstreamTlsContext.fromEnvoyProtoDownstreamTlsContext(
+            io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext.getDefaultInstance());
+    buildServerWithTlsContext(/* downstreamTlsContext= */ defaultTlsContext);
+
+    SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
+            getBlockingStub(/* upstreamTlsContext= */ null, /* overrideAuthority= */ null);
     assertThat(unaryRpc("buddy", blockingStub)).isEqualTo("Hello buddy");
   }
 

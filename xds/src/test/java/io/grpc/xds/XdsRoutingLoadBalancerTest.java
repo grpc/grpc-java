@@ -17,27 +17,18 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
-import static io.grpc.ConnectivityState.READY;
-import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.atLeastOnce;
-import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Iterables;
-import io.grpc.Attributes;
-import io.grpc.Attributes.Key;
 import io.grpc.CallOptions;
-import io.grpc.ChannelLogger;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
+import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.Subchannel;
@@ -47,18 +38,22 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.Status;
+import io.grpc.SynchronizationContext;
+import io.grpc.internal.FakeClock;
+import io.grpc.internal.PickSubchannelArgsImpl;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
-import io.grpc.internal.TestUtils;
-import io.grpc.internal.TestUtils.StandardLoadBalancerProvider;
 import io.grpc.testing.TestMethodDescriptors;
-import io.grpc.xds.XdsRoutingLoadBalancerProvider.MethodName;
+import io.grpc.xds.RouteMatch.HeaderMatcher;
+import io.grpc.xds.RouteMatch.PathMatcher;
+import io.grpc.xds.XdsRoutingLoadBalancer.RouteMatchingSubchannelPicker;
 import io.grpc.xds.XdsRoutingLoadBalancerProvider.Route;
 import io.grpc.xds.XdsRoutingLoadBalancerProvider.XdsRoutingConfig;
-import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
-import org.junit.After;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -71,269 +66,278 @@ import org.mockito.MockitoAnnotations;
 @RunWith(JUnit4.class)
 public class XdsRoutingLoadBalancerTest {
 
-  private final List<LoadBalancer> fooBalancers = new ArrayList<>();
-  private final List<LoadBalancer> barBalancers = new ArrayList<>();
-  private final List<LoadBalancer> bazBalancers = new ArrayList<>();
-  private final List<Helper> fooHelpers = new ArrayList<>();
-  private final List<Helper> barHelpers = new ArrayList<>();
-  private final List<Helper> bazHelpers = new ArrayList<>();
-
-  private final LoadBalancerProvider fooLbProvider =
-      new StandardLoadBalancerProvider("foo_policy") {
+  private final SynchronizationContext syncContext = new SynchronizationContext(
+      new Thread.UncaughtExceptionHandler() {
         @Override
-        public LoadBalancer newLoadBalancer(Helper helper) {
-          LoadBalancer lb = mock(LoadBalancer.class);
-          fooBalancers.add(lb);
-          fooHelpers.add(helper);
-          return lb;
+        public void uncaughtException(Thread t, Throwable e) {
+          throw new AssertionError(e);
         }
-      };
-  private final LoadBalancerProvider barLbProvider =
-      new StandardLoadBalancerProvider("bar_policy") {
-        @Override
-        public LoadBalancer newLoadBalancer(Helper helper) {
-          LoadBalancer lb = mock(LoadBalancer.class);
-          barBalancers.add(lb);
-          barHelpers.add(helper);
-          return lb;
-        }
-      };
-  private final LoadBalancerProvider bazLbProvider =
-      new StandardLoadBalancerProvider("baz_policy") {
-        @Override
-        public LoadBalancer newLoadBalancer(Helper helper) {
-          LoadBalancer lb = mock(LoadBalancer.class);
-          bazBalancers.add(lb);
-          bazHelpers.add(helper);
-          return lb;
-        }
-      };
+      });
+  private final FakeClock fakeClock = new FakeClock();
 
   @Mock
-  private Helper helper;
-  @Mock
-  private ChannelLogger channelLogger;
+  private LoadBalancer.Helper helper;
 
-  private LoadBalancer xdsRoutingLb;
+  private  RouteMatch routeMatch1 =
+      new RouteMatch(
+          new PathMatcher("/FooService/barMethod", null, null),
+          Arrays.asList(
+              new HeaderMatcher("user-agent", "gRPC-Java", null, null, null, null, null, false),
+              new HeaderMatcher("grpc-encoding", "gzip", null, null, null, null, null, false)),
+          null);
+  private RouteMatch routeMatch2 =
+      new RouteMatch(
+          new PathMatcher("/FooService/bazMethod", null, null),
+          Collections.<HeaderMatcher>emptyList(),
+          null);
+  private RouteMatch routeMatch3 =
+      new RouteMatch(
+          new PathMatcher(null, "/", null),
+          Collections.<HeaderMatcher>emptyList(),
+          null);
+  private List<FakeLoadBalancer> childBalancers = new ArrayList<>();
+  private LoadBalancer xdsRoutingLoadBalancer;
 
   @Before
   public void setUp() {
     MockitoAnnotations.initMocks(this);
-    doReturn(channelLogger).when(helper).getChannelLogger();
-    xdsRoutingLb = new XdsRoutingLoadBalancer(helper);
-  }
-
-  @After
-  public void tearDown() {
-    xdsRoutingLb.shutdown();
-
-    for (LoadBalancer balancer : Iterables.concat(fooBalancers, barBalancers, bazBalancers)) {
-      verify(balancer).shutdown();
-    }
+    when(helper.getSynchronizationContext()).thenReturn(syncContext);
+    when(helper.getScheduledExecutorService()).thenReturn(fakeClock.getScheduledExecutorService());
+    xdsRoutingLoadBalancer = new XdsRoutingLoadBalancer(helper);
   }
 
   @Test
   public void typicalWorkflow() {
-    // Resolution error.
-    xdsRoutingLb.handleNameResolutionError(Status.UNAUTHENTICATED);
-    verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
+    Object childConfig1 = new Object();
+    Object childConfig2 = new Object();
+    PolicySelection policyA =
+        new PolicySelection(new FakeLoadBalancerProvider("policy_a"), null, childConfig1);
+    PolicySelection policyB =
+        new PolicySelection(new FakeLoadBalancerProvider("policy_b"), null, childConfig2);
+    PolicySelection policyC =
+        new PolicySelection(new FakeLoadBalancerProvider("policy_c"), null , null);
 
-    // Config update.
-    Attributes attributes =
-        Attributes.newBuilder().set(Key.<String>create("fakeKey"), "fakeVal").build();
-    Object fooConfig1 = new Object();
-    Object barConfig1 = new Object();
-    Object bazConfig1 = new Object();
-    Object fooConfig2 = new Object();
-    XdsRoutingConfig xdsRoutingConfig = new XdsRoutingConfig(
-        ImmutableList.of(
-            new Route("foo_action", new MethodName("service1", "method1")),
-            new Route("foo_action", new MethodName("service2", "method2")),
-            new Route("bar_action", new MethodName("service1", "hello")),
-            new Route("bar_action", new MethodName("service2", "hello")),
-            new Route("foo_action_2", new MethodName("service2", "")),
-            new Route("baz_action", new MethodName("", ""))),
-        ImmutableMap.of(
-            "foo_action",
-            new PolicySelection(fooLbProvider, null, fooConfig1),
-            "foo_action_2",
-            new PolicySelection(fooLbProvider, null, fooConfig2),
-            "bar_action",
-            new PolicySelection(barLbProvider, null, barConfig1),
-            "baz_action",
-            new PolicySelection(bazLbProvider, null, bazConfig1)));
-    xdsRoutingLb.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder()
-            .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
-            .setAttributes(attributes)
-            .setLoadBalancingPolicyConfig(xdsRoutingConfig).build());
-    assertThat(fooBalancers).hasSize(2);
-    ArgumentCaptor<ResolvedAddresses> resolvedAddressesCaptor = ArgumentCaptor.forClass(null);
-    verify(fooBalancers.get(0)).handleResolvedAddresses(resolvedAddressesCaptor.capture());
-    ResolvedAddresses resolvedAddressesFoo0 = resolvedAddressesCaptor.getValue();
-    verify(fooBalancers.get(1)).handleResolvedAddresses(resolvedAddressesCaptor.capture());
-    ResolvedAddresses resolvedAddressesFoo1 = resolvedAddressesCaptor.getValue();
-    assertThat(barBalancers).hasSize(1);
-    verify(barBalancers.get(0)).handleResolvedAddresses(resolvedAddressesCaptor.capture());
-    ResolvedAddresses resolvedAddressesBar = resolvedAddressesCaptor.getValue();
-    assertThat(bazBalancers).hasSize(1);
-    verify(bazBalancers.get(0)).handleResolvedAddresses(resolvedAddressesCaptor.capture());
-    ResolvedAddresses resolvedAddressesBaz = resolvedAddressesCaptor.getValue();
-    assertThat(resolvedAddressesFoo0.getAttributes()).isEqualTo(attributes);
-    assertThat(resolvedAddressesFoo1.getAttributes()).isEqualTo(attributes);
-    assertThat(resolvedAddressesBar.getAttributes()).isEqualTo(attributes);
-    assertThat(resolvedAddressesBaz.getAttributes()).isEqualTo(attributes);
+    XdsRoutingConfig config =
+        new XdsRoutingConfig(
+            Arrays.asList(
+                new Route(routeMatch1, "action_a"),
+                new Route(routeMatch2, "action_b"),
+                new Route(routeMatch3, "action_a")),
+            ImmutableMap.of("action_a", policyA, "action_b", policyB));
+    xdsRoutingLoadBalancer
+        .handleResolvedAddresses(
+            ResolvedAddresses.newBuilder()
+                .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
+                .setLoadBalancingPolicyConfig(config)
+                .build());
+
+    assertThat(childBalancers).hasSize(2);
+    FakeLoadBalancer childBalancer1 = childBalancers.get(0);
+    FakeLoadBalancer childBalancer2 = childBalancers.get(1);
+    assertThat(childBalancer1.name).isEqualTo("policy_a");
+    assertThat(childBalancer2.name).isEqualTo("policy_b");
+    assertThat(childBalancer1.config).isEqualTo(childConfig1);
+    assertThat(childBalancer2.config).isEqualTo(childConfig2);
+
+    // Receive an updated routing config.
+    config =
+        new XdsRoutingConfig(
+            Arrays.asList(
+                new Route(routeMatch1, "action_b"),
+                new Route(routeMatch2, "action_c"),
+                new Route(routeMatch3, "action_c")),
+            ImmutableMap.of("action_b", policyA, "action_c", policyC));
+    xdsRoutingLoadBalancer
+        .handleResolvedAddresses(
+            ResolvedAddresses.newBuilder()
+                .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
+                .setLoadBalancingPolicyConfig(config)
+                .build());
+
+    assertThat(childBalancer2.shutdown)
+        .isTrue();  // (immediate) shutdown because "action_b" changes policy (before ready)
+    assertThat(fakeClock.numPendingTasks())
+        .isEqualTo(1);  // (delayed) shutdown because "action_a" is removed
+    assertThat(childBalancer1.shutdown).isFalse();
+    assertThat(childBalancers).hasSize(3);
+    FakeLoadBalancer childBalancer3 = childBalancers.get(1);
+    FakeLoadBalancer childBalancer4 = childBalancers.get(2);
+    assertThat(childBalancer3.name).isEqualTo("policy_a");
+    assertThat(childBalancer3).isNotSameInstanceAs(childBalancer1);
+    assertThat(childBalancer4.name).isEqualTo("policy_c");
+
+    // Simulate subchannel state update from the leaf policy.
+    Subchannel subchannel1 = mock(Subchannel.class);
+    Subchannel subchannel2 = mock(Subchannel.class);
+    Subchannel subchannel3 = mock(Subchannel.class);
+    childBalancer1.deliverSubchannelState(subchannel1, ConnectivityState.READY);
+    childBalancer3.deliverSubchannelState(subchannel2, ConnectivityState.CONNECTING);
+    childBalancer4.deliverSubchannelState(subchannel3, ConnectivityState.READY);
+
+    ArgumentCaptor<SubchannelPicker> pickerCaptor = ArgumentCaptor.forClass(null);
+    verify(helper).updateBalancingState(eq(ConnectivityState.READY), pickerCaptor.capture());
+    RouteMatchingSubchannelPicker picker = (RouteMatchingSubchannelPicker) pickerCaptor.getValue();
+    assertThat(picker.routePickers).hasSize(3);
     assertThat(
-        Arrays.asList(
-            resolvedAddressesFoo0.getLoadBalancingPolicyConfig(),
-            resolvedAddressesFoo1.getLoadBalancingPolicyConfig()))
-        .containsExactly(fooConfig1, fooConfig2);
-    LoadBalancer fooBalancer1;
-    Helper fooHelper1;
-    Helper fooHelper2;
-    if (resolvedAddressesFoo0.getLoadBalancingPolicyConfig().equals(fooConfig1)) {
-      fooBalancer1 = fooBalancers.get(0);
-      fooHelper1 = fooHelpers.get(0);
-      fooHelper2 = fooHelpers.get(1);
-    } else {
-      fooBalancer1 = fooBalancers.get(1);
-      fooHelper1 = fooHelpers.get(1);
-      fooHelper2 = fooHelpers.get(0);
-    }
-    assertThat(resolvedAddressesBar.getLoadBalancingPolicyConfig()).isEqualTo(barConfig1);
-    assertThat(resolvedAddressesBaz.getLoadBalancingPolicyConfig()).isEqualTo(bazConfig1);
-    Helper barHelper = barHelpers.get(0);
-    Helper bazHelper = bazHelpers.get(0);
+        picker.routePickers.get(routeMatch1)
+            .pickSubchannel(mock(PickSubchannelArgs.class)).getSubchannel())
+        .isSameInstanceAs(subchannel2);  // routeMatch1 -> action_b -> policy_a -> subchannel2
+    assertThat(
+        picker.routePickers.get(routeMatch2)
+            .pickSubchannel(mock(PickSubchannelArgs.class)).getSubchannel())
+        .isSameInstanceAs(subchannel3);  // routeMatch2 -> action_c -> policy_c -> subchannel3
+    assertThat(
+        picker.routePickers.get(routeMatch3)
+            .pickSubchannel(mock(PickSubchannelArgs.class)).getSubchannel())
+        .isSameInstanceAs(subchannel3);  // routeMatch3 -> action_c -> policy_c -> subchannel3
 
-    // State update.
-    Subchannel subchannelFoo1 = mock(Subchannel.class);
-    Subchannel subchannelFoo2 = mock(Subchannel.class);
-    fooHelper1.updateBalancingState(READY, TestUtils.pickerOf(subchannelFoo1));
-    fooHelper2.updateBalancingState(READY, TestUtils.pickerOf(subchannelFoo2));
-    barHelper.updateBalancingState(
-        TRANSIENT_FAILURE, new ErrorPicker(Status.ABORTED.withDescription("abort bar")));
-    bazHelper.updateBalancingState(
-        TRANSIENT_FAILURE, new ErrorPicker(Status.DATA_LOSS.withDescription("data loss baz")));
-    ArgumentCaptor<ConnectivityState> connectivityStateCaptor = ArgumentCaptor.forClass(null);
-    ArgumentCaptor<SubchannelPicker> subchannelPickerCaptor = ArgumentCaptor.forClass(null);
-    verify(helper, atLeastOnce()).updateBalancingState(
-        connectivityStateCaptor.capture(), subchannelPickerCaptor.capture());
-    assertThat(connectivityStateCaptor.getValue()).isEqualTo(READY);
-    SubchannelPicker picker = subchannelPickerCaptor.getValue();
-    assertPickerRoutePathToSubchannel(picker, "service1", "method1", subchannelFoo1);
-    assertPickerRoutePathToSubchannel(picker, "service2", "method2", subchannelFoo1);
-    assertPickerRoutePathToError(
-        picker, "service1", "hello", Status.ABORTED.withDescription("abort bar"));
-    assertPickerRoutePathToError(
-        picker, "service2", "hello", Status.ABORTED.withDescription("abort bar"));
-    assertPickerRoutePathToSubchannel(picker, "service2", "otherMethod", subchannelFoo2);
-    assertPickerRoutePathToError(
-        picker, "otherService", "hello", Status.DATA_LOSS.withDescription("data loss baz"));
+    // Error propagation from upstream policies.
+    Status error = Status.UNAVAILABLE.withDescription("network error");
+    xdsRoutingLoadBalancer.handleNameResolutionError(error);
+    assertThat(childBalancer1.upstreamError).isNull();
+    assertThat(childBalancer3.upstreamError).isEqualTo(error);
+    assertThat(childBalancer4.upstreamError).isEqualTo(error);
+    fakeClock.forwardTime(
+        XdsRoutingLoadBalancer.DELAYED_ACTION_DELETION_TIME_MINUTES, TimeUnit.MINUTES);
+    assertThat(childBalancer1.shutdown).isTrue();
 
-    // Resolution error.
-    Status error = Status.UNAVAILABLE.withDescription("fake unavailable");
-    xdsRoutingLb.handleNameResolutionError(error);
-    for (LoadBalancer lb : Iterables.concat(fooBalancers, barBalancers, bazBalancers)) {
-      verify(lb).handleNameResolutionError(error);
-    }
-
-    // New config update.
-    Object fooConfig3 = new Object();
-    Object barConfig2 = new Object();
-    Object barConfig3 = new Object();
-    Object bazConfig2 = new Object();
-    xdsRoutingConfig = new XdsRoutingConfig(
-        ImmutableList.of(
-            new Route("foo_action", new MethodName("service1", "method1")),
-            new Route("foo_action", new MethodName("service2", "method3")),
-            new Route("bar_action", new MethodName("service1", "hello")),
-            new Route("bar_action_2", new MethodName("service2", "hello")),
-            new Route("baz_action", new MethodName("", ""))),
-        ImmutableMap.of(
-            "foo_action",
-            new PolicySelection(fooLbProvider, null, fooConfig3),
-            "bar_action",
-            new PolicySelection(barLbProvider, null, barConfig2),
-            "bar_action_2",
-            new PolicySelection(barLbProvider, null, barConfig3),
-            "baz_action",
-            new PolicySelection(bazLbProvider, null, bazConfig2)));
-    xdsRoutingLb.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder()
-            .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
-            .setLoadBalancingPolicyConfig(xdsRoutingConfig)
-            .build());
-    verify(fooBalancer1, times(2)).handleResolvedAddresses(resolvedAddressesCaptor.capture());
-    assertThat(resolvedAddressesCaptor.getValue().getLoadBalancingPolicyConfig())
-        .isEqualTo(fooConfig3);
-    assertThat(barBalancers).hasSize(2);
-    verify(barBalancers.get(0), times(2))
-        .handleResolvedAddresses(resolvedAddressesCaptor.capture());
-    assertThat(resolvedAddressesCaptor.getValue().getLoadBalancingPolicyConfig())
-        .isEqualTo(barConfig2);
-    verify(barBalancers.get(1)).handleResolvedAddresses(resolvedAddressesCaptor.capture());
-    assertThat(resolvedAddressesCaptor.getValue().getLoadBalancingPolicyConfig())
-        .isEqualTo(barConfig3);
-    verify(bazBalancers.get(0), times(2))
-        .handleResolvedAddresses(resolvedAddressesCaptor.capture());
-    assertThat(resolvedAddressesCaptor.getValue().getLoadBalancingPolicyConfig())
-        .isEqualTo(bazConfig2);
-
-    // New status update.
-    Subchannel subchannelBar2 = mock(Subchannel.class);
-    Helper barHelper2 = barHelpers.get(1);
-    barHelper2.updateBalancingState(READY, TestUtils.pickerOf(subchannelBar2));
-    verify(helper, atLeastOnce()).updateBalancingState(
-        connectivityStateCaptor.capture(), subchannelPickerCaptor.capture());
-    assertThat(connectivityStateCaptor.getValue()).isEqualTo(READY);
-    picker = subchannelPickerCaptor.getValue();
-    assertPickerRoutePathToSubchannel(picker, "service1", "method1", subchannelFoo1);
-    assertPickerRoutePathToError(
-        picker, "service1", "method2", Status.DATA_LOSS.withDescription("data loss baz"));
-    assertPickerRoutePathToSubchannel(picker, "service2", "method3", subchannelFoo1);
-    assertPickerRoutePathToError(
-        picker, "service1", "hello", Status.ABORTED.withDescription("abort bar"));
-    assertPickerRoutePathToSubchannel(picker, "service2", "hello", subchannelBar2);
+    xdsRoutingLoadBalancer.shutdown();
+    assertThat(childBalancer3.shutdown).isTrue();
+    assertThat(childBalancer4.shutdown).isTrue();
   }
 
-  private static PickSubchannelArgs pickSubchannelArgsForMethod(
-      final String service, final String method) {
-    return new PickSubchannelArgs() {
+  @Test
+  public void routeMatchingSubchannelPicker_typicalRouting() {
+    Subchannel subchannel1 = mock(Subchannel.class);
+    Subchannel subchannel2 = mock(Subchannel.class);
+    Subchannel subchannel3 = mock(Subchannel.class);
+    RouteMatchingSubchannelPicker routeMatchingPicker =
+        new RouteMatchingSubchannelPicker(
+            ImmutableMap.of(
+                routeMatch1, pickerOf(subchannel1),
+                routeMatch2, pickerOf(subchannel2),
+                routeMatch3, pickerOf(subchannel3)));
 
-      @Override
-      public CallOptions getCallOptions() {
-        return CallOptions.DEFAULT;
-      }
+    PickSubchannelArgs args1 =
+        createPickSubchannelArgs(
+            "FooService", "barMethod",
+            ImmutableMap.of("user-agent", "gRPC-Java", "grpc-encoding", "gzip"));
+    assertThat(routeMatchingPicker.pickSubchannel(args1).getSubchannel())
+        .isSameInstanceAs(subchannel1);
 
-      @Override
-      public Metadata getHeaders() {
-        return new Metadata();
-      }
+    PickSubchannelArgs args2 =
+        createPickSubchannelArgs(
+            "FooService", "bazMethod",
+            ImmutableMap.of("user-agent", "gRPC-Java", "custom-key", "custom-value"));
+    assertThat(routeMatchingPicker.pickSubchannel(args2).getSubchannel())
+        .isSameInstanceAs(subchannel2);
 
+    PickSubchannelArgs args3 =
+        createPickSubchannelArgs(
+            "FooService", "barMethod",
+            ImmutableMap.of("user-agent", "gRPC-Java", "custom-key", "custom-value"));
+    assertThat(routeMatchingPicker.pickSubchannel(args3).getSubchannel())
+        .isSameInstanceAs(subchannel3);
+
+    PickSubchannelArgs args4 =
+        createPickSubchannelArgs(
+            "BazService", "fooMethod",
+            Collections.<String, String>emptyMap());
+    assertThat(routeMatchingPicker.pickSubchannel(args4).getSubchannel())
+        .isSameInstanceAs(subchannel3);
+  }
+
+  private static SubchannelPicker pickerOf(final Subchannel subchannel) {
+    return new SubchannelPicker() {
       @Override
-      public MethodDescriptor<Void, Void> getMethodDescriptor() {
-        return MethodDescriptor.<Void, Void>newBuilder()
-            .setType(MethodType.UNARY)
-            .setFullMethodName(service + "/" + method)
-            .setRequestMarshaller(TestMethodDescriptors.voidMarshaller())
-            .setResponseMarshaller(TestMethodDescriptors.voidMarshaller())
-            .build();
+      public PickResult pickSubchannel(PickSubchannelArgs args) {
+        return PickResult.withSubchannel(subchannel);
       }
     };
   }
 
-  private static void assertPickerRoutePathToSubchannel(
-      SubchannelPicker picker, String service, String method, Subchannel expectedSubchannel) {
-    Subchannel actualSubchannel =
-        picker.pickSubchannel(pickSubchannelArgsForMethod(service, method)).getSubchannel();
-    assertThat(actualSubchannel).isEqualTo(expectedSubchannel);
+  private static PickSubchannelArgs createPickSubchannelArgs(
+      String service, String method, Map<String, String> headers) {
+    MethodDescriptor<Void, Void> methodDescriptor =
+        MethodDescriptor.<Void, Void>newBuilder()
+            .setType(MethodType.UNARY).setFullMethodName(service + "/" + method)
+            .setRequestMarshaller(TestMethodDescriptors.voidMarshaller())
+            .setResponseMarshaller(TestMethodDescriptors.voidMarshaller())
+            .build();
+    Metadata metadata = new Metadata();
+    for (Map.Entry<String, String> entry : headers.entrySet()) {
+      metadata.put(
+          Metadata.Key.of(entry.getKey(), Metadata.ASCII_STRING_MARSHALLER), entry.getValue());
+    }
+    return new PickSubchannelArgsImpl(methodDescriptor, metadata, CallOptions.DEFAULT);
   }
 
-  private static void assertPickerRoutePathToError(
-      SubchannelPicker picker, String service, String method, Status expectedStatus) {
-    Status actualStatus =
-        picker.pickSubchannel(pickSubchannelArgsForMethod(service, method)).getStatus();
-    assertThat(actualStatus.getCode()).isEqualTo(expectedStatus.getCode());
-    assertThat(actualStatus.getDescription()).isEqualTo(expectedStatus.getDescription());
+  private final class FakeLoadBalancerProvider extends LoadBalancerProvider {
+    private final String policyName;
+
+    FakeLoadBalancerProvider(String policyName) {
+      this.policyName = policyName;
+    }
+
+    @Override
+    public LoadBalancer newLoadBalancer(Helper helper) {
+      FakeLoadBalancer balancer = new FakeLoadBalancer(policyName, helper);
+      childBalancers.add(balancer);
+      return balancer;
+    }
+
+    @Override
+    public boolean isAvailable() {
+      return true;
+    }
+
+    @Override
+    public int getPriority() {
+      return 0;  // doesn't matter
+    }
+
+    @Override
+    public String getPolicyName() {
+      return policyName;
+    }
+  }
+
+  private final class FakeLoadBalancer extends LoadBalancer {
+    private final String name;
+    private final Helper helper;
+    private Object config;
+    private Status upstreamError;
+    private boolean shutdown;
+
+    FakeLoadBalancer(String name, Helper helper) {
+      this.name = name;
+      this.helper = helper;
+    }
+
+    @Override
+    public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+      config = resolvedAddresses.getLoadBalancingPolicyConfig();
+    }
+
+    @Override
+    public void handleNameResolutionError(Status error) {
+      upstreamError = error;
+    }
+
+    @Override
+    public void shutdown() {
+      shutdown = true;
+      childBalancers.remove(this);
+    }
+
+    void deliverSubchannelState(final Subchannel subchannel, ConnectivityState state) {
+      SubchannelPicker picker = new SubchannelPicker() {
+        @Override
+        public PickResult pickSubchannel(PickSubchannelArgs args) {
+          return PickResult.withSubchannel(subchannel);
+        }
+      };
+      helper.updateBalancingState(state, picker);
+    }
   }
 }

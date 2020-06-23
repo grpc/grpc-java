@@ -48,6 +48,11 @@ abstract class ForwardingClientStream implements ClientStream {
   }
 
   @Override
+  public void optimizeForDirectExecutor() {
+    delegate().optimizeForDirectExecutor();
+  }
+
+  @Override
   public void setCompressor(Compressor compressor) {
     delegate().setCompressor(compressor);
   }

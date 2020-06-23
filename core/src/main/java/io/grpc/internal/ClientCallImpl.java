@@ -79,6 +79,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   private final MethodDescriptor<ReqT, RespT> method;
   private final Tag tag;
   private final Executor callExecutor;
+  private final boolean callExecutorIsDirect;
   private final CallTracer channelCallsTracer;
   private final Context context;
   private final boolean unaryRequest;
@@ -110,9 +111,13 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     // If we know that the executor is a direct executor, we don't need to wrap it with a
     // SerializingExecutor. This is purely for performance reasons.
     // See https://github.com/grpc/grpc-java/issues/368
-    this.callExecutor = executor == directExecutor()
-        ? new SerializeReentrantCallsDirectExecutor()
-        : new SerializingExecutor(executor);
+    if (executor == directExecutor()) {
+      this.callExecutor = new SerializeReentrantCallsDirectExecutor();
+      callExecutorIsDirect = true;
+    } else {
+      this.callExecutor = new SerializingExecutor(executor);
+      callExecutorIsDirect = false;
+    }
     this.channelCallsTracer = channelCallsTracer;
     // Propagate the context from the thread which initiated the call to all callbacks.
     this.context = Context.current();
@@ -265,6 +270,9 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
               "ClientCall started after deadline exceeded: " + effectiveDeadline));
     }
 
+    if (callExecutorIsDirect) {
+      stream.optimizeForDirectExecutor();
+    }
     if (callOptions.getAuthority() != null) {
       stream.setAuthority(callOptions.getAuthority());
     }

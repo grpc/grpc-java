@@ -186,18 +186,6 @@ class OkHttpClientStream extends AbstractClientStream {
     }
 
     @Override
-    public void request(final int numMessages) {
-      PerfMark.startTask("OkHttpClientStream$Sink.request");
-      try {
-        synchronized (state.lock) {
-          state.requestMessagesFromDeframer(numMessages);
-        }
-      } finally {
-        PerfMark.stopTask("OkHttpClientStream$Sink.request");
-      }
-    }
-
-    @Override
     public void cancel(Status reason) {
       PerfMark.startTask("OkHttpClientStream$Sink.cancel");
       try {

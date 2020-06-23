@@ -43,7 +43,6 @@ import io.netty.channel.EventLoop;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.handler.codec.http2.Http2Stream;
 import io.netty.util.AsciiString;
-import io.perfmark.Link;
 import io.perfmark.PerfMark;
 import io.perfmark.Tag;
 import javax.annotation.Nullable;
@@ -62,7 +61,6 @@ class NettyClientStream extends AbstractClientStream {
   private final TransportState state;
   private final WriteQueue writeQueue;
   private final MethodDescriptor<?, ?> method;
-  private final Channel channel;
   private AsciiString authority;
   private final AsciiString scheme;
   private final AsciiString userAgent;
@@ -89,7 +87,6 @@ class NettyClientStream extends AbstractClientStream {
     this.state = checkNotNull(state, "transportState");
     this.writeQueue = state.handler.getWriteQueue();
     this.method = checkNotNull(method, "method");
-    this.channel = checkNotNull(channel, "channel");
     this.authority = checkNotNull(authority, "authority");
     this.scheme = checkNotNull(scheme, "scheme");
     this.userAgent = userAgent;
@@ -208,41 +205,6 @@ class NettyClientStream extends AbstractClientStream {
         writeFrameInternal(frame, endOfStream, flush, numMessages);
       } finally {
         PerfMark.stopTask("NettyClientStream$Sink.writeFrame");
-      }
-    }
-
-    private void requestInternal(final int numMessages) {
-      if (channel.eventLoop().inEventLoop()) {
-        // Processing data read in the event loop so can call into the deframer immediately
-        transportState().requestMessagesFromDeframer(numMessages);
-      } else {
-        channel.eventLoop().execute(new Runnable() {
-          final Link link = PerfMark.linkOut();
-          @Override
-          public void run() {
-            PerfMark.startTask(
-                "NettyClientStream$Sink.requestMessagesFromDeframer",
-                transportState().tag());
-            PerfMark.linkIn(link);
-            try {
-              transportState().requestMessagesFromDeframer(numMessages);
-            } finally {
-              PerfMark.stopTask(
-                  "NettyClientStream$Sink.requestMessagesFromDeframer",
-                  transportState().tag());
-            }
-          }
-        });
-      }
-    }
-
-    @Override
-    public void request(int numMessages) {
-      PerfMark.startTask("NettyClientStream$Sink.request");
-      try {
-        requestInternal(numMessages);
-      } finally {
-        PerfMark.stopTask("NettyClientStream$Sink.request");
       }
     }
 

@@ -41,7 +41,6 @@ import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
 import io.envoyproxy.envoy.api.v2.Listener;
 import io.envoyproxy.envoy.api.v2.RouteConfiguration;
-import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.core.Address;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.api.v2.core.SocketAddress;
@@ -64,6 +63,7 @@ import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyProtoData.StructOrError;
+import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.LoadReportClient.LoadReportCallback;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.util.ArrayList;
@@ -1003,7 +1003,7 @@ final class XdsClientImpl extends XdsClient {
       }
       try {
         UpstreamTlsContext upstreamTlsContext = getTlsContextFromCluster(cluster);
-        if (upstreamTlsContext != null && upstreamTlsContext.hasCommonTlsContext()) {
+        if (upstreamTlsContext != null && upstreamTlsContext.getCommonTlsContext() != null) {
           updateBuilder.setUpstreamTlsContext(upstreamTlsContext);
         }
       } catch (InvalidProtocolBufferException e) {
@@ -1022,13 +1022,15 @@ final class XdsClientImpl extends XdsClient {
 
     // Update local CDS cache with data in this response.
     absentCdsResources.removeAll(clusterUpdates.keySet());
-    for (String clusterName : clusterNamesToClusterUpdates.keySet()) {
-      if (!clusterUpdates.containsKey(clusterName)) {
+    for (Map.Entry<String, ClusterUpdate> entry : clusterNamesToClusterUpdates.entrySet()) {
+      if (!clusterUpdates.containsKey(entry.getKey())) {
         // Some previously existing resource no longer exists.
-        absentCdsResources.add(clusterName);
+        absentCdsResources.add(entry.getKey());
+      } else if (clusterUpdates.get(entry.getKey()).equals(entry.getValue())) {
+        clusterUpdates.remove(entry.getKey());
       }
     }
-    clusterNamesToClusterUpdates.clear();
+    clusterNamesToClusterUpdates.keySet().removeAll(absentCdsResources);
     clusterNamesToClusterUpdates.putAll(clusterUpdates);
 
     // Remove EDS cache entries for ClusterLoadAssignments not referenced by this CDS response.
@@ -1056,12 +1058,13 @@ final class XdsClientImpl extends XdsClient {
     // Notify watchers if clusters interested in present in this CDS response.
     for (Map.Entry<String, Set<ClusterWatcher>> entry : clusterWatchers.entrySet()) {
       String clusterName = entry.getKey();
-      if (clusterUpdates.containsKey(clusterName)) {
+      if (clusterUpdates.containsKey(entry.getKey())) {
         ClusterUpdate clusterUpdate = clusterUpdates.get(clusterName);
         for (ClusterWatcher watcher : entry.getValue()) {
           watcher.onClusterChanged(clusterUpdate);
         }
-      } else if (!cdsRespTimers.containsKey(clusterName)) {
+      } else if (!clusterNamesToClusterUpdates.containsKey(entry.getKey())
+          && !cdsRespTimers.containsKey(clusterName)) {
         // Update for previously present resource being removed.
         for (ClusterWatcher watcher : entry.getValue()) {
           watcher.onResourceDoesNotExist(entry.getKey());
@@ -1074,10 +1077,11 @@ final class XdsClientImpl extends XdsClient {
       throws InvalidProtocolBufferException {
     if (cluster.hasTransportSocket() && "tls".equals(cluster.getTransportSocket().getName())) {
       Any any = cluster.getTransportSocket().getTypedConfig();
-      return UpstreamTlsContext.parseFrom(any.getValue());
+      return UpstreamTlsContext.fromEnvoyProtoUpstreamTlsContext(
+          io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext.parseFrom(any.getValue()));
     }
     // TODO(sanjaypujare): remove when we move to envoy protos v3
-    return cluster.getTlsContext();
+    return UpstreamTlsContext.fromEnvoyProtoUpstreamTlsContext(cluster.getTlsContext());
   }
 
   /**
@@ -1192,6 +1196,8 @@ final class XdsClientImpl extends XdsClient {
     absentEdsResources.removeAll(endpointUpdates.keySet());
 
     // Notify watchers waiting for updates of endpoint information received in this EDS response.
+    // Based on xDS protocol, the management server should not send endpoint data again if
+    // nothing has changed.
     for (Map.Entry<String, EndpointUpdate> entry : endpointUpdates.entrySet()) {
       String clusterName = entry.getKey();
       // Cancel and delete response timeout timer.

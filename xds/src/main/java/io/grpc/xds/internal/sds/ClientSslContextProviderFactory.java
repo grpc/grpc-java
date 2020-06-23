@@ -16,12 +16,11 @@
 
 package io.grpc.xds.internal.sds;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.grpc.xds.Bootstrapper;
+import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.internal.sds.ReferenceCountingSslContextProviderMap.SslContextProviderFactory;
 import java.io.IOException;
 import java.util.concurrent.Executors;
@@ -34,8 +33,8 @@ final class ClientSslContextProviderFactory
   @Override
   public SslContextProvider createSslContextProvider(UpstreamTlsContext upstreamTlsContext) {
     checkNotNull(upstreamTlsContext, "upstreamTlsContext");
-    checkArgument(
-        upstreamTlsContext.hasCommonTlsContext(),
+    checkNotNull(
+        upstreamTlsContext.getCommonTlsContext(),
         "upstreamTlsContext should have CommonTlsContext");
     if (CommonTlsContextUtil.hasAllSecretsUsingFilename(upstreamTlsContext.getCommonTlsContext())) {
       return SecretVolumeClientSslContextProvider.getProvider(upstreamTlsContext);

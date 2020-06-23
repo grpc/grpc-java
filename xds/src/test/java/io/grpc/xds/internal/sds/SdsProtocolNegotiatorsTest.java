@@ -31,9 +31,7 @@ import static org.mockito.Mockito.when;
 import com.google.common.base.Strings;
 import io.envoyproxy.envoy.api.v2.auth.CertificateValidationContext;
 import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
-import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.auth.TlsCertificate;
-import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.core.DataSource;
 import io.grpc.Attributes;
 import io.grpc.internal.testing.TestUtils;
@@ -41,6 +39,8 @@ import io.grpc.netty.GrpcHttp2ConnectionHandler;
 import io.grpc.netty.InternalProtocolNegotiationEvent;
 import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiators;
+import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
+import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.XdsAttributes;
 import io.grpc.xds.XdsClientWrapperForServerSds;
 import io.grpc.xds.XdsClientWrapperForServerSdsTest;
@@ -96,22 +96,17 @@ public class SdsProtocolNegotiatorsTest {
   /** Builds UpstreamTlsContext from file-names. */
   private static UpstreamTlsContext buildUpstreamTlsContextFromFilenames(
       String privateKey, String certChain, String trustCa) throws IOException {
-    return buildUpstreamTlsContext(
+    return CommonTlsContextTestsUtil.buildUpstreamTlsContext(
         buildCommonTlsContextFromFilenames(privateKey, certChain, trustCa));
-  }
-
-  /** Builds UpstreamTlsContext from commonTlsContext. */
-  private static UpstreamTlsContext buildUpstreamTlsContext(CommonTlsContext commonTlsContext) {
-    UpstreamTlsContext upstreamTlsContext =
-        UpstreamTlsContext.newBuilder().setCommonTlsContext(commonTlsContext).build();
-    return upstreamTlsContext;
   }
 
   /** Builds DownstreamTlsContext from commonTlsContext. */
   private static DownstreamTlsContext buildDownstreamTlsContext(CommonTlsContext commonTlsContext) {
-    DownstreamTlsContext downstreamTlsContext =
-        DownstreamTlsContext.newBuilder().setCommonTlsContext(commonTlsContext).build();
-    return downstreamTlsContext;
+    io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext downstreamTlsContext =
+        io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext.newBuilder()
+            .setCommonTlsContext(commonTlsContext)
+            .build();
+    return DownstreamTlsContext.fromEnvoyProtoDownstreamTlsContext(downstreamTlsContext);
   }
 
   private static CommonTlsContext buildCommonTlsContextFromFilenames(
@@ -162,7 +157,7 @@ public class SdsProtocolNegotiatorsTest {
   @Test
   public void clientSdsProtocolNegotiatorNewHandler_withTlsContextAttribute() {
     UpstreamTlsContext upstreamTlsContext =
-        buildUpstreamTlsContext(
+        CommonTlsContextTestsUtil.buildUpstreamTlsContext(
             getCommonTlsContext(/* tlsCertificate= */ null, /* certContext= */ null));
     ClientSdsProtocolNegotiator pn = new ClientSdsProtocolNegotiator();
     GrpcHttp2ConnectionHandler mockHandler = mock(GrpcHttp2ConnectionHandler.class);
@@ -241,6 +236,46 @@ public class SdsProtocolNegotiatorsTest {
     // ProtocolNegotiators.ServerTlsHandler.class is not accessible, get canonical name
     assertThat(iterator.next().getValue().getClass().getCanonicalName())
         .contains("ProtocolNegotiators.ServerTlsHandler");
+  }
+
+  @Test
+  public void serverSdsHandler_defaultDownstreamTlsContext_expectFallbackProtocolNegotiator()
+      throws IOException {
+    ChannelHandler mockChannelHandler = mock(ChannelHandler.class);
+    ProtocolNegotiator mockProtocolNegotiator = mock(ProtocolNegotiator.class);
+    when(mockProtocolNegotiator.newHandler(grpcHandler)).thenReturn(mockChannelHandler);
+    // we need InetSocketAddress instead of EmbeddedSocketAddress as localAddress for this test
+    channel =
+        new EmbeddedChannel() {
+          @Override
+          public SocketAddress localAddress() {
+            return new InetSocketAddress("172.168.1.1", 80);
+          }
+        };
+    pipeline = channel.pipeline();
+    DownstreamTlsContext downstreamTlsContext =
+        DownstreamTlsContext.fromEnvoyProtoDownstreamTlsContext(
+            io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext.getDefaultInstance());
+
+    XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
+        XdsClientWrapperForServerSdsTest.createXdsClientWrapperForServerSds(
+            80, downstreamTlsContext);
+    SdsProtocolNegotiators.HandlerPickerHandler handlerPickerHandler =
+        new SdsProtocolNegotiators.HandlerPickerHandler(
+            grpcHandler, xdsClientWrapperForServerSds, mockProtocolNegotiator);
+    pipeline.addLast(handlerPickerHandler);
+    channelHandlerCtx = pipeline.context(handlerPickerHandler);
+    assertThat(channelHandlerCtx).isNotNull(); // should find HandlerPickerHandler
+
+    // kick off protocol negotiation: should replace HandlerPickerHandler with ServerSdsHandler
+    pipeline.fireUserEventTriggered(InternalProtocolNegotiationEvent.getDefault());
+    channelHandlerCtx = pipeline.context(handlerPickerHandler);
+    assertThat(channelHandlerCtx).isNull();
+    channel.runPendingTasks(); // need this for tasks to execute on eventLoop
+    Iterator<Map.Entry<String, ChannelHandler>> iterator = pipeline.iterator();
+    assertThat(iterator.next().getValue()).isSameInstanceAs(mockChannelHandler);
+    // no more handlers in the pipeline
+    assertThat(iterator.hasNext()).isFalse();
   }
 
   @Test

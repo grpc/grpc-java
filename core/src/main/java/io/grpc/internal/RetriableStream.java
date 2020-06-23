@@ -541,6 +541,18 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   }
 
   @Override
+  public void optimizeForDirectExecutor() {
+    class OptimizeDirectEntry implements BufferEntry {
+      @Override
+      public void runWith(Substream substream) {
+        substream.stream.optimizeForDirectExecutor();
+      }
+    }
+
+    delayOrExecute(new OptimizeDirectEntry());
+  }
+
+  @Override
   public final void setCompressor(final Compressor compressor) {
     class CompressorEntry implements BufferEntry {
       @Override
@@ -947,10 +959,10 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
     @Override
     public void onReady() {
-      // TODO(zdapeng): the more correct way to handle onReady
-      if (state.drainedSubstreams.contains(substream)) {
-        masterListener.onReady();
-      }
+      // FIXME(#7089): hedging case is broken.
+      // TODO(zdapeng): optimization: if the substream is not drained yet, delay onReady() once
+      // drained and if is still ready.
+      masterListener.onReady();
     }
   }
 
