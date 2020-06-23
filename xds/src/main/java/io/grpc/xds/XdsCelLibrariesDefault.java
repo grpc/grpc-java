@@ -17,7 +17,6 @@
 package io.grpc.xds;
 
 import com.google.api.expr.v1alpha1.Expr;
-import com.google.common.base.Preconditions;
 import com.google.protobuf.Descriptors.Descriptor;
 import io.grpc.Metadata;
 import io.grpc.xds.InterpreterException;
@@ -29,18 +28,12 @@ import java.util.List;
 public class XdsCelLibrariesDefault implements XdsCelLibraries {
   /** Default implementation of {@link XdsCelLibraries.Interpreter}. */
   public static class DefaultInterpreter implements XdsCelLibraries.Interpreter {
-    private final RuntimeTypeProvider typeProvider;
-    private final Dispatcher dispatcher;
-
     /**
     * Creates a new interpreter
     * @param typeProvider object which allows to construct and inspect messages.
     * @param dispatcher a method dispatcher.
     */
-    public DefaultInterpreter(RuntimeTypeProvider typeProvider, Dispatcher dispatcher) {
-      this.typeProvider = Preconditions.checkNotNull(typeProvider);
-      this.dispatcher = Preconditions.checkNotNull(dispatcher);
-    }
+    public DefaultInterpreter(RuntimeTypeProvider typeProvider, Dispatcher dispatcher) {}
 
     @Override
     public XdsCelLibraries.Interpretable createInterpretable(Expr expr) 
@@ -48,16 +41,12 @@ public class XdsCelLibrariesDefault implements XdsCelLibraries {
       return new DefaultInterpretable(expr);
     }
 
-    private class DefaultInterpretable implements XdsCelLibraries.Interpretable {
-      private final Expr expr;
-
+    private static class DefaultInterpretable implements XdsCelLibraries.Interpretable {
       /**
       * Creates a new interpretable.
       * @param expr a Cel expression.
       */
-      public DefaultInterpretable(Expr expr) {
-        this.expr = Preconditions.checkNotNull(expr);
-      }
+      public DefaultInterpretable(Expr expr) {}
 
       @Override
       public Object eval(XdsCelLibraries.Activation activation) throws InterpreterException {
