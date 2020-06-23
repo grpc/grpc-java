@@ -17,53 +17,31 @@
 package io.grpc.xds;
 
 import com.google.api.expr.v1alpha1.Expr;
-import com.google.common.collect.ImmutableMap;
+import com.google.common.base.Preconditions;
+import com.google.protobuf.Descriptors.Descriptor;
 import io.grpc.Metadata;
 import io.grpc.xds.InterpreterException;
 import io.grpc.xds.XdsCelLibraries;
 import java.lang.String;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
-/**
- * Default implementation of the Cel libraries.
- * 
- */
+/** Default implementation of {@link XdsCelLibraries}. */
 public class XdsCelLibrariesDefault implements XdsCelLibraries {
-
-  /** Main launches the server from the command line. */
-  public static void main(String[] args) throws InterpreterException {
-    XdsCelLibraries.Dispatcher dispatcher = DefaultDispatcher.create();
-    XdsCelLibraries.Interpreter interpreter = new DefaultInterpreter();
-    Expr.Builder exprBuilder = Expr.newBuilder();
-    Expr checkedResult = exprBuilder.build();
-
-    Map<String, Object> map = new HashMap<>();
-    map.put("requestUrlPath", new Object());
-    map.put("requestHost", new Object());
-    map.put("requestMethod", new Object());
-    map.put("requestHeaders", new Object());
-    map.put("sourceAddress", new Object());
-    map.put("sourcePort", new Object());
-    map.put("destinationAddress", new Object());
-
-    // ImmutableMap<String, Object> apiAttributes = ImmutableMap.builder()
-    //     .put("requestUrlPath", new Object())
-    //     .put("requestHost", new Object())
-    //     .put("requestMethod", new Object())
-    //     .put("requestHeaders", new Object())
-    //     .put("sourceAddress", new Object())
-    //     .put("sourcePort", new Object())
-    //     .build();
-
-    ImmutableMap<String, Object> apiAttributes = ImmutableMap.copyOf(map);
-
-    XdsCelLibraries.Activation activation = XdsCelLibraries.Activation.copyOf(apiAttributes);
-    Object result = interpreter.createInterpretable(checkedResult).eval(activation);
-  }
-
+  /** Default implementation of {@link XdsCelLibraries.Interpreter}. */
   public static class DefaultInterpreter implements XdsCelLibraries.Interpreter {
+    private final RuntimeTypeProvider typeProvider;
+    private final Dispatcher dispatcher;
+
+    /**
+    * Creates a new interpreter
+    * @param typeProvider object which allows to construct and inspect messages.
+    * @param dispatcher a method dispatcher.
+    */
+    public DefaultInterpreter(RuntimeTypeProvider typeProvider, Dispatcher dispatcher) {
+      this.typeProvider = Preconditions.checkNotNull(typeProvider);
+      this.dispatcher = Preconditions.checkNotNull(dispatcher);
+    }
+
     @Override
     public XdsCelLibraries.Interpretable createInterpretable(Expr expr) 
     throws InterpreterException {
@@ -72,11 +50,13 @@ public class XdsCelLibrariesDefault implements XdsCelLibraries {
 
     private class DefaultInterpretable implements XdsCelLibraries.Interpretable {
       private final Expr expr;
-      private final Metadata metadata;
 
+      /**
+      * Creates a new interpretable.
+      * @param expr a Cel expression.
+      */
       public DefaultInterpretable(Expr expr) {
-        this.metadata = new Metadata();
-        this.expr = expr;
+        this.expr = Preconditions.checkNotNull(expr);
       }
 
       @Override
@@ -86,8 +66,8 @@ public class XdsCelLibrariesDefault implements XdsCelLibraries {
     }
   }
 
+  /** Default implementation of {@link XdsCelLibraries.Dispatcher}. */
   public static class DefaultDispatcher implements XdsCelLibraries.Dispatcher {
-
     /** Creates a new dispatcher with all standard functions. */
     public static DefaultDispatcher create() {
       return new DefaultDispatcher();
@@ -100,5 +80,15 @@ public class XdsCelLibrariesDefault implements XdsCelLibraries {
       return new Object();
     }
   }
-}
 
+  /** Default implementation of {@link XdsCelLibraries.RuntimeTypeProvider} */
+  public static class DescriptorMessageProvider implements XdsCelLibraries.RuntimeTypeProvider {
+    /**
+     * Creates a new message provider that provides only {@link DynamicMessage DynamicMessages} for
+     * the specified descriptors.
+     */
+    public static DescriptorMessageProvider dynamicMessages(Iterable<Descriptor> descriptors) {
+      return new DescriptorMessageProvider();
+    }
+  }
+}

@@ -24,30 +24,22 @@ import java.util.List;
 import java.util.Map;
 import javax.annotation.Nullable;
 
-/** Represent a mock Cel libraries which contains functions needed for CEL evaluation engine. */
+/** Represent a mock Cel library which contains functions needed for evaluation of Cel engine. */
 public interface XdsCelLibraries {
-
   /** Represent an expression which can be interpreted repeatedly using a given activation. */
   public interface Interpretable {
-
     /** Runs interpretation with the given activation which supplies name/value bindings. */
     Object eval(Activation activation) throws InterpreterException;
   }
 
   /** Interface to a CEL interpreter. */
   public interface Interpreter {
-    
-    /**
-    * Creates an interpretable for the given expression.
-    * 
-    * <p>This method may run pre-processing and partial evaluation of the expression it gets passed.
-    */
-    Interpretable createInterpretable(Expr checkedExpr) throws InterpreterException;
+    /** Creates an interpretable for the given expression. */
+    Interpretable createInterpretable(Expr expr) throws InterpreterException;
   }
 
   /** An object which implements dispatching of function calls. */
   public interface Dispatcher {
-
     /**
      * Invokes a function based on given parameters.
      *
@@ -66,9 +58,11 @@ public interface XdsCelLibraries {
         throws InterpreterException;
   }
 
+  /** Interface to a type provider at runtime. */
+  public interface RuntimeTypeProvider {}
+
   /** An object which allows to bind names to values. */
   public abstract class Activation {
-
     /** Resolves the given name to its value. Returns null if resolution fails. */
     @Nullable
     public abstract Object resolve(String name);

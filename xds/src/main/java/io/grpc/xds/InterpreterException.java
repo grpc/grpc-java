@@ -17,8 +17,32 @@
 package io.grpc.xds;
 
 import java.lang.Exception;
+import javax.annotation.Nullable;
 
-/** The InterpreterException class represents Exception made in XdsCelLibraries. */
+/** An exception produced during interpretation of expressions. */
 public class InterpreterException extends Exception {
+  /** Builder for InterpreterException. */
+  public static class Builder {
+    private final String message;
+    @Nullable private String location;
+    private int position;
+    private Throwable cause;
 
+    public Builder(String message, Object... args) {
+      this.message = args.length > 0 ? String.format(message, args) : message;
+    }
+
+    /** Build function for InterpreterException. */
+    public InterpreterException build() {
+      return new InterpreterException(
+          String.format(
+              "evaluation error%s: %s",
+              location != null ? " at " + location + ":" + position : "", message),
+          cause);
+    }
+  }
+
+  private InterpreterException(String message, Throwable cause) {
+    super(message, cause);
+  }
 }
