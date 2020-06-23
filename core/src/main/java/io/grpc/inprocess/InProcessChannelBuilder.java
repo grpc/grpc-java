@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import io.grpc.ChannelLogger;
+import io.grpc.ClientInterceptor;
 import io.grpc.ExperimentalApi;
 import io.grpc.Internal;
 import io.grpc.internal.AbstractManagedChannelImplBuilder;
@@ -182,6 +183,11 @@ public final class InProcessChannelBuilder extends
   protected ClientTransportFactory buildTransportFactory() {
     return new InProcessClientTransportFactory(
         name, scheduledExecutorService, maxInboundMetadataSize, transportIncludeStatusCause);
+  }
+
+  @Override
+  protected InProcessChannelBuilder setTestInterceptor(ClientInterceptor interceptor) {
+    return super.setTestInterceptor(interceptor);
   }
 
   /**
