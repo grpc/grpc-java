@@ -70,7 +70,7 @@ public class RetryingHelloWorldClient {
         .usePlaintext();
     if (enableRetries) {
       Map<String, ?> serviceConfig = getRetryingServiceConfig();
-      logger.info("Client started with retrying configuration: " + serviceConfig.toString());
+      logger.info("Client started with retrying configuration: " + serviceConfig);
       channelBuilder.defaultServiceConfig(serviceConfig).enableRetry();
     }
     channel = channelBuilder.build();

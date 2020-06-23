@@ -31,8 +31,11 @@ import java.util.Map;
 import java.util.Set;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.JUnit4;
 
 /** Tests for {@link RouteMatch}. */
+@RunWith(JUnit4.class)
 public class RouteMatchTest {
 
   private final Map<String, Set<String>> headers = new HashMap<>();
