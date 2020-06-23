@@ -20,6 +20,7 @@ import java.lang.Exception;
 import javax.annotation.Nullable;
 
 /** An exception produced during interpretation of expressions. */
+@SuppressWarnings("serial")
 public class InterpreterException extends Exception {
   /** Builder for InterpreterException. */
   public static class Builder {
