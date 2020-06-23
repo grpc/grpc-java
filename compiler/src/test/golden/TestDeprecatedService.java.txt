@@ -21,7 +21,7 @@ import static io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall;
  * </pre>
  */
 @javax.annotation.Generated(
-    value = "by gRPC proto compiler (version 1.30.2-SNAPSHOT)",
+    value = "by gRPC proto compiler (version 1.30.2)",
     comments = "Source: grpc/testing/compiler/test.proto")
 @java.lang.Deprecated
 public final class TestDeprecatedServiceGrpc {
