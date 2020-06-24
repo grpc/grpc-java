@@ -20,7 +20,7 @@ package io.grpc;
  * Internal accessor for configuring Census features. Do not use this.
  */
 @Internal
-public class InternalCensus {
+public final class InternalCensus {
 
   /**
    * Key to access the configuration if the default client side census features are disabled.
