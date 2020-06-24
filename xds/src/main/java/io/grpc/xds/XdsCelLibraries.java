@@ -16,7 +16,7 @@
 
 package io.grpc.xds;
 
-import com.google.api.expr.v1alpha1.Expr;
+import com.google.api.expr.v1alpha1.CheckedExpr;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.Metadata;
 import io.grpc.xds.InterpreterException;
@@ -35,7 +35,7 @@ public interface XdsCelLibraries {
   /** Interface to a CEL interpreter. */
   public interface Interpreter {
     /** Creates an interpretable for the given expression. */
-    Interpretable createInterpretable(Expr expr) throws InterpreterException;
+    Interpretable createInterpretable(CheckedExpr checkedExpr) throws InterpreterException;
   }
 
   /** An object which implements dispatching of function calls. */

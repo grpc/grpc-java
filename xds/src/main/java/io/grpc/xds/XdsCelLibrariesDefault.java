@@ -16,7 +16,7 @@
 
 package io.grpc.xds;
 
-import com.google.api.expr.v1alpha1.Expr;
+import com.google.api.expr.v1alpha1.CheckedExpr;
 import com.google.protobuf.Descriptors.Descriptor;
 import io.grpc.Metadata;
 import io.grpc.xds.InterpreterException;
@@ -36,9 +36,9 @@ public class XdsCelLibrariesDefault implements XdsCelLibraries {
     public DefaultInterpreter(RuntimeTypeProvider typeProvider, Dispatcher dispatcher) {}
 
     @Override
-    public XdsCelLibraries.Interpretable createInterpretable(Expr expr) 
+    public XdsCelLibraries.Interpretable createInterpretable(CheckedExpr checkedExpr) 
     throws InterpreterException {
-      return new DefaultInterpretable(expr);
+      return new DefaultInterpretable(checkedExpr);
     }
 
     private static class DefaultInterpretable implements XdsCelLibraries.Interpretable {
@@ -46,7 +46,7 @@ public class XdsCelLibrariesDefault implements XdsCelLibraries {
       * Creates a new interpretable.
       * @param expr a Cel expression.
       */
-      public DefaultInterpretable(Expr expr) {}
+      public DefaultInterpretable(CheckedExpr checkedExpr) {}
 
       @Override
       public Object eval(XdsCelLibraries.Activation activation) throws InterpreterException {
