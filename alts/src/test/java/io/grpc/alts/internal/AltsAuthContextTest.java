@@ -18,6 +18,8 @@ package io.grpc.alts.internal;
 
 import static org.junit.Assert.assertEquals;
 
+import java.util.HashMap;
+import java.util.Map;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -35,12 +37,17 @@ public final class AltsAuthContextTest {
   private static final String TEST_LOCAL_SERVICE_ACCOUNT = "local@gserviceaccount.com";
   private static final String TEST_PEER_SERVICE_ACCOUNT = "peer@gserviceaccount.com";
   private static final String TEST_RECORD_PROTOCOL = "ALTSRP_GCM_AES128";
+  private static final String TEST_PEER_ATTRIBUTES_KEY = "peer";
+  private static final String TEST_PEER_ATTRIBUTES_VALUE = "attributes";
 
+  private Map<String, String> testPeerAttributes;
   private HandshakerResult handshakerResult;
   private RpcProtocolVersions rpcVersions;
 
   @Before
   public void setUp() {
+    testPeerAttributes = new HashMap<String, String>();
+    testPeerAttributes.put(TEST_PEER_ATTRIBUTES_KEY, TEST_PEER_ATTRIBUTES_VALUE);
     rpcVersions =
         RpcProtocolVersions.newBuilder()
             .setMaxRpcVersion(
@@ -54,11 +61,14 @@ public final class AltsAuthContextTest {
                     .setMinor(TEST_MIN_RPC_VERSION_MINOR)
                     .build())
             .build();
+    Identity.Builder peerIdentity = Identity.newBuilder()
+        .setServiceAccount(TEST_PEER_SERVICE_ACCOUNT);
+    peerIdentity.putAllAttributes(testPeerAttributes);
     handshakerResult =
         HandshakerResult.newBuilder()
             .setApplicationProtocol(TEST_APPLICATION_PROTOCOL)
             .setRecordProtocol(TEST_RECORD_PROTOCOL)
-            .setPeerIdentity(Identity.newBuilder().setServiceAccount(TEST_PEER_SERVICE_ACCOUNT))
+            .setPeerIdentity(peerIdentity)
             .setLocalIdentity(Identity.newBuilder().setServiceAccount(TEST_LOCAL_SERVICE_ACCOUNT))
             .setPeerRpcVersions(rpcVersions)
             .build();
@@ -73,5 +83,8 @@ public final class AltsAuthContextTest {
     assertEquals(TEST_PEER_SERVICE_ACCOUNT, authContext.getPeerServiceAccount());
     assertEquals(TEST_LOCAL_SERVICE_ACCOUNT, authContext.getLocalServiceAccount());
     assertEquals(rpcVersions, authContext.getPeerRpcVersions());
+    assertEquals(testPeerAttributes, authContext.getPeerAttributes());
+    assertEquals(TEST_PEER_ATTRIBUTES_VALUE, authContext.getPeerAttributes()
+        .get(TEST_PEER_ATTRIBUTES_KEY));
   }
 }
