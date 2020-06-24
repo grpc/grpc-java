@@ -725,14 +725,14 @@ public class XdsClientImplTest {
     assertThat(routes.get(0)).isEqualTo(
         new EnvoyProtoData.Route(
             // path match with cluster route
-            new EnvoyProtoData.RouteMatch(
+            new io.grpc.xds.RouteMatch(
                 /* prefix= */ null,
                 /* path= */ "/service1/method1"),
             new EnvoyProtoData.RouteAction("cl1.googleapis.com", null)));
     assertThat(routes.get(1)).isEqualTo(
         new EnvoyProtoData.Route(
             // path match with weighted cluster route
-            new EnvoyProtoData.RouteMatch(
+            new io.grpc.xds.RouteMatch(
                 /* prefix= */ null,
                 /* path= */ "/service2/method2"),
             new EnvoyProtoData.RouteAction(
@@ -744,14 +744,14 @@ public class XdsClientImplTest {
     assertThat(routes.get(2)).isEqualTo(
         new EnvoyProtoData.Route(
             // prefix match with cluster route
-            new EnvoyProtoData.RouteMatch(
+            new io.grpc.xds.RouteMatch(
                 /* prefix= */ "/service1/",
                 /* path= */ null),
             new EnvoyProtoData.RouteAction("cl1.googleapis.com", null)));
     assertThat(routes.get(3)).isEqualTo(
         new EnvoyProtoData.Route(
             // default match with cluster route
-            new EnvoyProtoData.RouteMatch(
+            new io.grpc.xds.RouteMatch(
                 /* prefix= */ "",
                 /* path= */ null),
             new EnvoyProtoData.RouteAction(
@@ -1453,7 +1453,10 @@ public class XdsClientImplTest {
     ArgumentCaptor<ClusterUpdate> clusterUpdateCaptor = ArgumentCaptor.forClass(null);
     verify(clusterWatcher, times(1)).onClusterChanged(clusterUpdateCaptor.capture());
     ClusterUpdate clusterUpdate = clusterUpdateCaptor.getValue();
-    assertThat(clusterUpdate.getUpstreamTlsContext()).isEqualTo(testUpstreamTlsContext);
+    assertThat(clusterUpdate.getUpstreamTlsContext())
+        .isEqualTo(
+            EnvoyServerProtoData.UpstreamTlsContext.fromEnvoyProtoUpstreamTlsContext(
+                testUpstreamTlsContext));
   }
 
   /**
@@ -1485,7 +1488,10 @@ public class XdsClientImplTest {
     ArgumentCaptor<ClusterUpdate> clusterUpdateCaptor = ArgumentCaptor.forClass(null);
     verify(clusterWatcher, times(1)).onClusterChanged(clusterUpdateCaptor.capture());
     ClusterUpdate clusterUpdate = clusterUpdateCaptor.getValue();
-    assertThat(clusterUpdate.getUpstreamTlsContext()).isEqualTo(testUpstreamTlsContext);
+    assertThat(clusterUpdate.getUpstreamTlsContext())
+        .isEqualTo(
+            EnvoyServerProtoData.UpstreamTlsContext.fromEnvoyProtoUpstreamTlsContext(
+                testUpstreamTlsContext));
   }
 
   @Test
@@ -1573,24 +1579,7 @@ public class XdsClientImplTest {
                     ImmutableList.of("cluster-foo.googleapis.com", "cluster-bar.googleapis.com"),
                     XdsClientImpl.ADS_TYPE_URL_CDS, "0001")));
 
-    // All watchers received notification for cluster update.
-    verify(watcher1, times(2)).onClusterChanged(clusterUpdateCaptor1.capture());
-    clusterUpdate1 = clusterUpdateCaptor1.getValue();
-    assertThat(clusterUpdate1.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
-    assertThat(clusterUpdate1.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
-    assertThat(clusterUpdate1.getEdsServiceName()).isNull();
-    assertThat(clusterUpdate1.getLbPolicy()).isEqualTo("round_robin");
-    assertThat(clusterUpdate1.getLrsServerName()).isNull();
-
-    clusterUpdateCaptor2 = ArgumentCaptor.forClass(null);
-    verify(watcher2, times(2)).onClusterChanged(clusterUpdateCaptor2.capture());
-    clusterUpdate2 = clusterUpdateCaptor2.getValue();
-    assertThat(clusterUpdate2.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
-    assertThat(clusterUpdate2.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
-    assertThat(clusterUpdate2.getEdsServiceName()).isNull();
-    assertThat(clusterUpdate2.getLbPolicy()).isEqualTo("round_robin");
-    assertThat(clusterUpdate2.getLrsServerName()).isNull();
-
+    verifyNoMoreInteractions(watcher1, watcher2); // resource has no change
     ArgumentCaptor<ClusterUpdate> clusterUpdateCaptor3 = ArgumentCaptor.forClass(null);
     verify(watcher3).onClusterChanged(clusterUpdateCaptor3.capture());
     ClusterUpdate clusterUpdate3 = clusterUpdateCaptor3.getValue();
@@ -1728,14 +1717,7 @@ public class XdsClientImplTest {
                 new DiscoveryRequestMatcher("1",
                     ImmutableList.of("cluster-foo.googleapis.com", "cluster-bar.googleapis.com"),
                     XdsClientImpl.ADS_TYPE_URL_CDS, "0001")));
-
-    verify(watcher1, times(2)).onClusterChanged(clusterUpdateCaptor1.capture());
-    clusterUpdate1 = clusterUpdateCaptor1.getValue();
-    assertThat(clusterUpdate1.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
-    assertThat(clusterUpdate1.getEdsServiceName()).isNull();
-    assertThat(clusterUpdate1.getLbPolicy()).isEqualTo("round_robin");
-    assertThat(clusterUpdate1.getLrsServerName()).isNull();
-
+    verifyNoMoreInteractions(watcher1);  // resource has no change
     ArgumentCaptor<ClusterUpdate> clusterUpdateCaptor2 = ArgumentCaptor.forClass(null);
     verify(watcher2).onClusterChanged(clusterUpdateCaptor2.capture());
     ClusterUpdate clusterUpdate2 = clusterUpdateCaptor2.getValue();

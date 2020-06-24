@@ -19,20 +19,121 @@ package io.grpc.xds;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
-import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
+import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
+import io.grpc.Internal;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import javax.annotation.Nullable;
 
 /**
  * Defines gRPC data types for Envoy protobuf messages used in xDS protocol on the server side,
  * similar to how {@link EnvoyProtoData} defines it for the client side.
  */
-final class EnvoyServerProtoData {
+@Internal
+public final class EnvoyServerProtoData {
 
   // Prevent instantiation.
   private EnvoyServerProtoData() {
+  }
+
+  public abstract static class BaseTlsContext {
+    @Nullable protected final CommonTlsContext commonTlsContext;
+
+    protected BaseTlsContext(@Nullable CommonTlsContext commonTlsContext) {
+      this.commonTlsContext = commonTlsContext;
+    }
+
+    @Nullable public CommonTlsContext getCommonTlsContext() {
+      return commonTlsContext;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (!(o instanceof BaseTlsContext)) {
+        return false;
+      }
+      BaseTlsContext that = (BaseTlsContext) o;
+      return Objects.equals(commonTlsContext, that.commonTlsContext);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hashCode(commonTlsContext);
+    }
+  }
+
+  public static final class UpstreamTlsContext extends BaseTlsContext {
+
+    @VisibleForTesting
+    UpstreamTlsContext(CommonTlsContext commonTlsContext) {
+      super(commonTlsContext);
+    }
+
+    public static UpstreamTlsContext fromEnvoyProtoUpstreamTlsContext(
+            io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext upstreamTlsContext) {
+      return new UpstreamTlsContext(upstreamTlsContext.getCommonTlsContext());
+    }
+
+    @Override
+    public String toString() {
+      return "UpstreamTlsContext{" + "commonTlsContext=" + commonTlsContext + '}';
+    }
+  }
+
+  public static final class DownstreamTlsContext extends BaseTlsContext {
+
+    private final boolean requireClientCertificate;
+
+    @VisibleForTesting
+    DownstreamTlsContext(CommonTlsContext commonTlsContext, boolean requireClientCertificate) {
+      super(commonTlsContext);
+      this.requireClientCertificate = requireClientCertificate;
+    }
+
+    public static DownstreamTlsContext fromEnvoyProtoDownstreamTlsContext(
+        io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext downstreamTlsContext) {
+      return new DownstreamTlsContext(downstreamTlsContext.getCommonTlsContext(),
+        downstreamTlsContext.hasRequireClientCertificate());
+    }
+
+    public boolean isRequireClientCertificate() {
+      return requireClientCertificate;
+    }
+
+    @Override
+    public String toString() {
+      return "DownstreamTlsContext{"
+          + "commonTlsContext="
+          + commonTlsContext
+          + ", requireClientCertificate="
+          + requireClientCertificate
+          + '}';
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      if (!super.equals(o)) {
+        return false;
+      }
+      DownstreamTlsContext that = (DownstreamTlsContext) o;
+      return requireClientCertificate == that.requireClientCertificate;
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(super.hashCode(), requireClientCertificate);
+    }
   }
 
   static final class CidrRange {
@@ -165,12 +266,10 @@ final class EnvoyServerProtoData {
   static final class FilterChain {
     // TODO(sanjaypujare): flatten structure by moving FilterChainMatch class members here.
     private final FilterChainMatch filterChainMatch;
-    // TODO(sanjaypujare): remove dependency on envoy data type along with rest of the code.
-    private final io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext downstreamTlsContext;
+    private final DownstreamTlsContext downstreamTlsContext;
 
     @VisibleForTesting
-    FilterChain(FilterChainMatch filterChainMatch,
-        io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext downstreamTlsContext) {
+    FilterChain(FilterChainMatch filterChainMatch, DownstreamTlsContext downstreamTlsContext) {
       this.filterChainMatch = filterChainMatch;
       this.downstreamTlsContext = downstreamTlsContext;
     }
@@ -190,17 +289,18 @@ final class EnvoyServerProtoData {
       if (filterChain.hasTransportSocket()
           && "tls".equals(filterChain.getTransportSocket().getName())) {
         Any any = filterChain.getTransportSocket().getTypedConfig();
-        return DownstreamTlsContext.parseFrom(any.getValue());
+        return DownstreamTlsContext.fromEnvoyProtoDownstreamTlsContext(
+            io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext.parseFrom(any.getValue()));
       }
       // TODO(sanjaypujare): remove when we move to envoy protos v3
-      return filterChain.getTlsContext();
+      return DownstreamTlsContext.fromEnvoyProtoDownstreamTlsContext(filterChain.getTlsContext());
     }
 
     public FilterChainMatch getFilterChainMatch() {
       return filterChainMatch;
     }
 
-    public io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext getDownstreamTlsContext() {
+    public DownstreamTlsContext getDownstreamTlsContext() {
       return downstreamTlsContext;
     }
 

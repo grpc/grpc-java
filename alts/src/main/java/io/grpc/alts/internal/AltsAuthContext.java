@@ -17,6 +17,7 @@
 package io.grpc.alts.internal;
 
 import com.google.common.annotations.VisibleForTesting;
+import java.util.Map;
 
 /** AltsAuthContext contains security-related context information about an ALTs connection. */
 public final class AltsAuthContext {
@@ -33,6 +34,7 @@ public final class AltsAuthContext {
             .setPeerServiceAccount(result.getPeerIdentity().getServiceAccount())
             .setLocalServiceAccount(result.getLocalIdentity().getServiceAccount())
             .setPeerRpcVersions(result.getPeerRpcVersions())
+            .putAllPeerAttributes(result.getPeerIdentity().getAttributes())
             .build();
   }
 
@@ -93,5 +95,14 @@ public final class AltsAuthContext {
    */
   public RpcProtocolVersions getPeerRpcVersions() {
     return context.getPeerRpcVersions();
+  }
+
+  /**
+   * Get peer attributes.
+   *
+   * @return the context's peer attributes.
+   */
+  public Map<String, String> getPeerAttributes() {
+    return context.getPeerAttributes();
   }
 }

@@ -59,6 +59,9 @@ public final class ClientCalls {
   /**
    * Executes a unary call with a response {@link StreamObserver}.  The {@code call} should not be
    * already started.  After calling this method, {@code call} should no longer be used.
+   *
+   * <p>If the provided {@code responseObserver} is an instance of {@link ClientResponseObserver},
+   * {@code beforeStart()} will be called.
    */
   public static <ReqT, RespT> void asyncUnaryCall(
       ClientCall<ReqT, RespT> call, ReqT req, StreamObserver<RespT> responseObserver) {
@@ -69,6 +72,9 @@ public final class ClientCalls {
    * Executes a server-streaming call with a response {@link StreamObserver}.  The {@code call}
    * should not be already started.  After calling this method, {@code call} should no longer be
    * used.
+   *
+   * <p>If the provided {@code responseObserver} is an instance of {@link ClientResponseObserver},
+   * {@code beforeStart()} will be called.
    */
   public static <ReqT, RespT> void asyncServerStreamingCall(
       ClientCall<ReqT, RespT> call, ReqT req, StreamObserver<RespT> responseObserver) {
@@ -80,7 +86,10 @@ public final class ClientCalls {
    * The {@code call} should not be already started.  After calling this method, {@code call}
    * should no longer be used.
    *
-   * @return request stream observer.
+   * <p>If the provided {@code responseObserver} is an instance of {@link ClientResponseObserver},
+   * {@code beforeStart()} will be called.
+   *
+   * @return request stream observer. It will extend {@link ClientCallStreamObserver}
    */
   public static <ReqT, RespT> StreamObserver<ReqT> asyncClientStreamingCall(
       ClientCall<ReqT, RespT> call,
@@ -92,7 +101,10 @@ public final class ClientCalls {
    * Executes a bidirectional-streaming call.  The {@code call} should not be already started.
    * After calling this method, {@code call} should no longer be used.
    *
-   * @return request stream observer.
+   * <p>If the provided {@code responseObserver} is an instance of {@link ClientResponseObserver},
+   * {@code beforeStart()} will be called.
+   *
+   * @return request stream observer. It will extend {@link ClientCallStreamObserver}
    */
   public static <ReqT, RespT> StreamObserver<ReqT> asyncBidiStreamingCall(
       ClientCall<ReqT, RespT> call, StreamObserver<RespT> responseObserver) {
@@ -104,6 +116,7 @@ public final class ClientCalls {
    * started.  After calling this method, {@code call} should no longer be used.
    *
    * @return the single response message.
+   * @throws StatusRuntimeException on error
    */
   public static <ReqT, RespT> RespT blockingUnaryCall(ClientCall<ReqT, RespT> call, ReqT req) {
     try {
@@ -120,6 +133,7 @@ public final class ClientCalls {
    * started.  After calling this method, {@code call} should no longer be used.
    *
    * @return the single response message.
+   * @throws StatusRuntimeException on error
    */
   public static <ReqT, RespT> RespT blockingUnaryCall(
       Channel channel, MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, ReqT req) {
@@ -158,6 +172,8 @@ public final class ClientCalls {
    * response stream.  The {@code call} should not be already started.  After calling this method,
    * {@code call} should no longer be used.
    *
+   * <p>The returned iterator may throw {@link StatusRuntimeException} on error.
+   *
    * @return an iterator over the response stream.
    */
   // TODO(louiscryan): Not clear if we want to use this idiom for 'simple' stubs.
@@ -172,6 +188,8 @@ public final class ClientCalls {
    * Executes a server-streaming call returning a blocking {@link Iterator} over the
    * response stream.  The {@code call} should not be already started.  After calling this method,
    * {@code call} should no longer be used.
+   *
+   * <p>The returned iterator may throw {@link StatusRuntimeException} on error.
    *
    * @return an iterator over the response stream.
    */
@@ -559,8 +577,9 @@ public final class ClientCalls {
    */
   // TODO(ejona86): determine how to allow ClientCall.cancel() in case of application error.
   private static final class BlockingResponseStream<T> implements Iterator<T> {
-    // Due to flow control, only needs to hold up to 2 items: 1 for value, 1 for close.
-    private final BlockingQueue<Object> buffer = new ArrayBlockingQueue<>(2);
+    // Due to flow control, only needs to hold up to 3 items: 2 for value, 1 for close.
+    // (2 for value, not 1, because of early request() in next())
+    private final BlockingQueue<Object> buffer = new ArrayBlockingQueue<>(3);
     private final StartableListener<T> listener = new QueuingListener();
     private final ClientCall<?, T> call;
     /** May be null. */
@@ -633,17 +652,20 @@ public final class ClientCalls {
 
     @Override
     public T next() {
+      // Eagerly call request(1) so it can be processing the next message while we wait for the
+      // current one, which reduces latency for the next message. With MigratingThreadDeframer and
+      // if the data has already been recieved, every other message can be delivered instantly. This
+      // can be run after hasNext(), but just would be slower.
+      if (!(last instanceof StatusRuntimeException) && last != this) {
+        call.request(1);
+      }
       if (!hasNext()) {
         throw new NoSuchElementException();
       }
-      try {
-        call.request(1);
-        @SuppressWarnings("unchecked")
-        T tmp = (T) last;
-        return tmp;
-      } finally {
-        last = null;
-      }
+      @SuppressWarnings("unchecked")
+      T tmp = (T) last;
+      last = null;
+      return tmp;
     }
 
     @Override

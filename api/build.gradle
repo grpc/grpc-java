@@ -17,9 +17,10 @@ dependencies {
 
     testImplementation project(':grpc-context').sourceSets.test.output,
             project(':grpc-testing'),
-            project(':grpc-grpclb'),
-            libraries.guava_testlib
-
+            project(':grpc-grpclb')
+    testImplementation (libraries.guava_testlib) {
+        exclude group: 'junit', module: 'junit'
+    }
     jmh project(':grpc-core')
 
     signature "org.codehaus.mojo.signature:java17:1.0@signature"

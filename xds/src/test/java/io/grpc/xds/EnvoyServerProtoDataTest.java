@@ -22,7 +22,6 @@ import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.UInt32Value;
 import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
-import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.auth.SdsSecretConfig;
 import io.envoyproxy.envoy.api.v2.core.Address;
 import io.envoyproxy.envoy.api.v2.core.CidrRange;
@@ -31,6 +30,7 @@ import io.envoyproxy.envoy.api.v2.core.TransportSocket;
 import io.envoyproxy.envoy.api.v2.listener.Filter;
 import io.envoyproxy.envoy.api.v2.listener.FilterChain;
 import io.envoyproxy.envoy.api.v2.listener.FilterChainMatch;
+import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.Listener;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import java.util.List;
@@ -73,7 +73,8 @@ public class EnvoyServerProtoDataTest {
     assertThat(outFilterChainMatch.getApplicationProtocols()).isEmpty();
     assertThat(outFilterChainMatch.getPrefixRanges()).isEmpty();
     assertThat(outFilter.getDownstreamTlsContext())
-        .isEqualTo(DownstreamTlsContext.getDefaultInstance());
+        .isEqualTo(DownstreamTlsContext.fromEnvoyProtoDownstreamTlsContext(
+                io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext.getDefaultInstance()));
 
     EnvoyServerProtoData.FilterChain inFilter = filterChains.get(1);
     assertThat(inFilter).isNotNull();
@@ -84,7 +85,7 @@ public class EnvoyServerProtoDataTest {
     assertThat(inFilterChainMatch.getPrefixRanges()).containsExactly(
         new EnvoyServerProtoData.CidrRange("10.20.0.15", 32));
     DownstreamTlsContext inFilterTlsContext = inFilter.getDownstreamTlsContext();
-    assertThat(inFilterTlsContext.hasCommonTlsContext()).isTrue();
+    assertThat(inFilterTlsContext.getCommonTlsContext()).isNotNull();
     CommonTlsContext commonTlsContext = inFilterTlsContext.getCommonTlsContext();
     List<SdsSecretConfig> tlsCertSdsConfigs = commonTlsContext
         .getTlsCertificateSdsSecretConfigsList();
@@ -111,7 +112,7 @@ public class EnvoyServerProtoDataTest {
     assertThat(filterChains).hasSize(1);
     EnvoyServerProtoData.FilterChain inFilter = filterChains.get(0);
     DownstreamTlsContext inFilterTlsContext = inFilter.getDownstreamTlsContext();
-    assertThat(inFilterTlsContext.hasCommonTlsContext()).isTrue();
+    assertThat(inFilterTlsContext.getCommonTlsContext()).isNotNull();
     CommonTlsContext commonTlsContext = inFilterTlsContext.getCommonTlsContext();
     List<SdsSecretConfig> tlsCertSdsConfigs = commonTlsContext
         .getTlsCertificateSdsSecretConfigsList();

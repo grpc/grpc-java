@@ -23,8 +23,8 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
 import io.grpc.inprocess.InProcessSocketAddress;
+import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.netty.channel.Channel;
 import java.io.IOException;
 import java.net.InetAddress;

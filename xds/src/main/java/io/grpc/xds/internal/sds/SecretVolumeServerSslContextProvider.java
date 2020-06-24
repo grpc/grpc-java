@@ -24,9 +24,9 @@ import static io.grpc.xds.internal.sds.CommonTlsContextUtil.validateTlsCertifica
 import com.google.common.annotations.VisibleForTesting;
 import io.envoyproxy.envoy.api.v2.auth.CertificateValidationContext;
 import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
-import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.auth.TlsCertificate;
 import io.grpc.netty.GrpcSslContexts;
+import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import java.io.File;
@@ -50,7 +50,7 @@ final class SecretVolumeServerSslContextProvider extends SslContextProvider {
       @Nullable String certificateChain,
       @Nullable CertificateValidationContext certContext,
       DownstreamTlsContext downstreamTlsContext) {
-    super(new DownstreamTlsContextHolder(downstreamTlsContext));
+    super(downstreamTlsContext);
     this.privateKey = privateKey;
     this.privateKeyPassword = privateKeyPassword;
     this.certificateChain = certificateChain;

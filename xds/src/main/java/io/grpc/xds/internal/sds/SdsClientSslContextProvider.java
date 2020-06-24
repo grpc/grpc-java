@@ -22,9 +22,9 @@ import io.envoyproxy.envoy.api.v2.auth.CertificateValidationContext;
 import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
 import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext.CombinedCertificateValidationContext;
 import io.envoyproxy.envoy.api.v2.auth.SdsSecretConfig;
-import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.grpc.netty.GrpcSslContexts;
+import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.internal.sds.trust.SdsTrustManagerFactory;
 import io.netty.handler.ssl.SslContextBuilder;
 import java.io.IOException;
@@ -48,7 +48,7 @@ final class SdsClientSslContextProvider extends SdsSslContextProvider {
         validationContextSdsConfig,
         staticCertValidationContext,
         watcherExecutor,
-        channelExecutor, new UpstreamTlsContextHolder(upstreamTlsContext));
+        channelExecutor, upstreamTlsContext);
   }
 
   static SdsClientSslContextProvider getProvider(

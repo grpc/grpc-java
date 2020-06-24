@@ -24,8 +24,6 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-// TODO(sanjaypujare): remove dependency on envoy data types.
-import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Status;
@@ -38,6 +36,7 @@ import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyProtoData.Route;
 import io.grpc.xds.EnvoyServerProtoData.Listener;
+import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -182,6 +181,28 @@ abstract class XdsClient {
               .toString();
     }
 
+    @Override
+    public int hashCode() {
+      return Objects.hash(
+          clusterName, edsServiceName, lbPolicy, lrsServerName, upstreamTlsContext);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      ClusterUpdate that = (ClusterUpdate) o;
+      return Objects.equals(clusterName, that.clusterName)
+          && Objects.equals(edsServiceName, that.edsServiceName)
+          && Objects.equals(lbPolicy, that.lbPolicy)
+          && Objects.equals(lrsServerName, that.lrsServerName)
+          && Objects.equals(upstreamTlsContext, that.upstreamTlsContext);
+    }
+
     static Builder newBuilder() {
       return new Builder();
     }
@@ -287,9 +308,9 @@ abstract class XdsClient {
         return false;
       }
       EndpointUpdate that = (EndpointUpdate) o;
-      return clusterName.equals(that.clusterName)
-          && localityLbEndpointsMap.equals(that.localityLbEndpointsMap)
-          && dropPolicies.equals(that.dropPolicies);
+      return Objects.equals(clusterName, that.clusterName)
+          && Objects.equals(localityLbEndpointsMap, that.localityLbEndpointsMap)
+          && Objects.equals(dropPolicies, that.dropPolicies);
     }
 
     @Override

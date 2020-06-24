@@ -51,7 +51,7 @@ public class ApplicationThreadDeframerTest {
   @Before
   public void setUp() {
     // ApplicationThreadDeframer constructor injects itself as the wrapped deframer's listener.
-    verify(mockDeframer).setListener(applicationThreadDeframer);
+    verify(mockDeframer).setListener(applicationThreadDeframer.getAppListener());
   }
 
   @Test
@@ -90,7 +90,7 @@ public class ApplicationThreadDeframerTest {
 
   @Test
   public void bytesReadInvokesTransportExecutor() {
-    applicationThreadDeframer.bytesRead(1);
+    applicationThreadDeframer.getAppListener().bytesRead(1);
     assertEquals(0, listener.bytesRead);
     transportExecutor.runStoredRunnable();
     assertEquals(1, listener.bytesRead);
@@ -98,7 +98,7 @@ public class ApplicationThreadDeframerTest {
 
   @Test
   public void deframerClosedInvokesTransportExecutor() {
-    applicationThreadDeframer.deframerClosed(true);
+    applicationThreadDeframer.getAppListener().deframerClosed(true);
     assertFalse(listener.deframerClosedWithPartialMessage);
     transportExecutor.runStoredRunnable();
     assertTrue(listener.deframerClosedWithPartialMessage);
@@ -107,7 +107,7 @@ public class ApplicationThreadDeframerTest {
   @Test
   public void deframeFailedInvokesTransportExecutor() {
     Throwable cause = new Throwable("error");
-    applicationThreadDeframer.deframeFailed(cause);
+    applicationThreadDeframer.getAppListener().deframeFailed(cause);
     assertNull(listener.deframeFailedCause);
     transportExecutor.runStoredRunnable();
     assertEquals(cause, listener.deframeFailedCause);
@@ -122,7 +122,7 @@ public class ApplicationThreadDeframerTest {
       messages.add(new ByteArrayInputStream(messageBytes[i]));
     }
     MultiMessageProducer messageProducer = new MultiMessageProducer(messages);
-    applicationThreadDeframer.messagesAvailable(messageProducer);
+    applicationThreadDeframer.getAppListener().messagesAvailable(messageProducer);
     applicationThreadDeframer.request(1 /* value is ignored */);
     for (int i = 0; i < messageBytes.length; i++) {
       InputStream message = listener.storedProducer.next();

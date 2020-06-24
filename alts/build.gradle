@@ -37,10 +37,13 @@ dependencies {
     testImplementation project(':grpc-testing'),
             project(':grpc-testing-proto'),
             libraries.guava,
-            libraries.guava_testlib,
             libraries.junit,
             libraries.mockito,
             libraries.truth
+
+    testImplementation (libraries.guava_testlib) {
+        exclude group: 'junit', module: 'junit'
+    }
     testRuntimeOnly libraries.netty_tcnative,
             libraries.netty_epoll
     signature 'org.codehaus.mojo.signature:java17:1.0@signature'

@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 The gRPC Authors
+ * Copyright 2019 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,16 +14,16 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.internal.sds;
-
-import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
-import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
+package io.grpc.internal;
 
 /**
- * A holder of {@link UpstreamTlsContext} or
- * {@link io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext}.
+ * A {@code Deframer} that optimizations by taking over part of the thread safety.
  */
-public interface TlsContextHolder {
-
-  CommonTlsContext getCommonTlsContext();
+public interface ThreadOptimizedDeframer extends Deframer {
+  /**
+   * Behaves like {@link Deframer#request(int)} except it can be called from any thread. Must not
+   * throw exceptions in case of deframer error.
+   */
+  @Override
+  void request(int numMessages);
 }

@@ -337,6 +337,16 @@ class DelayedStream implements ClientStream {
   }
 
   @Override
+  public void optimizeForDirectExecutor() {
+    delayOrExecute(new Runnable() {
+      @Override
+      public void run() {
+        realStream.optimizeForDirectExecutor();
+      }
+    });
+  }
+
+  @Override
   public void setCompressor(final Compressor compressor) {
     checkNotNull(compressor, "compressor");
     delayOrExecute(new Runnable() {

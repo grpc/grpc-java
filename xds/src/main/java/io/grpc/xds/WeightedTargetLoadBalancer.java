@@ -87,6 +87,7 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
     for (String targetName : targets.keySet()) {
       childBalancers.get(targetName).handleResolvedAddresses(
           resolvedAddresses.toBuilder()
+              .setAddresses(AddressFilter.filter(resolvedAddresses.getAddresses(), targetName))
               .setLoadBalancingPolicyConfig(targets.get(targetName).policySelection.getConfig())
               .build());
     }

@@ -204,6 +204,10 @@ public class MessageDeframer implements Closeable, Deframer {
     stopDelivery = true;
   }
 
+  boolean hasPendingDeliveries() {
+    return pendingDeliveries != 0;
+  }
+
   @Override
   public void close() {
     if (isClosed()) {

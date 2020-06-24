@@ -19,6 +19,7 @@ package io.grpc.testing.integration;
 import io.grpc.Server;
 import io.grpc.health.v1.HealthCheckResponse.ServingStatus;
 import io.grpc.netty.NettyServerBuilder;
+import io.grpc.protobuf.services.ProtoReflectionService;
 import io.grpc.services.HealthStatusManager;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.integration.Messages.SimpleRequest;
@@ -113,8 +114,10 @@ public final class XdsTestServer {
     health = new HealthStatusManager();
     server =
         NettyServerBuilder.forPort(port)
-            .addService(new TestServiceImpl())
+            .addService(new TestServiceImpl(serverId))
+            .addService(new XdsUpdateHealthServiceImpl(health))
             .addService(health.getHealthService())
+            .addService(ProtoReflectionService.newInstance())
             .build()
             .start();
     health.setStatus("", ServingStatus.SERVING);
@@ -133,10 +136,12 @@ public final class XdsTestServer {
     }
   }
 
-  private class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
+  private static class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
+    private final String serverId;
     private final String host;
 
-    private TestServiceImpl() {
+    private TestServiceImpl(String serverId) {
+      this.serverId = serverId;
       try {
         host = InetAddress.getLocalHost().getHostName();
       } catch (UnknownHostException e) {
@@ -149,6 +154,31 @@ public final class XdsTestServer {
     public void unaryCall(SimpleRequest req, StreamObserver<SimpleResponse> responseObserver) {
       responseObserver.onNext(
           SimpleResponse.newBuilder().setServerId(serverId).setHostname(host).build());
+      responseObserver.onCompleted();
+    }
+  }
+
+  private static class XdsUpdateHealthServiceImpl
+      extends XdsUpdateHealthServiceGrpc.XdsUpdateHealthServiceImplBase {
+    private HealthStatusManager health;
+
+    private XdsUpdateHealthServiceImpl(HealthStatusManager health) {
+      this.health = health;
+    }
+
+    @Override
+    public void setServing(
+        EmptyProtos.Empty req, StreamObserver<EmptyProtos.Empty> responseObserver) {
+      health.setStatus("", ServingStatus.SERVING);
+      responseObserver.onNext(EmptyProtos.Empty.getDefaultInstance());
+      responseObserver.onCompleted();
+    }
+
+    @Override
+    public void setNotServing(
+        EmptyProtos.Empty req, StreamObserver<EmptyProtos.Empty> responseObserver) {
+      health.setStatus("", ServingStatus.NOT_SERVING);
+      responseObserver.onNext(EmptyProtos.Empty.getDefaultInstance());
       responseObserver.onCompleted();
     }
   }

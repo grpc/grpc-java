@@ -23,7 +23,6 @@ import static io.grpc.xds.XdsLbPolicies.EDS_POLICY_NAME;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
-import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
@@ -36,6 +35,7 @@ import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.CdsLoadBalancerProvider.CdsConfig;
 import io.grpc.xds.EdsLoadBalancerProvider.EdsConfig;
+import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.XdsClient.ClusterUpdate;
 import io.grpc.xds.XdsClient.ClusterWatcher;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
@@ -259,9 +259,6 @@ public final class CdsLoadBalancer extends LoadBalancer {
     final EdsLoadBalancingHelper helper;
     final ResolvedAddresses resolvedAddresses;
 
-    // EDS balancer for the cluster.
-    // Becomes non-null once handleResolvedAddresses() successfully.
-    // Assigned at most once.
     @Nullable
     LoadBalancer edsBalancer;
 
@@ -293,7 +290,9 @@ public final class CdsLoadBalancer extends LoadBalancer {
               /* edsServiceName = */ newUpdate.getEdsServiceName(),
               /* lrsServerName = */ newUpdate.getLrsServerName(),
               new PolicySelection(lbProvider, ImmutableMap.<String, Object>of(), lbConfig));
-      updateSslContextProvider(newUpdate.getUpstreamTlsContext());
+      if (false) {
+        updateSslContextProvider(newUpdate.getUpstreamTlsContext());
+      }
       if (edsBalancer == null) {
         edsBalancer = lbRegistry.getProvider(EDS_POLICY_NAME).newLoadBalancer(helper);
       }
@@ -325,15 +324,14 @@ public final class CdsLoadBalancer extends LoadBalancer {
     @Override
     public void onResourceDoesNotExist(String resourceName) {
       logger.log(XdsLogLevel.INFO, "Resource {0} is unavailable", resourceName);
-      // TODO(chengyuanzhang): should unconditionally propagate to downstream instances and
-      //  go to TRANSIENT_FAILURE.
-      if (edsBalancer == null) {
-        helper.updateBalancingState(
-            TRANSIENT_FAILURE,
-            new ErrorPicker(
-                Status.UNAVAILABLE.withDescription(
-                    "Resource " + resourceName + " is unavailable")));
+      if (edsBalancer != null) {
+        edsBalancer.shutdown();
+        edsBalancer = null;
       }
+      helper.updateBalancingState(
+          TRANSIENT_FAILURE,
+          new ErrorPicker(
+              Status.UNAVAILABLE.withDescription("Resource " + resourceName + " is unavailable")));
     }
 
     @Override
