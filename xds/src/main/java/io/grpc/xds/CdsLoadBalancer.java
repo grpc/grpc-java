@@ -57,6 +57,9 @@ public final class CdsLoadBalancer extends LoadBalancer {
   private final LoadBalancerRegistry lbRegistry;
   private final GracefulSwitchLoadBalancer switchingLoadBalancer;
   private final TlsContextManager tlsContextManager;
+  // TODO(sanjaypujare): remove once xds security is released
+  private boolean enableXdsSecurity;
+  private static final String XDS_SECURITY_ENV_VAR = "GRPC_XDS_EXPERIMENTAL_SECURITY_SUPPORT";
 
   // The following fields become non-null once handleResolvedAddresses() successfully.
 
@@ -126,6 +129,17 @@ public final class CdsLoadBalancer extends LoadBalancer {
     if (xdsClientPool != null) {
       xdsClientPool.returnObject(xdsClient);
     }
+  }
+
+  // TODO(sanjaypujare): remove once xDS security is released
+  private boolean isXdsSecurityEnabled() {
+    return enableXdsSecurity || Boolean.valueOf(System.getenv(XDS_SECURITY_ENV_VAR));
+  }
+
+  // TODO(sanjaypujare): remove once xDS security is released
+  @VisibleForTesting
+  void setXdsSecurity(boolean enable) {
+    enableXdsSecurity = enable;
   }
 
   /**
@@ -290,7 +304,7 @@ public final class CdsLoadBalancer extends LoadBalancer {
               /* edsServiceName = */ newUpdate.getEdsServiceName(),
               /* lrsServerName = */ newUpdate.getLrsServerName(),
               new PolicySelection(lbProvider, ImmutableMap.<String, Object>of(), lbConfig));
-      if (false) {
+      if (isXdsSecurityEnabled()) {
         updateSslContextProvider(newUpdate.getUpstreamTlsContext());
       }
       if (edsBalancer == null) {

@@ -76,7 +76,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -339,9 +338,10 @@ public class CdsLoadBalancerTest {
     assertThat(xdsClientPool.xdsClient).isNull();
   }
 
-  @Ignore
   @Test
   public void handleCdsConfigUpdate_withUpstreamTlsContext()  {
+    assertThat(cdsLoadBalancer).isInstanceOf(CdsLoadBalancer.class);
+    ((CdsLoadBalancer)cdsLoadBalancer).setXdsSecurity(true);
     assertThat(xdsClient).isNull();
     ResolvedAddresses resolvedAddresses1 =
          ResolvedAddresses.newBuilder()
