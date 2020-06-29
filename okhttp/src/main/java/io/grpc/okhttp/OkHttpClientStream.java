@@ -101,6 +101,11 @@ class OkHttpClientStream extends AbstractClientStream {
             transport,
             initialWindowSize,
             method.getFullMethodName());
+
+    // TODO(ejona86) Fix a potential data race using MigratingThreadDeframer in OkHttp.
+    // OkHttp is lock based and it doesn't get benefit from using MigratingThreadDeframer,
+    // disabling it to avoid race.
+    optimizeForDirectExecutor();
   }
 
   @Override
