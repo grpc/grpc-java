@@ -53,6 +53,7 @@ import io.envoyproxy.envoy.api.v2.listener.Filter;
 import io.envoyproxy.envoy.api.v2.listener.FilterChain;
 import io.envoyproxy.envoy.api.v2.listener.FilterChainMatch;
 import io.envoyproxy.envoy.config.filter.network.http_connection_manager.v2.HttpConnectionManager;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceImplBase;
 import io.grpc.Context;
 import io.grpc.Context.CancellationListener;
@@ -364,7 +365,8 @@ public class XdsClientImplTestForListener {
     final FilterChain filterChainInbound = buildFilterChain(buildFilterChainMatch(PORT,
         CidrRange.newBuilder().setAddressPrefix(LOCAL_IP)
             .setPrefixLen(UInt32Value.of(32)).build()),
-        CommonTlsContextTestsUtil.buildTestDownstreamTlsContext("google-sds-config-default",
+        // Server is still speaking xds v2.
+        CommonTlsContextTestsUtil.buildTestDownstreamTlsContextV2("google-sds-config-default",
             "ROOTCA"),
         buildTestFilter("envoy.http_connection_manager"));
     List<Any> listeners = ImmutableList.of(
@@ -415,7 +417,8 @@ public class XdsClientImplTestForListener {
     final FilterChain filterChainInbound = buildFilterChain(buildFilterChainMatch(PORT,
         CidrRange.newBuilder().setAddressPrefix(LOCAL_IP)
             .setPrefixLen(UInt32Value.of(32)).build()),
-        CommonTlsContextTestsUtil.buildTestDownstreamTlsContext("google-sds-config-default",
+        // Server is still speaking xds v2.
+        CommonTlsContextTestsUtil.buildTestDownstreamTlsContextV2("google-sds-config-default",
             "ROOTCA"),
         buildTestFilter("envoy.http_connection_manager"));
     List<Any> listeners = ImmutableList.of(
@@ -447,11 +450,28 @@ public class XdsClientImplTestForListener {
     EnvoyServerProtoData.Listener listener = configUpdate.getListener();
     assertThat(listener.getName()).isEqualTo(LISTENER_NAME);
     assertThat(listener.getAddress()).isEqualTo("0.0.0.0:" + PORT);
-    EnvoyServerProtoData.FilterChain[] expected = new EnvoyServerProtoData.FilterChain[]{
-        EnvoyServerProtoData.FilterChain.fromEnvoyProtoFilterChain(filterChainOutbound),
-        EnvoyServerProtoData.FilterChain.fromEnvoyProtoFilterChain(filterChainInbound)
-    };
-    assertThat(listener.getFilterChains()).isEqualTo(Arrays.asList(expected));
+    assertThat(listener.getFilterChains()).hasSize(2);
+    EnvoyServerProtoData.FilterChain filterChainOutboundInListenerUpdate
+        = listener.getFilterChains().get(0);
+    assertThat(filterChainOutboundInListenerUpdate.getFilterChainMatch().getDestinationPort())
+        .isEqualTo(8000);
+    EnvoyServerProtoData.FilterChain filterChainInboundInListenerUpdate
+        = listener.getFilterChains().get(1);
+    EnvoyServerProtoData.FilterChainMatch inBoundfilterChainMatch =
+        filterChainInboundInListenerUpdate.getFilterChainMatch();
+    assertThat(inBoundfilterChainMatch.getDestinationPort()).isEqualTo(PORT);
+    assertThat(inBoundfilterChainMatch.getPrefixRanges()).containsExactly(
+        new EnvoyServerProtoData.CidrRange(LOCAL_IP, 32));
+    CommonTlsContext downstreamCommonTlsContext =
+        filterChainInboundInListenerUpdate.getDownstreamTlsContext().getCommonTlsContext();
+    assertThat(downstreamCommonTlsContext.getTlsCertificateSdsSecretConfigs(0).getName())
+        .isEqualTo("google-sds-config-default");
+    assertThat(
+            downstreamCommonTlsContext
+                .getCombinedValidationContext()
+                .getValidationContextSdsSecretConfig()
+                .getName())
+        .isEqualTo("ROOTCA");
     assertThat(fakeClock.getPendingTasks(LISTENER_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
 
@@ -472,7 +492,8 @@ public class XdsClientImplTestForListener {
     final FilterChain filterChainInbound = buildFilterChain(buildFilterChainMatch(PORT,
         CidrRange.newBuilder().setAddressPrefix(LOCAL_IP)
             .setPrefixLen(UInt32Value.of(32)).build()),
-        CommonTlsContextTestsUtil.buildTestDownstreamTlsContext("google-sds-config-default",
+        // Server is still speaking xds v2.
+        CommonTlsContextTestsUtil.buildTestDownstreamTlsContextV2("google-sds-config-default",
             "ROOTCA"),
         buildTestFilter("envoy.http_connection_manager"));
     List<Any> listeners = ImmutableList.of(
@@ -505,7 +526,7 @@ public class XdsClientImplTestForListener {
     final FilterChain filterChainNewInbound = buildFilterChain(buildFilterChainMatch(PORT,
         CidrRange.newBuilder().setAddressPrefix(LOCAL_IP)
             .setPrefixLen(UInt32Value.of(32)).build()),
-        CommonTlsContextTestsUtil.buildTestDownstreamTlsContext("google-sds-config-default1",
+        CommonTlsContextTestsUtil.buildTestDownstreamTlsContextV2("google-sds-config-default1",
             "ROOTCA2"),
         buildTestFilter("envoy.http_connection_manager"));
     List<Any> listeners1 = ImmutableList.of(
@@ -527,10 +548,23 @@ public class XdsClientImplTestForListener {
     ListenerUpdate configUpdate = listenerUpdateCaptor.getValue();
     EnvoyServerProtoData.Listener listener = configUpdate.getListener();
     assertThat(listener.getName()).isEqualTo(LISTENER_NAME);
-    EnvoyServerProtoData.FilterChain[] expected = new EnvoyServerProtoData.FilterChain[]{
-        EnvoyServerProtoData.FilterChain.fromEnvoyProtoFilterChain(filterChainNewInbound)
-    };
-    assertThat(listener.getFilterChains()).isEqualTo(Arrays.asList(expected));
+    assertThat(listener.getFilterChains()).hasSize(1);
+    EnvoyServerProtoData.FilterChain filterChain =
+        Iterables.getOnlyElement(listener.getFilterChains());
+    EnvoyServerProtoData.FilterChainMatch filterChainMatch = filterChain.getFilterChainMatch();
+    assertThat(filterChainMatch.getDestinationPort()).isEqualTo(PORT);
+    assertThat(filterChainMatch.getPrefixRanges()).containsExactly(
+        new EnvoyServerProtoData.CidrRange(LOCAL_IP, 32));
+    CommonTlsContext downstreamCommonTlsContext =
+        filterChain.getDownstreamTlsContext().getCommonTlsContext();
+    assertThat(downstreamCommonTlsContext.getTlsCertificateSdsSecretConfigs(0).getName())
+        .isEqualTo("google-sds-config-default1");
+    assertThat(
+            downstreamCommonTlsContext
+                .getCombinedValidationContext()
+                .getValidationContextSdsSecretConfig()
+                .getName())
+        .isEqualTo("ROOTCA2");
   }
 
   /**
@@ -554,7 +588,8 @@ public class XdsClientImplTestForListener {
     final FilterChain filterChainOutbound = buildFilterChain(buildFilterChainMatch(PORT,
         CidrRange.newBuilder().setAddressPrefix(DIFFERENT_IP)
             .setPrefixLen(UInt32Value.of(32)).build()),
-        CommonTlsContextTestsUtil.buildTestDownstreamTlsContext("google-sds-config-default",
+        // Server is still speaking xds v2.
+        CommonTlsContextTestsUtil.buildTestDownstreamTlsContextV2("google-sds-config-default",
             "ROOTCA"),
         buildTestFilter("envoy.http_connection_manager"));
     List<Any> listeners = ImmutableList.of(
@@ -602,7 +637,8 @@ public class XdsClientImplTestForListener {
         PORT + 1,  // add 1 to mismatch
         CidrRange.newBuilder().setAddressPrefix(LOCAL_IP)
             .setPrefixLen(UInt32Value.of(32)).build()),
-        CommonTlsContextTestsUtil.buildTestDownstreamTlsContext("google-sds-config-default",
+        // Server is still speaking xds v2.
+        CommonTlsContextTestsUtil.buildTestDownstreamTlsContextV2("google-sds-config-default",
             "ROOTCA"),
         buildTestFilter("envoy.http_connection_manager"));
     List<Any> listeners = ImmutableList.of(
@@ -661,7 +697,8 @@ public class XdsClientImplTestForListener {
     final FilterChain filterChainInbound = buildFilterChain(buildFilterChainMatch(PORT,
         CidrRange.newBuilder().setAddressPrefix(LOCAL_IP)
             .setPrefixLen(UInt32Value.of(32)).build()),
-        CommonTlsContextTestsUtil.buildTestDownstreamTlsContext("google-sds-config-default",
+        // Server is still speaking xds v2.
+        CommonTlsContextTestsUtil.buildTestDownstreamTlsContextV2("google-sds-config-default",
             "ROOTCA"),
         buildTestFilter("envoy.http_connection_manager"));
     List<Any> listeners = ImmutableList.of(

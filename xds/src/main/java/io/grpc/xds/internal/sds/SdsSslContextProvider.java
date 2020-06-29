@@ -19,12 +19,12 @@ package io.grpc.xds.internal.sds;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
-import io.envoyproxy.envoy.api.v2.auth.CertificateValidationContext;
-import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
-import io.envoyproxy.envoy.api.v2.auth.SdsSecretConfig;
-import io.envoyproxy.envoy.api.v2.auth.Secret;
-import io.envoyproxy.envoy.api.v2.auth.TlsCertificate;
 import io.envoyproxy.envoy.api.v2.core.Node;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.SdsSecretConfig;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.Secret;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.TlsCertificate;
 import io.grpc.Status;
 import io.grpc.xds.EnvoyServerProtoData.BaseTlsContext;
 import io.netty.handler.ssl.ApplicationProtocolConfig;

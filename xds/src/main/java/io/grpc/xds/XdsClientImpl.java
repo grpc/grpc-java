@@ -39,17 +39,17 @@ import io.envoyproxy.envoy.api.v2.Cluster.LbPolicy;
 import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment;
 import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
-import io.envoyproxy.envoy.api.v2.Listener;
 import io.envoyproxy.envoy.api.v2.RouteConfiguration;
 import io.envoyproxy.envoy.api.v2.core.Address;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.api.v2.core.SocketAddress;
-import io.envoyproxy.envoy.api.v2.listener.FilterChain;
-import io.envoyproxy.envoy.api.v2.listener.FilterChainMatch;
 import io.envoyproxy.envoy.api.v2.route.Route;
 import io.envoyproxy.envoy.api.v2.route.VirtualHost;
 import io.envoyproxy.envoy.config.filter.network.http_connection_manager.v2.HttpConnectionManager;
 import io.envoyproxy.envoy.config.filter.network.http_connection_manager.v2.Rds;
+import io.envoyproxy.envoy.config.listener.v3.FilterChain;
+import io.envoyproxy.envoy.config.listener.v3.FilterChainMatch;
+import io.envoyproxy.envoy.config.listener.v3.Listener;
 import io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc;
 import io.grpc.InternalLogId;
 import io.grpc.ManagedChannel;
@@ -87,6 +87,8 @@ final class XdsClientImpl extends XdsClient {
 
   @VisibleForTesting
   static final String ADS_TYPE_URL_LDS = "type.googleapis.com/envoy.api.v2.Listener";
+  private static final String ADS_TYPE_URL_LDS_V3 =
+      "type.googleapis.com/envoy.config.listener.v3.Listener";
   @VisibleForTesting
   static final String ADS_TYPE_URL_RDS =
       "type.googleapis.com/envoy.api.v2.RouteConfiguration";
@@ -553,6 +555,9 @@ final class XdsClientImpl extends XdsClient {
     List<String> listenerNames = new ArrayList<>(ldsResponse.getResourcesCount());
     try {
       for (com.google.protobuf.Any res : ldsResponse.getResourcesList()) {
+        if (!res.is(Listener.class)) {
+          res = res.toBuilder().setTypeUrl(ADS_TYPE_URL_LDS_V3).build();
+        }
         Listener listener = res.unpack(Listener.class);
         listeners.add(listener);
         listenerNames.add(listener.getName());
@@ -681,6 +686,9 @@ final class XdsClientImpl extends XdsClient {
     logger.log(XdsLogLevel.DEBUG, "Listener count: {0}", ldsResponse.getResourcesCount());
     try {
       for (com.google.protobuf.Any res : ldsResponse.getResourcesList()) {
+        if (!res.is(Listener.class)) {
+          res = res.toBuilder().setTypeUrl(ADS_TYPE_URL_LDS_V3).build();
+        }
         Listener listener = res.unpack(Listener.class);
         logger.log(XdsLogLevel.DEBUG, "Found listener {0}", listener.toString());
         if (isRequestedListener(listener)) {
@@ -730,7 +738,7 @@ final class XdsClientImpl extends XdsClient {
         && hasMatchingFilter(listener.getFilterChainsList());
   }
 
-  private boolean isAddressMatching(Address address) {
+  private boolean isAddressMatching(io.envoyproxy.envoy.config.core.v3.Address address) {
     // TODO(sanjaypujare): check IP address once we know xDS server will include it
     return address.hasSocketAddress()
         && (address.getSocketAddress().getPortValue() == listenerPort);
@@ -1073,15 +1081,16 @@ final class XdsClientImpl extends XdsClient {
     }
   }
 
+  @Nullable
   private static UpstreamTlsContext getTlsContextFromCluster(Cluster cluster)
       throws InvalidProtocolBufferException {
     if (cluster.hasTransportSocket() && "tls".equals(cluster.getTransportSocket().getName())) {
       Any any = cluster.getTransportSocket().getTypedConfig();
       return UpstreamTlsContext.fromEnvoyProtoUpstreamTlsContext(
-          io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext.parseFrom(any.getValue()));
+          io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext.parseFrom(
+              any.getValue()));
     }
-    // TODO(sanjaypujare): remove when we move to envoy protos v3
-    return UpstreamTlsContext.fromEnvoyProtoUpstreamTlsContext(cluster.getTlsContext());
+    return null;
   }
 
   /**
@@ -1315,7 +1324,7 @@ final class XdsClientImpl extends XdsClient {
           // used for management server to identify which response the client is ACKing/NACking.
           // To avoid confusion, client-initiated requests will always use the nonce in
           // most recently received responses of each resource type.
-          if (typeUrl.equals(ADS_TYPE_URL_LDS)) {
+          if (typeUrl.equals(ADS_TYPE_URL_LDS) || typeUrl.equals(ADS_TYPE_URL_LDS_V3)) {
             ldsRespNonce = response.getNonce();
             handleLdsResponse(response);
           } else if (typeUrl.equals(ADS_TYPE_URL_RDS)) {
@@ -1717,6 +1726,7 @@ final class XdsClientImpl extends XdsClient {
       com.google.protobuf.TypeRegistry registry =
           com.google.protobuf.TypeRegistry.newBuilder()
               .add(Listener.getDescriptor())
+              .add(io.envoyproxy.envoy.api.v2.Listener.getDescriptor())
               .add(HttpConnectionManager.getDescriptor())
               .add(RouteConfiguration.getDescriptor())
               .add(Cluster.getDescriptor())

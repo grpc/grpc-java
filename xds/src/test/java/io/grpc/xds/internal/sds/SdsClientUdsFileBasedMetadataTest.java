@@ -24,9 +24,9 @@ import static org.mockito.Mockito.mock;
 
 import com.google.common.io.Files;
 import com.google.common.util.concurrent.MoreExecutors;
-import io.envoyproxy.envoy.api.v2.auth.SdsSecretConfig;
-import io.envoyproxy.envoy.api.v2.core.ConfigSource;
 import io.envoyproxy.envoy.api.v2.core.Node;
+import io.envoyproxy.envoy.config.core.v3.ConfigSource;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.SdsSecretConfig;
 import io.netty.channel.epoll.Epoll;
 import java.io.File;
 import java.io.IOException;

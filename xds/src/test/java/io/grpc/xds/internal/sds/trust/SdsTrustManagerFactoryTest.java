@@ -24,8 +24,8 @@ import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_PEM_FILE
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_PEM_FILE;
 
 import com.google.protobuf.ByteString;
-import io.envoyproxy.envoy.api.v2.auth.CertificateValidationContext;
-import io.envoyproxy.envoy.api.v2.core.DataSource;
+import io.envoyproxy.envoy.config.core.v3.DataSource;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.grpc.internal.testing.TestUtils;
 import java.io.IOException;
 import java.security.cert.CertStoreException;

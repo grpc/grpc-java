@@ -19,7 +19,6 @@ package io.grpc.xds;
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.xds.XdsClientTestHelper.buildCluster;
 import static io.grpc.xds.XdsClientTestHelper.buildClusterLoadAssignment;
-import static io.grpc.xds.XdsClientTestHelper.buildDeprecatedSecureCluster;
 import static io.grpc.xds.XdsClientTestHelper.buildDiscoveryRequest;
 import static io.grpc.xds.XdsClientTestHelper.buildDiscoveryResponse;
 import static io.grpc.xds.XdsClientTestHelper.buildDropOverload;
@@ -70,6 +69,7 @@ import io.envoyproxy.envoy.api.v2.route.VirtualHost;
 import io.envoyproxy.envoy.api.v2.route.WeightedCluster;
 import io.envoyproxy.envoy.config.filter.network.http_connection_manager.v2.HttpConnectionManager;
 import io.envoyproxy.envoy.config.filter.network.http_connection_manager.v2.Rds;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.SdsSecretConfig;
 import io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceImplBase;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadReportingServiceGrpc.LoadReportingServiceImplBase;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsRequest;
@@ -1435,6 +1435,7 @@ public class XdsClientImplTest {
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
 
     // Management server sends back CDS response with UpstreamTlsContext.
+    // Server still using envoy API V2.
     UpstreamTlsContext testUpstreamTlsContext =
         buildUpstreamTlsContext("secret1", "unix:/var/uds2");
     List<Any> clusters = ImmutableList.of(
@@ -1453,45 +1454,20 @@ public class XdsClientImplTest {
     ArgumentCaptor<ClusterUpdate> clusterUpdateCaptor = ArgumentCaptor.forClass(null);
     verify(clusterWatcher, times(1)).onClusterChanged(clusterUpdateCaptor.capture());
     ClusterUpdate clusterUpdate = clusterUpdateCaptor.getValue();
-    assertThat(clusterUpdate.getUpstreamTlsContext())
-        .isEqualTo(
-            EnvoyServerProtoData.UpstreamTlsContext.fromEnvoyProtoUpstreamTlsContext(
-                testUpstreamTlsContext));
-  }
-
-  /**
-   * CDS response containing UpstreamTlsContext for a cluster in a deprecated field.
-   */
-  // TODO(sanjaypujare): remove once we move to envoy proto v3
-  @Test
-  public void cdsResponseWithDeprecatedUpstreamTlsContext() {
-    xdsClient.watchClusterData("cluster-foo.googleapis.com", clusterWatcher);
-    StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
-    StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
-
-    // Management server sends back CDS response with UpstreamTlsContext.
-    UpstreamTlsContext testUpstreamTlsContext =
-        buildUpstreamTlsContext("secret1", "unix:/var/uds2");
-    List<Any> clusters = ImmutableList.of(
-        Any.pack(buildCluster("cluster-bar.googleapis.com", null, false)),
-        Any.pack(buildDeprecatedSecureCluster("cluster-foo.googleapis.com",
-            "eds-cluster-foo.googleapis.com", true, testUpstreamTlsContext)),
-        Any.pack(buildCluster("cluster-baz.googleapis.com", null, false)));
-    DiscoveryResponse response =
-        buildDiscoveryResponse("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS, "0000");
-    responseObserver.onNext(response);
-
-    // Client sent an ACK CDS request.
-    verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest(NODE, "0", "cluster-foo.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_CDS, "0000")));
-    ArgumentCaptor<ClusterUpdate> clusterUpdateCaptor = ArgumentCaptor.forClass(null);
-    verify(clusterWatcher, times(1)).onClusterChanged(clusterUpdateCaptor.capture());
-    ClusterUpdate clusterUpdate = clusterUpdateCaptor.getValue();
-    assertThat(clusterUpdate.getUpstreamTlsContext())
-        .isEqualTo(
-            EnvoyServerProtoData.UpstreamTlsContext.fromEnvoyProtoUpstreamTlsContext(
-                testUpstreamTlsContext));
+    EnvoyServerProtoData.UpstreamTlsContext upstreamTlsContext = clusterUpdate
+        .getUpstreamTlsContext();
+    SdsSecretConfig validationContextSdsSecretConfig = upstreamTlsContext.getCommonTlsContext()
+        .getValidationContextSdsSecretConfig();
+    assertThat(validationContextSdsSecretConfig.getName()).isEqualTo("secret1");
+    assertThat(
+            Iterables.getOnlyElement(
+                    validationContextSdsSecretConfig
+                        .getSdsConfig()
+                        .getApiConfigSource()
+                        .getGrpcServicesList())
+                .getGoogleGrpc()
+                .getTargetUri())
+        .isEqualTo("unix:/var/uds2");
   }
 
   @Test

@@ -29,10 +29,10 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.google.common.base.Strings;
-import io.envoyproxy.envoy.api.v2.auth.CertificateValidationContext;
-import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
-import io.envoyproxy.envoy.api.v2.auth.TlsCertificate;
-import io.envoyproxy.envoy.api.v2.core.DataSource;
+import io.envoyproxy.envoy.config.core.v3.DataSource;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.TlsCertificate;
 import io.grpc.Attributes;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
@@ -102,10 +102,12 @@ public class SdsProtocolNegotiatorsTest {
 
   /** Builds DownstreamTlsContext from commonTlsContext. */
   private static DownstreamTlsContext buildDownstreamTlsContext(CommonTlsContext commonTlsContext) {
-    io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext downstreamTlsContext =
-        io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext.newBuilder()
-            .setCommonTlsContext(commonTlsContext)
-            .build();
+    io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
+        downstreamTlsContext =
+            io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
+                .newBuilder()
+                .setCommonTlsContext(commonTlsContext)
+                .build();
     return DownstreamTlsContext.fromEnvoyProtoDownstreamTlsContext(downstreamTlsContext);
   }
 
@@ -255,7 +257,8 @@ public class SdsProtocolNegotiatorsTest {
     pipeline = channel.pipeline();
     DownstreamTlsContext downstreamTlsContext =
         DownstreamTlsContext.fromEnvoyProtoDownstreamTlsContext(
-            io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext.getDefaultInstance());
+            io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
+                .getDefaultInstance());
 
     XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
         XdsClientWrapperForServerSdsTest.createXdsClientWrapperForServerSds(
