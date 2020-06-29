@@ -35,6 +35,7 @@ import java.util.concurrent.TimeUnit;
 import org.junit.After;
 import org.junit.Assume;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -43,6 +44,7 @@ import org.junit.runners.JUnit4;
 
 /** Unit tests for {@link SdsClient} & {@link FileBasedPluginCredential} using UDS transport. */
 @RunWith(JUnit4.class)
+@Ignore // FIXME(#7166): fix the test when FileBasedPluginCredential for xds V3 is implemented
 public class SdsClientUdsFileBasedMetadataTest {
 
   private static final String SDSCLIENT_TEST_SOCKET = "/tmp/sdsclient-test.socket";
