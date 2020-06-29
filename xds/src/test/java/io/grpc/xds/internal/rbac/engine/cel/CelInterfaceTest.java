@@ -47,7 +47,6 @@ public class CelInterfaceTest {
     messageProvider = DescriptorMessageProvider.dynamicMessages(descriptors);
     dispatcher = DefaultDispatcher.create();
     interpreter = new DefaultInterpreter(messageProvider, dispatcher);
-    checkedResult = CheckedExpr.newBuilder().build();
 
     Map<String, Object> map = new HashMap<>();
     map.put("requestUrlPath", new Object());
@@ -57,10 +56,11 @@ public class CelInterfaceTest {
     map.put("sourceAddress", new Object());
     map.put("sourcePort", new Object());
     map.put("destinationAddress", new Object());
-
     ImmutableMap<String, Object> apiAttributes = ImmutableMap.copyOf(map);
 
     activation = Activation.copyOf(apiAttributes);
+    checkedResult = CheckedExpr.newBuilder().build();
+
     result = interpreter.createInterpretable(checkedResult).eval(activation);
   }
 

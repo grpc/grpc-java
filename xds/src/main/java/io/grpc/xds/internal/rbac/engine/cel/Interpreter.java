@@ -24,4 +24,3 @@ public interface Interpreter {
   /** Creates an interpretable for the given expression. */
   Interpretable createInterpretable(CheckedExpr checkedExpr) throws InterpreterException;
 }
- 

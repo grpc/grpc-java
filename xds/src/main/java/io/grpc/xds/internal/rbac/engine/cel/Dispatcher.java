@@ -22,7 +22,6 @@ import java.util.List;
 
 /** An object which implements dispatching of function calls. */
 public interface Dispatcher {
-
   /**
    * Invokes a function based on given parameters.
    *
