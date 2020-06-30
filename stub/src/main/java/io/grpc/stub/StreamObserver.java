@@ -49,7 +49,9 @@ public interface StreamObserver<V>  {
    *
    * <p>Although implementations are expected to not throw exceptions, if an exception occurs the
    * caller is encouraged to call {@link #onError} as part of normal application exception handling.
-   * gRPC will attempt to call {@code onError()} when an application's implementation throws.
+   * That is to say, {@code onError} should be called if any related part of the application throws
+   * an exception, generally independent of the source, to avoid leaks. gRPC will call {@code
+   * onError()} when an application's implementation throws.
    *
    * <p>As an exception to the rule and for historical reasons, on server-side, {@code onNext()} may
    * throw with a {@code StatusRuntimeException} if the client cancels the call after {@code
