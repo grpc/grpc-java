@@ -1435,7 +1435,6 @@ public class XdsClientImplTest {
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
 
     // Management server sends back CDS response with UpstreamTlsContext.
-    // Server still using envoy API V2.
     UpstreamTlsContext testUpstreamTlsContext =
         buildUpstreamTlsContext("secret1", "unix:/var/uds2");
     List<Any> clusters = ImmutableList.of(
