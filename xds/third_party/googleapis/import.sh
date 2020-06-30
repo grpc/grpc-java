@@ -24,6 +24,7 @@ SOURCE_PROTO_BASE_DIR=googleapis
 TARGET_PROTO_BASE_DIR=src/main/proto
 FILES=(
 google/api/expr/v1alpha1/syntax.proto
+google/api/expr/v1alpha1/checked.proto
 )
 
 pushd `git rev-parse --show-toplevel`/xds/third_party/googleapis
