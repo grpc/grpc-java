@@ -40,11 +40,11 @@ import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment;
 import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
 import io.envoyproxy.envoy.api.v2.RouteConfiguration;
-import io.envoyproxy.envoy.api.v2.core.Address;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.api.v2.core.SocketAddress;
 import io.envoyproxy.envoy.api.v2.route.Route;
 import io.envoyproxy.envoy.api.v2.route.VirtualHost;
+import io.envoyproxy.envoy.config.core.v3.Address;
 import io.envoyproxy.envoy.config.filter.network.http_connection_manager.v2.HttpConnectionManager;
 import io.envoyproxy.envoy.config.filter.network.http_connection_manager.v2.Rds;
 import io.envoyproxy.envoy.config.listener.v3.FilterChain;
@@ -454,8 +454,8 @@ final class XdsClientImpl extends XdsClient {
         .putFields("TRAFFICDIRECTOR_PROXYLESS",
             Value.newBuilder().setStringValue("1").build())
         .build();
-    Address listeningAddress =
-        Address.newBuilder()
+    io.envoyproxy.envoy.api.v2.core.Address listeningAddress =
+        io.envoyproxy.envoy.api.v2.core.Address.newBuilder()
             .setSocketAddress(
                 SocketAddress.newBuilder().setAddress("0.0.0.0").setPortValue(port).build())
             .build();
@@ -738,7 +738,7 @@ final class XdsClientImpl extends XdsClient {
         && hasMatchingFilter(listener.getFilterChainsList());
   }
 
-  private boolean isAddressMatching(io.envoyproxy.envoy.config.core.v3.Address address) {
+  private boolean isAddressMatching(Address address) {
     // TODO(sanjaypujare): check IP address once we know xDS server will include it
     return address.hasSocketAddress()
         && (address.getSocketAddress().getPortValue() == listenerPort);
