@@ -233,7 +233,8 @@ final class SdsX509TrustManager extends X509ExtendedTrustManager implements X509
       throw new CertificateException("Peer certificate(s) missing");
     }
     // verify SANs only in the top cert (leaf cert)
-    // TODO(#7166): impl
+    // v2 version: verifySubjectAltNameInLeaf(peerCertChain[0], verifyList);
+    // TODO(#7166): Implement v3 version.
     throw new UnsupportedOperationException();
   }
 
