@@ -282,12 +282,6 @@ public class CommonTlsContextTestsUtil {
         buildDownstreamTlsContext(commonTlsContext, requireClientCert));
   }
 
-  /** Helper method for creating DownstreamTlsContext values for tests. */
-  public static io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext
-      buildTestDownstreamTlsContextV2() {
-    return buildTestDownstreamTlsContextV2("google-sds-config-default", "ROOTCA");
-  }
-
   /** Helper method for creating DownstreamTlsContext values with names. */
   public static io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext
       buildTestDownstreamTlsContextV2(String certName, String validationContextName) {
@@ -304,7 +298,7 @@ public class CommonTlsContextTestsUtil {
   }
 
   /** Helper method for creating DownstreamTlsContext values with names. */
-  private static DownstreamTlsContext buildTestDownstreamTlsContext(
+  public static DownstreamTlsContext buildTestDownstreamTlsContext(
       String certName, String validationContextName) {
     return buildDownstreamTlsContext(
         buildCommonTlsContextWithAdditionalValues(
