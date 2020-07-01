@@ -54,11 +54,10 @@ public interface StreamObserver<V>  {
    * onError()} when an application's implementation throws.
    *
    * <p>As an exception to the rule and for historical reasons, on server-side, {@code onNext()} may
-   * throw with a {@code StatusRuntimeException} if the client cancels the call after {@code
-   * onCompleted()}. This was necessary because there was not a callback available to notify the
-   * service. Services are encouraged to use {@link
-   * ServerCallStreamObserver#setOnCancelHandler} which provides a callback and disables this
-   * exception-throwing behavior.
+   * throw with a {@code StatusRuntimeException} if the call is cancelled. This was necessary
+   * because there was not a callback available to notify the service. Services are encouraged to
+   * use {@link ServerCallStreamObserver#setOnCancelHandler} which provides a callback and disables
+   * this exception-throwing behavior.
    *
    * @param value the value passed to the stream
    */
