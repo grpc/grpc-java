@@ -48,7 +48,7 @@ public final class ServerCalls {
    */
   public static <ReqT, RespT> ServerCallHandler<ReqT, RespT> asyncUnaryCall(
       UnaryMethod<ReqT, RespT> method) {
-    return asyncUnaryRequestCall(method);
+    return new UnaryServerCallHandler<>(method);
   }
 
   /**
@@ -58,7 +58,7 @@ public final class ServerCalls {
    */
   public static <ReqT, RespT> ServerCallHandler<ReqT, RespT> asyncServerStreamingCall(
       ServerStreamingMethod<ReqT, RespT> method) {
-    return asyncUnaryRequestCall(method);
+    return new UnaryServerCallHandler<>(method);
   }
 
   /**
@@ -68,7 +68,7 @@ public final class ServerCalls {
    */
   public static <ReqT, RespT> ServerCallHandler<ReqT, RespT> asyncClientStreamingCall(
       ClientStreamingMethod<ReqT, RespT> method) {
-    return asyncStreamingRequestCall(method);
+    return new StreamingServerCallHandler<>(method);
   }
 
   /**
@@ -78,7 +78,7 @@ public final class ServerCalls {
    */
   public static <ReqT, RespT> ServerCallHandler<ReqT, RespT> asyncBidiStreamingCall(
       BidiStreamingMethod<ReqT, RespT> method) {
-    return asyncStreamingRequestCall(method);
+    return new StreamingServerCallHandler<>(method);
   }
 
   /**
@@ -205,16 +205,6 @@ public final class ServerCalls {
     }
   }
 
-  /**
-   * Creates a {@link ServerCallHandler} for a unary request call method of the service.
-   *
-   * @param method an adaptor to the actual method on the service implementation.
-   */
-  private static <ReqT, RespT> ServerCallHandler<ReqT, RespT> asyncUnaryRequestCall(
-      UnaryRequestMethod<ReqT, RespT> method) {
-    return new UnaryServerCallHandler<>(method);
-  }
-
   private static final class StreamingServerCallHandler<ReqT, RespT>
       implements ServerCallHandler<ReqT, RespT> {
 
@@ -291,16 +281,6 @@ public final class ServerCalls {
         }
       }
     }
-  }
-
-  /**
-   * Creates a {@link ServerCallHandler} for a streaming request call method of the service.
-   *
-   * @param method an adaptor to the actual method on the service implementation.
-   */
-  private static <ReqT, RespT> ServerCallHandler<ReqT, RespT> asyncStreamingRequestCall(
-      StreamingRequestMethod<ReqT, RespT> method) {
-    return new StreamingServerCallHandler<>(method);
   }
 
   private interface UnaryRequestMethod<ReqT, RespT> {
