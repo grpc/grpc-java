@@ -87,7 +87,7 @@ final class CachingRlsLbClient {
       "io.grpc.rls.CachingRlsLbClient.enable_oobchannel_directpath";
   @VisibleForTesting
   static boolean enableOobChannelDirectPath =
-      Boolean.parseBoolean(System.getProperty(RLS_ENABLE_OOB_CHANNEL_DIRECTPATH_PROPERTY, "true"));
+      Boolean.parseBoolean(System.getProperty(RLS_ENABLE_OOB_CHANNEL_DIRECTPATH_PROPERTY, "false"));
 
   // All cache status changes (pending, backoff, success) must be under this lock
   private final Object lock = new Object();
