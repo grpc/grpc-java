@@ -16,6 +16,7 @@
 
 package io.grpc.xds.internal.certprovider;
 
+import java.io.Closeable;
 import java.security.PrivateKey;
 import java.security.cert.X509Certificate;
 import java.util.List;
@@ -27,9 +28,9 @@ import java.util.List;
  * <p>We may move this out of the internal package and make this an official API in the future.
  *
  * <p>The plugin fetches certificates - root and optionally identity cert - required by xDS
- * security.  {@link #close()} is called to “shut down” the provider.
+ * security.
  */
-public abstract class CertificateProvider {
+public abstract class CertificateProvider implements Closeable {
 
   /** A watcher is registered via the constructor to receive updates for the certificates. */
   public interface Watcher {
@@ -54,13 +55,10 @@ public abstract class CertificateProvider {
     this.notifyCertUpdates = notifyCertUpdates;
   }
 
-  /**
-   * Called by CertificateProviderStore to ask the plugin to release all resources and stop
-   * cert refreshes and watcher updates. The instance will be released from the store and will be
-   * garbage collected.
-   */
+  /** Releases all resources and stop cert refreshes and watcher updates. */
+  @Override
   public abstract void close();
 
-  protected Watcher watcher;
-  protected boolean notifyCertUpdates;
+  protected final Watcher watcher;
+  protected final boolean notifyCertUpdates;
 }
