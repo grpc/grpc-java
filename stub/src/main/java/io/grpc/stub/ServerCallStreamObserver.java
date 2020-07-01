@@ -34,7 +34,7 @@ public abstract class ServerCallStreamObserver<V> extends CallStreamObserver<V> 
   /**
    * Returns {@code true} when the call is cancelled and the server is encouraged to abort
    * processing to save resources, since the client will not be processing any further methods.
-   * Cancellations can be caused by timeouts, explicit cancel by client, network errors, and
+   * Cancellations can be caused by timeouts, explicit cancellation by client, network errors, and
    * similar.
    *
    * <p>This method may safely be called concurrently from multiple threads.
@@ -42,7 +42,7 @@ public abstract class ServerCallStreamObserver<V> extends CallStreamObserver<V> 
   public abstract boolean isCancelled();
 
   /**
-   * Set a {@link Runnable} to be called if the call is cancelled and the server is encouraged to
+   * Sets a {@link Runnable} to be called if the call is cancelled and the server is encouraged to
    * abort processing to save resources, since the client will not process any further messages.
    * Cancellations can be caused by timeouts, explicit cancellation by the client, network errors,
    * etc.
