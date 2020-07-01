@@ -309,7 +309,7 @@ public class XdsClientImplTestForListener {
     // Client sends an LDS request with null in lds resource name
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "",
-            XdsClientImpl.ADS_TYPE_URL_LDS_v2, "")));
+            XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
     assertThat(fakeClock.getPendingTasks(LISTENER_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
 
     List<Any> listeners = ImmutableList.of(
@@ -332,13 +332,13 @@ public class XdsClientImplTestForListener {
                                 "cluster-baz.googleapis.com"))))
                 .build()))));
     DiscoveryResponse response =
-        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_v2, "0000");
+        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000");
     responseObserver.onNext(response);
 
     // Client sends an ACK LDS request.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "0",
-            XdsClientImpl.ADS_TYPE_URL_LDS_v2, "0000")));
+            XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000")));
 
     verify(listenerWatcher, never()).onListenerChanged(any(ListenerUpdate.class));
     verify(listenerWatcher, never()).onResourceDoesNotExist(":" + PORT);
@@ -358,7 +358,7 @@ public class XdsClientImplTestForListener {
     // Client sends an LDS request with null in lds resource name
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "",
-            XdsClientImpl.ADS_TYPE_URL_LDS_v2, "")));
+            XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
     assertThat(fakeClock.getPendingTasks(LISTENER_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
 
     final FilterChain filterChainOutbound = buildFilterChain(buildFilterChainMatch(8000), null);
@@ -384,13 +384,13 @@ public class XdsClientImplTestForListener {
             filterChainInbound
         )));
     DiscoveryResponse response =
-        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_v2, "0000");
+        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000");
     responseObserver.onNext(response);
 
     // Client sends an ACK LDS request.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "0",
-            XdsClientImpl.ADS_TYPE_URL_LDS_v2, "0000")));
+            XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000")));
 
     verify(listenerWatcher, never()).onListenerChanged(any(ListenerUpdate.class));
     verify(listenerWatcher, never()).onResourceDoesNotExist(":" + PORT);
@@ -410,7 +410,7 @@ public class XdsClientImplTestForListener {
     // Client sends an LDS request with null in lds resource name
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "",
-            XdsClientImpl.ADS_TYPE_URL_LDS_v2, "")));
+            XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
     assertThat(fakeClock.getPendingTasks(LISTENER_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
 
     final FilterChain filterChainOutbound = buildFilterChain(buildFilterChainMatch(8000), null);
@@ -436,13 +436,13 @@ public class XdsClientImplTestForListener {
             filterChainInbound
         )));
     DiscoveryResponse response =
-        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_v2, "0000");
+        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000");
     responseObserver.onNext(response);
 
     // Client sends an ACK LDS request.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "0",
-            XdsClientImpl.ADS_TYPE_URL_LDS_v2, "0000")));
+            XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000")));
 
     ArgumentCaptor<ListenerUpdate> listenerUpdateCaptor = ArgumentCaptor.forClass(null);
     verify(listenerWatcher, times(1)).onListenerChanged(listenerUpdateCaptor.capture());
@@ -485,7 +485,7 @@ public class XdsClientImplTestForListener {
     // Client sends an LDS request with null in lds resource name
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "",
-            XdsClientImpl.ADS_TYPE_URL_LDS_v2, "")));
+            XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
     assertThat(fakeClock.getPendingTasks(LISTENER_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
 
     final FilterChain filterChainOutbound = buildFilterChain(buildFilterChainMatch(8000), null);
@@ -511,13 +511,13 @@ public class XdsClientImplTestForListener {
             filterChainInbound
         )));
     DiscoveryResponse response =
-        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_v2, "0000");
+        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000");
     responseObserver.onNext(response);
 
     // Client sends an ACK LDS request.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "0",
-            XdsClientImpl.ADS_TYPE_URL_LDS_v2, "0000")));
+            XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000")));
 
     ArgumentCaptor<ListenerUpdate> listenerUpdateCaptor = ArgumentCaptor.forClass(null);
     verify(listenerWatcher, times(1)).onListenerChanged(listenerUpdateCaptor.capture());
@@ -534,13 +534,13 @@ public class XdsClientImplTestForListener {
             filterChainNewInbound
         )));
     DiscoveryResponse response1 =
-        buildDiscoveryResponse("1", listeners1, XdsClientImpl.ADS_TYPE_URL_LDS_v2, "0001");
+        buildDiscoveryResponse("1", listeners1, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0001");
     responseObserver.onNext(response1);
 
     // Client sends an ACK LDS request.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "1",
-            XdsClientImpl.ADS_TYPE_URL_LDS_v2, "0001")));
+            XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0001")));
 
     // Updated listener is notified to config watcher.
     listenerUpdateCaptor = ArgumentCaptor.forClass(null);
@@ -581,7 +581,7 @@ public class XdsClientImplTestForListener {
     // Client sends an LDS request with null in lds resource name
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "",
-            XdsClientImpl.ADS_TYPE_URL_LDS_v2, "")));
+            XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
     assertThat(fakeClock.getPendingTasks(LISTENER_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
 
     final FilterChain filterChainInbound = buildFilterChain(buildFilterChainMatch(8000), null);
@@ -607,13 +607,13 @@ public class XdsClientImplTestForListener {
             filterChainOutbound
         )));
     DiscoveryResponse response =
-        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_v2, "0000");
+        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000");
     responseObserver.onNext(response);
 
     // Client sends an ACK LDS request.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "0",
-            XdsClientImpl.ADS_TYPE_URL_LDS_v2, "0000")));
+            XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000")));
 
     verify(listenerWatcher, never()).onError(any(Status.class));
     verify(listenerWatcher, never()).onListenerChanged(any(ListenerUpdate.class));
@@ -629,7 +629,7 @@ public class XdsClientImplTestForListener {
     // Client sends an LDS request with null in lds resource name
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "",
-            XdsClientImpl.ADS_TYPE_URL_LDS_v2, "")));
+            XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
     assertThat(fakeClock.getPendingTasks(LISTENER_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
 
     final FilterChain filterChainInbound = buildFilterChain(buildFilterChainMatch(8000), null);
@@ -656,13 +656,13 @@ public class XdsClientImplTestForListener {
             filterChainOutbound
         )));
     DiscoveryResponse response =
-        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_v2, "0000");
+        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000");
     responseObserver.onNext(response);
 
     // Client sends an ACK LDS request.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "0",
-            XdsClientImpl.ADS_TYPE_URL_LDS_v2, "0000")));
+            XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000")));
 
     verify(listenerWatcher, never()).onListenerChanged(any(ListenerUpdate.class));
     verify(listenerWatcher, never()).onResourceDoesNotExist(":" + PORT);
@@ -691,7 +691,7 @@ public class XdsClientImplTestForListener {
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "",
-            XdsClientImpl.ADS_TYPE_URL_LDS_v2, "")));
+            XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
 
     final FilterChain filterChainOutbound = buildFilterChain(buildFilterChainMatch(8000), null);
     final FilterChain filterChainInbound = buildFilterChain(buildFilterChainMatch(PORT,
@@ -707,7 +707,7 @@ public class XdsClientImplTestForListener {
             filterChainInbound
         )));
     DiscoveryResponse response =
-        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_v2, "0000");
+        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000");
     responseObserver.onNext(response);
 
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
@@ -728,7 +728,7 @@ public class XdsClientImplTestForListener {
     // Retry resumes requests for all wanted resources.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "",
-            XdsClientImpl.ADS_TYPE_URL_LDS_v2, "")));
+            XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
 
     // Management server becomes unreachable.
     responseObserver.onError(Status.UNAVAILABLE.asException());
@@ -747,7 +747,7 @@ public class XdsClientImplTestForListener {
     requestObserver = requestObservers.poll();
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "",
-            XdsClientImpl.ADS_TYPE_URL_LDS_v2, "")));
+            XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
 
     // Management server is still not reachable.
     responseObserver.onError(Status.UNAVAILABLE.asException());
@@ -766,11 +766,11 @@ public class XdsClientImplTestForListener {
     requestObserver = requestObservers.poll();
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "",
-            XdsClientImpl.ADS_TYPE_URL_LDS_v2, "")));
+            XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
 
     // Management server sends back a LDS response.
     response = buildDiscoveryResponse("1", listeners,
-        XdsClientImpl.ADS_TYPE_URL_LDS_v2, "0001");
+        XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0001");
     responseObserver.onNext(response);
 
     // Client sent an LDS ACK request (Omitted).
@@ -789,7 +789,7 @@ public class XdsClientImplTestForListener {
 
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "",
-            XdsClientImpl.ADS_TYPE_URL_LDS_v2, "")));
+            XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
 
     // Management server becomes unreachable again.
     responseObserver.onError(Status.UNAVAILABLE.asException());
@@ -807,7 +807,7 @@ public class XdsClientImplTestForListener {
     requestObserver = requestObservers.poll();
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "",
-            XdsClientImpl.ADS_TYPE_URL_LDS_v2, "")));
+            XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
 
     verifyNoMoreInteractions(mockedDiscoveryService, backoffPolicyProvider, backoffPolicy1,
         backoffPolicy2);

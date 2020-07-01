@@ -86,7 +86,7 @@ final class XdsClientImpl extends XdsClient {
   static final int INITIAL_RESOURCE_FETCH_TIMEOUT_SEC = 15;
 
   @VisibleForTesting
-  static final String ADS_TYPE_URL_LDS_v2 = "type.googleapis.com/envoy.api.v2.Listener";
+  static final String ADS_TYPE_URL_LDS_V2 = "type.googleapis.com/envoy.api.v2.Listener";
   private static final String ADS_TYPE_URL_LDS =
       "type.googleapis.com/envoy.config.listener.v3.Listener";
   @VisibleForTesting
@@ -265,7 +265,7 @@ final class XdsClientImpl extends XdsClient {
     if (adsStream == null) {
       startRpcStream();
     }
-    adsStream.sendXdsRequest(ADS_TYPE_URL_LDS_v2, ImmutableList.of(ldsResourceName));
+    adsStream.sendXdsRequest(ADS_TYPE_URL_LDS_V2, ImmutableList.of(ldsResourceName));
     ldsRespTimer =
         syncContext
             .schedule(
@@ -440,7 +440,7 @@ final class XdsClientImpl extends XdsClient {
       startRpcStream();
     }
     updateNodeMetadataForListenerRequest(port);
-    adsStream.sendXdsRequest(ADS_TYPE_URL_LDS_v2, ImmutableList.<String>of());
+    adsStream.sendXdsRequest(ADS_TYPE_URL_LDS_V2, ImmutableList.<String>of());
     ldsRespTimer =
         syncContext
             .schedule(
@@ -555,7 +555,7 @@ final class XdsClientImpl extends XdsClient {
     List<String> listenerNames = new ArrayList<>(ldsResponse.getResourcesCount());
     try {
       for (com.google.protobuf.Any res : ldsResponse.getResourcesList()) {
-        if (res.getTypeUrl().equals(ADS_TYPE_URL_LDS_v2)) {
+        if (res.getTypeUrl().equals(ADS_TYPE_URL_LDS_V2)) {
           res = res.toBuilder().setTypeUrl(ADS_TYPE_URL_LDS).build();
         }
         Listener listener = res.unpack(Listener.class);
@@ -565,7 +565,7 @@ final class XdsClientImpl extends XdsClient {
     } catch (InvalidProtocolBufferException e) {
       logger.log(XdsLogLevel.WARNING, "Failed to unpack Listeners in LDS response {0}", e);
       adsStream.sendNackRequest(
-          ADS_TYPE_URL_LDS_v2, ImmutableList.of(ldsResourceName),
+          ADS_TYPE_URL_LDS_V2, ImmutableList.of(ldsResourceName),
           ldsResponse.getVersionInfo(), "Malformed LDS response: " + e);
       return;
     }
@@ -586,7 +586,7 @@ final class XdsClientImpl extends XdsClient {
           XdsLogLevel.WARNING,
           "Failed to unpack HttpConnectionManagers in Listeners of LDS response {0}", e);
       adsStream.sendNackRequest(
-          ADS_TYPE_URL_LDS_v2, ImmutableList.of(ldsResourceName),
+          ADS_TYPE_URL_LDS_V2, ImmutableList.of(ldsResourceName),
           ldsResponse.getVersionInfo(), "Malformed LDS response: " + e);
       return;
     }
@@ -632,11 +632,11 @@ final class XdsClientImpl extends XdsClient {
 
     if (errorMessage != null) {
       adsStream.sendNackRequest(
-          ADS_TYPE_URL_LDS_v2, ImmutableList.of(ldsResourceName),
+          ADS_TYPE_URL_LDS_V2, ImmutableList.of(ldsResourceName),
           ldsResponse.getVersionInfo(), errorMessage);
       return;
     }
-    adsStream.sendAckRequest(ADS_TYPE_URL_LDS_v2, ImmutableList.of(ldsResourceName),
+    adsStream.sendAckRequest(ADS_TYPE_URL_LDS_V2, ImmutableList.of(ldsResourceName),
         ldsResponse.getVersionInfo());
 
     if (routes != null || rdsRouteConfigName != null) {
@@ -686,7 +686,7 @@ final class XdsClientImpl extends XdsClient {
     logger.log(XdsLogLevel.DEBUG, "Listener count: {0}", ldsResponse.getResourcesCount());
     try {
       for (com.google.protobuf.Any res : ldsResponse.getResourcesList()) {
-        if (res.getTypeUrl().equals(ADS_TYPE_URL_LDS_v2)) {
+        if (res.getTypeUrl().equals(ADS_TYPE_URL_LDS_V2)) {
           res = res.toBuilder().setTypeUrl(ADS_TYPE_URL_LDS).build();
         }
         Listener listener = res.unpack(Listener.class);
@@ -699,7 +699,7 @@ final class XdsClientImpl extends XdsClient {
     } catch (InvalidProtocolBufferException e) {
       logger.log(XdsLogLevel.WARNING, "Failed to unpack Listeners in LDS response {0}", e);
       adsStream.sendNackRequest(
-          ADS_TYPE_URL_LDS_v2, ImmutableList.<String>of(),
+          ADS_TYPE_URL_LDS_V2, ImmutableList.<String>of(),
           ldsResponse.getVersionInfo(), "Malformed LDS response: " + e);
       return;
     }
@@ -716,7 +716,7 @@ final class XdsClientImpl extends XdsClient {
       } catch (InvalidProtocolBufferException e) {
         logger.log(XdsLogLevel.WARNING, "Failed to unpack Listener in LDS response {0}", e);
         adsStream.sendNackRequest(
-            ADS_TYPE_URL_LDS_v2, ImmutableList.<String>of(),
+            ADS_TYPE_URL_LDS_V2, ImmutableList.<String>of(),
             ldsResponse.getVersionInfo(), "Malformed LDS response: " + e);
         return;
       }
@@ -725,7 +725,7 @@ final class XdsClientImpl extends XdsClient {
         listenerWatcher.onResourceDoesNotExist(":" + listenerPort);
       }
     }
-    adsStream.sendAckRequest(ADS_TYPE_URL_LDS_v2, ImmutableList.<String>of(),
+    adsStream.sendAckRequest(ADS_TYPE_URL_LDS_V2, ImmutableList.<String>of(),
         ldsResponse.getVersionInfo());
     if (listenerUpdate != null) {
       listenerWatcher.onListenerChanged(listenerUpdate);
@@ -1228,7 +1228,7 @@ final class XdsClientImpl extends XdsClient {
     public void run() {
       startRpcStream();
       if (configWatcher != null) {
-        adsStream.sendXdsRequest(ADS_TYPE_URL_LDS_v2, ImmutableList.of(ldsResourceName));
+        adsStream.sendXdsRequest(ADS_TYPE_URL_LDS_V2, ImmutableList.of(ldsResourceName));
         ldsRespTimer =
             syncContext
                 .schedule(
@@ -1236,7 +1236,7 @@ final class XdsClientImpl extends XdsClient {
                     INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS, timeService);
       }
       if (listenerWatcher != null) {
-        adsStream.sendXdsRequest(ADS_TYPE_URL_LDS_v2, ImmutableList.<String>of());
+        adsStream.sendXdsRequest(ADS_TYPE_URL_LDS_V2, ImmutableList.<String>of());
         ldsRespTimer =
             syncContext
                 .schedule(
@@ -1324,7 +1324,7 @@ final class XdsClientImpl extends XdsClient {
           // used for management server to identify which response the client is ACKing/NACking.
           // To avoid confusion, client-initiated requests will always use the nonce in
           // most recently received responses of each resource type.
-          if (typeUrl.equals(ADS_TYPE_URL_LDS_v2) || typeUrl.equals(ADS_TYPE_URL_LDS)) {
+          if (typeUrl.equals(ADS_TYPE_URL_LDS_V2) || typeUrl.equals(ADS_TYPE_URL_LDS)) {
             ldsRespNonce = response.getNonce();
             handleLdsResponse(response);
           } else if (typeUrl.equals(ADS_TYPE_URL_RDS)) {
@@ -1437,7 +1437,7 @@ final class XdsClientImpl extends XdsClient {
       checkState(requestWriter != null, "ADS stream has not been started");
       String version = "";
       String nonce = "";
-      if (typeUrl.equals(ADS_TYPE_URL_LDS_v2)) {
+      if (typeUrl.equals(ADS_TYPE_URL_LDS_V2)) {
         version = ldsVersion;
         nonce = ldsRespNonce;
         logger.log(XdsLogLevel.INFO, "Sending LDS request for resources: {0}", resourceNames);
@@ -1478,7 +1478,7 @@ final class XdsClientImpl extends XdsClient {
         String versionInfo) {
       checkState(requestWriter != null, "ADS stream has not been started");
       String nonce = "";
-      if (typeUrl.equals(ADS_TYPE_URL_LDS_v2)) {
+      if (typeUrl.equals(ADS_TYPE_URL_LDS_V2)) {
         ldsVersion = versionInfo;
         nonce = ldsRespNonce;
       } else if (typeUrl.equals(ADS_TYPE_URL_RDS)) {
@@ -1513,7 +1513,7 @@ final class XdsClientImpl extends XdsClient {
       checkState(requestWriter != null, "ADS stream has not been started");
       String versionInfo = "";
       String nonce = "";
-      if (typeUrl.equals(ADS_TYPE_URL_LDS_v2)) {
+      if (typeUrl.equals(ADS_TYPE_URL_LDS_V2)) {
         versionInfo = ldsVersion;
         nonce = ldsRespNonce;
         logger.log(

@@ -66,12 +66,12 @@ public class CommonTlsContextTestsUtil {
     return sdsSecretConfig;
   }
 
-  private static io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.SdsSecretConfig
+  private static SdsSecretConfig
       buildSdsSecretConfig(String name, String targetUri, String channelType) {
-    io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.SdsSecretConfig sdsSecretConfig = null;
+    SdsSecretConfig sdsSecretConfig = null;
     if (!Strings.isNullOrEmpty(name) && !Strings.isNullOrEmpty(targetUri)) {
       sdsSecretConfig =
-          io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.SdsSecretConfig.newBuilder()
+          SdsSecretConfig.newBuilder()
               .setName(name)
               .setSdsConfig(buildConfigSource(targetUri, channelType))
               .build();
@@ -111,8 +111,7 @@ public class CommonTlsContextTestsUtil {
    *
    * @param channelType specifying "inproc" creates an Inprocess channel for testing.
    */
-  private static io.envoyproxy.envoy.config.core.v3.ConfigSource buildConfigSource(
-      String targetUri, String channelType) {
+  private static ConfigSource buildConfigSource(String targetUri, String channelType) {
     GrpcService.GoogleGrpc.Builder googleGrpcBuilder =
         GrpcService.GoogleGrpc.newBuilder().setTargetUri(targetUri);
     if (channelType != null) {
