@@ -36,12 +36,12 @@ import javax.annotation.concurrent.ThreadSafe;
  * @param <V> Value type for the map - it should be a {@link Closeable}
  */
 @ThreadSafe
-final class ReferenceCountingMap<K, V extends Closeable> {
+public final class ReferenceCountingMap<K, V extends Closeable> {
 
   private final Map<K, Instance<V>> instances = new HashMap<>();
   private final ValueFactory<K, V> valueFactory;
 
-  ReferenceCountingMap(ValueFactory<K, V> valueFactory) {
+  public ReferenceCountingMap(ValueFactory<K, V> valueFactory) {
     checkNotNull(valueFactory, "valueFactory");
     this.valueFactory = valueFactory;
   }

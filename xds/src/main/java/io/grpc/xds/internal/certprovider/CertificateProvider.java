@@ -17,7 +17,7 @@
 package io.grpc.xds.internal.certprovider;
 
 import io.grpc.Status;
-import java.io.Closeable;
+import io.grpc.xds.internal.sds.Closeable;
 import java.security.PrivateKey;
 import java.security.cert.X509Certificate;
 import java.util.List;
@@ -62,4 +62,12 @@ public abstract class CertificateProvider implements Closeable {
 
   protected final Watcher watcher;
   protected final boolean notifyCertUpdates;
+
+  public Watcher getWatcher() {
+    return watcher;
+  }
+
+  public boolean isNotifyCertUpdates() {
+    return notifyCertUpdates;
+  }
 }

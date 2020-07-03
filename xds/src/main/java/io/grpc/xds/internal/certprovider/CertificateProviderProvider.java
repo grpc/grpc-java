@@ -32,7 +32,10 @@ interface CertificateProviderProvider {
    * @param config configuration needed by the Provider to create the CertificateProvider. A form of
    *     JSON that the Provider understands e.g. a string or a key-value Map.
    * @param watcher A {@link Watcher} to receive updates from the CertificateProvider
-   * @param notifyCertUpdates See {@link CertificateProvider#CertificateProvider(Watcher, boolean)}
+   * @param notifyCertUpdates See {@link CertificateProvider#CertificateProvider(Watcher, boolean)}.
+   * @throws IllegalArgumentException in case of errors in processing config.
+   * @throws UnsupportedOperationException if the plugin is incapable of sending cert
+   *     updates when notifyCertUpdates is true.
    */
   CertificateProvider createCertificateProvider(
       Object config, Watcher watcher, boolean notifyCertUpdates);
