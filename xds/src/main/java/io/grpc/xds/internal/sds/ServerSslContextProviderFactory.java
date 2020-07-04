@@ -21,17 +21,17 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.grpc.xds.Bootstrapper;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
-import io.grpc.xds.internal.sds.ReferenceCountingSslContextProviderMap.SslContextProviderFactory;
+import io.grpc.xds.internal.sds.ReferenceCountingMap.ValueFactory;
 import java.io.IOException;
 import java.util.concurrent.Executors;
 
 /** Factory to create server-side SslContextProvider from DownstreamTlsContext. */
 final class ServerSslContextProviderFactory
-    implements SslContextProviderFactory<DownstreamTlsContext> {
+    implements ValueFactory<DownstreamTlsContext, SslContextProvider> {
 
   /** Creates a SslContextProvider from the given DownstreamTlsContext. */
   @Override
-  public SslContextProvider createSslContextProvider(
+  public SslContextProvider create(
       DownstreamTlsContext downstreamTlsContext) {
     checkNotNull(downstreamTlsContext, "downstreamTlsContext");
     checkNotNull(
