@@ -93,6 +93,7 @@ public abstract class SslContextProvider implements Closeable {
   }
 
   /** Closes this provider and releases any resources. */
+  @Override
   public void close() {}
 
   /**
