@@ -104,7 +104,8 @@ public class XdsSdsClientServerTest {
   public void plaintextClientServer_withDefaultTlsContext() throws IOException, URISyntaxException {
     DownstreamTlsContext defaultTlsContext =
         EnvoyServerProtoData.DownstreamTlsContext.fromEnvoyProtoDownstreamTlsContext(
-            io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext.getDefaultInstance());
+            io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
+                .getDefaultInstance());
     buildServerWithTlsContext(/* downstreamTlsContext= */ defaultTlsContext);
 
     SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =

@@ -20,7 +20,8 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Ascii;
-import io.envoyproxy.envoy.api.v2.auth.CertificateValidationContext;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
+import io.envoyproxy.envoy.type.matcher.v3.StringMatcher;
 import java.net.Socket;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateParsingException;
@@ -199,6 +200,7 @@ final class SdsX509TrustManager extends X509ExtendedTrustManager implements X509
   }
 
   // logic from Envoy::Extensions::TransportSockets::Tls::ContextImpl::verifySubjectAltName
+  @SuppressWarnings("UnusedMethod") // TODO(#7166): support StringMatcher list.
   private static void verifySubjectAltNameInLeaf(X509Certificate cert, List<String> verifyList)
       throws CertificateException {
     Collection<List<?>> names = cert.getSubjectAlternativeNames();
@@ -223,7 +225,7 @@ final class SdsX509TrustManager extends X509ExtendedTrustManager implements X509
     if (certContext == null) {
       return;
     }
-    List<String> verifyList = certContext.getVerifySubjectAltNameList();
+    List<StringMatcher> verifyList = certContext.getMatchSubjectAltNamesList();
     if (verifyList.isEmpty()) {
       return;
     }
@@ -231,7 +233,9 @@ final class SdsX509TrustManager extends X509ExtendedTrustManager implements X509
       throw new CertificateException("Peer certificate(s) missing");
     }
     // verify SANs only in the top cert (leaf cert)
-    verifySubjectAltNameInLeaf(peerCertChain[0], verifyList);
+    // v2 version: verifySubjectAltNameInLeaf(peerCertChain[0], verifyList);
+    // TODO(#7166): Implement v3 version.
+    throw new UnsupportedOperationException();
   }
 
   @Override

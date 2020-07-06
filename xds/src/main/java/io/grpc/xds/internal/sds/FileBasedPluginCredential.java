@@ -27,6 +27,7 @@ import com.google.protobuf.Value;
 // TODO(sanjaypujare): remove dependency on envoy data types.
 import io.envoyproxy.envoy.api.v2.core.DataSource;
 import io.envoyproxy.envoy.api.v2.core.GrpcService.GoogleGrpc.CallCredentials.MetadataCredentialsFromPlugin;
+import io.envoyproxy.envoy.config.core.v3.GrpcService.GoogleGrpc;
 import io.grpc.CallCredentials;
 import io.grpc.Metadata;
 import io.grpc.Status;
@@ -75,6 +76,19 @@ final class FileBasedPluginCredential extends CallCredentials {
     Value value = configStruct.getFieldsOrThrow(SECRET_DATA);
     checkState(value.hasStructValue(), "expected struct value for %s", SECRET_DATA);
     secretData = buildDataSourceFromConfigStruct(value.getStructValue());
+  }
+
+  FileBasedPluginCredential(
+      GoogleGrpc.CallCredentials.MetadataCredentialsFromPlugin metadataCredentialsFromPlugin) {
+    checkNotNull(metadataCredentialsFromPlugin, "metadataCredentialsFromPlugin");
+    checkArgument(
+        PLUGIN_NAME.equals(metadataCredentialsFromPlugin.getName()),
+        "plugin name should be %s", PLUGIN_NAME);
+
+    // FIXME(#7166): real implementation
+    headerKey = DEFAULT_HEADER_KEY;
+    headerPrefix = "";
+    secretData = null;
   }
 
   private static DataSource buildDataSourceFromConfigStruct(Struct secretValueStruct) {

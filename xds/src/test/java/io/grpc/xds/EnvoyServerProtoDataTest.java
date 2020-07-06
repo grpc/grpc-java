@@ -21,15 +21,15 @@ import static com.google.common.truth.Truth.assertThat;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.UInt32Value;
-import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
-import io.envoyproxy.envoy.api.v2.auth.SdsSecretConfig;
-import io.envoyproxy.envoy.api.v2.core.Address;
-import io.envoyproxy.envoy.api.v2.core.CidrRange;
-import io.envoyproxy.envoy.api.v2.core.SocketAddress;
-import io.envoyproxy.envoy.api.v2.core.TransportSocket;
-import io.envoyproxy.envoy.api.v2.listener.Filter;
-import io.envoyproxy.envoy.api.v2.listener.FilterChain;
-import io.envoyproxy.envoy.api.v2.listener.FilterChainMatch;
+import io.envoyproxy.envoy.config.core.v3.Address;
+import io.envoyproxy.envoy.config.core.v3.CidrRange;
+import io.envoyproxy.envoy.config.core.v3.SocketAddress;
+import io.envoyproxy.envoy.config.core.v3.TransportSocket;
+import io.envoyproxy.envoy.config.listener.v3.Filter;
+import io.envoyproxy.envoy.config.listener.v3.FilterChain;
+import io.envoyproxy.envoy.config.listener.v3.FilterChainMatch;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.SdsSecretConfig;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.Listener;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
@@ -51,8 +51,8 @@ public class EnvoyServerProtoDataTest {
             .setSocketAddress(
                 SocketAddress.newBuilder().setPortValue(8000).setAddress("10.2.1.34").build())
             .build();
-    io.envoyproxy.envoy.api.v2.Listener listener =
-        io.envoyproxy.envoy.api.v2.Listener.newBuilder()
+    io.envoyproxy.envoy.config.listener.v3.Listener listener =
+        io.envoyproxy.envoy.config.listener.v3.Listener.newBuilder()
             .setName("8000")
             .setAddress(address)
             .addFilterChains(createOutFilter())
@@ -73,8 +73,7 @@ public class EnvoyServerProtoDataTest {
     assertThat(outFilterChainMatch.getApplicationProtocols()).isEmpty();
     assertThat(outFilterChainMatch.getPrefixRanges()).isEmpty();
     assertThat(outFilter.getDownstreamTlsContext())
-        .isEqualTo(DownstreamTlsContext.fromEnvoyProtoDownstreamTlsContext(
-                io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext.getDefaultInstance()));
+        .isNull();
 
     EnvoyServerProtoData.FilterChain inFilter = filterChains.get(1);
     assertThat(inFilter).isNotNull();
@@ -84,33 +83,6 @@ public class EnvoyServerProtoDataTest {
     assertThat(inFilterChainMatch.getApplicationProtocols()).containsExactly("managed-mtls");
     assertThat(inFilterChainMatch.getPrefixRanges()).containsExactly(
         new EnvoyServerProtoData.CidrRange("10.20.0.15", 32));
-    DownstreamTlsContext inFilterTlsContext = inFilter.getDownstreamTlsContext();
-    assertThat(inFilterTlsContext.getCommonTlsContext()).isNotNull();
-    CommonTlsContext commonTlsContext = inFilterTlsContext.getCommonTlsContext();
-    List<SdsSecretConfig> tlsCertSdsConfigs = commonTlsContext
-        .getTlsCertificateSdsSecretConfigsList();
-    assertThat(tlsCertSdsConfigs).hasSize(1);
-    assertThat(tlsCertSdsConfigs.get(0).getName()).isEqualTo("google-sds-config-default");
-  }
-
-  // TODO(sanjaypujare): remove when we move to envoy protos v3
-  @Test
-  public void listener_convertFromDeprecatedListenerProto() throws InvalidProtocolBufferException {
-    Address address =
-        Address.newBuilder()
-            .setSocketAddress(
-                SocketAddress.newBuilder().setPortValue(8000).setAddress("10.2.1.34").build())
-            .build();
-    io.envoyproxy.envoy.api.v2.Listener listener =
-        io.envoyproxy.envoy.api.v2.Listener.newBuilder()
-            .setName("8000")
-            .setAddress(address)
-            .addFilterChains(createDeprecatedInFilter())
-            .build();
-    Listener xdsListener = Listener.fromEnvoyProtoListener(listener);
-    List<EnvoyServerProtoData.FilterChain> filterChains = xdsListener.getFilterChains();
-    assertThat(filterChains).hasSize(1);
-    EnvoyServerProtoData.FilterChain inFilter = filterChains.get(0);
     DownstreamTlsContext inFilterTlsContext = inFilter.getDownstreamTlsContext();
     assertThat(inFilterTlsContext.getCommonTlsContext()).isNotNull();
     CommonTlsContext commonTlsContext = inFilterTlsContext.getCommonTlsContext();
@@ -147,33 +119,10 @@ public class EnvoyServerProtoDataTest {
                     .addApplicationProtocols("managed-mtls")
                     .build())
             .setTransportSocket(TransportSocket.newBuilder().setName("tls")
-                .setTypedConfig(Any.pack(CommonTlsContextTestsUtil.buildTestDownstreamTlsContext()))
+                .setTypedConfig(
+                    Any.pack(CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
+                        "google-sds-config-default", "ROOTCA")))
                 .build())
-            .addFilters(Filter.newBuilder()
-                .setName("envoy.http_connection_manager")
-                .setTypedConfig(Any.newBuilder()
-                    .setTypeUrl(
-                        "type.googleapis.com/envoy.config.filter.network.http_connection_manager"
-                            + ".v2.HttpConnectionManager"))
-                .build())
-            .build();
-    return filterChain;
-  }
-
-  // TODO(sanjaypujare): remove when we move to envoy protos v3
-  @SuppressWarnings("deprecation")
-  private static FilterChain createDeprecatedInFilter() {
-    FilterChain filterChain =
-        FilterChain.newBuilder()
-            .setFilterChainMatch(
-                FilterChainMatch.newBuilder()
-                    .setDestinationPort(UInt32Value.of(8000))
-                    .addPrefixRanges(CidrRange.newBuilder()
-                        .setAddressPrefix("10.20.0.15")
-                        .setPrefixLen(UInt32Value.of(32)).build())
-                    .addApplicationProtocols("managed-mtls")
-                    .build())
-            .setTlsContext(CommonTlsContextTestsUtil.buildTestDownstreamTlsContext())
             .addFilters(Filter.newBuilder()
                 .setName("envoy.http_connection_manager")
                 .setTypedConfig(Any.newBuilder()

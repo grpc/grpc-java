@@ -21,8 +21,8 @@ import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
-import io.envoyproxy.envoy.api.v2.auth.CertificateValidationContext;
-import io.envoyproxy.envoy.api.v2.core.DataSource.SpecifierCase;
+import io.envoyproxy.envoy.config.core.v3.DataSource.SpecifierCase;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.grpc.xds.internal.sds.TlsContextManagerImpl;
 import io.netty.handler.ssl.util.SimpleTrustManagerFactory;
 import java.io.File;

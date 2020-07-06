@@ -150,31 +150,6 @@ class XdsClientTestHelper {
     return clusterBuilder.build();
   }
 
-  // TODO(sanjaypujare): remove once we move to envoy proto v3
-  @SuppressWarnings("deprecation")
-  static Cluster buildDeprecatedSecureCluster(String clusterName, @Nullable String edsServiceName,
-      boolean enableLrs, @Nullable UpstreamTlsContext upstreamTlsContext) {
-    Cluster.Builder clusterBuilder = Cluster.newBuilder();
-    clusterBuilder.setName(clusterName);
-    clusterBuilder.setType(DiscoveryType.EDS);
-    EdsClusterConfig.Builder edsClusterConfigBuilder = EdsClusterConfig.newBuilder();
-    edsClusterConfigBuilder.setEdsConfig(
-        ConfigSource.newBuilder().setAds(AggregatedConfigSource.getDefaultInstance()));
-    if (edsServiceName != null) {
-      edsClusterConfigBuilder.setServiceName(edsServiceName);
-    }
-    clusterBuilder.setEdsClusterConfig(edsClusterConfigBuilder);
-    clusterBuilder.setLbPolicy(LbPolicy.ROUND_ROBIN);
-    if (enableLrs) {
-      clusterBuilder.setLrsServer(
-          ConfigSource.newBuilder().setSelf(SelfConfigSource.getDefaultInstance()));
-    }
-    if (upstreamTlsContext != null) {
-      clusterBuilder.setTlsContext(upstreamTlsContext);
-    }
-    return clusterBuilder.build();
-  }
-
   @SuppressWarnings("deprecation")
   static ClusterLoadAssignment buildClusterLoadAssignment(String clusterName,
       List<io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints> localityLbEndpoints,

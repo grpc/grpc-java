@@ -399,7 +399,7 @@ public class XdsNameResolverIntegrationTest {
     List<Any> listeners =
         ImmutableList.of(Any.pack(buildListener(AUTHORITY, Any.pack(httpConnectionManager))));
     responseObserver.onNext(
-        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS,  "0000"));
+        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2,  "0000"));
 
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
@@ -551,7 +551,7 @@ public class XdsNameResolverIntegrationTest {
                                     ImmutableList.of(host), // exact match
                                     clusterName))))
                     .build()))));
-    return buildDiscoveryResponse(versionInfo, listeners, XdsClientImpl.ADS_TYPE_URL_LDS, nonce);
+    return buildDiscoveryResponse(versionInfo, listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, nonce);
   }
 
   /**
@@ -573,7 +573,7 @@ public class XdsNameResolverIntegrationTest {
         Any.pack(
             buildListener(
                 host, Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build()))));
-    return buildDiscoveryResponse(versionInfo, listeners, XdsClientImpl.ADS_TYPE_URL_LDS, nonce);
+    return buildDiscoveryResponse(versionInfo, listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, nonce);
   }
 
   /**
