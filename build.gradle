@@ -41,6 +41,12 @@ subprojects {
         }
     }
 
+    tasks.withType(GenerateModuleMetadata) {
+        // Module metadata, introduced in Gradle 6.0, conflicts with our publishing task for
+        // grpc-alts and grpc-compiler.
+        enabled = false
+    }
+
     def isAndroid = project.name in [
             'grpc-android', 'grpc-android-interop-testing', 'grpc-cronet']
 
