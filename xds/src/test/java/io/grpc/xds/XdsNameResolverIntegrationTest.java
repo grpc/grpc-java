@@ -482,7 +482,7 @@ public class XdsNameResolverIntegrationTest {
                     buildVirtualHostForRoutes(
                         AUTHORITY, ImmutableList.of(weightedClustersDefaultRoute))))));
     responseObserver.onNext(
-        buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0000"));
+        buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS_V2, "0000"));
 
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
@@ -592,7 +592,8 @@ public class XdsNameResolverIntegrationTest {
                 routeConfigName,
                 ImmutableList.of(
                     buildVirtualHost(ImmutableList.of(host), clusterName)))));
-    return buildDiscoveryResponse(versionInfo, routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, nonce);
+    return buildDiscoveryResponse(
+        versionInfo, routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS_V2, nonce);
   }
 
   private static RouteAction buildClusterRoute(String clusterName) {

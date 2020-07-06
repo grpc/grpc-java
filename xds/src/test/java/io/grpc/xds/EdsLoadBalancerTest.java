@@ -590,7 +590,7 @@ public class EdsLoadBalancerTest {
             buildDropOverload("cat_1", 3),
             buildDropOverload("cat_2", 456)));
     deliverClusterLoadAssignments(clusterLoadAssignment);
-    EndpointUpdate endpointUpdate = getEndpointUpdateFromClusterAssignment(clusterLoadAssignment);
+    EndpointUpdate endpointUpdate = getEndpointUpdateFromClusterAssignmentV2(clusterLoadAssignment);
     verify(localityStore).updateDropPercentage(endpointUpdate.getDropPolicies());
     verify(localityStore).updateLocalityStore(endpointUpdate.getLocalityLbEndpointsMap());
 
@@ -607,7 +607,7 @@ public class EdsLoadBalancerTest {
             buildDropOverload("cat_3", 4)));
     deliverClusterLoadAssignments(clusterLoadAssignment);
 
-    endpointUpdate = getEndpointUpdateFromClusterAssignment(clusterLoadAssignment);
+    endpointUpdate = getEndpointUpdateFromClusterAssignmentV2(clusterLoadAssignment);
     verify(localityStore).updateDropPercentage(endpointUpdate.getDropPolicies());
     verify(localityStore).updateLocalityStore(endpointUpdate.getLocalityLbEndpointsMap());
 
@@ -628,7 +628,7 @@ public class EdsLoadBalancerTest {
             buildDropOverload("cat_1", 3),
             buildDropOverload("cat_3", 4)));
     deliverClusterLoadAssignments(clusterLoadAssignment);
-    endpointUpdate = getEndpointUpdateFromClusterAssignment(clusterLoadAssignment);
+    endpointUpdate = getEndpointUpdateFromClusterAssignmentV2(clusterLoadAssignment);
     verify(localityStore).updateDropPercentage(endpointUpdate.getDropPolicies());
     verify(localityStore).updateLocalityStore(endpointUpdate.getLocalityLbEndpointsMap());
   }
@@ -682,7 +682,7 @@ public class EdsLoadBalancerTest {
         buildDiscoveryResponse(
             String.valueOf(versionIno++),
             Collections.<Any>emptyList(),
-            XdsClientImpl.ADS_TYPE_URL_CDS,
+            XdsClientImpl.ADS_TYPE_URL_CDS_V2,
             String.valueOf(nonce++)));
 
     verify(localityBalancer).shutdown();
@@ -730,19 +730,19 @@ public class EdsLoadBalancerTest {
    * clusterName, localityLbEndpointsMap and dropPolicies, is extracted from ClusterLoadAssignment,
    * and all other data is ignored.
    */
-  private static EndpointUpdate getEndpointUpdateFromClusterAssignment(
+  private static EndpointUpdate getEndpointUpdateFromClusterAssignmentV2(
       ClusterLoadAssignment clusterLoadAssignment) {
     EndpointUpdate.Builder endpointUpdateBuilder = EndpointUpdate.newBuilder();
     endpointUpdateBuilder.setClusterName(clusterLoadAssignment.getClusterName());
     for (DropOverload dropOverload : clusterLoadAssignment.getPolicy().getDropOverloadsList()) {
       endpointUpdateBuilder.addDropPolicy(
-          EnvoyProtoData.DropOverload.fromEnvoyProtoDropOverload(dropOverload));
+          EnvoyProtoData.DropOverload.fromEnvoyProtoDropOverloadV2(dropOverload));
     }
     for (LocalityLbEndpoints localityLbEndpoints : clusterLoadAssignment.getEndpointsList()) {
       endpointUpdateBuilder.addLocalityLbEndpoints(
-          EnvoyProtoData.Locality.fromEnvoyProtoLocality(
+          EnvoyProtoData.Locality.fromEnvoyProtoLocalityV2(
               localityLbEndpoints.getLocality()),
-          EnvoyProtoData.LocalityLbEndpoints.fromEnvoyProtoLocalityLbEndpoints(
+          EnvoyProtoData.LocalityLbEndpoints.fromEnvoyProtoLocalityLbEndpointsV2(
               localityLbEndpoints));
     }
     return endpointUpdateBuilder.build();
@@ -770,7 +770,7 @@ public class EdsLoadBalancerTest {
           buildDiscoveryResponse(
               String.valueOf(versionIno++),
               ImmutableList.of(Any.pack(clusterLoadAssignment)),
-              XdsClientImpl.ADS_TYPE_URL_EDS,
+              XdsClientImpl.ADS_TYPE_URL_EDS_V2,
               String.valueOf(nonce++)));
   }
 

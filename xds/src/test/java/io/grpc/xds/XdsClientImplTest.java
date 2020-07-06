@@ -53,22 +53,22 @@ import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment;
 import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy;
 import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
-import io.envoyproxy.envoy.api.v2.RouteConfiguration;
 import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.core.AggregatedConfigSource;
 import io.envoyproxy.envoy.api.v2.core.ConfigSource;
 import io.envoyproxy.envoy.api.v2.core.HealthStatus;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
-import io.envoyproxy.envoy.api.v2.route.QueryParameterMatcher;
 import io.envoyproxy.envoy.api.v2.route.RedirectAction;
-import io.envoyproxy.envoy.api.v2.route.Route;
-import io.envoyproxy.envoy.api.v2.route.RouteAction;
-import io.envoyproxy.envoy.api.v2.route.RouteMatch;
-import io.envoyproxy.envoy.api.v2.route.VirtualHost;
 import io.envoyproxy.envoy.api.v2.route.WeightedCluster;
 import io.envoyproxy.envoy.config.filter.network.http_connection_manager.v2.HttpConnectionManager;
 import io.envoyproxy.envoy.config.filter.network.http_connection_manager.v2.Rds;
+import io.envoyproxy.envoy.config.route.v3.QueryParameterMatcher;
+import io.envoyproxy.envoy.config.route.v3.Route;
+import io.envoyproxy.envoy.config.route.v3.RouteAction;
+import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
+import io.envoyproxy.envoy.config.route.v3.RouteMatch;
+import io.envoyproxy.envoy.config.route.v3.VirtualHost;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.SdsSecretConfig;
 import io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceImplBase;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadReportingServiceGrpc.LoadReportingServiceImplBase;
@@ -395,7 +395,7 @@ public class XdsClientImplTest {
             XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
 
-    RouteConfiguration routeConfig =
+    io.envoyproxy.envoy.api.v2.RouteConfiguration routeConfig =
         buildRouteConfiguration(
             "route.googleapis.com",
             ImmutableList.of(
@@ -539,7 +539,7 @@ public class XdsClientImplTest {
     // Client sends an (first) RDS request.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "route-foo.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_RDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_RDS_V2, "")));
 
     assertThat(fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
 
@@ -560,13 +560,13 @@ public class XdsClientImplTest {
                     buildVirtualHost(
                         ImmutableList.of(TARGET_AUTHORITY),
                         "some more whatever cluster")))));
-    response = buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0000");
+    response = buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS_V2, "0000");
     responseObserver.onNext(response);
 
     // Client sends an ACK RDS request.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "0", "route-foo.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_RDS, "0000")));
+            XdsClientImpl.ADS_TYPE_URL_RDS_V2, "0000")));
 
     verify(configWatcher, never()).onConfigChanged(any(ConfigUpdate.class));
     verify(configWatcher, never()).onResourceDoesNotExist(anyString());
@@ -624,7 +624,7 @@ public class XdsClientImplTest {
                 ImmutableList.of(
                     buildVirtualHost(ImmutableList.of("foo.googleapis.com"),
                         "some more cluster")))));
-    response = buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0000");
+    response = buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS_V2, "0000");
     responseObserver.onNext(response);
 
     assertThat(fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
@@ -632,7 +632,7 @@ public class XdsClientImplTest {
     // Client sent an ACK RDS request.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "0", "route-foo.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_RDS, "0000")));
+            XdsClientImpl.ADS_TYPE_URL_RDS_V2, "0000")));
 
     ArgumentCaptor<ConfigUpdate> configUpdateCaptor = ArgumentCaptor.forClass(null);
     verify(configWatcher).onConfigChanged(configUpdateCaptor.capture());
@@ -674,41 +674,63 @@ public class XdsClientImplTest {
 
     // Management server should only sends RouteConfiguration messages with at least one
     // VirtualHost with domains matching requested hostname. Otherwise, it is invalid data.
-    List<Any> routeConfigs = ImmutableList.of(
-        Any.pack(
-            buildRouteConfiguration(
-                "route-foo.googleapis.com",
-                ImmutableList.of(
-                    VirtualHost.newBuilder()
-                        .setName("virtualhost00.googleapis.com") // don't care
-                        // domains wit a match.
-                        .addAllDomains(ImmutableList.of(TARGET_AUTHORITY, "bar.googleapis.com"))
-                        .addRoutes(Route.newBuilder()
-                            // path match with cluster route
-                            .setRoute(RouteAction.newBuilder().setCluster("cl1.googleapis.com"))
-                            .setMatch(RouteMatch.newBuilder().setPath("/service1/method1")))
-                        .addRoutes(Route.newBuilder()
-                            // path match with weighted cluster route
-                            .setRoute(RouteAction.newBuilder().setWeightedClusters(
-                                WeightedCluster.newBuilder()
-                                    .addClusters(WeightedCluster.ClusterWeight.newBuilder()
-                                        .setWeight(UInt32Value.of(30))
-                                        .setName("cl21.googleapis.com"))
-                                    .addClusters(WeightedCluster.ClusterWeight.newBuilder()
-                                        .setWeight(UInt32Value.of(70))
-                                        .setName("cl22.googleapis.com"))))
-                            .setMatch(RouteMatch.newBuilder().setPath("/service2/method2")))
-                        .addRoutes(Route.newBuilder()
-                            // prefix match with cluster route
-                            .setRoute(RouteAction.newBuilder()
-                                .setCluster("cl1.googleapis.com"))
-                            .setMatch(RouteMatch.newBuilder().setPrefix("/service1/")))
-                        .addRoutes(Route.newBuilder()
-                            // default match with cluster route
-                            .setRoute(RouteAction.newBuilder().setCluster("cluster.googleapis.com"))
-                            .setMatch(RouteMatch.newBuilder().setPrefix("")))
-                        .build()))));
-    response = buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0000");
+    List<Any> routeConfigs =
+        ImmutableList.of(
+            Any.pack(
+                buildRouteConfiguration(
+                    "route-foo.googleapis.com",
+                    ImmutableList.of(
+                        io.envoyproxy.envoy.api.v2.route.VirtualHost.newBuilder()
+                            .setName("virtualhost00.googleapis.com") // don't care
+                            // domains wit a match.
+                            .addAllDomains(ImmutableList.of(TARGET_AUTHORITY, "bar.googleapis.com"))
+                            .addRoutes(
+                                io.envoyproxy.envoy.api.v2.route.Route.newBuilder()
+                                    // path match with cluster route
+                                    .setRoute(
+                                        io.envoyproxy.envoy.api.v2.route.RouteAction.newBuilder()
+                                            .setCluster("cl1.googleapis.com"))
+                                    .setMatch(
+                                        io.envoyproxy.envoy.api.v2.route.RouteMatch.newBuilder()
+                                            .setPath("/service1/method1")))
+                            .addRoutes(
+                                io.envoyproxy.envoy.api.v2.route.Route.newBuilder()
+                                    // path match with weighted cluster route
+                                    .setRoute(
+                                        io.envoyproxy.envoy.api.v2.route.RouteAction.newBuilder()
+                                            .setWeightedClusters(
+                                                WeightedCluster.newBuilder()
+                                                    .addClusters(
+                                                        WeightedCluster.ClusterWeight.newBuilder()
+                                                            .setWeight(UInt32Value.of(30))
+                                                            .setName("cl21.googleapis.com"))
+                                                    .addClusters(
+                                                        WeightedCluster.ClusterWeight.newBuilder()
+                                                            .setWeight(UInt32Value.of(70))
+                                                            .setName("cl22.googleapis.com"))))
+                                    .setMatch(
+                                        io.envoyproxy.envoy.api.v2.route.RouteMatch.newBuilder()
+                                            .setPath("/service2/method2")))
+                            .addRoutes(
+                                io.envoyproxy.envoy.api.v2.route.Route.newBuilder()
+                                    // prefix match with cluster route
+                                    .setRoute(
+                                        io.envoyproxy.envoy.api.v2.route.RouteAction.newBuilder()
+                                            .setCluster("cl1.googleapis.com"))
+                                    .setMatch(
+                                        io.envoyproxy.envoy.api.v2.route.RouteMatch.newBuilder()
+                                            .setPrefix("/service1/")))
+                            .addRoutes(
+                                io.envoyproxy.envoy.api.v2.route.Route.newBuilder()
+                                    // default match with cluster route
+                                    .setRoute(
+                                        io.envoyproxy.envoy.api.v2.route.RouteAction.newBuilder()
+                                            .setCluster("cluster.googleapis.com"))
+                                    .setMatch(
+                                        io.envoyproxy.envoy.api.v2.route.RouteMatch.newBuilder()
+                                            .setPrefix("")))
+                            .build()))));
+    response = buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS_V2, "0000");
     responseObserver.onNext(response);
 
     assertThat(fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
@@ -716,7 +738,7 @@ public class XdsClientImplTest {
     // Client sent an ACK RDS request.
     verify(requestObserver)
             .onNext(eq(buildDiscoveryRequest(NODE, "0", "route-foo.googleapis.com",
-                    XdsClientImpl.ADS_TYPE_URL_RDS, "0000")));
+                    XdsClientImpl.ADS_TYPE_URL_RDS_V2, "0000")));
 
     ArgumentCaptor<ConfigUpdate> configUpdateCaptor = ArgumentCaptor.forClass(null);
     verify(configWatcher).onConfigChanged(configUpdateCaptor.capture());
@@ -807,14 +829,14 @@ public class XdsClientImplTest {
                 ImmutableList.of(
                     buildVirtualHost(ImmutableList.of("one more does not match"),
                         "some more cluster")))));
-    response = buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0000");
+    response = buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS_V2, "0000");
     responseObserver.onNext(response);
 
     // Client sent an NACK RDS request.
     verify(requestObserver)
         .onNext(
             argThat(new DiscoveryRequestMatcher("", "route-foo.googleapis.com",
-                XdsClientImpl.ADS_TYPE_URL_RDS, "0000")));
+                XdsClientImpl.ADS_TYPE_URL_RDS_V2, "0000")));
 
     verify(configWatcher, never()).onConfigChanged(any(ConfigUpdate.class));
     verify(configWatcher, never()).onResourceDoesNotExist(anyString());
@@ -858,12 +880,12 @@ public class XdsClientImplTest {
     assertThat(fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
 
     // A VirtualHost with a Route that contains only redirect configuration.
-    VirtualHost virtualHost =
-        VirtualHost.newBuilder()
-            .setName("virtualhost00.googleapis.com")  // don't care
+    io.envoyproxy.envoy.api.v2.route.VirtualHost virtualHost =
+        io.envoyproxy.envoy.api.v2.route.VirtualHost.newBuilder()
+            .setName("virtualhost00.googleapis.com") // don't care
             .addDomains(TARGET_AUTHORITY)
             .addRoutes(
-                Route.newBuilder()
+                io.envoyproxy.envoy.api.v2.route.Route.newBuilder()
                     .setRedirect(
                         RedirectAction.newBuilder()
                             .setHostRedirect("bar.googleapis.com")
@@ -874,14 +896,14 @@ public class XdsClientImplTest {
         Any.pack(
             buildRouteConfiguration("route-foo.googleapis.com",
                 ImmutableList.of(virtualHost))));
-    response = buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0000");
+    response = buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS_V2, "0000");
     responseObserver.onNext(response);
 
     // Client sent an NACK RDS request.
     verify(requestObserver)
         .onNext(
             argThat(new DiscoveryRequestMatcher("", "route-foo.googleapis.com",
-                XdsClientImpl.ADS_TYPE_URL_RDS, "0000")));
+                XdsClientImpl.ADS_TYPE_URL_RDS_V2, "0000")));
 
     verify(configWatcher, never()).onConfigChanged(any(ConfigUpdate.class));
     verify(configWatcher, never()).onResourceDoesNotExist(anyString());
@@ -909,7 +931,7 @@ public class XdsClientImplTest {
 
     // Management server sends back an LDS response containing a RouteConfiguration for the
     // requested Listener directly in-line.
-    RouteConfiguration routeConfig =
+    io.envoyproxy.envoy.api.v2.RouteConfiguration routeConfig =
         buildRouteConfiguration(
             "route-foo.googleapis.com", // target route configuration
             ImmutableList.of(
@@ -993,7 +1015,7 @@ public class XdsClientImplTest {
     // Client sends an (first) RDS request.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "some-route-to-foo.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_RDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_RDS_V2, "")));
 
     // Management server sends back an RDS response containing the RouteConfiguration
     // for the requested resource.
@@ -1006,13 +1028,13 @@ public class XdsClientImplTest {
                         "some cluster"),
                     buildVirtualHost(ImmutableList.of(TARGET_AUTHORITY, "bar.googleapis.com:443"),
                         "some-other-cluster.googleapis.com")))));
-    response = buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0000");
+    response = buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS_V2, "0000");
     responseObserver.onNext(response);
 
     // Client sent an ACK RDS request.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "0", "some-route-to-foo.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_RDS, "0000")));
+            XdsClientImpl.ADS_TYPE_URL_RDS_V2, "0000")));
 
     // Updated cluster name is notified to config watcher again.
     configUpdateCaptor = ArgumentCaptor.forClass(null);
@@ -1029,13 +1051,13 @@ public class XdsClientImplTest {
                 ImmutableList.of(
                     buildVirtualHost(ImmutableList.of(TARGET_AUTHORITY, "bar.googleapis.com:443"),
                         "an-updated-cluster.googleapis.com")))));
-    response = buildDiscoveryResponse("1", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0001");
+    response = buildDiscoveryResponse("1", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS_V2, "0001");
     responseObserver.onNext(response);
 
     // Client sent an ACK RDS request.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "1", "some-route-to-foo.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_RDS, "0001")));
+            XdsClientImpl.ADS_TYPE_URL_RDS_V2, "0001")));
 
     // Updated cluster name is notified to config watcher again.
     configUpdateCaptor = ArgumentCaptor.forClass(null);
@@ -1098,7 +1120,7 @@ public class XdsClientImplTest {
     // Client sends an (first) RDS request.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "route-foo.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_RDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_RDS_V2, "")));
 
     ScheduledTask rdsRespTimer =
         Iterables.getOnlyElement(
@@ -1117,13 +1139,13 @@ public class XdsClientImplTest {
                     buildVirtualHost(
                         ImmutableList.of(TARGET_AUTHORITY),
                         "some more cluster")))));
-    response = buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0000");
+    response = buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS_V2, "0000");
     responseObserver.onNext(response);
 
     // Client sent an ACK RDS request.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "0", "route-foo.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_RDS, "0000")));
+            XdsClientImpl.ADS_TYPE_URL_RDS_V2, "0000")));
 
     // Client waits for future RDS responses silently.
     verifyNoMoreInteractions(configWatcher);
@@ -1144,13 +1166,13 @@ public class XdsClientImplTest {
                     buildVirtualHost( // matching virtual host
                         ImmutableList.of(TARGET_AUTHORITY, "bar.googleapis.com:443"),
                         "another-cluster.googleapis.com")))));
-    response = buildDiscoveryResponse("1", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0001");
+    response = buildDiscoveryResponse("1", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS_V2, "0001");
     responseObserver.onNext(response);
 
     // Client sent an ACK RDS request.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "1", "route-foo.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_RDS, "0001")));
+            XdsClientImpl.ADS_TYPE_URL_RDS_V2, "0001")));
 
     // Updated cluster name is notified to config watcher.
     ArgumentCaptor<ConfigUpdate> configUpdateCaptor = ArgumentCaptor.forClass(null);
@@ -1200,7 +1222,7 @@ public class XdsClientImplTest {
     // Client sends an (first) RDS request.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "route-foo.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_RDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_RDS_V2, "")));
 
     // Management server sends back an RDS response containing RouteConfiguration requested.
     List<Any> routeConfigs = ImmutableList.of(
@@ -1211,13 +1233,13 @@ public class XdsClientImplTest {
                     buildVirtualHost(
                         ImmutableList.of(TARGET_AUTHORITY), // matching virtual host
                         "cluster.googleapis.com")))));
-    response = buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0000");
+    response = buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS_V2, "0000");
     responseObserver.onNext(response);
 
     // Client sent an ACK RDS request.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "0", "route-foo.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_RDS, "0000")));
+            XdsClientImpl.ADS_TYPE_URL_RDS_V2, "0000")));
 
     // Resolved cluster name is notified to config watcher.
     ArgumentCaptor<ConfigUpdate> configUpdateCaptor = ArgumentCaptor.forClass(null);
@@ -1270,7 +1292,7 @@ public class XdsClientImplTest {
     // Client sends an (first) RDS request.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "route-foo.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_RDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_RDS_V2, "")));
 
     ScheduledTask rdsRespTimer =
         Iterables.getOnlyElement(
@@ -1299,7 +1321,7 @@ public class XdsClientImplTest {
     // Client sent a new RDS request with updated resource name.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "route-bar.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_RDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_RDS_V2, "")));
 
     assertThat(rdsRespTimer.isCancelled()).isTrue();
     rdsRespTimer =
@@ -1316,7 +1338,7 @@ public class XdsClientImplTest {
                     buildVirtualHost(
                         ImmutableList.of(TARGET_AUTHORITY), // matching virtual host
                         "cluster.googleapis.com")))));
-    response = buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0000");
+    response = buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS_V2, "0000");
     responseObserver.onNext(response);
 
     assertThat(rdsRespTimer.isCancelled()).isTrue();
@@ -1336,7 +1358,7 @@ public class XdsClientImplTest {
     // Client sends a CDS request for the only cluster being watched to management server.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster-foo.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_CDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_CDS_V2, "")));
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
 
     // Management server sends back a CDS response without Cluster for the requested resource.
@@ -1344,13 +1366,13 @@ public class XdsClientImplTest {
         Any.pack(buildCluster("cluster-bar.googleapis.com", null, false)),
         Any.pack(buildCluster("cluster-baz.googleapis.com", null, false)));
     DiscoveryResponse response =
-        buildDiscoveryResponse("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS, "0000");
+        buildDiscoveryResponse("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS_V2, "0000");
     responseObserver.onNext(response);
 
     // Client sent an ACK CDS request.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "0", "cluster-foo.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_CDS, "0000")));
+            XdsClientImpl.ADS_TYPE_URL_CDS_V2, "0000")));
     verify(clusterWatcher, never()).onClusterChanged(any(ClusterUpdate.class));
     verify(clusterWatcher, never()).onResourceDoesNotExist("cluster-foo.googleapis.com");
     verify(clusterWatcher, never()).onError(any(Status.class));
@@ -1373,7 +1395,7 @@ public class XdsClientImplTest {
     // Client sends a CDS request for the only cluster being watched to management server.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster-foo.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_CDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_CDS_V2, "")));
     ScheduledTask cdsRespTimer =
         Iterables.getOnlyElement(
             fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER));
@@ -1384,13 +1406,13 @@ public class XdsClientImplTest {
         Any.pack(buildCluster("cluster-foo.googleapis.com", null, false)),
         Any.pack(buildCluster("cluster-baz.googleapis.com", null, false)));
     DiscoveryResponse response =
-        buildDiscoveryResponse("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS, "0000");
+        buildDiscoveryResponse("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS_V2, "0000");
     responseObserver.onNext(response);
 
     // Client sent an ACK CDS request.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "0", "cluster-foo.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_CDS, "0000")));
+            XdsClientImpl.ADS_TYPE_URL_CDS_V2, "0000")));
     assertThat(cdsRespTimer.isCancelled()).isTrue();
 
     ArgumentCaptor<ClusterUpdate> clusterUpdateCaptor = ArgumentCaptor.forClass(null);
@@ -1408,13 +1430,13 @@ public class XdsClientImplTest {
             buildCluster("cluster-foo.googleapis.com", "eds-cluster-foo.googleapis.com", true)),
         Any.pack(buildCluster("cluster-baz.googleapis.com", null, false)));
     response =
-        buildDiscoveryResponse("1", clusters, XdsClientImpl.ADS_TYPE_URL_CDS, "0001");
+        buildDiscoveryResponse("1", clusters, XdsClientImpl.ADS_TYPE_URL_CDS_V2, "0001");
     responseObserver.onNext(response);
 
     // Client sent an ACK CDS request.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "1", "cluster-foo.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_CDS, "0001")));
+            XdsClientImpl.ADS_TYPE_URL_CDS_V2, "0001")));
 
     verify(clusterWatcher, times(2)).onClusterChanged(clusterUpdateCaptor.capture());
     clusterUpdate = clusterUpdateCaptor.getValue();
@@ -1443,13 +1465,13 @@ public class XdsClientImplTest {
             "eds-cluster-foo.googleapis.com", true, testUpstreamTlsContext)),
         Any.pack(buildCluster("cluster-baz.googleapis.com", null, false)));
     DiscoveryResponse response =
-        buildDiscoveryResponse("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS, "0000");
+        buildDiscoveryResponse("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS_V2, "0000");
     responseObserver.onNext(response);
 
     // Client sent an ACK CDS request.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "0", "cluster-foo.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_CDS, "0000")));
+            XdsClientImpl.ADS_TYPE_URL_CDS_V2, "0000")));
     ArgumentCaptor<ClusterUpdate> clusterUpdateCaptor = ArgumentCaptor.forClass(null);
     verify(clusterWatcher, times(1)).onClusterChanged(clusterUpdateCaptor.capture());
     ClusterUpdate clusterUpdate = clusterUpdateCaptor.getValue();
@@ -1487,7 +1509,7 @@ public class XdsClientImplTest {
             argThat(
                 new DiscoveryRequestMatcher("",
                     ImmutableList.of("cluster-foo.googleapis.com", "cluster-bar.googleapis.com"),
-                    XdsClientImpl.ADS_TYPE_URL_CDS, "")));
+                    XdsClientImpl.ADS_TYPE_URL_CDS_V2, "")));
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(2);
 
     // Management server sends back a CDS response contains Cluster for only one of
@@ -1495,7 +1517,7 @@ public class XdsClientImplTest {
     List<Any> clusters = ImmutableList.of(
         Any.pack(buildCluster("cluster-foo.googleapis.com", null, false)));
     DiscoveryResponse response =
-        buildDiscoveryResponse("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS, "0000");
+        buildDiscoveryResponse("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS_V2, "0000");
     responseObserver.onNext(response);
 
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
@@ -1505,7 +1527,7 @@ public class XdsClientImplTest {
             argThat(
                 new DiscoveryRequestMatcher("0",
                     ImmutableList.of("cluster-foo.googleapis.com", "cluster-bar.googleapis.com"),
-                    XdsClientImpl.ADS_TYPE_URL_CDS, "0000")));
+                    XdsClientImpl.ADS_TYPE_URL_CDS_V2, "0000")));
 
     // Two watchers get notification of cluster update for the cluster they are interested in.
     ArgumentCaptor<ClusterUpdate> clusterUpdateCaptor1 = ArgumentCaptor.forClass(null);
@@ -1543,7 +1565,7 @@ public class XdsClientImplTest {
             buildCluster("cluster-bar.googleapis.com",
                 "eds-cluster-bar.googleapis.com", true)));
     response = buildDiscoveryResponse("1", clusters,
-        XdsClientImpl.ADS_TYPE_URL_CDS, "0001");
+        XdsClientImpl.ADS_TYPE_URL_CDS_V2, "0001");
     responseObserver.onNext(response);
 
     // Client sent an ACK CDS request.
@@ -1552,7 +1574,7 @@ public class XdsClientImplTest {
             argThat(
                 new DiscoveryRequestMatcher("1",
                     ImmutableList.of("cluster-foo.googleapis.com", "cluster-bar.googleapis.com"),
-                    XdsClientImpl.ADS_TYPE_URL_CDS, "0001")));
+                    XdsClientImpl.ADS_TYPE_URL_CDS_V2, "0001")));
 
     verifyNoMoreInteractions(watcher1, watcher2); // resource has no change
     ArgumentCaptor<ClusterUpdate> clusterUpdateCaptor3 = ArgumentCaptor.forClass(null);
@@ -1582,7 +1604,7 @@ public class XdsClientImplTest {
     // Client sends an CDS request to management server.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster-foo.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_CDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_CDS_V2, "")));
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
 
     // Management server sends back an CDS response with Cluster for the requested
@@ -1590,13 +1612,13 @@ public class XdsClientImplTest {
     List<Any> clusters = ImmutableList.of(
         Any.pack(buildCluster("cluster-foo.googleapis.com", null, false)));
     DiscoveryResponse response =
-        buildDiscoveryResponse("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS, "0000");
+        buildDiscoveryResponse("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS_V2, "0000");
     responseObserver.onNext(response);
 
     // Client sent an ACK CDS request.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "0", "cluster-foo.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_CDS, "0000")));
+            XdsClientImpl.ADS_TYPE_URL_CDS_V2, "0000")));
 
     ArgumentCaptor<ClusterUpdate> clusterUpdateCaptor1 = ArgumentCaptor.forClass(null);
     verify(watcher1).onClusterChanged(clusterUpdateCaptor1.capture());
@@ -1640,20 +1662,20 @@ public class XdsClientImplTest {
     // Client sends an CDS request to management server.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster-foo.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_CDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_CDS_V2, "")));
 
     // Management server sends back a CDS response with Cluster for the requested
     // cluster.
     List<Any> clusters = ImmutableList.of(
         Any.pack(buildCluster("cluster-foo.googleapis.com", null, false)));
     DiscoveryResponse response =
-        buildDiscoveryResponse("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS, "0000");
+        buildDiscoveryResponse("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS_V2, "0000");
     responseObserver.onNext(response);
 
     // Client sent an ACK CDS request.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "0", "cluster-foo.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_CDS, "0000")));
+            XdsClientImpl.ADS_TYPE_URL_CDS_V2, "0000")));
 
     ArgumentCaptor<ClusterUpdate> clusterUpdateCaptor1 = ArgumentCaptor.forClass(null);
     verify(watcher1).onClusterChanged(clusterUpdateCaptor1.capture());
@@ -1673,7 +1695,7 @@ public class XdsClientImplTest {
             argThat(
                 new DiscoveryRequestMatcher("0",
                     ImmutableList.of("cluster-foo.googleapis.com", "cluster-bar.googleapis.com"),
-                    XdsClientImpl.ADS_TYPE_URL_CDS, "0000")));
+                    XdsClientImpl.ADS_TYPE_URL_CDS_V2, "0000")));
 
     // Management server sends back a CDS response with Cluster for all requested cluster.
     clusters = ImmutableList.of(
@@ -1682,7 +1704,7 @@ public class XdsClientImplTest {
             buildCluster("cluster-bar.googleapis.com",
                 "eds-cluster-bar.googleapis.com", true)));
     response = buildDiscoveryResponse("1", clusters,
-        XdsClientImpl.ADS_TYPE_URL_CDS, "0001");
+        XdsClientImpl.ADS_TYPE_URL_CDS_V2, "0001");
     responseObserver.onNext(response);
 
     // Client sent an ACK CDS request for all interested resources.
@@ -1691,7 +1713,7 @@ public class XdsClientImplTest {
             argThat(
                 new DiscoveryRequestMatcher("1",
                     ImmutableList.of("cluster-foo.googleapis.com", "cluster-bar.googleapis.com"),
-                    XdsClientImpl.ADS_TYPE_URL_CDS, "0001")));
+                    XdsClientImpl.ADS_TYPE_URL_CDS_V2, "0001")));
     verifyNoMoreInteractions(watcher1);  // resource has no change
     ArgumentCaptor<ClusterUpdate> clusterUpdateCaptor2 = ArgumentCaptor.forClass(null);
     verify(watcher2).onClusterChanged(clusterUpdateCaptor2.capture());
@@ -1710,7 +1732,7 @@ public class XdsClientImplTest {
     // that cluster.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "1", "cluster-bar.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_CDS, "0001")));
+            XdsClientImpl.ADS_TYPE_URL_CDS_V2, "0001")));
 
     // Management server has nothing to respond.
 
@@ -1721,7 +1743,7 @@ public class XdsClientImplTest {
         .onNext(
             argThat(
                 new DiscoveryRequestMatcher("1", ImmutableList.<String>of(),
-                    XdsClientImpl.ADS_TYPE_URL_CDS, "0001")));
+                    XdsClientImpl.ADS_TYPE_URL_CDS_V2, "0001")));
 
     // Management server sends back a new CDS response.
     clusters = ImmutableList.of(
@@ -1729,14 +1751,14 @@ public class XdsClientImplTest {
         Any.pack(
             buildCluster("cluster-bar.googleapis.com", null, false)));
     response =
-        buildDiscoveryResponse("2", clusters, XdsClientImpl.ADS_TYPE_URL_CDS, "0002");
+        buildDiscoveryResponse("2", clusters, XdsClientImpl.ADS_TYPE_URL_CDS_V2, "0002");
     responseObserver.onNext(response);
 
     verify(requestObserver)
         .onNext(
             argThat(
                 new DiscoveryRequestMatcher("2", ImmutableList.<String>of(),
-                    XdsClientImpl.ADS_TYPE_URL_CDS, "0002")));
+                    XdsClientImpl.ADS_TYPE_URL_CDS_V2, "0002")));
 
     // Cancelled watchers do not receive notification.
     verifyNoMoreInteractions(watcher1, watcher2);
@@ -1749,7 +1771,7 @@ public class XdsClientImplTest {
     // A CDS request is sent to indicate subscription of "cluster-foo.googleapis.com" only.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "2", "cluster-foo.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_CDS, "0002")));
+            XdsClientImpl.ADS_TYPE_URL_CDS_V2, "0002")));
 
     // Management server sends back a new CDS response for at least newly requested resources
     // (it is required to do so).
@@ -1758,7 +1780,7 @@ public class XdsClientImplTest {
         Any.pack(
             buildCluster("cluster-bar.googleapis.com", null, false)));
     response =
-        buildDiscoveryResponse("3", clusters, XdsClientImpl.ADS_TYPE_URL_CDS, "0003");
+        buildDiscoveryResponse("3", clusters, XdsClientImpl.ADS_TYPE_URL_CDS_V2, "0003");
     responseObserver.onNext(response);
 
     // Notified with cached data immediately.
@@ -1775,7 +1797,7 @@ public class XdsClientImplTest {
     // A CDS request is sent to re-subscribe the cluster again.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "3", "cluster-foo.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_CDS, "0003")));
+            XdsClientImpl.ADS_TYPE_URL_CDS_V2, "0003")));
   }
 
   @Test
@@ -1791,7 +1813,7 @@ public class XdsClientImplTest {
         .onNext(
             argThat(
                 new DiscoveryRequestMatcher("", "cluster-foo.googleapis.com",
-                    XdsClientImpl.ADS_TYPE_URL_CDS, "")));
+                    XdsClientImpl.ADS_TYPE_URL_CDS_V2, "")));
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
 
     fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC - 1, TimeUnit.SECONDS);
@@ -1809,7 +1831,7 @@ public class XdsClientImplTest {
             argThat(
                 new DiscoveryRequestMatcher("",
                     ImmutableList.of("cluster-foo.googleapis.com", "cluster-bar.googleapis.com"),
-                    XdsClientImpl.ADS_TYPE_URL_CDS, "")));
+                    XdsClientImpl.ADS_TYPE_URL_CDS_V2, "")));
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(2);
 
     fakeClock.forwardTime(1, TimeUnit.SECONDS);
@@ -1851,14 +1873,14 @@ public class XdsClientImplTest {
 
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster-foo.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_CDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_CDS_V2, "")));
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
 
     // Management server sends back a CDS response containing requested resource.
     List<Any> clusters = ImmutableList.of(
         Any.pack(buildCluster("cluster-foo.googleapis.com", null, true)));
     DiscoveryResponse response =
-        buildDiscoveryResponse("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS, "0000");
+        buildDiscoveryResponse("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS_V2, "0000");
     responseObserver.onNext(response);
 
     // Client sent an ACK CDS request (Omitted).
@@ -1875,7 +1897,7 @@ public class XdsClientImplTest {
     // No cluster is available.
     response =
         buildDiscoveryResponse("1", ImmutableList.<Any>of(),
-            XdsClientImpl.ADS_TYPE_URL_CDS, "0001");
+            XdsClientImpl.ADS_TYPE_URL_CDS_V2, "0001");
     responseObserver.onNext(response);
 
     verify(clusterWatcher).onResourceDoesNotExist("cluster-foo.googleapis.com");
@@ -1897,7 +1919,7 @@ public class XdsClientImplTest {
     // Client sends an EDS request for the only cluster being watched to management server.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster-foo.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_EDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_EDS_V2, "")));
     assertThat(fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
 
     // Management server sends back an EDS response without ClusterLoadAssignment for the requested
@@ -1920,13 +1942,13 @@ public class XdsClientImplTest {
 
     DiscoveryResponse response =
         buildDiscoveryResponse("0", clusterLoadAssignments,
-            XdsClientImpl.ADS_TYPE_URL_EDS, "0000");
+            XdsClientImpl.ADS_TYPE_URL_EDS_V2, "0000");
     responseObserver.onNext(response);
 
     // Client sent an ACK EDS request.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "0", "cluster-foo.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_EDS, "0000")));
+            XdsClientImpl.ADS_TYPE_URL_EDS_V2, "0000")));
 
     verify(endpointWatcher, never()).onEndpointChanged(any(EndpointUpdate.class));
     verify(endpointWatcher, never()).onResourceDoesNotExist("cluster-foo.googleapis.com");
@@ -1949,7 +1971,7 @@ public class XdsClientImplTest {
     // Client sends an EDS request for the only cluster being watched to management server.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster-foo.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_EDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_EDS_V2, "")));
     ScheduledTask edsRespTimeoutTask =
         Iterables.getOnlyElement(
             fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER));
@@ -1984,7 +2006,7 @@ public class XdsClientImplTest {
 
     DiscoveryResponse response =
         buildDiscoveryResponse("0", clusterLoadAssignments,
-            XdsClientImpl.ADS_TYPE_URL_EDS, "0000");
+            XdsClientImpl.ADS_TYPE_URL_EDS_V2, "0000");
     responseObserver.onNext(response);
 
     assertThat(edsRespTimeoutTask.isCancelled()).isTrue();
@@ -1992,7 +2014,7 @@ public class XdsClientImplTest {
     // Client sent an ACK EDS request.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "0", "cluster-foo.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_EDS, "0000")));
+            XdsClientImpl.ADS_TYPE_URL_EDS_V2, "0000")));
 
     ArgumentCaptor<EndpointUpdate> endpointUpdateCaptor = ArgumentCaptor.forClass(null);
     verify(endpointWatcher).onEndpointChanged(endpointUpdateCaptor.capture());
@@ -2019,13 +2041,13 @@ public class XdsClientImplTest {
             ImmutableList.<ClusterLoadAssignment.Policy.DropOverload>of())));
     response =
         buildDiscoveryResponse(
-            "1", clusterLoadAssignments, XdsClientImpl.ADS_TYPE_URL_EDS, "0001");
+            "1", clusterLoadAssignments, XdsClientImpl.ADS_TYPE_URL_EDS_V2, "0001");
     responseObserver.onNext(response);
 
     // Client sent an ACK EDS request.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "1", "cluster-foo.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_EDS, "0001")));
+            XdsClientImpl.ADS_TYPE_URL_EDS_V2, "0001")));
 
     verify(endpointWatcher, times(2)).onEndpointChanged(endpointUpdateCaptor.capture());
     endpointUpdate = endpointUpdateCaptor.getValue();
@@ -2052,7 +2074,7 @@ public class XdsClientImplTest {
             argThat(
                 new DiscoveryRequestMatcher("",
                     ImmutableList.of("cluster-foo.googleapis.com", "cluster-bar.googleapis.com"),
-                    XdsClientImpl.ADS_TYPE_URL_EDS, "")));
+                    XdsClientImpl.ADS_TYPE_URL_EDS_V2, "")));
 
     assertThat(fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(2);
 
@@ -2069,7 +2091,7 @@ public class XdsClientImplTest {
 
     DiscoveryResponse response =
         buildDiscoveryResponse("0", clusterLoadAssignments,
-            XdsClientImpl.ADS_TYPE_URL_EDS, "0000");
+            XdsClientImpl.ADS_TYPE_URL_EDS_V2, "0000");
     responseObserver.onNext(response);
 
     assertThat(fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
@@ -2080,7 +2102,7 @@ public class XdsClientImplTest {
             argThat(
                 new DiscoveryRequestMatcher("0",
                     ImmutableList.of("cluster-foo.googleapis.com", "cluster-bar.googleapis.com"),
-                    XdsClientImpl.ADS_TYPE_URL_EDS, "0000")));
+                    XdsClientImpl.ADS_TYPE_URL_EDS_V2, "0000")));
 
     // Two watchers get notification of endpoint update for the cluster they are interested in.
     ArgumentCaptor<EndpointUpdate> endpointUpdateCaptor1 = ArgumentCaptor.forClass(null);
@@ -2121,7 +2143,7 @@ public class XdsClientImplTest {
             ImmutableList.<ClusterLoadAssignment.Policy.DropOverload>of())));
 
     response = buildDiscoveryResponse("1", clusterLoadAssignments,
-        XdsClientImpl.ADS_TYPE_URL_EDS, "0001");
+        XdsClientImpl.ADS_TYPE_URL_EDS_V2, "0001");
     responseObserver.onNext(response);
 
     // Client sent an ACK EDS request.
@@ -2130,7 +2152,7 @@ public class XdsClientImplTest {
             argThat(
                 new DiscoveryRequestMatcher("1",
                     ImmutableList.of("cluster-foo.googleapis.com", "cluster-bar.googleapis.com"),
-                    XdsClientImpl.ADS_TYPE_URL_EDS, "0001")));
+                    XdsClientImpl.ADS_TYPE_URL_EDS_V2, "0001")));
 
     // The corresponding watcher gets notified.
     ArgumentCaptor<EndpointUpdate> endpointUpdateCaptor3 = ArgumentCaptor.forClass(null);
@@ -2161,7 +2183,7 @@ public class XdsClientImplTest {
     // Client sends first EDS request.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster-foo.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_EDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_EDS_V2, "")));
 
     assertThat(fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
 
@@ -2178,7 +2200,7 @@ public class XdsClientImplTest {
 
     DiscoveryResponse response =
         buildDiscoveryResponse("0", clusterLoadAssignments,
-            XdsClientImpl.ADS_TYPE_URL_EDS, "0000");
+            XdsClientImpl.ADS_TYPE_URL_EDS_V2, "0000");
     responseObserver.onNext(response);
 
     assertThat(fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
@@ -2186,7 +2208,7 @@ public class XdsClientImplTest {
     // Client sent an ACK EDS request.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "0", "cluster-foo.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_EDS, "0000")));
+            XdsClientImpl.ADS_TYPE_URL_EDS_V2, "0000")));
 
     ArgumentCaptor<EndpointUpdate> endpointUpdateCaptor1 = ArgumentCaptor.forClass(null);
     verify(watcher1).onEndpointChanged(endpointUpdateCaptor1.capture());
@@ -2239,7 +2261,7 @@ public class XdsClientImplTest {
     // Client sends an EDS request to management server.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster-foo.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_EDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_EDS_V2, "")));
 
     // Management server sends back an EDS response with ClusterLoadAssignment for the requested
     // cluster.
@@ -2255,13 +2277,13 @@ public class XdsClientImplTest {
 
     DiscoveryResponse response =
         buildDiscoveryResponse("0", clusterLoadAssignments,
-            XdsClientImpl.ADS_TYPE_URL_EDS, "0000");
+            XdsClientImpl.ADS_TYPE_URL_EDS_V2, "0000");
     responseObserver.onNext(response);
 
     // Client sent an ACK EDS request.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "0", "cluster-foo.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_EDS, "0000")));
+            XdsClientImpl.ADS_TYPE_URL_EDS_V2, "0000")));
 
     ArgumentCaptor<EndpointUpdate> endpointUpdateCaptor1 = ArgumentCaptor.forClass(null);
     verify(watcher1).onEndpointChanged(endpointUpdateCaptor1.capture());
@@ -2286,7 +2308,7 @@ public class XdsClientImplTest {
             argThat(
                 new DiscoveryRequestMatcher("0",
                     ImmutableList.of("cluster-foo.googleapis.com", "cluster-bar.googleapis.com"),
-                    XdsClientImpl.ADS_TYPE_URL_EDS, "0000")));
+                    XdsClientImpl.ADS_TYPE_URL_EDS_V2, "0000")));
 
     // Management server sends back an EDS response with ClusterLoadAssignment for one of requested
     // cluster.
@@ -2300,7 +2322,7 @@ public class XdsClientImplTest {
             ImmutableList.<Policy.DropOverload>of())));
 
     response = buildDiscoveryResponse("1", clusterLoadAssignments,
-        XdsClientImpl.ADS_TYPE_URL_EDS, "0001");
+        XdsClientImpl.ADS_TYPE_URL_EDS_V2, "0001");
     responseObserver.onNext(response);
 
     // Client sent an ACK EDS request for all interested resources.
@@ -2309,7 +2331,7 @@ public class XdsClientImplTest {
             argThat(
                 new DiscoveryRequestMatcher("1",
                     ImmutableList.of("cluster-foo.googleapis.com", "cluster-bar.googleapis.com"),
-                    XdsClientImpl.ADS_TYPE_URL_EDS, "0001")));
+                    XdsClientImpl.ADS_TYPE_URL_EDS_V2, "0001")));
 
     ArgumentCaptor<EndpointUpdate> endpointUpdateCaptor2 = ArgumentCaptor.forClass(null);
     verify(watcher2).onEndpointChanged(endpointUpdateCaptor2.capture());
@@ -2330,7 +2352,7 @@ public class XdsClientImplTest {
     // sent an new EDS request to unsubscribe from that cluster.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "1", "cluster-bar.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_EDS, "0001")));
+            XdsClientImpl.ADS_TYPE_URL_EDS_V2, "0001")));
 
     // Management server should not respond as it had previously sent the requested resource.
 
@@ -2344,7 +2366,7 @@ public class XdsClientImplTest {
             argThat(
                 new DiscoveryRequestMatcher("1",
                     ImmutableList.<String>of(),  // empty resources
-                    XdsClientImpl.ADS_TYPE_URL_EDS, "0001")));
+                    XdsClientImpl.ADS_TYPE_URL_EDS_V2, "0001")));
 
     // All endpoint watchers have been cancelled.
 
@@ -2366,7 +2388,7 @@ public class XdsClientImplTest {
             ImmutableList.<Policy.DropOverload>of())));
 
     response = buildDiscoveryResponse("2", clusterLoadAssignments,
-        XdsClientImpl.ADS_TYPE_URL_EDS, "0002");
+        XdsClientImpl.ADS_TYPE_URL_EDS_V2, "0002");
     responseObserver.onNext(response);
 
     // Client sent an ACK EDS request.
@@ -2375,7 +2397,7 @@ public class XdsClientImplTest {
             argThat(
                 new DiscoveryRequestMatcher("2",
                     ImmutableList.<String>of(),  // empty resources
-                    XdsClientImpl.ADS_TYPE_URL_EDS, "0002")));
+                    XdsClientImpl.ADS_TYPE_URL_EDS_V2, "0002")));
 
     // Cancelled watchers do not receive notification.
     verifyNoMoreInteractions(watcher1, watcher2);
@@ -2392,7 +2414,7 @@ public class XdsClientImplTest {
     // An EDS request is sent to re-subscribe the cluster again.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "2", "cluster-bar.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_EDS, "0002")));
+            XdsClientImpl.ADS_TYPE_URL_EDS_V2, "0002")));
 
     // Management server sends back an EDS response for re-subscribed resource.
     clusterLoadAssignments = ImmutableList.of(
@@ -2405,7 +2427,7 @@ public class XdsClientImplTest {
             ImmutableList.<Policy.DropOverload>of())));
 
     response = buildDiscoveryResponse("3", clusterLoadAssignments,
-        XdsClientImpl.ADS_TYPE_URL_EDS, "0003");
+        XdsClientImpl.ADS_TYPE_URL_EDS_V2, "0003");
     responseObserver.onNext(response);
 
     ArgumentCaptor<EndpointUpdate> endpointUpdateCaptor3 = ArgumentCaptor.forClass(null);
@@ -2426,7 +2448,7 @@ public class XdsClientImplTest {
             argThat(
                 new DiscoveryRequestMatcher("3",
                     ImmutableList.of("cluster-bar.googleapis.com"),
-                    XdsClientImpl.ADS_TYPE_URL_EDS, "0003")));
+                    XdsClientImpl.ADS_TYPE_URL_EDS_V2, "0003")));
   }
 
   @Test
@@ -2442,7 +2464,7 @@ public class XdsClientImplTest {
         .onNext(
             argThat(
                 new DiscoveryRequestMatcher("", "cluster-foo.googleapis.com",
-                    XdsClientImpl.ADS_TYPE_URL_EDS, "")));
+                    XdsClientImpl.ADS_TYPE_URL_EDS_V2, "")));
     assertThat(fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
 
     fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC - 1, TimeUnit.SECONDS);
@@ -2460,7 +2482,7 @@ public class XdsClientImplTest {
             argThat(
                 new DiscoveryRequestMatcher("",
                     ImmutableList.of("cluster-foo.googleapis.com", "cluster-bar.googleapis.com"),
-                    XdsClientImpl.ADS_TYPE_URL_EDS, "")));
+                    XdsClientImpl.ADS_TYPE_URL_EDS_V2, "")));
     assertThat(fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(2);
 
     fakeClock.forwardTime(1, TimeUnit.SECONDS);
@@ -2503,7 +2525,7 @@ public class XdsClientImplTest {
     List<Any> clusters = ImmutableList.of(
         Any.pack(buildCluster("cluster-foo.googleapis.com", "cluster-foo:service-bar", false)));
     DiscoveryResponse response =
-        buildDiscoveryResponse("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS, "0000");
+        buildDiscoveryResponse("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS_V2, "0000");
     responseObserver.onNext(response);
 
     xdsClient.watchEndpointData("cluster-foo:service-bar", endpointWatcher);
@@ -2519,7 +2541,7 @@ public class XdsClientImplTest {
             ImmutableList.<Policy.DropOverload>of())));
     response =
         buildDiscoveryResponse("0", clusterLoadAssignments,
-            XdsClientImpl.ADS_TYPE_URL_EDS, "0000");
+            XdsClientImpl.ADS_TYPE_URL_EDS_V2, "0000");
     responseObserver.onNext(response);
 
     ArgumentCaptor<EndpointUpdate> endpointUpdateCaptor = ArgumentCaptor.forClass(null);
@@ -2540,7 +2562,7 @@ public class XdsClientImplTest {
     clusters = ImmutableList.of(
         Any.pack(buildCluster("cluster-foo.googleapis.com", "cluster-foo:service-blade", false)));
     response =
-        buildDiscoveryResponse("1", clusters, XdsClientImpl.ADS_TYPE_URL_CDS, "0001");
+        buildDiscoveryResponse("1", clusters, XdsClientImpl.ADS_TYPE_URL_CDS_V2, "0001");
     responseObserver.onNext(response);
 
     // Watcher get notification for endpoint resource "cluster-foo:service-bar" being deleted.
@@ -2635,7 +2657,7 @@ public class XdsClientImplTest {
     // Client sent an RDS request based on the received listener.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "route-foo.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_RDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_RDS_V2, "")));
 
     // Management server encounters an error and closes the stream.
     responseObserver.onError(Status.UNKNOWN.asException());
@@ -2682,7 +2704,7 @@ public class XdsClientImplTest {
                         ImmutableList.of(TARGET_AUTHORITY), // matching virtual host
                         "cluster.googleapis.com")))));
     DiscoveryResponse rdsResponse =
-        buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0000");
+        buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS_V2, "0000");
     // Management server sends an RDS response.
     responseObserver.onNext(rdsResponse);
 
@@ -2733,7 +2755,7 @@ public class XdsClientImplTest {
     // Client sent first CDS request.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_CDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_CDS_V2, "")));
 
     // Start watching endpoint information.
     xdsClient.watchEndpointData("cluster.googleapis.com", endpointWatcher);
@@ -2741,7 +2763,7 @@ public class XdsClientImplTest {
     // Client sent first EDS request.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_EDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_EDS_V2, "")));
 
     // Management server closes the RPC stream with an error.
     responseObserver.onError(Status.UNKNOWN.asException());
@@ -2766,10 +2788,10 @@ public class XdsClientImplTest {
             XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_CDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_CDS_V2, "")));
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_EDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_EDS_V2, "")));
 
     // Management server becomes unreachable.
     responseObserver.onError(Status.UNAVAILABLE.asException());
@@ -2795,10 +2817,10 @@ public class XdsClientImplTest {
             XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_CDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_CDS_V2, "")));
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_EDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_EDS_V2, "")));
 
     // Management server is still not reachable.
     responseObserver.onError(Status.UNAVAILABLE.asException());
@@ -2824,16 +2846,16 @@ public class XdsClientImplTest {
             XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_CDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_CDS_V2, "")));
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_EDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_EDS_V2, "")));
 
     // Management server sends back a CDS response.
     List<Any> clusters = ImmutableList.of(
         Any.pack(buildCluster("cluster.googleapis.com", null, false)));
     DiscoveryResponse cdsResponse =
-        buildDiscoveryResponse("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS, "0000");
+        buildDiscoveryResponse("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS_V2, "0000");
     responseObserver.onNext(cdsResponse);
 
     // Client sent an CDS ACK request (Omitted).
@@ -2857,10 +2879,10 @@ public class XdsClientImplTest {
             XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_CDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_CDS_V2, "")));
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_EDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_EDS_V2, "")));
 
     // Management server becomes unreachable again.
     responseObserver.onError(Status.UNAVAILABLE.asException());
@@ -2885,10 +2907,10 @@ public class XdsClientImplTest {
             XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_CDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_CDS_V2, "")));
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_EDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_EDS_V2, "")));
 
     verifyNoMoreInteractions(mockedDiscoveryService, backoffPolicyProvider, backoffPolicy1,
         backoffPolicy2);
@@ -2951,7 +2973,7 @@ public class XdsClientImplTest {
             XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_CDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_CDS_V2, "")));
 
     // Management server is still unreachable.
     responseObserver.onError(Status.UNAVAILABLE.asException());
@@ -2975,16 +2997,16 @@ public class XdsClientImplTest {
             XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_CDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_CDS_V2, "")));
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_EDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_EDS_V2, "")));
 
     // Management server sends back a CDS response.
     List<Any> clusters = ImmutableList.of(
         Any.pack(buildCluster("cluster.googleapis.com", null, false)));
     DiscoveryResponse cdsResponse =
-        buildDiscoveryResponse("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS, "0000");
+        buildDiscoveryResponse("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS_V2, "0000");
     responseObserver.onNext(cdsResponse);
 
     // Client sent an CDS ACK request (Omitted).
@@ -2994,14 +3016,14 @@ public class XdsClientImplTest {
     // Client updates EDS resource subscription immediately.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", ImmutableList.<String>of(),
-            XdsClientImpl.ADS_TYPE_URL_EDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_EDS_V2, "")));
 
     // Become interested in endpoints of another cluster.
     xdsClient.watchEndpointData("cluster2.googleapis.com", endpointWatcher);
     // Client updates EDS resource subscription immediately.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster2.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_EDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_EDS_V2, "")));
 
     // Management server closes the RPC stream again.
     responseObserver.onCompleted();
@@ -3018,10 +3040,10 @@ public class XdsClientImplTest {
             XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_CDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_CDS_V2, "")));
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster2.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_EDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_EDS_V2, "")));
 
     // Management server becomes unreachable again.
     responseObserver.onError(Status.UNAVAILABLE.asException());
@@ -3045,10 +3067,10 @@ public class XdsClientImplTest {
             XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
     verify(requestObserver, never())
         .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_CDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_CDS_V2, "")));
     verify(requestObserver, never())
         .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster2.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_EDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_EDS_V2, "")));
 
     verifyNoMoreInteractions(mockedDiscoveryService, backoffPolicyProvider, backoffPolicy1,
         backoffPolicy2);
@@ -3136,7 +3158,7 @@ public class XdsClientImplTest {
                     buildVirtualHost(
                         ImmutableList.of(TARGET_AUTHORITY), // matching virtual host
                         "cluster-foo.googleapis.com")))));
-    response = buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0000");
+    response = buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS_V2, "0000");
     responseObserver.onNext(response);
 
     assertThat(rdsRespTimer.isCancelled()).isTrue();
@@ -3270,7 +3292,7 @@ public class XdsClientImplTest {
                         ImmutableList.of(TARGET_AUTHORITY), // matching virtual host
                         "cluster.googleapis.com")))));
     DiscoveryResponse rdsResponse =
-        buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0000");
+        buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS_V2, "0000");
     responseObserver.onNext(rdsResponse);
   }
 
@@ -3335,8 +3357,10 @@ public class XdsClientImplTest {
             .addAllDomains(ImmutableList.of("*"))
             .build();
     RouteConfiguration routeConfig =
-        buildRouteConfiguration(
-            "route-foo.googleapis.com", ImmutableList.of(vHost1, vHost2, vHost3));
+        RouteConfiguration.newBuilder()
+            .setName("route-foo.googleapis.com")
+            .addAllVirtualHosts(ImmutableList.of(vHost1, vHost2, vHost3))
+            .build();
     assertThat(XdsClientImpl.findVirtualHostForHostName(routeConfig, hostname)).isEqualTo(vHost1);
   }
 
@@ -3359,8 +3383,10 @@ public class XdsClientImplTest {
             .addAllDomains(ImmutableList.of("*"))
             .build();
     RouteConfiguration routeConfig =
-        buildRouteConfiguration(
-            "route-foo.googleapis.com", ImmutableList.of(vHost1, vHost2, vHost3));
+        RouteConfiguration.newBuilder()
+            .setName("route-foo.googleapis.com")
+            .addAllVirtualHosts(ImmutableList.of(vHost1, vHost2, vHost3))
+            .build();
     assertThat(XdsClientImpl.findVirtualHostForHostName(routeConfig, hostname)).isEqualTo(vHost1);
   }
 
@@ -3378,8 +3404,10 @@ public class XdsClientImplTest {
             .addAllDomains(ImmutableList.of("b.googleapis.com"))
             .build();
     RouteConfiguration routeConfig =
-        buildRouteConfiguration(
-            "route-foo.googleapis.com", ImmutableList.of(vHost1, vHost2));
+        RouteConfiguration.newBuilder()
+            .setName("route-foo.googleapis.com")
+            .addAllVirtualHosts(ImmutableList.of(vHost1, vHost2))
+            .build();
     assertThat(XdsClientImpl.findVirtualHostForHostName(routeConfig, hostname)).isEqualTo(vHost1);
   }
 
@@ -3521,7 +3549,7 @@ public class XdsClientImplTest {
                             ImmutableList.of("foo.googleapis.com", "bar.googleapis.com"),
                             "cluster.googleapis.com")))));
     DiscoveryResponse response =
-        buildDiscoveryResponse("213", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0052");
+        buildDiscoveryResponse("213", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS_V2, "0052");
 
     String expectedString = "{\n"
         + "  \"versionInfo\": \"213\",\n"
@@ -3562,7 +3590,7 @@ public class XdsClientImplTest {
         Any.pack(buildCluster("cluster-bar.googleapis.com", "service-blaze:cluster-bar", true)),
         Any.pack(buildCluster("cluster-foo.googleapis.com", null, false)));
     DiscoveryResponse response =
-        buildDiscoveryResponse("14", clusters, XdsClientImpl.ADS_TYPE_URL_CDS, "8");
+        buildDiscoveryResponse("14", clusters, XdsClientImpl.ADS_TYPE_URL_CDS_V2, "8");
 
     String expectedString = "{\n"
         + "  \"versionInfo\": \"14\",\n"
@@ -3619,7 +3647,7 @@ public class XdsClientImplTest {
 
     DiscoveryResponse response =
         buildDiscoveryResponse("5", clusterLoadAssignments,
-            XdsClientImpl.ADS_TYPE_URL_EDS, "004");
+            XdsClientImpl.ADS_TYPE_URL_EDS_V2, "004");
 
     String expectedString = "{\n"
         + "  \"versionInfo\": \"5\",\n"
