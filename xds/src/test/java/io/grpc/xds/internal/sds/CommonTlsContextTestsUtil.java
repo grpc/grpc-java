@@ -26,6 +26,7 @@ import io.envoyproxy.envoy.config.core.v3.DataSource;
 import io.envoyproxy.envoy.config.core.v3.GrpcService;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext.CombinedCertificateValidationContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.SdsSecretConfig;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.TlsCertificate;
@@ -235,8 +236,8 @@ public class CommonTlsContextTestsUtil {
                 .addAllMatchSubjectAltNames(matchSubjectAltNames)
                 .build();
     if (sdsSecretConfig != null && certValidationContext != null) {
-      CommonTlsContext.CombinedCertificateValidationContext.Builder combinedBuilder =
-          CommonTlsContext.CombinedCertificateValidationContext.newBuilder()
+      CombinedCertificateValidationContext.Builder combinedBuilder =
+          CombinedCertificateValidationContext.newBuilder()
               .setDefaultValidationContext(certValidationContext)
               .setValidationContextSdsSecretConfig(sdsSecretConfig);
       builder.setCombinedValidationContext(combinedBuilder);
