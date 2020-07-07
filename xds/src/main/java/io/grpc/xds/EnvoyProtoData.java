@@ -345,8 +345,7 @@ final class EnvoyProtoData {
           new EquivalentAddressGroup(ImmutableList.<java.net.SocketAddress>of(addr)),
           proto.getLoadBalancingWeight().getValue(),
           proto.getHealthStatus() == io.envoyproxy.envoy.api.v2.core.HealthStatus.HEALTHY
-              || proto.getHealthStatus()
-              == io.envoyproxy.envoy.api.v2.core.HealthStatus.UNKNOWN);
+              || proto.getHealthStatus() == io.envoyproxy.envoy.api.v2.core.HealthStatus.UNKNOWN);
     }
 
     EquivalentAddressGroup getAddress() {
