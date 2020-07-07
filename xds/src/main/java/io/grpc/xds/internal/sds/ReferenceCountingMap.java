@@ -106,7 +106,7 @@ final class ReferenceCountingMap<K, V extends Closeable> {
     V create(K key);
   }
 
-  private static class Instance<V extends Closeable> {
+  private static final class Instance<V extends Closeable> {
     final V value;
     private int refCount;
 

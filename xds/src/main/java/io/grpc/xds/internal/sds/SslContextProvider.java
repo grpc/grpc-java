@@ -94,7 +94,7 @@ public abstract class SslContextProvider implements Closeable {
 
   /** Closes this provider and releases any resources. */
   @Override
-  public void close() {}
+  public abstract void close();
 
   /**
    * Registers a callback on the given executor. The callback will run when SslContext becomes
