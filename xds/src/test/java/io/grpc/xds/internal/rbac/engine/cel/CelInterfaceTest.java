@@ -18,11 +18,7 @@ package io.grpc.xds.internal;
 
 import static com.google.common.truth.Truth.assertThat;
 
-import com.google.api.expr.v1alpha1.CheckedExpr;
 import com.google.api.expr.v1alpha1.Expr;
-import com.google.api.expr.v1alpha1.ParsedExpr;
-import com.google.api.expr.v1alpha1.SourceInfo;
-import com.google.api.expr.v1alpha1.Type;
 import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.Descriptors.Descriptor;
 import io.grpc.xds.InterpreterException;
@@ -35,46 +31,32 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-/** Unit tests for {@link DefaultInterpreter}. */
+/** Unit tests for Cel Interface. */
 @RunWith(JUnit4.class)
 public class CelInterfaceTest {
   private RuntimeTypeProvider messageProvider;
   private Dispatcher dispatcher;
   private Interpreter interpreter;
-  private Env env;
-  private CheckedExpr checkedResult;
   private Activation activation;
   private Object result;
 
   @Test
   public void setup() throws InterpreterException {
+    // Set up interpreter used in Cel library's eval function.
     List<Descriptor> descriptors = new ArrayList<>();
     messageProvider = DescriptorMessageProvider.dynamicMessages(descriptors);
     dispatcher = DefaultDispatcher.create();
     interpreter = new DefaultInterpreter(messageProvider, dispatcher);
-
-    Errors errors = new Errors("source_location", null);
-    TypeProvider typeProvider = new DescriptorTypeProvider();
-    env = Env.standard(errors, typeProvider);
-    env.add("requestUrlPath", Type.newBuilder().build());
-    env.add("requestHost", Type.newBuilder().build());
-    env.add("requestMethod", Type.newBuilder().build());
-
-    Expr conditions = Expr.newBuilder().build();
-    ParsedExpr parsedConditions = ParsedExpr.newBuilder()
-        .setExpr(conditions)
-        .setSourceInfo(SourceInfo.newBuilder().build())
-        .build();
-    checkedResult = ExprChecker.check(env, "", parsedConditions);
-
+    // Set up activation used in Cel library's eval function.
     Map<String, Object> map = new HashMap<>();
     map.put("requestUrlPath", new Object());
     map.put("requestHost", new Object());
     map.put("requestMethod", new Object());
     ImmutableMap<String, Object> apiAttributes = ImmutableMap.copyOf(map);
-
     activation = Activation.copyOf(apiAttributes);
-    result = interpreter.createInterpretable(checkedResult).eval(activation);
+    // Add a fake condition Expr that are being evaluated.
+    Expr conditions = Expr.newBuilder().build();
+    result = interpreter.createInterpretable(conditions).eval(activation);
   }
 
   @Test
@@ -84,12 +66,9 @@ public class CelInterfaceTest {
     } catch (InterpreterException e) {
       System.out.println(e.toString());
     }
-    
     assertThat(messageProvider).isNotNull();
     assertThat(dispatcher).isNotNull();
     assertThat(interpreter).isNotNull();
-    assertThat(env).isNotNull();
-    assertThat(checkedResult).isNotNull();
     assertThat(activation).isNotNull();
     assertThat(result).isNotNull();
   }

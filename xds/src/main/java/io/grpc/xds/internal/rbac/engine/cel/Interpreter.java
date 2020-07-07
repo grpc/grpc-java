@@ -16,11 +16,11 @@
 
 package io.grpc.xds.internal;
 
-import com.google.api.expr.v1alpha1.CheckedExpr;
+import com.google.api.expr.v1alpha1.Expr;
 import io.grpc.xds.InterpreterException;
 
 /** Interface to a CEL interpreter. */
 public interface Interpreter {
   /** Creates an interpretable for the given expression. */
-  Interpretable createInterpretable(CheckedExpr checkedExpr) throws InterpreterException;
+  Interpretable createInterpretable(Expr expr) throws InterpreterException;
 }

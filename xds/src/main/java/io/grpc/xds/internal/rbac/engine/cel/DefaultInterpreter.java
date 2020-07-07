@@ -16,7 +16,7 @@
 
 package io.grpc.xds.internal;
 
-import com.google.api.expr.v1alpha1.CheckedExpr;
+import com.google.api.expr.v1alpha1.Expr;
 import io.grpc.xds.InterpreterException;
 
 /** Default implementation of {@link Interpreter}. */
@@ -29,17 +29,17 @@ public class DefaultInterpreter implements Interpreter {
   public DefaultInterpreter(RuntimeTypeProvider typeProvider, Dispatcher dispatcher) {}  
   
   @Override
-  public Interpretable createInterpretable(CheckedExpr checkedExpr) 
+  public Interpretable createInterpretable(Expr expr) 
     throws InterpreterException {
-    return new DefaultInterpretable(checkedExpr);
+    return new DefaultInterpretable(expr);
   }
 
   private static class DefaultInterpretable implements Interpretable {
     /**
     * Creates a new interpretable.
-    * @param checkedExpr a Cel expression.
+    * @param expr a Cel expression.
     */
-    public DefaultInterpretable(CheckedExpr checkedExpr) {}
+    public DefaultInterpretable(Expr expr) {}
 
     @Override
     public Object eval(Activation activation) throws InterpreterException {
