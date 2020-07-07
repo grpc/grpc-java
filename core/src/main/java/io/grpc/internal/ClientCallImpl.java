@@ -584,10 +584,22 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
   private class ClientStreamListenerImpl implements ClientStreamListener {
     private final Listener<RespT> observer;
-    private boolean closed;
+    private Status exceptionStatus;
 
     public ClientStreamListenerImpl(Listener<RespT> observer) {
       this.observer = checkNotNull(observer, "observer");
+    }
+
+    /**
+     * Cancels call and schedules onClose() notification. May only be called from the application
+     * thread.
+     */
+    private void exceptionThrown(Status status) {
+      // Since each RPC can have its own executor, we can only call onClose() when we are sure there
+      // will be no further callbacks. We set the status here and overwrite the onClose() details
+      // when it arrives.
+      exceptionStatus = status;
+      stream.cancel(status);
     }
 
     @Override
@@ -612,16 +624,14 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         }
 
         private void runInternal() {
-          if (closed) {
+          if (exceptionStatus != null) {
             return;
           }
           try {
             observer.onHeaders(headers);
           } catch (Throwable t) {
-            Status status =
-                Status.CANCELLED.withCause(t).withDescription("Failed to read headers");
-            stream.cancel(status);
-            close(status, new Metadata());
+            exceptionThrown(
+                Status.CANCELLED.withCause(t).withDescription("Failed to read headers"));
           }
         }
       }
@@ -655,7 +665,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         }
 
         private void runInternal() {
-          if (closed) {
+          if (exceptionStatus != null) {
             GrpcUtil.closeQuietly(producer);
             return;
           }
@@ -672,10 +682,8 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
             }
           } catch (Throwable t) {
             GrpcUtil.closeQuietly(producer);
-            Status status =
-                Status.CANCELLED.withCause(t).withDescription("Failed to read message.");
-            stream.cancel(status);
-            close(status, new Metadata());
+            exceptionThrown(
+                Status.CANCELLED.withCause(t).withDescription("Failed to read message."));
           }
         }
       }
@@ -684,20 +692,6 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         callExecutor.execute(new MessagesAvailable());
       } finally {
         PerfMark.stopTask("ClientStreamListener.messagesAvailable", tag);
-      }
-    }
-
-    /**
-     * Must be called from application thread.
-     */
-    private void close(Status status, Metadata trailers) {
-      closed = true;
-      cancelListenersShouldBeRemoved = true;
-      try {
-        closeObserver(observer, status, trailers);
-      } finally {
-        removeContextListenerAndCancelDeadlineFuture();
-        channelCallsTracer.reportCallEnded(status.isOk());
       }
     }
 
@@ -752,11 +746,25 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         }
 
         private void runInternal() {
-          if (closed) {
-            // We intentionally don't keep the status or metadata from the server.
-            return;
+          Status status = savedStatus;
+          Metadata trailers = savedTrailers;
+          if (exceptionStatus != null) {
+            // Ideally exceptionStatus == savedStatus, as exceptionStatus was passed to cancel().
+            // However the cancel is racy and this closed() may have already been queued when the
+            // cancellation occurred. Since other calls like onMessage() will throw away data if
+            // exceptionStatus != null, it is semantically essential that we _not_ use a status
+            // provided by the server.
+            status = exceptionStatus;
+            // Replace trailers to prevent mixing sources of status and trailers.
+            trailers = new Metadata();
           }
-          close(savedStatus, savedTrailers);
+          cancelListenersShouldBeRemoved = true;
+          try {
+            closeObserver(observer, status, trailers);
+          } finally {
+            removeContextListenerAndCancelDeadlineFuture();
+            channelCallsTracer.reportCallEnded(status.isOk());
+          }
         }
       }
 
@@ -789,13 +797,14 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         }
 
         private void runInternal() {
+          if (exceptionStatus != null) {
+            return;
+          }
           try {
             observer.onReady();
           } catch (Throwable t) {
-            Status status =
-                Status.CANCELLED.withCause(t).withDescription("Failed to call onReady.");
-            stream.cancel(status);
-            close(status, new Metadata());
+            exceptionThrown(
+                Status.CANCELLED.withCause(t).withDescription("Failed to call onReady."));
           }
         }
       }
