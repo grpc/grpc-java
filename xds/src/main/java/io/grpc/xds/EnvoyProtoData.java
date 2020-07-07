@@ -414,7 +414,7 @@ final class EnvoyProtoData {
           numerator *= 100;
           break;
         case HUNDRED:
-          numerator *= 100_00;
+          numerator *= 10_000;
           break;
         case MILLION:
           break;
@@ -440,7 +440,7 @@ final class EnvoyProtoData {
           numerator *= 100;
           break;
         case HUNDRED:
-          numerator *= 100_00;
+          numerator *= 10_000;
           break;
         case MILLION:
           break;
