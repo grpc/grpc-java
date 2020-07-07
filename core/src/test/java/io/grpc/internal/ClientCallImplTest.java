@@ -257,6 +257,51 @@ public class ClientCallImplTest {
   }
 
   @Test
+  public void exceptionInOnHeadersHasOnCloseQueuedLast() {
+    class PointOfNoReturnExecutor implements Executor {
+      boolean rejectNewRunnables;
+
+      @Override public void execute(Runnable command) {
+        assertThat(rejectNewRunnables).isFalse();
+        command.run();
+      }
+    }
+
+    final PointOfNoReturnExecutor executor = new PointOfNoReturnExecutor();
+    ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
+        method,
+        executor,
+        baseCallOptions,
+        provider,
+        deadlineCancellationExecutor,
+        channelCallTracer,
+        /* retryEnabled= */ false);
+    callListener = new NoopClientCall.NoopClientCallListener<Void>() {
+      private final RuntimeException failure = new RuntimeException("bad");
+
+      @Override public void onHeaders(Metadata metadata) {
+        throw failure;
+      }
+
+      @Override public void onClose(Status status, Metadata metadata) {
+        verify(stream).cancel(same(status));
+        assertThat(status.getCode()).isEqualTo(Status.Code.CANCELLED);
+        assertThat(status.getCause()).isSameInstanceAs(failure);
+        // At the point onClose() is called the user may shut down the executor, so no further
+        // Runnables may be scheduled. The only thread-safe way of guaranteeing that is for
+        // onClose() to be queued last.
+        executor.rejectNewRunnables = true;
+      }
+    };
+    call.start(callListener, new Metadata());
+    verify(stream).start(listenerArgumentCaptor.capture());
+    final ClientStreamListener streamListener = listenerArgumentCaptor.getValue();
+
+    streamListener.headersRead(new Metadata());
+    streamListener.closed(Status.OK, new Metadata());
+  }
+
+  @Test
   public void exceptionInOnReadyTakesPrecedenceOverServer() {
     DelayedExecutor executor = new DelayedExecutor();
     ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
