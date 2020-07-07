@@ -24,8 +24,8 @@ import com.google.common.base.MoreObjects.ToStringHelper;
 import com.google.common.collect.ImmutableList;
 import com.google.re2j.Pattern;
 import com.google.re2j.PatternSyntaxException;
-import io.envoyproxy.envoy.type.FractionalPercent;
-import io.envoyproxy.envoy.type.FractionalPercent.DenominatorType;
+import io.envoyproxy.envoy.type.v3.FractionalPercent;
+import io.envoyproxy.envoy.type.v3.FractionalPercent.DenominatorType;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.xds.RouteMatch.FractionMatcher;
 import io.grpc.xds.RouteMatch.HeaderMatcher;
@@ -148,7 +148,15 @@ final class EnvoyProtoData {
       this.subZone = subZone;
     }
 
-    static Locality fromEnvoyProtoLocality(io.envoyproxy.envoy.api.v2.core.Locality locality) {
+    static Locality fromEnvoyProtoLocality(io.envoyproxy.envoy.config.core.v3.Locality locality) {
+      return new Locality(
+          /* region = */ locality.getRegion(),
+          /* zone = */ locality.getZone(),
+          /* subZone = */ locality.getSubZone());
+    }
+
+    @VisibleForTesting
+    static Locality fromEnvoyProtoLocalityV2(io.envoyproxy.envoy.api.v2.core.Locality locality) {
       return new Locality(
           /* region = */ locality.getRegion(),
           /* zone = */ locality.getZone(),
@@ -222,10 +230,25 @@ final class EnvoyProtoData {
     }
 
     static LocalityLbEndpoints fromEnvoyProtoLocalityLbEndpoints(
+        io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints proto) {
+      List<LbEndpoint> endpoints = new ArrayList<>(proto.getLbEndpointsCount());
+      for (io.envoyproxy.envoy.config.endpoint.v3.LbEndpoint endpoint :
+          proto.getLbEndpointsList()) {
+        endpoints.add(LbEndpoint.fromEnvoyProtoLbEndpoint(endpoint));
+      }
+      return
+          new LocalityLbEndpoints(
+              endpoints,
+              proto.getLoadBalancingWeight().getValue(),
+              proto.getPriority());
+    }
+
+    @VisibleForTesting
+    static LocalityLbEndpoints fromEnvoyProtoLocalityLbEndpointsV2(
         io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints proto) {
       List<LbEndpoint> endpoints = new ArrayList<>(proto.getLbEndpointsCount());
       for (io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint endpoint : proto.getLbEndpointsList()) {
-        endpoints.add(LbEndpoint.fromEnvoyProtoLbEndpoint(endpoint));
+        endpoints.add(LbEndpoint.fromEnvoyProtoLbEndpointV2(endpoint));
       }
       return
           new LocalityLbEndpoints(
@@ -299,18 +322,30 @@ final class EnvoyProtoData {
     }
 
     static LbEndpoint fromEnvoyProtoLbEndpoint(
+        io.envoyproxy.envoy.config.endpoint.v3.LbEndpoint proto) {
+      io.envoyproxy.envoy.config.core.v3.SocketAddress socketAddress =
+          proto.getEndpoint().getAddress().getSocketAddress();
+      InetSocketAddress addr =
+          new InetSocketAddress(socketAddress.getAddress(), socketAddress.getPortValue());
+      return new LbEndpoint(
+          new EquivalentAddressGroup(ImmutableList.<java.net.SocketAddress>of(addr)),
+          proto.getLoadBalancingWeight().getValue(),
+          proto.getHealthStatus() == io.envoyproxy.envoy.config.core.v3.HealthStatus.HEALTHY
+              || proto.getHealthStatus()
+                  == io.envoyproxy.envoy.config.core.v3.HealthStatus.UNKNOWN);
+    }
+
+    private static LbEndpoint fromEnvoyProtoLbEndpointV2(
         io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint proto) {
       io.envoyproxy.envoy.api.v2.core.SocketAddress socketAddress =
           proto.getEndpoint().getAddress().getSocketAddress();
       InetSocketAddress addr =
           new InetSocketAddress(socketAddress.getAddress(), socketAddress.getPortValue());
-      return
-          new LbEndpoint(
-              new EquivalentAddressGroup(ImmutableList.<java.net.SocketAddress>of(addr)),
-              proto.getLoadBalancingWeight().getValue(),
-              proto.getHealthStatus() == io.envoyproxy.envoy.api.v2.core.HealthStatus.HEALTHY
-                  || proto.getHealthStatus() == io.envoyproxy.envoy.api.v2.core.HealthStatus.UNKNOWN
-              );
+      return new LbEndpoint(
+          new EquivalentAddressGroup(ImmutableList.<java.net.SocketAddress>of(addr)),
+          proto.getLoadBalancingWeight().getValue(),
+          proto.getHealthStatus() == io.envoyproxy.envoy.api.v2.core.HealthStatus.HEALTHY
+              || proto.getHealthStatus() == io.envoyproxy.envoy.api.v2.core.HealthStatus.UNKNOWN);
     }
 
     EquivalentAddressGroup getAddress() {
@@ -370,7 +405,7 @@ final class EnvoyProtoData {
     }
 
     static DropOverload fromEnvoyProtoDropOverload(
-        io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy.DropOverload proto) {
+        io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment.Policy.DropOverload proto) {
       FractionalPercent percent = proto.getDropPercentage();
       int numerator = percent.getNumerator();
       DenominatorType type = percent.getDenominator();
@@ -379,7 +414,33 @@ final class EnvoyProtoData {
           numerator *= 100;
           break;
         case HUNDRED:
-          numerator *= 100_00;
+          numerator *= 10_000;
+          break;
+        case MILLION:
+          break;
+        default:
+          throw new IllegalArgumentException("Unknown denominator type of " + percent);
+      }
+
+      if (numerator > 1_000_000) {
+        numerator = 1_000_000;
+      }
+
+      return new DropOverload(proto.getCategory(), numerator);
+    }
+
+    @VisibleForTesting
+    static DropOverload fromEnvoyProtoDropOverloadV2(
+        io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy.DropOverload proto) {
+      io.envoyproxy.envoy.type.FractionalPercent percent = proto.getDropPercentage();
+      int numerator = percent.getNumerator();
+      io.envoyproxy.envoy.type.FractionalPercent.DenominatorType type = percent.getDenominator();
+      switch (type) {
+        case TEN_THOUSAND:
+          numerator *= 100;
+          break;
+        case HUNDRED:
+          numerator *= 10_000;
           break;
         case MILLION:
           break;
@@ -484,7 +545,8 @@ final class EnvoyProtoData {
     }
 
     @Nullable
-    static StructOrError<Route> fromEnvoyProtoRoute(io.envoyproxy.envoy.api.v2.route.Route proto) {
+    static StructOrError<Route> fromEnvoyProtoRoute(
+        io.envoyproxy.envoy.config.route.v3.Route proto) {
       StructOrError<RouteMatch> routeMatch = convertEnvoyProtoRouteMatch(proto.getMatch());
       if (routeMatch == null) {
         return null;
@@ -523,7 +585,7 @@ final class EnvoyProtoData {
     @SuppressWarnings("deprecation")
     @Nullable
     static StructOrError<RouteMatch> convertEnvoyProtoRouteMatch(
-        io.envoyproxy.envoy.api.v2.route.RouteMatch proto) {
+        io.envoyproxy.envoy.config.route.v3.RouteMatch proto) {
       if (proto.getQueryParametersCount() != 0) {
         return null;
       }
@@ -547,7 +609,7 @@ final class EnvoyProtoData {
       }
 
       List<HeaderMatcher> headerMatchers = new ArrayList<>();
-      for (io.envoyproxy.envoy.api.v2.route.HeaderMatcher hmProto : proto.getHeadersList()) {
+      for (io.envoyproxy.envoy.config.route.v3.HeaderMatcher hmProto : proto.getHeadersList()) {
         StructOrError<HeaderMatcher> headerMatcher = convertEnvoyProtoHeaderMatcher(hmProto);
         if (headerMatcher.getErrorDetail() != null) {
           return StructOrError.fromError(headerMatcher.getErrorDetail());
@@ -562,7 +624,7 @@ final class EnvoyProtoData {
 
     @SuppressWarnings("deprecation")
     private static StructOrError<PathMatcher> convertEnvoyProtoPathMatcher(
-        io.envoyproxy.envoy.api.v2.route.RouteMatch proto) {
+        io.envoyproxy.envoy.config.route.v3.RouteMatch proto) {
       String path = null;
       String prefix = null;
       Pattern safeRegEx = null;
@@ -573,8 +635,6 @@ final class EnvoyProtoData {
         case PATH:
           path = proto.getPath();
           break;
-        case REGEX:
-          return StructOrError.fromError("Unsupported path match type: regex");
         case SAFE_REGEX:
           String rawPattern = proto.getSafeRegex().getRegex();
           try {
@@ -591,7 +651,7 @@ final class EnvoyProtoData {
     }
 
     private static StructOrError<FractionMatcher> convertEnvoyProtoFraction(
-        io.envoyproxy.envoy.type.FractionalPercent proto) {
+        io.envoyproxy.envoy.type.v3.FractionalPercent proto) {
       int numerator = proto.getNumerator();
       int denominator = 0;
       switch (proto.getDenominator()) {
@@ -615,7 +675,7 @@ final class EnvoyProtoData {
     @VisibleForTesting
     @SuppressWarnings("deprecation")
     static StructOrError<HeaderMatcher> convertEnvoyProtoHeaderMatcher(
-        io.envoyproxy.envoy.api.v2.route.HeaderMatcher proto) {
+        io.envoyproxy.envoy.config.route.v3.HeaderMatcher proto) {
       String exactMatch = null;
       Pattern safeRegExMatch = null;
       HeaderMatcher.Range rangeMatch = null;
@@ -627,9 +687,6 @@ final class EnvoyProtoData {
         case EXACT_MATCH:
           exactMatch = proto.getExactMatch();
           break;
-        case REGEX_MATCH:
-          return StructOrError.fromError(
-              "HeaderMatcher [" + proto.getName() + "] has unsupported match type: regex");
         case SAFE_REGEX_MATCH:
           String rawPattern = proto.getSafeRegexMatch().getRegex();
           try {
@@ -722,7 +779,7 @@ final class EnvoyProtoData {
     @Nullable
     @VisibleForTesting
     static StructOrError<RouteAction> fromEnvoyProtoRouteAction(
-        io.envoyproxy.envoy.api.v2.route.RouteAction proto) {
+        io.envoyproxy.envoy.config.route.v3.RouteAction proto) {
       String cluster = null;
       List<ClusterWeight> weightedClusters = null;
       switch (proto.getClusterSpecifierCase()) {
@@ -732,10 +789,10 @@ final class EnvoyProtoData {
         case CLUSTER_HEADER:
           return null;
         case WEIGHTED_CLUSTERS:
-          List<io.envoyproxy.envoy.api.v2.route.WeightedCluster.ClusterWeight> clusterWeights
+          List<io.envoyproxy.envoy.config.route.v3.WeightedCluster.ClusterWeight> clusterWeights
               = proto.getWeightedClusters().getClustersList();
           weightedClusters = new ArrayList<>();
-          for (io.envoyproxy.envoy.api.v2.route.WeightedCluster.ClusterWeight clusterWeight
+          for (io.envoyproxy.envoy.config.route.v3.WeightedCluster.ClusterWeight clusterWeight
               : clusterWeights) {
             weightedClusters.add(ClusterWeight.fromEnvoyProtoClusterWeight(clusterWeight));
           }
@@ -799,7 +856,7 @@ final class EnvoyProtoData {
 
     @VisibleForTesting
     static ClusterWeight fromEnvoyProtoClusterWeight(
-        io.envoyproxy.envoy.api.v2.route.WeightedCluster.ClusterWeight proto) {
+        io.envoyproxy.envoy.config.route.v3.WeightedCluster.ClusterWeight proto) {
       return new ClusterWeight(proto.getName(), proto.getWeight().getValue());
     }
   }

@@ -90,7 +90,9 @@ envoy/config/listener/v3/api_listener.proto
 envoy/config/listener/v3/listener.proto
 envoy/config/listener/v3/listener_components.proto
 envoy/config/listener/v3/udp_listener_config.proto
+envoy/config/route/v3/route.proto
 envoy/config/route/v3/route_components.proto
+envoy/config/route/v3/scoped_route.proto
 envoy/config/trace/v2/http_tracer.proto
 envoy/config/trace/v2/trace.proto
 envoy/config/trace/v2/datadog.proto
@@ -99,7 +101,16 @@ envoy/config/trace/v2/lightstep.proto
 envoy/config/trace/v2/opencensus.proto
 envoy/config/trace/v2/service.proto
 envoy/config/trace/v2/zipkin.proto
+envoy/config/trace/v3/http_tracer.proto
+envoy/config/trace/v3/trace.proto
+envoy/config/trace/v3/datadog.proto
+envoy/config/trace/v3/dynamic_ot.proto
+envoy/config/trace/v3/lightstep.proto
+envoy/config/trace/v3/opencensus.proto
+envoy/config/trace/v3/service.proto
+envoy/config/trace/v3/zipkin.proto
 envoy/config/rbac/v2/rbac.proto
+envoy/extensions/filters/network/http_connection_manager/v3/http_connection_manager.proto
 envoy/extensions/transport_sockets/tls/v3/cert.proto
 envoy/extensions/transport_sockets/tls/v3/common.proto
 envoy/extensions/transport_sockets/tls/v3/secret.proto
