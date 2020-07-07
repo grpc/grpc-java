@@ -203,7 +203,7 @@ abstract class SdsSslContextProvider extends SslContextProvider implements SdsCl
   }
 
   @Override
-  void close() {
+  public void close() {
     if (certSdsClient != null) {
       certSdsClient.cancelSecretWatch(this);
       certSdsClient.shutdown();

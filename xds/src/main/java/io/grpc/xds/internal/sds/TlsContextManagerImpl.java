@@ -21,20 +21,20 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
-import io.grpc.xds.internal.sds.ReferenceCountingSslContextProviderMap.SslContextProviderFactory;
+import io.grpc.xds.internal.sds.ReferenceCountingMap.ValueFactory;
 
 /**
  * Class to manage {@link SslContextProvider} objects created from inputs we get from xDS. Used by
  * gRPC-xds to access the SslContext's and is not public API. This manager manages the life-cycle of
  * {@link SslContextProvider} objects as shared resources via ref-counting as described in {@link
- * ReferenceCountingSslContextProviderMap}.
+ * ReferenceCountingMap}.
  */
 public final class TlsContextManagerImpl implements TlsContextManager {
 
   private static TlsContextManagerImpl instance;
 
-  private final ReferenceCountingSslContextProviderMap<UpstreamTlsContext> mapForClients;
-  private final ReferenceCountingSslContextProviderMap<DownstreamTlsContext> mapForServers;
+  private final ReferenceCountingMap<UpstreamTlsContext, SslContextProvider> mapForClients;
+  private final ReferenceCountingMap<DownstreamTlsContext, SslContextProvider> mapForServers;
 
   private TlsContextManagerImpl() {
     this(new ClientSslContextProviderFactory(), new ServerSslContextProviderFactory());
@@ -42,12 +42,12 @@ public final class TlsContextManagerImpl implements TlsContextManager {
 
   @VisibleForTesting
   TlsContextManagerImpl(
-      SslContextProviderFactory<UpstreamTlsContext> clientFactory,
-      SslContextProviderFactory<DownstreamTlsContext> serverFactory) {
+      ValueFactory<UpstreamTlsContext, SslContextProvider> clientFactory,
+      ValueFactory<DownstreamTlsContext, SslContextProvider> serverFactory) {
     checkNotNull(clientFactory, "clientFactory");
     checkNotNull(serverFactory, "serverFactory");
-    mapForClients = new ReferenceCountingSslContextProviderMap<>(clientFactory);
-    mapForServers = new ReferenceCountingSslContextProviderMap<>(serverFactory);
+    mapForClients = new ReferenceCountingMap<>(clientFactory);
+    mapForServers = new ReferenceCountingMap<>(serverFactory);
   }
 
   /** Gets the TlsContextManagerImpl singleton. */

@@ -26,38 +26,38 @@ import javax.annotation.CheckReturnValue;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
- * A map for managing {@link SslContextProvider}s as reference-counted shared resources.
+ * A map for managing reference-counted shared resources - typically providers.
  *
- * <p>A key (of generic type K) identifies a {@link SslContextProvider}. The map also depends on a
- * factory {@link SslContextProviderFactory} to create a new instance of {@link SslContextProvider}
- * as needed. {@link SslContextProvider}s are ref-counted and closed by calling {@link
- * SslContextProvider#close()} when ref-count reaches zero.
+ * <p>A key (of generic type K) identifies a provider (of generic type V). The map also depends on a
+ * factory {@link ValueFactory} to create a new instance of V as needed. Values are ref-counted and
+ * closed by calling {@link Closeable#close()} when ref-count reaches zero.
  *
  * @param <K> Key type for the map
+ * @param <V> Value type for the map - it should be a {@link Closeable}
  */
 @ThreadSafe
-final class ReferenceCountingSslContextProviderMap<K> {
+final class ReferenceCountingMap<K, V extends Closeable> {
 
-  private final Map<K, Instance> instances = new HashMap<>();
-  private final SslContextProviderFactory<K> sslContextProviderFactory;
+  private final Map<K, Instance<V>> instances = new HashMap<>();
+  private final ValueFactory<K, V> valueFactory;
 
-  ReferenceCountingSslContextProviderMap(SslContextProviderFactory<K> sslContextProviderFactory) {
-    checkNotNull(sslContextProviderFactory, "sslContextProviderFactory");
-    this.sslContextProviderFactory = sslContextProviderFactory;
+  ReferenceCountingMap(ValueFactory<K, V> valueFactory) {
+    checkNotNull(valueFactory, "valueFactory");
+    this.valueFactory = valueFactory;
   }
 
   /**
-   * Gets an existing instance of {@link SslContextProvider}. If it doesn't exist, creates a new one
-   * using the provided {@link SslContextProviderFactory&lt;K&gt;}
+   * Gets an existing instance of a provider. If it doesn't exist, creates a new one
+   * using the provided {@link ValueFactory &lt;K, V&gt;}
    */
   @CheckReturnValue
-  public SslContextProvider get(K key) {
+  public V get(K key) {
     checkNotNull(key, "key");
     return getInternal(key);
   }
 
   /**
-   * Releases an instance of the given {@link SslContextProvider}.
+   * Releases an instance of the given value.
    *
    * <p>The instance must have been obtained from {@link #get(K)}. Otherwise will throw
    * IllegalArgumentException.
@@ -69,30 +69,30 @@ final class ReferenceCountingSslContextProviderMap<K> {
    * @param value the instance to be released
    * @return a null which the caller can use to clear the reference to that instance.
    */
-  public SslContextProvider release(K key, SslContextProvider value) {
+  public V release(K key, V value) {
     checkNotNull(key, "key");
     checkNotNull(value, "value");
     return releaseInternal(key, value);
   }
 
-  private synchronized SslContextProvider getInternal(K key) {
-    Instance instance = instances.get(key);
+  private synchronized V getInternal(K key) {
+    Instance<V> instance = instances.get(key);
     if (instance == null) {
-      instance = new Instance(sslContextProviderFactory.createSslContextProvider(key));
+      instance = new Instance<>(valueFactory.create(key));
       instances.put(key, instance);
-      return instance.sslContextProvider;
+      return instance.value;
     } else {
       return instance.acquire();
     }
   }
 
-  private synchronized SslContextProvider releaseInternal(K key, SslContextProvider instance) {
-    Instance cached = instances.get(key);
+  private synchronized V releaseInternal(K key, V value) {
+    Instance<V> cached = instances.get(key);
     checkArgument(cached != null, "No cached instance found for %s", key);
-    checkArgument(instance == cached.sslContextProvider, "Releasing the wrong instance");
+    checkArgument(value == cached.value, "Releasing the wrong instance");
     if (cached.release()) {
       try {
-        cached.sslContextProvider.close();
+        cached.value.close();
       } finally {
         instances.remove(key);
       }
@@ -101,19 +101,19 @@ final class ReferenceCountingSslContextProviderMap<K> {
     return null;
   }
 
-  /** A factory to create an SslContextProvider from the given key. */
-  public interface SslContextProviderFactory<K> {
-    SslContextProvider createSslContextProvider(K key);
+  /** A factory to create a value from the given key. */
+  public interface ValueFactory<K, V extends Closeable> {
+    V create(K key);
   }
 
-  private static class Instance {
-    final SslContextProvider sslContextProvider;
+  private static final class Instance<V extends Closeable> {
+    final V value;
     private int refCount;
 
-    /** Increment refCount and acquire a reference to sslContextProvider. */
-    SslContextProvider acquire() {
+    /** Increment refCount and acquire a reference to value. */
+    V acquire() {
       refCount++;
-      return sslContextProvider;
+      return value;
     }
 
     /** Decrement refCount and return true if it has reached 0. */
@@ -122,8 +122,8 @@ final class ReferenceCountingSslContextProviderMap<K> {
       return --refCount == 0;
     }
 
-    Instance(SslContextProvider sslContextProvider) {
-      this.sslContextProvider = sslContextProvider;
+    Instance(V value) {
+      this.value = value;
       this.refCount = 1;
     }
   }

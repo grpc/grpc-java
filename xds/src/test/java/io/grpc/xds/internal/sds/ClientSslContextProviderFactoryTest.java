@@ -42,7 +42,7 @@ public class ClientSslContextProviderFactoryTest {
             CLIENT_KEY_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
 
     SslContextProvider sslContextProvider =
-        clientSslContextProviderFactory.createSslContextProvider(upstreamTlsContext);
+        clientSslContextProviderFactory.create(upstreamTlsContext);
     assertThat(sslContextProvider).isNotNull();
   }
 
@@ -56,7 +56,7 @@ public class ClientSslContextProviderFactoryTest {
 
     try {
       SslContextProvider unused =
-          clientSslContextProviderFactory.createSslContextProvider(upstreamTlsContext);
+          clientSslContextProviderFactory.create(upstreamTlsContext);
       Assert.fail("no exception thrown");
     } catch (UnsupportedOperationException expected) {
       assertThat(expected)
@@ -78,7 +78,7 @@ public class ClientSslContextProviderFactoryTest {
 
     try {
       SslContextProvider unused =
-          clientSslContextProviderFactory.createSslContextProvider(upstreamTlsContext);
+          clientSslContextProviderFactory.create(upstreamTlsContext);
       Assert.fail("no exception thrown");
     } catch (UnsupportedOperationException expected) {
       assertThat(expected)

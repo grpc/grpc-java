@@ -41,7 +41,7 @@ import java.util.logging.Logger;
  * stream that is receiving the requested secret(s) or it could represent file-system based
  * secret(s) that are dynamic.
  */
-public abstract class SslContextProvider {
+public abstract class SslContextProvider implements Closeable {
 
   private static final Logger logger = Logger.getLogger(SslContextProvider.class.getName());
 
@@ -93,7 +93,8 @@ public abstract class SslContextProvider {
   }
 
   /** Closes this provider and releases any resources. */
-  void close() {}
+  @Override
+  public abstract void close();
 
   /**
    * Registers a callback on the given executor. The callback will run when SslContext becomes
