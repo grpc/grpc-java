@@ -19,6 +19,8 @@ package io.grpc.xds;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
+import io.envoyproxy.envoy.config.core.v3.Address;
+import io.envoyproxy.envoy.config.core.v3.SocketAddress;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.grpc.Internal;
 import java.util.ArrayList;
@@ -355,10 +357,9 @@ public final class EnvoyServerProtoData {
       this.filterChains = Collections.unmodifiableList(filterChains);
     }
 
-    private static String convertEnvoyAddressToString(
-        io.envoyproxy.envoy.config.core.v3.Address proto) {
+    private static String convertEnvoyAddressToString(Address proto) {
       if (proto.hasSocketAddress()) {
-        io.envoyproxy.envoy.config.core.v3.SocketAddress socketAddress = proto.getSocketAddress();
+        SocketAddress socketAddress = proto.getSocketAddress();
         String address = socketAddress.getAddress();
         switch (socketAddress.getPortSpecifierCase()) {
           case NAMED_PORT:
