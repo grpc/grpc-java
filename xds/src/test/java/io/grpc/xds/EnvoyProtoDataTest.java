@@ -215,8 +215,7 @@ public class EnvoyProtoDataTest {
     // path_specifier = safe_regex
     io.envoyproxy.envoy.config.route.v3.RouteMatch proto4 =
         io.envoyproxy.envoy.config.route.v3.RouteMatch.newBuilder()
-            .setSafeRegex(
-                RegexMatcher.newBuilder().setRegex("."))
+            .setSafeRegex(RegexMatcher.newBuilder().setRegex("."))
             .build();
     StructOrError<RouteMatch> struct4 = Route.convertEnvoyProtoRouteMatch(proto4);
     assertThat(struct4.getErrorDetail()).isNull();
@@ -286,9 +285,7 @@ public class EnvoyProtoDataTest {
                     .setDefaultValue(
                         FractionalPercent.newBuilder()
                             .setNumerator(30)
-                            .setDenominator(
-                                FractionalPercent.DenominatorType
-                                    .HUNDRED)))
+                            .setDenominator(FractionalPercent.DenominatorType.HUNDRED)))
             .build();
     StructOrError<RouteMatch> struct = Route.convertEnvoyProtoRouteMatch(proto);
     assertThat(struct.getErrorDetail()).isNull();
@@ -361,8 +358,7 @@ public class EnvoyProtoDataTest {
     io.envoyproxy.envoy.config.route.v3.HeaderMatcher proto3 =
         io.envoyproxy.envoy.config.route.v3.HeaderMatcher.newBuilder()
             .setName(":method")
-            .setSafeRegexMatch(
-                RegexMatcher.newBuilder().setRegex("P*"))
+            .setSafeRegexMatch(RegexMatcher.newBuilder().setRegex("P*"))
             .build();
     StructOrError<HeaderMatcher> struct3 = Route.convertEnvoyProtoHeaderMatcher(proto3);
     assertThat(struct3.getErrorDetail()).isNull();
@@ -373,8 +369,7 @@ public class EnvoyProtoDataTest {
     io.envoyproxy.envoy.config.route.v3.HeaderMatcher proto4 =
         io.envoyproxy.envoy.config.route.v3.HeaderMatcher.newBuilder()
             .setName("timeout")
-            .setRangeMatch(
-                Int64Range.newBuilder().setStart(10L).setEnd(20L))
+            .setRangeMatch(Int64Range.newBuilder().setStart(10L).setEnd(20L))
             .build();
     StructOrError<HeaderMatcher> struct4 = Route.convertEnvoyProtoHeaderMatcher(proto4);
     assertThat(struct4.getErrorDetail()).isNull();

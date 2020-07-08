@@ -1193,8 +1193,7 @@ final class XdsClientImpl extends XdsClient {
         priorities.add(localityPriority);
         // The endpoint field of each lb_endpoints must be set.
         // Inside of it: the address field must be set.
-        for (LbEndpoint lbEndpoint
-            : localityLbEndpoints.getLbEndpointsList()) {
+        for (LbEndpoint lbEndpoint : localityLbEndpoints.getLbEndpointsList()) {
           if (!lbEndpoint.getEndpoint().hasAddress()) {
             errorMessage = "ClusterLoadAssignment " + clusterName + " : endpoint with no address.";
             break;
