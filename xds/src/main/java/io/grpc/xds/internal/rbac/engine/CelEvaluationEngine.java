@@ -16,14 +16,7 @@
 
 package io.grpc.xds.internal;
 
-import com.google.api.expr.v1alpha1.CheckedExpr;
 import com.google.api.expr.v1alpha1.Expr;
-import com.google.api.expr.v1alpha1.ParsedExpr;
-import com.google.api.expr.v1alpha1.SourceInfo;
-import com.google.api.expr.v1alpha1.Type;
-import com.google.api.expr.v1alpha1.Type.MapType;
-import com.google.api.expr.v1alpha1.Type.PrimitiveType;
-import com.google.api.expr.v1alpha1.Type.WellKnownType;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.Descriptors.Descriptor;
@@ -54,7 +47,7 @@ import java.util.Map;
  */
 public class CelEvaluationEngine<ReqT, RespT> {
   private final List<RBAC.Action> action;
-  private final List<ImmutableMap<String, CheckedExpr>> conditions;
+  private final List<ImmutableMap<String, Expr>> conditions;
 
   /**
    * Creates a Cel Evaluation Engine from a list of Envoy RBACs.
@@ -83,66 +76,8 @@ public class CelEvaluationEngine<ReqT, RespT> {
         conditions.put(entry.getKey(), entry.getValue().getCondition());
       }
       this.action.add(Preconditions.checkNotNull(rbac.getAction()));
-      this.conditions.add(
-          Preconditions.checkNotNull(ImmutableMap.copyOf(parseConditions(conditions))));
+      this.conditions.add(Preconditions.checkNotNull(ImmutableMap.copyOf(conditions)));
     }
-  }
-
-  /** Convert RBAC conditions from type Expr to type CheckedExpr. */
-  private Map<String, CheckedExpr> parseConditions(Map<String, Expr> conditions) {
-    Map<String, CheckedExpr> parsedConditions = new HashMap<>();
-    Env env = envSetup();
-    for (Map.Entry<String, Expr> entry : conditions.entrySet()) {
-      Expr condition = entry.getValue();
-      // Convert Expr to ParsedExpr by adding an empty SourceInfo field.
-      ParsedExpr parsedCondition = ParsedExpr.newBuilder()
-          .setExpr(condition)
-          .setSourceInfo(SourceInfo.newBuilder().build())
-          .build();
-      // Convert ParsedExpr to CheckedExpr.
-      CheckedExpr checkedCondition = ExprChecker.check(env, "", parsedCondition);
-      parsedConditions.put(entry.getKey(), checkedCondition);
-    }
-    return parsedConditions;
-  }
-
-  /** Set up environment used for ExprChecker conversion. */
-  private Env envSetup() {
-    // Define relevent Type variables for environment setup.
-    final Type stringType = Type.newBuilder()
-        .setPrimitive(PrimitiveType.STRING)
-        .build();
-    final Type int64Type = Type.newBuilder()
-        .setPrimitive(PrimitiveType.INT64)
-        .build();
-    final Type unknownType = Type.newBuilder()
-        .setWellKnown(WellKnownType.WELL_KNOWN_TYPE_UNSPECIFIED)
-        .build();
-    final Type stringMapType = Type.newBuilder()
-        .setMapType(
-            MapType.newBuilder()
-                .setKeyType(stringType)
-                .setValueType(unknownType))
-        .build();
-    // Create the environment variable.
-    Errors errors = new Errors("source_location", null);
-    TypeProvider typeProvider = new DescriptorTypeProvider();
-    Env env = Env.standard(errors, typeProvider);
-    // Add Envoy Attributes and their corresponding Type values into env.
-    env.add("requestUrlPath", stringType);
-    env.add("requestHost", stringType);
-    env.add("requestMethod", stringType);
-    env.add("requestHeaders", stringMapType);
-    env.add("sourceAddress", stringType);
-    env.add("sourcePort", int64Type);
-    env.add("destinationAddress", stringType);
-    env.add("destinationPort", int64Type);
-    env.add("connectionRequestedServerName", stringType);
-    env.add("onnectionUriSanPeerCertificate", stringType);
-    if (errors.getErrorCount() > 0) {
-      throw new RuntimeException(errors.getAllErrorsAsString());
-    }
-    return env;
   }
 
   /**
@@ -159,7 +94,7 @@ public class CelEvaluationEngine<ReqT, RespT> {
     // Go through each RBAC in the Envoy RBAC list.
     for (int i = 0; i < this.action.size(); i++) {
       // Go through each condition in the RBAC policy.
-      for (Map.Entry<String, CheckedExpr> entry : this.conditions.get(i).entrySet()) {
+      for (Map.Entry<String, Expr> entry : this.conditions.get(i).entrySet()) {
         try {
           if (matches(entry.getValue(), args)) {
             if (this.action.get(i) == RBAC.Action.ALLOW) {
@@ -191,7 +126,7 @@ public class CelEvaluationEngine<ReqT, RespT> {
   }
 
   /** Evaluate if a condition matches the given Enovy Attributes using Cel library. */
-  private boolean matches(CheckedExpr conditions, EvaluateArgs<ReqT, RespT> args) 
+  private boolean matches(Expr conditions, EvaluateArgs<ReqT, RespT> args) 
     throws InterpreterException, IllegalArgumentException {
     // Set up interpreter used in Cel library's eval function.
     List<Descriptor> descriptors = new ArrayList<>();
