@@ -22,8 +22,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.Descriptors.Descriptor;
 import io.envoyproxy.envoy.config.rbac.v2.Policy;
 import io.envoyproxy.envoy.config.rbac.v2.RBAC;
-import io.grpc.Grpc;
-import io.grpc.Metadata;
 import io.grpc.xds.InterpreterException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -152,96 +150,16 @@ public class CelEvaluationEngine<ReqT, RespT> {
     }
     // Add the extracted Envoy Attributes to the attributes map.
     Map<String, Object> attributes = new HashMap<>();
-    setRequestHost(args, attributes);
-    setRequestMethod(args, attributes);
-    setRequestHeaders(args, attributes);
-    setSourceAddress(args, attributes);
-    setDestinationAddress(args, attributes);
-    setConnectionRequestedServerName(args, attributes);
+    attributes.put("requestUrlPath", args.getRequestUrlPath());
+    attributes.put("requestHost", args.getRequestHost());
+    attributes.put("requestMethod", args.getRequestMethod());
+    attributes.put("requestHeaders", args.getRequestHeaders());
+    attributes.put("sourceAddress", args.getSourceAddress());
+    attributes.put("sourcePort", args.getSourcePort());
+    attributes.put("destinationAddress", args.getDestinationAddress());
+    attributes.put("destinationPort", args.getDestinationPort());
+    attributes.put("connectionRequestedServerName", args.getConnectionRequestedServerName());
+    attributes.put("connectionUriSanPeerCertificate", args.getConnectionUriSanPeerCertificate());
     return ImmutableMap.copyOf(attributes);
   }
-
-  // TBD
-  // private void setRequestUrlPath(
-  //    EvaluateArgs<ReqT, RespT> args, Map<String, Object> attributes) {}
-
-  /** Extract and set the RequestHost field. */
-  private void setRequestHost(
-      EvaluateArgs<ReqT, RespT> args, Map<String, Object> attributes) 
-      throws IllegalArgumentException {
-    String requestHost = args.getCall().getMethodDescriptor().getServiceName();
-    if (requestHost == null || requestHost.length() == 0) {
-      throw new IllegalArgumentException("RequestHost field is not found. ");
-    }
-    attributes.put("requestHost", requestHost);
-  }
-
-  /** Extract and set the RequestMethod field. */
-  private void setRequestMethod(
-      EvaluateArgs<ReqT, RespT> args, Map<String, Object> attributes) 
-      throws IllegalArgumentException {
-    String requestMethod = args.getCall().getMethodDescriptor().getFullMethodName();
-    if (requestMethod == null || requestMethod.length() == 0) {
-      throw new IllegalArgumentException("RequestMethod field is not found. ");
-    }
-    attributes.put("requestMethod", requestMethod);
-  }
-
-  /** Extract and set the RequestHeaders field. */
-  private void setRequestHeaders(
-      EvaluateArgs<ReqT, RespT> args, Map<String, Object> attributes) 
-      throws IllegalArgumentException {
-    Metadata requestHeaders = args.getHeaders();
-    if (requestHeaders == null) {
-      throw new IllegalArgumentException("RequestHeaders field is not found. ");
-    }
-    attributes.put("requestHeaders", requestHeaders);
-  }
-
-  /** Extract and set the SourceAddress field. */
-  private void setSourceAddress(
-      EvaluateArgs<ReqT, RespT> args, Map<String, Object> attributes) 
-      throws IllegalArgumentException {
-    String sourceAddress = args.getCall().getAttributes()
-        .get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR).toString();
-    if (sourceAddress == null || sourceAddress.length() == 0) {
-      throw new IllegalArgumentException("SourceAddress field is not found. ");
-    }
-    attributes.put("sourceAddress", sourceAddress);
-  }
-
-  // TBD
-  // private void setSourcePort(
-  //    EvaluateArgs<ReqT, RespT> args, Map<String, Object> attributes) {}
-
-  /** Extract and set the DestinationAddress field. */
-  private void setDestinationAddress(
-      EvaluateArgs<ReqT, RespT> args, Map<String, Object> attributes) 
-      throws IllegalArgumentException {
-    String destinationAddress = args.getCall().getAttributes()
-        .get(Grpc.TRANSPORT_ATTR_LOCAL_ADDR).toString();
-    if (destinationAddress == null || destinationAddress.length() == 0) {
-      throw new IllegalArgumentException("DestinationAddress field is not found. ");
-    }
-    attributes.put("destinationAddress", destinationAddress);
-  }
-
-  // TBD
-  // private void setDestinationPort(
-  //    EvaluateArgs<ReqT, RespT> args, Map<String, Object> attributes) {}
-
-  /** Extract and set the ConnectionRequestedServerName field. */
-  private void setConnectionRequestedServerName(
-      EvaluateArgs<ReqT, RespT> args, Map<String, Object> attributes) 
-      throws IllegalArgumentException {
-    String connectionRequestedServerName = args.getCall().getAuthority();
-    if (connectionRequestedServerName == null || connectionRequestedServerName.length() == 0) {
-      throw new IllegalArgumentException("ConnectionRequestedServerName field is not found. ");
-    }
-    attributes.put("connectionRequestedServerName", connectionRequestedServerName);
-  }
-
-  // TBD
-  // private void setConnectionUriSanPeerCertificate(
-  //    EvaluateArgs<ReqT, RespT> args, Map<String, Object> attributes) {}
 }
