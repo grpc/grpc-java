@@ -418,6 +418,7 @@ final class EnvoyProtoData {
           break;
         case MILLION:
           break;
+        case UNRECOGNIZED:
         default:
           throw new IllegalArgumentException("Unknown denominator type of " + percent);
       }
