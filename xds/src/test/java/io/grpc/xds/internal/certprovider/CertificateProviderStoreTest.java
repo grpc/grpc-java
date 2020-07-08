@@ -29,6 +29,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
+import io.grpc.Status;
 import java.security.PrivateKey;
 import java.security.cert.X509Certificate;
 import java.util.List;
@@ -194,6 +195,28 @@ public class CertificateProviderStoreTest {
     verify(mockWatcher2, times(1)).updateTrustedRoots(eq(testList));
     handle2.close();
     assertThat(testCertificateProvider.closeCalled).isEqualTo(1);
+  }
+
+  @Test
+  public void onePluginTwoInstances_notifyError() {
+    registerPlugin("plugin1");
+    CertificateProvider.Watcher mockWatcher1 = mock(CertificateProvider.Watcher.class);
+    CertificateProviderStore.HandleImpl handle1 =
+            (CertificateProviderStore.HandleImpl)
+                    certificateProviderStore.createOrGetProvider(
+                            "cert-name1", "plugin1", "config", mockWatcher1, true);
+    CertificateProvider.Watcher mockWatcher2 = mock(CertificateProvider.Watcher.class);
+    CertificateProviderStore.HandleImpl handle2 =
+            (CertificateProviderStore.HandleImpl)
+                    certificateProviderStore.createOrGetProvider(
+                            "cert-name1", "plugin1", "config", mockWatcher2, true);
+    TestCertificateProvider testCertificateProvider =
+            (TestCertificateProvider) handle1.certProvider;
+    testCertificateProvider.watcher.onError(Status.CANCELLED);
+    verify(mockWatcher1, times(1)).onError(eq(Status.CANCELLED));
+    verify(mockWatcher2, times(1)).onError(eq(Status.CANCELLED));
+    handle1.close();
+    handle2.close();
   }
 
   @Test
