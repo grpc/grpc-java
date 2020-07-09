@@ -19,6 +19,7 @@ package io.grpc.testing.integration;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.Files;
 import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.alts.AltsChannelBuilder;
 import io.grpc.alts.ComputeEngineChannelBuilder;
 import io.grpc.alts.GoogleDefaultChannelBuilder;
@@ -389,17 +390,17 @@ public class TestServiceClient {
 
   private class Tester extends AbstractInteropTest {
     @Override
-    protected ManagedChannel createChannel() {
+    protected ManagedChannelBuilder<?> createChannelBuilder() {
       if (customCredentialsType != null
           && customCredentialsType.equals("google_default_credentials")) {
-        return GoogleDefaultChannelBuilder.forAddress(serverHost, serverPort).build();
+        return GoogleDefaultChannelBuilder.forAddress(serverHost, serverPort);
       }
       if (customCredentialsType != null
           && customCredentialsType.equals("compute_engine_channel_creds")) {
-        return ComputeEngineChannelBuilder.forAddress(serverHost, serverPort).build();
+        return ComputeEngineChannelBuilder.forAddress(serverHost, serverPort);
       }
       if (useAlts) {
-        return AltsChannelBuilder.forAddress(serverHost, serverPort).build();
+        return AltsChannelBuilder.forAddress(serverHost, serverPort);
       }
       AbstractManagedChannelImplBuilder<?> builder;
       if (!useOkHttp) {
@@ -452,7 +453,7 @@ public class TestServiceClient {
       }
       // Disable the default census stats interceptor, use testing interceptor instead.
       io.grpc.internal.TestingAccessor.setStatsEnabled(builder, false);
-      return builder.intercept(createCensusStatsClientInterceptor()).build();
+      return builder.intercept(createCensusStatsClientInterceptor());
     }
 
     @Override

@@ -33,6 +33,7 @@ import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.Status;
@@ -513,6 +514,11 @@ public class StressTestClient {
       @Override
       protected ManagedChannel createChannel() {
         return Worker.this.channel;
+      }
+
+      @Override
+      protected ManagedChannelBuilder<?> createChannelBuilder() {
+        throw new UnsupportedOperationException();
       }
 
       @Override

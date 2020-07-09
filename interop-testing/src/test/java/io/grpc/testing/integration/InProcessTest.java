@@ -16,7 +16,6 @@
 
 package io.grpc.testing.integration;
 
-import io.grpc.ManagedChannel;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.AbstractServerImplBuilder;
@@ -36,11 +35,11 @@ public class InProcessTest extends AbstractInteropTest {
   }
 
   @Override
-  protected ManagedChannel createChannel() {
+  protected InProcessChannelBuilder createChannelBuilder() {
     InProcessChannelBuilder builder = InProcessChannelBuilder.forName(SERVER_NAME);
     // Disable the default census stats interceptor, use testing interceptor instead.
     io.grpc.internal.TestingAccessor.setStatsEnabled(builder, false);
-    return builder.intercept(createCensusStatsClientInterceptor()).build();
+    return builder.intercept(createCensusStatsClientInterceptor());
   }
 
   @Override
