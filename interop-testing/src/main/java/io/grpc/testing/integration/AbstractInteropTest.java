@@ -342,7 +342,9 @@ public abstract class AbstractInteropTest {
     return createChannelBuilder().build();
   }
 
-  protected abstract ManagedChannelBuilder<?> createChannelBuilder();
+  protected ManagedChannelBuilder<?> createChannelBuilder() {
+    throw new UnsupportedOperationException("not implemented");
+  }
 
   @Nullable
   protected ClientInterceptor[] getAdditionalInterceptors() {
