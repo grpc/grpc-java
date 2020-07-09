@@ -32,7 +32,7 @@ import javax.annotation.concurrent.GuardedBy;
  * Manages keepalive pings.
  */
 public class KeepAliveManager {
-  private static final long MIN_KEEPALIVE_TIME_NANOS = TimeUnit.SECONDS.toNanos(10);
+  private static final long MIN_KEEPALIVE_TIME_NANOS = TimeUnit.SECONDS.toNanos(1L);
   private static final long MIN_KEEPALIVE_TIMEOUT_NANOS = TimeUnit.MILLISECONDS.toNanos(10L);
 
   private final ScheduledExecutorService scheduler;
@@ -233,7 +233,7 @@ public class KeepAliveManager {
   }
 
   /**
-   * Bumps keepalive time to 10 seconds if the specified value was smaller than that.
+   * Bumps keepalive time to minimum value if the specified value was smaller than that.
    */
   public static long clampKeepAliveTimeInNanos(long keepAliveTimeInNanos) {
     return Math.max(keepAliveTimeInNanos, MIN_KEEPALIVE_TIME_NANOS);
