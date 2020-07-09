@@ -20,6 +20,8 @@ import com.google.common.base.Strings;
 import com.google.protobuf.BoolValue;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
+import io.envoyproxy.envoy.api.v2.core.ApiConfigSource.ApiType;
+import io.envoyproxy.envoy.api.v2.core.GrpcService.GoogleGrpc;
 import io.envoyproxy.envoy.config.core.v3.ApiConfigSource;
 import io.envoyproxy.envoy.config.core.v3.ConfigSource;
 import io.envoyproxy.envoy.config.core.v3.DataSource;
@@ -87,18 +89,16 @@ public class CommonTlsContextTestsUtil {
    */
   private static io.envoyproxy.envoy.api.v2.core.ConfigSource buildConfigSourceV2(
       String targetUri, String channelType) {
-    io.envoyproxy.envoy.api.v2.core.GrpcService.GoogleGrpc.Builder googleGrpcBuilder =
-        io.envoyproxy.envoy.api.v2.core.GrpcService.GoogleGrpc.newBuilder().setTargetUri(targetUri);
+    GoogleGrpc.Builder googleGrpcBuilder = GoogleGrpc.newBuilder().setTargetUri(targetUri);
     if (channelType != null) {
-      Struct.Builder structBuilder = Struct.newBuilder();
-      structBuilder.putFields(
-          "channelType", Value.newBuilder().setStringValue(channelType).build());
+      Struct.Builder structBuilder = Struct.newBuilder()
+          .putFields("channelType", Value.newBuilder().setStringValue(channelType).build());
       googleGrpcBuilder.setConfig(structBuilder.build());
     }
     return io.envoyproxy.envoy.api.v2.core.ConfigSource.newBuilder()
         .setApiConfigSource(
             io.envoyproxy.envoy.api.v2.core.ApiConfigSource.newBuilder()
-                .setApiType(io.envoyproxy.envoy.api.v2.core.ApiConfigSource.ApiType.GRPC)
+                .setApiType(ApiType.GRPC)
                 .addGrpcServices(
                     io.envoyproxy.envoy.api.v2.core.GrpcService.newBuilder()
                         .setGoogleGrpc(googleGrpcBuilder.build())
@@ -116,9 +116,8 @@ public class CommonTlsContextTestsUtil {
     GrpcService.GoogleGrpc.Builder googleGrpcBuilder =
         GrpcService.GoogleGrpc.newBuilder().setTargetUri(targetUri);
     if (channelType != null) {
-      Struct.Builder structBuilder = Struct.newBuilder();
-      structBuilder.putFields(
-          "channelType", Value.newBuilder().setStringValue(channelType).build());
+      Struct.Builder structBuilder = Struct.newBuilder()
+          .putFields("channelType", Value.newBuilder().setStringValue(channelType).build());
       googleGrpcBuilder.setConfig(structBuilder.build());
     }
     return ConfigSource.newBuilder()
@@ -193,13 +192,14 @@ public class CommonTlsContextTestsUtil {
                 .addAllVerifySubjectAltName(verifySubjectAltNames).build();
 
     if (sdsSecretConfig != null && certValidationContext != null) {
-      io.envoyproxy.envoy.api.v2.auth.CommonTlsContext.CombinedCertificateValidationContext.Builder
-          combinedBuilder =
+      io.envoyproxy.envoy.api.v2.auth.CommonTlsContext.CombinedCertificateValidationContext
+          combined =
               io.envoyproxy.envoy.api.v2.auth.CommonTlsContext.CombinedCertificateValidationContext
                   .newBuilder()
                   .setDefaultValidationContext(certValidationContext)
-                  .setValidationContextSdsSecretConfig(sdsSecretConfig);
-      builder.setCombinedValidationContext(combinedBuilder);
+                  .setValidationContextSdsSecretConfig(sdsSecretConfig)
+                  .build();
+      builder.setCombinedValidationContext(combined);
     } else if (sdsSecretConfig != null) {
       builder.setValidationContextSdsSecretConfig(sdsSecretConfig);
     } else if (certValidationContext != null) {

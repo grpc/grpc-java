@@ -35,5 +35,5 @@ interface CertificateProviderProvider {
    * @param notifyCertUpdates See {@link CertificateProvider#CertificateProvider(Watcher, boolean)}
    */
   CertificateProvider createCertificateProvider(
-      Object config, Watcher watcher, boolean notifyCertUpdates) throws IllegalArgumentException;
+      Object config, Watcher watcher, boolean notifyCertUpdates);
 }

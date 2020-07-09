@@ -16,6 +16,7 @@
 
 package io.grpc.xds.internal.certprovider;
 
+import io.grpc.Status;
 import java.io.Closeable;
 import java.security.PrivateKey;
 import java.security.cert.X509Certificate;
@@ -38,7 +39,7 @@ public abstract class CertificateProvider implements Closeable {
 
     void updateTrustedRoots(List<X509Certificate> trustedRoots);
 
-    void onError(io.grpc.Status errorStatus);
+    void onError(Status errorStatus);
   }
 
   /**

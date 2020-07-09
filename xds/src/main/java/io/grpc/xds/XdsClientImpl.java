@@ -35,12 +35,14 @@ import com.google.rpc.Code;
 import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
 import io.envoyproxy.envoy.api.v2.core.Node;
+import io.envoyproxy.envoy.api.v2.core.SocketAddress;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.DiscoveryType;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.EdsClusterConfig;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.LbPolicy;
 import io.envoyproxy.envoy.config.core.v3.Address;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
+import io.envoyproxy.envoy.config.endpoint.v3.LbEndpoint;
 import io.envoyproxy.envoy.config.listener.v3.FilterChain;
 import io.envoyproxy.envoy.config.listener.v3.FilterChainMatch;
 import io.envoyproxy.envoy.config.listener.v3.Listener;
@@ -468,7 +470,7 @@ final class XdsClientImpl extends XdsClient {
     io.envoyproxy.envoy.api.v2.core.Address listeningAddress =
         io.envoyproxy.envoy.api.v2.core.Address.newBuilder()
             .setSocketAddress(
-                io.envoyproxy.envoy.api.v2.core.SocketAddress.newBuilder()
+                SocketAddress.newBuilder()
                     .setAddress("0.0.0.0")
                     .setPortValue(port)
                     .build())
@@ -1191,8 +1193,7 @@ final class XdsClientImpl extends XdsClient {
         priorities.add(localityPriority);
         // The endpoint field of each lb_endpoints must be set.
         // Inside of it: the address field must be set.
-        for (io.envoyproxy.envoy.config.endpoint.v3.LbEndpoint lbEndpoint
-            : localityLbEndpoints.getLbEndpointsList()) {
+        for (LbEndpoint lbEndpoint : localityLbEndpoints.getLbEndpointsList()) {
           if (!lbEndpoint.getEndpoint().hasAddress()) {
             errorMessage = "ClusterLoadAssignment " + clusterName + " : endpoint with no address.";
             break;
