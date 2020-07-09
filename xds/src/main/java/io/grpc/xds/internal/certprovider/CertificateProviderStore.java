@@ -152,8 +152,7 @@ public final class CertificateProviderStore {
     }
 
     @Override
-    public CertificateProvider create(CertProviderKey key)
-        throws IllegalArgumentException, UnsupportedOperationException {
+    public CertificateProvider create(CertProviderKey key) {
       CertificateProviderProvider certProviderProvider =
           certificateProviderRegistry.getProvider(key.pluginName);
       if (certProviderProvider == null) {
@@ -199,14 +198,17 @@ public final class CertificateProviderStore {
    * @param notifyCertUpdates when true, the caller is interested in identity cert updates. When
    *     false, the caller cannot depend on receiving the {@link Watcher#updateCertificate}
    *     callbacks but may still receive these callbacks which should be ignored.
-   * @throws IllegalArgumentException in case of errors in processing config or
-   *     the plugin is incapable of sending cert updates when notifyCertUpdates is true.
-   * @throws UnsupportedOperationException if the plugin is incapable of sending
-   *     cert updates when notifyCertUpdates is true.
+   * @throws IllegalArgumentException in case of errors in processing config or the plugin is
+   *     incapable of sending cert updates when notifyCertUpdates is true.
+   * @throws UnsupportedOperationException if the plugin is incapable of sending cert updates when
+   *     notifyCertUpdates is true.
    */
   public synchronized Handle createOrGetProvider(
-      String certName, String pluginName, Object config, Watcher watcher, boolean notifyCertUpdates)
-      throws IllegalArgumentException, UnsupportedOperationException {
+      String certName,
+      String pluginName,
+      Object config,
+      Watcher watcher,
+      boolean notifyCertUpdates) {
     if (!notifyCertUpdates) {
       // we try to get a provider first for notifyCertUpdates==true always
       try {
@@ -220,8 +222,11 @@ public final class CertificateProviderStore {
   }
 
   private synchronized Handle createProviderHelper(
-      String certName, String pluginName, Object config, Watcher watcher, boolean notifyCertUpdates)
-      throws IllegalArgumentException, UnsupportedOperationException {
+      String certName,
+      String pluginName,
+      Object config,
+      Watcher watcher,
+      boolean notifyCertUpdates) {
     CertProviderKey key = new CertProviderKey(certName, pluginName, notifyCertUpdates, config);
     CertificateProvider provider = certProviderMap.get(key);
     DistributorWatcher distWatcher = (DistributorWatcher) provider.getWatcher();
