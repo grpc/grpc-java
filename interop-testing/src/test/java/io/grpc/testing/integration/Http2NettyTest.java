@@ -19,7 +19,6 @@ package io.grpc.testing.integration;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 
-import io.grpc.ManagedChannel;
 import io.grpc.internal.AbstractServerImplBuilder;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.GrpcSslContexts;
@@ -59,7 +58,7 @@ public class Http2NettyTest extends AbstractInteropTest {
   }
 
   @Override
-  protected ManagedChannel createChannel() {
+  protected NettyChannelBuilder createChannelBuilder() {
     try {
       NettyChannelBuilder builder = NettyChannelBuilder
           .forAddress(TestUtils.testServerAddress((InetSocketAddress) getListenAddress()))
@@ -73,7 +72,7 @@ public class Http2NettyTest extends AbstractInteropTest {
               .build());
       // Disable the default census stats interceptor, use testing interceptor instead.
       io.grpc.internal.TestingAccessor.setStatsEnabled(builder, false);
-      return builder.intercept(createCensusStatsClientInterceptor()).build();
+      return builder.intercept(createCensusStatsClientInterceptor());
     } catch (Exception ex) {
       throw new RuntimeException(ex);
     }
