@@ -342,6 +342,9 @@ public abstract class AbstractInteropTest {
     return createChannelBuilder().build();
   }
 
+  /**
+   * Creates a channel builder for {@link #createChannel()} to use.
+   */
   protected ManagedChannelBuilder<?> createChannelBuilder() {
     throw new UnsupportedOperationException("not implemented");
   }
