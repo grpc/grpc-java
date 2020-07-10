@@ -21,8 +21,9 @@ import io.grpc.Status;
 import io.grpc.xds.internal.sds.Closeable;
 import java.security.PrivateKey;
 import java.security.cert.X509Certificate;
-import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * A plug-in that provides certificates required by the xDS security component and created
@@ -47,7 +48,7 @@ public abstract class CertificateProvider implements Closeable {
   @VisibleForTesting
   static final class DistributorWatcher implements Watcher {
     @VisibleForTesting
-    final ArrayList<Watcher> downsstreamWatchers = new ArrayList<>();
+    final Set<Watcher> downsstreamWatchers = new HashSet<>();
 
     synchronized void addWatcher(Watcher watcher) {
       downsstreamWatchers.add(watcher);
