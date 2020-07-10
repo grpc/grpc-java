@@ -14,17 +14,16 @@
  * limitations under the License.
  */
 
-/**
-  This is a Java stub for evaluating Common Expression Language (CEL). 
-  More information about CEL can be found in https://github.com/google/cel-spec. 
-  Once Java CEL has been open-sourced, this stub will be removed.
-*/
-
 package io.grpc.xds;
 
 import java.lang.Exception;
 import javax.annotation.Nullable;
 
+/**
+ * This is a Java stub for evaluating Common Expression Language (CEL). 
+ * More information about CEL can be found in https://github.com/google/cel-spec. 
+ * Once Java CEL has been open-sourced, this stub will be removed.
+ */
 /** An exception produced during interpretation of expressions. */
 @SuppressWarnings("serial")
 public class InterpreterException extends Exception {

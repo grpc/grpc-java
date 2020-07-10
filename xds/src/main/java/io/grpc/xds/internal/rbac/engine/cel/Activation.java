@@ -14,18 +14,17 @@
  * limitations under the License.
  */
 
-/**
-  This is a Java stub for evaluating Common Expression Language (CEL). 
-  More information about CEL can be found in https://github.com/google/cel-spec. 
-  Once Java CEL has been open-sourced, this stub will be removed.
-*/
- 
 package io.grpc.xds.internal;
 
 import com.google.common.collect.ImmutableMap;
 import java.util.Map;
 import javax.annotation.Nullable;
   
+/**
+ * This is a Java stub for evaluating Common Expression Language (CEL). 
+ * More information about CEL can be found in https://github.com/google/cel-spec. 
+ * Once Java CEL has been open-sourced, this stub will be removed.
+ */
 /** An object which allows to bind names to values. */
 public abstract class Activation {
   /** Resolves the given name to its value. Returns null if resolution fails. */

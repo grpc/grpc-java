@@ -14,14 +14,13 @@
  * limitations under the License.
  */
 
-/**
-  This is a Java stub for evaluating Common Expression Language (CEL). 
-  More information about CEL can be found in https://github.com/google/cel-spec. 
-  Once Java CEL has been open-sourced, this stub will be removed.
-*/
-
 package io.grpc.xds.internal;
 
+/**
+ * This is a Java stub for evaluating Common Expression Language (CEL). 
+ * More information about CEL can be found in https://github.com/google/cel-spec. 
+ * Once Java CEL has been open-sourced, this stub will be removed.
+ */
 /**
  * The {@code RuntimeTypeProvider} is a combination fo the MessageProvider 
  * and TypeResolver interfaces.
