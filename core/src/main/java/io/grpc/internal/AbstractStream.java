@@ -157,7 +157,8 @@ public abstract class AbstractStream implements Stream {
           maxMessageSize,
           statsTraceCtx,
           transportTracer);
-      deframer = new MigratingThreadDeframer(this, this, rawDeframer);
+      // TODO(#7168): use MigratingThreadDeframer when enabling retry doesn't break.
+      deframer = rawDeframer;
     }
 
     final void optimizeForDirectExecutor() {

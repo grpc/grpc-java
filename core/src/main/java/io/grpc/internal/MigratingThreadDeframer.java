@@ -47,14 +47,11 @@ final class MigratingThreadDeframer implements ThreadOptimizedDeframer {
   /**
    * {@code true} means decoding on transport thread.
    *
-   * <p>Invariant: if there are outstanding requests, then deframerOnTransportThread=true. If there
-   * is buffered data, then deframerOnTransportThread=false.
-   *
-   * <p>Start on transport thread since our stubs will generally request(1) immediately, and to be
-   * compatible with RetriableStream.
+   * <p>Invariant: if there are outstanding requests, then deframerOnTransportThread=true. Otherwise
+   * deframerOnTransportThread=false.
    */
   @GuardedBy("lock")
-  private boolean deframerOnTransportThread = true;
+  private boolean deframerOnTransportThread;
   @GuardedBy("lock")
   private final Queue<Op> opQueue = new ArrayDeque<>();
   @GuardedBy("lock")
@@ -68,7 +65,8 @@ final class MigratingThreadDeframer implements ThreadOptimizedDeframer {
         new SquelchLateMessagesAvailableDeframerListener(checkNotNull(listener, "listener"));
     this.transportExecutor = checkNotNull(transportExecutor, "transportExecutor");
     this.appListener = new ApplicationThreadDeframerListener(transportListener, transportExecutor);
-    this.migratingListener = new MigratingDeframerListener(transportListener);
+    // Starts on app thread
+    this.migratingListener = new MigratingDeframerListener(appListener);
     deframer.setListener(migratingListener);
     this.deframer = deframer;
   }
