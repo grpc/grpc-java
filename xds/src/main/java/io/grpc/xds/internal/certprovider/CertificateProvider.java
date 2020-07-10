@@ -16,11 +16,14 @@
 
 package io.grpc.xds.internal.certprovider;
 
+import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Status;
-import java.io.Closeable;
+import io.grpc.xds.internal.sds.Closeable;
 import java.security.PrivateKey;
 import java.security.cert.X509Certificate;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * A plug-in that provides certificates required by the xDS security component and created
@@ -33,13 +36,48 @@ import java.util.List;
  */
 public abstract class CertificateProvider implements Closeable {
 
-  /** A watcher is registered via the constructor to receive updates for the certificates. */
+  /** A watcher is registered to receive certificate updates. */
   public interface Watcher {
     void updateCertificate(PrivateKey key, List<X509Certificate> certChain);
 
     void updateTrustedRoots(List<X509Certificate> trustedRoots);
 
     void onError(Status errorStatus);
+  }
+
+  @VisibleForTesting
+  static final class DistributorWatcher implements Watcher {
+    @VisibleForTesting
+    final Set<Watcher> downsstreamWatchers = new HashSet<>();
+
+    synchronized void addWatcher(Watcher watcher) {
+      downsstreamWatchers.add(watcher);
+    }
+
+    synchronized void removeWatcher(Watcher watcher) {
+      downsstreamWatchers.remove(watcher);
+    }
+
+    @Override
+    public void updateCertificate(PrivateKey key, List<X509Certificate> certChain) {
+      for (Watcher watcher : downsstreamWatchers) {
+        watcher.updateCertificate(key, certChain);
+      }
+    }
+
+    @Override
+    public void updateTrustedRoots(List<X509Certificate> trustedRoots) {
+      for (Watcher watcher : downsstreamWatchers) {
+        watcher.updateTrustedRoots(trustedRoots);
+      }
+    }
+
+    @Override
+    public void onError(Status errorStatus) {
+      for (Watcher watcher : downsstreamWatchers) {
+        watcher.onError(errorStatus);
+      }
+    }
   }
 
   /**
@@ -51,7 +89,7 @@ public abstract class CertificateProvider implements Closeable {
    *     Used by server-side and mTLS client-side. Note the Provider is always required
    *     to call updateTrustedRoots to provide trusted-root updates.
    */
-  protected CertificateProvider(Watcher watcher, boolean notifyCertUpdates) {
+  protected CertificateProvider(DistributorWatcher watcher, boolean notifyCertUpdates) {
     this.watcher = watcher;
     this.notifyCertUpdates = notifyCertUpdates;
   }
@@ -60,6 +98,16 @@ public abstract class CertificateProvider implements Closeable {
   @Override
   public abstract void close();
 
-  protected final Watcher watcher;
-  protected final boolean notifyCertUpdates;
+  private final DistributorWatcher watcher;
+  private final boolean notifyCertUpdates;
+
+  public DistributorWatcher getWatcher() {
+    return watcher;
+  }
+
+  public boolean isNotifyCertUpdates() {
+    return notifyCertUpdates;
+  }
+
+
 }

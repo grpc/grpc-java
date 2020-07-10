@@ -32,8 +32,14 @@ interface CertificateProviderProvider {
    * @param config configuration needed by the Provider to create the CertificateProvider. A form of
    *     JSON that the Provider understands e.g. a string or a key-value Map.
    * @param watcher A {@link Watcher} to receive updates from the CertificateProvider
-   * @param notifyCertUpdates See {@link CertificateProvider#CertificateProvider(Watcher, boolean)}
+   * @param notifyCertUpdates if true, the provider is required to call the watcher’s
+   *     updateCertificate method. Implies the Provider is capable of minting certificates. Used
+   *     by server-side and mTLS client-side. Note the Provider is always required  to call
+   *     updateTrustedRoots to provide trusted-root updates.
+   * @throws IllegalArgumentException in case of errors in processing config.
+   * @throws UnsupportedOperationException if the plugin is incapable of sending cert updates when
+   *     notifyCertUpdates is true.
    */
   CertificateProvider createCertificateProvider(
-      Object config, Watcher watcher, boolean notifyCertUpdates);
+      Object config, CertificateProvider.DistributorWatcher watcher, boolean notifyCertUpdates);
 }
