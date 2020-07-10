@@ -17,14 +17,9 @@
 package io.grpc.xds.internal.certprovider;
 
 import com.google.common.annotations.VisibleForTesting;
-import io.grpc.Status;
 import io.grpc.xds.internal.certprovider.CertificateProvider.Watcher;
 import io.grpc.xds.internal.sds.ReferenceCountingMap;
 
-import java.security.PrivateKey;
-import java.security.cert.X509Certificate;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Objects;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -45,7 +40,18 @@ public final class CertificateProviderStore {
   private final ReferenceCountingMap<CertProviderKey, CertificateProvider> certProviderMap;
 
   /** Opaque Handle returned by {@link #createOrGetProvider}. */
-  interface Handle extends java.io.Closeable {
+  @VisibleForTesting
+  final class Handle implements java.io.Closeable {
+    private final CertProviderKey key;
+    private final Watcher watcher;
+    @VisibleForTesting
+    final CertificateProvider certProvider;
+
+    private Handle(CertProviderKey key, Watcher watcher, CertificateProvider certProvider) {
+      this.key = key;
+      this.watcher = watcher;
+      this.certProvider = certProvider;
+    }
 
     /**
      * Removes the associated {@link Watcher} for the {@link CertificateProvider} and
@@ -53,7 +59,11 @@ public final class CertificateProviderStore {
      * has reached 0.
      */
     @Override
-    void close();
+    public synchronized void close() {
+      CertificateProvider.DistributorWatcher distWatcher = certProvider.getWatcher();
+      distWatcher.removeWatcher(watcher);
+      certProviderMap.release(key, certProvider);
+    }
   }
 
   private static final class CertProviderKey {
@@ -107,44 +117,6 @@ public final class CertificateProviderStore {
     }
   }
 
-  @VisibleForTesting
-  static final class DistributorWatcher implements CertificateProvider.Watcher {
-    @VisibleForTesting
-    final ArrayList<Watcher> downsstreamWatchers = new ArrayList<>();
-
-    private synchronized void addWatcher(Watcher watcher) {
-      downsstreamWatchers.add(watcher);
-    }
-
-    private synchronized void removeWatcher(Watcher watcher) {
-      downsstreamWatchers.remove(watcher);
-    }
-
-    private DistributorWatcher() {
-    }
-
-    @Override
-    public void updateCertificate(PrivateKey key, List<X509Certificate> certChain) {
-      for (Watcher watcher : downsstreamWatchers) {
-        watcher.updateCertificate(key, certChain);
-      }
-    }
-
-    @Override
-    public void updateTrustedRoots(List<X509Certificate> trustedRoots) {
-      for (Watcher watcher : downsstreamWatchers) {
-        watcher.updateTrustedRoots(trustedRoots);
-      }
-    }
-
-    @Override
-    public void onError(Status errorStatus) {
-      for (Watcher watcher : downsstreamWatchers) {
-        watcher.onError(errorStatus);
-      }
-    }
-  }
-
   private final class CertProviderFactory
       implements ReferenceCountingMap.ValueFactory<CertProviderKey, CertificateProvider> {
 
@@ -159,7 +131,7 @@ public final class CertificateProviderStore {
         throw new IllegalArgumentException("Provider not found.");
       }
       return certProviderProvider.createCertificateProvider(
-          key.config, new DistributorWatcher(), key.notifyCertUpdates);
+          key.config, new CertificateProvider.DistributorWatcher(), key.notifyCertUpdates);
     }
   }
 
@@ -167,27 +139,6 @@ public final class CertificateProviderStore {
   CertificateProviderStore(CertificateProviderRegistry certificateProviderRegistry) {
     this.certificateProviderRegistry = certificateProviderRegistry;
     certProviderMap = new ReferenceCountingMap<>(new CertProviderFactory());
-  }
-
-  @VisibleForTesting
-  final class HandleImpl implements Handle {
-    private final CertProviderKey key;
-    private final Watcher watcher;
-    @VisibleForTesting
-    final CertificateProvider certProvider;
-
-    private HandleImpl(CertProviderKey key, Watcher watcher, CertificateProvider certProvider) {
-      this.key = key;
-      this.watcher = watcher;
-      this.certProvider = certProvider;
-    }
-
-    @Override
-    public synchronized void close() {
-      DistributorWatcher distWatcher = (DistributorWatcher)certProvider.getWatcher();
-      distWatcher.removeWatcher(watcher);
-      certProviderMap.release(key, certProvider);
-    }
   }
 
   /**
@@ -229,9 +180,9 @@ public final class CertificateProviderStore {
       boolean notifyCertUpdates) {
     CertProviderKey key = new CertProviderKey(certName, pluginName, notifyCertUpdates, config);
     CertificateProvider provider = certProviderMap.get(key);
-    DistributorWatcher distWatcher = (DistributorWatcher) provider.getWatcher();
+    CertificateProvider.DistributorWatcher distWatcher = provider.getWatcher();
     distWatcher.addWatcher(watcher);
-    return new HandleImpl(key, watcher, provider);
+    return new Handle(key, watcher, provider);
   }
 
   /** Gets the CertificateProviderStore singleton instance. */

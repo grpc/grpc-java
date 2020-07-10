@@ -54,7 +54,7 @@ public class CertificateProviderStoreTest {
     int closeCalled = 0;
 
     protected TestCertificateProvider(
-        Watcher watcher,
+        CertificateProvider.DistributorWatcher watcher,
         boolean notifyCertUpdates,
         Object config,
         CertificateProviderProvider certificateProviderProvider) {
@@ -83,8 +83,7 @@ public class CertificateProviderStoreTest {
   public void pluginNotRegistered_expectException() {
     CertificateProvider.Watcher mockWatcher = mock(CertificateProvider.Watcher.class);
     try {
-      CertificateProviderStore.Handle unused =
-          certificateProviderStore.createOrGetProvider(
+      CertificateProviderStore.Handle unused = certificateProviderStore.createOrGetProvider(
               "cert-name1", "plugin1", "config", mockWatcher, true);
       fail("exception expected");
     } catch (IllegalArgumentException expected) {
@@ -96,14 +95,12 @@ public class CertificateProviderStoreTest {
   public void pluginUnregistered_expectException() {
     CertificateProviderProvider certificateProviderProvider = registerPlugin("plugin1");
     CertificateProvider.Watcher mockWatcher = mock(CertificateProvider.Watcher.class);
-    CertificateProviderStore.Handle handle =
-        certificateProviderStore.createOrGetProvider(
+    CertificateProviderStore.Handle handle = certificateProviderStore.createOrGetProvider(
             "cert-name1", "plugin1", "config", mockWatcher, true);
     handle.close();
     certificateProviderRegistry.deregister(certificateProviderProvider);
     try {
-      handle =
-          certificateProviderStore.createOrGetProvider(
+      handle = certificateProviderStore.createOrGetProvider(
               "cert-name1", "plugin1", "config", mockWatcher, true);
       fail("exception expected");
     } catch (IllegalArgumentException expected) {
@@ -154,32 +151,27 @@ public class CertificateProviderStoreTest {
   public void onePluginSameConfig_sameInstance() {
     registerPlugin("plugin1");
     CertificateProvider.Watcher mockWatcher1 = mock(CertificateProvider.Watcher.class);
-    CertificateProviderStore.HandleImpl handle1 =
-        (CertificateProviderStore.HandleImpl)
-            certificateProviderStore.createOrGetProvider(
+    CertificateProviderStore.Handle handle1 = certificateProviderStore.createOrGetProvider(
                 "cert-name1", "plugin1", "config", mockWatcher1, true);
     CertificateProvider.Watcher mockWatcher2 = mock(CertificateProvider.Watcher.class);
-    CertificateProviderStore.HandleImpl handle2 =
-        (CertificateProviderStore.HandleImpl)
-            certificateProviderStore.createOrGetProvider(
+    CertificateProviderStore.Handle handle2 = certificateProviderStore.createOrGetProvider(
                 "cert-name1", "plugin1", "config", mockWatcher2, true);
     assertThat(handle1).isNotSameInstanceAs(handle2);
     assertThat(handle1.certProvider).isSameInstanceAs(handle2.certProvider);
     assertThat(handle1.certProvider).isInstanceOf(TestCertificateProvider.class);
     TestCertificateProvider testCertificateProvider =
         (TestCertificateProvider) handle1.certProvider;
-    CertificateProviderStore.DistributorWatcher distWatcher =
-        (CertificateProviderStore.DistributorWatcher) testCertificateProvider.watcher;
+    CertificateProvider.DistributorWatcher distWatcher = testCertificateProvider.getWatcher();
     assertThat(distWatcher.downsstreamWatchers.size()).isEqualTo(2);
     PrivateKey testKey = mock(PrivateKey.class);
     X509Certificate cert = mock(X509Certificate.class);
     List<X509Certificate> testList = ImmutableList.of(cert);
-    testCertificateProvider.watcher.updateCertificate(testKey, testList);
+    testCertificateProvider.getWatcher().updateCertificate(testKey, testList);
     verify(mockWatcher1, times(1)).updateCertificate(eq(testKey), eq(testList));
     verify(mockWatcher2, times(1)).updateCertificate(eq(testKey), eq(testList));
     reset(mockWatcher1);
     reset(mockWatcher2);
-    testCertificateProvider.watcher.updateTrustedRoots(testList);
+    testCertificateProvider.getWatcher().updateTrustedRoots(testList);
     verify(mockWatcher1, times(1)).updateTrustedRoots(eq(testList));
     verify(mockWatcher2, times(1)).updateTrustedRoots(eq(testList));
     reset(mockWatcher1);
@@ -187,11 +179,11 @@ public class CertificateProviderStoreTest {
     handle1.close();
     assertThat(testCertificateProvider.closeCalled).isEqualTo(0);
     assertThat(distWatcher.downsstreamWatchers.size()).isEqualTo(1);
-    testCertificateProvider.watcher.updateCertificate(testKey, testList);
+    testCertificateProvider.getWatcher().updateCertificate(testKey, testList);
     verify(mockWatcher1, never())
         .updateCertificate(any(PrivateKey.class), anyListOf(X509Certificate.class));
     verify(mockWatcher2, times(1)).updateCertificate(eq(testKey), eq(testList));
-    testCertificateProvider.watcher.updateTrustedRoots(testList);
+    testCertificateProvider.getWatcher().updateTrustedRoots(testList);
     verify(mockWatcher2, times(1)).updateTrustedRoots(eq(testList));
     handle2.close();
     assertThat(testCertificateProvider.closeCalled).isEqualTo(1);
@@ -201,18 +193,14 @@ public class CertificateProviderStoreTest {
   public void onePluginTwoInstances_notifyError() {
     registerPlugin("plugin1");
     CertificateProvider.Watcher mockWatcher1 = mock(CertificateProvider.Watcher.class);
-    CertificateProviderStore.HandleImpl handle1 =
-            (CertificateProviderStore.HandleImpl)
-                    certificateProviderStore.createOrGetProvider(
+    CertificateProviderStore.Handle handle1 = certificateProviderStore.createOrGetProvider(
                             "cert-name1", "plugin1", "config", mockWatcher1, true);
     CertificateProvider.Watcher mockWatcher2 = mock(CertificateProvider.Watcher.class);
-    CertificateProviderStore.HandleImpl handle2 =
-            (CertificateProviderStore.HandleImpl)
-                    certificateProviderStore.createOrGetProvider(
+    CertificateProviderStore.Handle handle2 = certificateProviderStore.createOrGetProvider(
                             "cert-name1", "plugin1", "config", mockWatcher2, true);
     TestCertificateProvider testCertificateProvider =
-            (TestCertificateProvider) handle1.certProvider;
-    testCertificateProvider.watcher.onError(Status.CANCELLED);
+        (TestCertificateProvider) handle1.certProvider;
+    testCertificateProvider.getWatcher().onError(Status.CANCELLED);
     verify(mockWatcher1, times(1)).onError(eq(Status.CANCELLED));
     verify(mockWatcher2, times(1)).onError(eq(Status.CANCELLED));
     handle1.close();
@@ -223,14 +211,10 @@ public class CertificateProviderStoreTest {
   public void onePluginDifferentConfig_differentInstance() {
     CertificateProviderProvider certProviderProvider = registerPlugin("plugin1");
     CertificateProvider.Watcher mockWatcher1 = mock(CertificateProvider.Watcher.class);
-    CertificateProviderStore.HandleImpl handle1 =
-        (CertificateProviderStore.HandleImpl)
-            certificateProviderStore.createOrGetProvider(
+    CertificateProviderStore.Handle handle1 = certificateProviderStore.createOrGetProvider(
                 "cert-name1", "plugin1", "config", mockWatcher1, true);
     CertificateProvider.Watcher mockWatcher2 = mock(CertificateProvider.Watcher.class);
-    CertificateProviderStore.HandleImpl handle2 =
-        (CertificateProviderStore.HandleImpl)
-            certificateProviderStore.createOrGetProvider(
+    CertificateProviderStore.Handle handle2 = certificateProviderStore.createOrGetProvider(
                 "cert-name1", "plugin1", "config2", mockWatcher2, true);
     checkDifferentInstances(
         mockWatcher1, handle1, certProviderProvider, mockWatcher2, handle2, certProviderProvider);
@@ -240,14 +224,10 @@ public class CertificateProviderStoreTest {
   public void onePluginDifferentCertName_differentInstance() {
     CertificateProviderProvider certProviderProvider = registerPlugin("plugin1");
     CertificateProvider.Watcher mockWatcher1 = mock(CertificateProvider.Watcher.class);
-    CertificateProviderStore.HandleImpl handle1 =
-        (CertificateProviderStore.HandleImpl)
-            certificateProviderStore.createOrGetProvider(
+    CertificateProviderStore.Handle handle1 = certificateProviderStore.createOrGetProvider(
                 "cert-name1", "plugin1", "config", mockWatcher1, true);
     CertificateProvider.Watcher mockWatcher2 = mock(CertificateProvider.Watcher.class);
-    CertificateProviderStore.HandleImpl handle2 =
-        (CertificateProviderStore.HandleImpl)
-            certificateProviderStore.createOrGetProvider(
+    CertificateProviderStore.Handle handle2 = certificateProviderStore.createOrGetProvider(
                 "cert-name2", "plugin1", "config", mockWatcher2, true);
     checkDifferentInstances(
         mockWatcher1, handle1, certProviderProvider, mockWatcher2, handle2, certProviderProvider);
@@ -257,14 +237,10 @@ public class CertificateProviderStoreTest {
   public void onePluginDifferentNotifyValue_sameInstance() {
     CertificateProviderProvider unused = registerPlugin("plugin1");
     CertificateProvider.Watcher mockWatcher1 = mock(CertificateProvider.Watcher.class);
-    CertificateProviderStore.HandleImpl handle1 =
-        (CertificateProviderStore.HandleImpl)
-            certificateProviderStore.createOrGetProvider(
+    CertificateProviderStore.Handle handle1 = certificateProviderStore.createOrGetProvider(
                 "cert-name1", "plugin1", "config", mockWatcher1, true);
     CertificateProvider.Watcher mockWatcher2 = mock(CertificateProvider.Watcher.class);
-    CertificateProviderStore.HandleImpl handle2 =
-        (CertificateProviderStore.HandleImpl)
-            certificateProviderStore.createOrGetProvider(
+    CertificateProviderStore.Handle handle2 = certificateProviderStore.createOrGetProvider(
                 "cert-name1", "plugin1", "config", mockWatcher2, false);
     assertThat(handle1).isNotSameInstanceAs(handle2);
     assertThat(handle1.certProvider).isSameInstanceAs(handle2.certProvider);
@@ -275,14 +251,10 @@ public class CertificateProviderStoreTest {
     CertificateProviderProvider certProviderProvider1 = registerPlugin("plugin1");
     CertificateProviderProvider certProviderProvider2 = registerPlugin("plugin2");
     CertificateProvider.Watcher mockWatcher1 = mock(CertificateProvider.Watcher.class);
-    CertificateProviderStore.HandleImpl handle1 =
-        (CertificateProviderStore.HandleImpl)
-            certificateProviderStore.createOrGetProvider(
+    CertificateProviderStore.Handle handle1 = certificateProviderStore.createOrGetProvider(
                 "cert-name1", "plugin1", "config", mockWatcher1, true);
     CertificateProvider.Watcher mockWatcher2 = mock(CertificateProvider.Watcher.class);
-    CertificateProviderStore.HandleImpl handle2 =
-        (CertificateProviderStore.HandleImpl)
-            certificateProviderStore.createOrGetProvider(
+    CertificateProviderStore.Handle handle2 = certificateProviderStore.createOrGetProvider(
                 "cert-name1", "plugin2", "config", mockWatcher2, true);
     checkDifferentInstances(
         mockWatcher1, handle1, certProviderProvider1, mockWatcher2, handle2, certProviderProvider2);
@@ -291,10 +263,10 @@ public class CertificateProviderStoreTest {
   @SuppressWarnings("deprecation")
   private void checkDifferentInstances(
       CertificateProvider.Watcher mockWatcher1,
-      CertificateProviderStore.HandleImpl handle1,
+      CertificateProviderStore.Handle handle1,
       CertificateProviderProvider certProviderProvider1,
       CertificateProvider.Watcher mockWatcher2,
-      CertificateProviderStore.HandleImpl handle2,
+      CertificateProviderStore.Handle handle2,
       CertificateProviderProvider certProviderProvider2) {
     assertThat(handle1.certProvider).isNotSameInstanceAs(handle2.certProvider);
     TestCertificateProvider testCertificateProvider1 =
@@ -305,16 +277,14 @@ public class CertificateProviderStoreTest {
         .isSameInstanceAs(certProviderProvider1);
     assertThat(testCertificateProvider2.certProviderProvider)
         .isSameInstanceAs(certProviderProvider2);
-    CertificateProviderStore.DistributorWatcher distWatcher1 =
-        (CertificateProviderStore.DistributorWatcher) testCertificateProvider1.watcher;
+    CertificateProvider.DistributorWatcher distWatcher1 = testCertificateProvider1.getWatcher();
     assertThat(distWatcher1.downsstreamWatchers.size()).isEqualTo(1);
-    CertificateProviderStore.DistributorWatcher distWatcher2 =
-        (CertificateProviderStore.DistributorWatcher) testCertificateProvider2.watcher;
+    CertificateProvider.DistributorWatcher distWatcher2 = testCertificateProvider2.getWatcher();
     assertThat(distWatcher2.downsstreamWatchers.size()).isEqualTo(1);
     PrivateKey testKey1 = mock(PrivateKey.class);
     X509Certificate cert1 = mock(X509Certificate.class);
     List<X509Certificate> testList1 = ImmutableList.of(cert1);
-    testCertificateProvider1.watcher.updateCertificate(testKey1, testList1);
+    testCertificateProvider1.getWatcher().updateCertificate(testKey1, testList1);
     verify(mockWatcher1, times(1)).updateCertificate(eq(testKey1), eq(testList1));
     verify(mockWatcher2, never())
         .updateCertificate(any(PrivateKey.class), anyListOf(X509Certificate.class));
@@ -323,7 +293,7 @@ public class CertificateProviderStoreTest {
     PrivateKey testKey2 = mock(PrivateKey.class);
     X509Certificate cert2 = mock(X509Certificate.class);
     List<X509Certificate> testList2 = ImmutableList.of(cert2);
-    testCertificateProvider2.watcher.updateCertificate(testKey2, testList2);
+    testCertificateProvider2.getWatcher().updateCertificate(testKey2, testList2);
     verify(mockWatcher2, times(1)).updateCertificate(eq(testKey2), eq(testList2));
     verify(mockWatcher1, never())
         .updateCertificate(any(PrivateKey.class), anyListOf(X509Certificate.class));
@@ -338,7 +308,9 @@ public class CertificateProviderStoreTest {
         mock(CertificateProviderProvider.class);
     when(certProviderProvider.getName()).thenReturn(pluginName);
     when(certProviderProvider.createCertificateProvider(
-            any(Object.class), any(CertificateProvider.Watcher.class), any(Boolean.TYPE)))
+            any(Object.class),
+            any(CertificateProvider.DistributorWatcher.class),
+            any(Boolean.TYPE)))
         .then(
             new Answer<CertificateProvider>() {
 
@@ -346,7 +318,8 @@ public class CertificateProviderStoreTest {
               public CertificateProvider answer(InvocationOnMock invocation) throws Throwable {
                 Object[] args = invocation.getArguments();
                 Object config = args[0];
-                CertificateProvider.Watcher watcher = (CertificateProvider.Watcher) args[1];
+                CertificateProvider.DistributorWatcher watcher =
+                    (CertificateProvider.DistributorWatcher) args[1];
                 boolean notifyCertUpdates = (Boolean) args[2];
                 return new TestCertificateProvider(
                     watcher, notifyCertUpdates, config, certProviderProvider);
