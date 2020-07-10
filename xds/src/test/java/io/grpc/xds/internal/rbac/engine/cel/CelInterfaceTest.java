@@ -14,11 +14,17 @@
  * limitations under the License.
  */
 
+/**
+  This is a Java stub for evaluating Common Expression Language (CEL). 
+  More information about CEL can be found in https://github.com/google/cel-spec. 
+  Once Java CEL has been open-sourced, this stub will be removed.
+*/
+
 package io.grpc.xds.internal;
 
 import static com.google.common.truth.Truth.assertThat;
 
-import com.google.api.expr.v1alpha1.Expr;
+import com.google.api.expr.v1alpha1.CheckedExpr;
 import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.Descriptors.Descriptor;
 import io.grpc.xds.InterpreterException;
@@ -54,8 +60,8 @@ public class CelInterfaceTest {
     map.put("requestMethod", new Object());
     ImmutableMap<String, Object> apiAttributes = ImmutableMap.copyOf(map);
     activation = Activation.copyOf(apiAttributes);
-    // Add a fake condition Expr that are being evaluated.
-    Expr conditions = Expr.newBuilder().build();
+    // Add a fake condition CheckedExpr that are being evaluated.
+    CheckedExpr conditions = CheckedExpr.newBuilder().build();
     result = interpreter.createInterpretable(conditions).eval(activation);
   }
 

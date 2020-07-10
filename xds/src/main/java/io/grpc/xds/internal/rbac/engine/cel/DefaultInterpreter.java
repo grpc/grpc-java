@@ -14,9 +14,15 @@
  * limitations under the License.
  */
 
+/**
+  This is a Java stub for evaluating Common Expression Language (CEL). 
+  More information about CEL can be found in https://github.com/google/cel-spec. 
+  Once Java CEL has been open-sourced, this stub will be removed.
+*/
+
 package io.grpc.xds.internal;
 
-import com.google.api.expr.v1alpha1.Expr;
+import com.google.api.expr.v1alpha1.CheckedExpr;
 import io.grpc.xds.InterpreterException;
 
 /** Default implementation of {@link Interpreter}. */
@@ -29,17 +35,17 @@ public class DefaultInterpreter implements Interpreter {
   public DefaultInterpreter(RuntimeTypeProvider typeProvider, Dispatcher dispatcher) {}  
   
   @Override
-  public Interpretable createInterpretable(Expr expr) 
+  public Interpretable createInterpretable(CheckedExpr checkedExpr) 
     throws InterpreterException {
-    return new DefaultInterpretable(expr);
+    return new DefaultInterpretable(checkedExpr);
   }
 
   private static class DefaultInterpretable implements Interpretable {
     /**
     * Creates a new interpretable.
-    * @param expr a Cel expression.
+    * @param checkedExpr a Cel checkedExpression.
     */
-    public DefaultInterpretable(Expr expr) {}
+    public DefaultInterpretable(CheckedExpr checkedExpr) {}
 
     @Override
     public Object eval(Activation activation) throws InterpreterException {
