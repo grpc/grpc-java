@@ -14,19 +14,18 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.internal;
+package io.grpc.xds.internal.cel;
 
-import io.grpc.Metadata;
-import io.grpc.xds.InterpreterException;
 import java.lang.String;
 import java.util.List;
 
 /**
- * This is a Java stub for evaluating Common Expression Language (CEL). 
+ * Default implementation of {@link Dispatcher}.
+ * 
+ * <p>This is a Java stub for evaluating Common Expression Language (CEL). 
  * More information about CEL can be found in https://github.com/google/cel-spec. 
  * Once Java CEL has been open-sourced, this stub will be removed.
  */
-/** Default implementation of {@link Dispatcher}. */
 public class DefaultDispatcher implements Dispatcher {
   /** Creates a new dispatcher with all standard functions. */
   public static DefaultDispatcher create() {

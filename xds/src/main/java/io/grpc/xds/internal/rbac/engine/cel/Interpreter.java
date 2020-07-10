@@ -14,18 +14,18 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.internal;
+package io.grpc.xds.internal.cel;
 
-import com.google.api.expr.v1alpha1.CheckedExpr;
-import io.grpc.xds.InterpreterException;
+import com.google.api.expr.v1alpha1.Expr;
 
 /**
- * This is a Java stub for evaluating Common Expression Language (CEL). 
+ * Interface to a CEL interpreter.
+ * 
+ * <p>This is a Java stub for evaluating Common Expression Language (CEL). 
  * More information about CEL can be found in https://github.com/google/cel-spec. 
  * Once Java CEL has been open-sourced, this stub will be removed.
  */
-/** Interface to a CEL interpreter. */
 public interface Interpreter {
   /** Creates an interpretable for the given expression. */
-  Interpretable createInterpretable(CheckedExpr checkedExpr) throws InterpreterException;
+  Interpretable createInterpretable(Expr expr) throws InterpreterException;
 }

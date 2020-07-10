@@ -14,16 +14,17 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.internal;
+package io.grpc.xds.internal.cel;
 
 import com.google.protobuf.Descriptors.Descriptor;
 
 /**
- * This is a Java stub for evaluating Common Expression Language (CEL). 
+ * An implementation of {@link RuntimeTypeProvider} which relies on proto descriptors.
+ * 
+ * <p>This is a Java stub for evaluating Common Expression Language (CEL). 
  * More information about CEL can be found in https://github.com/google/cel-spec. 
  * Once Java CEL has been open-sourced, this stub will be removed.
  */
-/** An implementation of {@link RuntimeTypeProvider} which relies on proto descriptors. */
 public class DescriptorMessageProvider implements RuntimeTypeProvider {
   /**
    * Creates a new message provider that provides only {@link DynamicMessage DynamicMessages} for

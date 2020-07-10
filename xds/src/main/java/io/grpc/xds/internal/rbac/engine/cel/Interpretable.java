@@ -14,16 +14,15 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.internal;
-
-import io.grpc.xds.InterpreterException;
+package io.grpc.xds.internal.cel;
 
 /**
- * This is a Java stub for evaluating Common Expression Language (CEL). 
+ * Represent an expression which can be interpreted repeatedly using a given activation.
+ * 
+ * <p>This is a Java stub for evaluating Common Expression Language (CEL). 
  * More information about CEL can be found in https://github.com/google/cel-spec. 
  * Once Java CEL has been open-sourced, this stub will be removed.
  */
-/** Represent an expression which can be interpreted repeatedly using a given activation. */
 public interface Interpretable {
   /** Runs interpretation with the given activation which supplies name/value bindings. */
   Object eval(Activation activation) throws InterpreterException;

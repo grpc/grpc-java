@@ -14,14 +14,13 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.internal;
+package io.grpc.xds.internal.cel;
 
 import static com.google.common.truth.Truth.assertThat;
 
-import com.google.api.expr.v1alpha1.CheckedExpr;
+import com.google.api.expr.v1alpha1.Expr;
 import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.Descriptors.Descriptor;
-import io.grpc.xds.InterpreterException;
 import java.lang.String;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -31,17 +30,21 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-/** Unit tests for Cel Interface. */
+/** Tests for CEL library stub. */
 @RunWith(JUnit4.class)
 public class CelInterfaceTest {
   private RuntimeTypeProvider messageProvider;
   private Dispatcher dispatcher;
   private Interpreter interpreter;
   private Activation activation;
+  private String activationString;
+  private Object activationResolution;
   private Object result;
+  private InterpreterException interpreterException;
+  private InterpreterException.Builder interpreterExceptionBuilder;
 
   @Test
-  public void setup() throws InterpreterException {
+  public void testCelInterface() throws Exception {
     // Set up interpreter used in Cel library's eval function.
     List<Descriptor> descriptors = new ArrayList<>();
     messageProvider = DescriptorMessageProvider.dynamicMessages(descriptors);
@@ -54,22 +57,25 @@ public class CelInterfaceTest {
     map.put("requestMethod", new Object());
     ImmutableMap<String, Object> apiAttributes = ImmutableMap.copyOf(map);
     activation = Activation.copyOf(apiAttributes);
-    // Add a fake condition CheckedExpr that are being evaluated.
-    CheckedExpr conditions = CheckedExpr.newBuilder().build();
+    activationString = activation.toString();
+    activationResolution = activation.resolve("");
+    // Add a fake condition Expr that are being evaluated.
+    Expr conditions = Expr.newBuilder().build();
     result = interpreter.createInterpretable(conditions).eval(activation);
-  }
-
-  @Test
-  public void testCelInterface() {
-    try {
-      setup();
-    } catch (InterpreterException e) {
-      System.out.println(e.toString());
-    }
     assertThat(messageProvider).isNotNull();
     assertThat(dispatcher).isNotNull();
     assertThat(interpreter).isNotNull();
     assertThat(activation).isNotNull();
+    assertThat(activationString).isNotNull();
+    assertThat(activationResolution).isNull();
     assertThat(result).isNotNull();
+  }
+
+  @Test
+  public void testInterpreterException() {
+    interpreterExceptionBuilder = new InterpreterException.Builder("");
+    interpreterException = interpreterExceptionBuilder.build();
+    assertThat(interpreterExceptionBuilder).isNotNull();
+    assertThat(interpreterException).isNotNull();
   }
 }

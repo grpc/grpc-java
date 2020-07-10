@@ -14,18 +14,17 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.internal;
+package io.grpc.xds.internal.cel;
 
-import io.grpc.Metadata;
-import io.grpc.xds.InterpreterException;
 import java.util.List;
 
 /**
- * This is a Java stub for evaluating Common Expression Language (CEL). 
+ * Determines an appropriate function and invokes it.
+ * 
+ * <p>This is a Java stub for evaluating Common Expression Language (CEL). 
  * More information about CEL can be found in https://github.com/google/cel-spec. 
  * Once Java CEL has been open-sourced, this stub will be removed.
  */
-/** An object which implements dispatching of function calls. */
 public interface Dispatcher {
   /**
    * Invokes a function based on given parameters.

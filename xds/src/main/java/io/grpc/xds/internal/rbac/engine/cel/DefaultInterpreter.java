@@ -14,17 +14,17 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.internal;
+package io.grpc.xds.internal.cel;
 
-import com.google.api.expr.v1alpha1.CheckedExpr;
-import io.grpc.xds.InterpreterException;
+import com.google.api.expr.v1alpha1.Expr;
 
 /**
- * This is a Java stub for evaluating Common Expression Language (CEL). 
+ * Default implementation of {@link Interpreter}.
+ * 
+ * <p>This is a Java stub for evaluating Common Expression Language (CEL). 
  * More information about CEL can be found in https://github.com/google/cel-spec. 
  * Once Java CEL has been open-sourced, this stub will be removed.
  */
-/** Default implementation of {@link Interpreter}. */
 public class DefaultInterpreter implements Interpreter {
   /**
   * Creates a new interpreter
@@ -34,17 +34,17 @@ public class DefaultInterpreter implements Interpreter {
   public DefaultInterpreter(RuntimeTypeProvider typeProvider, Dispatcher dispatcher) {}  
   
   @Override
-  public Interpretable createInterpretable(CheckedExpr checkedExpr) 
-    throws InterpreterException {
-    return new DefaultInterpretable(checkedExpr);
+  public Interpretable createInterpretable(Expr expr) 
+      throws InterpreterException {
+    return new DefaultInterpretable(expr);
   }
 
   private static class DefaultInterpretable implements Interpretable {
     /**
     * Creates a new interpretable.
-    * @param checkedExpr a Cel checkedExpression.
+    * @param expr a Cel expression.
     */
-    public DefaultInterpretable(CheckedExpr checkedExpr) {}
+    public DefaultInterpretable(Expr expr) {}
 
     @Override
     public Object eval(Activation activation) throws InterpreterException {
