@@ -38,6 +38,7 @@ dependencies {
 
 javadoc {
     exclude 'io/grpc/internal/**'
+    exclude 'io/grpc/inprocess/Internal*'
     // Disabled until kinda stable.
     exclude 'io/grpc/perfmark/**'
 }
