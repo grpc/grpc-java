@@ -1131,7 +1131,8 @@ public abstract class AbstractInteropTest {
           Pattern.matches("deadline exceeded after .*s. \\[.*\\]", desc)
           // If server expires first, it'd reset the stream and client would generate a different
           // message
-          || desc.startsWith("ClientCall was cancelled at or after deadline."));
+          || desc.startsWith("ClientCall was cancelled at or after deadline.")
+          || desc.startsWith("ClientCall started after deadline exceeded");
     }
 
     assertStatsTrace("grpc.testing.TestService/EmptyCall", Status.Code.OK);
