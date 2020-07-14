@@ -262,7 +262,7 @@ public class CertificateProviderStoreTest {
   }
 
   @SuppressWarnings("deprecation")
-  private void checkDifferentInstances(
+  private static void checkDifferentInstances(
       CertificateProvider.Watcher mockWatcher1,
       CertificateProviderStore.Handle handle1,
       CertificateProviderProvider certProviderProvider1,
