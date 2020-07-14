@@ -48,7 +48,9 @@ dependencies {
     implementation project(':grpc-netty')
     implementation project(":grpc-stub")
     implementation (project(':grpc-interop-testing')) {
+        // Avoid grpc-netty-shaded dependency
         exclude group: 'io.grpc', module: 'grpc-alts'
+        exclude group: 'io.grpc', module: 'grpc-xds'
     }
     implementation libraries.junit
     implementation libraries.protobuf
