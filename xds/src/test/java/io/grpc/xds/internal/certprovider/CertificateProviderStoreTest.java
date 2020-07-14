@@ -19,6 +19,7 @@ package io.grpc.xds.internal.certprovider;
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyListOf;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -310,7 +311,7 @@ public class CertificateProviderStoreTest {
     when(certProviderProvider.createCertificateProvider(
             any(Object.class),
             any(CertificateProvider.DistributorWatcher.class),
-            any(Boolean.TYPE)))
+            anyBoolean()))
         .then(
             new Answer<CertificateProvider>() {
 
