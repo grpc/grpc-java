@@ -20,6 +20,7 @@ import com.google.common.annotations.VisibleForTesting;
 import io.grpc.xds.internal.certprovider.CertificateProvider.Watcher;
 import io.grpc.xds.internal.sds.ReferenceCountingMap;
 
+import java.io.Closeable;
 import java.util.Objects;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -41,7 +42,7 @@ public final class CertificateProviderStore {
 
   /** Opaque Handle returned by {@link #createOrGetProvider}. */
   @VisibleForTesting
-  final class Handle implements java.io.Closeable {
+  final class Handle implements Closeable {
     private final CertProviderKey key;
     private final Watcher watcher;
     @VisibleForTesting
