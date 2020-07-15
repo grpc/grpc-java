@@ -101,6 +101,7 @@ class ClusterManagerLoadBalancer extends LoadBalancer {
         childLbStates.get(name).deactivate();
       }
     }
+    updateOverallBalancingState();
   }
 
   @Override
