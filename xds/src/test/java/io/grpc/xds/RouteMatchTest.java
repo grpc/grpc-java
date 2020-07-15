@@ -26,9 +26,7 @@ import io.grpc.xds.RouteMatch.PathMatcher;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
-import java.util.Set;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -38,15 +36,15 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class RouteMatchTest {
 
-  private final Map<String, Set<String>> headers = new HashMap<>();
+  private final Map<String, Iterable<String>> headers = new HashMap<>();
 
   @Before
   public void setUp() {
-    headers.put("content-type", Collections.singleton("application/grpc"));
-    headers.put("grpc-encoding", Collections.singleton("gzip"));
-    headers.put("user-agent", Collections.singleton("gRPC-Java"));
-    headers.put("content-length", Collections.singleton("1000"));
-    headers.put("custom-key", new HashSet<>(Arrays.asList("custom-value1", "custom-value2")));
+    headers.put("content-type", Collections.singletonList("application/grpc"));
+    headers.put("grpc-encoding", Collections.singletonList("gzip"));
+    headers.put("user-agent", Collections.singletonList("gRPC-Java"));
+    headers.put("content-length", Collections.singletonList("1000"));
+    headers.put("custom-key", Arrays.asList("custom-value1", "custom-value2"));
   }
 
   @Test
@@ -135,6 +133,15 @@ public class RouteMatchTest {
                 null, true)),
         null);
     assertThat(routeMatch6.matches("/FooService/barMethod", headers)).isFalse();
+
+    RouteMatch routeMatch7 = new RouteMatch(
+        new PathMatcher("/FooService/barMethod", null, null),
+        Collections.singletonList(
+            new HeaderMatcher(
+                "custom-key", "custom-value1,custom-value2", null, null, null, null,
+                null, false)),
+        null);
+    assertThat(routeMatch7.matches("/FooService/barMethod", headers)).isTrue();
   }
 
   @Test
