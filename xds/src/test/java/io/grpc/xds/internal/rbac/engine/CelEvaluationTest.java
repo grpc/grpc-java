@@ -27,6 +27,7 @@ import com.google.common.collect.ImmutableMap;
 import io.envoyproxy.envoy.config.rbac.v2.Policy;
 import io.envoyproxy.envoy.config.rbac.v2.RBAC;
 import io.envoyproxy.envoy.config.rbac.v2.RBAC.Action;
+import io.grpc.xds.internal.cel.Activation;
 import io.grpc.xds.internal.cel.InterpreterException;
 import java.lang.StringBuilder;
 import java.util.ArrayList;
@@ -53,6 +54,9 @@ public class CelEvaluationTest<ReqT, RespT> {
   
   @Mock
   private EvaluateArgs<ReqT,RespT> args;
+
+  @Mock
+  private Activation activation;
 
   private CelEvaluationEngine<ReqT,RespT> engine;
   private CelEvaluationEngine<ReqT,RespT> spyEngine;
@@ -82,7 +86,7 @@ public class CelEvaluationTest<ReqT, RespT> {
     spyEngine = Mockito.spy(engine);
     doReturn(ImmutableMap.copyOf(attributes)).when(spyEngine).extractFields(
         ArgumentMatchers.<EvaluateArgs<ReqT,RespT>>any());
-    when(spyEngine.matches(condition, args)).thenReturn(true);
+    when(spyEngine.matches(any(Expr.class), any(Activation.class))).thenReturn(true);
     assertEquals(spyEngine.evaluate(args).getDecision(), AuthorizationDecision.Decision.ALLOW);
     assertEquals(spyEngine.evaluate(args).getMatchingPolicyNames().get(0), "Policy 1");
     assertEquals(spyEngine.evaluate(args).toString(), 
@@ -96,7 +100,7 @@ public class CelEvaluationTest<ReqT, RespT> {
     spyEngine = Mockito.spy(engine);
     doReturn(ImmutableMap.copyOf(attributes)).when(spyEngine).extractFields(
         ArgumentMatchers.<EvaluateArgs<ReqT,RespT>>any());
-    when(spyEngine.matches(condition, args)).thenReturn(true);
+    when(spyEngine.matches(any(Expr.class), any(Activation.class))).thenReturn(true);
     assertEquals(spyEngine.evaluate(args).getDecision(), AuthorizationDecision.Decision.DENY);
     assertEquals(spyEngine.evaluate(args).getMatchingPolicyNames().get(0), "Policy 1");
     assertEquals(spyEngine.evaluate(args).toString(), 
@@ -110,7 +114,7 @@ public class CelEvaluationTest<ReqT, RespT> {
     spyEngine = Mockito.spy(engine);
     doReturn(ImmutableMap.copyOf(attributes)).when(spyEngine).extractFields(
         ArgumentMatchers.<EvaluateArgs<ReqT,RespT>>any());
-    when(spyEngine.matches(condition, args)).thenReturn(false);
+    when(spyEngine.matches(any(Expr.class), any(Activation.class))).thenReturn(false);
     assertEquals(spyEngine.evaluate(args).getDecision(), AuthorizationDecision.Decision.DENY);
     assertEquals(spyEngine.evaluate(args).getMatchingPolicyNames().size(), 0);
     assertEquals(spyEngine.evaluate(args).toString(), 
@@ -124,7 +128,7 @@ public class CelEvaluationTest<ReqT, RespT> {
     spyEngine = Mockito.spy(engine);
     doReturn(ImmutableMap.copyOf(attributes)).when(spyEngine).extractFields(
         ArgumentMatchers.<EvaluateArgs<ReqT,RespT>>any());
-    when(spyEngine.matches(condition, args)).thenReturn(false);
+    when(spyEngine.matches(any(Expr.class), any(Activation.class))).thenReturn(false);
     assertEquals(spyEngine.evaluate(args).getDecision(), AuthorizationDecision.Decision.ALLOW);
     assertEquals(spyEngine.evaluate(args).getMatchingPolicyNames().size(), 0);
     assertEquals(spyEngine.evaluate(args).toString(), 
@@ -138,7 +142,7 @@ public class CelEvaluationTest<ReqT, RespT> {
     spyEngine = Mockito.spy(engine);
     doReturn(ImmutableMap.copyOf(attributes)).when(spyEngine).extractFields(
         ArgumentMatchers.<EvaluateArgs<ReqT,RespT>>any());
-    when(spyEngine.matches(condition, args)).thenThrow(
+    when(spyEngine.matches(any(Expr.class), any(Activation.class))).thenThrow(
         new InterpreterException.Builder("Unknown result").build());
     assertEquals(spyEngine.evaluate(args).getDecision(), AuthorizationDecision.Decision.UNKNOWN);
     assertEquals(spyEngine.evaluate(args).getMatchingPolicyNames().get(0), "Policy 1");
@@ -153,8 +157,7 @@ public class CelEvaluationTest<ReqT, RespT> {
     spyEngine = Mockito.spy(engine);
     doReturn(ImmutableMap.copyOf(attributes)).when(spyEngine).extractFields(
         ArgumentMatchers.<EvaluateArgs<ReqT,RespT>>any());
-    when(spyEngine.matches(any(Expr.class), ArgumentMatchers.<EvaluateArgs<ReqT,RespT>>any()))
-        .thenReturn(true);
+    when(spyEngine.matches(any(Expr.class), any(Activation.class))).thenReturn(true);
     assertEquals(spyEngine.evaluate(args).getDecision(), AuthorizationDecision.Decision.DENY);
     assertEquals(spyEngine.evaluate(args).getMatchingPolicyNames().get(0), "Policy 1");
     assertEquals(spyEngine.evaluate(args).toString(), 
@@ -168,8 +171,7 @@ public class CelEvaluationTest<ReqT, RespT> {
     spyEngine = Mockito.spy(engine);
     doReturn(ImmutableMap.copyOf(attributes)).when(spyEngine).extractFields(
         ArgumentMatchers.<EvaluateArgs<ReqT,RespT>>any());
-    when(spyEngine.matches(any(Expr.class), ArgumentMatchers.<EvaluateArgs<ReqT,RespT>>any()))
-        .thenReturn(false);
+    when(spyEngine.matches(any(Expr.class), any(Activation.class))).thenReturn(false);
     assertEquals(spyEngine.evaluate(args).getDecision(), AuthorizationDecision.Decision.DENY);
     assertEquals(spyEngine.evaluate(args).getMatchingPolicyNames().size(), 0);
     assertEquals(spyEngine.evaluate(args).toString(), 
@@ -183,7 +185,7 @@ public class CelEvaluationTest<ReqT, RespT> {
     spyEngine = Mockito.spy(engine);
     doReturn(ImmutableMap.copyOf(attributes)).when(spyEngine).extractFields(
         ArgumentMatchers.<EvaluateArgs<ReqT,RespT>>any());
-    when(spyEngine.matches(any(Expr.class), ArgumentMatchers.<EvaluateArgs<ReqT,RespT>>any()))
+    when(spyEngine.matches(any(Expr.class), any(Activation.class)))
         .thenThrow(new InterpreterException.Builder("Unknown result").build());
     assertEquals(spyEngine.evaluate(args).getDecision(), AuthorizationDecision.Decision.UNKNOWN);
     assertEquals(spyEngine.evaluate(args).getMatchingPolicyNames().get(0), "Policy 1");

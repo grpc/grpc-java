@@ -107,12 +107,13 @@ public class CelEvaluationEngine<ReqT, RespT> {
     AuthorizationDecision.Decision authorizationDecision = null;
     List<String> matchingPolicyNames = new ArrayList<>();
     List<String> unknownPolicyNames = new ArrayList<>();
+    Activation activation = Activation.copyOf(extractFields(args));
     // Go through each RBAC in the Envoy RBAC list.
     for (int i = 0; i < this.action.size(); i++) {
       // Go through each condition in the RBAC policy.
       for (Map.Entry<String, Expr> entry : this.conditions.get(i).entrySet()) {
         try {
-          if (matches(entry.getValue(), args)) {
+          if (matches(entry.getValue(), activation)) {
             if (this.action.get(i) == RBAC.Action.ALLOW) {
               authorizationDecision = AuthorizationDecision.Decision.ALLOW;
             } else {
@@ -141,16 +142,12 @@ public class CelEvaluationEngine<ReqT, RespT> {
   }
 
   /** Evaluate if a condition matches the given Enovy Attributes using Cel library. */
-  protected boolean matches(Expr condition, EvaluateArgs<ReqT, RespT> args) 
-    throws InterpreterException {
+  protected boolean matches(Expr condition, Activation activation) throws InterpreterException {
     // Set up interpreter used in Cel library's eval function.
     List<Descriptor> descriptors = new ArrayList<>();
     RuntimeTypeProvider messageProvider = DescriptorMessageProvider.dynamicMessages(descriptors);
     Dispatcher dispatcher = DefaultDispatcher.create();
     Interpreter interpreter = new DefaultInterpreter(messageProvider, dispatcher);
-    // Set up activation used in Cel library's eval function.
-    ImmutableMap<String, Object> apiAttributes = extractFields(args);
-    Activation activation = Activation.copyOf(apiAttributes);
     // Parse the generated result object to a boolean variable.
     Object result = interpreter.createInterpretable(condition).eval(activation);
     if (result instanceof Boolean) {
@@ -160,8 +157,7 @@ public class CelEvaluationEngine<ReqT, RespT> {
   }
 
   /** Extract Envoy Attributes from EvaluateArgs. */
-  protected ImmutableMap<String, Object> extractFields(
-      EvaluateArgs<ReqT, RespT> args) {
+  protected ImmutableMap<String, Object> extractFields(EvaluateArgs<ReqT, RespT> args) {
     Map<String, Object> attributes = new HashMap<>();
     attributes.put("request.url_path", args.getRequestUrlPath());
     attributes.put("request.host", args.getRequestHost());
