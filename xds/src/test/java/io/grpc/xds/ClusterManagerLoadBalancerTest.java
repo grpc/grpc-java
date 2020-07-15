@@ -152,7 +152,7 @@ public class ClusterManagerLoadBalancerTest {
     assertThat(childBalancer2.upstreamError).isNull();
     assertThat(childBalancer3.upstreamError).isEqualTo(error);
     fakeClock.forwardTime(
-        XdsRoutingLoadBalancer.DELAYED_ACTION_DELETION_TIME_MINUTES, TimeUnit.MINUTES);
+        ClusterManagerLoadBalancer.DELAYED_ACTION_DELETION_TIME_MINUTES, TimeUnit.MINUTES);
     assertThat(childBalancer2.shutdown).isTrue();
 
     clusterManagerLoadBalancer.shutdown();
