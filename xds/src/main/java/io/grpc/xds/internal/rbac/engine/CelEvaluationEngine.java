@@ -120,11 +120,13 @@ public class CelEvaluationEngine<ReqT, RespT> {
               authorizationDecision = AuthorizationDecision.Decision.DENY;
             }
             matchingPolicyNames.add(entry.getKey());
-            return new AuthorizationDecision(authorizationDecision, matchingPolicyNames);
           }
         } catch (InterpreterException e) {
           unknownPolicyNames.add(entry.getKey());
         }
+      }
+      if (matchingPolicyNames.size() > 0) {
+        return new AuthorizationDecision(authorizationDecision, matchingPolicyNames);
       }
     }
     // No RBAC conditions matched and found unknown conditions. 
