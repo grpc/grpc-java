@@ -110,7 +110,7 @@ public class ClusterManagerLoadBalancerTest {
   }
 
   @Test
-  public void update_() {
+  public void handleResolvedAddressesUpdatesChannelPicker() {
     ClusterManagerConfig config =
         buildConfig(ImmutableMap.of("childA", "policy_a", "childB", "policy_b"));
     clusterManagerLoadBalancer
@@ -147,7 +147,9 @@ public class ClusterManagerLoadBalancerTest {
     picker = pickerCaptor.getValue();
     assertThat(pickSubchannel(picker, "childA")).isEqualTo(PickResult.withNoResult());
     assertThat(pickSubchannel(picker, "childC")).isEqualTo(PickResult.withNoResult());
-    // TODO: verify "childB" UNAVAILABLE
+    Status status = pickSubchannel(picker, "childB").getStatus();
+    assertThat(status.getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat(status.getDescription()).isEqualTo("Unable to find cluster childB");
     assertThat(fakeClock.numPendingTasks())
         .isEqualTo(1);  // (delayed) shutdown because "childB" is removed
     assertThat(childBalancer1.shutdown).isFalse();

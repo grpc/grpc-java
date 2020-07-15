@@ -151,7 +151,7 @@ class ClusterManagerLoadBalancer extends LoadBalancer {
           if (delegate == null) {
             return
                 PickResult.withError(
-                    Status.INTERNAL.withDescription("Unable to find cluster " + clusterName));
+                    Status.UNAVAILABLE.withDescription("Unable to find cluster " + clusterName));
           }
           return delegate.pickSubchannel(args);
         }
