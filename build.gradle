@@ -19,7 +19,7 @@ subprojects {
     apply plugin: "net.ltgt.errorprone"
 
     group = "io.grpc"
-    version = "1.31.0-SNAPSHOT" // CURRENT_GRPC_VERSION
+    version = "1.32.0-SNAPSHOT" // CURRENT_GRPC_VERSION
 
     repositories {
         maven { // The google mirror is less flaky than mavenCentral()
