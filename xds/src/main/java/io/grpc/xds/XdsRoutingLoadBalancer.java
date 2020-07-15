@@ -42,7 +42,6 @@ import io.grpc.xds.XdsRoutingLoadBalancerProvider.Route;
 import io.grpc.xds.XdsRoutingLoadBalancerProvider.XdsRoutingConfig;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -264,18 +263,14 @@ final class XdsRoutingLoadBalancer extends LoadBalancer {
     @Override
     public PickResult pickSubchannel(PickSubchannelArgs args) {
       // Index ASCII headers by keys.
-      Map<String, Set<String>> asciiHeaders = new HashMap<>();
+      Map<String, Iterable<String>> asciiHeaders = new HashMap<>();
       Metadata headers = args.getHeaders();
       for (String headerName : headers.keys()) {
         if (headerName.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
           continue;
         }
-        Set<String> headerValues = new HashSet<>();
         Metadata.Key<String> key = Metadata.Key.of(headerName, Metadata.ASCII_STRING_MARSHALLER);
-        for (String value : headers.getAll(key)) {
-          headerValues.add(value);
-        }
-        asciiHeaders.put(headerName, headerValues);
+        asciiHeaders.put(headerName, headers.getAll(key));
       }
       for (Map.Entry<RouteMatch, SubchannelPicker> entry : routePickers.entrySet()) {
         RouteMatch routeMatch = entry.getKey();
