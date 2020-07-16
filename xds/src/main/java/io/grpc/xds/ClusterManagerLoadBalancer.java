@@ -88,12 +88,13 @@ class ClusterManagerLoadBalancer extends LoadBalancer {
       } else {
         childLbStates.get(name).reactivate(childPolicyProvider);
       }
+      final LoadBalancer childLb = childLbStates.get(name).lb;
       final ResolvedAddresses childAddresses =
           resolvedAddresses.toBuilder().setLoadBalancingPolicyConfig(childConfig).build();
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
-          childLbStates.get(name).lb.handleResolvedAddresses(childAddresses);
+          childLb.handleResolvedAddresses(childAddresses);
         }
       });
     }
