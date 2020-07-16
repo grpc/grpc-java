@@ -32,7 +32,7 @@ import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-/** Unit tests for constructor of Cel Evaluation Engine. */
+/** Unit tests for constructor of CEL Evaluation Engine. */
 @RunWith(JUnit4.class)
 public class CelEngineTest {
   @Rule

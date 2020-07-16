@@ -56,7 +56,7 @@ public class EvaluateArgsTest<ReqT,RespT> {
   public void setup() {
     // Set up metadata.
     metadata = new Metadata();
-    // Set up Cel engine.
+    // Set up CEL engine.
     RBAC rbacAllow = RBAC.newBuilder()
         .setAction(RBAC.Action.ALLOW)
         .build();

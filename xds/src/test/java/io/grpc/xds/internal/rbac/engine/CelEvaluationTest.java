@@ -46,7 +46,7 @@ import org.mockito.Mockito;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
-/** Unit tests for evaluate function of Cel Evaluation Engine. */
+/** Unit tests for evaluate function of CEL Evaluation Engine. */
 @RunWith(JUnit4.class)
 public class CelEvaluationTest<ReqT, RespT> {
   @Rule

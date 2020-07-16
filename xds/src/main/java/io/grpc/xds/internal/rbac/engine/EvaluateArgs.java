@@ -25,7 +25,7 @@ import java.util.List;
 import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSession;
 
-/** The EvaluateArgs class holds evaluate arguments used in Cel Evaluation Engine. */
+/** The EvaluateArgs class holds evaluate arguments used in CEL Evaluation Engine. */
 public class EvaluateArgs<ReqT, RespT> {
   private Metadata headers;
   private ServerCall<ReqT, RespT> call;

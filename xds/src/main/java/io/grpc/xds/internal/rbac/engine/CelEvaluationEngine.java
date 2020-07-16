@@ -155,17 +155,18 @@ public class CelEvaluationEngine<ReqT, RespT> {
 
   /** Extract Envoy Attributes from EvaluateArgs. */
   protected ImmutableMap<String, Object> extractFields(EvaluateArgs<ReqT, RespT> args) {
-    Map<String, Object> attributes = new HashMap<>();
-    attributes.put("request.url_path", args.getRequestUrlPath());
-    attributes.put("request.host", args.getRequestHost());
-    attributes.put("request.method", args.getRequestMethod());
-    attributes.put("request.headers", args.getRequestHeaders());
-    attributes.put("source.address", args.getSourceAddress());
-    attributes.put("source.port", args.getSourcePort());
-    attributes.put("destination.address", args.getDestinationAddress());
-    attributes.put("destination.port", args.getDestinationPort());
-    attributes.put(
-        "connection.uri_san_peer_certificate", args.getConnectionUriSanPeerCertificate());
-    return ImmutableMap.copyOf(attributes);
+    ImmutableMap<String, Object> attributes = ImmutableMap.<String, Object>builder()
+        .put("request.url_path", args.getRequestUrlPath())
+        .put("request.host", args.getRequestHost())
+        .put("request.method", args.getRequestMethod())
+        .put("request.headers", args.getRequestHeaders())
+        .put("source.address", args.getSourceAddress())
+        .put("source.port", args.getSourcePort())
+        .put("destination.address", args.getDestinationAddress())
+        .put("destination.port", args.getDestinationPort())
+        .put("connection.uri_san_peer_certificate", 
+            args.getConnectionUriSanPeerCertificate())
+        .build();
+    return attributes;
   }
 }
