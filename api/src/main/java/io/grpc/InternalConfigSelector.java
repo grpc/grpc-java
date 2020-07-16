@@ -56,8 +56,7 @@ public abstract class InternalConfigSelector {
 
     /**
      * Returns an interceptor that would be used to modify CallOptions, in addition to monitoring
-     * call lifecycle. Could use the same interceptor instance for all calls routed to the same
-     * cluster.
+     * call lifecycle.
      */
     @Nullable
     public ClientInterceptor getInterceptor() {
