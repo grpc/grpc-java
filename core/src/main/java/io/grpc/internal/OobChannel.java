@@ -46,7 +46,7 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
-import io.grpc.internal.ClientCallImpl.ClientTransportProvider;
+import io.grpc.internal.ClientCallImpl.ClientStreamProvider;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -82,19 +82,19 @@ final class OobChannel extends ManagedChannel implements InternalInstrumented<Ch
   private final ChannelTracer channelTracer;
   private final TimeProvider timeProvider;
 
-  private final ClientTransportProvider transportProvider = new ClientTransportProvider() {
+  private final ClientStreamProvider transportProvider = new ClientStreamProvider() {
     @Override
-    public ClientTransport get(PickSubchannelArgs args) {
+    public ClientStream newStream(MethodDescriptor<?, ?> method,
+        CallOptions callOptions, Metadata headers, Context context) {
+      Context origContext = context.attach();
       // delayed transport's newStream() always acquires a lock, but concurrent performance doesn't
       // matter here because OOB communication should be sparse, and it's not on application RPC's
       // critical path.
-      return delayedTransport;
-    }
-
-    @Override
-    public <ReqT> ClientStream newRetriableStream(MethodDescriptor<ReqT, ?> method,
-        CallOptions callOptions, Metadata headers, Context context) {
-      throw new UnsupportedOperationException("OobChannel should not create retriable streams");
+      try {
+        return delayedTransport.newStream(method, headers, callOptions);
+      } finally {
+        context.detach(origContext);
+      }
     }
   };
 
@@ -202,8 +202,7 @@ final class OobChannel extends ManagedChannel implements InternalInstrumented<Ch
       MethodDescriptor<RequestT, ResponseT> methodDescriptor, CallOptions callOptions) {
     return new ClientCallImpl<>(methodDescriptor,
         callOptions.getExecutor() == null ? executor : callOptions.getExecutor(),
-        callOptions, transportProvider, deadlineCancellationExecutor, channelCallsTracer,
-        false /* retryEnabled */);
+        callOptions, transportProvider, deadlineCancellationExecutor, channelCallsTracer);
   }
 
   @Override

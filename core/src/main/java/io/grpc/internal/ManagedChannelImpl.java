@@ -72,7 +72,7 @@ import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.AutoConfiguredLoadBalancerFactory.AutoConfiguredLoadBalancer;
-import io.grpc.internal.ClientCallImpl.ClientTransportProvider;
+import io.grpc.internal.ClientCallImpl.ClientStreamProvider;
 import io.grpc.internal.RetriableStream.ChannelBufferMeter;
 import io.grpc.internal.RetriableStream.Throttle;
 import java.net.URI;
@@ -454,9 +454,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
   }
 
-  private final class ChannelTransportProvider implements ClientTransportProvider {
-    @Override
-    public ClientTransport get(PickSubchannelArgs args) {
+  private final class ChannelStreamProvider implements ClientStreamProvider {
+    private ClientTransport getTransport(PickSubchannelArgs args) {
       SubchannelPicker pickerCopy = subchannelPicker;
       if (shutdown.get()) {
         // If channel is shut down, delayedTransport is also shut down which will fail the stream
@@ -494,57 +493,68 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
 
     @Override
-    public <ReqT> ClientStream newRetriableStream(
-        final MethodDescriptor<ReqT, ?> method,
+    public ClientStream newStream(
+        final MethodDescriptor<?, ?> method,
         final CallOptions callOptions,
         final Metadata headers,
         final Context context) {
-      checkState(retryEnabled, "retry should be enabled");
-      final Throttle throttle = lastServiceConfig.getRetryThrottling();
-      final class RetryStream extends RetriableStream<ReqT> {
-        RetryStream() {
-          super(
-              method,
-              headers,
-              channelBufferUsed,
-              perRpcBufferLimit,
-              channelBufferLimit,
-              getCallExecutor(callOptions),
-              transportFactory.getScheduledExecutorService(),
-              callOptions.getOption(RETRY_POLICY_KEY),
-              callOptions.getOption(HEDGING_POLICY_KEY),
-              throttle);
+      if (!retryEnabled) {
+        ClientTransport transport =
+            getTransport(new PickSubchannelArgsImpl(method, headers, callOptions));
+        Context origContext = context.attach();
+        try {
+          return transport.newStream(method, headers, callOptions);
+        } finally {
+          context.detach(origContext);
         }
+      } else {
+        final Throttle throttle = lastServiceConfig.getRetryThrottling();
+        final class RetryStream<ReqT> extends RetriableStream<ReqT> {
+          @SuppressWarnings("unchecked")
+          RetryStream() {
+            super(
+                (MethodDescriptor<ReqT, ?>) method,
+                headers,
+                channelBufferUsed,
+                perRpcBufferLimit,
+                channelBufferLimit,
+                getCallExecutor(callOptions),
+                transportFactory.getScheduledExecutorService(),
+                callOptions.getOption(RETRY_POLICY_KEY),
+                callOptions.getOption(HEDGING_POLICY_KEY),
+                throttle);
+          }
 
-        @Override
-        Status prestart() {
-          return uncommittedRetriableStreamsRegistry.add(this);
-        }
+          @Override
+          Status prestart() {
+            return uncommittedRetriableStreamsRegistry.add(this);
+          }
 
-        @Override
-        void postCommit() {
-          uncommittedRetriableStreamsRegistry.remove(this);
-        }
+          @Override
+          void postCommit() {
+            uncommittedRetriableStreamsRegistry.remove(this);
+          }
 
-        @Override
-        ClientStream newSubstream(ClientStreamTracer.Factory tracerFactory, Metadata newHeaders) {
-          CallOptions newOptions = callOptions.withStreamTracerFactory(tracerFactory);
-          ClientTransport transport =
-              get(new PickSubchannelArgsImpl(method, newHeaders, newOptions));
-          Context origContext = context.attach();
-          try {
-            return transport.newStream(method, newHeaders, newOptions);
-          } finally {
-            context.detach(origContext);
+          @Override
+          ClientStream newSubstream(ClientStreamTracer.Factory tracerFactory, Metadata newHeaders) {
+            CallOptions newOptions = callOptions.withStreamTracerFactory(tracerFactory);
+            ClientTransport transport =
+                getTransport(new PickSubchannelArgsImpl(method, newHeaders, newOptions));
+            Context origContext = context.attach();
+            try {
+              return transport.newStream(method, newHeaders, newOptions);
+            } finally {
+              context.detach(origContext);
+            }
           }
         }
-      }
 
-      return new RetryStream();
+        return new RetryStream<>();
+      }
     }
   }
 
-  private final ClientTransportProvider transportProvider = new ChannelTransportProvider();
+  private final ClientStreamProvider transportProvider = new ChannelStreamProvider();
 
   private final Rescheduler idleTimer;
 
@@ -887,8 +897,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
           callOptions,
           transportProvider,
           terminated ? null : transportFactory.getScheduledExecutorService(),
-          channelCallTracer,
-          retryEnabled)
+          channelCallTracer)
           .setFullStreamDecompression(fullStreamDecompression)
           .setDecompressorRegistry(decompressorRegistry)
           .setCompressorRegistry(compressorRegistry);
