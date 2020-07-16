@@ -266,9 +266,6 @@ final class XdsRoutingLoadBalancer extends LoadBalancer {
       Map<String, Iterable<String>> asciiHeaders = new HashMap<>();
       Metadata headers = args.getHeaders();
       for (String headerName : headers.keys()) {
-        if (headerName.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
-          continue;
-        }
         Metadata.Key<String> key = Metadata.Key.of(headerName, Metadata.ASCII_STRING_MARSHALLER);
         asciiHeaders.put(headerName, headers.getAll(key));
       }
