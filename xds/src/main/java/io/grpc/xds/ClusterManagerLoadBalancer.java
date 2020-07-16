@@ -248,12 +248,11 @@ class ClusterManagerLoadBalancer extends LoadBalancer {
 
       @Override
       public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
-        if (deactivated) {
-          return;
-        }
         currentState = newState;
         currentPicker = newPicker;
-        updateOverallBalancingState();
+        if (!deactivated) {
+          updateOverallBalancingState();
+        }
       }
 
       @Override

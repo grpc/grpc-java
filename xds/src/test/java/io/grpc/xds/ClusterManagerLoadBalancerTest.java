@@ -111,14 +111,7 @@ public class ClusterManagerLoadBalancerTest {
 
   @Test
   public void handleResolvedAddressesUpdatesChannelPicker() {
-    ClusterManagerConfig config =
-        buildConfig(ImmutableMap.of("childA", "policy_a", "childB", "policy_b"));
-    clusterManagerLoadBalancer
-        .handleResolvedAddresses(
-            ResolvedAddresses.newBuilder()
-                .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
-                .setLoadBalancingPolicyConfig(config)
-                .build());
+    deliverResolvedAddresses(ImmutableMap.of("childA", "policy_a", "childB", "policy_b"));
 
     verify(helper, atLeastOnce()).updateBalancingState(
         eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
@@ -134,13 +127,7 @@ public class ClusterManagerLoadBalancerTest {
     assertThat(childBalancer2.config).isEqualTo(lbConfigInventory.get("childB"));
 
     // Receive an updated config.
-    config = buildConfig(ImmutableMap.of("childA", "policy_a", "childC", "policy_c"));
-    clusterManagerLoadBalancer
-        .handleResolvedAddresses(
-            ResolvedAddresses.newBuilder()
-                .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
-                .setLoadBalancingPolicyConfig(config)
-                .build());
+    deliverResolvedAddresses(ImmutableMap.of("childA", "policy_a", "childC", "policy_c"));
 
     verify(helper, atLeast(2))
         .updateBalancingState(eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
@@ -167,14 +154,7 @@ public class ClusterManagerLoadBalancerTest {
 
   @Test
   public void updateBalancingStateFromChildBalancers() {
-    ClusterManagerConfig config =
-        buildConfig(ImmutableMap.of("childA", "policy_a", "childB", "policy_b"));
-    clusterManagerLoadBalancer
-        .handleResolvedAddresses(
-            ResolvedAddresses.newBuilder()
-                .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
-                .setLoadBalancingPolicyConfig(config)
-                .build());
+    deliverResolvedAddresses(ImmutableMap.of("childA", "policy_a", "childB", "policy_b"));
 
     assertThat(childBalancers).hasSize(2);
     FakeLoadBalancer childBalancer1 = childBalancers.get(0);
@@ -198,9 +178,15 @@ public class ClusterManagerLoadBalancerTest {
   @Test
   public void updateBalancingStateFromDeactivatedChildBalancer() {
     FakeLoadBalancer balancer = deliverAddressesAndUpdateToRemoveChildPolicy("childA", "policy_a");
-    balancer.deliverSubchannelState(mock(Subchannel.class), ConnectivityState.READY);
+    Subchannel subchannel = mock(Subchannel.class);
+    balancer.deliverSubchannelState(subchannel, ConnectivityState.READY);
     verify(helper, never()).updateBalancingState(
         eq(ConnectivityState.READY), any(SubchannelPicker.class));
+
+    deliverResolvedAddresses(ImmutableMap.of("childA", "policy_a"));
+    verify(helper).updateBalancingState(eq(ConnectivityState.READY), pickerCaptor.capture());
+    assertThat(pickSubchannel(pickerCaptor.getValue(), "childA").getSubchannel())
+        .isEqualTo(subchannel);
   }
 
   @Test
@@ -213,14 +199,7 @@ public class ClusterManagerLoadBalancerTest {
     assertThat(result.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(result.getStatus().getDescription()).isEqualTo("resolver error");
 
-    ClusterManagerConfig config =
-        buildConfig(ImmutableMap.of("childA", "policy_a", "childB", "policy_b"));
-    clusterManagerLoadBalancer
-        .handleResolvedAddresses(
-            ResolvedAddresses.newBuilder()
-                .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
-                .setLoadBalancingPolicyConfig(config)
-                .build());
+    deliverResolvedAddresses(ImmutableMap.of("childA", "policy_a", "childB", "policy_b"));
 
     assertThat(childBalancers).hasSize(2);
     FakeLoadBalancer childBalancer1 = childBalancers.get(0);
@@ -244,27 +223,15 @@ public class ClusterManagerLoadBalancerTest {
   private FakeLoadBalancer deliverAddressesAndUpdateToRemoveChildPolicy(
       String childName, String childPolicyName) {
     lbConfigInventory.put("childFoo", null);
-    ClusterManagerConfig config =
-        buildConfig(ImmutableMap.of(childName, childPolicyName, "childFoo", "policy_foo"));
-    clusterManagerLoadBalancer
-        .handleResolvedAddresses(
-            ResolvedAddresses.newBuilder()
-                .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
-                .setLoadBalancingPolicyConfig(config)
-                .build());
+    deliverResolvedAddresses(
+        ImmutableMap.of(childName, childPolicyName, "childFoo", "policy_foo"));
 
     verify(helper, atLeastOnce()).updateBalancingState(
         eq(ConnectivityState.CONNECTING), any(SubchannelPicker.class));
     assertThat(childBalancers).hasSize(2);
     FakeLoadBalancer balancer = childBalancers.get(0);
-    config =
-        buildConfig(ImmutableMap.of("childFoo", "policy_foo"));
-    clusterManagerLoadBalancer
-        .handleResolvedAddresses(
-            ResolvedAddresses.newBuilder()
-                .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
-                .setLoadBalancingPolicyConfig(config)
-                .build());
+
+    deliverResolvedAddresses(ImmutableMap.of("childFoo", "policy_foo"));
     verify(helper, atLeast(2)).updateBalancingState(
         eq(ConnectivityState.CONNECTING), any(SubchannelPicker.class));
     assertThat(Iterables.getOnlyElement(fakeClock.getPendingTasks()).getDelay(TimeUnit.MINUTES))
@@ -272,16 +239,30 @@ public class ClusterManagerLoadBalancerTest {
     return balancer;
   }
 
-  private ClusterManagerConfig buildConfig(Map<String, String> childNames) {
-    Map<String, PolicySelection> childPolicies = new LinkedHashMap<>();
-    for (String name : childNames.keySet()) {
-      String childPolicyName = childNames.get(name);
+  private void deliverResolvedAddresses(final Map<String, String> childPolicies) {
+    syncContext.execute(new Runnable() {
+      @Override
+      public void run() {
+        clusterManagerLoadBalancer
+            .handleResolvedAddresses(
+                ResolvedAddresses.newBuilder()
+                    .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
+                    .setLoadBalancingPolicyConfig(buildConfig(childPolicies))
+                    .build());
+      }
+    });
+  }
+
+  private ClusterManagerConfig buildConfig(Map<String, String> childPolicies) {
+    Map<String, PolicySelection> childPolicySelections = new LinkedHashMap<>();
+    for (String name : childPolicies.keySet()) {
+      String childPolicyName = childPolicies.get(name);
       Object childConfig = lbConfigInventory.get(name);
       PolicySelection policy =
           new PolicySelection(new FakeLoadBalancerProvider(childPolicyName), null, childConfig);
-      childPolicies.put(name, policy);
+      childPolicySelections.put(name, policy);
     }
-    return new ClusterManagerConfig(childPolicies);
+    return new ClusterManagerConfig(childPolicySelections);
   }
 
   private static PickResult pickSubchannel(SubchannelPicker picker, String name) {
