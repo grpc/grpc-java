@@ -161,7 +161,7 @@ public class ClusterManagerLoadBalancerTest {
     assertThat(childBalancer3.config).isEqualTo(lbConfigInventory.get("childC"));
 
     fakeClock.forwardTime(
-        ClusterManagerLoadBalancer.DELAYED_ACTION_DELETION_TIME_MINUTES, TimeUnit.MINUTES);
+        ClusterManagerLoadBalancer.DELAYED_CHILD_DELETION_TIME_MINUTES, TimeUnit.MINUTES);
     assertThat(childBalancer2.shutdown).isTrue();
   }
 
@@ -268,7 +268,7 @@ public class ClusterManagerLoadBalancerTest {
     verify(helper, atLeast(2)).updateBalancingState(
         eq(ConnectivityState.CONNECTING), any(SubchannelPicker.class));
     assertThat(Iterables.getOnlyElement(fakeClock.getPendingTasks()).getDelay(TimeUnit.MINUTES))
-        .isEqualTo(ClusterManagerLoadBalancer.DELAYED_ACTION_DELETION_TIME_MINUTES);
+        .isEqualTo(ClusterManagerLoadBalancer.DELAYED_CHILD_DELETION_TIME_MINUTES);
     return balancer;
   }
 

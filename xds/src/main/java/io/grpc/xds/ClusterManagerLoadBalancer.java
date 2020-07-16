@@ -50,7 +50,7 @@ import javax.annotation.Nullable;
 class ClusterManagerLoadBalancer extends LoadBalancer {
 
   @VisibleForTesting
-  static final int DELAYED_ACTION_DELETION_TIME_MINUTES = 15;
+  static final int DELAYED_CHILD_DELETION_TIME_MINUTES = 15;
   @VisibleForTesting
   static final CallOptions.Key<String> ROUTING_CLUSTER_NAME_KEY =
       CallOptions.Key.create("io.grpc.xds.ROUTING_CLUSTER_NAME_KEY");
@@ -65,7 +65,8 @@ class ClusterManagerLoadBalancer extends LoadBalancer {
     this.helper = checkNotNull(helper, "helper");
     this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
     this.timeService = checkNotNull(helper.getScheduledExecutorService(), "timeService");
-    logger = XdsLogger.withLogId(InternalLogId.allocate("cds-lb", helper.getAuthority()));
+    logger = XdsLogger.withLogId(
+        InternalLogId.allocate("cluster_manager-lb", helper.getAuthority()));
     logger.log(XdsLogLevel.INFO, "Created");
   }
 
@@ -211,7 +212,7 @@ class ClusterManagerLoadBalancer extends LoadBalancer {
       deletionTimer =
           syncContext.schedule(
               new DeletionTask(),
-              DELAYED_ACTION_DELETION_TIME_MINUTES,
+              DELAYED_CHILD_DELETION_TIME_MINUTES,
               TimeUnit.MINUTES,
               timeService);
       deactivated = true;
