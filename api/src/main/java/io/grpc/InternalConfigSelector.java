@@ -24,7 +24,7 @@ import javax.annotation.Nullable;
 // Otherwise, shading would break it.
 /**
  * Per method config selector that the channel or load balancers will use to choose the appropriate
- * Route and MethodConfig for an RPC.
+ * config or take config related actions for an RPC.
  */
 @Internal
 public abstract class InternalConfigSelector {
