@@ -65,7 +65,20 @@ final class RouteMatch {
       return false;
     }
     for (HeaderMatcher headerMatcher : headerMatchers) {
-      if (!headerMatcher.matchesValue(headers.get(headerMatcher.getName()))) {
+      Iterable<String> headerValues = headers.get(headerMatcher.getName());
+      // Special cases for hiding headers: "grpc-tags-bin", "grpc-trace-bin" and
+      // "grpc-previous-rpc-attempts".
+      if (headerMatcher.getName().equals("grpc-tags-bin")
+          || headerMatcher.getName().equals("grpc-trace-bin")
+          || headerMatcher.getName().equals("grpc-previous-rpc-attempts")) {
+        headerValues = null;
+      }
+      // Special case for exposing headers: "content-type".
+      // TODO(chengyuanzhang): expose "user-agent" and "grpc-timeout".
+      if (headerMatcher.getName().equals("content-type")) {
+        headerValues = Collections.singletonList("application/grpc");
+      }
+      if (!headerMatcher.matchesValue(headerValues)) {
         return false;
       }
     }
