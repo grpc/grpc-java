@@ -21,23 +21,23 @@ import java.util.List;
 
 /** 
  * The AuthorizationDecision class holds authorization decision 
- * returned by Cel Evaluation Engine. 
+ * returned by CEL Evaluation Engine. 
  */
 public class AuthorizationDecision {
-  /** The Decision enum represents the possible decisions outputted by Cel Evaluation Engine.*/
+  /** The Decision enum represents the possible decisions outputted by CEL Evaluation Engine.*/
   public enum Decision {
     /** 
-     * The Decision ALLOW indicates that Cel Evaluate Engine 
+     * The Decision ALLOW indicates that CEL Evaluate Engine 
      * had authorized the gRPC call and allowed the gRPC call to go through.
      */
     ALLOW,
     /** 
-     * The Decision DENY indicates that Cel Evaluate Engine 
+     * The Decision DENY indicates that CEL Evaluate Engine 
      * had authorized the gRPC call and denied the gRPC call from going through.
      */
     DENY,
     /** 
-     * The Decision UNKNOWN indicates that Cel Evaluate Engine 
+     * The Decision UNKNOWN indicates that CEL Evaluate Engine 
      * did not have enough information to authorize the gRPC call. 
      * */
     UNKNOWN,
