@@ -27,9 +27,7 @@ import io.envoyproxy.envoy.config.rbac.v2.RBAC;
 import io.grpc.Metadata;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -63,17 +61,17 @@ public class EvaluateArgsTest<ReqT,RespT> {
     List<RBAC> rbacList = new ArrayList<>(Arrays.asList(new RBAC[] {rbacAllow}));
     engine = new CelEvaluationEngine<>(ImmutableList.copyOf(rbacList));
     // Set up attributes map.
-    Map<String, Object> attributes = new HashMap<>();
-    attributes.put("request.url_path", "package.service/method");
-    attributes.put("request.host", "fooapi.googleapis.com");
-    attributes.put("request.method", "GET");
-    attributes.put("request.headers", metadata);
-    attributes.put("source.address", "1.2.3.4");
-    attributes.put("source.port", 5050);
-    attributes.put("destination.address", "4.3.2.1");
-    attributes.put("destination.port", 8080);
-    attributes.put("connection.uri_san_peer_certificate", "foo");
-    attributesMap = ImmutableMap.copyOf(attributes);
+    attributesMap = ImmutableMap.<String, Object>builder()
+        .put("request.url_path", "package.service/method")
+        .put("request.host", "fooapi.googleapis.com")
+        .put("request.method", "GET")
+        .put("request.headers", metadata)
+        .put("source.address", "1.2.3.4")
+        .put("source.port", 5050)
+        .put("destination.address", "4.3.2.1")
+        .put("destination.port", 8080)
+        .put("connection.uri_san_peer_certificate", "foo")
+        .build();
     // Set up evaluate args.
     when(args.getRequestUrlPath()).thenReturn("package.service/method");
     when(args.getRequestHost()).thenReturn("fooapi.googleapis.com");

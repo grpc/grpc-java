@@ -52,8 +52,22 @@ import java.util.Map;
  * </pre>
  */
 public class CelEvaluationEngine<ReqT, RespT> {
-  private final List<RBAC.Action> action;
-  private final List<ImmutableMap<String, Expr>> conditions;
+  /**
+   * RbacEngine is an inner class that holds RBAC action 
+   * and conditions of RBAC policy.
+   */
+  @SuppressWarnings("ClassCanBeStatic")
+  private class RbacEngine {
+    private final RBAC.Action action;
+    private final ImmutableMap<String, Expr> conditions;
+
+    public RbacEngine(RBAC.Action action, ImmutableMap<String, Expr> conditions) {
+      this.action = action;
+      this.conditions = conditions;
+    }
+  }
+  
+  private final List<RbacEngine> rbacEngines;
 
   /**
    * Creates a CEL Evaluation Engine from a list of Envoy RBACs.
@@ -73,15 +87,15 @@ public class CelEvaluationEngine<ReqT, RespT> {
       throw new IllegalArgumentException( "Invalid RBAC list, " 
           + "must provide a RBAC with DENY action followed by a RBAC with ALLOW action. ");
     }
-    this.action = new ArrayList<>();
-    this.conditions = new ArrayList<>();
+    this.rbacEngines = new ArrayList<>();
     for (RBAC rbac : rbacPolicies) {
       Map<String, Expr> conditions = new HashMap<>();
-      for (Map.Entry<String, Policy> entry: rbac.getPolicies().entrySet()) {
-        conditions.put(entry.getKey(), entry.getValue().getCondition());
+      for (Map.Entry<String, Policy> rbacPolicy: rbac.getPolicies().entrySet()) {
+        conditions.put(rbacPolicy.getKey(), rbacPolicy.getValue().getCondition());
       }
-      this.action.add(Preconditions.checkNotNull(rbac.getAction()));
-      this.conditions.add(Preconditions.checkNotNull(ImmutableMap.copyOf(conditions)));
+      this.rbacEngines.add(new RbacEngine(
+          Preconditions.checkNotNull(rbac.getAction()), 
+          Preconditions.checkNotNull(ImmutableMap.copyOf(conditions))));
     }
   }
 
@@ -94,26 +108,27 @@ public class CelEvaluationEngine<ReqT, RespT> {
    */
   public AuthorizationDecision evaluate(EvaluateArgs<ReqT, RespT> args) 
       throws IllegalArgumentException {
-    if (this.action.size() < 1 || this.action.size() > 2) {
+    if (this.rbacEngines.size() < 1 || this.rbacEngines.size() > 2) {
       throw new IllegalArgumentException(
         "Invalid RBAC list size, must provide either one RBAC or two RBACs. ");
     } 
-    if (this.action.size() == 2 && (this.action.get(0) != RBAC.Action.DENY 
-        || this.action.get(1) != RBAC.Action.ALLOW)) {
+    if (this.rbacEngines.size() == 2 && (this.rbacEngines.get(0).action != RBAC.Action.DENY 
+        || this.rbacEngines.get(1).action != RBAC.Action.ALLOW)) {
       throw new IllegalArgumentException( "Invalid RBAC list, " 
           + "must provide a RBAC with DENY action followed by a RBAC with ALLOW action. ");
     }
     AuthorizationDecision.Decision authorizationDecision = null;
     List<String> matchingPolicyNames = new ArrayList<>();
     List<String> unknownPolicyNames = new ArrayList<>();
+    // Set up activation used in CEL library's eval function.
     Activation activation = Activation.copyOf(extractFields(args));
     // Go through each RBAC in the Envoy RBAC list.
-    for (int i = 0; i < this.action.size(); i++) {
+    for (RbacEngine rbacEngine : rbacEngines) {
       // Go through each condition in the RBAC policy.
-      for (Map.Entry<String, Expr> condition : this.conditions.get(i).entrySet()) {
+      for (Map.Entry<String, Expr> condition : rbacEngine.conditions.entrySet()) {
         try {
           if (matches(condition.getValue(), activation)) {
-            authorizationDecision = this.action.get(i) == RBAC.Action.ALLOW 
+            authorizationDecision = rbacEngine.action == RBAC.Action.ALLOW 
                 ? AuthorizationDecision.Decision.ALLOW : AuthorizationDecision.Decision.DENY;
             matchingPolicyNames.add(condition.getKey());
           }
@@ -131,7 +146,7 @@ public class CelEvaluationEngine<ReqT, RespT> {
       return new AuthorizationDecision(authorizationDecision, unknownPolicyNames);
     }
     // No RBAC conditions matched and didn't find unknown conditions.
-    if (this.action.size() == 1 && this.action.get(0) == RBAC.Action.DENY) {
+    if (this.rbacEngines.size() == 1 && this.rbacEngines.get(0).action == RBAC.Action.DENY) {
       return new AuthorizationDecision(
           AuthorizationDecision.Decision.ALLOW, new ArrayList<String>());
     }
