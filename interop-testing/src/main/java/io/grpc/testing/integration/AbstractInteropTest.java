@@ -1114,7 +1114,7 @@ public abstract class AbstractInteropTest {
     // warm up the channel and JVM
     blockingStub.emptyCall(Empty.getDefaultInstance());
     TestServiceGrpc.TestServiceBlockingStub stub =
-        blockingStub.withDeadlineAfter(100, TimeUnit.MILLISECONDS);
+        blockingStub.withDeadlineAfter(1, TimeUnit.SECONDS);
     StreamingOutputCallRequest request = StreamingOutputCallRequest.newBuilder()
         .addResponseParameters(ResponseParameters.newBuilder()
             .setIntervalUs((int) TimeUnit.SECONDS.toMicros(20)))
@@ -1131,8 +1131,7 @@ public abstract class AbstractInteropTest {
           Pattern.matches("deadline exceeded after .*s. \\[.*\\]", desc)
           // If server expires first, it'd reset the stream and client would generate a different
           // message
-          || desc.startsWith("ClientCall was cancelled at or after deadline.")
-          || desc.startsWith("ClientCall started after deadline exceeded"));
+          || desc.startsWith("ClientCall was cancelled at or after deadline."));
     }
 
     assertStatsTrace("grpc.testing.TestService/EmptyCall", Status.Code.OK);
