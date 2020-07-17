@@ -86,14 +86,14 @@ final class XdsRoutingLoadBalancer extends LoadBalancer {
       } else {
         childLbStates.get(actionName).reactivate(action.getProvider());
       }
+      final LoadBalancer childLb = childLbStates.get(actionName).lb;
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
-          childLbStates.get(actionName).lb
-              .handleResolvedAddresses(
-                  resolvedAddresses.toBuilder()
-                      .setLoadBalancingPolicyConfig(action.getConfig())
-                      .build());
+          childLb.handleResolvedAddresses(
+              resolvedAddresses.toBuilder()
+                  .setLoadBalancingPolicyConfig(action.getConfig())
+                  .build());
         }
       });
     }
