@@ -102,6 +102,7 @@ final class XdsRoutingLoadBalancer extends LoadBalancer {
     for (String actionName : diff) {
       childLbStates.get(actionName).deactivate();
     }
+    updateOverallBalancingState();
   }
 
   @Override
