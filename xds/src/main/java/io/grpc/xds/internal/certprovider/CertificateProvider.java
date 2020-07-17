@@ -71,18 +71,17 @@ public abstract class CertificateProvider implements Closeable {
     }
 
     private void sendLastCertificateUpdate(Watcher watcher) {
-      checkNotNull(lastKey, "lastKey");
-      checkNotNull(lastCertChain, "lastCertChain");
       watcher.updateCertificate(lastKey, lastCertChain);
     }
 
     private void sendLastTrustedRootsUpdate(Watcher watcher) {
-      checkNotNull(lastTrustedRoots, "lastTrustedRoots");
       watcher.updateTrustedRoots(lastTrustedRoots);
     }
 
     @Override
     public synchronized void updateCertificate(PrivateKey key, List<X509Certificate> certChain) {
+      checkNotNull(key, "key");
+      checkNotNull(certChain, "certChain");
       lastKey = key;
       lastCertChain = certChain;
       for (Watcher watcher : downsstreamWatchers) {
@@ -92,6 +91,7 @@ public abstract class CertificateProvider implements Closeable {
 
     @Override
     public synchronized void updateTrustedRoots(List<X509Certificate> trustedRoots) {
+      checkNotNull(trustedRoots, "trustedRoots");
       lastTrustedRoots = trustedRoots;
       for (Watcher watcher : downsstreamWatchers) {
         sendLastTrustedRootsUpdate(watcher);
