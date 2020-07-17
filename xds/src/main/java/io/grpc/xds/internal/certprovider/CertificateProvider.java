@@ -16,6 +16,8 @@
 
 package io.grpc.xds.internal.certprovider;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Status;
 import io.grpc.xds.internal.sds.Closeable;
@@ -47,33 +49,57 @@ public abstract class CertificateProvider implements Closeable {
 
   @VisibleForTesting
   static final class DistributorWatcher implements Watcher {
+    private PrivateKey lastKey;
+    private List<X509Certificate> lastCertChain;
+    private List<X509Certificate> lastTrustedRoots;
+
     @VisibleForTesting
     final Set<Watcher> downsstreamWatchers = new HashSet<>();
 
     synchronized void addWatcher(Watcher watcher) {
       downsstreamWatchers.add(watcher);
+      if (lastKey != null && lastCertChain != null) {
+        sendLastCertificateUpdate(watcher);
+      }
+      if (lastTrustedRoots != null) {
+        sendLastTrustedRootsUpdate(watcher);
+      }
     }
 
     synchronized void removeWatcher(Watcher watcher) {
       downsstreamWatchers.remove(watcher);
     }
 
+    private void sendLastCertificateUpdate(Watcher watcher) {
+      watcher.updateCertificate(lastKey, lastCertChain);
+    }
+
+    private void sendLastTrustedRootsUpdate(Watcher watcher) {
+      watcher.updateTrustedRoots(lastTrustedRoots);
+    }
+
     @Override
-    public void updateCertificate(PrivateKey key, List<X509Certificate> certChain) {
+    public synchronized void updateCertificate(PrivateKey key, List<X509Certificate> certChain) {
+      checkNotNull(key, "key");
+      checkNotNull(certChain, "certChain");
+      lastKey = key;
+      lastCertChain = certChain;
       for (Watcher watcher : downsstreamWatchers) {
-        watcher.updateCertificate(key, certChain);
+        sendLastCertificateUpdate(watcher);
       }
     }
 
     @Override
-    public void updateTrustedRoots(List<X509Certificate> trustedRoots) {
+    public synchronized void updateTrustedRoots(List<X509Certificate> trustedRoots) {
+      checkNotNull(trustedRoots, "trustedRoots");
+      lastTrustedRoots = trustedRoots;
       for (Watcher watcher : downsstreamWatchers) {
-        watcher.updateTrustedRoots(trustedRoots);
+        sendLastTrustedRootsUpdate(watcher);
       }
     }
 
     @Override
-    public void onError(Status errorStatus) {
+    public synchronized void onError(Status errorStatus) {
       for (Watcher watcher : downsstreamWatchers) {
         watcher.onError(errorStatus);
       }

@@ -190,6 +190,44 @@ public class CertificateProviderStoreTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
+  public void onePluginSameConfig_secondWatcherAfterFirstNotify() {
+    registerPlugin("plugin1");
+    CertificateProvider.Watcher mockWatcher1 = mock(CertificateProvider.Watcher.class);
+    CertificateProviderStore.Handle handle1 = certificateProviderStore.createOrGetProvider(
+            "cert-name1", "plugin1", "config", mockWatcher1, true);
+    TestCertificateProvider testCertificateProvider =
+            (TestCertificateProvider) handle1.certProvider;
+    CertificateProvider.DistributorWatcher distWatcher = testCertificateProvider.getWatcher();
+    PrivateKey testKey = mock(PrivateKey.class);
+    X509Certificate cert = mock(X509Certificate.class);
+    List<X509Certificate> testList = ImmutableList.of(cert);
+    testCertificateProvider.getWatcher().updateCertificate(testKey, testList);
+    verify(mockWatcher1, times(1)).updateCertificate(eq(testKey), eq(testList));
+    testCertificateProvider.getWatcher().updateTrustedRoots(testList);
+    verify(mockWatcher1, times(1)).updateTrustedRoots(eq(testList));
+    testCertificateProvider.getWatcher().onError(Status.CANCELLED);
+    verify(mockWatcher1, times(1)).onError(eq(Status.CANCELLED));
+    reset(mockWatcher1);
+
+    // now add the second watcher
+    CertificateProvider.Watcher mockWatcher2 = mock(CertificateProvider.Watcher.class);
+    CertificateProviderStore.Handle unused = certificateProviderStore.createOrGetProvider(
+            "cert-name1", "plugin1", "config", mockWatcher2, true);
+    assertThat(distWatcher.downsstreamWatchers).hasSize(2);
+    // updates sent to the second watcher
+    verify(mockWatcher2, times(1)).updateCertificate(eq(testKey), eq(testList));
+    verify(mockWatcher2, times(1)).updateTrustedRoots(eq(testList));
+    // but not errors!
+    verify(mockWatcher2, never()).onError(eq(Status.CANCELLED));
+    // and none to first one
+    verify(mockWatcher1, never())
+            .updateCertificate(any(PrivateKey.class), anyListOf(X509Certificate.class));
+    verify(mockWatcher1, never()).updateTrustedRoots(anyListOf(X509Certificate.class));
+    verify(mockWatcher1, never()).onError(any(Status.class));
+  }
+
+  @Test
   public void onePluginTwoInstances_notifyError() {
     registerPlugin("plugin1");
     CertificateProvider.Watcher mockWatcher1 = mock(CertificateProvider.Watcher.class);
