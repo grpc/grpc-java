@@ -1114,7 +1114,7 @@ public abstract class AbstractInteropTest {
     // warm up the channel and JVM
     blockingStub.emptyCall(Empty.getDefaultInstance());
     TestServiceGrpc.TestServiceBlockingStub stub =
-        blockingStub.withDeadlineAfter(100, TimeUnit.MILLISECONDS);
+        blockingStub.withDeadlineAfter(1, TimeUnit.SECONDS);
     StreamingOutputCallRequest request = StreamingOutputCallRequest.newBuilder()
         .addResponseParameters(ResponseParameters.newBuilder()
             .setIntervalUs((int) TimeUnit.SECONDS.toMicros(20)))
