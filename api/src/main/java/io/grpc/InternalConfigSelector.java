@@ -38,12 +38,14 @@ public abstract class InternalConfigSelector {
 
   public static final class Result {
     private final Object config;
+    private final CallOptions callOptions;
     @Nullable
-    private final ClientInterceptor interceptor;
+    private final Runnable committedCallback;
 
-    private Result(Object config, @Nullable ClientInterceptor interceptor) {
+    private Result(Object config, CallOptions callOptions, @Nullable Runnable committedCallback) {
       this.config = checkNotNull(config, "config");
-      this.interceptor = interceptor;
+      this.callOptions = checkNotNull(callOptions, "callOptions");
+      this.committedCallback = committedCallback;
     }
 
     /**
@@ -55,12 +57,18 @@ public abstract class InternalConfigSelector {
     }
 
     /**
-     * Returns an interceptor that would be used to modify CallOptions, in addition to monitoring
-     * call lifecycle.
+     * Returns a config-selector-modified CallOptions for the RPC.
+     */
+    public CallOptions getCallOptions() {
+      return callOptions;
+    }
+
+    /**
+     * Returns a callback to be invoked when the RPC no longer needs a picker.
      */
     @Nullable
-    public ClientInterceptor getInterceptor() {
-      return interceptor;
+    public Runnable getCommittedCallback() {
+      return committedCallback;
     }
 
     public static Builder newBuilder() {
@@ -69,7 +77,8 @@ public abstract class InternalConfigSelector {
 
     public static final class Builder {
       private Object config;
-      private ClientInterceptor interceptor;
+      private CallOptions callOptions;
+      private Runnable committedCallback;
 
       private Builder() {}
 
@@ -84,17 +93,27 @@ public abstract class InternalConfigSelector {
       }
 
       /**
+       * Sets the CallOptions.
+       *
+       * @return this
+       */
+      public Builder setCallOptions(CallOptions callOptions) {
+        this.callOptions = checkNotNull(callOptions, "callOptions");
+        return this;
+      }
+
+      /**
        * Sets the interceptor.
        *
        * @return this
        */
-      public Builder setInterceptor(@Nullable ClientInterceptor interceptor) {
-        this.interceptor = interceptor;
+      public Builder setCommittedCallback(@Nullable Runnable committedCallback) {
+        this.committedCallback = committedCallback;
         return this;
       }
 
       public Result build() {
-        return new Result(config, interceptor);
+        return new Result(config, callOptions, committedCallback);
       }
     }
   }
