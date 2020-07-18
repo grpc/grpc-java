@@ -41,7 +41,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Objects;
 
 // TODO(sanjaypujare): replace with the official implementation from google-auth once ready
 /** Implementation of OAuth2 Token Exchange as per https://tools.ietf.org/html/rfc8693. */
@@ -151,36 +150,8 @@ public class StsCredentials extends GoogleCredentials {
   }
 
   @Override
-  public boolean equals(Object o) {
-    if (this == o) {
-      return true;
-    }
-    if (!(o instanceof StsCredentials)) {
-      return false;
-    }
-    if (!super.equals(o)) {
-      return false;
-    }
-    StsCredentials that = (StsCredentials) o;
-    return Objects.equals(sourceCredentialsFileLocation, that.sourceCredentialsFileLocation)
-        && Objects.equals(identityTokenEndpoint, that.identityTokenEndpoint)
-        && Objects.equals(audience, that.audience)
-        && Objects.equals(transportFactory, that.transportFactory);
-  }
-
-  @Override
-  public int hashCode() {
-    return Objects.hash(
-        super.hashCode(),
-        sourceCredentialsFileLocation,
-        identityTokenEndpoint,
-        audience,
-        transportFactory);
-  }
-
-  @Override
   public Builder toBuilder() {
-    throw new UnsupportedOperationException();
+    throw new UnsupportedOperationException("toBuilder not supported");
   }
 
   private static class DefaultHttpTransportFactory implements HttpTransportFactory {

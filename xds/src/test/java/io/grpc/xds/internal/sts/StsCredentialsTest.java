@@ -17,11 +17,13 @@
 package io.grpc.xds.internal.sts;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.fail;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.google.api.client.http.HttpStatusCodes;
 import com.google.api.client.http.json.JsonHttpContent;
 import com.google.api.client.testing.http.MockHttpTransport;
 import com.google.api.client.testing.http.MockLowLevelHttpRequest;
@@ -135,6 +137,62 @@ public class StsCredentialsTest {
     assertThat(metadata).isNotNull();
     String authValue = metadata.get(KEY_FOR_AUTHORIZATION);
     assertThat(authValue).isEqualTo("Bearer " + ACCESS_TOKEN);
+  }
+
+  @Test
+  public void testStsRequest_exception() throws IOException {
+    MockHttpTransport.Builder builder = new MockHttpTransport.Builder();
+    MockLowLevelHttpResponse response = new MockLowLevelHttpResponse();
+    response.setStatusCode(HttpStatusCodes.STATUS_CODE_BAD_REQUEST);
+    response.setContent(MOCK_RESPONSE);
+    builder.setLowLevelHttpResponse(response);
+    MockHttpTransport httpTransport = builder.build();
+    HttpTransportFactory httpTransportFactory = mock(HttpTransportFactory.class);
+    when(httpTransportFactory.create()).thenReturn(httpTransport);
+    StsCredentials stsCredentials =
+            StsCredentials.create(
+                    STS_URL, AUDIENCE_VALUE, tempTokenFile.getAbsolutePath(), httpTransportFactory);
+    try {
+      stsCredentials.refreshAccessToken();
+      fail("exception expected");
+    } catch (IOException ioe) {
+      assertThat(ioe.getMessage()).isEqualTo("Error requesting access token");
+    }
+  }
+
+  @Test
+  public void testStsRequest_nonSuccessCode() throws IOException {
+    MockHttpTransport.Builder builder = new MockHttpTransport.Builder();
+    MockLowLevelHttpResponse response = new MockLowLevelHttpResponse();
+    response.setStatusCode(HttpStatusCodes.STATUS_CODE_NO_CONTENT);
+    response.setContent(MOCK_RESPONSE);
+    builder.setLowLevelHttpResponse(response);
+    MockHttpTransport httpTransport = builder.build();
+    HttpTransportFactory httpTransportFactory = mock(HttpTransportFactory.class);
+    when(httpTransportFactory.create()).thenReturn(httpTransport);
+    StsCredentials stsCredentials =
+            StsCredentials.create(
+                    STS_URL, AUDIENCE_VALUE, tempTokenFile.getAbsolutePath(), httpTransportFactory);
+    try {
+      stsCredentials.refreshAccessToken();
+      fail("exception expected");
+    } catch (IOException ioe) {
+      assertThat(ioe.getMessage()).isEqualTo("Error getting access token 204 : null");
+    }
+  }
+
+  @Test
+  public void toBuilder_unsupportedException() {
+    HttpTransportFactory httpTransportFactory = mock(HttpTransportFactory.class);
+    StsCredentials stsCredentials =
+            StsCredentials.create(
+                    STS_URL, AUDIENCE_VALUE, tempTokenFile.getAbsolutePath(), httpTransportFactory);
+    try {
+      stsCredentials.toBuilder();
+      fail("exception expected");
+    } catch (UnsupportedOperationException uoe) {
+      assertThat(uoe.getMessage()).isEqualTo("toBuilder not supported");
+    }
   }
 
   private static final String ACCESS_TOKEN = "eyJhbGciOiJSU";
