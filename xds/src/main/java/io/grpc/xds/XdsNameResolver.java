@@ -60,7 +60,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import javax.annotation.Nullable;
 
 /**
- * A {@link NameResolver} for resolving gRPC target names with "xds-experimental" scheme.
+ * A {@link NameResolver} for resolving gRPC target names with "xds:" scheme.
  *
  * <p>Resolving a gRPC target involves contacting the control plane management server via xDS
  * protocol to retrieve service information and produce a service config to the caller.

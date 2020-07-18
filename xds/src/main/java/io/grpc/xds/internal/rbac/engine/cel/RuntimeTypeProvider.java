@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.internal.cel;
+package io.grpc.xds.internal.rbac.engine.cel;
 
 /**
  * The {@code RuntimeTypeProvider} is a combination of the MessageProvider 

@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Joiner;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.MoreObjects.ToStringHelper;
 import com.google.re2j.Pattern;
@@ -25,7 +26,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import javax.annotation.Nullable;
 
 /**
@@ -60,7 +60,7 @@ final class RouteMatch {
    *
    * <p>Match is not deterministic if a runtime fraction match rule presents in this RouteMatch.
    */
-  boolean matches(String path, Map<String, Set<String>> headers) {
+  boolean matches(String path, Map<String, Iterable<String>> headers) {
     if (!pathMatch.matches(path)) {
       return false;
     }
@@ -229,35 +229,31 @@ final class RouteMatch {
       this.isInvertedMatch = isInvertedMatch;
     }
 
-    private boolean matchesValue(@Nullable Set<String> values) {
+    private boolean matchesValue(@Nullable Iterable<String> values) {
       if (presentMatch != null) {
         return (values == null) == presentMatch.equals(isInvertedMatch);
       }
       if (values == null) {
         return false;
       }
-      boolean baseMatch = false;
-      for (String value : values) {
-        if (exactMatch != null) {
-          baseMatch = exactMatch.equals(value);
-        } else if (safeRegExMatch != null) {
-          baseMatch = safeRegExMatch.matches(value);
-        } else if (rangeMatch != null) {
-          long numValue;
-          try {
-            numValue = Long.parseLong(value);
-          } catch (NumberFormatException ignored) {
-            continue;
-          }
+      String valueStr = Joiner.on(",").join(values);
+      boolean baseMatch;
+      if (exactMatch != null) {
+        baseMatch = exactMatch.equals(valueStr);
+      } else if (safeRegExMatch != null) {
+        baseMatch = safeRegExMatch.matches(valueStr);
+      } else if (rangeMatch != null) {
+        long numValue;
+        try {
+          numValue = Long.parseLong(valueStr);
           baseMatch = rangeMatch.contains(numValue);
-        } else if (prefixMatch != null) {
-          baseMatch = value.startsWith(prefixMatch);
-        } else {
-          baseMatch = value.endsWith(suffixMatch);
+        } catch (NumberFormatException ignored) {
+          baseMatch = false;
         }
-        if (baseMatch) {
-          break;
-        }
+      } else if (prefixMatch != null) {
+        baseMatch = valueStr.startsWith(prefixMatch);
+      } else {
+        baseMatch = valueStr.endsWith(suffixMatch);
       }
       return baseMatch != isInvertedMatch;
     }

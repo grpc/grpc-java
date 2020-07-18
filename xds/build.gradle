@@ -67,6 +67,7 @@ sourceSets {
             srcDir 'third_party/protoc-gen-validate/src/main/proto'
             srcDir 'third_party/udpa/src/main/proto'
             srcDir 'third_party/googleapis/src/main/proto'
+            srcDir 'third_party/istio/src/main/proto'
         }
     }
 }
