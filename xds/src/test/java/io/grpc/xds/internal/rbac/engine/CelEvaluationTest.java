@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.internal.engine;
+package io.grpc.xds.internal.rbac.engine;
 
 import static org.junit.Assert.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
@@ -27,8 +27,8 @@ import com.google.common.collect.ImmutableMap;
 import io.envoyproxy.envoy.config.rbac.v2.Policy;
 import io.envoyproxy.envoy.config.rbac.v2.RBAC;
 import io.envoyproxy.envoy.config.rbac.v2.RBAC.Action;
-import io.grpc.xds.internal.cel.Activation;
-import io.grpc.xds.internal.cel.InterpreterException;
+import io.grpc.xds.internal.rbac.engine.cel.Activation;
+import io.grpc.xds.internal.rbac.engine.cel.InterpreterException;
 import java.lang.StringBuilder;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -78,6 +78,8 @@ public class CelEvaluationTest<ReqT, RespT> {
         .putPolicies("Policy 1", Policy.newBuilder().setCondition(condition).build())
         .build();
   }
+
+  // TODO(@cindyxue): expand unit tests using rbac with multiple policies.
 
   @Test
   public void testEvaluateMatchAllow() throws InterpreterException {

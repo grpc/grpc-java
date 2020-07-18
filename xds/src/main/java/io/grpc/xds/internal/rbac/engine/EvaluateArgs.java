@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.internal.engine;
+package io.grpc.xds.internal.rbac.engine;
 
 import io.grpc.Grpc;
 import io.grpc.Metadata;

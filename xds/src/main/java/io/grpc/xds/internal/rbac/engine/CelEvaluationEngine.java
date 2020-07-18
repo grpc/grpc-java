@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.internal.engine;
+package io.grpc.xds.internal.rbac.engine;
 
 import com.google.api.expr.v1alpha1.Expr;
 import com.google.common.base.Preconditions;
@@ -23,14 +23,14 @@ import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.Descriptors.Descriptor;
 import io.envoyproxy.envoy.config.rbac.v2.Policy;
 import io.envoyproxy.envoy.config.rbac.v2.RBAC;
-import io.grpc.xds.internal.cel.Activation;
-import io.grpc.xds.internal.cel.DefaultDispatcher;
-import io.grpc.xds.internal.cel.DefaultInterpreter;
-import io.grpc.xds.internal.cel.DescriptorMessageProvider;
-import io.grpc.xds.internal.cel.Dispatcher;
-import io.grpc.xds.internal.cel.Interpreter;
-import io.grpc.xds.internal.cel.InterpreterException;
-import io.grpc.xds.internal.cel.RuntimeTypeProvider;
+import io.grpc.xds.internal.rbac.engine.cel.Activation;
+import io.grpc.xds.internal.rbac.engine.cel.DefaultDispatcher;
+import io.grpc.xds.internal.rbac.engine.cel.DefaultInterpreter;
+import io.grpc.xds.internal.rbac.engine.cel.DescriptorMessageProvider;
+import io.grpc.xds.internal.rbac.engine.cel.Dispatcher;
+import io.grpc.xds.internal.rbac.engine.cel.Interpreter;
+import io.grpc.xds.internal.rbac.engine.cel.InterpreterException;
+import io.grpc.xds.internal.rbac.engine.cel.RuntimeTypeProvider;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
