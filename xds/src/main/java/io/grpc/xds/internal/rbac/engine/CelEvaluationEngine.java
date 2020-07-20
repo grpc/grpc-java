@@ -139,11 +139,10 @@ public class CelEvaluationEngine<ReqT, RespT> {
       if (matchingPolicyNames.size() > 0) {
         return new AuthorizationDecision(authorizationDecision, matchingPolicyNames);
       }
-    }
-    // No RBAC conditions matched and found unknown conditions. 
-    if (unknownPolicyNames.size() > 0) {
-      authorizationDecision = AuthorizationDecision.Decision.UNKNOWN;
-      return new AuthorizationDecision(authorizationDecision, unknownPolicyNames);
+      if (unknownPolicyNames.size() > 0) {
+        return new AuthorizationDecision(
+            AuthorizationDecision.Decision.UNKNOWN, unknownPolicyNames);
+      }
     }
     // No RBAC conditions matched and didn't find unknown conditions.
     if (this.rbacEngines.size() == 1 && this.rbacEngines.get(0).action == RBAC.Action.DENY) {
@@ -163,7 +162,7 @@ public class CelEvaluationEngine<ReqT, RespT> {
     // Parse the generated result object to a boolean variable.
     Object result = interpreter.createInterpretable(condition).eval(activation);
     if (result instanceof Boolean) {
-      return Boolean.parseBoolean(result.toString());
+      return Boolean.valueOf(result.toString());
     }
     return false;
   }
