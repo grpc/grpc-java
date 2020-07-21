@@ -31,9 +31,12 @@ import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
+import io.grpc.ClientInterceptors;
+import io.grpc.ClientStreamTracer;
 import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
 import io.grpc.MethodDescriptor;
+import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.NameResolver;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
@@ -45,6 +48,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -69,6 +73,30 @@ public class AbstractManagedChannelImplBuilderTest {
 
   private Builder builder = new Builder("fake");
   private Builder directAddressBuilder = new Builder(new SocketAddress(){}, "fake");
+  private AtomicReference<CallOptions> callOptionsCaptor = new AtomicReference<>();
+  @SuppressWarnings("unchecked")
+  private MethodDescriptor<String, String> method =
+      MethodDescriptor.<String, Integer>newBuilder()
+          .setType(MethodDescriptor.MethodType.UNKNOWN)
+          .setFullMethodName("a.service/method")
+          .setRequestMarshaller(mock(Marshaller.class))
+          .setResponseMarshaller(mock(Marshaller.class))
+          .build();
+
+  @SuppressWarnings("unchecked")
+  private Channel fakeChannel = new Channel() {
+    @Override
+    public <RequestT, ResponseT> ClientCall<RequestT, ResponseT> newCall(
+        MethodDescriptor<RequestT, ResponseT> methodDescriptor, CallOptions callOptions) {
+      callOptionsCaptor.set(callOptions);
+      return mock(ClientCall.class);
+    }
+
+    @Override
+    public String authority() {
+      throw new UnsupportedOperationException("should not be called");
+    }
+  };
 
   @Test
   public void executor_default() {
@@ -279,46 +307,81 @@ public class AbstractManagedChannelImplBuilderTest {
   }
 
   @Test
-  public void getEffectiveInterceptors_default() {
+  public void censusFeatures_default() {
     builder.intercept(DUMMY_USER_INTERCEPTOR);
     List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors();
     assertEquals(3, effectiveInterceptors.size());
-    assertThat(effectiveInterceptors.get(0).getClass().getName())
-        .isEqualTo("io.grpc.census.CensusTracingModule$TracingClientInterceptor");
-    assertThat(effectiveInterceptors.get(1).getClass().getName())
-        .isEqualTo("io.grpc.census.CensusStatsModule$StatsClientInterceptor");
     assertThat(effectiveInterceptors.get(2)).isSameInstanceAs(DUMMY_USER_INTERCEPTOR);
+    Channel channel = ClientInterceptors.intercept(fakeChannel, effectiveInterceptors);
+    channel.newCall(method, CallOptions.DEFAULT);
+    List<ClientStreamTracer.Factory> callTracers  =
+        callOptionsCaptor.get().getStreamTracerFactories();
+    assertThat(callTracers).hasSize(2);
+    assertThat(callTracers.get(0).getClass().getName())
+        .isEqualTo("io.grpc.census.CensusStatsModule$ClientCallTracer");
+    assertThat(callTracers.get(1).getClass().getName())
+        .isEqualTo("io.grpc.census.CensusTracingModule$ClientCallTracer");
   }
 
   @Test
-  public void getEffectiveInterceptors_disableStats() {
+  public void censusFeatures_disableStats() {
     builder.intercept(DUMMY_USER_INTERCEPTOR);
     builder.setStatsEnabled(false);
     List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors();
     assertEquals(2, effectiveInterceptors.size());
-    assertThat(effectiveInterceptors.get(0).getClass().getName())
-        .isEqualTo("io.grpc.census.CensusTracingModule$TracingClientInterceptor");
     assertThat(effectiveInterceptors.get(1)).isSameInstanceAs(DUMMY_USER_INTERCEPTOR);
+    Channel channel = ClientInterceptors.intercept(fakeChannel, effectiveInterceptors);
+    channel.newCall(method, CallOptions.DEFAULT);
+    List<ClientStreamTracer.Factory> callTracers  =
+        callOptionsCaptor.get().getStreamTracerFactories();
+    assertThat(callTracers).hasSize(1);
+    assertThat(callTracers.get(0).getClass().getName())
+        .isEqualTo("io.grpc.census.CensusTracingModule$ClientCallTracer");
   }
 
   @Test
-  public void getEffectiveInterceptors_disableTracing() {
+  public void censusFeatures_disableTracing() {
     builder.intercept(DUMMY_USER_INTERCEPTOR);
     builder.setTracingEnabled(false);
     List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors();
     assertEquals(2, effectiveInterceptors.size());
-    assertThat(effectiveInterceptors.get(0).getClass().getName())
-        .isEqualTo("io.grpc.census.CensusStatsModule$StatsClientInterceptor");
     assertThat(effectiveInterceptors.get(1)).isSameInstanceAs(DUMMY_USER_INTERCEPTOR);
+    Channel channel = ClientInterceptors.intercept(fakeChannel, effectiveInterceptors);
+    channel.newCall(method, CallOptions.DEFAULT);
+    List<ClientStreamTracer.Factory> callTracers  =
+        callOptionsCaptor.get().getStreamTracerFactories();
+    assertThat(callTracers).hasSize(1);
+    assertThat(callTracers.get(0).getClass().getName())
+        .isEqualTo("io.grpc.census.CensusStatsModule$ClientCallTracer");
+
   }
 
   @Test
-  public void getEffectiveInterceptors_disableBoth() {
+  public void censusFeatures_disableBoth() {
     builder.intercept(DUMMY_USER_INTERCEPTOR);
     builder.setStatsEnabled(false);
     builder.setTracingEnabled(false);
     List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors();
     assertThat(effectiveInterceptors).containsExactly(DUMMY_USER_INTERCEPTOR);
+    Channel channel = ClientInterceptors.intercept(fakeChannel, effectiveInterceptors);
+    channel.newCall(method, CallOptions.DEFAULT);
+    assertThat(callOptionsCaptor.get().getStreamTracerFactories()).isEmpty();
+  }
+
+  @Test
+  public void getEffectiveInterceptors_testInterceptorAlwaysFirst() {
+    ClientInterceptor interceptor = new ClientInterceptor() {
+      @Override
+      public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+          MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+        return next.newCall(method, callOptions);
+      }
+    };
+    builder.intercept(DUMMY_USER_INTERCEPTOR);
+    builder.setTestInterceptor(interceptor);
+    List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors();
+    assertThat(effectiveInterceptors).hasSize(4);
+    assertThat(effectiveInterceptors.get(0)).isSameInstanceAs(interceptor);
   }
 
   @Test

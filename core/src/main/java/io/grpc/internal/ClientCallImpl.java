@@ -40,6 +40,7 @@ import io.grpc.Context;
 import io.grpc.Context.CancellationListener;
 import io.grpc.Deadline;
 import io.grpc.DecompressorRegistry;
+import io.grpc.InternalCensus;
 import io.grpc.InternalDecompressorRegistry;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.Metadata;
@@ -126,7 +127,8 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     this.callOptions = callOptions;
     this.clientTransportProvider = clientTransportProvider;
     this.deadlineCancellationExecutor = deadlineCancellationExecutor;
-    this.retryEnabled = retryEnabled;
+    this.retryEnabled = retryEnabled
+        && callOptions.getOption(InternalCensus.DISABLE_CLIENT_DEFAULT_CENSUS) == null;
     PerfMark.event("ClientCall.<init>", tag);
   }
 

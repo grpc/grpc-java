@@ -17,6 +17,7 @@
 package io.grpc.internal;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -180,6 +181,8 @@ public abstract class AbstractManagedChannelImplBuilder
   private boolean recordFinishedRpcs = true;
   private boolean recordRealTimeMetrics = false;
   private boolean tracingEnabled = true;
+  @Nullable
+  private ClientInterceptor testInterceptor;
 
   protected AbstractManagedChannelImplBuilder(String target) {
     this.target = Preconditions.checkNotNull(target, "target");
@@ -585,7 +588,19 @@ public abstract class AbstractManagedChannelImplBuilder
         effectiveInterceptors.add(0, tracingInterceptor);
       }
     }
+    if (testInterceptor != null) {
+      effectiveInterceptors.add(0, testInterceptor);
+    }
     return effectiveInterceptors;
+  }
+
+  /**
+   * Adds a {@link ClientInterceptor} that is closest to the network to test some internal
+   * features.
+   */
+  protected T setTestInterceptor(ClientInterceptor interceptor) {
+    testInterceptor = checkNotNull(interceptor, "interceptor");
+    return thisT();
   }
 
   /**

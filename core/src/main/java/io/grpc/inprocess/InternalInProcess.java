@@ -17,6 +17,7 @@
 package io.grpc.inprocess;
 
 import io.grpc.Attributes;
+import io.grpc.ClientInterceptor;
 import io.grpc.Internal;
 import io.grpc.ServerStreamTracer;
 import io.grpc.internal.ConnectionClientTransport;
@@ -61,5 +62,15 @@ public final class InternalInProcess {
         serverSchedulerPool,
         serverStreamTracerFactories,
         serverListener);
+  }
+
+  /**
+   * Adds a {@link ClientInterceptor} that is closest to the network to test some internal
+   * features.
+   */
+  @Internal
+  public static void setTestInterceptor(
+      InProcessChannelBuilder builder, ClientInterceptor interceptor) {
+    builder.setTestInterceptor(interceptor);
   }
 }

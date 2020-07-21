@@ -16,10 +16,14 @@
 
 package io.grpc.census;
 
+import io.grpc.CallOptions;
+import io.grpc.Channel;
+import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.Internal;
+import io.grpc.InternalCensus;
+import io.grpc.MethodDescriptor;
 import io.grpc.ServerStreamTracer;
-import io.opencensus.trace.Tracing;
 
 /**
  * Accessor for getting {@link ClientInterceptor} or {@link ServerStreamTracer.Factory} with
@@ -37,10 +41,19 @@ public final class InternalCensusTracingAccessor {
    */
   public static ClientInterceptor getClientInterceptor() {
     CensusTracingModule censusTracing =
-        new CensusTracingModule(
-            Tracing.getTracer(),
-            Tracing.getPropagationComponent().getBinaryFormat());
-    return censusTracing.getClientInterceptor();
+        new CensusTracingModule();
+    final ClientInterceptor interceptor = censusTracing.getClientInterceptor();
+    return new ClientInterceptor() {
+      @Override
+      public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+          MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+        if (callOptions.getOption(
+            InternalCensus.DISABLE_CLIENT_DEFAULT_CENSUS) != null) {
+          return next.newCall(method, callOptions);
+        }
+        return interceptor.interceptCall(method, callOptions, next);
+      }
+    };
   }
 
   /**
@@ -48,9 +61,7 @@ public final class InternalCensusTracingAccessor {
    */
   public static ServerStreamTracer.Factory getServerStreamTracerFactory() {
     CensusTracingModule censusTracing =
-        new CensusTracingModule(
-            Tracing.getTracer(),
-            Tracing.getPropagationComponent().getBinaryFormat());
+        new CensusTracingModule();
     return censusTracing.getServerTracerFactory();
   }
 }
