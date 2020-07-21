@@ -345,7 +345,10 @@ public final class ServerCalls {
     public void onNext(RespT response) {
       if (cancelled) {
         if (serverStreamingOrBidi) {
-          throw Status.CANCELLED.withDescription("call already cancelled").asRuntimeException();
+          throw Status.CANCELLED
+              .withDescription("call already cancelled. "
+                  + "ServerCallStreamObserver.setOnCancelHandler() disables this exception")
+              .asRuntimeException();
         } else {
           // We choose not to throw for unary responses. The exception is intended to stop servers
           // from continuing processing, but for unary responses there is no further processing
