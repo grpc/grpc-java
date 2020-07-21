@@ -436,7 +436,7 @@ public final class XdsTestClient {
           LoadBalancerStatsResponse.RpcsByPeer.Builder rpcs =
               LoadBalancerStatsResponse.RpcsByPeer.newBuilder();
           rpcs.putAllRpcsByPeer(entry.getValue());
-          builder.putRpcsByType(entry.getKey(), rpcs.build());
+          builder.putRpcsByMethod(entry.getKey(), rpcs.build());
         }
         builder.setNumFailures(noRemotePeer + (int) latch.getCount());
       }
