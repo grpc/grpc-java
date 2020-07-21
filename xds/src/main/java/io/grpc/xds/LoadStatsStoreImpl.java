@@ -74,7 +74,7 @@ final class LoadStatsStoreImpl implements LoadStatsStore {
     for (Map.Entry<Locality, ClientLoadCounter> entry : localityLoadCounters.entrySet()) {
       ClientLoadSnapshot snapshot = entry.getValue().snapshot();
       UpstreamLocalityStats.Builder localityStatsBuilder =
-          UpstreamLocalityStats.newBuilder().setLocality(entry.getKey().toEnvoyProtoLocality());
+          UpstreamLocalityStats.newBuilder().setLocality(entry.getKey().toEnvoyProtoLocalityV2());
       localityStatsBuilder
           .setTotalSuccessfulRequests(snapshot.getCallsSucceeded())
           .setTotalErrorRequests(snapshot.getCallsFailed())

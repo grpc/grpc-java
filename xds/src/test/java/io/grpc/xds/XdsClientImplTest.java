@@ -279,7 +279,7 @@ public class XdsClientImplTest {
         cleanupRule.register(InProcessChannelBuilder.forName(serverName).directExecutor().build());
 
     List<ServerInfo> servers =
-        ImmutableList.of(new ServerInfo(serverName, ImmutableList.<ChannelCreds>of()));
+        ImmutableList.of(new ServerInfo(serverName, ImmutableList.<ChannelCreds>of(), null));
     XdsChannelFactory channelFactory = new XdsChannelFactory() {
       @Override
       ManagedChannel createChannel(List<ServerInfo> servers) {
@@ -294,7 +294,7 @@ public class XdsClientImplTest {
             TARGET_AUTHORITY,
             servers,
             channelFactory,
-            NODE,
+            EnvoyProtoData.Node.fromEnvoyProtoNodeV2(NODE),
             syncContext,
             fakeClock.getScheduledExecutorService(),
             backoffPolicyProvider,

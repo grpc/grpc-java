@@ -37,7 +37,6 @@ import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
 import io.envoyproxy.envoy.api.v2.core.AggregatedConfigSource;
 import io.envoyproxy.envoy.api.v2.core.ConfigSource;
-import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.api.v2.route.Route;
 import io.envoyproxy.envoy.api.v2.route.RouteAction;
 import io.envoyproxy.envoy.api.v2.route.RouteMatch;
@@ -65,6 +64,7 @@ import io.grpc.internal.ObjectPool;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.Bootstrapper.ServerInfo;
+import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.XdsClient.XdsChannelFactory;
 import java.io.IOException;
 import java.util.ArrayDeque;
@@ -169,8 +169,7 @@ public class XdsNameResolverIntegrationTest {
       public BootstrapInfo readBootstrap() {
         List<ServerInfo> serverList =
             ImmutableList.of(
-                new ServerInfo(serverName,
-                    ImmutableList.<ChannelCreds>of()));
+                new ServerInfo(serverName, ImmutableList.<ChannelCreds>of(), null));
         return new BootstrapInfo(serverList, FAKE_BOOTSTRAP_NODE);
       }
     };

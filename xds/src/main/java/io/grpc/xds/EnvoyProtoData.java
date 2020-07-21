@@ -22,6 +22,10 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.MoreObjects.ToStringHelper;
 import com.google.common.collect.ImmutableList;
+import com.google.protobuf.ListValue;
+import com.google.protobuf.NullValue;
+import com.google.protobuf.Struct;
+import com.google.protobuf.Value;
 import com.google.re2j.Pattern;
 import com.google.re2j.PatternSyntaxException;
 import io.envoyproxy.envoy.type.v3.FractionalPercent;
@@ -34,6 +38,7 @@ import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import javax.annotation.Nullable;
 
@@ -135,17 +140,364 @@ final class EnvoyProtoData {
   }
 
   /**
-   * See corresponding Envoy proto message {@link io.envoyproxy.envoy.api.v2.core.Locality}.
+   * See corresponding Envoy proto message {@link io.envoyproxy.envoy.config.core.v3.Node}.
+   */
+  public static final class Node {
+
+    private final String id;
+    private final String cluster;
+    @Nullable
+    private final Map<String, ?> metadata;
+    @Nullable
+    private final Locality locality;
+    private final List<Address> listeningAddresses;
+    private final String buildVersion;
+    private final String userAgentName;
+    @Nullable
+    private final String userAgentVersion;
+    private final List<String> clientFeatures;
+
+    private Node(
+        String id, String cluster, @Nullable Map<String, ?> metadata, @Nullable Locality locality,
+        List<Address> listeningAddresses, String buildVersion, String userAgentName,
+        @Nullable String userAgentVersion, List<String> clientFeatures) {
+      this.id = id;
+      this.cluster = cluster;
+      this.metadata = metadata;
+      this.locality = locality;
+      this.listeningAddresses = listeningAddresses;
+      this.buildVersion = buildVersion;
+      this.userAgentName = userAgentName;
+      this.userAgentVersion = userAgentVersion;
+      this.clientFeatures = clientFeatures;
+    }
+
+    static final class Builder {
+
+      private String id = "";
+      private String cluster = "";
+      @Nullable
+      private Map<String, ?> metadata;
+      @Nullable
+      private Locality locality;
+      private List<Address> listeningAddresse = new ArrayList<>();
+      private String buildVersion = "";
+      private String userAgentName = "";
+      private String userAgentVersion;
+      private List<String> clientFeatures = new ArrayList<>();
+
+      private Builder() {
+      }
+
+      Builder setId(String id) {
+        this.id = checkNotNull(id, "id");
+        return this;
+      }
+
+      Builder setCluster(String cluster) {
+        this.cluster = checkNotNull(cluster, "cluster");
+        return this;
+      }
+
+      Builder setMetadata(Map<String, ?> metadata) {
+        this.metadata = checkNotNull(metadata, "metadata");
+        return this;
+      }
+
+      Builder setLocality(Locality locality) {
+        this.locality = checkNotNull(locality, "locality");
+        return this;
+      }
+
+      Builder setListeningAddresses(List<Address> addresses) {
+        listeningAddresse = checkNotNull(addresses, "addresses");
+        return this;
+      }
+
+      Builder setBuildVersion(String buildVersion) {
+        this.buildVersion = checkNotNull(buildVersion, "buildVersion");
+        return this;
+      }
+
+      Builder setUserAgentName(String userAgentName) {
+        this.userAgentName = checkNotNull(userAgentName, "userAgentName");
+        return this;
+      }
+
+      Builder setUserAgentVersion(String userAgentVersion) {
+        this.userAgentVersion = checkNotNull(userAgentVersion, "userAgentVersion");
+        return this;
+      }
+
+      Builder setClientFeatures(List<String> clientFeatures) {
+        this.clientFeatures = checkNotNull(clientFeatures, "clientFeatures");
+        return this;
+      }
+
+      Node build() {
+        return new Node(
+            id, cluster, metadata, locality, listeningAddresse, buildVersion, userAgentName,
+            userAgentVersion, clientFeatures);
+      }
+    }
+
+    static Builder newBuilder() {
+      return new Builder();
+    }
+
+    Builder toBuilder() {
+      Builder builder = new Builder().setId(id).setCluster(cluster);
+      if (metadata != null) {
+        builder.setMetadata(metadata);
+      }
+      if (locality != null) {
+        builder.setLocality(locality);
+      }
+      builder.setListeningAddresses(listeningAddresses);
+      return builder;
+    }
+
+    String getId() {
+      return id;
+    }
+
+    String getCluster() {
+      return cluster;
+    }
+
+    @Nullable
+    Map<String, ?> getMetadata() {
+      return metadata;
+    }
+
+    @Nullable
+    Locality getLocality() {
+      return locality;
+    }
+
+    List<Address> getListeningAddresses() {
+      return listeningAddresses;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      Node node = (Node) o;
+      return Objects.equals(id, node.id)
+          && Objects.equals(cluster, node.cluster)
+          && Objects.equals(metadata, node.metadata)
+          && Objects.equals(locality, node.locality)
+          && Objects.equals(listeningAddresses, node.listeningAddresses)
+          && Objects.equals(buildVersion, node.buildVersion)
+          && Objects.equals(userAgentName, node.userAgentName)
+          && Objects.equals(userAgentVersion, node.userAgentVersion)
+          && Objects.equals(clientFeatures, node.clientFeatures);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(
+          id, cluster, metadata, locality, listeningAddresses, buildVersion, userAgentName,
+          userAgentVersion, clientFeatures);
+    }
+
+    static Node fromEnvoyProtoNode(io.envoyproxy.envoy.config.core.v3.Node proto) {
+      Node.Builder builder = newBuilder();
+      builder.setId(proto.getId());
+      builder.setCluster(proto.getCluster());
+      if (proto.hasMetadata()) {
+        builder.setMetadata(proto.getMetadata().getFieldsMap());
+      }
+      if (proto.hasLocality()) {
+        builder.setLocality(Locality.fromEnvoyProtoLocality(proto.getLocality()));
+      }
+      List<io.envoyproxy.envoy.config.core.v3.Address> listeningAddressesList =
+          proto.getListeningAddressesList();
+      List<Address> listeningAddresses = new ArrayList<>(listeningAddressesList.size());
+      for (io.envoyproxy.envoy.config.core.v3.Address addressProto : listeningAddressesList) {
+        listeningAddresses.add(Address.fromEnvoyProtoAddress(addressProto));
+      }
+      builder.setListeningAddresses(listeningAddresses);
+      builder.setUserAgentName(proto.getUserAgentName());
+      if (proto.hasUserAgentBuildVersion()) {
+        builder.setUserAgentVersion(proto.getUserAgentVersion());
+      }
+      builder.setClientFeatures(proto.getClientFeaturesList());
+      return builder.build();
+    }
+
+    static Node fromEnvoyProtoNodeV2(io.envoyproxy.envoy.api.v2.core.Node proto) {
+      Node.Builder builder = newBuilder();
+      builder.setId(proto.getId());
+      builder.setCluster(proto.getCluster());
+      if (proto.hasMetadata()) {
+        builder.setMetadata(proto.getMetadata().getFieldsMap());
+      }
+      if (proto.hasLocality()) {
+        builder.setLocality(Locality.fromEnvoyProtoLocalityV2(proto.getLocality()));
+      }
+      List<io.envoyproxy.envoy.api.v2.core.Address> listeningAddressesList =
+          proto.getListeningAddressesList();
+      List<Address> listeningAddresses = new ArrayList<>(listeningAddressesList.size());
+      for (io.envoyproxy.envoy.api.v2.core.Address addressProto : listeningAddressesList) {
+        listeningAddresses.add(Address.fromEnvoyProtoAddressV2(addressProto));
+      }
+      builder.setBuildVersion(proto.getBuildVersion());
+      builder.setListeningAddresses(listeningAddresses);
+      builder.setUserAgentName(proto.getUserAgentName());
+      if (proto.hasUserAgentBuildVersion()) {
+        builder.setUserAgentVersion(proto.getUserAgentVersion());
+      }
+      builder.setClientFeatures(proto.getClientFeaturesList());
+      return builder.build();
+    }
+
+    io.envoyproxy.envoy.config.core.v3.Node toEnvoyProtoNode() {
+      io.envoyproxy.envoy.config.core.v3.Node.Builder builder =
+          io.envoyproxy.envoy.config.core.v3.Node.newBuilder();
+      builder.setId(id);
+      builder.setCluster(cluster);
+      if (metadata != null) {
+        Struct.Builder structBuilder = Struct.newBuilder();
+        for (Map.Entry<String, ?> entry : metadata.entrySet()) {
+          structBuilder.putFields(entry.getKey(), convertToValue(entry.getValue()));
+        }
+        builder.setMetadata(structBuilder);
+      }
+      if (locality != null) {
+        builder.setLocality(locality.toEnvoyProtoLocality());
+      }
+      for (Address address : listeningAddresses) {
+        builder.addListeningAddresses(address.toEnvoyProtoAddress());
+      }
+      builder.setUserAgentName(userAgentName);
+      if (userAgentVersion != null) {
+        builder.setUserAgentVersion(userAgentVersion);
+      }
+      builder.addAllClientFeatures(clientFeatures);
+      return builder.build();
+    }
+
+    public io.envoyproxy.envoy.api.v2.core.Node toEnvoyProtoNodeV2() {
+      io.envoyproxy.envoy.api.v2.core.Node.Builder builder =
+          io.envoyproxy.envoy.api.v2.core.Node.newBuilder();
+      builder.setId(id);
+      builder.setCluster(cluster);
+      if (metadata != null) {
+        Struct.Builder structBuilder = Struct.newBuilder();
+        for (Map.Entry<String, ?> entry : metadata.entrySet()) {
+          structBuilder.putFields(entry.getKey(), convertToValue(entry.getValue()));
+        }
+        builder.setMetadata(structBuilder);
+      }
+      if (locality != null) {
+        builder.setLocality(locality.toEnvoyProtoLocalityV2());
+      }
+      for (Address address : listeningAddresses) {
+        builder.addListeningAddresses(address.toEnvoyProtoAddressV2());
+      }
+      builder.setBuildVersion(buildVersion);
+      builder.setUserAgentName(userAgentName);
+      if (userAgentVersion != null) {
+        builder.setUserAgentVersion(userAgentVersion);
+      }
+      builder.addAllClientFeatures(clientFeatures);
+      return builder.build();
+    }
+  }
+
+  /**
+   * Converts Java representation of the given JSON value to protobuf's {@link
+   * com.google.protobuf.Value} representation.
+   *
+   * <p>The given {@code rawObject} must be a valid JSON value in Java representation, which is
+   * either a {@code Map<String, ?>}, {@code List<?>}, {@code String}, {@code Double}, {@code
+   * Boolean}, or {@code null}.
+   */
+  private static Value convertToValue(Object rawObject) {
+    Value.Builder valueBuilder = Value.newBuilder();
+    if (rawObject == null) {
+      valueBuilder.setNullValue(NullValue.NULL_VALUE);
+    } else if (rawObject instanceof Double) {
+      valueBuilder.setNumberValue((Double) rawObject);
+    } else if (rawObject instanceof String) {
+      valueBuilder.setStringValue((String) rawObject);
+    } else if (rawObject instanceof Boolean) {
+      valueBuilder.setBoolValue((Boolean) rawObject);
+    } else if (rawObject instanceof Map) {
+      Struct.Builder structBuilder = Struct.newBuilder();
+      @SuppressWarnings("unchecked")
+      Map<String, ?> map = (Map<String, ?>) rawObject;
+      for (Map.Entry<String, ?> entry : map.entrySet()) {
+        structBuilder.putFields(entry.getKey(), convertToValue(entry.getValue()));
+      }
+      valueBuilder.setStructValue(structBuilder);
+    } else if (rawObject instanceof List) {
+      ListValue.Builder listBuilder = ListValue.newBuilder();
+      List<?> list = (List<?>) rawObject;
+      for (Object obj : list) {
+        listBuilder.addValues(convertToValue(obj));
+      }
+      valueBuilder.setListValue(listBuilder);
+    }
+    return valueBuilder.build();
+  }
+
+  /**
+   * See corresponding Envoy proto message {@link io.envoyproxy.envoy.config.core.v3.Address}.
+   */
+  static final class Address {
+
+    private final String address;
+    private final int port;
+
+    Address(String address, int port) {
+      this.address = checkNotNull(address, "address");
+      this.port = port;
+    }
+
+    static Address fromEnvoyProtoAddress(io.envoyproxy.envoy.config.core.v3.Address proto) {
+      return new Address(proto.getSocketAddress().getAddress(),
+          proto.getSocketAddress().getPortValue());
+    }
+
+    static Address fromEnvoyProtoAddressV2(io.envoyproxy.envoy.api.v2.core.Address proto) {
+      return new Address(proto.getSocketAddress().getAddress(),
+          proto.getSocketAddress().getPortValue());
+    }
+
+    io.envoyproxy.envoy.config.core.v3.Address toEnvoyProtoAddress() {
+      return
+          io.envoyproxy.envoy.config.core.v3.Address.newBuilder().setSocketAddress(
+              io.envoyproxy.envoy.config.core.v3.SocketAddress.newBuilder().setAddress(address)
+                  .setPortValue(port)).build();
+    }
+
+    io.envoyproxy.envoy.api.v2.core.Address toEnvoyProtoAddressV2() {
+      return
+          io.envoyproxy.envoy.api.v2.core.Address.newBuilder().setSocketAddress(
+              io.envoyproxy.envoy.api.v2.core.SocketAddress.newBuilder().setAddress(address)
+                  .setPortValue(port)).build();
+    }
+  }
+
+  /**
+   * See corresponding Envoy proto message {@link io.envoyproxy.envoy.config.core.v3.Locality}.
    */
   static final class Locality {
     private final String region;
     private final String zone;
     private final String subZone;
 
-    Locality(String region, String zone, String subZone) {
-      this.region = region;
-      this.zone = zone;
-      this.subZone = subZone;
+    Locality(@Nullable String region, @Nullable String zone, @Nullable String subZone) {
+      this.region = region == null ? "" : region;
+      this.zone = zone == null ? "" : zone;
+      this.subZone = subZone == null ? "" : subZone;
     }
 
     static Locality fromEnvoyProtoLocality(io.envoyproxy.envoy.config.core.v3.Locality locality) {
@@ -163,7 +515,15 @@ final class EnvoyProtoData {
           /* subZone = */ locality.getSubZone());
     }
 
-    io.envoyproxy.envoy.api.v2.core.Locality toEnvoyProtoLocality() {
+    io.envoyproxy.envoy.config.core.v3.Locality toEnvoyProtoLocality() {
+      return io.envoyproxy.envoy.config.core.v3.Locality.newBuilder()
+          .setRegion(region)
+          .setZone(zone)
+          .setSubZone(subZone)
+          .build();
+    }
+
+    io.envoyproxy.envoy.api.v2.core.Locality toEnvoyProtoLocalityV2() {
       return io.envoyproxy.envoy.api.v2.core.Locality.newBuilder()
           .setRegion(region)
           .setZone(zone)
