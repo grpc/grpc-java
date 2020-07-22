@@ -164,15 +164,14 @@ public class RouteMatchTest {
   @Test
   public void headerMatching_specialCaseGrpcHeaders() {
     Map<String, Iterable<String>> headers = new HashMap<>();
-    headers.put("grpc-tags-bin", Collections.singletonList("fake-binary-tag"));
-    headers.put("grpc-trace-bin", Collections.singletonList("fake-binary-trace"));
     headers.put("grpc-previous-rpc-attempts", Collections.singletonList("0"));
+
     RouteMatch routeMatch1 =
         new RouteMatch(new PathMatcher("/FooService/barMethod", null, null),
             Arrays.asList(
                 new HeaderMatcher(
-                    "grpc-tags-bin", "fake-binary-tag", null, null, null, null,
-                null, false)),
+                    "grpc-previous-rpc-attempts", "0", null, null, null, null,
+                    null, false)),
             null);
     assertThat(routeMatch1.matches("/FooService/barMethod", headers)).isFalse();
 
@@ -180,28 +179,10 @@ public class RouteMatchTest {
         new RouteMatch(new PathMatcher("/FooService/barMethod", null, null),
             Arrays.asList(
                 new HeaderMatcher(
-                    "grpc-trace-bin", "fake-binary-trace", null, null, null, null,
-                    null, false)),
-            null);
-    assertThat(routeMatch2.matches("/FooService/barMethod", headers)).isFalse();
-
-    RouteMatch routeMatch3 =
-        new RouteMatch(new PathMatcher("/FooService/barMethod", null, null),
-            Arrays.asList(
-                new HeaderMatcher(
-                    "grpc-previous-rpc-attempts", "0", null, null, null, null,
-                    null, false)),
-            null);
-    assertThat(routeMatch3.matches("/FooService/barMethod", headers)).isFalse();
-
-    RouteMatch routeMatch4 =
-        new RouteMatch(new PathMatcher("/FooService/barMethod", null, null),
-            Arrays.asList(
-                new HeaderMatcher(
                     "content-type", "application/grpc", null, null, null, null,
                     null, false)),
             null);
-    assertThat(routeMatch4.matches("/FooService/barMethod", headers)).isTrue();
+    assertThat(routeMatch2.matches("/FooService/barMethod", headers)).isTrue();
   }
 
   private static final class FakeRandom implements ThreadSafeRandom {
