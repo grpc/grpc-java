@@ -87,14 +87,14 @@ final class XdsRoutingLoadBalancer extends LoadBalancer {
       } else {
         childLbStates.get(actionName).reactivate(action.getProvider());
       }
+      final LoadBalancer childLb = childLbStates.get(actionName).lb;
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
-          childLbStates.get(actionName).lb
-              .handleResolvedAddresses(
-                  resolvedAddresses.toBuilder()
-                      .setLoadBalancingPolicyConfig(action.getConfig())
-                      .build());
+          childLb.handleResolvedAddresses(
+              resolvedAddresses.toBuilder()
+                  .setLoadBalancingPolicyConfig(action.getConfig())
+                  .build());
         }
       });
     }
@@ -103,6 +103,7 @@ final class XdsRoutingLoadBalancer extends LoadBalancer {
     for (String actionName : diff) {
       childLbStates.get(actionName).deactivate();
     }
+    updateOverallBalancingState();
   }
 
   @Override
@@ -236,12 +237,11 @@ final class XdsRoutingLoadBalancer extends LoadBalancer {
 
       @Override
       public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
-        if (deactivated) {
-          return;
-        }
         currentState = newState;
         currentPicker = newPicker;
-        updateOverallBalancingState();
+        if (!deactivated) {
+          updateOverallBalancingState();
+        }
       }
 
       @Override
