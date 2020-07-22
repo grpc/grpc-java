@@ -67,7 +67,7 @@ final class LoadReportClient {
   private final BackoffPolicy.Provider backoffPolicyProvider;
 
   // Sources of load stats data for each cluster:cluster_service.
-  private final Map<String, Map<String, LoadStatsStore>> loadStatsStoreMap = new HashMap<>();
+  private final Map<String, Map<String, LoadStatsEntity>> loadStatsEntities = new HashMap<>();
   private boolean started;
 
   @Nullable
@@ -148,18 +148,18 @@ final class LoadReportClient {
   void addLoadStatsStore(
       String clusterName, @Nullable String clusterServiceName, LoadStatsStore loadStatsStore) {
     checkState(
-        !loadStatsStoreMap.containsKey(clusterName)
-            || !loadStatsStoreMap.get(clusterName).containsKey(clusterServiceName),
+        !loadStatsEntities.containsKey(clusterName)
+            || !loadStatsEntities.get(clusterName).containsKey(clusterServiceName),
         "load stats for cluster: %s, cluster service: %s already exists",
         clusterName, clusterServiceName);
     logger.log(
         XdsLogLevel.INFO,
         "Add load stats for cluster: {0}, cluster_service: {1}", clusterName, clusterServiceName);
-    if (!loadStatsStoreMap.containsKey(clusterName)) {
-      loadStatsStoreMap.put(clusterName, new HashMap<String, LoadStatsStore>());
+    if (!loadStatsEntities.containsKey(clusterName)) {
+      loadStatsEntities.put(clusterName, new HashMap<String, LoadStatsEntity>());
     }
-    Map<String, LoadStatsStore> clusterLoadStatsStores = loadStatsStoreMap.get(clusterName);
-    clusterLoadStatsStores.put(clusterServiceName, loadStatsStore);
+    Map<String, LoadStatsEntity> clusterLoadStatsEntities = loadStatsEntities.get(clusterName);
+    clusterLoadStatsEntities.put(clusterServiceName, new LoadStatsEntity(loadStatsStore));
   }
 
   /**
@@ -167,8 +167,8 @@ final class LoadReportClient {
    */
   void removeLoadStatsStore(String clusterName, @Nullable String clusterServiceName) {
     checkState(
-        loadStatsStoreMap.containsKey(clusterName)
-            && loadStatsStoreMap.get(clusterName).containsKey(clusterServiceName),
+        loadStatsEntities.containsKey(clusterName)
+            && loadStatsEntities.get(clusterName).containsKey(clusterServiceName),
         "load stats for cluster: %s, cluster service: %s does not exist",
         clusterName, clusterServiceName);
     logger.log(
@@ -176,10 +176,10 @@ final class LoadReportClient {
         "Remove load stats for cluster: {0}, cluster_service: {1}",
         clusterName,
         clusterServiceName);
-    Map<String, LoadStatsStore> clusterLoadStatsStores = loadStatsStoreMap.get(clusterName);
-    clusterLoadStatsStores.remove(clusterServiceName);
-    if (clusterLoadStatsStores.isEmpty()) {
-      loadStatsStoreMap.remove(clusterName);
+    Map<String, LoadStatsEntity> clusterLoadStatsEntities = loadStatsEntities.get(clusterName);
+    clusterLoadStatsEntities.remove(clusterServiceName);
+    if (clusterLoadStatsEntities.isEmpty()) {
+      loadStatsEntities.remove(clusterName);
     }
   }
 
@@ -217,10 +217,8 @@ final class LoadReportClient {
 
   private class LrsStream implements StreamObserver<LoadStatsResponse> {
 
-    // Cluster to report loads for asked by management server.
     final Set<String> clusterNames = new HashSet<>();
     final LoadReportingServiceGrpc.LoadReportingServiceStub stub;
-    final Stopwatch reportStopwatch;
     StreamObserver<LoadStatsRequest> lrsRequestWriter;
     boolean initialResponseReceived;
     boolean closed;
@@ -229,15 +227,10 @@ final class LoadReportClient {
 
     LrsStream(LoadReportingServiceGrpc.LoadReportingServiceStub stub, Stopwatch stopwatch) {
       this.stub = checkNotNull(stub, "stub");
-      reportStopwatch = checkNotNull(stopwatch, "stopwatch");
     }
 
     void start() {
       lrsRequestWriter = stub.withWaitForReady().streamLoadStats(this);
-      reportStopwatch.reset().start();
-
-      // Send an initial LRS request with empty cluster stats. Management server is able to
-      // infer clusters the gRPC client sending loads to.
       LoadStatsRequest initRequest =
           LoadStatsRequest.newBuilder()
               .setNode(node)
@@ -278,19 +271,12 @@ final class LoadReportClient {
     }
 
     private void sendLoadReport() {
-      long interval = reportStopwatch.elapsed(TimeUnit.NANOSECONDS);
-      reportStopwatch.reset().start();
       LoadStatsRequest.Builder requestBuilder = LoadStatsRequest.newBuilder().setNode(node);
       for (String name : clusterNames) {
-        if (loadStatsStoreMap.containsKey(name)) {
-          Map<String, LoadStatsStore> clusterLoadStatsStores = loadStatsStoreMap.get(name);
-          for (LoadStatsStore statsStore : clusterLoadStatsStores.values()) {
-            ClusterStats report =
-                statsStore.generateLoadReport()
-                    .toBuilder()
-                    .setLoadReportInterval(Durations.fromNanos(interval))
-                    .build();
-            requestBuilder.addClusterStats(report);
+        if (loadStatsEntities.containsKey(name)) {
+          Map<String, LoadStatsEntity> clusterLoadStatsEntities = loadStatsEntities.get(name);
+          for (LoadStatsEntity entity : clusterLoadStatsEntities.values()) {
+            requestBuilder.addClusterStats(entity.getLoadStats());
           }
         }
       }
@@ -317,28 +303,27 @@ final class LoadReportClient {
       if (closed) {
         return;
       }
-
       if (!initialResponseReceived) {
         logger.log(XdsLogLevel.DEBUG, "Received LRS initial response:\n{0}", response);
         initialResponseReceived = true;
       } else {
         logger.log(XdsLogLevel.DEBUG, "Received LRS response:\n{0}", response);
       }
-      long interval =  Durations.toNanos(response.getLoadReportingInterval());
-      if (interval != loadReportIntervalNano) {
-        logger.log(XdsLogLevel.INFO, "Update load reporting interval to {0} ns", interval);
-        loadReportIntervalNano = interval;
-        callback.onReportResponse(loadReportIntervalNano);
-      }
-      if (clusterNames.size() != response.getClustersCount()
-          || !clusterNames.containsAll(response.getClustersList())) {
+      clusterNames.clear();
+      if (response.getSendAllClusters()) {
+        clusterNames.addAll(loadStatsEntities.keySet());
+        logger.log(XdsLogLevel.INFO, "Update to report loads for all clusters");
+      } else {
         logger.log(
             XdsLogLevel.INFO,
             "Update load reporting clusters to {0}", response.getClustersList());
-        clusterNames.clear();
         clusterNames.addAll(response.getClustersList());
       }
+      long interval = Durations.toNanos(response.getLoadReportingInterval());
+      logger.log(XdsLogLevel.INFO, "Update load reporting interval to {0} ns", interval);
+      loadReportIntervalNano = interval;
       scheduleNextLoadReport();
+      callback.onReportResponse(loadReportIntervalNano);
     }
 
     private void handleStreamClosed(Status status) {
@@ -398,6 +383,27 @@ final class LoadReportClient {
       if (lrsStream == this) {
         lrsStream = null;
       }
+    }
+  }
+
+  private final class LoadStatsEntity {
+    private final LoadStatsStore loadStatsStore;
+    private final Stopwatch stopwatch;
+
+    private LoadStatsEntity(LoadStatsStore loadStatsStore) {
+      this.loadStatsStore = loadStatsStore;
+      this.stopwatch = stopwatchSupplier.get().reset().start();
+    }
+
+    private ClusterStats getLoadStats() {
+      ClusterStats stats =
+          loadStatsStore.generateLoadReport()
+              .toBuilder()
+              .setLoadReportInterval(
+                  Durations.fromNanos(stopwatch.elapsed(TimeUnit.NANOSECONDS)))
+              .build();
+      stopwatch.reset().start();
+      return stats;
     }
   }
 
