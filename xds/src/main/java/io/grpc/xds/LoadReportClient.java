@@ -159,8 +159,7 @@ final class LoadReportClient {
       loadStatsEntities.put(clusterName, new HashMap<String, LoadStatsEntity>());
     }
     Map<String, LoadStatsEntity> clusterLoadStatsEntities = loadStatsEntities.get(clusterName);
-    clusterLoadStatsEntities.put(
-        clusterServiceName, new LoadStatsEntity(loadStatsStore, stopwatchSupplier.get()));
+    clusterLoadStatsEntities.put(clusterServiceName, new LoadStatsEntity(loadStatsStore));
   }
 
   /**
@@ -387,14 +386,13 @@ final class LoadReportClient {
     }
   }
 
-  private static final class LoadStatsEntity {
+  private final class LoadStatsEntity {
     private final LoadStatsStore loadStatsStore;
     private final Stopwatch stopwatch;
 
-    private LoadStatsEntity(LoadStatsStore loadStatsStore, Stopwatch stopwatch) {
+    private LoadStatsEntity(LoadStatsStore loadStatsStore) {
       this.loadStatsStore = loadStatsStore;
-      this.stopwatch = stopwatch;
-      stopwatch.reset().start();
+      this.stopwatch = stopwatchSupplier.get().reset().start();
     }
 
     private ClusterStats getLoadStats() {
