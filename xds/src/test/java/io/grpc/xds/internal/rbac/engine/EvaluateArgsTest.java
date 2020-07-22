@@ -46,7 +46,7 @@ public class EvaluateArgsTest<ReqT,RespT> {
   @Mock
   private EvaluateArgs<ReqT,RespT> args;
 
-  private CelEvaluationEngine<ReqT,RespT> engine;
+  private AuthorizationEngine<ReqT,RespT> engine;
   private Metadata metadata;
   private ImmutableMap<String, Object> attributesMap;
 
@@ -59,7 +59,7 @@ public class EvaluateArgsTest<ReqT,RespT> {
         .setAction(RBAC.Action.ALLOW)
         .build();
     List<RBAC> rbacList = new ArrayList<>(Arrays.asList(new RBAC[] {rbacAllow}));
-    engine = new CelEvaluationEngine<>(ImmutableList.copyOf(rbacList));
+    engine = new AuthorizationEngine<>(ImmutableList.copyOf(rbacList));
     // Set up attributes map.
     attributesMap = ImmutableMap.<String, Object>builder()
         .put("request.url_path", "package.service/method")

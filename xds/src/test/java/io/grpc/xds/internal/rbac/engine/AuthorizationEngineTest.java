@@ -32,12 +32,12 @@ import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-/** Unit tests for constructor of CEL Evaluation Engine. */
+/** Unit tests for constructor of CEL-based Authorization Engine. */
 @RunWith(JUnit4.class)
-public class CelEngineTest {
+public class AuthorizationEngineTest {
   @Rule
   public final ExpectedException thrown = ExpectedException.none();
-  private CelEvaluationEngine<?,?> engine;
+  private AuthorizationEngine<?,?> engine;
   private RBAC rbacDeny;
   private RBAC rbacAllow;
 
@@ -54,14 +54,14 @@ public class CelEngineTest {
   @Test
   public void createEngineSingleRbac() {
     List<RBAC> rbacList = new ArrayList<>(Arrays.asList(new RBAC[] {rbacAllow}));
-    engine = new CelEvaluationEngine<>(ImmutableList.copyOf(rbacList));
+    engine = new AuthorizationEngine<>(ImmutableList.copyOf(rbacList));
     assertNotNull(engine);
   }
 
   @Test
   public void createEngineRbacPairOfDenyAllow() {
     List<RBAC> rbacList = new ArrayList<>(Arrays.asList(new RBAC[] {rbacDeny, rbacAllow}));
-    engine = new CelEvaluationEngine<>(ImmutableList.copyOf(rbacList));
+    engine = new AuthorizationEngine<>(ImmutableList.copyOf(rbacList));
     assertNotNull(engine);
   }
 
@@ -71,7 +71,7 @@ public class CelEngineTest {
     thrown.expectMessage( "Invalid RBAC list, " 
         + "must provide a RBAC with DENY action followed by a RBAC with ALLOW action. ");
     List<RBAC> rbacList = new ArrayList<>(Arrays.asList(new RBAC[] {rbacAllow, rbacAllow}));
-    engine = new CelEvaluationEngine<>(ImmutableList.copyOf(rbacList));
+    engine = new AuthorizationEngine<>(ImmutableList.copyOf(rbacList));
     assertNull(engine);
   }
 
@@ -81,7 +81,7 @@ public class CelEngineTest {
     thrown.expectMessage( "Invalid RBAC list, " 
         + "must provide a RBAC with DENY action followed by a RBAC with ALLOW action. ");
     List<RBAC> rbacList = new ArrayList<>(Arrays.asList(new RBAC[] {rbacAllow, rbacDeny}));
-    engine = new CelEvaluationEngine<>(ImmutableList.copyOf(rbacList));
+    engine = new AuthorizationEngine<>(ImmutableList.copyOf(rbacList));
     assertNull(engine);
   }
 
@@ -91,7 +91,7 @@ public class CelEngineTest {
     thrown.expectMessage( "Invalid RBAC list, " 
         + "must provide a RBAC with DENY action followed by a RBAC with ALLOW action. ");
     List<RBAC> rbacList = new ArrayList<>(Arrays.asList(new RBAC[] {rbacDeny, rbacDeny}));
-    engine = new CelEvaluationEngine<>(ImmutableList.copyOf(rbacList));
+    engine = new AuthorizationEngine<>(ImmutableList.copyOf(rbacList));
     assertNull(engine);
   }
 
@@ -101,7 +101,7 @@ public class CelEngineTest {
     thrown.expectMessage(
         "Invalid RBAC list size, must provide either one RBAC or two RBACs. ");
     List<RBAC> rbacList = new ArrayList<>();
-    engine = new CelEvaluationEngine<>(ImmutableList.copyOf(rbacList));
+    engine = new AuthorizationEngine<>(ImmutableList.copyOf(rbacList));
     assertNull(engine);
   }
 
@@ -112,7 +112,7 @@ public class CelEngineTest {
         "Invalid RBAC list size, must provide either one RBAC or two RBACs. ");
     List<RBAC> rbacList = new ArrayList<>(Arrays.asList(
         new RBAC[] {rbacAllow, rbacAllow, rbacAllow}));
-    engine = new CelEvaluationEngine<>(ImmutableList.copyOf(rbacList));
+    engine = new AuthorizationEngine<>(ImmutableList.copyOf(rbacList));
     assertNull(engine);
   }
 }

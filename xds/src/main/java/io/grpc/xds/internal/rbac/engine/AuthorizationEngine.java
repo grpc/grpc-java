@@ -47,11 +47,11 @@ import java.util.Map;
  * <p>Use as in:
  * 
  * <pre>
- *  CelEvaluationEngine engine = new CelEvaluationEngine(rbacPolicies);
+ *  AuthorizationEngine engine = new AuthorizationEngine(rbacPolicies);
  *  AuthorizationDecision result = engine.evaluate();
  * </pre>
  */
-public class CelEvaluationEngine<ReqT, RespT> {
+public class AuthorizationEngine<ReqT, RespT> {
   /**
    * RbacEngine is an inner class that holds RBAC action 
    * and conditions of RBAC policy.
@@ -70,14 +70,14 @@ public class CelEvaluationEngine<ReqT, RespT> {
   private final List<RbacEngine> rbacEngines;
 
   /**
-   * Creates a CEL Evaluation Engine from a list of Envoy RBACs.
+   * Creates a CEL-based Authorization Engine from a list of Envoy RBACs.
    * The constructor can take either one or two Envoy RBACs.
    * When it takes two RBACs, the order has to be a RBAC with DENY action
    * followed by a RBAC with ALLOW action.
    * @param rbacPolicies input Envoy RBAC list.
    * @throws IllegalArgumentException if the user inputs an invalid RBAC list.
    */
-  public CelEvaluationEngine(ImmutableList<RBAC> rbacPolicies) throws IllegalArgumentException {
+  public AuthorizationEngine(ImmutableList<RBAC> rbacPolicies) throws IllegalArgumentException {
     if (rbacPolicies.size() < 1 || rbacPolicies.size() > 2) {
       throw new IllegalArgumentException(
         "Invalid RBAC list size, must provide either one RBAC or two RBACs. ");
