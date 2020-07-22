@@ -23,6 +23,7 @@ dependencies {
             project(':grpc-stub'),
             project(':grpc-core'),
             project(':grpc-services'),
+            project(':grpc-auth'),
             project(path: ':grpc-alts', configuration: 'shadow'),
             libraries.gson,
             libraries.re2j
