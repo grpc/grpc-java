@@ -56,7 +56,9 @@ import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.LoadReportClient.LoadReportCallback;
 import java.util.ArrayDeque;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -178,7 +180,7 @@ public class LoadReportClientTest {
     when(backoffPolicy1.nextBackoffNanos())
         .thenReturn(TimeUnit.SECONDS.toNanos(1L), TimeUnit.SECONDS.toNanos(10L));
     when(backoffPolicy2.nextBackoffNanos())
-        .thenReturn(TimeUnit.SECONDS.toNanos(1L), TimeUnit.SECONDS.toNanos(10L));
+        .thenReturn(TimeUnit.SECONDS.toNanos(2L), TimeUnit.SECONDS.toNanos(20L));
     lrsClient =
         new LoadReportClient(
             logId,
@@ -216,15 +218,17 @@ public class LoadReportClientTest {
     responseObserver.onNext(buildLrsResponse(ImmutableList.of(cluster1), 1000));
     inOrder.verify(callback).onReportResponse(1000);
 
-    ArgumentMatcher<LoadStatsRequest> expectedLoadReportMatcher =
-        new LoadStatsRequestMatcher(ImmutableList.of(rawStats1), 1000);
+    ClusterStats expectedStats1 =
+        rawStats1.toBuilder().setLoadReportInterval(Durations.fromNanos(1000)).build();
     fakeClock.forwardNanos(999);
     inOrder.verifyNoMoreInteractions();
     fakeClock.forwardNanos(1);
-    inOrder.verify(requestObserver).onNext(argThat(expectedLoadReportMatcher));
+    inOrder.verify(requestObserver)
+        .onNext(argThat(new LoadStatsRequestMatcher(Collections.singletonList(expectedStats1))));
 
     fakeClock.forwardNanos(1000);
-    inOrder.verify(requestObserver).onNext(argThat(expectedLoadReportMatcher));
+    inOrder.verify(requestObserver)
+        .onNext(argThat(new LoadStatsRequestMatcher(Collections.singletonList(expectedStats1))));
 
     String cluster2 = "cluster-bar.googleapis.com";
     ClusterStats rawStats2 = generateClusterLoadStats(cluster2, null);
@@ -236,28 +240,38 @@ public class LoadReportClientTest {
     responseObserver.onNext(buildLrsResponse(ImmutableList.of(cluster1), 2000));
     inOrder.verify(callback).onReportResponse(2000);
 
+    expectedStats1 =
+        rawStats1.toBuilder().setLoadReportInterval(Durations.fromNanos(2000)).build();
     fakeClock.forwardNanos(1000);
     inOrder.verifyNoMoreInteractions();
-
     fakeClock.forwardNanos(1000);
     inOrder.verify(requestObserver)
-        .onNext(argThat(new LoadStatsRequestMatcher(ImmutableList.of(rawStats1), 2000)));
+        .onNext(argThat(new LoadStatsRequestMatcher(Collections.singletonList(expectedStats1))));
 
-    // Management server asks to report loads for cluster1 and cluster2.
-    responseObserver.onNext(buildLrsResponse(ImmutableList.of(cluster1, cluster2), 2000));
+    // Management server asks to report loads for all clusters.
+    responseObserver.onNext(
+        LoadStatsResponse.newBuilder()
+            .setSendAllClusters(true)
+            .setLoadReportingInterval(Durations.fromNanos(2000))
+            .build());
+    inOrder.verify(callback).onReportResponse(2000);
 
+    ClusterStats expectedStats2 =
+        rawStats2.toBuilder().setLoadReportInterval(Durations.fromNanos(2000 + 2000)).build();
     fakeClock.forwardNanos(2000);
     inOrder.verify(requestObserver)
         .onNext(
             argThat(
-                new LoadStatsRequestMatcher(ImmutableList.of(rawStats1, rawStats2), 2000)));
+                new LoadStatsRequestMatcher(Arrays.asList(expectedStats1, expectedStats2))));
 
     // Load reports for cluster1 is no longer wanted.
-    responseObserver.onNext(buildLrsResponse(ImmutableList.of(cluster2), 2000));
+    responseObserver.onNext(buildLrsResponse(Collections.singletonList(cluster2), 2000));
 
+    expectedStats2 =
+        rawStats2.toBuilder().setLoadReportInterval(Durations.fromNanos(2000)).build();
     fakeClock.forwardNanos(2000);
     inOrder.verify(requestObserver)
-        .onNext(argThat(new LoadStatsRequestMatcher(ImmutableList.of(rawStats2), 2000)));
+        .onNext(argThat(new LoadStatsRequestMatcher(Collections.singletonList(expectedStats2))));
 
     // Management server asks loads for a cluster that client has no load data.
     responseObserver
@@ -331,7 +345,7 @@ public class LoadReportClientTest {
 
     // Balancer sends a response asking for loads of the cluster.
     responseObserver
-        .onNext(buildLrsResponse(ImmutableList.of(clusterName), 0));
+        .onNext(buildLrsResponse(ImmutableList.of(clusterName), 5));
 
     // Then breaks the RPC
     responseObserver.onError(Status.UNAVAILABLE.asException());
@@ -348,12 +362,12 @@ public class LoadReportClientTest {
     fakeClock.forwardNanos(4);
     responseObserver.onError(Status.UNAVAILABLE.asException());
 
-    // Will be on the first retry (1s) of backoff sequence 2.
+    // Will be on the first retry (2s) of backoff sequence 2.
     inOrder.verify(backoffPolicy2).nextBackoffNanos();
     assertEquals(1, fakeClock.numPendingTasks(LRS_RPC_RETRY_TASK_FILTER));
 
     // Fast-forward to a moment before the retry, the time spent in the last try is deducted.
-    fakeClock.forwardNanos(TimeUnit.SECONDS.toNanos(1) - 4 - 1);
+    fakeClock.forwardNanos(TimeUnit.SECONDS.toNanos(2) - 4 - 1);
     verifyNoMoreInteractions(mockLoadReportingService);
     // Then time for retry
     fakeClock.forwardNanos(1);
@@ -368,8 +382,13 @@ public class LoadReportClientTest {
     responseObserver
         .onNext(buildLrsResponse(ImmutableList.of(clusterName), 10));
     fakeClock.forwardNanos(10);
+    ClusterStats expectedStats =
+        stats.toBuilder()
+            .setLoadReportInterval(
+                Durations.add(Durations.fromSeconds(1 + 10 + 2), Durations.fromNanos(10)))
+            .build();
     verify(requestObserver)
-        .onNext(argThat(new LoadStatsRequestMatcher(ImmutableList.of(stats), 10)));
+        .onNext(argThat(new LoadStatsRequestMatcher(Collections.singletonList(expectedStats))));
 
     // Wrapping up
     verify(backoffPolicyProvider, times(2)).get();
@@ -466,9 +485,9 @@ public class LoadReportClientTest {
         UpstreamLocalityStats.newBuilder()
             .setLocality(
                 Locality.newBuilder()
-                    .setRegion("region-foo")
-                    .setZone("zone-bar")
-                    .setSubZone("subzone-baz"))
+                    .setRegion(clusterName + "-region-foo")
+                    .setZone(clusterName + "-zone-bar")
+                    .setSubZone(clusterName + "-subzone-baz"))
             .setTotalRequestsInProgress(callsInProgress)
             .setTotalSuccessfulRequests(callsSucceeded)
             .setTotalErrorRequests(callsFailed)
@@ -491,13 +510,9 @@ public class LoadReportClientTest {
   private static class LoadStatsRequestMatcher implements ArgumentMatcher<LoadStatsRequest> {
     private final Map<String, ClusterStats> expectedStats = new HashMap<>();
 
-    LoadStatsRequestMatcher(Collection<ClusterStats> clusterStats, long expectedIntervalNano) {
+    LoadStatsRequestMatcher(Collection<ClusterStats> clusterStats) {
       for (ClusterStats stats : clusterStats) {
-        ClusterStats statsWithInterval =
-            stats.toBuilder()
-                .setLoadReportInterval(Durations.fromNanos(expectedIntervalNano))
-                .build();
-        expectedStats.put(statsWithInterval.getClusterName(), statsWithInterval);
+        expectedStats.put(stats.getClusterName(), stats);
       }
     }
 
