@@ -123,7 +123,7 @@ public final class StsCredentials extends GoogleCredentials {
     }
 
     if (response.getStatusCode() != HttpStatusCodes.STATUS_CODE_OK) {
-      throw new IOException("Error getting access token " + getStatusString(response));
+      throw new IOException("Error getting access token: " + getStatusString(response));
     }
 
     GenericData responseData = null;

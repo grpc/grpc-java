@@ -177,7 +177,7 @@ public class StsCredentialsTest {
       stsCredentials.refreshAccessToken();
       fail("exception expected");
     } catch (IOException ioe) {
-      assertThat(ioe.getMessage()).isEqualTo("Error getting access token 204 : null");
+      assertThat(ioe.getMessage()).isEqualTo("Error getting access token: 204 : null");
     }
   }
 
