@@ -44,12 +44,11 @@ import java.util.Map;
 
 // TODO(sanjaypujare): replace with the official implementation from google-auth once ready
 /** Implementation of OAuth2 Token Exchange as per https://tools.ietf.org/html/rfc8693. */
-public class StsCredentials extends GoogleCredentials {
+public final class StsCredentials extends GoogleCredentials {
   private static final long serialVersionUID = 6647041424685484932L;
 
   private static final HttpTransportFactory defaultHttpTransportFactory =
       new DefaultHttpTransportFactory();
-  private static final HttpTransport netHttpTransport = new NetHttpTransport();
   private static final String CLOUD_PLATFORM_SCOPE =
       "https://www.googleapis.com/auth/cloud-platform";
   private final String sourceCredentialsFileLocation;
@@ -127,8 +126,12 @@ public class StsCredentials extends GoogleCredentials {
       throw new IOException("Error getting access token " + getStatusString(response));
     }
 
-    GenericData responseData = response.parseAs(GenericData.class);
-    response.disconnect();
+    GenericData responseData = null;
+    try {
+      responseData = response.parseAs(GenericData.class);
+    } finally {
+      response.disconnect();
+    }
 
     String access_token = (String) responseData.get("access_token");
     Date expiryTime = null;  // just in case expired_in value is not present
@@ -155,6 +158,8 @@ public class StsCredentials extends GoogleCredentials {
   }
 
   private static class DefaultHttpTransportFactory implements HttpTransportFactory {
+
+    private static final HttpTransport netHttpTransport = new NetHttpTransport();
 
     @Override
     public HttpTransport create() {
