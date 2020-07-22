@@ -25,8 +25,6 @@ import io.envoyproxy.envoy.api.v2.Cluster.EdsClusterConfig;
 import io.envoyproxy.envoy.api.v2.Cluster.LbPolicy;
 import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment;
 import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy;
-import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
-import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
 import io.envoyproxy.envoy.api.v2.Listener;
 import io.envoyproxy.envoy.api.v2.RouteConfiguration;
 import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
@@ -39,7 +37,6 @@ import io.envoyproxy.envoy.api.v2.core.ConfigSource;
 import io.envoyproxy.envoy.api.v2.core.GrpcService;
 import io.envoyproxy.envoy.api.v2.core.GrpcService.GoogleGrpc;
 import io.envoyproxy.envoy.api.v2.core.HealthStatus;
-import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.api.v2.core.SelfConfigSource;
 import io.envoyproxy.envoy.api.v2.core.SocketAddress;
 import io.envoyproxy.envoy.api.v2.core.TransportSocket;
@@ -48,7 +45,10 @@ import io.envoyproxy.envoy.api.v2.route.Route;
 import io.envoyproxy.envoy.api.v2.route.RouteAction;
 import io.envoyproxy.envoy.api.v2.route.RouteMatch;
 import io.envoyproxy.envoy.api.v2.route.VirtualHost;
+import io.envoyproxy.envoy.config.core.v3.Node;
 import io.envoyproxy.envoy.config.listener.v2.ApiListener;
+import io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest;
+import io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse;
 import io.envoyproxy.envoy.type.FractionalPercent;
 import io.envoyproxy.envoy.type.FractionalPercent.DenominatorType;
 import java.util.List;
@@ -60,13 +60,12 @@ import javax.annotation.Nullable;
 class XdsClientTestHelper {
   static DiscoveryResponse buildDiscoveryResponse(String versionInfo,
       List<Any> resources, String typeUrl, String nonce) {
-    return
-        DiscoveryResponse.newBuilder()
-            .setVersionInfo(versionInfo)
-            .setTypeUrl(typeUrl)
-            .addAllResources(resources)
-            .setNonce(nonce)
-            .build();
+    return DiscoveryResponse.newBuilder()
+        .setVersionInfo(versionInfo)
+        .setTypeUrl(typeUrl)
+        .addAllResources(resources)
+        .setNonce(nonce)
+        .build();
   }
 
   static DiscoveryRequest buildDiscoveryRequest(Node node, String versionInfo,
@@ -76,14 +75,42 @@ class XdsClientTestHelper {
 
   static DiscoveryRequest buildDiscoveryRequest(Node node, String versionInfo,
       List<String> resourceNames, String typeUrl, String nonce) {
-    return
-        DiscoveryRequest.newBuilder()
-            .setVersionInfo(versionInfo)
-            .setNode(node)
-            .setTypeUrl(typeUrl)
-            .addAllResourceNames(resourceNames)
-            .setResponseNonce(nonce)
-            .build();
+    return DiscoveryRequest.newBuilder()
+        .setVersionInfo(versionInfo)
+        .setNode(node)
+        .setTypeUrl(typeUrl)
+        .addAllResourceNames(resourceNames)
+        .setResponseNonce(nonce)
+        .build();
+  }
+
+  static io.envoyproxy.envoy.api.v2.DiscoveryResponse buildDiscoveryResponseV2(String versionInfo,
+      List<Any> resources, String typeUrl, String nonce) {
+    return io.envoyproxy.envoy.api.v2.DiscoveryResponse.newBuilder()
+        .setVersionInfo(versionInfo)
+        .setTypeUrl(typeUrl)
+        .addAllResources(resources)
+        .setNonce(nonce)
+        .build();
+  }
+
+  static io.envoyproxy.envoy.api.v2.DiscoveryRequest buildDiscoveryRequestV2(
+      io.envoyproxy.envoy.api.v2.core.Node node, String versionInfo, String resourceName,
+      String typeUrl, String nonce) {
+    return buildDiscoveryRequestV2(
+        node, versionInfo, ImmutableList.of(resourceName), typeUrl, nonce);
+  }
+
+  static io.envoyproxy.envoy.api.v2.DiscoveryRequest buildDiscoveryRequestV2(
+      io.envoyproxy.envoy.api.v2.core.Node node, String versionInfo, List<String> resourceNames,
+      String typeUrl, String nonce) {
+    return io.envoyproxy.envoy.api.v2.DiscoveryRequest.newBuilder()
+        .setVersionInfo(versionInfo)
+        .setNode(node)
+        .setTypeUrl(typeUrl)
+        .addAllResourceNames(resourceNames)
+        .setResponseNonce(nonce)
+        .build();
   }
 
   static Listener buildListener(String name, com.google.protobuf.Any apiListener) {

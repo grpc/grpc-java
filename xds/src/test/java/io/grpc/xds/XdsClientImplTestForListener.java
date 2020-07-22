@@ -17,7 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
-import static io.grpc.xds.XdsClientTestHelper.buildDiscoveryResponse;
+import static io.grpc.xds.XdsClientTestHelper.buildDiscoveryResponseV2;
 import static io.grpc.xds.XdsClientTestHelper.buildListener;
 import static io.grpc.xds.XdsClientTestHelper.buildRouteConfiguration;
 import static io.grpc.xds.XdsClientTestHelper.buildVirtualHost;
@@ -329,7 +329,7 @@ public class XdsClientImplTestForListener {
                                 "cluster-baz.googleapis.com"))))
                 .build()))));
     DiscoveryResponse response =
-        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000");
+        buildDiscoveryResponseV2("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000");
     responseObserver.onNext(response);
 
     // Client sends an ACK LDS request.
@@ -381,7 +381,7 @@ public class XdsClientImplTestForListener {
             filterChainInbound
         )));
     DiscoveryResponse response =
-        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000");
+        buildDiscoveryResponseV2("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000");
     responseObserver.onNext(response);
 
     // Client sends an ACK LDS request.
@@ -433,7 +433,7 @@ public class XdsClientImplTestForListener {
             filterChainInbound
         )));
     DiscoveryResponse response =
-        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000");
+        buildDiscoveryResponseV2("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000");
     responseObserver.onNext(response);
 
     // Client sends an ACK LDS request.
@@ -508,7 +508,7 @@ public class XdsClientImplTestForListener {
             filterChainInbound
         )));
     DiscoveryResponse response =
-        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000");
+        buildDiscoveryResponseV2("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000");
     responseObserver.onNext(response);
 
     // Client sends an ACK LDS request.
@@ -531,7 +531,7 @@ public class XdsClientImplTestForListener {
             filterChainNewInbound
         )));
     DiscoveryResponse response1 =
-        buildDiscoveryResponse("1", listeners1, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0001");
+        buildDiscoveryResponseV2("1", listeners1, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0001");
     responseObserver.onNext(response1);
 
     // Client sends an ACK LDS request.
@@ -604,7 +604,7 @@ public class XdsClientImplTestForListener {
             filterChainOutbound
         )));
     DiscoveryResponse response =
-        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000");
+        buildDiscoveryResponseV2("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000");
     responseObserver.onNext(response);
 
     // Client sends an ACK LDS request.
@@ -653,7 +653,7 @@ public class XdsClientImplTestForListener {
             filterChainOutbound
         )));
     DiscoveryResponse response =
-        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000");
+        buildDiscoveryResponseV2("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000");
     responseObserver.onNext(response);
 
     // Client sends an ACK LDS request.
@@ -704,7 +704,7 @@ public class XdsClientImplTestForListener {
             filterChainInbound
         )));
     DiscoveryResponse response =
-        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000");
+        buildDiscoveryResponseV2("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000");
     responseObserver.onNext(response);
 
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
@@ -766,7 +766,7 @@ public class XdsClientImplTestForListener {
             XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
 
     // Management server sends back a LDS response.
-    response = buildDiscoveryResponse("1", listeners,
+    response = buildDiscoveryResponseV2("1", listeners,
         XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0001");
     responseObserver.onNext(response);
 
