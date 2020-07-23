@@ -47,14 +47,14 @@ import java.util.Map;
 public final class StsCredentials extends GoogleCredentials {
   private static final long serialVersionUID = 6647041424685484932L;
 
-  private static final HttpTransportFactory defaultHttpTransportFactory =
+  @VisibleForTesting static final HttpTransportFactory defaultHttpTransportFactory =
       new DefaultHttpTransportFactory();
   private static final String CLOUD_PLATFORM_SCOPE =
       "https://www.googleapis.com/auth/cloud-platform";
-  private final String sourceCredentialsFileLocation;
-  private final String identityTokenEndpoint;
-  private final String audience;
-  private transient HttpTransportFactory transportFactory;
+  @VisibleForTesting final String sourceCredentialsFileLocation;
+  @VisibleForTesting final String identityTokenEndpoint;
+  @VisibleForTesting final String audience;
+  @VisibleForTesting transient HttpTransportFactory transportFactory;
 
   private StsCredentials(
       String identityTokenEndpoint,
@@ -65,33 +65,6 @@ public final class StsCredentials extends GoogleCredentials {
     this.audience = audience;
     this.sourceCredentialsFileLocation = sourceCredentialsFileLocation;
     this.transportFactory = transportFactory;
-  }
-
-  /**
-   * Creates an StsCredentials.
-   *
-   * @param identityTokenEndpoint  URL of the token exchange service to use.
-   * @param audience Audience to use in the STS request.
-   * @param sourceCredentialsFileLocation file-system location that contains the
-   *                                      source creds e.g. JWT contents.
-   */
-  public static StsCredentials create(
-      String identityTokenEndpoint, String audience, String sourceCredentialsFileLocation) {
-    return create(
-        identityTokenEndpoint,
-        audience,
-        sourceCredentialsFileLocation,
-        getFromServiceLoader(HttpTransportFactory.class, defaultHttpTransportFactory));
-  }
-
-  @VisibleForTesting
-  static StsCredentials create(
-      String identityTokenEndpoint,
-      String audience,
-      String sourceCredentialsFileLocation,
-      HttpTransportFactory transportFactory) {
-    return new StsCredentials(
-        identityTokenEndpoint, audience, sourceCredentialsFileLocation, transportFactory);
   }
 
   @Override
@@ -155,6 +128,48 @@ public final class StsCredentials extends GoogleCredentials {
   @Override
   public Builder toBuilder() {
     throw new UnsupportedOperationException("toBuilder not supported");
+  }
+
+  /** Factory for creating StsCredentials. */
+  public abstract static class Factory {
+    private static final Factory DEFAULT_INSTANCE =
+        new Factory() {
+
+          @Override
+          public StsCredentials create(
+              String identityTokenEndpoint, String audience, String sourceCredentialsFileLocation) {
+            return create(
+                identityTokenEndpoint,
+                audience,
+                sourceCredentialsFileLocation,
+                getFromServiceLoader(HttpTransportFactory.class, defaultHttpTransportFactory));
+          }
+        };
+
+    public static Factory getInstance() {
+      return DEFAULT_INSTANCE;
+    }
+
+    /**
+     * Creates an StsCredentials.
+     *
+     * @param identityTokenEndpoint  URL of the token exchange service to use.
+     * @param audience Audience to use in the STS request.
+     * @param sourceCredentialsFileLocation file-system location that contains the
+     *                                      source creds e.g. JWT contents.
+     */
+    public abstract StsCredentials create(
+            String identityTokenEndpoint, String audience, String sourceCredentialsFileLocation);
+
+    @VisibleForTesting
+    static StsCredentials create(
+            String identityTokenEndpoint,
+            String audience,
+            String sourceCredentialsFileLocation,
+            HttpTransportFactory transportFactory) {
+      return new StsCredentials(
+              identityTokenEndpoint, audience, sourceCredentialsFileLocation, transportFactory);
+    }
   }
 
   private static class DefaultHttpTransportFactory implements HttpTransportFactory {

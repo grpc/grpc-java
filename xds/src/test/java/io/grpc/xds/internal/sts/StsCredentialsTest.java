@@ -83,7 +83,7 @@ public class StsCredentialsTest {
     HttpTransportFactory httpTransportFactory = mock(HttpTransportFactory.class);
     when(httpTransportFactory.create()).thenReturn(httpTransport);
     StsCredentials stsCredentials =
-        StsCredentials.create(
+        StsCredentials.Factory.create(
             STS_URL, AUDIENCE_VALUE, tempTokenFile.getAbsolutePath(), httpTransportFactory);
     AccessToken token = stsCredentials.refreshAccessToken();
     assertThat(token).isNotNull();
@@ -115,7 +115,7 @@ public class StsCredentialsTest {
     HttpTransportFactory httpTransportFactory = mock(HttpTransportFactory.class);
     when(httpTransportFactory.create()).thenReturn(httpTransport);
     StsCredentials stsCredentials =
-        StsCredentials.create(
+        StsCredentials.Factory.create(
             STS_URL, AUDIENCE_VALUE, tempTokenFile.getAbsolutePath(), httpTransportFactory);
     CallCredentials callCreds = MoreCallCredentials.from(stsCredentials);
     CallCredentials.RequestInfo requestInfo = mock(CallCredentials.RequestInfo.class);
@@ -150,7 +150,7 @@ public class StsCredentialsTest {
     HttpTransportFactory httpTransportFactory = mock(HttpTransportFactory.class);
     when(httpTransportFactory.create()).thenReturn(httpTransport);
     StsCredentials stsCredentials =
-            StsCredentials.create(
+            StsCredentials.Factory.create(
                     STS_URL, AUDIENCE_VALUE, tempTokenFile.getAbsolutePath(), httpTransportFactory);
     try {
       stsCredentials.refreshAccessToken();
@@ -171,7 +171,7 @@ public class StsCredentialsTest {
     HttpTransportFactory httpTransportFactory = mock(HttpTransportFactory.class);
     when(httpTransportFactory.create()).thenReturn(httpTransport);
     StsCredentials stsCredentials =
-            StsCredentials.create(
+            StsCredentials.Factory.create(
                     STS_URL, AUDIENCE_VALUE, tempTokenFile.getAbsolutePath(), httpTransportFactory);
     try {
       stsCredentials.refreshAccessToken();
@@ -185,7 +185,7 @@ public class StsCredentialsTest {
   public void toBuilder_unsupportedException() {
     HttpTransportFactory httpTransportFactory = mock(HttpTransportFactory.class);
     StsCredentials stsCredentials =
-            StsCredentials.create(
+            StsCredentials.Factory.create(
                     STS_URL, AUDIENCE_VALUE, tempTokenFile.getAbsolutePath(), httpTransportFactory);
     try {
       stsCredentials.toBuilder();
@@ -193,6 +193,13 @@ public class StsCredentialsTest {
     } catch (UnsupportedOperationException uoe) {
       assertThat(uoe.getMessage()).isEqualTo("toBuilder not supported");
     }
+  }
+
+  @Test
+  public void defaultFactory() {
+    StsCredentials stsCreds = StsCredentials.Factory.getInstance()
+        .create(STS_URL, AUDIENCE_VALUE, tempTokenFile.getAbsolutePath());
+    assertThat(stsCreds.transportFactory).isEqualTo(StsCredentials.defaultHttpTransportFactory);
   }
 
   private static final String ACCESS_TOKEN = "eyJhbGciOiJSU";
