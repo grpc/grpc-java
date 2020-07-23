@@ -23,11 +23,13 @@ import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.Descriptors.Descriptor;
 import io.envoyproxy.envoy.config.rbac.v2.Policy;
 import io.envoyproxy.envoy.config.rbac.v2.RBAC;
+import io.envoyproxy.envoy.config.rbac.v2.RBAC.Action;
 import io.grpc.xds.internal.rbac.engine.cel.Activation;
 import io.grpc.xds.internal.rbac.engine.cel.DefaultDispatcher;
 import io.grpc.xds.internal.rbac.engine.cel.DefaultInterpreter;
 import io.grpc.xds.internal.rbac.engine.cel.DescriptorMessageProvider;
 import io.grpc.xds.internal.rbac.engine.cel.Dispatcher;
+import io.grpc.xds.internal.rbac.engine.cel.IncompleteData;
 import io.grpc.xds.internal.rbac.engine.cel.Interpreter;
 import io.grpc.xds.internal.rbac.engine.cel.InterpreterException;
 import io.grpc.xds.internal.rbac.engine.cel.RuntimeTypeProvider;
@@ -35,6 +37,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * CEL Evaluation Engine is part of the authorization framework in gRPC.
@@ -52,21 +56,23 @@ import java.util.Map;
  * </pre>
  */
 public class AuthorizationEngine<ReqT, RespT> {
+  private static final Logger log = Logger.getLogger(AuthorizationEngine.class.getName());
+  
   /**
    * RbacEngine is an inner class that holds RBAC action 
    * and conditions of RBAC policy.
    */
   @SuppressWarnings("ClassCanBeStatic")
   private class RbacEngine {
-    private final RBAC.Action action;
+    private final Action action;
     private final ImmutableMap<String, Expr> conditions;
 
-    public RbacEngine(RBAC.Action action, ImmutableMap<String, Expr> conditions) {
+    public RbacEngine(Action action, ImmutableMap<String, Expr> conditions) {
       this.action = action;
       this.conditions = conditions;
     }
   }
-  
+
   private final List<RbacEngine> rbacEngines;
 
   /**
@@ -82,8 +88,8 @@ public class AuthorizationEngine<ReqT, RespT> {
       throw new IllegalArgumentException(
         "Invalid RBAC list size, must provide either one RBAC or two RBACs. ");
     } 
-    if (rbacPolicies.size() == 2 && (rbacPolicies.get(0).getAction() != RBAC.Action.DENY 
-        || rbacPolicies.get(1).getAction() != RBAC.Action.ALLOW)) {
+    if (rbacPolicies.size() == 2 && (rbacPolicies.get(0).getAction() != Action.DENY 
+        || rbacPolicies.get(1).getAction() != Action.ALLOW)) {
       throw new IllegalArgumentException( "Invalid RBAC list, " 
           + "must provide a RBAC with DENY action followed by a RBAC with ALLOW action. ");
     }
@@ -112,8 +118,8 @@ public class AuthorizationEngine<ReqT, RespT> {
       throw new IllegalArgumentException(
         "Invalid RBAC list size, must provide either one RBAC or two RBACs. ");
     } 
-    if (this.rbacEngines.size() == 2 && (this.rbacEngines.get(0).action != RBAC.Action.DENY 
-        || this.rbacEngines.get(1).action != RBAC.Action.ALLOW)) {
+    if (this.rbacEngines.size() == 2 && (this.rbacEngines.get(0).action != Action.DENY 
+        || this.rbacEngines.get(1).action != Action.ALLOW)) {
       throw new IllegalArgumentException( "Invalid RBAC list, " 
           + "must provide a RBAC with DENY action followed by a RBAC with ALLOW action. ");
     }
@@ -128,7 +134,7 @@ public class AuthorizationEngine<ReqT, RespT> {
       for (Map.Entry<String, Expr> condition : rbacEngine.conditions.entrySet()) {
         try {
           if (matches(condition.getValue(), activation)) {
-            authorizationDecision = rbacEngine.action == RBAC.Action.ALLOW 
+            authorizationDecision = rbacEngine.action == Action.ALLOW 
                 ? AuthorizationDecision.Decision.ALLOW : AuthorizationDecision.Decision.DENY;
             matchingPolicyNames.add(condition.getKey());
           }
@@ -145,7 +151,7 @@ public class AuthorizationEngine<ReqT, RespT> {
       }
     }
     // No RBAC conditions matched and didn't find unknown conditions.
-    if (this.rbacEngines.size() == 1 && this.rbacEngines.get(0).action == RBAC.Action.DENY) {
+    if (this.rbacEngines.size() == 1 && this.rbacEngines.get(0).action == Action.DENY) {
       return new AuthorizationDecision(
           AuthorizationDecision.Decision.ALLOW, new ArrayList<String>());
     }
@@ -160,9 +166,20 @@ public class AuthorizationEngine<ReqT, RespT> {
     Dispatcher dispatcher = DefaultDispatcher.create();
     Interpreter interpreter = new DefaultInterpreter(messageProvider, dispatcher);
     // Parse the generated result object to a boolean variable.
-    Object result = interpreter.createInterpretable(condition).eval(activation);
-    if (result instanceof Boolean) {
-      return Boolean.valueOf(result.toString());
+    try {
+      Object result = interpreter.createInterpretable(condition).eval(activation);
+      if (result instanceof Boolean) {
+        return Boolean.valueOf(result.toString());
+      }
+      // Throw an InterpreterException if there are missing Envoy Attributes.
+      if (result instanceof IncompleteData) {
+        throw new InterpreterException.Builder("Incomplete Envoy Attributes to be evaluated.")
+            .build(); 
+      }
+    } catch (InterpreterException e) {
+      // If any InterpreterExceptions are catched, throw it and log the error.
+      log.log(Level.WARNING, e.toString(), e);
+      throw e;
     }
     return false;
   }

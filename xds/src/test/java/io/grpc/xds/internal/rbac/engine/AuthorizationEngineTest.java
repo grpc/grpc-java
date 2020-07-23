@@ -68,7 +68,7 @@ public class AuthorizationEngineTest {
   @Test
   public void failToCreateEngineIfRbacPairOfAllowAllow() {
     thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage( "Invalid RBAC list, " 
+    thrown.expectMessage("Invalid RBAC list, " 
         + "must provide a RBAC with DENY action followed by a RBAC with ALLOW action. ");
     List<RBAC> rbacList = new ArrayList<>(Arrays.asList(new RBAC[] {rbacAllow, rbacAllow}));
     engine = new AuthorizationEngine<>(ImmutableList.copyOf(rbacList));
@@ -78,7 +78,7 @@ public class AuthorizationEngineTest {
   @Test
   public void failToCreateEngineIfRbacPairOfAllowDeny() {
     thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage( "Invalid RBAC list, " 
+    thrown.expectMessage("Invalid RBAC list, " 
         + "must provide a RBAC with DENY action followed by a RBAC with ALLOW action. ");
     List<RBAC> rbacList = new ArrayList<>(Arrays.asList(new RBAC[] {rbacAllow, rbacDeny}));
     engine = new AuthorizationEngine<>(ImmutableList.copyOf(rbacList));
@@ -88,7 +88,7 @@ public class AuthorizationEngineTest {
   @Test
   public void failToCreateEngineIfRbacPairOfDenyDeny() {
     thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage( "Invalid RBAC list, " 
+    thrown.expectMessage("Invalid RBAC list, " 
         + "must provide a RBAC with DENY action followed by a RBAC with ALLOW action. ");
     List<RBAC> rbacList = new ArrayList<>(Arrays.asList(new RBAC[] {rbacDeny, rbacDeny}));
     engine = new AuthorizationEngine<>(ImmutableList.copyOf(rbacList));
