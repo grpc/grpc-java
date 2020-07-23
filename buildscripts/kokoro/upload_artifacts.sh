@@ -73,7 +73,7 @@ fi
 VERSION="$(cat $LOCAL_OTHER_ARTIFACTS/version)"
 EXAMPLE_HOSTNAME_ID="$(cat "$LOCAL_OTHER_ARTIFACTS/example-hostname.id")"
 docker load --input "$LOCAL_OTHER_ARTIFACTS/example-hostname.tar"
-LATEST_VERSION="$((echo "v$VERSION"; git ls-remote -t https://github.com/grpc/grpc-java.git | cut -f 2 | sed s#refs/tags/##) | sort -V | tail -n 1)"
+LATEST_VERSION="$((echo "v$VERSION"; git ls-remote -t --refs https://github.com/grpc/grpc-java.git | cut -f 2 | sed s#refs/tags/##) | sort -V | tail -n 1)"
 
 
 STAGING_REPO=a93898609ef848
@@ -81,7 +81,7 @@ STAGING_REPO=a93898609ef848
 
 docker tag "$EXAMPLE_HOSTNAME_ID" "grpc/java-example-hostname:${VERSION}"
 docker push "grpc/java-example-hostname:${VERSION}"
-if [[ "$VERSION" = "$LATEST_VERSION" ]]; then
+if [[ "v$VERSION" = "$LATEST_VERSION" ]]; then
   docker tag "$EXAMPLE_HOSTNAME_ID" grpc/java-example-hostname:latest
   docker push grpc/java-example-hostname:latest
 fi
