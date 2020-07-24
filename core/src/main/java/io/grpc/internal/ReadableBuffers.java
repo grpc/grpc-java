@@ -19,6 +19,7 @@ package io.grpc.internal;
 import static com.google.common.base.Charsets.UTF_8;
 
 import com.google.common.base.Preconditions;
+import io.grpc.ByteBufferReadable;
 import io.grpc.KnownLength;
 import java.io.IOException;
 import java.io.InputStream;
@@ -26,6 +27,7 @@ import java.io.OutputStream;
 import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
+import javax.annotation.Nullable;
 
 /**
  * Utility methods for creating {@link ReadableBuffer} instances.
@@ -103,7 +105,11 @@ public final class ReadableBuffers {
    * @param owner if {@code true}, the returned stream will close the buffer when closed.
    */
   public static InputStream openStream(ReadableBuffer buffer, boolean owner) {
-    return new BufferInputStream(owner ? buffer : ignoreClose(buffer));
+    if (!owner) {
+      buffer = ignoreClose(buffer);
+    }
+    return buffer.shouldUseByteBuffer()
+        ? new ByteBufferReadableInputStream(buffer) : new BufferInputStream(buffer);
   }
 
   /**
@@ -297,7 +303,7 @@ public final class ReadableBuffers {
   /**
    * An {@link InputStream} that is backed by a {@link ReadableBuffer}.
    */
-  private static final class BufferInputStream extends InputStream implements KnownLength {
+  private static class BufferInputStream extends InputStream implements KnownLength {
     final ReadableBuffer buffer;
 
     public BufferInputStream(ReadableBuffer buffer) {
@@ -333,6 +339,26 @@ public final class ReadableBuffers {
     @Override
     public void close() throws IOException {
       buffer.close();
+    }
+  }
+
+  private static final class ByteBufferReadableInputStream extends BufferInputStream
+      implements ByteBufferReadable {
+
+    ByteBufferReadableInputStream(ReadableBuffer buffer) {
+      super(buffer);
+    }
+
+    @Nullable
+    @Override
+    public Iterable<ByteBuffer> readByteBuffers(int length) {
+      if (buffer.readableBytes() == 0) {
+        // EOF.
+        return null;
+      }
+
+      length = Math.min(buffer.readableBytes(), length);
+      return buffer.readByteBuffers(length);
     }
   }
 
