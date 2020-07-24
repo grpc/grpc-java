@@ -24,7 +24,6 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Iterables;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.MessageOrBuilder;
@@ -110,10 +109,6 @@ final class XdsClientImpl extends XdsClient {
       "type.googleapis.com/envoy.api.v2.ClusterLoadAssignment";
   private static final String ADS_TYPE_URL_EDS =
       "type.googleapis.com/envoy.config.endpoint.v3.ClusterLoadAssignment";
-
-  // Mutable for testing.
-  static boolean enableExperimentalRouting = Boolean.parseBoolean(
-      System.getenv("GRPC_XDS_EXPERIMENTAL_ROUTING"));
 
   private final MessagePrinter respPrinter = new MessagePrinter();
 
@@ -888,16 +883,6 @@ final class XdsClientImpl extends XdsClient {
     if (routes.isEmpty()) {
       throw new InvalidProtoDataException(
           "Virtual host [" + virtualHost.getName() + "] contains no usable route");
-    }
-
-    if (!enableExperimentalRouting) {
-      EnvoyProtoData.Route defaultRoute = Iterables.getLast(routes);
-      if (!defaultRoute.isDefaultRoute()) {
-        throw new InvalidProtoDataException(
-            "Virtual host [" + virtualHost.getName()
-                + "] contains non-default route as the last route");
-      }
-      return Collections.singletonList(defaultRoute);
     }
     return Collections.unmodifiableList(routes);
   }
