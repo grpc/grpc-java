@@ -41,7 +41,6 @@ import io.grpc.Context.CancellationListener;
 import io.grpc.Deadline;
 import io.grpc.DecompressorRegistry;
 import io.grpc.InternalDecompressorRegistry;
-import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
@@ -84,12 +83,11 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   private final Context context;
   private final boolean unaryRequest;
   private final CallOptions callOptions;
-  private final boolean retryEnabled;
   private ClientStream stream;
   private volatile boolean cancelListenersShouldBeRemoved;
   private boolean cancelCalled;
   private boolean halfCloseCalled;
-  private final ClientTransportProvider clientTransportProvider;
+  private final ClientStreamProvider clientStreamProvider;
   private ContextCancellationListener cancellationListener;
   private final ScheduledExecutorService deadlineCancellationExecutor;
   private boolean fullStreamDecompression;
@@ -101,10 +99,9 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
   ClientCallImpl(
       MethodDescriptor<ReqT, RespT> method, Executor executor, CallOptions callOptions,
-      ClientTransportProvider clientTransportProvider,
+      ClientStreamProvider clientStreamProvider,
       ScheduledExecutorService deadlineCancellationExecutor,
-      CallTracer channelCallsTracer,
-      boolean retryEnabled) {
+      CallTracer channelCallsTracer) {
     this.method = method;
     // TODO(carl-mastrangelo): consider moving this construction to ManagedChannelImpl.
     this.tag = PerfMark.createTag(method.getFullMethodName(), System.identityHashCode(this));
@@ -124,9 +121,8 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     this.unaryRequest = method.getType() == MethodType.UNARY
         || method.getType() == MethodType.SERVER_STREAMING;
     this.callOptions = callOptions;
-    this.clientTransportProvider = clientTransportProvider;
+    this.clientStreamProvider = clientStreamProvider;
     this.deadlineCancellationExecutor = deadlineCancellationExecutor;
-    this.retryEnabled = retryEnabled;
     PerfMark.event("ClientCall.<init>", tag);
   }
 
@@ -149,23 +145,14 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   }
 
   /**
-   * Provider of {@link ClientTransport}s.
+   * Provider of {@link ClientStream}s.
    */
-  // TODO(zdapeng): replace the two APIs with a single API: newStream()
-  interface ClientTransportProvider {
-    /**
-     * Returns a transport for a new call.
-     *
-     * @param args object containing call arguments.
-     */
-    ClientTransport get(PickSubchannelArgs args);
-
-    <ReqT> ClientStream newRetriableStream(
-        MethodDescriptor<ReqT, ?> method,
+  interface ClientStreamProvider {
+    ClientStream newStream(
+        MethodDescriptor<?, ?> method,
         CallOptions callOptions,
         Metadata headers,
         Context context);
-
   }
 
   ClientCallImpl<ReqT, RespT> setFullStreamDecompression(boolean fullStreamDecompression) {
@@ -252,18 +239,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     if (!deadlineExceeded) {
       logIfContextNarrowedTimeout(
           effectiveDeadline, context.getDeadline(), callOptions.getDeadline());
-      if (retryEnabled) {
-        stream = clientTransportProvider.newRetriableStream(method, callOptions, headers, context);
-      } else {
-        ClientTransport transport = clientTransportProvider.get(
-            new PickSubchannelArgsImpl(method, headers, callOptions));
-        Context origContext = context.attach();
-        try {
-          stream = transport.newStream(method, headers, callOptions);
-        } finally {
-          context.detach(origContext);
-        }
-      }
+      stream = clientStreamProvider.newStream(method, callOptions, headers, context);
     } else {
       stream = new FailingClientStream(
           DEADLINE_EXCEEDED.withDescription(
