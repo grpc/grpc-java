@@ -24,6 +24,7 @@ import com.google.protobuf.ExtensionRegistryLite;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.MessageLite;
 import com.google.protobuf.Parser;
+import io.grpc.ByteBufferReadable;
 import io.grpc.ExperimentalApi;
 import io.grpc.KnownLength;
 import io.grpc.Metadata;
@@ -173,7 +174,15 @@ public final class ProtoLiteUtils {
       try {
         if (stream instanceof KnownLength) {
           int size = stream.available();
-          if (size > 0 && size <= DEFAULT_MAX_MESSAGE_SIZE) {
+          if (size <= 0) {
+            return defaultInstance;
+          }
+          // TODO(chengyuanzhang): we may still want to go with the byte array approach for small
+          //  messages.
+          if (stream instanceof ByteBufferReadable) {
+            cis = CodedInputStream.newInstance(
+                ((ByteBufferReadable) stream).readByteBuffers(size));
+          } else if (size < DEFAULT_MAX_MESSAGE_SIZE) {
             Reference<byte[]> ref;
             // buf should not be used after this method has returned.
             byte[] buf;
@@ -197,8 +206,6 @@ public final class ProtoLiteUtils {
               throw new RuntimeException("size inaccurate: " + size + " != " + position);
             }
             cis = CodedInputStream.newInstance(buf, 0, size);
-          } else if (size == 0) {
-            return defaultInstance;
           }
         }
       } catch (IOException e) {
