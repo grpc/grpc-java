@@ -20,6 +20,7 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
+import java.util.List;
 
 /**
  * Interface for an abstract byte buffer. Buffers are intended to be a read-only, except for the
@@ -101,6 +102,22 @@ public interface ReadableBuffer extends Closeable {
    * @throws IndexOutOfBoundsException if required bytes are not readable
    */
   ReadableBuffer readBytes(int length);
+
+  /**
+   * Indicates whether or not this buffer supports {@link #readByteBuffers} operation that returns
+   * buffer's content as {@link ByteBuffer}s without making an extra copy.
+   */
+  boolean shouldUseByteBuffer();
+
+  /**
+   * Reads {@code length} bytes as {@link ByteBuffer}s. This is an optional method, so callers
+   * should first check {@link #shouldUseByteBuffer}.
+   *
+   * @param length the total number of bytes to contain in the returned {@link ByteBuffer}s.
+   * @throws UnsupportedOperationException the buffer does not support this method
+   * @throws IndexOutOfBoundsException if required bytes are not readable
+   */
+  List<ByteBuffer> readByteBuffers(int length);
 
   /**
    * Indicates whether or not this buffer exposes a backing array.

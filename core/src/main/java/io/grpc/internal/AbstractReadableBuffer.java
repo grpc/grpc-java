@@ -16,6 +16,9 @@
 
 package io.grpc.internal;
 
+import java.nio.ByteBuffer;
+import java.util.List;
+
 /**
  * Abstract base class for {@link ReadableBuffer} implementations.
  */
@@ -28,6 +31,16 @@ public abstract class AbstractReadableBuffer implements ReadableBuffer {
     int b3 = readUnsignedByte();
     int b4 = readUnsignedByte();
     return (b1 << 24) | (b2 << 16) | (b3 << 8) | b4;
+  }
+
+  @Override
+  public boolean shouldUseByteBuffer() {
+    return false;
+  }
+
+  @Override
+  public List<ByteBuffer> readByteBuffers(int length) {
+    throw new UnsupportedOperationException();
   }
 
   @Override

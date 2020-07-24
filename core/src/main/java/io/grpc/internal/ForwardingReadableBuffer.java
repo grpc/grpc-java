@@ -21,6 +21,7 @@ import com.google.common.base.Preconditions;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
+import java.util.List;
 
 /**
  * Base class for a wrapper around another {@link ReadableBuffer}.
@@ -79,6 +80,16 @@ public abstract class ForwardingReadableBuffer implements ReadableBuffer {
   @Override
   public ReadableBuffer readBytes(int length) {
     return buf.readBytes(length);
+  }
+
+  @Override
+  public boolean shouldUseByteBuffer() {
+    return buf.shouldUseByteBuffer();
+  }
+
+  @Override
+  public List<ByteBuffer> readByteBuffers(int length) {
+    return buf.readByteBuffers(length);
   }
 
   @Override
