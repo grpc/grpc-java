@@ -22,6 +22,8 @@ import io.netty.buffer.ByteBuf;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
+import java.util.List;
 
 /**
  * A {@link java.nio.Buffer} implementation that is backed by a Netty {@link ByteBuf}. This class
@@ -77,6 +79,21 @@ class NettyReadableBuffer extends AbstractReadableBuffer {
   @Override
   public NettyReadableBuffer readBytes(int length) {
     return new NettyReadableBuffer(buffer.readRetainedSlice(length));
+  }
+
+  @Override
+  public boolean shouldUseByteBuffer() {
+    return buffer.nioBufferCount() > 0;
+  }
+
+  @Override
+  public List<ByteBuffer> readByteBuffers(int length) {
+    if (buffer.readableBytes() < length) {
+      throw new IndexOutOfBoundsException();
+    }
+    List<ByteBuffer> res = Arrays.asList(buffer.nioBuffers(buffer.readerIndex(), length));
+    buffer.skipBytes(length);
+    return res;
   }
 
   @Override
