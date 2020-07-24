@@ -21,6 +21,8 @@ import java.io.OutputStream;
 import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Queue;
 
 /**
@@ -57,6 +59,35 @@ public class CompositeReadableBuffer extends AbstractReadableBuffer {
     readableBytes += compositeBuffer.readableBytes;
     compositeBuffer.readableBytes = 0;
     compositeBuffer.close();
+  }
+
+  @Override
+  public boolean shouldUseByteBuffer() {
+    for (ReadableBuffer buf : buffers) {
+      if (!buf.shouldUseByteBuffer()) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  @Override
+  public List<ByteBuffer> readByteBuffers(int length) {
+    checkReadable(length);
+    readableBytes -= length;
+
+    List<ByteBuffer> res = new ArrayList<>();
+    while (length > 0) {
+      ReadableBuffer buffer = buffers.peek();
+      int readLength = length;
+      if (buffer.readableBytes() <= length) {
+        readLength = buffer.readableBytes();
+        buffers.poll();
+      }
+      res.addAll(buffer.readByteBuffers(readLength));
+      length -= readLength;
+    }
+    return res;
   }
 
   @Override
