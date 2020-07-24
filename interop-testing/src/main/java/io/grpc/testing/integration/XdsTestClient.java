@@ -275,7 +275,7 @@ public final class XdsTestClient {
           headersToSend = new Metadata();
         }
         ManagedChannel channel = channels.get((int) (requestId % channels.size()));
-        TestServiceGrpc.TestServiceBlockingStub stub = TestServiceGrpc.newBlockingStub(channel);
+        TestServiceGrpc.TestServiceStub stub = TestServiceGrpc.newStub(channel);
         final AtomicReference<ClientCall<?, ?>> clientCallRef = new AtomicReference<>();
         final AtomicReference<String> hostnameRef = new AtomicReference<>();
         stub =
@@ -308,27 +308,65 @@ public final class XdsTestClient {
                     });
 
         if (rpcType == RpcType.EMPTY_CALL) {
-          stub.emptyCall(EmptyProtos.Empty.getDefaultInstance());
+          stub.emptyCall(
+              EmptyProtos.Empty.getDefaultInstance(),
+              new StreamObserver<EmptyProtos.Empty>() {
+                @Override
+                public void onCompleted() {
+                  notifyWatchers(
+                      savedWatchers, rpcType.toCamelCase(), requestId, hostnameRef.get());
+                }
+
+                @Override
+                public void onError(Throwable t) {
+                  notifyWatchers(
+                      savedWatchers, rpcType.toCamelCase(), requestId, hostnameRef.get());
+                }
+
+                @Override
+                public void onNext(EmptyProtos.Empty response) {}
+              });
         } else if (rpcType == RpcType.UNARY_CALL) {
           SimpleRequest request = SimpleRequest.newBuilder().setFillServerId(true).build();
-          SimpleResponse response = stub.unaryCall(request);
-          // TODO(ericgribkoff) Currently some test environments cannot access the stats RPC
-          // service and rely on parsing stdout.
-          if (printResponse) {
-            System.out.println(
-                "Greeting: Hello world, this is "
-                    + response.getHostname()
-                    + ", from "
-                    + clientCallRef.get().getAttributes().get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR));
-          }
-          // Use the hostname from the response if not present in the metadata.
-          // TODO(ericgribkoff) Delete when server is deployed that sets metadata value.
-          if (hostnameRef.get() == null) {
-            hostnameRef.set(response.getHostname());
-          }
-        }
-        for (XdsStatsWatcher watcher : savedWatchers) {
-          watcher.rpcCompleted(rpcType.toCamelCase(), requestId, hostnameRef.get());
+          stub.unaryCall(
+              request,
+              new StreamObserver<SimpleResponse>() {
+                @Override
+                public void onCompleted() {
+                  notifyWatchers(
+                      savedWatchers, rpcType.toCamelCase(), requestId, hostnameRef.get());
+                }
+
+                @Override
+                public void onError(Throwable t) {
+                  if (printResponse) {
+                    logger.log(Level.WARNING, "Rpc failed: {0}", t);
+                  }
+                  notifyWatchers(
+                      savedWatchers, rpcType.toCamelCase(), requestId, hostnameRef.get());
+                }
+
+                @Override
+                public void onNext(SimpleResponse response) {
+                  // TODO(ericgribkoff) Currently some test environments cannot access the stats RPC
+                  // service and rely on parsing stdout.
+                  if (printResponse) {
+                    System.out.println(
+                        "Greeting: Hello world, this is "
+                            + response.getHostname()
+                            + ", from "
+                            + clientCallRef
+                                .get()
+                                .getAttributes()
+                                .get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR));
+                  }
+                  // Use the hostname from the response if not present in the metadata.
+                  // TODO(ericgribkoff) Delete when server is deployed that sets metadata value.
+                  if (hostnameRef.get() == null) {
+                    hostnameRef.set(response.getHostname());
+                  }
+                }
+              });
         }
       }
     }
@@ -356,6 +394,13 @@ public final class XdsTestClient {
     }
 
     failure.get();
+  }
+
+  private void notifyWatchers(
+      Set<XdsStatsWatcher> watchers, String rpcType, long requestId, String hostname) {
+    for (XdsStatsWatcher watcher : watchers) {
+      watcher.rpcCompleted(rpcType, requestId, hostname);
+    }
   }
 
   private class XdsStatsImpl extends LoadBalancerStatsServiceGrpc.LoadBalancerStatsServiceImplBase {
