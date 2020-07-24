@@ -72,7 +72,7 @@ public final class XdsTestClient {
   private int qps = 1;
   private List<RpcType> rpc = ImmutableList.of(RpcType.UNARY_CALL);
   private Map<RpcType, Metadata> metadata = new HashMap<>();
-  private int rpcTimeoutSec = 2;
+  private int rpcTimeoutSec = 20;
   private String server = "localhost:8080";
   private int statsPort = 8081;
   private Server statsServer;
