@@ -321,6 +321,11 @@ public final class XdsTestClient {
                     + ", from "
                     + clientCallRef.get().getAttributes().get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR));
           }
+          // Use the hostname from the response if not present in the metadata.
+          // TODO(ericgribkoff) Delete when server is deployed that sets metadata value.
+          if (hostnameRef.get() == null) {
+            hostnameRef.set(response.getHostname());
+          }
         }
         for (XdsStatsWatcher watcher : savedWatchers) {
           watcher.rpcCompleted(rpcType.toCamelCase(), requestId, hostnameRef.get());
