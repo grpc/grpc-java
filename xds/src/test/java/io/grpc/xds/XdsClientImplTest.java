@@ -299,7 +299,7 @@ public class XdsClientImplTest {
             fakeClock.getScheduledExecutorService(),
             backoffPolicyProvider,
             fakeClock.getStopwatchSupplier());
-    xdsClient.xdsV3 = true;
+    xdsClient.useXdsV3 = true;
     // Only the connection to management server is established, no RPC request is sent until at
     // least one watcher is registered.
     assertThat(responseObservers).isEmpty();

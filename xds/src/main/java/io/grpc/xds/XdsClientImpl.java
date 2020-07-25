@@ -136,7 +136,7 @@ final class XdsClientImpl extends XdsClient {
   private EnvoyProtoData.Node node;
 
   @VisibleForTesting
-  boolean xdsV3;
+  boolean useXdsV3;
 
   // Cached data for CDS responses, keyed by cluster names.
   // Optimization: cache ClusterUpdate, which contains only information needed by gRPC, instead
@@ -215,7 +215,7 @@ final class XdsClientImpl extends XdsClient {
     this.channel =
         checkNotNull(channelFactory, "channelFactory")
             .createChannel(checkNotNull(servers, "servers"));
-    this.xdsV3 =
+    this.useXdsV3 =
         V3_SUPPORT_ENV_VAR
             && channelFactory.getSelectedServerFeatures() != null
             && channelFactory.getSelectedServerFeatures().contains("xds_v3");
@@ -533,7 +533,7 @@ final class XdsClientImpl extends XdsClient {
    */
   private void startRpcStream() {
     checkState(adsStream == null, "Previous adsStream has not been cleared yet");
-    if (xdsV3) {
+    if (useXdsV3) {
       AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceStub stub =
           AggregatedDiscoveryServiceGrpc.newStub(channel);
       adsStream = new AdsStream(stub);
@@ -1541,7 +1541,7 @@ final class XdsClientImpl extends XdsClient {
       }
       closed = true;
       cleanUp();
-      if (xdsV3) {
+      if (useXdsV3) {
         requestWriter.onError(error);
       } else {
         requestWriterV2.onError(error);
@@ -1560,7 +1560,7 @@ final class XdsClientImpl extends XdsClient {
      * as we need it to find resources in responses.
      */
     private void sendXdsRequest(ResourceType resourceType, Collection<String> resourceNames) {
-      if (xdsV3) {
+      if (useXdsV3) {
         checkState(requestWriter != null, "ADS stream has not been started");
       } else {
         checkState(requestWriterV2 != null, "ADS stream has not been started");
@@ -1570,13 +1570,13 @@ final class XdsClientImpl extends XdsClient {
       String typeUrl;
       switch (resourceType) {
         case LDS:
-          typeUrl = xdsV3 ? ADS_TYPE_URL_LDS : ADS_TYPE_URL_LDS_V2;
+          typeUrl = useXdsV3 ? ADS_TYPE_URL_LDS : ADS_TYPE_URL_LDS_V2;
           version = ldsVersion;
           nonce = ldsRespNonce;
           logger.log(XdsLogLevel.INFO, "Sending LDS request for resources: {0}", resourceNames);
           break;
         case RDS:
-          typeUrl = xdsV3 ? ADS_TYPE_URL_RDS : ADS_TYPE_URL_RDS_V2;
+          typeUrl = useXdsV3 ? ADS_TYPE_URL_RDS : ADS_TYPE_URL_RDS_V2;
           checkArgument(
               resourceNames.size() == 1, "RDS request requesting for more than one resource");
           version = rdsVersion;
@@ -1585,13 +1585,13 @@ final class XdsClientImpl extends XdsClient {
           logger.log(XdsLogLevel.INFO, "Sending RDS request for resources: {0}", resourceNames);
           break;
         case CDS:
-          typeUrl = xdsV3 ? ADS_TYPE_URL_CDS : ADS_TYPE_URL_CDS_V2;
+          typeUrl = useXdsV3 ? ADS_TYPE_URL_CDS : ADS_TYPE_URL_CDS_V2;
           version = cdsVersion;
           nonce = cdsRespNonce;
           logger.log(XdsLogLevel.INFO, "Sending CDS request for resources: {0}", resourceNames);
           break;
         case EDS:
-          typeUrl = xdsV3 ? ADS_TYPE_URL_EDS : ADS_TYPE_URL_EDS_V2;
+          typeUrl = useXdsV3 ? ADS_TYPE_URL_EDS : ADS_TYPE_URL_EDS_V2;
           version = edsVersion;
           nonce = edsRespNonce;
           logger.log(XdsLogLevel.INFO, "Sending EDS request for resources: {0}", resourceNames);
@@ -1599,7 +1599,7 @@ final class XdsClientImpl extends XdsClient {
         default:
           throw new AssertionError("Missing case in enum switch: " + resourceType);
       }
-      if (xdsV3) {
+      if (useXdsV3) {
         DiscoveryRequest request =
             DiscoveryRequest
                 .newBuilder()
@@ -1631,7 +1631,7 @@ final class XdsClientImpl extends XdsClient {
      */
     private void sendAckRequest(ResourceType resourceType, Collection<String> resourceNames,
         String versionInfo) {
-      if (xdsV3) {
+      if (useXdsV3) {
         checkState(requestWriter != null, "ADS stream has not been started");
       } else {
         checkState(requestWriterV2 != null, "ADS stream has not been started");
@@ -1640,29 +1640,29 @@ final class XdsClientImpl extends XdsClient {
       String typeUrl;
       switch (resourceType) {
         case LDS:
-          typeUrl = xdsV3 ? ADS_TYPE_URL_LDS : ADS_TYPE_URL_LDS_V2;
+          typeUrl = useXdsV3 ? ADS_TYPE_URL_LDS : ADS_TYPE_URL_LDS_V2;
           ldsVersion = versionInfo;
           nonce = ldsRespNonce;
           break;
         case RDS:
-          typeUrl = xdsV3 ? ADS_TYPE_URL_RDS : ADS_TYPE_URL_RDS_V2;
+          typeUrl = useXdsV3 ? ADS_TYPE_URL_RDS : ADS_TYPE_URL_RDS_V2;
           rdsVersion = versionInfo;
           nonce = rdsRespNonce;
           break;
         case CDS:
-          typeUrl = xdsV3 ? ADS_TYPE_URL_CDS : ADS_TYPE_URL_CDS_V2;
+          typeUrl = useXdsV3 ? ADS_TYPE_URL_CDS : ADS_TYPE_URL_CDS_V2;
           cdsVersion = versionInfo;
           nonce = cdsRespNonce;
           break;
         case EDS:
-          typeUrl = xdsV3 ? ADS_TYPE_URL_EDS : ADS_TYPE_URL_EDS_V2;
+          typeUrl = useXdsV3 ? ADS_TYPE_URL_EDS : ADS_TYPE_URL_EDS_V2;
           edsVersion = versionInfo;
           nonce = edsRespNonce;
           break;
         default:
           throw new AssertionError("Missing case in enum switch: " + resourceType);
       }
-      if (xdsV3) {
+      if (useXdsV3) {
         DiscoveryRequest request =
             DiscoveryRequest.newBuilder()
                 .setVersionInfo(versionInfo)
@@ -1693,7 +1693,7 @@ final class XdsClientImpl extends XdsClient {
      */
     private void sendNackRequest(ResourceType resourceType, Collection<String> resourceNames,
         String rejectVersion, String message) {
-      if (xdsV3) {
+      if (useXdsV3) {
         checkState(requestWriter != null, "ADS stream has not been started");
       } else {
         checkState(requestWriterV2 != null, "ADS stream has not been started");
@@ -1703,7 +1703,7 @@ final class XdsClientImpl extends XdsClient {
       String typeUrl;
       switch (resourceType) {
         case LDS:
-          typeUrl = xdsV3 ? ADS_TYPE_URL_LDS : ADS_TYPE_URL_LDS_V2;
+          typeUrl = useXdsV3 ? ADS_TYPE_URL_LDS : ADS_TYPE_URL_LDS_V2;
           versionInfo = ldsVersion;
           nonce = ldsRespNonce;
           logger.log(
@@ -1713,7 +1713,7 @@ final class XdsClientImpl extends XdsClient {
               message);
           break;
         case RDS:
-          typeUrl = xdsV3 ? ADS_TYPE_URL_RDS : ADS_TYPE_URL_RDS_V2;
+          typeUrl = useXdsV3 ? ADS_TYPE_URL_RDS : ADS_TYPE_URL_RDS_V2;
           versionInfo = rdsVersion;
           nonce = rdsRespNonce;
           logger.log(
@@ -1723,7 +1723,7 @@ final class XdsClientImpl extends XdsClient {
               message);
           break;
         case CDS:
-          typeUrl = xdsV3 ? ADS_TYPE_URL_CDS : ADS_TYPE_URL_CDS_V2;
+          typeUrl = useXdsV3 ? ADS_TYPE_URL_CDS : ADS_TYPE_URL_CDS_V2;
           versionInfo = cdsVersion;
           nonce = cdsRespNonce;
           logger.log(
@@ -1733,7 +1733,7 @@ final class XdsClientImpl extends XdsClient {
               message);
           break;
         case EDS:
-          typeUrl = xdsV3 ? ADS_TYPE_URL_EDS : ADS_TYPE_URL_EDS_V2;
+          typeUrl = useXdsV3 ? ADS_TYPE_URL_EDS : ADS_TYPE_URL_EDS_V2;
           versionInfo = edsVersion;
           nonce = edsRespNonce;
           logger.log(
@@ -1745,7 +1745,7 @@ final class XdsClientImpl extends XdsClient {
         default:
           throw new AssertionError("Missing case in enum switch: " + resourceType);
       }
-      if (xdsV3) {
+      if (useXdsV3) {
         DiscoveryRequest request =
             DiscoveryRequest.newBuilder()
                 .setVersionInfo(versionInfo)
