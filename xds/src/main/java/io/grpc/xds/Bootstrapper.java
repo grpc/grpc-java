@@ -160,8 +160,7 @@ public abstract class Bootstrapper {
     nodeBuilder.setBuildVersion(buildVersion.toString());
     nodeBuilder.setUserAgentName(buildVersion.getUserAgent());
     nodeBuilder.setUserAgentVersion(buildVersion.getImplementationVersion());
-    nodeBuilder.setClientFeatures(
-        Collections.singletonList(CLIENT_FEATURE_DISABLE_OVERPROVISIONING));
+    nodeBuilder.addClientFeatures(CLIENT_FEATURE_DISABLE_OVERPROVISIONING);
 
     return new BootstrapInfo(servers, nodeBuilder.build());
 

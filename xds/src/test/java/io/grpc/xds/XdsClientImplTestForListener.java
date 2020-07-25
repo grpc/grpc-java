@@ -238,7 +238,7 @@ public class XdsClientImplTestForListener {
     Address listeningAddress = new Address("0.0.0.0", PORT);
     return NODE.toBuilder()
         .setMetadata(newMetadata)
-        .setListeningAddresses(ImmutableList.of(listeningAddress))
+        .addListeningAddresses(listeningAddress)
         .build();
   }
 

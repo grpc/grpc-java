@@ -166,11 +166,11 @@ final class EnvoyProtoData {
       this.cluster = cluster;
       this.metadata = metadata;
       this.locality = locality;
-      this.listeningAddresses = listeningAddresses;
+      this.listeningAddresses = Collections.unmodifiableList(listeningAddresses);
       this.buildVersion = buildVersion;
       this.userAgentName = userAgentName;
       this.userAgentVersion = userAgentVersion;
-      this.clientFeatures = clientFeatures;
+      this.clientFeatures = Collections.unmodifiableList(clientFeatures);
     }
 
     static final class Builder {
@@ -181,11 +181,11 @@ final class EnvoyProtoData {
       private Map<String, ?> metadata;
       @Nullable
       private Locality locality;
-      private List<Address> listeningAddresse = new ArrayList<>();
+      private final List<Address> listeningAddresses = new ArrayList<>();
       private String buildVersion = "";
       private String userAgentName = "";
       private String userAgentVersion;
-      private List<String> clientFeatures = new ArrayList<>();
+      private final List<String> clientFeatures = new ArrayList<>();
 
       private Builder() {
       }
@@ -210,8 +210,8 @@ final class EnvoyProtoData {
         return this;
       }
 
-      Builder setListeningAddresses(List<Address> addresses) {
-        listeningAddresse = checkNotNull(addresses, "addresses");
+      Builder addListeningAddresses(Address address) {
+        listeningAddresses.add(checkNotNull(address, "address"));
         return this;
       }
 
@@ -230,14 +230,14 @@ final class EnvoyProtoData {
         return this;
       }
 
-      Builder setClientFeatures(List<String> clientFeatures) {
-        this.clientFeatures = checkNotNull(clientFeatures, "clientFeatures");
+      Builder addClientFeatures(String clientFeature) {
+        this.clientFeatures.add(checkNotNull(clientFeature, "clientFeature"));
         return this;
       }
 
       Node build() {
         return new Node(
-            id, cluster, metadata, locality, listeningAddresse, buildVersion, userAgentName,
+            id, cluster, metadata, locality, listeningAddresses, buildVersion, userAgentName,
             userAgentVersion, clientFeatures);
       }
     }
@@ -254,7 +254,7 @@ final class EnvoyProtoData {
       if (locality != null) {
         builder.setLocality(locality);
       }
-      builder.setListeningAddresses(listeningAddresses);
+      builder.listeningAddresses.addAll(listeningAddresses);
       return builder;
     }
 
@@ -323,14 +323,14 @@ final class EnvoyProtoData {
       for (io.envoyproxy.envoy.config.core.v3.Address addressProto : listeningAddressesList) {
         listeningAddresses.add(Address.fromEnvoyProtoAddress(addressProto));
       }
-      builder.setListeningAddresses(listeningAddresses);
+      builder.listeningAddresses.addAll(listeningAddresses);
       builder.setUserAgentName(proto.getUserAgentName());
       if (proto
           .getUserAgentVersionTypeCase()
           .equals(UserAgentVersionTypeCase.USER_AGENT_VERSION)) {
         builder.setUserAgentVersion(proto.getUserAgentVersion());
       }
-      builder.setClientFeatures(proto.getClientFeaturesList());
+      builder.clientFeatures.addAll(proto.getClientFeaturesList());
       return builder.build();
     }
 
@@ -351,7 +351,7 @@ final class EnvoyProtoData {
         listeningAddresses.add(Address.fromEnvoyProtoAddressV2(addressProto));
       }
       builder.setBuildVersion(proto.getBuildVersion());
-      builder.setListeningAddresses(listeningAddresses);
+      builder.listeningAddresses.addAll(listeningAddresses);
       builder.setUserAgentName(proto.getUserAgentName());
       if (proto
           .getUserAgentVersionTypeCase()
@@ -359,7 +359,7 @@ final class EnvoyProtoData {
               io.envoyproxy.envoy.api.v2.core.Node.UserAgentVersionTypeCase.USER_AGENT_VERSION)) {
         builder.setUserAgentVersion(proto.getUserAgentVersion());
       }
-      builder.setClientFeatures(proto.getClientFeaturesList());
+      builder.clientFeatures.addAll(proto.getClientFeaturesList());
       return builder.build();
     }
 

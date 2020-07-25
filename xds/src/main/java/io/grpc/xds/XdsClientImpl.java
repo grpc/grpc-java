@@ -481,8 +481,7 @@ final class XdsClientImpl extends XdsClient {
     EnvoyProtoData.Address listeningAddress =
         new EnvoyProtoData.Address("0.0.0.0", port);
     node =
-        node.toBuilder().setMetadata(newMetadata)
-            .setListeningAddresses(Collections.singletonList(listeningAddress)).build();
+        node.toBuilder().setMetadata(newMetadata).addListeningAddresses(listeningAddress).build();
   }
 
   @Override
