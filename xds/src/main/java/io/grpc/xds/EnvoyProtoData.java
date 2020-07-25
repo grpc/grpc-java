@@ -28,6 +28,7 @@ import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
 import com.google.re2j.Pattern;
 import com.google.re2j.PatternSyntaxException;
+import io.envoyproxy.envoy.config.core.v3.Node.UserAgentVersionTypeCase;
 import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.envoyproxy.envoy.type.v3.FractionalPercent.DenominatorType;
 import io.grpc.EquivalentAddressGroup;
@@ -324,7 +325,9 @@ final class EnvoyProtoData {
       }
       builder.setListeningAddresses(listeningAddresses);
       builder.setUserAgentName(proto.getUserAgentName());
-      if (proto.hasUserAgentBuildVersion()) {
+      if (proto
+          .getUserAgentVersionTypeCase()
+          .equals(UserAgentVersionTypeCase.USER_AGENT_VERSION)) {
         builder.setUserAgentVersion(proto.getUserAgentVersion());
       }
       builder.setClientFeatures(proto.getClientFeaturesList());
@@ -350,7 +353,10 @@ final class EnvoyProtoData {
       builder.setBuildVersion(proto.getBuildVersion());
       builder.setListeningAddresses(listeningAddresses);
       builder.setUserAgentName(proto.getUserAgentName());
-      if (proto.hasUserAgentBuildVersion()) {
+      if (proto
+          .getUserAgentVersionTypeCase()
+          .equals(
+              io.envoyproxy.envoy.api.v2.core.Node.UserAgentVersionTypeCase.USER_AGENT_VERSION)) {
         builder.setUserAgentVersion(proto.getUserAgentVersion());
       }
       builder.setClientFeatures(proto.getClientFeaturesList());
