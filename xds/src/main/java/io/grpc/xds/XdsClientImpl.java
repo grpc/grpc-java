@@ -959,8 +959,7 @@ final class XdsClientImpl extends XdsClient {
    * Response data for requested clusters is cached locally, in case of new cluster watchers
    * interested in the same clusters are added later.
    */
-  private void handleCdsResponse(List<Any> resources, String versionInfo, String cdsRespNonce) {
-    adsStream.cdsRespNonce = cdsRespNonce;
+  private void handleCdsResponse(List<Any> resources, String versionInfo) {
     // Unpack Cluster messages.
     List<Cluster> clusters = new ArrayList<>(resources.size());
     List<String> clusterNames = new ArrayList<>(resources.size());
@@ -1455,7 +1454,7 @@ final class XdsClientImpl extends XdsClient {
           logger.log(XdsLogLevel.DEBUG, "Received CDS response:\n{0}", respPrinter.print(response));
         }
         cdsRespNonce = respNonce;
-        handleCdsResponse(resources, versionInfo, cdsRespNonce);
+        handleCdsResponse(resources, versionInfo);
       } else if (typeUrl.equals(ADS_TYPE_URL_EDS_V2) || typeUrl.equals(ADS_TYPE_URL_EDS)) {
         if (logger.isLoggable(XdsLogLevel.DEBUG)) {
           logger.log(XdsLogLevel.DEBUG, "Received EDS response:\n{0}", respPrinter.print(response));
