@@ -1413,6 +1413,20 @@ final class XdsClientImpl extends XdsClient {
       }
     }
 
+    private void sendDiscoveryRequest(EnvoyProtoData.DiscoveryRequest request) {
+      if (useXdsV3) {
+        io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest requestProto =
+            request.toEnvoyProto();
+        requestWriter.onNext(requestProto);
+        logger.log(XdsLogLevel.DEBUG, "Sent ACK request\n{0}", requestProto);
+      } else {
+        io.envoyproxy.envoy.api.v2.DiscoveryRequest requestProto =
+            request.toEnvoyProtoV2();
+        requestWriterV2.onNext(requestProto);
+        logger.log(XdsLogLevel.DEBUG, "Sent ACK request\n{0}", requestProto);
+      }
+    }
+
     private void onDiscoveryResponse(final EnvoyProtoData.DiscoveryResponse response) {
       syncContext.execute(new Runnable() {
         @Override
@@ -1578,30 +1592,16 @@ final class XdsClientImpl extends XdsClient {
         default:
           throw new AssertionError("Missing case in enum switch: " + resourceType);
       }
-      if (useXdsV3) {
-        DiscoveryRequest request =
-            DiscoveryRequest
-                .newBuilder()
-                .setVersionInfo(version)
-                .setNode(node.toEnvoyProtoNode())
-                .addAllResourceNames(resourceNames)
-                .setTypeUrl(typeUrl)
-                .setResponseNonce(nonce)
-                .build();
-        requestWriter.onNext(request);
-        logger.log(XdsLogLevel.DEBUG, "Sent DiscoveryRequest\n{0}", request);
-      } else {
-        io.envoyproxy.envoy.api.v2.DiscoveryRequest request =
-            io.envoyproxy.envoy.api.v2.DiscoveryRequest.newBuilder()
-                .setVersionInfo(version)
-                .setNode(node.toEnvoyProtoNodeV2())
-                .addAllResourceNames(resourceNames)
-                .setTypeUrl(typeUrl)
-                .setResponseNonce(nonce)
-                .build();
-        requestWriterV2.onNext(request);
-        logger.log(XdsLogLevel.DEBUG, "Sent DiscoveryRequest\n{0}", request);
-      }
+      EnvoyProtoData.DiscoveryRequest request =
+          EnvoyProtoData.DiscoveryRequest
+              .newBuilder()
+              .setVersionInfo(version)
+              .setNode(node)
+              .addAllResourceNames(resourceNames)
+              .setTypeUrl(typeUrl)
+              .setResponseNonce(nonce)
+              .build();
+      sendDiscoveryRequest(request);
     }
 
     /**
@@ -1641,29 +1641,16 @@ final class XdsClientImpl extends XdsClient {
         default:
           throw new AssertionError("Missing case in enum switch: " + resourceType);
       }
-      if (useXdsV3) {
-        DiscoveryRequest request =
-            DiscoveryRequest.newBuilder()
-                .setVersionInfo(versionInfo)
-                .setNode(node.toEnvoyProtoNode())
-                .addAllResourceNames(resourceNames)
-                .setTypeUrl(typeUrl)
-                .setResponseNonce(nonce)
-                .build();
-        requestWriter.onNext(request);
-        logger.log(XdsLogLevel.DEBUG, "Sent ACK request\n{0}", request);
-      } else {
-        io.envoyproxy.envoy.api.v2.DiscoveryRequest request =
-            io.envoyproxy.envoy.api.v2.DiscoveryRequest.newBuilder()
-                .setVersionInfo(versionInfo)
-                .setNode(node.toEnvoyProtoNodeV2())
-                .addAllResourceNames(resourceNames)
-                .setTypeUrl(typeUrl)
-                .setResponseNonce(nonce)
-                .build();
-        requestWriterV2.onNext(request);
-        logger.log(XdsLogLevel.DEBUG, "Sent ACK request\n{0}", request);
-      }
+      EnvoyProtoData.DiscoveryRequest request =
+          EnvoyProtoData.DiscoveryRequest
+              .newBuilder()
+              .setVersionInfo(versionInfo)
+              .setNode(node)
+              .addAllResourceNames(resourceNames)
+              .setTypeUrl(typeUrl)
+              .setResponseNonce(nonce)
+              .build();
+      sendDiscoveryRequest(request);
     }
 
     /**
@@ -1724,38 +1711,21 @@ final class XdsClientImpl extends XdsClient {
         default:
           throw new AssertionError("Missing case in enum switch: " + resourceType);
       }
-      if (useXdsV3) {
-        DiscoveryRequest request =
-            DiscoveryRequest.newBuilder()
-                .setVersionInfo(versionInfo)
-                .setNode(node.toEnvoyProtoNode())
-                .addAllResourceNames(resourceNames)
-                .setTypeUrl(typeUrl)
-                .setResponseNonce(nonce)
-                .setErrorDetail(
-                    com.google.rpc.Status.newBuilder()
-                        .setCode(Code.INVALID_ARGUMENT_VALUE)
-                        .setMessage(message))
-                .build();
-        requestWriter.onNext(request);
-        logger.log(XdsLogLevel.DEBUG, "Sent NACK request\n{0}", request);
-      } else {
-        io.envoyproxy.envoy.api.v2.DiscoveryRequest request =
-            io.envoyproxy.envoy.api.v2.DiscoveryRequest
-                .newBuilder()
-                .setVersionInfo(versionInfo)
-                .setNode(node.toEnvoyProtoNodeV2())
-                .addAllResourceNames(resourceNames)
-                .setTypeUrl(typeUrl)
-                .setResponseNonce(nonce)
-                .setErrorDetail(
-                    com.google.rpc.Status.newBuilder()
-                        .setCode(Code.INVALID_ARGUMENT_VALUE)
-                        .setMessage(message))
-                .build();
-        requestWriterV2.onNext(request);
-        logger.log(XdsLogLevel.DEBUG, "Sent NACK request\n{0}", request);
-      }
+      EnvoyProtoData.DiscoveryRequest request =
+          EnvoyProtoData.DiscoveryRequest
+              .newBuilder()
+              .setVersionInfo(versionInfo)
+              .setNode(node)
+              .addAllResourceNames(resourceNames)
+              .setTypeUrl(typeUrl)
+              .setResponseNonce(nonce)
+              .setErrorDetail(
+                  com.google.rpc.Status.newBuilder()
+                      .setCode(Code.INVALID_ARGUMENT_VALUE)
+                      .setMessage(message)
+                      .build())
+              .build();
+      sendDiscoveryRequest(request);
     }
   }
 

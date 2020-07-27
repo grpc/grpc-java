@@ -32,6 +32,7 @@ import com.google.protobuf.Value;
 import com.google.protobuf.util.JsonFormat;
 import com.google.re2j.Pattern;
 import com.google.re2j.PatternSyntaxException;
+import com.google.rpc.Status;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
 import io.envoyproxy.envoy.config.core.v3.Node.UserAgentVersionTypeCase;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
@@ -46,6 +47,7 @@ import io.grpc.xds.RouteMatch.HeaderMatcher;
 import io.grpc.xds.RouteMatch.PathMatcher;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -485,23 +487,23 @@ final class EnvoyProtoData {
       this.rawProto = rawProto;
     }
 
-    public String getTypeUrl() {
+    String getTypeUrl() {
       return typeUrl;
     }
 
-    public List<Any> getResources() {
+    List<Any> getResources() {
       return resources;
     }
 
-    public String getVersionInfo() {
+    String getVersionInfo() {
       return versionInfo;
     }
 
-    public String getNonce() {
+    String getNonce() {
       return nonce;
     }
 
-    public String print(MessagePrinter printer) {
+    String print(MessagePrinter printer) {
       return printer.print(rawProto);
     }
 
@@ -516,6 +518,110 @@ final class EnvoyProtoData {
       return new DiscoveryResponse(
           proto.getTypeUrl(), proto.getResourcesList(), proto.getVersionInfo(), proto.getNonce(),
           proto);
+    }
+  }
+
+  /**
+   * See corresponding Envoy proto message {@link
+   * io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest}.
+   */
+  static final class DiscoveryRequest {
+
+    private final String typeUrl;
+    private final List<String> resourceNames;
+    private final String versionInfo;
+    private final String responseNonce;
+    private final Node node;
+    @Nullable
+    private final Status errorDetail;
+
+    private DiscoveryRequest(
+        String typeUrl, List<String> resourceNames, String versionInfo, String responseNonce,
+        Node node, @Nullable Status errorDetail) {
+      this.typeUrl = typeUrl;
+      this.resourceNames = resourceNames;
+      this.versionInfo = versionInfo;
+      this.responseNonce = responseNonce;
+      this.node = node;
+      this.errorDetail = errorDetail;
+    }
+
+    io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest toEnvoyProto() {
+      io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest.Builder builder =
+          io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest.newBuilder()
+              .setVersionInfo(versionInfo)
+              .setNode(node.toEnvoyProtoNode())
+              .addAllResourceNames(resourceNames)
+              .setTypeUrl(typeUrl)
+              .setResponseNonce(responseNonce);
+      if (errorDetail != null) {
+        builder.setErrorDetail(errorDetail);
+      }
+      return builder.build();
+    }
+
+    io.envoyproxy.envoy.api.v2.DiscoveryRequest toEnvoyProtoV2() {
+      io.envoyproxy.envoy.api.v2.DiscoveryRequest.Builder builder =
+          io.envoyproxy.envoy.api.v2.DiscoveryRequest.newBuilder()
+              .setVersionInfo(versionInfo)
+              .setNode(node.toEnvoyProtoNodeV2())
+              .addAllResourceNames(resourceNames)
+              .setTypeUrl(typeUrl)
+              .setResponseNonce(responseNonce);
+      if (errorDetail != null) {
+        builder.setErrorDetail(errorDetail);
+      }
+      return builder.build();
+    }
+
+    static Builder newBuilder() {
+      return new Builder();
+    }
+
+    static final class Builder {
+      private String typeUrl;
+      private List<String> resourceNames = new ArrayList<>();
+      private String versionInfo;
+      private String responseNonce;
+      private Node node;
+      private Status errorDetail;
+
+      private Builder() {}
+
+      Builder setTypeUrl(String typeUrl) {
+        this.typeUrl = checkNotNull(typeUrl, "typeUrl");
+        return this;
+      }
+
+      Builder addAllResourceNames(Collection<String> resourceNames) {
+        this.resourceNames.addAll(checkNotNull(resourceNames, "resourceNames"));
+        return this;
+      }
+
+      Builder setVersionInfo(String versionInfo) {
+        this.versionInfo = checkNotNull(versionInfo, "versionInfo");
+        return this;
+      }
+
+      Builder setResponseNonce(String responseNonce) {
+        this.responseNonce = checkNotNull(responseNonce, "responseNonce");
+        return this;
+      }
+
+      Builder setNode(Node node) {
+        this.node = checkNotNull(node, "node");
+        return this;
+      }
+
+      Builder setErrorDetail(Status errorDetail) {
+        this.errorDetail = checkNotNull(errorDetail, "errorDetail");
+        return this;
+      }
+
+      DiscoveryRequest build() {
+        return new DiscoveryRequest(
+            typeUrl, resourceNames, versionInfo, responseNonce, node, errorDetail);
+      }
     }
   }
 
