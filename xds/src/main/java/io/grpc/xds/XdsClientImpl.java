@@ -27,8 +27,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
-import com.google.protobuf.MessageOrBuilder;
-import com.google.protobuf.util.JsonFormat;
 import com.google.rpc.Code;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.DiscoveryType;
@@ -59,6 +57,7 @@ import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
+import io.grpc.xds.EnvoyProtoData.MessagePrinter;
 import io.grpc.xds.EnvoyProtoData.StructOrError;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.LoadReportClient.LoadReportCallback;
@@ -554,13 +553,17 @@ final class XdsClientImpl extends XdsClient {
    * Calls handleLdsResponseForListener or handleLdsResponseForConfigUpdate based on which watcher
    * was set.
    */
-  private void handleLdsResponse(List<Any> resources, String versionInfo) {
+  private void handleLdsResponse(EnvoyProtoData.DiscoveryResponse response) {
     checkState((configWatcher != null) != (listenerWatcher != null),
         "No LDS request was ever sent. Management server is doing something wrong");
+    if (logger.isLoggable(XdsLogLevel.DEBUG)) {
+      logger.log(
+          XdsLogLevel.DEBUG, "Received  LDS response:\n{0}", response.print(respPrinter));
+    }
     if (listenerWatcher != null) {
-      handleLdsResponseForListener(resources, versionInfo);
+      handleLdsResponseForListener(response);
     } else {
-      handleLdsResponseForConfigUpdate(resources, versionInfo);
+      handleLdsResponseForConfigUpdate(response);
     }
   }
 
@@ -572,11 +575,11 @@ final class XdsClientImpl extends XdsClient {
    * resolution. The response is NACKed if contains invalid data for gRPC's usage. Otherwise, an
    * ACK request is sent to management server.
    */
-  private void handleLdsResponseForConfigUpdate(
-      List<Any> resources, String versionInfo) {
+  private void handleLdsResponseForConfigUpdate(EnvoyProtoData.DiscoveryResponse response) {
     checkState(ldsResourceName != null && configWatcher != null,
         "LDS request for ConfigWatcher was never sent!");
-
+    List<Any> resources = response.getResources();
+    String versionInfo = response.getVersionInfo();
     // Unpack Listener messages.
     List<Listener> listeners = new ArrayList<>(resources.size());
     List<String> listenerNames = new ArrayList<>(resources.size());
@@ -708,9 +711,11 @@ final class XdsClientImpl extends XdsClient {
     }
   }
 
-  private void handleLdsResponseForListener(List<Any> resources, String versionInfo) {
+  private void handleLdsResponseForListener(EnvoyProtoData.DiscoveryResponse response) {
     checkState(ldsResourceName == null && listenerPort > 0 && listenerWatcher != null,
         "LDS request for ListenerWatcher was never sent!");
+    List<Any> resources = response.getResources();
+    String versionInfo = response.getVersionInfo();
     // Unpack Listener messages.
     Listener requestedListener = null;
     logger.log(XdsLogLevel.DEBUG, "Listener count: {0}", resources.size());
@@ -792,10 +797,14 @@ final class XdsClientImpl extends XdsClient {
    * for the "xds:" URI (with the port, if any, stripped off). The response is NACKed if contains
    * invalid data for gRPC's usage. Otherwise, an ACK request is sent to management server.
    */
-  private void handleRdsResponse(List<Any> resources, String versionInfo) {
+  private void handleRdsResponse(EnvoyProtoData.DiscoveryResponse response) {
     checkState(adsStream.rdsResourceName != null,
         "Never requested for RDS resources, management server is doing something wrong");
-
+    if (logger.isLoggable(XdsLogLevel.DEBUG)) {
+      logger.log(XdsLogLevel.DEBUG, "Received RDS response:\n{0}", response.print(respPrinter));
+    }
+    String versionInfo = response.getVersionInfo();
+    List<Any> resources = response.getResources();
     // Unpack RouteConfiguration messages.
     List<String> routeConfigNames = new ArrayList<>(resources.size());
     RouteConfiguration requestedRouteConfig = null;
@@ -959,7 +968,12 @@ final class XdsClientImpl extends XdsClient {
    * Response data for requested clusters is cached locally, in case of new cluster watchers
    * interested in the same clusters are added later.
    */
-  private void handleCdsResponse(List<Any> resources, String versionInfo) {
+  private void handleCdsResponse(EnvoyProtoData.DiscoveryResponse response) {
+    if (logger.isLoggable(XdsLogLevel.DEBUG)) {
+      logger.log(XdsLogLevel.DEBUG, "Received CDS response:\n{0}", response.print(respPrinter));
+    }
+    String versionInfo = response.getVersionInfo();
+    List<Any> resources = response.getResources();
     // Unpack Cluster messages.
     List<Cluster> clusters = new ArrayList<>(resources.size());
     List<String> clusterNames = new ArrayList<>(resources.size());
@@ -1132,7 +1146,12 @@ final class XdsClientImpl extends XdsClient {
    * cached locally, in case of new endpoint watchers interested in the same clusters
    * are added later.
    */
-  private void handleEdsResponse(List<Any> resources, String versionInfo) {
+  private void handleEdsResponse(EnvoyProtoData.DiscoveryResponse response) {
+    if (logger.isLoggable(XdsLogLevel.DEBUG)) {
+      logger.log(XdsLogLevel.DEBUG, "Received EDS response:\n{0}", response.print(respPrinter));
+    }
+    String versionInfo = response.getVersionInfo();
+    List<Any> resources = response.getResources();
     // Unpack ClusterLoadAssignment messages.
     List<ClusterLoadAssignment> clusterLoadAssignments = new ArrayList<>(resources.size());
     List<String> claNames = new ArrayList<>(resources.size());
@@ -1357,7 +1376,7 @@ final class XdsClientImpl extends XdsClient {
         StreamObserver<DiscoveryResponse> responseReader = new StreamObserver<DiscoveryResponse>() {
           @Override
           public void onNext(DiscoveryResponse value) {
-            AdsStream.this.onNext(value);
+            onDiscoveryResponse(EnvoyProtoData.DiscoveryResponse.fromEnvoyProto(value));
           }
 
           @Override
@@ -1376,7 +1395,7 @@ final class XdsClientImpl extends XdsClient {
             new StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse>() {
           @Override
           public void onNext(io.envoyproxy.envoy.api.v2.DiscoveryResponse value) {
-            AdsStream.this.onNext(value);
+            onDiscoveryResponse(EnvoyProtoData.DiscoveryResponse.fromEnvoyProtoV2(value));
           }
 
           @Override
@@ -1394,7 +1413,7 @@ final class XdsClientImpl extends XdsClient {
       }
     }
 
-    private void onNext(final DiscoveryResponse response) {
+    private void onDiscoveryResponse(final EnvoyProtoData.DiscoveryResponse response) {
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
@@ -1402,70 +1421,31 @@ final class XdsClientImpl extends XdsClient {
             return;
           }
           responseReceived = true;
-          onNext(
-              response,
-              response.getTypeUrl(),
-              response.getResourcesList(),
-              response.getVersionInfo(),
-              response.getNonce());
-        }
-      });
-    }
-
-    private void onNext(final io.envoyproxy.envoy.api.v2.DiscoveryResponse response) {
-      syncContext.execute(new Runnable() {
-        @Override
-        public void run() {
-          if (closed) {
-            return;
+          String typeUrl = response.getTypeUrl();
+          String respNonce = response.getNonce();
+          // Nonce in each response is echoed back in the following ACK/NACK request. It is
+          // used for management server to identify which response the client is ACKing/NACking.
+          // To avoid confusion, client-initiated requests will always use the nonce in
+          // most recently received responses of each resource type.
+          if (typeUrl.equals(ADS_TYPE_URL_LDS_V2) || typeUrl.equals(ADS_TYPE_URL_LDS)) {
+            ldsRespNonce = respNonce;
+            handleLdsResponse(response);
+          } else if (typeUrl.equals(ADS_TYPE_URL_RDS_V2) || typeUrl.equals(ADS_TYPE_URL_LDS)) {
+            rdsRespNonce = respNonce;
+            handleRdsResponse(response);
+          } else if (typeUrl.equals(ADS_TYPE_URL_CDS_V2) || typeUrl.equals(ADS_TYPE_URL_CDS)) {
+            cdsRespNonce = respNonce;
+            handleCdsResponse(response);
+          } else if (typeUrl.equals(ADS_TYPE_URL_EDS_V2) || typeUrl.equals(ADS_TYPE_URL_EDS)) {
+            edsRespNonce = respNonce;
+            handleEdsResponse(response);
+          } else {
+            logger.log(
+                XdsLogLevel.WARNING,
+                "Received an unknown type of DiscoveryResponse\n{0}", respNonce);
           }
-          responseReceived = true;
-          onNext(
-              response,
-              response.getTypeUrl(),
-              response.getResourcesList(),
-              response.getVersionInfo(),
-              response.getNonce());
         }
       });
-    }
-
-    private void onNext(MessageOrBuilder response, String typeUrl, List<Any> resources,
-        String versionInfo, String respNonce) {
-      // Nonce in each response is echoed back in the following ACK/NACK request. It is
-      // used for management server to identify which response the client is ACKing/NACking.
-      // To avoid confusion, client-initiated requests will always use the nonce in
-      // most recently received responses of each resource type.
-      if (typeUrl.equals(ADS_TYPE_URL_LDS_V2) || typeUrl.equals(ADS_TYPE_URL_LDS)) {
-        if (logger.isLoggable(XdsLogLevel.DEBUG)) {
-          logger.log(
-              XdsLogLevel.DEBUG, "Received  LDS response:\n{0}", respPrinter.print(response));
-        }
-        ldsRespNonce = respNonce;
-        handleLdsResponse(resources, versionInfo);
-      } else if (typeUrl.equals(ADS_TYPE_URL_RDS_V2) || typeUrl.equals(ADS_TYPE_URL_LDS)) {
-        if (logger.isLoggable(XdsLogLevel.DEBUG)) {
-          logger.log(XdsLogLevel.DEBUG, "Received RDS response:\n{0}", respPrinter.print(response));
-        }
-        rdsRespNonce = respNonce;
-        handleRdsResponse(resources, versionInfo);
-      } else if (typeUrl.equals(ADS_TYPE_URL_CDS_V2) || typeUrl.equals(ADS_TYPE_URL_CDS)) {
-        if (logger.isLoggable(XdsLogLevel.DEBUG)) {
-          logger.log(XdsLogLevel.DEBUG, "Received CDS response:\n{0}", respPrinter.print(response));
-        }
-        cdsRespNonce = respNonce;
-        handleCdsResponse(resources, versionInfo);
-      } else if (typeUrl.equals(ADS_TYPE_URL_EDS_V2) || typeUrl.equals(ADS_TYPE_URL_EDS)) {
-        if (logger.isLoggable(XdsLogLevel.DEBUG)) {
-          logger.log(XdsLogLevel.DEBUG, "Received EDS response:\n{0}", respPrinter.print(response));
-        }
-        edsRespNonce = respNonce;
-        handleEdsResponse(resources, versionInfo);
-      } else {
-        logger.log(
-            XdsLogLevel.WARNING,
-            "Received an unknown type of DiscoveryResponse\n{0}", respNonce);
-      }
     }
 
     private void onError(final Throwable t) {
@@ -1934,46 +1914,6 @@ final class XdsClientImpl extends XdsClient {
     // Pattern matches hostname if suffix matching succeeds.
     return index == pattern.length() - 1
         && hostName.startsWith(pattern.substring(0, pattern.length() - 1));
-  }
-
-  /**
-   * Convert protobuf message to human readable String format. Useful for protobuf messages
-   * containing {@link com.google.protobuf.Any} fields.
-   */
-  @VisibleForTesting
-  static final class MessagePrinter {
-    private final JsonFormat.Printer printer;
-
-    @VisibleForTesting
-    MessagePrinter() {
-      com.google.protobuf.TypeRegistry registry =
-          com.google.protobuf.TypeRegistry.newBuilder()
-              .add(Listener.getDescriptor())
-              .add(io.envoyproxy.envoy.api.v2.Listener.getDescriptor())
-              .add(HttpConnectionManager.getDescriptor())
-              .add(
-                  io.envoyproxy.envoy.config.filter.network.http_connection_manager.v2
-                      .HttpConnectionManager.getDescriptor())
-              .add(RouteConfiguration.getDescriptor())
-              .add(io.envoyproxy.envoy.api.v2.RouteConfiguration.getDescriptor())
-              .add(Cluster.getDescriptor())
-              .add(io.envoyproxy.envoy.api.v2.Cluster.getDescriptor())
-              .add(ClusterLoadAssignment.getDescriptor())
-              .add(io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.getDescriptor())
-              .build();
-      printer = JsonFormat.printer().usingTypeRegistry(registry);
-    }
-
-    @VisibleForTesting
-    String print(MessageOrBuilder message) {
-      String res;
-      try {
-        res = printer.print(message);
-      } catch (InvalidProtocolBufferException e) {
-        res = message + " (failed to pretty-print: " + e + ")";
-      }
-      return res;
-    }
   }
 
   @VisibleForTesting

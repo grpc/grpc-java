@@ -22,13 +22,22 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.MoreObjects.ToStringHelper;
 import com.google.common.collect.ImmutableList;
+import com.google.protobuf.Any;
+import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.ListValue;
+import com.google.protobuf.MessageOrBuilder;
 import com.google.protobuf.NullValue;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
+import com.google.protobuf.util.JsonFormat;
 import com.google.re2j.Pattern;
 import com.google.re2j.PatternSyntaxException;
+import io.envoyproxy.envoy.config.cluster.v3.Cluster;
 import io.envoyproxy.envoy.config.core.v3.Node.UserAgentVersionTypeCase;
+import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
+import io.envoyproxy.envoy.config.listener.v3.Listener;
+import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
+import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
 import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.envoyproxy.envoy.type.v3.FractionalPercent.DenominatorType;
 import io.grpc.EquivalentAddressGroup;
@@ -455,6 +464,62 @@ final class EnvoyProtoData {
   }
 
   /**
+   * See corresponding Envoy proto message {@link
+   * io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse}.
+   */
+  static final class DiscoveryResponse {
+
+    private final String typeUrl;
+    private final List<Any> resources;
+    private final String versionInfo;
+    private final String nonce;
+    private final MessageOrBuilder rawProto;
+
+    private DiscoveryResponse(
+        String typeUrl, List<Any> resources, String versionInfo, String nonce,
+        MessageOrBuilder rawProto) {
+      this.typeUrl = typeUrl;
+      this.resources = resources;
+      this.versionInfo = versionInfo;
+      this.nonce = nonce;
+      this.rawProto = rawProto;
+    }
+
+    public String getTypeUrl() {
+      return typeUrl;
+    }
+
+    public List<Any> getResources() {
+      return resources;
+    }
+
+    public String getVersionInfo() {
+      return versionInfo;
+    }
+
+    public String getNonce() {
+      return nonce;
+    }
+
+    public String print(MessagePrinter printer) {
+      return printer.print(rawProto);
+    }
+
+    static DiscoveryResponse fromEnvoyProto(
+        io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse proto) {
+      return new DiscoveryResponse(
+          proto.getTypeUrl(), proto.getResourcesList(), proto.getVersionInfo(), proto.getNonce(),
+          proto);
+    }
+
+    static DiscoveryResponse fromEnvoyProtoV2(io.envoyproxy.envoy.api.v2.DiscoveryResponse proto) {
+      return new DiscoveryResponse(
+          proto.getTypeUrl(), proto.getResourcesList(), proto.getVersionInfo(), proto.getNonce(),
+          proto);
+    }
+  }
+
+  /**
    * See corresponding Envoy proto message {@link io.envoyproxy.envoy.config.core.v3.Address}.
    */
   static final class Address {
@@ -496,6 +561,7 @@ final class EnvoyProtoData {
    * See corresponding Envoy proto message {@link io.envoyproxy.envoy.config.core.v3.Locality}.
    */
   static final class Locality {
+
     private final String region;
     private final String zone;
     private final String subZone;
@@ -583,6 +649,7 @@ final class EnvoyProtoData {
    * io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints}.
    */
   static final class LocalityLbEndpoints {
+
     private final List<LbEndpoint> endpoints;
     private final int localityWeight;
     private final int priority;
@@ -668,6 +735,7 @@ final class EnvoyProtoData {
    * See corresponding Envoy proto message {@link io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint}.
    */
   static final class LbEndpoint {
+
     private final EquivalentAddressGroup eag;
     private final int loadBalancingWeight;
     private final boolean isHealthy;
@@ -698,7 +766,7 @@ final class EnvoyProtoData {
           proto.getLoadBalancingWeight().getValue(),
           proto.getHealthStatus() == io.envoyproxy.envoy.config.core.v3.HealthStatus.HEALTHY
               || proto.getHealthStatus()
-                  == io.envoyproxy.envoy.config.core.v3.HealthStatus.UNKNOWN);
+              == io.envoyproxy.envoy.config.core.v3.HealthStatus.UNKNOWN);
     }
 
     private static LbEndpoint fromEnvoyProtoLbEndpointV2(
@@ -760,6 +828,7 @@ final class EnvoyProtoData {
    * io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy.DropOverload}.
    */
   static final class DropOverload {
+
     private final String category;
     private final int dropsPerMillion;
 
@@ -859,6 +928,7 @@ final class EnvoyProtoData {
 
   /** See corresponding Envoy proto message {@link io.envoyproxy.envoy.api.v2.route.Route}. */
   static final class Route {
+
     private final RouteMatch routeMatch;
     private final RouteAction routeAction;
 
@@ -1092,6 +1162,7 @@ final class EnvoyProtoData {
 
   /** See corresponding Envoy proto message {@link io.envoyproxy.envoy.api.v2.route.RouteAction}. */
   static final class RouteAction {
+
     // Exactly one of the following fields is non-null.
     @Nullable
     private final String cluster;
@@ -1180,6 +1251,7 @@ final class EnvoyProtoData {
    * io.envoyproxy.envoy.api.v2.route.WeightedCluster.ClusterWeight}.
    */
   static final class ClusterWeight {
+
     private final String name;
     private final int weight;
 
@@ -1226,6 +1298,47 @@ final class EnvoyProtoData {
     static ClusterWeight fromEnvoyProtoClusterWeight(
         io.envoyproxy.envoy.config.route.v3.WeightedCluster.ClusterWeight proto) {
       return new ClusterWeight(proto.getName(), proto.getWeight().getValue());
+    }
+  }
+
+  /**
+   * Convert protobuf message to human readable String format. Useful for protobuf messages
+   * containing {@link Any} fields.
+   */
+  @VisibleForTesting
+  static final class MessagePrinter {
+
+    private final JsonFormat.Printer printer;
+
+    @VisibleForTesting
+    MessagePrinter() {
+      com.google.protobuf.TypeRegistry registry =
+          com.google.protobuf.TypeRegistry.newBuilder()
+              .add(Listener.getDescriptor())
+              .add(io.envoyproxy.envoy.api.v2.Listener.getDescriptor())
+              .add(HttpConnectionManager.getDescriptor())
+              .add(
+                  io.envoyproxy.envoy.config.filter.network.http_connection_manager.v2
+                      .HttpConnectionManager.getDescriptor())
+              .add(RouteConfiguration.getDescriptor())
+              .add(io.envoyproxy.envoy.api.v2.RouteConfiguration.getDescriptor())
+              .add(Cluster.getDescriptor())
+              .add(io.envoyproxy.envoy.api.v2.Cluster.getDescriptor())
+              .add(ClusterLoadAssignment.getDescriptor())
+              .add(io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.getDescriptor())
+              .build();
+      printer = JsonFormat.printer().usingTypeRegistry(registry);
+    }
+
+    @VisibleForTesting
+    String print(MessageOrBuilder message) {
+      String res;
+      try {
+        res = printer.print(message);
+      } catch (InvalidProtocolBufferException e) {
+        res = message + " (failed to pretty-print: " + e + ")";
+      }
+      return res;
     }
   }
 }
