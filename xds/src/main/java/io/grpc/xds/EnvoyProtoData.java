@@ -70,6 +70,29 @@ import javax.annotation.Nullable;
  */
 final class EnvoyProtoData {
 
+  @VisibleForTesting
+  static final String ADS_TYPE_URL_LDS_V2 = "type.googleapis.com/envoy.api.v2.Listener";
+  @VisibleForTesting
+  static final String ADS_TYPE_URL_LDS =
+      "type.googleapis.com/envoy.config.listener.v3.Listener";
+  @VisibleForTesting
+  static final String ADS_TYPE_URL_RDS_V2 =
+      "type.googleapis.com/envoy.api.v2.RouteConfiguration";
+  @VisibleForTesting
+  static final String ADS_TYPE_URL_RDS =
+      "type.googleapis.com/envoy.config.route.v3.RouteConfiguration";
+  @VisibleForTesting
+  static final String ADS_TYPE_URL_CDS_V2 = "type.googleapis.com/envoy.api.v2.Cluster";
+  @VisibleForTesting
+  static final String ADS_TYPE_URL_CDS =
+      "type.googleapis.com/envoy.config.cluster.v3.Cluster";
+  @VisibleForTesting
+  static final String ADS_TYPE_URL_EDS_V2 =
+      "type.googleapis.com/envoy.api.v2.ClusterLoadAssignment";
+  @VisibleForTesting
+  static final String ADS_TYPE_URL_EDS =
+      "type.googleapis.com/envoy.config.endpoint.v3.ClusterLoadAssignment";
+
   // Prevent instantiation.
   private EnvoyProtoData() {
   }
@@ -465,30 +488,89 @@ final class EnvoyProtoData {
     return valueBuilder.build();
   }
 
+  enum ResourceType {
+    UNKNOWN, LDS, RDS, CDS, EDS;
+
+    String typeUrl() {
+      switch (this) {
+        case LDS:
+          return ADS_TYPE_URL_LDS;
+        case RDS:
+          return ADS_TYPE_URL_RDS;
+        case CDS:
+          return ADS_TYPE_URL_CDS;
+        case EDS:
+          return ADS_TYPE_URL_EDS;
+        case UNKNOWN:
+        default:
+          throw new AssertionError("Unknown or missing case in enum switch: " + this);
+      }
+    }
+
+    String typeUrlV2() {
+      switch (this) {
+        case LDS:
+          return ADS_TYPE_URL_LDS_V2;
+        case RDS:
+          return ADS_TYPE_URL_RDS_V2;
+        case CDS:
+          return ADS_TYPE_URL_CDS_V2;
+        case EDS:
+          return ADS_TYPE_URL_EDS_V2;
+        case UNKNOWN:
+        default:
+          throw new AssertionError("Unknown or missing case in enum switch: " + this);
+      }
+    }
+
+    static ResourceType fromTypeUrl(String typeUrl) {
+      switch (typeUrl) {
+        case ADS_TYPE_URL_LDS:
+          // fall trough
+        case ADS_TYPE_URL_LDS_V2:
+          return LDS;
+        case ADS_TYPE_URL_RDS:
+          // fall through
+        case ADS_TYPE_URL_RDS_V2:
+          return RDS;
+        case ADS_TYPE_URL_CDS:
+          // fall through
+        case ADS_TYPE_URL_CDS_V2:
+          return CDS;
+        case ADS_TYPE_URL_EDS:
+          // fall through
+        case ADS_TYPE_URL_EDS_V2:
+          return EDS;
+        default:
+          return UNKNOWN;
+      }
+    }
+  }
+
   /**
    * See corresponding Envoy proto message {@link
    * io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse}.
    */
   static final class DiscoveryResponse {
 
-    private final String typeUrl;
+    private final ResourceType resourceType;
     private final List<Any> resources;
     private final String versionInfo;
     private final String nonce;
     private final MessageOrBuilder rawProto;
 
     private DiscoveryResponse(
-        String typeUrl, List<Any> resources, String versionInfo, String nonce,
+        ResourceType resourceType, List<Any> resources, String versionInfo, String nonce,
         MessageOrBuilder rawProto) {
-      this.typeUrl = typeUrl;
+      this.resourceType = resourceType;
       this.resources = resources;
       this.versionInfo = versionInfo;
       this.nonce = nonce;
       this.rawProto = rawProto;
     }
 
-    String getTypeUrl() {
-      return typeUrl;
+    ResourceType getResourceType() {
+      return resourceType;
     }
 
     List<Any> getResources() {
@@ -510,14 +592,14 @@ final class EnvoyProtoData {
     static DiscoveryResponse fromEnvoyProto(
         io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse proto) {
       return new DiscoveryResponse(
-          proto.getTypeUrl(), proto.getResourcesList(), proto.getVersionInfo(), proto.getNonce(),
-          proto);
+          ResourceType.fromTypeUrl(proto.getTypeUrl()), proto.getResourcesList(),
+          proto.getVersionInfo(), proto.getNonce(), proto);
     }
 
     static DiscoveryResponse fromEnvoyProtoV2(io.envoyproxy.envoy.api.v2.DiscoveryResponse proto) {
       return new DiscoveryResponse(
-          proto.getTypeUrl(), proto.getResourcesList(), proto.getVersionInfo(), proto.getNonce(),
-          proto);
+          ResourceType.fromTypeUrl(proto.getTypeUrl()), proto.getResourcesList(),
+          proto.getVersionInfo(), proto.getNonce(), proto);
     }
   }
 
@@ -527,7 +609,7 @@ final class EnvoyProtoData {
    */
   static final class DiscoveryRequest {
 
-    private final String typeUrl;
+    private final ResourceType resourceType;
     private final List<String> resourceNames;
     private final String versionInfo;
     private final String responseNonce;
@@ -536,9 +618,9 @@ final class EnvoyProtoData {
     private final Status errorDetail;
 
     private DiscoveryRequest(
-        String typeUrl, List<String> resourceNames, String versionInfo, String responseNonce,
-        Node node, @Nullable Status errorDetail) {
-      this.typeUrl = typeUrl;
+        ResourceType resourceType, List<String> resourceNames, String versionInfo,
+        String responseNonce, Node node, @Nullable Status errorDetail) {
+      this.resourceType = resourceType;
       this.resourceNames = resourceNames;
       this.versionInfo = versionInfo;
       this.responseNonce = responseNonce;
@@ -552,7 +634,7 @@ final class EnvoyProtoData {
               .setVersionInfo(versionInfo)
               .setNode(node.toEnvoyProtoNode())
               .addAllResourceNames(resourceNames)
-              .setTypeUrl(typeUrl)
+              .setTypeUrl(resourceType.typeUrl())
               .setResponseNonce(responseNonce);
       if (errorDetail != null) {
         builder.setErrorDetail(errorDetail);
@@ -566,7 +648,7 @@ final class EnvoyProtoData {
               .setVersionInfo(versionInfo)
               .setNode(node.toEnvoyProtoNodeV2())
               .addAllResourceNames(resourceNames)
-              .setTypeUrl(typeUrl)
+              .setTypeUrl(resourceType.typeUrlV2())
               .setResponseNonce(responseNonce);
       if (errorDetail != null) {
         builder.setErrorDetail(errorDetail);
@@ -579,7 +661,7 @@ final class EnvoyProtoData {
     }
 
     static final class Builder {
-      private String typeUrl;
+      private ResourceType resourceType;
       private List<String> resourceNames = new ArrayList<>();
       private String versionInfo;
       private String responseNonce;
@@ -588,8 +670,8 @@ final class EnvoyProtoData {
 
       private Builder() {}
 
-      Builder setTypeUrl(String typeUrl) {
-        this.typeUrl = checkNotNull(typeUrl, "typeUrl");
+      Builder setTypeUrl(ResourceType resourceType) {
+        this.resourceType = checkNotNull(resourceType, "resourceType");
         return this;
       }
 
@@ -620,7 +702,7 @@ final class EnvoyProtoData {
 
       DiscoveryRequest build() {
         return new DiscoveryRequest(
-            typeUrl, resourceNames, versionInfo, responseNonce, node, errorDetail);
+            resourceType, resourceNames, versionInfo, responseNonce, node, errorDetail);
       }
     }
   }

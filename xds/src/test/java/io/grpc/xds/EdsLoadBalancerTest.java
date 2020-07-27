@@ -685,7 +685,7 @@ public class EdsLoadBalancerTest {
         buildDiscoveryResponseV2(
             String.valueOf(versionIno++),
             Collections.<Any>emptyList(),
-            XdsClientImpl.ADS_TYPE_URL_CDS_V2,
+            EnvoyProtoData.ADS_TYPE_URL_CDS_V2,
             String.valueOf(nonce++)));
 
     verify(localityBalancer).shutdown();
@@ -773,7 +773,7 @@ public class EdsLoadBalancerTest {
           buildDiscoveryResponseV2(
               String.valueOf(versionIno++),
               ImmutableList.of(Any.pack(clusterLoadAssignment)),
-              XdsClientImpl.ADS_TYPE_URL_EDS_V2,
+              EnvoyProtoData.ADS_TYPE_URL_EDS_V2,
               String.valueOf(nonce++)));
   }
 

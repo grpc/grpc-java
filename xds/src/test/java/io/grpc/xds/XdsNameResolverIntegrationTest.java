@@ -398,7 +398,7 @@ public class XdsNameResolverIntegrationTest {
     List<Any> listeners =
         ImmutableList.of(Any.pack(buildListener(AUTHORITY, Any.pack(httpConnectionManager))));
     responseObserver.onNext(
-        buildDiscoveryResponseV2("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2,  "0000"));
+        buildDiscoveryResponseV2("0", listeners, EnvoyProtoData.ADS_TYPE_URL_LDS_V2,  "0000"));
 
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
@@ -481,7 +481,7 @@ public class XdsNameResolverIntegrationTest {
                     buildVirtualHostForRoutes(
                         AUTHORITY, ImmutableList.of(weightedClustersDefaultRoute))))));
     responseObserver.onNext(
-        buildDiscoveryResponseV2("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS_V2, "0000"));
+        buildDiscoveryResponseV2("0", routeConfigs, EnvoyProtoData.ADS_TYPE_URL_RDS_V2, "0000"));
 
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
@@ -551,7 +551,7 @@ public class XdsNameResolverIntegrationTest {
                                     clusterName))))
                     .build()))));
     return buildDiscoveryResponseV2(
-        versionInfo, listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, nonce);
+        versionInfo, listeners, EnvoyProtoData.ADS_TYPE_URL_LDS_V2, nonce);
   }
 
   /**
@@ -574,7 +574,7 @@ public class XdsNameResolverIntegrationTest {
             buildListener(
                 host, Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build()))));
     return buildDiscoveryResponseV2(
-        versionInfo, listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, nonce);
+        versionInfo, listeners, EnvoyProtoData.ADS_TYPE_URL_LDS_V2, nonce);
   }
 
   /**
@@ -594,7 +594,7 @@ public class XdsNameResolverIntegrationTest {
                 ImmutableList.of(
                     buildVirtualHost(ImmutableList.of(host), clusterName)))));
     return buildDiscoveryResponseV2(
-        versionInfo, routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS_V2, nonce);
+        versionInfo, routeConfigs, EnvoyProtoData.ADS_TYPE_URL_RDS_V2, nonce);
   }
 
   private static RouteAction buildClusterRoute(String clusterName) {

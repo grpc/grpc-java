@@ -58,6 +58,7 @@ import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyProtoData.MessagePrinter;
+import io.grpc.xds.EnvoyProtoData.ResourceType;
 import io.grpc.xds.EnvoyProtoData.StructOrError;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.LoadReportClient.LoadReportCallback;
@@ -81,34 +82,12 @@ final class XdsClientImpl extends XdsClient {
   @VisibleForTesting
   static final int INITIAL_RESOURCE_FETCH_TIMEOUT_SEC = 15;
 
-  @VisibleForTesting
-  static final String ADS_TYPE_URL_LDS_V2 = "type.googleapis.com/envoy.api.v2.Listener";
-  @VisibleForTesting
-  static final String ADS_TYPE_URL_LDS =
-      "type.googleapis.com/envoy.config.listener.v3.Listener";
-  @VisibleForTesting
-  static final String ADS_TYPE_URL_RDS_V2 =
-      "type.googleapis.com/envoy.api.v2.RouteConfiguration";
-  @VisibleForTesting
-  static final String ADS_TYPE_URL_RDS =
-      "type.googleapis.com/envoy.config.route.v3.RouteConfiguration";
   private static final String TYPE_URL_HTTP_CONNECTION_MANAGER_V2 =
       "type.googleapis.com/envoy.config.filter.network.http_connection_manager.v2"
           + ".HttpConnectionManager";
   private static final String TYPE_URL_HTTP_CONNECTION_MANAGER =
       "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3"
           + ".HttpConnectionManager";
-  @VisibleForTesting
-  static final String ADS_TYPE_URL_CDS_V2 = "type.googleapis.com/envoy.api.v2.Cluster";
-  @VisibleForTesting
-  static final String ADS_TYPE_URL_CDS =
-      "type.googleapis.com/envoy.config.cluster.v3.Cluster";
-  @VisibleForTesting
-  static final String ADS_TYPE_URL_EDS_V2 =
-      "type.googleapis.com/envoy.api.v2.ClusterLoadAssignment";
-  @VisibleForTesting
-  static final String ADS_TYPE_URL_EDS =
-      "type.googleapis.com/envoy.config.endpoint.v3.ClusterLoadAssignment";
 
   // Mutable for testing.
   static boolean enableExperimentalRouting = Boolean.parseBoolean(
@@ -180,7 +159,7 @@ final class XdsClientImpl extends XdsClient {
   private ScheduledHandle rdsRespTimer;
 
   @Nullable
-  private AdsStream adsStream;
+  private AbstractAdsStream adsStream;
   @Nullable
   private BackoffPolicy retryBackoffPolicy;
   @Nullable
@@ -287,7 +266,7 @@ final class XdsClientImpl extends XdsClient {
     if (adsStream == null) {
       startRpcStream();
     }
-    adsStream.sendXdsRequest(ResourceType.LDS, ImmutableList.of(ldsResourceName));
+    adsStream.sendXdsRequest(EnvoyProtoData.ResourceType.LDS, ImmutableList.of(ldsResourceName));
     ldsRespTimer =
         syncContext
             .schedule(
@@ -328,7 +307,7 @@ final class XdsClientImpl extends XdsClient {
       if (adsStream == null) {
         startRpcStream();
       }
-      adsStream.sendXdsRequest(ResourceType.CDS, clusterWatchers.keySet());
+      adsStream.sendXdsRequest(EnvoyProtoData.ResourceType.CDS, clusterWatchers.keySet());
       ScheduledHandle timeoutHandle =
           syncContext
               .schedule(
@@ -365,7 +344,7 @@ final class XdsClientImpl extends XdsClient {
       }
       checkState(adsStream != null,
           "Severe bug: ADS stream was not created while an endpoint watcher was registered");
-      adsStream.sendXdsRequest(ResourceType.CDS, clusterWatchers.keySet());
+      adsStream.sendXdsRequest(EnvoyProtoData.ResourceType.CDS, clusterWatchers.keySet());
     }
   }
 
@@ -406,7 +385,7 @@ final class XdsClientImpl extends XdsClient {
       if (adsStream == null) {
         startRpcStream();
       }
-      adsStream.sendXdsRequest(ResourceType.EDS, endpointWatchers.keySet());
+      adsStream.sendXdsRequest(EnvoyProtoData.ResourceType.EDS, endpointWatchers.keySet());
       ScheduledHandle timeoutHandle =
           syncContext
               .schedule(
@@ -441,7 +420,7 @@ final class XdsClientImpl extends XdsClient {
         // Currently in retry backoff.
         return;
       }
-      adsStream.sendXdsRequest(ResourceType.EDS, endpointWatchers.keySet());
+      adsStream.sendXdsRequest(EnvoyProtoData.ResourceType.EDS, endpointWatchers.keySet());
     }
   }
 
@@ -462,7 +441,7 @@ final class XdsClientImpl extends XdsClient {
       startRpcStream();
     }
     updateNodeMetadataForListenerRequest(port);
-    adsStream.sendXdsRequest(ResourceType.LDS, ImmutableList.<String>of());
+    adsStream.sendXdsRequest(EnvoyProtoData.ResourceType.LDS, ImmutableList.<String>of());
     ldsRespTimer =
         syncContext
             .schedule(
@@ -542,7 +521,7 @@ final class XdsClientImpl extends XdsClient {
           stubV2 =
           io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.newStub(
               channel);
-      adsStream = new AdsStream(stubV2);
+      adsStream = new AdsStreamV2(stubV2);
     }
     adsStream.start();
     logger.log(XdsLogLevel.INFO, "ADS stream started");
@@ -585,8 +564,8 @@ final class XdsClientImpl extends XdsClient {
     List<String> listenerNames = new ArrayList<>(resources.size());
     try {
       for (com.google.protobuf.Any res : resources) {
-        if (res.getTypeUrl().equals(ADS_TYPE_URL_LDS_V2)) {
-          res = res.toBuilder().setTypeUrl(ADS_TYPE_URL_LDS).build();
+        if (res.getTypeUrl().equals(EnvoyProtoData.ADS_TYPE_URL_LDS_V2)) {
+          res = res.toBuilder().setTypeUrl(EnvoyProtoData.ADS_TYPE_URL_LDS).build();
         }
         Listener listener = res.unpack(Listener.class);
         listeners.add(listener);
@@ -595,7 +574,7 @@ final class XdsClientImpl extends XdsClient {
     } catch (InvalidProtocolBufferException e) {
       logger.log(XdsLogLevel.WARNING, "Failed to unpack Listeners in LDS response {0}", e);
       adsStream.sendNackRequest(
-          ResourceType.LDS, ImmutableList.of(ldsResourceName),
+          EnvoyProtoData.ResourceType.LDS, ImmutableList.of(ldsResourceName),
           versionInfo, "Malformed LDS response: " + e);
       return;
     }
@@ -620,7 +599,7 @@ final class XdsClientImpl extends XdsClient {
           XdsLogLevel.WARNING,
           "Failed to unpack HttpConnectionManagers in Listeners of LDS response {0}", e);
       adsStream.sendNackRequest(
-          ResourceType.LDS, ImmutableList.of(ldsResourceName),
+          EnvoyProtoData.ResourceType.LDS, ImmutableList.of(ldsResourceName),
           versionInfo, "Malformed LDS response: " + e);
       return;
     }
@@ -666,11 +645,11 @@ final class XdsClientImpl extends XdsClient {
 
     if (errorMessage != null) {
       adsStream.sendNackRequest(
-          ResourceType.LDS, ImmutableList.of(ldsResourceName),
+          EnvoyProtoData.ResourceType.LDS, ImmutableList.of(ldsResourceName),
           versionInfo, errorMessage);
       return;
     }
-    adsStream.sendAckRequest(ResourceType.LDS, ImmutableList.of(ldsResourceName),
+    adsStream.sendAckRequest(EnvoyProtoData.ResourceType.LDS, ImmutableList.of(ldsResourceName),
         versionInfo);
 
     if (routes != null || rdsRouteConfigName != null) {
@@ -692,7 +671,8 @@ final class XdsClientImpl extends XdsClient {
         logger.log(
             XdsLogLevel.INFO,
             "Use RDS to dynamically resolve route config, resource name: {0}", rdsRouteConfigName);
-        adsStream.sendXdsRequest(ResourceType.RDS, ImmutableList.of(rdsRouteConfigName));
+        adsStream.sendXdsRequest(
+            EnvoyProtoData.ResourceType.RDS, ImmutableList.of(rdsRouteConfigName));
         // Cancel the timer for fetching the previous RDS resource.
         if (rdsRespTimer != null) {
           rdsRespTimer.cancel();
@@ -721,8 +701,8 @@ final class XdsClientImpl extends XdsClient {
     logger.log(XdsLogLevel.DEBUG, "Listener count: {0}", resources.size());
     try {
       for (com.google.protobuf.Any res : resources) {
-        if (res.getTypeUrl().equals(ADS_TYPE_URL_LDS_V2)) {
-          res = res.toBuilder().setTypeUrl(ADS_TYPE_URL_LDS).build();
+        if (res.getTypeUrl().equals(EnvoyProtoData.ADS_TYPE_URL_LDS_V2)) {
+          res = res.toBuilder().setTypeUrl(EnvoyProtoData.ADS_TYPE_URL_LDS).build();
         }
         Listener listener = res.unpack(Listener.class);
         logger.log(XdsLogLevel.DEBUG, "Found listener {0}", listener.toString());
@@ -734,7 +714,7 @@ final class XdsClientImpl extends XdsClient {
     } catch (InvalidProtocolBufferException e) {
       logger.log(XdsLogLevel.WARNING, "Failed to unpack Listeners in LDS response {0}", e);
       adsStream.sendNackRequest(
-          ResourceType.LDS, ImmutableList.<String>of(),
+          EnvoyProtoData.ResourceType.LDS, ImmutableList.<String>of(),
           versionInfo, "Malformed LDS response: " + e);
       return;
     }
@@ -751,7 +731,7 @@ final class XdsClientImpl extends XdsClient {
       } catch (InvalidProtocolBufferException e) {
         logger.log(XdsLogLevel.WARNING, "Failed to unpack Listener in LDS response {0}", e);
         adsStream.sendNackRequest(
-            ResourceType.LDS, ImmutableList.<String>of(),
+            EnvoyProtoData.ResourceType.LDS, ImmutableList.<String>of(),
             versionInfo, "Malformed LDS response: " + e);
         return;
       }
@@ -760,7 +740,7 @@ final class XdsClientImpl extends XdsClient {
         listenerWatcher.onResourceDoesNotExist(":" + listenerPort);
       }
     }
-    adsStream.sendAckRequest(ResourceType.LDS, ImmutableList.<String>of(),
+    adsStream.sendAckRequest(EnvoyProtoData.ResourceType.LDS, ImmutableList.<String>of(),
         versionInfo);
     if (listenerUpdate != null) {
       listenerWatcher.onListenerChanged(listenerUpdate);
@@ -810,8 +790,8 @@ final class XdsClientImpl extends XdsClient {
     RouteConfiguration requestedRouteConfig = null;
     try {
       for (com.google.protobuf.Any res : resources) {
-        if (res.getTypeUrl().equals(ADS_TYPE_URL_RDS_V2)) {
-          res = res.toBuilder().setTypeUrl(ADS_TYPE_URL_RDS).build();
+        if (res.getTypeUrl().equals(EnvoyProtoData.ADS_TYPE_URL_RDS_V2)) {
+          res = res.toBuilder().setTypeUrl(EnvoyProtoData.ADS_TYPE_URL_RDS).build();
         }
         RouteConfiguration rc = res.unpack(RouteConfiguration.class);
         routeConfigNames.add(rc.getName());
@@ -823,7 +803,7 @@ final class XdsClientImpl extends XdsClient {
       logger.log(
           XdsLogLevel.WARNING, "Failed to unpack RouteConfiguration in RDS response {0}", e);
       adsStream.sendNackRequest(
-          ResourceType.RDS, ImmutableList.of(adsStream.rdsResourceName),
+          EnvoyProtoData.ResourceType.RDS, ImmutableList.of(adsStream.rdsResourceName),
           versionInfo, "Malformed RDS response: " + e);
       return;
     }
@@ -838,7 +818,7 @@ final class XdsClientImpl extends XdsClient {
       } catch (InvalidProtoDataException e) {
         String errorDetail = e.getMessage();
         adsStream.sendNackRequest(
-            ResourceType.RDS, ImmutableList.of(adsStream.rdsResourceName),
+            EnvoyProtoData.ResourceType.RDS, ImmutableList.of(adsStream.rdsResourceName),
             versionInfo,
             "RouteConfiguration " + requestedRouteConfig.getName() + ": cannot find a "
                 + "valid cluster name in any virtual hosts with domains matching: "
@@ -848,7 +828,8 @@ final class XdsClientImpl extends XdsClient {
       }
     }
 
-    adsStream.sendAckRequest(ResourceType.RDS, ImmutableList.of(adsStream.rdsResourceName),
+    adsStream.sendAckRequest(
+        EnvoyProtoData.ResourceType.RDS, ImmutableList.of(adsStream.rdsResourceName),
         versionInfo);
 
     // Notify the ConfigWatcher if this RDS response contains the most recently requested
@@ -979,8 +960,8 @@ final class XdsClientImpl extends XdsClient {
     List<String> clusterNames = new ArrayList<>(resources.size());
     try {
       for (com.google.protobuf.Any res : resources) {
-        if (res.getTypeUrl().equals(ADS_TYPE_URL_CDS_V2)) {
-          res = res.toBuilder().setTypeUrl(ADS_TYPE_URL_CDS).build();
+        if (res.getTypeUrl().equals(EnvoyProtoData.ADS_TYPE_URL_CDS_V2)) {
+          res = res.toBuilder().setTypeUrl(EnvoyProtoData.ADS_TYPE_URL_CDS).build();
         }
         Cluster cluster = res.unpack(Cluster.class);
         clusters.add(cluster);
@@ -989,7 +970,7 @@ final class XdsClientImpl extends XdsClient {
     } catch (InvalidProtocolBufferException e) {
       logger.log(XdsLogLevel.WARNING, "Failed to unpack Clusters in CDS response {0}", e);
       adsStream.sendNackRequest(
-          ResourceType.CDS, clusterWatchers.keySet(),
+          EnvoyProtoData.ResourceType.CDS, clusterWatchers.keySet(),
           versionInfo, "Malformed CDS response: " + e);
       return;
     }
@@ -1064,13 +1045,13 @@ final class XdsClientImpl extends XdsClient {
     }
     if (errorMessage != null) {
       adsStream.sendNackRequest(
-          ResourceType.CDS,
+          EnvoyProtoData.ResourceType.CDS,
           clusterWatchers.keySet(),
           versionInfo,
           errorMessage);
       return;
     }
-    adsStream.sendAckRequest(ResourceType.CDS, clusterWatchers.keySet(),
+    adsStream.sendAckRequest(EnvoyProtoData.ResourceType.CDS, clusterWatchers.keySet(),
         versionInfo);
 
     // Update local CDS cache with data in this response.
@@ -1157,8 +1138,8 @@ final class XdsClientImpl extends XdsClient {
     List<String> claNames = new ArrayList<>(resources.size());
     try {
       for (com.google.protobuf.Any res : resources) {
-        if (res.getTypeUrl().equals(ADS_TYPE_URL_EDS_V2)) {
-          res = res.toBuilder().setTypeUrl(ADS_TYPE_URL_EDS).build();
+        if (res.getTypeUrl().equals(EnvoyProtoData.ADS_TYPE_URL_EDS_V2)) {
+          res = res.toBuilder().setTypeUrl(EnvoyProtoData.ADS_TYPE_URL_EDS).build();
         }
         ClusterLoadAssignment assignment = res.unpack(ClusterLoadAssignment.class);
         clusterLoadAssignments.add(assignment);
@@ -1168,7 +1149,7 @@ final class XdsClientImpl extends XdsClient {
       logger.log(
           XdsLogLevel.WARNING, "Failed to unpack ClusterLoadAssignments in EDS response {0}", e);
       adsStream.sendNackRequest(
-          ResourceType.EDS, endpointWatchers.keySet(),
+          EnvoyProtoData.ResourceType.EDS, endpointWatchers.keySet(),
           versionInfo, "Malformed EDS response: " + e);
       return;
     }
@@ -1241,13 +1222,13 @@ final class XdsClientImpl extends XdsClient {
     }
     if (errorMessage != null) {
       adsStream.sendNackRequest(
-          ResourceType.EDS,
+          EnvoyProtoData.ResourceType.EDS,
           endpointWatchers.keySet(),
           versionInfo,
           errorMessage);
       return;
     }
-    adsStream.sendAckRequest(ResourceType.EDS, endpointWatchers.keySet(),
+    adsStream.sendAckRequest(EnvoyProtoData.ResourceType.EDS, endpointWatchers.keySet(),
         versionInfo);
 
     // Update local EDS cache by inserting updated endpoint information.
@@ -1278,7 +1259,8 @@ final class XdsClientImpl extends XdsClient {
     public void run() {
       startRpcStream();
       if (configWatcher != null) {
-        adsStream.sendXdsRequest(ResourceType.LDS, ImmutableList.of(ldsResourceName));
+        adsStream.sendXdsRequest(
+            EnvoyProtoData.ResourceType.LDS, ImmutableList.of(ldsResourceName));
         ldsRespTimer =
             syncContext
                 .schedule(
@@ -1286,7 +1268,7 @@ final class XdsClientImpl extends XdsClient {
                     INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS, timeService);
       }
       if (listenerWatcher != null) {
-        adsStream.sendXdsRequest(ResourceType.LDS, ImmutableList.<String>of());
+        adsStream.sendXdsRequest(EnvoyProtoData.ResourceType.LDS, ImmutableList.<String>of());
         ldsRespTimer =
             syncContext
                 .schedule(
@@ -1294,7 +1276,7 @@ final class XdsClientImpl extends XdsClient {
                     INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS, timeService);
       }
       if (!clusterWatchers.isEmpty()) {
-        adsStream.sendXdsRequest(ResourceType.CDS, clusterWatchers.keySet());
+        adsStream.sendXdsRequest(EnvoyProtoData.ResourceType.CDS, clusterWatchers.keySet());
         for (String clusterName : clusterWatchers.keySet()) {
           ScheduledHandle timeoutHandle =
               syncContext
@@ -1305,7 +1287,7 @@ final class XdsClientImpl extends XdsClient {
         }
       }
       if (!endpointWatchers.isEmpty()) {
-        adsStream.sendXdsRequest(ResourceType.EDS, endpointWatchers.keySet());
+        adsStream.sendXdsRequest(EnvoyProtoData.ResourceType.EDS, endpointWatchers.keySet());
         for (String clusterName : endpointWatchers.keySet()) {
           ScheduledHandle timeoutHandle =
               syncContext
@@ -1318,17 +1300,7 @@ final class XdsClientImpl extends XdsClient {
     }
   }
 
-  private enum ResourceType {
-    LDS, RDS, CDS, EDS
-  }
-
-  private final class AdsStream {
-    private final AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceStub stub;
-    private final io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc
-        .AggregatedDiscoveryServiceStub stubV2;
-
-    private StreamObserver<DiscoveryRequest> requestWriter;
-    private StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest> requestWriterV2;
+  private abstract class AbstractAdsStream {
     private boolean responseReceived;
     private boolean closed;
 
@@ -1359,110 +1331,58 @@ final class XdsClientImpl extends XdsClient {
     @Nullable
     private String rdsResourceName;
 
-    private AdsStream(AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceStub stub) {
-      this.stub = checkNotNull(stub, "stub");
-      this.stubV2 = null;
+    abstract void start();
+
+    abstract void sendDiscoveryRequest(EnvoyProtoData.DiscoveryRequest request);
+
+    abstract void sendError(Exception error);
+
+    final void onDiscoveryResponse(final EnvoyProtoData.DiscoveryResponse response) {
+      syncContext.execute(
+          new Runnable() {
+            @Override
+            public void run() {
+              if (closed) {
+                return;
+              }
+              responseReceived = true;
+              String respNonce = response.getNonce();
+              // Nonce in each response is echoed back in the following ACK/NACK request. It is
+              // used for management server to identify which response the client is ACKing/NACking.
+              // To avoid confusion, client-initiated requests will always use the nonce in
+              // most recently received responses of each resource type.
+              ResourceType resourceType = response.getResourceType();
+              switch (resourceType) {
+                case LDS:
+                  ldsRespNonce = respNonce;
+                  handleLdsResponse(response);
+                  break;
+                case RDS:
+                  rdsRespNonce = respNonce;
+                  handleRdsResponse(response);
+                  break;
+                case CDS:
+                  cdsRespNonce = respNonce;
+                  handleCdsResponse(response);
+                  break;
+                case EDS:
+                  edsRespNonce = respNonce;
+                  handleEdsResponse(response);
+                  break;
+                case UNKNOWN:
+                  logger.log(
+                      XdsLogLevel.WARNING,
+                      "Received an unknown type of DiscoveryResponse\n{0}",
+                      respNonce);
+                  break;
+                default:
+                  throw new AssertionError("Missing case in enum switch: " + resourceType);
+              }
+            }
+          });
     }
 
-    private AdsStream(
-        io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc
-            .AggregatedDiscoveryServiceStub stubV2) {
-      this.stub = null;
-      this.stubV2 = checkNotNull(stubV2, "stubV2");
-    }
-
-    private void start() {
-      if (stub != null) {
-        StreamObserver<DiscoveryResponse> responseReader = new StreamObserver<DiscoveryResponse>() {
-          @Override
-          public void onNext(DiscoveryResponse value) {
-            onDiscoveryResponse(EnvoyProtoData.DiscoveryResponse.fromEnvoyProto(value));
-          }
-
-          @Override
-          public void onError(Throwable t) {
-            AdsStream.this.onError(t);
-          }
-
-          @Override
-          public void onCompleted() {
-            AdsStream.this.onCompleted();
-          }
-        };
-        requestWriter = stub.withWaitForReady().streamAggregatedResources(responseReader);
-      } else {
-        StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseReaderV2 =
-            new StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse>() {
-          @Override
-          public void onNext(io.envoyproxy.envoy.api.v2.DiscoveryResponse value) {
-            onDiscoveryResponse(EnvoyProtoData.DiscoveryResponse.fromEnvoyProtoV2(value));
-          }
-
-          @Override
-          public void onError(Throwable t) {
-            AdsStream.this.onError(t);
-          }
-
-          @Override
-          public void onCompleted() {
-            AdsStream.this.onCompleted();
-          }
-        };
-
-        requestWriterV2 = stubV2.withWaitForReady().streamAggregatedResources(responseReaderV2);
-      }
-    }
-
-    private void sendDiscoveryRequest(EnvoyProtoData.DiscoveryRequest request) {
-      if (useXdsV3) {
-        io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest requestProto =
-            request.toEnvoyProto();
-        requestWriter.onNext(requestProto);
-        logger.log(XdsLogLevel.DEBUG, "Sent ACK request\n{0}", requestProto);
-      } else {
-        io.envoyproxy.envoy.api.v2.DiscoveryRequest requestProto =
-            request.toEnvoyProtoV2();
-        requestWriterV2.onNext(requestProto);
-        logger.log(XdsLogLevel.DEBUG, "Sent ACK request\n{0}", requestProto);
-      }
-    }
-
-    private void onDiscoveryResponse(final EnvoyProtoData.DiscoveryResponse response) {
-      syncContext.execute(new Runnable() {
-        @Override
-        public void run() {
-          if (closed) {
-            return;
-          }
-          responseReceived = true;
-          String typeUrl = response.getTypeUrl();
-          String respNonce = response.getNonce();
-          // Nonce in each response is echoed back in the following ACK/NACK request. It is
-          // used for management server to identify which response the client is ACKing/NACking.
-          // To avoid confusion, client-initiated requests will always use the nonce in
-          // most recently received responses of each resource type.
-          if (typeUrl.equals(ADS_TYPE_URL_LDS_V2) || typeUrl.equals(ADS_TYPE_URL_LDS)) {
-            ldsRespNonce = respNonce;
-            handleLdsResponse(response);
-          } else if (typeUrl.equals(ADS_TYPE_URL_RDS_V2) || typeUrl.equals(ADS_TYPE_URL_LDS)) {
-            rdsRespNonce = respNonce;
-            handleRdsResponse(response);
-          } else if (typeUrl.equals(ADS_TYPE_URL_CDS_V2) || typeUrl.equals(ADS_TYPE_URL_CDS)) {
-            cdsRespNonce = respNonce;
-            handleCdsResponse(response);
-          } else if (typeUrl.equals(ADS_TYPE_URL_EDS_V2) || typeUrl.equals(ADS_TYPE_URL_EDS)) {
-            edsRespNonce = respNonce;
-            handleEdsResponse(response);
-          } else {
-            logger.log(
-                XdsLogLevel.WARNING,
-                "Received an unknown type of DiscoveryResponse\n{0}", respNonce);
-          }
-        }
-      });
-    }
-
-    private void onError(final Throwable t) {
+    final void onError(final Throwable t) {
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
@@ -1471,7 +1391,7 @@ final class XdsClientImpl extends XdsClient {
       });
     }
 
-    private void onCompleted() {
+    final void onCompleted() {
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
@@ -1534,11 +1454,7 @@ final class XdsClientImpl extends XdsClient {
       }
       closed = true;
       cleanUp();
-      if (useXdsV3) {
-        requestWriter.onError(error);
-      } else {
-        requestWriterV2.onError(error);
-      }
+      sendError(error);
     }
 
     private void cleanUp() {
@@ -1553,23 +1469,15 @@ final class XdsClientImpl extends XdsClient {
      * as we need it to find resources in responses.
      */
     private void sendXdsRequest(ResourceType resourceType, Collection<String> resourceNames) {
-      if (useXdsV3) {
-        checkState(requestWriter != null, "ADS stream has not been started");
-      } else {
-        checkState(requestWriterV2 != null, "ADS stream has not been started");
-      }
       String version;
       String nonce;
-      String typeUrl;
       switch (resourceType) {
         case LDS:
-          typeUrl = useXdsV3 ? ADS_TYPE_URL_LDS : ADS_TYPE_URL_LDS_V2;
           version = ldsVersion;
           nonce = ldsRespNonce;
           logger.log(XdsLogLevel.INFO, "Sending LDS request for resources: {0}", resourceNames);
           break;
         case RDS:
-          typeUrl = useXdsV3 ? ADS_TYPE_URL_RDS : ADS_TYPE_URL_RDS_V2;
           checkArgument(
               resourceNames.size() == 1, "RDS request requesting for more than one resource");
           version = rdsVersion;
@@ -1578,19 +1486,18 @@ final class XdsClientImpl extends XdsClient {
           logger.log(XdsLogLevel.INFO, "Sending RDS request for resources: {0}", resourceNames);
           break;
         case CDS:
-          typeUrl = useXdsV3 ? ADS_TYPE_URL_CDS : ADS_TYPE_URL_CDS_V2;
           version = cdsVersion;
           nonce = cdsRespNonce;
           logger.log(XdsLogLevel.INFO, "Sending CDS request for resources: {0}", resourceNames);
           break;
         case EDS:
-          typeUrl = useXdsV3 ? ADS_TYPE_URL_EDS : ADS_TYPE_URL_EDS_V2;
           version = edsVersion;
           nonce = edsRespNonce;
           logger.log(XdsLogLevel.INFO, "Sending EDS request for resources: {0}", resourceNames);
           break;
+        case UNKNOWN:
         default:
-          throw new AssertionError("Missing case in enum switch: " + resourceType);
+          throw new AssertionError("Unknown or missing case in enum switch: " + resourceType);
       }
       EnvoyProtoData.DiscoveryRequest request =
           EnvoyProtoData.DiscoveryRequest
@@ -1598,7 +1505,7 @@ final class XdsClientImpl extends XdsClient {
               .setVersionInfo(version)
               .setNode(node)
               .addAllResourceNames(resourceNames)
-              .setTypeUrl(typeUrl)
+              .setTypeUrl(resourceType)
               .setResponseNonce(nonce)
               .build();
       sendDiscoveryRequest(request);
@@ -1610,36 +1517,27 @@ final class XdsClientImpl extends XdsClient {
      */
     private void sendAckRequest(ResourceType resourceType, Collection<String> resourceNames,
         String versionInfo) {
-      if (useXdsV3) {
-        checkState(requestWriter != null, "ADS stream has not been started");
-      } else {
-        checkState(requestWriterV2 != null, "ADS stream has not been started");
-      }
-      String nonce = "";
-      String typeUrl;
+      String nonce;
       switch (resourceType) {
         case LDS:
-          typeUrl = useXdsV3 ? ADS_TYPE_URL_LDS : ADS_TYPE_URL_LDS_V2;
           ldsVersion = versionInfo;
           nonce = ldsRespNonce;
           break;
         case RDS:
-          typeUrl = useXdsV3 ? ADS_TYPE_URL_RDS : ADS_TYPE_URL_RDS_V2;
           rdsVersion = versionInfo;
           nonce = rdsRespNonce;
           break;
         case CDS:
-          typeUrl = useXdsV3 ? ADS_TYPE_URL_CDS : ADS_TYPE_URL_CDS_V2;
           cdsVersion = versionInfo;
           nonce = cdsRespNonce;
           break;
         case EDS:
-          typeUrl = useXdsV3 ? ADS_TYPE_URL_EDS : ADS_TYPE_URL_EDS_V2;
           edsVersion = versionInfo;
           nonce = edsRespNonce;
           break;
+        case UNKNOWN:
         default:
-          throw new AssertionError("Missing case in enum switch: " + resourceType);
+          throw new AssertionError("Unknown or missing case in enum switch: " + resourceType);
       }
       EnvoyProtoData.DiscoveryRequest request =
           EnvoyProtoData.DiscoveryRequest
@@ -1647,7 +1545,7 @@ final class XdsClientImpl extends XdsClient {
               .setVersionInfo(versionInfo)
               .setNode(node)
               .addAllResourceNames(resourceNames)
-              .setTypeUrl(typeUrl)
+              .setTypeUrl(resourceType)
               .setResponseNonce(nonce)
               .build();
       sendDiscoveryRequest(request);
@@ -1659,17 +1557,10 @@ final class XdsClientImpl extends XdsClient {
      */
     private void sendNackRequest(ResourceType resourceType, Collection<String> resourceNames,
         String rejectVersion, String message) {
-      if (useXdsV3) {
-        checkState(requestWriter != null, "ADS stream has not been started");
-      } else {
-        checkState(requestWriterV2 != null, "ADS stream has not been started");
-      }
-      String versionInfo = "";
-      String nonce = "";
-      String typeUrl;
+      String versionInfo;
+      String nonce;
       switch (resourceType) {
         case LDS:
-          typeUrl = useXdsV3 ? ADS_TYPE_URL_LDS : ADS_TYPE_URL_LDS_V2;
           versionInfo = ldsVersion;
           nonce = ldsRespNonce;
           logger.log(
@@ -1679,7 +1570,6 @@ final class XdsClientImpl extends XdsClient {
               message);
           break;
         case RDS:
-          typeUrl = useXdsV3 ? ADS_TYPE_URL_RDS : ADS_TYPE_URL_RDS_V2;
           versionInfo = rdsVersion;
           nonce = rdsRespNonce;
           logger.log(
@@ -1689,7 +1579,6 @@ final class XdsClientImpl extends XdsClient {
               message);
           break;
         case CDS:
-          typeUrl = useXdsV3 ? ADS_TYPE_URL_CDS : ADS_TYPE_URL_CDS_V2;
           versionInfo = cdsVersion;
           nonce = cdsRespNonce;
           logger.log(
@@ -1699,7 +1588,6 @@ final class XdsClientImpl extends XdsClient {
               message);
           break;
         case EDS:
-          typeUrl = useXdsV3 ? ADS_TYPE_URL_EDS : ADS_TYPE_URL_EDS_V2;
           versionInfo = edsVersion;
           nonce = edsRespNonce;
           logger.log(
@@ -1708,8 +1596,9 @@ final class XdsClientImpl extends XdsClient {
               rejectVersion,
               message);
           break;
+        case UNKNOWN:
         default:
-          throw new AssertionError("Missing case in enum switch: " + resourceType);
+          throw new AssertionError("Unknown or missing case in enum switch: " + resourceType);
       }
       EnvoyProtoData.DiscoveryRequest request =
           EnvoyProtoData.DiscoveryRequest
@@ -1717,7 +1606,7 @@ final class XdsClientImpl extends XdsClient {
               .setVersionInfo(versionInfo)
               .setNode(node)
               .addAllResourceNames(resourceNames)
-              .setTypeUrl(typeUrl)
+              .setTypeUrl(resourceType)
               .setResponseNonce(nonce)
               .setErrorDetail(
                   com.google.rpc.Status.newBuilder()
@@ -1726,6 +1615,97 @@ final class XdsClientImpl extends XdsClient {
                       .build())
               .build();
       sendDiscoveryRequest(request);
+    }
+  }
+
+  private final class AdsStreamV2 extends AbstractAdsStream {
+    private final io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc
+        .AggregatedDiscoveryServiceStub stubV2;
+    private StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest> requestWriterV2;
+
+    AdsStreamV2(io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc
+        .AggregatedDiscoveryServiceStub stubV2) {
+      this.stubV2 = checkNotNull(stubV2, "stubV2");
+    }
+
+    @Override
+    void start() {
+      StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseReaderV2 =
+          new StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse>() {
+            @Override
+            public void onNext(io.envoyproxy.envoy.api.v2.DiscoveryResponse value) {
+              onDiscoveryResponse(EnvoyProtoData.DiscoveryResponse.fromEnvoyProtoV2(value));
+            }
+
+            @Override
+            public void onError(Throwable t) {
+              AdsStreamV2.this.onError(t);
+            }
+
+            @Override
+            public void onCompleted() {
+              AdsStreamV2.this.onCompleted();
+            }
+          };
+      requestWriterV2 = stubV2.withWaitForReady().streamAggregatedResources(responseReaderV2);
+    }
+
+    @Override
+    void sendDiscoveryRequest(EnvoyProtoData.DiscoveryRequest request) {
+      checkState(requestWriterV2 != null, "ADS stream has not been started");
+      io.envoyproxy.envoy.api.v2.DiscoveryRequest requestProto =
+          request.toEnvoyProtoV2();
+      requestWriterV2.onNext(requestProto);
+      logger.log(XdsLogLevel.DEBUG, "Sent ACK request\n{0}", requestProto);
+    }
+
+    @Override
+    void sendError(Exception error) {
+      requestWriterV2.onError(error);
+    }
+  }
+
+  private final class AdsStream extends AbstractAdsStream {
+    private final AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceStub stub;
+    private StreamObserver<DiscoveryRequest> requestWriter;
+
+    AdsStream(AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceStub stub) {
+      this.stub = checkNotNull(stub, "stub");
+    }
+
+    @Override
+    void start() {
+      StreamObserver<DiscoveryResponse> responseReader = new StreamObserver<DiscoveryResponse>() {
+        @Override
+        public void onNext(DiscoveryResponse value) {
+          onDiscoveryResponse(EnvoyProtoData.DiscoveryResponse.fromEnvoyProto(value));
+        }
+
+        @Override
+        public void onError(Throwable t) {
+          AdsStream.this.onError(t);
+        }
+
+        @Override
+        public void onCompleted() {
+          AdsStream.this.onCompleted();
+        }
+      };
+      requestWriter = stub.withWaitForReady().streamAggregatedResources(responseReader);
+    }
+
+    @Override
+    void sendDiscoveryRequest(EnvoyProtoData.DiscoveryRequest request) {
+      checkState(requestWriter != null, "ADS stream has not been started");
+      io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest requestProto =
+          request.toEnvoyProto();
+      requestWriter.onNext(requestProto);
+      logger.log(XdsLogLevel.DEBUG, "Sent ACK request\n{0}", requestProto);
+    }
+
+    @Override
+    void sendError(Exception error) {
+      requestWriter.onError(error);
     }
   }
 
