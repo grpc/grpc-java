@@ -162,7 +162,7 @@ final class EnvoyProtoData {
         String id, String cluster, @Nullable Map<String, ?> metadata, @Nullable Locality locality,
         List<Address> listeningAddresses, String buildVersion, String userAgentName,
         @Nullable String userAgentVersion, List<String> clientFeatures) {
-      this.id = id;
+      this.id = checkNotNull(id, "id");
       this.cluster = checkNotNull(cluster, "cluster");
       this.metadata = metadata;
       this.locality = locality;
