@@ -18,15 +18,14 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
-import com.google.protobuf.Struct;
-import com.google.protobuf.Value;
-import io.envoyproxy.envoy.api.v2.core.Locality;
-import io.envoyproxy.envoy.api.v2.core.Node;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.GrpcUtil.GrpcBuildVersion;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.Bootstrapper.ServerInfo;
+import io.grpc.xds.EnvoyProtoData.Locality;
+import io.grpc.xds.EnvoyProtoData.Node;
 import java.io.IOException;
 import java.util.List;
 import org.junit.Rule;
@@ -78,20 +77,17 @@ public class BootstrapperTest {
     assertThat(serverInfo.getChannelCredentials().get(1).getConfig()).isNull();
     assertThat(serverInfo.getChannelCredentials().get(2).getType()).isEqualTo("google_default");
     assertThat(serverInfo.getChannelCredentials().get(2).getConfig()).isNull();
-    assertThat(info.getNode().toEnvoyProtoNodeV2()).isEqualTo(
+    assertThat(info.getNode()).isEqualTo(
         getNodeBuilder()
             .setId("ENVOY_NODE_ID")
             .setCluster("ENVOY_CLUSTER")
-            .setLocality(
-                Locality.newBuilder()
-                    .setRegion("ENVOY_REGION").setZone("ENVOY_ZONE").setSubZone("ENVOY_SUBZONE"))
+            .setLocality(new Locality("ENVOY_REGION", "ENVOY_ZONE", "ENVOY_SUBZONE"))
             .setMetadata(
-                Struct.newBuilder()
-                    .putFields("TRAFFICDIRECTOR_INTERCEPTION_PORT",
-                        Value.newBuilder().setStringValue("ENVOY_PORT").build())
-                    .putFields("TRAFFICDIRECTOR_NETWORK_NAME",
-                        Value.newBuilder().setStringValue("VPC_NETWORK_NAME").build())
-                    .build())
+                ImmutableMap.of(
+                    "TRAFFICDIRECTOR_INTERCEPTION_PORT",
+                    "ENVOY_PORT",
+                    "TRAFFICDIRECTOR_NETWORK_NAME",
+                    "VPC_NETWORK_NAME"))
             .build());
   }
 
@@ -141,20 +137,17 @@ public class BootstrapperTest {
     assertThat(serverInfoList.get(1).getServerUri())
         .isEqualTo("trafficdirector-bar.googleapis.com:443");
     assertThat(serverInfoList.get(1).getChannelCredentials()).isEmpty();
-    assertThat(info.getNode().toEnvoyProtoNodeV2()).isEqualTo(
+    assertThat(info.getNode()).isEqualTo(
         getNodeBuilder()
             .setId("ENVOY_NODE_ID")
             .setCluster("ENVOY_CLUSTER")
-            .setLocality(
-                Locality.newBuilder()
-                    .setRegion("ENVOY_REGION").setZone("ENVOY_ZONE").setSubZone("ENVOY_SUBZONE"))
+            .setLocality(new Locality("ENVOY_REGION", "ENVOY_ZONE", "ENVOY_SUBZONE"))
             .setMetadata(
-                Struct.newBuilder()
-                    .putFields("TRAFFICDIRECTOR_INTERCEPTION_PORT",
-                        Value.newBuilder().setStringValue("ENVOY_PORT").build())
-                    .putFields("TRAFFICDIRECTOR_NETWORK_NAME",
-                        Value.newBuilder().setStringValue("VPC_NETWORK_NAME").build())
-                    .build())
+                ImmutableMap.of(
+                    "TRAFFICDIRECTOR_INTERCEPTION_PORT",
+                    "ENVOY_PORT",
+                    "TRAFFICDIRECTOR_NETWORK_NAME",
+                    "VPC_NETWORK_NAME"))
             .build());
   }
 
@@ -197,20 +190,17 @@ public class BootstrapperTest {
     assertThat(serverInfo.getChannelCredentials().get(1).getConfig()).isNull();
     assertThat(serverInfo.getChannelCredentials().get(2).getType()).isEqualTo("google_default");
     assertThat(serverInfo.getChannelCredentials().get(2).getConfig()).isNull();
-    assertThat(info.getNode().toEnvoyProtoNodeV2()).isEqualTo(
+    assertThat(info.getNode()).isEqualTo(
         getNodeBuilder()
             .setId("ENVOY_NODE_ID")
             .setCluster("ENVOY_CLUSTER")
-            .setLocality(
-                Locality.newBuilder()
-                    .setRegion("ENVOY_REGION").setZone("ENVOY_ZONE").setSubZone("ENVOY_SUBZONE"))
+            .setLocality(new Locality("ENVOY_REGION", "ENVOY_ZONE", "ENVOY_SUBZONE"))
             .setMetadata(
-                Struct.newBuilder()
-                    .putFields("TRAFFICDIRECTOR_INTERCEPTION_PORT",
-                        Value.newBuilder().setStringValue("ENVOY_PORT").build())
-                    .putFields("TRAFFICDIRECTOR_NETWORK_NAME",
-                        Value.newBuilder().setStringValue("VPC_NETWORK_NAME").build())
-                    .build())
+                ImmutableMap.of(
+                    "TRAFFICDIRECTOR_INTERCEPTION_PORT",
+                    "ENVOY_PORT",
+                    "TRAFFICDIRECTOR_NETWORK_NAME",
+                    "VPC_NETWORK_NAME"))
             .build());
   }
 
@@ -230,7 +220,7 @@ public class BootstrapperTest {
 
     BootstrapInfo info = Bootstrapper.parseConfig(rawData);
     assertThat(info.getServers()).isEmpty();
-    assertThat(info.getNode().toEnvoyProtoNodeV2()).isEqualTo(getNodeBuilder().build());
+    assertThat(info.getNode()).isEqualTo(getNodeBuilder().build());
   }
 
   @Test
@@ -248,7 +238,7 @@ public class BootstrapperTest {
     ServerInfo serverInfo = Iterables.getOnlyElement(info.getServers());
     assertThat(serverInfo.getServerUri()).isEqualTo("trafficdirector.googleapis.com:443");
     assertThat(serverInfo.getChannelCredentials()).isEmpty();
-    assertThat(info.getNode().toEnvoyProtoNodeV2()).isEqualTo(getNodeBuilder().build());
+    assertThat(info.getNode()).isEqualTo(getNodeBuilder().build());
   }
 
   @Test
@@ -304,7 +294,6 @@ public class BootstrapperTest {
     Bootstrapper.parseConfig(rawData);
   }
 
-  @SuppressWarnings("deprecation")
   private static Node.Builder getNodeBuilder() {
     GrpcBuildVersion buildVersion = GrpcUtil.getGrpcBuildVersion();
     return
