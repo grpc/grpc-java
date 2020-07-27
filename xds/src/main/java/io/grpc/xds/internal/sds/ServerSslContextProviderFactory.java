@@ -45,7 +45,7 @@ final class ServerSslContextProviderFactory
       try {
         return SdsServerSslContextProvider.getProvider(
             downstreamTlsContext,
-            Bootstrapper.getInstance().readBootstrap().getNode(),
+            Bootstrapper.getInstance().readBootstrap().getNode().toEnvoyProtoNodeV2(),
             Executors.newSingleThreadExecutor(new ThreadFactoryBuilder()
                 .setNameFormat("server-sds-sslcontext-provider-%d")
                 .setDaemon(true)

@@ -63,7 +63,8 @@ public class EnvoyProtoDataTest {
     assertThat(xdsLocality.getZone()).isEqualTo("test_zone");
     assertThat(xdsLocality.getSubZone()).isEqualTo("test_subzone");
 
-    io.envoyproxy.envoy.api.v2.core.Locality convertedLocality = xdsLocality.toEnvoyProtoLocality();
+    io.envoyproxy.envoy.api.v2.core.Locality convertedLocality =
+        xdsLocality.toEnvoyProtoLocalityV2();
     assertThat(convertedLocality.getRegion()).isEqualTo("test_region");
     assertThat(convertedLocality.getZone()).isEqualTo("test_zone");
     assertThat(convertedLocality.getSubZone()).isEqualTo("test_subzone");

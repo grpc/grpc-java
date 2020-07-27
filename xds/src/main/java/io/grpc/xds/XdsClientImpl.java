@@ -28,14 +28,10 @@ import com.google.common.collect.Iterables;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.MessageOrBuilder;
-import com.google.protobuf.Struct;
-import com.google.protobuf.Value;
 import com.google.protobuf.util.JsonFormat;
 import com.google.rpc.Code;
 import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
-import io.envoyproxy.envoy.api.v2.core.Node;
-import io.envoyproxy.envoy.api.v2.core.SocketAddress;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.DiscoveryType;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.EdsClusterConfig;
@@ -63,6 +59,7 @@ import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
+import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.EnvoyProtoData.StructOrError;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.LoadReportClient.LoadReportCallback;
@@ -463,18 +460,13 @@ final class XdsClientImpl extends XdsClient {
 
   /** In case of Listener watcher metadata to be updated to include port. */
   private void updateNodeMetadataForListenerRequest(int port) {
-    Struct newMetadata = node.getMetadata().toBuilder()
-        .putFields("TRAFFICDIRECTOR_PROXYLESS",
-            Value.newBuilder().setStringValue("1").build())
-        .build();
-    io.envoyproxy.envoy.api.v2.core.Address listeningAddress =
-        io.envoyproxy.envoy.api.v2.core.Address.newBuilder()
-            .setSocketAddress(
-                SocketAddress.newBuilder()
-                    .setAddress("0.0.0.0")
-                    .setPortValue(port)
-                    .build())
-            .build();
+    Map<String, Object> newMetadata = new HashMap<>();
+    if (node.getMetadata() != null) {
+      newMetadata.putAll(node.getMetadata());
+    }
+    newMetadata.put("TRAFFICDIRECTOR_PROXYLESS", "1");
+    EnvoyProtoData.Address listeningAddress =
+        new EnvoyProtoData.Address("0.0.0.0", port);
     node =
         node.toBuilder().setMetadata(newMetadata).addListeningAddresses(listeningAddress).build();
   }
@@ -488,7 +480,7 @@ final class XdsClientImpl extends XdsClient {
               logId,
               targetName,
               channel,
-              node,
+              node.toEnvoyProtoNodeV2(),
               syncContext,
               timeService,
               backoffPolicyProvider,
@@ -1495,7 +1487,7 @@ final class XdsClientImpl extends XdsClient {
           DiscoveryRequest
               .newBuilder()
               .setVersionInfo(version)
-              .setNode(node)
+              .setNode(node.toEnvoyProtoNodeV2())
               .addAllResourceNames(resourceNames)
               .setTypeUrl(typeUrl)
               .setResponseNonce(nonce)
@@ -1529,7 +1521,7 @@ final class XdsClientImpl extends XdsClient {
           DiscoveryRequest
               .newBuilder()
               .setVersionInfo(versionInfo)
-              .setNode(node)
+              .setNode(node.toEnvoyProtoNodeV2())
               .addAllResourceNames(resourceNames)
               .setTypeUrl(typeUrl)
               .setResponseNonce(nonce)
@@ -1576,7 +1568,7 @@ final class XdsClientImpl extends XdsClient {
           DiscoveryRequest
               .newBuilder()
               .setVersionInfo(versionInfo)
-              .setNode(node)
+              .setNode(node.toEnvoyProtoNodeV2())
               .addAllResourceNames(resourceNames)
               .setTypeUrl(typeUrl)
               .setResponseNonce(nonce)

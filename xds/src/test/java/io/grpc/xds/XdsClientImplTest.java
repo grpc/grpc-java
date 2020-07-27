@@ -294,7 +294,7 @@ public class XdsClientImplTest {
             TARGET_AUTHORITY,
             servers,
             channelFactory,
-            NODE,
+            EnvoyProtoData.Node.fromEnvoyProtoNodeV2(NODE),
             syncContext,
             fakeClock.getScheduledExecutorService(),
             backoffPolicyProvider,
