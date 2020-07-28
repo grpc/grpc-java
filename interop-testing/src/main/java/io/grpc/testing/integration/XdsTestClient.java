@@ -45,6 +45,7 @@ import io.grpc.testing.integration.Messages.LoadBalancerStatsResponse;
 import io.grpc.testing.integration.Messages.SimpleRequest;
 import io.grpc.testing.integration.Messages.SimpleResponse;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -70,7 +71,7 @@ public final class XdsTestClient {
   private int numChannels = 1;
   private boolean printResponse = false;
   private int qps = 1;
-  private List<RpcType> rpc = ImmutableList.of(RpcType.UNARY_CALL);
+  private List<RpcType> rpcTypes = ImmutableList.of(RpcType.UNARY_CALL);
   private Map<RpcType, Metadata> metadata = new HashMap<>();
   private int rpcTimeoutSec = 20;
   private String server = "localhost:8080";
@@ -139,7 +140,7 @@ public final class XdsTestClient {
       } else if ("qps".equals(key)) {
         qps = Integer.valueOf(value);
       } else if ("rpc".equals(key)) {
-        rpc = parseRpcs(value);
+        rpcTypes = parseRpcs(value);
       } else if ("rpc_timeout_sec".equals(key)) {
         rpcTimeoutSec = Integer.valueOf(value);
       } else if ("server".equals(key)) {
@@ -165,7 +166,7 @@ public final class XdsTestClient {
               + "\n  --qps=INT              Qps per channel, for each type of RPC. Default: "
               + c.qps
               + "\n  --rpc=STR              Types of RPCs to make, ',' separated string. RPCs can "
-              + "be EmptyCall or UnaryCall."
+              + "be EmptyCall or UnaryCall. Default: UnaryCall"
               + "\n  --metadata=STR         The metadata to send with each RPC, in the format "
               + "EmptyCall:key1:value1,UnaryCall:key2:value2."
               + "\n  --rpc_timeout_sec=INT  Per RPC timeout seconds. Default: "
@@ -313,14 +314,12 @@ public final class XdsTestClient {
               new StreamObserver<EmptyProtos.Empty>() {
                 @Override
                 public void onCompleted() {
-                  notifyWatchers(
-                      savedWatchers, rpcType.toCamelCase(), requestId, hostnameRef.get());
+                  notifyWatchers(savedWatchers, rpcType, requestId, hostnameRef.get());
                 }
 
                 @Override
                 public void onError(Throwable t) {
-                  notifyWatchers(
-                      savedWatchers, rpcType.toCamelCase(), requestId, hostnameRef.get());
+                  notifyWatchers(savedWatchers, rpcType, requestId, hostnameRef.get());
                 }
 
                 @Override
@@ -333,8 +332,7 @@ public final class XdsTestClient {
               new StreamObserver<SimpleResponse>() {
                 @Override
                 public void onCompleted() {
-                  notifyWatchers(
-                      savedWatchers, rpcType.toCamelCase(), requestId, hostnameRef.get());
+                  notifyWatchers(savedWatchers, rpcType, requestId, hostnameRef.get());
                 }
 
                 @Override
@@ -342,8 +340,7 @@ public final class XdsTestClient {
                   if (printResponse) {
                     logger.log(Level.WARNING, "Rpc failed: {0}", t);
                   }
-                  notifyWatchers(
-                      savedWatchers, rpcType.toCamelCase(), requestId, hostnameRef.get());
+                  notifyWatchers(savedWatchers, rpcType, requestId, hostnameRef.get());
                 }
 
                 @Override
@@ -373,7 +370,7 @@ public final class XdsTestClient {
 
     long nanosPerQuery = TimeUnit.SECONDS.toNanos(1) / qps;
 
-    for (RpcType rpcType : rpc) {
+    for (RpcType rpcType : rpcTypes) {
       ListenableScheduledFuture<?> future =
           exec.scheduleAtFixedRate(
               new PeriodicRpc(rpcType), 0, nanosPerQuery, TimeUnit.NANOSECONDS);
@@ -397,7 +394,7 @@ public final class XdsTestClient {
   }
 
   private void notifyWatchers(
-      Set<XdsStatsWatcher> watchers, String rpcType, long requestId, String hostname) {
+      Set<XdsStatsWatcher> watchers, RpcType rpcType, long requestId, String hostname) {
     for (XdsStatsWatcher watcher : watchers) {
       watcher.rpcCompleted(rpcType, requestId, hostname);
     }
@@ -429,7 +426,8 @@ public final class XdsTestClient {
     private final long startId;
     private final long endId;
     private final Map<String, Integer> rpcsByPeer = new HashMap<>();
-    private final Map<String, Map<String, Integer>> rpcsByTypeAndPeer = new HashMap<>();
+    private final EnumMap<RpcType, Map<String, Integer>> rpcsByTypeAndPeer =
+        new EnumMap<>(RpcType.class);
     private final Object lock = new Object();
     private int noRemotePeer;
 
@@ -439,7 +437,7 @@ public final class XdsTestClient {
       this.endId = endId;
     }
 
-    void rpcCompleted(String rpcType, long requestId, @Nullable String hostname) {
+    void rpcCompleted(RpcType rpcType, long requestId, @Nullable String hostname) {
       synchronized (lock) {
         if (startId <= requestId && requestId < endId) {
           if (hostname != null) {
@@ -482,11 +480,11 @@ public final class XdsTestClient {
       LoadBalancerStatsResponse.Builder builder = LoadBalancerStatsResponse.newBuilder();
       synchronized (lock) {
         builder.putAllRpcsByPeer(rpcsByPeer);
-        for (Map.Entry<String, Map<String, Integer>> entry : rpcsByTypeAndPeer.entrySet()) {
+        for (Map.Entry<RpcType, Map<String, Integer>> entry : rpcsByTypeAndPeer.entrySet()) {
           LoadBalancerStatsResponse.RpcsByPeer.Builder rpcs =
               LoadBalancerStatsResponse.RpcsByPeer.newBuilder();
           rpcs.putAllRpcsByPeer(entry.getValue());
-          builder.putRpcsByMethod(entry.getKey(), rpcs.build());
+          builder.putRpcsByMethod(entry.getKey().toCamelCase(), rpcs.build());
         }
         builder.setNumFailures(noRemotePeer + (int) latch.getCount());
       }
