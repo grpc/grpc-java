@@ -111,11 +111,6 @@ class XdsClientTestHelper {
         .addAllDomains(domains)
         .addRoutes(
             Route.newBuilder()
-                .setRoute(RouteAction.newBuilder().setCluster("whatever cluster"))
-                .setMatch(RouteMatch.newBuilder().setPrefix("")))
-        .addRoutes(
-            // Only the last (default) route matters.
-            Route.newBuilder()
                 .setRoute(RouteAction.newBuilder().setCluster(clusterName))
                 .setMatch(RouteMatch.newBuilder().setPrefix("")))
         .build();

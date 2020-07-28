@@ -307,7 +307,6 @@ public class XdsClientImplTest {
 
   @After
   public void tearDown() {
-    XdsClientImpl.enableExperimentalRouting = false;
     xdsClient.shutdown();
     assertThat(adsEnded.get()).isTrue();
     assertThat(lrsEnded.get()).isTrue();
@@ -647,7 +646,6 @@ public class XdsClientImplTest {
    */
   @Test
   public void resolveVirtualHostWithPathMatchingInRdsResponse() {
-    XdsClientImpl.enableExperimentalRouting = true;
     xdsClient.watchConfigData(TARGET_AUTHORITY, configWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
@@ -3431,25 +3429,6 @@ public class XdsClientImplTest {
   }
 
   @Test
-  public void populateRoutesInVirtualHost_lastRouteIsNotDefaultRoute() {
-    VirtualHost virtualHost =
-        VirtualHost.newBuilder()
-            .setName("virtualhost00.googleapis.com")  // don't care
-            .addDomains(TARGET_AUTHORITY)
-            .addRoutes(
-                Route.newBuilder()
-                    .setRoute(RouteAction.newBuilder().setCluster("cluster.googleapis.com"))
-                    .setMatch(
-                        RouteMatch.newBuilder()
-                            .setPrefix("/service/method")
-                            .setCaseSensitive(BoolValue.newBuilder().setValue(true))))
-            .build();
-
-    thrown.expect(XdsClientImpl.InvalidProtoDataException.class);
-    XdsClientImpl.populateRoutesInVirtualHost(virtualHost);
-  }
-
-  @Test
   public void populateRoutesInVirtualHost_NoUsableRoute() {
     VirtualHost virtualHost =
         VirtualHost.newBuilder()
@@ -3514,13 +3493,6 @@ public class XdsClientImplTest {
         + "                \"prefix\": \"\"\n"
         + "              },\n"
         + "              \"route\": {\n"
-        + "                \"cluster\": \"whatever cluster\"\n"
-        + "              }\n"
-        + "            }, {\n"
-        + "              \"match\": {\n"
-        + "                \"prefix\": \"\"\n"
-        + "              },\n"
-        + "              \"route\": {\n"
         + "                \"cluster\": \"cluster.googleapis.com\"\n"
         + "              }\n"
         + "            }]\n"
@@ -3560,13 +3532,6 @@ public class XdsClientImplTest {
         + "      \"name\": \"virtualhost00.googleapis.com\",\n"
         + "      \"domains\": [\"foo.googleapis.com\", \"bar.googleapis.com\"],\n"
         + "      \"routes\": [{\n"
-        + "        \"match\": {\n"
-        + "          \"prefix\": \"\"\n"
-        + "        },\n"
-        + "        \"route\": {\n"
-        + "          \"cluster\": \"whatever cluster\"\n"
-        + "        }\n"
-        + "      }, {\n"
         + "        \"match\": {\n"
         + "          \"prefix\": \"\"\n"
         + "        },\n"
