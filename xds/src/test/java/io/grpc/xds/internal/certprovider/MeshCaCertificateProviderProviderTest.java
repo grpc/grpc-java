@@ -52,7 +52,7 @@ public class MeshCaCertificateProviderProviderTest {
   StsCredentials.Factory stsCredentialsFactory;
 
   @Mock
-  MeshCaCertificateProvider.ChannelFactory channelFactory;
+  MeshCaCertificateProvider.MeshCaChannelFactory meshCaChannelFactory;
 
   @Mock
   BackoffPolicy.Provider backoffPolicyProvider;
@@ -67,7 +67,7 @@ public class MeshCaCertificateProviderProviderTest {
     provider =
         new MeshCaCertificateProviderProvider(
             stsCredentialsFactory,
-            channelFactory,
+            meshCaChannelFactory,
             backoffPolicyProvider,
             meshCaCertificateProviderFactory);
   }
@@ -81,8 +81,8 @@ public class MeshCaCertificateProviderProviderTest {
         (MeshCaCertificateProviderProvider) certProviderProvider;
     assertThat(meshCaCertificateProviderProvider.stsCredentialsFactory)
         .isSameInstanceAs(StsCredentials.Factory.getInstance());
-    assertThat(meshCaCertificateProviderProvider.channelFactory)
-        .isSameInstanceAs(MeshCaCertificateProvider.ChannelFactory.getInstance());
+    assertThat(meshCaCertificateProviderProvider.meshCaChannelFactory)
+        .isSameInstanceAs(MeshCaCertificateProvider.MeshCaChannelFactory.getInstance());
     assertThat(meshCaCertificateProviderProvider.backoffPolicyProvider)
         .isInstanceOf(ExponentialBackoffPolicy.Provider.class);
     assertThat(meshCaCertificateProviderProvider.meshCaCertificateProviderFactory)
@@ -110,7 +110,7 @@ public class MeshCaCertificateProviderProviderTest {
             eq(MeshCaCertificateProviderProvider.KEY_SIZE_DEFAULT),
             eq(MeshCaCertificateProviderProvider.KEY_ALGO_DEFAULT),
             eq(MeshCaCertificateProviderProvider.SIGNATURE_ALGO_DEFAULT),
-            eq(channelFactory),
+            eq(meshCaChannelFactory),
             eq(backoffPolicyProvider),
             eq(MeshCaCertificateProviderProvider.RENEWAL_GRACE_PERIOD_SECONDS_DEFAULT),
             eq(MeshCaCertificateProviderProvider.MAX_RETRY_ATTEMPTS_DEFAULT),
@@ -180,7 +180,7 @@ public class MeshCaCertificateProviderProviderTest {
                     eq(4096),
                     eq("KEY-ALGO1"),
                     eq("SIG-ALGO2"),
-                    eq(channelFactory),
+                    eq(meshCaChannelFactory),
                     eq(backoffPolicyProvider),
                     eq(4321L),
                     eq(9),

@@ -32,7 +32,7 @@ final class MeshCaCertificateProvider extends CertificateProvider {
 
   protected MeshCaCertificateProvider(DistributorWatcher watcher, boolean notifyCertUpdates,
       String meshCaUrl, String zone, long validitySeconds,
-      int keySize, String alg, String signatureAlg, ChannelFactory channelFactory,
+      int keySize, String alg, String signatureAlg, MeshCaChannelFactory meshCaChannelFactory,
       BackoffPolicy.Provider backoffPolicyProvider, long renewalGracePeriodSeconds,
       int maxRetryAttempts, GoogleCredentials oauth2Creds) {
     super(watcher, notifyCertUpdates);
@@ -49,10 +49,10 @@ final class MeshCaCertificateProvider extends CertificateProvider {
   }
 
   /** Factory for creating channels to MeshCA sever. */
-  abstract static class ChannelFactory {
+  abstract static class MeshCaChannelFactory {
 
-    private static final ChannelFactory DEFAULT_INSTANCE =
-        new ChannelFactory() {
+    private static final MeshCaChannelFactory DEFAULT_INSTANCE =
+        new MeshCaChannelFactory() {
 
           /** Creates a channel to the URL in the given list. */
           @Override
@@ -65,7 +65,7 @@ final class MeshCaCertificateProvider extends CertificateProvider {
           }
         };
 
-    static ChannelFactory getInstance() {
+    static MeshCaChannelFactory getInstance() {
       return DEFAULT_INSTANCE;
     }
 
@@ -90,7 +90,7 @@ final class MeshCaCertificateProvider extends CertificateProvider {
               int keySize,
               String alg,
               String signatureAlg,
-              ChannelFactory channelFactory,
+              MeshCaChannelFactory meshCaChannelFactory,
               BackoffPolicy.Provider backoffPolicyProvider,
               long renewalGracePeriodSeconds,
               int maxRetryAttempts,
@@ -104,7 +104,7 @@ final class MeshCaCertificateProvider extends CertificateProvider {
                 keySize,
                 alg,
                 signatureAlg,
-                channelFactory,
+                meshCaChannelFactory,
                 backoffPolicyProvider,
                 renewalGracePeriodSeconds,
                 maxRetryAttempts,
@@ -125,7 +125,7 @@ final class MeshCaCertificateProvider extends CertificateProvider {
         int keySize,
         String alg,
         String signatureAlg,
-        ChannelFactory channelFactory,
+        MeshCaChannelFactory meshCaChannelFactory,
         BackoffPolicy.Provider backoffPolicyProvider,
         long renewalGracePeriodSeconds,
         int maxRetryAttempts,

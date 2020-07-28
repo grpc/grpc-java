@@ -74,7 +74,7 @@ final class MeshCaCertificateProviderProvider implements CertificateProviderProv
           .register(
               new MeshCaCertificateProviderProvider(
                   StsCredentials.Factory.getInstance(),
-                  MeshCaCertificateProvider.ChannelFactory.getInstance(),
+                  MeshCaCertificateProvider.MeshCaChannelFactory.getInstance(),
                   new ExponentialBackoffPolicy.Provider(),
                   MeshCaCertificateProvider.Factory.getInstance())
         );
@@ -84,17 +84,17 @@ final class MeshCaCertificateProviderProvider implements CertificateProviderProv
   }
 
   final StsCredentials.Factory stsCredentialsFactory;
-  final MeshCaCertificateProvider.ChannelFactory channelFactory;
+  final MeshCaCertificateProvider.MeshCaChannelFactory meshCaChannelFactory;
   final BackoffPolicy.Provider backoffPolicyProvider;
   final MeshCaCertificateProvider.Factory meshCaCertificateProviderFactory;
 
   @VisibleForTesting
   MeshCaCertificateProviderProvider(StsCredentials.Factory stsCredentialsFactory,
-      MeshCaCertificateProvider.ChannelFactory channelFactory,
+      MeshCaCertificateProvider.MeshCaChannelFactory meshCaChannelFactory,
       BackoffPolicy.Provider backoffPolicyProvider,
       MeshCaCertificateProvider.Factory meshCaCertificateProviderFactory) {
     this.stsCredentialsFactory = stsCredentialsFactory;
-    this.channelFactory = channelFactory;
+    this.meshCaChannelFactory = meshCaChannelFactory;
     this.backoffPolicyProvider = backoffPolicyProvider;
     this.meshCaCertificateProviderFactory = meshCaCertificateProviderFactory;
   }
@@ -120,11 +120,11 @@ final class MeshCaCertificateProviderProvider implements CertificateProviderProv
         configObj.zone,
         configObj.certValiditySeconds, configObj.keySize, configObj.keyAlgo,
         configObj.signatureAlgo,
-        channelFactory, backoffPolicyProvider,
+        meshCaChannelFactory, backoffPolicyProvider,
         configObj.renewalGracePeriodSeconds, configObj.maxRetryAttempts, stsCredentials);
   }
 
-  static Config validateAndTranslateConfig(Object config) {
+  private static Config validateAndTranslateConfig(Object config) {
     // TODO(sanjaypujare): add support for string, struct proto etc
     checkArgument(config instanceof Map, "Only Map supported for config");
     @SuppressWarnings("unchecked") Map<String, String> map = (Map<String, String>)config;
