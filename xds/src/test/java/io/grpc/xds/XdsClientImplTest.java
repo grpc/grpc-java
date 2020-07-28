@@ -57,7 +57,6 @@ import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.core.AggregatedConfigSource;
 import io.envoyproxy.envoy.api.v2.core.ConfigSource;
 import io.envoyproxy.envoy.api.v2.core.HealthStatus;
-import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
 import io.envoyproxy.envoy.api.v2.route.RedirectAction;
 import io.envoyproxy.envoy.api.v2.route.WeightedCluster;
@@ -94,6 +93,7 @@ import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.LbEndpoint;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
+import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.XdsClient.ClusterUpdate;
 import io.grpc.xds.XdsClient.ClusterWatcher;
 import io.grpc.xds.XdsClient.ConfigUpdate;
@@ -132,7 +132,7 @@ public class XdsClientImplTest {
 
   private static final String TARGET_AUTHORITY = "foo.googleapis.com:8080";
 
-  private static final Node NODE = Node.getDefaultInstance();
+  private static final Node NODE = Node.newBuilder().build();
   private static final FakeClock.TaskFilter RPC_RETRY_TASK_FILTER =
       new FakeClock.TaskFilter() {
         @Override
@@ -294,7 +294,7 @@ public class XdsClientImplTest {
             TARGET_AUTHORITY,
             servers,
             channelFactory,
-            NODE,
+            EnvoyProtoData.Node.newBuilder().build(),
             syncContext,
             fakeClock.getScheduledExecutorService(),
             backoffPolicyProvider,
@@ -3732,7 +3732,7 @@ public class XdsClientImplTest {
       if (!resourceNames.equals(new HashSet<>(argument.getResourceNamesList()))) {
         return false;
       }
-      return NODE.equals(argument.getNode());
+      return argument.getNode().equals(NODE.toEnvoyProtoNodeV2());
     }
   }
 

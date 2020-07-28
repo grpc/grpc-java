@@ -17,17 +17,13 @@
 package io.grpc.xds;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.protobuf.ListValue;
-import com.google.protobuf.NullValue;
-import com.google.protobuf.Struct;
-import com.google.protobuf.Value;
-import io.envoyproxy.envoy.api.v2.core.Locality;
-import io.envoyproxy.envoy.api.v2.core.Node;
 import io.grpc.Internal;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.GrpcUtil.GrpcBuildVersion;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.JsonUtil;
+import io.grpc.xds.EnvoyProtoData.Locality;
+import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -133,34 +129,24 @@ public abstract class Bootstrapper {
       }
       Map<String, ?> metadata = JsonUtil.getObject(rawNode, "metadata");
       if (metadata != null) {
-        Struct.Builder structBuilder = Struct.newBuilder();
-        for (Map.Entry<String, ?> entry : metadata.entrySet()) {
-          logger.log(
-              XdsLogLevel.INFO,
-              "Node metadata field {0}: {1}", entry.getKey(), entry.getValue());
-          structBuilder.putFields(entry.getKey(), convertToValue(entry.getValue()));
-        }
-        nodeBuilder.setMetadata(structBuilder);
+        nodeBuilder.setMetadata(metadata);
       }
       Map<String, ?> rawLocality = JsonUtil.getObject(rawNode, "locality");
       if (rawLocality != null) {
-        Locality.Builder localityBuilder = Locality.newBuilder();
-        if (rawLocality.containsKey("region")) {
-          String region = JsonUtil.getString(rawLocality, "region");
+        String region = JsonUtil.getString(rawLocality, "region");
+        String zone = JsonUtil.getString(rawLocality, "zone");
+        String subZone = JsonUtil.getString(rawLocality, "sub_zone");
+        if (region != null) {
           logger.log(XdsLogLevel.INFO, "Locality region: {0}", region);
-          localityBuilder.setRegion(region);
         }
         if (rawLocality.containsKey("zone")) {
-          String zone = JsonUtil.getString(rawLocality, "zone");
           logger.log(XdsLogLevel.INFO, "Locality zone: {0}", zone);
-          localityBuilder.setZone(zone);
         }
         if (rawLocality.containsKey("sub_zone")) {
-          String subZone = JsonUtil.getString(rawLocality, "sub_zone");
           logger.log(XdsLogLevel.INFO, "Locality sub_zone: {0}", subZone);
-          localityBuilder.setSubZone(subZone);
         }
-        nodeBuilder.setLocality(localityBuilder);
+        Locality locality = new Locality(region, zone, subZone);
+        nodeBuilder.setLocality(locality);
       }
     }
     GrpcBuildVersion buildVersion = GrpcUtil.getGrpcBuildVersion();
@@ -171,43 +157,6 @@ public abstract class Bootstrapper {
     nodeBuilder.addClientFeatures(CLIENT_FEATURE_DISABLE_OVERPROVISIONING);
 
     return new BootstrapInfo(servers, nodeBuilder.build());
-  }
-
-  /**
-   * Converts Java representation of the given JSON value to protobuf's {@link
-   * com.google.protobuf.Value} representation.
-   *
-   * <p>The given {@code rawObject} must be a valid JSON value in Java representation, which is
-   * either a {@code Map<String, ?>}, {@code List<?>}, {@code String}, {@code Double},
-   * {@code Boolean}, or {@code null}.
-   */
-  private static Value convertToValue(Object rawObject) {
-    Value.Builder valueBuilder = Value.newBuilder();
-    if (rawObject == null) {
-      valueBuilder.setNullValue(NullValue.NULL_VALUE);
-    } else if (rawObject instanceof Double) {
-      valueBuilder.setNumberValue((Double) rawObject);
-    } else if (rawObject instanceof String) {
-      valueBuilder.setStringValue((String) rawObject);
-    } else if (rawObject instanceof Boolean) {
-      valueBuilder.setBoolValue((Boolean) rawObject);
-    } else if (rawObject instanceof Map) {
-      Struct.Builder structBuilder = Struct.newBuilder();
-      @SuppressWarnings("unchecked")
-      Map<String, ?> map = (Map<String, ?>) rawObject;
-      for (Map.Entry<String, ?> entry : map.entrySet()) {
-        structBuilder.putFields(entry.getKey(), convertToValue(entry.getValue()));
-      }
-      valueBuilder.setStructValue(structBuilder);
-    } else if (rawObject instanceof List) {
-      ListValue.Builder listBuilder = ListValue.newBuilder();
-      List<?> list = (List<?>) rawObject;
-      for (Object obj : list) {
-        listBuilder.addValues(convertToValue(obj));
-      }
-      valueBuilder.setListValue(listBuilder);
-    }
-    return valueBuilder.build();
   }
 
   /**

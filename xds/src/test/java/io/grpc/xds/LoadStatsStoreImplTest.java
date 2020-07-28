@@ -83,7 +83,7 @@ public class LoadStatsStoreImplTest {
       @Nullable List<EndpointLoadMetricStats> metrics) {
     UpstreamLocalityStats.Builder builder =
         UpstreamLocalityStats.newBuilder()
-            .setLocality(locality.toEnvoyProtoLocality())
+            .setLocality(locality.toEnvoyProtoLocalityV2())
             .setTotalSuccessfulRequests(callsSucceed)
             .setTotalErrorRequests(callsFailed)
             .setTotalRequestsInProgress(callsInProgress)
