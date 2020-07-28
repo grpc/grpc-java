@@ -28,7 +28,6 @@ import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
 import com.google.re2j.Pattern;
 import com.google.re2j.PatternSyntaxException;
-import io.envoyproxy.envoy.config.core.v3.Node.UserAgentVersionTypeCase;
 import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.envoyproxy.envoy.type.v3.FractionalPercent.DenominatorType;
 import io.grpc.EquivalentAddressGroup;
@@ -175,6 +174,48 @@ final class EnvoyProtoData {
           checkNotNull(clientFeatures, "clientFeatures"));
     }
 
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(this)
+          .add("id", id)
+          .add("cluster", cluster)
+          .add("metadata", metadata)
+          .add("locality", locality)
+          .add("listeningAddresses", listeningAddresses)
+          .add("buildVersion", buildVersion)
+          .add("userAgentName", userAgentName)
+          .add("userAgentVersion", userAgentVersion)
+          .add("clientFeatures", clientFeatures)
+          .toString();
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      Node node = (Node) o;
+      return Objects.equals(id, node.id)
+          && Objects.equals(cluster, node.cluster)
+          && Objects.equals(metadata, node.metadata)
+          && Objects.equals(locality, node.locality)
+          && Objects.equals(listeningAddresses, node.listeningAddresses)
+          && Objects.equals(buildVersion, node.buildVersion)
+          && Objects.equals(userAgentName, node.userAgentName)
+          && Objects.equals(userAgentVersion, node.userAgentVersion)
+          && Objects.equals(clientFeatures, node.clientFeatures);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects
+          .hash(id, cluster, metadata, locality, listeningAddresses, buildVersion, userAgentName,
+              userAgentVersion, clientFeatures);
+    }
+
     static final class Builder {
       private String id = "";
       private String cluster = "";
@@ -282,89 +323,6 @@ final class EnvoyProtoData {
       return listeningAddresses;
     }
 
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (o == null || getClass() != o.getClass()) {
-        return false;
-      }
-      Node node = (Node) o;
-      return Objects.equals(id, node.id)
-          && Objects.equals(cluster, node.cluster)
-          && Objects.equals(metadata, node.metadata)
-          && Objects.equals(locality, node.locality)
-          && Objects.equals(listeningAddresses, node.listeningAddresses)
-          && Objects.equals(buildVersion, node.buildVersion)
-          && Objects.equals(userAgentName, node.userAgentName)
-          && Objects.equals(userAgentVersion, node.userAgentVersion)
-          && Objects.equals(clientFeatures, node.clientFeatures);
-    }
-
-    @Override
-    public int hashCode() {
-      return Objects.hash(
-          id, cluster, metadata, locality, listeningAddresses, buildVersion, userAgentName,
-          userAgentVersion, clientFeatures);
-    }
-
-    static Node fromEnvoyProtoNode(io.envoyproxy.envoy.config.core.v3.Node proto) {
-      Node.Builder builder = newBuilder();
-      builder.setId(proto.getId());
-      builder.setCluster(proto.getCluster());
-      if (proto.hasMetadata()) {
-        builder.setMetadata(proto.getMetadata().getFieldsMap());
-      }
-      if (proto.hasLocality()) {
-        builder.setLocality(Locality.fromEnvoyProtoLocality(proto.getLocality()));
-      }
-      List<io.envoyproxy.envoy.config.core.v3.Address> listeningAddressesList =
-          proto.getListeningAddressesList();
-      List<Address> listeningAddresses = new ArrayList<>(listeningAddressesList.size());
-      for (io.envoyproxy.envoy.config.core.v3.Address addressProto : listeningAddressesList) {
-        listeningAddresses.add(Address.fromEnvoyProtoAddress(addressProto));
-      }
-      builder.listeningAddresses.addAll(listeningAddresses);
-      builder.setUserAgentName(proto.getUserAgentName());
-      if (proto
-          .getUserAgentVersionTypeCase()
-          .equals(UserAgentVersionTypeCase.USER_AGENT_VERSION)) {
-        builder.setUserAgentVersion(proto.getUserAgentVersion());
-      }
-      builder.clientFeatures.addAll(proto.getClientFeaturesList());
-      return builder.build();
-    }
-
-    static Node fromEnvoyProtoNodeV2(io.envoyproxy.envoy.api.v2.core.Node proto) {
-      Node.Builder builder = newBuilder();
-      builder.setId(proto.getId());
-      builder.setCluster(proto.getCluster());
-      if (proto.hasMetadata()) {
-        builder.setMetadata(proto.getMetadata().getFieldsMap());
-      }
-      if (proto.hasLocality()) {
-        builder.setLocality(Locality.fromEnvoyProtoLocalityV2(proto.getLocality()));
-      }
-      List<io.envoyproxy.envoy.api.v2.core.Address> listeningAddressesList =
-          proto.getListeningAddressesList();
-      List<Address> listeningAddresses = new ArrayList<>(listeningAddressesList.size());
-      for (io.envoyproxy.envoy.api.v2.core.Address addressProto : listeningAddressesList) {
-        listeningAddresses.add(Address.fromEnvoyProtoAddressV2(addressProto));
-      }
-      builder.setBuildVersion(proto.getBuildVersion());
-      builder.listeningAddresses.addAll(listeningAddresses);
-      builder.setUserAgentName(proto.getUserAgentName());
-      if (proto
-          .getUserAgentVersionTypeCase()
-          .equals(
-              io.envoyproxy.envoy.api.v2.core.Node.UserAgentVersionTypeCase.USER_AGENT_VERSION)) {
-        builder.setUserAgentVersion(proto.getUserAgentVersion());
-      }
-      builder.clientFeatures.addAll(proto.getClientFeaturesList());
-      return builder.build();
-    }
-
     io.envoyproxy.envoy.config.core.v3.Node toEnvoyProtoNode() {
       io.envoyproxy.envoy.config.core.v3.Node.Builder builder =
           io.envoyproxy.envoy.config.core.v3.Node.newBuilder();
@@ -391,6 +349,7 @@ final class EnvoyProtoData {
       return builder.build();
     }
 
+    @SuppressWarnings("deprecation") // Deprecated v2 API setBuildVersion().
     public io.envoyproxy.envoy.api.v2.core.Node toEnvoyProtoNodeV2() {
       io.envoyproxy.envoy.api.v2.core.Node.Builder builder =
           io.envoyproxy.envoy.api.v2.core.Node.newBuilder();
@@ -490,6 +449,31 @@ final class EnvoyProtoData {
           io.envoyproxy.envoy.api.v2.core.Address.newBuilder().setSocketAddress(
               io.envoyproxy.envoy.api.v2.core.SocketAddress.newBuilder().setAddress(address)
                   .setPortValue(port)).build();
+    }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(this)
+          .add("address", address)
+          .add("port", port)
+          .toString();
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      Address address1 = (Address) o;
+      return port == address1.port && Objects.equals(address, address1.address);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(address, port);
     }
   }
 

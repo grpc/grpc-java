@@ -39,7 +39,6 @@ import io.envoyproxy.envoy.api.v2.core.ConfigSource;
 import io.envoyproxy.envoy.api.v2.core.GrpcService;
 import io.envoyproxy.envoy.api.v2.core.GrpcService.GoogleGrpc;
 import io.envoyproxy.envoy.api.v2.core.HealthStatus;
-import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.api.v2.core.SelfConfigSource;
 import io.envoyproxy.envoy.api.v2.core.SocketAddress;
 import io.envoyproxy.envoy.api.v2.core.TransportSocket;
@@ -51,6 +50,7 @@ import io.envoyproxy.envoy.api.v2.route.VirtualHost;
 import io.envoyproxy.envoy.config.listener.v2.ApiListener;
 import io.envoyproxy.envoy.type.FractionalPercent;
 import io.envoyproxy.envoy.type.FractionalPercent.DenominatorType;
+import io.grpc.xds.EnvoyProtoData.Node;
 import java.util.List;
 import javax.annotation.Nullable;
 
@@ -79,7 +79,7 @@ class XdsClientTestHelper {
     return
         DiscoveryRequest.newBuilder()
             .setVersionInfo(versionInfo)
-            .setNode(node)
+            .setNode(node.toEnvoyProtoNodeV2())
             .setTypeUrl(typeUrl)
             .addAllResourceNames(resourceNames)
             .setResponseNonce(nonce)
