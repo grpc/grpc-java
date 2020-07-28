@@ -427,16 +427,6 @@ final class EnvoyProtoData {
       this.port = port;
     }
 
-    static Address fromEnvoyProtoAddress(io.envoyproxy.envoy.config.core.v3.Address proto) {
-      return new Address(proto.getSocketAddress().getAddress(),
-          proto.getSocketAddress().getPortValue());
-    }
-
-    static Address fromEnvoyProtoAddressV2(io.envoyproxy.envoy.api.v2.core.Address proto) {
-      return new Address(proto.getSocketAddress().getAddress(),
-          proto.getSocketAddress().getPortValue());
-    }
-
     io.envoyproxy.envoy.config.core.v3.Address toEnvoyProtoAddress() {
       return
           io.envoyproxy.envoy.config.core.v3.Address.newBuilder().setSocketAddress(
