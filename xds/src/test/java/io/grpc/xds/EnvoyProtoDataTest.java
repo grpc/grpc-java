@@ -144,7 +144,7 @@ public class EnvoyProtoDataTest {
     assertThat(node.toEnvoyProtoNode()).isEqualTo(nodeProto);
 
     @SuppressWarnings("deprecation") // Deprecated v2 API setBuildVersion().
-        io.envoyproxy.envoy.api.v2.core.Node nodeProtoV2 =
+    io.envoyproxy.envoy.api.v2.core.Node nodeProtoV2 =
         io.envoyproxy.envoy.api.v2.core.Node.newBuilder()
             .setId("node-id")
             .setCluster("cluster")
