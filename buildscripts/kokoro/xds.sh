@@ -30,11 +30,14 @@ JAVA_OPTS=-Djava.util.logging.config.file=grpc-java/buildscripts/xds_logging.pro
   python3 grpc/tools/run_tests/run_xds_tests.py \
     --test_case="all,path_matching,header_matching" \
     --project_id=grpc-testing \
-    --source_image=projects/grpc-testing/global/images/xds-test-server \
+    --source_image=projects/grpc-testing/global/images/xds-test-server-2 \
     --path_to_server_binary=/java_server/grpc-java/interop-testing/build/install/grpc-interop-testing/bin/xds-test-server \
     --gcp_suffix=$(date '+%s') \
     --verbose \
     --client_cmd="grpc-java/interop-testing/build/install/grpc-interop-testing/bin/xds-test-client \
       --server=xds:///{server_uri} \
       --stats_port={stats_port} \
-      --qps={qps}"
+      --qps={qps} \
+      {rpcs_to_send} \
+      {metadata_to_send}"
+
