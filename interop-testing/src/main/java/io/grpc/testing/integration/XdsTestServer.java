@@ -16,7 +16,13 @@
 
 package io.grpc.testing.integration;
 
+import io.grpc.ForwardingServerCall.SimpleForwardingServerCall;
+import io.grpc.Metadata;
 import io.grpc.Server;
+import io.grpc.ServerCall;
+import io.grpc.ServerCallHandler;
+import io.grpc.ServerInterceptor;
+import io.grpc.ServerInterceptors;
 import io.grpc.health.v1.HealthCheckResponse.ServingStatus;
 import io.grpc.netty.NettyServerBuilder;
 import io.grpc.protobuf.services.ProtoReflectionService;
@@ -32,12 +38,16 @@ import java.util.logging.Logger;
 
 /** Interop test server that implements the xDS testing service. */
 public final class XdsTestServer {
+  static final Metadata.Key<String> HOSTNAME_KEY =
+      Metadata.Key.of("hostname", Metadata.ASCII_STRING_MARSHALLER);
+
   private static Logger logger = Logger.getLogger(XdsTestServer.class.getName());
 
   private int port = 8080;
   private String serverId = "java_server";
   private HealthStatusManager health;
   private Server server;
+  private String host;
 
   /**
    * The main application allowing this client to be launched from the command line.
@@ -111,10 +121,18 @@ public final class XdsTestServer {
   }
 
   private void start() throws Exception {
+    try {
+      host = InetAddress.getLocalHost().getHostName();
+    } catch (UnknownHostException e) {
+      logger.log(Level.SEVERE, "Failed to get host", e);
+      throw new RuntimeException(e);
+    }
     health = new HealthStatusManager();
     server =
         NettyServerBuilder.forPort(port)
-            .addService(new TestServiceImpl(serverId))
+            .addService(
+                ServerInterceptors.intercept(
+                    new TestServiceImpl(serverId, host), new HostnameInterceptor(host)))
             .addService(new XdsUpdateHealthServiceImpl(health))
             .addService(health.getHealthService())
             .addService(ProtoReflectionService.newInstance())
@@ -140,14 +158,16 @@ public final class XdsTestServer {
     private final String serverId;
     private final String host;
 
-    private TestServiceImpl(String serverId) {
+    private TestServiceImpl(String serverId, String host) {
       this.serverId = serverId;
-      try {
-        host = InetAddress.getLocalHost().getHostName();
-      } catch (UnknownHostException e) {
-        logger.log(Level.SEVERE, "Failed to get host", e);
-        throw new RuntimeException(e);
-      }
+      this.host = host;
+    }
+
+    @Override
+    public void emptyCall(
+        EmptyProtos.Empty req, StreamObserver<EmptyProtos.Empty> responseObserver) {
+      responseObserver.onNext(EmptyProtos.Empty.getDefaultInstance());
+      responseObserver.onCompleted();
     }
 
     @Override
@@ -180,6 +200,30 @@ public final class XdsTestServer {
       health.setStatus("", ServingStatus.NOT_SERVING);
       responseObserver.onNext(EmptyProtos.Empty.getDefaultInstance());
       responseObserver.onCompleted();
+    }
+  }
+
+  private static class HostnameInterceptor implements ServerInterceptor {
+    private final String host;
+
+    private HostnameInterceptor(String host) {
+      this.host = host;
+    }
+
+    @Override
+    public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
+        ServerCall<ReqT, RespT> call,
+        final Metadata requestHeaders,
+        ServerCallHandler<ReqT, RespT> next) {
+      return next.startCall(
+          new SimpleForwardingServerCall<ReqT, RespT>(call) {
+            @Override
+            public void sendHeaders(Metadata responseHeaders) {
+              responseHeaders.put(HOSTNAME_KEY, host);
+              super.sendHeaders(responseHeaders);
+            }
+          },
+          requestHeaders);
     }
   }
 }
