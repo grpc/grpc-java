@@ -24,6 +24,7 @@ import com.google.protobuf.BoolValue;
 import com.google.protobuf.Struct;
 import com.google.protobuf.UInt32Value;
 import com.google.protobuf.Value;
+import com.google.protobuf.util.Durations;
 import com.google.re2j.Pattern;
 import io.envoyproxy.envoy.config.core.v3.RuntimeFractionalPercent;
 import io.envoyproxy.envoy.config.route.v3.QueryParameterMatcher;
@@ -44,6 +45,7 @@ import io.grpc.xds.RouteMatch.HeaderMatcher;
 import io.grpc.xds.RouteMatch.PathMatcher;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -206,7 +208,7 @@ public class EnvoyProtoDataTest {
             new Route(
                 new RouteMatch(new PathMatcher("/service/method", null, null),
                     Collections.<HeaderMatcher>emptyList(), null),
-                new RouteAction("cluster-foo", null)));
+                new RouteAction(TimeUnit.SECONDS.toNanos(15L), "cluster-foo", null)));
 
     io.envoyproxy.envoy.config.route.v3.Route unsupportedProto =
         io.envoyproxy.envoy.config.route.v3.Route.newBuilder()
@@ -400,6 +402,8 @@ public class EnvoyProtoDataTest {
             .build();
     StructOrError<RouteAction> struct1 = RouteAction.fromEnvoyProtoRouteAction(proto1);
     assertThat(struct1.getErrorDetail()).isNull();
+    assertThat(struct1.getStruct().getTimeoutNano())
+        .isEqualTo(TimeUnit.SECONDS.toNanos(15L)); // default value
     assertThat(struct1.getStruct().getCluster()).isEqualTo("cluster-foo");
     assertThat(struct1.getStruct().getWeightedCluster()).isNull();
 
@@ -414,6 +418,8 @@ public class EnvoyProtoDataTest {
     // cluster_specifier = weighted_cluster
     io.envoyproxy.envoy.config.route.v3.RouteAction proto3 =
         io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
+            .setMaxGrpcTimeout(Durations.fromSeconds(6L))
+            .setTimeout(Durations.fromMicros(20L))
             .setWeightedClusters(
                 WeightedCluster.newBuilder()
                     .addClusters(
@@ -424,6 +430,8 @@ public class EnvoyProtoDataTest {
             .build();
     StructOrError<RouteAction> struct3 = RouteAction.fromEnvoyProtoRouteAction(proto3);
     assertThat(struct3.getErrorDetail()).isNull();
+    assertThat(struct3.getStruct().getTimeoutNano())
+        .isEqualTo(TimeUnit.SECONDS.toNanos(6L));
     assertThat(struct3.getStruct().getCluster()).isNull();
     assertThat(struct3.getStruct().getWeightedCluster())
         .containsExactly(new ClusterWeight("cluster-baz", 100));

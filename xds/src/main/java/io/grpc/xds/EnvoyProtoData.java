@@ -26,6 +26,7 @@ import com.google.protobuf.ListValue;
 import com.google.protobuf.NullValue;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
+import com.google.protobuf.util.Durations;
 import com.google.re2j.Pattern;
 import com.google.re2j.PatternSyntaxException;
 import io.envoyproxy.envoy.type.v3.FractionalPercent;
@@ -40,6 +41,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
 /**
@@ -1067,6 +1069,10 @@ final class EnvoyProtoData {
 
   /** See corresponding Envoy proto message {@link io.envoyproxy.envoy.api.v2.route.RouteAction}. */
   static final class RouteAction {
+    // Specifies the upstream timeout for the route, which spans between the point at which
+    // the entire downstream request (i.e., end-of-stream) has been processed and when the
+    // upstream response has been completely processed.
+    private final long timeoutNano;
     // Exactly one of the following fields is non-null.
     @Nullable
     private final String cluster;
@@ -1074,9 +1080,17 @@ final class EnvoyProtoData {
     private final List<ClusterWeight> weightedClusters;
 
     @VisibleForTesting
-    RouteAction(@Nullable String cluster, @Nullable List<ClusterWeight> weightedClusters) {
+    RouteAction(
+        long timeoutNano,
+        @Nullable String cluster,
+        @Nullable List<ClusterWeight> weightedClusters) {
+      this.timeoutNano = timeoutNano;
       this.cluster = cluster;
       this.weightedClusters = weightedClusters;
+    }
+
+    long getTimeoutNano() {
+      return timeoutNano;
     }
 
     @Nullable
@@ -1098,18 +1112,20 @@ final class EnvoyProtoData {
         return false;
       }
       RouteAction that = (RouteAction) o;
-      return Objects.equals(cluster, that.cluster)
+      return Objects.equals(timeoutNano, that.timeoutNano)
+          && Objects.equals(cluster, that.cluster)
           && Objects.equals(weightedClusters, that.weightedClusters);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hash(cluster, weightedClusters);
+      return Objects.hash(timeoutNano, cluster, weightedClusters);
     }
 
     @Override
     public String toString() {
       ToStringHelper toStringHelper = MoreObjects.toStringHelper(this);
+      toStringHelper.add("timeout", timeoutNano + "ns");
       if (cluster != null) {
         toStringHelper.add("cluster", cluster);
       }
@@ -1146,7 +1162,13 @@ final class EnvoyProtoData {
           return StructOrError.fromError(
               "Unknown cluster specifier: " + proto.getClusterSpecifierCase());
       }
-      return StructOrError.fromStruct(new RouteAction(cluster, weightedClusters));
+      long timeoutNano = TimeUnit.SECONDS.toNanos(15L);  // default 15s
+      if (proto.hasMaxGrpcTimeout()) {
+        timeoutNano = Durations.toNanos(proto.getMaxGrpcTimeout());
+      } else if (proto.hasTimeout()) {
+        timeoutNano  = Durations.toNanos(proto.getTimeout());
+      }
+      return StructOrError.fromStruct(new RouteAction(timeoutNano, cluster, weightedClusters));
     }
   }
 
