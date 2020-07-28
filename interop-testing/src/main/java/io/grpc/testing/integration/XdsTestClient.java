@@ -72,7 +72,7 @@ public final class XdsTestClient {
   private boolean printResponse = false;
   private int qps = 1;
   private List<RpcType> rpcTypes = ImmutableList.of(RpcType.UNARY_CALL);
-  private Map<RpcType, Metadata> metadata = new HashMap<>();
+  private EnumMap<RpcType, Metadata> metadata = new EnumMap<>(RpcType.class);
   private int rpcTimeoutSec = 20;
   private String server = "localhost:8080";
   private int statsPort = 8081;
@@ -188,8 +188,8 @@ public final class XdsTestClient {
     return rpcs;
   }
 
-  private static Map<RpcType, Metadata> parseMetadata(String metadataArg) {
-    Map<RpcType, Metadata> rpcMetadata = new HashMap<>();
+  private static EnumMap<RpcType, Metadata> parseMetadata(String metadataArg) {
+    EnumMap<RpcType, Metadata> rpcMetadata = new EnumMap<>(RpcType.class);
     for (String metadata : Splitter.on(',').omitEmptyStrings().split(metadataArg)) {
       List<String> parts = Splitter.on(':').splitToList(metadata);
       if (parts.size() != 3) {
