@@ -188,7 +188,6 @@ public class XdsNameResolverIntegrationTest {
   @After
   public void tearDown() {
     xdsNameResolver.shutdown();
-    XdsClientImpl.enableExperimentalRouting = false;
   }
 
   @Test
@@ -352,7 +351,6 @@ public class XdsNameResolverIntegrationTest {
   @Test
   @SuppressWarnings("unchecked")
   public void resolve_xdsRoutingLoadBalancing() {
-    XdsClientImpl.enableExperimentalRouting = true;
     xdsNameResolver.start(mockListener);
     assertThat(responseObservers).hasSize(1);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
@@ -453,7 +451,6 @@ public class XdsNameResolverIntegrationTest {
   @SuppressWarnings("unchecked")
   @Test
   public void resolve_weightedTargetLoadBalancing() {
-    XdsClientImpl.enableExperimentalRouting = true;
     xdsNameResolver.start(mockListener);
     assertThat(responseObservers).hasSize(1);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
