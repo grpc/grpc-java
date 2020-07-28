@@ -18,9 +18,12 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.testing.EqualsTester;
 import com.google.protobuf.BoolValue;
+import com.google.protobuf.Struct;
 import com.google.protobuf.UInt32Value;
+import com.google.protobuf.Value;
 import com.google.re2j.Pattern;
 import io.envoyproxy.envoy.config.core.v3.RuntimeFractionalPercent;
 import io.envoyproxy.envoy.config.route.v3.QueryParameterMatcher;
@@ -29,8 +32,10 @@ import io.envoyproxy.envoy.config.route.v3.WeightedCluster;
 import io.envoyproxy.envoy.type.matcher.v3.RegexMatcher;
 import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.envoyproxy.envoy.type.v3.Int64Range;
+import io.grpc.xds.EnvoyProtoData.Address;
 import io.grpc.xds.EnvoyProtoData.ClusterWeight;
 import io.grpc.xds.EnvoyProtoData.Locality;
+import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.EnvoyProtoData.Route;
 import io.grpc.xds.EnvoyProtoData.RouteAction;
 import io.grpc.xds.EnvoyProtoData.StructOrError;
@@ -63,7 +68,8 @@ public class EnvoyProtoDataTest {
     assertThat(xdsLocality.getZone()).isEqualTo("test_zone");
     assertThat(xdsLocality.getSubZone()).isEqualTo("test_subzone");
 
-    io.envoyproxy.envoy.api.v2.core.Locality convertedLocality = xdsLocality.toEnvoyProtoLocality();
+    io.envoyproxy.envoy.api.v2.core.Locality convertedLocality =
+        xdsLocality.toEnvoyProtoLocalityV2();
     assertThat(convertedLocality.getRegion()).isEqualTo("test_region");
     assertThat(convertedLocality.getZone()).isEqualTo("test_zone");
     assertThat(convertedLocality.getSubZone()).isEqualTo("test_subzone");
@@ -82,6 +88,95 @@ public class EnvoyProtoDataTest {
             new Locality("", "", ""),
             new Locality("", "", ""))
         .testEquals();
+  }
+
+  @Test
+  public void convertNode() {
+    Node node = Node.newBuilder()
+        .setId("node-id")
+        .setCluster("cluster")
+        .setMetadata(
+            ImmutableMap.of(
+                "TRAFFICDIRECTOR_INTERCEPTION_PORT",
+                "ENVOY_PORT",
+                "TRAFFICDIRECTOR_NETWORK_NAME",
+                "VPC_NETWORK_NAME"))
+        .setLocality(new Locality("region", "zone", "subzone"))
+        .addListeningAddresses(new Address("www.foo.com", 8080))
+        .addListeningAddresses(new Address("www.bar.com", 8088))
+        .setBuildVersion("v1")
+        .setUserAgentName("agent")
+        .setUserAgentVersion("1.1")
+        .addClientFeatures("feature-1")
+        .addClientFeatures("feature-2")
+        .build();
+    io.envoyproxy.envoy.config.core.v3.Node nodeProto =
+        io.envoyproxy.envoy.config.core.v3.Node.newBuilder()
+            .setId("node-id")
+            .setCluster("cluster")
+            .setMetadata(Struct.newBuilder()
+                .putFields("TRAFFICDIRECTOR_INTERCEPTION_PORT",
+                    Value.newBuilder().setStringValue("ENVOY_PORT").build())
+                .putFields("TRAFFICDIRECTOR_NETWORK_NAME",
+                    Value.newBuilder().setStringValue("VPC_NETWORK_NAME").build()))
+            .setLocality(
+                io.envoyproxy.envoy.config.core.v3.Locality.newBuilder()
+                    .setRegion("region")
+                    .setZone("zone")
+                    .setSubZone("subzone"))
+            .addListeningAddresses(
+                io.envoyproxy.envoy.config.core.v3.Address.newBuilder()
+                    .setSocketAddress(
+                        io.envoyproxy.envoy.config.core.v3.SocketAddress.newBuilder()
+                            .setAddress("www.foo.com")
+                            .setPortValue(8080)))
+            .addListeningAddresses(
+                io.envoyproxy.envoy.config.core.v3.Address.newBuilder()
+                    .setSocketAddress(
+                        io.envoyproxy.envoy.config.core.v3.SocketAddress.newBuilder()
+                            .setAddress("www.bar.com")
+                            .setPortValue(8088)))
+            .setUserAgentName("agent")
+            .setUserAgentVersion("1.1")
+            .addClientFeatures("feature-1")
+            .addClientFeatures("feature-2")
+            .build();
+    assertThat(node.toEnvoyProtoNode()).isEqualTo(nodeProto);
+
+    @SuppressWarnings("deprecation") // Deprecated v2 API setBuildVersion().
+    io.envoyproxy.envoy.api.v2.core.Node nodeProtoV2 =
+        io.envoyproxy.envoy.api.v2.core.Node.newBuilder()
+            .setId("node-id")
+            .setCluster("cluster")
+            .setMetadata(Struct.newBuilder()
+                .putFields("TRAFFICDIRECTOR_INTERCEPTION_PORT",
+                    Value.newBuilder().setStringValue("ENVOY_PORT").build())
+                .putFields("TRAFFICDIRECTOR_NETWORK_NAME",
+                    Value.newBuilder().setStringValue("VPC_NETWORK_NAME").build()))
+            .setLocality(
+                io.envoyproxy.envoy.api.v2.core.Locality.newBuilder()
+                    .setRegion("region")
+                    .setZone("zone")
+                    .setSubZone("subzone"))
+            .addListeningAddresses(
+                io.envoyproxy.envoy.api.v2.core.Address.newBuilder()
+                    .setSocketAddress(
+                        io.envoyproxy.envoy.api.v2.core.SocketAddress.newBuilder()
+                            .setAddress("www.foo.com")
+                            .setPortValue(8080)))
+            .addListeningAddresses(
+                io.envoyproxy.envoy.api.v2.core.Address.newBuilder()
+                    .setSocketAddress(
+                        io.envoyproxy.envoy.api.v2.core.SocketAddress.newBuilder()
+                            .setAddress("www.bar.com")
+                            .setPortValue(8088)))
+            .setBuildVersion("v1")
+            .setUserAgentName("agent")
+            .setUserAgentVersion("1.1")
+            .addClientFeatures("feature-1")
+            .addClientFeatures("feature-2")
+            .build();
+    assertThat(node.toEnvoyProtoNodeV2()).isEqualTo(nodeProtoV2);
   }
 
   @Test

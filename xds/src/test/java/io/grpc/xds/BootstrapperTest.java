@@ -18,15 +18,14 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
-import com.google.protobuf.Struct;
-import com.google.protobuf.Value;
-import io.envoyproxy.envoy.api.v2.core.Locality;
-import io.envoyproxy.envoy.api.v2.core.Node;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.GrpcUtil.GrpcBuildVersion;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.Bootstrapper.ServerInfo;
+import io.grpc.xds.EnvoyProtoData.Locality;
+import io.grpc.xds.EnvoyProtoData.Node;
 import java.io.IOException;
 import java.util.List;
 import org.junit.Rule;
@@ -82,16 +81,13 @@ public class BootstrapperTest {
         getNodeBuilder()
             .setId("ENVOY_NODE_ID")
             .setCluster("ENVOY_CLUSTER")
-            .setLocality(
-                Locality.newBuilder()
-                    .setRegion("ENVOY_REGION").setZone("ENVOY_ZONE").setSubZone("ENVOY_SUBZONE"))
+            .setLocality(new Locality("ENVOY_REGION", "ENVOY_ZONE", "ENVOY_SUBZONE"))
             .setMetadata(
-                Struct.newBuilder()
-                    .putFields("TRAFFICDIRECTOR_INTERCEPTION_PORT",
-                        Value.newBuilder().setStringValue("ENVOY_PORT").build())
-                    .putFields("TRAFFICDIRECTOR_NETWORK_NAME",
-                        Value.newBuilder().setStringValue("VPC_NETWORK_NAME").build())
-                    .build())
+                ImmutableMap.of(
+                    "TRAFFICDIRECTOR_INTERCEPTION_PORT",
+                    "ENVOY_PORT",
+                    "TRAFFICDIRECTOR_NETWORK_NAME",
+                    "VPC_NETWORK_NAME"))
             .build());
   }
 
@@ -145,16 +141,13 @@ public class BootstrapperTest {
         getNodeBuilder()
             .setId("ENVOY_NODE_ID")
             .setCluster("ENVOY_CLUSTER")
-            .setLocality(
-                Locality.newBuilder()
-                    .setRegion("ENVOY_REGION").setZone("ENVOY_ZONE").setSubZone("ENVOY_SUBZONE"))
+            .setLocality(new Locality("ENVOY_REGION", "ENVOY_ZONE", "ENVOY_SUBZONE"))
             .setMetadata(
-                Struct.newBuilder()
-                    .putFields("TRAFFICDIRECTOR_INTERCEPTION_PORT",
-                        Value.newBuilder().setStringValue("ENVOY_PORT").build())
-                    .putFields("TRAFFICDIRECTOR_NETWORK_NAME",
-                        Value.newBuilder().setStringValue("VPC_NETWORK_NAME").build())
-                    .build())
+                ImmutableMap.of(
+                    "TRAFFICDIRECTOR_INTERCEPTION_PORT",
+                    "ENVOY_PORT",
+                    "TRAFFICDIRECTOR_NETWORK_NAME",
+                    "VPC_NETWORK_NAME"))
             .build());
   }
 
@@ -201,16 +194,13 @@ public class BootstrapperTest {
         getNodeBuilder()
             .setId("ENVOY_NODE_ID")
             .setCluster("ENVOY_CLUSTER")
-            .setLocality(
-                Locality.newBuilder()
-                    .setRegion("ENVOY_REGION").setZone("ENVOY_ZONE").setSubZone("ENVOY_SUBZONE"))
+            .setLocality(new Locality("ENVOY_REGION", "ENVOY_ZONE", "ENVOY_SUBZONE"))
             .setMetadata(
-                Struct.newBuilder()
-                    .putFields("TRAFFICDIRECTOR_INTERCEPTION_PORT",
-                        Value.newBuilder().setStringValue("ENVOY_PORT").build())
-                    .putFields("TRAFFICDIRECTOR_NETWORK_NAME",
-                        Value.newBuilder().setStringValue("VPC_NETWORK_NAME").build())
-                    .build())
+                ImmutableMap.of(
+                    "TRAFFICDIRECTOR_INTERCEPTION_PORT",
+                    "ENVOY_PORT",
+                    "TRAFFICDIRECTOR_NETWORK_NAME",
+                    "VPC_NETWORK_NAME"))
             .build());
   }
 
@@ -304,7 +294,6 @@ public class BootstrapperTest {
     Bootstrapper.parseConfig(rawData);
   }
 
-  @SuppressWarnings("deprecation")
   private static Node.Builder getNodeBuilder() {
     GrpcBuildVersion buildVersion = GrpcUtil.getGrpcBuildVersion();
     return

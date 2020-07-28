@@ -43,7 +43,6 @@ import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment;
 import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy.DropOverload;
 import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
-import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint;
 import io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints;
 import io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceImplBase;
@@ -76,6 +75,7 @@ import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.Bootstrapper.ChannelCreds;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EdsLoadBalancerProvider.EdsConfig;
+import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.LocalityStore.LocalityStoreFactory;
 import io.grpc.xds.XdsClient.EndpointUpdate;
 import io.grpc.xds.XdsClient.XdsChannelFactory;
@@ -231,7 +231,8 @@ public class EdsLoadBalancerTest {
     final List<ServerInfo> serverList =
         ImmutableList.of(
             new ServerInfo("trafficdirector.googleapis.com", ImmutableList.<ChannelCreds>of()));
-    BootstrapInfo bootstrapInfo = new BootstrapInfo(serverList, Node.getDefaultInstance());
+    Node node = Node.newBuilder().build();
+    BootstrapInfo bootstrapInfo = new BootstrapInfo(serverList, node);
     doReturn(bootstrapInfo).when(bootstrapper).readBootstrap();
 
     if (isFullFlow) {
@@ -240,7 +241,7 @@ public class EdsLoadBalancerTest {
               SERVICE_AUTHORITY,
               serverList,
               channelFactory,
-              Node.getDefaultInstance(),
+              node,
               syncContext,
               fakeClock.getScheduledExecutorService(),
               mock(BackoffPolicy.Provider.class),
