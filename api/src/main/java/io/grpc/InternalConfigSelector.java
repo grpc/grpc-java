@@ -18,6 +18,7 @@ package io.grpc;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 
 import javax.annotation.Nullable;
 
@@ -137,6 +138,8 @@ public abstract class InternalConfigSelector {
       }
 
       public Result build() {
+        checkState(config != null, "config is not set");
+        checkState(callOptions != null, "callOptions is not set");
         return new Result(Status.OK, config, callOptions, committedCallback);
       }
     }
