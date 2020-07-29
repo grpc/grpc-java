@@ -25,8 +25,6 @@ import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.xds.internal.sts.StsCredentials;
 import java.util.Map;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -35,9 +33,6 @@ import java.util.regex.Pattern;
  * move this out of the internal package and make this an official API in the future.
  */
 final class MeshCaCertificateProviderProvider implements CertificateProviderProvider {
-
-  private static final Logger logger = Logger
-      .getLogger(MeshCaCertificateProviderProvider.class.getName());
 
   private static final String MESHCA_URL_KEY = "meshCaUrl";
   private static final String RPC_TIMEOUT_SECONDS_KEY = "rpcTimeoutSeconds";
@@ -69,18 +64,13 @@ final class MeshCaCertificateProviderProvider implements CertificateProviderProv
   static final String MESH_CA_NAME = "meshCA";
 
   static {
-    try {
-      CertificateProviderRegistry.getInstance()
-          .register(
-              new MeshCaCertificateProviderProvider(
-                  StsCredentials.Factory.getInstance(),
-                  MeshCaCertificateProvider.MeshCaChannelFactory.getInstance(),
-                  new ExponentialBackoffPolicy.Provider(),
-                  MeshCaCertificateProvider.Factory.getInstance())
-        );
-    } catch (Throwable t) {
-      logger.log(Level.SEVERE, "Registering MeshCaCertificateProviderProvider", t);
-    }
+    CertificateProviderRegistry.getInstance()
+        .register(
+            new MeshCaCertificateProviderProvider(
+                StsCredentials.Factory.getInstance(),
+                MeshCaCertificateProvider.MeshCaChannelFactory.getInstance(),
+                new ExponentialBackoffPolicy.Provider(),
+                MeshCaCertificateProvider.Factory.getInstance()));
   }
 
   final StsCredentials.Factory stsCredentialsFactory;
