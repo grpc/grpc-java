@@ -1164,7 +1164,8 @@ final class EnvoyProtoData {
       }
       long timeoutNano = TimeUnit.SECONDS.toNanos(15L);  // default 15s
       if (proto.hasMaxGrpcTimeout()) {
-        timeoutNano = Durations.toNanos(proto.getMaxGrpcTimeout());
+        long time = Durations.toNanos(proto.getMaxGrpcTimeout());
+        timeoutNano = time == 0 ? Long.MAX_VALUE : time;
       } else if (proto.hasTimeout()) {
         timeoutNano  = Durations.toNanos(proto.getTimeout());
       }
