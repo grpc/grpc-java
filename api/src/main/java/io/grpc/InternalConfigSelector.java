@@ -55,7 +55,7 @@ public abstract class InternalConfigSelector {
     }
 
     /**
-     * Create a {@code Result} with the given error status.
+     * Creates a {@code Result} with the given error status.
      */
     public static Result forError(Status status) {
       checkArgument(!status.isOk(), "status is OK");
