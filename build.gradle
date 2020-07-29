@@ -177,6 +177,8 @@ subprojects {
             conscrypt: 'org.conscrypt:conscrypt-openjdk-uber:2.2.1',
             re2j: 'com.google.re2j:re2j:1.2',
 
+            bouncycastle: 'org.bouncycastle:bcpkix-jdk15on:1.61',
+
             // Test dependencies.
             junit: 'junit:junit:4.12',
             mockito: 'org.mockito:mockito-core:3.3.3',

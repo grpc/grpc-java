@@ -26,7 +26,8 @@ dependencies {
             project(':grpc-auth'),
             project(path: ':grpc-alts', configuration: 'shadow'),
             libraries.gson,
-            libraries.re2j
+            libraries.re2j,
+            libraries.bouncycastle
     def nettyDependency = implementation project(':grpc-netty')
 
     implementation (libraries.opencensus_proto) {

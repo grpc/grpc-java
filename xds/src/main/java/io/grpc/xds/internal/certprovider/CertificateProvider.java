@@ -104,6 +104,24 @@ public abstract class CertificateProvider implements Closeable {
         watcher.onError(errorStatus);
       }
     }
+
+    X509Certificate getLastIdentityCert() {
+      if (lastCertChain != null && !lastCertChain.isEmpty()) {
+        return lastCertChain.get(0);
+      }
+      return null;
+    }
+
+    void close() {
+      downsstreamWatchers.clear();
+      cleanupLastValues();
+    }
+
+    void cleanupLastValues() {
+      lastKey = null;
+      lastCertChain = null;
+      lastTrustedRoots = null;
+    }
   }
 
   /**

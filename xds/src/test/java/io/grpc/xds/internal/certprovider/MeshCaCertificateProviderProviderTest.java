@@ -17,6 +17,7 @@
 package io.grpc.xds.internal.certprovider;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.xds.internal.certprovider.MeshCaCertificateProviderProvider.RPC_TIMEOUT_SECONDS;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -26,10 +27,14 @@ import static org.mockito.Mockito.verify;
 import com.google.auth.oauth2.GoogleCredentials;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.ExponentialBackoffPolicy;
+import io.grpc.internal.TimeProvider;
 import io.grpc.xds.internal.sts.StsCredentials;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ScheduledExecutorService;
+
+import java.util.concurrent.TimeUnit;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -59,6 +64,12 @@ public class MeshCaCertificateProviderProviderTest {
 
   @Mock
   MeshCaCertificateProvider.Factory meshCaCertificateProviderFactory;
+
+  @Mock
+  private ScheduledExecutorService scheduledExecutorService;
+  @Mock
+  private TimeProvider timeProvider;
+
   private MeshCaCertificateProviderProvider provider;
 
   @Before
@@ -69,7 +80,9 @@ public class MeshCaCertificateProviderProviderTest {
             stsCredentialsFactory,
             meshCaChannelFactory,
             backoffPolicyProvider,
-            meshCaCertificateProviderFactory);
+            meshCaCertificateProviderFactory,
+            scheduledExecutorService,
+            timeProvider);
   }
 
   @Test
@@ -114,7 +127,10 @@ public class MeshCaCertificateProviderProviderTest {
             eq(backoffPolicyProvider),
             eq(MeshCaCertificateProviderProvider.RENEWAL_GRACE_PERIOD_SECONDS_DEFAULT),
             eq(MeshCaCertificateProviderProvider.MAX_RETRY_ATTEMPTS_DEFAULT),
-            (GoogleCredentials) isNull());
+            (GoogleCredentials) isNull(),
+            eq(scheduledExecutorService),
+            eq(timeProvider),
+            eq(TimeUnit.SECONDS.toMillis(RPC_TIMEOUT_SECONDS)));
   }
 
   @Test
@@ -184,7 +200,10 @@ public class MeshCaCertificateProviderProviderTest {
                     eq(backoffPolicyProvider),
                     eq(4321L),
                     eq(9),
-                    (GoogleCredentials) isNull());
+                    (GoogleCredentials) isNull(),
+                    eq(scheduledExecutorService),
+                    eq(timeProvider),
+                    eq(TimeUnit.SECONDS.toMillis(RPC_TIMEOUT_SECONDS)));
   }
 
   private Map<String, String> buildFullMap() {
