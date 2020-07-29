@@ -137,6 +137,9 @@ public abstract class InternalConfigSelector {
         return this;
       }
 
+      /**
+       * Build this {@link Result}.
+       */
       public Result build() {
         checkState(config != null, "config is not set");
         checkState(callOptions != null, "callOptions is not set");
