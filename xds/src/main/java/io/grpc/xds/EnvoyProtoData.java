@@ -1069,7 +1069,7 @@ final class EnvoyProtoData {
 
   /** See corresponding Envoy proto message {@link io.envoyproxy.envoy.api.v2.route.RouteAction}. */
   static final class RouteAction {
-    private final long timeoutNano;
+    private final Long timeoutNano;
     // Exactly one of the following fields is non-null.
     @Nullable
     private final String cluster;
@@ -1078,7 +1078,7 @@ final class EnvoyProtoData {
 
     @VisibleForTesting
     RouteAction(
-        long timeoutNano,
+        @Nullable Long timeoutNano,
         @Nullable String cluster,
         @Nullable List<ClusterWeight> weightedClusters) {
       this.timeoutNano = timeoutNano;
@@ -1086,7 +1086,9 @@ final class EnvoyProtoData {
       this.weightedClusters = weightedClusters;
     }
 
-    long getTimeoutNano() {
+
+    @Nullable
+    Long getTimeoutNano() {
       return timeoutNano;
     }
 
@@ -1122,7 +1124,9 @@ final class EnvoyProtoData {
     @Override
     public String toString() {
       ToStringHelper toStringHelper = MoreObjects.toStringHelper(this);
-      toStringHelper.add("timeout", timeoutNano + "ns");
+      if (timeoutNano != null) {
+        toStringHelper.add("timeout", timeoutNano + "ns");
+      }
       if (cluster != null) {
         toStringHelper.add("cluster", cluster);
       }
@@ -1159,12 +1163,13 @@ final class EnvoyProtoData {
           return StructOrError.fromError(
               "Unknown cluster specifier: " + proto.getClusterSpecifierCase());
       }
-      long timeoutNano = TimeUnit.SECONDS.toNanos(15L);  // default 15s
+      Long timeoutNano = TimeUnit.SECONDS.toNanos(15L);  // default 15s
       if (proto.hasMaxGrpcTimeout()) {
         long time = Durations.toNanos(proto.getMaxGrpcTimeout());
         timeoutNano = time == 0 ? Long.MAX_VALUE : time;
       } else if (proto.hasTimeout()) {
-        timeoutNano  = Durations.toNanos(proto.getTimeout());
+        long time = Durations.toNanos(proto.getTimeout());
+        timeoutNano = time == 0 ? null : time;
       }
       return StructOrError.fromStruct(new RouteAction(timeoutNano, cluster, weightedClusters));
     }
