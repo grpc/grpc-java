@@ -1069,9 +1069,6 @@ final class EnvoyProtoData {
 
   /** See corresponding Envoy proto message {@link io.envoyproxy.envoy.api.v2.route.RouteAction}. */
   static final class RouteAction {
-    // Specifies the upstream timeout for the route, which spans between the point at which
-    // the entire downstream request (i.e., end-of-stream) has been processed and when the
-    // upstream response has been completely processed.
     private final long timeoutNano;
     // Exactly one of the following fields is non-null.
     @Nullable
