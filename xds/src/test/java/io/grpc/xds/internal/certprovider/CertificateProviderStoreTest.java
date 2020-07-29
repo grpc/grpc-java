@@ -53,6 +53,7 @@ public class CertificateProviderStoreTest {
     Object config;
     CertificateProviderProvider certProviderProvider;
     int closeCalled = 0;
+    int startCalled = 0;
 
     protected TestCertificateProvider(
         CertificateProvider.DistributorWatcher watcher,
@@ -70,6 +71,11 @@ public class CertificateProviderStoreTest {
     @Override
     public void close() {
       closeCalled++;
+    }
+
+    @Override
+    public void start() {
+      startCalled++;
     }
   }
 
@@ -161,6 +167,7 @@ public class CertificateProviderStoreTest {
     assertThat(handle1.certProvider).isInstanceOf(TestCertificateProvider.class);
     TestCertificateProvider testCertificateProvider =
         (TestCertificateProvider) handle1.certProvider;
+    assertThat(testCertificateProvider.startCalled).isEqualTo(1);
     CertificateProvider.DistributorWatcher distWatcher = testCertificateProvider.getWatcher();
     assertThat(distWatcher.downsstreamWatchers).hasSize(2);
     PrivateKey testKey = mock(PrivateKey.class);
@@ -335,6 +342,8 @@ public class CertificateProviderStoreTest {
     verify(mockWatcher2, times(1)).updateCertificate(eq(testKey2), eq(testList2));
     verify(mockWatcher1, never())
         .updateCertificate(any(PrivateKey.class), anyListOf(X509Certificate.class));
+    assertThat(testCertificateProvider1.startCalled).isEqualTo(1);
+    assertThat(testCertificateProvider2.startCalled).isEqualTo(1);
     handle2.close();
     assertThat(testCertificateProvider2.closeCalled).isEqualTo(1);
     handle1.close();

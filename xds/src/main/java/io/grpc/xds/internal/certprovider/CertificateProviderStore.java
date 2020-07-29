@@ -131,8 +131,10 @@ public final class CertificateProviderStore {
       if (certProviderProvider == null) {
         throw new IllegalArgumentException("Provider not found.");
       }
-      return certProviderProvider.createCertificateProvider(
-          key.config, new CertificateProvider.DistributorWatcher(), key.notifyCertUpdates);
+      CertificateProvider certProvider = certProviderProvider.createCertificateProvider(
+              key.config, new CertificateProvider.DistributorWatcher(), key.notifyCertUpdates);
+      certProvider.start();
+      return certProvider;
     }
   }
 
