@@ -492,14 +492,9 @@ subprojects {
         }
 
         plugins.withId("java") {
-            task javadocJar(type: Jar) {
-                classifier = 'javadoc'
-                from javadoc
-            }
-
-            task sourcesJar(type: Jar) {
-                classifier = 'sources'
-                from sourceSets.main.allSource
+            java {
+                withJavadocJar()
+                withSourcesJar()
             }
 
             publishing {
@@ -508,9 +503,6 @@ subprojects {
                         if (project.name != 'grpc-netty-shaded') {
                             from components.java
                         }
-
-                        artifact javadocJar
-                        artifact sourcesJar
                     }
                 }
             }
