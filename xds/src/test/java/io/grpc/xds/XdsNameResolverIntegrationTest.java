@@ -168,9 +168,7 @@ public class XdsNameResolverIntegrationTest {
       @Override
       public BootstrapInfo readBootstrap() {
         List<ServerInfo> serverList =
-            ImmutableList.of(
-                new ServerInfo(serverName,
-                    ImmutableList.<ChannelCreds>of()));
+            ImmutableList.of(new ServerInfo(serverName, ImmutableList.<ChannelCreds>of(), null));
         return new BootstrapInfo(serverList, FAKE_BOOTSTRAP_NODE);
       }
     };

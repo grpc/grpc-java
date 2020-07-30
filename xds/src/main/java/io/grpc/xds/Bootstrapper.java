@@ -47,6 +47,7 @@ public abstract class Bootstrapper {
   @VisibleForTesting
   static final String CLIENT_FEATURE_DISABLE_OVERPROVISIONING =
       "envoy.lb.does_not_support_overprovisioning";
+  static final String XDS_V3_SERVER_FEATURE = "xds_v3";
 
   private static final Bootstrapper DEFAULT_INSTANCE = new Bootstrapper() {
     @Override
@@ -111,7 +112,11 @@ public abstract class Bootstrapper {
           channelCredsOptions.add(creds);
         }
       }
-      servers.add(new ServerInfo(serverUri, channelCredsOptions));
+      List<?> serverFeatures = JsonUtil.getList(serverConfig, "server_features");
+      if (serverFeatures != null && serverFeatures.contains(XDS_V3_SERVER_FEATURE)) {
+        logger.log(XdsLogLevel.INFO, "Server feature: {0}", XDS_V3_SERVER_FEATURE);
+      }
+      servers.add(new ServerInfo(serverUri, channelCredsOptions, serverFeatures));
     }
 
     Node.Builder nodeBuilder = Node.newBuilder();
@@ -196,11 +201,14 @@ public abstract class Bootstrapper {
   static class ServerInfo {
     private final String serverUri;
     private final List<ChannelCreds> channelCredsList;
+    @Nullable
+    private final List<?> serverFeatures;
 
     @VisibleForTesting
-    ServerInfo(String serverUri, List<ChannelCreds> channelCredsList) {
+    ServerInfo(String serverUri, List<ChannelCreds> channelCredsList, List<?> serverFeatures) {
       this.serverUri = serverUri;
       this.channelCredsList = channelCredsList;
+      this.serverFeatures = serverFeatures;
     }
 
     String getServerUri() {
@@ -209,6 +217,12 @@ public abstract class Bootstrapper {
 
     List<ChannelCreds> getChannelCredentials() {
       return Collections.unmodifiableList(channelCredsList);
+    }
+
+    List<?> getServerFeatures() {
+      return serverFeatures == null
+          ? Collections.emptyList()
+          : Collections.unmodifiableList(serverFeatures);
     }
   }
 
@@ -240,6 +254,5 @@ public abstract class Bootstrapper {
     public Node getNode() {
       return node;
     }
-
   }
 }

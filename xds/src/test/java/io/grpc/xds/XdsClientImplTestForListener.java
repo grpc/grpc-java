@@ -201,7 +201,7 @@ public class XdsClientImplTestForListener {
         cleanupRule.register(InProcessChannelBuilder.forName(serverName).directExecutor().build());
 
     List<ServerInfo> servers =
-        ImmutableList.of(new ServerInfo(serverName, ImmutableList.<ChannelCreds>of()));
+        ImmutableList.of(new ServerInfo(serverName, ImmutableList.<ChannelCreds>of(), null));
     XdsChannelFactory channelFactory = new XdsChannelFactory() {
       @Override
       ManagedChannel createChannel(List<ServerInfo> servers) {

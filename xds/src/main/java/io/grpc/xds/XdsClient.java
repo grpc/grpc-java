@@ -602,6 +602,7 @@ abstract class XdsClient {
    */
   abstract static class XdsChannelFactory {
     private static final XdsChannelFactory DEFAULT_INSTANCE = new XdsChannelFactory() {
+      List<?> serverFeatures;
 
       /**
        * Creates a channel to the first server in the given list.
@@ -611,6 +612,7 @@ abstract class XdsClient {
         checkArgument(!servers.isEmpty(), "No management server provided.");
         XdsLogger logger = XdsLogger.withPrefix("xds-client-channel-factory");
         ServerInfo serverInfo = servers.get(0);
+        serverFeatures = serverInfo.getServerFeatures();
         String serverUri = serverInfo.getServerUri();
         logger.log(XdsLogLevel.INFO, "Creating channel to {0}", serverUri);
         List<ChannelCreds> channelCredsList = serverInfo.getChannelCredentials();
@@ -633,6 +635,11 @@ abstract class XdsClient {
             .keepAliveTime(5, TimeUnit.MINUTES)
             .build();
       }
+
+      @Override
+      List<?> getSelectedServerFeatures() {
+        return serverFeatures;
+      }
     };
 
     static XdsChannelFactory getInstance() {
@@ -643,5 +650,14 @@ abstract class XdsClient {
      * Creates a channel to one of the provided management servers.
      */
     abstract ManagedChannel createChannel(List<ServerInfo> servers);
+
+    /**
+     * Gets features of the server that the channel is created for. Value is only available
+     * after {@link #createChannel} is called.
+     */
+    @Nullable
+    List<?> getSelectedServerFeatures() {
+      return null;
+    }
   }
 }

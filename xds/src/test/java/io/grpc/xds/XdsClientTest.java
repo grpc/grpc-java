@@ -21,7 +21,12 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+import com.google.common.collect.ImmutableList;
+import io.grpc.ManagedChannel;
+import io.grpc.xds.Bootstrapper.ChannelCreds;
+import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.XdsClient.RefCountedXdsClientObjectPool;
+import io.grpc.xds.XdsClient.XdsChannelFactory;
 import io.grpc.xds.XdsClient.XdsClientFactory;
 import org.junit.Rule;
 import org.junit.Test;
@@ -101,5 +106,18 @@ public class XdsClientTest {
 
     XdsClient xdsClient2 = xdsClientPool.getObject();
     assertThat(xdsClient2).isNotSameInstanceAs(xdsClient1);
+  }
+
+  @Test
+  public void defaultChannelFactorySelectsServerFeatures() {
+    XdsChannelFactory xdsChannelFactory = XdsChannelFactory.getInstance();
+    ManagedChannel channel = xdsChannelFactory.createChannel(
+        ImmutableList.of(
+            new ServerInfo(
+                "xdsserver.com", ImmutableList.<ChannelCreds>of(), ImmutableList.of("foo", "bar")),
+            new ServerInfo(
+                "xdsserver2.com", ImmutableList.<ChannelCreds>of(), ImmutableList.of("baz"))));
+    channel.shutdown();
+    assertThat(xdsChannelFactory.getSelectedServerFeatures()).containsExactly("foo", "bar");
   }
 }
