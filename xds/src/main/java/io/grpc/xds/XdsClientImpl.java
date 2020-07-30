@@ -1329,15 +1329,15 @@ final class XdsClientImpl extends XdsClient {
 
   private static final class DiscoveryRequestData {
     private final ResourceType resourceType;
-    private final List<String> resourceNames;
+    private final Collection<String> resourceNames;
     private final String versionInfo;
     private final String responseNonce;
     private final Node node;
     @Nullable
     private final com.google.rpc.Status errorDetail;
 
-    private DiscoveryRequestData(
-        ResourceType resourceType, List<String> resourceNames, String versionInfo,
+    DiscoveryRequestData(
+        ResourceType resourceType, Collection<String> resourceNames, String versionInfo,
         String responseNonce, Node node, @Nullable com.google.rpc.Status errorDetail) {
       this.resourceType = resourceType;
       this.resourceNames = resourceNames;
@@ -1374,54 +1374,6 @@ final class XdsClientImpl extends XdsClient {
       }
       return builder.build();
     }
-
-    static Builder newBuilder() {
-      return new Builder();
-    }
-
-    static final class Builder {
-      private ResourceType resourceType;
-      private List<String> resourceNames = new ArrayList<>();
-      private String versionInfo;
-      private String responseNonce;
-      private Node node;
-      private com.google.rpc.Status errorDetail;
-
-      Builder setTypeUrl(ResourceType resourceType) {
-        this.resourceType = checkNotNull(resourceType, "resourceType");
-        return this;
-      }
-
-      Builder addAllResourceNames(Collection<String> resourceNames) {
-        this.resourceNames.addAll(checkNotNull(resourceNames, "resourceNames"));
-        return this;
-      }
-
-      Builder setVersionInfo(String versionInfo) {
-        this.versionInfo = checkNotNull(versionInfo, "versionInfo");
-        return this;
-      }
-
-      Builder setResponseNonce(String responseNonce) {
-        this.responseNonce = checkNotNull(responseNonce, "responseNonce");
-        return this;
-      }
-
-      Builder setNode(Node node) {
-        this.node = checkNotNull(node, "node");
-        return this;
-      }
-
-      Builder setErrorDetail(com.google.rpc.Status errorDetail) {
-        this.errorDetail = checkNotNull(errorDetail, "errorDetail");
-        return this;
-      }
-
-      DiscoveryRequestData build() {
-        return new DiscoveryRequestData(
-            resourceType, resourceNames, versionInfo, responseNonce, node, errorDetail);
-      }
-    }
   }
 
   private static final class DiscoveryResponseData {
@@ -1430,7 +1382,7 @@ final class XdsClientImpl extends XdsClient {
     private final String versionInfo;
     private final String nonce;
 
-    private DiscoveryResponseData(
+    DiscoveryResponseData(
         ResourceType resourceType, List<Any> resources, String versionInfo, String nonce) {
       this.resourceType = resourceType;
       this.resources = resources;
@@ -1668,14 +1620,7 @@ final class XdsClientImpl extends XdsClient {
           throw new AssertionError("Unknown or missing case in enum switch: " + resourceType);
       }
       DiscoveryRequestData request =
-          DiscoveryRequestData
-              .newBuilder()
-              .setVersionInfo(version)
-              .setNode(node)
-              .addAllResourceNames(resourceNames)
-              .setTypeUrl(resourceType)
-              .setResponseNonce(nonce)
-              .build();
+          new DiscoveryRequestData(resourceType, resourceNames, version, nonce, node, null);
       sendDiscoveryRequest(request);
     }
 
@@ -1712,14 +1657,7 @@ final class XdsClientImpl extends XdsClient {
           throw new AssertionError("Unknown or missing case in enum switch: " + resourceType);
       }
       DiscoveryRequestData request =
-          DiscoveryRequestData
-              .newBuilder()
-              .setVersionInfo(versionInfo)
-              .setNode(node)
-              .addAllResourceNames(resourceNames)
-              .setTypeUrl(resourceType)
-              .setResponseNonce(nonce)
-              .build();
+          new DiscoveryRequestData(resourceType, resourceNames, versionInfo, nonce, node, null);
       sendDiscoveryRequest(request);
     }
 
@@ -1772,20 +1710,12 @@ final class XdsClientImpl extends XdsClient {
         default:
           throw new AssertionError("Unknown or missing case in enum switch: " + resourceType);
       }
+      com.google.rpc.Status error = com.google.rpc.Status.newBuilder()
+          .setCode(Code.INVALID_ARGUMENT_VALUE)
+          .setMessage(message)
+          .build();
       DiscoveryRequestData request =
-          DiscoveryRequestData
-              .newBuilder()
-              .setVersionInfo(versionInfo)
-              .setNode(node)
-              .addAllResourceNames(resourceNames)
-              .setTypeUrl(resourceType)
-              .setResponseNonce(nonce)
-              .setErrorDetail(
-                  com.google.rpc.Status.newBuilder()
-                      .setCode(Code.INVALID_ARGUMENT_VALUE)
-                      .setMessage(message)
-                      .build())
-              .build();
+          new DiscoveryRequestData(resourceType, resourceNames, versionInfo, nonce, node, error);
       sendDiscoveryRequest(request);
     }
   }
