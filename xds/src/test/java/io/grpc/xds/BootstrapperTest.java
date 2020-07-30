@@ -114,7 +114,7 @@ public class BootstrapperTest {
         + "        {\"type\": \"tls\"}, {\"type\": \"loas\"}, {\"type\": \"google_default\"}\n"
         + "      ],\n"
         + "      \"server_features\": [\n"
-        + "        \"xds_v3\", {\"foo\": \"bar\"}\n"
+        + "        \"xds_v3\", \"foo\", \"bar\"\n"
         + "      ]\n"
         + "    },\n"
         + "    {\n"

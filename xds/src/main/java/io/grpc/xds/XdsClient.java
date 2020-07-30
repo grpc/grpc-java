@@ -605,9 +605,8 @@ abstract class XdsClient {
     static boolean experimentalV3SupportEnvVar = Boolean.getBoolean(
         System.getenv("GRPC_XDS_EXPERIMENTAL_V3_SUPPORT"));
 
+    private static final String XDS_V3_SERVER_FEATURE = "xds_v3";
     private static final XdsChannelFactory DEFAULT_INSTANCE = new XdsChannelFactory() {
-      List<?> serverFeatures;
-
       /**
        * Creates a channel to the first server in the given list.
        */
@@ -616,7 +615,6 @@ abstract class XdsClient {
         checkArgument(!servers.isEmpty(), "No management server provided.");
         XdsLogger logger = XdsLogger.withPrefix("xds-client-channel-factory");
         ServerInfo serverInfo = servers.get(0);
-        serverFeatures = serverInfo.getServerFeatures();
         String serverUri = serverInfo.getServerUri();
         logger.log(XdsLogLevel.INFO, "Creating channel to {0}", serverUri);
         List<ChannelCreds> channelCredsList = serverInfo.getChannelCredentials();
@@ -639,7 +637,7 @@ abstract class XdsClient {
             .keepAliveTime(5, TimeUnit.MINUTES)
             .build();
         boolean useProtocolV3 = experimentalV3SupportEnvVar
-            && serverInfo.getServerFeatures().contains(Bootstrapper.XDS_V3_SERVER_FEATURE);
+            && serverInfo.getServerFeatures().contains(XDS_V3_SERVER_FEATURE);
 
         return new XdsChannel(
             channel, useProtocolV3);

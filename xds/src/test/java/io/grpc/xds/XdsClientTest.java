@@ -124,7 +124,7 @@ public class XdsClientTest {
                   new ServerInfo(
                       "xdsserver2.com",
                       ImmutableList.<ChannelCreds>of(),
-                      ImmutableList.of(Bootstrapper.XDS_V3_SERVER_FEATURE))));
+                      ImmutableList.of("xds_v3"))));
       xdsChannel.getManagedChannel().shutdown();
       assertThat(xdsChannel.isUseProtocolV3()).isFalse();
 
@@ -135,7 +135,7 @@ public class XdsClientTest {
                   new ServerInfo(
                       "xdsserver.com",
                       ImmutableList.<ChannelCreds>of(),
-                      ImmutableList.of(Bootstrapper.XDS_V3_SERVER_FEATURE)),
+                      ImmutableList.of("xds_v3")),
                   new ServerInfo(
                       "xdsserver2.com",
                       ImmutableList.<ChannelCreds>of(),
@@ -150,7 +150,7 @@ public class XdsClientTest {
                   new ServerInfo(
                       "xdsserver.com",
                       ImmutableList.<ChannelCreds>of(),
-                      ImmutableList.of(Bootstrapper.XDS_V3_SERVER_FEATURE)),
+                      ImmutableList.of("xds_v3")),
                   new ServerInfo(
                       "xdsserver2.com",
                       ImmutableList.<ChannelCreds>of(),
