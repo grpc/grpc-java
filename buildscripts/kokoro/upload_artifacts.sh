@@ -56,7 +56,7 @@ gpg --version
 if gpg --version | grep 'gpg (GnuPG) 1.'; then
   # This command was tested on 1.4.16
   find "$LOCAL_MVN_ARTIFACTS" -type f \
-    -not -name "maven-metadata.xml*" -not -name "*.sha1" -not -name "*.md5" -exec \
+    -not -name "maven-metadata.xml*" -not -name "*.sha*" -not -name "*.md5" -exec \
     bash -c 'cat ~/java_signing/passphrase | gpg --batch --passphrase-fd 0 --detach-sign -a {}' \;
 fi
 
@@ -64,7 +64,7 @@ fi
 if gpg --version | grep 'gpg (GnuPG) 2.'; then
   # This command was tested on 2.2.2
   find "$LOCAL_MVN_ARTIFACTS" -type f \
-    -not -name "maven-metadata.xml*" -not -name "*.sha1" -not -name "*.md5" -exec \
+    -not -name "maven-metadata.xml*" -not -name "*.sha*" -not -name "*.md5" -exec \
     gpg --batch --passphrase-file ~/java_signing/passphrase --pinentry-mode loopback \
     --detach-sign -a {} \;
 fi
