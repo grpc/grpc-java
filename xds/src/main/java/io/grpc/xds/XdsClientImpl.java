@@ -1387,8 +1387,6 @@ final class XdsClientImpl extends XdsClient {
       private Node node;
       private com.google.rpc.Status errorDetail;
 
-      private Builder() {}
-
       Builder setTypeUrl(ResourceType resourceType) {
         this.resourceType = checkNotNull(resourceType, "resourceType");
         return this;
@@ -1427,7 +1425,6 @@ final class XdsClientImpl extends XdsClient {
   }
 
   private static final class DiscoveryResponseData {
-
     private final ResourceType resourceType;
     private final List<Any> resources;
     private final String versionInfo;
@@ -1693,18 +1690,22 @@ final class XdsClientImpl extends XdsClient {
         case LDS:
           ldsVersion = versionInfo;
           nonce = ldsRespNonce;
+          logger.log(XdsLogLevel.WARNING, "Accepting LDS update, version: {0}", versionInfo);
           break;
         case RDS:
           rdsVersion = versionInfo;
           nonce = rdsRespNonce;
+          logger.log(XdsLogLevel.WARNING, "Accepting RDS update, version: {0}", versionInfo);
           break;
         case CDS:
           cdsVersion = versionInfo;
           nonce = cdsRespNonce;
+          logger.log(XdsLogLevel.WARNING, "Accepting CDS update, version: {0}", versionInfo);
           break;
         case EDS:
           edsVersion = versionInfo;
           nonce = edsRespNonce;
+          logger.log(XdsLogLevel.WARNING, "Accepting EDS update, version: {0}", versionInfo);
           break;
         case UNKNOWN:
         default:
@@ -1836,7 +1837,7 @@ final class XdsClientImpl extends XdsClient {
       io.envoyproxy.envoy.api.v2.DiscoveryRequest requestProto =
           request.toEnvoyProtoV2();
       requestWriterV2.onNext(requestProto);
-      logger.log(XdsLogLevel.DEBUG, "Sent ACK request\n{0}", requestProto);
+      logger.log(XdsLogLevel.DEBUG, "Sent DiscoveryRequest\n{0}", requestProto);
     }
 
     @Override
@@ -1890,7 +1891,7 @@ final class XdsClientImpl extends XdsClient {
       checkState(requestWriter != null, "ADS stream has not been started");
       DiscoveryRequest requestProto = request.toEnvoyProto();
       requestWriter.onNext(requestProto);
-      logger.log(XdsLogLevel.DEBUG, "Sent ACK request\n{0}", requestProto);
+      logger.log(XdsLogLevel.DEBUG, "Sent DiscoveryRequest\n{0}", requestProto);
     }
 
     @Override
