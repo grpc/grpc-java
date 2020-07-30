@@ -418,14 +418,14 @@ public class EnvoyProtoDataTest {
     assertThat(struct2.getStruct().getTimeoutNano())
         .isEqualTo(Long.MAX_VALUE); // infinite
 
-    // cluster_specifier = cluster, disabled timeout
+    // cluster_specifier = cluster, infinity timeout
     io.envoyproxy.envoy.config.route.v3.RouteAction proto3 =
         io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
             .setTimeout(Durations.fromNanos(0))
             .setCluster("cluster-foo")
             .build();
     StructOrError<RouteAction> struct3 = RouteAction.fromEnvoyProtoRouteAction(proto3);
-    assertThat(struct3.getStruct().getTimeoutNano()).isNull(); // timeout disabled
+    assertThat(struct3.getStruct().getTimeoutNano()).isEqualTo(Long.MAX_VALUE); // infinite
 
     // cluster_specifier = cluster_header
     io.envoyproxy.envoy.config.route.v3.RouteAction proto4 =
