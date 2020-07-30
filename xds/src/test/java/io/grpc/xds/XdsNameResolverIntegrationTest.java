@@ -161,9 +161,8 @@ public class XdsNameResolverIntegrationTest {
     channelFactory = new XdsChannelFactory() {
       @Override
       XdsChannel createChannel(List<ServerInfo> servers) {
-        ServerInfo serverInfo = Iterables.getOnlyElement(servers);
-        assertThat(serverInfo.getServerUri()).isEqualTo(serverName);
-        return new XdsChannel(channel, serverInfo);
+        assertThat(Iterables.getOnlyElement(servers).getServerUri()).isEqualTo(serverName);
+        return new XdsChannel(channel, false);
       }
     };
     Bootstrapper bootstrapper = new Bootstrapper() {

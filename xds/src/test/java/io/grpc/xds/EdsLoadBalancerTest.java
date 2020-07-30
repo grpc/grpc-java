@@ -137,10 +137,9 @@ public class EdsLoadBalancerTest {
   private final XdsChannelFactory channelFactory = new XdsChannelFactory() {
     @Override
     XdsChannel createChannel(List<ServerInfo> servers) {
-      ServerInfo serverInfo = Iterables.getOnlyElement(servers);
-      assertThat(serverInfo.getServerUri())
+      assertThat(Iterables.getOnlyElement(servers).getServerUri())
           .isEqualTo("trafficdirector.googleapis.com");
-      return new XdsChannel(channel, serverInfo);
+      return new XdsChannel(channel, false);
     }
   };
 

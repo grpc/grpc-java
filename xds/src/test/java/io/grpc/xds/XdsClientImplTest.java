@@ -287,7 +287,7 @@ public class XdsClientImplTest {
         ServerInfo serverInfo = Iterables.getOnlyElement(servers);
         assertThat(serverInfo.getServerUri()).isEqualTo(serverName);
         assertThat(serverInfo.getChannelCredentials()).isEmpty();
-        return new XdsChannel(channel, serverInfo);
+        return new XdsChannel(channel, false);
       }
     };
 

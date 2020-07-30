@@ -634,7 +634,8 @@ abstract class XdsClient {
         ManagedChannel channel = channelBuilder
             .keepAliveTime(5, TimeUnit.MINUTES)
             .build();
-        return new XdsChannel(channel, serverInfo);
+        return new XdsChannel(
+            channel, serverInfo.getServerFeatures().contains(Bootstrapper.XDS_V3_SERVER_FEATURE));
       }
     };
 
@@ -651,20 +652,20 @@ abstract class XdsClient {
 
   static final class XdsChannel {
     private final ManagedChannel managedChannel;
-    private final ServerInfo serverInfo;
+    private final boolean useProtocolV3;
 
     @VisibleForTesting
-    XdsChannel(ManagedChannel managedChannel, ServerInfo serverInfo) {
+    XdsChannel(ManagedChannel managedChannel, boolean useProtocolV3) {
       this.managedChannel = managedChannel;
-      this.serverInfo = serverInfo;
+      this.useProtocolV3 = useProtocolV3;
     }
 
     ManagedChannel getManagedChannel() {
       return managedChannel;
     }
 
-    ServerInfo getServerInfo() {
-      return serverInfo;
+    boolean isUseProtocolV3() {
+      return useProtocolV3;
     }
   }
 }
