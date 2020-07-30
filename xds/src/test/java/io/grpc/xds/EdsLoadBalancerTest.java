@@ -78,6 +78,7 @@ import io.grpc.xds.EdsLoadBalancerProvider.EdsConfig;
 import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.LocalityStore.LocalityStoreFactory;
 import io.grpc.xds.XdsClient.EndpointUpdate;
+import io.grpc.xds.XdsClient.XdsChannel;
 import io.grpc.xds.XdsClient.XdsChannelFactory;
 import java.net.InetSocketAddress;
 import java.util.ArrayDeque;
@@ -135,10 +136,11 @@ public class EdsLoadBalancerTest {
   private final Map<String, LoadBalancer> childBalancers = new HashMap<>();
   private final XdsChannelFactory channelFactory = new XdsChannelFactory() {
     @Override
-    ManagedChannel createChannel(List<ServerInfo> servers) {
-      assertThat(Iterables.getOnlyElement(servers).getServerUri())
+    XdsChannel createChannel(List<ServerInfo> servers) {
+      ServerInfo serverInfo = Iterables.getOnlyElement(servers);
+      assertThat(serverInfo.getServerUri())
           .isEqualTo("trafficdirector.googleapis.com");
-      return channel;
+      return new XdsChannel(channel, serverInfo);
     }
   };
 

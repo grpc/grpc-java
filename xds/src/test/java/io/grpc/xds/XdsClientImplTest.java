@@ -100,6 +100,7 @@ import io.grpc.xds.XdsClient.ConfigUpdate;
 import io.grpc.xds.XdsClient.ConfigWatcher;
 import io.grpc.xds.XdsClient.EndpointUpdate;
 import io.grpc.xds.XdsClient.EndpointWatcher;
+import io.grpc.xds.XdsClient.XdsChannel;
 import io.grpc.xds.XdsClient.XdsChannelFactory;
 import io.grpc.xds.XdsClientImpl.MessagePrinter;
 import java.io.IOException;
@@ -282,10 +283,11 @@ public class XdsClientImplTest {
         ImmutableList.of(new ServerInfo(serverName, ImmutableList.<ChannelCreds>of(), null));
     XdsChannelFactory channelFactory = new XdsChannelFactory() {
       @Override
-      ManagedChannel createChannel(List<ServerInfo> servers) {
-        assertThat(Iterables.getOnlyElement(servers).getServerUri()).isEqualTo(serverName);
-        assertThat(Iterables.getOnlyElement(servers).getChannelCredentials()).isEmpty();
-        return channel;
+      XdsChannel createChannel(List<ServerInfo> servers) {
+        ServerInfo serverInfo = Iterables.getOnlyElement(servers);
+        assertThat(serverInfo.getServerUri()).isEqualTo(serverName);
+        assertThat(serverInfo.getChannelCredentials()).isEmpty();
+        return new XdsChannel(channel, serverInfo);
       }
     };
 

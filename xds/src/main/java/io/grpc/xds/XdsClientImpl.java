@@ -200,7 +200,8 @@ final class XdsClientImpl extends XdsClient {
     this.targetName = checkNotNull(targetName, "targetName");
     this.channel =
         checkNotNull(channelFactory, "channelFactory")
-            .createChannel(checkNotNull(servers, "servers"));
+            .createChannel(checkNotNull(servers, "servers"))
+            .getManagedChannel();
     this.node = checkNotNull(node, "node");
     this.syncContext = checkNotNull(syncContext, "syncContext");
     this.timeService = checkNotNull(timeService, "timeService");

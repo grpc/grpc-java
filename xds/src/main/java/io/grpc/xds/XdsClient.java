@@ -608,7 +608,7 @@ abstract class XdsClient {
        * Creates a channel to the first server in the given list.
        */
       @Override
-      ManagedChannel createChannel(List<ServerInfo> servers) {
+      XdsChannel createChannel(List<ServerInfo> servers) {
         checkArgument(!servers.isEmpty(), "No management server provided.");
         XdsLogger logger = XdsLogger.withPrefix("xds-client-channel-factory");
         ServerInfo serverInfo = servers.get(0);
@@ -631,14 +631,10 @@ abstract class XdsClient {
           channelBuilder = ManagedChannelBuilder.forTarget(serverUri);
         }
 
-        return channelBuilder
+        ManagedChannel channel = channelBuilder
             .keepAliveTime(5, TimeUnit.MINUTES)
             .build();
-      }
-
-      @Override
-      List<?> getSelectedServerFeatures() {
-        return serverFeatures;
+        return new XdsChannel(channel, serverInfo);
       }
     };
 
@@ -649,15 +645,26 @@ abstract class XdsClient {
     /**
      * Creates a channel to one of the provided management servers.
      */
-    abstract ManagedChannel createChannel(List<ServerInfo> servers);
+    abstract XdsChannel createChannel(List<ServerInfo> servers);
 
-    /**
-     * Gets features of the server that the channel is created for. Value is only available
-     * after {@link #createChannel} is called.
-     */
-    @Nullable
-    List<?> getSelectedServerFeatures() {
-      return null;
+  }
+
+  static final class XdsChannel {
+    private final ManagedChannel managedChannel;
+    private final ServerInfo serverInfo;
+
+    @VisibleForTesting
+    XdsChannel(ManagedChannel managedChannel, ServerInfo serverInfo) {
+      this.managedChannel = managedChannel;
+      this.serverInfo = serverInfo;
+    }
+
+    ManagedChannel getManagedChannel() {
+      return managedChannel;
+    }
+
+    ServerInfo getServerInfo() {
+      return serverInfo;
     }
   }
 }
