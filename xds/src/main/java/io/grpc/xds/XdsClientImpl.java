@@ -1635,22 +1635,22 @@ final class XdsClientImpl extends XdsClient {
         case LDS:
           ldsVersion = versionInfo;
           nonce = ldsRespNonce;
-          logger.log(XdsLogLevel.WARNING, "Accepting LDS update, version: {0}", versionInfo);
+          logger.log(XdsLogLevel.WARNING, "Sending ACK for LDS update, version: {0}", versionInfo);
           break;
         case RDS:
           rdsVersion = versionInfo;
           nonce = rdsRespNonce;
-          logger.log(XdsLogLevel.WARNING, "Accepting RDS update, version: {0}", versionInfo);
+          logger.log(XdsLogLevel.WARNING, "Sending ACK for RDS update, version: {0}", versionInfo);
           break;
         case CDS:
           cdsVersion = versionInfo;
           nonce = cdsRespNonce;
-          logger.log(XdsLogLevel.WARNING, "Accepting CDS update, version: {0}", versionInfo);
+          logger.log(XdsLogLevel.WARNING, "Sending ACK for CDS update, version: {0}", versionInfo);
           break;
         case EDS:
           edsVersion = versionInfo;
           nonce = edsRespNonce;
-          logger.log(XdsLogLevel.WARNING, "Accepting EDS update, version: {0}", versionInfo);
+          logger.log(XdsLogLevel.WARNING, "Sending ACK for EDS update, version: {0}", versionInfo);
           break;
         case UNKNOWN:
         default:
@@ -1675,7 +1675,7 @@ final class XdsClientImpl extends XdsClient {
           nonce = ldsRespNonce;
           logger.log(
               XdsLogLevel.WARNING,
-              "Rejecting LDS update, version: {0}, reason: {1}",
+              "Sending NACK for LDS update, version: {0}, reason: {1}",
               rejectVersion,
               message);
           break;
@@ -1684,7 +1684,7 @@ final class XdsClientImpl extends XdsClient {
           nonce = rdsRespNonce;
           logger.log(
               XdsLogLevel.WARNING,
-              "Rejecting RDS update, version: {0}, reason: {1}",
+              "Sending NACK for RDS update, version: {0}, reason: {1}",
               rejectVersion,
               message);
           break;
@@ -1693,7 +1693,7 @@ final class XdsClientImpl extends XdsClient {
           nonce = cdsRespNonce;
           logger.log(
               XdsLogLevel.WARNING,
-              "Rejecting CDS update, version: {0}, reason: {1}",
+              "Sending NACK for CDS update, version: {0}, reason: {1}",
               rejectVersion,
               message);
           break;
@@ -1702,7 +1702,7 @@ final class XdsClientImpl extends XdsClient {
           nonce = edsRespNonce;
           logger.log(
               XdsLogLevel.WARNING,
-              "Rejecting EDS update, version: {0}, reason: {1}",
+              "Sending NACK for EDS update, version: {0}, reason: {1}",
               rejectVersion,
               message);
           break;
