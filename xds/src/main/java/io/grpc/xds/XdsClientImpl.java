@@ -1846,6 +1846,7 @@ final class XdsClientImpl extends XdsClient {
   }
 
   // AdsStream V3
+  @SuppressWarnings("UnusedNestedClass") // Will be used once xds-v3 support is implemented.
   private final class AdsStream extends AbstractAdsStream {
     private final AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceStub stub;
     private StreamObserver<DiscoveryRequest> requestWriter;
