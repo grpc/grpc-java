@@ -50,7 +50,8 @@ import javax.annotation.concurrent.GuardedBy;
 final class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   private static final Logger logger = Logger.getLogger(DelayedClientCall.class.getName());
   /**
-   * A timer to monitor the initial deadline. The timer must be cancelled when pass through.
+   * A timer to monitor the initial deadline. The timer must be cancelled on transition to the real
+   * call.
    */
   @Nullable
   private final ScheduledFuture<?> initialDeadlineMonitor;
