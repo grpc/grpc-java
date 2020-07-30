@@ -1335,19 +1335,16 @@ final class XdsClientImpl extends XdsClient {
     private final Node node;
     @Nullable
     private final com.google.rpc.Status errorDetail;
-    private final AckType ackType;
 
     private DiscoveryRequestData(
         ResourceType resourceType, List<String> resourceNames, String versionInfo,
-        String responseNonce, Node node, @Nullable com.google.rpc.Status errorDetail,
-        AckType ackType) {
+        String responseNonce, Node node, @Nullable com.google.rpc.Status errorDetail) {
       this.resourceType = resourceType;
       this.resourceNames = resourceNames;
       this.versionInfo = versionInfo;
       this.responseNonce = responseNonce;
       this.node = node;
       this.errorDetail = errorDetail;
-      this.ackType = ackType;
     }
 
     DiscoveryRequest toEnvoyProto() {
@@ -1382,10 +1379,6 @@ final class XdsClientImpl extends XdsClient {
       return new Builder();
     }
 
-    enum AckType {
-      ORIGINAL_REQUEST, ACK, NACK
-    }
-
     static final class Builder {
       private ResourceType resourceType;
       private List<String> resourceNames = new ArrayList<>();
@@ -1393,7 +1386,8 @@ final class XdsClientImpl extends XdsClient {
       private String responseNonce;
       private Node node;
       private com.google.rpc.Status errorDetail;
-      private AckType ackType = AckType.ORIGINAL_REQUEST;
+
+      private Builder() {}
 
       Builder setTypeUrl(ResourceType resourceType) {
         this.resourceType = checkNotNull(resourceType, "resourceType");
@@ -1425,20 +1419,9 @@ final class XdsClientImpl extends XdsClient {
         return this;
       }
 
-      Builder asAck() {
-        ackType = AckType.ACK;
-        return this;
-      }
-
-      Builder asNack() {
-        ackType = AckType.NACK;
-        return this;
-      }
-
       DiscoveryRequestData build() {
         return new DiscoveryRequestData(
-            resourceType, resourceNames, versionInfo, responseNonce, node, errorDetail,
-            ackType);
+            resourceType, resourceNames, versionInfo, responseNonce, node, errorDetail);
       }
     }
   }
@@ -1735,7 +1718,6 @@ final class XdsClientImpl extends XdsClient {
               .addAllResourceNames(resourceNames)
               .setTypeUrl(resourceType)
               .setResponseNonce(nonce)
-              .asAck()
               .build();
       sendDiscoveryRequest(request);
     }
@@ -1802,7 +1784,6 @@ final class XdsClientImpl extends XdsClient {
                       .setCode(Code.INVALID_ARGUMENT_VALUE)
                       .setMessage(message)
                       .build())
-              .asNack()
               .build();
       sendDiscoveryRequest(request);
     }
@@ -1855,16 +1836,7 @@ final class XdsClientImpl extends XdsClient {
       io.envoyproxy.envoy.api.v2.DiscoveryRequest requestProto =
           request.toEnvoyProtoV2();
       requestWriterV2.onNext(requestProto);
-      switch (request.ackType) {
-        case ACK:
-          logger.log(XdsLogLevel.DEBUG, "Sent ACK request\n{0}", requestProto);
-          break;
-        case NACK:
-          logger.log(XdsLogLevel.DEBUG, "Sent NACK request\n{0}", requestProto);
-          break;
-        default:
-          logger.log(XdsLogLevel.DEBUG, "Sent DiscoveryRequest\n{0}", requestProto);
-      }
+      logger.log(XdsLogLevel.DEBUG, "Sent ACK request\n{0}", requestProto);
     }
 
     @Override
@@ -1918,16 +1890,7 @@ final class XdsClientImpl extends XdsClient {
       checkState(requestWriter != null, "ADS stream has not been started");
       DiscoveryRequest requestProto = request.toEnvoyProto();
       requestWriter.onNext(requestProto);
-      switch (request.ackType) {
-        case ACK:
-          logger.log(XdsLogLevel.DEBUG, "Sent ACK request\n{0}", requestProto);
-          break;
-        case NACK:
-          logger.log(XdsLogLevel.DEBUG, "Sent NACK request\n{0}", requestProto);
-          break;
-        default:
-          logger.log(XdsLogLevel.DEBUG, "Sent DiscoveryRequest\n{0}", requestProto);
-      }
+      logger.log(XdsLogLevel.DEBUG, "Sent ACK request\n{0}", requestProto);
     }
 
     @Override
