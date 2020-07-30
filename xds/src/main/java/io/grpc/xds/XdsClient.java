@@ -601,6 +601,10 @@ abstract class XdsClient {
    * Factory for creating channels to xDS severs.
    */
   abstract static class XdsChannelFactory {
+    @VisibleForTesting
+    static boolean experimentalV3SupportEnvVar = Boolean.getBoolean(
+        System.getenv("GRPC_XDS_EXPERIMENTAL_V3_SUPPORT"));
+
     private static final XdsChannelFactory DEFAULT_INSTANCE = new XdsChannelFactory() {
       List<?> serverFeatures;
 
@@ -634,8 +638,11 @@ abstract class XdsClient {
         ManagedChannel channel = channelBuilder
             .keepAliveTime(5, TimeUnit.MINUTES)
             .build();
+        boolean useProtocolV3 = experimentalV3SupportEnvVar
+            && serverInfo.getServerFeatures().contains(Bootstrapper.XDS_V3_SERVER_FEATURE);
+
         return new XdsChannel(
-            channel, serverInfo.getServerFeatures().contains(Bootstrapper.XDS_V3_SERVER_FEATURE));
+            channel, useProtocolV3);
       }
     };
 
