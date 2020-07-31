@@ -341,8 +341,7 @@ public class MeshCaCertificateProviderTest {
     assertThat(receivedReq.getValidity().getSeconds()).isEqualTo(TimeUnit.HOURS.toSeconds(9L));
     // cannot decode CSR: just check the PEM format delimiters
     String csr = receivedReq.getCsr();
-    assertThat(csr).startsWith("-----BEGIN NEW CERTIFICATE REQUEST-----\n");
-    assertThat(csr).endsWith("\n-----END NEW CERTIFICATE REQUEST-----\n");
+    assertThat(csr).startsWith("-----BEGIN NEW CERTIFICATE REQUEST-----");
     verifyReceivedMetadataValues(1);
     verify(timeService, times(1))
         .schedule(
