@@ -17,8 +17,8 @@
 package io.grpc.xds.internal.rbac.engine.cel;
 
 /**
- * Add an interface for interpreter to check if an object is an instance
- * of PartialMessage.
+ * Interpreter returns an instance of {@code IncompleteData} if 
+ * an object is an instance of {@link PartialMessage}.
  * 
  * <p>This is a Java stub for evaluating Common Expression Language (CEL). 
  * More information about CEL can be found in https://github.com/google/cel-spec. 
