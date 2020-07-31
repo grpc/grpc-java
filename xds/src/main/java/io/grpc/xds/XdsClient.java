@@ -601,13 +601,17 @@ abstract class XdsClient {
    * Factory for creating channels to xDS severs.
    */
   abstract static class XdsChannelFactory {
-    private static final XdsChannelFactory DEFAULT_INSTANCE = new XdsChannelFactory() {
+    @VisibleForTesting
+    static boolean experimentalV3SupportEnvVar = Boolean.parseBoolean(
+        System.getenv("GRPC_XDS_EXPERIMENTAL_V3_SUPPORT"));
 
+    private static final String XDS_V3_SERVER_FEATURE = "xds_v3";
+    private static final XdsChannelFactory DEFAULT_INSTANCE = new XdsChannelFactory() {
       /**
        * Creates a channel to the first server in the given list.
        */
       @Override
-      ManagedChannel createChannel(List<ServerInfo> servers) {
+      XdsChannel createChannel(List<ServerInfo> servers) {
         checkArgument(!servers.isEmpty(), "No management server provided.");
         XdsLogger logger = XdsLogger.withPrefix("xds-client-channel-factory");
         ServerInfo serverInfo = servers.get(0);
@@ -629,9 +633,13 @@ abstract class XdsClient {
           channelBuilder = ManagedChannelBuilder.forTarget(serverUri);
         }
 
-        return channelBuilder
+        ManagedChannel channel = channelBuilder
             .keepAliveTime(5, TimeUnit.MINUTES)
             .build();
+        boolean useProtocolV3 = experimentalV3SupportEnvVar
+            && serverInfo.getServerFeatures().contains(XDS_V3_SERVER_FEATURE);
+
+        return new XdsChannel(channel, useProtocolV3);
       }
     };
 
@@ -642,6 +650,25 @@ abstract class XdsClient {
     /**
      * Creates a channel to one of the provided management servers.
      */
-    abstract ManagedChannel createChannel(List<ServerInfo> servers);
+    abstract XdsChannel createChannel(List<ServerInfo> servers);
+  }
+
+  static final class XdsChannel {
+    private final ManagedChannel managedChannel;
+    private final boolean useProtocolV3;
+
+    @VisibleForTesting
+    XdsChannel(ManagedChannel managedChannel, boolean useProtocolV3) {
+      this.managedChannel = managedChannel;
+      this.useProtocolV3 = useProtocolV3;
+    }
+
+    ManagedChannel getManagedChannel() {
+      return managedChannel;
+    }
+
+    boolean isUseProtocolV3() {
+      return useProtocolV3;
+    }
   }
 }

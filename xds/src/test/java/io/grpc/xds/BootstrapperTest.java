@@ -112,6 +112,9 @@ public class BootstrapperTest {
         + "      \"server_uri\": \"trafficdirector-foo.googleapis.com:443\",\n"
         + "      \"channel_creds\": [\n"
         + "        {\"type\": \"tls\"}, {\"type\": \"loas\"}, {\"type\": \"google_default\"}\n"
+        + "      ],\n"
+        + "      \"server_features\": [\n"
+        + "        \"xds_v3\", \"foo\", \"bar\"\n"
         + "      ]\n"
         + "    },\n"
         + "    {\n"
@@ -134,6 +137,7 @@ public class BootstrapperTest {
     assertThat(serverInfoList.get(0).getChannelCredentials().get(2).getType())
         .isEqualTo("google_default");
     assertThat(serverInfoList.get(0).getChannelCredentials().get(2).getConfig()).isNull();
+    assertThat(serverInfoList.get(0).getServerFeatures()).contains("xds_v3");
     assertThat(serverInfoList.get(1).getServerUri())
         .isEqualTo("trafficdirector-bar.googleapis.com:443");
     assertThat(serverInfoList.get(1).getChannelCredentials()).isEmpty();
