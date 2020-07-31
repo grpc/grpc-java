@@ -118,6 +118,7 @@ final class XdsClientImpl extends XdsClient {
   // Name of the target server this gRPC client is trying to talk to.
   private final String targetName;
   private final ManagedChannel channel;
+  private final boolean useProtocolV3;
   private final SynchronizationContext syncContext;
   private final ScheduledExecutorService timeService;
   private final BackoffPolicy.Provider backoffPolicyProvider;
@@ -127,7 +128,6 @@ final class XdsClientImpl extends XdsClient {
   // first request to carry the node identifier on a stream. It should be identical if present
   // more than once.
   private Node node;
-  private boolean useProtocolV3;
 
   // Cached data for CDS responses, keyed by cluster names.
   // Optimization: cache ClusterUpdate, which contains only information needed by gRPC, instead
