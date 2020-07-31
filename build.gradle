@@ -10,7 +10,6 @@ import net.ltgt.gradle.errorprone.CheckSeverity
 
 subprojects {
     apply plugin: "checkstyle"
-    apply plugin: "maven"
     apply plugin: "idea"
     apply plugin: "signing"
     apply plugin: "jacoco"
@@ -286,7 +285,7 @@ subprojects {
     jacoco { toolVersion = "0.8.2" }
 
     checkstyle {
-        configDir = file("$rootDir/buildscripts")
+        configDirectory = file("$rootDir/buildscripts")
         toolVersion = "6.17"
         ignoreFailures = false
         if (rootProject.hasProperty("checkstyle.ignoreFailures")) {
@@ -315,7 +314,7 @@ subprojects {
         targetCompatibility = 1.7
 
         dependencies {
-            testCompile libraries.junit,
+            testImplementation libraries.junit,
                     libraries.mockito,
                     libraries.truth
         }
