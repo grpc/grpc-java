@@ -639,8 +639,7 @@ abstract class XdsClient {
         boolean useProtocolV3 = experimentalV3SupportEnvVar
             && serverInfo.getServerFeatures().contains(XDS_V3_SERVER_FEATURE);
 
-        return new XdsChannel(
-            channel, useProtocolV3);
+        return new XdsChannel(channel, useProtocolV3);
       }
     };
 
@@ -652,7 +651,6 @@ abstract class XdsClient {
      * Creates a channel to one of the provided management servers.
      */
     abstract XdsChannel createChannel(List<ServerInfo> servers);
-
   }
 
   static final class XdsChannel {
