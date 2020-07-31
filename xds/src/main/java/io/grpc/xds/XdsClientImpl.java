@@ -523,16 +523,9 @@ final class XdsClientImpl extends XdsClient {
   private void startRpcStream() {
     checkState(adsStream == null, "Previous adsStream has not been cleared yet");
     if (useProtocolV3) {
-      AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceStub stub =
-          AggregatedDiscoveryServiceGrpc.newStub(channel);
-      adsStream = new AdsStream(stub);
+      adsStream = new AdsStream();
     } else {
-      io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc
-              .AggregatedDiscoveryServiceStub
-          stubV2 =
-              io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.newStub(
-                  channel);
-      adsStream = new AdsStreamV2(stubV2);
+      adsStream = new AdsStreamV2();
     }
     adsStream.start();
     logger.log(XdsLogLevel.INFO, "ADS stream started");
@@ -1738,9 +1731,9 @@ final class XdsClientImpl extends XdsClient {
         .AggregatedDiscoveryServiceStub stubV2;
     private StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest> requestWriterV2;
 
-    AdsStreamV2(io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc
-        .AggregatedDiscoveryServiceStub stubV2) {
-      this.stubV2 = checkNotNull(stubV2, "stubV2");
+    AdsStreamV2() {
+      stubV2 =
+          io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.newStub(channel);
     }
 
     @Override
@@ -1794,8 +1787,8 @@ final class XdsClientImpl extends XdsClient {
     private final AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceStub stub;
     private StreamObserver<DiscoveryRequest> requestWriter;
 
-    AdsStream(AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceStub stub) {
-      this.stub = checkNotNull(stub, "stub");
+    AdsStream() {
+      stub = AggregatedDiscoveryServiceGrpc.newStub(channel);
     }
 
     @Override
