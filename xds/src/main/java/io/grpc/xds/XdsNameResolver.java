@@ -21,19 +21,18 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Iterables;
-import com.google.gson.Gson;
-import com.google.re2j.Pattern;
 import io.grpc.Attributes;
-import io.grpc.EquivalentAddressGroup;
+import io.grpc.CallOptions;
+import io.grpc.InternalConfigSelector;
 import io.grpc.InternalLogId;
+import io.grpc.LoadBalancer.PickSubchannelArgs;
+import io.grpc.Metadata;
 import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.JsonParser;
 import io.grpc.internal.ObjectPool;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.Bootstrapper.ServerInfo;
@@ -41,22 +40,24 @@ import io.grpc.xds.EnvoyProtoData.ClusterWeight;
 import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.EnvoyProtoData.Route;
 import io.grpc.xds.EnvoyProtoData.RouteAction;
-import io.grpc.xds.RouteMatch.FractionMatcher;
-import io.grpc.xds.RouteMatch.HeaderMatcher;
-import io.grpc.xds.RouteMatch.PathMatcher;
 import io.grpc.xds.XdsClient.ConfigUpdate;
 import io.grpc.xds.XdsClient.ConfigWatcher;
 import io.grpc.xds.XdsClient.RefCountedXdsClientObjectPool;
 import io.grpc.xds.XdsClient.XdsChannelFactory;
 import io.grpc.xds.XdsClient.XdsClientFactory;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
-import java.util.ArrayList;
+import java.io.IOException;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicInteger;
 import javax.annotation.Nullable;
 
 /**
@@ -69,6 +70,9 @@ import javax.annotation.Nullable;
  */
 final class XdsNameResolver extends NameResolver {
 
+  private static final CallOptions.Key<String> CLUSTER_SELECTION_KEY =
+      CallOptions.Key.create("io.grpc.xds.CLUSTER_SELECTION_KEY");
+
   private final XdsLogger logger;
   private final String authority;
   private final XdsChannelFactory channelFactory;
@@ -78,7 +82,10 @@ final class XdsNameResolver extends NameResolver {
   private final BackoffPolicy.Provider backoffPolicyProvider;
   private final Supplier<Stopwatch> stopwatchSupplier;
   private final Bootstrapper bootstrapper;
+  private final Map<String, AtomicInteger> clusterRefs = new ConcurrentHashMap<>();
 
+  private volatile List<Route> routes = Collections.emptyList();
+  private Listener2 listener;
   @Nullable
   private ObjectPool<XdsClient> xdsClientPool;
   @Nullable
@@ -124,6 +131,7 @@ final class XdsNameResolver extends NameResolver {
           Status.UNAVAILABLE.withDescription("No management server provided by bootstrap"));
       return;
     }
+    this.listener = checkNotNull(listener, "listener");
 
     XdsClientFactory xdsClientFactory = new XdsClientFactory() {
       @Override
@@ -142,69 +150,158 @@ final class XdsNameResolver extends NameResolver {
     };
     xdsClientPool = new RefCountedXdsClientObjectPool(xdsClientFactory);
     xdsClient = xdsClientPool.getObject();
-    xdsClient.watchConfigData(authority, new ConfigWatcherImpl(listener));
+    xdsClient.watchConfigData(authority, new ConfigWatcherImpl());
+  }
+
+  private final class ConfigSelector extends InternalConfigSelector {
+    @Override
+    public Result selectConfig(PickSubchannelArgs args) {
+      // Index ASCII headers by keys.
+      Map<String, Iterable<String>> asciiHeaders = new HashMap<>();
+      Metadata headers = args.getHeaders();
+      for (String headerName : headers.keys()) {
+        if (headerName.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
+          continue;
+        }
+        Metadata.Key<String> key = Metadata.Key.of(headerName, Metadata.ASCII_STRING_MARSHALLER);
+        asciiHeaders.put(headerName, headers.getAll(key));
+      }
+      String cluster = null;
+      Route selectedRoute = null;
+      do {
+        for (Route route : routes) {
+          if (route.getRouteMatch().matches(
+              "/" + args.getMethodDescriptor().getFullMethodName(), asciiHeaders)) {
+            selectedRoute = route;
+            break;
+          }
+        }
+        if (selectedRoute == null) {
+          return Result.forError(Status.UNAVAILABLE.withDescription("Failed to route the RPC"));
+        }
+        RouteAction action = selectedRoute.getRouteAction();
+        if (action.getCluster() != null) {
+          cluster = action.getCluster();
+        } else if (action.getWeightedCluster() != null) {
+          int totalWeight = 0;
+          for (ClusterWeight weightedCluster : action.getWeightedCluster()) {
+            totalWeight += weightedCluster.getWeight();
+          }
+          int select = ThreadLocalRandom.current().nextInt(totalWeight);
+          int accumulator = 0;
+          for (ClusterWeight weightedCluster : action.getWeightedCluster()) {
+            accumulator += weightedCluster.getWeight();
+            if (select < accumulator) {
+              cluster = weightedCluster.getName();
+              break;
+            }
+          }
+        }
+        if (cluster == null) {
+          return Result.forError(
+              Status.UNAVAILABLE.withDescription("Failed to route the RPC with selected action"));
+        }
+      } while (!retainCluster(cluster));
+      final String finalCluster = cluster;
+      class SelectionCompleted implements Runnable {
+        @Override
+        public void run() {
+          releaseCluster(finalCluster);
+        }
+      }
+      
+      return
+          Result.newBuilder()
+              .setCallOptions(args.getCallOptions().withOption(CLUSTER_SELECTION_KEY, cluster))
+              // TODO (chengyuanzhang): generate config for method
+              .setConfig(
+                  serviceConfigParser.parseServiceConfig(Collections.<String, Object>emptyMap()))
+              .setCommittedCallback(new SelectionCompleted())
+              .build();
+    }
+
+    private boolean retainCluster(String cluster) {
+      AtomicInteger refCount = clusterRefs.get(cluster);
+      int count;
+      do {
+        count = refCount.get();
+        if (count == 0) {
+          return false;
+        }
+      } while (!refCount.compareAndSet(count, count + 1));
+      return true;
+    }
+
+    private void releaseCluster(String cluster) {
+      int count = clusterRefs.get(cluster).decrementAndGet();
+      if (count == 0) {
+        clusterRefs.remove(cluster);
+        updateResolutionResult();
+      }
+    }
+  }
+
+  @SuppressWarnings("unchecked")
+  private void updateResolutionResult() {
+    String serviceConfigJson = generateServiceConfigJson(clusterRefs.keySet());
+    logger.log(XdsLogLevel.INFO, "Generated service config:\n{0}", serviceConfigJson);
+    Map<String, ?> serviceConfig;
+    try {
+      serviceConfig = (Map<String, ?>) JsonParser.parse(serviceConfigJson);
+    } catch (IOException e) {
+      throw new AssertionError("Malformed lb config: " + e);
+    }
+    Attributes attrs =
+        Attributes.newBuilder()
+            .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
+            .set(InternalConfigSelector.KEY, new ConfigSelector())
+            .build();
+    ConfigOrError parsedServiceConfig = serviceConfigParser.parseServiceConfig(serviceConfig);
+    ResolutionResult result =
+        ResolutionResult.newBuilder()
+            .setAttributes(attrs)
+            .setServiceConfig(parsedServiceConfig)
+            .build();
+    listener.onResult(result);
   }
 
   private class ConfigWatcherImpl implements ConfigWatcher {
-
-    final Listener2 listener;
-
-    ConfigWatcherImpl(Listener2 listener) {
-      this.listener = listener;
-    }
-
     @Override
     public void onConfigChanged(ConfigUpdate update) {
-      Map<String, ?> rawLbConfig;
-      if (update.getRoutes().size() > 1) {
-        logger.log(
-            XdsLogLevel.INFO,
-            "Received config update with {0} routes from xDS client {1}",
-            update.getRoutes().size(),
-            xdsClient);
-        rawLbConfig = generateXdsRoutingRawConfig(update.getRoutes());
-      } else {
-        Route defaultRoute = Iterables.getOnlyElement(update.getRoutes());
-        RouteAction action = defaultRoute.getRouteAction();
-        String clusterName = defaultRoute.getRouteAction().getCluster();
+      Set<String> clusters = new HashSet<>();
+      for (Route route : update.getRoutes()) {
+        RouteAction action = route.getRouteAction();
         if (action.getCluster() != null) {
-          logger.log(
-              XdsLogLevel.INFO,
-              "Received config update from xDS client {0}: cluster_name={1}",
-              xdsClient,
-              clusterName);
-          rawLbConfig = generateCdsRawConfig(clusterName);
-        } else {
-          logger.log(
-              XdsLogLevel.INFO,
-              "Received config update with one weighted cluster route from xDS client {0}",
-              xdsClient);
-          List<ClusterWeight> clusterWeights = defaultRoute.getRouteAction().getWeightedCluster();
-          rawLbConfig = generateWeightedTargetRawConfig(clusterWeights);
+          clusters.add(action.getCluster());
+        } else if (action.getWeightedCluster() != null) {
+          for (ClusterWeight weighedCluster : action.getWeightedCluster()) {
+            clusters.add(weighedCluster.getName());
+          }
         }
       }
-
-      Map<String, ?> serviceConfig =
-          ImmutableMap.of("loadBalancingConfig", ImmutableList.of(rawLbConfig));
-      if (logger.isLoggable(XdsLogLevel.INFO)) {
-        logger.log(
-            XdsLogLevel.INFO,
-            "Generated service config:\n{0}",
-            new Gson().toJson(serviceConfig));
+      for (String newCluster : clusters) {
+        if (!clusterRefs.containsKey(newCluster)) {
+          clusterRefs.put(newCluster, new AtomicInteger(1));
+        }
       }
-
-      Attributes attrs =
-          Attributes.newBuilder()
-              .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
-              .build();
-      ConfigOrError parsedServiceConfig = serviceConfigParser.parseServiceConfig(serviceConfig);
-      ResolutionResult result =
-          ResolutionResult.newBuilder()
-              .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
-              .setAttributes(attrs)
-              .setServiceConfig(parsedServiceConfig)
-              .build();
-      listener.onResult(result);
+      // Update service config to include newly added clusters.
+      updateResolutionResult();
+      // Make newly added clusters selectable by config selector.
+      routes = update.getRoutes();
+      // Drops reference for deleted clusters, update service config to remove deleted clusters
+      // not in use.
+      boolean shouldUpdateResult = false;
+      for (Map.Entry<String, AtomicInteger> entry : clusterRefs.entrySet()) {
+        if (!clusters.contains(entry.getKey())) {
+          int count = entry.getValue().decrementAndGet();
+          if (count == 0) {
+            shouldUpdateResult = true;
+          }
+        }
+      }
+      if (shouldUpdateResult) {
+        updateResolutionResult();
+      }
     }
 
     @Override
@@ -229,143 +326,32 @@ final class XdsNameResolver extends NameResolver {
   }
 
   @VisibleForTesting
-  static ImmutableMap<String, ?> generateXdsRoutingRawConfig(List<Route> routes) {
-    List<Object> rawRoutes = new ArrayList<>();
-    Map<String, Object> rawActions = new LinkedHashMap<>();
-    Map<RouteAction, String> existingActions = new HashMap<>();
-    for (Route route : routes) {
-      RouteAction routeAction = route.getRouteAction();
-      String actionName;
-      Map<String, ?> actionPolicy;
-      if (existingActions.containsKey(routeAction)) {
-        actionName = existingActions.get(routeAction);
-      } else {
-        if (routeAction.getCluster() != null) {
-          actionName = "cds:" + routeAction.getCluster();
-          actionPolicy = generateCdsRawConfig(routeAction.getCluster());
-        } else {
-          StringBuilder sb = new StringBuilder("weighted:");
-          List<ClusterWeight> clusterWeights = routeAction.getWeightedCluster();
-          for (ClusterWeight clusterWeight : clusterWeights) {
-            sb.append(clusterWeight.getName()).append('_');
-          }
-          sb.append(routeAction.hashCode());
-          actionName = sb.toString();
-          if (rawActions.containsKey(actionName)) {
-            // Just in case of hash collision, append existingActions.size() to make actionName
-            // unique. However, in case of collision, when new ConfigUpdate is received, actions
-            // and actionNames might be associated differently from the previous update, but it
-            // is just suboptimal and won't cause a problem.
-            actionName = actionName + "_" + existingActions.size();
-          }
-          actionPolicy = generateWeightedTargetRawConfig(clusterWeights);
-        }
-        existingActions.put(routeAction, actionName);
-        List<?> childPolicies = ImmutableList.of(actionPolicy);
-        rawActions.put(actionName, ImmutableMap.of("childPolicy", childPolicies));
+  static String generateServiceConfigJson(Collection<String> clusters) {
+    StringBuilder sb = new StringBuilder();
+    sb.append("{\n");
+    sb.append("  \"loadBalancingConfig\": [{\n");
+    sb.append("    \"cluster_manager_experimental\": {\n");
+    sb.append("      \"childPolicy\": {\n");
+    int i = 0;
+    for (String cluster : clusters) {
+      sb.append("        \"" + cluster + "\": {\n");
+      sb.append("          \"lbPolicy\": [{\n");
+      sb.append("            \"cds_experimental\": {\n");
+      sb.append("              \"cluster\": \"" + cluster + "\"\n");
+      sb.append("            }\n");
+      sb.append("          }]\n");
+      sb.append("        }");
+      if (i < clusters.size() - 1) {
+        sb.append(",");
       }
-      ImmutableMap<String, ?> configRoute = convertToRawRoute(route.getRouteMatch(), actionName);
-      rawRoutes.add(configRoute);
+      sb.append("\n");
+      i++;
     }
-    return ImmutableMap.of(
-        XdsLbPolicies.XDS_ROUTING_POLICY_NAME,
-        ImmutableMap.of(
-            "route", Collections.unmodifiableList(rawRoutes),
-            "action", Collections.unmodifiableMap(rawActions)));
-  }
-
-  @VisibleForTesting
-  static ImmutableMap<String, ?> convertToRawRoute(RouteMatch routeMatch, String actionName) {
-    ImmutableMap.Builder<String, Object> configRouteBuilder = new ImmutableMap.Builder<>();
-
-    PathMatcher pathMatcher = routeMatch.getPathMatch();
-    String path = pathMatcher.getPath();
-    String prefix = pathMatcher.getPrefix();
-    Pattern regex = pathMatcher.getRegEx();
-    if (path != null) {
-      configRouteBuilder.put("path", path);
-    }
-    if (prefix != null) {
-      configRouteBuilder.put("prefix", prefix);
-    }
-    if (regex != null) {
-      configRouteBuilder.put("regex", regex.pattern());
-    }
-
-    ImmutableList.Builder<Object> rawHeaderMatcherListBuilder = new ImmutableList.Builder<>();
-    List<HeaderMatcher> headerMatchers = routeMatch.getHeaderMatchers();
-    for (HeaderMatcher headerMatcher : headerMatchers) {
-      ImmutableMap.Builder<String, Object> rawHeaderMatcherBuilder = new ImmutableMap.Builder<>();
-      rawHeaderMatcherBuilder.put("name", headerMatcher.getName());
-      String exactMatch = headerMatcher.getExactMatch();
-      Pattern regexMatch = headerMatcher.getRegExMatch();
-      HeaderMatcher.Range rangeMatch = headerMatcher.getRangeMatch();
-      Boolean presentMatch = headerMatcher.getPresentMatch();
-      String prefixMatch = headerMatcher.getPrefixMatch();
-      String suffixMatch = headerMatcher.getSuffixMatch();
-      if (exactMatch != null) {
-        rawHeaderMatcherBuilder.put("exactMatch", exactMatch);
-      }
-      if (regexMatch != null) {
-        rawHeaderMatcherBuilder.put("regexMatch", regexMatch.pattern());
-      }
-      if (rangeMatch != null) {
-        rawHeaderMatcherBuilder
-            .put(
-                "rangeMatch",
-                ImmutableMap.of("start", rangeMatch.getStart(), "end", rangeMatch.getEnd()));
-      }
-      if (presentMatch != null) {
-        rawHeaderMatcherBuilder.put("presentMatch", presentMatch);
-      }
-      if (prefixMatch != null) {
-        rawHeaderMatcherBuilder.put("prefixMatch", prefixMatch);
-      }
-      if (suffixMatch != null) {
-        rawHeaderMatcherBuilder.put("suffixMatch", suffixMatch);
-      }
-      rawHeaderMatcherBuilder.put("invertMatch", headerMatcher.isInvertedMatch());
-      rawHeaderMatcherListBuilder.add(rawHeaderMatcherBuilder.build());
-    }
-    ImmutableList<?> rawHeaderMatchers = rawHeaderMatcherListBuilder.build();
-    if (!rawHeaderMatchers.isEmpty()) {
-      configRouteBuilder.put("headers", rawHeaderMatchers);
-    }
-
-    FractionMatcher matchFraction = routeMatch.getFractionMatch();
-    if (matchFraction != null) {
-      configRouteBuilder
-          .put(
-              "matchFraction",
-              ImmutableMap.of(
-                  "numerator", matchFraction.getNumerator(),
-                  "denominator", matchFraction.getDenominator()));
-    }
-
-    configRouteBuilder.put("action", actionName);
-    return configRouteBuilder.build();
-  }
-
-  @VisibleForTesting
-  static ImmutableMap<String, ?> generateWeightedTargetRawConfig(
-      List<ClusterWeight> clusterWeights) {
-    Map<String, Object> targets = new LinkedHashMap<>();
-    for (ClusterWeight clusterWeight : clusterWeights) {
-      Map<String, ?> childPolicy = generateCdsRawConfig(clusterWeight.getName());
-      Map<String, ?> weightedConfig = ImmutableMap.of(
-          "weight",
-          (double) clusterWeight.getWeight(),
-          "childPolicy",
-          ImmutableList.of(childPolicy));
-      targets.put(clusterWeight.getName(), weightedConfig);
-    }
-    return ImmutableMap.of(
-        XdsLbPolicies.WEIGHTED_TARGET_POLICY_NAME,
-        ImmutableMap.of("targets", targets));
-  }
-
-  private static ImmutableMap<String, ?> generateCdsRawConfig(String clusterName) {
-    return ImmutableMap.of(XdsLbPolicies.CDS_POLICY_NAME, ImmutableMap.of("cluster", clusterName));
+    sb.append("      }\n");
+    sb.append("    }\n");
+    sb.append("  }]\n");
+    sb.append("}");
+    return sb.toString();
   }
 
   @Override
