@@ -44,4 +44,12 @@ interface ProtocolNegotiator {
    * on client-side.
    */
   void close();
+
+  interface ClientFactory {
+    /** Creates a new negotiator. */
+    ProtocolNegotiator newNegotiator();
+
+    /** Returns the implicit port to use if no port was specified explicitly by the user. */
+    int getDefaultPort();
+  }
 }

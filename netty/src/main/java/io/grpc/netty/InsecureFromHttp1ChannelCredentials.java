@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 The gRPC Authors
+ * Copyright 2020 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,19 +16,16 @@
 
 package io.grpc.netty;
 
-import io.grpc.Internal;
+import io.grpc.ChannelCredentials;
+import io.grpc.ExperimentalApi;
 
-/**
- * Internal accessor for {@link ProtocolNegotiator}.
- */
-@Internal
-public final class InternalProtocolNegotiator {
+/** An insecure credential that upgrades from HTTP/1 to HTTP/2. */
+@ExperimentalApi("There is no plan to make this API stable, given transport API instability")
+public final class InsecureFromHttp1ChannelCredentials {
+  private InsecureFromHttp1ChannelCredentials() {}
 
-  private InternalProtocolNegotiator() {}
-
-  public interface ProtocolNegotiator extends io.grpc.netty.ProtocolNegotiator {}
-
-  public interface ClientFactory extends io.grpc.netty.ProtocolNegotiator.ClientFactory {
-    @Override ProtocolNegotiator newNegotiator();
+  /** Creates an insecure credential that will upgrade from HTTP/1 to HTTP/2. */
+  public static ChannelCredentials create() {
+    return NettyChannelCredentials.create(ProtocolNegotiators.plaintextUpgradeClientFactory());
   }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 The gRPC Authors
+ * Copyright 2020 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,19 +16,19 @@
 
 package io.grpc.netty;
 
+import io.grpc.ChannelCredentials;
 import io.grpc.Internal;
 
 /**
- * Internal accessor for {@link ProtocolNegotiator}.
+ * Internal {@link NettyChannelCredentials} accessor.  This is intended for usage internal to the
+ * gRPC team. If you *really* think you need to use this, contact the gRPC team first.
  */
 @Internal
-public final class InternalProtocolNegotiator {
+public final class InternalNettyChannelCredentials {
+  private InternalNettyChannelCredentials() {}
 
-  private InternalProtocolNegotiator() {}
-
-  public interface ProtocolNegotiator extends io.grpc.netty.ProtocolNegotiator {}
-
-  public interface ClientFactory extends io.grpc.netty.ProtocolNegotiator.ClientFactory {
-    @Override ProtocolNegotiator newNegotiator();
+  /** Creates a {@link ChannelCredentials} that will use the provided {@code negotiator}. */
+  public static ChannelCredentials create(InternalProtocolNegotiator.ClientFactory negotiator) {
+    return NettyChannelCredentials.create(negotiator);
   }
 }
