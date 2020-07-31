@@ -123,6 +123,7 @@ final class XdsClientImpl extends XdsClient {
   // first request to carry the node identifier on a stream. It should be identical if present
   // more than once.
   private Node node;
+  private boolean useProtocolV3;
 
   // Cached data for CDS responses, keyed by cluster names.
   // Optimization: cache ClusterUpdate, which contains only information needed by gRPC, instead
@@ -198,10 +199,11 @@ final class XdsClientImpl extends XdsClient {
       BackoffPolicy.Provider backoffPolicyProvider,
       Supplier<Stopwatch> stopwatchSupplier) {
     this.targetName = checkNotNull(targetName, "targetName");
-    this.channel =
+    XdsChannel xdsChannel =
         checkNotNull(channelFactory, "channelFactory")
-            .createChannel(checkNotNull(servers, "servers"))
-            .getManagedChannel();
+            .createChannel(checkNotNull(servers, "servers"));
+    this.channel = xdsChannel.getManagedChannel();
+    this.useProtocolV3 = xdsChannel.isUseProtocolV3();
     this.node = checkNotNull(node, "node");
     this.syncContext = checkNotNull(syncContext, "syncContext");
     this.timeService = checkNotNull(timeService, "timeService");
@@ -516,12 +518,18 @@ final class XdsClientImpl extends XdsClient {
    */
   private void startRpcStream() {
     checkState(adsStream == null, "Previous adsStream has not been cleared yet");
-    io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc
-            .AggregatedDiscoveryServiceStub
-        stub =
-            io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.newStub(
-                channel);
-    adsStream = new AdsStreamV2(stub);
+    if (useProtocolV3) {
+      AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceStub stub =
+          AggregatedDiscoveryServiceGrpc.newStub(channel);
+      adsStream = new AdsStream(stub);
+    } else {
+      io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc
+              .AggregatedDiscoveryServiceStub
+          stubV2 =
+              io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.newStub(
+                  channel);
+      adsStream = new AdsStreamV2(stubV2);
+    }
     adsStream.start();
     logger.log(XdsLogLevel.INFO, "ADS stream started");
     adsStreamRetryStopwatch.reset().start();
@@ -1778,7 +1786,6 @@ final class XdsClientImpl extends XdsClient {
   }
 
   // AdsStream V3
-  @SuppressWarnings("UnusedNestedClass") // Will be used once xds-v3 support is implemented.
   private final class AdsStream extends AbstractAdsStream {
     private final AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceStub stub;
     private StreamObserver<DiscoveryRequest> requestWriter;
