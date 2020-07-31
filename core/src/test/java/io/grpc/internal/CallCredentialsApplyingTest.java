@@ -102,24 +102,23 @@ public class CallCredentialsApplyingTest {
       Metadata.Key.of("test-creds", Metadata.ASCII_STRING_MARSHALLER);
   private static final String CREDS_VALUE = "some credentials";
 
+  private final ClientTransportFactory.ClientTransportOptions clientTransportOptions =
+        new ClientTransportFactory.ClientTransportOptions()
+          .setAuthority(AUTHORITY)
+          .setUserAgent(USER_AGENT);
   private final Metadata origHeaders = new Metadata();
   private ForwardingConnectionClientTransport transport;
   private CallOptions callOptions;
 
   @Before
   public void setUp() {
-    ClientTransportFactory.ClientTransportOptions clientTransportOptions =
-        new ClientTransportFactory.ClientTransportOptions()
-          .setAuthority(AUTHORITY)
-          .setUserAgent(USER_AGENT);
-
     origHeaders.put(ORIG_HEADER_KEY, ORIG_HEADER_VALUE);
     when(mockTransportFactory.newClientTransport(address, clientTransportOptions, channelLogger))
         .thenReturn(mockTransport);
     when(mockTransport.newStream(same(method), any(Metadata.class), any(CallOptions.class)))
         .thenReturn(mockStream);
     ClientTransportFactory transportFactory = new CallCredentialsApplyingTransportFactory(
-        mockTransportFactory, mockExecutor);
+        mockTransportFactory, null, mockExecutor);
     transport = (ForwardingConnectionClientTransport)
         transportFactory.newClientTransport(address, clientTransportOptions, channelLogger);
     callOptions = CallOptions.DEFAULT.withCallCredentials(mockCreds);
@@ -185,19 +184,8 @@ public class CallCredentialsApplyingTest {
   @Test
   public void applyMetadata_inline() {
     when(mockTransport.getAttributes()).thenReturn(Attributes.EMPTY);
-    doAnswer(new Answer<Void>() {
-        @Override
-        public Void answer(InvocationOnMock invocation) throws Throwable {
-          CallCredentials.MetadataApplier applier =
-              (CallCredentials.MetadataApplier) invocation.getArguments()[2];
-          Metadata headers = new Metadata();
-          headers.put(CREDS_KEY, CREDS_VALUE);
-          applier.apply(headers);
-          return null;
-        }
-      }).when(mockCreds).applyRequestMetadata(any(RequestInfo.class),
-          same(mockExecutor), any(CallCredentials.MetadataApplier.class));
 
+    callOptions = callOptions.withCallCredentials(new FakeCallCredentials(CREDS_KEY, CREDS_VALUE));
     ClientStream stream = transport.newStream(method, origHeaders, callOptions);
 
     verify(mockTransport).newStream(method, origHeaders, callOptions);
@@ -278,5 +266,68 @@ public class CallCredentialsApplyingTest {
     assertSame(mockStream, stream);
     assertNull(origHeaders.get(CREDS_KEY));
     assertEquals(ORIG_HEADER_VALUE, origHeaders.get(ORIG_HEADER_KEY));
+  }
+
+  @Test
+  public void justCallOptionCreds() {
+    callOptions = callOptions.withCallCredentials(new FakeCallCredentials(CREDS_KEY, CREDS_VALUE));
+
+    ClientStream stream = transport.newStream(method, origHeaders, callOptions);
+
+    assertSame(mockStream, stream);
+    assertEquals(CREDS_VALUE, origHeaders.get(CREDS_KEY));
+    assertEquals(ORIG_HEADER_VALUE, origHeaders.get(ORIG_HEADER_KEY));
+  }
+
+  @Test
+  public void justChannelCreds() {
+    ClientTransportFactory transportFactory = new CallCredentialsApplyingTransportFactory(
+        mockTransportFactory, new FakeCallCredentials(CREDS_KEY, CREDS_VALUE), mockExecutor);
+    transport = (ForwardingConnectionClientTransport)
+        transportFactory.newClientTransport(address, clientTransportOptions, channelLogger);
+    callOptions = callOptions.withCallCredentials(null);
+
+    ClientStream stream = transport.newStream(method, origHeaders, callOptions);
+
+    assertSame(mockStream, stream);
+    assertEquals(CREDS_VALUE, origHeaders.get(CREDS_KEY));
+    assertEquals(ORIG_HEADER_VALUE, origHeaders.get(ORIG_HEADER_KEY));
+  }
+
+  @Test
+  public void callOptionAndChanelCreds() {
+    ClientTransportFactory transportFactory = new CallCredentialsApplyingTransportFactory(
+        mockTransportFactory, new FakeCallCredentials(CREDS_KEY, CREDS_VALUE), mockExecutor);
+    transport = (ForwardingConnectionClientTransport)
+        transportFactory.newClientTransport(address, clientTransportOptions, channelLogger);
+    Metadata.Key<String> creds2Key =
+        Metadata.Key.of("test-creds2", Metadata.ASCII_STRING_MARSHALLER);
+    String creds2Value = "some more credentials";
+    callOptions = callOptions.withCallCredentials(new FakeCallCredentials(creds2Key, creds2Value));
+
+    ClientStream stream = transport.newStream(method, origHeaders, callOptions);
+
+    assertSame(mockStream, stream);
+    assertEquals(CREDS_VALUE, origHeaders.get(CREDS_KEY));
+    assertEquals(creds2Value, origHeaders.get(creds2Key));
+    assertEquals(ORIG_HEADER_VALUE, origHeaders.get(ORIG_HEADER_KEY));
+  }
+
+  private abstract static class BaseCallCredentials extends CallCredentials {
+    @Override public void thisUsesUnstableApi() {}
+  }
+
+  private static class FakeCallCredentials extends BaseCallCredentials {
+    private final Metadata headers;
+
+    public <T> FakeCallCredentials(Metadata.Key<T> key, T value) {
+      headers = new Metadata();
+      headers.put(key, value);
+    }
+
+    @Override public void applyRequestMetadata(
+        RequestInfo requestInfo, Executor appExecutor, CallCredentials.MetadataApplier applier) {
+      applier.apply(headers);
+    }
   }
 }

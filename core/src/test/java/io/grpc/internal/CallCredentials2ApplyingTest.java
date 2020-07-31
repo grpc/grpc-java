@@ -120,7 +120,7 @@ public class CallCredentials2ApplyingTest {
     when(mockTransport.newStream(same(method), any(Metadata.class), any(CallOptions.class)))
         .thenReturn(mockStream);
     ClientTransportFactory transportFactory = new CallCredentialsApplyingTransportFactory(
-        mockTransportFactory, mockExecutor);
+        mockTransportFactory, null, mockExecutor);
     transport = (ForwardingConnectionClientTransport)
         transportFactory.newClientTransport(address, clientTransportOptions, channelLogger);
     callOptions = CallOptions.DEFAULT.withCallCredentials(mockCreds);

@@ -20,10 +20,11 @@ import static com.google.common.base.MoreObjects.firstNonNull;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import io.grpc.Attributes;
-import io.grpc.CallCredentials;
 import io.grpc.CallCredentials.RequestInfo;
+import io.grpc.CallCredentials;
 import io.grpc.CallOptions;
 import io.grpc.ChannelLogger;
+import io.grpc.CompositeCallCredentials;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.SecurityLevel;
@@ -34,11 +35,14 @@ import java.util.concurrent.ScheduledExecutorService;
 
 final class CallCredentialsApplyingTransportFactory implements ClientTransportFactory {
   private final ClientTransportFactory delegate;
+  private final CallCredentials channelCallCredentials;
   private final Executor appExecutor;
 
   CallCredentialsApplyingTransportFactory(
-      ClientTransportFactory delegate, Executor appExecutor) {
+      ClientTransportFactory delegate, CallCredentials channelCallCredentials,
+      Executor appExecutor) {
     this.delegate = checkNotNull(delegate, "delegate");
+    this.channelCallCredentials = channelCallCredentials;
     this.appExecutor = checkNotNull(appExecutor, "appExecutor");
   }
 
@@ -78,6 +82,11 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
     public ClientStream newStream(
         final MethodDescriptor<?, ?> method, Metadata headers, final CallOptions callOptions) {
       CallCredentials creds = callOptions.getCredentials();
+      if (creds == null) {
+        creds = channelCallCredentials;
+      } else if (channelCallCredentials != null) {
+        creds = new CompositeCallCredentials(channelCallCredentials, creds);
+      }
       if (creds != null) {
         MetadataApplierImpl applier = new MetadataApplierImpl(
             delegate, method, headers, callOptions);
