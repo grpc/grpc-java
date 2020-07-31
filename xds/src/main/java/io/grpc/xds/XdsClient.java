@@ -602,7 +602,7 @@ abstract class XdsClient {
    */
   abstract static class XdsChannelFactory {
     @VisibleForTesting
-    static boolean experimentalV3SupportEnvVar = Boolean.getBoolean(
+    static boolean experimentalV3SupportEnvVar = Boolean.parseBoolean(
         System.getenv("GRPC_XDS_EXPERIMENTAL_V3_SUPPORT"));
 
     private static final String XDS_V3_SERVER_FEATURE = "xds_v3";
