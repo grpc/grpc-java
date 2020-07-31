@@ -17,7 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
-import static io.grpc.xds.XdsClientTestHelper.buildDiscoveryResponse;
+import static io.grpc.xds.XdsClientTestHelper.buildDiscoveryResponseV2;
 import static io.grpc.xds.XdsClientTestHelper.buildListener;
 import static io.grpc.xds.XdsClientTestHelper.buildRouteConfiguration;
 import static io.grpc.xds.XdsClientTestHelper.buildVirtualHost;
@@ -396,7 +396,7 @@ public class XdsNameResolverIntegrationTest {
     List<Any> listeners =
         ImmutableList.of(Any.pack(buildListener(AUTHORITY, Any.pack(httpConnectionManager))));
     responseObserver.onNext(
-        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2,  "0000"));
+        buildDiscoveryResponseV2("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2,  "0000"));
 
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
@@ -478,7 +478,7 @@ public class XdsNameResolverIntegrationTest {
                     buildVirtualHostForRoutes(
                         AUTHORITY, ImmutableList.of(weightedClustersDefaultRoute))))));
     responseObserver.onNext(
-        buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS_V2, "0000"));
+        buildDiscoveryResponseV2("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS_V2, "0000"));
 
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
@@ -547,7 +547,8 @@ public class XdsNameResolverIntegrationTest {
                                     ImmutableList.of(host), // exact match
                                     clusterName))))
                     .build()))));
-    return buildDiscoveryResponse(versionInfo, listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, nonce);
+    return buildDiscoveryResponseV2(
+        versionInfo, listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, nonce);
   }
 
   /**
@@ -569,7 +570,8 @@ public class XdsNameResolverIntegrationTest {
         Any.pack(
             buildListener(
                 host, Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build()))));
-    return buildDiscoveryResponse(versionInfo, listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, nonce);
+    return buildDiscoveryResponseV2(
+        versionInfo, listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, nonce);
   }
 
   /**
@@ -588,7 +590,7 @@ public class XdsNameResolverIntegrationTest {
                 routeConfigName,
                 ImmutableList.of(
                     buildVirtualHost(ImmutableList.of(host), clusterName)))));
-    return buildDiscoveryResponse(
+    return buildDiscoveryResponseV2(
         versionInfo, routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS_V2, nonce);
   }
 
