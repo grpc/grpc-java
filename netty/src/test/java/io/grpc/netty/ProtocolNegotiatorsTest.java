@@ -30,11 +30,17 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 
 import io.grpc.Attributes;
+import io.grpc.CallCredentials;
+import io.grpc.ChannelCredentials;
+import io.grpc.ChoiceChannelCredentials;
+import io.grpc.CompositeChannelCredentials;
 import io.grpc.Grpc;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.InternalChannelz.Security;
 import io.grpc.SecurityLevel;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
+import io.grpc.TlsChannelCredentials;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.ProtocolNegotiators.ClientTlsHandler;
@@ -159,6 +165,105 @@ public class ProtocolNegotiatorsTest {
       chan.close();
     }
     group.shutdownGracefully();
+  }
+
+  @Test
+  public void from_unknown() {
+    ProtocolNegotiators.FromChannelCredentialsResult result =
+        ProtocolNegotiators.from(new ChannelCredentials() {});
+    assertThat(result.error).isNotNull();
+    assertThat(result.callCredentials).isNull();
+    assertThat(result.negotiator).isNull();
+  }
+
+  @Test
+  public void from_tls() {
+    ProtocolNegotiators.FromChannelCredentialsResult result =
+        ProtocolNegotiators.from(TlsChannelCredentials.create());
+    assertThat(result.error).isNull();
+    assertThat(result.callCredentials).isNull();
+    assertThat(result.negotiator)
+        .isInstanceOf(ProtocolNegotiators.TlsProtocolNegotiatorClientFactory.class);
+  }
+
+  @Test
+  public void from_unspportedTls() {
+    ProtocolNegotiators.FromChannelCredentialsResult result =
+        ProtocolNegotiators.from(TlsChannelCredentials.newBuilder().requireFakeFeature().build());
+    assertThat(result.error).contains("FAKE");
+    assertThat(result.callCredentials).isNull();
+    assertThat(result.negotiator).isNull();
+  }
+
+  @Test
+  public void from_insecure() {
+    ProtocolNegotiators.FromChannelCredentialsResult result =
+        ProtocolNegotiators.from(InsecureChannelCredentials.create());
+    assertThat(result.error).isNull();
+    assertThat(result.callCredentials).isNull();
+    assertThat(result.negotiator)
+        .isInstanceOf(ProtocolNegotiators.PlaintextProtocolNegotiatorClientFactory.class);
+  }
+
+  @Test
+  public void from_composite() {
+    CallCredentials callCredentials = mock(CallCredentials.class);
+    ProtocolNegotiators.FromChannelCredentialsResult result =
+        ProtocolNegotiators.from(CompositeChannelCredentials.create(
+          TlsChannelCredentials.create(), callCredentials));
+    assertThat(result.error).isNull();
+    assertThat(result.callCredentials).isSameInstanceAs(callCredentials);
+    assertThat(result.negotiator)
+        .isInstanceOf(ProtocolNegotiators.TlsProtocolNegotiatorClientFactory.class);
+
+    result = ProtocolNegotiators.from(CompositeChannelCredentials.create(
+          InsecureChannelCredentials.create(), callCredentials));
+    assertThat(result.error).isNull();
+    assertThat(result.callCredentials).isSameInstanceAs(callCredentials);
+    assertThat(result.negotiator)
+        .isInstanceOf(ProtocolNegotiators.PlaintextProtocolNegotiatorClientFactory.class);
+  }
+
+  @Test
+  public void from_netty() {
+    ProtocolNegotiator.ClientFactory factory = mock(ProtocolNegotiator.ClientFactory.class);
+    ProtocolNegotiators.FromChannelCredentialsResult result =
+        ProtocolNegotiators.from(NettyChannelCredentials.create(factory));
+    assertThat(result.error).isNull();
+    assertThat(result.callCredentials).isNull();
+    assertThat(result.negotiator).isSameInstanceAs(factory);
+  }
+
+  @Test
+  public void from_choice() {
+    ProtocolNegotiators.FromChannelCredentialsResult result =
+        ProtocolNegotiators.from(ChoiceChannelCredentials.create(
+          new ChannelCredentials() {},
+          TlsChannelCredentials.create(),
+          InsecureChannelCredentials.create()));
+    assertThat(result.error).isNull();
+    assertThat(result.callCredentials).isNull();
+    assertThat(result.negotiator)
+        .isInstanceOf(ProtocolNegotiators.TlsProtocolNegotiatorClientFactory.class);
+
+    result = ProtocolNegotiators.from(ChoiceChannelCredentials.create(
+          InsecureChannelCredentials.create(),
+          new ChannelCredentials() {},
+          TlsChannelCredentials.create()));
+    assertThat(result.error).isNull();
+    assertThat(result.callCredentials).isNull();
+    assertThat(result.negotiator)
+        .isInstanceOf(ProtocolNegotiators.PlaintextProtocolNegotiatorClientFactory.class);
+  }
+
+  @Test
+  public void from_choice_unknown() {
+    ProtocolNegotiators.FromChannelCredentialsResult result =
+        ProtocolNegotiators.from(ChoiceChannelCredentials.create(
+          new ChannelCredentials() {}));
+    assertThat(result.error).isNotNull();
+    assertThat(result.callCredentials).isNull();
+    assertThat(result.negotiator).isNull();
   }
 
   @Test

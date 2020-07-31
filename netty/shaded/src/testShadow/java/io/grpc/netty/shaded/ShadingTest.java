@@ -18,14 +18,17 @@ package io.grpc.netty.shaded;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import io.grpc.ChannelCredentials;
+import io.grpc.Grpc;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.shaded.io.grpc.netty.GrpcSslContexts;
 import io.grpc.netty.shaded.io.grpc.netty.NettyChannelBuilder;
 import io.grpc.netty.shaded.io.grpc.netty.NettyServerBuilder;
+import io.grpc.netty.shaded.io.grpc.netty.NettySslContextChannelCredentials;
 import io.grpc.netty.shaded.io.netty.handler.ssl.SslContextBuilder;
 import io.grpc.netty.shaded.io.netty.handler.ssl.SslProvider;
 import io.grpc.stub.StreamObserver;
@@ -67,7 +70,7 @@ public final class ShadingTest {
   @Test
   public void serviceLoaderFindsNetty() throws Exception {
     assertThat(ServerBuilder.forPort(0)).isInstanceOf(NettyServerBuilder.class);
-    assertThat(ManagedChannelBuilder.forAddress("localhost", 1234))
+    assertThat(Grpc.newChannelBuilder("localhost:1234", InsecureChannelCredentials.create()))
         .isInstanceOf(NettyChannelBuilder.class);
   }
 
@@ -76,9 +79,8 @@ public final class ShadingTest {
     server = ServerBuilder.forPort(0)
         .addService(new SimpleServiceImpl())
         .build().start();
-    channel = ManagedChannelBuilder
-        .forAddress("localhost", server.getPort())
-        .usePlaintext()
+    channel = Grpc.newChannelBuilder(
+          "localhost:" + server.getPort(), InsecureChannelCredentials.create())
         .build();
     SimpleServiceBlockingStub stub = SimpleServiceGrpc.newBlockingStub(channel);
     assertThat(SimpleResponse.getDefaultInstance())
@@ -91,11 +93,10 @@ public final class ShadingTest {
         .useTransportSecurity(TestUtils.loadCert("server1.pem"), TestUtils.loadCert("server1.key"))
         .addService(new SimpleServiceImpl())
         .build().start();
-    channel = NettyChannelBuilder
-        .forAddress("localhost", server.getPort())
-        .sslContext(
-            GrpcSslContexts.configure(SslContextBuilder.forClient(), SslProvider.OPENSSL)
-                .trustManager(TestUtils.loadCert("ca.pem")).build())
+    ChannelCredentials creds = NettySslContextChannelCredentials.create(
+        GrpcSslContexts.configure(SslContextBuilder.forClient(), SslProvider.OPENSSL)
+            .trustManager(TestUtils.loadCert("ca.pem")).build());
+    channel = Grpc.newChannelBuilder("localhost:" + server.getPort(), creds)
         .overrideAuthority("foo.test.google.fr")
         .build();
     SimpleServiceBlockingStub stub = SimpleServiceGrpc.newBlockingStub(channel);

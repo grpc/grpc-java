@@ -25,6 +25,8 @@ import static io.grpc.internal.GrpcUtil.KEEPALIVE_TIME_NANOS_DISABLED;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import io.grpc.Attributes;
+import io.grpc.CallCredentials;
+import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.ExperimentalApi;
@@ -91,10 +93,8 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder<NettyCha
   private final ManagedChannelImplBuilder managedChannelImplBuilder;
   private TransportTracer.Factory transportTracerFactory = TransportTracer.getDefaultFactory();
   private final Map<ChannelOption<?>, Object> channelOptions = new HashMap<>();
-  private NegotiationType negotiationType = NegotiationType.TLS;
   private ChannelFactory<? extends Channel> channelFactory = DEFAULT_CHANNEL_FACTORY;
   private ObjectPool<? extends EventLoopGroup> eventLoopGroupPool = DEFAULT_EVENT_LOOP_GROUP_POOL;
-  private SslContext sslContext;
   private boolean autoFlowControl = DEFAULT_AUTO_FLOW_CONTROL;
   private int flowControlWindow = DEFAULT_FLOW_CONTROL_WINDOW;
   private int maxInboundMessageSize = GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
@@ -102,7 +102,9 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder<NettyCha
   private long keepAliveTimeNanos = KEEPALIVE_TIME_NANOS_DISABLED;
   private long keepAliveTimeoutNanos = DEFAULT_KEEPALIVE_TIMEOUT_NANOS;
   private boolean keepAliveWithoutCalls;
-  private ProtocolNegotiatorFactory protocolNegotiatorFactory;
+  private ProtocolNegotiator.ClientFactory protocolNegotiatorFactory
+      = new DefaultProtocolNegotiator();
+  private final boolean freezeProtocolNegotiatorFactory;
   private LocalSocketPicker localSocketPicker;
 
   /**
@@ -128,7 +130,15 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder<NettyCha
    */
   @CheckReturnValue
   public static NettyChannelBuilder forAddress(String host, int port) {
-    return new NettyChannelBuilder(host, port);
+    return forTarget(GrpcUtil.authorityFromHostAndPort(host, port));
+  }
+
+  /**
+   * Creates a new builder with the given host and port.
+   */
+  @CheckReturnValue
+  public static NettyChannelBuilder forAddress(String host, int port, ChannelCredentials creds) {
+    return forTarget(GrpcUtil.authorityFromHostAndPort(host, port), creds);
   }
 
   /**
@@ -140,9 +150,18 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder<NettyCha
     return new NettyChannelBuilder(target);
   }
 
+  /**
+   * Creates a new builder with the given target string that will be resolved by
+   * {@link io.grpc.NameResolver}.
+   */
   @CheckReturnValue
-  NettyChannelBuilder(String host, int port) {
-    this(GrpcUtil.authorityFromHostAndPort(host, port));
+  public static NettyChannelBuilder forTarget(String target, ChannelCredentials creds) {
+    ProtocolNegotiators.FromChannelCredentialsResult result = ProtocolNegotiators.from(creds);
+    if (result.error != null) {
+      throw new IllegalArgumentException(result.error);
+    }
+    return new NettyChannelBuilder(
+        target, result.negotiator, result.callCredentials);
   }
 
   private final class NettyChannelTransportFactoryBuilder implements ClientTransportFactoryBuilder {
@@ -155,7 +174,7 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder<NettyCha
   private final class NettyChannelDefaultPortProvider implements ChannelBuilderDefaultPortProvider {
     @Override
     public int getDefaultPort() {
-      return NettyChannelBuilder.this.getDefaultPort();
+      return protocolNegotiatorFactory.getDefaultPort();
     }
   }
 
@@ -164,6 +183,18 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder<NettyCha
     managedChannelImplBuilder = new ManagedChannelImplBuilder(target,
         new NettyChannelTransportFactoryBuilder(),
         new NettyChannelDefaultPortProvider());
+    this.freezeProtocolNegotiatorFactory = false;
+  }
+
+  @CheckReturnValue
+  NettyChannelBuilder(
+      String target, ProtocolNegotiator.ClientFactory negotiator,
+      @Nullable CallCredentials callCreds) {
+    managedChannelImplBuilder = new ManagedChannelImplBuilder(target, callCreds,
+        new NettyChannelTransportFactoryBuilder(),
+        new NettyChannelDefaultPortProvider());
+    this.protocolNegotiatorFactory = checkNotNull(negotiator, "negotiator");
+    this.freezeProtocolNegotiatorFactory = true;
   }
 
   @CheckReturnValue
@@ -172,6 +203,7 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder<NettyCha
         getAuthorityFromAddress(address),
         new NettyChannelTransportFactoryBuilder(),
         new NettyChannelDefaultPortProvider());
+    this.freezeProtocolNegotiatorFactory = false;
   }
 
   @Internal
@@ -242,7 +274,13 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder<NettyCha
    * <p>Default: <code>TLS</code>
    */
   public NettyChannelBuilder negotiationType(NegotiationType type) {
-    negotiationType = type;
+    checkState(!freezeProtocolNegotiatorFactory,
+               "Cannot change security when using ChannelCredentials");
+    if (!(protocolNegotiatorFactory instanceof DefaultProtocolNegotiator)) {
+      // Do nothing for compatibility
+      return this;
+    }
+    ((DefaultProtocolNegotiator) protocolNegotiatorFactory).negotiationType = type;
     return this;
   }
 
@@ -276,12 +314,18 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder<NettyCha
    * GrpcSslContexts}, but options could have been overridden.
    */
   public NettyChannelBuilder sslContext(SslContext sslContext) {
+    checkState(!freezeProtocolNegotiatorFactory,
+               "Cannot change security when using ChannelCredentials");
     if (sslContext != null) {
       checkArgument(sslContext.isClient(),
           "Server SSL context can not be used for client channel");
       GrpcSslContexts.ensureAlpnAndH2Enabled(sslContext.applicationProtocolNegotiator());
     }
-    this.sslContext = sslContext;
+    if (!(protocolNegotiatorFactory instanceof DefaultProtocolNegotiator)) {
+      // Do nothing for compatibility
+      return this;
+    }
+    ((DefaultProtocolNegotiator) protocolNegotiatorFactory).sslContext = sslContext;
     return this;
   }
 
@@ -452,22 +496,7 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder<NettyCha
   ClientTransportFactory buildTransportFactory() {
     assertEventLoopAndChannelType();
 
-    ProtocolNegotiator negotiator;
-    if (protocolNegotiatorFactory != null) {
-      negotiator = protocolNegotiatorFactory.buildProtocolNegotiator();
-    } else {
-      SslContext localSslContext = sslContext;
-      if (negotiationType == NegotiationType.TLS && localSslContext == null) {
-        try {
-          localSslContext = GrpcSslContexts.forClient().build();
-        } catch (SSLException ex) {
-          throw new RuntimeException(ex);
-        }
-      }
-      negotiator = createProtocolNegotiatorByType(negotiationType, localSslContext,
-          this.managedChannelImplBuilder.getOffloadExecutorPool());
-    }
-
+    ProtocolNegotiator negotiator = protocolNegotiatorFactory.newNegotiator();
     return new NettyTransportFactory(
         negotiator, channelFactory, channelOptions,
         eventLoopGroupPool, autoFlowControl, flowControlWindow, maxInboundMessageSize,
@@ -488,15 +517,7 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder<NettyCha
 
   @CheckReturnValue
   int getDefaultPort() {
-    switch (negotiationType) {
-      case PLAINTEXT:
-      case PLAINTEXT_UPGRADE:
-        return GrpcUtil.DEFAULT_PORT_PLAINTEXT;
-      case TLS:
-        return GrpcUtil.DEFAULT_PORT_SSL;
-      default:
-        throw new AssertionError(negotiationType + " not handled");
-    }
+    return protocolNegotiatorFactory.getDefaultPort();
   }
 
   @VisibleForTesting
@@ -527,7 +548,9 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder<NettyCha
     return this;
   }
 
-  void protocolNegotiatorFactory(ProtocolNegotiatorFactory protocolNegotiatorFactory) {
+  void protocolNegotiatorFactory(ProtocolNegotiator.ClientFactory protocolNegotiatorFactory) {
+    checkState(!freezeProtocolNegotiatorFactory,
+               "Cannot change security when using ChannelCredentials");
     this.protocolNegotiatorFactory
         = checkNotNull(protocolNegotiatorFactory, "protocolNegotiatorFactory");
   }
@@ -558,12 +581,36 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder<NettyCha
     return this;
   }
 
-  interface ProtocolNegotiatorFactory {
-    /**
-     * Returns a ProtocolNegotatior instance configured for this Builder. This method is called
-     * during {@code ManagedChannelBuilder#build()}.
-     */
-    ProtocolNegotiator buildProtocolNegotiator();
+  private final class DefaultProtocolNegotiator implements ProtocolNegotiator.ClientFactory {
+    private NegotiationType negotiationType = NegotiationType.TLS;
+    private SslContext sslContext;
+
+    @Override
+    public ProtocolNegotiator newNegotiator() {
+      SslContext localSslContext = sslContext;
+      if (negotiationType == NegotiationType.TLS && localSslContext == null) {
+        try {
+          localSslContext = GrpcSslContexts.forClient().build();
+        } catch (SSLException ex) {
+          throw new RuntimeException(ex);
+        }
+      }
+      return createProtocolNegotiatorByType(negotiationType, localSslContext,
+          managedChannelImplBuilder.getOffloadExecutorPool());
+    }
+
+    @Override
+    public int getDefaultPort() {
+      switch (negotiationType) {
+        case PLAINTEXT:
+        case PLAINTEXT_UPGRADE:
+          return GrpcUtil.DEFAULT_PORT_PLAINTEXT;
+        case TLS:
+          return GrpcUtil.DEFAULT_PORT_SSL;
+        default:
+          throw new AssertionError(negotiationType + " not handled");
+      }
+    }
   }
 
   /**
