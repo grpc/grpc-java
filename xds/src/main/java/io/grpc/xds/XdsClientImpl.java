@@ -84,12 +84,14 @@ final class XdsClientImpl extends XdsClient {
 
   @VisibleForTesting
   static final String ADS_TYPE_URL_LDS_V2 = "type.googleapis.com/envoy.api.v2.Listener";
-  private static final String ADS_TYPE_URL_LDS =
+  @VisibleForTesting
+  static final String ADS_TYPE_URL_LDS =
       "type.googleapis.com/envoy.config.listener.v3.Listener";
   @VisibleForTesting
   static final String ADS_TYPE_URL_RDS_V2 =
       "type.googleapis.com/envoy.api.v2.RouteConfiguration";
-  private static final String ADS_TYPE_URL_RDS =
+  @VisibleForTesting
+  static final String ADS_TYPE_URL_RDS =
       "type.googleapis.com/envoy.config.route.v3.RouteConfiguration";
   private static final String TYPE_URL_HTTP_CONNECTION_MANAGER_V2 =
       "type.googleapis.com/envoy.config.filter.network.http_connection_manager.v2"
@@ -99,12 +101,14 @@ final class XdsClientImpl extends XdsClient {
           + ".HttpConnectionManager";
   @VisibleForTesting
   static final String ADS_TYPE_URL_CDS_V2 = "type.googleapis.com/envoy.api.v2.Cluster";
-  private static final String ADS_TYPE_URL_CDS =
+  @VisibleForTesting
+  static final String ADS_TYPE_URL_CDS =
       "type.googleapis.com/envoy.config.cluster.v3.Cluster";
   @VisibleForTesting
   static final String ADS_TYPE_URL_EDS_V2 =
       "type.googleapis.com/envoy.api.v2.ClusterLoadAssignment";
-  private static final String ADS_TYPE_URL_EDS =
+  @VisibleForTesting
+  static final String ADS_TYPE_URL_EDS =
       "type.googleapis.com/envoy.config.endpoint.v3.ClusterLoadAssignment";
 
   private final MessagePrinter respPrinter = new MessagePrinter();
@@ -114,6 +118,7 @@ final class XdsClientImpl extends XdsClient {
   // Name of the target server this gRPC client is trying to talk to.
   private final String targetName;
   private final ManagedChannel channel;
+  private final boolean useProtocolV3;
   private final SynchronizationContext syncContext;
   private final ScheduledExecutorService timeService;
   private final BackoffPolicy.Provider backoffPolicyProvider;
@@ -198,10 +203,11 @@ final class XdsClientImpl extends XdsClient {
       BackoffPolicy.Provider backoffPolicyProvider,
       Supplier<Stopwatch> stopwatchSupplier) {
     this.targetName = checkNotNull(targetName, "targetName");
-    this.channel =
+    XdsChannel xdsChannel =
         checkNotNull(channelFactory, "channelFactory")
-            .createChannel(checkNotNull(servers, "servers"))
-            .getManagedChannel();
+            .createChannel(checkNotNull(servers, "servers"));
+    this.channel = xdsChannel.getManagedChannel();
+    this.useProtocolV3 = xdsChannel.isUseProtocolV3();
     this.node = checkNotNull(node, "node");
     this.syncContext = checkNotNull(syncContext, "syncContext");
     this.timeService = checkNotNull(timeService, "timeService");
@@ -516,12 +522,11 @@ final class XdsClientImpl extends XdsClient {
    */
   private void startRpcStream() {
     checkState(adsStream == null, "Previous adsStream has not been cleared yet");
-    io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc
-            .AggregatedDiscoveryServiceStub
-        stub =
-            io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.newStub(
-                channel);
-    adsStream = new AdsStreamV2(stub);
+    if (useProtocolV3) {
+      adsStream = new AdsStream();
+    } else {
+      adsStream = new AdsStreamV2();
+    }
     adsStream.start();
     logger.log(XdsLogLevel.INFO, "ADS stream started");
     adsStreamRetryStopwatch.reset().start();
@@ -1726,9 +1731,9 @@ final class XdsClientImpl extends XdsClient {
         .AggregatedDiscoveryServiceStub stubV2;
     private StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest> requestWriterV2;
 
-    AdsStreamV2(io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc
-        .AggregatedDiscoveryServiceStub stubV2) {
-      this.stubV2 = checkNotNull(stubV2, "stubV2");
+    AdsStreamV2() {
+      stubV2 =
+          io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.newStub(channel);
     }
 
     @Override
@@ -1778,13 +1783,12 @@ final class XdsClientImpl extends XdsClient {
   }
 
   // AdsStream V3
-  @SuppressWarnings("UnusedNestedClass") // Will be used once xds-v3 support is implemented.
   private final class AdsStream extends AbstractAdsStream {
     private final AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceStub stub;
     private StreamObserver<DiscoveryRequest> requestWriter;
 
-    AdsStream(AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceStub stub) {
-      this.stub = checkNotNull(stub, "stub");
+    AdsStream() {
+      stub = AggregatedDiscoveryServiceGrpc.newStub(channel);
     }
 
     @Override
