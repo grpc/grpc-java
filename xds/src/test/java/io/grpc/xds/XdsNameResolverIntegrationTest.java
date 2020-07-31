@@ -65,6 +65,7 @@ import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.Node;
+import io.grpc.xds.XdsClient.XdsChannel;
 import io.grpc.xds.XdsClient.XdsChannelFactory;
 import java.io.IOException;
 import java.util.ArrayDeque;
@@ -159,18 +160,16 @@ public class XdsNameResolverIntegrationTest {
 
     channelFactory = new XdsChannelFactory() {
       @Override
-      ManagedChannel createChannel(List<ServerInfo> servers) {
+      XdsChannel createChannel(List<ServerInfo> servers) {
         assertThat(Iterables.getOnlyElement(servers).getServerUri()).isEqualTo(serverName);
-        return channel;
+        return new XdsChannel(channel, false);
       }
     };
     Bootstrapper bootstrapper = new Bootstrapper() {
       @Override
       public BootstrapInfo readBootstrap() {
         List<ServerInfo> serverList =
-            ImmutableList.of(
-                new ServerInfo(serverName,
-                    ImmutableList.<ChannelCreds>of()));
+            ImmutableList.of(new ServerInfo(serverName, ImmutableList.<ChannelCreds>of(), null));
         return new BootstrapInfo(serverList, FAKE_BOOTSTRAP_NODE);
       }
     };

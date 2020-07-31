@@ -111,7 +111,11 @@ public abstract class Bootstrapper {
           channelCredsOptions.add(creds);
         }
       }
-      servers.add(new ServerInfo(serverUri, channelCredsOptions));
+      List<String> serverFeatures = JsonUtil.getListOfStrings(serverConfig, "server_features");
+      if (serverFeatures != null) {
+        logger.log(XdsLogLevel.INFO, "Server features: {0}", serverFeatures);
+      }
+      servers.add(new ServerInfo(serverUri, channelCredsOptions, serverFeatures));
     }
 
     Node.Builder nodeBuilder = Node.newBuilder();
@@ -196,11 +200,14 @@ public abstract class Bootstrapper {
   static class ServerInfo {
     private final String serverUri;
     private final List<ChannelCreds> channelCredsList;
+    @Nullable
+    private final List<String> serverFeatures;
 
     @VisibleForTesting
-    ServerInfo(String serverUri, List<ChannelCreds> channelCredsList) {
+    ServerInfo(String serverUri, List<ChannelCreds> channelCredsList, List<String> serverFeatures) {
       this.serverUri = serverUri;
       this.channelCredsList = channelCredsList;
+      this.serverFeatures = serverFeatures;
     }
 
     String getServerUri() {
@@ -209,6 +216,12 @@ public abstract class Bootstrapper {
 
     List<ChannelCreds> getChannelCredentials() {
       return Collections.unmodifiableList(channelCredsList);
+    }
+
+    List<String> getServerFeatures() {
+      return serverFeatures == null
+          ? Collections.<String>emptyList()
+          : Collections.unmodifiableList(serverFeatures);
     }
   }
 
@@ -240,6 +253,5 @@ public abstract class Bootstrapper {
     public Node getNode() {
       return node;
     }
-
   }
 }
