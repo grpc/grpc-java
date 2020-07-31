@@ -508,6 +508,7 @@ public final class GrpcUtil {
   /**
    * Combine a host and port into an authority string.
    */
+  // There is a copy of this method in io.grpc.Grpc
   public static String authorityFromHostAndPort(String host, int port) {
     try {
       return new URI(null, null, host, port, null, null, null).getAuthority();

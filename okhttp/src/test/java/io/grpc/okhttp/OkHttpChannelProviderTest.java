@@ -20,9 +20,9 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-import io.grpc.InternalManagedChannelProvider;
 import io.grpc.InternalServiceProviders;
 import io.grpc.ManagedChannelProvider;
+import io.grpc.ManagedChannelRegistryAccessor;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -46,9 +46,8 @@ public class OkHttpChannelProviderTest {
 
   @Test
   public void providedHardCoded() {
-    for (ManagedChannelProvider current : InternalServiceProviders.getCandidatesViaHardCoded(
-        ManagedChannelProvider.class, InternalManagedChannelProvider.HARDCODED_CLASSES)) {
-      if (current instanceof OkHttpChannelProvider) {
+    for (Class<?> current : ManagedChannelRegistryAccessor.getHardCodedClasses()) {
+      if (current == OkHttpChannelProvider.class) {
         return;
       }
     }
