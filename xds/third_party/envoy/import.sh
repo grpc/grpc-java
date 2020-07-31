@@ -117,6 +117,8 @@ envoy/extensions/transport_sockets/tls/v3/secret.proto
 envoy/extensions/transport_sockets/tls/v3/tls.proto
 envoy/service/discovery/v2/ads.proto
 envoy/service/discovery/v2/sds.proto
+envoy/service/discovery/v3/ads.proto
+envoy/service/discovery/v3/discovery.proto
 envoy/service/load_stats/v2/lrs.proto
 envoy/type/http.proto
 envoy/type/matcher/regex.proto

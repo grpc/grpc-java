@@ -50,13 +50,8 @@ import io.grpc.internal.FakeClock;
 import io.grpc.internal.PickSubchannelArgsImpl;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.testing.TestMethodDescriptors;
-import io.grpc.xds.RouteMatch.HeaderMatcher;
-import io.grpc.xds.RouteMatch.PathMatcher;
-import io.grpc.xds.XdsRoutingLoadBalancer.RouteMatchingSubchannelPicker;
-import io.grpc.xds.XdsRoutingLoadBalancerProvider.Route;
-import io.grpc.xds.XdsRoutingLoadBalancerProvider.XdsRoutingConfig;
+import io.grpc.xds.ClusterManagerLoadBalancerProvider.ClusterManagerConfig;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -73,9 +68,9 @@ import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
-/** Tests for {@link XdsRoutingLoadBalancer}. */
+/** Tests for {@link ClusterManagerLoadBalancer}. */
 @RunWith(JUnit4.class)
-public class XdsRoutingLoadBalancerTest {
+public class ClusterManagerLoadBalancerTest {
 
   private final SynchronizationContext syncContext = new SynchronizationContext(
       new Thread.UncaughtExceptionHandler() {
@@ -86,46 +81,29 @@ public class XdsRoutingLoadBalancerTest {
       });
   private final FakeClock fakeClock = new FakeClock();
 
-  @Mock
-  private LoadBalancer.Helper helper;
   @Captor
   ArgumentCaptor<SubchannelPicker> pickerCaptor;
+  @Mock
+  private LoadBalancer.Helper helper;
 
-  private  RouteMatch routeMatch1 =
-      new RouteMatch(
-          new PathMatcher("/FooService/barMethod", null, null),
-          Arrays.asList(
-              new HeaderMatcher("user-agent", "gRPC-Java", null, null, null, null, null, false),
-              new HeaderMatcher("grpc-encoding", "gzip", null, null, null, null, null, false)),
-          null);
-  private RouteMatch routeMatch2 =
-      new RouteMatch(
-          new PathMatcher("/FooService/bazMethod", null, null),
-          Collections.<HeaderMatcher>emptyList(),
-          null);
-  private RouteMatch routeMatch3 =
-      new RouteMatch(
-          new PathMatcher(null, "/", null),
-          Collections.<HeaderMatcher>emptyList(),
-          null);
   private final Map<String, Object> lbConfigInventory = new HashMap<>();
   private final List<FakeLoadBalancer> childBalancers = new ArrayList<>();
-  private LoadBalancer xdsRoutingLoadBalancer;
+  private LoadBalancer clusterManagerLoadBalancer;
 
   @Before
   public void setUp() {
     MockitoAnnotations.initMocks(this);
     when(helper.getSynchronizationContext()).thenReturn(syncContext);
     when(helper.getScheduledExecutorService()).thenReturn(fakeClock.getScheduledExecutorService());
-    lbConfigInventory.put("actionA", new Object());
-    lbConfigInventory.put("actionB", new Object());
-    lbConfigInventory.put("actionC", null);
-    xdsRoutingLoadBalancer = new XdsRoutingLoadBalancer(helper);
+    lbConfigInventory.put("childA", new Object());
+    lbConfigInventory.put("childB", new Object());
+    lbConfigInventory.put("childC", null);
+    clusterManagerLoadBalancer = new ClusterManagerLoadBalancer(helper);
   }
 
   @After
   public void tearDown() {
-    xdsRoutingLoadBalancer.shutdown();
+    clusterManagerLoadBalancer.shutdown();
     for (FakeLoadBalancer childLb : childBalancers) {
       assertThat(childLb.shutdown).isTrue();
     }
@@ -133,75 +111,50 @@ public class XdsRoutingLoadBalancerTest {
 
   @Test
   public void handleResolvedAddressesUpdatesChannelPicker() {
-    deliverResolvedAddresses(
-        ImmutableMap.of(
-            new Route(routeMatch1, "actionA"), "policy_a",
-            new Route(routeMatch2, "actionB"), "policy_b"));
+    deliverResolvedAddresses(ImmutableMap.of("childA", "policy_a", "childB", "policy_b"));
 
     verify(helper, atLeastOnce()).updateBalancingState(
         eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
-    RouteMatchingSubchannelPicker picker = (RouteMatchingSubchannelPicker) pickerCaptor.getValue();
-    assertThat(picker.routePickers).hasSize(2);
-    assertThat(picker.routePickers.get(routeMatch1).pickSubchannel(mock(PickSubchannelArgs.class)))
-        .isEqualTo(PickResult.withNoResult());
-    assertThat(picker.routePickers.get(routeMatch2).pickSubchannel(mock(PickSubchannelArgs.class)))
-        .isEqualTo(PickResult.withNoResult());
+    SubchannelPicker picker = pickerCaptor.getValue();
+    assertThat(pickSubchannel(picker, "childA")).isEqualTo(PickResult.withNoResult());
+    assertThat(pickSubchannel(picker, "childB")).isEqualTo(PickResult.withNoResult());
     assertThat(childBalancers).hasSize(2);
     FakeLoadBalancer childBalancer1 = childBalancers.get(0);
     FakeLoadBalancer childBalancer2 = childBalancers.get(1);
     assertThat(childBalancer1.name).isEqualTo("policy_a");
     assertThat(childBalancer2.name).isEqualTo("policy_b");
-    assertThat(childBalancer1.config).isEqualTo(lbConfigInventory.get("actionA"));
-    assertThat(childBalancer2.config).isEqualTo(lbConfigInventory.get("actionB"));
+    assertThat(childBalancer1.config).isEqualTo(lbConfigInventory.get("childA"));
+    assertThat(childBalancer2.config).isEqualTo(lbConfigInventory.get("childB"));
 
     // Receive an updated config.
-    deliverResolvedAddresses(
-        ImmutableMap.of(
-            new Route(routeMatch1, "actionA"), "policy_a",
-            new Route(routeMatch3, "actionC"), "policy_c"));
+    deliverResolvedAddresses(ImmutableMap.of("childA", "policy_a", "childC", "policy_c"));
 
     verify(helper, atLeast(2))
         .updateBalancingState(eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
-    picker = (RouteMatchingSubchannelPicker) pickerCaptor.getValue();
-    assertThat(picker.routePickers).hasSize(2);
-    assertThat(picker.routePickers).doesNotContainKey(routeMatch2);
-    assertThat(picker.routePickers.get(routeMatch3).pickSubchannel(mock(PickSubchannelArgs.class)))
-        .isEqualTo(PickResult.withNoResult());
+    picker = pickerCaptor.getValue();
+    assertThat(pickSubchannel(picker, "childA")).isEqualTo(PickResult.withNoResult());
+    assertThat(pickSubchannel(picker, "childC")).isEqualTo(PickResult.withNoResult());
+    Status status = pickSubchannel(picker, "childB").getStatus();
+    assertThat(status.getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat(status.getDescription()).isEqualTo("Unable to find cluster childB");
     assertThat(fakeClock.numPendingTasks())
-        .isEqualTo(1);  // (delayed) shutdown because "actionB" is removed
+        .isEqualTo(1);  // (delayed) shutdown because "childB" is removed
     assertThat(childBalancer1.shutdown).isFalse();
     assertThat(childBalancer2.shutdown).isFalse();
 
     assertThat(childBalancers).hasSize(3);
     FakeLoadBalancer childBalancer3 = childBalancers.get(2);
     assertThat(childBalancer3.name).isEqualTo("policy_c");
-    assertThat(childBalancer3.config).isEqualTo(lbConfigInventory.get("actionC"));
+    assertThat(childBalancer3.config).isEqualTo(lbConfigInventory.get("childC"));
 
     fakeClock.forwardTime(
-        XdsRoutingLoadBalancer.DELAYED_ACTION_DELETION_TIME_MINUTES, TimeUnit.MINUTES);
+        ClusterManagerLoadBalancer.DELAYED_CHILD_DELETION_TIME_MINUTES, TimeUnit.MINUTES);
     assertThat(childBalancer2.shutdown).isTrue();
   }
 
   @Test
-  public void updateWithActionPolicyChange() {
-    deliverResolvedAddresses(ImmutableMap.of(new Route(routeMatch1, "actionA"), "policy_a"));
-    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
-    assertThat(childBalancer.name).isEqualTo("policy_a");
-    assertThat(childBalancer.config).isEqualTo(lbConfigInventory.get("actionA"));
-
-    deliverResolvedAddresses(ImmutableMap.of(new Route(routeMatch1, "actionA"), "policy_b"));
-    assertThat(childBalancer.shutdown).isTrue();  // immediate shutdown as the it was not ready
-    assertThat(Iterables.getOnlyElement(childBalancers).name).isEqualTo("policy_b");
-    assertThat(Iterables.getOnlyElement(childBalancers).config)
-        .isEqualTo(lbConfigInventory.get("actionA"));
-  }
-
-  @Test
   public void updateBalancingStateFromChildBalancers() {
-    deliverResolvedAddresses(
-        ImmutableMap.of(
-            new Route(routeMatch1, "actionA"), "policy_a",
-            new Route(routeMatch2, "actionB"), "policy_b"));
+    deliverResolvedAddresses(ImmutableMap.of("childA", "policy_a", "childB", "policy_b"));
 
     assertThat(childBalancers).hasSize(2);
     FakeLoadBalancer childBalancer1 = childBalancers.get(0);
@@ -211,64 +164,48 @@ public class XdsRoutingLoadBalancerTest {
     childBalancer1.deliverSubchannelState(subchannel1, ConnectivityState.READY);
 
     verify(helper).updateBalancingState(eq(ConnectivityState.READY), pickerCaptor.capture());
-    RouteMatchingSubchannelPicker picker = (RouteMatchingSubchannelPicker) pickerCaptor.getValue();
-    assertThat(picker.routePickers).hasSize(2);
-    assertThat(
-        picker.routePickers.get(routeMatch1)
-            .pickSubchannel(mock(PickSubchannelArgs.class)).getSubchannel())
-        .isEqualTo(subchannel1);
-    assertThat(picker.routePickers.get(routeMatch2).pickSubchannel(mock(PickSubchannelArgs.class)))
-        .isEqualTo(PickResult.withNoResult());
+    SubchannelPicker picker = pickerCaptor.getValue();
+    assertThat(pickSubchannel(picker, "childA").getSubchannel()).isEqualTo(subchannel1);
+    assertThat(pickSubchannel(picker, "childB")).isEqualTo(PickResult.withNoResult());
 
     childBalancer2.deliverSubchannelState(subchannel2, ConnectivityState.READY);
     verify(helper, times(2))
         .updateBalancingState(eq(ConnectivityState.READY), pickerCaptor.capture());
-    picker = (RouteMatchingSubchannelPicker) pickerCaptor.getValue();
-    assertThat(
-        picker.routePickers.get(routeMatch2)
-            .pickSubchannel(mock(PickSubchannelArgs.class)).getSubchannel())
+    assertThat(pickSubchannel(pickerCaptor.getValue(), "childB").getSubchannel())
         .isEqualTo(subchannel2);
   }
 
   @Test
   public void updateBalancingStateFromDeactivatedChildBalancer() {
-    FakeLoadBalancer balancer =
-        deliverAddressesAndUpdateToRemoveChildPolicy(
-            new Route(routeMatch1, "actionA"), "policy_a");
+    FakeLoadBalancer balancer = deliverAddressesAndUpdateToRemoveChildPolicy("childA", "policy_a");
     Subchannel subchannel = mock(Subchannel.class);
     balancer.deliverSubchannelState(subchannel, ConnectivityState.READY);
     verify(helper, never()).updateBalancingState(
         eq(ConnectivityState.READY), any(SubchannelPicker.class));
 
-    deliverResolvedAddresses(ImmutableMap.of(new Route(routeMatch1, "actionA"), "policy_a"));
+    deliverResolvedAddresses(ImmutableMap.of("childA", "policy_a"));
     verify(helper).updateBalancingState(eq(ConnectivityState.READY), pickerCaptor.capture());
-    RouteMatchingSubchannelPicker picker = (RouteMatchingSubchannelPicker) pickerCaptor.getValue();
-    assertThat(
-        picker.routePickers.get(routeMatch1)
-            .pickSubchannel(mock(PickSubchannelArgs.class)).getSubchannel())
+    assertThat(pickSubchannel(pickerCaptor.getValue(), "childA").getSubchannel())
         .isEqualTo(subchannel);
   }
 
   @Test
   public void errorPropagation() {
     Status error = Status.UNAVAILABLE.withDescription("resolver error");
-    xdsRoutingLoadBalancer.handleNameResolutionError(error);
+    clusterManagerLoadBalancer.handleNameResolutionError(error);
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
     PickResult result = pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class));
     assertThat(result.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(result.getStatus().getDescription()).isEqualTo("resolver error");
 
-    deliverResolvedAddresses(
-        ImmutableMap.of(
-            new Route(routeMatch1, "actionA"), "policy_a",
-            new Route(routeMatch2, "actionB"), "policy_b"));
+    deliverResolvedAddresses(ImmutableMap.of("childA", "policy_a", "childB", "policy_b"));
 
     assertThat(childBalancers).hasSize(2);
     FakeLoadBalancer childBalancer1 = childBalancers.get(0);
     FakeLoadBalancer childBalancer2 = childBalancers.get(1);
 
-    xdsRoutingLoadBalancer.handleNameResolutionError(error);
+    clusterManagerLoadBalancer.handleNameResolutionError(error);
     assertThat(childBalancer1.upstreamError.getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(childBalancer1.upstreamError.getDescription()).isEqualTo("resolver error");
     assertThat(childBalancer2.upstreamError.getCode()).isEqualTo(Code.UNAVAILABLE);
@@ -277,46 +214,36 @@ public class XdsRoutingLoadBalancerTest {
 
   @Test
   public void errorPropagationToDeactivatedChildBalancer() {
-    FakeLoadBalancer balancer =
-        deliverAddressesAndUpdateToRemoveChildPolicy(
-            new Route(routeMatch1, "actionA"), "policy_a");
-    xdsRoutingLoadBalancer.handleNameResolutionError(
+    FakeLoadBalancer balancer = deliverAddressesAndUpdateToRemoveChildPolicy("childA", "policy_a");
+    clusterManagerLoadBalancer.handleNameResolutionError(
         Status.UNKNOWN.withDescription("unknown error"));
     assertThat(balancer.upstreamError).isNull();
   }
 
   private FakeLoadBalancer deliverAddressesAndUpdateToRemoveChildPolicy(
-      Route route, String childPolicyName) {
-    lbConfigInventory.put("actionX", null);
-    Route routeX =
-        new Route(
-            new RouteMatch(
-                new PathMatcher(
-                    "/XService/xMethod", null, null),
-                Collections.<HeaderMatcher>emptyList(),
-                null),
-            "actionX");
+      String childName, String childPolicyName) {
+    lbConfigInventory.put("childFoo", null);
     deliverResolvedAddresses(
-        ImmutableMap.of(route, childPolicyName, routeX, "policy_x"));
+        ImmutableMap.of(childName, childPolicyName, "childFoo", "policy_foo"));
 
     verify(helper, atLeastOnce()).updateBalancingState(
         eq(ConnectivityState.CONNECTING), any(SubchannelPicker.class));
     assertThat(childBalancers).hasSize(2);
     FakeLoadBalancer balancer = childBalancers.get(0);
 
-    deliverResolvedAddresses(ImmutableMap.of(routeX, "policy_x"));
+    deliverResolvedAddresses(ImmutableMap.of("childFoo", "policy_foo"));
     verify(helper, atLeast(2)).updateBalancingState(
         eq(ConnectivityState.CONNECTING), any(SubchannelPicker.class));
     assertThat(Iterables.getOnlyElement(fakeClock.getPendingTasks()).getDelay(TimeUnit.MINUTES))
-        .isEqualTo(XdsRoutingLoadBalancer.DELAYED_ACTION_DELETION_TIME_MINUTES);
+        .isEqualTo(ClusterManagerLoadBalancer.DELAYED_CHILD_DELETION_TIME_MINUTES);
     return balancer;
   }
 
-  private void deliverResolvedAddresses(final Map<Route, String> childPolicies) {
+  private void deliverResolvedAddresses(final Map<String, String> childPolicies) {
     syncContext.execute(new Runnable() {
       @Override
       public void run() {
-        xdsRoutingLoadBalancer
+        clusterManagerLoadBalancer
             .handleResolvedAddresses(
                 ResolvedAddresses.newBuilder()
                     .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
@@ -326,85 +253,31 @@ public class XdsRoutingLoadBalancerTest {
     });
   }
 
-  private XdsRoutingConfig buildConfig(Map<Route, String> childPolicies) {
+  private ClusterManagerConfig buildConfig(Map<String, String> childPolicies) {
     Map<String, PolicySelection> childPolicySelections = new LinkedHashMap<>();
-    List<Route> routeList = new ArrayList<>();
-    for (Route route : childPolicies.keySet()) {
-      String childActionName = route.getActionName();
-      String childPolicyName = childPolicies.get(route);
-      Object childConfig = lbConfigInventory.get(childActionName);
+    for (String name : childPolicies.keySet()) {
+      String childPolicyName = childPolicies.get(name);
+      Object childConfig = lbConfigInventory.get(name);
       PolicySelection policy =
           new PolicySelection(new FakeLoadBalancerProvider(childPolicyName), null, childConfig);
-      childPolicySelections.put(childActionName, policy);
-      routeList.add(route);
+      childPolicySelections.put(name, policy);
     }
-    return new XdsRoutingConfig(routeList, childPolicySelections);
+    return new ClusterManagerConfig(childPolicySelections);
   }
 
-  @Test
-  public void routeMatchingSubchannelPicker_typicalRouting() {
-    Subchannel subchannel1 = mock(Subchannel.class);
-    Subchannel subchannel2 = mock(Subchannel.class);
-    Subchannel subchannel3 = mock(Subchannel.class);
-    RouteMatchingSubchannelPicker routeMatchingPicker =
-        new RouteMatchingSubchannelPicker(
-            ImmutableMap.of(
-                routeMatch1, pickerOf(subchannel1),
-                routeMatch2, pickerOf(subchannel2),
-                routeMatch3, pickerOf(subchannel3)));
-
-    PickSubchannelArgs args1 =
-        createPickSubchannelArgs(
-            "FooService", "barMethod",
-            ImmutableMap.of("user-agent", "gRPC-Java", "grpc-encoding", "gzip"));
-    assertThat(routeMatchingPicker.pickSubchannel(args1).getSubchannel())
-        .isSameInstanceAs(subchannel1);
-
-    PickSubchannelArgs args2 =
-        createPickSubchannelArgs(
-            "FooService", "bazMethod",
-            ImmutableMap.of("user-agent", "gRPC-Java", "custom-key", "custom-value"));
-    assertThat(routeMatchingPicker.pickSubchannel(args2).getSubchannel())
-        .isSameInstanceAs(subchannel2);
-
-    PickSubchannelArgs args3 =
-        createPickSubchannelArgs(
-            "FooService", "barMethod",
-            ImmutableMap.of("user-agent", "gRPC-Java", "custom-key", "custom-value"));
-    assertThat(routeMatchingPicker.pickSubchannel(args3).getSubchannel())
-        .isSameInstanceAs(subchannel3);
-
-    PickSubchannelArgs args4 =
-        createPickSubchannelArgs(
-            "BazService", "fooMethod",
-            Collections.<String, String>emptyMap());
-    assertThat(routeMatchingPicker.pickSubchannel(args4).getSubchannel())
-        .isSameInstanceAs(subchannel3);
-  }
-
-  private static SubchannelPicker pickerOf(final Subchannel subchannel) {
-    return new SubchannelPicker() {
-      @Override
-      public PickResult pickSubchannel(PickSubchannelArgs args) {
-        return PickResult.withSubchannel(subchannel);
-      }
-    };
-  }
-
-  private static PickSubchannelArgs createPickSubchannelArgs(
-      String service, String method, Map<String, String> headers) {
-    MethodDescriptor<Void, Void> methodDescriptor =
-        MethodDescriptor.<Void, Void>newBuilder()
-            .setType(MethodType.UNARY).setFullMethodName(service + "/" + method)
-            .setRequestMarshaller(TestMethodDescriptors.voidMarshaller())
-            .setResponseMarshaller(TestMethodDescriptors.voidMarshaller())
-            .build();
-    Metadata metadata = new Metadata();
-    for (Map.Entry<String, String> entry : headers.entrySet()) {
-      metadata.put(
-          Metadata.Key.of(entry.getKey(), Metadata.ASCII_STRING_MARSHALLER), entry.getValue());
-    }
-    return new PickSubchannelArgsImpl(methodDescriptor, metadata, CallOptions.DEFAULT);
+  private static PickResult pickSubchannel(SubchannelPicker picker, String name) {
+    PickSubchannelArgs args =
+        new PickSubchannelArgsImpl(
+            MethodDescriptor.<Void, Void>newBuilder()
+                .setType(MethodType.UNARY)
+                .setFullMethodName("/service/method")
+                .setRequestMarshaller(TestMethodDescriptors.voidMarshaller())
+                .setResponseMarshaller(TestMethodDescriptors.voidMarshaller())
+                .build(),
+            new Metadata(),
+            CallOptions.DEFAULT.withOption(
+                ClusterManagerLoadBalancer.ROUTING_CLUSTER_NAME_KEY, name));
+    return picker.pickSubchannel(args);
   }
 
   private final class FakeLoadBalancerProvider extends LoadBalancerProvider {
