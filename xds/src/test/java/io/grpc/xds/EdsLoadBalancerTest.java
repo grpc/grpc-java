@@ -22,7 +22,7 @@ import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.xds.XdsClientTestHelper.buildClusterLoadAssignment;
-import static io.grpc.xds.XdsClientTestHelper.buildDiscoveryResponse;
+import static io.grpc.xds.XdsClientTestHelper.buildDiscoveryResponseV2;
 import static io.grpc.xds.XdsClientTestHelper.buildDropOverload;
 import static io.grpc.xds.XdsClientTestHelper.buildLbEndpoint;
 import static io.grpc.xds.XdsClientTestHelper.buildLocalityLbEndpoints;
@@ -680,7 +680,7 @@ public class EdsLoadBalancerTest {
     // The whole cluster is no longer accessible.
     // Note that EDS resource removal is achieved by CDS resource update.
     responseObserver.onNext(
-        buildDiscoveryResponse(
+        buildDiscoveryResponseV2(
             String.valueOf(versionIno++),
             Collections.<Any>emptyList(),
             XdsClientImpl.ADS_TYPE_URL_CDS_V2,
@@ -768,7 +768,7 @@ public class EdsLoadBalancerTest {
 
   private void deliverClusterLoadAssignments(ClusterLoadAssignment clusterLoadAssignment) {
     responseObserver.onNext(
-          buildDiscoveryResponse(
+          buildDiscoveryResponseV2(
               String.valueOf(versionIno++),
               ImmutableList.of(Any.pack(clusterLoadAssignment)),
               XdsClientImpl.ADS_TYPE_URL_EDS_V2,

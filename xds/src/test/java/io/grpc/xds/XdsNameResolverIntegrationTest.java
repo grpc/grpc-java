@@ -17,7 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
-import static io.grpc.xds.XdsClientTestHelper.buildDiscoveryResponse;
+import static io.grpc.xds.XdsClientTestHelper.buildDiscoveryResponseV2;
 import static io.grpc.xds.XdsClientTestHelper.buildListener;
 import static io.grpc.xds.XdsClientTestHelper.buildRouteConfiguration;
 import static io.grpc.xds.XdsClientTestHelper.buildVirtualHost;
@@ -320,41 +320,6 @@ public class XdsNameResolverIntegrationTest {
     assertThat(rawConfigValues).containsExactly("cluster", "cluster-blade.googleapis.com");
   }
 
-  @Ignore
-  @Test
-  @SuppressWarnings("unchecked")
-  public void resolve_resourceNewlyAdded() {
-    xdsNameResolver.start(mockListener);
-    assertThat(responseObservers).hasSize(1);
-    StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
-
-    // Simulate receiving an LDS response that does not contain requested resource.
-    responseObserver.onNext(
-        buildLdsResponseForCluster("0", "bar.googleapis.com",
-            "cluster-bar.googleapis.com", "0000"));
-
-    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
-    ResolutionResult result = resolutionResultCaptor.getValue();
-    assertThat(result.getAddresses()).isEmpty();
-
-    // Simulate receiving another LDS response that contains cluster resolution directly in-line.
-    responseObserver.onNext(
-        buildLdsResponseForCluster("1", AUTHORITY, "cluster-foo.googleapis.com",
-            "0001"));
-
-    verify(mockListener, times(2)).onResult(resolutionResultCaptor.capture());
-    result = resolutionResultCaptor.getValue();
-    assertThat(result.getAddresses()).isEmpty();
-    Map<String, ?> serviceConfig = (Map<String, ?>) result.getServiceConfig().getConfig();
-    List<Map<String, ?>> rawLbConfigs =
-        (List<Map<String, ?>>) serviceConfig.get("loadBalancingConfig");
-    Map<String, ?> lbConfig = Iterables.getOnlyElement(rawLbConfigs);
-    assertThat(lbConfig.keySet()).containsExactly("cds_experimental");
-    Map<String, ?> rawConfigValues = (Map<String, ?>) lbConfig.get("cds_experimental");
-    assertThat(rawConfigValues).containsExactly("cluster", "cluster-foo.googleapis.com");
-  }
-
   /**
    * Builds an LDS DiscoveryResponse containing the mapping of given host to
    * the given cluster name directly in-line. Clients receiving this response is
@@ -373,7 +338,8 @@ public class XdsNameResolverIntegrationTest {
                                     ImmutableList.of(host), // exact match
                                     clusterName))))
                     .build()))));
-    return buildDiscoveryResponse(versionInfo, listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, nonce);
+    return buildDiscoveryResponseV2(
+        versionInfo, listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, nonce);
   }
 
   /**
@@ -395,7 +361,8 @@ public class XdsNameResolverIntegrationTest {
         Any.pack(
             buildListener(
                 host, Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build()))));
-    return buildDiscoveryResponse(versionInfo, listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, nonce);
+    return buildDiscoveryResponseV2(
+        versionInfo, listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, nonce);
   }
 
   /**
@@ -414,7 +381,7 @@ public class XdsNameResolverIntegrationTest {
                 routeConfigName,
                 ImmutableList.of(
                     buildVirtualHost(ImmutableList.of(host), clusterName)))));
-    return buildDiscoveryResponse(
+    return buildDiscoveryResponseV2(
         versionInfo, routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS_V2, nonce);
   }
 
