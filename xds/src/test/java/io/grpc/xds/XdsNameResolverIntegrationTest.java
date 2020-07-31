@@ -21,15 +21,11 @@ import static io.grpc.xds.XdsClientTestHelper.buildDiscoveryResponse;
 import static io.grpc.xds.XdsClientTestHelper.buildListener;
 import static io.grpc.xds.XdsClientTestHelper.buildRouteConfiguration;
 import static io.grpc.xds.XdsClientTestHelper.buildVirtualHost;
-import static io.grpc.xds.XdsNameResolverTest.assertCdsPolicy;
-import static io.grpc.xds.XdsNameResolverTest.assertWeightedTargetConfigClusterWeights;
-import static io.grpc.xds.XdsNameResolverTest.assertWeightedTargetPolicy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import com.google.protobuf.Any;
 import com.google.protobuf.UInt32Value;
@@ -39,7 +35,6 @@ import io.envoyproxy.envoy.api.v2.core.AggregatedConfigSource;
 import io.envoyproxy.envoy.api.v2.core.ConfigSource;
 import io.envoyproxy.envoy.api.v2.route.Route;
 import io.envoyproxy.envoy.api.v2.route.RouteAction;
-import io.envoyproxy.envoy.api.v2.route.RouteMatch;
 import io.envoyproxy.envoy.api.v2.route.VirtualHost;
 import io.envoyproxy.envoy.api.v2.route.WeightedCluster;
 import io.envoyproxy.envoy.api.v2.route.WeightedCluster.ClusterWeight;
@@ -74,6 +69,7 @@ import java.util.Queue;
 import java.util.concurrent.TimeUnit;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -123,13 +119,13 @@ public class XdsNameResolverIntegrationTest {
           .setChannelLogger(mock(ChannelLogger.class))
           .build();
 
-  ArgumentCaptor<ResolutionResult> resolutionResultCaptor = ArgumentCaptor.forClass(null);
+  private final ArgumentCaptor<ResolutionResult> resolutionResultCaptor =
+      ArgumentCaptor.forClass(null);
 
   @Mock
   private BackoffPolicy.Provider backoffPolicyProvider;
   @Mock
   private NameResolver.Listener2 mockListener;
-
   private XdsChannelFactory channelFactory;
   private XdsNameResolver xdsNameResolver;
 
@@ -277,6 +273,7 @@ public class XdsNameResolverIntegrationTest {
     assertThat((Map<String, ?>) result.getServiceConfig().getConfig()).isEmpty();
   }
 
+  @Ignore
   @Test
   @SuppressWarnings("unchecked")
   public void resolve_resourceUpdated() {
@@ -324,178 +321,7 @@ public class XdsNameResolverIntegrationTest {
     assertThat(rawConfigValues).containsExactly("cluster", "cluster-blade.googleapis.com");
   }
 
-  @SuppressWarnings("unchecked")
-  @Test
-  public void resolve_cdsLoadBalancing() {
-    xdsNameResolver.start(mockListener);
-    assertThat(responseObservers).hasSize(1);
-    StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
-
-    // Simulate receiving an LDS response that contains cluster resolution directly in-line.
-    String clusterName = "cluster-foo.googleapis.com";
-    responseObserver.onNext(
-        buildLdsResponseForCluster("0", AUTHORITY, clusterName, "0000"));
-
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
-    ResolutionResult result = resolutionResultCaptor.getValue();
-    assertThat(result.getAddresses()).isEmpty();
-    Map<String, ?> serviceConfig = (Map<String, ?>) result.getServiceConfig().getConfig();
-    List<Map<String, ?>> rawLbConfigs =
-        (List<Map<String, ?>>) serviceConfig.get("loadBalancingConfig");
-    Map<String, ?> lbConfig = Iterables.getOnlyElement(rawLbConfigs);
-    assertThat(lbConfig.keySet()).containsExactly("cds_experimental");
-    Map<String, ?> rawConfigValues = (Map<String, ?>) lbConfig.get("cds_experimental");
-    assertThat(rawConfigValues).containsExactly("cluster", clusterName);
-  }
-
-  @Test
-  @SuppressWarnings("unchecked")
-  public void resolve_xdsRoutingLoadBalancing() {
-    xdsNameResolver.start(mockListener);
-    assertThat(responseObservers).hasSize(1);
-    StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
-
-    // Simulate receiving an LDS response that contains routes resolution directly in-line.
-    List<Route> protoRoutes =
-        ImmutableList.of(
-            // path match, routed to cluster
-            Route.newBuilder()
-                .setMatch(RouteMatch.newBuilder().setPath("/fooSvc/hello"))
-                .setRoute(buildClusterRoute("cluster-hello.googleapis.com"))
-                .build(),
-            // prefix match, routed to cluster
-            Route.newBuilder()
-                .setMatch(RouteMatch.newBuilder().setPrefix("/fooSvc/"))
-                .setRoute(buildClusterRoute("cluster-foo.googleapis.com"))
-                .build(),
-            // path match, routed to weighted clusters
-            Route.newBuilder()
-                .setMatch(RouteMatch.newBuilder().setPath("/barSvc/hello"))
-                .setRoute(buildWeightedClusterRoute(ImmutableMap.of(
-                    "cluster-hello.googleapis.com", 40,  "cluster-hello2.googleapis.com", 60)))
-                .build(),
-            // prefix match, routed to weighted clusters
-            Route.newBuilder()
-                .setMatch(RouteMatch.newBuilder().setPrefix("/barSvc/"))
-                .setRoute(
-                    buildWeightedClusterRoute(
-                        ImmutableMap.of(
-                            "cluster-bar.googleapis.com", 30, "cluster-bar2.googleapis.com", 70)))
-                .build(),
-            // default with prefix = "/", routed to cluster
-            Route.newBuilder()
-                .setMatch(RouteMatch.newBuilder().setPrefix("/"))
-                .setRoute(buildClusterRoute("cluster-hello.googleapis.com"))
-                .build());
-    HttpConnectionManager httpConnectionManager =
-        HttpConnectionManager.newBuilder()
-            .setRouteConfig(
-                buildRouteConfiguration(
-                    "route-foo.googleapis.com", // doesn't matter
-                    ImmutableList.of(buildVirtualHostForRoutes(AUTHORITY, protoRoutes))))
-            .build();
-    List<Any> listeners =
-        ImmutableList.of(Any.pack(buildListener(AUTHORITY, Any.pack(httpConnectionManager))));
-    responseObserver.onNext(
-        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2,  "0000"));
-
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
-    ResolutionResult result = resolutionResultCaptor.getValue();
-    assertThat(result.getAddresses()).isEmpty();
-    Map<String, ?> serviceConfig = (Map<String, ?>) result.getServiceConfig().getConfig();
-
-    List<Map<String, ?>> rawLbConfigs =
-        (List<Map<String, ?>>) serviceConfig.get("loadBalancingConfig");
-    Map<String, ?> lbConfig = Iterables.getOnlyElement(rawLbConfigs);
-    assertThat(lbConfig.keySet()).containsExactly("xds_routing_experimental");
-    Map<String, ?> rawConfigValues = (Map<String, ?>) lbConfig.get("xds_routing_experimental");
-    assertThat(rawConfigValues.keySet()).containsExactly("action", "route");
-    Map<String, Map<String, ?>> actions =
-        (Map<String, Map<String, ?>>) rawConfigValues.get("action");
-    List<Map<String, ?>> routes = (List<Map<String, ?>>) rawConfigValues.get("route");
-    assertThat(actions).hasSize(4);
-    assertThat(routes).hasSize(5);
-
-    Map<String, ?> route0 = routes.get(0);
-    assertThat(route0.keySet()).containsExactly("path", "action");
-    assertThat((String) route0.get("path")).isEqualTo("/fooSvc/hello");
-    assertCdsPolicy(actions.get(route0.get("action")), "cluster-hello.googleapis.com");
-
-    Map<String, ?> route1 = routes.get(1);
-    assertThat(route1.keySet()).containsExactly("prefix", "action");
-    assertThat((String) route1.get("prefix")).isEqualTo("/fooSvc/");
-    assertCdsPolicy(actions.get(route1.get("action")), "cluster-foo.googleapis.com");
-
-    Map<String, ?> route2 = routes.get(2);
-    assertThat(route2.keySet()).containsExactly("path", "action");
-    assertThat((String) route2.get("path")).isEqualTo("/barSvc/hello");
-    assertWeightedTargetPolicy(
-        actions.get(route2.get("action")),
-        ImmutableMap.of(
-            "cluster-hello.googleapis.com", 40,  "cluster-hello2.googleapis.com", 60));
-
-    Map<String, ?> route3 = routes.get(3);
-    assertThat(route3.keySet()).containsExactly("prefix", "action");
-    assertThat((String) route3.get("prefix")).isEqualTo("/barSvc/");
-    assertWeightedTargetPolicy(
-        actions.get(route3.get("action")),
-        ImmutableMap.of(
-            "cluster-bar.googleapis.com", 30, "cluster-bar2.googleapis.com", 70));
-
-    Map<String, ?> route4 = routes.get(4);
-    assertThat(route4.keySet()).containsExactly("prefix", "action");
-    assertThat((String) route4.get("prefix")).isEqualTo("/");
-    assertCdsPolicy(actions.get(route4.get("action")), "cluster-hello.googleapis.com");
-  }
-
-  @SuppressWarnings("unchecked")
-  @Test
-  public void resolve_weightedTargetLoadBalancing() {
-    xdsNameResolver.start(mockListener);
-    assertThat(responseObservers).hasSize(1);
-    StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
-
-    // Simulate receiving another LDS response that tells client to do RDS.
-    String routeConfigName = "route-foo.googleapis.com";
-    responseObserver.onNext(
-        buildLdsResponseForRdsResource("1", AUTHORITY, routeConfigName, "0001"));
-
-    // Client sent an RDS request for resource "route-foo.googleapis.com" (Omitted in this test).
-
-    // Simulate receiving an RDS response that contains the resource "route-foo.googleapis.com"
-    // with a route resolution for a single weighted cluster route.
-    Route weightedClustersDefaultRoute =
-        Route.newBuilder()
-            .setMatch(RouteMatch.newBuilder().setPrefix(""))
-            .setRoute(buildWeightedClusterRoute(
-                ImmutableMap.of(
-                    "cluster-foo.googleapis.com", 20, "cluster-bar.googleapis.com", 80)))
-            .build();
-    List<Any> routeConfigs = ImmutableList.of(
-        Any.pack(
-            buildRouteConfiguration(
-                routeConfigName,
-                ImmutableList.of(
-                    buildVirtualHostForRoutes(
-                        AUTHORITY, ImmutableList.of(weightedClustersDefaultRoute))))));
-    responseObserver.onNext(
-        buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS_V2, "0000"));
-
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
-    ResolutionResult result = resolutionResultCaptor.getValue();
-    assertThat(result.getAddresses()).isEmpty();
-    Map<String, ?> serviceConfig = (Map<String, ?>) result.getServiceConfig().getConfig();
-    List<Map<String, ?>> rawLbConfigs =
-        (List<Map<String, ?>>) serviceConfig.get("loadBalancingConfig");
-    Map<String, ?> lbConfig = Iterables.getOnlyElement(rawLbConfigs);
-    assertThat(lbConfig.keySet()).containsExactly("weighted_target_experimental");
-    Map<String, ?> rawConfigValues = (Map<String, ?>) lbConfig.get("weighted_target_experimental");
-    assertWeightedTargetConfigClusterWeights(
-        rawConfigValues,
-        ImmutableMap.of(
-            "cluster-foo.googleapis.com", 20, "cluster-bar.googleapis.com", 80));
-  }
-
+  @Ignore
   @Test
   @SuppressWarnings("unchecked")
   public void resolve_resourceNewlyAdded() {
