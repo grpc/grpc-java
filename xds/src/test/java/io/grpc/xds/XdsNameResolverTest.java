@@ -83,7 +83,7 @@ public class XdsNameResolverTest {
             new RouteMatch(
                 new PathMatcher(null, "", null), Collections.<HeaderMatcher>emptyList(),
                 new FractionMatcher(10, 20)),
-            new RouteAction("cluster-foo", null));
+            new RouteAction(15L, "cluster-foo", null));
     Route r2 =
         new Route(
             new RouteMatch(
@@ -92,6 +92,7 @@ public class XdsNameResolverTest {
                     new HeaderMatcher(":scheme", "https", null, null, null, null, null, false)),
                 null),
             new RouteAction(
+                15L,
                 null,
                 Arrays.asList(
                     new ClusterWeight("cluster-foo", 20),
@@ -134,7 +135,7 @@ public class XdsNameResolverTest {
             new RouteMatch(
                 new PathMatcher("/service/method", null, null),
                 Collections.<HeaderMatcher>emptyList(), null),
-            new RouteAction("cluster-foo", null));
+            new RouteAction(15L, "cluster-foo", null));
 
     Map<String, ?> config =
         XdsNameResolver.generateXdsRoutingRawConfig(Arrays.asList(route, route));

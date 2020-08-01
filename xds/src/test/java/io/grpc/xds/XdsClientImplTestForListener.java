@@ -17,7 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
-import static io.grpc.xds.XdsClientTestHelper.buildDiscoveryResponse;
+import static io.grpc.xds.XdsClientTestHelper.buildDiscoveryResponseV2;
 import static io.grpc.xds.XdsClientTestHelper.buildListener;
 import static io.grpc.xds.XdsClientTestHelper.buildRouteConfiguration;
 import static io.grpc.xds.XdsClientTestHelper.buildVirtualHost;
@@ -37,16 +37,12 @@ import com.google.common.collect.Iterables;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
-import com.google.protobuf.Struct;
 import com.google.protobuf.UInt32Value;
-import com.google.protobuf.Value;
 import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
 import io.envoyproxy.envoy.api.v2.Listener;
 import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
-import io.envoyproxy.envoy.api.v2.core.Address;
 import io.envoyproxy.envoy.api.v2.core.CidrRange;
-import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.api.v2.core.SocketAddress;
 import io.envoyproxy.envoy.api.v2.core.TransportSocket;
 import io.envoyproxy.envoy.api.v2.listener.Filter;
@@ -70,19 +66,23 @@ import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.Bootstrapper.ChannelCreds;
 import io.grpc.xds.Bootstrapper.ServerInfo;
+import io.grpc.xds.EnvoyProtoData.Address;
+import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.XdsClient.ConfigWatcher;
 import io.grpc.xds.XdsClient.ListenerUpdate;
 import io.grpc.xds.XdsClient.ListenerWatcher;
+import io.grpc.xds.XdsClient.XdsChannel;
 import io.grpc.xds.XdsClient.XdsChannelFactory;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import java.io.IOException;
 import java.util.ArrayDeque;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Ignore;
@@ -109,7 +109,7 @@ public class XdsClientImplTestForListener {
       "type.googleapis.com/"
           + "envoy.config.filter.network.http_connection_manager.v2.HttpConnectionManager";
 
-  private static final Node NODE = Node.getDefaultInstance();
+  private static final Node NODE = Node.newBuilder().build();
   private static final FakeClock.TaskFilter RPC_RETRY_TASK_FILTER =
       new FakeClock.TaskFilter() {
         @Override
@@ -201,13 +201,14 @@ public class XdsClientImplTestForListener {
         cleanupRule.register(InProcessChannelBuilder.forName(serverName).directExecutor().build());
 
     List<ServerInfo> servers =
-        ImmutableList.of(new ServerInfo(serverName, ImmutableList.<ChannelCreds>of()));
+        ImmutableList.of(new ServerInfo(serverName, ImmutableList.<ChannelCreds>of(), null));
     XdsChannelFactory channelFactory = new XdsChannelFactory() {
       @Override
-      ManagedChannel createChannel(List<ServerInfo> servers) {
-        assertThat(Iterables.getOnlyElement(servers).getServerUri()).isEqualTo(serverName);
-        assertThat(Iterables.getOnlyElement(servers).getChannelCredentials()).isEmpty();
-        return channel;
+      XdsChannel createChannel(List<ServerInfo> servers) {
+        ServerInfo serverInfo = Iterables.getOnlyElement(servers);
+        assertThat(serverInfo.getServerUri()).isEqualTo(serverName);
+        assertThat(serverInfo.getChannelCredentials()).isEmpty();
+        return new XdsChannel(channel, false);
       }
     };
 
@@ -230,15 +231,12 @@ public class XdsClientImplTestForListener {
   }
 
   private static Node getNodeToVerify() {
-    Struct newMetadata = NODE.getMetadata().toBuilder()
-        .putFields("TRAFFICDIRECTOR_PROXYLESS",
-            Value.newBuilder().setStringValue("1").build())
-        .build();
-    Address listeningAddress =
-        Address.newBuilder()
-            .setSocketAddress(
-                SocketAddress.newBuilder().setAddress("0.0.0.0").setPortValue(PORT).build())
-            .build();
+    Map<String, Object> newMetadata = new HashMap<>();
+    if (NODE.getMetadata() != null) {
+      newMetadata.putAll(NODE.getMetadata());
+    }
+    newMetadata.put("TRAFFICDIRECTOR_PROXYLESS", "1");
+    Address listeningAddress = new Address("0.0.0.0", PORT);
     return NODE.toBuilder()
         .setMetadata(newMetadata)
         .addListeningAddresses(listeningAddress)
@@ -249,7 +247,7 @@ public class XdsClientImplTestForListener {
       Node node, String versionInfo, String typeUrl, String nonce) {
     return DiscoveryRequest.newBuilder()
         .setVersionInfo(versionInfo)
-        .setNode(node)
+        .setNode(node.toEnvoyProtoNodeV2())
         .setTypeUrl(typeUrl)
         .setResponseNonce(nonce)
         .build();
@@ -332,7 +330,7 @@ public class XdsClientImplTestForListener {
                                 "cluster-baz.googleapis.com"))))
                 .build()))));
     DiscoveryResponse response =
-        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000");
+        buildDiscoveryResponseV2("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000");
     responseObserver.onNext(response);
 
     // Client sends an ACK LDS request.
@@ -384,7 +382,7 @@ public class XdsClientImplTestForListener {
             filterChainInbound
         )));
     DiscoveryResponse response =
-        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000");
+        buildDiscoveryResponseV2("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000");
     responseObserver.onNext(response);
 
     // Client sends an ACK LDS request.
@@ -436,7 +434,7 @@ public class XdsClientImplTestForListener {
             filterChainInbound
         )));
     DiscoveryResponse response =
-        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000");
+        buildDiscoveryResponseV2("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000");
     responseObserver.onNext(response);
 
     // Client sends an ACK LDS request.
@@ -511,7 +509,7 @@ public class XdsClientImplTestForListener {
             filterChainInbound
         )));
     DiscoveryResponse response =
-        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000");
+        buildDiscoveryResponseV2("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000");
     responseObserver.onNext(response);
 
     // Client sends an ACK LDS request.
@@ -534,7 +532,7 @@ public class XdsClientImplTestForListener {
             filterChainNewInbound
         )));
     DiscoveryResponse response1 =
-        buildDiscoveryResponse("1", listeners1, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0001");
+        buildDiscoveryResponseV2("1", listeners1, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0001");
     responseObserver.onNext(response1);
 
     // Client sends an ACK LDS request.
@@ -607,7 +605,7 @@ public class XdsClientImplTestForListener {
             filterChainOutbound
         )));
     DiscoveryResponse response =
-        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000");
+        buildDiscoveryResponseV2("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000");
     responseObserver.onNext(response);
 
     // Client sends an ACK LDS request.
@@ -656,7 +654,7 @@ public class XdsClientImplTestForListener {
             filterChainOutbound
         )));
     DiscoveryResponse response =
-        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000");
+        buildDiscoveryResponseV2("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000");
     responseObserver.onNext(response);
 
     // Client sends an ACK LDS request.
@@ -707,7 +705,7 @@ public class XdsClientImplTestForListener {
             filterChainInbound
         )));
     DiscoveryResponse response =
-        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000");
+        buildDiscoveryResponseV2("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000");
     responseObserver.onNext(response);
 
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
@@ -769,7 +767,7 @@ public class XdsClientImplTestForListener {
             XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
 
     // Management server sends back a LDS response.
-    response = buildDiscoveryResponse("1", listeners,
+    response = buildDiscoveryResponseV2("1", listeners,
         XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0001");
     responseObserver.onNext(response);
 
@@ -815,10 +813,11 @@ public class XdsClientImplTestForListener {
 
   static Listener buildListenerWithFilterChain(String name, int portValue, String address,
       FilterChain... filterChains) {
-    Address listenerAddress = Address.newBuilder()
-        .setSocketAddress(SocketAddress.newBuilder()
-            .setPortValue(portValue).setAddress(address))
-        .build();
+    io.envoyproxy.envoy.api.v2.core.Address listenerAddress =
+        io.envoyproxy.envoy.api.v2.core.Address.newBuilder()
+            .setSocketAddress(
+                SocketAddress.newBuilder().setPortValue(portValue).setAddress(address))
+            .build();
     return
         Listener.newBuilder()
             .setName(name)

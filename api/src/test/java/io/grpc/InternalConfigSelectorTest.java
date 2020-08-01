@@ -18,6 +18,8 @@ package io.grpc;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import io.grpc.InternalConfigSelector.Result;
+import io.grpc.Status.Code;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -37,6 +39,7 @@ public class InternalConfigSelectorTest {
 
     InternalConfigSelector.Result result =
         builder.setConfig(config).setCallOptions(callOptions).build();
+    assertThat(result.getStatus().isOk()).isTrue();
     assertThat(result.getConfig()).isEqualTo(config);
     assertThat(result.getCallOptions()).isEqualTo(callOptions);
     assertThat(result.getCommittedCallback()).isNull();
@@ -46,8 +49,17 @@ public class InternalConfigSelectorTest {
         .setCallOptions(callOptions)
         .setCommittedCallback(committedCallback)
         .build();
+    assertThat(result.getStatus().isOk()).isTrue();
     assertThat(result.getConfig()).isEqualTo(config);
     assertThat(result.getCallOptions()).isEqualTo(callOptions);
     assertThat(result.getCommittedCallback()).isSameInstanceAs(committedCallback);
+  }
+
+  @Test
+  public void errorResult() {
+    Result result = Result.forError(Status.INTERNAL.withDescription("failed"));
+    assertThat(result.getStatus().isOk()).isFalse();
+    assertThat(result.getStatus().getCode()).isEqualTo(Code.INTERNAL);
+    assertThat(result.getStatus().getDescription()).isEqualTo("failed");
   }
 }

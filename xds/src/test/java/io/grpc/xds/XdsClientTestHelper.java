@@ -25,8 +25,6 @@ import io.envoyproxy.envoy.api.v2.Cluster.EdsClusterConfig;
 import io.envoyproxy.envoy.api.v2.Cluster.LbPolicy;
 import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment;
 import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy;
-import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
-import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
 import io.envoyproxy.envoy.api.v2.Listener;
 import io.envoyproxy.envoy.api.v2.RouteConfiguration;
 import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
@@ -39,7 +37,6 @@ import io.envoyproxy.envoy.api.v2.core.ConfigSource;
 import io.envoyproxy.envoy.api.v2.core.GrpcService;
 import io.envoyproxy.envoy.api.v2.core.GrpcService.GoogleGrpc;
 import io.envoyproxy.envoy.api.v2.core.HealthStatus;
-import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.api.v2.core.SelfConfigSource;
 import io.envoyproxy.envoy.api.v2.core.SocketAddress;
 import io.envoyproxy.envoy.api.v2.core.TransportSocket;
@@ -49,8 +46,11 @@ import io.envoyproxy.envoy.api.v2.route.RouteAction;
 import io.envoyproxy.envoy.api.v2.route.RouteMatch;
 import io.envoyproxy.envoy.api.v2.route.VirtualHost;
 import io.envoyproxy.envoy.config.listener.v2.ApiListener;
+import io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest;
+import io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse;
 import io.envoyproxy.envoy.type.FractionalPercent;
 import io.envoyproxy.envoy.type.FractionalPercent.DenominatorType;
+import io.grpc.xds.EnvoyProtoData.Node;
 import java.util.List;
 import javax.annotation.Nullable;
 
@@ -69,6 +69,17 @@ class XdsClientTestHelper {
             .build();
   }
 
+  static io.envoyproxy.envoy.api.v2.DiscoveryResponse buildDiscoveryResponseV2(String versionInfo,
+      List<Any> resources, String typeUrl, String nonce) {
+    return
+        io.envoyproxy.envoy.api.v2.DiscoveryResponse.newBuilder()
+            .setVersionInfo(versionInfo)
+            .setTypeUrl(typeUrl)
+            .addAllResources(resources)
+            .setNonce(nonce)
+            .build();
+  }
+
   static DiscoveryRequest buildDiscoveryRequest(Node node, String versionInfo,
       String resourceName, String typeUrl, String nonce) {
     return buildDiscoveryRequest(node, versionInfo, ImmutableList.of(resourceName), typeUrl, nonce);
@@ -79,7 +90,25 @@ class XdsClientTestHelper {
     return
         DiscoveryRequest.newBuilder()
             .setVersionInfo(versionInfo)
-            .setNode(node)
+            .setNode(node.toEnvoyProtoNode())
+            .setTypeUrl(typeUrl)
+            .addAllResourceNames(resourceNames)
+            .setResponseNonce(nonce)
+            .build();
+  }
+
+  static io.envoyproxy.envoy.api.v2.DiscoveryRequest buildDiscoveryRequestV2(
+      Node node, String versionInfo, String resourceName, String typeUrl, String nonce) {
+    return buildDiscoveryRequestV2(
+        node, versionInfo, ImmutableList.of(resourceName), typeUrl, nonce);
+  }
+
+  static io.envoyproxy.envoy.api.v2.DiscoveryRequest buildDiscoveryRequestV2(
+      Node node, String versionInfo, List<String> resourceNames, String typeUrl, String nonce) {
+    return
+        io.envoyproxy.envoy.api.v2.DiscoveryRequest.newBuilder()
+            .setVersionInfo(versionInfo)
+            .setNode(node.toEnvoyProtoNodeV2())
             .setTypeUrl(typeUrl)
             .addAllResourceNames(resourceNames)
             .setResponseNonce(nonce)
@@ -110,11 +139,6 @@ class XdsClientTestHelper {
         .setName("virtualhost00.googleapis.com") // don't care
         .addAllDomains(domains)
         .addRoutes(
-            Route.newBuilder()
-                .setRoute(RouteAction.newBuilder().setCluster("whatever cluster"))
-                .setMatch(RouteMatch.newBuilder().setPrefix("")))
-        .addRoutes(
-            // Only the last (default) route matters.
             Route.newBuilder()
                 .setRoute(RouteAction.newBuilder().setCluster(clusterName))
                 .setMatch(RouteMatch.newBuilder().setPrefix("")))

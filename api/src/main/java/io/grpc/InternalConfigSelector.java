@@ -16,7 +16,9 @@
 
 package io.grpc;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 
 import javax.annotation.Nullable;
 
@@ -37,21 +39,43 @@ public abstract class InternalConfigSelector {
   public abstract Result selectConfig(LoadBalancer.PickSubchannelArgs args);
 
   public static final class Result {
+    private final Status status;
+    @Nullable
     private final Object config;
+    @Nullable
     private final CallOptions callOptions;
     @Nullable
     private final Runnable committedCallback;
 
-    private Result(Object config, CallOptions callOptions, @Nullable Runnable committedCallback) {
-      this.config = checkNotNull(config, "config");
-      this.callOptions = checkNotNull(callOptions, "callOptions");
+    private Result(
+        Status status, Object config, CallOptions callOptions, Runnable committedCallback) {
+      this.status = checkNotNull(status, "status");
+      this.config = config;
+      this.callOptions = callOptions;
       this.committedCallback = committedCallback;
+    }
+
+    /**
+     * Creates a {@code Result} with the given error status.
+     */
+    public static Result forError(Status status) {
+      checkArgument(!status.isOk(), "status is OK");
+      return new Result(status, null, null, null);
+    }
+
+    /**
+     * Returns the status of the config selection operation. If status is not {@link Status#OK},
+     * this result should not be used.
+     */
+    public Status getStatus() {
+      return status;
     }
 
     /**
      * Returns a parsed config. Must have been returned via
      * ServiceConfigParser.parseServiceConfig().getConfig()
      */
+    @Nullable
     public Object getConfig() {
       return config;
     }
@@ -59,6 +83,7 @@ public abstract class InternalConfigSelector {
     /**
      * Returns a config-selector-modified CallOptions for the RPC.
      */
+    @Nullable
     public CallOptions getCallOptions() {
       return callOptions;
     }
@@ -112,8 +137,13 @@ public abstract class InternalConfigSelector {
         return this;
       }
 
+      /**
+       * Build this {@link Result}.
+       */
       public Result build() {
-        return new Result(config, callOptions, committedCallback);
+        checkState(config != null, "config is not set");
+        checkState(callOptions != null, "callOptions is not set");
+        return new Result(Status.OK, config, callOptions, committedCallback);
       }
     }
   }

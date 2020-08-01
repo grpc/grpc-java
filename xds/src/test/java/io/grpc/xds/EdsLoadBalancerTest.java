@@ -22,7 +22,7 @@ import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.xds.XdsClientTestHelper.buildClusterLoadAssignment;
-import static io.grpc.xds.XdsClientTestHelper.buildDiscoveryResponse;
+import static io.grpc.xds.XdsClientTestHelper.buildDiscoveryResponseV2;
 import static io.grpc.xds.XdsClientTestHelper.buildDropOverload;
 import static io.grpc.xds.XdsClientTestHelper.buildLbEndpoint;
 import static io.grpc.xds.XdsClientTestHelper.buildLocalityLbEndpoints;
@@ -43,7 +43,6 @@ import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment;
 import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy.DropOverload;
 import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
-import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint;
 import io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints;
 import io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceImplBase;
@@ -76,8 +75,10 @@ import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.Bootstrapper.ChannelCreds;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EdsLoadBalancerProvider.EdsConfig;
+import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.LocalityStore.LocalityStoreFactory;
 import io.grpc.xds.XdsClient.EndpointUpdate;
+import io.grpc.xds.XdsClient.XdsChannel;
 import io.grpc.xds.XdsClient.XdsChannelFactory;
 import java.net.InetSocketAddress;
 import java.util.ArrayDeque;
@@ -135,10 +136,10 @@ public class EdsLoadBalancerTest {
   private final Map<String, LoadBalancer> childBalancers = new HashMap<>();
   private final XdsChannelFactory channelFactory = new XdsChannelFactory() {
     @Override
-    ManagedChannel createChannel(List<ServerInfo> servers) {
+    XdsChannel createChannel(List<ServerInfo> servers) {
       assertThat(Iterables.getOnlyElement(servers).getServerUri())
           .isEqualTo("trafficdirector.googleapis.com");
-      return channel;
+      return new XdsChannel(channel, false);
     }
   };
 
@@ -228,10 +229,10 @@ public class EdsLoadBalancerTest {
             .forName(serverName)
             .directExecutor()
             .build());
-    final List<ServerInfo> serverList =
-        ImmutableList.of(
-            new ServerInfo("trafficdirector.googleapis.com", ImmutableList.<ChannelCreds>of()));
-    BootstrapInfo bootstrapInfo = new BootstrapInfo(serverList, Node.getDefaultInstance());
+    final List<ServerInfo> serverList = ImmutableList.of(
+        new ServerInfo("trafficdirector.googleapis.com", ImmutableList.<ChannelCreds>of(), null));
+    Node node = Node.newBuilder().build();
+    BootstrapInfo bootstrapInfo = new BootstrapInfo(serverList, node);
     doReturn(bootstrapInfo).when(bootstrapper).readBootstrap();
 
     if (isFullFlow) {
@@ -240,7 +241,7 @@ public class EdsLoadBalancerTest {
               SERVICE_AUTHORITY,
               serverList,
               channelFactory,
-              Node.getDefaultInstance(),
+              node,
               syncContext,
               fakeClock.getScheduledExecutorService(),
               mock(BackoffPolicy.Provider.class),
@@ -679,7 +680,7 @@ public class EdsLoadBalancerTest {
     // The whole cluster is no longer accessible.
     // Note that EDS resource removal is achieved by CDS resource update.
     responseObserver.onNext(
-        buildDiscoveryResponse(
+        buildDiscoveryResponseV2(
             String.valueOf(versionIno++),
             Collections.<Any>emptyList(),
             XdsClientImpl.ADS_TYPE_URL_CDS_V2,
@@ -767,7 +768,7 @@ public class EdsLoadBalancerTest {
 
   private void deliverClusterLoadAssignments(ClusterLoadAssignment clusterLoadAssignment) {
     responseObserver.onNext(
-          buildDiscoveryResponse(
+          buildDiscoveryResponseV2(
               String.valueOf(versionIno++),
               ImmutableList.of(Any.pack(clusterLoadAssignment)),
               XdsClientImpl.ADS_TYPE_URL_EDS_V2,
