@@ -752,7 +752,8 @@ public class XdsClientImplTestV2 {
             new io.grpc.xds.RouteMatch(
                 /* prefix= */ null,
                 /* path= */ "/service1/method1"),
-            new EnvoyProtoData.RouteAction("cl1.googleapis.com", null)));
+            new EnvoyProtoData.RouteAction(
+                TimeUnit.SECONDS.toNanos(15L), "cl1.googleapis.com", null)));
     assertThat(routes.get(1)).isEqualTo(
         new EnvoyProtoData.Route(
             // path match with weighted cluster route
@@ -760,6 +761,7 @@ public class XdsClientImplTestV2 {
                 /* prefix= */ null,
                 /* path= */ "/service2/method2"),
             new EnvoyProtoData.RouteAction(
+                TimeUnit.SECONDS.toNanos(15L),
                 null,
                 ImmutableList.of(
                     new EnvoyProtoData.ClusterWeight("cl21.googleapis.com", 30),
@@ -771,7 +773,8 @@ public class XdsClientImplTestV2 {
             new io.grpc.xds.RouteMatch(
                 /* prefix= */ "/service1/",
                 /* path= */ null),
-            new EnvoyProtoData.RouteAction("cl1.googleapis.com", null)));
+            new EnvoyProtoData.RouteAction(
+                TimeUnit.SECONDS.toNanos(15L), "cl1.googleapis.com", null)));
     assertThat(routes.get(3)).isEqualTo(
         new EnvoyProtoData.Route(
             // default match with cluster route
@@ -779,7 +782,7 @@ public class XdsClientImplTestV2 {
                 /* prefix= */ "",
                 /* path= */ null),
             new EnvoyProtoData.RouteAction(
-                "cluster.googleapis.com", null)));
+                TimeUnit.SECONDS.toNanos(15L), "cluster.googleapis.com", null)));
   }
 
   /**
