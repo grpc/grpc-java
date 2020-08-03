@@ -30,6 +30,7 @@ import io.grpc.xds.internal.rbac.engine.cel.DefaultInterpreter;
 import io.grpc.xds.internal.rbac.engine.cel.DescriptorMessageProvider;
 import io.grpc.xds.internal.rbac.engine.cel.Dispatcher;
 import io.grpc.xds.internal.rbac.engine.cel.IncompleteData;
+import io.grpc.xds.internal.rbac.engine.cel.Interpretable;
 import io.grpc.xds.internal.rbac.engine.cel.Interpreter;
 import io.grpc.xds.internal.rbac.engine.cel.InterpreterException;
 import io.grpc.xds.internal.rbac.engine.cel.RuntimeTypeProvider;
@@ -165,9 +166,10 @@ public class AuthorizationEngine<ReqT, RespT> {
     RuntimeTypeProvider messageProvider = DescriptorMessageProvider.dynamicMessages(descriptors);
     Dispatcher dispatcher = DefaultDispatcher.create();
     Interpreter interpreter = new DefaultInterpreter(messageProvider, dispatcher);
+    Interpretable interpretable = interpreter.createInterpretable(condition);
     // Parse the generated result object to a boolean variable.
     try {
-      Object result = interpreter.createInterpretable(condition).eval(activation);
+      Object result = interpretable.eval(activation);
       if (result instanceof Boolean) {
         return Boolean.valueOf(result.toString());
       }

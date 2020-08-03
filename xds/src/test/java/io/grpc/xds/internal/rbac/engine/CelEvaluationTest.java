@@ -163,24 +163,24 @@ public class CelEvaluationTest<ReqT, RespT> {
     doReturn(true).when(spyEngine).matches(eq(condition3), any(Activation.class));
     evaluateResult = spyEngine.evaluate(args);
     assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Decision.ALLOW);
-    assertEquals(evaluateResult.getMatchingPolicyNames().size(), 3);
-    assertTrue(evaluateResult.getMatchingPolicyNames().contains("Policy 1"));
-    assertTrue(evaluateResult.getMatchingPolicyNames().contains("Policy 2"));
-    assertTrue(evaluateResult.getMatchingPolicyNames().contains("Policy 3"));
+    assertEquals(evaluateResult.getPolicyNames().size(), 3);
+    assertTrue(evaluateResult.getPolicyNames().contains("Policy 1"));
+    assertTrue(evaluateResult.getPolicyNames().contains("Policy 2"));
+    assertTrue(evaluateResult.getPolicyNames().contains("Policy 3"));
     // Policy 1 - unmatched; Policy 2 - matched; Policy 3 - matched
     doReturn(false).when(spyEngine).matches(eq(condition1), any(Activation.class));
     evaluateResult = spyEngine.evaluate(args);
     assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Decision.ALLOW);
-    assertEquals(evaluateResult.getMatchingPolicyNames().size(), 2);
-    assertTrue(evaluateResult.getMatchingPolicyNames().contains("Policy 2"));
-    assertTrue(evaluateResult.getMatchingPolicyNames().contains("Policy 3"));
+    assertEquals(evaluateResult.getPolicyNames().size(), 2);
+    assertTrue(evaluateResult.getPolicyNames().contains("Policy 2"));
+    assertTrue(evaluateResult.getPolicyNames().contains("Policy 3"));
     // Policy 1 - unmatched; Policy 2 - matched; Policy 3 - unknown
     doThrow(new InterpreterException.Builder("Unknown result").build())
         .when(spyEngine).matches(eq(condition3), any(Activation.class));
     evaluateResult = spyEngine.evaluate(args);
     assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Decision.ALLOW);
-    assertEquals(evaluateResult.getMatchingPolicyNames().size(), 1);
-    assertTrue(evaluateResult.getMatchingPolicyNames().contains("Policy 2"));
+    assertEquals(evaluateResult.getPolicyNames().size(), 1);
+    assertTrue(evaluateResult.getPolicyNames().contains("Policy 2"));
     assertEquals(evaluateResult.toString(), 
         new StringBuilder("Authorization Decision: ALLOW. \n" + "Policy 2; \n").toString());
     // Policy 1 - unmatched; Policy 2 - unmatched; Policy 3 - unmatched
@@ -189,7 +189,7 @@ public class CelEvaluationTest<ReqT, RespT> {
     doReturn(false).when(spyEngine).matches(eq(condition3), any(Activation.class));
     evaluateResult = spyEngine.evaluate(args);
     assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Decision.DENY);
-    assertEquals(evaluateResult.getMatchingPolicyNames().size(), 0);
+    assertEquals(evaluateResult.getPolicyNames().size(), 0);
     assertEquals(evaluateResult.toString(), 
         new StringBuilder("Authorization Decision: DENY. \n").toString());
     // Policy 1 - unmatched; Policy 2 - unknown; Policy 3 - unknown
@@ -199,9 +199,9 @@ public class CelEvaluationTest<ReqT, RespT> {
         .when(spyEngine).matches(eq(condition3), any(Activation.class));
     evaluateResult = spyEngine.evaluate(args);
     assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Decision.UNKNOWN);
-    assertEquals(evaluateResult.getMatchingPolicyNames().size(), 2);
-    assertTrue(evaluateResult.getMatchingPolicyNames().contains("Policy 2"));
-    assertTrue(evaluateResult.getMatchingPolicyNames().contains("Policy 3"));
+    assertEquals(evaluateResult.getPolicyNames().size(), 2);
+    assertTrue(evaluateResult.getPolicyNames().contains("Policy 2"));
+    assertTrue(evaluateResult.getPolicyNames().contains("Policy 3"));
     assertEquals(evaluateResult.toString(), 
         new StringBuilder("Authorization Decision: UNKNOWN. \n" 
             + "Policy 3; \n" + "Policy 2; \n").toString());
@@ -216,31 +216,31 @@ public class CelEvaluationTest<ReqT, RespT> {
     doReturn(true).when(spyEngine).matches(eq(condition6), any(Activation.class));
     evaluateResult = spyEngine.evaluate(args);
     assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Decision.DENY);
-    assertEquals(evaluateResult.getMatchingPolicyNames().size(), 3);
-    assertTrue(evaluateResult.getMatchingPolicyNames().contains("Policy 4"));
-    assertTrue(evaluateResult.getMatchingPolicyNames().contains("Policy 5"));
-    assertTrue(evaluateResult.getMatchingPolicyNames().contains("Policy 6"));
+    assertEquals(evaluateResult.getPolicyNames().size(), 3);
+    assertTrue(evaluateResult.getPolicyNames().contains("Policy 4"));
+    assertTrue(evaluateResult.getPolicyNames().contains("Policy 5"));
+    assertTrue(evaluateResult.getPolicyNames().contains("Policy 6"));
     // Policy 4 - unmatched; Policy 5 - matched; Policy 6 - matched
     doReturn(false).when(spyEngine).matches(eq(condition4), any(Activation.class));
     evaluateResult = spyEngine.evaluate(args);
     assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Decision.DENY);
-    assertEquals(evaluateResult.getMatchingPolicyNames().size(), 2);
-    assertTrue(evaluateResult.getMatchingPolicyNames().contains("Policy 5"));
-    assertTrue(evaluateResult.getMatchingPolicyNames().contains("Policy 6"));
+    assertEquals(evaluateResult.getPolicyNames().size(), 2);
+    assertTrue(evaluateResult.getPolicyNames().contains("Policy 5"));
+    assertTrue(evaluateResult.getPolicyNames().contains("Policy 6"));
     // Policy 4 - unmatched; Policy 5 - matched; Policy 6 - unknown
     doThrow(new InterpreterException.Builder("Unknown result").build())
         .when(spyEngine).matches(eq(condition6), any(Activation.class));
     evaluateResult = spyEngine.evaluate(args);
     assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Decision.DENY);
-    assertEquals(evaluateResult.getMatchingPolicyNames().size(), 1);
-    assertTrue(evaluateResult.getMatchingPolicyNames().contains("Policy 5"));
+    assertEquals(evaluateResult.getPolicyNames().size(), 1);
+    assertTrue(evaluateResult.getPolicyNames().contains("Policy 5"));
     // Policy 4 - unmatched; Policy 5 - unmatched; Policy 6 - unmatched
     doReturn(false).when(spyEngine).matches(eq(condition4), any(Activation.class));
     doReturn(false).when(spyEngine).matches(eq(condition5), any(Activation.class));
     doReturn(false).when(spyEngine).matches(eq(condition6), any(Activation.class));
     evaluateResult = spyEngine.evaluate(args);
     assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Decision.ALLOW);
-    assertEquals(evaluateResult.getMatchingPolicyNames().size(), 0);
+    assertEquals(evaluateResult.getPolicyNames().size(), 0);
     // Policy 4 - unmatched; Policy 5 - unknown; Policy 6 - unknown
     doThrow(new InterpreterException.Builder("Unknown result").build())
         .when(spyEngine).matches(eq(condition5), any(Activation.class));
@@ -248,9 +248,9 @@ public class CelEvaluationTest<ReqT, RespT> {
         .when(spyEngine).matches(eq(condition6), any(Activation.class));
     evaluateResult = spyEngine.evaluate(args);
     assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Decision.UNKNOWN);
-    assertEquals(evaluateResult.getMatchingPolicyNames().size(), 2);
-    assertTrue(evaluateResult.getMatchingPolicyNames().contains("Policy 5"));
-    assertTrue(evaluateResult.getMatchingPolicyNames().contains("Policy 6"));
+    assertEquals(evaluateResult.getPolicyNames().size(), 2);
+    assertTrue(evaluateResult.getPolicyNames().contains("Policy 5"));
+    assertTrue(evaluateResult.getPolicyNames().contains("Policy 6"));
   }
 
   @Test
@@ -266,10 +266,10 @@ public class CelEvaluationTest<ReqT, RespT> {
     doReturn(true).when(spyEngine).matches(eq(condition6), any(Activation.class));
     evaluateResult = spyEngine.evaluate(args);
     assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Decision.DENY);
-    assertEquals(evaluateResult.getMatchingPolicyNames().size(), 3);
-    assertTrue(evaluateResult.getMatchingPolicyNames().contains("Policy 4"));
-    assertTrue(evaluateResult.getMatchingPolicyNames().contains("Policy 5"));
-    assertTrue(evaluateResult.getMatchingPolicyNames().contains("Policy 6"));
+    assertEquals(evaluateResult.getPolicyNames().size(), 3);
+    assertTrue(evaluateResult.getPolicyNames().contains("Policy 4"));
+    assertTrue(evaluateResult.getPolicyNames().contains("Policy 5"));
+    assertTrue(evaluateResult.getPolicyNames().contains("Policy 6"));
     // Policy 4 - unmatched; Policy 5 - matched; Policy 6 - unknown
     // Policy 1 - matched; Policy 2 - matched; Policy 3 - matched
     doReturn(false).when(spyEngine).matches(eq(condition4), any(Activation.class));
@@ -277,27 +277,27 @@ public class CelEvaluationTest<ReqT, RespT> {
         .when(spyEngine).matches(eq(condition6), any(Activation.class));
     evaluateResult = spyEngine.evaluate(args);
     assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Decision.DENY);
-    assertEquals(evaluateResult.getMatchingPolicyNames().size(), 1);
-    assertTrue(evaluateResult.getMatchingPolicyNames().contains("Policy 5"));
+    assertEquals(evaluateResult.getPolicyNames().size(), 1);
+    assertTrue(evaluateResult.getPolicyNames().contains("Policy 5"));
     // Policy 4 - unmatched; Policy 5 - unknown; Policy 6 - unknown
     // Policy 1 - matched; Policy 2 - matched; Policy 3 - matched
     doThrow(new InterpreterException.Builder("Unknown result").build())
         .when(spyEngine).matches(eq(condition5), any(Activation.class));
     evaluateResult = spyEngine.evaluate(args);
     assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Decision.UNKNOWN);
-    assertEquals(evaluateResult.getMatchingPolicyNames().size(), 2);
-    assertTrue(evaluateResult.getMatchingPolicyNames().contains("Policy 5"));
-    assertTrue(evaluateResult.getMatchingPolicyNames().contains("Policy 6"));
+    assertEquals(evaluateResult.getPolicyNames().size(), 2);
+    assertTrue(evaluateResult.getPolicyNames().contains("Policy 5"));
+    assertTrue(evaluateResult.getPolicyNames().contains("Policy 6"));
     // Policy 4 - unmatched; Policy 5 - unmatched; Policy 6 - unmatched
     // Policy 1 - matched; Policy 2 - matched; Policy 3 - matched
     doReturn(false).when(spyEngine).matches(eq(condition5), any(Activation.class));
     doReturn(false).when(spyEngine).matches(eq(condition6), any(Activation.class));
     evaluateResult = spyEngine.evaluate(args);
     assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Decision.ALLOW);
-    assertEquals(evaluateResult.getMatchingPolicyNames().size(), 3);
-    assertTrue(evaluateResult.getMatchingPolicyNames().contains("Policy 1"));
-    assertTrue(evaluateResult.getMatchingPolicyNames().contains("Policy 2"));
-    assertTrue(evaluateResult.getMatchingPolicyNames().contains("Policy 3"));
+    assertEquals(evaluateResult.getPolicyNames().size(), 3);
+    assertTrue(evaluateResult.getPolicyNames().contains("Policy 1"));
+    assertTrue(evaluateResult.getPolicyNames().contains("Policy 2"));
+    assertTrue(evaluateResult.getPolicyNames().contains("Policy 3"));
     // Policy 4 - unmatched; Policy 5 - unmatched; Policy 6 - unmatched
     // Policy 1 - unmatched; Policy 2 - matched; Policy 3 - unknown
     doReturn(false).when(spyEngine).matches(eq(condition1), any(Activation.class));
@@ -305,17 +305,17 @@ public class CelEvaluationTest<ReqT, RespT> {
         .when(spyEngine).matches(eq(condition3), any(Activation.class));
     evaluateResult = spyEngine.evaluate(args);
     assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Decision.ALLOW);
-    assertEquals(evaluateResult.getMatchingPolicyNames().size(), 1);
-    assertTrue(evaluateResult.getMatchingPolicyNames().contains("Policy 2"));
+    assertEquals(evaluateResult.getPolicyNames().size(), 1);
+    assertTrue(evaluateResult.getPolicyNames().contains("Policy 2"));
     // Policy 4 - unmatched; Policy 5 - unmatched; Policy 6 - unmatched
     // Policy 1 - unmatched; Policy 2 - unknown; Policy 3 - unknown
     doThrow(new InterpreterException.Builder("Unknown result").build())
         .when(spyEngine).matches(eq(condition2), any(Activation.class));
     evaluateResult = spyEngine.evaluate(args);
     assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Decision.UNKNOWN);
-    assertEquals(evaluateResult.getMatchingPolicyNames().size(), 2);
-    assertTrue(evaluateResult.getMatchingPolicyNames().contains("Policy 2"));
-    assertTrue(evaluateResult.getMatchingPolicyNames().contains("Policy 3"));
+    assertEquals(evaluateResult.getPolicyNames().size(), 2);
+    assertTrue(evaluateResult.getPolicyNames().contains("Policy 2"));
+    assertTrue(evaluateResult.getPolicyNames().contains("Policy 3"));
     // Policy 4 - unmatched; Policy 5 - unmatched; Policy 6 - unmatched
     // Policy 1 - unmatched; Policy 2 - unmatched; Policy 3 - unmatched
     doReturn(false).when(spyEngine).matches(eq(condition2), any(Activation.class));
@@ -323,6 +323,6 @@ public class CelEvaluationTest<ReqT, RespT> {
     doReturn(false).when(spyEngine).matches(eq(condition6), any(Activation.class));
     evaluateResult = spyEngine.evaluate(args);
     assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Decision.DENY);
-    assertEquals(evaluateResult.getMatchingPolicyNames().size(), 0);
+    assertEquals(evaluateResult.getPolicyNames().size(), 0);
   }
 }

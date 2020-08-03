@@ -44,16 +44,16 @@ public class AuthorizationDecision {
   }
 
   private final Decision decision;
-  private final List<String> matchingPolicyNames;
+  private final List<String> policyNames;
 
   /**
    * Creates a new authorization decision using the input {@code decision} 
    * for resolving authorization decision
-   * and {@code matchingPolicyNames} for resolving authorization context.
+   * and {@code policyNames} for resolving authorization context.
    */
-  public AuthorizationDecision(Decision decision, List<String> matchingPolicyNames) {
+  public AuthorizationDecision(Decision decision, List<String> policyNames) {
     this.decision = decision;
-    this.matchingPolicyNames = matchingPolicyNames;
+    this.policyNames = policyNames;
   }
 
   /** Returns the authorization decision. */
@@ -61,31 +61,31 @@ public class AuthorizationDecision {
     return this.decision;
   }
 
-  /** Returns the matching policy list. */
-  public List<String> getMatchingPolicyNames() {
-    return this.matchingPolicyNames;
+  /** Returns the policy list. */
+  public List<String> getPolicyNames() {
+    return this.policyNames;
   }
 
   @Override
   public String toString() {
-    StringBuilder authContext = new StringBuilder();
+    StringBuilder authzStr = new StringBuilder();
     switch (this.decision) {
       case ALLOW: 
-        authContext.append("Authorization Decision: ALLOW. \n");
+        authzStr.append("Authorization Decision: ALLOW. \n");
         break;
       case DENY: 
-        authContext.append("Authorization Decision: DENY. \n");
+        authzStr.append("Authorization Decision: DENY. \n");
         break;
       case UNKNOWN: 
-        authContext.append("Authorization Decision: UNKNOWN. \n");
+        authzStr.append("Authorization Decision: UNKNOWN. \n");
         break;
       default: 
-        authContext.append("");
+        authzStr.append("");
         break;
     }
-    for (String matchingPolicyName : this.matchingPolicyNames) {
-      authContext.append(matchingPolicyName + "; \n");
+    for (String policyName : this.policyNames) {
+      authzStr.append(policyName + "; \n");
     }
-    return authContext.toString();
+    return authzStr.toString();
   }
 }
