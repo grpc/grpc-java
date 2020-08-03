@@ -40,7 +40,7 @@ interface ProtocolNegotiator {
   /**
    * Releases resources held by this negotiator. Called when the Channel transitions to terminated
    * or when InternalServer is shutdown (depending on client or server). That means handlers
-   * returned by {@link #newHandler()} can outlive their parent negotiator on server-side, but not
+   * returned by {@link #newHandler} can outlive their parent negotiator on server-side, but not
    * on client-side.
    */
   void close();

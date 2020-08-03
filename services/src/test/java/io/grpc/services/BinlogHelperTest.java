@@ -59,7 +59,6 @@ import io.grpc.ServerCallHandler;
 import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.binarylog.v1.Address;
-import io.grpc.binarylog.v1.Address.Type;
 import io.grpc.binarylog.v1.ClientHeader;
 import io.grpc.binarylog.v1.GrpcLogEntry;
 import io.grpc.binarylog.v1.GrpcLogEntry.EventType;
@@ -377,7 +376,7 @@ public final class BinlogHelperTest {
     assertEquals(
         Address
             .newBuilder()
-            .setType(Type.TYPE_IPV4)
+            .setType(Address.Type.TYPE_IPV4)
             .setAddress("127.0.0.1")
             .setIpPort(12345)
             .build(),
@@ -393,7 +392,7 @@ public final class BinlogHelperTest {
     assertEquals(
         Address
             .newBuilder()
-            .setType(Type.TYPE_IPV6)
+            .setType(Address.Type.TYPE_IPV6)
             .setAddress("2001:db8::2:1") // RFC 5952 section 4: ipv6 canonical form required
             .setIpPort(12345)
             .build(),
@@ -407,7 +406,7 @@ public final class BinlogHelperTest {
     assertEquals(
         Address
             .newBuilder()
-            .setType(Type.TYPE_UNIX)
+            .setType(Address.Type.TYPE_UNIX)
             .setAddress("/some/path")
             .build(),
         BinlogHelper.socketToProto(socketAddress)
@@ -424,7 +423,7 @@ public final class BinlogHelperTest {
     };
     assertEquals(
         Address.newBuilder()
-            .setType(Type.TYPE_UNKNOWN)
+            .setType(Address.Type.TYPE_UNKNOWN)
             .setAddress("some-socket-address")
             .build(),
         BinlogHelper.socketToProto(unknownSocket));

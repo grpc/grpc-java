@@ -25,7 +25,6 @@ import static org.mockito.Mockito.when;
 
 import com.github.udpa.udpa.data.orca.v1.OrcaLoadReport;
 import io.grpc.ClientStreamTracer;
-import io.grpc.ClientStreamTracer.Factory;
 import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
@@ -224,7 +223,8 @@ public class ClientLoadCounterTest {
       }
 
       @Override
-      protected Factory wrapTracerFactory(Factory originFactory) {
+      protected ClientStreamTracer.Factory wrapTracerFactory(
+          ClientStreamTracer.Factory originFactory) {
         // NO-OP
         return originFactory;
       }

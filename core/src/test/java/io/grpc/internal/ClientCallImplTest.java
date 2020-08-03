@@ -42,7 +42,6 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
-import io.grpc.Attributes.Key;
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
 import io.grpc.ClientStreamTracer;
@@ -1007,8 +1006,8 @@ public class ClientCallImplTest {
     ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
         method, MoreExecutors.directExecutor(), baseCallOptions, clientStreamProvider,
         deadlineCancellationExecutor, channelCallTracer);
-    Attributes attrs =
-        Attributes.newBuilder().set(Key.<String>create("fake key"), "fake value").build();
+    Attributes attrs = Attributes.newBuilder().set(
+        Attributes.Key.<String>create("fake key"), "fake value").build();
     when(stream.getAttributes()).thenReturn(attrs);
 
     assertNotEquals(attrs, call.getAttributes());

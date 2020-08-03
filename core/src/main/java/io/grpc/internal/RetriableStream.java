@@ -469,8 +469,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   }
 
   /**
-   * Do not use it directly. Use {@link #sendMessage(ReqT)} instead because we don't use InputStream
-   * for buffering.
+   * Do not use it directly. Use {@link #sendMessage(Object)} instead because we don't use
+   * InputStream for buffering.
    */
   @Override
   public final void writeMessage(InputStream message) {

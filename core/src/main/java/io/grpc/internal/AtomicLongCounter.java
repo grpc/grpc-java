@@ -19,7 +19,7 @@ package io.grpc.internal;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * An implementation of {@link LongCounter} that is just an {@Link AtomicLong}.
+ * An implementation of {@link LongCounter} that is just an {@link AtomicLong}.
  */
 final class AtomicLongCounter implements LongCounter {
   private final AtomicLong counter = new AtomicLong();

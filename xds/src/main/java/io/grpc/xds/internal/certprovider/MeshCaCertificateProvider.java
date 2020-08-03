@@ -30,7 +30,7 @@ import java.util.logging.Logger;
 final class MeshCaCertificateProvider extends CertificateProvider {
   private static final Logger logger = Logger.getLogger(MeshCaCertificateProvider.class.getName());
 
-  protected MeshCaCertificateProvider(DistributorWatcher watcher, boolean notifyCertUpdates,
+  MeshCaCertificateProvider(DistributorWatcher watcher, boolean notifyCertUpdates,
       String meshCaUrl, String zone, long validitySeconds,
       int keySize, String alg, String signatureAlg, MeshCaChannelFactory meshCaChannelFactory,
       BackoffPolicy.Provider backoffPolicyProvider, long renewalGracePeriodSeconds,

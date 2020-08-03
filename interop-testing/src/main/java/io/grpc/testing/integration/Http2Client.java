@@ -85,9 +85,9 @@ public final class Http2Client {
   private Tester tester = new Tester();
   private ListeningExecutorService threadpool;
 
-  protected ManagedChannel channel;
-  protected TestServiceGrpc.TestServiceBlockingStub blockingStub;
-  protected TestServiceGrpc.TestServiceStub asyncStub;
+  ManagedChannel channel;
+  TestServiceGrpc.TestServiceBlockingStub blockingStub;
+  TestServiceGrpc.TestServiceStub asyncStub;
 
   private void parseArgs(String[] args) {
     boolean usage = false;

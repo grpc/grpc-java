@@ -137,6 +137,7 @@ public abstract class AbstractBenchmark {
    * sudo ip addr add dev lo 127.127.127.127/32 label lo:benchmark
    * </pre>
    */
+  @SuppressWarnings("JdkObsolete") // No choice but to use Enumeration
   private static InetAddress buildBenchmarkAddr() {
     InetAddress tmp = null;
     try {
@@ -180,7 +181,7 @@ public abstract class AbstractBenchmark {
   private MethodDescriptor<ByteBuf, ByteBuf> flowControlledStreaming;
   protected ManagedChannel[] channels;
 
-  public AbstractBenchmark() {
+  protected AbstractBenchmark() {
   }
 
   /**

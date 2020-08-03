@@ -62,6 +62,7 @@ import io.grpc.internal.ClientTransport;
 import io.grpc.internal.ClientTransport.PingCallback;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.KeepAliveManager;
+import io.grpc.internal.ManagedClientTransport;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.StreamListener;
 import io.grpc.internal.TransportTracer;
@@ -129,7 +130,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   @Rule
   public TestName testNameRule = new TestName();
   @Mock
-  private NettyClientTransport.Listener listener;
+  private ManagedClientTransport.Listener listener;
   @Mock
   private ClientStreamListener streamListener;
 

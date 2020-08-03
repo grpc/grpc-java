@@ -111,7 +111,7 @@ public interface FrameReader extends Closeable {
      * @param promisedStreamId server-initiated stream ID.  Must be an even
      * number.
      * @param requestHeaders minimally includes {@code :method}, {@code :scheme},
-     * {@code :authority}, and (@code :path}.
+     * {@code :authority}, and {@code :path}.
      */
     void pushPromise(int streamId, int promisedStreamId, List<io.grpc.okhttp.internal.framed.Header> requestHeaders)
         throws IOException;

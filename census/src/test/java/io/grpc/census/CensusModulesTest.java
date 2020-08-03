@@ -84,7 +84,6 @@ import io.opencensus.tags.TagValue;
 import io.opencensus.trace.BlankSpan;
 import io.opencensus.trace.EndSpanOptions;
 import io.opencensus.trace.MessageEvent;
-import io.opencensus.trace.MessageEvent.Type;
 import io.opencensus.trace.Span;
 import io.opencensus.trace.SpanBuilder;
 import io.opencensus.trace.SpanContext;
@@ -542,11 +541,13 @@ public class CensusModulesTest {
     inOrder.verify(spyClientSpan, times(3)).addMessageEvent(messageEventCaptor.capture());
     List<MessageEvent> events = messageEventCaptor.getAllValues();
     assertEquals(
-        MessageEvent.builder(Type.SENT, 0).setCompressedMessageSize(882).build(), events.get(0));
+        MessageEvent.builder(MessageEvent.Type.SENT, 0).setCompressedMessageSize(882).build(),
+        events.get(0));
     assertEquals(
-        MessageEvent.builder(Type.SENT, 1).setUncompressedMessageSize(27).build(), events.get(1));
+        MessageEvent.builder(MessageEvent.Type.SENT, 1).setUncompressedMessageSize(27).build(),
+        events.get(1));
     assertEquals(
-        MessageEvent.builder(Type.RECEIVED, 0)
+        MessageEvent.builder(MessageEvent.Type.RECEIVED, 0)
             .setCompressedMessageSize(255)
             .setUncompressedMessageSize(90)
             .build(),
@@ -1065,11 +1066,13 @@ public class CensusModulesTest {
     inOrder.verify(spyServerSpan, times(3)).addMessageEvent(messageEventCaptor.capture());
     List<MessageEvent> events = messageEventCaptor.getAllValues();
     assertEquals(
-        MessageEvent.builder(Type.SENT, 0).setCompressedMessageSize(882).build(), events.get(0));
+        MessageEvent.builder(MessageEvent.Type.SENT, 0).setCompressedMessageSize(882).build(),
+        events.get(0));
     assertEquals(
-        MessageEvent.builder(Type.SENT, 1).setUncompressedMessageSize(27).build(), events.get(1));
+        MessageEvent.builder(MessageEvent.Type.SENT, 1).setUncompressedMessageSize(27).build(),
+        events.get(1));
     assertEquals(
-        MessageEvent.builder(Type.RECEIVED, 0)
+        MessageEvent.builder(MessageEvent.Type.RECEIVED, 0)
             .setCompressedMessageSize(255)
             .setUncompressedMessageSize(90)
             .build(),

@@ -47,7 +47,7 @@ public final class TestUtils {
   public abstract static class StandardLoadBalancerProvider extends LoadBalancerProvider {
     private final String policyName;
 
-    public StandardLoadBalancerProvider(String policyName) {
+    protected StandardLoadBalancerProvider(String policyName) {
       this.policyName = policyName;
     }
 

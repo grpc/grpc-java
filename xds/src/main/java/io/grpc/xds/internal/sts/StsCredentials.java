@@ -67,6 +67,7 @@ public final class StsCredentials extends GoogleCredentials {
     this.transportFactory = transportFactory;
   }
 
+  @SuppressWarnings("JdkObsolete") // We can't use java.time
   @Override
   public AccessToken refreshAccessToken() throws IOException {
     AccessToken tok = getSourceAccessTokenFromFileLocation();
