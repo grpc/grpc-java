@@ -16,6 +16,7 @@
 
 package io.grpc.xds.internal.rbac.engine;
 
+import com.google.common.collect.ImmutableList;
 import java.lang.StringBuilder;
 import java.util.List;
 
@@ -44,7 +45,7 @@ public class AuthorizationDecision {
   }
 
   private final Decision decision;
-  private final List<String> policyNames;
+  private final ImmutableList<String> policyNames;
 
   /**
    * Creates a new authorization decision using the input {@code decision} 
@@ -53,7 +54,7 @@ public class AuthorizationDecision {
    */
   public AuthorizationDecision(Decision decision, List<String> policyNames) {
     this.decision = decision;
-    this.policyNames = policyNames;
+    this.policyNames = ImmutableList.copyOf(policyNames);
   }
 
   /** Returns the authorization decision. */
@@ -62,7 +63,7 @@ public class AuthorizationDecision {
   }
 
   /** Returns the policy list. */
-  public List<String> getPolicyNames() {
+  public ImmutableList<String> getPolicyNames() {
     return this.policyNames;
   }
 

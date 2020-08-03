@@ -17,7 +17,6 @@
 package io.grpc.xds.internal.rbac.engine;
 
 import com.google.api.expr.v1alpha1.Expr;
-import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.Descriptors.Descriptor;
@@ -35,7 +34,8 @@ import io.grpc.xds.internal.rbac.engine.cel.Interpreter;
 import io.grpc.xds.internal.rbac.engine.cel.InterpreterException;
 import io.grpc.xds.internal.rbac.engine.cel.RuntimeTypeProvider;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
@@ -63,8 +63,8 @@ public class AuthorizationEngine<ReqT, RespT> {
    * RbacEngine is an inner class that holds RBAC action 
    * and conditions of RBAC policy.
    */
-  @SuppressWarnings("ClassCanBeStatic")
-  private class RbacEngine {
+  private static class RbacEngine {
+    @SuppressWarnings("UnusedVariable")
     private final Action action;
     private final ImmutableMap<String, Expr> conditions;
 
@@ -74,7 +74,8 @@ public class AuthorizationEngine<ReqT, RespT> {
     }
   }
 
-  private final List<RbacEngine> rbacEngines;
+  private final RbacEngine allowEngine;
+  private final RbacEngine denyEngine;
 
   /**
    * Creates a CEL-based Authorization Engine from a list of Envoy RBACs.
@@ -94,16 +95,22 @@ public class AuthorizationEngine<ReqT, RespT> {
       throw new IllegalArgumentException( "Invalid RBAC list, " 
           + "must provide a RBAC with DENY action followed by a RBAC with ALLOW action. ");
     }
-    this.rbacEngines = new ArrayList<>();
+    RbacEngine allowEngine = null;
+    RbacEngine denyEngine = null;
     for (RBAC rbac : rbacPolicies) {
-      Map<String, Expr> conditions = new HashMap<>();
+      Map<String, Expr> conditions = new LinkedHashMap<>();
       for (Map.Entry<String, Policy> rbacPolicy: rbac.getPolicies().entrySet()) {
         conditions.put(rbacPolicy.getKey(), rbacPolicy.getValue().getCondition());
       }
-      this.rbacEngines.add(new RbacEngine(
-          Preconditions.checkNotNull(rbac.getAction()), 
-          Preconditions.checkNotNull(ImmutableMap.copyOf(conditions))));
+      if (rbac.getAction() == Action.ALLOW) {
+        allowEngine = new RbacEngine(Action.ALLOW, ImmutableMap.copyOf(conditions));
+      }
+      if (rbac.getAction() == Action.DENY) {
+        denyEngine = new RbacEngine(Action.DENY, ImmutableMap.copyOf(conditions));
+      }
     }
+    this.allowEngine = allowEngine;
+    this.denyEngine = denyEngine;
   }
 
   /**
@@ -115,36 +122,42 @@ public class AuthorizationEngine<ReqT, RespT> {
    */
   public AuthorizationDecision evaluate(EvaluateArgs<ReqT, RespT> args) 
       throws IllegalArgumentException {
-    if (this.rbacEngines.size() < 1 || this.rbacEngines.size() > 2) {
-      throw new IllegalArgumentException(
-        "Invalid RBAC list size, must provide either one RBAC or two RBACs. ");
-    } 
-    if (this.rbacEngines.size() == 2 && (this.rbacEngines.get(0).action != Action.DENY 
-        || this.rbacEngines.get(1).action != Action.ALLOW)) {
-      throw new IllegalArgumentException( "Invalid RBAC list, " 
-          + "must provide a RBAC with DENY action followed by a RBAC with ALLOW action. ");
-    }
-    AuthorizationDecision.Decision authorizationDecision = null;
-    List<String> matchingPolicyNames = new ArrayList<>();
     List<String> unknownPolicyNames = new ArrayList<>();
     // Set up activation used in CEL library's eval function.
     Activation activation = Activation.copyOf(extractFields(args));
-    // Go through each RBAC in the Envoy RBAC list.
-    for (RbacEngine rbacEngine : rbacEngines) {
-      // Go through each condition in the RBAC policy.
-      for (Map.Entry<String, Expr> condition : rbacEngine.conditions.entrySet()) {
+    // Iterate through denyEngine's map.
+    // If there is match, immediately return deny. 
+    // If there are unknown results, return undecided. 
+    // If all non-match, then iterate through allowEngine.
+    if (denyEngine != null) {
+      for (Map.Entry<String, Expr> condition : denyEngine.conditions.entrySet()) {
         try {
           if (matches(condition.getValue(), activation)) {
-            authorizationDecision = rbacEngine.action == Action.ALLOW 
-                ? AuthorizationDecision.Decision.ALLOW : AuthorizationDecision.Decision.DENY;
-            matchingPolicyNames.add(condition.getKey());
+            return new AuthorizationDecision(AuthorizationDecision.Decision.DENY, 
+                new ArrayList<String>(Arrays.asList(new String[] {condition.getKey()})));
           }
         } catch (InterpreterException e) {
           unknownPolicyNames.add(condition.getKey());
         }
       }
-      if (matchingPolicyNames.size() > 0) {
-        return new AuthorizationDecision(authorizationDecision, matchingPolicyNames);
+      if (unknownPolicyNames.size() > 0) {
+        return new AuthorizationDecision(
+            AuthorizationDecision.Decision.UNKNOWN, unknownPolicyNames);
+      }
+    }
+    // Once we enter allowEngine, if there is a match, immediately return allow. 
+    // In the end of iteration, if there are unknown rules, return undecided.
+    // If all non-match, return deny.
+    if (allowEngine != null) {
+      for (Map.Entry<String, Expr> condition : allowEngine.conditions.entrySet()) {
+        try {
+          if (matches(condition.getValue(), activation)) {
+            return new AuthorizationDecision(AuthorizationDecision.Decision.ALLOW, 
+                new ArrayList<String>(Arrays.asList(new String[] {condition.getKey()})));
+          }
+        } catch (InterpreterException e) {
+          unknownPolicyNames.add(condition.getKey());
+        }
       }
       if (unknownPolicyNames.size() > 0) {
         return new AuthorizationDecision(
@@ -152,7 +165,7 @@ public class AuthorizationEngine<ReqT, RespT> {
       }
     }
     // No RBAC conditions matched and didn't find unknown conditions.
-    if (this.rbacEngines.size() == 1 && this.rbacEngines.get(0).action == Action.DENY) {
+    if (this.allowEngine == null && this.denyEngine != null) {
       return new AuthorizationDecision(
           AuthorizationDecision.Decision.ALLOW, new ArrayList<String>());
     }
