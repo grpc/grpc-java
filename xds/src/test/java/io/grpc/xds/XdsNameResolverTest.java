@@ -130,6 +130,7 @@ public class XdsNameResolverTest {
     assertThat(error.getCause()).hasMessageThat().isEqualTo("Fail to read bootstrap file");
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void resolve_resourceNotFound() {
     resolver.start(mockListener);
@@ -362,8 +363,7 @@ public class XdsNameResolverTest {
   public void generateServiceConfig_forMethodConfig() {
     String serviceName = "HelloWord";
     String methodName = "greet";
-    long timeoutNano =
-        TimeUnit.SECONDS.toNanos(1L) + TimeUnit.NANOSECONDS.toNanos(1L); // 1.0000000001s
+    long timeoutNano = TimeUnit.SECONDS.toNanos(1L) + 1L; // 1.0000000001s
     String expectedServiceConfig = "{\n"
         + "  \"methodConfig\": [{\n"
         + "    \"name\": [{\n"
