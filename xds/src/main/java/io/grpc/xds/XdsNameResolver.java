@@ -155,7 +155,7 @@ final class XdsNameResolver extends NameResolver {
             }
           }
         }
-        if (cluster == null) {
+        if (cluster == null) {  // should not happen if routing rules are configured correctly
           return Result.forError(
               Status.UNAVAILABLE.withDescription("Failed to route the RPC with selected action"));
         }
@@ -276,6 +276,7 @@ final class XdsNameResolver extends NameResolver {
       ResolutionResult result =
           ResolutionResult.newBuilder()
               .setServiceConfig(parsedServiceConfig)
+              // let channel take action for no config selector
               .build();
       listener.onResult(result);
     }
