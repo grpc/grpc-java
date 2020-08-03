@@ -536,6 +536,7 @@ abstract class XdsClient {
   void cancelClientStatsReport(String clusterName, @Nullable String clusterServiceName) {
   }
 
+  // TODO(chengyuanzhang): eliminate this factory
   abstract static class XdsClientFactory {
     abstract XdsClient createXdsClient();
   }
