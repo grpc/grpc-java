@@ -30,8 +30,8 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 
 import com.github.udpa.udpa.data.orca.v1.OrcaLoadReport;
@@ -302,7 +302,7 @@ public class OrcaOobUtilTest {
       assertThat(orcaServiceImps[i].calls).hasSize(1);
     }
 
-    verifyZeroInteractions(backoffPolicyProvider);
+    verifyNoInteractions(backoffPolicyProvider);
   }
 
   @Test
@@ -388,7 +388,7 @@ public class OrcaOobUtilTest {
       assertThat(orcaServiceImps[i].calls).hasSize(1);
     }
 
-    verifyZeroInteractions(backoffPolicyProvider);
+    verifyNoInteractions(backoffPolicyProvider);
   }
 
   @Test
@@ -424,7 +424,7 @@ public class OrcaOobUtilTest {
     assertLog(subchannel.logs, "DEBUG: Received an ORCA report: " + report);
     verify(mockOrcaListener0).onLoadReport(eq(report));
 
-    verifyZeroInteractions(backoffPolicyProvider);
+    verifyNoInteractions(backoffPolicyProvider);
   }
 
   @Test

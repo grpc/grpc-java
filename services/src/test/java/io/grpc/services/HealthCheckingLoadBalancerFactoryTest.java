@@ -34,8 +34,8 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.util.concurrent.MoreExecutors;
@@ -364,7 +364,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
       assertThat(healthImpls[i].calls).hasSize(1);
     }
 
-    verifyZeroInteractions(backoffPolicyProvider);
+    verifyNoInteractions(backoffPolicyProvider);
   }
 
   @Test
@@ -433,7 +433,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
         unavailableStateWithMsg("Health-check service responded SERVICE_UNKNOWN for 'BarService'"));
 
     verifyNoMoreInteractions(origLb, mockStateListeners[0], mockStateListeners[1]);
-    verifyZeroInteractions(backoffPolicyProvider);
+    verifyNoInteractions(backoffPolicyProvider);
   }
 
   @Test
