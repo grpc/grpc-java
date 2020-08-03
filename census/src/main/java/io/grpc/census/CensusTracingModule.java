@@ -34,7 +34,6 @@ import io.grpc.StreamTracer;
 import io.opencensus.trace.BlankSpan;
 import io.opencensus.trace.EndSpanOptions;
 import io.opencensus.trace.MessageEvent;
-import io.opencensus.trace.MessageEvent.Type;
 import io.opencensus.trace.Span;
 import io.opencensus.trace.SpanContext;
 import io.opencensus.trace.Status;
@@ -283,14 +282,14 @@ final class CensusTracingModule {
     public void outboundMessageSent(
         int seqNo, long optionalWireSize, long optionalUncompressedSize) {
       recordMessageEvent(
-          span, Type.SENT, seqNo, optionalWireSize, optionalUncompressedSize);
+          span, MessageEvent.Type.SENT, seqNo, optionalWireSize, optionalUncompressedSize);
     }
 
     @Override
     public void inboundMessageRead(
         int seqNo, long optionalWireSize, long optionalUncompressedSize) {
       recordMessageEvent(
-          span, Type.RECEIVED, seqNo, optionalWireSize, optionalUncompressedSize);
+          span, MessageEvent.Type.RECEIVED, seqNo, optionalWireSize, optionalUncompressedSize);
     }
   }
 
@@ -349,14 +348,14 @@ final class CensusTracingModule {
     public void outboundMessageSent(
         int seqNo, long optionalWireSize, long optionalUncompressedSize) {
       recordMessageEvent(
-          span, Type.SENT, seqNo, optionalWireSize, optionalUncompressedSize);
+          span, MessageEvent.Type.SENT, seqNo, optionalWireSize, optionalUncompressedSize);
     }
 
     @Override
     public void inboundMessageRead(
         int seqNo, long optionalWireSize, long optionalUncompressedSize) {
       recordMessageEvent(
-          span, Type.RECEIVED, seqNo, optionalWireSize, optionalUncompressedSize);
+          span, MessageEvent.Type.RECEIVED, seqNo, optionalWireSize, optionalUncompressedSize);
     }
   }
 

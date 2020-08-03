@@ -63,10 +63,10 @@ public interface ClientTransportFactory extends Closeable {
   void close();
 
   /**
-   * Options passed to {@link #newClientTransport(SocketAddress, ClientTransportOptions)}. Although
-   * it is safe to save this object if received, it is generally expected that the useful fields are
-   * copied and then the options object is discarded. This allows using {@code final} for those
-   * fields as well as avoids retaining unused objects contained in the options.
+   * Options passed to {@link #newClientTransport}. Although it is safe to save this object if
+   * received, it is generally expected that the useful fields are copied and then the options
+   * object is discarded. This allows using {@code final} for those fields as well as avoids
+   * retaining unused objects contained in the options.
    */
   final class ClientTransportOptions {
     private ChannelLogger channelLogger;

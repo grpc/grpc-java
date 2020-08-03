@@ -35,7 +35,6 @@ import io.grpc.ClientCall;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
-import io.grpc.LoadBalancer.Factory;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelStateListener;
@@ -69,16 +68,16 @@ import javax.annotation.Nullable;
  * <p>Note the original LoadBalancer must call {@code Helper.createSubchannel()} from the
  * SynchronizationContext, or it will throw.
  */
-final class HealthCheckingLoadBalancerFactory extends Factory {
+final class HealthCheckingLoadBalancerFactory extends LoadBalancer.Factory {
   private static final Logger logger =
       Logger.getLogger(HealthCheckingLoadBalancerFactory.class.getName());
 
-  private final Factory delegateFactory;
+  private final LoadBalancer.Factory delegateFactory;
   private final BackoffPolicy.Provider backoffPolicyProvider;
   private final Supplier<Stopwatch> stopwatchSupplier;
 
   public HealthCheckingLoadBalancerFactory(
-      Factory delegateFactory, BackoffPolicy.Provider backoffPolicyProvider,
+      LoadBalancer.Factory delegateFactory, BackoffPolicy.Provider backoffPolicyProvider,
       Supplier<Stopwatch> stopwatchSupplier) {
     this.delegateFactory = checkNotNull(delegateFactory, "delegateFactory");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");

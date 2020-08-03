@@ -194,6 +194,8 @@ final class JndiResourceResolverFactory implements DnsNameResolver.ResourceResol
 
   @VisibleForTesting
   @IgnoreJRERequirement
+  // Hashtable is required. https://github.com/google/error-prone/issues/1766
+  @SuppressWarnings("JdkObsolete")
   // javax.naming.* is only loaded reflectively and is never loaded for Android
   // The lint issue id is supposed to be "InvalidPackage" but it doesn't work, don't know why.
   // Use "all" as the lint issue id to suppress all types of lint error.
@@ -205,7 +207,6 @@ final class JndiResourceResolverFactory implements DnsNameResolver.ResourceResol
       String[] rrType = new String[]{recordType};
       List<String> records = new ArrayList<>();
 
-      @SuppressWarnings("JdkObsolete")
       Hashtable<String, String> env = new Hashtable<>();
       env.put("com.sun.jndi.ldap.connect.timeout", "5000");
       env.put("com.sun.jndi.ldap.read.timeout", "5000");

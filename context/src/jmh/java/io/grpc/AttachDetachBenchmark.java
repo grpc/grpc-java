@@ -16,7 +16,6 @@
 
 package io.grpc;
 
-import io.grpc.Context.Key;
 import java.util.concurrent.TimeUnit;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
@@ -30,7 +29,7 @@ import org.openjdk.jmh.annotations.State;
 @State(Scope.Benchmark)
 public class AttachDetachBenchmark {
 
-  private final Key<Integer> key = Context.keyWithDefault("key", 9999);
+  private final Context.Key<Integer> key = Context.keyWithDefault("key", 9999);
   private final Context cu = Context.current().withValue(key, 8888);
 
   /**

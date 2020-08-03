@@ -42,7 +42,7 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
-import io.grpc.NameResolver.Factory;
+import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.inprocess.InProcessChannelBuilder;
@@ -521,7 +521,7 @@ public class CachingRlsLbClientTest {
 
     @Override
     @Deprecated
-    public Factory getNameResolverFactory() {
+    public NameResolver.Factory getNameResolverFactory() {
       throw new UnsupportedOperationException();
     }
 

@@ -943,6 +943,8 @@ public class Context {
    */
   public interface CancellationListener {
     /**
+     * Notifies that a context was cancelled.
+     *
      * @param context the newly cancelled context.
      */
     void cancelled(Context context);

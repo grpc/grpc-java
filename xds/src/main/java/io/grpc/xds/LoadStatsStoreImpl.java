@@ -39,6 +39,8 @@ import javax.annotation.concurrent.NotThreadSafe;
  * client's perspective by maintaining a set of locality counters for each locality it is tracking
  * loads for.
  */
+// https://github.com/google/error-prone/issues/1767
+@SuppressWarnings("ModifyCollectionInEnhancedForLoop")
 @NotThreadSafe
 final class LoadStatsStoreImpl implements LoadStatsStore {
   private final String clusterName;

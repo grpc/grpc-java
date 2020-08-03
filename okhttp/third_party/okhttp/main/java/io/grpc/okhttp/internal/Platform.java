@@ -177,7 +177,9 @@ public class Platform {
         trafficStatsTagSocket = trafficStats.getMethod("tagSocket", Socket.class);
         trafficStatsUntagSocket = trafficStats.getMethod("untagSocket", Socket.class);
       } catch (ClassNotFoundException ignored) {
+        // On older Android
       } catch (NoSuchMethodException ignored) {
+        // On older Android
       }
 
       TlsExtensionType tlsExtensionType;
@@ -244,10 +246,15 @@ public class Platform {
               });
       return new JdkAlpnPlatform(sslProvider, setApplicationProtocols, getApplicationProtocol);
     } catch (NoSuchAlgorithmException ignored) {
+      // On older Java
     } catch (KeyManagementException ignored) {
+      // On older Java
     } catch (PrivilegedActionException ignored) {
+      // On older Java
     } catch (IllegalAccessException ignored) {
+      // On older Java
     } catch (InvocationTargetException ignored) {
+      // On older Java
     }
 
     // Find Jetty's ALPN extension for OpenJDK.
@@ -264,7 +271,9 @@ public class Platform {
           putMethod, getMethod, removeMethod, clientProviderClass, serverProviderClass,
           sslProvider);
     } catch (ClassNotFoundException ignored) {
+      // No Jetty ALPN
     } catch (NoSuchMethodException ignored) {
+      // Weird Jetty ALPN
     }
 
     // TODO(ericgribkoff) Return null here
@@ -512,7 +521,9 @@ public class Platform {
         removeMethod.invoke(null, sslSocket);
       } catch (IllegalAccessException ignored) {
         throw new AssertionError();
-      } catch (InvocationTargetException ignored) {
+      } catch (InvocationTargetException ex) {
+        // This would be very surprising and there's not much to do about it
+        logger.log(Level.FINE, "Failed to remove SSLSocket from Jetty ALPN", ex);
       }
     }
 

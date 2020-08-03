@@ -49,7 +49,6 @@ import io.grpc.Context.CancellationListener;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
-import io.grpc.LoadBalancer.Factory;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.Subchannel;
@@ -131,8 +130,8 @@ public class HealthCheckingLoadBalancerFactoryTest {
   private final Helper origHelper = mock(Helper.class, delegatesTo(new FakeHelper()));
   // The helper seen by the origLb
   private Helper wrappedHelper;
-  private final Factory origLbFactory =
-      mock(Factory.class, delegatesTo(new Factory() {
+  private final LoadBalancer.Factory origLbFactory =
+      mock(LoadBalancer.Factory.class, delegatesTo(new LoadBalancer.Factory() {
           @Override
           public LoadBalancer newLoadBalancer(Helper helper) {
             checkState(wrappedHelper == null, "LoadBalancer already created");
@@ -1056,8 +1055,8 @@ public class HealthCheckingLoadBalancerFactoryTest {
 
   @Test
   public void util_newHealthCheckingLoadBalancer() {
-    Factory hcFactory =
-        new Factory() {
+    LoadBalancer.Factory hcFactory =
+        new LoadBalancer.Factory() {
           @Override
           public LoadBalancer newLoadBalancer(Helper helper) {
             return HealthCheckingLoadBalancerUtil.newHealthCheckingLoadBalancer(

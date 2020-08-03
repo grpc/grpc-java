@@ -72,8 +72,8 @@ public final class GrpclbLongLivedAffinityTestClient {
   private long rpcIntermissionSeconds = 1;
   private long totalTestSeconds = 60;
 
-  protected ManagedChannel channel;
-  protected TestServiceGrpc.TestServiceBlockingStub blockingStub;
+  ManagedChannel channel;
+  TestServiceGrpc.TestServiceBlockingStub blockingStub;
 
   private void parseArgs(String[] args) {
     boolean usage = false;
