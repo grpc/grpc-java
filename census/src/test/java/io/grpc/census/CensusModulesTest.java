@@ -37,8 +37,8 @@ import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
@@ -1039,7 +1039,7 @@ public class CensusModulesTest {
     ServerStreamTracer.Factory tracerFactory = censusTracing.getServerTracerFactory();
     ServerStreamTracer serverStreamTracer =
         tracerFactory.newServerStreamTracer(method.getFullMethodName(), new Metadata());
-    verifyZeroInteractions(mockTracingPropagationHandler);
+    verifyNoInteractions(mockTracingPropagationHandler);
     verify(tracer).spanBuilderWithRemoteParent(
         eq("Recv.package1.service2.method3"), ArgumentMatchers.<SpanContext>isNull());
     verify(spyServerSpanBuilder).setRecordEvents(eq(true));

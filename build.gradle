@@ -179,7 +179,7 @@ subprojects {
 
             // Test dependencies.
             junit: 'junit:junit:4.12',
-            mockito: 'org.mockito:mockito-core:2.28.2',
+            mockito: 'org.mockito:mockito-core:3.3.3',
             truth: 'com.google.truth:truth:1.0.1',
             guava_testlib: "com.google.guava:guava-testlib:${guavaVersion}",
             androidx_test: "androidx.test:core:1.2.0",

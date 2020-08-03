@@ -35,7 +35,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyZeroInteractions;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableSet;
@@ -154,7 +154,7 @@ public class ClientCallImplTest {
 
   @After
   public void tearDown() {
-    verifyZeroInteractions(streamTracerFactory);
+    verifyNoInteractions(streamTracerFactory);
   }
 
   @Test
@@ -696,7 +696,7 @@ public class ClientCallImplTest {
     call.halfClose();
 
     // Stream should never be created.
-    verifyZeroInteractions(clientStreamProvider);
+    verifyNoInteractions(clientStreamProvider);
 
     try {
       call.sendMessage(null);
@@ -729,7 +729,7 @@ public class ClientCallImplTest {
     assertEquals(Status.Code.DEADLINE_EXCEEDED, statusCaptor.getValue().getCode());
     assertThat(statusCaptor.getValue().getDescription())
         .startsWith("ClientCall started after deadline exceeded");
-    verifyZeroInteractions(clientStreamProvider);
+    verifyNoInteractions(clientStreamProvider);
   }
 
   @Test

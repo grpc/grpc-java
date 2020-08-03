@@ -24,7 +24,6 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.verifyZeroInteractions;
 
 import com.google.common.io.ByteStreams;
 import com.google.common.primitives.Bytes;
@@ -57,7 +56,7 @@ public class ApplicationThreadDeframerTest {
   @Test
   public void requestInvokesMessagesAvailableOnListener() {
     applicationThreadDeframer.request(1);
-    verifyZeroInteractions(mockDeframer);
+    verifyNoMoreInteractions(mockDeframer);
     listener.runStoredProducer();
     verify(mockDeframer).request(1);
   }
@@ -66,7 +65,7 @@ public class ApplicationThreadDeframerTest {
   public void deframeInvokesMessagesAvailableOnListener() {
     ReadableBuffer frame = ReadableBuffers.wrap(new byte[1]);
     applicationThreadDeframer.deframe(frame);
-    verifyZeroInteractions(mockDeframer);
+    verifyNoMoreInteractions(mockDeframer);
     listener.runStoredProducer();
     verify(mockDeframer).deframe(frame);
   }
@@ -74,7 +73,7 @@ public class ApplicationThreadDeframerTest {
   @Test
   public void closeWhenCompleteInvokesMessagesAvailableOnListener() {
     applicationThreadDeframer.closeWhenComplete();
-    verifyZeroInteractions(mockDeframer);
+    verifyNoMoreInteractions(mockDeframer);
     listener.runStoredProducer();
     verify(mockDeframer).closeWhenComplete();
   }

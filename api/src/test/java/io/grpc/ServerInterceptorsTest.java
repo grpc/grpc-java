@@ -25,8 +25,8 @@ import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.verifyZeroInteractions;
 
 import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.MethodDescriptor.MethodType;
@@ -102,9 +102,9 @@ public class ServerInterceptorsTest {
   /** Final checks for all tests. */
   @After
   public void makeSureExpectedMocksUnused() {
-    verifyZeroInteractions(requestMarshaller);
-    verifyZeroInteractions(responseMarshaller);
-    verifyZeroInteractions(listener);
+    verifyNoInteractions(requestMarshaller);
+    verifyNoInteractions(responseMarshaller);
+    verifyNoInteractions(listener);
   }
 
   @Test
