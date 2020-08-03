@@ -34,6 +34,7 @@ import io.grpc.internal.ObjectPool;
 import io.grpc.xds.EnvoyProtoData.ClusterWeight;
 import io.grpc.xds.EnvoyProtoData.Route;
 import io.grpc.xds.EnvoyProtoData.RouteAction;
+import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
 import io.grpc.xds.XdsClient.ConfigUpdate;
 import io.grpc.xds.XdsClient.ConfigWatcher;
 import io.grpc.xds.XdsClient.XdsClientPoolFactory;
@@ -47,7 +48,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.annotation.Nullable;
 
@@ -69,6 +69,7 @@ final class XdsNameResolver extends NameResolver {
   private final ServiceConfigParser serviceConfigParser;
   private final SynchronizationContext syncContext;
   private final XdsClientPoolFactory xdsClientPoolFactory;
+  private final ThreadSafeRandom random;
   private final Map<String, AtomicInteger> clusterRefs = new ConcurrentHashMap<>();
 
   private volatile List<Route> routes = Collections.emptyList();
@@ -78,15 +79,25 @@ final class XdsNameResolver extends NameResolver {
   @Nullable
   private XdsClient xdsClient;
 
+  XdsNameResolver(String name,
+      ServiceConfigParser serviceConfigParser,
+      SynchronizationContext syncContext,
+      XdsClientPoolFactory xdsClientPoolFactory) {
+    this(name, serviceConfigParser, syncContext, xdsClientPoolFactory,
+        ThreadSafeRandomImpl.instance);
+  }
+
   XdsNameResolver(
       String name,
       ServiceConfigParser serviceConfigParser,
       SynchronizationContext syncContext,
-      XdsClientPoolFactory xdsClientPoolFactory) {
+      XdsClientPoolFactory xdsClientPoolFactory,
+      ThreadSafeRandom random) {
     authority = GrpcUtil.checkAuthority(checkNotNull(name, "name"));
     this.serviceConfigParser = checkNotNull(serviceConfigParser, "serviceConfigParser");
     this.syncContext = checkNotNull(syncContext, "syncContext");
     this.xdsClientPoolFactory = checkNotNull(xdsClientPoolFactory, "xdsClientPoolFactory");
+    this.random = checkNotNull(random, "random");
     logger = XdsLogger.withLogId(InternalLogId.allocate("xds-resolver", name));
     logger.log(XdsLogLevel.INFO, "Created resolver for {0}", name);
   }
@@ -145,7 +156,7 @@ final class XdsNameResolver extends NameResolver {
           for (ClusterWeight weightedCluster : action.getWeightedCluster()) {
             totalWeight += weightedCluster.getWeight();
           }
-          int select = ThreadLocalRandom.current().nextInt(totalWeight);
+          int select = random.nextInt(totalWeight);
           int accumulator = 0;
           for (ClusterWeight weightedCluster : action.getWeightedCluster()) {
             accumulator += weightedCluster.getWeight();

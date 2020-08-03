@@ -17,10 +17,12 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
@@ -42,6 +44,7 @@ import io.grpc.internal.JsonUtil;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.PickSubchannelArgsImpl;
 import io.grpc.testing.TestMethodDescriptors;
+import io.grpc.xds.EnvoyProtoData.ClusterWeight;
 import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.EnvoyProtoData.Route;
 import io.grpc.xds.EnvoyProtoData.RouteAction;
@@ -89,6 +92,8 @@ public class XdsNameResolverTest {
   private final CallInfo call2 = new CallInfo("GreetService", "bye");
 
   @Mock
+  private ThreadSafeRandom mockRandom;
+  @Mock
   private NameResolver.Listener2 mockListener;
   @Captor
   private ArgumentCaptor<ResolutionResult> resolutionResultCaptor;
@@ -98,8 +103,8 @@ public class XdsNameResolverTest {
 
   @Before
   public void setUp() {
-    resolver =
-        new XdsNameResolver(AUTHORITY, serviceConfigParser, syncContext, xdsClientPoolFactory);
+    resolver = new XdsNameResolver(AUTHORITY, serviceConfigParser, syncContext,
+        xdsClientPoolFactory, mockRandom);
     xdsClientPoolFactory.loadBootstrapper(new Bootstrapper() {
       @Override
       public BootstrapInfo readBootstrap() {
@@ -153,7 +158,6 @@ public class XdsNameResolverTest {
     assertThat(error.getDescription()).isEqualTo("server unreachable");
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void resolve_simpleCallSucceeds() {
     InternalConfigSelector configSelector = resolveToClusters();
@@ -280,6 +284,46 @@ public class XdsNameResolverTest {
         Arrays.asList(cluster1, cluster2), (Map<String, ?>) result.getServiceConfig().getConfig());
     assertThat(result.getAttributes().get(XdsAttributes.XDS_CLIENT_POOL)).isNotNull();
     return result.getAttributes().get(InternalConfigSelector.KEY);
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test
+  public void resolve_simpleCallSucceeds_routeToWeightedCluster() {
+    when(mockRandom.nextInt(anyInt())).thenReturn(90, 10);
+    resolver.start(mockListener);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    xdsClient.deliverRoutes(
+        Arrays.asList(
+            new Route(
+                new RouteMatch(null, call1.getFullMethodNameForPath()),
+                new RouteAction(
+                    TimeUnit.SECONDS.toNanos(20L), null,
+                    Arrays.asList(
+                        new ClusterWeight(cluster1, 20), new ClusterWeight(cluster2, 80))))));
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    ResolutionResult result = resolutionResultCaptor.getValue();
+    assertThat(result.getAddresses()).isEmpty();
+    assertServiceConfigForLoadBalancingConfig(
+        Arrays.asList(cluster1, cluster2), (Map<String, ?>) result.getServiceConfig().getConfig());
+    assertThat(result.getAttributes().get(XdsAttributes.XDS_CLIENT_POOL)).isNotNull();
+    InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
+    Result selectResult = configSelector.selectConfig(
+        new PickSubchannelArgsImpl(call1.methodDescriptor, new Metadata(), CallOptions.DEFAULT));
+    assertThat(selectResult.getStatus().isOk()).isTrue();
+    assertThat(selectResult.getCallOptions().getOption(XdsNameResolver.CLUSTER_SELECTION_KEY))
+        .isEqualTo(cluster2);
+    assertServiceConfigForMethodConfig(
+        call1.service, call1.method, 20.0,
+        (Map<String, ?>) selectResult.getConfig().getConfig());
+
+    selectResult = configSelector.selectConfig(
+        new PickSubchannelArgsImpl(call1.methodDescriptor, new Metadata(), CallOptions.DEFAULT));
+    assertThat(selectResult.getStatus().isOk()).isTrue();
+    assertThat(selectResult.getCallOptions().getOption(XdsNameResolver.CLUSTER_SELECTION_KEY))
+        .isEqualTo(cluster1);
+    assertServiceConfigForMethodConfig(
+        call1.service, call1.method, 20.0,
+        (Map<String, ?>) selectResult.getConfig().getConfig());
   }
 
   /**
