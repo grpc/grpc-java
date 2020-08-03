@@ -16,14 +16,27 @@
 
 package io.grpc.xds;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import com.google.common.base.Preconditions;
+import com.google.common.base.Stopwatch;
+import com.google.common.base.Supplier;
 import io.grpc.Internal;
 import io.grpc.NameResolver.Args;
 import io.grpc.NameResolverProvider;
+import io.grpc.SynchronizationContext;
+import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.ObjectPool;
+import io.grpc.xds.Bootstrapper.BootstrapInfo;
+import io.grpc.xds.XdsClient.RefCountedXdsClientObjectPool;
 import io.grpc.xds.XdsClient.XdsChannelFactory;
+import io.grpc.xds.XdsClient.XdsClientFactory;
+import io.grpc.xds.XdsClient.XdsClientPoolFactory;
+import java.io.IOException;
 import java.net.URI;
+import java.util.concurrent.ScheduledExecutorService;
 
 /**
  * A provider for {@link XdsNameResolver}.
@@ -43,21 +56,24 @@ public final class XdsNameResolverProvider extends NameResolverProvider {
   @Override
   public XdsNameResolver newNameResolver(URI targetUri, Args args) {
     if (SCHEME.equals(targetUri.getScheme())) {
-      String targetPath = Preconditions.checkNotNull(targetUri.getPath(), "targetPath");
+      String targetPath = checkNotNull(targetUri.getPath(), "targetPath");
       Preconditions.checkArgument(
           targetPath.startsWith("/"),
           "the path component (%s) of the target (%s) must start with '/'",
           targetPath,
           targetUri);
       String name = targetPath.substring(1);
-      return
-          new XdsNameResolver(
+      XdsClientPoolFactory xdsClientPoolFactory =
+          new RefCountedXdsClientPoolFactory(
               name,
-              args,
-              new ExponentialBackoffPolicy.Provider(),
-              GrpcUtil.STOPWATCH_SUPPLIER,
+              Bootstrapper.getInstance(),
               XdsChannelFactory.getInstance(),
-              Bootstrapper.getInstance());
+              args.getSynchronizationContext(), args.getScheduledExecutorService(),
+              new ExponentialBackoffPolicy.Provider(),
+              GrpcUtil.STOPWATCH_SUPPLIER);
+      return new XdsNameResolver(
+          name, args.getServiceConfigParser(),
+          args.getSynchronizationContext(), xdsClientPoolFactory);
     }
     return null;
   }
@@ -77,5 +93,58 @@ public final class XdsNameResolverProvider extends NameResolverProvider {
     // Set priority value to be < 5 as we still want DNS resolver to be the primary default
     // resolver.
     return 4;
+  }
+
+  static class RefCountedXdsClientPoolFactory implements XdsClientPoolFactory {
+    private final String serviceName;
+    private final Bootstrapper bootstrapper;
+    private final XdsChannelFactory channelFactory;
+    private final SynchronizationContext syncContext;
+    private final ScheduledExecutorService timeService;
+    private final BackoffPolicy.Provider backoffPolicyProvider;
+    private final Supplier<Stopwatch> stopwatchSupplier;
+
+    private BootstrapInfo bootstrapInfo;
+
+    RefCountedXdsClientPoolFactory(
+        String serviceName,
+        Bootstrapper bootstrapper,
+        XdsChannelFactory channelFactory,
+        SynchronizationContext syncContext,
+        ScheduledExecutorService timeService,
+        BackoffPolicy.Provider backoffPolicyProvider,
+        Supplier<Stopwatch> stopwatchSupplier) {
+      this.serviceName = checkNotNull(serviceName, "serviceName");
+      this.bootstrapper = checkNotNull(bootstrapper, "bootstrapper");
+      this.channelFactory = checkNotNull(channelFactory, "channelFactory");
+      this.syncContext = checkNotNull(syncContext, "syncContext");
+      this.timeService = checkNotNull(timeService, "timeService");
+      this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
+      this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
+    }
+
+    @Override
+    public void bootstrap() throws IOException {
+      if (bootstrapInfo != null) {
+        return;
+      }
+      bootstrapInfo = bootstrapper.readBootstrap();
+    }
+
+    @Override
+    public ObjectPool<XdsClient> newXdsClientObjectPool() {
+      if (bootstrapInfo == null) {
+        throw new IllegalStateException("Not bootstrapped");
+      }
+      XdsClientFactory xdsClientFactory = new XdsClientFactory() {
+        @Override
+        XdsClient createXdsClient() {
+          return new XdsClientImpl(
+              serviceName, bootstrapInfo.getServers(), channelFactory, bootstrapInfo.getNode(),
+              syncContext, timeService, backoffPolicyProvider, stopwatchSupplier);
+        }
+      };
+      return new RefCountedXdsClientObjectPool(xdsClientFactory);
+    }
   }
 }

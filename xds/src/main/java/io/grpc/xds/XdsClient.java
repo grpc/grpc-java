@@ -38,6 +38,7 @@ import io.grpc.xds.EnvoyProtoData.Route;
 import io.grpc.xds.EnvoyServerProtoData.Listener;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -670,5 +671,12 @@ abstract class XdsClient {
     boolean isUseProtocolV3() {
       return useProtocolV3;
     }
+  }
+
+  interface XdsClientPoolFactory {
+
+    void bootstrap() throws IOException;
+
+    ObjectPool<XdsClient> newXdsClientObjectPool();
   }
 }
