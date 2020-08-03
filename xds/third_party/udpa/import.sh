@@ -18,7 +18,7 @@
 set -e
 BRANCH=master
 # import VERSION from one of the google internal CLs
-VERSION=3b31d022a144b334eb2224838e4d6952ab5253aa
+VERSION=efcf912fb35470672231c7b7bef620f3d17f655a
 GIT_REPO="https://github.com/cncf/udpa.git"
 GIT_BASE_DIR=udpa
 SOURCE_PROTO_BASE_DIR=udpa
@@ -29,6 +29,11 @@ udpa/annotations/security.proto
 udpa/annotations/sensitive.proto
 udpa/annotations/status.proto
 udpa/annotations/versioning.proto
+udpa/core/v1/authority.proto
+udpa/core/v1/collection_entry.proto
+udpa/core/v1/context_params.proto
+udpa/core/v1/resource_locator.proto
+udpa/core/v1/resource_name.proto
 udpa/data/orca/v1/orca_load_report.proto
 udpa/service/orca/v1/orca.proto
 )
