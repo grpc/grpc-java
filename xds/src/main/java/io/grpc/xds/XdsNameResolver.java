@@ -19,8 +19,6 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Stopwatch;
-import com.google.common.base.Supplier;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.InternalConfigSelector;
@@ -30,21 +28,15 @@ import io.grpc.Metadata;
 import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
-import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.ObjectPool;
-import io.grpc.xds.Bootstrapper.BootstrapInfo;
-import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.ClusterWeight;
-import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.EnvoyProtoData.Route;
 import io.grpc.xds.EnvoyProtoData.RouteAction;
 import io.grpc.xds.XdsClient.ConfigUpdate;
 import io.grpc.xds.XdsClient.ConfigWatcher;
-import io.grpc.xds.XdsClient.RefCountedXdsClientObjectPool;
-import io.grpc.xds.XdsClient.XdsChannelFactory;
-import io.grpc.xds.XdsClient.XdsClientFactory;
+import io.grpc.xds.XdsClient.XdsClientPoolFactory;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.io.IOException;
 import java.util.Collection;
@@ -55,7 +47,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.annotation.Nullable;
@@ -70,18 +61,14 @@ import javax.annotation.Nullable;
  */
 final class XdsNameResolver extends NameResolver {
 
-  private static final CallOptions.Key<String> CLUSTER_SELECTION_KEY =
+  static final CallOptions.Key<String> CLUSTER_SELECTION_KEY =
       CallOptions.Key.create("io.grpc.xds.CLUSTER_SELECTION_KEY");
 
   private final XdsLogger logger;
   private final String authority;
-  private final XdsChannelFactory channelFactory;
-  private final SynchronizationContext syncContext;
-  private final ScheduledExecutorService timeService;
   private final ServiceConfigParser serviceConfigParser;
-  private final BackoffPolicy.Provider backoffPolicyProvider;
-  private final Supplier<Stopwatch> stopwatchSupplier;
-  private final Bootstrapper bootstrapper;
+  private final SynchronizationContext syncContext;
+  private final XdsClientPoolFactory xdsClientPoolFactory;
   private final Map<String, AtomicInteger> clusterRefs = new ConcurrentHashMap<>();
 
   private volatile List<Route> routes = Collections.emptyList();
@@ -93,19 +80,13 @@ final class XdsNameResolver extends NameResolver {
 
   XdsNameResolver(
       String name,
-      Args args,
-      BackoffPolicy.Provider backoffPolicyProvider,
-      Supplier<Stopwatch> stopwatchSupplier,
-      XdsChannelFactory channelFactory,
-      Bootstrapper bootstrapper) {
+      ServiceConfigParser serviceConfigParser,
+      SynchronizationContext syncContext,
+      XdsClientPoolFactory xdsClientPoolFactory) {
     authority = GrpcUtil.checkAuthority(checkNotNull(name, "name"));
-    this.channelFactory = checkNotNull(channelFactory, "channelFactory");
-    this.syncContext = checkNotNull(args.getSynchronizationContext(), "syncContext");
-    this.timeService = checkNotNull(args.getScheduledExecutorService(), "timeService");
-    this.serviceConfigParser = checkNotNull(args.getServiceConfigParser(), "serviceConfigParser");
-    this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
-    this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
-    this.bootstrapper = checkNotNull(bootstrapper, "bootstrapper");
+    this.serviceConfigParser = checkNotNull(serviceConfigParser, "serviceConfigParser");
+    this.syncContext = checkNotNull(syncContext, "syncContext");
+    this.xdsClientPoolFactory = checkNotNull(xdsClientPoolFactory, "xdsClientPoolFactory");
     logger = XdsLogger.withLogId(InternalLogId.allocate("xds-resolver", name));
     logger.log(XdsLogLevel.INFO, "Created resolver for {0}", name);
   }
@@ -117,43 +98,20 @@ final class XdsNameResolver extends NameResolver {
 
   @Override
   public void start(Listener2 listener) {
-    BootstrapInfo bootstrapInfo;
     try {
-      bootstrapInfo = bootstrapper.readBootstrap();
-    } catch (Exception e) {
+      xdsClientPoolFactory.bootstrap();
+    } catch (IOException e) {
       listener.onError(Status.UNAVAILABLE.withDescription("Failed to bootstrap").withCause(e));
       return;
     }
-    final List<ServerInfo> serverList = bootstrapInfo.getServers();
-    final Node node = bootstrapInfo.getNode();
-    if (serverList.isEmpty()) {
-      listener.onError(
-          Status.UNAVAILABLE.withDescription("No management server provided by bootstrap"));
-      return;
-    }
     this.listener = checkNotNull(listener, "listener");
-
-    XdsClientFactory xdsClientFactory = new XdsClientFactory() {
-      @Override
-      XdsClient createXdsClient() {
-        return
-            new XdsClientImpl(
-                authority,
-                serverList,
-                channelFactory,
-                node,
-                syncContext,
-                timeService,
-                backoffPolicyProvider,
-                stopwatchSupplier);
-      }
-    };
-    xdsClientPool = new RefCountedXdsClientObjectPool(xdsClientFactory);
+    xdsClientPool = xdsClientPoolFactory.newXdsClientObjectPool();
     xdsClient = xdsClientPool.getObject();
     xdsClient.watchConfigData(authority, new ConfigWatcherImpl());
   }
 
-  private final class ConfigSelector extends InternalConfigSelector {
+  @VisibleForTesting
+  final class ConfigSelector extends InternalConfigSelector {
     @Override
     public Result selectConfig(PickSubchannelArgs args) {
       // Index ASCII headers by keys.
@@ -209,13 +167,16 @@ final class XdsNameResolver extends NameResolver {
           releaseCluster(finalCluster);
         }
       }
-      
+
+      String serviceConfigJson =
+          generateServiceConfigWithMethodConfig(
+              args.getMethodDescriptor().getFullMethodName(),
+              selectedRoute.getRouteAction().getTimeoutNano());
+      ConfigOrError parsedServiceConfig = parseServiceConfig(serviceConfigJson);
       return
           Result.newBuilder()
               .setCallOptions(args.getCallOptions().withOption(CLUSTER_SELECTION_KEY, cluster))
-              // TODO (chengyuanzhang): generate config for method
-              .setConfig(
-                  serviceConfigParser.parseServiceConfig(Collections.<String, Object>emptyMap()))
+              .setConfig(parsedServiceConfig)
               .setCommittedCallback(new SelectionCompleted())
               .build();
     }
@@ -236,27 +197,25 @@ final class XdsNameResolver extends NameResolver {
       int count = clusterRefs.get(cluster).decrementAndGet();
       if (count == 0) {
         clusterRefs.remove(cluster);
-        updateResolutionResult();
+        syncContext.execute(new Runnable() {
+          @Override
+          public void run() {
+            updateResolutionResult();
+          }
+        });
       }
     }
   }
 
-  @SuppressWarnings("unchecked")
   private void updateResolutionResult() {
-    String serviceConfigJson = generateServiceConfigJson(clusterRefs.keySet());
+    String serviceConfigJson = generateServiceConfigWithLoadBalancingConfig(clusterRefs.keySet());
     logger.log(XdsLogLevel.INFO, "Generated service config:\n{0}", serviceConfigJson);
-    Map<String, ?> serviceConfig;
-    try {
-      serviceConfig = (Map<String, ?>) JsonParser.parse(serviceConfigJson);
-    } catch (IOException e) {
-      throw new AssertionError("Malformed lb config: " + e);
-    }
+    ConfigOrError parsedServiceConfig = parseServiceConfig(serviceConfigJson);
     Attributes attrs =
         Attributes.newBuilder()
             .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
             .set(InternalConfigSelector.KEY, new ConfigSelector())
             .build();
-    ConfigOrError parsedServiceConfig = serviceConfigParser.parseServiceConfig(serviceConfig);
     ResolutionResult result =
         ResolutionResult.newBuilder()
             .setAttributes(attrs)
@@ -279,13 +238,17 @@ final class XdsNameResolver extends NameResolver {
           }
         }
       }
+      boolean receivedNewCluster = false;
       for (String newCluster : clusters) {
         if (!clusterRefs.containsKey(newCluster)) {
           clusterRefs.put(newCluster, new AtomicInteger(1));
+          receivedNewCluster = true;
         }
       }
       // Update service config to include newly added clusters.
-      updateResolutionResult();
+      if (receivedNewCluster) {
+        updateResolutionResult();
+      }
       // Make newly added clusters selectable by config selector.
       routes = update.getRoutes();
       // Drops reference for deleted clusters, update service config to remove deleted clusters
@@ -295,6 +258,7 @@ final class XdsNameResolver extends NameResolver {
         if (!clusters.contains(entry.getKey())) {
           int count = entry.getValue().decrementAndGet();
           if (count == 0) {
+            clusterRefs.remove(entry.getKey());
             shouldUpdateResult = true;
           }
         }
@@ -325,8 +289,39 @@ final class XdsNameResolver extends NameResolver {
     }
   }
 
+  @SuppressWarnings("unchecked")
+  private ConfigOrError parseServiceConfig(String serviceConfigJson) {
+    Map<String, ?> serviceConfig;
+    try {
+      serviceConfig = (Map<String, ?>) JsonParser.parse(serviceConfigJson);
+    } catch (IOException e) {
+      return ConfigOrError.fromError(
+          Status.INTERNAL.withCause(e).withDescription("bug: malformed service config"));
+    }
+    return serviceConfigParser.parseServiceConfig(serviceConfig);
+  }
+
   @VisibleForTesting
-  static String generateServiceConfigJson(Collection<String> clusters) {
+  static String generateServiceConfigWithMethodConfig(
+      String fullMethodName, long timeoutNano) {
+    int index = fullMethodName.lastIndexOf('/');
+    String serviceName = fullMethodName.substring(0, index);
+    String methodName = fullMethodName.substring(index + 1);
+    StringBuilder sb = new StringBuilder();
+    sb.append("{\n");
+    sb.append("  \"methodConfig\": [{\n");
+    sb.append("    \"name\": [{\n");
+    sb.append("      \"service\": \"" + serviceName + "\",\n");
+    sb.append("      \"method\": \"" + methodName + "\"\n");
+    sb.append("    }],\n");
+    sb.append("    \"timeout\": \"" + timeoutNano / 1_000_000_000.0 + "s\"\n");
+    sb.append("  }]\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  @VisibleForTesting
+  static String generateServiceConfigWithLoadBalancingConfig(Collection<String> clusters) {
     StringBuilder sb = new StringBuilder();
     sb.append("{\n");
     sb.append("  \"loadBalancingConfig\": [{\n");
@@ -352,6 +347,12 @@ final class XdsNameResolver extends NameResolver {
     sb.append("  }]\n");
     sb.append("}");
     return sb.toString();
+  }
+
+  @VisibleForTesting
+  @Nullable
+  XdsClient getXdsClient() {
+    return xdsClient;
   }
 
   @Override
