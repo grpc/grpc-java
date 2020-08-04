@@ -304,7 +304,7 @@ public class BootstrapperTest {
     String rawData =
         "{\n"
             + "  \"xds_servers\": [],\n"
-            + "  \"cert_providers\": {\n"
+            + "  \"certificate_providers\": {\n"
             + "    \"gcp_id\": {\n"
             + "      \"plugin_name\": \"meshca\",\n"
             + "      \"config\": {\n"
