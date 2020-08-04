@@ -36,6 +36,8 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.ref.Reference;
 import java.lang.ref.WeakReference;
+import java.nio.ByteBuffer;
+import java.util.List;
 
 /**
  * Utility methods for using protobuf with grpc.
@@ -180,8 +182,10 @@ public final class ProtoLiteUtils {
           // TODO(chengyuanzhang): we may still want to go with the byte array approach for small
           //  messages.
           if (stream instanceof ByteBufferReadable) {
-            cis = CodedInputStream.newInstance(
-                ((ByteBufferReadable) stream).readByteBuffers(size));
+            List<ByteBuffer> byteBuffers = ((ByteBufferReadable) stream).readByteBuffers(size);
+            cis = byteBuffers.size() == 1
+                ? CodedInputStream.newInstance(byteBuffers.get(0))
+                : CodedInputStream.newInstance(byteBuffers);
           } else if (size < DEFAULT_MAX_MESSAGE_SIZE) {
             Reference<byte[]> ref;
             // buf should not be used after this method has returned.
