@@ -118,12 +118,12 @@ final class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     class DeadlineExceededRunnable implements Runnable {
       @Override
       public void run() {
-        synchronized (DelayedClientCall.this) {
-          if (realCall != null) {
-            return;
-          }
-        }
-        cancel(Status.DEADLINE_EXCEEDED.withDescription(buf.toString()));
+        cancel(
+            Status.DEADLINE_EXCEEDED.withDescription(buf.toString()),
+            // We should not to cancel the call if the realCall is set because there could be a
+            // race between cancel() and realCall.start(). The realCall will handle deadline by
+            // itself.
+            /* onlyCancelPendingCall= */ true);
       }
     }
 
@@ -191,10 +191,13 @@ final class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     if (cause != null) {
       status = status.withCause(cause);
     }
-    cancel(status);
+    cancel(status, false);
   }
 
-  private void cancel(final Status status) {
+  /**
+   * Cancels the call unless {@code realCall} is set and {@code onlyCancelPendingCall} is true.
+   */
+  private void cancel(final Status status, boolean onlyCancelPendingCall) {
     boolean delegateToRealCall = true;
     Listener<RespT> listenerToClose = null;
     synchronized (this) {
@@ -207,6 +210,8 @@ final class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         // If listener == null, then start() will later call listener with 'error'
         listenerToClose = listener;
         error = status;
+      } else if (onlyCancelPendingCall) {
+        return;
       }
     }
     if (delegateToRealCall) {
