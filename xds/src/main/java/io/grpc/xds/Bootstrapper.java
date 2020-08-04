@@ -16,6 +16,8 @@
 
 package io.grpc.xds;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Internal;
 import io.grpc.internal.GrpcUtil;
@@ -165,24 +167,12 @@ public abstract class Bootstrapper {
     Map<String, CertificateProviderInfo> certProviders = null;
     if (certProvidersBlob != null) {
       certProviders = new HashMap<>(certProvidersBlob.size());
-      for (Map.Entry<String, ?> entry : certProvidersBlob.entrySet()) {
-        String name = entry.getKey();
-        Object value = entry.getValue();
-        if (!(value instanceof Map)) {
-          throw new IOException(
-              "Invalid bootstrap: invalid 'certificate_providers' entry for " + name);
-        }
-        @SuppressWarnings("unchecked")
-        Map<String, ?> valueMap = (Map<String, ?>) value;
-        Object pluginName = valueMap.get("plugin_name");
-        Object config = valueMap.get("config");
-        if (!(pluginName instanceof String) || !(config instanceof Map)) {
-          throw new IOException(
-              "Invalid bootstrap: invalid 'certificate_providers' entry for " + name);
-        }
-        @SuppressWarnings("unchecked")
+      for (String name : certProvidersBlob.keySet()) {
+        Map<String, ?> valueMap = JsonUtil.getObject(certProvidersBlob, name);
+        String pluginName = JsonUtil.getString(valueMap, "plugin_name");
+        Map<String, ?> config =  JsonUtil.getObject(valueMap, "config");
         CertificateProviderInfo certificateProviderInfo =
-            new CertificateProviderInfo((String) pluginName, (Map<String, ?>) config);
+            new CertificateProviderInfo(pluginName, config);
         certProviders.put(name, certificateProviderInfo);
       }
     }
@@ -255,14 +245,15 @@ public abstract class Bootstrapper {
    * Data class containing Certificate provider information: the plugin-name and an opaque
    * Map that represents the config for that plugin.
    */
+  @Internal
   @Immutable
-  static class CertificateProviderInfo {
+  public static class CertificateProviderInfo {
     private final String pluginName;
     private final Map<String, ?> config;
 
     CertificateProviderInfo(String pluginName, Map<String, ?> config) {
-      this.pluginName = pluginName;
-      this.config = config;
+      this.pluginName = checkNotNull(pluginName, "pluginName");
+      this.config = checkNotNull(config, "config");
     }
 
     String getPluginName() {
@@ -282,7 +273,7 @@ public abstract class Bootstrapper {
   public static class BootstrapInfo {
     private List<ServerInfo> servers;
     private final Node node;
-    private final Map<String, CertificateProviderInfo> certProviders;
+    @Nullable private final Map<String, CertificateProviderInfo> certProviders;
 
     @VisibleForTesting
     BootstrapInfo(

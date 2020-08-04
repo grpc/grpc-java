@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.fail;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
@@ -351,6 +352,148 @@ public class BootstrapperTest {
     assertThat(fileProvider.getConfig()).isInstanceOf(Map.class);
     Map<String, ?> meshCaConfig = (Map<String, ?>)gcpId.getConfig();
     assertThat(meshCaConfig.get("key_size")).isEqualTo(2048);
+  }
+
+  @Test
+  public void parseBootstrap_badPluginName() throws IOException {
+    String rawData =
+        "{\n"
+            + "  \"xds_servers\": [],\n"
+            + "  \"certificate_providers\": {\n"
+            + "    \"gcp_id\": {\n"
+            + "      \"plugin_name\": 234,\n"
+            + "      \"config\": {\n"
+            + "        \"server\": {\n"
+            + "          \"api_type\": \"GRPC\",\n"
+            + "          \"grpc_services\": [{\n"
+            + "            \"google_grpc\": {\n"
+            + "              \"target_uri\": \"meshca.com\",\n"
+            + "              \"channel_credentials\": {\"google_default\": {}},\n"
+            + "              \"call_credentials\": [{\n"
+            + "                \"sts_service\": {\n"
+            + "                  \"token_exchange_service\": \"securetoken.googleapis.com\",\n"
+            + "                  \"subject_token_path\": \"/etc/secret/sajwt.token\"\n"
+            + "                }\n"
+            + "              }]\n" // end call_credentials
+            + "            },\n" // end google_grpc
+            + "            \"time_out\": {\"seconds\": 10}\n"
+            + "          }]\n" // end grpc_services
+            + "        },\n" // end server
+            + "        \"certificate_lifetime\": {\"seconds\": 86400},\n"
+            + "        \"renewal_grace_period\": {\"seconds\": 3600},\n"
+            + "        \"key_type\": \"RSA\",\n"
+            + "        \"key_size\": 2048,\n"
+            + "        \"location\": \"https://container.googleapis.com/v1/project/test-project1/locations/test-zone2/clusters/test-cluster3\"\n"
+            + "      }\n" // end config
+            + "    },\n" // end gcp_id
+            + "    \"file_provider\": {\n"
+            + "      \"plugin_name\": \"file_watcher\",\n"
+            + "      \"config\": {\"path\": \"/etc/secret/certs\"}\n"
+            + "    }\n"
+            + "  }\n"
+            + "}";
+
+    try {
+      Bootstrapper.parseConfig(rawData);
+      fail("exception expected");
+    } catch (ClassCastException expected) {
+      assertThat(expected).hasMessageThat().contains("value '234.0' for key 'plugin_name' in");
+    }
+  }
+
+  @Test
+  public void parseBootstrap_badConfig() throws IOException {
+    String rawData =
+        "{\n"
+            + "  \"xds_servers\": [],\n"
+            + "  \"certificate_providers\": {\n"
+            + "    \"gcp_id\": {\n"
+            + "      \"plugin_name\": \"meshca\",\n"
+            + "      \"config\": \"badValue\"\n"
+            + "    },\n" // end gcp_id
+            + "    \"file_provider\": {\n"
+            + "      \"plugin_name\": \"file_watcher\",\n"
+            + "      \"config\": {\"path\": \"/etc/secret/certs\"}\n"
+            + "    }\n"
+            + "  }\n"
+            + "}";
+
+    try {
+      Bootstrapper.parseConfig(rawData);
+      fail("exception expected");
+    } catch (ClassCastException expected) {
+      assertThat(expected).hasMessageThat().contains("value 'badValue' for key 'config' in");
+    }
+  }
+
+  @Test
+  public void parseBootstrap_missingConfig() throws IOException {
+    String rawData =
+        "{\n"
+            + "  \"xds_servers\": [],\n"
+            + "  \"certificate_providers\": {\n"
+            + "    \"gcp_id\": {\n"
+            + "      \"plugin_name\": \"meshca\"\n"
+            + "    },\n" // end gcp_id
+            + "    \"file_provider\": {\n"
+            + "      \"plugin_name\": \"file_watcher\",\n"
+            + "      \"config\": {\"path\": \"/etc/secret/certs\"}\n"
+            + "    }\n"
+            + "  }\n"
+            + "}";
+
+    try {
+      Bootstrapper.parseConfig(rawData);
+      fail("exception expected");
+    } catch (NullPointerException expected) {
+      assertThat(expected).hasMessageThat().isEqualTo("config");
+    }
+  }
+
+  @Test
+  public void parseBootstrap_missingPluginName() throws IOException {
+    String rawData =
+        "{\n"
+            + "  \"xds_servers\": [],\n"
+            + "  \"certificate_providers\": {\n"
+            + "    \"gcp_id\": {\n"
+            + "      \"plugin_name\": \"meshca\",\n"
+            + "      \"config\": {\n"
+            + "        \"server\": {\n"
+            + "          \"api_type\": \"GRPC\",\n"
+            + "          \"grpc_services\": [{\n"
+            + "            \"google_grpc\": {\n"
+            + "              \"target_uri\": \"meshca.com\",\n"
+            + "              \"channel_credentials\": {\"google_default\": {}},\n"
+            + "              \"call_credentials\": [{\n"
+            + "                \"sts_service\": {\n"
+            + "                  \"token_exchange_service\": \"securetoken.googleapis.com\",\n"
+            + "                  \"subject_token_path\": \"/etc/secret/sajwt.token\"\n"
+            + "                }\n"
+            + "              }]\n" // end call_credentials
+            + "            },\n" // end google_grpc
+            + "            \"time_out\": {\"seconds\": 10}\n"
+            + "          }]\n" // end grpc_services
+            + "        },\n" // end server
+            + "        \"certificate_lifetime\": {\"seconds\": 86400},\n"
+            + "        \"renewal_grace_period\": {\"seconds\": 3600},\n"
+            + "        \"key_type\": \"RSA\",\n"
+            + "        \"key_size\": 2048,\n"
+            + "        \"location\": \"https://container.googleapis.com/v1/project/test-project1/locations/test-zone2/clusters/test-cluster3\"\n"
+            + "      }\n" // end config
+            + "    },\n" // end gcp_id
+            + "    \"file_provider\": {\n"
+            + "      \"config\": {\"path\": \"/etc/secret/certs\"}\n"
+            + "    }\n"
+            + "  }\n"
+            + "}";
+
+    try {
+      Bootstrapper.parseConfig(rawData);
+      fail("exception expected");
+    } catch (NullPointerException expected) {
+      assertThat(expected).hasMessageThat().isEqualTo("pluginName");
+    }
   }
 
   private static Node.Builder getNodeBuilder() {
