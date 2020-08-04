@@ -160,7 +160,8 @@ public abstract class Bootstrapper {
     nodeBuilder.setUserAgentVersion(buildVersion.getImplementationVersion());
     nodeBuilder.addClientFeatures(CLIENT_FEATURE_DISABLE_OVERPROVISIONING);
 
-    return new BootstrapInfo(servers, nodeBuilder.build());
+    Map<String, ?> certProviders = JsonUtil.getObject(rawBootstrap, "cert_providers");
+    return new BootstrapInfo(servers, nodeBuilder.build(), certProviders);
   }
 
   /**
@@ -233,11 +234,13 @@ public abstract class Bootstrapper {
   public static class BootstrapInfo {
     private List<ServerInfo> servers;
     private final Node node;
+    private final Map<String, ?> certProviders;
 
     @VisibleForTesting
-    BootstrapInfo(List<ServerInfo> servers, Node node) {
+    BootstrapInfo(List<ServerInfo> servers, Node node, Map<String, ?> certProviders) {
       this.servers = servers;
       this.node = node;
+      this.certProviders = certProviders;
     }
 
     /**
@@ -252,6 +255,11 @@ public abstract class Bootstrapper {
      */
     public Node getNode() {
       return node;
+    }
+
+    /** Returns the cert-providers config map. */
+    public Map<String, ?> getCertProviders() {
+      return certProviders;
     }
   }
 }

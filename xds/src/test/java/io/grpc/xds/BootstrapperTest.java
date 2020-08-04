@@ -28,6 +28,7 @@ import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.Node;
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -296,6 +297,59 @@ public class BootstrapperTest {
     thrown.expect(IOException.class);
     thrown.expectMessage("Invalid bootstrap: 'xds_servers' contains unknown server.");
     Bootstrapper.parseConfig(rawData);
+  }
+
+  @Test
+  public void parseBootstrap_validData_certProviderInstances() throws IOException {
+    String rawData =
+        "{\n"
+            + "  \"xds_servers\": [],\n"
+            + "  \"cert_providers\": {\n"
+            + "    \"gcp_id\": {\n"
+            + "      \"plugin_name\": \"meshca\",\n"
+            + "      \"config\": {\n"
+            + "        \"server\": {\n"
+            + "          \"api_type\": \"GRPC\",\n"
+            + "          \"grpc_services\": [{\n"
+            + "            \"google_grpc\": {\n"
+            + "              \"target_uri\": \"meshca.com\",\n"
+            + "              \"channel_credentials\": {\"google_default\": {}},\n"
+            + "              \"call_credentials\": [{\n"
+            + "                \"sts_service\": {\n"
+            + "                  \"token_exchange_service\": \"securetoken.googleapis.com\",\n"
+            + "                  \"subject_token_path\": \"/etc/secret/sajwt.token\"\n"
+            + "                }\n"
+            + "              }]\n" // end call_credentials
+            + "            },\n" // end google_grpc
+            + "            \"time_out\": {\"seconds\": 10}\n"
+            + "          }]\n" // end grpc_services
+            + "        },\n" // end server
+            + "        \"certificate_lifetime\": {\"seconds\": 86400},\n"
+            + "        \"renewal_grace_period\": {\"seconds\": 3600},\n"
+            + "        \"key_type\": \"RSA\",\n"
+            + "        \"key_size\": 2048,\n"
+            + "        \"location\": \"https://container.googleapis.com/v1/project/test-project1/locations/test-zone2/clusters/test-cluster3\"\n"
+            + "      }\n" // end config
+            + "    },\n" // end gcp_id
+            + "    \"file_provider\": {\n"
+            + "      \"plugin_name\": \"file_watcher\",\n"
+            + "      \"config\": {\"path\": \"/etc/secret/certs\"}\n"
+            + "    }\n"
+            + "  }\n"
+            + "}";
+
+    BootstrapInfo info = Bootstrapper.parseConfig(rawData);
+    assertThat(info.getServers()).isEmpty();
+    assertThat(info.getNode()).isEqualTo(getNodeBuilder().build());
+    Map<String, ?> certProviders = info.getCertProviders();
+    assertThat(certProviders).isNotNull();
+    Object gcpId = certProviders.get("gcp_id");
+    assertThat(gcpId).isInstanceOf(Map.class);
+    Object fileProvider = certProviders.get("file_provider");
+    assertThat(fileProvider).isInstanceOf(Map.class);
+    @SuppressWarnings("unchecked") Map<String, ?> gcpIdMap = (Map<String, ?>)gcpId;
+    assertThat(gcpIdMap.get("plugin_name")).isEqualTo("meshca");
+    assertThat(gcpIdMap.get("config")).isInstanceOf(Map.class);
   }
 
   private static Node.Builder getNodeBuilder() {
