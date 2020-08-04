@@ -73,15 +73,19 @@ public class CompositeReadableBuffer extends AbstractReadableBuffer {
 
   @Override
   public List<ByteBuffer> readByteBuffers(int length) {
-    final List<ByteBuffer> res = new ArrayList<>();
-    ReadOperation op = new ReadOperation() {
-      @Override
-      int readInternal(ReadableBuffer buffer, int length) {
-        res.addAll(buffer.readByteBuffers(length));
-        return 0;
+    checkReadable(length);
+    readableBytes -= length;
+    List<ByteBuffer> res = new ArrayList<>();
+    while (length > 0) {
+      ReadableBuffer buffer = buffers.peek();
+      int readLength = length;
+      if (buffer.readableBytes() <= length) {
+        readLength = buffer.readableBytes();
+        buffers.remove();
       }
-    };
-    execute(op, length);
+      res.addAll(buffer.readByteBuffers(readLength));
+      length -= readLength;
+    }
     return res;
   }
 

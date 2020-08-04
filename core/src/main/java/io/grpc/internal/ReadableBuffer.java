@@ -111,7 +111,9 @@ public interface ReadableBuffer extends Closeable {
 
   /**
    * Reads {@code length} bytes as {@link ByteBuffer}s. This is an optional method, so callers
-   * should first check {@link #shouldUseByteBuffer}.
+   * should first check {@link #shouldUseByteBuffer}. Some implementation may return
+   * {@link ByteBuffer}s sharing the backing memory with this buffer to prevent copying. Closing
+   * this buffer may result in the returned {@link ByteBuffer}s no longer readable.
    *
    * @param length the total number of bytes to contain in the returned {@link ByteBuffer}s.
    * @throws UnsupportedOperationException the buffer does not support this method
