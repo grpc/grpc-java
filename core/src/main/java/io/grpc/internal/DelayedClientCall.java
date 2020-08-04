@@ -125,7 +125,7 @@ final class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       public void run() {
         cancel(
             Status.DEADLINE_EXCEEDED.withDescription(buf.toString()),
-            // We should not to cancel the call if the realCall is set because there could be a
+            // We should not cancel the call if the realCall is set because there could be a
             // race between cancel() and realCall.start(). The realCall will handle deadline by
             // itself.
             /* onlyCancelPendingCall= */ true);
