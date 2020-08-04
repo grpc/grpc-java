@@ -186,6 +186,7 @@ public final class ProtoLiteUtils {
             cis = byteBuffers.size() == 1
                 ? CodedInputStream.newInstance(byteBuffers.get(0))
                 : CodedInputStream.newInstance(byteBuffers);
+            // TODO(chengyuanzhang): still need to close original ReadableBuffers.
           } else if (size < DEFAULT_MAX_MESSAGE_SIZE) {
             Reference<byte[]> ref;
             // buf should not be used after this method has returned.
