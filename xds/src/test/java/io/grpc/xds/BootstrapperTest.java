@@ -341,15 +341,16 @@ public class BootstrapperTest {
     BootstrapInfo info = Bootstrapper.parseConfig(rawData);
     assertThat(info.getServers()).isEmpty();
     assertThat(info.getNode()).isEqualTo(getNodeBuilder().build());
-    Map<String, ?> certProviders = info.getCertProviders();
+    Map<String, Bootstrapper.CertificateProviderInfo> certProviders = info.getCertProviders();
     assertThat(certProviders).isNotNull();
-    Object gcpId = certProviders.get("gcp_id");
-    assertThat(gcpId).isInstanceOf(Map.class);
-    Object fileProvider = certProviders.get("file_provider");
-    assertThat(fileProvider).isInstanceOf(Map.class);
-    @SuppressWarnings("unchecked") Map<String, ?> gcpIdMap = (Map<String, ?>)gcpId;
-    assertThat(gcpIdMap.get("plugin_name")).isEqualTo("meshca");
-    assertThat(gcpIdMap.get("config")).isInstanceOf(Map.class);
+    Bootstrapper.CertificateProviderInfo gcpId = certProviders.get("gcp_id");
+    Bootstrapper.CertificateProviderInfo fileProvider = certProviders.get("file_provider");
+    assertThat(gcpId.getPluginName()).isEqualTo("meshca");
+    assertThat(gcpId.getConfig()).isInstanceOf(Map.class);
+    assertThat(fileProvider.getPluginName()).isEqualTo("file_watcher");
+    assertThat(fileProvider.getConfig()).isInstanceOf(Map.class);
+    Map<String, ?> meshCaConfig = (Map<String, ?>)gcpId.getConfig();
+    assertThat(meshCaConfig.get("key_size")).isEqualTo(2048);
   }
 
   private static Node.Builder getNodeBuilder() {

@@ -31,6 +31,7 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import javax.annotation.Nullable;
@@ -160,7 +161,31 @@ public abstract class Bootstrapper {
     nodeBuilder.setUserAgentVersion(buildVersion.getImplementationVersion());
     nodeBuilder.addClientFeatures(CLIENT_FEATURE_DISABLE_OVERPROVISIONING);
 
-    Map<String, ?> certProviders = JsonUtil.getObject(rawBootstrap, "certificate_providers");
+    Map<String, ?> certProvidersBlob = JsonUtil.getObject(rawBootstrap, "certificate_providers");
+    Map<String, CertificateProviderInfo> certProviders = null;
+    if (certProvidersBlob != null) {
+      certProviders = new HashMap<>(certProvidersBlob.size());
+      for (Map.Entry<String, ?> entry : certProvidersBlob.entrySet()) {
+        String name = entry.getKey();
+        Object value = entry.getValue();
+        if (!(value instanceof Map)) {
+          throw new IOException(
+              "Invalid bootstrap: invalid 'certificate_providers' entry for " + name);
+        }
+        @SuppressWarnings("unchecked")
+        Map<String, ?> valueMap = (Map<String, ?>) value;
+        Object pluginName = valueMap.get("plugin_name");
+        Object config = valueMap.get("config");
+        if (!(pluginName instanceof String) || !(config instanceof Map)) {
+          throw new IOException(
+              "Invalid bootstrap: invalid 'certificate_providers' entry for " + name);
+        }
+        @SuppressWarnings("unchecked")
+        CertificateProviderInfo certificateProviderInfo =
+            new CertificateProviderInfo((String) pluginName, (Map<String, ?>) config);
+        certProviders.put(name, certificateProviderInfo);
+      }
+    }
     return new BootstrapInfo(servers, nodeBuilder.build(), certProviders);
   }
 
@@ -227,6 +252,29 @@ public abstract class Bootstrapper {
   }
 
   /**
+   * Data class containing Certificate provider information: the plugin-name and an opaque
+   * Map that represents the config for that plugin.
+   */
+  @Immutable
+  static class CertificateProviderInfo {
+    private final String pluginName;
+    private final Map<String, ?> config;
+
+    CertificateProviderInfo(String pluginName, Map<String, ?> config) {
+      this.pluginName = pluginName;
+      this.config = config;
+    }
+
+    String getPluginName() {
+      return pluginName;
+    }
+
+    Map<String, ?> getConfig() {
+      return config;
+    }
+  }
+
+  /**
    * Data class containing the results of reading bootstrap.
    */
   @Internal
@@ -234,10 +282,11 @@ public abstract class Bootstrapper {
   public static class BootstrapInfo {
     private List<ServerInfo> servers;
     private final Node node;
-    private final Map<String, ?> certProviders;
+    private final Map<String, CertificateProviderInfo> certProviders;
 
     @VisibleForTesting
-    BootstrapInfo(List<ServerInfo> servers, Node node, Map<String, ?> certProviders) {
+    BootstrapInfo(
+        List<ServerInfo> servers, Node node, Map<String, CertificateProviderInfo> certProviders) {
       this.servers = servers;
       this.node = node;
       this.certProviders = certProviders;
@@ -258,7 +307,7 @@ public abstract class Bootstrapper {
     }
 
     /** Returns the cert-providers config map. */
-    public Map<String, ?> getCertProviders() {
+    public Map<String, CertificateProviderInfo> getCertProviders() {
       return certProviders;
     }
   }
