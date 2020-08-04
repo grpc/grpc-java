@@ -78,10 +78,15 @@ final class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     this.callExecutor = checkNotNull(callExecutor, "callExecutor");
     checkNotNull(scheduler, "scheduler");
     context = Context.current();
+    initialDeadlineMonitor = scheduleDeadlineIfNeeded(scheduler, deadline);
+  }
+
+  @Nullable
+  private ScheduledFuture<?> scheduleDeadlineIfNeeded(
+      ScheduledExecutorService scheduler, @Nullable Deadline deadline) {
     Deadline contextDeadline = context.getDeadline();
     if (deadline == null && contextDeadline == null) {
-      this.initialDeadlineMonitor = null;
-      return;
+      return null;
     }
     long remainingNanos = Long.MAX_VALUE;
     if (deadline != null) {
@@ -127,8 +132,7 @@ final class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       }
     }
 
-    this.initialDeadlineMonitor =
-        scheduler.schedule(new DeadlineExceededRunnable(), remainingNanos, NANOSECONDS);
+    return scheduler.schedule(new DeadlineExceededRunnable(), remainingNanos, NANOSECONDS);
   }
 
   /**
