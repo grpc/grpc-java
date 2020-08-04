@@ -17,6 +17,7 @@
 package io.grpc;
 
 import java.nio.ByteBuffer;
+import java.util.List;
 import javax.annotation.Nullable;
 
 /**
@@ -31,12 +32,12 @@ public interface ByteBufferReadable {
 
 
   /**
-   * Reads up to a total of {@code length} bytes as {@link ByteBuffer}s.
+   * Reads up to a total of {@code length} bytes as a list of {@link ByteBuffer}s.
    *
    * @param length the maximum number of bytes to be read.
-   * @return {@link ByteBuffer}s that contains the bytes being read or {@code null} if no more
-   *     bytes can be read.
+   * @return a list of {@link ByteBuffer}s that contains the bytes being read or {@code null}
+   *     if no more bytes can be read.
    */
   @Nullable
-  Iterable<ByteBuffer> readByteBuffers(int length);
+  List<ByteBuffer> readByteBuffers(int length);
 }

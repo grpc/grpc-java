@@ -27,6 +27,7 @@ import java.io.OutputStream;
 import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
+import java.util.List;
 import javax.annotation.Nullable;
 
 /**
@@ -351,7 +352,7 @@ public final class ReadableBuffers {
 
     @Nullable
     @Override
-    public Iterable<ByteBuffer> readByteBuffers(int length) {
+    public List<ByteBuffer> readByteBuffers(int length) {
       if (buffer.readableBytes() == 0) {
         // EOF.
         return null;
