@@ -24,9 +24,10 @@ import com.google.protobuf.ExtensionRegistryLite;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.MessageLite;
 import com.google.protobuf.Parser;
-import io.grpc.ByteBufferReadable;
 import io.grpc.ExperimentalApi;
 import io.grpc.KnownLength;
+import io.grpc.ManagedBytes;
+import io.grpc.ManagedBytes.ManagedBytesReadable;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.MethodDescriptor.PrototypeMarshaller;
@@ -36,8 +37,6 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.ref.Reference;
 import java.lang.ref.WeakReference;
-import java.nio.ByteBuffer;
-import java.util.List;
 
 /**
  * Utility methods for using protobuf with grpc.
@@ -173,6 +172,7 @@ public final class ProtoLiteUtils {
         }
       }
       CodedInputStream cis = null;
+      ManagedBytes managedBytes = null;
       try {
         if (stream instanceof KnownLength) {
           int size = stream.available();
@@ -181,12 +181,9 @@ public final class ProtoLiteUtils {
           }
           // TODO(chengyuanzhang): we may still want to go with the byte array approach for small
           //  messages.
-          if (stream instanceof ByteBufferReadable) {
-            List<ByteBuffer> byteBuffers = ((ByteBufferReadable) stream).readByteBuffers(size);
-            cis = byteBuffers.size() == 1
-                ? CodedInputStream.newInstance(byteBuffers.get(0))
-                : CodedInputStream.newInstance(byteBuffers);
-            // TODO(chengyuanzhang): still need to close original ReadableBuffers.
+          if (stream instanceof ManagedBytesReadable) {
+            managedBytes = ((ManagedBytesReadable) stream).readManagedBytes(size);
+            cis = CodedInputStream.newInstance(managedBytes.asByteBuffers());
           } else if (size < DEFAULT_MAX_MESSAGE_SIZE) {
             Reference<byte[]> ref;
             // buf should not be used after this method has returned.
@@ -228,6 +225,10 @@ public final class ProtoLiteUtils {
       } catch (InvalidProtocolBufferException ipbe) {
         throw Status.INTERNAL.withDescription("Invalid protobuf byte sequence")
             .withCause(ipbe).asRuntimeException();
+      } finally {
+        if (managedBytes != null) {
+          managedBytes.release();
+        }
       }
     }
 
