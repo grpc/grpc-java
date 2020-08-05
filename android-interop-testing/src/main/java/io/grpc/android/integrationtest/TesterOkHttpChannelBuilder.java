@@ -17,9 +17,12 @@
 package io.grpc.android.integrationtest;
 
 import android.support.annotation.Nullable;
+import io.grpc.ChannelCredentials;
+import io.grpc.Grpc;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
-import io.grpc.okhttp.OkHttpChannelBuilder;
+import io.grpc.okhttp.SslSocketFactoryChannelCredentials;
 import java.io.InputStream;
 import java.security.KeyStore;
 import java.security.cert.CertificateFactory;
@@ -40,21 +43,23 @@ class TesterOkHttpChannelBuilder {
       @Nullable String serverHostOverride,
       boolean useTls,
       @Nullable InputStream testCa) {
-    ManagedChannelBuilder<?> channelBuilder = ManagedChannelBuilder.forAddress(host, port)
-        .maxInboundMessageSize(16 * 1024 * 1024);
-    if (serverHostOverride != null) {
-      // Force the hostname to match the cert the server uses.
-      channelBuilder.overrideAuthority(serverHostOverride);
-    }
+    ChannelCredentials credentials;
     if (useTls) {
       try {
-        ((OkHttpChannelBuilder) channelBuilder).useTransportSecurity();
-        ((OkHttpChannelBuilder) channelBuilder).sslSocketFactory(getSslSocketFactory(testCa));
+        credentials = SslSocketFactoryChannelCredentials.create(getSslSocketFactory(testCa));
       } catch (Exception e) {
         throw new RuntimeException(e);
       }
     } else {
-      channelBuilder.usePlaintext();
+      credentials = InsecureChannelCredentials.create();
+    }
+
+    ManagedChannelBuilder<?> channelBuilder = Grpc.newChannelBuilderForAddress(
+          host, port, credentials)
+        .maxInboundMessageSize(16 * 1024 * 1024);
+    if (serverHostOverride != null) {
+      // Force the hostname to match the cert the server uses.
+      channelBuilder.overrideAuthority(serverHostOverride);
     }
     return channelBuilder.build();
   }
