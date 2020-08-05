@@ -307,7 +307,7 @@ public abstract class Bootstrapper {
 
     /** Returns the cert-providers config map. */
     public Map<String, CertificateProviderInfo> getCertProviders() {
-      return certProviders;
+      return Collections.unmodifiableMap(certProviders);
     }
   }
 }
