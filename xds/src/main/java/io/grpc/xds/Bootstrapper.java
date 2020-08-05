@@ -16,6 +16,8 @@
 
 package io.grpc.xds;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Internal;
 import io.grpc.internal.GrpcUtil;
@@ -31,6 +33,7 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import javax.annotation.Nullable;
@@ -160,7 +163,28 @@ public abstract class Bootstrapper {
     nodeBuilder.setUserAgentVersion(buildVersion.getImplementationVersion());
     nodeBuilder.addClientFeatures(CLIENT_FEATURE_DISABLE_OVERPROVISIONING);
 
-    return new BootstrapInfo(servers, nodeBuilder.build());
+    Map<String, ?> certProvidersBlob = JsonUtil.getObject(rawBootstrap, "certificate_providers");
+    Map<String, CertificateProviderInfo> certProviders = null;
+    if (certProvidersBlob != null) {
+      certProviders = new HashMap<>(certProvidersBlob.size());
+      for (String name : certProvidersBlob.keySet()) {
+        Map<String, ?> valueMap = JsonUtil.getObject(certProvidersBlob, name);
+        String pluginName =
+            checkForNull(JsonUtil.getString(valueMap, "plugin_name"), "plugin_name");
+        Map<String, ?> config = checkForNull(JsonUtil.getObject(valueMap, "config"), "config");
+        CertificateProviderInfo certificateProviderInfo =
+            new CertificateProviderInfo(pluginName, config);
+        certProviders.put(name, certificateProviderInfo);
+      }
+    }
+    return new BootstrapInfo(servers, nodeBuilder.build(), certProviders);
+  }
+
+  static <T> T checkForNull(T value, String fieldName) throws IOException {
+    if (value == null) {
+      throw new IOException("Invalid bootstrap: '" + fieldName + "' does not exist.");
+    }
+    return value;
   }
 
   /**
@@ -226,6 +250,30 @@ public abstract class Bootstrapper {
   }
 
   /**
+   * Data class containing Certificate provider information: the plugin-name and an opaque
+   * Map that represents the config for that plugin.
+   */
+  @Internal
+  @Immutable
+  public static class CertificateProviderInfo {
+    private final String pluginName;
+    private final Map<String, ?> config;
+
+    CertificateProviderInfo(String pluginName, Map<String, ?> config) {
+      this.pluginName = checkNotNull(pluginName, "pluginName");
+      this.config = checkNotNull(config, "config");
+    }
+
+    String getPluginName() {
+      return pluginName;
+    }
+
+    Map<String, ?> getConfig() {
+      return config;
+    }
+  }
+
+  /**
    * Data class containing the results of reading bootstrap.
    */
   @Internal
@@ -233,11 +281,14 @@ public abstract class Bootstrapper {
   public static class BootstrapInfo {
     private List<ServerInfo> servers;
     private final Node node;
+    @Nullable private final Map<String, CertificateProviderInfo> certProviders;
 
     @VisibleForTesting
-    BootstrapInfo(List<ServerInfo> servers, Node node) {
+    BootstrapInfo(
+        List<ServerInfo> servers, Node node, Map<String, CertificateProviderInfo> certProviders) {
       this.servers = servers;
       this.node = node;
+      this.certProviders = certProviders;
     }
 
     /**
@@ -252,6 +303,11 @@ public abstract class Bootstrapper {
      */
     public Node getNode() {
       return node;
+    }
+
+    /** Returns the cert-providers config map. */
+    public Map<String, CertificateProviderInfo> getCertProviders() {
+      return Collections.unmodifiableMap(certProviders);
     }
   }
 }
