@@ -33,6 +33,7 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalChannelz.ChannelStats;
 import io.grpc.InternalChannelz.ChannelTrace;
+import io.grpc.InternalConfigSelector;
 import io.grpc.InternalInstrumented;
 import io.grpc.InternalLogId;
 import io.grpc.InternalWithLogId;
@@ -53,6 +54,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.concurrent.ThreadSafe;
@@ -81,6 +83,7 @@ final class OobChannel extends ManagedChannel implements InternalInstrumented<Ch
   private final CallTracer channelCallsTracer;
   private final ChannelTracer channelTracer;
   private final TimeProvider timeProvider;
+  private final AtomicReference<InternalConfigSelector> configSelector;
 
   private final ClientStreamProvider transportProvider = new ClientStreamProvider() {
     @Override
@@ -102,7 +105,7 @@ final class OobChannel extends ManagedChannel implements InternalInstrumented<Ch
       String authority, ObjectPool<? extends Executor> executorPool,
       ScheduledExecutorService deadlineCancellationExecutor, SynchronizationContext syncContext,
       CallTracer callsTracer, ChannelTracer channelTracer, InternalChannelz channelz,
-      TimeProvider timeProvider) {
+      TimeProvider timeProvider, AtomicReference<InternalConfigSelector> configSelector) {
     this.authority = checkNotNull(authority, "authority");
     this.logId = InternalLogId.allocate(getClass(), authority);
     this.executorPool = checkNotNull(executorPool, "executorPool");
@@ -135,6 +138,7 @@ final class OobChannel extends ManagedChannel implements InternalInstrumented<Ch
     this.channelCallsTracer = callsTracer;
     this.channelTracer = checkNotNull(channelTracer, "channelTracer");
     this.timeProvider = checkNotNull(timeProvider, "timeProvider");
+    this.configSelector = checkNotNull(configSelector, "configSelector");
   }
 
   // Must be called only once, right after the OobChannel is created.
@@ -202,7 +206,8 @@ final class OobChannel extends ManagedChannel implements InternalInstrumented<Ch
       MethodDescriptor<RequestT, ResponseT> methodDescriptor, CallOptions callOptions) {
     return new ClientCallImpl<>(methodDescriptor,
         callOptions.getExecutor() == null ? executor : callOptions.getExecutor(),
-        callOptions, transportProvider, deadlineCancellationExecutor, channelCallsTracer);
+        callOptions, transportProvider, deadlineCancellationExecutor, channelCallsTracer,
+        configSelector.get());
   }
 
   @Override
