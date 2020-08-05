@@ -169,14 +169,22 @@ public abstract class Bootstrapper {
       certProviders = new HashMap<>(certProvidersBlob.size());
       for (String name : certProvidersBlob.keySet()) {
         Map<String, ?> valueMap = JsonUtil.getObject(certProvidersBlob, name);
-        String pluginName = JsonUtil.getString(valueMap, "plugin_name");
-        Map<String, ?> config =  JsonUtil.getObject(valueMap, "config");
+        String pluginName =
+            checkForNull(JsonUtil.getString(valueMap, "plugin_name"), "plugin_name");
+        Map<String, ?> config = checkForNull(JsonUtil.getObject(valueMap, "config"), "config");
         CertificateProviderInfo certificateProviderInfo =
             new CertificateProviderInfo(pluginName, config);
         certProviders.put(name, certificateProviderInfo);
       }
     }
     return new BootstrapInfo(servers, nodeBuilder.build(), certProviders);
+  }
+
+  static <T> T checkForNull(T value, String fieldName) throws IOException {
+    if (value == null) {
+      throw new IOException("Invalid bootstrap: '" + fieldName + "' does not exist.");
+    }
+    return value;
   }
 
   /**

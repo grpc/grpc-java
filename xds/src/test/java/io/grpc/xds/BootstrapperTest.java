@@ -445,8 +445,10 @@ public class BootstrapperTest {
     try {
       Bootstrapper.parseConfig(rawData);
       fail("exception expected");
-    } catch (NullPointerException expected) {
-      assertThat(expected).hasMessageThat().isEqualTo("config");
+    } catch (IOException expected) {
+      assertThat(expected)
+          .hasMessageThat()
+          .isEqualTo("Invalid bootstrap: 'config' does not exist.");
     }
   }
 
@@ -491,8 +493,10 @@ public class BootstrapperTest {
     try {
       Bootstrapper.parseConfig(rawData);
       fail("exception expected");
-    } catch (NullPointerException expected) {
-      assertThat(expected).hasMessageThat().isEqualTo("pluginName");
+    } catch (IOException expected) {
+      assertThat(expected)
+          .hasMessageThat()
+          .isEqualTo("Invalid bootstrap: 'plugin_name' does not exist.");
     }
   }
 
