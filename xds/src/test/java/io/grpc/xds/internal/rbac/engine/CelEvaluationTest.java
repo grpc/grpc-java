@@ -66,14 +66,21 @@ public class CelEvaluationTest<ReqT, RespT> {
   private AuthorizationEngine<ReqT,RespT> engine;
   private AuthorizationEngine<ReqT,RespT> spyEngine;
   private AuthorizationDecision evaluateResult;
+
+  // Mock RBAC engine with ALLOW action.
   private RBAC rbacAllow;
+  // Mock RBAC engine with DENY action.
   private RBAC rbacDeny;
+
+  // Mock policies that will be used to construct RBAC Engine.
   private Policy policy1;
   private Policy policy2;
   private Policy policy3;
   private Policy policy4;
   private Policy policy5;
   private Policy policy6;
+
+  // Mock conditions that will be used to construct RBAC poilcies.
   private Expr condition1;
   private Expr condition2;
   private Expr condition3;
@@ -83,7 +90,7 @@ public class CelEvaluationTest<ReqT, RespT> {
   
   @Before
   public void buildRbac() {
-    // Set up RBAC condition.
+    // Set up RBAC conditions.
     condition1 = Expr.newBuilder()
         .setIdentExpr(Ident.newBuilder().setName("Condition 1").build())
         .build();
@@ -102,14 +109,14 @@ public class CelEvaluationTest<ReqT, RespT> {
     condition6 = Expr.newBuilder()
         .setIdentExpr(Ident.newBuilder().setName("Condition 6").build())
         .build();
-    // Set up RBAC policy.
+    // Set up RBAC policies.
     policy1 = Policy.newBuilder().setCondition(condition1).build();
     policy2 = Policy.newBuilder().setCondition(condition2).build();
     policy3 = Policy.newBuilder().setCondition(condition3).build();
     policy4 = Policy.newBuilder().setCondition(condition4).build();
     policy5 = Policy.newBuilder().setCondition(condition5).build();
     policy6 = Policy.newBuilder().setCondition(condition6).build();
-    // Set up RBAC.
+    // Set up RBACs.
     rbacAllow = RBAC.newBuilder()
         .setAction(Action.ALLOW)
         .putPolicies("Policy 1", policy1)
@@ -124,6 +131,7 @@ public class CelEvaluationTest<ReqT, RespT> {
         .build();
   }
 
+  /** Build an ALLOW engine from Policy 1, 2, 3. */
   @Before
   public void setupEngineSingleRbacAllow() {
     buildRbac();
@@ -134,6 +142,7 @@ public class CelEvaluationTest<ReqT, RespT> {
         ArgumentMatchers.<EvaluateArgs<ReqT,RespT>>any());
   }
 
+  /** Build a DENY engine from Policy 4, 5, 6. */
   @Before
   public void setupEngineSingleRbacDeny() {
     buildRbac();
@@ -144,6 +153,7 @@ public class CelEvaluationTest<ReqT, RespT> {
         ArgumentMatchers.<EvaluateArgs<ReqT,RespT>>any());
   }
 
+  /** Build a pair of engines with a DENY engine followed by an ALLOW engine. */
   @Before
   public void setupEngineRbacPair() {
     buildRbac();
@@ -154,8 +164,13 @@ public class CelEvaluationTest<ReqT, RespT> {
         ArgumentMatchers.<EvaluateArgs<ReqT,RespT>>any());
   }
 
+  /**
+   * Test on the ALLOW engine.
+   * The evaluation result of all the CEL expressions is set to true,
+   * so the gRPC authorization returns ALLOW.
+   */
   @Test
-  public void testEvaluateEngineRbacAllow() throws InterpreterException {
+  public void testAllowEngineWithAllMatchedPolicies() throws InterpreterException {
     setupEngineSingleRbacAllow();
     // Policy 1 - matched; Policy 2 - matched; Policy 3 - matched
     doReturn(true).when(spyEngine).matches(eq(condition1), any(Activation.class));
@@ -165,21 +180,16 @@ public class CelEvaluationTest<ReqT, RespT> {
     assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Decision.ALLOW);
     assertEquals(evaluateResult.getPolicyNames().size(), 1);
     assertTrue(evaluateResult.getPolicyNames().contains("Policy 1"));
-    // Policy 1 - unmatched; Policy 2 - matched; Policy 3 - matched
-    doReturn(false).when(spyEngine).matches(eq(condition1), any(Activation.class));
-    evaluateResult = spyEngine.evaluate(args);
-    assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Decision.ALLOW);
-    assertEquals(evaluateResult.getPolicyNames().size(), 1);
-    assertTrue(evaluateResult.getPolicyNames().contains("Policy 2"));
-    // Policy 1 - unmatched; Policy 2 - matched; Policy 3 - unknown
-    doThrow(new InterpreterException.Builder("Unknown result").build())
-        .when(spyEngine).matches(eq(condition3), any(Activation.class));
-    evaluateResult = spyEngine.evaluate(args);
-    assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Decision.ALLOW);
-    assertEquals(evaluateResult.getPolicyNames().size(), 1);
-    assertTrue(evaluateResult.getPolicyNames().contains("Policy 2"));
-    assertEquals(evaluateResult.toString(), 
-        new StringBuilder("Authorization Decision: ALLOW. \n" + "Policy 2; \n").toString());
+  }
+
+  /**
+   * Test on the ALLOW engine.
+   * The evaluation result of all the CEL expressions is set to false,
+   * so the gRPC authorization returns DENY.
+   */
+  @Test
+  public void testAllowEngineWithAllUnmatchedPolicies() throws InterpreterException {
+    setupEngineSingleRbacAllow();
     // Policy 1 - unmatched; Policy 2 - unmatched; Policy 3 - unmatched
     doReturn(false).when(spyEngine).matches(eq(condition1), any(Activation.class));
     doReturn(false).when(spyEngine).matches(eq(condition2), any(Activation.class));
@@ -189,7 +199,39 @@ public class CelEvaluationTest<ReqT, RespT> {
     assertEquals(evaluateResult.getPolicyNames().size(), 0);
     assertEquals(evaluateResult.toString(), 
         new StringBuilder("Authorization Decision: DENY. \n").toString());
+  }
+
+  /**
+   * Test on the ALLOW engine.
+   * The evaluation result of two CEL expressions is set to true,
+   * and the evaluation result of one CEL expression is set to false,
+   * so the gRPC authorization returns ALLOW.
+   */
+  @Test
+  public void testAllowEngineWithMatchedAndUnmatchedPolicies() 
+      throws InterpreterException {
+    setupEngineSingleRbacAllow();
+    // Policy 1 - unmatched; Policy 2 - matched; Policy 3 - matched
+    doReturn(false).when(spyEngine).matches(eq(condition1), any(Activation.class));
+    doReturn(true).when(spyEngine).matches(eq(condition2), any(Activation.class));
+    doReturn(true).when(spyEngine).matches(eq(condition3), any(Activation.class));
+    evaluateResult = spyEngine.evaluate(args);
+    assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Decision.ALLOW);
+    assertEquals(evaluateResult.getPolicyNames().size(), 1);
+    assertTrue(evaluateResult.getPolicyNames().contains("Policy 2"));
+  }
+
+  /**
+   * Test on the ALLOW engine.
+   * The evaluation result of one CEL expression is set to unknown,
+   * so the gRPC authorization returns UNKNOWN.
+   */
+  @Test
+  public void testAllowEngineWithUnknownAndUnmatchedPolicies() 
+      throws InterpreterException {
+    setupEngineSingleRbacAllow();
     // Policy 1 - unmatched; Policy 2 - unknown; Policy 3 - unknown
+    doReturn(false).when(spyEngine).matches(eq(condition1), any(Activation.class));
     doThrow(new InterpreterException.Builder("Unknown result").build())
         .when(spyEngine).matches(eq(condition2), any(Activation.class));
     doThrow(new InterpreterException.Builder("Unknown result").build())
@@ -204,8 +246,35 @@ public class CelEvaluationTest<ReqT, RespT> {
             + "Policy 2; \n" + "Policy 3; \n").toString());
   }
 
+  /**
+   * Test on the ALLOW engine.
+   * The evaluation result of one CEL expression is set to unknown,
+   * so the gRPC authorization returns UNKNOWN.
+   */
   @Test
-  public void testEvaluateEngineRbacDeny() throws InterpreterException {
+  public void testAllowEngineWithMatchedUnmatchedAndUnknownPolicies() 
+      throws InterpreterException {
+    setupEngineSingleRbacAllow();
+    // Policy 1 - unmatched; Policy 2 - matched; Policy 3 - unknown
+    doReturn(false).when(spyEngine).matches(eq(condition1), any(Activation.class));
+    doReturn(true).when(spyEngine).matches(eq(condition2), any(Activation.class));
+    doThrow(new InterpreterException.Builder("Unknown result").build())
+        .when(spyEngine).matches(eq(condition3), any(Activation.class));
+    evaluateResult = spyEngine.evaluate(args);
+    assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Decision.ALLOW);
+    assertEquals(evaluateResult.getPolicyNames().size(), 1);
+    assertTrue(evaluateResult.getPolicyNames().contains("Policy 2"));
+    assertEquals(evaluateResult.toString(), 
+        new StringBuilder("Authorization Decision: ALLOW. \n" + "Policy 2; \n").toString());
+  }
+
+  /**
+   * Test on the DENY engine.
+   * The evaluation result of all the CEL expressions is set to true,
+   * so the gRPC authorization returns DENY.
+   */
+  @Test
+  public void testDenyEngineWithAllMatchedPolicies() throws InterpreterException {
     setupEngineSingleRbacDeny();
     // Policy 4 - matched; Policy 5 - matched; Policy 6 - matched
     doReturn(true).when(spyEngine).matches(eq(condition4), any(Activation.class));
@@ -215,19 +284,16 @@ public class CelEvaluationTest<ReqT, RespT> {
     assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Decision.DENY);
     assertEquals(evaluateResult.getPolicyNames().size(), 1);
     assertTrue(evaluateResult.getPolicyNames().contains("Policy 4"));
-    // Policy 4 - unmatched; Policy 5 - matched; Policy 6 - matched
-    doReturn(false).when(spyEngine).matches(eq(condition4), any(Activation.class));
-    evaluateResult = spyEngine.evaluate(args);
-    assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Decision.DENY);
-    assertEquals(evaluateResult.getPolicyNames().size(), 1);
-    assertTrue(evaluateResult.getPolicyNames().contains("Policy 5"));
-    // Policy 4 - unmatched; Policy 5 - matched; Policy 6 - unknown
-    doThrow(new InterpreterException.Builder("Unknown result").build())
-        .when(spyEngine).matches(eq(condition6), any(Activation.class));
-    evaluateResult = spyEngine.evaluate(args);
-    assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Decision.DENY);
-    assertEquals(evaluateResult.getPolicyNames().size(), 1);
-    assertTrue(evaluateResult.getPolicyNames().contains("Policy 5"));
+  }
+
+  /**
+   * Test on the DENY engine.
+   * The evaluation result of all the CEL expressions is set to false,
+   * so the gRPC authorization returns ALLOW.
+   */
+  @Test
+  public void testDenyEngineWithAllUnmatchedPolicies() throws InterpreterException {
+    setupEngineSingleRbacDeny();
     // Policy 4 - unmatched; Policy 5 - unmatched; Policy 6 - unmatched
     doReturn(false).when(spyEngine).matches(eq(condition4), any(Activation.class));
     doReturn(false).when(spyEngine).matches(eq(condition5), any(Activation.class));
@@ -235,7 +301,39 @@ public class CelEvaluationTest<ReqT, RespT> {
     evaluateResult = spyEngine.evaluate(args);
     assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Decision.ALLOW);
     assertEquals(evaluateResult.getPolicyNames().size(), 0);
+  }
+
+  /**
+   * Test on the DENY engine.
+   * The evaluation result of two CEL expressions is set to true,
+   * and the evaluation result of one CEL expression is set to false,
+   * so the gRPC authorization returns DENY.
+   */
+  @Test
+  public void testDenyEngineWithMatchedAndUnmatchedPolicies() 
+      throws InterpreterException {
+    setupEngineSingleRbacDeny();
+    // Policy 4 - unmatched; Policy 5 - matched; Policy 6 - matched
+    doReturn(false).when(spyEngine).matches(eq(condition4), any(Activation.class));
+    doReturn(true).when(spyEngine).matches(eq(condition5), any(Activation.class));
+    doReturn(true).when(spyEngine).matches(eq(condition6), any(Activation.class));
+    evaluateResult = spyEngine.evaluate(args);
+    assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Decision.DENY);
+    assertEquals(evaluateResult.getPolicyNames().size(), 1);
+    assertTrue(evaluateResult.getPolicyNames().contains("Policy 5"));
+  }
+
+  /**
+   * Test on the DENY engine.
+   * The evaluation result of one CEL expression is set to unknown,
+   * so the gRPC authorization returns UNKNOWN.
+   */
+  @Test
+  public void testDenyEngineWithUnknownAndUnmatchedPolicies() 
+      throws InterpreterException {
+    setupEngineSingleRbacDeny();
     // Policy 4 - unmatched; Policy 5 - unknown; Policy 6 - unknown
+    doReturn(false).when(spyEngine).matches(eq(condition4), any(Activation.class));
     doThrow(new InterpreterException.Builder("Unknown result").build())
         .when(spyEngine).matches(eq(condition5), any(Activation.class));
     doThrow(new InterpreterException.Builder("Unknown result").build())
@@ -247,8 +345,33 @@ public class CelEvaluationTest<ReqT, RespT> {
     assertTrue(evaluateResult.getPolicyNames().contains("Policy 6"));
   }
 
+  /**
+   * Test on the DENY engine.
+   * The evaluation result of one CEL expression is set to unknown,
+   * so the gRPC authorization returns UNKNOWN.
+   */
   @Test
-  public void testEvaluateEngineRbacPair() throws InterpreterException {
+  public void testDenyEngineWithMatchedUnmatchedAndUnknownPolicies() 
+      throws InterpreterException {
+    setupEngineSingleRbacDeny();
+    // Policy 4 - unmatched; Policy 5 - matched; Policy 6 - unknown
+    doReturn(false).when(spyEngine).matches(eq(condition4), any(Activation.class));
+    doReturn(true).when(spyEngine).matches(eq(condition5), any(Activation.class));
+    doThrow(new InterpreterException.Builder("Unknown result").build())
+        .when(spyEngine).matches(eq(condition6), any(Activation.class));
+    evaluateResult = spyEngine.evaluate(args);
+    assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Decision.DENY);
+    assertEquals(evaluateResult.getPolicyNames().size(), 1);
+    assertTrue(evaluateResult.getPolicyNames().contains("Policy 5"));
+  }
+
+  /**
+   * Test on the DENY engine and ALLOW engine pair.
+   * The evaluation result of all the CEL expressions is set to true in DENY engine,
+   * so the gRPC authorization returns DENY.
+   */
+  @Test
+  public void testEnginePairWithAllMatchedDenyEngine() throws InterpreterException {
     setupEngineRbacPair();
     // Policy 4 - matched; Policy 5 - matched; Policy 6 - matched
     // Policy 1 - matched; Policy 2 - matched; Policy 3 - matched
@@ -262,54 +385,99 @@ public class CelEvaluationTest<ReqT, RespT> {
     assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Decision.DENY);
     assertEquals(evaluateResult.getPolicyNames().size(), 1);
     assertTrue(evaluateResult.getPolicyNames().contains("Policy 4"));
+  }
+
+  /**
+   * Test on the DENY engine and ALLOW engine pair.
+   * The evaluation result of two CEL expressions is set to true,
+   * and the evaluation result of one CEL expression is set to false in DENY engine, 
+   * so the gRPC authorization returns DENY.
+   */
+  @Test
+  public void testEnginePairWithPartiallyMatchedDenyEngine() 
+      throws InterpreterException {
+    setupEngineRbacPair();
     // Policy 4 - unmatched; Policy 5 - matched; Policy 6 - unknown
     // Policy 1 - matched; Policy 2 - matched; Policy 3 - matched
+    doReturn(true).when(spyEngine).matches(eq(condition1), any(Activation.class));
+    doReturn(true).when(spyEngine).matches(eq(condition2), any(Activation.class));
+    doReturn(true).when(spyEngine).matches(eq(condition3), any(Activation.class));
     doReturn(false).when(spyEngine).matches(eq(condition4), any(Activation.class));
+    doReturn(true).when(spyEngine).matches(eq(condition5), any(Activation.class));
     doThrow(new InterpreterException.Builder("Unknown result").build())
         .when(spyEngine).matches(eq(condition6), any(Activation.class));
     evaluateResult = spyEngine.evaluate(args);
     assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Decision.DENY);
     assertEquals(evaluateResult.getPolicyNames().size(), 1);
     assertTrue(evaluateResult.getPolicyNames().contains("Policy 5"));
+  }
+
+  /**
+   * Test on the DENY engine and ALLOW engine pair.
+   * The DENY engine has unknown policies, so the gRPC authorization returns UNKNOWN.
+   */
+  @Test
+  public void testEnginePairWithUnknownDenyEngine() throws InterpreterException {
+    setupEngineRbacPair();
     // Policy 4 - unmatched; Policy 5 - unknown; Policy 6 - unknown
     // Policy 1 - matched; Policy 2 - matched; Policy 3 - matched
+    doReturn(true).when(spyEngine).matches(eq(condition1), any(Activation.class));
+    doReturn(true).when(spyEngine).matches(eq(condition2), any(Activation.class));
+    doReturn(true).when(spyEngine).matches(eq(condition3), any(Activation.class));
+    doReturn(false).when(spyEngine).matches(eq(condition4), any(Activation.class));
     doThrow(new InterpreterException.Builder("Unknown result").build())
         .when(spyEngine).matches(eq(condition5), any(Activation.class));
+    doThrow(new InterpreterException.Builder("Unknown result").build())
+        .when(spyEngine).matches(eq(condition6), any(Activation.class));
     evaluateResult = spyEngine.evaluate(args);
     assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Decision.UNKNOWN);
     assertEquals(evaluateResult.getPolicyNames().size(), 2);
     assertTrue(evaluateResult.getPolicyNames().contains("Policy 5"));
     assertTrue(evaluateResult.getPolicyNames().contains("Policy 6"));
-    // Policy 4 - unmatched; Policy 5 - unmatched; Policy 6 - unmatched
-    // Policy 1 - matched; Policy 2 - matched; Policy 3 - matched
-    doReturn(false).when(spyEngine).matches(eq(condition5), any(Activation.class));
-    doReturn(false).when(spyEngine).matches(eq(condition6), any(Activation.class));
-    evaluateResult = spyEngine.evaluate(args);
-    assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Decision.ALLOW);
-    assertEquals(evaluateResult.getPolicyNames().size(), 1);
-    assertTrue(evaluateResult.getPolicyNames().contains("Policy 1"));
-    // Policy 4 - unmatched; Policy 5 - unmatched; Policy 6 - unmatched
-    // Policy 1 - unmatched; Policy 2 - matched; Policy 3 - unknown
-    doReturn(false).when(spyEngine).matches(eq(condition1), any(Activation.class));
-    doThrow(new InterpreterException.Builder("Unknown result").build())
-        .when(spyEngine).matches(eq(condition3), any(Activation.class));
-    evaluateResult = spyEngine.evaluate(args);
-    assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Decision.ALLOW);
-    assertEquals(evaluateResult.getPolicyNames().size(), 1);
-    assertTrue(evaluateResult.getPolicyNames().contains("Policy 2"));
+  }
+
+  /**
+   * Test on the DENY engine and ALLOW engine pair.
+   * The evaluation result of all the CEL expressions is set to false in DENY engine,
+   * and the ALLOW engine has unknown policies, 
+   * so the gRPC authorization returns UNKNOWN.
+   */
+  @Test
+  public void testEnginePairWithUnmatchedDenyEngineAndUnknownAllowEngine() 
+      throws InterpreterException {
+    setupEngineRbacPair();
     // Policy 4 - unmatched; Policy 5 - unmatched; Policy 6 - unmatched
     // Policy 1 - unmatched; Policy 2 - unknown; Policy 3 - unknown
+    doReturn(false).when(spyEngine).matches(eq(condition1), any(Activation.class));
     doThrow(new InterpreterException.Builder("Unknown result").build())
         .when(spyEngine).matches(eq(condition2), any(Activation.class));
+    doThrow(new InterpreterException.Builder("Unknown result").build())
+        .when(spyEngine).matches(eq(condition3), any(Activation.class));
+    doReturn(false).when(spyEngine).matches(eq(condition4), any(Activation.class));
+    doReturn(false).when(spyEngine).matches(eq(condition5), any(Activation.class));
+    doReturn(false).when(spyEngine).matches(eq(condition6), any(Activation.class));
     evaluateResult = spyEngine.evaluate(args);
     assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Decision.UNKNOWN);
     assertEquals(evaluateResult.getPolicyNames().size(), 2);
     assertTrue(evaluateResult.getPolicyNames().contains("Policy 2"));
     assertTrue(evaluateResult.getPolicyNames().contains("Policy 3"));
+  }
+
+  /**
+   * Test on the DENY engine and ALLOW engine pair.
+   * The evaluation result of all the CEL expressions is set to false in both engines,
+   * so the gRPC authorization returns DENY.
+   */
+  @Test
+  public void testUnmatchedEnginePair() throws InterpreterException {
+    setupEngineRbacPair();
     // Policy 4 - unmatched; Policy 5 - unmatched; Policy 6 - unmatched
     // Policy 1 - unmatched; Policy 2 - unmatched; Policy 3 - unmatched
+    doReturn(false).when(spyEngine).matches(eq(condition1), any(Activation.class));
     doReturn(false).when(spyEngine).matches(eq(condition2), any(Activation.class));
     doReturn(false).when(spyEngine).matches(eq(condition3), any(Activation.class));
+    doReturn(false).when(spyEngine).matches(eq(condition4), any(Activation.class));
+    doReturn(false).when(spyEngine).matches(eq(condition5), any(Activation.class));
     doReturn(false).when(spyEngine).matches(eq(condition6), any(Activation.class));
     evaluateResult = spyEngine.evaluate(args);
     assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Decision.DENY);
