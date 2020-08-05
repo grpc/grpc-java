@@ -230,7 +230,7 @@ public class XdsNameResolverTest {
         .isEqualTo(expectedCluster);
     assertServiceConfigForMethodConfig(
         call.service, call.method, expectedTimeoutSec,
-        (Map<String, ?>) result.getConfig().getConfig());
+        (Map<String, ?>) result.getConfig());
     return result;
   }
 
@@ -314,7 +314,7 @@ public class XdsNameResolverTest {
         .isEqualTo(cluster2);
     assertServiceConfigForMethodConfig(
         call1.service, call1.method, 20.0,
-        (Map<String, ?>) selectResult.getConfig().getConfig());
+        (Map<String, ?>) selectResult.getConfig());
 
     selectResult = configSelector.selectConfig(
         new PickSubchannelArgsImpl(call1.methodDescriptor, new Metadata(), CallOptions.DEFAULT));
@@ -323,7 +323,7 @@ public class XdsNameResolverTest {
         .isEqualTo(cluster1);
     assertServiceConfigForMethodConfig(
         call1.service, call1.method, 20.0,
-        (Map<String, ?>) selectResult.getConfig().getConfig());
+        (Map<String, ?>) selectResult.getConfig());
   }
 
   /**

@@ -184,10 +184,15 @@ final class XdsNameResolver extends NameResolver {
               args.getMethodDescriptor().getFullMethodName(),
               selectedRoute.getRouteAction().getTimeoutNano());
       ConfigOrError parsedServiceConfig = parseServiceConfig(serviceConfigJson);
+      Object config = parsedServiceConfig.getConfig();
+      if (config == null) {
+        throw new AssertionError(
+            "Bug: invalid config", parsedServiceConfig.getError().asException());
+      }
       return
           Result.newBuilder()
               .setCallOptions(args.getCallOptions().withOption(CLUSTER_SELECTION_KEY, cluster))
-              .setConfig(parsedServiceConfig)
+              .setConfig(config)
               .setCommittedCallback(new SelectionCompleted())
               .build();
     }

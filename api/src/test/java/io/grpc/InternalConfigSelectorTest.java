@@ -19,7 +19,6 @@ package io.grpc;
 import static com.google.common.truth.Truth.assertThat;
 
 import io.grpc.InternalConfigSelector.Result;
-import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status.Code;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -30,7 +29,7 @@ import org.junit.runners.JUnit4;
 public class InternalConfigSelectorTest {
   @Test
   public void resultBuilder() {
-    ConfigOrError config =  ConfigOrError.fromConfig("fake_config");
+    Object config = "fake_config";
     CallOptions callOptions = CallOptions.DEFAULT.withAuthority("fake authority");
     Runnable committedCallback = new Runnable() {
       @Override

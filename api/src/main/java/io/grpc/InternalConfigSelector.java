@@ -20,7 +20,6 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
-import io.grpc.NameResolver.ConfigOrError;
 import javax.annotation.Nullable;
 
 // The class can not be located in io.grpc.internal since it is used as a cross-module API.
@@ -42,14 +41,14 @@ public abstract class InternalConfigSelector {
   public static final class Result {
     private final Status status;
     @Nullable
-    private final ConfigOrError config;
+    private final Object config;
     @Nullable
     private final CallOptions callOptions;
     @Nullable
     private final Runnable committedCallback;
 
     private Result(
-        Status status, ConfigOrError config, CallOptions callOptions, Runnable committedCallback) {
+        Status status, Object config, CallOptions callOptions, Runnable committedCallback) {
       this.status = checkNotNull(status, "status");
       this.config = config;
       this.callOptions = callOptions;
@@ -74,10 +73,10 @@ public abstract class InternalConfigSelector {
 
     /**
      * Returns a parsed config. Must have been returned via
-     * ServiceConfigParser.parseServiceConfig().
+     * ServiceConfigParser.parseServiceConfig().getConfig()
      */
     @Nullable
-    public ConfigOrError getConfig() {
+    public Object getConfig() {
       return config;
     }
 
@@ -102,7 +101,7 @@ public abstract class InternalConfigSelector {
     }
 
     public static final class Builder {
-      private ConfigOrError config;
+      private Object config;
       private CallOptions callOptions;
       private Runnable committedCallback;
 
@@ -113,7 +112,7 @@ public abstract class InternalConfigSelector {
        *
        * @return this
        */
-      public Builder setConfig(ConfigOrError config) {
+      public Builder setConfig(Object config) {
         this.config = checkNotNull(config, "config");
         return this;
       }
