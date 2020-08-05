@@ -16,6 +16,8 @@
 
 package io.grpc.internal;
 
+import com.google.common.base.Preconditions;
+import io.grpc.ManagedBytes;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.Buffer;
@@ -62,9 +64,9 @@ public class CompositeReadableBuffer extends AbstractReadableBuffer {
   }
 
   @Override
-  public boolean shouldUseByteBuffer() {
+  public boolean shouldUseManagedBytes() {
     for (ReadableBuffer buf : buffers) {
-      if (!buf.shouldUseByteBuffer()) {
+      if (!buf.shouldUseManagedBytes()) {
         return false;
       }
     }
@@ -72,21 +74,62 @@ public class CompositeReadableBuffer extends AbstractReadableBuffer {
   }
 
   @Override
-  public List<ByteBuffer> readByteBuffers(int length) {
+  public ManagedBytes readManagedBytes(int length) {
     checkReadable(length);
     readableBytes -= length;
-    List<ByteBuffer> res = new ArrayList<>();
+
+    CompositeManagedBytes res = new CompositeManagedBytes();
     while (length > 0) {
       ReadableBuffer buffer = buffers.peek();
-      int readLength = length;
-      if (buffer.readableBytes() <= length) {
-        readLength = buffer.readableBytes();
-        buffers.remove();
+      if (buffer.readableBytes() > length) {
+        res.addSharedBytes(buffer.readManagedBytes(length));
+        length = 0;
+      } else {
+        res.addBuffer(buffers.poll());
+        length -= buffer.readableBytes();
       }
-      res.addAll(buffer.readByteBuffers(readLength));
-      length -= readLength;
     }
     return res;
+  }
+
+  private static final class CompositeManagedBytes extends ManagedBytes {
+    private final List<ManagedBytes> managedBytesList = new ArrayList<>();
+
+    private void addBuffer(final ReadableBuffer buffer) {
+      Preconditions.checkArgument(
+          buffer.shouldUseManagedBytes(), "buffer does not support shared bytes");
+      managedBytesList.add(new ManagedBytes() {
+        @Override
+        public List<ByteBuffer> asByteBuffers() {
+          return buffer.readManagedBytes(buffer.readableBytes()).asByteBuffers();
+        }
+
+        @Override
+        public void release() {
+          buffer.close();
+        }
+      });
+    }
+
+    private void addSharedBytes(ManagedBytes managedBytes) {
+      managedBytesList.add(managedBytes);
+    }
+
+    @Override
+    public List<ByteBuffer> asByteBuffers() {
+      List<ByteBuffer> res = new ArrayList<>();
+      for (ManagedBytes managedBytes : managedBytesList) {
+        res.addAll(managedBytes.asByteBuffers());
+      }
+      return res;
+    }
+
+    @Override
+    public void release() {
+      for (ManagedBytes managedBytes : managedBytesList) {
+        managedBytes.release();
+      }
+    }
   }
 
   @Override
