@@ -22,11 +22,18 @@ import static io.grpc.internal.GrpcUtil.KEEPALIVE_TIME_NANOS_DISABLED;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import io.grpc.CallCredentials;
+import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
+import io.grpc.ChoiceChannelCredentials;
+import io.grpc.CompositeCallCredentials;
+import io.grpc.CompositeChannelCredentials;
 import io.grpc.ExperimentalApi;
 import io.grpc.ForwardingChannelBuilder;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.Internal;
 import io.grpc.ManagedChannelBuilder;
+import io.grpc.TlsChannelCredentials;
 import io.grpc.internal.AtomicBackoff;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.ConnectionClientTransport;
@@ -45,6 +52,8 @@ import io.grpc.okhttp.internal.TlsVersion;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.security.GeneralSecurityException;
+import java.util.EnumSet;
+import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -113,6 +122,11 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder<OkHttpC
     return new OkHttpChannelBuilder(host, port);
   }
 
+  /** Creates a new builder with the given host and port. */
+  public static OkHttpChannelBuilder forAddress(String host, int port, ChannelCredentials creds) {
+    return forTarget(GrpcUtil.authorityFromHostAndPort(host, port), creds);
+  }
+
   /**
    * Creates a new builder for the given target that will be resolved by
    * {@link io.grpc.NameResolver}.
@@ -121,11 +135,24 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder<OkHttpC
     return new OkHttpChannelBuilder(target);
   }
 
+  /**
+   * Creates a new builder for the given target that will be resolved by
+   * {@link io.grpc.NameResolver}.
+   */
+  public static OkHttpChannelBuilder forTarget(String target, ChannelCredentials creds) {
+    SslSocketFactoryResult result = sslSocketFactoryFrom(creds);
+    if (result.error != null) {
+      throw new IllegalArgumentException(result.error);
+    }
+    return new OkHttpChannelBuilder(target, result.factory, result.callCredentials);
+  }
+
   private Executor transportExecutor;
   private ScheduledExecutorService scheduledExecutorService;
 
   private SocketFactory socketFactory;
   private SSLSocketFactory sslSocketFactory;
+  private final boolean freezeSecurityConfiguration;
   private HostnameVerifier hostnameVerifier;
   private ConnectionSpec connectionSpec = INTERNAL_DEFAULT_CONNECTION_SPEC;
   private NegotiationType negotiationType = NegotiationType.TLS;
@@ -147,23 +174,36 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder<OkHttpC
   }
 
   private OkHttpChannelBuilder(String target) {
-    final class OkHttpChannelTransportFactoryBuilder implements ClientTransportFactoryBuilder {
-      @Override
-      public ClientTransportFactory buildClientTransportFactory() {
-        return buildTransportFactory();
-      }
-    }
-
-    final class OkHttpChannelDefaultPortProvider implements ChannelBuilderDefaultPortProvider {
-      @Override
-      public int getDefaultPort() {
-        return OkHttpChannelBuilder.this.getDefaultPort();
-      }
-    }
-
     managedChannelImplBuilder = new ManagedChannelImplBuilder(target,
         new OkHttpChannelTransportFactoryBuilder(),
         new OkHttpChannelDefaultPortProvider());
+    this.freezeSecurityConfiguration = false;
+  }
+
+  OkHttpChannelBuilder(String target, @Nullable SSLSocketFactory factory,
+      @Nullable CallCredentials callCredentials) {
+    managedChannelImplBuilder = new ManagedChannelImplBuilder(target, callCredentials,
+        new OkHttpChannelTransportFactoryBuilder(),
+        new OkHttpChannelDefaultPortProvider());
+    this.sslSocketFactory = factory;
+    this.negotiationType = factory == null ? NegotiationType.PLAINTEXT : NegotiationType.TLS;
+    this.freezeSecurityConfiguration = true;
+  }
+
+  private final class OkHttpChannelTransportFactoryBuilder
+      implements ClientTransportFactoryBuilder {
+    @Override
+    public ClientTransportFactory buildClientTransportFactory() {
+      return buildTransportFactory();
+    }
+  }
+
+  private final class OkHttpChannelDefaultPortProvider
+      implements ChannelBuilderDefaultPortProvider {
+    @Override
+    public int getDefaultPort() {
+      return OkHttpChannelBuilder.this.getDefaultPort();
+    }
   }
 
   @Internal
@@ -214,6 +254,8 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder<OkHttpC
    */
   @Deprecated
   public OkHttpChannelBuilder negotiationType(io.grpc.okhttp.NegotiationType type) {
+    Preconditions.checkState(!freezeSecurityConfiguration,
+        "Cannot change security when using ChannelCredentials");
     Preconditions.checkNotNull(type, "type");
     switch (type) {
       case TLS:
@@ -284,6 +326,8 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder<OkHttpC
    * Override the default {@link SSLSocketFactory} and enable TLS negotiation.
    */
   public OkHttpChannelBuilder sslSocketFactory(SSLSocketFactory factory) {
+    Preconditions.checkState(!freezeSecurityConfiguration,
+        "Cannot change security when using ChannelCredentials");
     this.sslSocketFactory = factory;
     negotiationType = NegotiationType.TLS;
     return this;
@@ -310,6 +354,8 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder<OkHttpC
    *
    */
   public OkHttpChannelBuilder hostnameVerifier(@Nullable HostnameVerifier hostnameVerifier) {
+    Preconditions.checkState(!freezeSecurityConfiguration,
+        "Cannot change security when using ChannelCredentials");
     this.hostnameVerifier = hostnameVerifier;
     return this;
   }
@@ -328,6 +374,8 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder<OkHttpC
    */
   public OkHttpChannelBuilder connectionSpec(
       com.squareup.okhttp.ConnectionSpec connectionSpec) {
+    Preconditions.checkState(!freezeSecurityConfiguration,
+        "Cannot change security when using ChannelCredentials");
     Preconditions.checkArgument(connectionSpec.isTls(), "plaintext ConnectionSpec is not accepted");
     this.connectionSpec = Utils.convertSpec(connectionSpec);
     return this;
@@ -336,6 +384,8 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder<OkHttpC
   /** Sets the negotiation type for the HTTP/2 connection to plaintext. */
   @Override
   public OkHttpChannelBuilder usePlaintext() {
+    Preconditions.checkState(!freezeSecurityConfiguration,
+        "Cannot change security when using ChannelCredentials");
     negotiationType = NegotiationType.PLAINTEXT;
     return this;
   }
@@ -345,11 +395,13 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder<OkHttpC
    *
    * <p>With TLS enabled, a default {@link SSLSocketFactory} is created using the best {@link
    * java.security.Provider} available and is NOT based on {@link SSLSocketFactory#getDefault}. To
-   * more precisely control the TLS configuration call {@link #sslSocketFactory} to override the
-   * socket factory used.
+   * more precisely control the TLS configuration call {@link #sslSocketFactory(SSLSocketFactory)}
+   * to override the socket factory used.
    */
   @Override
   public OkHttpChannelBuilder useTransportSecurity() {
+    Preconditions.checkState(!freezeSecurityConfiguration,
+        "Cannot change security when using ChannelCredentials");
     negotiationType = NegotiationType.TLS;
     return this;
   }
@@ -468,6 +520,99 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder<OkHttpC
         throw new RuntimeException("Unknown negotiation type: " + negotiationType);
     }
   }
+
+  private static final EnumSet<TlsChannelCredentials.Feature> understoodTlsFeatures =
+      EnumSet.noneOf(TlsChannelCredentials.Feature.class);
+
+  static SslSocketFactoryResult sslSocketFactoryFrom(ChannelCredentials creds) {
+    if (creds instanceof TlsChannelCredentials) {
+      TlsChannelCredentials tlsCreds = (TlsChannelCredentials) creds;
+      Set<TlsChannelCredentials.Feature> incomprehensible =
+          tlsCreds.incomprehensible(understoodTlsFeatures);
+      if (!incomprehensible.isEmpty()) {
+        return SslSocketFactoryResult.error(
+            "TLS features not understood: " + incomprehensible);
+      }
+      SSLSocketFactory sslSocketFactory;
+      try {
+        SSLContext sslContext = SSLContext.getInstance("Default", Platform.get().getProvider());
+        sslSocketFactory = sslContext.getSocketFactory();
+      } catch (GeneralSecurityException gse) {
+        throw new RuntimeException("TLS Provider failure", gse);
+      }
+      return SslSocketFactoryResult.factory(sslSocketFactory);
+
+    } else if (creds instanceof InsecureChannelCredentials) {
+      return SslSocketFactoryResult.plaintext();
+
+    } else if (creds instanceof CompositeChannelCredentials) {
+      CompositeChannelCredentials compCreds = (CompositeChannelCredentials) creds;
+      return sslSocketFactoryFrom(compCreds.getChannelCredentials())
+          .withCallCredentials(compCreds.getCallCredentials());
+
+    } else if (creds instanceof SslSocketFactoryChannelCredentials.ChannelCredentials) {
+      SslSocketFactoryChannelCredentials.ChannelCredentials factoryCreds =
+          (SslSocketFactoryChannelCredentials.ChannelCredentials) creds;
+      return SslSocketFactoryResult.factory(factoryCreds.getFactory());
+
+    } else if (creds instanceof ChoiceChannelCredentials) {
+      ChoiceChannelCredentials choiceCreds = (ChoiceChannelCredentials) creds;
+      StringBuilder error = new StringBuilder();
+      for (ChannelCredentials innerCreds : choiceCreds.getCredentialsList()) {
+        SslSocketFactoryResult result = sslSocketFactoryFrom(innerCreds);
+        if (result.error == null) {
+          return result;
+        }
+        error.append(", ");
+        error.append(result.error);
+      }
+      return SslSocketFactoryResult.error(error.substring(2));
+
+    } else {
+      return SslSocketFactoryResult.error(
+          "Unsupported credential type: " + creds.getClass().getName());
+    }
+  }
+
+  static final class SslSocketFactoryResult {
+    /** {@code null} implies plaintext if {@code error == null}. */
+    public final SSLSocketFactory factory;
+    public final CallCredentials callCredentials;
+    public final String error;
+
+    private SslSocketFactoryResult(SSLSocketFactory factory, CallCredentials creds, String error) {
+      this.factory = factory;
+      this.callCredentials = creds;
+      this.error = error;
+    }
+
+    public static SslSocketFactoryResult error(String error) {
+      return new SslSocketFactoryResult(
+          null, null, Preconditions.checkNotNull(error, "error"));
+    }
+
+    public static SslSocketFactoryResult plaintext() {
+      return new SslSocketFactoryResult(null, null, null);
+    }
+
+    public static SslSocketFactoryResult factory(
+        SSLSocketFactory factory) {
+      return new SslSocketFactoryResult(
+          Preconditions.checkNotNull(factory, "factory"), null, null);
+    }
+
+    public SslSocketFactoryResult withCallCredentials(CallCredentials callCreds) {
+      Preconditions.checkNotNull(callCreds, "callCreds");
+      if (error != null) {
+        return this;
+      }
+      if (this.callCredentials != null) {
+        callCreds = new CompositeCallCredentials(this.callCredentials, callCreds);
+      }
+      return new SslSocketFactoryResult(factory, callCreds, null);
+    }
+  }
+
 
   /**
    * Creates OkHttp transports. Exposed for internal use, as it should be private.
