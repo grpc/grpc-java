@@ -30,8 +30,8 @@ For a guided tour, take a look at the [quick start
 guide](https://grpc.io/docs/languages/java/quickstart) or the more explanatory [gRPC
 basics](https://grpc.io/docs/languages/java/basics).
 
-The [examples](https://github.com/grpc/grpc-java/tree/v1.30.0/examples) and the
-[Android example](https://github.com/grpc/grpc-java/tree/v1.30.0/examples/android)
+The [examples](https://github.com/grpc/grpc-java/tree/v1.31.0/examples) and the
+[Android example](https://github.com/grpc/grpc-java/tree/v1.31.0/examples/android)
 are standalone projects that showcase the usage of gRPC.
 
 Download
