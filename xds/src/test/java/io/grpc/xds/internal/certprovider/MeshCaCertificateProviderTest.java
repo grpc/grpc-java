@@ -20,7 +20,6 @@ import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CA_PEM_FILE;
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_0_PEM_FILE;
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_PEM_FILE;
-import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.doAnswer;
@@ -37,7 +36,6 @@ import com.google.auth.http.AuthHttpConstants;
 import com.google.auth.oauth2.AccessToken;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.common.collect.ImmutableList;
-import com.google.common.io.CharStreams;
 import com.google.common.util.concurrent.MoreExecutors;
 import google.security.meshca.v1.MeshCertificateServiceGrpc;
 import google.security.meshca.v1.Meshca;
@@ -53,15 +51,10 @@ import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.TimeProvider;
-import io.grpc.internal.testing.TestUtils;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.internal.certprovider.CertificateProvider.DistributorWatcher;
-import io.grpc.xds.internal.sds.trust.CertificateUtils;
-import java.io.ByteArrayInputStream;
+import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.Reader;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.cert.CertificateException;
@@ -328,9 +321,9 @@ public class MeshCaCertificateProviderTest {
     oauth2Tokens.offer(TEST_STS_TOKEN + "0");
     responsesToSend.offer(
         new ResponseList(ImmutableList.of(
-            getResourceContents(SERVER_0_PEM_FILE),
-            getResourceContents(SERVER_1_PEM_FILE),
-            getResourceContents(CA_PEM_FILE))));
+            CommonTlsContextTestsUtil.getResourceContents(SERVER_0_PEM_FILE),
+            CommonTlsContextTestsUtil.getResourceContents(SERVER_1_PEM_FILE),
+            CommonTlsContextTestsUtil.getResourceContents(CA_PEM_FILE))));
     when(timeProvider.currentTimeNanos()).thenReturn(CURRENT_TIME_NANOS);
     ScheduledFuture<?> scheduledFuture = mock(ScheduledFuture.class);
     doReturn(scheduledFuture)
@@ -445,9 +438,9 @@ public class MeshCaCertificateProviderTest {
     responsesToSend
         .offer(new ResponseThrowable(new StatusRuntimeException(Status.RESOURCE_EXHAUSTED)));
     responsesToSend.offer(new ResponseList(ImmutableList.of(
-        getResourceContents(SERVER_0_PEM_FILE),
-        getResourceContents(SERVER_1_PEM_FILE),
-        getResourceContents(CA_PEM_FILE))));
+        CommonTlsContextTestsUtil.getResourceContents(SERVER_0_PEM_FILE),
+        CommonTlsContextTestsUtil.getResourceContents(SERVER_1_PEM_FILE),
+        CommonTlsContextTestsUtil.getResourceContents(CA_PEM_FILE))));
     when(timeProvider.currentTimeNanos()).thenReturn(CURRENT_TIME_NANOS);
     ScheduledFuture<?> scheduledFuture = mock(ScheduledFuture.class);
     doReturn(scheduledFuture).when(timeService)
@@ -478,9 +471,9 @@ public class MeshCaCertificateProviderTest {
     responsesToSend.offer(new ResponseToSend());
     responsesToSend.offer(new ResponseToSend());
     responsesToSend.offer(new ResponseList(ImmutableList.of(
-        getResourceContents(SERVER_0_PEM_FILE),
-        getResourceContents(SERVER_1_PEM_FILE),
-        getResourceContents(CA_PEM_FILE))));
+        CommonTlsContextTestsUtil.getResourceContents(SERVER_0_PEM_FILE),
+        CommonTlsContextTestsUtil.getResourceContents(SERVER_1_PEM_FILE),
+        CommonTlsContextTestsUtil.getResourceContents(CA_PEM_FILE))));
     when(timeProvider.currentTimeNanos()).thenReturn(CURRENT_TIME_NANOS);
     ScheduledFuture<?> scheduledFuture = mock(ScheduledFuture.class);
     doReturn(scheduledFuture).when(timeService)
@@ -516,31 +509,20 @@ public class MeshCaCertificateProviderTest {
         .updateCertificate(any(PrivateKey.class), certChainCaptor.capture());
     List<X509Certificate> certChain = certChainCaptor.getValue();
     assertThat(certChain).hasSize(3);
-    assertThat(certChain.get(0)).isEqualTo(getCertFromResourceName(SERVER_0_PEM_FILE));
-    assertThat(certChain.get(1)).isEqualTo(getCertFromResourceName(SERVER_1_PEM_FILE));
-    assertThat(certChain.get(2)).isEqualTo(getCertFromResourceName(CA_PEM_FILE));
+    assertThat(certChain.get(0))
+        .isEqualTo(CommonTlsContextTestsUtil.getCertFromResourceName(SERVER_0_PEM_FILE));
+    assertThat(certChain.get(1))
+        .isEqualTo(CommonTlsContextTestsUtil.getCertFromResourceName(SERVER_1_PEM_FILE));
+    assertThat(certChain.get(2))
+        .isEqualTo(CommonTlsContextTestsUtil.getCertFromResourceName(CA_PEM_FILE));
 
     ArgumentCaptor<List<X509Certificate>> rootsCaptor = ArgumentCaptor.forClass(null);
     verify(mockWatcher, times(1)).updateTrustedRoots(rootsCaptor.capture());
     List<X509Certificate> roots = rootsCaptor.getValue();
     assertThat(roots).hasSize(1);
-    assertThat(roots.get(0)).isEqualTo(getCertFromResourceName(CA_PEM_FILE));
+    assertThat(roots.get(0))
+        .isEqualTo(CommonTlsContextTestsUtil.getCertFromResourceName(CA_PEM_FILE));
     verify(mockWatcher, never()).onError(any(Status.class));
-  }
-
-  private static X509Certificate getCertFromResourceName(String resourceName)
-      throws IOException, CertificateException {
-    return CertificateUtils.toX509Certificate(
-        new ByteArrayInputStream(getResourceContents(resourceName).getBytes(UTF_8)));
-  }
-
-  private static String getResourceContents(String resourceName) throws IOException {
-    InputStream inputStream = TestUtils.class.getResourceAsStream("/certs/" + resourceName);
-    String text = null;
-    try (Reader reader = new InputStreamReader(inputStream, UTF_8)) {
-      text = CharStreams.toString(reader);
-    }
-    return text;
   }
 
   private void verifyReceivedMetadataValues(int count) {
