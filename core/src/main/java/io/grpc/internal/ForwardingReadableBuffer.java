@@ -18,10 +18,10 @@ package io.grpc.internal;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
+import io.grpc.ManagedBytes;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
-import java.util.List;
 
 /**
  * Base class for a wrapper around another {@link ReadableBuffer}.
@@ -83,13 +83,13 @@ public abstract class ForwardingReadableBuffer implements ReadableBuffer {
   }
 
   @Override
-  public boolean shouldUseByteBuffer() {
-    return buf.shouldUseByteBuffer();
+  public boolean shouldUseManagedBytes() {
+    return buf.shouldUseManagedBytes();
   }
 
   @Override
-  public List<ByteBuffer> readByteBuffers(int length) {
-    return buf.readByteBuffers(length);
+  public ManagedBytes readManagedBytes(int length) {
+    return buf.readManagedBytes(length);
   }
 
   @Override

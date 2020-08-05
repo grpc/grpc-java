@@ -16,11 +16,11 @@
 
 package io.grpc.internal;
 
+import io.grpc.ManagedBytes;
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
-import java.util.List;
 
 /**
  * Interface for an abstract byte buffer. Buffers are intended to be a read-only, except for the
@@ -104,22 +104,21 @@ public interface ReadableBuffer extends Closeable {
   ReadableBuffer readBytes(int length);
 
   /**
-   * Indicates whether or not this buffer supports {@link #readByteBuffers} operation that returns
-   * buffer's content as {@link ByteBuffer}s without making an extra copy.
+   * Indicates whether or not this buffer supports {@link #readManagedBytes} operation that returns
+   * buffer's content as {@link ManagedBytes}.
    */
-  boolean shouldUseByteBuffer();
+  boolean shouldUseManagedBytes();
 
   /**
-   * Reads {@code length} bytes as {@link ByteBuffer}s. This is an optional method, so callers
-   * should first check {@link #shouldUseByteBuffer}. Some implementation may return
-   * {@link ByteBuffer}s sharing the backing memory with this buffer to prevent copying. Closing
-   * this buffer may result in the returned {@link ByteBuffer}s no longer readable.
+   * Reads {@code length} bytes as {@link ManagedBytes}. This is an optional method, so callers
+   * should first check {@link #shouldUseManagedBytes}. Closing this buffer too early may
+   * result in the returned {@link ManagedBytes} no longer readable.
    *
-   * @param length the total number of bytes to contain in the returned {@link ByteBuffer}s.
+   * @param length the total number of bytes to contain in the returned {@link ManagedBytes}s.
    * @throws UnsupportedOperationException the buffer does not support this method
    * @throws IndexOutOfBoundsException if required bytes are not readable
    */
-  List<ByteBuffer> readByteBuffers(int length);
+  ManagedBytes readManagedBytes(int length);
 
   /**
    * Indicates whether or not this buffer exposes a backing array.

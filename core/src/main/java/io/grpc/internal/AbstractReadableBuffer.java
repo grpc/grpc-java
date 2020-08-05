@@ -16,8 +16,7 @@
 
 package io.grpc.internal;
 
-import java.nio.ByteBuffer;
-import java.util.List;
+import io.grpc.ManagedBytes;
 
 /**
  * Abstract base class for {@link ReadableBuffer} implementations.
@@ -34,12 +33,12 @@ public abstract class AbstractReadableBuffer implements ReadableBuffer {
   }
 
   @Override
-  public boolean shouldUseByteBuffer() {
+  public boolean shouldUseManagedBytes() {
     return false;
   }
 
   @Override
-  public List<ByteBuffer> readByteBuffers(int length) {
+  public ManagedBytes readManagedBytes(int length) {
     throw new UnsupportedOperationException();
   }
 
