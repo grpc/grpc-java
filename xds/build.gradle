@@ -96,6 +96,7 @@ shadowJar {
     relocate 'io.envoyproxy', 'io.grpc.xds.shaded.io.envoyproxy'
     relocate 'io.grpc.netty', 'io.grpc.netty.shaded.io.grpc.netty'
     relocate 'io.netty', 'io.grpc.netty.shaded.io.netty'
+    relocate 'google.security', 'io.grpc.xds.shaded.google.security'
     exclude "**/*.proto"
 }
 
