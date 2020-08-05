@@ -17,13 +17,13 @@
 package io.grpc.netty;
 
 import com.google.common.base.Preconditions;
+import io.grpc.ManagedBytes;
 import io.grpc.internal.AbstractReadableBuffer;
 import io.netty.buffer.ByteBuf;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 
 /**
@@ -83,20 +83,23 @@ class NettyReadableBuffer extends AbstractReadableBuffer {
   }
 
   @Override
-  public boolean shouldUseByteBuffer() {
+  public boolean shouldUseManagedBytes() {
     return buffer.nioBufferCount() > 0;
   }
 
   @Override
-  public List<ByteBuffer> readByteBuffers(int length) {
+  public ManagedBytes readManagedBytes(int length) {
     if (buffer.readableBytes() < length) {
       throw new IndexOutOfBoundsException();
     }
-    List<ByteBuffer> res = buffer.nioBufferCount() == 1
-        ? Collections.singletonList(buffer.nioBuffer(buffer.readerIndex(), length))
-        : Arrays.asList(buffer.nioBuffers(buffer.readerIndex(), length));
+    final List<ByteBuffer> res = Arrays.asList(buffer.nioBuffers(buffer.readerIndex(), length));
     buffer.skipBytes(length);
-    return res;
+    return new ManagedBytes() {
+      @Override
+      public List<ByteBuffer> asByteBuffers() {
+        return res;
+      }
+    };
   }
 
   @Override
