@@ -76,6 +76,7 @@ import io.grpc.IntegerMarshaller;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalChannelz.ChannelStats;
 import io.grpc.InternalChannelz.ChannelTrace;
+import io.grpc.InternalConfigSelector;
 import io.grpc.InternalInstrumented;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
@@ -482,6 +483,51 @@ public class ManagedChannelImplTest {
     verify(mockCallListener).onClose(statusCaptor.capture(), any(Metadata.class));
     Status status = statusCaptor.getValue();
     assertSame(Status.DEADLINE_EXCEEDED.getCode(), status.getCode());
+  }
+
+  @Test
+  public void startCallBeforeNameResolution() {
+    channel = new ManagedChannelImpl(
+        channelBuilder, mockTransportFactory, new FakeBackoffPolicyProvider(),
+        balancerRpcExecutorPool, timer.getStopwatchSupplier(),
+        Collections.<ClientInterceptor>emptyList(), timer.getTimeProvider());
+    Metadata headers = new Metadata();
+    ClientStream mockStream = mock(ClientStream.class);
+    ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
+    call.start(mockCallListener, headers);
+
+    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(null);
+    verify(mockLoadBalancerProvider).newLoadBalancer(helperCaptor.capture());
+    helper = helperCaptor.getValue();
+    // Make the transport available
+    Subchannel subchannel =
+        createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
+    verify(mockTransportFactory, never())
+        .newClientTransport(
+            any(SocketAddress.class), any(ClientTransportOptions.class), any(ChannelLogger.class));
+    requestConnectionSafely(helper, subchannel);
+    verify(mockTransportFactory)
+        .newClientTransport(
+            any(SocketAddress.class), any(ClientTransportOptions.class), any(ChannelLogger.class));
+    MockClientTransportInfo transportInfo = transports.poll();
+    ConnectionClientTransport mockTransport = transportInfo.transport;
+    ManagedClientTransport.Listener transportListener = transportInfo.listener;
+    when(mockTransport.newStream(same(method), same(headers), any(CallOptions.class)))
+        .thenReturn(mockStream);
+    transportListener.transportReady();
+    when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class)))
+        .thenReturn(PickResult.withSubchannel(subchannel));
+    updateBalancingStateSafely(helper, READY, mockPicker);
+    executor.runDueTasks();
+
+    // TODO(zdapeng): verify CallOptions updated by config selector
+    verify(mockTransport).newStream(same(method), same(headers), any(CallOptions.class));
+    verify(mockStream).start(streamListenerCaptor.capture());
+
+    // Clean up as much as possible to allow the channel to terminate.
+    shutdownSafely(helper, subchannel);
+    timer.forwardNanos(
+        TimeUnit.SECONDS.toNanos(ManagedChannelImpl.SUBCHANNEL_SHUTDOWN_DELAY_SECONDS));
   }
 
   @Test
@@ -3689,6 +3735,10 @@ public class ManagedChannelImplTest {
           createManagedChannelServiceConfig(rawServiceConfig, null);
       nameResolverFactory.nextConfigOrError.set(
           ConfigOrError.fromConfig(managedChannelServiceConfig));
+      nameResolverFactory.nextAttributes.set(
+          Attributes.newBuilder()
+              .set(InternalConfigSelector.KEY, mock(InternalConfigSelector.class))
+              .build());
 
       createChannel();
 
@@ -3696,6 +3746,7 @@ public class ManagedChannelImplTest {
           ArgumentCaptor.forClass(ResolvedAddresses.class);
       verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
       assertThat(resultCaptor.getValue().getAddresses()).containsExactly(addressGroup);
+      assertThat(resultCaptor.getValue().getAttributes().get(InternalConfigSelector.KEY)).isNull();
       verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
     } finally {
       LoadBalancerRegistry.getDefaultRegistry().deregister(mockLoadBalancerProvider);
@@ -3722,6 +3773,10 @@ public class ManagedChannelImplTest {
           createManagedChannelServiceConfig(rawServiceConfig, null);
       nameResolverFactory.nextConfigOrError.set(
           ConfigOrError.fromConfig(managedChannelServiceConfig));
+      nameResolverFactory.nextAttributes.set(
+          Attributes.newBuilder()
+              .set(InternalConfigSelector.KEY, mock(InternalConfigSelector.class))
+              .build());
 
       createChannel();
 
@@ -3729,6 +3784,7 @@ public class ManagedChannelImplTest {
           ArgumentCaptor.forClass(ResolvedAddresses.class);
       verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
       assertThat(resultCaptor.getValue().getAddresses()).containsExactly(addressGroup);
+      assertThat(resultCaptor.getValue().getAttributes().get(InternalConfigSelector.KEY)).isNull();
       verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
     } finally {
       LoadBalancerRegistry.getDefaultRegistry().deregister(mockLoadBalancerProvider);
@@ -4008,6 +4064,7 @@ public class ManagedChannelImplTest {
     final Status error;
     final ArrayList<FakeNameResolverFactory.FakeNameResolver> resolvers = new ArrayList<>();
     final AtomicReference<ConfigOrError> nextConfigOrError = new AtomicReference<>();
+    final AtomicReference<Attributes> nextAttributes = new AtomicReference<>(Attributes.EMPTY);
 
     FakeNameResolverFactory(
         List<URI> expectedUris,
@@ -4078,7 +4135,8 @@ public class ManagedChannelImplTest {
         }
         ResolutionResult.Builder builder =
             ResolutionResult.newBuilder()
-                .setAddresses(servers);
+                .setAddresses(servers)
+                .setAttributes(nextAttributes.get());
         ConfigOrError configOrError = nextConfigOrError.get();
         if (configOrError != null) {
           builder.setServiceConfig(configOrError);
