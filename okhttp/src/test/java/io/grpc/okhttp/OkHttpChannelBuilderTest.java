@@ -16,15 +16,23 @@
 
 package io.grpc.okhttp;
 
+import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.internal.GrpcUtil.TIMER_SERVICE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.mockito.Mockito.mock;
 
 import com.squareup.okhttp.ConnectionSpec;
+import io.grpc.CallCredentials;
+import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
+import io.grpc.ChoiceChannelCredentials;
+import io.grpc.CompositeChannelCredentials;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
+import io.grpc.TlsChannelCredentials;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.GrpcUtil;
@@ -35,6 +43,8 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.util.concurrent.ScheduledExecutorService;
 import javax.net.SocketFactory;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocketFactory;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -110,6 +120,101 @@ public class OkHttpChannelBuilderTest {
     thrown.expectMessage("Invalid host or port");
 
     OkHttpChannelBuilder.forAddress("invalid_authority", 1234);
+  }
+
+  @Test
+  public void sslSocketFactoryFrom_unknown() {
+    OkHttpChannelBuilder.SslSocketFactoryResult result =
+        OkHttpChannelBuilder.sslSocketFactoryFrom(new ChannelCredentials() {});
+    assertThat(result.error).isNotNull();
+    assertThat(result.callCredentials).isNull();
+    assertThat(result.factory).isNull();
+  }
+
+  @Test
+  public void sslSocketFactoryFrom_tls() {
+    OkHttpChannelBuilder.SslSocketFactoryResult result =
+        OkHttpChannelBuilder.sslSocketFactoryFrom(TlsChannelCredentials.create());
+    assertThat(result.error).isNull();
+    assertThat(result.callCredentials).isNull();
+    assertThat(result.factory).isNotNull();
+  }
+
+  @Test
+  public void sslSocketFactoryFrom_unsupportedTls() {
+    OkHttpChannelBuilder.SslSocketFactoryResult result = OkHttpChannelBuilder.sslSocketFactoryFrom(
+        TlsChannelCredentials.newBuilder().requireFakeFeature().build());
+    assertThat(result.error).contains("FAKE");
+    assertThat(result.callCredentials).isNull();
+    assertThat(result.factory).isNull();
+  }
+
+  @Test
+  public void sslSocketFactoryFrom_insecure() {
+    OkHttpChannelBuilder.SslSocketFactoryResult result =
+        OkHttpChannelBuilder.sslSocketFactoryFrom(InsecureChannelCredentials.create());
+    assertThat(result.error).isNull();
+    assertThat(result.callCredentials).isNull();
+    assertThat(result.factory).isNull();
+  }
+
+  @Test
+  public void sslSocketFactoryFrom_composite() {
+    CallCredentials callCredentials = mock(CallCredentials.class);
+    OkHttpChannelBuilder.SslSocketFactoryResult result =
+        OkHttpChannelBuilder.sslSocketFactoryFrom(CompositeChannelCredentials.create(
+          TlsChannelCredentials.create(), callCredentials));
+    assertThat(result.error).isNull();
+    assertThat(result.callCredentials).isSameInstanceAs(callCredentials);
+    assertThat(result.factory).isNotNull();
+
+    result = OkHttpChannelBuilder.sslSocketFactoryFrom(CompositeChannelCredentials.create(
+          InsecureChannelCredentials.create(), callCredentials));
+    assertThat(result.error).isNull();
+    assertThat(result.callCredentials).isSameInstanceAs(callCredentials);
+    assertThat(result.factory).isNull();
+  }
+
+  @Test
+  public void sslSocketFactoryFrom_okHttp() throws Exception {
+    SSLContext sslContext = SSLContext.getInstance("TLS");
+    sslContext.init(null, null, null);
+    SSLSocketFactory sslSocketFactory = sslContext.getSocketFactory();
+    OkHttpChannelBuilder.SslSocketFactoryResult result = OkHttpChannelBuilder.sslSocketFactoryFrom(
+        SslSocketFactoryChannelCredentials.create(sslSocketFactory));
+    assertThat(result.error).isNull();
+    assertThat(result.callCredentials).isNull();
+    assertThat(result.factory).isSameInstanceAs(sslSocketFactory);
+  }
+
+  @Test
+  public void sslSocketFactoryFrom_choice() {
+    OkHttpChannelBuilder.SslSocketFactoryResult result =
+        OkHttpChannelBuilder.sslSocketFactoryFrom(ChoiceChannelCredentials.create(
+          new ChannelCredentials() {},
+          TlsChannelCredentials.create(),
+          InsecureChannelCredentials.create()));
+    assertThat(result.error).isNull();
+    assertThat(result.callCredentials).isNull();
+    assertThat(result.factory).isNotNull();
+
+    result = OkHttpChannelBuilder.sslSocketFactoryFrom(ChoiceChannelCredentials.create(
+          InsecureChannelCredentials.create(),
+          new ChannelCredentials() {},
+          TlsChannelCredentials.create()));
+    assertThat(result.error).isNull();
+    assertThat(result.callCredentials).isNull();
+    assertThat(result.factory).isNull();
+  }
+
+  @Test
+  public void sslSocketFactoryFrom_choice_unknown() {
+    OkHttpChannelBuilder.SslSocketFactoryResult result =
+        OkHttpChannelBuilder.sslSocketFactoryFrom(ChoiceChannelCredentials.create(
+          new ChannelCredentials() {}));
+    assertThat(result.error).isNotNull();
+    assertThat(result.callCredentials).isNull();
+    assertThat(result.factory).isNull();
   }
 
   @Test
