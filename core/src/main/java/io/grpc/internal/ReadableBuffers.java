@@ -19,15 +19,15 @@ package io.grpc.internal;
 import static com.google.common.base.Charsets.UTF_8;
 
 import com.google.common.base.Preconditions;
-import io.grpc.ByteBufferReadable;
 import io.grpc.KnownLength;
+import io.grpc.ManagedBytes;
+import io.grpc.ManagedBytes.ManagedBytesReadable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
-import java.util.List;
 import javax.annotation.Nullable;
 
 /**
@@ -109,8 +109,8 @@ public final class ReadableBuffers {
     if (!owner) {
       buffer = ignoreClose(buffer);
     }
-    return buffer.shouldUseByteBuffer()
-        ? new ByteBufferReadableInputStream(buffer) : new BufferInputStream(buffer);
+    return buffer.shouldUseManagedBytes()
+        ? new ManagedBytesInputStream(buffer) : new BufferInputStream(buffer);
   }
 
   /**
@@ -343,23 +343,26 @@ public final class ReadableBuffers {
     }
   }
 
-  private static final class ByteBufferReadableInputStream extends BufferInputStream
-      implements ByteBufferReadable {
+  /**
+   * A {@link BufferInputStream} that supports data transfer via {@link ManagedBytes}.
+   */
+  private static final class ManagedBytesInputStream extends BufferInputStream
+      implements ManagedBytesReadable {
 
-    ByteBufferReadableInputStream(ReadableBuffer buffer) {
+    ManagedBytesInputStream(ReadableBuffer buffer) {
       super(buffer);
     }
 
     @Nullable
     @Override
-    public List<ByteBuffer> readByteBuffers(int length) {
+    public ManagedBytes readManagedBytes(int length) {
       if (buffer.readableBytes() == 0) {
         // EOF.
         return null;
       }
 
       length = Math.min(buffer.readableBytes(), length);
-      return buffer.readByteBuffers(length);
+      return buffer.readManagedBytes(length);
     }
   }
 
