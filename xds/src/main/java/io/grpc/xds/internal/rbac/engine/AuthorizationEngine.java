@@ -52,8 +52,9 @@ import java.util.logging.Logger;
  * <p>Use as in:
  * 
  * <pre>
- *  AuthorizationEngine engine = new AuthorizationEngine(rbacPolicies);
- *  AuthorizationDecision result = engine.evaluate();
+ *  AuthorizationEngine engine = new AuthorizationEngine(
+ *      ImmutableList.of(rbacPolicies));
+ *  AuthorizationDecision result = engine.evaluate(new EvaluateArgs(call, headers));
  * </pre>
  */
 public class AuthorizationEngine<ReqT, RespT> {
@@ -212,6 +213,7 @@ public class AuthorizationEngine<ReqT, RespT> {
         .put("destination.port", args.getDestinationPort())
         .put("connection.uri_san_peer_certificate", 
             args.getConnectionUriSanPeerCertificate())
+        .put("source.principal", args.getSourcePrincipal())
         .build();
     return attributes;
   }

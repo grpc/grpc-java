@@ -39,12 +39,12 @@ public class EvaluateArgs<ReqT, RespT> {
     this.call = call;
   }
 
-  /** Returns the headers. */
+  /** Return the headers. */
   public Metadata getHeaders() {
     return headers;
   }
 
-  /** Returns the gRPC call. */
+  /** Return the gRPC call. */
   public ServerCall<ReqT, RespT> getCall() {
     return call;
   }
@@ -61,16 +61,16 @@ public class EvaluateArgs<ReqT, RespT> {
     return requestHost;
   }
 
-  // Uncertain
   /** Extract the request.method field. */
   public String getRequestMethod() {
+    // TODO(@zhenlian): confirm extraction for request.method.
     String requestMethod = this.getCall().getMethodDescriptor().getServiceName();
     return requestMethod;
   }
 
-  // Uncertain
   /** Extract the request.headers field. */
   public Metadata getRequestHeaders() {
+    // TODO(@zhenlian): convert request.headers from Metadata to a String Map.
     Metadata requestHeaders = this.getHeaders();
     return requestHeaders;
   }
@@ -82,9 +82,9 @@ public class EvaluateArgs<ReqT, RespT> {
     return sourceAddress;
   }
 
-  // TBD
   /** Extract the source.port field. */
   public int getSourcePort() {
+    // TODO(@zhenlian): fill out extraction for source.port.
     int sourcePort = 0;
     return sourcePort;
   }
@@ -96,16 +96,16 @@ public class EvaluateArgs<ReqT, RespT> {
     return destinationAddress;
   }
 
-  // TBD
   /** Extract the destination.port field. */
   public int getDestinationPort() {
+    // TODO(@zhenlian): fill out extraction for destination.port.
     int destinationPort = 0;
     return destinationPort;
   }
 
-  // TBD
   /** Extract the connection.uri_san_peer_certificate field. */
   public String getConnectionUriSanPeerCertificate() {
+    // TODO(@zhenlian): fill out extraction for connection.uri_san_peer_certificate.
     SSLSession sslSession = 
         this.getCall().getAttributes().get(Grpc.TRANSPORT_ATTR_SSL_SESSION);
     @SuppressWarnings("unused")
@@ -117,5 +117,12 @@ public class EvaluateArgs<ReqT, RespT> {
     }
     String connectionUriSanPeerCertificate = "placeholder";
     return connectionUriSanPeerCertificate;
+  }
+
+  /** Extract the source.principal field. */
+  public String getSourcePrincipal() {
+    // TODO(@zhenlian): fill out extraction for source.principal.
+    String sourcePrincipal = "placeholder";
+    return sourcePrincipal;
   }
 }

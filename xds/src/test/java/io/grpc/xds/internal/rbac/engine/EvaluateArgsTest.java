@@ -71,6 +71,7 @@ public class EvaluateArgsTest<ReqT,RespT> {
         .put("destination.address", "4.3.2.1")
         .put("destination.port", 8080)
         .put("connection.uri_san_peer_certificate", "foo")
+        .put("source.principal", "spiffe")
         .build();
     // Set up evaluate args.
     when(args.getRequestUrlPath()).thenReturn("package.service/method");
@@ -82,6 +83,7 @@ public class EvaluateArgsTest<ReqT,RespT> {
     when(args.getDestinationAddress()).thenReturn("4.3.2.1");
     when(args.getDestinationPort()).thenReturn(8080);
     when(args.getConnectionUriSanPeerCertificate()).thenReturn("foo");
+    when(args.getSourcePrincipal()).thenReturn("spiffe");
   }
 
   @Test
@@ -97,5 +99,6 @@ public class EvaluateArgsTest<ReqT,RespT> {
     verify(args, times(1)).getDestinationAddress();
     verify(args, times(1)).getDestinationPort();
     verify(args, times(1)).getConnectionUriSanPeerCertificate();
+    verify(args, times(1)).getSourcePrincipal();
   }
 }
