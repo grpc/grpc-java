@@ -45,12 +45,14 @@
 
 namespace java_grpc_generator {
 
-using google::protobuf::FileDescriptor;
-using google::protobuf::ServiceDescriptor;
-using google::protobuf::MethodDescriptor;
-using google::protobuf::Descriptor;
-using google::protobuf::io::Printer;
-using google::protobuf::SourceLocation;
+namespace protobuf = google::protobuf;
+
+using protobuf::Descriptor;
+using protobuf::FileDescriptor;
+using protobuf::MethodDescriptor;
+using protobuf::ServiceDescriptor;
+using protobuf::SourceLocation;
+using protobuf::io::Printer;
 using std::to_string;
 
 // java keywords from: https://docs.oracle.com/javase/specs/jls/se8/html/jls-3.html#jls-3.9
@@ -164,7 +166,7 @@ static inline std::string MethodIdFieldName(const MethodDescriptor* method) {
 }
 
 static inline std::string MessageFullJavaName(const Descriptor* desc) {
-  return google::protobuf::compiler::java::ClassName(desc);
+  return protobuf::compiler::java::ClassName(desc);
 }
 
 // TODO(nmittler): Remove once protobuf includes javadoc methods in distribution.
@@ -427,12 +429,12 @@ static void PrintMethodFields(
         "            .setFullMethodName(generateFullMethodName(SERVICE_NAME, \"$method_name$\"))\n");
         
     bool safe = method->options().idempotency_level()
-        == google::protobuf::MethodOptions_IdempotencyLevel_NO_SIDE_EFFECTS;
+        == protobuf::MethodOptions_IdempotencyLevel_NO_SIDE_EFFECTS;
     if (safe) {
       p->Print(*vars, "            .setSafe(true)\n");
     } else {
       bool idempotent = method->options().idempotency_level()
-          == google::protobuf::MethodOptions_IdempotencyLevel_IDEMPOTENT;
+          == protobuf::MethodOptions_IdempotencyLevel_IDEMPOTENT;
       if (idempotent) {
         p->Print(*vars, "            .setIdempotent(true)\n");
       }
@@ -918,7 +920,7 @@ static void PrintGetServiceDescriptorMethod(const ServiceDescriptor* service,
     (*vars)["proto_base_descriptor_supplier"] = service->name() + "BaseDescriptorSupplier";
     (*vars)["proto_file_descriptor_supplier"] = service->name() + "FileDescriptorSupplier";
     (*vars)["proto_method_descriptor_supplier"] = service->name() + "MethodDescriptorSupplier";
-    (*vars)["proto_class_name"] = google::protobuf::compiler::java::ClassName(service->file());
+    (*vars)["proto_class_name"] = protobuf::compiler::java::ClassName(service->file());
     p->Print(
         *vars,
         "private static abstract class $proto_base_descriptor_supplier$\n"
@@ -1188,7 +1190,7 @@ void PrintImports(Printer* p) {
 }
 
 void GenerateService(const ServiceDescriptor* service,
-                     google::protobuf::io::ZeroCopyOutputStream* out,
+                     protobuf::io::ZeroCopyOutputStream* out,
                      ProtoFlavor flavor,
                      bool disable_version) {
   // All non-generated classes must be referred by fully qualified names to
@@ -1244,7 +1246,7 @@ void GenerateService(const ServiceDescriptor* service,
 }
 
 std::string ServiceJavaPackage(const FileDescriptor* file) {
-  std::string result = google::protobuf::compiler::java::ClassName(file);
+  std::string result = protobuf::compiler::java::ClassName(file);
   size_t last_dot_pos = result.find_last_of('.');
   if (last_dot_pos != std::string::npos) {
     result.resize(last_dot_pos);
@@ -1254,7 +1256,7 @@ std::string ServiceJavaPackage(const FileDescriptor* file) {
   return result;
 }
 
-std::string ServiceClassName(const google::protobuf::ServiceDescriptor* service) {
+std::string ServiceClassName(const ServiceDescriptor* service) {
   return service->name() + "Grpc";
 }
 
