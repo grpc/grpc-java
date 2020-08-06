@@ -21,8 +21,10 @@ import static io.grpc.xds.internal.certprovider.MeshCaCertificateProviderProvide
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.google.auth.oauth2.GoogleCredentials;
 import io.grpc.internal.BackoffPolicy;
@@ -33,7 +35,6 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
-
 import java.util.concurrent.TimeUnit;
 import org.junit.Before;
 import org.junit.Test;
@@ -66,7 +67,9 @@ public class MeshCaCertificateProviderProviderTest {
   MeshCaCertificateProvider.Factory meshCaCertificateProviderFactory;
 
   @Mock
-  private ScheduledExecutorService scheduledExecutorService;
+  private MeshCaCertificateProviderProvider.ScheduledExecutorServiceFactory
+      scheduledExecutorServiceFactory;
+
   @Mock
   private TimeProvider timeProvider;
 
@@ -81,7 +84,7 @@ public class MeshCaCertificateProviderProviderTest {
             meshCaChannelFactory,
             backoffPolicyProvider,
             meshCaCertificateProviderFactory,
-            scheduledExecutorService,
+            scheduledExecutorServiceFactory,
             timeProvider);
   }
 
@@ -107,6 +110,10 @@ public class MeshCaCertificateProviderProviderTest {
     CertificateProvider.DistributorWatcher distWatcher =
         new CertificateProvider.DistributorWatcher();
     Map<String, String> map = buildMinimalMap();
+    ScheduledExecutorService mockService = mock(ScheduledExecutorService.class);
+    when(scheduledExecutorServiceFactory.create(
+            eq(MeshCaCertificateProviderProvider.MESHCA_URL_DEFAULT)))
+        .thenReturn(mockService);
     provider.createCertificateProvider(map, distWatcher, true);
     verify(stsCredentialsFactory, times(1))
         .create(
@@ -128,7 +135,7 @@ public class MeshCaCertificateProviderProviderTest {
             eq(MeshCaCertificateProviderProvider.RENEWAL_GRACE_PERIOD_SECONDS_DEFAULT),
             eq(MeshCaCertificateProviderProvider.MAX_RETRY_ATTEMPTS_DEFAULT),
             (GoogleCredentials) isNull(),
-            eq(scheduledExecutorService),
+            eq(mockService),
             eq(timeProvider),
             eq(TimeUnit.SECONDS.toMillis(RPC_TIMEOUT_SECONDS)));
   }
@@ -166,7 +173,9 @@ public class MeshCaCertificateProviderProviderTest {
     CertificateProvider.DistributorWatcher distWatcher =
             new CertificateProvider.DistributorWatcher();
     Map<String, String> map = buildMinimalMap();
-    map.put("gkeClusterUrl", "https://container.googleapis.com/v1/project/test-project1/locations/test-zone2/clusters/test-cluster3");
+    map.put(
+        "gkeClusterUrl",
+        "https://container.googleapis.com/v1/project/test-project1/locations/test-zone2/clusters/test-cluster3");
     try {
       provider.createCertificateProvider(map, distWatcher, true);
       fail("exception expected");
@@ -180,6 +189,9 @@ public class MeshCaCertificateProviderProviderTest {
     CertificateProvider.DistributorWatcher distWatcher =
             new CertificateProvider.DistributorWatcher();
     Map<String, String> map = buildFullMap();
+    ScheduledExecutorService mockService = mock(ScheduledExecutorService.class);
+    when(scheduledExecutorServiceFactory.create(eq(NON_DEFAULT_MESH_CA_URL)))
+        .thenReturn(mockService);
     provider.createCertificateProvider(map, distWatcher, true);
     verify(stsCredentialsFactory, times(1))
             .create(
@@ -201,7 +213,7 @@ public class MeshCaCertificateProviderProviderTest {
                     eq(4321L),
                     eq(9),
                     (GoogleCredentials) isNull(),
-                    eq(scheduledExecutorService),
+                    eq(mockService),
                     eq(timeProvider),
                     eq(TimeUnit.SECONDS.toMillis(RPC_TIMEOUT_SECONDS)));
   }
