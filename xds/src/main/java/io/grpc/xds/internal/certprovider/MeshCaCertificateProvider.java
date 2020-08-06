@@ -316,6 +316,7 @@ final class MeshCaCertificateProvider extends CertificateProvider {
     return Math.max(delayToCertExpirySeconds, INITIAL_DELAY_SECONDS);
   }
 
+  @SuppressWarnings("JdkObsolete")
   private long computeDelaySecondsToCertExpiry(X509Certificate lastCert) {
     checkNotNull(lastCert, "lastCert");
     return TimeUnit.NANOSECONDS.toSeconds(
