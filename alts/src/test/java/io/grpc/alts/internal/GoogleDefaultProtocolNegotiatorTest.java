@@ -69,7 +69,7 @@ public final class GoogleDefaultProtocolNegotiatorTest {
         ImmutableList.<String>of(),
         handshakerChannelPool,
         sslContext)
-        .buildProtocolNegotiator();
+        .newNegotiator();
   }
 
   @After
