@@ -169,7 +169,7 @@ public class CertificateProviderStoreTest {
         (TestCertificateProvider) handle1.certProvider;
     assertThat(testCertificateProvider.startCalled).isEqualTo(1);
     CertificateProvider.DistributorWatcher distWatcher = testCertificateProvider.getWatcher();
-    assertThat(distWatcher.downsstreamWatchers).hasSize(2);
+    assertThat(distWatcher.downstreamWatchers).hasSize(2);
     PrivateKey testKey = mock(PrivateKey.class);
     X509Certificate cert = mock(X509Certificate.class);
     List<X509Certificate> testList = ImmutableList.of(cert);
@@ -185,7 +185,7 @@ public class CertificateProviderStoreTest {
     reset(mockWatcher2);
     handle1.close();
     assertThat(testCertificateProvider.closeCalled).isEqualTo(0);
-    assertThat(distWatcher.downsstreamWatchers).hasSize(1);
+    assertThat(distWatcher.downstreamWatchers).hasSize(1);
     testCertificateProvider.getWatcher().updateCertificate(testKey, testList);
     verify(mockWatcher1, never())
         .updateCertificate(any(PrivateKey.class), anyListOf(X509Certificate.class));
@@ -221,7 +221,7 @@ public class CertificateProviderStoreTest {
     CertificateProvider.Watcher mockWatcher2 = mock(CertificateProvider.Watcher.class);
     CertificateProviderStore.Handle unused = certificateProviderStore.createOrGetProvider(
             "cert-name1", "plugin1", "config", mockWatcher2, true);
-    assertThat(distWatcher.downsstreamWatchers).hasSize(2);
+    assertThat(distWatcher.downstreamWatchers).hasSize(2);
     // updates sent to the second watcher
     verify(mockWatcher2, times(1)).updateCertificate(eq(testKey), eq(testList));
     verify(mockWatcher2, times(1)).updateTrustedRoots(eq(testList));
@@ -323,9 +323,9 @@ public class CertificateProviderStoreTest {
     assertThat(testCertificateProvider2.certProviderProvider)
         .isSameInstanceAs(certProviderProvider2);
     CertificateProvider.DistributorWatcher distWatcher1 = testCertificateProvider1.getWatcher();
-    assertThat(distWatcher1.downsstreamWatchers).hasSize(1);
+    assertThat(distWatcher1.downstreamWatchers).hasSize(1);
     CertificateProvider.DistributorWatcher distWatcher2 = testCertificateProvider2.getWatcher();
-    assertThat(distWatcher2.downsstreamWatchers).hasSize(1);
+    assertThat(distWatcher2.downstreamWatchers).hasSize(1);
     PrivateKey testKey1 = mock(PrivateKey.class);
     X509Certificate cert1 = mock(X509Certificate.class);
     List<X509Certificate> testList1 = ImmutableList.of(cert1);

@@ -47,6 +47,7 @@ import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
+import io.grpc.SynchronizationContext;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.BackoffPolicy;
@@ -279,24 +280,24 @@ public class MeshCaCertificateProviderTest {
         .when(timeService)
         .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
     provider.start();
-    MeshCaCertificateProvider.RefreshCertificateTask savedScheduledTask = provider.scheduledTask;
-    assertThat(savedScheduledTask).isNotNull();
-    assertThat(savedScheduledTask.scheduledHandle.isPending()).isTrue();
+    SynchronizationContext.ScheduledHandle savedScheduledHandle = provider.scheduledHandle;
+    assertThat(savedScheduledHandle).isNotNull();
+    assertThat(savedScheduledHandle.isPending()).isTrue();
     verify(timeService, times(1))
         .schedule(
             any(Runnable.class),
             eq(MeshCaCertificateProvider.INITIAL_DELAY_SECONDS),
             eq(TimeUnit.SECONDS));
     DistributorWatcher distWatcher = provider.getWatcher();
-    assertThat(distWatcher.downsstreamWatchers).hasSize(1);
+    assertThat(distWatcher.downstreamWatchers).hasSize(1);
     PrivateKey mockKey = mock(PrivateKey.class);
     X509Certificate mockCert = mock(X509Certificate.class);
     distWatcher.updateCertificate(mockKey, ImmutableList.of(mockCert));
     distWatcher.updateTrustedRoots(ImmutableList.of(mockCert));
     provider.close();
-    assertThat(provider.scheduledTask).isNull();
-    assertThat(savedScheduledTask.scheduledHandle.isPending()).isFalse();
-    assertThat(distWatcher.downsstreamWatchers).isEmpty();
+    assertThat(provider.scheduledHandle).isNull();
+    assertThat(savedScheduledHandle.isPending()).isFalse();
+    assertThat(distWatcher.downstreamWatchers).isEmpty();
     assertThat(distWatcher.getLastIdentityCert()).isNull();
   }
 
@@ -307,11 +308,11 @@ public class MeshCaCertificateProviderTest {
         .when(timeService)
         .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
     provider.start();
-    MeshCaCertificateProvider.RefreshCertificateTask savedScheduledTask1 = provider.scheduledTask;
+    SynchronizationContext.ScheduledHandle savedScheduledHandle1 = provider.scheduledHandle;
     provider.start();
-    MeshCaCertificateProvider.RefreshCertificateTask savedScheduledTask2 = provider.scheduledTask;
-    assertThat(savedScheduledTask2).isNotSameInstanceAs(savedScheduledTask1);
-    assertThat(savedScheduledTask2.scheduledHandle.isPending()).isTrue();
+    SynchronizationContext.ScheduledHandle savedScheduledHandle2 = provider.scheduledHandle;
+    assertThat(savedScheduledHandle2).isNotSameInstanceAs(savedScheduledHandle1);
+    assertThat(savedScheduledHandle2.isPending()).isTrue();
   }
 
   @Test

@@ -38,7 +38,6 @@ import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ForwardingClientCall;
-import io.grpc.ForwardingClientCallListener;
 import io.grpc.InternalLogId;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
@@ -84,7 +83,7 @@ import org.bouncycastle.util.io.pem.PemObject;
 final class MeshCaCertificateProvider extends CertificateProvider {
   private static final Logger logger = Logger.getLogger(MeshCaCertificateProvider.class.getName());
 
-  protected MeshCaCertificateProvider(
+  MeshCaCertificateProvider(
       DistributorWatcher watcher,
       boolean notifyCertUpdates,
       String meshCaUrl,
@@ -127,7 +126,7 @@ final class MeshCaCertificateProvider extends CertificateProvider {
   }
 
   private SynchronizationContext createSynchronizationContext(String details) {
-    final InternalLogId logId = InternalLogId.allocate("XdsClientWrapperForServerSds", details);
+    final InternalLogId logId = InternalLogId.allocate("MeshCaCertificateProvider", details);
     return new SynchronizationContext(
         new Thread.UncaughtExceptionHandler() {
           private boolean panicMode;
@@ -159,21 +158,21 @@ final class MeshCaCertificateProvider extends CertificateProvider {
 
   @Override
   public void close() {
-    if (scheduledTask != null) {
-      scheduledTask.scheduledHandle.cancel();
-      scheduledTask = null;
+    if (scheduledHandle != null) {
+      scheduledHandle.cancel();
+      scheduledHandle = null;
     }
     getWatcher().close();
   }
 
   private void scheduleNextRefreshCertificate(long delayInSeconds) {
-    if (scheduledTask != null) {
-      if (scheduledTask.scheduledHandle.isPending()) {
-        logger.log(Level.SEVERE, "Pending task found: inconsistent state in scheduledHandle!");
-        scheduledTask.scheduledHandle.cancel();
-      }
+    if (scheduledHandle != null && scheduledHandle.isPending()) {
+      logger.log(Level.SEVERE, "Pending task found: inconsistent state in scheduledHandle!");
+      scheduledHandle.cancel();
     }
-    scheduledTask = new RefreshCertificateTask(delayInSeconds);
+    RefreshCertificateTask runnable = new RefreshCertificateTask();
+    scheduledHandle = syncContext.schedule(
+            runnable, delayInSeconds, TimeUnit.SECONDS, scheduledExecutorService);
   }
 
   @VisibleForTesting
@@ -252,7 +251,10 @@ final class MeshCaCertificateProvider extends CertificateProvider {
     }, nanos, TimeUnit.NANOSECONDS);
     try {
       future.get(nanos, TimeUnit.NANOSECONDS);
-    } catch (InterruptedException | ExecutionException | TimeoutException ex) {
+    } catch (InterruptedException ie) {
+      logger.log(Level.SEVERE, "Inside sleep", ie);
+      Thread.currentThread().interrupt();
+    } catch (ExecutionException | TimeoutException ex) {
       logger.log(Level.SEVERE, "Inside sleep", ex);
     }
   }
@@ -277,7 +279,7 @@ final class MeshCaCertificateProvider extends CertificateProvider {
       if (delaySeconds > INITIAL_DELAY_SECONDS) {
         return;
       }
-      getWatcher().cleanupLastValues();
+      getWatcher().clearValues();
     }
     getWatcher().onError(Status.fromThrowable(t));
   }
@@ -328,6 +330,7 @@ final class MeshCaCertificateProvider extends CertificateProvider {
     } catch (InterruptedException ex) {
       logger.log(Level.SEVERE, "awaiting channel Termination", ex);
       channel.shutdownNow();
+      Thread.currentThread().interrupt();
     }
   }
 
@@ -345,13 +348,6 @@ final class MeshCaCertificateProvider extends CertificateProvider {
 
   @VisibleForTesting
   class RefreshCertificateTask implements Runnable {
-    @VisibleForTesting final SynchronizationContext.ScheduledHandle scheduledHandle;
-
-    private RefreshCertificateTask(long delayInSeconds) {
-      scheduledHandle =
-          syncContext.schedule(this, delayInSeconds, TimeUnit.SECONDS, scheduledExecutorService);
-    }
-
     @Override
     public void run() {
       try {
@@ -471,10 +467,7 @@ final class MeshCaCertificateProvider extends CertificateProvider {
         @Override
         public void start(Listener<RespT> responseListener, Metadata headers) {
           headers.put(KEY_FOR_ZONE_INFO, zone);
-          super.start(
-              new ForwardingClientCallListener.SimpleForwardingClientCallListener<RespT>(
-                  responseListener) {},
-              headers);
+          super.start(responseListener, headers);
         }
       };
     }
@@ -510,6 +503,6 @@ final class MeshCaCertificateProvider extends CertificateProvider {
   private final GoogleCredentials oauth2Creds;
   private final TimeProvider timeProvider;
   private final MeshCaChannelFactory meshCaChannelFactory;
-  @VisibleForTesting RefreshCertificateTask scheduledTask;
+  @VisibleForTesting SynchronizationContext.ScheduledHandle scheduledHandle;
   private final long rpcTimeoutMillis;
 }
