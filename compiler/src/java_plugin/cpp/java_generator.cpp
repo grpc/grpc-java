@@ -37,8 +37,10 @@
 #define XSTR(s) STR(s)
 #endif
 
-#ifndef FALLTHROUGH_INTENDED
-#define FALLTHROUGH_INTENDED
+#ifdef ABSL_FALLTHROUGH_INTENDED
+#define FALLTHROUGH ABSL_FALLTHROUGH_INTENDED
+#else
+#define FALLTHROUGH
 #endif
 
 namespace java_grpc_generator {
@@ -542,7 +544,7 @@ static void PrintStub(
       break;
     case BLOCKING_CLIENT_INTERFACE:
       interface = true;
-      FALLTHROUGH_INTENDED;
+      FALLTHROUGH;
     case BLOCKING_CLIENT_IMPL:
       call_type = BLOCKING_CALL;
       stub_name += "BlockingStub";
@@ -551,7 +553,7 @@ static void PrintStub(
       break;
     case FUTURE_CLIENT_INTERFACE:
       interface = true;
-      FALLTHROUGH_INTENDED;
+      FALLTHROUGH;
     case FUTURE_CLIENT_IMPL:
       call_type = FUTURE_CALL;
       stub_name += "FutureStub";
