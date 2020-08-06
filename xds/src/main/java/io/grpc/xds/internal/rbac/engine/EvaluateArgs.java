@@ -19,11 +19,6 @@ package io.grpc.xds.internal.rbac.engine;
 import io.grpc.Grpc;
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
-import java.security.cert.Certificate;
-import java.util.Arrays;
-import java.util.List;
-import javax.net.ssl.SSLPeerUnverifiedException;
-import javax.net.ssl.SSLSession;
 
 /** The EvaluateArgs class holds evaluate arguments used in CEL Evaluation Engine. */
 public class EvaluateArgs<ReqT, RespT> {
@@ -106,15 +101,6 @@ public class EvaluateArgs<ReqT, RespT> {
   /** Extract the connection.uri_san_peer_certificate field. */
   public String getConnectionUriSanPeerCertificate() {
     // TODO(@zhenlian): fill out extraction for connection.uri_san_peer_certificate.
-    SSLSession sslSession = 
-        this.getCall().getAttributes().get(Grpc.TRANSPORT_ATTR_SSL_SESSION);
-    @SuppressWarnings("unused")
-    List<Certificate> certificates; 
-    try {
-      certificates = Arrays.asList(sslSession.getPeerCertificates());
-    } catch (SSLPeerUnverifiedException e) {
-      return null;
-    }
     String connectionUriSanPeerCertificate = "placeholder";
     return connectionUriSanPeerCertificate;
   }
