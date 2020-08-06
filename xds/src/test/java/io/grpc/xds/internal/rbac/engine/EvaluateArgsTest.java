@@ -18,7 +18,6 @@ package io.grpc.xds.internal.rbac.engine;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
-// import static org.junit.Assert.assertNull;
 import static org.mockito.Mockito.when;
 
 import io.grpc.Metadata;
@@ -40,15 +39,6 @@ public class EvaluateArgsTest<ReqT,RespT> {
   @Mock
   private ServerCall<ReqT,RespT> call;
 
-  // @SuppressWarnings("UnusedVariable")
-  // private static final MethodDescriptor<String, Integer> method =
-  //     MethodDescriptor.<String, Integer>newBuilder()
-  //         .setType(MethodDescriptor.MethodType.UNKNOWN)
-  //         .setFullMethodName("service/method")
-  //         .setRequestMarshaller(new StringMarshaller())
-  //         .setResponseMarshaller(new IntegerMarshaller())
-  //         .build();
-
   private EvaluateArgs<ReqT,RespT> args;
   
   @Test
@@ -57,14 +47,9 @@ public class EvaluateArgsTest<ReqT,RespT> {
     when(call.getAuthority()).thenReturn("fooapi.googleapis.com");
     assertNotNull(args.getCall());
     assertNotNull(args.getHeaders());
-
-    // assertNull(args.getRequestUrlPath());
     assertEquals(args.getRequestHost(), "fooapi.googleapis.com");
-    // assertNull(args.getRequestMethod());
     assertNotNull(args.getRequestHeaders());
-    // assertNull(args.getSourceAddress());
     assertEquals(args.getSourcePort(), 0);
-    // assertNull(args.getDestinationAddress());
     assertEquals(args.getDestinationPort(), 0);
     assertEquals(args.getConnectionUriSanPeerCertificate(), "placeholder");
     assertEquals(args.getSourcePrincipal(), "placeholder");
