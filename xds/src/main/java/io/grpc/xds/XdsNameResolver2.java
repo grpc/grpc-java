@@ -49,6 +49,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.annotation.Nullable;
 
@@ -72,7 +73,7 @@ final class XdsNameResolver2 extends NameResolver {
   private final Bootstrapper bootstrapper;
   private final XdsClientPoolFactory xdsClientPoolFactory;
   private final ThreadSafeRandom random;
-  private final Map<String, AtomicInteger> clusterRefs = new ConcurrentHashMap<>();
+  private final ConcurrentMap<String, AtomicInteger> clusterRefs = new ConcurrentHashMap<>();
 
   private volatile List<Route> routes = Collections.emptyList();
   private Listener2 listener;
@@ -204,6 +205,9 @@ final class XdsNameResolver2 extends NameResolver {
 
     private boolean retainCluster(String cluster) {
       AtomicInteger refCount = clusterRefs.get(cluster);
+      if (refCount == null) {
+        return false;
+      }
       int count;
       do {
         count = refCount.get();
@@ -262,8 +266,7 @@ final class XdsNameResolver2 extends NameResolver {
       }
       boolean receivedNewCluster = false;
       for (String newCluster : clusters) {
-        if (!clusterRefs.containsKey(newCluster)) {
-          clusterRefs.put(newCluster, new AtomicInteger(1));
+        if (clusterRefs.putIfAbsent(newCluster, new AtomicInteger(1)) == null) {
           receivedNewCluster = true;
         }
       }
