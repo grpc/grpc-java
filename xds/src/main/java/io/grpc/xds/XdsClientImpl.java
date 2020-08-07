@@ -62,6 +62,7 @@ import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.EnvoyProtoData.StructOrError;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.LoadReportClient.LoadReportCallback;
+import io.grpc.xds.LoadStatsManager.LoadStatsStore;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -179,6 +180,7 @@ final class XdsClientImpl extends XdsClient {
   private ScheduledHandle rpcRetryTimer;
   @Nullable
   private LoadReportClient lrsClient;
+  private LoadStatsManager loadStatsManager;
 
   // Following fields are set only after the ConfigWatcher registered. Once set, they should
   // never change. Only a ConfigWatcher or ListenerWatcher can be registered.
@@ -474,13 +476,14 @@ final class XdsClientImpl extends XdsClient {
   }
 
   @Override
-  void reportClientStats(
-      String clusterName, @Nullable String clusterServiceName, LoadStatsStore loadStatsStore) {
+  LoadStatsStore reportClientStats(String clusterName, @Nullable String clusterServiceName) {
     if (lrsClient == null) {
+      loadStatsManager = new LoadStatsManager();
       lrsClient =
           new LoadReportClient(
               logId,
               targetName,
+              loadStatsManager,
               channel,
               node.toEnvoyProtoNodeV2(),
               syncContext,
@@ -495,7 +498,7 @@ final class XdsClientImpl extends XdsClient {
     logger.log(
         XdsLogLevel.INFO,
         "Report loads for cluster: {0}, cluster_service: {1}", clusterName, clusterServiceName);
-    lrsClient.addLoadStatsStore(clusterName, clusterServiceName, loadStatsStore);
+    return loadStatsManager.addLoadStats(clusterName, clusterServiceName);
   }
 
   @Override
@@ -506,7 +509,7 @@ final class XdsClientImpl extends XdsClient {
         "Stop reporting loads for cluster: {0}, cluster_service: {1}",
         clusterName,
         clusterServiceName);
-    lrsClient.removeLoadStatsStore(clusterName, clusterServiceName);
+    loadStatsManager.removeLoadStats(clusterName, clusterServiceName);
     // TODO(chengyuanzhang): can be optimized to stop load reporting if no more loads need
     //  to be reported.
   }

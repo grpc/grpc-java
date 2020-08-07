@@ -37,6 +37,7 @@ import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyProtoData.Route;
 import io.grpc.xds.EnvoyServerProtoData.Listener;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
+import io.grpc.xds.LoadStatsManager.LoadStatsStore;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -518,14 +519,11 @@ abstract class XdsClient {
   }
 
   /**
-   * Report client load stats to a remote server for the given cluster:cluster_service.
-   *
-   * <p>Note: currently we can only report loads for a single cluster:cluster_service,
-   * as the design for adding clusters to report loads for while load reporting is
-   * happening is undefined.
+   * Report client load stats to a remote server for the given cluster:cluster_service. Caller
+   * should use the returned {@link LoadStatsStore} to record and aggregate stats for loads sent
+   * to the cluster:cluster_service.
    */
-  void reportClientStats(
-      String clusterName, @Nullable String clusterServiceName, LoadStatsStore loadStatsStore) {
+  LoadStatsStore reportClientStats(String clusterName, @Nullable String clusterServiceName) {
     throw new UnsupportedOperationException();
   }
 
