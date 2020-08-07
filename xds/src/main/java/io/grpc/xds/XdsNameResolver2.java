@@ -245,6 +245,7 @@ final class XdsNameResolver2 extends NameResolver {
     listener.onResult(result);
   }
 
+  @SuppressWarnings("ModifyCollectionInEnhancedForLoop")  // ok for concurrent map
   private class ConfigWatcherImpl implements ConfigWatcher {
     @Override
     public void onConfigChanged(ConfigUpdate update) {
