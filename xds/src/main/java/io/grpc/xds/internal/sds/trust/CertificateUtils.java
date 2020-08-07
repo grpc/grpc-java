@@ -67,7 +67,7 @@ public final class CertificateUtils {
     initInstance();
     try {
       Certificate cert = factory.generateCertificate(inputStream);
-      return (X509Certificate)cert;
+      return (X509Certificate) cert;
     } finally {
       inputStream.close();
     }
