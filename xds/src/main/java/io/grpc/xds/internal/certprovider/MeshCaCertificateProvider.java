@@ -44,7 +44,6 @@ import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
-import io.grpc.StatusRuntimeException;
 import io.grpc.SynchronizationContext;
 import io.grpc.auth.MoreCallCredentials;
 import io.grpc.internal.BackoffPolicy;
@@ -260,16 +259,7 @@ final class MeshCaCertificateProvider extends CertificateProvider {
   }
 
   private static boolean retriable(Throwable t) {
-    if (t instanceof StatusRuntimeException) {
-      return retriable(((StatusRuntimeException) t).getStatus());
-    } else if (t.getCause() instanceof StatusRuntimeException) {
-      return retriable(((StatusRuntimeException) t.getCause()).getStatus());
-    }
-    return false;
-  }
-
-  private static boolean retriable(Status status) {
-    return RETRIABLE_CODES.contains(status.getCode());
+    return RETRIABLE_CODES.contains(Status.fromThrowable(t).getCode());
   }
 
   private void generateErrorIfCurrentCertExpired(Throwable t) {
@@ -298,12 +288,12 @@ final class MeshCaCertificateProvider extends CertificateProvider {
     ContentSigner signer = csBuilder.build(pair.getPrivate());
     PKCS10CertificationRequest csr = p10Builder.build(signer);
     PemObject pemObject = new PemObject("NEW CERTIFICATE REQUEST", csr.getEncoded());
-    StringWriter str = new StringWriter();
-    JcaPEMWriter pemWriter = new JcaPEMWriter(str);
-    pemWriter.writeObject(pemObject);
-    pemWriter.close();
-    str.close();
-    return str.toString();
+    try (StringWriter str = new StringWriter()) {
+      try (JcaPEMWriter pemWriter = new JcaPEMWriter(str)) {
+        pemWriter.writeObject(pemObject);
+      }
+      return str.toString();
+    }
   }
 
   /** Compute refresh interval as half of interval to current cert expiry. */

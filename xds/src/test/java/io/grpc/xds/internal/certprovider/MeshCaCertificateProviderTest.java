@@ -436,8 +436,9 @@ public class MeshCaCertificateProviderTest {
     oauth2Tokens.offer(TEST_STS_TOKEN + "1");
     oauth2Tokens.offer(TEST_STS_TOKEN + "2");
     responsesToSend.offer(new ResponseThrowable(new StatusRuntimeException(Status.UNKNOWN)));
-    responsesToSend
-        .offer(new ResponseThrowable(new StatusRuntimeException(Status.RESOURCE_EXHAUSTED)));
+    responsesToSend.offer(
+        new ResponseThrowable(
+            new Exception(new StatusRuntimeException(Status.RESOURCE_EXHAUSTED))));
     responsesToSend.offer(new ResponseList(ImmutableList.of(
         CommonTlsContextTestsUtil.getResourceContents(SERVER_0_PEM_FILE),
         CommonTlsContextTestsUtil.getResourceContents(SERVER_1_PEM_FILE),
