@@ -38,6 +38,7 @@ import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyProtoData.Node;
+import io.grpc.xds.LoadStatsManager.LoadStatsStore;
 import io.grpc.xds.LocalityStore.LocalityStoreFactory;
 import io.grpc.xds.XdsClient.EndpointUpdate;
 import io.grpc.xds.XdsClient.EndpointWatcher;
@@ -208,11 +209,9 @@ final class EdsLoadBalancer extends LoadBalancer {
    */
   private final class ClusterEndpointsBalancerFactory extends LoadBalancer.Factory {
     @Nullable final String clusterServiceName;
-    final LoadStatsStore loadStatsStore;
 
     ClusterEndpointsBalancerFactory(@Nullable String clusterServiceName) {
       this.clusterServiceName = clusterServiceName;
-      loadStatsStore = new LoadStatsStoreImpl(clusterName, clusterServiceName);
     }
 
     @Override
@@ -248,8 +247,7 @@ final class EdsLoadBalancer extends LoadBalancer {
       ClusterEndpointsBalancer(Helper helper) {
         this.helper = helper;
         resourceName = clusterServiceName != null ? clusterServiceName : clusterName;
-        localityStore =
-            localityStoreFactory.newLocalityStore(logId, helper, lbRegistry, loadStatsStore);
+        localityStore = localityStoreFactory.newLocalityStore(logId, helper, lbRegistry);
         endpointWatcher = new EndpointWatcherImpl();
         logger.log(
             XdsLogLevel.INFO,
@@ -272,8 +270,9 @@ final class EdsLoadBalancer extends LoadBalancer {
                 "Start reporting loads for cluster: {0}, cluster_service: {1}",
                 clusterName,
                 clusterServiceName);
-            xdsClient.reportClientStats(clusterName, clusterServiceName, loadStatsStore);
-            isReportingLoad = true;
+            LoadStatsStore loadStatsStore =
+                xdsClient.reportClientStats(clusterName, clusterServiceName);
+            localityStore.setLoadStatsStore(loadStatsStore);
           }
         } else {
           if (isReportingLoad) {
@@ -283,7 +282,7 @@ final class EdsLoadBalancer extends LoadBalancer {
                 clusterName,
                 clusterServiceName);
             xdsClient.cancelClientStatsReport(clusterName, clusterServiceName);
-            isReportingLoad = false;
+            localityStore.setLoadStatsStore(null);
           }
         }
         // TODO(zddapeng): In handleResolvedAddresses() handle child policy change if any.
@@ -303,6 +302,7 @@ final class EdsLoadBalancer extends LoadBalancer {
 
       @Override
       public void shutdown() {
+        localityStore.reset();
         if (isReportingLoad) {
           logger.log(
               XdsLogLevel.INFO,
@@ -310,9 +310,9 @@ final class EdsLoadBalancer extends LoadBalancer {
               clusterName,
               clusterServiceName);
           xdsClient.cancelClientStatsReport(clusterName, clusterServiceName);
+          localityStore.setLoadStatsStore(null);
           isReportingLoad = false;
         }
-        localityStore.reset();
         xdsClient.cancelEndpointDataWatch(resourceName, endpointWatcher);
         logger.log(
             XdsLogLevel.INFO,

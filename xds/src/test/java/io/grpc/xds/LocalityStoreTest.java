@@ -16,7 +16,6 @@
 
 package io.grpc.xds;
 
-import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.READY;
@@ -26,7 +25,6 @@ import static io.grpc.xds.XdsSubchannelPickers.BUFFER_PICKER;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.ArgumentMatchers.same;
@@ -64,16 +62,12 @@ import io.grpc.internal.FakeClock;
 import io.grpc.internal.FakeClock.ScheduledTask;
 import io.grpc.internal.FakeClock.TaskFilter;
 import io.grpc.xds.ClientLoadCounter.LoadRecordingStreamTracerFactory;
-import io.grpc.xds.ClientLoadCounter.MetricsRecordingListener;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.LbEndpoint;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
+import io.grpc.xds.LoadStatsManager.LoadStatsStore;
 import io.grpc.xds.LocalityStore.LocalityStoreImpl;
-import io.grpc.xds.OrcaOobUtil.OrcaOobReportListener;
-import io.grpc.xds.OrcaOobUtil.OrcaReportingConfig;
-import io.grpc.xds.OrcaOobUtil.OrcaReportingHelperWrapper;
-import io.grpc.xds.OrcaPerRequestUtil.OrcaPerRequestReportListener;
 import io.grpc.xds.WeightedRandomPicker.WeightedChildPicker;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.net.InetSocketAddress;
@@ -91,13 +85,10 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
-import org.mockito.ArgumentMatcher;
 import org.mockito.InOrder;
 import org.mockito.Mock;
-import org.mockito.invocation.InvocationOnMock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
-import org.mockito.stubbing.Answer;
 
 /**
  * Tests for {@link LocalityStore}.
@@ -119,7 +110,6 @@ public class LocalityStoreTest {
   private final LoadBalancerRegistry lbRegistry = new LoadBalancerRegistry();
   private final Map<String, LoadBalancer> loadBalancers = new HashMap<>();
   private final Map<String, Helper> childHelpers = new HashMap<>();
-  private final Map<String, FakeOrcaReportingHelperWrapper> childHelperWrappers = new HashMap<>();
   private final FakeClock fakeClock = new FakeClock();
 
   private final TaskFilter deactivationTaskFilter = new TaskFilter() {
@@ -202,10 +192,6 @@ public class LocalityStoreTest {
   private PickSubchannelArgs pickSubchannelArgs;
   @Mock
   private ThreadSafeRandom random;
-  @Mock
-  private OrcaPerRequestUtil orcaPerRequestUtil;
-  @Mock
-  private OrcaOobUtil orcaOobUtil;
   private final FakeLoadStatsStore fakeLoadStatsStore = new FakeLoadStatsStore();
   private final LoadStatsStore loadStatsStore =
       mock(LoadStatsStore.class, delegatesTo(fakeLoadStatsStore));
@@ -217,22 +203,9 @@ public class LocalityStoreTest {
     doReturn(mock(ChannelLogger.class)).when(helper).getChannelLogger();
     doReturn(syncContext).when(helper).getSynchronizationContext();
     doReturn(fakeClock.getScheduledExecutorService()).when(helper).getScheduledExecutorService();
-    when(orcaOobUtil.newOrcaReportingHelperWrapper(any(Helper.class),
-        any(OrcaOobReportListener.class)))
-        .thenAnswer(new Answer<OrcaReportingHelperWrapper>() {
-          @Override
-          public OrcaReportingHelperWrapper answer(InvocationOnMock invocation) {
-            Helper h = invocation.getArgument(0);
-            FakeOrcaReportingHelperWrapper res =
-                new FakeOrcaReportingHelperWrapper(h);
-            childHelperWrappers.put(h.getAuthority(), res);
-            return res;
-          }
-        });
     lbRegistry.register(lbProvider);
-    localityStore =
-        new LocalityStoreImpl(logId, helper, lbRegistry, random, loadStatsStore,
-            orcaPerRequestUtil, orcaOobUtil);
+    localityStore = new LocalityStoreImpl(logId, helper, lbRegistry, random);
+    localityStore.setLoadStatsStore(loadStatsStore);
   }
 
   @Test
@@ -244,15 +217,8 @@ public class LocalityStoreTest {
         new LocalityLbEndpoints(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 0);
     localityStore.updateLocalityStore(ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2));
-
     // Two child balancers are created.
     assertThat(loadBalancers).hasSize(2);
-
-    ClientStreamTracer.Factory metricsTracingFactory1 = mock(ClientStreamTracer.Factory.class);
-    ClientStreamTracer.Factory metricsTracingFactory2 = mock(ClientStreamTracer.Factory.class);
-    when(orcaPerRequestUtil.newOrcaClientStreamTracerFactory(any(ClientStreamTracer.Factory.class),
-        any(OrcaPerRequestReportListener.class)))
-        .thenReturn(metricsTracingFactory1, metricsTracingFactory2);
 
     Subchannel subchannel1 = mock(Subchannel.class);
     Subchannel subchannel2 = mock(Subchannel.class);
@@ -277,109 +243,20 @@ public class LocalityStoreTest {
     assertThat(interLocalityPicker.weightedChildPickers).hasSize(2);
 
     // Verify each PickResult picked is intercepted with client stream tracer factory for
-    // recording load and backend metrics.
+    // recording loads.
     Map<Subchannel, Locality> localitiesBySubchannel
         = ImmutableMap.of(subchannel1, locality1, subchannel2, locality2);
-    Map<Subchannel, ClientStreamTracer.Factory> metricsTracingFactoriesBySubchannel
-        = ImmutableMap.of(subchannel1, metricsTracingFactory1, subchannel2, metricsTracingFactory2);
     for (int i = 0; i < interLocalityPicker.weightedChildPickers.size(); i++) {
       PickResult pickResult = interLocalityPicker.weightedChildPickers.get(i).getPicker()
           .pickSubchannel(pickSubchannelArgs);
       Subchannel expectedSubchannel = pickResult.getSubchannel();
       Locality expectedLocality = localitiesBySubchannel.get(expectedSubchannel);
-      ArgumentCaptor<OrcaPerRequestReportListener> listenerCaptor = ArgumentCaptor.forClass(null);
-      verify(orcaPerRequestUtil, times(i + 1))
-          .newOrcaClientStreamTracerFactory(any(ClientStreamTracer.Factory.class),
-              listenerCaptor.capture());
-      assertThat(listenerCaptor.getValue()).isInstanceOf(MetricsRecordingListener.class);
-      MetricsRecordingListener listener = (MetricsRecordingListener) listenerCaptor.getValue();
-      assertThat(listener.getCounter())
-          .isSameInstanceAs(fakeLoadStatsStore.localityCounters.get(expectedLocality));
       assertThat(pickResult.getStreamTracerFactory())
           .isInstanceOf(LoadRecordingStreamTracerFactory.class);
       LoadRecordingStreamTracerFactory loadRecordingFactory =
           (LoadRecordingStreamTracerFactory) pickResult.getStreamTracerFactory();
       assertThat(loadRecordingFactory.getCounter())
           .isSameInstanceAs(fakeLoadStatsStore.localityCounters.get(expectedLocality));
-      assertThat(loadRecordingFactory.delegate())
-          .isSameInstanceAs(metricsTracingFactoriesBySubchannel.get(expectedSubchannel));
-    }
-  }
-
-  @Test
-  public void childLbPerformOobBackendMetricsAggregation() {
-    // Simulate receiving two localities.
-    LocalityLbEndpoints localityInfo1 =
-        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1, 0);
-    LocalityLbEndpoints localityInfo2 =
-        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 0);
-    localityStore.updateLocalityStore(ImmutableMap.of(
-        locality1, localityInfo1, locality2, localityInfo2));
-
-    // Two child balancers are created.
-    assertThat(loadBalancers).hasSize(2);
-    assertThat(childHelperWrappers).hasSize(2);
-
-    class HelperMatcher implements ArgumentMatcher<Helper> {
-
-      private final String authority;
-
-      private HelperMatcher(String authority) {
-        this.authority = checkNotNull(authority, "authority");
-      }
-
-      @Override
-      public boolean matches(Helper argument) {
-        return authority.equals(argument.getAuthority());
-      }
-    }
-
-    Map<String, Locality> localities = ImmutableMap.of("sz1", locality1, "sz2", locality2);
-    for (Helper h : childHelpers.values()) {
-      ArgumentCaptor<OrcaOobReportListener> listenerCaptor = ArgumentCaptor.forClass(null);
-      verify(orcaOobUtil)
-          .newOrcaReportingHelperWrapper(argThat(new HelperMatcher(h.getAuthority())),
-              listenerCaptor.capture());
-      assertThat(listenerCaptor.getValue()).isInstanceOf(MetricsRecordingListener.class);
-      MetricsRecordingListener listener = (MetricsRecordingListener) listenerCaptor.getValue();
-      assertThat(listener.getCounter())
-          .isSameInstanceAs(fakeLoadStatsStore
-              .localityCounters.get(localities.get(h.getAuthority())));
-    }
-
-    // Simulate receiving updates for backend metrics reporting interval.
-    localityStore.updateOobMetricsReportInterval(1952);
-    for (FakeOrcaReportingHelperWrapper orcaWrapper : childHelperWrappers.values()) {
-      assertThat(orcaWrapper.reportIntervalNanos).isEqualTo(1952);
-    }
-
-    localityStore.updateOobMetricsReportInterval(9251);
-    for (FakeOrcaReportingHelperWrapper orcaWrapper : childHelperWrappers.values()) {
-      assertThat(orcaWrapper.reportIntervalNanos).isEqualTo(9251);
-    }
-  }
-
-  @Test
-  public void updateOobMetricsReportIntervalBeforeChildLbCreated() {
-    // Simulate receiving update for backend metrics reporting interval.
-    localityStore.updateOobMetricsReportInterval(1952);
-
-    assertThat(loadBalancers).isEmpty();
-
-    // Simulate receiving two localities.
-    LocalityLbEndpoints localityInfo1 =
-        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1, 0);
-    LocalityLbEndpoints localityInfo2 =
-        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 0);
-    localityStore.updateLocalityStore(ImmutableMap.of(
-        locality1, localityInfo1, locality2, localityInfo2));
-
-    // Two child balancers are created.
-    assertThat(loadBalancers).hasSize(2);
-    assertThat(childHelperWrappers).hasSize(2);
-
-    for (FakeOrcaReportingHelperWrapper orcaWrapper : childHelperWrappers.values()) {
-      assertThat(orcaWrapper.reportIntervalNanos).isEqualTo(1952);
     }
   }
 
@@ -1357,26 +1234,6 @@ public class LocalityStoreTest {
     @Override
     public void recordDroppedRequest(String category) {
       // NO-OP, verify by invocations.
-    }
-  }
-
-  private static final class FakeOrcaReportingHelperWrapper extends OrcaReportingHelperWrapper {
-
-    final Helper delegate;
-    long reportIntervalNanos = -1;
-
-    FakeOrcaReportingHelperWrapper(Helper delegate) {
-      this.delegate = checkNotNull(delegate, "delegate");
-    }
-
-    @Override
-    public void setReportingConfig(OrcaReportingConfig config) {
-      reportIntervalNanos = config.getReportIntervalNanos();
-    }
-
-    @Override
-    public Helper asHelper() {
-      return delegate;
     }
   }
 }

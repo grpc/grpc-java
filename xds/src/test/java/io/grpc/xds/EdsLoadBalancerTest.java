@@ -559,8 +559,7 @@ public class EdsLoadBalancerTest {
       LocalityStore newLocalityStore(
           InternalLogId logId,
           Helper helper,
-          LoadBalancerRegistry lbRegistry,
-          LoadStatsStore loadStatsStore) {
+          LoadBalancerRegistry lbRegistry) {
         // Note that this test approach can not verify anything about how localityStore will use the
         // helper in the arguments to delegate updates from localityStore to the EDS balancer, and
         // can not verify anything about how loadStatsStore updates localities and drop information.

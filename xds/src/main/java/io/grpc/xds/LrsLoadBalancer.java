@@ -26,6 +26,7 @@ import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.ClientLoadCounter.LoadRecordingSubchannelPicker;
 import io.grpc.xds.EnvoyProtoData.Locality;
+import io.grpc.xds.LoadStatsManager.LoadStatsStore;
 import io.grpc.xds.LrsLoadBalancerProvider.LrsConfig;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.Objects;

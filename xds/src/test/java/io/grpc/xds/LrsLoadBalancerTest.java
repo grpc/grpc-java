@@ -40,6 +40,7 @@ import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.xds.ClientLoadCounter.LoadRecordingStreamTracerFactory;
 import io.grpc.xds.ClientLoadCounter.LoadRecordingSubchannelPicker;
 import io.grpc.xds.EnvoyProtoData.Locality;
+import io.grpc.xds.LoadStatsManager.LoadStatsStore;
 import io.grpc.xds.LrsLoadBalancerProvider.LrsConfig;
 import java.net.SocketAddress;
 import java.util.ArrayDeque;
