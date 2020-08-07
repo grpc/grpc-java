@@ -284,7 +284,6 @@ public class ServerInterceptorsTest {
 
   @Test
   public void argumentsPassed() {
-    @SuppressWarnings("unchecked")
     final ServerCall<String, Integer> call2 = new NoopServerCall<>();
     @SuppressWarnings("unchecked")
     final ServerCall.Listener<String> listener2 = mock(ServerCall.Listener.class);
