@@ -30,7 +30,7 @@ import java.util.Collection;
 /**
  * Contains certificate utility method(s).
  */
-final class CertificateUtils {
+public final class CertificateUtils {
 
   private static CertificateFactory factory;
 
@@ -46,19 +46,26 @@ final class CertificateUtils {
    * @param file a {@link File} containing the cert data
    */
   static X509Certificate[] toX509Certificates(File file) throws CertificateException, IOException {
-    FileInputStream fis = new FileInputStream(file);
-    return toX509Certificates(new BufferedInputStream(fis));
+    try (FileInputStream fis = new FileInputStream(file);
+        BufferedInputStream bis = new BufferedInputStream(fis)) {
+      return toX509Certificates(bis);
+    }
   }
 
   static synchronized X509Certificate[] toX509Certificates(InputStream inputStream)
       throws CertificateException, IOException {
     initInstance();
-    try {
-      Collection<? extends Certificate> certs = factory.generateCertificates(inputStream);
-      return certs.toArray(new X509Certificate[0]);
-    } finally {
-      inputStream.close();
-    }
+    Collection<? extends Certificate> certs = factory.generateCertificates(inputStream);
+    return certs.toArray(new X509Certificate[0]);
+
+  }
+
+  /** See {@link CertificateFactory#generateCertificate(InputStream)}. */
+  public static synchronized X509Certificate toX509Certificate(InputStream inputStream)
+          throws CertificateException, IOException {
+    initInstance();
+    Certificate cert = factory.generateCertificate(inputStream);
+    return (X509Certificate) cert;
   }
 
   private CertificateUtils() {}

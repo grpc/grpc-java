@@ -17,19 +17,25 @@
 package io.grpc.xds.internal.certprovider;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.xds.internal.certprovider.MeshCaCertificateProviderProvider.RPC_TIMEOUT_SECONDS;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.google.auth.oauth2.GoogleCredentials;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.ExponentialBackoffPolicy;
+import io.grpc.internal.TimeProvider;
 import io.grpc.xds.internal.sts.StsCredentials;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -59,6 +65,14 @@ public class MeshCaCertificateProviderProviderTest {
 
   @Mock
   MeshCaCertificateProvider.Factory meshCaCertificateProviderFactory;
+
+  @Mock
+  private MeshCaCertificateProviderProvider.ScheduledExecutorServiceFactory
+      scheduledExecutorServiceFactory;
+
+  @Mock
+  private TimeProvider timeProvider;
+
   private MeshCaCertificateProviderProvider provider;
 
   @Before
@@ -69,7 +83,9 @@ public class MeshCaCertificateProviderProviderTest {
             stsCredentialsFactory,
             meshCaChannelFactory,
             backoffPolicyProvider,
-            meshCaCertificateProviderFactory);
+            meshCaCertificateProviderFactory,
+            scheduledExecutorServiceFactory,
+            timeProvider);
   }
 
   @Test
@@ -94,6 +110,10 @@ public class MeshCaCertificateProviderProviderTest {
     CertificateProvider.DistributorWatcher distWatcher =
         new CertificateProvider.DistributorWatcher();
     Map<String, String> map = buildMinimalMap();
+    ScheduledExecutorService mockService = mock(ScheduledExecutorService.class);
+    when(scheduledExecutorServiceFactory.create(
+            eq(MeshCaCertificateProviderProvider.MESHCA_URL_DEFAULT)))
+        .thenReturn(mockService);
     provider.createCertificateProvider(map, distWatcher, true);
     verify(stsCredentialsFactory, times(1))
         .create(
@@ -114,7 +134,10 @@ public class MeshCaCertificateProviderProviderTest {
             eq(backoffPolicyProvider),
             eq(MeshCaCertificateProviderProvider.RENEWAL_GRACE_PERIOD_SECONDS_DEFAULT),
             eq(MeshCaCertificateProviderProvider.MAX_RETRY_ATTEMPTS_DEFAULT),
-            (GoogleCredentials) isNull());
+            (GoogleCredentials) isNull(),
+            eq(mockService),
+            eq(timeProvider),
+            eq(TimeUnit.SECONDS.toMillis(RPC_TIMEOUT_SECONDS)));
   }
 
   @Test
@@ -150,7 +173,9 @@ public class MeshCaCertificateProviderProviderTest {
     CertificateProvider.DistributorWatcher distWatcher =
             new CertificateProvider.DistributorWatcher();
     Map<String, String> map = buildMinimalMap();
-    map.put("gkeClusterUrl", "https://container.googleapis.com/v1/project/test-project1/locations/test-zone2/clusters/test-cluster3");
+    map.put(
+        "gkeClusterUrl",
+        "https://container.googleapis.com/v1/project/test-project1/locations/test-zone2/clusters/test-cluster3");
     try {
       provider.createCertificateProvider(map, distWatcher, true);
       fail("exception expected");
@@ -164,6 +189,9 @@ public class MeshCaCertificateProviderProviderTest {
     CertificateProvider.DistributorWatcher distWatcher =
             new CertificateProvider.DistributorWatcher();
     Map<String, String> map = buildFullMap();
+    ScheduledExecutorService mockService = mock(ScheduledExecutorService.class);
+    when(scheduledExecutorServiceFactory.create(eq(NON_DEFAULT_MESH_CA_URL)))
+        .thenReturn(mockService);
     provider.createCertificateProvider(map, distWatcher, true);
     verify(stsCredentialsFactory, times(1))
             .create(
@@ -184,7 +212,10 @@ public class MeshCaCertificateProviderProviderTest {
                     eq(backoffPolicyProvider),
                     eq(4321L),
                     eq(9),
-                    (GoogleCredentials) isNull());
+                    (GoogleCredentials) isNull(),
+                    eq(mockService),
+                    eq(timeProvider),
+                    eq(TimeUnit.SECONDS.toMillis(RPC_TIMEOUT_SECONDS)));
   }
 
   private Map<String, String> buildFullMap() {

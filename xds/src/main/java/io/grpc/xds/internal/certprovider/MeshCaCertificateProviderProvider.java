@@ -21,10 +21,15 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.ExponentialBackoffPolicy;
+import io.grpc.internal.TimeProvider;
 import io.grpc.xds.internal.sts.StsCredentials;
 import java.util.Map;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -46,15 +51,19 @@ final class MeshCaCertificateProviderProvider implements CertificateProviderProv
   private static final String STS_URL_KEY = "stsUrl";
   private static final String GKE_SA_JWT_LOCATION_KEY = "gkeSaJwtLocation";
 
-  static final String MESHCA_URL_DEFAULT = "meshca.googleapis.com";
-  static final long RPC_TIMEOUT_SECONDS_DEFAULT = 5L;
-  static final long CERT_VALIDITY_SECONDS_DEFAULT = 9L * 3600L; // 9 hours
-  static final long RENEWAL_GRACE_PERIOD_SECONDS_DEFAULT = 1L * 3600L; // 1 hour
-  static final String KEY_ALGO_DEFAULT = "RSA";  // aka keyType
-  static final int KEY_SIZE_DEFAULT = 2048;
-  static final String SIGNATURE_ALGO_DEFAULT = "SHA256withRSA";
-  static final int MAX_RETRY_ATTEMPTS_DEFAULT = 3;
+  @VisibleForTesting static final String MESHCA_URL_DEFAULT = "meshca.googleapis.com";
+  @VisibleForTesting static final long RPC_TIMEOUT_SECONDS_DEFAULT = 5L;
+  @VisibleForTesting static final long CERT_VALIDITY_SECONDS_DEFAULT = 9L * 3600L;
+  @VisibleForTesting static final long RENEWAL_GRACE_PERIOD_SECONDS_DEFAULT = 1L * 3600L;
+  @VisibleForTesting static final String KEY_ALGO_DEFAULT = "RSA";  // aka keyType
+  @VisibleForTesting static final int KEY_SIZE_DEFAULT = 2048;
+  @VisibleForTesting static final String SIGNATURE_ALGO_DEFAULT = "SHA256withRSA";
+  @VisibleForTesting static final int MAX_RETRY_ATTEMPTS_DEFAULT = 3;
+  @VisibleForTesting
   static final String STS_URL_DEFAULT = "https://securetoken.googleapis.com/v1/identitybindingtoken";
+
+  @VisibleForTesting
+  static final long RPC_TIMEOUT_SECONDS = 10L;
 
   private static final Pattern CLUSTER_URL_PATTERN = Pattern
       .compile(".*/projects/(.*)/locations/(.*)/clusters/.*");
@@ -70,23 +79,32 @@ final class MeshCaCertificateProviderProvider implements CertificateProviderProv
                 StsCredentials.Factory.getInstance(),
                 MeshCaCertificateProvider.MeshCaChannelFactory.getInstance(),
                 new ExponentialBackoffPolicy.Provider(),
-                MeshCaCertificateProvider.Factory.getInstance()));
+                MeshCaCertificateProvider.Factory.getInstance(),
+                ScheduledExecutorServiceFactory.DEFAULT_INSTANCE,
+                TimeProvider.SYSTEM_TIME_PROVIDER));
   }
 
   final StsCredentials.Factory stsCredentialsFactory;
   final MeshCaCertificateProvider.MeshCaChannelFactory meshCaChannelFactory;
   final BackoffPolicy.Provider backoffPolicyProvider;
   final MeshCaCertificateProvider.Factory meshCaCertificateProviderFactory;
+  final ScheduledExecutorServiceFactory scheduledExecutorServiceFactory;
+  final TimeProvider timeProvider;
 
   @VisibleForTesting
-  MeshCaCertificateProviderProvider(StsCredentials.Factory stsCredentialsFactory,
+  MeshCaCertificateProviderProvider(
+      StsCredentials.Factory stsCredentialsFactory,
       MeshCaCertificateProvider.MeshCaChannelFactory meshCaChannelFactory,
       BackoffPolicy.Provider backoffPolicyProvider,
-      MeshCaCertificateProvider.Factory meshCaCertificateProviderFactory) {
+      MeshCaCertificateProvider.Factory meshCaCertificateProviderFactory,
+      ScheduledExecutorServiceFactory scheduledExecutorServiceFactory,
+      TimeProvider timeProvider) {
     this.stsCredentialsFactory = stsCredentialsFactory;
     this.meshCaChannelFactory = meshCaChannelFactory;
     this.backoffPolicyProvider = backoffPolicyProvider;
     this.meshCaCertificateProviderFactory = meshCaCertificateProviderFactory;
+    this.scheduledExecutorServiceFactory = scheduledExecutorServiceFactory;
+    this.timeProvider = timeProvider;
   }
 
   @Override
@@ -106,12 +124,23 @@ final class MeshCaCertificateProviderProvider implements CertificateProviderProv
     StsCredentials stsCredentials = stsCredentialsFactory
         .create(configObj.stsUrl, audience, configObj.gkeSaJwtLocation);
 
-    return meshCaCertificateProviderFactory.create(watcher, notifyCertUpdates, configObj.meshCaUrl,
+    return meshCaCertificateProviderFactory.create(
+        watcher,
+        notifyCertUpdates,
+        configObj.meshCaUrl,
         configObj.zone,
-        configObj.certValiditySeconds, configObj.keySize, configObj.keyAlgo,
+        configObj.certValiditySeconds,
+        configObj.keySize,
+        configObj.keyAlgo,
         configObj.signatureAlgo,
-        meshCaChannelFactory, backoffPolicyProvider,
-        configObj.renewalGracePeriodSeconds, configObj.maxRetryAttempts, stsCredentials);
+        meshCaChannelFactory,
+        backoffPolicyProvider,
+        configObj.renewalGracePeriodSeconds,
+        configObj.maxRetryAttempts,
+        stsCredentials,
+        scheduledExecutorServiceFactory.create(configObj.meshCaUrl),
+        timeProvider,
+        TimeUnit.SECONDS.toMillis(RPC_TIMEOUT_SECONDS));
   }
 
   private static Config validateAndTranslateConfig(Object config) {
@@ -175,6 +204,28 @@ final class MeshCaCertificateProviderProvider implements CertificateProviderProv
     checkState(matcher.groupCount() == 2, "gkeClusterUrl does not have project and location parts");
     configObj.project = matcher.group(1);
     configObj.zone = matcher.group(2);
+  }
+
+  abstract static class ScheduledExecutorServiceFactory {
+
+    private static final ScheduledExecutorServiceFactory DEFAULT_INSTANCE =
+        new ScheduledExecutorServiceFactory() {
+
+          @Override
+          ScheduledExecutorService create(String serverUri) {
+            return Executors.newSingleThreadScheduledExecutor(
+                new ThreadFactoryBuilder()
+                    .setNameFormat("meshca-" + serverUri + "-%d")
+                    .setDaemon(true)
+                    .build());
+          }
+        };
+
+    static ScheduledExecutorServiceFactory getInstance() {
+      return DEFAULT_INSTANCE;
+    }
+
+    abstract ScheduledExecutorService create(String serverUri);
   }
 
   /** POJO class for storing various config values. */
