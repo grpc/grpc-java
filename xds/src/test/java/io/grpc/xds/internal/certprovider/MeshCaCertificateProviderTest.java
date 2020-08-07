@@ -37,8 +37,9 @@ import com.google.auth.oauth2.AccessToken;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.MoreExecutors;
-import google.security.meshca.v1.MeshCertificateServiceGrpc;
-import google.security.meshca.v1.Meshca;
+import com.google.security.meshca.v1.MeshCertificateRequest;
+import com.google.security.meshca.v1.MeshCertificateResponse;
+import com.google.security.meshca.v1.MeshCertificateServiceGrpc;
 import io.grpc.Context;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
@@ -52,6 +53,7 @@ import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.TimeProvider;
+import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.internal.certprovider.CertificateProvider.DistributorWatcher;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
@@ -149,7 +151,7 @@ public class MeshCaCertificateProviderTest {
     }
   }
 
-  private final Queue<Meshca.MeshCertificateRequest> receivedRequests = new ArrayDeque<>();
+  private final Queue<MeshCertificateRequest> receivedRequests = new ArrayDeque<>();
   private final Queue<String> receivedStsCreds = new ArrayDeque<>();
   private final Queue<String> receivedZoneValues = new ArrayDeque<>();
   private final Queue<ResponseToSend> responsesToSend = new ArrayDeque<>();
@@ -189,9 +191,8 @@ public class MeshCaCertificateProviderTest {
 
           @Override
           public void createCertificate(
-              google.security.meshca.v1.Meshca.MeshCertificateRequest request,
-              io.grpc.stub.StreamObserver<google.security.meshca.v1.Meshca.MeshCertificateResponse>
-                  responseObserver) {
+              MeshCertificateRequest request,
+              StreamObserver<MeshCertificateResponse> responseObserver) {
             assertThat(callEnded.get()).isTrue(); // ensure previous call was ended
             callEnded.set(false);
             Context.current()
@@ -209,8 +210,8 @@ public class MeshCaCertificateProviderTest {
               responseObserver.onError(response.getThrowable());
             } else if (response instanceof ResponseList) {
               List<String> certChainInResponse = response.getList();
-              Meshca.MeshCertificateResponse responseToSend =
-                  Meshca.MeshCertificateResponse.newBuilder()
+              MeshCertificateResponse responseToSend =
+                  MeshCertificateResponse.newBuilder()
                       .addAllCertChain(certChainInResponse)
                       .build();
               responseObserver.onNext(responseToSend);
@@ -331,7 +332,7 @@ public class MeshCaCertificateProviderTest {
         .when(timeService)
         .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
     provider.refreshCertificate();
-    Meshca.MeshCertificateRequest receivedReq = receivedRequests.poll();
+    MeshCertificateRequest receivedReq = receivedRequests.poll();
     assertThat(receivedReq.getValidity().getSeconds()).isEqualTo(TimeUnit.HOURS.toSeconds(9L));
     // cannot decode CSR: just check the PEM format delimiters
     String csr = receivedReq.getCsr();

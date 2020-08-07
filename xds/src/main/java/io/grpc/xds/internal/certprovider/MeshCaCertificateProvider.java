@@ -31,8 +31,9 @@ import com.google.auth.oauth2.GoogleCredentials;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.protobuf.Duration;
-import google.security.meshca.v1.MeshCertificateServiceGrpc;
-import google.security.meshca.v1.Meshca;
+import com.google.security.meshca.v1.MeshCertificateRequest;
+import com.google.security.meshca.v1.MeshCertificateResponse;
+import com.google.security.meshca.v1.MeshCertificateServiceGrpc;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
@@ -213,8 +214,8 @@ final class MeshCaCertificateProvider extends CertificateProvider {
       String reqId,
       Duration duration,
       String csr) {
-    Meshca.MeshCertificateRequest request =
-        Meshca.MeshCertificateRequest.newBuilder()
+    MeshCertificateRequest request =
+        MeshCertificateRequest.newBuilder()
             .setValidity(duration)
             .setCsr(csr)
             .setRequestId(reqId)
@@ -224,7 +225,7 @@ final class MeshCaCertificateProvider extends CertificateProvider {
     Throwable lastException = null;
     for (int i = 0; i <= maxRetryAttempts; i++) {
       try {
-        Meshca.MeshCertificateResponse response =
+        MeshCertificateResponse response =
             stub.withDeadlineAfter(rpcTimeoutMillis, TimeUnit.MILLISECONDS)
                 .createCertificate(request);
         return getX509CertificatesFromResponse(response);
@@ -326,7 +327,7 @@ final class MeshCaCertificateProvider extends CertificateProvider {
   }
 
   private List<X509Certificate> getX509CertificatesFromResponse(
-      Meshca.MeshCertificateResponse response) throws CertificateException, IOException {
+      MeshCertificateResponse response) throws CertificateException, IOException {
     List<String> certChain = response.getCertChainList();
     List<X509Certificate> x509Chain = new ArrayList<>(certChain.size());
     for (String certString : certChain) {
