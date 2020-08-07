@@ -34,7 +34,6 @@ import io.grpc.xds.XdsClient.RefCountedXdsClientObjectPool;
 import io.grpc.xds.XdsClient.XdsChannelFactory;
 import io.grpc.xds.XdsClient.XdsClientFactory;
 import io.grpc.xds.XdsClient.XdsClientPoolFactory;
-import java.io.IOException;
 import java.net.URI;
 import java.util.concurrent.ScheduledExecutorService;
 
@@ -66,7 +65,6 @@ public final class XdsNameResolverProvider extends NameResolverProvider {
       XdsClientPoolFactory xdsClientPoolFactory =
           new RefCountedXdsClientPoolFactory(
               name,
-              Bootstrapper.getInstance(),
               XdsChannelFactory.getInstance(),
               args.getSynchronizationContext(), args.getScheduledExecutorService(),
               new ExponentialBackoffPolicy.Provider(),
@@ -97,25 +95,20 @@ public final class XdsNameResolverProvider extends NameResolverProvider {
 
   static class RefCountedXdsClientPoolFactory implements XdsClientPoolFactory {
     private final String serviceName;
-    private final Bootstrapper bootstrapper;
     private final XdsChannelFactory channelFactory;
     private final SynchronizationContext syncContext;
     private final ScheduledExecutorService timeService;
     private final BackoffPolicy.Provider backoffPolicyProvider;
     private final Supplier<Stopwatch> stopwatchSupplier;
 
-    private BootstrapInfo bootstrapInfo;
-
     RefCountedXdsClientPoolFactory(
         String serviceName,
-        Bootstrapper bootstrapper,
         XdsChannelFactory channelFactory,
         SynchronizationContext syncContext,
         ScheduledExecutorService timeService,
         BackoffPolicy.Provider backoffPolicyProvider,
         Supplier<Stopwatch> stopwatchSupplier) {
       this.serviceName = checkNotNull(serviceName, "serviceName");
-      this.bootstrapper = checkNotNull(bootstrapper, "bootstrapper");
       this.channelFactory = checkNotNull(channelFactory, "channelFactory");
       this.syncContext = checkNotNull(syncContext, "syncContext");
       this.timeService = checkNotNull(timeService, "timeService");
@@ -124,18 +117,7 @@ public final class XdsNameResolverProvider extends NameResolverProvider {
     }
 
     @Override
-    public void bootstrap() throws IOException {
-      if (bootstrapInfo != null) {
-        return;
-      }
-      bootstrapInfo = bootstrapper.readBootstrap();
-    }
-
-    @Override
-    public ObjectPool<XdsClient> newXdsClientObjectPool() {
-      if (bootstrapInfo == null) {
-        throw new IllegalStateException("Not bootstrapped");
-      }
+    public ObjectPool<XdsClient> newXdsClientObjectPool(final BootstrapInfo bootstrapInfo) {
       XdsClientFactory xdsClientFactory = new XdsClientFactory() {
         @Override
         XdsClient createXdsClient() {

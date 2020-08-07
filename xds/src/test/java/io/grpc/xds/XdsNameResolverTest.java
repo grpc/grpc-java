@@ -44,6 +44,7 @@ import io.grpc.internal.JsonUtil;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.PickSubchannelArgsImpl;
 import io.grpc.testing.TestMethodDescriptors;
+import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.EnvoyProtoData.ClusterWeight;
 import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.EnvoyProtoData.Route;
@@ -103,9 +104,7 @@ public class XdsNameResolverTest {
 
   @Before
   public void setUp() {
-    resolver = new XdsNameResolver(AUTHORITY, serviceConfigParser, syncContext,
-        xdsClientPoolFactory, mockRandom);
-    xdsClientPoolFactory.loadBootstrapper(new Bootstrapper() {
+    Bootstrapper bootstrapper = new Bootstrapper() {
       @Override
       public BootstrapInfo readBootstrap() {
         return new BootstrapInfo(
@@ -113,9 +112,12 @@ public class XdsNameResolverTest {
                 new ServerInfo(
                     "trafficdirector.googleapis.com",
                     ImmutableList.<ChannelCreds>of(), ImmutableList.<String>of())),
-            Node.newBuilder().build());
+            Node.newBuilder().build(),
+            null);
       }
-    });
+    };
+    resolver = new XdsNameResolver(AUTHORITY, serviceConfigParser, syncContext, bootstrapper,
+        xdsClientPoolFactory, mockRandom);
   }
 
   @Test
@@ -126,7 +128,8 @@ public class XdsNameResolverTest {
         throw new IOException("Fail to read bootstrap file");
       }
     };
-    xdsClientPoolFactory.loadBootstrapper(bootstrapper);
+    resolver = new XdsNameResolver(AUTHORITY, serviceConfigParser, syncContext, bootstrapper,
+        xdsClientPoolFactory, mockRandom);
     resolver.start(mockListener);
     verify(mockListener).onError(errorCaptor.capture());
     Status error = errorCaptor.getValue();
@@ -424,19 +427,8 @@ public class XdsNameResolverTest {
   }
 
   private final class FakeXdsClientPoolFactory implements XdsClientPoolFactory {
-    private Bootstrapper bootstrapper;
-
     @Override
-    public void bootstrap() throws IOException {
-      bootstrapper.readBootstrap();
-    }
-
-    void loadBootstrapper(Bootstrapper bootstrapper) {
-      this.bootstrapper = bootstrapper;
-    }
-
-    @Override
-    public ObjectPool<XdsClient> newXdsClientObjectPool() {
+    public ObjectPool<XdsClient> newXdsClientObjectPool(BootstrapInfo bootstrapInfo) {
       return new ObjectPool<XdsClient>() {
         @Override
         public XdsClient getObject() {

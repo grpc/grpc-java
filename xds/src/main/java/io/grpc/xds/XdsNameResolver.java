@@ -31,6 +31,7 @@ import io.grpc.SynchronizationContext;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.ObjectPool;
+import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.EnvoyProtoData.ClusterWeight;
 import io.grpc.xds.EnvoyProtoData.Route;
 import io.grpc.xds.EnvoyProtoData.RouteAction;
@@ -68,6 +69,7 @@ final class XdsNameResolver extends NameResolver {
   private final String authority;
   private final ServiceConfigParser serviceConfigParser;
   private final SynchronizationContext syncContext;
+  private final Bootstrapper bootstrapper;
   private final XdsClientPoolFactory xdsClientPoolFactory;
   private final ThreadSafeRandom random;
   private final Map<String, AtomicInteger> clusterRefs = new ConcurrentHashMap<>();
@@ -83,19 +85,21 @@ final class XdsNameResolver extends NameResolver {
       ServiceConfigParser serviceConfigParser,
       SynchronizationContext syncContext,
       XdsClientPoolFactory xdsClientPoolFactory) {
-    this(name, serviceConfigParser, syncContext, xdsClientPoolFactory,
-        ThreadSafeRandomImpl.instance);
+    this(name, serviceConfigParser, syncContext, Bootstrapper.getInstance(),
+        xdsClientPoolFactory, ThreadSafeRandomImpl.instance);
   }
 
   XdsNameResolver(
       String name,
       ServiceConfigParser serviceConfigParser,
       SynchronizationContext syncContext,
+      Bootstrapper bootstrapper,
       XdsClientPoolFactory xdsClientPoolFactory,
       ThreadSafeRandom random) {
     authority = GrpcUtil.checkAuthority(checkNotNull(name, "name"));
     this.serviceConfigParser = checkNotNull(serviceConfigParser, "serviceConfigParser");
     this.syncContext = checkNotNull(syncContext, "syncContext");
+    this.bootstrapper = checkNotNull(bootstrapper, "bootstrapper");
     this.xdsClientPoolFactory = checkNotNull(xdsClientPoolFactory, "xdsClientPoolFactory");
     this.random = checkNotNull(random, "random");
     logger = XdsLogger.withLogId(InternalLogId.allocate("xds-resolver", name));
@@ -109,14 +113,15 @@ final class XdsNameResolver extends NameResolver {
 
   @Override
   public void start(Listener2 listener) {
+    BootstrapInfo bootstrapInfo;
     try {
-      xdsClientPoolFactory.bootstrap();
-    } catch (IOException e) {
+      bootstrapInfo = bootstrapper.readBootstrap();
+    } catch (Exception e) {
       listener.onError(Status.UNAVAILABLE.withDescription("Failed to bootstrap").withCause(e));
       return;
     }
     this.listener = checkNotNull(listener, "listener");
-    xdsClientPool = xdsClientPoolFactory.newXdsClientObjectPool();
+    xdsClientPool = xdsClientPoolFactory.newXdsClientObjectPool(bootstrapInfo);
     xdsClient = xdsClientPool.getObject();
     xdsClient.watchConfigData(authority, new ConfigWatcherImpl());
   }

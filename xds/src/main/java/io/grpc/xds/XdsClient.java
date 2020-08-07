@@ -29,6 +29,7 @@ import io.grpc.ManagedChannelBuilder;
 import io.grpc.Status;
 import io.grpc.alts.GoogleDefaultChannelBuilder;
 import io.grpc.internal.ObjectPool;
+import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.Bootstrapper.ChannelCreds;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
@@ -38,7 +39,6 @@ import io.grpc.xds.EnvoyProtoData.Route;
 import io.grpc.xds.EnvoyServerProtoData.Listener;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -675,9 +675,6 @@ abstract class XdsClient {
   }
 
   interface XdsClientPoolFactory {
-
-    void bootstrap() throws IOException;
-
-    ObjectPool<XdsClient> newXdsClientObjectPool();
+    ObjectPool<XdsClient> newXdsClientObjectPool(BootstrapInfo bootstrapInfo);
   }
 }
