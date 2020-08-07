@@ -330,9 +330,9 @@ final class MeshCaCertificateProvider extends CertificateProvider {
     List<String> certChain = response.getCertChainList();
     List<X509Certificate> x509Chain = new ArrayList<>(certChain.size());
     for (String certString : certChain) {
-      x509Chain.add(
-          CertificateUtils
-              .toX509Certificate(new ByteArrayInputStream(certString.getBytes(UTF_8))));
+      try (ByteArrayInputStream bais = new ByteArrayInputStream(certString.getBytes(UTF_8))) {
+        x509Chain.add(CertificateUtils.toX509Certificate(bais));
+      }
     }
     return x509Chain;
   }

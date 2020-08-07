@@ -443,10 +443,13 @@ public class CommonTlsContextTestsUtil {
         upstreamTlsContext);
   }
 
+  /** Gets a cert from contents of a resource. */
   public static X509Certificate getCertFromResourceName(String resourceName)
       throws IOException, CertificateException {
-    return CertificateUtils.toX509Certificate(
-        new ByteArrayInputStream(getResourceContents(resourceName).getBytes(UTF_8)));
+    try (ByteArrayInputStream bais =
+        new ByteArrayInputStream(getResourceContents(resourceName).getBytes(UTF_8))) {
+      return CertificateUtils.toX509Certificate(bais);
+    }
   }
 
   /** Gets contents of a resource from TestUtils.class loader. */
