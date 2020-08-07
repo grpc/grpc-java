@@ -18,6 +18,9 @@ allprojects {
     repositories {
         google()
         jcenter()
+        // Some grpc-java releases may be missing in JCenter.
+        // See https://github.com/grpc/grpc-java/issues/5782
+        mavenCentral()
         mavenLocal()
     }
 }
