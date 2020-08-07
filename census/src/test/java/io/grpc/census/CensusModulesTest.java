@@ -199,7 +199,6 @@ public class CensusModulesTest {
   private CensusTracingModule censusTracing;
 
   @Before
-  @SuppressWarnings("unchecked")
   public void setUp() throws Exception {
     when(spyClientSpanBuilder.startSpan()).thenReturn(spyClientSpan);
     when(tracer.spanBuilderWithExplicitParent(anyString(), ArgumentMatchers.<Span>any()))
