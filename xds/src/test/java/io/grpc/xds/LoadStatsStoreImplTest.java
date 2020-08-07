@@ -18,13 +18,17 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import com.google.common.base.Stopwatch;
 import com.google.common.collect.ImmutableMap;
+import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats.DroppedRequests;
 import io.envoyproxy.envoy.api.v2.endpoint.EndpointLoadMetricStats;
 import io.envoyproxy.envoy.api.v2.endpoint.UpstreamLocalityStats;
+import io.grpc.internal.FakeClock;
 import io.grpc.xds.ClientLoadCounter.MetricValue;
 import io.grpc.xds.EnvoyProtoData.Locality;
+import io.grpc.xds.LoadStatsManager.LoadStatsStore;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -49,6 +53,7 @@ public class LoadStatsStoreImplTest {
       new Locality("test_region1", "test_zone", "test_subzone");
   private static final Locality LOCALITY2 =
       new Locality("test_region2", "test_zone", "test_subzone");
+  private final FakeClock fakeClock = new FakeClock();
   private ConcurrentMap<Locality, ClientLoadCounter> localityLoadCounters;
   private ConcurrentMap<String, AtomicLong> dropCounters;
   private LoadStatsStore loadStatsStore;
@@ -57,8 +62,9 @@ public class LoadStatsStoreImplTest {
   public void setUp() {
     localityLoadCounters = new ConcurrentHashMap<>();
     dropCounters = new ConcurrentHashMap<>();
+    Stopwatch stopwatch = fakeClock.getStopwatchSupplier().get();
     loadStatsStore =
-        new LoadStatsStoreImpl(CLUSTER_NAME, null, localityLoadCounters, dropCounters);
+        new LoadStatsStoreImpl(CLUSTER_NAME, null, stopwatch, localityLoadCounters, dropCounters);
   }
 
   private static List<EndpointLoadMetricStats> buildEndpointLoadMetricStatsList(
@@ -103,7 +109,7 @@ public class LoadStatsStoreImplTest {
 
   private static ClusterStats buildClusterStats(
       @Nullable List<UpstreamLocalityStats> upstreamLocalityStatsList,
-      @Nullable List<DroppedRequests> droppedRequestsList) {
+      @Nullable List<DroppedRequests> droppedRequestsList, long intervalNano) {
     ClusterStats.Builder clusterStatsBuilder = ClusterStats.newBuilder();
     clusterStatsBuilder.setClusterName(CLUSTER_NAME);
     if (upstreamLocalityStatsList != null) {
@@ -117,6 +123,7 @@ public class LoadStatsStoreImplTest {
       }
       clusterStatsBuilder.setTotalDroppedRequests(dropCount);
     }
+    clusterStatsBuilder.setLoadReportInterval(Durations.fromNanos(intervalNano));
     return clusterStatsBuilder.build();
   }
 
@@ -227,6 +234,7 @@ public class LoadStatsStoreImplTest {
     localityLoadCounters.put(LOCALITY1, counter1);
     localityLoadCounters.put(LOCALITY2, counter2);
 
+    fakeClock.forwardNanos(1000L);
     Map<String, MetricValue> metrics1 =
         ImmutableMap.of(
             "cpu_utilization", new MetricValue(1, 0.3244),
@@ -245,16 +253,17 @@ public class LoadStatsStoreImplTest {
                 buildUpstreamLocalityStats(LOCALITY2, 41234, 432, 431, 702,
                     buildEndpointLoadMetricStatsList(metrics2))
             ),
-            null);
+            null, 1000L);
     assertClusterStatsEqual(expectedReport, loadStatsStore.generateLoadReport());
 
+    fakeClock.forwardNanos(2000L);
     expectedReport =
         buildClusterStats(
             Arrays.asList(
                 buildUpstreamLocalityStats(LOCALITY1, 0, 3421, 0, 0, null),
                 buildUpstreamLocalityStats(LOCALITY2, 0, 432, 0, 0, null)
             ),
-            null);
+            null, 2000L);
     assertClusterStatsEqual(expectedReport, loadStatsStore.generateLoadReport());
   }
 
@@ -270,10 +279,13 @@ public class LoadStatsStoreImplTest {
     }
     assertThat(dropCounters.get("lb").get()).isEqualTo(numLbDrop);
     assertThat(dropCounters.get("throttle").get()).isEqualTo(numThrottleDrop);
+
+    fakeClock.forwardNanos(1000L);
     ClusterStats expectedLoadReport =
         buildClusterStats(null,
             Arrays.asList(buildDroppedRequests("lb", numLbDrop),
-                buildDroppedRequests("throttle", numThrottleDrop)));
+                buildDroppedRequests("throttle", numThrottleDrop)),
+            1000L);
     assertClusterStatsEqual(expectedLoadReport, loadStatsStore.generateLoadReport());
     assertThat(dropCounters.get("lb").get()).isEqualTo(0);
     assertThat(dropCounters.get("throttle").get()).isEqualTo(0);

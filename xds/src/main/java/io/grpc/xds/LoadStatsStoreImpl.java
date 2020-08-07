@@ -20,16 +20,22 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Stopwatch;
+import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats.DroppedRequests;
 import io.envoyproxy.envoy.api.v2.endpoint.EndpointLoadMetricStats;
 import io.envoyproxy.envoy.api.v2.endpoint.UpstreamLocalityStats;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.xds.ClientLoadCounter.ClientLoadSnapshot;
 import io.grpc.xds.ClientLoadCounter.MetricValue;
 import io.grpc.xds.EnvoyProtoData.Locality;
+import io.grpc.xds.LoadStatsManager.LoadStatsStore;
+import io.grpc.xds.LoadStatsManager.LoadStatsStoreFactory;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
@@ -50,9 +56,12 @@ final class LoadStatsStoreImpl implements LoadStatsStore {
   private final ConcurrentMap<Locality, ClientLoadCounter> localityLoadCounters;
   // Cluster level dropped request counts for each category decision made by xDS load balancer.
   private final ConcurrentMap<String, AtomicLong> dropCounters;
+  private final Stopwatch stopwatch;
 
-  LoadStatsStoreImpl(String clusterName, @Nullable String clusterServiceName) {
-    this(clusterName, clusterServiceName, new ConcurrentHashMap<Locality, ClientLoadCounter>(),
+  LoadStatsStoreImpl(
+      String clusterName, @Nullable String clusterServiceName) {
+    this(clusterName, clusterServiceName, GrpcUtil.STOPWATCH_SUPPLIER.get(),
+        new ConcurrentHashMap<Locality, ClientLoadCounter>(),
         new ConcurrentHashMap<String, AtomicLong>());
   }
 
@@ -60,12 +69,15 @@ final class LoadStatsStoreImpl implements LoadStatsStore {
   LoadStatsStoreImpl(
       String clusterName,
       @Nullable String clusterServiceName,
+      Stopwatch stopwatch,
       ConcurrentMap<Locality, ClientLoadCounter> localityLoadCounters,
       ConcurrentMap<String, AtomicLong> dropCounters) {
     this.clusterName = checkNotNull(clusterName, "clusterName");
     this.clusterServiceName = clusterServiceName;
+    this.stopwatch =  checkNotNull(stopwatch, "stopwatch");
     this.localityLoadCounters = checkNotNull(localityLoadCounters, "localityLoadCounters");
     this.dropCounters = checkNotNull(dropCounters, "dropCounters");
+    stopwatch.reset().start();
   }
 
   @Override
@@ -105,6 +117,9 @@ final class LoadStatsStoreImpl implements LoadStatsStore {
           .setDroppedCount(drops));
     }
     statsBuilder.setTotalDroppedRequests(totalDrops);
+    statsBuilder.setLoadReportInterval(
+        Durations.fromNanos(stopwatch.elapsed(TimeUnit.NANOSECONDS)));
+    stopwatch.reset().start();
     return statsBuilder.build();
   }
 
@@ -143,5 +158,14 @@ final class LoadStatsStoreImpl implements LoadStatsStore {
       }
     }
     counter.getAndIncrement();
+  }
+
+  static LoadStatsStoreFactory getDefaultFactory() {
+    return new LoadStatsStoreFactory() {
+      @Override
+      public LoadStatsStore newLoadStatsStore(String cluster, String clusterService) {
+        return new LoadStatsStoreImpl(cluster, clusterService);
+      }
+    };
   }
 }
