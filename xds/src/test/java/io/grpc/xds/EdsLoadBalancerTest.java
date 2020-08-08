@@ -76,6 +76,7 @@ import io.grpc.xds.Bootstrapper.ChannelCreds;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EdsLoadBalancerProvider.EdsConfig;
 import io.grpc.xds.EnvoyProtoData.Node;
+import io.grpc.xds.LoadStatsManager.LoadStatsStore;
 import io.grpc.xds.LocalityStore.LocalityStoreFactory;
 import io.grpc.xds.XdsClient.EndpointUpdate;
 import io.grpc.xds.XdsClient.XdsChannel;
@@ -559,7 +560,8 @@ public class EdsLoadBalancerTest {
       LocalityStore newLocalityStore(
           InternalLogId logId,
           Helper helper,
-          LoadBalancerRegistry lbRegistry) {
+          LoadBalancerRegistry lbRegistry,
+          LoadStatsStore loadStatsStore) {
         // Note that this test approach can not verify anything about how localityStore will use the
         // helper in the arguments to delegate updates from localityStore to the EDS balancer, and
         // can not verify anything about how loadStatsStore updates localities and drop information.

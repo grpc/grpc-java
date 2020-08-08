@@ -236,6 +236,7 @@ final class EdsLoadBalancer extends LoadBalancer {
     /**
      * Load-balances endpoints for a given cluster.
      */
+
     final class ClusterEndpointsBalancer extends LoadBalancer {
       // Name of the resource to be used for querying endpoint information.
       final String resourceName;
@@ -247,7 +248,9 @@ final class EdsLoadBalancer extends LoadBalancer {
       ClusterEndpointsBalancer(Helper helper) {
         this.helper = helper;
         resourceName = clusterServiceName != null ? clusterServiceName : clusterName;
-        localityStore = localityStoreFactory.newLocalityStore(logId, helper, lbRegistry);
+        LoadStatsStore loadStatsStore = xdsClient.addClientStats(clusterName, clusterServiceName);
+        localityStore =
+            localityStoreFactory.newLocalityStore(logId, helper, lbRegistry, loadStatsStore);
         endpointWatcher = new EndpointWatcherImpl();
         logger.log(
             XdsLogLevel.INFO,
@@ -270,9 +273,7 @@ final class EdsLoadBalancer extends LoadBalancer {
                 "Start reporting loads for cluster: {0}, cluster_service: {1}",
                 clusterName,
                 clusterServiceName);
-            LoadStatsStore loadStatsStore =
-                xdsClient.reportClientStats(clusterName, clusterServiceName);
-            localityStore.setLoadStatsStore(loadStatsStore);
+            xdsClient.reportClientStats();
           }
         } else {
           if (isReportingLoad) {
@@ -281,8 +282,7 @@ final class EdsLoadBalancer extends LoadBalancer {
                 "Stop reporting loads for cluster: {0}, cluster_service: {1}",
                 clusterName,
                 clusterServiceName);
-            xdsClient.cancelClientStatsReport(clusterName, clusterServiceName);
-            localityStore.setLoadStatsStore(null);
+            xdsClient.cancelClientStatsReport();
           }
         }
         // TODO(zddapeng): In handleResolvedAddresses() handle child policy change if any.
@@ -309,10 +309,10 @@ final class EdsLoadBalancer extends LoadBalancer {
               "Stop reporting loads for cluster: {0}, cluster_service: {1}",
               clusterName,
               clusterServiceName);
-          xdsClient.cancelClientStatsReport(clusterName, clusterServiceName);
-          localityStore.setLoadStatsStore(null);
+          xdsClient.cancelClientStatsReport();
           isReportingLoad = false;
         }
+        xdsClient.removeClientStats(clusterName, clusterServiceName);
         xdsClient.cancelEndpointDataWatch(resourceName, endpointWatcher);
         logger.log(
             XdsLogLevel.INFO,
@@ -370,7 +370,7 @@ final class EdsLoadBalancer extends LoadBalancer {
                 "Stop reporting loads for cluster: {0}, cluster_service: {1}",
                 clusterName,
                 clusterServiceName);
-            xdsClient.cancelClientStatsReport(clusterName, clusterServiceName);
+            xdsClient.cancelClientStatsReport();
             isReportingLoad = false;
           }
           localityStore.reset();
