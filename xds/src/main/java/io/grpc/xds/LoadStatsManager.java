@@ -16,6 +16,7 @@
 
 package io.grpc.xds;
 
+import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -124,7 +125,7 @@ final class LoadStatsManager {
     private int refs = 0;
 
     RefCounted(LoadStatsStore instance) {
-      this.instance = instance;
+      this.instance = checkNotNull(instance, "instance");
     }
 
     LoadStatsStore get() {
