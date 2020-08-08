@@ -3237,8 +3237,9 @@ public class XdsClientImplTest {
   @Test
   public void reportLoadStatsToServer() {
     String clusterName = "cluster-foo.googleapis.com";
+    xdsClient.addClientStats(clusterName, null);
     ArgumentCaptor<LoadStatsRequest> requestCaptor = ArgumentCaptor.forClass(null);
-    xdsClient.reportClientStats(clusterName, null);
+    xdsClient.reportClientStats();
     LoadReportCall lrsCall = loadReportCalls.poll();
     verify(lrsCall.requestObserver).onNext(requestCaptor.capture());
     assertThat(requestCaptor.getValue().getClusterStatsCount())
@@ -3254,12 +3255,14 @@ public class XdsClientImplTest {
     ClusterStats report = Iterables.getOnlyElement(requestCaptor.getValue().getClusterStatsList());
     assertThat(report.getClusterName()).isEqualTo(clusterName);
 
-    xdsClient.cancelClientStatsReport(clusterName, null);
+    xdsClient.removeClientStats(clusterName, null);
     fakeClock.forwardNanos(1000L);
     verify(lrsCall.requestObserver, times(3)).onNext(requestCaptor.capture());
     assertThat(requestCaptor.getValue().getClusterStatsCount())
         .isEqualTo(0);  // no more stats reported
 
+    xdsClient.cancelClientStatsReport();
+    assertThat(lrsEnded.get()).isTrue();
     // See more test on LoadReportClientTest.java
   }
 

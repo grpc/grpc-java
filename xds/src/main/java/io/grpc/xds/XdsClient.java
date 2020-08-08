@@ -519,18 +519,34 @@ abstract class XdsClient {
   }
 
   /**
-   * Report client load stats to a remote server for the given cluster:cluster_service. Caller
-   * should use the returned {@link LoadStatsStore} to record and aggregate stats for loads sent
-   * to the cluster:cluster_service.
+   * Starts client side load reporting via LRS. All clusters report load through one LRS stream,
+   * only the first call of this method effectively starts the LRS stream.
    */
-  LoadStatsStore reportClientStats(String clusterName, @Nullable String clusterServiceName) {
+  void reportClientStats() {
+  }
+
+  /**
+   * Stops client side load reporting via LRS. All clusters report load through one LRS stream,
+   * only the last call of this method effectively stops the LRS stream.
+   */
+  void cancelClientStatsReport() {
+  }
+
+  /**
+   * Starts recording client load stats for the given cluster:cluster_service. Caller should use
+   * the returned {@link LoadStatsStore} to record and aggregate stats for load sent to the given
+   * cluster:cluster_service. Recorded stats may be reported to a load reporting server if enabled.
+   */
+  LoadStatsStore addClientStats(String clusterName, @Nullable String clusterServiceName) {
     throw new UnsupportedOperationException();
   }
 
   /**
-   * Stops reporting client load stats to the remote server for the given cluster:cluster_service.
+   * Stops recording client load stats for the given cluster:cluster_service. The load reporting
+   * server will no longer receive stats for the given cluster:cluster_service after this call.
    */
-  void cancelClientStatsReport(String clusterName, @Nullable String clusterServiceName) {
+  void removeClientStats(String clusterName, @Nullable String clusterServiceName) {
+    throw new UnsupportedOperationException();
   }
 
   abstract static class XdsClientFactory {
