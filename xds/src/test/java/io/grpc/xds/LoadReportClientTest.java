@@ -55,7 +55,6 @@ import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
-import io.grpc.xds.LoadReportClient.LoadReportCallback;
 import io.grpc.xds.LoadStatsManager.LoadStatsStore;
 import io.grpc.xds.LoadStatsManager.LoadStatsStoreFactory;
 import java.util.ArrayDeque;
@@ -147,8 +146,6 @@ public class LoadReportClientTest {
   private BackoffPolicy backoffPolicy1;
   @Mock
   private BackoffPolicy backoffPolicy2;
-  @Mock
-  private LoadReportCallback callback;
   @Captor
   private ArgumentCaptor<StreamObserver<LoadStatsResponse>> lrsResponseObserverCaptor;
 
@@ -202,7 +199,7 @@ public class LoadReportClientTest {
             fakeClock.getScheduledExecutorService(),
             backoffPolicyProvider,
             fakeClock.getStopwatchSupplier());
-    lrsClient.startLoadReporting(callback);
+    lrsClient.startLoadReporting();
   }
 
   @After
@@ -217,7 +214,7 @@ public class LoadReportClientTest {
     StreamObserver<LoadStatsResponse> responseObserver = lrsResponseObserverCaptor.getValue();
     StreamObserver<LoadStatsRequest> requestObserver =
         Iterables.getOnlyElement(lrsRequestObservers);
-    InOrder inOrder = inOrder(requestObserver, callback);
+    InOrder inOrder = inOrder(requestObserver);
     inOrder.verify(requestObserver).onNext(eq(buildInitialRequest()));
 
     FakeLoadStatsStore loadStatsStore1 =
@@ -226,7 +223,6 @@ public class LoadReportClientTest {
 
     // Management server asks to report loads for cluster1.
     responseObserver.onNext(buildLrsResponse(ImmutableList.of(CLUSTER1), 1000));
-    inOrder.verify(callback).onReportResponse(1000);
 
     fakeClock.forwardNanos(999);
     inOrder.verifyNoMoreInteractions();
@@ -252,7 +248,6 @@ public class LoadReportClientTest {
     // Management server updates the interval of sending load reports, while still asking for
     // loads to cluster1 only.
     responseObserver.onNext(buildLrsResponse(ImmutableList.of(CLUSTER1), 2000));
-    inOrder.verify(callback).onReportResponse(2000);
 
     fakeClock.forwardNanos(1000);
     inOrder.verifyNoMoreInteractions();
@@ -270,7 +265,6 @@ public class LoadReportClientTest {
             .setSendAllClusters(true)
             .setLoadReportingInterval(Durations.fromNanos(2000))
             .build());
-    inOrder.verify(callback).onReportResponse(2000);
 
     loadStatsStore1.refresh();
     loadStatsStore2.refresh();

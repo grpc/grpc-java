@@ -71,8 +71,6 @@ final class LoadReportClient {
   private ScheduledHandle lrsRpcRetryTimer;
   @Nullable
   private LrsStream lrsStream;
-  @Nullable
-  private LoadReportCallback callback;
 
   LoadReportClient(
       InternalLogId logId,
@@ -110,11 +108,10 @@ final class LoadReportClient {
    * stats periodically. Calling this method on an already started {@link LoadReportClient} is
    * no-op.
    */
-  void startLoadReporting(LoadReportCallback callback) {
+  void startLoadReporting() {
     if (started) {
       return;
     }
-    this.callback = callback;
     started = true;
     startLrsRpc();
   }
@@ -274,7 +271,6 @@ final class LoadReportClient {
       logger.log(XdsLogLevel.INFO, "Update load reporting interval to {0} ns", interval);
       loadReportIntervalNano = interval;
       scheduleNextLoadReport();
-      callback.onReportResponse(loadReportIntervalNano);
     }
 
     private void handleStreamClosed(Status status) {
@@ -335,22 +331,5 @@ final class LoadReportClient {
         lrsStream = null;
       }
     }
-  }
-
-  /**
-   * Callbacks for passing information received from client load reporting responses to xDS load
-   * balancer, such as the load reporting interval requested by the traffic director.
-   *
-   * <p>Implementations are not required to be thread-safe as callbacks will be invoked in xDS load
-   * balancer's {@link io.grpc.SynchronizationContext}.
-   */
-  interface LoadReportCallback {
-
-    /**
-     * The load reporting interval has been received.
-     *
-     * @param reportIntervalNano load reporting interval requested by remote traffic director.
-     */
-    void onReportResponse(long reportIntervalNano);
   }
 }
