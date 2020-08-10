@@ -28,6 +28,7 @@ import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.TlsCertificate;
 import io.grpc.Status;
 import io.grpc.xds.EnvoyServerProtoData.BaseTlsContext;
 import io.netty.handler.ssl.ApplicationProtocolConfig;
+import io.netty.handler.ssl.ReferenceCountedOpenSslContext;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import java.io.IOException;
@@ -164,6 +165,9 @@ abstract class SdsSslContextProvider extends SslContextProvider implements SdsCl
         sslContextBuilder.applicationProtocolConfig(apn);
       }
       SslContext sslContextCopy = sslContextBuilder.build();
+      if (sslContextCopy instanceof ReferenceCountedOpenSslContext) {
+        ((ReferenceCountedOpenSslContext)sslContextCopy).setUseTasks(true);
+      }
       sslContext = sslContextCopy;
       makePendingCallbacks(sslContextCopy);
     } catch (CertificateException | IOException | CertStoreException e) {
