@@ -55,11 +55,11 @@ public abstract class SslContextProvider implements Closeable {
     void onException(Throwable throwable);
   }
 
-  SslContextProvider(BaseTlsContext tlsContext) {
+  protected SslContextProvider(BaseTlsContext tlsContext) {
     this.tlsContext = checkNotNull(tlsContext, "tlsContext");
   }
 
-  CommonTlsContext getCommonTlsContext() {
+  protected CommonTlsContext getCommonTlsContext() {
     return tlsContext.getCommonTlsContext();
   }
 
@@ -102,7 +102,7 @@ public abstract class SslContextProvider implements Closeable {
    */
   public abstract void addCallback(Callback callback, Executor executor);
 
-  final void performCallback(
+  protected final void performCallback(
       final SslContextGetter sslContextGetter, final Callback callback, Executor executor) {
     checkNotNull(sslContextGetter, "sslContextGetter");
     checkNotNull(callback, "callback");

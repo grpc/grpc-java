@@ -75,7 +75,7 @@ final class SdsServerSslContextProvider extends SdsSslContextProvider {
   }
 
   @Override
-  SslContextBuilder getSslContextBuilder(
+  protected final SslContextBuilder getSslContextBuilder(
       CertificateValidationContext localCertValidationContext)
       throws CertificateException, IOException, CertStoreException {
     SslContextBuilder sslContextBuilder =
