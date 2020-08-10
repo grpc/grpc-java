@@ -21,15 +21,15 @@ import io.grpc.Metadata;
 import io.grpc.ServerCall;
 
 /** The EvaluateArgs class holds evaluate arguments used in CEL Evaluation Engine. */
-public class EvaluateArgs<ReqT, RespT> {
+public class EvaluateArgs {
   private Metadata headers;
-  private ServerCall<ReqT, RespT> call;
+  private ServerCall<?, ?> call;
 
   /**
    * Creates a new evaluate argument using the input {@code headers} for resolving headers
    * and {@code call} for resolving gRPC call.
    */
-  public EvaluateArgs(Metadata headers, ServerCall<ReqT, RespT> call) {
+  public EvaluateArgs(Metadata headers, ServerCall<?, ?> call) {
     this.headers = headers;
     this.call = call;
   }
@@ -40,7 +40,7 @@ public class EvaluateArgs<ReqT, RespT> {
   }
 
   /** Return the gRPC call. */
-  public ServerCall<ReqT, RespT> getCall() {
+  public ServerCall<?, ?> getCall() {
     return call;
   }
 

@@ -39,11 +39,11 @@ public class EvaluateArgsTest<ReqT,RespT> {
   @Mock
   private ServerCall<ReqT,RespT> call;
 
-  private EvaluateArgs<ReqT,RespT> args;
+  private EvaluateArgs args;
   
   @Test
   public void testEvaluateArgsAccessorFunctions() {
-    args = new EvaluateArgs<ReqT,RespT>(new Metadata(), call);
+    args = new EvaluateArgs(new Metadata(), call);
     when(call.getAuthority()).thenReturn("fooapi.googleapis.com");
     assertNotNull(args.getCall());
     assertNotNull(args.getHeaders());

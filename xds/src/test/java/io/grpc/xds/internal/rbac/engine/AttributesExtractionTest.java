@@ -39,14 +39,14 @@ import org.mockito.junit.MockitoRule;
 
 /** Unit tests for evaluate argument. */
 @RunWith(JUnit4.class)
-public class AttributesExtractionTest<ReqT,RespT> {
+public class AttributesExtractionTest {
   @Rule
   public final MockitoRule mocks = MockitoJUnit.rule();
 
   @Mock
-  private EvaluateArgs<ReqT,RespT> args;
+  private EvaluateArgs args;
 
-  private AuthorizationEngine<ReqT,RespT> engine;
+  private AuthorizationEngine engine;
   private Metadata metadata;
   private ImmutableMap<String, Object> attributesMap;
 
@@ -59,7 +59,7 @@ public class AttributesExtractionTest<ReqT,RespT> {
         .setAction(RBAC.Action.ALLOW)
         .build();
     List<RBAC> rbacList = new ArrayList<>(Arrays.asList(new RBAC[] {rbacAllow}));
-    engine = new AuthorizationEngine<>(ImmutableList.copyOf(rbacList));
+    engine = new AuthorizationEngine(ImmutableList.copyOf(rbacList));
     // Set up attributes map.
     attributesMap = ImmutableMap.<String, Object>builder()
         .put("request.url_path", "package.service/method")

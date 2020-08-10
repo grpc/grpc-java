@@ -43,7 +43,7 @@ import org.mockito.junit.MockitoRule;
 
 /** Tests for CEL library stub. */
 @RunWith(JUnit4.class)
-public class CelExpressionEvaluationTest<ReqT, RespT> {
+public class CelExpressionEvaluationTest {
   @Rule
   public final MockitoRule mocks = MockitoJUnit.rule();
 
@@ -64,7 +64,7 @@ public class CelExpressionEvaluationTest<ReqT, RespT> {
   
   private Expr expr;
   private Object result;
-  private AuthorizationEngine<ReqT,RespT> engine;
+  private AuthorizationEngine engine;
 
   @Before
   public void setup() throws InterpreterException {
@@ -72,7 +72,7 @@ public class CelExpressionEvaluationTest<ReqT, RespT> {
         .setAction(RBAC.Action.ALLOW)
         .build();
     List<RBAC> rbacList = new ArrayList<>(Arrays.asList(new RBAC[] {rbacAllow}));
-    engine = new AuthorizationEngine<>(ImmutableList.copyOf(rbacList));
+    engine = new AuthorizationEngine(ImmutableList.copyOf(rbacList));
     when(interpretable.eval(any(Activation.class))).thenReturn(true);
   }
 
