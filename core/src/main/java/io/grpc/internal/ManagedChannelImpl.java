@@ -1256,8 +1256,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
               "OobChannel for " + addressGroup);
       final OobChannel oobChannel = new OobChannel(
           authority, balancerRpcExecutorPool, transportFactory.getScheduledExecutorService(),
-          syncContext, callTracerFactory.create(), oobChannelTracer, channelz, timeProvider,
-          configSelector);
+          syncContext, callTracerFactory.create(), oobChannelTracer, channelz, timeProvider);
       channelTracer.reportEvent(new ChannelTrace.Event.Builder()
           .setDescription("Child OobChannel created")
           .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
