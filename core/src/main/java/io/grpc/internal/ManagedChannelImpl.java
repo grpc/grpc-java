@@ -911,35 +911,33 @@ final class ManagedChannelImpl extends ManagedChannel implements
         final MethodDescriptor<ReqT, RespT> method, final CallOptions callOptions) {
       if (configSelector.get() != INITIAL_PENDING_SELECTOR) {
         return newClientCall(method, callOptions);
-      } else {
-        final DelayedClientCall<ReqT, RespT> delayedClientCall = new DelayedClientCall<>(
-            getCallExecutor(callOptions), scheduledExecutor, callOptions.getDeadline());
-        final Context context = Context.current();
-        class TransitionRunnable extends ContextRunnable {
-          TransitionRunnable() {
-            super(context);
-          }
-
-          @Override
-          public void runInContext() {
-            delayedClientCall.setCall(newClientCall(method, callOptions));
-          }
+      }
+      final DelayedClientCall<ReqT, RespT> delayedClientCall = new DelayedClientCall<>(
+           getCallExecutor(callOptions), scheduledExecutor, callOptions.getDeadline());
+      final Context context = Context.current();
+      class TransitionRunnable extends ContextRunnable {
+        TransitionRunnable() {
+          super(context);
         }
 
-        syncContext.execute(new Runnable() {
-          @Override
-          public void run() {
-            exitIdleMode();
-            TransitionRunnable transitionRunnable = new TransitionRunnable();
-            if (configSelector.get() == INITIAL_PENDING_SELECTOR) {
-              pendingCalls.add(transitionRunnable);
-            } else {
-              transitionRunnable.run();
-            }
-          }
-        });
-        return delayedClientCall;
+        @Override public void runInContext() {
+          delayedClientCall.setCall(newClientCall(method, callOptions));
+        }
       }
+
+      syncContext.execute(new Runnable() {
+        @Override
+        public void run() {
+          exitIdleMode();
+          TransitionRunnable transitionRunnable = new TransitionRunnable();
+          if (configSelector.get() == INITIAL_PENDING_SELECTOR) {
+            pendingCalls.add(transitionRunnable);
+          } else {
+            transitionRunnable.run();
+          }
+        }
+      });
+      return delayedClientCall;
     }
 
     @Override
