@@ -465,8 +465,7 @@ public class ServiceConfigErrorHandlingTest {
     ResolvedAddresses resolvedAddresses = resultCaptor.getValue();
     assertThat(resolvedAddresses.getAddresses()).containsExactly(addressGroup);
     assertThat(resolvedAddresses.getLoadBalancingPolicyConfig()).isEqualTo("1st raw config");
-    assertThat(resolvedAddresses.getAttributes().get(InternalConfigSelector.KEY))
-        .isSameInstanceAs(configSelector);
+    assertThat(channel.getConfigSelector()).isSameInstanceAs(configSelector);
     verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
 
     assertThat(channel.getState(false)).isNotEqualTo(ConnectivityState.TRANSIENT_FAILURE);
@@ -480,9 +479,8 @@ public class ServiceConfigErrorHandlingTest {
     verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
     ResolvedAddresses newResolvedAddress = resultCaptor.getValue();
     // should use previous service config because new service config is invalid.
-    assertThat(resolvedAddresses.getLoadBalancingPolicyConfig()).isEqualTo("1st raw config");
-    assertThat(newResolvedAddress.getAttributes().get(InternalConfigSelector.KEY))
-        .isSameInstanceAs(configSelector);
+    assertThat(newResolvedAddress.getLoadBalancingPolicyConfig()).isEqualTo("1st raw config");
+    assertThat(channel.getConfigSelector()).isSameInstanceAs(configSelector);
     verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
     assertThat(channel.getState(false)).isEqualTo(ConnectivityState.IDLE);
   }
@@ -516,8 +514,7 @@ public class ServiceConfigErrorHandlingTest {
     assertThat(resolvedAddresses.getAddresses()).containsExactly(addressGroup);
     // should use previous service config because new resolution result is no config.
     assertThat(resolvedAddresses.getLoadBalancingPolicyConfig()).isEqualTo("1st raw config");
-    assertThat(resolvedAddresses.getAttributes().get(InternalConfigSelector.KEY))
-        .isSameInstanceAs(configSelector);
+    assertThat(channel.getConfigSelector()).isSameInstanceAs(configSelector);
     verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
 
     // 2nd resolution lbConfig is no config

@@ -754,6 +754,11 @@ final class ManagedChannelImpl extends ManagedChannel implements
         target, uriSyntaxErrors.length() > 0 ? " (" + uriSyntaxErrors + ")" : ""));
   }
 
+  @VisibleForTesting
+  InternalConfigSelector getConfigSelector() {
+    return configSelector.get();
+  }
+
   /**
    * Initiates an orderly shutdown in which preexisting calls continue but new calls are immediately
    * cancelled.
@@ -1520,12 +1525,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
           Attributes effectiveAttrs = resolutionResult.getAttributes();
           // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
           if (NameResolverListener.this.helper == ManagedChannelImpl.this.lbHelper) {
-            Attributes.Builder attrBuilder = effectiveAttrs.toBuilder();
-            if (configSelector.get() == null) {
-              attrBuilder.discard(InternalConfigSelector.KEY);
-            } else {
-              attrBuilder.set(InternalConfigSelector.KEY, configSelector.get());
-            }
+            Attributes.Builder attrBuilder =
+                effectiveAttrs.toBuilder().discard(InternalConfigSelector.KEY);
             Map<String, ?> healthCheckingConfig =
                 effectiveServiceConfig.getHealthCheckingConfig();
             if (healthCheckingConfig != null) {
