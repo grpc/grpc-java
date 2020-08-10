@@ -267,21 +267,11 @@ final class EdsLoadBalancer extends LoadBalancer {
             throw new AssertionError("Can only report load to the same management server");
           }
           if (!isReportingLoad) {
-            logger.log(
-                XdsLogLevel.INFO,
-                "Start reporting loads for cluster: {0}, cluster_service: {1}",
-                clusterName,
-                clusterServiceName);
             xdsClient.reportClientStats();
             isReportingLoad = true;
           }
         } else {
           if (isReportingLoad) {
-            logger.log(
-                XdsLogLevel.INFO,
-                "Stop reporting loads for cluster: {0}, cluster_service: {1}",
-                clusterName,
-                clusterServiceName);
             xdsClient.cancelClientStatsReport();
             isReportingLoad = false;
           }
@@ -304,11 +294,6 @@ final class EdsLoadBalancer extends LoadBalancer {
       @Override
       public void shutdown() {
         if (isReportingLoad) {
-          logger.log(
-              XdsLogLevel.INFO,
-              "Stop reporting loads for cluster: {0}, cluster_service: {1}",
-              clusterName,
-              clusterServiceName);
           xdsClient.cancelClientStatsReport();
           isReportingLoad = false;
         }
@@ -366,11 +351,6 @@ final class EdsLoadBalancer extends LoadBalancer {
         public void onResourceDoesNotExist(String resourceName) {
           logger.log(XdsLogLevel.INFO, "Resource {0} is unavailable", resourceName);
           if (isReportingLoad) {
-            logger.log(
-                XdsLogLevel.INFO,
-                "Stop reporting loads for cluster: {0}, cluster_service: {1}",
-                clusterName,
-                clusterServiceName);
             xdsClient.cancelClientStatsReport();
             isReportingLoad = false;
           }

@@ -479,9 +479,9 @@ final class XdsClientImpl extends XdsClient {
   @Override
   void reportClientStats() {
     if (lrsClient == null) {
+      logger.log(XdsLogLevel.INFO, "Turning on load reporting");
       lrsClient =
           new LoadReportClient(
-              logId,
               targetName,
               loadStatsManager,
               channel,
@@ -502,7 +502,9 @@ final class XdsClientImpl extends XdsClient {
     checkState(loadReportCount > 0, "load reporting was never started");
     loadReportCount--;
     if (loadReportCount == 0) {
+      logger.log(XdsLogLevel.INFO, "Turning off load reporting");
       lrsClient.stopLoadReporting();
+      lrsClient = null;
     }
   }
 

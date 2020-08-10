@@ -53,6 +53,7 @@ final class LoadReportClient {
   @VisibleForTesting
   static final String TARGET_NAME_METADATA_KEY = "PROXYLESS_CLIENT_HOSTNAME";
 
+  private final InternalLogId logId;
   private final XdsLogger logger;
   private final ManagedChannel channel;
   private final Node node;
@@ -73,7 +74,6 @@ final class LoadReportClient {
   private LrsStream lrsStream;
 
   LoadReportClient(
-      InternalLogId logId,
       String targetName,
       LoadStatsManager loadStatsManager,
       ManagedChannel channel,
@@ -99,8 +99,9 @@ final class LoadReportClient {
                 Value.newBuilder().setStringValue(targetName).build())
             .build();
     this.node = node.toBuilder().setMetadata(metadata).build();
-    String logPrefix = checkNotNull(logId, "logId").toString().concat("-lrs-client");
-    logger = XdsLogger.withPrefix(logPrefix);
+    logId = InternalLogId.allocate("lrs-client", targetName);
+    logger = XdsLogger.withLogId(logId);
+    logger.log(XdsLogLevel.INFO, "Created");
   }
 
   /**
@@ -113,6 +114,7 @@ final class LoadReportClient {
       return;
     }
     started = true;
+    logger.log(XdsLogLevel.INFO, "Starting load reporting RPC");
     startLrsRpc();
   }
 
@@ -124,6 +126,7 @@ final class LoadReportClient {
     if (!started) {
       return;
     }
+    logger.log(XdsLogLevel.INFO, "Stopping load reporting RPC");
     if (lrsRpcRetryTimer != null) {
       lrsRpcRetryTimer.cancel();
     }
