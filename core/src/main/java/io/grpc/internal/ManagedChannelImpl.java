@@ -920,6 +920,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       final DelayedClientCall<ReqT, RespT> delayedClientCall = new DelayedClientCall<>(
            getCallExecutor(callOptions), scheduledExecutor, callOptions.getDeadline());
       final Context context = Context.current();
+      final Executor callExecutor = getCallExecutor(callOptions);
       class TransitionRunnable extends ContextRunnable {
         TransitionRunnable() {
           super(context);
@@ -934,7 +935,12 @@ final class ManagedChannelImpl extends ManagedChannel implements
         @Override
         public void run() {
           exitIdleMode();
-          TransitionRunnable transitionRunnable = new TransitionRunnable();
+          Runnable transitionRunnable = new Runnable() {
+            @Override
+            public void run() {
+              callExecutor.execute(new TransitionRunnable());
+            }
+          };
           if (configSelector.get() == INITIAL_PENDING_SELECTOR) {
             pendingCalls.add(transitionRunnable);
           } else {
