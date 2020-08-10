@@ -170,7 +170,7 @@ public class XdsNameResolverIntegrationTest {
       public BootstrapInfo readBootstrap() {
         List<ServerInfo> serverList =
             ImmutableList.of(new ServerInfo(serverName, ImmutableList.<ChannelCreds>of(), null));
-        return new BootstrapInfo(serverList, FAKE_BOOTSTRAP_NODE);
+        return new BootstrapInfo(serverList, FAKE_BOOTSTRAP_NODE, null);
       }
     };
     xdsNameResolver =
@@ -194,7 +194,7 @@ public class XdsNameResolverIntegrationTest {
     Bootstrapper bootstrapper = new Bootstrapper() {
       @Override
       public BootstrapInfo readBootstrap() {
-        return new BootstrapInfo(ImmutableList.<ServerInfo>of(), FAKE_BOOTSTRAP_NODE);
+        return new BootstrapInfo(ImmutableList.<ServerInfo>of(), FAKE_BOOTSTRAP_NODE, null);
       }
     };
 

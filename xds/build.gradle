@@ -26,7 +26,8 @@ dependencies {
             project(':grpc-auth'),
             project(path: ':grpc-alts', configuration: 'shadow'),
             libraries.gson,
-            libraries.re2j
+            libraries.re2j,
+            libraries.bouncycastle
     def nettyDependency = implementation project(':grpc-netty')
 
     implementation (libraries.opencensus_proto) {
@@ -96,6 +97,7 @@ shadowJar {
     relocate 'io.envoyproxy', 'io.grpc.xds.shaded.io.envoyproxy'
     relocate 'io.grpc.netty', 'io.grpc.netty.shaded.io.grpc.netty'
     relocate 'io.netty', 'io.grpc.netty.shaded.io.netty'
+    relocate 'com.google.security', 'io.grpc.xds.shaded.com.google.security'
     exclude "**/*.proto"
 }
 

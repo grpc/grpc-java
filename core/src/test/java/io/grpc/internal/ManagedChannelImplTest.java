@@ -46,8 +46,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.base.Throwables;
@@ -141,7 +141,6 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
@@ -211,7 +210,6 @@ public class ManagedChannelImplTest {
 
   private final InternalChannelz channelz = new InternalChannelz();
 
-  @Rule public final ExpectedException thrown = ExpectedException.none();
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
   private ManagedChannelImpl channel;
@@ -1238,7 +1236,7 @@ public class ManagedChannelImplTest {
     if (shouldFail) {
       verify(mockCallListener).onClose(same(status), any(Metadata.class));
     } else {
-      verifyZeroInteractions(mockCallListener);
+      verifyNoInteractions(mockCallListener);
     }
 
     // This call doesn't involve delayed transport
@@ -1249,7 +1247,7 @@ public class ManagedChannelImplTest {
     if (shouldFail) {
       verify(mockCallListener2).onClose(same(status), any(Metadata.class));
     } else {
-      verifyZeroInteractions(mockCallListener2);
+      verifyNoInteractions(mockCallListener2);
     }
   }
 
@@ -1737,7 +1735,7 @@ public class ManagedChannelImplTest {
     verify(mockTransport, never()).newStream(
         any(MethodDescriptor.class), any(Metadata.class), any(CallOptions.class));
 
-    verifyZeroInteractions(mockCallListener);
+    verifyNoInteractions(mockCallListener);
     assertEquals(1, balancerRpcExecutor.runDueTasks());
     verify(mockCallListener).onClose(
         same(SubchannelChannel.NOT_READY_ERROR), any(Metadata.class));
@@ -1769,7 +1767,7 @@ public class ManagedChannelImplTest {
     verify(mockTransport, never()).newStream(
         any(MethodDescriptor.class), any(Metadata.class), any(CallOptions.class));
 
-    verifyZeroInteractions(mockCallListener);
+    verifyNoInteractions(mockCallListener);
     assertEquals(1, balancerRpcExecutor.runDueTasks());
     verify(mockCallListener).onClose(
         same(SubchannelChannel.WAIT_FOR_READY_ERROR), any(Metadata.class));
@@ -2040,8 +2038,8 @@ public class ManagedChannelImplTest {
         Arrays.asList(factory1, factory2),
         callOptionsCaptor.getValue().getStreamTracerFactories());
     // The factories are safely not stubbed because we do not expect any usage of them.
-    verifyZeroInteractions(factory1);
-    verifyZeroInteractions(factory2);
+    verifyNoInteractions(factory1);
+    verifyNoInteractions(factory2);
   }
 
   @Test
@@ -2076,8 +2074,8 @@ public class ManagedChannelImplTest {
         Arrays.asList(factory1, factory2),
         callOptionsCaptor.getValue().getStreamTracerFactories());
     // The factories are safely not stubbed because we do not expect any usage of them.
-    verifyZeroInteractions(factory1);
-    verifyZeroInteractions(factory2);
+    verifyNoInteractions(factory1);
+    verifyNoInteractions(factory2);
   }
 
   @Test
@@ -2307,7 +2305,7 @@ public class ManagedChannelImplTest {
     assertEquals(SHUTDOWN, channel.getState(false));
 
     // We didn't stub mockPicker, because it should have never been called in this test.
-    verifyZeroInteractions(mockPicker);
+    verifyNoInteractions(mockPicker);
   }
 
   @Test
@@ -2328,7 +2326,7 @@ public class ManagedChannelImplTest {
     call2.start(mockCallListener2, new Metadata());
 
     executor.runDueTasks();
-    verifyZeroInteractions(mockCallListener, mockCallListener2);
+    verifyNoInteractions(mockCallListener, mockCallListener2);
 
     // Enter panic
     final Throwable panicReason = new Exception("Simulated uncaught exception");

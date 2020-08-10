@@ -34,8 +34,8 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.util.concurrent.MoreExecutors;
@@ -49,7 +49,6 @@ import io.grpc.Context.CancellationListener;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
-import io.grpc.LoadBalancer.Factory;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.Subchannel;
@@ -131,8 +130,8 @@ public class HealthCheckingLoadBalancerFactoryTest {
   private final Helper origHelper = mock(Helper.class, delegatesTo(new FakeHelper()));
   // The helper seen by the origLb
   private Helper wrappedHelper;
-  private final Factory origLbFactory =
-      mock(Factory.class, delegatesTo(new Factory() {
+  private final LoadBalancer.Factory origLbFactory =
+      mock(LoadBalancer.Factory.class, delegatesTo(new LoadBalancer.Factory() {
           @Override
           public LoadBalancer newLoadBalancer(Helper helper) {
             checkState(wrappedHelper == null, "LoadBalancer already created");
@@ -364,7 +363,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
       assertThat(healthImpls[i].calls).hasSize(1);
     }
 
-    verifyZeroInteractions(backoffPolicyProvider);
+    verifyNoInteractions(backoffPolicyProvider);
   }
 
   @Test
@@ -433,7 +432,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
         unavailableStateWithMsg("Health-check service responded SERVICE_UNKNOWN for 'BarService'"));
 
     verifyNoMoreInteractions(origLb, mockStateListeners[0], mockStateListeners[1]);
-    verifyZeroInteractions(backoffPolicyProvider);
+    verifyNoInteractions(backoffPolicyProvider);
   }
 
   @Test
@@ -1056,8 +1055,8 @@ public class HealthCheckingLoadBalancerFactoryTest {
 
   @Test
   public void util_newHealthCheckingLoadBalancer() {
-    Factory hcFactory =
-        new Factory() {
+    LoadBalancer.Factory hcFactory =
+        new LoadBalancer.Factory() {
           @Override
           public LoadBalancer newLoadBalancer(Helper helper) {
             return HealthCheckingLoadBalancerUtil.newHealthCheckingLoadBalancer(

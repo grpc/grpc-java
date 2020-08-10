@@ -1,4 +1,4 @@
-package google.security.meshca.v1;
+package com.google.security.meshca.v1;
 
 import static io.grpc.MethodDescriptor.generateFullMethodName;
 import static io.grpc.stub.ClientCalls.asyncBidiStreamingCall;
@@ -30,29 +30,29 @@ public final class MeshCertificateServiceGrpc {
   public static final String SERVICE_NAME = "google.security.meshca.v1.MeshCertificateService";
 
   // Static method descriptors that strictly reflect the proto.
-  private static volatile io.grpc.MethodDescriptor<google.security.meshca.v1.Meshca.MeshCertificateRequest,
-      google.security.meshca.v1.Meshca.MeshCertificateResponse> getCreateCertificateMethod;
+  private static volatile io.grpc.MethodDescriptor<com.google.security.meshca.v1.MeshCertificateRequest,
+      com.google.security.meshca.v1.MeshCertificateResponse> getCreateCertificateMethod;
 
   @io.grpc.stub.annotations.RpcMethod(
       fullMethodName = SERVICE_NAME + '/' + "CreateCertificate",
-      requestType = google.security.meshca.v1.Meshca.MeshCertificateRequest.class,
-      responseType = google.security.meshca.v1.Meshca.MeshCertificateResponse.class,
+      requestType = com.google.security.meshca.v1.MeshCertificateRequest.class,
+      responseType = com.google.security.meshca.v1.MeshCertificateResponse.class,
       methodType = io.grpc.MethodDescriptor.MethodType.UNARY)
-  public static io.grpc.MethodDescriptor<google.security.meshca.v1.Meshca.MeshCertificateRequest,
-      google.security.meshca.v1.Meshca.MeshCertificateResponse> getCreateCertificateMethod() {
-    io.grpc.MethodDescriptor<google.security.meshca.v1.Meshca.MeshCertificateRequest, google.security.meshca.v1.Meshca.MeshCertificateResponse> getCreateCertificateMethod;
+  public static io.grpc.MethodDescriptor<com.google.security.meshca.v1.MeshCertificateRequest,
+      com.google.security.meshca.v1.MeshCertificateResponse> getCreateCertificateMethod() {
+    io.grpc.MethodDescriptor<com.google.security.meshca.v1.MeshCertificateRequest, com.google.security.meshca.v1.MeshCertificateResponse> getCreateCertificateMethod;
     if ((getCreateCertificateMethod = MeshCertificateServiceGrpc.getCreateCertificateMethod) == null) {
       synchronized (MeshCertificateServiceGrpc.class) {
         if ((getCreateCertificateMethod = MeshCertificateServiceGrpc.getCreateCertificateMethod) == null) {
           MeshCertificateServiceGrpc.getCreateCertificateMethod = getCreateCertificateMethod =
-              io.grpc.MethodDescriptor.<google.security.meshca.v1.Meshca.MeshCertificateRequest, google.security.meshca.v1.Meshca.MeshCertificateResponse>newBuilder()
+              io.grpc.MethodDescriptor.<com.google.security.meshca.v1.MeshCertificateRequest, com.google.security.meshca.v1.MeshCertificateResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
               .setFullMethodName(generateFullMethodName(SERVICE_NAME, "CreateCertificate"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
-                  google.security.meshca.v1.Meshca.MeshCertificateRequest.getDefaultInstance()))
+                  com.google.security.meshca.v1.MeshCertificateRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
-                  google.security.meshca.v1.Meshca.MeshCertificateResponse.getDefaultInstance()))
+                  com.google.security.meshca.v1.MeshCertificateResponse.getDefaultInstance()))
               .setSchemaDescriptor(new MeshCertificateServiceMethodDescriptorSupplier("CreateCertificate"))
               .build();
         }
@@ -118,8 +118,8 @@ public final class MeshCertificateServiceGrpc {
      * service account identity.
      * </pre>
      */
-    public void createCertificate(google.security.meshca.v1.Meshca.MeshCertificateRequest request,
-        io.grpc.stub.StreamObserver<google.security.meshca.v1.Meshca.MeshCertificateResponse> responseObserver) {
+    public void createCertificate(com.google.security.meshca.v1.MeshCertificateRequest request,
+        io.grpc.stub.StreamObserver<com.google.security.meshca.v1.MeshCertificateResponse> responseObserver) {
       asyncUnimplementedUnaryCall(getCreateCertificateMethod(), responseObserver);
     }
 
@@ -129,8 +129,8 @@ public final class MeshCertificateServiceGrpc {
             getCreateCertificateMethod(),
             asyncUnaryCall(
               new MethodHandlers<
-                google.security.meshca.v1.Meshca.MeshCertificateRequest,
-                google.security.meshca.v1.Meshca.MeshCertificateResponse>(
+                com.google.security.meshca.v1.MeshCertificateRequest,
+                com.google.security.meshca.v1.MeshCertificateResponse>(
                   this, METHODID_CREATE_CERTIFICATE)))
           .build();
     }
@@ -159,8 +159,8 @@ public final class MeshCertificateServiceGrpc {
      * service account identity.
      * </pre>
      */
-    public void createCertificate(google.security.meshca.v1.Meshca.MeshCertificateRequest request,
-        io.grpc.stub.StreamObserver<google.security.meshca.v1.Meshca.MeshCertificateResponse> responseObserver) {
+    public void createCertificate(com.google.security.meshca.v1.MeshCertificateRequest request,
+        io.grpc.stub.StreamObserver<com.google.security.meshca.v1.MeshCertificateResponse> responseObserver) {
       asyncUnaryCall(
           getChannel().newCall(getCreateCertificateMethod(), getCallOptions()), request, responseObserver);
     }
@@ -189,7 +189,7 @@ public final class MeshCertificateServiceGrpc {
      * service account identity.
      * </pre>
      */
-    public google.security.meshca.v1.Meshca.MeshCertificateResponse createCertificate(google.security.meshca.v1.Meshca.MeshCertificateRequest request) {
+    public com.google.security.meshca.v1.MeshCertificateResponse createCertificate(com.google.security.meshca.v1.MeshCertificateRequest request) {
       return blockingUnaryCall(
           getChannel(), getCreateCertificateMethod(), getCallOptions(), request);
     }
@@ -218,8 +218,8 @@ public final class MeshCertificateServiceGrpc {
      * service account identity.
      * </pre>
      */
-    public com.google.common.util.concurrent.ListenableFuture<google.security.meshca.v1.Meshca.MeshCertificateResponse> createCertificate(
-        google.security.meshca.v1.Meshca.MeshCertificateRequest request) {
+    public com.google.common.util.concurrent.ListenableFuture<com.google.security.meshca.v1.MeshCertificateResponse> createCertificate(
+        com.google.security.meshca.v1.MeshCertificateRequest request) {
       return futureUnaryCall(
           getChannel().newCall(getCreateCertificateMethod(), getCallOptions()), request);
     }
@@ -245,8 +245,8 @@ public final class MeshCertificateServiceGrpc {
     public void invoke(Req request, io.grpc.stub.StreamObserver<Resp> responseObserver) {
       switch (methodId) {
         case METHODID_CREATE_CERTIFICATE:
-          serviceImpl.createCertificate((google.security.meshca.v1.Meshca.MeshCertificateRequest) request,
-              (io.grpc.stub.StreamObserver<google.security.meshca.v1.Meshca.MeshCertificateResponse>) responseObserver);
+          serviceImpl.createCertificate((com.google.security.meshca.v1.MeshCertificateRequest) request,
+              (io.grpc.stub.StreamObserver<com.google.security.meshca.v1.MeshCertificateResponse>) responseObserver);
           break;
         default:
           throw new AssertionError();
@@ -270,7 +270,7 @@ public final class MeshCertificateServiceGrpc {
 
     @java.lang.Override
     public com.google.protobuf.Descriptors.FileDescriptor getFileDescriptor() {
-      return google.security.meshca.v1.Meshca.getDescriptor();
+      return com.google.security.meshca.v1.MeshCaProto.getDescriptor();
     }
 
     @java.lang.Override

@@ -35,14 +35,13 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyZeroInteractions;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableSet;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
-import io.grpc.Attributes.Key;
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
 import io.grpc.ClientStreamTracer;
@@ -158,7 +157,7 @@ public class ClientCallImplTest {
 
   @After
   public void tearDown() {
-    verifyZeroInteractions(streamTracerFactory);
+    verifyNoInteractions(streamTracerFactory);
   }
 
   @Test
@@ -700,7 +699,7 @@ public class ClientCallImplTest {
     call.halfClose();
 
     // Stream should never be created.
-    verifyZeroInteractions(clientStreamProvider);
+    verifyNoInteractions(clientStreamProvider);
 
     try {
       call.sendMessage(null);
@@ -733,7 +732,7 @@ public class ClientCallImplTest {
     assertEquals(Status.Code.DEADLINE_EXCEEDED, statusCaptor.getValue().getCode());
     assertThat(statusCaptor.getValue().getDescription())
         .startsWith("ClientCall started after deadline exceeded");
-    verifyZeroInteractions(clientStreamProvider);
+    verifyNoInteractions(clientStreamProvider);
   }
 
   @Test
@@ -1011,8 +1010,8 @@ public class ClientCallImplTest {
     ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
         method, MoreExecutors.directExecutor(), baseCallOptions, clientStreamProvider,
         deadlineCancellationExecutor, channelCallTracer, configSelector);
-    Attributes attrs =
-        Attributes.newBuilder().set(Key.<String>create("fake key"), "fake value").build();
+    Attributes attrs = Attributes.newBuilder().set(
+        Attributes.Key.<String>create("fake key"), "fake value").build();
     when(stream.getAttributes()).thenReturn(attrs);
 
     assertNotEquals(attrs, call.getAttributes());

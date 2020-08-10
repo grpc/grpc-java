@@ -59,7 +59,7 @@ public final class ReferenceCountingMap<K, V extends Closeable> {
   /**
    * Releases an instance of the given value.
    *
-   * <p>The instance must have been obtained from {@link #get(K)}. Otherwise will throw
+   * <p>The instance must have been obtained from {@link #get(Object)}. Otherwise will throw
    * IllegalArgumentException.
    *
    * <p>Caller must not release a reference more than once. It's advised that you clear the

@@ -16,7 +16,10 @@
 
 package io.grpc.xds.internal.sds;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+
 import com.google.common.base.Strings;
+import com.google.common.io.CharStreams;
 import com.google.protobuf.BoolValue;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
@@ -36,7 +39,14 @@ import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContex
 import io.envoyproxy.envoy.type.matcher.v3.StringMatcher;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.xds.EnvoyServerProtoData;
+import io.grpc.xds.internal.sds.trust.CertificateUtils;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Reader;
+import java.security.cert.CertificateException;
+import java.security.cert.X509Certificate;
 import java.util.Arrays;
 import javax.annotation.Nullable;
 
@@ -431,5 +441,24 @@ public class CommonTlsContextTestsUtil {
         UpstreamTlsContext.newBuilder().setCommonTlsContext(commonTlsContext).build();
     return EnvoyServerProtoData.UpstreamTlsContext.fromEnvoyProtoUpstreamTlsContext(
         upstreamTlsContext);
+  }
+
+  /** Gets a cert from contents of a resource. */
+  public static X509Certificate getCertFromResourceName(String resourceName)
+      throws IOException, CertificateException {
+    try (ByteArrayInputStream bais =
+        new ByteArrayInputStream(getResourceContents(resourceName).getBytes(UTF_8))) {
+      return CertificateUtils.toX509Certificate(bais);
+    }
+  }
+
+  /** Gets contents of a resource from TestUtils.class loader. */
+  public static String getResourceContents(String resourceName) throws IOException {
+    InputStream inputStream = TestUtils.class.getResourceAsStream("/certs/" + resourceName);
+    String text = null;
+    try (Reader reader = new InputStreamReader(inputStream, UTF_8)) {
+      text = CharStreams.toString(reader);
+    }
+    return text;
   }
 }

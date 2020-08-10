@@ -49,42 +49,42 @@ public abstract class CertificateProvider implements Closeable {
 
   @VisibleForTesting
   static final class DistributorWatcher implements Watcher {
-    private PrivateKey lastKey;
-    private List<X509Certificate> lastCertChain;
-    private List<X509Certificate> lastTrustedRoots;
+    private PrivateKey privateKey;
+    private List<X509Certificate> certChain;
+    private List<X509Certificate> trustedRoots;
 
     @VisibleForTesting
-    final Set<Watcher> downsstreamWatchers = new HashSet<>();
+    final Set<Watcher> downstreamWatchers = new HashSet<>();
 
     synchronized void addWatcher(Watcher watcher) {
-      downsstreamWatchers.add(watcher);
-      if (lastKey != null && lastCertChain != null) {
+      downstreamWatchers.add(watcher);
+      if (privateKey != null && certChain != null) {
         sendLastCertificateUpdate(watcher);
       }
-      if (lastTrustedRoots != null) {
+      if (trustedRoots != null) {
         sendLastTrustedRootsUpdate(watcher);
       }
     }
 
     synchronized void removeWatcher(Watcher watcher) {
-      downsstreamWatchers.remove(watcher);
+      downstreamWatchers.remove(watcher);
     }
 
     private void sendLastCertificateUpdate(Watcher watcher) {
-      watcher.updateCertificate(lastKey, lastCertChain);
+      watcher.updateCertificate(privateKey, certChain);
     }
 
     private void sendLastTrustedRootsUpdate(Watcher watcher) {
-      watcher.updateTrustedRoots(lastTrustedRoots);
+      watcher.updateTrustedRoots(trustedRoots);
     }
 
     @Override
     public synchronized void updateCertificate(PrivateKey key, List<X509Certificate> certChain) {
       checkNotNull(key, "key");
       checkNotNull(certChain, "certChain");
-      lastKey = key;
-      lastCertChain = certChain;
-      for (Watcher watcher : downsstreamWatchers) {
+      privateKey = key;
+      this.certChain = certChain;
+      for (Watcher watcher : downstreamWatchers) {
         sendLastCertificateUpdate(watcher);
       }
     }
@@ -92,17 +92,35 @@ public abstract class CertificateProvider implements Closeable {
     @Override
     public synchronized void updateTrustedRoots(List<X509Certificate> trustedRoots) {
       checkNotNull(trustedRoots, "trustedRoots");
-      lastTrustedRoots = trustedRoots;
-      for (Watcher watcher : downsstreamWatchers) {
+      this.trustedRoots = trustedRoots;
+      for (Watcher watcher : downstreamWatchers) {
         sendLastTrustedRootsUpdate(watcher);
       }
     }
 
     @Override
     public synchronized void onError(Status errorStatus) {
-      for (Watcher watcher : downsstreamWatchers) {
+      for (Watcher watcher : downstreamWatchers) {
         watcher.onError(errorStatus);
       }
+    }
+
+    X509Certificate getLastIdentityCert() {
+      if (certChain != null && !certChain.isEmpty()) {
+        return certChain.get(0);
+      }
+      return null;
+    }
+
+    void close() {
+      downstreamWatchers.clear();
+      clearValues();
+    }
+
+    void clearValues() {
+      privateKey = null;
+      certChain = null;
+      trustedRoots = null;
     }
   }
 

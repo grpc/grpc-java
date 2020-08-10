@@ -18,7 +18,7 @@
 set -e
 BRANCH=master
 
-VERSION=4c14c4673ab8748a0c77922290d91b6ce68b7b7c
+VERSION=e0ce39487b4806bdd9062b2c0d0cae0bebbbac7b
 GIT_REPO="https://github.com/istio/istio.git"
 GIT_BASE_DIR=istio
 SOURCE_PROTO_BASE_DIR=istio

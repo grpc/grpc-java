@@ -22,7 +22,6 @@ import com.google.common.base.Objects;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Set;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
@@ -179,7 +178,7 @@ public final class Attributes {
     if (data.size() != that.data.size()) {
       return false;
     }
-    for (Entry<Key<?>, Object> e : data.entrySet()) {
+    for (Map.Entry<Key<?>, Object> e : data.entrySet()) {
       if (!that.data.containsKey(e.getKey())) {
         return false;
       }
@@ -202,7 +201,7 @@ public final class Attributes {
   @Override
   public int hashCode() {
     int hashCode = 0;
-    for (Entry<Key<?>, Object> e : data.entrySet()) {
+    for (Map.Entry<Key<?>, Object> e : data.entrySet()) {
       hashCode += Objects.hashCode(e.getKey(), e.getValue());
     }
     return hashCode;
@@ -262,7 +261,7 @@ public final class Attributes {
      */
     public Attributes build() {
       if (newdata != null) {
-        for (Entry<Key<?>, Object> entry : base.data.entrySet()) {
+        for (Map.Entry<Key<?>, Object> entry : base.data.entrySet()) {
           if (!newdata.containsKey(entry.getKey())) {
             newdata.put(entry.getKey(), entry.getValue());
           }

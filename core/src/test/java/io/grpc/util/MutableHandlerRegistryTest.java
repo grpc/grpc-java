@@ -99,8 +99,8 @@ public class MutableHandlerRegistryTest {
   /** Final checks for all tests. */
   @After
   public void makeSureMocksUnused() {
-    Mockito.verifyZeroInteractions(requestMarshaller);
-    Mockito.verifyZeroInteractions(responseMarshaller);
+    Mockito.verifyNoInteractions(requestMarshaller);
+    Mockito.verifyNoInteractions(responseMarshaller);
     Mockito.verifyNoMoreInteractions(flowHandler);
     Mockito.verifyNoMoreInteractions(coupleHandler);
     Mockito.verifyNoMoreInteractions(fewHandler);

@@ -23,7 +23,6 @@ import static org.mockito.Mockito.mock;
 
 import io.grpc.ChannelLogger;
 import io.grpc.NameResolver;
-import io.grpc.NameResolver.Factory;
 import io.grpc.NameResolver.ServiceConfigParser;
 import io.grpc.ProxyDetector;
 import io.grpc.SynchronizationContext;
@@ -104,7 +103,7 @@ public class ManagedChannelImplGetNameResolverTest {
 
   @Test
   public void validTargetNoResovler() {
-    Factory nameResolverFactory = new NameResolver.Factory() {
+    NameResolver.Factory nameResolverFactory = new NameResolver.Factory() {
       @Override
       public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
         return null;
@@ -125,7 +124,7 @@ public class ManagedChannelImplGetNameResolverTest {
   }
 
   private void testValidTarget(String target, String expectedUriString, URI expectedUri) {
-    Factory nameResolverFactory = new FakeNameResolverFactory(expectedUri.getScheme());
+    NameResolver.Factory nameResolverFactory = new FakeNameResolverFactory(expectedUri.getScheme());
     FakeNameResolver nameResolver = (FakeNameResolver) ManagedChannelImpl.getNameResolver(
         target, nameResolverFactory, NAMERESOLVER_ARGS);
     assertNotNull(nameResolver);
@@ -134,7 +133,7 @@ public class ManagedChannelImplGetNameResolverTest {
   }
 
   private void testInvalidTarget(String target) {
-    Factory nameResolverFactory = new FakeNameResolverFactory("dns");
+    NameResolver.Factory nameResolverFactory = new FakeNameResolverFactory("dns");
 
     try {
       FakeNameResolver nameResolver = (FakeNameResolver) ManagedChannelImpl.getNameResolver(

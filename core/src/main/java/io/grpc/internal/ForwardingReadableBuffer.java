@@ -37,7 +37,7 @@ public abstract class ForwardingReadableBuffer implements ReadableBuffer {
    *
    * @param buf the underlying buffer
    */
-  public ForwardingReadableBuffer(ReadableBuffer buf) {
+  protected ForwardingReadableBuffer(ReadableBuffer buf) {
     this.buf = Preconditions.checkNotNull(buf, "buf");
   }
 

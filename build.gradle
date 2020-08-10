@@ -177,9 +177,11 @@ subprojects {
             conscrypt: 'org.conscrypt:conscrypt-openjdk-uber:2.2.1',
             re2j: 'com.google.re2j:re2j:1.2',
 
+            bouncycastle: 'org.bouncycastle:bcpkix-jdk15on:1.61',
+
             // Test dependencies.
             junit: 'junit:junit:4.12',
-            mockito: 'org.mockito:mockito-core:2.28.2',
+            mockito: 'org.mockito:mockito-core:3.3.3',
             truth: 'com.google.truth:truth:1.0.1',
             guava_testlib: "com.google.guava:guava-testlib:${guavaVersion}",
             androidx_test: "androidx.test:core:1.2.0",
@@ -295,7 +297,7 @@ subprojects {
 
     if (rootProject.properties.get('errorProne', true)) {
         dependencies {
-            errorprone 'com.google.errorprone:error_prone_core:2.3.4'
+            errorprone 'com.google.errorprone:error_prone_core:2.4.0'
             errorproneJavac 'com.google.errorprone:javac:9+181-r4173-1'
         }
     } else {
@@ -373,6 +375,8 @@ subprojects {
             options.errorprone.check("UnnecessaryAnonymousClass", CheckSeverity.OFF)
             // This project targets Java 7 (no time.Duration class)
             options.errorprone.check("PreferJavaTimeOverload", CheckSeverity.OFF)
+            // The warning fails to provide a source location
+            options.errorprone.check("MissingSummary", CheckSeverity.OFF)
         }
         compileTestJava {
             // LinkedList doesn't hurt much in tests and has lots of usages

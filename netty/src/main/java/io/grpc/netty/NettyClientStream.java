@@ -231,7 +231,7 @@ class NettyClientStream extends AbstractClientStream {
     private Http2Stream http2Stream;
     private Tag tag;
 
-    public TransportState(
+    protected TransportState(
         NettyClientHandler handler,
         EventLoop eventLoop,
         int maxMessageSize,

@@ -25,8 +25,8 @@ import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.verifyZeroInteractions;
 
 import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.MethodDescriptor.MethodType;
@@ -102,9 +102,9 @@ public class ServerInterceptorsTest {
   /** Final checks for all tests. */
   @After
   public void makeSureExpectedMocksUnused() {
-    verifyZeroInteractions(requestMarshaller);
-    verifyZeroInteractions(responseMarshaller);
-    verifyZeroInteractions(listener);
+    verifyNoInteractions(requestMarshaller);
+    verifyNoInteractions(responseMarshaller);
+    verifyNoInteractions(listener);
   }
 
   @Test
@@ -284,7 +284,6 @@ public class ServerInterceptorsTest {
 
   @Test
   public void argumentsPassed() {
-    @SuppressWarnings("unchecked")
     final ServerCall<String, Integer> call2 = new NoopServerCall<>();
     @SuppressWarnings("unchecked")
     final ServerCall.Listener<String> listener2 = mock(ServerCall.Listener.class);

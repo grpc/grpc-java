@@ -74,6 +74,7 @@ public final class Util {
       } catch (RuntimeException rethrown) {
         throw rethrown;
       } catch (Exception ignored) {
+        // The method is defined to ignore checked exceptions
       }
     }
   }
@@ -91,6 +92,7 @@ public final class Util {
       } catch (RuntimeException rethrown) {
         throw rethrown;
       } catch (Exception ignored) {
+        // The method is defined to ignore checked exceptions
       }
     }
   }
@@ -106,6 +108,7 @@ public final class Util {
       } catch (RuntimeException rethrown) {
         throw rethrown;
       } catch (Exception ignored) {
+        // The method is defined to ignore checked exceptions
       }
     }
   }

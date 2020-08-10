@@ -52,7 +52,7 @@ import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.NameResolver.ConfigOrError;
-import io.grpc.NameResolver.Factory;
+import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.inprocess.InProcessChannelBuilder;
@@ -509,7 +509,7 @@ public class RlsLoadBalancerTest {
 
     @Override
     @Deprecated
-    public Factory getNameResolverFactory() {
+    public NameResolver.Factory getNameResolverFactory() {
       throw new UnsupportedOperationException();
     }
 

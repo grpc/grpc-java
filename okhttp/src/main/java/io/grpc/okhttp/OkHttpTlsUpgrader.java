@@ -85,7 +85,7 @@ final class OkHttpTlsUpgrader {
    * @see <a href="https://www.ietf.org/rfc/rfc2732.txt">RFC2732</a>
    * @see <a href="https://tools.ietf.org/html/rfc5280#section-4.2.1.6">RFC5280</a>
    *
-   * @return {@param host} in a form consistent with X509 certificates
+   * @return {@code host} in a form consistent with X509 certificates
    */
   @VisibleForTesting
   static String canonicalizeHost(String host) {

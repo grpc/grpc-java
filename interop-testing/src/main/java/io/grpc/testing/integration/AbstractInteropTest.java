@@ -193,7 +193,7 @@ public abstract class AbstractInteropTest {
   /**
    * Constructor for tests.
    */
-  public AbstractInteropTest() {
+  protected AbstractInteropTest() {
     TestRule timeout = Timeout.seconds(60);
     try {
       timeout = new DisableOnDebug(timeout);

@@ -27,6 +27,7 @@ import io.grpc.xds.internal.sds.TlsContextManagerImpl;
 import io.netty.handler.ssl.util.SimpleTrustManagerFactory;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
@@ -69,8 +70,10 @@ public final class SdsTrustManagerFactory extends SimpleTrustManagerFactory {
           "trustedCa.file-name in certificateValidationContext cannot be empty");
       return CertificateUtils.toX509Certificates(new File(certsFile));
     } else if (specifierCase == SpecifierCase.INLINE_BYTES) {
-      return CertificateUtils.toX509Certificates(
-          certificateValidationContext.getTrustedCa().getInlineBytes().newInput());
+      try (InputStream is =
+          certificateValidationContext.getTrustedCa().getInlineBytes().newInput()) {
+        return CertificateUtils.toX509Certificates(is);
+      }
     } else {
       throw new IllegalArgumentException("Not supported: " + specifierCase);
     }
