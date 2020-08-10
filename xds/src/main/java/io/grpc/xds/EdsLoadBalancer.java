@@ -236,7 +236,6 @@ final class EdsLoadBalancer extends LoadBalancer {
     /**
      * Load-balances endpoints for a given cluster.
      */
-
     final class ClusterEndpointsBalancer extends LoadBalancer {
       // Name of the resource to be used for querying endpoint information.
       final String resourceName;
@@ -274,6 +273,7 @@ final class EdsLoadBalancer extends LoadBalancer {
                 clusterName,
                 clusterServiceName);
             xdsClient.reportClientStats();
+            isReportingLoad = true;
           }
         } else {
           if (isReportingLoad) {
@@ -283,6 +283,7 @@ final class EdsLoadBalancer extends LoadBalancer {
                 clusterName,
                 clusterServiceName);
             xdsClient.cancelClientStatsReport();
+            isReportingLoad = false;
           }
         }
         // TODO(zddapeng): In handleResolvedAddresses() handle child policy change if any.
@@ -302,7 +303,6 @@ final class EdsLoadBalancer extends LoadBalancer {
 
       @Override
       public void shutdown() {
-        localityStore.reset();
         if (isReportingLoad) {
           logger.log(
               XdsLogLevel.INFO,
@@ -312,6 +312,7 @@ final class EdsLoadBalancer extends LoadBalancer {
           xdsClient.cancelClientStatsReport();
           isReportingLoad = false;
         }
+        localityStore.reset();
         xdsClient.removeClientStats(clusterName, clusterServiceName);
         xdsClient.cancelEndpointDataWatch(resourceName, endpointWatcher);
         logger.log(
