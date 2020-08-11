@@ -145,7 +145,7 @@ final class LoadStatsManager {
      * Track load stats for endpoints in the provided locality. Only load stats for endpoints
      * in tracked localities will be included in generated load reports.
      */
-    void addLocality(Locality locality);
+    ClientLoadCounter addLocality(Locality locality);
 
     /**
      * Drop tracking load stats for endpoints in the provided locality. Load stats for endpoints
@@ -153,13 +153,6 @@ final class LoadStatsManager {
      * their currently recording stats have been fully reported.
      */
     void removeLocality(Locality locality);
-
-    /**
-     * Returns the locality counter that does locality level stats aggregation for the provided
-     * locality. If the provided locality is not tracked, {@code null} will be returned.
-     */
-    @Nullable
-    ClientLoadCounter getLocalityCounter(Locality locality);
 
     /**
      * Records a drop decision.

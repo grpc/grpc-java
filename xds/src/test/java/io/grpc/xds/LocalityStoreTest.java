@@ -85,7 +85,6 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
-import javax.annotation.Nullable;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -1338,21 +1337,17 @@ public class LocalityStoreTest {
     }
 
     @Override
-    public void addLocality(Locality locality) {
+    public ClientLoadCounter addLocality(Locality locality) {
       assertThat(localityCounters).doesNotContainKey(locality);
-      localityCounters.put(locality, new ClientLoadCounter());
+      ClientLoadCounter counter = new ClientLoadCounter();
+      localityCounters.put(locality, counter);
+      return counter;
     }
 
     @Override
     public void removeLocality(Locality locality) {
       assertThat(localityCounters).containsKey(locality);
       localityCounters.remove(locality);
-    }
-
-    @Nullable
-    @Override
-    public ClientLoadCounter getLocalityCounter(Locality locality) {
-      return localityCounters.get(locality);
     }
 
     @Override

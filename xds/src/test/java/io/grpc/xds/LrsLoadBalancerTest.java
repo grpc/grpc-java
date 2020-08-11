@@ -73,8 +73,6 @@ public class LrsLoadBalancerTest {
   private static final String LRS_SERVER_NAME = "trafficdirector.googleapis.com";
   private static final Locality TEST_LOCALITY =
       new Locality("test-region", "test-zone", "test-subzone");
-
-  private final ClientLoadCounter counter = new ClientLoadCounter();
   private final LoadRecorder loadRecorder = new LoadRecorder();
   private final Queue<LoadBalancer> childBalancers = new ArrayDeque<>();
 
@@ -107,7 +105,7 @@ public class LrsLoadBalancerTest {
     PickResult result = picker.pickSubchannel(mock(PickSubchannelArgs.class));
     ClientStreamTracer.Factory tracerFactory = result.getStreamTracerFactory();
     assertThat(((LoadRecordingStreamTracerFactory) tracerFactory).getCounter())
-        .isSameInstanceAs(counter);
+        .isSameInstanceAs(loadRecorder.counter);
     loadBalancer.shutdown();
     assertThat(childBalancer.shutdown).isTrue();
     assertThat(loadRecorder.recording).isFalse();
@@ -301,7 +299,8 @@ public class LrsLoadBalancerTest {
     }
   }
 
-  private final class LoadRecorder implements LoadStatsStore {
+  private static final class LoadRecorder implements LoadStatsStore {
+    private final ClientLoadCounter counter = new ClientLoadCounter();
     private boolean recording = false;
 
     @Override
@@ -310,21 +309,16 @@ public class LrsLoadBalancerTest {
     }
 
     @Override
-    public void addLocality(Locality locality) {
+    public ClientLoadCounter addLocality(Locality locality) {
       assertThat(locality).isEqualTo(TEST_LOCALITY);
       recording = true;
+      return counter;
     }
 
     @Override
     public void removeLocality(Locality locality) {
       assertThat(locality).isEqualTo(TEST_LOCALITY);
       recording = false;
-    }
-
-    @Override
-    public ClientLoadCounter getLocalityCounter(Locality locality) {
-      assertThat(locality).isEqualTo(TEST_LOCALITY);
-      return counter;
     }
 
     @Override

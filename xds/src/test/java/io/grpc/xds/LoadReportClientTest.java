@@ -67,7 +67,6 @@ import java.util.Queue;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -537,18 +536,12 @@ public class LoadReportClientTest {
     }
 
     @Override
-    public void addLocality(EnvoyProtoData.Locality locality) {
+    public ClientLoadCounter addLocality(EnvoyProtoData.Locality locality) {
       throw new UnsupportedOperationException("should not used");
     }
 
     @Override
     public void removeLocality(EnvoyProtoData.Locality locality) {
-      throw new UnsupportedOperationException("should not used");
-    }
-
-    @Nullable
-    @Override
-    public ClientLoadCounter getLocalityCounter(EnvoyProtoData.Locality locality) {
       throw new UnsupportedOperationException("should not used");
     }
 

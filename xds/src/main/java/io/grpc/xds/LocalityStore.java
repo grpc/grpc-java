@@ -312,8 +312,8 @@ interface LocalityStore {
 
       LocalityLbInfo(Locality locality) {
         this.locality = checkNotNull(locality, "locality");
-        loadStatsStore.addLocality(locality);
-        childHelper = new ChildHelper();
+        ClientLoadCounter counter = loadStatsStore.addLocality(locality);
+        childHelper = new ChildHelper(counter);
         childBalancer = loadBalancerProvider.newLoadBalancer(childHelper);
       }
 
@@ -369,8 +369,7 @@ interface LocalityStore {
         private SubchannelPicker currentChildPicker = XdsSubchannelPickers.BUFFER_PICKER;
         private ConnectivityState currentChildState = CONNECTING;
 
-        ChildHelper() {
-          final ClientLoadCounter counter = loadStatsStore.getLocalityCounter(locality);
+        ChildHelper(final ClientLoadCounter counter) {
           Helper delegate = new ForwardingLoadBalancerHelper() {
             @Override
             protected Helper delegate() {

@@ -162,34 +162,30 @@ public class LoadStatsStoreImplTest {
   }
 
   @Test
-  public void localityCountersReferenceCounted() {
+  public void removeInactiveCountersAfterGeneratingLoadReport() {
     loadStatsStore.addLocality(LOCALITY1);
-    assertThat(loadStatsStore.getLocalityCounter(LOCALITY1)).isNotNull();
-
-    assertThat(loadStatsStore.getLocalityCounter(LOCALITY2)).isNull();
-
-    loadStatsStore.addLocality(LOCALITY1);
-    loadStatsStore.removeLocality(LOCALITY1);
-    assertThat(loadStatsStore.getLocalityCounter(LOCALITY1)).isNotNull();
-    loadStatsStore.removeLocality(LOCALITY1);
-    assertThat(loadStatsStore.getLocalityCounter(LOCALITY1)).isNull();
+    assertThat(loadStatsStore.generateLoadReport().getUpstreamLocalityStatsCount()).isEqualTo(1);
+    loadStatsStore.removeLocality(LOCALITY1);  // becomes inactive
+    assertThat(loadStatsStore.generateLoadReport().getUpstreamLocalityStatsCount()).isEqualTo(1);
+    assertThat(loadStatsStore.generateLoadReport().getUpstreamLocalityStatsCount()).isEqualTo(0);
   }
 
   @Test
-  public void removeInactiveCountersAfterGeneratingLoadReport() {
+  public void localityCountersReferenceCounted() {
     loadStatsStore.addLocality(LOCALITY1);
-    loadStatsStore.generateLoadReport();
-    assertThat(loadStatsStore.getLocalityCounter(LOCALITY1)).isNotNull();
+    loadStatsStore.addLocality(LOCALITY1);
     loadStatsStore.removeLocality(LOCALITY1);
-    assertThat(loadStatsStore.getLocalityCounter(LOCALITY1)).isNull();
+    assertThat(loadStatsStore.generateLoadReport().getUpstreamLocalityStatsCount()).isEqualTo(1);
+    assertThat(loadStatsStore.generateLoadReport().getUpstreamLocalityStatsCount())
+        .isEqualTo(1);  // still active
+    loadStatsStore.removeLocality(LOCALITY1);  // becomes inactive
     assertThat(loadStatsStore.generateLoadReport().getUpstreamLocalityStatsCount()).isEqualTo(1);
     assertThat(loadStatsStore.generateLoadReport().getUpstreamLocalityStatsCount()).isEqualTo(0);
   }
 
   @Test
   public void loadReportContainsRecordedStats() {
-    loadStatsStore.addLocality(LOCALITY1);
-    ClientLoadCounter counter1 = loadStatsStore.getLocalityCounter(LOCALITY1);
+    ClientLoadCounter counter1 = loadStatsStore.addLocality(LOCALITY1);
     counter1.setCallsSucceeded(4315);
     counter1.setCallsInProgress(3421);
     counter1.setCallsFailed(23);
@@ -197,8 +193,7 @@ public class LoadStatsStoreImplTest {
     counter1.recordMetric("cpu_utilization", 0.3244);
     counter1.recordMetric("mem_utilization", 0.01233);
     counter1.recordMetric("named_cost_or_utilization", 3221.6543);
-    loadStatsStore.addLocality(LOCALITY2);
-    ClientLoadCounter counter2 = loadStatsStore.getLocalityCounter(LOCALITY2);
+    ClientLoadCounter counter2 = loadStatsStore.addLocality(LOCALITY2);
     counter2.setCallsSucceeded(41234);
     counter2.setCallsInProgress(432);
     counter2.setCallsFailed(431);

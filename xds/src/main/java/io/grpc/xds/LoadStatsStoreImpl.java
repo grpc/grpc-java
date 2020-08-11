@@ -121,26 +121,20 @@ final class LoadStatsStoreImpl implements LoadStatsStore {
   }
 
   @Override
-  public void addLocality(final Locality locality) {
+  public ClientLoadCounter addLocality(final Locality locality) {
     ReferenceCounted<ClientLoadCounter> counter = localityLoadCounters.get(locality);
     if (counter == null) {
       counter = ReferenceCounted.wrap(new ClientLoadCounter());
       localityLoadCounters.put(locality, counter);
     }
     counter.retain();
+    return counter.get();
   }
 
   @Override
   public void removeLocality(final Locality locality) {
     ReferenceCounted<ClientLoadCounter> counter = localityLoadCounters.get(locality);
     counter.release();
-  }
-
-  @Nullable
-  @Override
-  public ClientLoadCounter getLocalityCounter(final Locality locality) {
-    ReferenceCounted<ClientLoadCounter> counter = localityLoadCounters.get(locality);
-    return counter == null || counter.getReferenceCount() == 0 ? null : counter.get();
   }
 
   @Override

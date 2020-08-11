@@ -59,8 +59,7 @@ final class LrsLoadBalancer extends LoadBalancer {
     checkAndSetUp(config, store);
 
     if (switchingLoadBalancer == null) {
-      loadStatsStore.addLocality(config.locality);
-      final ClientLoadCounter counter = loadStatsStore.getLocalityCounter(config.locality);
+      final ClientLoadCounter counter = loadStatsStore.addLocality(config.locality);
       LoadBalancer.Helper loadRecordingHelper = new ForwardingLoadBalancerHelper() {
         @Override
         protected Helper delegate() {
