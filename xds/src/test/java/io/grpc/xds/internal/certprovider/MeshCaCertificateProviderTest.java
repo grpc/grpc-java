@@ -97,7 +97,7 @@ public class MeshCaCertificateProviderTest {
   private static final String ZONE = "us-west2-a";
   private static final long START_DELAY = 200_000_000L;  // 0.2 seconds
   private static final long[] DELAY_VALUES = {START_DELAY, START_DELAY * 2, START_DELAY * 4};
-  private static final long RPC_TIMEOUT_MILLIS = 100L;
+  private static final long RPC_TIMEOUT_MILLIS = 1000L;
   /**
    * Expire time of cert SERVER_0_PEM_FILE.
    */
