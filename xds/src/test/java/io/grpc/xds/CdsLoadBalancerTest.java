@@ -29,7 +29,6 @@ import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_PEM_FILE
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
-import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -61,8 +60,6 @@ import io.grpc.xds.EdsLoadBalancerProvider.EdsConfig;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.XdsClient.ClusterUpdate;
 import io.grpc.xds.XdsClient.ClusterWatcher;
-import io.grpc.xds.XdsClient.EndpointUpdate;
-import io.grpc.xds.XdsClient.EndpointWatcher;
 import io.grpc.xds.XdsClient.RefCountedXdsClientObjectPool;
 import io.grpc.xds.XdsClient.XdsClientFactory;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
@@ -591,53 +588,5 @@ public class CdsLoadBalancerTest {
     // Verify no more TRANSIENT_FAILURE.
     verify(helper, times(1))
         .updateBalancingState(eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
-  }
-
-  @Test
-  public void cdsBalancerIntegrateWithEdsBalancer() {
-    lbRegistry.deregister(fakeEdsLoadBlancerProvider);
-    lbRegistry.register(new EdsLoadBalancerProvider());
-
-    ResolvedAddresses resolvedAddresses1 = ResolvedAddresses.newBuilder()
-        .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
-        .setAttributes(Attributes.newBuilder()
-            .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
-            .build())
-        .setLoadBalancingPolicyConfig(new CdsConfig("foo.googleapis.com"))
-        .build();
-    cdsLoadBalancer.handleResolvedAddresses(resolvedAddresses1);
-    ArgumentCaptor<ClusterWatcher> clusterWatcherCaptor = ArgumentCaptor.forClass(null);
-    verify(xdsClient).watchClusterData(eq("foo.googleapis.com"), clusterWatcherCaptor.capture());
-    ClusterWatcher clusterWatcher = clusterWatcherCaptor.getValue();
-    clusterWatcher.onClusterChanged(
-        ClusterUpdate.newBuilder()
-            .setClusterName("foo.googleapis.com")
-            .setEdsServiceName("edsServiceFoo.googleapis.com")
-            .setLbPolicy("round_robin")
-            .build());
-
-    ArgumentCaptor<EndpointWatcher> endpointWatcherCaptor = ArgumentCaptor.forClass(null);
-    verify(xdsClient).watchEndpointData(
-        eq("edsServiceFoo.googleapis.com"), endpointWatcherCaptor.capture());
-    EndpointWatcher endpointWatcher = endpointWatcherCaptor.getValue();
-
-    verify(helper, never()).updateBalancingState(
-        eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
-    // Update endpoints with all backends unhealthy, the EDS will update channel state to
-    // TRANSIENT_FAILURE.
-    // Not able to test with healthy endpoints because the real EDS balancer is using real
-    // round-robin balancer to balance endpoints.
-    endpointWatcher.onEndpointChanged(EndpointUpdate.newBuilder()
-        .setClusterName("edsServiceFoo.googleapis.com")
-        .addLocalityLbEndpoints(
-            new EnvoyProtoData.Locality("region", "zone", "subzone"),
-            new EnvoyProtoData.LocalityLbEndpoints(
-                // All unhealthy.
-                ImmutableList.of(new EnvoyProtoData.LbEndpoint("127.0.0.1", 8080, 1, false)), 1, 0))
-        .build());
-    verify(helper, atLeastOnce()).updateBalancingState(
-        eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
-
-    cdsLoadBalancer.shutdown();
   }
 }
