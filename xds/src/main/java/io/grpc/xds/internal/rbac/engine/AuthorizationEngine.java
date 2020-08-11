@@ -38,6 +38,7 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -129,38 +130,20 @@ public class AuthorizationEngine {
     // If there are unknown results, return undecided. 
     // If all non-match, then iterate through allowEngine.
     if (denyEngine != null) {
-      for (Map.Entry<String, Expr> condition : denyEngine.conditions.entrySet()) {
-        try {
-          if (matches(condition.getValue(), activation)) {
-            return new AuthorizationDecision(AuthorizationDecision.Decision.DENY, 
-                new ArrayList<String>(Arrays.asList(new String[] {condition.getKey()})));
-          }
-        } catch (InterpreterException e) {
-          unknownPolicyNames.add(condition.getKey());
-        }
-      }
-      if (unknownPolicyNames.size() > 0) {
-        return new AuthorizationDecision(
-            AuthorizationDecision.Decision.UNKNOWN, unknownPolicyNames);
+      AuthorizationDecision authzDecision = evaluateEngine(denyEngine.conditions.entrySet(), 
+          AuthorizationDecision.Decision.DENY, unknownPolicyNames, activation);
+      if (authzDecision != null) {
+        return authzDecision;
       }
     }
     // Once we enter allowEngine, if there is a match, immediately return allow. 
     // In the end of iteration, if there are unknown rules, return undecided.
     // If all non-match, return deny.
     if (allowEngine != null) {
-      for (Map.Entry<String, Expr> condition : allowEngine.conditions.entrySet()) {
-        try {
-          if (matches(condition.getValue(), activation)) {
-            return new AuthorizationDecision(AuthorizationDecision.Decision.ALLOW, 
-                new ArrayList<String>(Arrays.asList(new String[] {condition.getKey()})));
-          }
-        } catch (InterpreterException e) {
-          unknownPolicyNames.add(condition.getKey());
-        }
-      }
-      if (unknownPolicyNames.size() > 0) {
-        return new AuthorizationDecision(
-            AuthorizationDecision.Decision.UNKNOWN, unknownPolicyNames);
+      AuthorizationDecision authzDecision = evaluateEngine(allowEngine.conditions.entrySet(), 
+          AuthorizationDecision.Decision.ALLOW, unknownPolicyNames, activation);
+      if (authzDecision != null) {
+        return authzDecision;
       }
     }
     // Only has a denyEngine and it’s unmatched.
@@ -170,6 +153,27 @@ public class AuthorizationEngine {
     }
     // None of denyEngine and allowEngine matched, or the single Allow Engine is unmatched.
     return new AuthorizationDecision(AuthorizationDecision.Decision.DENY, new ArrayList<String>());
+  }
+
+  /** Evaluate a single RbacEngine. */
+  protected AuthorizationDecision evaluateEngine(Set<Map.Entry<String, Expr>> entrySet, 
+      AuthorizationDecision.Decision decision, List<String> unknownPolicyNames, 
+      Activation activation) {
+    for (Map.Entry<String, Expr> condition : entrySet) {
+      try {
+        if (matches(condition.getValue(), activation)) {
+          return new AuthorizationDecision(decision, 
+              new ArrayList<String>(Arrays.asList(new String[] {condition.getKey()})));
+        }
+      } catch (InterpreterException e) {
+        unknownPolicyNames.add(condition.getKey());
+      }
+    }
+    if (unknownPolicyNames.size() > 0) {
+      return new AuthorizationDecision(
+          AuthorizationDecision.Decision.UNKNOWN, unknownPolicyNames);
+    }
+    return null;
   }
 
   /** Evaluate if a condition matches the given Enovy Attributes using CEL library. */
