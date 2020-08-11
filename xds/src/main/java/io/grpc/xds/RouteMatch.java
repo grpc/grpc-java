@@ -65,7 +65,16 @@ final class RouteMatch {
       return false;
     }
     for (HeaderMatcher headerMatcher : headerMatchers) {
-      if (!headerMatcher.matchesValue(headers.get(headerMatcher.getName()))) {
+      Iterable<String> headerValues = headers.get(headerMatcher.getName());
+      // Special cases for hiding headers: "grpc-previous-rpc-attempts".
+      if (headerMatcher.getName().equals("grpc-previous-rpc-attempts")) {
+        headerValues = null;
+      }
+      // Special case for exposing headers: "content-type".
+      if (headerMatcher.getName().equals("content-type")) {
+        headerValues = Collections.singletonList("application/grpc");
+      }
+      if (!headerMatcher.matchesValue(headerValues)) {
         return false;
       }
     }

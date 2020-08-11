@@ -40,7 +40,7 @@ public class RouteMatchTest {
 
   @Before
   public void setUp() {
-    headers.put("content-type", Collections.singletonList("application/grpc"));
+    headers.put("authority", Collections.singletonList("foo.googleapis.com"));
     headers.put("grpc-encoding", Collections.singletonList("gzip"));
     headers.put("user-agent", Collections.singletonList("gRPC-Java"));
     headers.put("content-length", Collections.singletonList("1000"));
@@ -79,7 +79,7 @@ public class RouteMatchTest {
             new HeaderMatcher(
                 "grpc-encoding", "gzip", null, null, null, null, null, false),
             new HeaderMatcher(
-                "content-type", null, Pattern.compile(".*grpc.*"), null, null, null,
+                "authority", null, Pattern.compile(".*googleapis.*"), null, null, null,
                 null, false),
             new HeaderMatcher(
                 "content-length", null, null, new Range(100, 10000), null, null, null, false),
@@ -93,7 +93,7 @@ public class RouteMatchTest {
         new PathMatcher("/FooService/barMethod", null, null),
         Collections.singletonList(
             new HeaderMatcher(
-                "content-type", null, Pattern.compile(".*grpc.*"), null, null, null,
+                "authority", null, Pattern.compile(".*googleapis.*"), null, null, null,
                 null, true)),
         null);
     assertThat(routeMatch2.matches("/FooService/barMethod", headers)).isFalse();
@@ -159,6 +159,30 @@ public class RouteMatchTest {
             Collections.<HeaderMatcher>emptyList(),
             new FractionMatcher(100, 1000, new FakeRandom(100)));
     assertThat(routeMatch2.matches("/FooService/barMethod", headers)).isFalse();
+  }
+
+  @Test
+  public void headerMatching_specialCaseGrpcHeaders() {
+    Map<String, Iterable<String>> headers = new HashMap<>();
+    headers.put("grpc-previous-rpc-attempts", Collections.singletonList("0"));
+
+    RouteMatch routeMatch1 =
+        new RouteMatch(new PathMatcher("/FooService/barMethod", null, null),
+            Arrays.asList(
+                new HeaderMatcher(
+                    "grpc-previous-rpc-attempts", "0", null, null, null, null,
+                    null, false)),
+            null);
+    assertThat(routeMatch1.matches("/FooService/barMethod", headers)).isFalse();
+
+    RouteMatch routeMatch2 =
+        new RouteMatch(new PathMatcher("/FooService/barMethod", null, null),
+            Arrays.asList(
+                new HeaderMatcher(
+                    "content-type", "application/grpc", null, null, null, null,
+                    null, false)),
+            null);
+    assertThat(routeMatch2.matches("/FooService/barMethod", headers)).isTrue();
   }
 
   private static final class FakeRandom implements ThreadSafeRandom {
