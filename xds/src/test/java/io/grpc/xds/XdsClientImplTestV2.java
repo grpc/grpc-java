@@ -38,7 +38,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
@@ -1875,7 +1874,8 @@ public class XdsClientImplTestV2 {
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
     assertThat(timeoutTask.isCancelled()).isTrue();
 
-    verifyNoInteractions(watcher3, watcher4);
+    // TODO(chengyuanzhang): migrate to verifyNoInteractions.
+    verifyNoMoreInteractions(watcher3, watcher4);
   }
 
   @Test
@@ -2142,7 +2142,8 @@ public class XdsClientImplTestV2 {
                     new LbEndpoint("192.168.0.1", 8080,
                         2, true)), 1, 0));
 
-    verifyNoInteractions(watcher3);
+    // TODO(chengyuanzhang): migrate to verifyNoInteractions.
+    verifyNoMoreInteractions(watcher3);
 
     // Management server sends back another EDS response contains ClusterLoadAssignment for the
     // other requested cluster.
@@ -2526,7 +2527,8 @@ public class XdsClientImplTestV2 {
     assertThat(fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
     assertThat(timeoutTask.isCancelled()).isTrue();
 
-    verifyNoInteractions(watcher3, watcher4);
+    // TODO(chengyuanzhang): migrate to verifyNoInteractions.
+    verifyNoMoreInteractions(watcher3, watcher4);
   }
 
   @Test
@@ -3245,9 +3247,9 @@ public class XdsClientImplTestV2 {
   @Test
   public void reportLoadStatsToServer() {
     String clusterName = "cluster-foo.googleapis.com";
-    LoadStatsStore loadStatsStore = new LoadStatsStoreImpl(clusterName, null);
     ArgumentCaptor<LoadStatsRequest> requestCaptor = ArgumentCaptor.forClass(null);
-    xdsClient.reportClientStats(clusterName, null, loadStatsStore);
+    xdsClient.addClientStats(clusterName, null);
+    xdsClient.reportClientStats();
     LoadReportCall lrsCall = loadReportCalls.poll();
     verify(lrsCall.requestObserver).onNext(requestCaptor.capture());
     assertThat(requestCaptor.getValue().getClusterStatsCount())
@@ -3263,12 +3265,14 @@ public class XdsClientImplTestV2 {
     ClusterStats report = Iterables.getOnlyElement(requestCaptor.getValue().getClusterStatsList());
     assertThat(report.getClusterName()).isEqualTo(clusterName);
 
-    xdsClient.cancelClientStatsReport(clusterName, null);
+    xdsClient.removeClientStats(clusterName, null);
     fakeClock.forwardNanos(1000L);
     verify(lrsCall.requestObserver, times(3)).onNext(requestCaptor.capture());
     assertThat(requestCaptor.getValue().getClusterStatsCount())
         .isEqualTo(0);  // no more stats reported
 
+    xdsClient.cancelClientStatsReport();
+    assertThat(lrsEnded.get()).isTrue();
     // See more test on LoadReportClientTest.java
   }
 

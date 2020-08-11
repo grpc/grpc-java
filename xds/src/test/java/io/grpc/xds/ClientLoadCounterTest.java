@@ -76,9 +76,11 @@ public class ClientLoadCounterTest {
     long numInProgressCalls = ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
     long numFailedCalls = ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
     long numIssuedCalls = ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
-    counter =
-        new ClientLoadCounter(numSucceededCalls, numInProgressCalls, numFailedCalls,
-            numIssuedCalls);
+    counter = new ClientLoadCounter();
+    counter.setCallsSucceeded(numSucceededCalls);
+    counter.setCallsInProgress(numInProgressCalls);
+    counter.setCallsFailed(numFailedCalls);
+    counter.setCallsIssued(numIssuedCalls);
     ClientLoadSnapshot snapshot = counter.snapshot();
     assertQueryCounts(snapshot, numSucceededCalls, numInProgressCalls, numFailedCalls,
         numIssuedCalls);

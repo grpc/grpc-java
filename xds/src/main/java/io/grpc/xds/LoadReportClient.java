@@ -27,7 +27,6 @@ import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
 import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.api.v2.core.Node;
-import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadReportingServiceGrpc;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsRequest;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsResponse;
@@ -39,10 +38,7 @@ import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.stub.StreamObserver;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
+import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
@@ -57,6 +53,7 @@ final class LoadReportClient {
   @VisibleForTesting
   static final String TARGET_NAME_METADATA_KEY = "PROXYLESS_CLIENT_HOSTNAME";
 
+  private final InternalLogId logId;
   private final XdsLogger logger;
   private final ManagedChannel channel;
   private final Node node;
@@ -65,9 +62,8 @@ final class LoadReportClient {
   private final Supplier<Stopwatch> stopwatchSupplier;
   private final Stopwatch retryStopwatch;
   private final BackoffPolicy.Provider backoffPolicyProvider;
+  private final LoadStatsManager loadStatsManager;
 
-  // Sources of load stats data for each cluster:cluster_service.
-  private final Map<String, Map<String, LoadStatsEntity>> loadStatsEntities = new HashMap<>();
   private boolean started;
 
   @Nullable
@@ -76,18 +72,17 @@ final class LoadReportClient {
   private ScheduledHandle lrsRpcRetryTimer;
   @Nullable
   private LrsStream lrsStream;
-  @Nullable
-  private LoadReportCallback callback;
 
   LoadReportClient(
-      InternalLogId logId,
       String targetName,
+      LoadStatsManager loadStatsManager,
       ManagedChannel channel,
       Node node,
       SynchronizationContext syncContext,
       ScheduledExecutorService scheduledExecutorService,
       BackoffPolicy.Provider backoffPolicyProvider,
       Supplier<Stopwatch> stopwatchSupplier) {
+    this.loadStatsManager = checkNotNull(loadStatsManager, "loadStatsManager");
     this.channel = checkNotNull(channel, "channel");
     this.syncContext = checkNotNull(syncContext, "syncContext");
     this.timerService = checkNotNull(scheduledExecutorService, "timeService");
@@ -104,8 +99,9 @@ final class LoadReportClient {
                 Value.newBuilder().setStringValue(targetName).build())
             .build();
     this.node = node.toBuilder().setMetadata(metadata).build();
-    String logPrefix = checkNotNull(logId, "logId").toString().concat("-lrs-client");
-    logger = XdsLogger.withPrefix(logPrefix);
+    logId = InternalLogId.allocate("lrs-client", targetName);
+    logger = XdsLogger.withLogId(logId);
+    logger.log(XdsLogLevel.INFO, "Created");
   }
 
   /**
@@ -113,12 +109,12 @@ final class LoadReportClient {
    * stats periodically. Calling this method on an already started {@link LoadReportClient} is
    * no-op.
    */
-  void startLoadReporting(LoadReportCallback callback) {
+  void startLoadReporting() {
     if (started) {
       return;
     }
-    this.callback = callback;
     started = true;
+    logger.log(XdsLogLevel.INFO, "Starting load reporting RPC");
     startLrsRpc();
   }
 
@@ -130,6 +126,7 @@ final class LoadReportClient {
     if (!started) {
       return;
     }
+    logger.log(XdsLogLevel.INFO, "Stopping load reporting RPC");
     if (lrsRpcRetryTimer != null) {
       lrsRpcRetryTimer.cancel();
     }
@@ -138,49 +135,6 @@ final class LoadReportClient {
     }
     started = false;
     // Do not shutdown channel as it is not owned by LrsClient.
-  }
-
-  /**
-   * Provides this LoadReportClient source of load stats data for the given
-   * cluster:cluster_service. If requested, data from the given loadStatsStore is
-   * periodically queried and sent to traffic director by this LoadReportClient.
-   */
-  void addLoadStatsStore(
-      String clusterName, @Nullable String clusterServiceName, LoadStatsStore loadStatsStore) {
-    checkState(
-        !loadStatsEntities.containsKey(clusterName)
-            || !loadStatsEntities.get(clusterName).containsKey(clusterServiceName),
-        "load stats for cluster: %s, cluster service: %s already exists",
-        clusterName, clusterServiceName);
-    logger.log(
-        XdsLogLevel.INFO,
-        "Add load stats for cluster: {0}, cluster_service: {1}", clusterName, clusterServiceName);
-    if (!loadStatsEntities.containsKey(clusterName)) {
-      loadStatsEntities.put(clusterName, new HashMap<String, LoadStatsEntity>());
-    }
-    Map<String, LoadStatsEntity> clusterLoadStatsEntities = loadStatsEntities.get(clusterName);
-    clusterLoadStatsEntities.put(clusterServiceName, new LoadStatsEntity(loadStatsStore));
-  }
-
-  /**
-   * Stops providing load stats data for the given cluster:cluster_service.
-   */
-  void removeLoadStatsStore(String clusterName, @Nullable String clusterServiceName) {
-    checkState(
-        loadStatsEntities.containsKey(clusterName)
-            && loadStatsEntities.get(clusterName).containsKey(clusterServiceName),
-        "load stats for cluster: %s, cluster service: %s does not exist",
-        clusterName, clusterServiceName);
-    logger.log(
-        XdsLogLevel.INFO,
-        "Remove load stats for cluster: {0}, cluster_service: {1}",
-        clusterName,
-        clusterServiceName);
-    Map<String, LoadStatsEntity> clusterLoadStatsEntities = loadStatsEntities.get(clusterName);
-    clusterLoadStatsEntities.remove(clusterServiceName);
-    if (clusterLoadStatsEntities.isEmpty()) {
-      loadStatsEntities.remove(clusterName);
-    }
   }
 
   @VisibleForTesting
@@ -217,12 +171,13 @@ final class LoadReportClient {
 
   private class LrsStream implements StreamObserver<LoadStatsResponse> {
 
-    final Set<String> clusterNames = new HashSet<>();
     final LoadReportingServiceGrpc.LoadReportingServiceStub stub;
     StreamObserver<LoadStatsRequest> lrsRequestWriter;
     boolean initialResponseReceived;
     boolean closed;
     long loadReportIntervalNano = -1;
+    boolean reportAllClusters;
+    List<String> clusterNames;  // clusters to report loads for, if not report all.
     ScheduledHandle loadReportTimer;
 
     LrsStream(LoadReportingServiceGrpc.LoadReportingServiceStub stub, Stopwatch stopwatch) {
@@ -272,12 +227,11 @@ final class LoadReportClient {
 
     private void sendLoadReport() {
       LoadStatsRequest.Builder requestBuilder = LoadStatsRequest.newBuilder().setNode(node);
-      for (String name : clusterNames) {
-        if (loadStatsEntities.containsKey(name)) {
-          Map<String, LoadStatsEntity> clusterLoadStatsEntities = loadStatsEntities.get(name);
-          for (LoadStatsEntity entity : clusterLoadStatsEntities.values()) {
-            requestBuilder.addClusterStats(entity.getLoadStats());
-          }
+      if (reportAllClusters) {
+        requestBuilder.addAllClusterStats(loadStatsManager.getAllLoadReports());
+      } else {
+        for (String name : clusterNames) {
+          requestBuilder.addAllClusterStats(loadStatsManager.getClusterLoadReports(name));
         }
       }
       LoadStatsRequest request = requestBuilder.build();
@@ -309,21 +263,17 @@ final class LoadReportClient {
       } else {
         logger.log(XdsLogLevel.DEBUG, "Received LRS response:\n{0}", response);
       }
-      clusterNames.clear();
-      if (response.getSendAllClusters()) {
-        clusterNames.addAll(loadStatsEntities.keySet());
-        logger.log(XdsLogLevel.INFO, "Update to report loads for all clusters");
+      reportAllClusters = response.getSendAllClusters();
+      if (reportAllClusters) {
+        logger.log(XdsLogLevel.INFO, "Report loads for all clusters");
       } else {
-        logger.log(
-            XdsLogLevel.INFO,
-            "Update load reporting clusters to {0}", response.getClustersList());
-        clusterNames.addAll(response.getClustersList());
+        logger.log(XdsLogLevel.INFO, "Report loads for clusters: ", response.getClustersList());
+        clusterNames = response.getClustersList();
       }
       long interval = Durations.toNanos(response.getLoadReportingInterval());
       logger.log(XdsLogLevel.INFO, "Update load reporting interval to {0} ns", interval);
       loadReportIntervalNano = interval;
       scheduleNextLoadReport();
-      callback.onReportResponse(loadReportIntervalNano);
     }
 
     private void handleStreamClosed(Status status) {
@@ -384,43 +334,5 @@ final class LoadReportClient {
         lrsStream = null;
       }
     }
-  }
-
-  private final class LoadStatsEntity {
-    private final LoadStatsStore loadStatsStore;
-    private final Stopwatch stopwatch;
-
-    private LoadStatsEntity(LoadStatsStore loadStatsStore) {
-      this.loadStatsStore = loadStatsStore;
-      this.stopwatch = stopwatchSupplier.get().reset().start();
-    }
-
-    private ClusterStats getLoadStats() {
-      ClusterStats stats =
-          loadStatsStore.generateLoadReport()
-              .toBuilder()
-              .setLoadReportInterval(
-                  Durations.fromNanos(stopwatch.elapsed(TimeUnit.NANOSECONDS)))
-              .build();
-      stopwatch.reset().start();
-      return stats;
-    }
-  }
-
-  /**
-   * Callbacks for passing information received from client load reporting responses to xDS load
-   * balancer, such as the load reporting interval requested by the traffic director.
-   *
-   * <p>Implementations are not required to be thread-safe as callbacks will be invoked in xDS load
-   * balancer's {@link io.grpc.SynchronizationContext}.
-   */
-  interface LoadReportCallback {
-
-    /**
-     * The load reporting interval has been received.
-     *
-     * @param reportIntervalNano load reporting interval requested by remote traffic director.
-     */
-    void onReportResponse(long reportIntervalNano);
   }
 }

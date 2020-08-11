@@ -38,6 +38,7 @@ import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyProtoData.Node;
+import io.grpc.xds.LoadStatsManager.LoadStatsStore;
 import io.grpc.xds.LocalityStore.LocalityStoreFactory;
 import io.grpc.xds.XdsClient.EndpointUpdate;
 import io.grpc.xds.XdsClient.EndpointWatcher;
@@ -208,11 +209,9 @@ final class EdsLoadBalancer extends LoadBalancer {
    */
   private final class ClusterEndpointsBalancerFactory extends LoadBalancer.Factory {
     @Nullable final String clusterServiceName;
-    final LoadStatsStore loadStatsStore;
 
     ClusterEndpointsBalancerFactory(@Nullable String clusterServiceName) {
       this.clusterServiceName = clusterServiceName;
-      loadStatsStore = new LoadStatsStoreImpl(clusterName, clusterServiceName);
     }
 
     @Override
@@ -248,6 +247,7 @@ final class EdsLoadBalancer extends LoadBalancer {
       ClusterEndpointsBalancer(Helper helper) {
         this.helper = helper;
         resourceName = clusterServiceName != null ? clusterServiceName : clusterName;
+        LoadStatsStore loadStatsStore = xdsClient.addClientStats(clusterName, clusterServiceName);
         localityStore =
             localityStoreFactory.newLocalityStore(logId, helper, lbRegistry, loadStatsStore);
         endpointWatcher = new EndpointWatcherImpl();
@@ -267,22 +267,12 @@ final class EdsLoadBalancer extends LoadBalancer {
             throw new AssertionError("Can only report load to the same management server");
           }
           if (!isReportingLoad) {
-            logger.log(
-                XdsLogLevel.INFO,
-                "Start reporting loads for cluster: {0}, cluster_service: {1}",
-                clusterName,
-                clusterServiceName);
-            xdsClient.reportClientStats(clusterName, clusterServiceName, loadStatsStore);
+            xdsClient.reportClientStats();
             isReportingLoad = true;
           }
         } else {
           if (isReportingLoad) {
-            logger.log(
-                XdsLogLevel.INFO,
-                "Stop reporting loads for cluster: {0}, cluster_service: {1}",
-                clusterName,
-                clusterServiceName);
-            xdsClient.cancelClientStatsReport(clusterName, clusterServiceName);
+            xdsClient.cancelClientStatsReport();
             isReportingLoad = false;
           }
         }
@@ -304,15 +294,11 @@ final class EdsLoadBalancer extends LoadBalancer {
       @Override
       public void shutdown() {
         if (isReportingLoad) {
-          logger.log(
-              XdsLogLevel.INFO,
-              "Stop reporting loads for cluster: {0}, cluster_service: {1}",
-              clusterName,
-              clusterServiceName);
-          xdsClient.cancelClientStatsReport(clusterName, clusterServiceName);
+          xdsClient.cancelClientStatsReport();
           isReportingLoad = false;
         }
         localityStore.reset();
+        xdsClient.removeClientStats(clusterName, clusterServiceName);
         xdsClient.cancelEndpointDataWatch(resourceName, endpointWatcher);
         logger.log(
             XdsLogLevel.INFO,
@@ -365,12 +351,7 @@ final class EdsLoadBalancer extends LoadBalancer {
         public void onResourceDoesNotExist(String resourceName) {
           logger.log(XdsLogLevel.INFO, "Resource {0} is unavailable", resourceName);
           if (isReportingLoad) {
-            logger.log(
-                XdsLogLevel.INFO,
-                "Stop reporting loads for cluster: {0}, cluster_service: {1}",
-                clusterName,
-                clusterServiceName);
-            xdsClient.cancelClientStatsReport(clusterName, clusterServiceName);
+            xdsClient.cancelClientStatsReport();
             isReportingLoad = false;
           }
           localityStore.reset();

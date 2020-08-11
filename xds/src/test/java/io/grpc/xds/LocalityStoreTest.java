@@ -69,6 +69,7 @@ import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.LbEndpoint;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
+import io.grpc.xds.LoadStatsManager.LoadStatsStore;
 import io.grpc.xds.LocalityStore.LocalityStoreImpl;
 import io.grpc.xds.OrcaOobUtil.OrcaOobReportListener;
 import io.grpc.xds.OrcaOobUtil.OrcaReportingConfig;
@@ -84,7 +85,6 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
-import javax.annotation.Nullable;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -1053,8 +1053,8 @@ public class LocalityStoreTest {
     ArgumentCaptor<SubchannelPicker> subchannelPickerCaptor = ArgumentCaptor.forClass(null);
     inOrder.verify(helper).updateBalancingState(same(READY), subchannelPickerCaptor.capture());
     assertThat(subchannelPickerCaptor.getValue()
-            .pickSubchannel(mock(PickSubchannelArgs.class))
-            .getSubchannel())
+        .pickSubchannel(mock(PickSubchannelArgs.class))
+        .getSubchannel())
         .isSameInstanceAs(mockSubchannel3);
 
     // P0 gets READY - P0 R, P1 F&D, P2 R&D, P3 N/A
@@ -1078,8 +1078,8 @@ public class LocalityStoreTest {
     assertThat(deactivationTasks).hasSize(2);
     inOrder.verify(helper).updateBalancingState(same(READY), subchannelPickerCaptor.capture());
     assertThat(subchannelPickerCaptor.getValue()
-            .pickSubchannel(mock(PickSubchannelArgs.class))
-            .getSubchannel())
+        .pickSubchannel(mock(PickSubchannelArgs.class))
+        .getSubchannel())
         .isSameInstanceAs(mockSubchannel1);
 
     // P1 gets READY - P0 R, P1 R&D, P2 R&D, P3 N/A
@@ -1188,8 +1188,8 @@ public class LocalityStoreTest {
     assertThat(fakeClock.getPendingTasks(deactivationTaskFilter)).hasSize(2);
     inOrder.verify(helper).updateBalancingState(same(READY), subchannelPickerCaptor.capture());
     assertThat(subchannelPickerCaptor.getValue()
-            .pickSubchannel(mock(PickSubchannelArgs.class))
-            .getSubchannel())
+        .pickSubchannel(mock(PickSubchannelArgs.class))
+        .getSubchannel())
         .isSameInstanceAs(mockSubchannel22);
 
     // EDS update, localities moved: P0 sz1, sz3; P1 sz4; P2 sz2 - P0 C, P1 R, P2 R&D
@@ -1214,8 +1214,8 @@ public class LocalityStoreTest {
     assertThat(loadBalancers.values()).containsExactly(lb1, lb2, lb3, lb4);
     inOrder.verify(helper).updateBalancingState(same(READY), subchannelPickerCaptor.capture());
     assertThat(subchannelPickerCaptor.getValue()
-            .pickSubchannel(mock(PickSubchannelArgs.class))
-            .getSubchannel())
+        .pickSubchannel(mock(PickSubchannelArgs.class))
+        .getSubchannel())
         .isSameInstanceAs(mockSubchannel4);
     // The order of the following four handleResolvedAddresses() does not matter. We want to verify
     // they are after helper.updateBalancingState()
@@ -1283,8 +1283,8 @@ public class LocalityStoreTest {
     assertThat(fakeClock.getPendingTasks(deactivationTaskFilter)).hasSize(1);
     inOrder.verify(helper).updateBalancingState(same(READY), subchannelPickerCaptor.capture());
     assertThat(subchannelPickerCaptor.getValue()
-            .pickSubchannel(mock(PickSubchannelArgs.class))
-            .getSubchannel())
+        .pickSubchannel(mock(PickSubchannelArgs.class))
+        .getSubchannel())
         .isSameInstanceAs(newMockSubchannel3);
     inOrder.verifyNoMoreInteractions();
 
@@ -1337,21 +1337,17 @@ public class LocalityStoreTest {
     }
 
     @Override
-    public void addLocality(Locality locality) {
+    public ClientLoadCounter addLocality(Locality locality) {
       assertThat(localityCounters).doesNotContainKey(locality);
-      localityCounters.put(locality, new ClientLoadCounter());
+      ClientLoadCounter counter = new ClientLoadCounter();
+      localityCounters.put(locality, counter);
+      return counter;
     }
 
     @Override
     public void removeLocality(Locality locality) {
       assertThat(localityCounters).containsKey(locality);
       localityCounters.remove(locality);
-    }
-
-    @Nullable
-    @Override
-    public ClientLoadCounter getLocalityCounter(Locality locality) {
-      return localityCounters.get(locality);
     }
 
     @Override

@@ -22,6 +22,7 @@ import io.grpc.Internal;
 import io.grpc.NameResolver;
 import io.grpc.internal.ObjectPool;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
+import io.grpc.xds.LoadStatsManager.LoadStatsStore;
 
 /**
  * Special attributes that are only useful to gRPC in the XDS context.
