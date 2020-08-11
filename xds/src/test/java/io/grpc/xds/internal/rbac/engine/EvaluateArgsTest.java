@@ -24,8 +24,14 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableMap;
+import io.grpc.Attributes;
+import io.grpc.Grpc;
 import io.grpc.Metadata;
+import io.grpc.SecurityLevel;
 import io.grpc.ServerCall;
+import io.grpc.internal.GrpcAttributes;
+import io.netty.channel.local.LocalAddress;
+import java.net.SocketAddress;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -103,12 +109,24 @@ public class EvaluateArgsTest<ReqT,RespT> {
   
   @Test
   public void testEvaluateArgsAccessorFunctions() {
+    // Set up args and call.
     args = new EvaluateArgs(new Metadata(), call);
+    SocketAddress localAddr = new LocalAddress("local_addr");
+    SocketAddress remoteAddr = new LocalAddress("remote_addr");
+    Attributes attrs = Attributes.newBuilder()
+        .set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, localAddr)
+        .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, remoteAddr)
+        .set(GrpcAttributes.ATTR_SECURITY_LEVEL, SecurityLevel.NONE)
+        .build();
+    when(call.getAttributes()).thenReturn(attrs);
     when(call.getAuthority()).thenReturn("fooapi.googleapis.com");
+    // Check the behavior of accessor functions.
     assertEquals(args.getRequestHost(), "fooapi.googleapis.com");
     assertNotNull(args.getRequestHeaders());
     assertEquals(args.getSourcePort(), 0);
     assertEquals(args.getDestinationPort(), 0);
+    assertEquals(args.getSourceAddress(), "local:remote_addr");
+    assertEquals(args.getDestinationAddress(), "local:local_addr");
     assertEquals(args.getConnectionUriSanPeerCertificate(), "placeholder");
     assertEquals(args.getSourcePrincipal(), "placeholder");
   }
