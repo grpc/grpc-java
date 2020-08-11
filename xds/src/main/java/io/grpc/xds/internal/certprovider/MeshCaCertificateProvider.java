@@ -90,7 +90,7 @@ final class MeshCaCertificateProvider extends CertificateProvider {
       String zone,
       long validitySeconds,
       int keySize,
-      String alg,
+      String unused, //TODO(sanjaypujare): to remove during refactoring
       String signatureAlg, MeshCaChannelFactory meshCaChannelFactory,
       BackoffPolicy.Provider backoffPolicyProvider,
       long renewalGracePeriodSeconds,
@@ -106,7 +106,6 @@ final class MeshCaCertificateProvider extends CertificateProvider {
         "validitySeconds must be greater than " + INITIAL_DELAY_SECONDS);
     this.validitySeconds = validitySeconds;
     this.keySize = keySize;
-    this.alg = checkNotNull(alg, "alg");
     this.signatureAlg = checkNotNull(signatureAlg, "signatureAlg");
     this.meshCaChannelFactory = checkNotNull(meshCaChannelFactory, "meshCaChannelFactory");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
@@ -276,7 +275,7 @@ final class MeshCaCertificateProvider extends CertificateProvider {
   }
 
   private KeyPair generateKeyPair() throws NoSuchAlgorithmException {
-    KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance(alg);
+    KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA");
     keyPairGenerator.initialize(keySize);
     return keyPairGenerator.generateKeyPair();
   }
@@ -490,7 +489,6 @@ final class MeshCaCertificateProvider extends CertificateProvider {
   private final long validitySeconds;
   private final long renewalGracePeriodSeconds;
   private final int keySize;
-  private final String alg;
   private final String signatureAlg;
   private final GoogleCredentials oauth2Creds;
   private final TimeProvider timeProvider;
