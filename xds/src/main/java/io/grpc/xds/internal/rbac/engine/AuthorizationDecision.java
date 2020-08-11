@@ -25,26 +25,26 @@ import java.util.List;
  * returned by CEL Evaluation Engine. 
  */
 public class AuthorizationDecision {
-  /** The Decision enum represents the possible decisions outputted by CEL Evaluation Engine.*/
-  public enum Decision {
+  /** The Output enum represents the possible decisions outputted by CEL Evaluation Engine.*/
+  public enum Output {
     /** 
-     * The Decision ALLOW indicates that CEL Evaluate Engine 
+     * The Output ALLOW indicates that CEL Evaluate Engine 
      * had authorized the gRPC call and allowed the gRPC call to go through.
      */
     ALLOW,
     /** 
-     * The Decision DENY indicates that CEL Evaluate Engine 
+     * The Output DENY indicates that CEL Evaluate Engine 
      * had authorized the gRPC call and denied the gRPC call from going through.
      */
     DENY,
     /** 
-     * The Decision UNKNOWN indicates that CEL Evaluate Engine 
+     * The Output UNKNOWN indicates that CEL Evaluate Engine 
      * did not have enough information to authorize the gRPC call. 
      * */
     UNKNOWN,
   }
 
-  private final Decision decision;
+  private final Output decision;
   private final ImmutableList<String> policyNames;
 
   /**
@@ -52,13 +52,13 @@ public class AuthorizationDecision {
    * for resolving authorization decision
    * and {@code policyNames} for resolving authorization context.
    */
-  public AuthorizationDecision(Decision decision, List<String> policyNames) {
+  public AuthorizationDecision(Output decision, List<String> policyNames) {
     this.decision = decision;
     this.policyNames = ImmutableList.copyOf(policyNames);
   }
 
   /** Returns the authorization decision. */
-  public Decision getDecision() {
+  public Output getDecision() {
     return this.decision;
   }
 

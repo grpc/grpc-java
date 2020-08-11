@@ -131,7 +131,7 @@ public class AuthorizationEngine {
     // If all non-match, then iterate through allowEngine.
     if (denyEngine != null) {
       AuthorizationDecision authzDecision = evaluateEngine(denyEngine.conditions.entrySet(), 
-          AuthorizationDecision.Decision.DENY, unknownPolicyNames, activation);
+          AuthorizationDecision.Output.DENY, unknownPolicyNames, activation);
       if (authzDecision != null) {
         return authzDecision;
       }
@@ -141,7 +141,7 @@ public class AuthorizationEngine {
     // If all non-match, return deny.
     if (allowEngine != null) {
       AuthorizationDecision authzDecision = evaluateEngine(allowEngine.conditions.entrySet(), 
-          AuthorizationDecision.Decision.ALLOW, unknownPolicyNames, activation);
+          AuthorizationDecision.Output.ALLOW, unknownPolicyNames, activation);
       if (authzDecision != null) {
         return authzDecision;
       }
@@ -149,15 +149,15 @@ public class AuthorizationEngine {
     // Only has a denyEngine and it’s unmatched.
     if (this.allowEngine == null && this.denyEngine != null) {
       return new AuthorizationDecision(
-          AuthorizationDecision.Decision.ALLOW, new ArrayList<String>());
+          AuthorizationDecision.Output.ALLOW, new ArrayList<String>());
     }
     // None of denyEngine and allowEngine matched, or the single Allow Engine is unmatched.
-    return new AuthorizationDecision(AuthorizationDecision.Decision.DENY, new ArrayList<String>());
+    return new AuthorizationDecision(AuthorizationDecision.Output.DENY, new ArrayList<String>());
   }
 
   /** Evaluate a single RbacEngine. */
   protected AuthorizationDecision evaluateEngine(Set<Map.Entry<String, Expr>> entrySet, 
-      AuthorizationDecision.Decision decision, List<String> unknownPolicyNames, 
+      AuthorizationDecision.Output decision, List<String> unknownPolicyNames, 
       Activation activation) {
     for (Map.Entry<String, Expr> condition : entrySet) {
       try {
@@ -171,7 +171,7 @@ public class AuthorizationEngine {
     }
     if (unknownPolicyNames.size() > 0) {
       return new AuthorizationDecision(
-          AuthorizationDecision.Decision.UNKNOWN, unknownPolicyNames);
+          AuthorizationDecision.Output.UNKNOWN, unknownPolicyNames);
     }
     return null;
   }
