@@ -60,9 +60,6 @@ public class MutableHandlerRegistryTest {
   @Mock
   private ServerCallHandler<String, Integer> fewHandler;
 
-  @Mock
-  private ServerCallHandler<String, Integer>  otherFlowHandler;
-
   private ServerServiceDefinition basicServiceDefinition;
   private ServerServiceDefinition multiServiceDefinition;
 
