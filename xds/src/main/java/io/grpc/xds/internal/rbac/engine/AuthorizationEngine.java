@@ -17,7 +17,7 @@
 package io.grpc.xds.internal.rbac.engine;
 
 import com.google.api.expr.v1alpha1.Expr;
-import com.google.common.collect.ImmutableList;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.Descriptors.Descriptor;
 import io.envoyproxy.envoy.config.rbac.v2.Policy;
@@ -71,8 +71,8 @@ public class AuthorizationEngine {
     private final ImmutableMap<String, Expr> conditions;
 
     public RbacEngine(Action action, ImmutableMap<String, Expr> conditions) {
-      this.action = action;
-      this.conditions = conditions;
+      this.action = Preconditions.checkNotNull(action);
+      this.conditions = Preconditions.checkNotNull(conditions);
     }
   }
 
@@ -80,39 +80,43 @@ public class AuthorizationEngine {
   private final RbacEngine denyEngine;
 
   /**
-   * Creates a CEL-based Authorization Engine from a list of Envoy RBACs.
-   * The constructor can take either one or two Envoy RBACs.
+   * Creates a CEL-based Authorization Engine from one Envoy RBAC.
+   * @param rbacPolicy input Envoy RBAC policy.
+   */
+  public AuthorizationEngine(RBAC rbacPolicy) {
+    Map<String, Expr> conditions = new LinkedHashMap<>();
+    for (Map.Entry<String, Policy> policy: rbacPolicy.getPolicies().entrySet()) {
+      conditions.put(policy.getKey(), policy.getValue().getCondition());
+    }
+    allowEngine = (rbacPolicy.getAction() == Action.ALLOW) 
+        ? new RbacEngine(Action.ALLOW, ImmutableMap.copyOf(conditions)) : null; 
+    denyEngine = (rbacPolicy.getAction() == Action.DENY) 
+        ? new RbacEngine(Action.DENY, ImmutableMap.copyOf(conditions)) : null; 
+  }
+
+  /**
+   * Creates a CEL-based Authorization Engine from two Envoy RBACs.
    * When it takes two RBACs, the order has to be a RBAC with DENY action
    * followed by a RBAC with ALLOW action.
-   * @param rbacPolicies input Envoy RBAC list.
+   * @param denyPolicy input Envoy RBAC policy with DENY action.
+   * @param allowPolicy input Envoy RBAC policy with ALLOW action.
    * @throws IllegalArgumentException if the user inputs an invalid RBAC list.
    */
-  public AuthorizationEngine(ImmutableList<RBAC> rbacPolicies) throws IllegalArgumentException {
-    if (rbacPolicies.size() < 1 || rbacPolicies.size() > 2) {
-      throw new IllegalArgumentException(
-        "Invalid RBAC list size, must provide either one RBAC or two RBACs. ");
-    } 
-    if (rbacPolicies.size() == 2 && (rbacPolicies.get(0).getAction() != Action.DENY 
-        || rbacPolicies.get(1).getAction() != Action.ALLOW)) {
+  public AuthorizationEngine(RBAC denyPolicy, RBAC allowPolicy) throws IllegalArgumentException {
+    if (denyPolicy.getAction() != Action.DENY || allowPolicy.getAction() != Action.ALLOW) {
       throw new IllegalArgumentException( "Invalid RBAC list, " 
           + "must provide a RBAC with DENY action followed by a RBAC with ALLOW action. ");
     }
-    RbacEngine allowEngine = null;
-    RbacEngine denyEngine = null;
-    for (RBAC rbac : rbacPolicies) {
-      Map<String, Expr> conditions = new LinkedHashMap<>();
-      for (Map.Entry<String, Policy> rbacPolicy: rbac.getPolicies().entrySet()) {
-        conditions.put(rbacPolicy.getKey(), rbacPolicy.getValue().getCondition());
-      }
-      if (rbac.getAction() == Action.ALLOW) {
-        allowEngine = new RbacEngine(Action.ALLOW, ImmutableMap.copyOf(conditions));
-      }
-      if (rbac.getAction() == Action.DENY) {
-        denyEngine = new RbacEngine(Action.DENY, ImmutableMap.copyOf(conditions));
-      }
+    Map<String, Expr> denyConditions = new LinkedHashMap<>();
+    for (Map.Entry<String, Policy> policy: denyPolicy.getPolicies().entrySet()) {
+      denyConditions.put(policy.getKey(), policy.getValue().getCondition());
     }
-    this.allowEngine = allowEngine;
-    this.denyEngine = denyEngine;
+    denyEngine = new RbacEngine(Action.DENY, ImmutableMap.copyOf(denyConditions));
+    Map<String, Expr> allowConditions = new LinkedHashMap<>();
+    for (Map.Entry<String, Policy> policy: allowPolicy.getPolicies().entrySet()) {
+      allowConditions.put(policy.getKey(), policy.getValue().getCondition());
+    }
+    allowEngine = new RbacEngine(Action.ALLOW, ImmutableMap.copyOf(allowConditions));   
   }
 
   /**
@@ -192,8 +196,7 @@ public class AuthorizationEngine {
       }
       // Throw an InterpreterException if there are missing Envoy Attributes.
       if (result instanceof IncompleteData) {
-        throw new InterpreterException.Builder("Incomplete Envoy Attributes to be evaluated.")
-            .build(); 
+        throw new InterpreterException.Builder("Envoy Attributes gotten are incomplete.").build(); 
       }
     } catch (InterpreterException e) {
       // If any InterpreterExceptions are catched, throw it and log the error.

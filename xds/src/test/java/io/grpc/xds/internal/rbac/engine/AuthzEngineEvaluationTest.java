@@ -25,7 +25,6 @@ import static org.mockito.Mockito.doThrow;
 
 import com.google.api.expr.v1alpha1.Expr;
 import com.google.api.expr.v1alpha1.Expr.Ident;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.envoyproxy.envoy.config.rbac.v2.Policy;
 import io.envoyproxy.envoy.config.rbac.v2.RBAC;
@@ -33,9 +32,6 @@ import io.envoyproxy.envoy.config.rbac.v2.RBAC.Action;
 import io.grpc.xds.internal.rbac.engine.cel.Activation;
 import io.grpc.xds.internal.rbac.engine.cel.InterpreterException;
 import java.lang.StringBuilder;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
 import java.util.Map;
 import org.junit.Before;
 import org.junit.Rule;
@@ -49,7 +45,7 @@ import org.mockito.junit.MockitoRule;
 
 /** Unit tests for evaluate function of CEL Evaluation Engine. */
 @RunWith(JUnit4.class)
-public class CelEvaluationTest {
+public class AuthzEngineEvaluationTest {
   @Rule
   public final MockitoRule mocks = MockitoJUnit.rule();
   
@@ -134,8 +130,7 @@ public class CelEvaluationTest {
   @Before
   public void setupEngineSingleRbacAllow() {
     buildRbac();
-    List<RBAC> rbacList = new ArrayList<>(Arrays.asList(new RBAC[] {rbacAllow}));
-    engine = new AuthorizationEngine(ImmutableList.copyOf(rbacList));
+    engine = new AuthorizationEngine(rbacAllow);
     spyEngine = Mockito.spy(engine);
     doReturn(ImmutableMap.copyOf(attributes)).when(args).generateEnvoyAttributes();
   }
@@ -144,8 +139,7 @@ public class CelEvaluationTest {
   @Before
   public void setupEngineSingleRbacDeny() {
     buildRbac();
-    List<RBAC> rbacList = new ArrayList<>(Arrays.asList(new RBAC[] {rbacDeny}));
-    engine = new AuthorizationEngine(ImmutableList.copyOf(rbacList));
+    engine = new AuthorizationEngine(rbacDeny);
     spyEngine = Mockito.spy(engine);
     doReturn(ImmutableMap.copyOf(attributes)).when(args).generateEnvoyAttributes();
   }
@@ -154,8 +148,7 @@ public class CelEvaluationTest {
   @Before
   public void setupEngineRbacPair() {
     buildRbac();
-    List<RBAC> rbacList = new ArrayList<>(Arrays.asList(new RBAC[] {rbacDeny, rbacAllow}));
-    engine = new AuthorizationEngine(ImmutableList.copyOf(rbacList));
+    engine = new AuthorizationEngine(rbacDeny, rbacAllow);
     spyEngine = Mockito.spy(engine);
     doReturn(ImmutableMap.copyOf(attributes)).when(args).generateEnvoyAttributes();
   }

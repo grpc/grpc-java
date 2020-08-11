@@ -81,7 +81,6 @@ public class AuthorizationDecision {
         authzStr.append("Authorization Decision: UNKNOWN. \n");
         break;
       default: 
-        authzStr.append("");
         break;
     }
     for (String policyName : this.policyNames) {
