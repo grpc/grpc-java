@@ -167,15 +167,15 @@ final class LoadStatsManager {
     ClusterStats generateLoadReport();
 
     /**
-     * Starts tracking load stats for endpoints in the provided locality. Only load stats for
-     * endpoints in added localities will be recorded and included in generated load reports.
+     * Track load stats for endpoints in the provided locality. Only load stats for endpoints
+     * in tracked localities will be included in generated load reports.
      */
     void addLocality(Locality locality);
 
     /**
-     * Stops tracking load stats for endpoints in the provided locality. Load stats for endpoints
+     * Drop tracking load stats for endpoints in the provided locality. Load stats for endpoints
      * in removed localities will no longer be included in future generated load reports after
-     * their recorded and ongoing loads have been reported.
+     * their currently recording stats have been fully reported.
      */
     void removeLocality(Locality locality);
 

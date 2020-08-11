@@ -17,7 +17,6 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
@@ -53,15 +52,14 @@ final class LoadStatsStoreImpl implements LoadStatsStore {
   @Nullable
   @SuppressWarnings("unused")
   private final String clusterServiceName;
-  private final ConcurrentMap<Locality, ClientLoadCounter> localityLoadCounters;
+  private final ConcurrentMap<Locality, ReferenceCounted<ClientLoadCounter>> localityLoadCounters
+      = new ConcurrentHashMap<>();
   // Cluster level dropped request counts for each category decision made by xDS load balancer.
   private final ConcurrentMap<String, AtomicLong> dropCounters;
   private final Stopwatch stopwatch;
 
-  LoadStatsStoreImpl(
-      String clusterName, @Nullable String clusterServiceName) {
+  LoadStatsStoreImpl(String clusterName, @Nullable String clusterServiceName) {
     this(clusterName, clusterServiceName, GrpcUtil.STOPWATCH_SUPPLIER.get(),
-        new ConcurrentHashMap<Locality, ClientLoadCounter>(),
         new ConcurrentHashMap<String, AtomicLong>());
   }
 
@@ -70,12 +68,10 @@ final class LoadStatsStoreImpl implements LoadStatsStore {
       String clusterName,
       @Nullable String clusterServiceName,
       Stopwatch stopwatch,
-      ConcurrentMap<Locality, ClientLoadCounter> localityLoadCounters,
       ConcurrentMap<String, AtomicLong> dropCounters) {
     this.clusterName = checkNotNull(clusterName, "clusterName");
     this.clusterServiceName = clusterServiceName;
     this.stopwatch =  checkNotNull(stopwatch, "stopwatch");
-    this.localityLoadCounters = checkNotNull(localityLoadCounters, "localityLoadCounters");
     this.dropCounters = checkNotNull(dropCounters, "dropCounters");
     stopwatch.reset().start();
   }
@@ -85,8 +81,9 @@ final class LoadStatsStoreImpl implements LoadStatsStore {
     ClusterStats.Builder statsBuilder = ClusterStats.newBuilder();
     statsBuilder.setClusterName(clusterName);
     // TODO(chengyuangzhang): also set cluster_service_name if provided.
-    for (Map.Entry<Locality, ClientLoadCounter> entry : localityLoadCounters.entrySet()) {
-      ClientLoadSnapshot snapshot = entry.getValue().snapshot();
+    for (Map.Entry<Locality, ReferenceCounted<ClientLoadCounter>> entry
+        : localityLoadCounters.entrySet()) {
+      ClientLoadSnapshot snapshot = entry.getValue().get().snapshot();
       UpstreamLocalityStats.Builder localityStatsBuilder =
           UpstreamLocalityStats.newBuilder().setLocality(entry.getKey().toEnvoyProtoLocalityV2());
       localityStatsBuilder
@@ -104,7 +101,7 @@ final class LoadStatsStoreImpl implements LoadStatsStore {
       statsBuilder.addUpstreamLocalityStats(localityStatsBuilder);
       // Discard counters for localities that are no longer exposed by the remote balancer and
       // no RPCs ongoing.
-      if (!entry.getValue().isActive() && snapshot.getCallsInProgress() == 0) {
+      if (entry.getValue().getReferenceCount() == 0 && snapshot.getCallsInProgress() == 0) {
         localityLoadCounters.remove(entry.getKey());
       }
     }
@@ -125,27 +122,25 @@ final class LoadStatsStoreImpl implements LoadStatsStore {
 
   @Override
   public void addLocality(final Locality locality) {
-    ClientLoadCounter counter = localityLoadCounters.get(locality);
-    checkState(counter == null || !counter.isActive(),
-        "An active counter for locality %s already exists", locality);
+    ReferenceCounted<ClientLoadCounter> counter = localityLoadCounters.get(locality);
     if (counter == null) {
-      localityLoadCounters.put(locality, new ClientLoadCounter());
-    } else {
-      counter.setActive(true);
+      counter = ReferenceCounted.wrap(new ClientLoadCounter());
+      localityLoadCounters.put(locality, counter);
     }
+    counter.retain();
   }
 
   @Override
   public void removeLocality(final Locality locality) {
-    ClientLoadCounter counter = localityLoadCounters.get(locality);
-    checkState(counter != null && counter.isActive(),
-        "No active counter for locality %s exists", locality);
-    counter.setActive(false);
+    ReferenceCounted<ClientLoadCounter> counter = localityLoadCounters.get(locality);
+    counter.release();
   }
 
+  @Nullable
   @Override
   public ClientLoadCounter getLocalityCounter(final Locality locality) {
-    return localityLoadCounters.get(locality);
+    ReferenceCounted<ClientLoadCounter> counter = localityLoadCounters.get(locality);
+    return counter == null || counter.getReferenceCount() == 0 ? null : counter.get();
   }
 
   @Override
