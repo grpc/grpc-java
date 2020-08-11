@@ -61,7 +61,7 @@ import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.EnvoyProtoData.StructOrError;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
-import io.grpc.xds.LoadReportClient.LoadReportCallback;
+import io.grpc.xds.LoadStatsManager.LoadStatsStore;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -163,6 +163,8 @@ final class XdsClientImpl extends XdsClient {
   // Timers for concluding EDS resources not found.
   private final Map<String, ScheduledHandle> edsRespTimers = new HashMap<>();
 
+  private final LoadStatsManager loadStatsManager = new LoadStatsManager();
+
   // Timer for concluding the currently requesting LDS resource not found.
   @Nullable
   private ScheduledHandle ldsRespTimer;
@@ -179,6 +181,7 @@ final class XdsClientImpl extends XdsClient {
   private ScheduledHandle rpcRetryTimer;
   @Nullable
   private LoadReportClient lrsClient;
+  private int loadReportCount;  // number of clusters enabling load reporting
 
   // Following fields are set only after the ConfigWatcher registered. Once set, they should
   // never change. Only a ConfigWatcher or ListenerWatcher can be registered.
@@ -474,41 +477,45 @@ final class XdsClientImpl extends XdsClient {
   }
 
   @Override
-  void reportClientStats(
-      String clusterName, @Nullable String clusterServiceName, LoadStatsStore loadStatsStore) {
+  void reportClientStats() {
     if (lrsClient == null) {
+      logger.log(XdsLogLevel.INFO, "Turning on load reporting");
       lrsClient =
           new LoadReportClient(
-              logId,
               targetName,
+              loadStatsManager,
               channel,
               node.toEnvoyProtoNodeV2(),
               syncContext,
               timeService,
               backoffPolicyProvider,
               stopwatchSupplier);
-      lrsClient.startLoadReporting(new LoadReportCallback() {
-        @Override
-        public void onReportResponse(long reportIntervalNano) {}
-      });
     }
-    logger.log(
-        XdsLogLevel.INFO,
-        "Report loads for cluster: {0}, cluster_service: {1}", clusterName, clusterServiceName);
-    lrsClient.addLoadStatsStore(clusterName, clusterServiceName, loadStatsStore);
+    if (loadReportCount == 0) {
+      lrsClient.startLoadReporting();
+    }
+    loadReportCount++;
   }
 
   @Override
-  void cancelClientStatsReport(String clusterName, @Nullable String clusterServiceName) {
-    checkState(lrsClient != null, "load reporting was never started");
-    logger.log(
-        XdsLogLevel.INFO,
-        "Stop reporting loads for cluster: {0}, cluster_service: {1}",
-        clusterName,
-        clusterServiceName);
-    lrsClient.removeLoadStatsStore(clusterName, clusterServiceName);
-    // TODO(chengyuanzhang): can be optimized to stop load reporting if no more loads need
-    //  to be reported.
+  void cancelClientStatsReport() {
+    checkState(loadReportCount > 0, "load reporting was never started");
+    loadReportCount--;
+    if (loadReportCount == 0) {
+      logger.log(XdsLogLevel.INFO, "Turning off load reporting");
+      lrsClient.stopLoadReporting();
+      lrsClient = null;
+    }
+  }
+
+  @Override
+  LoadStatsStore addClientStats(String clusterName, @Nullable String clusterServiceName) {
+    return loadStatsManager.addLoadStats(clusterName, clusterServiceName);
+  }
+
+  @Override
+  void removeClientStats(String clusterName, @Nullable String clusterServiceName) {
+    loadStatsManager.removeLoadStats(clusterName, clusterServiceName);
   }
 
   @Override
