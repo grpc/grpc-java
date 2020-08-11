@@ -23,6 +23,10 @@ import static com.google.common.base.Preconditions.checkState;
  * A reference count wrapper for objects. This class does not take the ownership for the object,
  * but only provides usage counting. The real owner of the wrapped object is responsible for
  * managing the lifecycle of the object.
+ *
+ * <p>Intended for a container class to keep track of lifecycle for elements it contains. This
+ * wrapper itself should never be returned to the consumers of the elements to avoid reference
+ * counts being leaked.
  */
 final class ReferenceCounted<T> {
   private final T instance;

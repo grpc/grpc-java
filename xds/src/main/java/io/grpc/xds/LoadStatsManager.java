@@ -16,7 +16,6 @@
 
 package io.grpc.xds;
 
-import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -33,7 +32,8 @@ import javax.annotation.Nullable;
  */
 final class LoadStatsManager {
   private final LoadStatsStoreFactory loadStatsStoreFactory;
-  private final Map<String, Map<String, RefCounted>> loadStatsStores = new HashMap<>();
+  private final Map<String, Map<String, ReferenceCounted<LoadStatsStore>>> loadStatsStores
+      = new HashMap<>();
 
   LoadStatsManager() {
     this(LoadStatsStoreImpl.getDefaultFactory());
@@ -51,15 +51,16 @@ final class LoadStatsManager {
    */
   LoadStatsStore addLoadStats(String cluster, @Nullable String clusterService) {
     if (!loadStatsStores.containsKey(cluster)) {
-      loadStatsStores.put(cluster, new HashMap<String, RefCounted>());
+      loadStatsStores.put(cluster, new HashMap<String, ReferenceCounted<LoadStatsStore>>());
     }
-    Map<String, RefCounted> clusterLoadStatsStores = loadStatsStores.get(cluster);
+    Map<String, ReferenceCounted<LoadStatsStore>> clusterLoadStatsStores
+        = loadStatsStores.get(cluster);
     if (!clusterLoadStatsStores.containsKey(clusterService)) {
       clusterLoadStatsStores.put(
           clusterService,
-          new RefCounted(loadStatsStoreFactory.newLoadStatsStore(cluster, clusterService)));
+          ReferenceCounted.wrap(loadStatsStoreFactory.newLoadStatsStore(cluster, clusterService)));
     }
-    RefCounted ref = clusterLoadStatsStores.get(clusterService);
+    ReferenceCounted<LoadStatsStore> ref = clusterLoadStatsStores.get(clusterService);
     ref.retain();
     return ref.get();
   }
@@ -72,10 +73,11 @@ final class LoadStatsManager {
         loadStatsStores.containsKey(cluster)
             && loadStatsStores.get(cluster).containsKey(clusterService),
         "stats for cluster %s, cluster service %s not exits");
-    Map<String, RefCounted> clusterLoadStatsStores = loadStatsStores.get(cluster);
-    RefCounted ref = clusterLoadStatsStores.get(clusterService);
+    Map<String, ReferenceCounted<LoadStatsStore>> clusterLoadStatsStores =
+        loadStatsStores.get(cluster);
+    ReferenceCounted<LoadStatsStore> ref = clusterLoadStatsStores.get(clusterService);
     ref.release();
-    if (ref.getRefCount() == 0) {
+    if (ref.getReferenceCount() == 0) {
       clusterLoadStatsStores.remove(clusterService);
     }
     if (clusterLoadStatsStores.isEmpty()) {
@@ -91,11 +93,12 @@ final class LoadStatsManager {
   // TODO(chengyuanzhang): do not use proto type directly.
   List<ClusterStats> getClusterLoadReports(String cluster) {
     List<ClusterStats> res = new ArrayList<>();
-    Map<String, RefCounted> clusterLoadStatsStores = loadStatsStores.get(cluster);
+    Map<String, ReferenceCounted<LoadStatsStore>> clusterLoadStatsStores =
+        loadStatsStores.get(cluster);
     if (clusterLoadStatsStores == null) {
       return res;
     }
-    for (RefCounted ref : clusterLoadStatsStores.values()) {
+    for (ReferenceCounted<LoadStatsStore> ref : clusterLoadStatsStores.values()) {
       res.add(ref.get().generateLoadReport());
     }
     return res;
@@ -109,41 +112,13 @@ final class LoadStatsManager {
   // TODO(chengyuanzhang): do not use proto type directly.
   List<ClusterStats> getAllLoadReports() {
     List<ClusterStats> res = new ArrayList<>();
-    for (Map<String, RefCounted> clusterLoadStatsStores : loadStatsStores.values()) {
-      for (RefCounted ref : clusterLoadStatsStores.values()) {
+    for (Map<String, ReferenceCounted<LoadStatsStore>> clusterLoadStatsStores
+        : loadStatsStores.values()) {
+      for (ReferenceCounted<LoadStatsStore> ref : clusterLoadStatsStores.values()) {
         res.add(ref.get().generateLoadReport());
       }
     }
     return res;
-  }
-
-  /**
-   * A reference-counted wrapper for {@link LoadStatsStore}.
-   */
-  private static final class RefCounted {
-    private final LoadStatsStore instance;
-    private int refs = 0;
-
-    RefCounted(LoadStatsStore instance) {
-      this.instance = checkNotNull(instance, "instance");
-    }
-
-    LoadStatsStore get() {
-      checkState(refs > 0, "reference reached 0");
-      return instance;
-    }
-
-    int getRefCount() {
-      return refs;
-    }
-
-    void retain() {
-      refs++;
-    }
-
-    void release() {
-      refs--;
-    }
   }
 
   @VisibleForTesting
