@@ -137,8 +137,7 @@ public class CelEvaluationTest {
     List<RBAC> rbacList = new ArrayList<>(Arrays.asList(new RBAC[] {rbacAllow}));
     engine = new AuthorizationEngine(ImmutableList.copyOf(rbacList));
     spyEngine = Mockito.spy(engine);
-    doReturn(ImmutableMap.copyOf(attributes)).when(spyEngine).extractFields(
-        any(EvaluateArgs.class));
+    doReturn(ImmutableMap.copyOf(attributes)).when(args).generateEnvoyAttributes();
   }
 
   /** Build a DENY engine from Policy 4, 5, 6. */
@@ -148,8 +147,7 @@ public class CelEvaluationTest {
     List<RBAC> rbacList = new ArrayList<>(Arrays.asList(new RBAC[] {rbacDeny}));
     engine = new AuthorizationEngine(ImmutableList.copyOf(rbacList));
     spyEngine = Mockito.spy(engine);
-    doReturn(ImmutableMap.copyOf(attributes)).when(spyEngine).extractFields(
-        any(EvaluateArgs.class));
+    doReturn(ImmutableMap.copyOf(attributes)).when(args).generateEnvoyAttributes();
   }
 
   /** Build a pair of engines with a DENY engine followed by an ALLOW engine. */
@@ -159,8 +157,7 @@ public class CelEvaluationTest {
     List<RBAC> rbacList = new ArrayList<>(Arrays.asList(new RBAC[] {rbacDeny, rbacAllow}));
     engine = new AuthorizationEngine(ImmutableList.copyOf(rbacList));
     spyEngine = Mockito.spy(engine);
-    doReturn(ImmutableMap.copyOf(attributes)).when(spyEngine).extractFields(
-        any(EvaluateArgs.class));
+    doReturn(ImmutableMap.copyOf(attributes)).when(args).generateEnvoyAttributes();
   }
 
   /**

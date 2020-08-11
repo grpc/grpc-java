@@ -16,6 +16,7 @@
 
 package io.grpc.xds.internal.rbac.engine;
 
+import com.google.common.collect.ImmutableMap;
 import io.grpc.Grpc;
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
@@ -34,81 +35,89 @@ public class EvaluateArgs {
     this.call = call;
   }
 
-  /** Return the headers. */
-  public Metadata getHeaders() {
-    return headers;
-  }
-
-  /** Return the gRPC call. */
-  public ServerCall<?, ?> getCall() {
-    return call;
-  }
-
   /** Extract the request.url_path field. */
-  public String getRequestUrlPath() {
-    String requestUrlPath = this.getCall().getMethodDescriptor().getFullMethodName();
+  protected String getRequestUrlPath() {
+    String requestUrlPath = this.call.getMethodDescriptor().getFullMethodName();
     return requestUrlPath;
   }
 
   /** Extract the request.host field. */
-  public String getRequestHost() {
-    String requestHost = this.getCall().getAuthority();
+  protected String getRequestHost() {
+    String requestHost = this.call.getAuthority();
     return requestHost;
   }
 
   /** Extract the request.method field. */
-  public String getRequestMethod() {
+  protected String getRequestMethod() {
     // TODO(@zhenlian): confirm extraction for request.method.
-    String requestMethod = this.getCall().getMethodDescriptor().getServiceName();
+    String requestMethod = this.call.getMethodDescriptor().getServiceName();
     return requestMethod;
   }
 
   /** Extract the request.headers field. */
-  public Metadata getRequestHeaders() {
+  protected Metadata getRequestHeaders() {
     // TODO(@zhenlian): convert request.headers from Metadata to a String Map.
-    Metadata requestHeaders = this.getHeaders();
+    Metadata requestHeaders = this.headers;
     return requestHeaders;
   }
 
   /** Extract the source.address field. */
-  public String getSourceAddress() {
+  protected String getSourceAddress() {
     String sourceAddress = 
-        this.getCall().getAttributes().get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR).toString();
+        this.call.getAttributes().get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR).toString();
     return sourceAddress;
   }
 
   /** Extract the source.port field. */
-  public int getSourcePort() {
+  protected int getSourcePort() {
     // TODO(@zhenlian): fill out extraction for source.port.
     int sourcePort = 0;
     return sourcePort;
   }
 
   /** Extract the destination.address field. */
-  public String getDestinationAddress() {
+  protected String getDestinationAddress() {
     String destinationAddress = 
-        this.getCall().getAttributes().get(Grpc.TRANSPORT_ATTR_LOCAL_ADDR).toString();
+        this.call.getAttributes().get(Grpc.TRANSPORT_ATTR_LOCAL_ADDR).toString();
     return destinationAddress;
   }
 
   /** Extract the destination.port field. */
-  public int getDestinationPort() {
+  protected int getDestinationPort() {
     // TODO(@zhenlian): fill out extraction for destination.port.
     int destinationPort = 0;
     return destinationPort;
   }
 
   /** Extract the connection.uri_san_peer_certificate field. */
-  public String getConnectionUriSanPeerCertificate() {
+  protected String getConnectionUriSanPeerCertificate() {
     // TODO(@zhenlian): fill out extraction for connection.uri_san_peer_certificate.
     String connectionUriSanPeerCertificate = "placeholder";
     return connectionUriSanPeerCertificate;
   }
 
   /** Extract the source.principal field. */
-  public String getSourcePrincipal() {
+  protected String getSourcePrincipal() {
     // TODO(@zhenlian): fill out extraction for source.principal.
     String sourcePrincipal = "placeholder";
     return sourcePrincipal;
+  }
+
+  /** Extract Envoy Attributes from EvaluateArgs. */
+  public ImmutableMap<String, Object> generateEnvoyAttributes() {
+    ImmutableMap<String, Object> attributes = ImmutableMap.<String, Object>builder()
+        .put("request.url_path", this.getRequestUrlPath())
+        .put("request.host", this.getRequestHost())
+        .put("request.method", this.getRequestMethod())
+        .put("request.headers", this.getRequestHeaders())
+        .put("source.address", this.getSourceAddress())
+        .put("source.port", this.getSourcePort())
+        .put("destination.address", this.getDestinationAddress())
+        .put("destination.port", this.getDestinationPort())
+        .put("connection.uri_san_peer_certificate", 
+            this.getConnectionUriSanPeerCertificate())
+        .put("source.principal", this.getSourcePrincipal())
+        .build();
+    return attributes;
   }
 }

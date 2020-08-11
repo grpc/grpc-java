@@ -124,7 +124,7 @@ public class AuthorizationEngine {
   public AuthorizationDecision evaluate(EvaluateArgs args) {
     List<String> unknownPolicyNames = new ArrayList<>();
     // Set up activation used in CEL library's eval function.
-    Activation activation = Activation.copyOf(extractFields(args));
+    Activation activation = Activation.copyOf(args.generateEnvoyAttributes());
     // Iterate through denyEngine's map.
     // If there is match, immediately return deny. 
     // If there are unknown results, return undecided. 
@@ -201,23 +201,5 @@ public class AuthorizationEngine {
       throw e;
     }
     return false;
-  }
-
-  /** Extract Envoy Attributes from EvaluateArgs. */
-  protected ImmutableMap<String, Object> extractFields(EvaluateArgs args) {
-    ImmutableMap<String, Object> attributes = ImmutableMap.<String, Object>builder()
-        .put("request.url_path", args.getRequestUrlPath())
-        .put("request.host", args.getRequestHost())
-        .put("request.method", args.getRequestMethod())
-        .put("request.headers", args.getRequestHeaders())
-        .put("source.address", args.getSourceAddress())
-        .put("source.port", args.getSourcePort())
-        .put("destination.address", args.getDestinationAddress())
-        .put("destination.port", args.getDestinationPort())
-        .put("connection.uri_san_peer_certificate", 
-            args.getConnectionUriSanPeerCertificate())
-        .put("source.principal", args.getSourcePrincipal())
-        .build();
-    return attributes;
   }
 }
