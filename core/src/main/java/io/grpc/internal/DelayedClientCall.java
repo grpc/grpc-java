@@ -47,7 +47,7 @@ import javax.annotation.concurrent.GuardedBy;
  * DelayedCall} may be internally altered by different threads, thus internal synchronization is
  * necessary.
  */
-final class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
+class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   private static final Logger logger = Logger.getLogger(DelayedClientCall.class.getName());
   /**
    * A timer to monitor the initial deadline. The timer must be cancelled on transition to the real
@@ -141,7 +141,7 @@ final class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
    * <p>No-op if either this method or {@link #cancel} have already been called.
    */
   // When this method returns, passThrough is guaranteed to be true
-  final void setCall(ClientCall<ReqT, RespT> call) {
+  void setCall(ClientCall<ReqT, RespT> call) {
     synchronized (this) {
       // If realCall != null, then either setCall() or cancel() has been called.
       if (realCall != null) {

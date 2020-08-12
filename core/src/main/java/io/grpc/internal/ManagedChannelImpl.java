@@ -82,6 +82,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -218,7 +219,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
   // Must be accessed from syncContext
   @Nullable
-  private Collection<Runnable> pendingCalls = new ArrayList<>();
+  private Collection<RealChannel.PendingCall<?, ?>> pendingCalls = new LinkedHashSet<>();
 
   // Must be mutated from syncContext
   private final Set<OobChannel> oobChannels = new HashSet<>(1, .75f);
@@ -917,59 +918,85 @@ final class ManagedChannelImpl extends ManagedChannel implements
       if (configSelector.get() != INITIAL_PENDING_SELECTOR) {
         return newClientCall(method, callOptions);
       }
-      final DelayedClientCall<ReqT, RespT> delayedClientCall = new DelayedClientCall<>(
-           getCallExecutor(callOptions), scheduledExecutor, callOptions.getDeadline());
       final Context context = Context.current();
-      final Executor callExecutor = getCallExecutor(callOptions);
-      class TransitionRunnable extends ContextRunnable {
-        TransitionRunnable() {
-          super(context);
-        }
-
-        @Override public void runInContext() {
-          delayedClientCall.setCall(newClientCall(method, callOptions));
-        }
-      }
+      final PendingCall<ReqT, RespT> pendingCall = new PendingCall<>(context, method, callOptions);
 
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
           exitIdleMode();
-          Runnable transitionRunnable = new Runnable() {
-            @Override
-            public void run() {
-              callExecutor.execute(new TransitionRunnable());
-            }
-          };
           if (configSelector.get() == INITIAL_PENDING_SELECTOR) {
-            pendingCalls.add(transitionRunnable);
+            if (pendingCalls.isEmpty()) {
+              inUseStateAggregator.updateObjectInUse(RealChannel.this, true);
+            }
+            pendingCalls.add(pendingCall);
           } else {
-            transitionRunnable.run();
+            pendingCall.pendingCallRunnable.run();
           }
         }
       });
-      return delayedClientCall;
+      return pendingCall;
     }
 
     @Override
     public String authority() {
       return authority;
     }
-  }
 
-  private <ReqT, RespT> ClientCall<ReqT, RespT> newClientCall(MethodDescriptor<ReqT, RespT> method,
-      CallOptions callOptions) {
-    return new ClientCallImpl<>(
-        method,
-        getCallExecutor(callOptions),
-        callOptions,
-        transportProvider,
-        terminated ? null : transportFactory.getScheduledExecutorService(),
-        channelCallTracer,
-        configSelector.get())
-        .setFullStreamDecompression(fullStreamDecompression)
-        .setDecompressorRegistry(decompressorRegistry)
-        .setCompressorRegistry(compressorRegistry);
+    private final class PendingCall<ReqT, RespT> extends DelayedClientCall<ReqT, RespT> {
+      final Runnable pendingCallRunnable;
+
+      PendingCall(
+          final Context context, final MethodDescriptor<ReqT, RespT> method,
+          final CallOptions callOptions) {
+        super(getCallExecutor(callOptions), scheduledExecutor, callOptions.getDeadline());
+        class PendingCallRunnable implements Runnable {
+          @Override
+          public void run() {
+            getCallExecutor(callOptions).execute(
+                new ContextRunnable(context) {
+                  @Override
+                  public void runInContext() {
+                    setCall(newClientCall(method, callOptions));
+                  }
+                }
+            );
+          }
+        }
+
+        pendingCallRunnable = new PendingCallRunnable();
+      }
+
+      @Override
+      void setCall(ClientCall<ReqT, RespT> call) {
+        super.setCall(call);
+        syncContext.execute(
+            new Runnable() {
+              @Override
+              public void run() {
+                boolean removed = pendingCalls.remove(PendingCall.this);
+                if (removed && pendingCalls.isEmpty()) {
+                  inUseStateAggregator.updateObjectInUse(RealChannel.this, false);
+                }
+              }
+            });
+      }
+    }
+
+    private <ReqT, RespT> ClientCall<ReqT, RespT> newClientCall(
+        MethodDescriptor<ReqT, RespT> method, CallOptions callOptions) {
+      return new ClientCallImpl<>(
+          method,
+          getCallExecutor(callOptions),
+          callOptions,
+          transportProvider,
+          terminated ? null : transportFactory.getScheduledExecutorService(),
+          channelCallTracer,
+          configSelector.get())
+          .setFullStreamDecompression(fullStreamDecompression)
+          .setDecompressorRegistry(decompressorRegistry)
+          .setCompressorRegistry(compressorRegistry);
+    }
   }
 
   /**
@@ -1592,13 +1619,17 @@ final class ManagedChannelImpl extends ManagedChannel implements
       scheduleExponentialBackOffInSyncContext();
     }
 
+    // Must run in SynchronizationContext.
     private void drainPendingCalls() {
-      if (pendingCalls != null) {
-        for (Runnable pendingCall : pendingCalls) {
-          pendingCall.run();
-        }
-        pendingCalls = null;
+      for (RealChannel.PendingCall<?, ?> pendingCall : pendingCalls) {
+        pendingCall.pendingCallRunnable.run();
       }
+      syncContext.execute(new Runnable() {
+        @Override
+        public void run() {
+          pendingCalls = null;
+        }
+      });
     }
 
     private void scheduleExponentialBackOffInSyncContext() {
