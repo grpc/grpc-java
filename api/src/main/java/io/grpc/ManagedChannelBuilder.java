@@ -124,12 +124,6 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
     throw new UnsupportedOperationException();
   }
 
-  @Deprecated
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6279")
-  public T blockingExecutor(Executor executor) {
-    return offloadExecutor(executor);
-  }
-
   /**
    * Adds interceptors that will be called before the channel performs its real work. This is
    * functionally equivalent to using {@link ClientInterceptors#intercept(Channel, List)}, but while
