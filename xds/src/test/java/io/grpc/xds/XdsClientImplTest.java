@@ -38,6 +38,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
@@ -1865,8 +1866,7 @@ public class XdsClientImplTest {
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
     assertThat(timeoutTask.isCancelled()).isTrue();
 
-    // TODO(chengyuanzhang): migrate to verifyNoInteractions.
-    verifyNoMoreInteractions(watcher3, watcher4);
+    verifyNoInteractions(watcher3, watcher4);
   }
 
   @Test
@@ -2133,8 +2133,7 @@ public class XdsClientImplTest {
                     new LbEndpoint("192.168.0.1", 8080,
                         2, true)), 1, 0));
 
-    // TODO(chengyuanzhang): migrate to verifyNoInteractions.
-    verifyNoMoreInteractions(watcher3);
+    verifyNoInteractions(watcher3);
 
     // Management server sends back another EDS response contains ClusterLoadAssignment for the
     // other requested cluster.
@@ -2518,8 +2517,7 @@ public class XdsClientImplTest {
     assertThat(fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
     assertThat(timeoutTask.isCancelled()).isTrue();
 
-    // TODO(chengyuanzhang): migrate to verifyNoInteractions.
-    verifyNoMoreInteractions(watcher3, watcher4);
+    verifyNoInteractions(watcher3, watcher4);
   }
 
   @Test
