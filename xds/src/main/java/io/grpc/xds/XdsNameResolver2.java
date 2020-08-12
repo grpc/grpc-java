@@ -19,6 +19,7 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.gson.Gson;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.InternalConfigSelector;
@@ -29,7 +30,6 @@ import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.GrpcUtil;
-import io.grpc.internal.JsonParser;
 import io.grpc.internal.ObjectPool;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.EnvoyProtoData.ClusterWeight;
@@ -40,7 +40,6 @@ import io.grpc.xds.XdsClient.ConfigUpdate;
 import io.grpc.xds.XdsClient.ConfigWatcher;
 import io.grpc.xds.XdsClient.XdsClientPoolFactory;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
-import java.io.IOException;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -185,11 +184,15 @@ final class XdsNameResolver2 extends NameResolver {
         }
       }
 
-      String serviceConfigJson =
+      Map<String, ?> rawServiceConfig =
           generateServiceConfigWithMethodConfig(
               args.getMethodDescriptor().getFullMethodName(),
               selectedRoute.getRouteAction().getTimeoutNano());
-      ConfigOrError parsedServiceConfig = parseServiceConfig(serviceConfigJson);
+      if (logger.isLoggable(XdsLogLevel.INFO)) {
+        logger.log(XdsLogLevel.INFO,
+            "Generated service config (method config):\n{0}", new Gson().toJson(rawServiceConfig));
+      }
+      ConfigOrError parsedServiceConfig = serviceConfigParser.parseServiceConfig(rawServiceConfig);
       Object config = parsedServiceConfig.getConfig();
       if (config == null) {
         throw new AssertionError(
@@ -233,9 +236,13 @@ final class XdsNameResolver2 extends NameResolver {
   }
 
   private void updateResolutionResult() {
-    String serviceConfigJson = generateServiceConfigWithLoadBalancingConfig(clusterRefs.keySet());
-    logger.log(XdsLogLevel.INFO, "Generated service config:\n{0}", serviceConfigJson);
-    ConfigOrError parsedServiceConfig = parseServiceConfig(serviceConfigJson);
+    Map<String, ?> rawServiceConfig =
+        generateServiceConfigWithLoadBalancingConfig(clusterRefs.keySet());
+    if (logger.isLoggable(XdsLogLevel.INFO)) {
+      logger.log(
+          XdsLogLevel.INFO, "Generated service config:\n{0}", new Gson().toJson(rawServiceConfig));
+    }
+    ConfigOrError parsedServiceConfig = serviceConfigParser.parseServiceConfig(rawServiceConfig);
     Attributes attrs =
         Attributes.newBuilder()
             .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
@@ -315,64 +322,45 @@ final class XdsNameResolver2 extends NameResolver {
     }
   }
 
-  @SuppressWarnings("unchecked")
-  private ConfigOrError parseServiceConfig(String serviceConfigJson) {
-    Map<String, ?> serviceConfig;
-    try {
-      serviceConfig = (Map<String, ?>) JsonParser.parse(serviceConfigJson);
-    } catch (IOException e) {
-      return ConfigOrError.fromError(
-          Status.INTERNAL.withCause(e).withDescription("bug: malformed service config"));
-    }
-    return serviceConfigParser.parseServiceConfig(serviceConfig);
-  }
-
   @VisibleForTesting
-  static String generateServiceConfigWithMethodConfig(
+  static Map<String, ?> generateServiceConfigWithMethodConfig(
       String fullMethodName, long timeoutNano) {
     int index = fullMethodName.lastIndexOf('/');
     String serviceName = fullMethodName.substring(0, index);
     String methodName = fullMethodName.substring(index + 1);
-    StringBuilder sb = new StringBuilder();
-    sb.append("{\n");
-    sb.append("  \"methodConfig\": [{\n");
-    sb.append("    \"name\": [{\n");
-    sb.append("      \"service\": \"" + serviceName + "\",\n");
-    sb.append("      \"method\": \"" + methodName + "\"\n");
-    sb.append("    }],\n");
-    sb.append("    \"timeout\": \"" + timeoutNano / 1_000_000_000.0 + "s\"\n");
-    sb.append("  }]\n");
-    sb.append("}");
-    return sb.toString();
+    String timeout = timeoutNano / 1_000_000_000.0 + "s";
+    Map<String, String> serviceMethod = new HashMap<>();
+    serviceMethod.put("service", serviceName);
+    serviceMethod.put("method", methodName);
+    Map<String, Object> methodConfig = new HashMap<>();
+    methodConfig.put(
+        "name", Collections.singletonList(Collections.unmodifiableMap(serviceMethod)));
+    methodConfig.put("timeout", timeout);
+    return Collections.singletonMap(
+        "methodConfig", Collections.singletonList(Collections.unmodifiableMap(methodConfig)));
   }
 
   @VisibleForTesting
-  static String generateServiceConfigWithLoadBalancingConfig(Collection<String> clusters) {
+  static Map<String, ?> generateServiceConfigWithLoadBalancingConfig(Collection<String> clusters) {
     StringBuilder sb = new StringBuilder();
     sb.append("{\n");
     sb.append("  \"loadBalancingConfig\": [{\n");
     sb.append("    \"cluster_manager_experimental\": {\n");
     sb.append("      \"childPolicy\": {\n");
     int i = 0;
+    Map<String, Object> childPolicy = new HashMap<>();
     for (String cluster : clusters) {
-      sb.append("        \"" + cluster + "\": {\n");
-      sb.append("          \"lbPolicy\": [{\n");
-      sb.append("            \"cds_experimental\": {\n");
-      sb.append("              \"cluster\": \"" + cluster + "\"\n");
-      sb.append("            }\n");
-      sb.append("          }]\n");
-      sb.append("        }");
-      if (i < clusters.size() - 1) {
-        sb.append(",");
-      }
-      sb.append("\n");
-      i++;
+      List<Map<String, Map<String, String>>> lbPolicy =
+          Collections.singletonList(
+              Collections.singletonMap(
+                  "cds_experimental", Collections.singletonMap("cluster", cluster)));
+      childPolicy.put(cluster, Collections.singletonMap("lbPolicy", lbPolicy));
     }
-    sb.append("      }\n");
-    sb.append("    }\n");
-    sb.append("  }]\n");
-    sb.append("}");
-    return sb.toString();
+    return Collections.singletonMap("loadBalancingConfig",
+        Collections.singletonList(
+            Collections.singletonMap(
+                "cluster_manager_experimental", Collections.singletonMap(
+                    "childPolicy", Collections.unmodifiableMap(childPolicy)))));
   }
 
   @VisibleForTesting

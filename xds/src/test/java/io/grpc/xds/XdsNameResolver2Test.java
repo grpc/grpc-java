@@ -40,6 +40,7 @@ import io.grpc.NameResolver.ServiceConfigParser;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
+import io.grpc.internal.JsonParser;
 import io.grpc.internal.JsonUtil;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.PickSubchannelArgsImpl;
@@ -370,10 +371,11 @@ public class XdsNameResolver2Test {
     }
   }
 
+  @SuppressWarnings("unchecked")
   @Test
-  public void generateServiceConfig_forLoadBalancingConfig() {
+  public void generateServiceConfig_forLoadBalancingConfig() throws IOException {
     List<String> clusters = Arrays.asList("cluster-foo", "cluster-bar", "cluster-baz");
-    String expectedServiceConfig = "{\n"
+    String expectedServiceConfigJson = "{\n"
         + "  \"loadBalancingConfig\": [{\n"
         + "    \"cluster_manager_experimental\": {\n"
         + "      \"childPolicy\": {\n"
@@ -402,16 +404,19 @@ public class XdsNameResolver2Test {
         + "    }\n"
         + "  }]\n"
         + "}";
+    Map<String, ?> expectedServiceConfig =
+        (Map<String, ?>) JsonParser.parse(expectedServiceConfigJson);
     assertThat(XdsNameResolver2.generateServiceConfigWithLoadBalancingConfig(clusters))
         .isEqualTo(expectedServiceConfig);
   }
 
+  @SuppressWarnings("unchecked")
   @Test
-  public void generateServiceConfig_forMethodConfig() {
+  public void generateServiceConfig_forMethodConfig() throws IOException {
     String serviceName = "HelloWord";
     String methodName = "greet";
     long timeoutNano = TimeUnit.SECONDS.toNanos(1L) + 1L; // 1.0000000001s
-    String expectedServiceConfig = "{\n"
+    String expectedServiceConfigJson = "{\n"
         + "  \"methodConfig\": [{\n"
         + "    \"name\": [{\n"
         + "      \"service\": \"HelloWord\",\n"
@@ -420,6 +425,8 @@ public class XdsNameResolver2Test {
         + "    \"timeout\": \"1.000000001s\"\n"
         + "  }]\n"
         + "}";
+    Map<String, ?> expectedServiceConfig =
+        (Map<String, ?>) JsonParser.parse(expectedServiceConfigJson);
     assertThat(
         XdsNameResolver2.generateServiceConfigWithMethodConfig(
             serviceName + "/" + methodName, timeoutNano))
