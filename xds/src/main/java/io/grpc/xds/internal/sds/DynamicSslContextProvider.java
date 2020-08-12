@@ -30,7 +30,6 @@ import java.security.cert.CertStoreException;
 import java.security.cert.CertificateException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.Executor;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -40,7 +39,7 @@ public abstract class DynamicSslContextProvider extends SslContextProvider {
 
   private static final Logger logger = Logger.getLogger(DynamicSslContextProvider.class.getName());
 
-  protected final List<CallbackPair> pendingCallbacks = new ArrayList<>();
+  protected final List<Callback> pendingCallbacks = new ArrayList<>();
   @Nullable protected final CertificateValidationContext staticCertificateValidationContext;
   @Nullable protected SslContext sslContext;
 
@@ -88,7 +87,7 @@ public abstract class DynamicSslContextProvider extends SslContextProvider {
   }
 
   protected final void callPerformCallback(
-      Callback callback, Executor executor, final SslContext sslContextCopy) {
+          Callback callback, final SslContext sslContextCopy) {
     performCallback(
         new SslContextGetter() {
           @Override
@@ -96,29 +95,28 @@ public abstract class DynamicSslContextProvider extends SslContextProvider {
             return sslContextCopy;
           }
         },
-        callback,
-        executor);
+        callback
+    );
   }
 
   @Override
-  public final void addCallback(Callback callback, Executor executor) {
+  public final void addCallback(Callback callback) {
     checkNotNull(callback, "callback");
-    checkNotNull(executor, "executor");
     // if there is a computed sslContext just send it
     SslContext sslContextCopy = sslContext;
     if (sslContextCopy != null) {
-      callPerformCallback(callback, executor, sslContextCopy);
+      callPerformCallback(callback, sslContextCopy);
     } else {
       synchronized (pendingCallbacks) {
-        pendingCallbacks.add(new CallbackPair(callback, executor));
+        pendingCallbacks.add(callback);
       }
     }
   }
 
   protected final void makePendingCallbacks(SslContext sslContextCopy) {
     synchronized (pendingCallbacks) {
-      for (CallbackPair pair : pendingCallbacks) {
-        callPerformCallback(pair.callback, pair.executor, sslContextCopy);
+      for (Callback callback : pendingCallbacks) {
+        callPerformCallback(callback, sslContextCopy);
       }
       pendingCallbacks.clear();
     }
@@ -127,20 +125,10 @@ public abstract class DynamicSslContextProvider extends SslContextProvider {
   /** Propagates error to all the callback receivers. */
   public final void onError(Status error) {
     synchronized (pendingCallbacks) {
-      for (CallbackPair callbackPair : pendingCallbacks) {
-        callbackPair.callback.onException(error.asException());
+      for (Callback callback : pendingCallbacks) {
+        callback.onException(error.asException());
       }
       pendingCallbacks.clear();
-    }
-  }
-
-  protected static final class CallbackPair {
-    private final Callback callback;
-    private final Executor executor;
-
-    private CallbackPair(Callback callback, Executor executor) {
-      this.callback = callback;
-      this.executor = executor;
     }
   }
 }

@@ -197,7 +197,7 @@ public final class SdsProtocolNegotiators {
               .findOrCreateClientSslContextProvider(upstreamTlsContext);
 
       sslContextProvider.addCallback(
-          new SslContextProvider.Callback() {
+          new SslContextProvider.Callback(ctx.executor()) {
 
             @Override
             public void updateSecret(SslContext sslContext) {
@@ -220,8 +220,8 @@ public final class SdsProtocolNegotiators {
             public void onException(Throwable throwable) {
               ctx.fireExceptionCaught(throwable);
             }
-          },
-          ctx.executor());
+          }
+      );
     }
 
     @Override
@@ -370,7 +370,7 @@ public final class SdsProtocolNegotiators {
       }
       final SslContextProvider sslContextProvider = sslContextProviderTemp;
       sslContextProvider.addCallback(
-          new SslContextProvider.Callback() {
+          new SslContextProvider.Callback(ctx.executor()) {
 
             @Override
             public void updateSecret(SslContext sslContext) {
@@ -389,8 +389,8 @@ public final class SdsProtocolNegotiators {
             public void onException(Throwable throwable) {
               ctx.fireExceptionCaught(throwable);
             }
-          },
-          ctx.executor());
+          }
+      );
     }
   }
 }

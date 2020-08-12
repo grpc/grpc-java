@@ -47,12 +47,18 @@ public abstract class SslContextProvider implements Closeable {
 
   protected final BaseTlsContext tlsContext;
 
-  public interface Callback {
+  abstract static class Callback {
+    private final Executor executor;
+
+    protected Callback(Executor executor) {
+      this.executor = executor;
+    }
+
     /** Informs callee of new/updated SslContext. */
-    void updateSecret(SslContext sslContext);
+    abstract void updateSecret(SslContext sslContext);
 
     /** Informs callee of an exception that was generated. */
-    void onException(Throwable throwable);
+    abstract void onException(Throwable throwable);
   }
 
   protected SslContextProvider(BaseTlsContext tlsContext) {
@@ -100,14 +106,14 @@ public abstract class SslContextProvider implements Closeable {
    * Registers a callback on the given executor. The callback will run when SslContext becomes
    * available or immediately if the result is already available.
    */
-  public abstract void addCallback(Callback callback, Executor executor);
+  public abstract void addCallback(Callback callback);
 
   protected final void performCallback(
-      final SslContextGetter sslContextGetter, final Callback callback, Executor executor) {
+          final SslContextGetter sslContextGetter, final Callback callback) {
     checkNotNull(sslContextGetter, "sslContextGetter");
     checkNotNull(callback, "callback");
-    checkNotNull(executor, "executor");
-    executor.execute(
+    Executor localexecutor = callback.executor;
+    localexecutor.execute(
         new Runnable() {
           @Override
           public void run() {

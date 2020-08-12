@@ -529,15 +529,19 @@ public class CommonTlsContextTestsUtil {
 
   /** Helper method to get the value thru callback with a user passed executor. */
   public static TestCallback getValueThruCallback(SslContextProvider provider, Executor executor) {
-    TestCallback testCallback = new TestCallback();
-    provider.addCallback(testCallback, executor);
+    TestCallback testCallback = new TestCallback(executor);
+    provider.addCallback(testCallback);
     return testCallback;
   }
 
-  public static class TestCallback implements SslContextProvider.Callback {
+  public static class TestCallback extends SslContextProvider.Callback {
 
     public SslContext updatedSslContext;
     Throwable updatedThrowable;
+
+    TestCallback(Executor executor) {
+      super(executor);
+    }
 
     @Override
     public void updateSecret(SslContext sslContext) {
