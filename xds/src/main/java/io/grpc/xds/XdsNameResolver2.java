@@ -347,7 +347,6 @@ final class XdsNameResolver2 extends NameResolver {
     sb.append("  \"loadBalancingConfig\": [{\n");
     sb.append("    \"cluster_manager_experimental\": {\n");
     sb.append("      \"childPolicy\": {\n");
-    int i = 0;
     Map<String, Object> childPolicy = new HashMap<>();
     for (String cluster : clusters) {
       List<Map<String, Map<String, String>>> lbPolicy =
