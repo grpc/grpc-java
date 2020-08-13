@@ -225,7 +225,7 @@ Now we need to update gh-pages with the new Javadoc:
 
 ```bash
 git checkout gh-pages
-git pull --ff-only
+git pull --ff-only upstream gh-pages
 rm -r javadoc/
 wget -O grpc-all-javadoc.jar "http://search.maven.org/remotecontent?filepath=io/grpc/grpc-all/$MAJOR.$MINOR.$PATCH/grpc-all-$MAJOR.$MINOR.$PATCH-javadoc.jar"
 unzip -d javadoc grpc-all-javadoc.jar
