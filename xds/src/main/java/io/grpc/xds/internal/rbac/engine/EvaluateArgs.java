@@ -21,13 +21,13 @@ import io.grpc.Grpc;
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
 
-/** The EvaluateArgs class holds evaluate arguments used in CEL Evaluation Engine. */
+/** The EvaluateArgs class holds evaluate arguments used in CEL-based Authorization Engine. */
 public class EvaluateArgs {
   private Metadata headers;
   private ServerCall<?, ?> call;
 
   /**
-   * Creates a new evaluate argument using the input {@code headers} for resolving headers
+   * Creates a new EvaluateArgs using the input {@code headers} for resolving headers
    * and {@code call} for resolving gRPC call.
    */
   public EvaluateArgs(Metadata headers, ServerCall<?, ?> call) {
