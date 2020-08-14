@@ -117,7 +117,8 @@ final class XdsNameResolver2 extends NameResolver {
     try {
       bootstrapInfo = bootstrapper.readBootstrap();
     } catch (Exception e) {
-      listener.onError(Status.UNAVAILABLE.withDescription("Failed to bootstrap").withCause(e));
+      listener.onError(
+          Status.UNAVAILABLE.withDescription("Failed to load xDS bootstrap").withCause(e));
       return;
     }
     this.listener = checkNotNull(listener, "listener");

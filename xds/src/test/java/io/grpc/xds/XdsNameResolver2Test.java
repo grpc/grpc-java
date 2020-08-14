@@ -135,7 +135,7 @@ public class XdsNameResolver2Test {
     verify(mockListener).onError(errorCaptor.capture());
     Status error = errorCaptor.getValue();
     assertThat(error.getCode()).isEqualTo(Code.UNAVAILABLE);
-    assertThat(error.getDescription()).isEqualTo("Failed to bootstrap");
+    assertThat(error.getDescription()).isEqualTo("Failed to load xDS bootstrap");
     assertThat(error.getCause()).hasMessageThat().isEqualTo("Fail to read bootstrap file");
   }
 
