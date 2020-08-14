@@ -19,6 +19,7 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.Sets;
 import com.google.gson.Gson;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
@@ -257,6 +258,8 @@ final class XdsNameResolver2 extends NameResolver {
   // https://github.com/google/error-prone/issues/1767
   @SuppressWarnings("ModifyCollectionInEnhancedForLoop")
   private class ConfigWatcherImpl implements ConfigWatcher {
+    private Set<String> existingClusters;
+
     @Override
     public void onConfigChanged(ConfigUpdate update) {
       Set<String> clusters = new HashSet<>();
@@ -270,27 +273,31 @@ final class XdsNameResolver2 extends NameResolver {
           }
         }
       }
-      boolean receivedNewCluster = false;
-      for (String newCluster : clusters) {
-        if (clusterRefs.putIfAbsent(newCluster, new AtomicInteger(1)) == null) {
-          receivedNewCluster = true;
+      Set<String> addedClusters =
+          existingClusters == null ? clusters : Sets.difference(clusters, existingClusters);
+      Set<String> deletedClusters =
+          existingClusters == null
+              ? Collections.<String>emptySet() : Sets.difference(existingClusters, clusters);
+      existingClusters = clusters;
+      boolean shouldUpdateResult = false;
+      for (String cluster : addedClusters) {
+        if (clusterRefs.putIfAbsent(cluster, new AtomicInteger(1)) == null) {
+          shouldUpdateResult = true;
         }
       }
       // Update service config to include newly added clusters.
-      if (receivedNewCluster) {
+      if (shouldUpdateResult) {
         updateResolutionResult();
       }
       // Make newly added clusters selectable by config selector and deleted clusters no longer
       // selectable.
       routes = update.getRoutes();
-      boolean shouldUpdateResult = false;
-      for (Map.Entry<String, AtomicInteger> entry : clusterRefs.entrySet()) {
-        if (!clusters.contains(entry.getKey())) {
-          int count = entry.getValue().decrementAndGet();
-          if (count == 0) {
-            clusterRefs.remove(entry.getKey());
-            shouldUpdateResult = true;
-          }
+      shouldUpdateResult = false;
+      for (String cluster : deletedClusters) {
+        int count = clusterRefs.get(cluster).decrementAndGet();
+        if (count == 0) {
+          clusterRefs.remove(cluster);
+          shouldUpdateResult = true;
         }
       }
       if (shouldUpdateResult) {

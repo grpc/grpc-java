@@ -261,6 +261,41 @@ public class XdsNameResolver2Test {
   }
 
   @SuppressWarnings("unchecked")
+  @Test
+  public void resolve_raceBetweenCallAndRepeatedResourceUpdate() {
+    InternalConfigSelector configSelector = resolveToClusters();
+    assertCallSelectResult(call1, configSelector, cluster1, 15.0);
+
+    reset(mockListener);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    xdsClient.deliverRoutes(
+        Arrays.asList(
+            new Route(
+                new RouteMatch(null, call1.getFullMethodNameForPath()),
+                new RouteAction(TimeUnit.SECONDS.toNanos(20L), "another-cluster", null)),
+            new Route(
+                new RouteMatch(null, call2.getFullMethodNameForPath()),
+                new RouteAction(TimeUnit.SECONDS.toNanos(15L), cluster2, null))));
+
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    ResolutionResult result = resolutionResultCaptor.getValue();
+    assertServiceConfigForLoadBalancingConfig(
+        Arrays.asList(cluster1, cluster2, "another-cluster"),
+        (Map<String, ?>) result.getServiceConfig().getConfig());
+
+    xdsClient.deliverRoutes(
+        Arrays.asList(
+            new Route(
+                new RouteMatch(null, call1.getFullMethodNameForPath()),
+                new RouteAction(TimeUnit.SECONDS.toNanos(15L), "another-cluster", null)),
+            new Route(
+                new RouteMatch(null, call2.getFullMethodNameForPath()),
+                new RouteAction(TimeUnit.SECONDS.toNanos(15L), cluster2, null))));
+    verifyNoMoreInteractions(mockListener);  // no cluster added/deleted
+    assertCallSelectResult(call1, configSelector, "another-cluster", 15.0);
+  }
+
+  @SuppressWarnings("unchecked")
   private InternalConfigSelector resolveToClusters() {
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
