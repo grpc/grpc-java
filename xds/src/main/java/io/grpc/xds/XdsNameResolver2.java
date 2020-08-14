@@ -151,7 +151,8 @@ final class XdsNameResolver2 extends NameResolver {
           }
         }
         if (selectedRoute == null) {
-          return Result.forError(Status.UNAVAILABLE.withDescription("Failed to route the RPC"));
+          return Result.forError(
+              Status.UNAVAILABLE.withDescription("Could not find xDS route matching RPC"));
         }
         RouteAction action = selectedRoute.getRouteAction();
         if (action.getCluster() != null) {
@@ -170,10 +171,6 @@ final class XdsNameResolver2 extends NameResolver {
               break;
             }
           }
-        }
-        if (cluster == null) {  // should not happen if routing rules are configured correctly
-          return Result.forError(
-              Status.UNAVAILABLE.withDescription("Failed to route the RPC with selected action"));
         }
       } while (!retainCluster(cluster));
       final String finalCluster = cluster;

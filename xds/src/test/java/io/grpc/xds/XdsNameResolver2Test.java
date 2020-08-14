@@ -179,7 +179,7 @@ public class XdsNameResolver2Test {
     Status status = selectResult.getStatus();
     assertThat(status.isOk()).isFalse();
     assertThat(status.getCode()).isEqualTo(Code.UNAVAILABLE);
-    assertThat(status.getDescription()).isEqualTo("Failed to route the RPC");
+    assertThat(status.getDescription()).isEqualTo("Could not find xDS route matching RPC");
     verifyNoMoreInteractions(mockListener);
   }
 
