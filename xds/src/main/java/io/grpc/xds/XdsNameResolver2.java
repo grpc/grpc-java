@@ -280,10 +280,9 @@ final class XdsNameResolver2 extends NameResolver {
       if (receivedNewCluster) {
         updateResolutionResult();
       }
-      // Make newly added clusters selectable by config selector.
+      // Make newly added clusters selectable by config selector and deleted clusters no longer
+      // selectable.
       routes = update.getRoutes();
-      // Drops reference for deleted clusters, update service config to remove deleted clusters
-      // not in use.
       boolean shouldUpdateResult = false;
       for (Map.Entry<String, AtomicInteger> entry : clusterRefs.entrySet()) {
         if (!clusters.contains(entry.getKey())) {
