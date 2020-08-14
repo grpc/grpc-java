@@ -206,13 +206,9 @@ public class XdsNameResolver2Test {
     assertServiceConfigForLoadBalancingConfig(
         Arrays.asList(cluster1, cluster2, "another-cluster"),
         (Map<String, ?>) result.getServiceConfig().getConfig());
-    InternalConfigSelector updatedConfigSelector =
-        result.getAttributes().get(InternalConfigSelector.KEY);
-
-    // Call created with old config selector.
+    assertThat(result.getAttributes().get(InternalConfigSelector.KEY))
+        .isSameInstanceAs(configSelector);
     assertCallSelectResult(call1, configSelector, "another-cluster", 20.0);
-    // Call created with new config selector.
-    assertCallSelectResult(call1, updatedConfigSelector, "another-cluster", 20.0);
 
     selectResult.getCommittedCallback().run();  // completes previous call
     verify(mockListener, times(2)).onResult(resolutionResultCaptor.capture());
@@ -257,12 +253,9 @@ public class XdsNameResolver2Test {
     assertServiceConfigForLoadBalancingConfig(
         Arrays.asList(cluster2, "another-cluster"),
         (Map<String, ?>) result.getServiceConfig().getConfig());
-    InternalConfigSelector updatedConfigSelector =
-        result.getAttributes().get(InternalConfigSelector.KEY);
-    // Call created with old config selector.
+    assertThat(result.getAttributes().get(InternalConfigSelector.KEY))
+        .isSameInstanceAs(configSelector);
     assertCallSelectResult(call1, configSelector, "another-cluster", 20.0);
-    // Call created with old config selector.
-    assertCallSelectResult(call1, updatedConfigSelector, "another-cluster", 20.0);
 
     verifyNoMoreInteractions(mockListener);
   }

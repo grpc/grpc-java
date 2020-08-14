@@ -73,6 +73,7 @@ final class XdsNameResolver2 extends NameResolver {
   private final XdsClientPoolFactory xdsClientPoolFactory;
   private final ThreadSafeRandom random;
   private final ConcurrentMap<String, AtomicInteger> clusterRefs = new ConcurrentHashMap<>();
+  private final ConfigSelector configSelector = new ConfigSelector();
 
   private volatile List<Route> routes = Collections.emptyList();
   private Listener2 listener;
@@ -243,7 +244,7 @@ final class XdsNameResolver2 extends NameResolver {
     Attributes attrs =
         Attributes.newBuilder()
             .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
-            .set(InternalConfigSelector.KEY, new ConfigSelector())
+            .set(InternalConfigSelector.KEY, configSelector)
             .build();
     ResolutionResult result =
         ResolutionResult.newBuilder()
