@@ -18,6 +18,7 @@ package io.grpc.xds.internal.sds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.common.collect.ImmutableList;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.grpc.Status;
@@ -111,21 +112,23 @@ public abstract class DynamicSslContextProvider extends SslContextProvider {
   }
 
   protected final void makePendingCallbacks(SslContext sslContextCopy) {
-    synchronized (pendingCallbacks) {
-      for (Callback callback : pendingCallbacks) {
-        callPerformCallback(callback, sslContextCopy);
-      }
-      pendingCallbacks.clear();
+    for (Callback callback : getPendingCallbacksCopy()) {
+      callPerformCallback(callback, sslContextCopy);
     }
   }
 
   /** Propagates error to all the callback receivers. */
   public final void onError(Status error) {
+    for (Callback callback : getPendingCallbacksCopy()) {
+      callback.onException(error.asException());
+    }
+  }
+
+  private List<Callback> getPendingCallbacksCopy() {
     synchronized (pendingCallbacks) {
-      for (Callback callback : pendingCallbacks) {
-        callback.onException(error.asException());
-      }
+      List<Callback> copy = ImmutableList.copyOf(pendingCallbacks);
       pendingCallbacks.clear();
+      return copy;
     }
   }
 }
