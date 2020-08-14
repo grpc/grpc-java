@@ -220,13 +220,13 @@ final class XdsNameResolver2 extends NameResolver {
       return true;
     }
 
-    private void releaseCluster(String cluster) {
+    private void releaseCluster(final String cluster) {
       int count = clusterRefs.get(cluster).decrementAndGet();
       if (count == 0) {
-        clusterRefs.remove(cluster);
         syncContext.execute(new Runnable() {
           @Override
           public void run() {
+            clusterRefs.remove(cluster);
             updateResolutionResult();
           }
         });
