@@ -82,6 +82,7 @@ envoy/config/core/v3/socket_option.proto
 envoy/config/core/v3/substitution_format_string.proto
 envoy/config/endpoint/v3/endpoint.proto
 envoy/config/endpoint/v3/endpoint_components.proto
+envoy/config/endpoint/v3/load_report.proto
 envoy/config/filter/accesslog/v2/accesslog.proto
 envoy/config/filter/fault/v2/fault.proto
 envoy/config/filter/http/fault/v2/fault.proto
@@ -121,6 +122,7 @@ envoy/service/discovery/v2/sds.proto
 envoy/service/discovery/v3/ads.proto
 envoy/service/discovery/v3/discovery.proto
 envoy/service/load_stats/v2/lrs.proto
+envoy/service/load_stats/v3/lrs.proto
 envoy/type/http.proto
 envoy/type/matcher/regex.proto
 envoy/type/matcher/string.proto
