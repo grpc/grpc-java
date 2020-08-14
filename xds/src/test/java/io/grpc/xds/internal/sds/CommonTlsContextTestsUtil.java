@@ -468,38 +468,69 @@ public class CommonTlsContextTestsUtil {
   }
 
   private static CommonTlsContext buildCommonTlsContextForCertProviderInstance(
-      String certInstanceName, String certName, String rootInstanceName, String rootCertName,
-      Iterable<String> alpnProtocols) {
+      String certInstanceName,
+      String certName,
+      String rootInstanceName,
+      String rootCertName,
+      Iterable<String> alpnProtocols,
+      CertificateValidationContext staticCertValidationContext) {
     CommonTlsContext.Builder builder = CommonTlsContext.newBuilder();
     if (certInstanceName != null) {
-      builder = builder.setTlsCertificateCertificateProviderInstance(
-          CommonTlsContext.CertificateProviderInstance.newBuilder()
-              .setInstanceName(certInstanceName)
-              .setCertificateName(certName));
+      builder =
+          builder.setTlsCertificateCertificateProviderInstance(
+              CommonTlsContext.CertificateProviderInstance.newBuilder()
+                  .setInstanceName(certInstanceName)
+                  .setCertificateName(certName));
     }
-    if (rootInstanceName != null) {
-      builder = builder.setValidationContextCertificateProviderInstance(
-          CommonTlsContext.CertificateProviderInstance.newBuilder()
-              .setInstanceName(rootInstanceName)
-              .setCertificateName(rootCertName));
-    }
+    builder =
+        addCertificateValidationContext(
+            builder, rootInstanceName, rootCertName, staticCertValidationContext);
     if (alpnProtocols != null) {
       builder.addAllAlpnProtocols(alpnProtocols);
     }
     return builder.build();
   }
 
-  /**
-   * Helper method to build UpstreamTlsContext for CertProvider tests.
-   */
+  private static CommonTlsContext.Builder addCertificateValidationContext(
+      CommonTlsContext.Builder builder,
+      String rootInstanceName,
+      String rootCertName,
+      CertificateValidationContext staticCertValidationContext) {
+    if (rootInstanceName != null) {
+      CommonTlsContext.CertificateProviderInstance.Builder providerInstanceBuilder =
+          CommonTlsContext.CertificateProviderInstance.newBuilder()
+              .setInstanceName(rootInstanceName)
+              .setCertificateName(rootCertName);
+      if (staticCertValidationContext != null) {
+        CombinedCertificateValidationContext combined =
+            CombinedCertificateValidationContext.newBuilder()
+                .setDefaultValidationContext(staticCertValidationContext)
+                .setValidationContextCertificateProviderInstance(providerInstanceBuilder)
+                .build();
+        return builder.setCombinedValidationContext(combined);
+      }
+      builder = builder.setValidationContextCertificateProviderInstance(providerInstanceBuilder);
+    }
+    return builder;
+  }
+
+  /** Helper method to build UpstreamTlsContext for CertProvider tests. */
   public static EnvoyServerProtoData.UpstreamTlsContext
       buildUpstreamTlsContextForCertProviderInstance(
-      @Nullable String certInstanceName, @Nullable String certName,
-      @Nullable String rootInstanceName, @Nullable String rootCertName,
-      Iterable<String> alpnProtocols) {
+          @Nullable String certInstanceName,
+          @Nullable String certName,
+          @Nullable String rootInstanceName,
+          @Nullable String rootCertName,
+          Iterable<String> alpnProtocols,
+          CertificateValidationContext staticCertValidationContext) {
     return buildUpstreamTlsContext(
-        buildCommonTlsContextForCertProviderInstance(certInstanceName, certName,
-            rootInstanceName, rootCertName, alpnProtocols));
+        buildCommonTlsContextForCertProviderInstance(
+            certInstanceName,
+            certName,
+            rootInstanceName,
+            rootCertName,
+            alpnProtocols,
+            staticCertValidationContext));
   }
 
   /** Perform some simple checks on sslContext. */
@@ -537,9 +568,9 @@ public class CommonTlsContextTestsUtil {
   public static class TestCallback extends SslContextProvider.Callback {
 
     public SslContext updatedSslContext;
-    Throwable updatedThrowable;
+    public Throwable updatedThrowable;
 
-    TestCallback(Executor executor) {
+    public TestCallback(Executor executor) {
       super(executor);
     }
 

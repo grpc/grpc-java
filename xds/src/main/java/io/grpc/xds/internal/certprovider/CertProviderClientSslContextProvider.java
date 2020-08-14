@@ -18,6 +18,7 @@ package io.grpc.xds.internal.certprovider;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.common.annotations.VisibleForTesting;
 import io.envoyproxy.envoy.config.core.v3.Node;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
@@ -74,7 +75,7 @@ final class CertProviderClientSslContextProvider extends CertProviderSslContextP
         new Factory(CertificateProviderStore.getInstance());
     private final CertificateProviderStore certificateProviderStore;
 
-    Factory(CertificateProviderStore certificateProviderStore) {
+    @VisibleForTesting Factory(CertificateProviderStore certificateProviderStore) {
       this.certificateProviderStore = certificateProviderStore;
     }
 

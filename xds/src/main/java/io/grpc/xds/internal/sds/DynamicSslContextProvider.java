@@ -30,14 +30,10 @@ import java.security.cert.CertStoreException;
 import java.security.cert.CertificateException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /** Base class for dynamic {@link SslContextProvider}s. */
 public abstract class DynamicSslContextProvider extends SslContextProvider {
-
-  private static final Logger logger = Logger.getLogger(DynamicSslContextProvider.class.getName());
 
   protected final List<Callback> pendingCallbacks = new ArrayList<>();
   @Nullable protected final CertificateValidationContext staticCertificateValidationContext;
@@ -81,8 +77,9 @@ public abstract class DynamicSslContextProvider extends SslContextProvider {
       SslContext sslContextCopy = sslContextBuilder.build();
       sslContext = sslContextCopy;
       makePendingCallbacks(sslContextCopy);
-    } catch (CertificateException | IOException | CertStoreException e) {
-      logger.log(Level.SEVERE, "exception in updateSslContext", e);
+    } catch (Exception e) {
+      onError(Status.fromThrowable(e));
+      throw new RuntimeException(e);
     }
   }
 
