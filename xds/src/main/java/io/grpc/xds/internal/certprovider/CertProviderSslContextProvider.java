@@ -117,8 +117,6 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
         updateSslContext();
         clearKeysAndCerts();
       }
-    } else {
-      throw new IllegalStateException("Config is neither mTLS nor TLS!");
     }
   }
 

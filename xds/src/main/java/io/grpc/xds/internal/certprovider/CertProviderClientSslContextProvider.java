@@ -47,7 +47,7 @@ final class CertProviderClientSslContextProvider extends CertProviderSslContextP
         node,
         certProviders,
         certInstance,
-        rootCertInstance,
+        checkNotNull(rootCertInstance, "Client SSL requires rootCertInstance"),
         staticCertValidationContext,
         upstreamTlsContext,
         certificateProviderStore);
