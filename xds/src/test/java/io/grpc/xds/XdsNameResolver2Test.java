@@ -232,9 +232,7 @@ public class XdsNameResolver2Test {
     assertThat(result.getStatus().isOk()).isTrue();
     assertThat(result.getCallOptions().getOption(XdsNameResolver2.CLUSTER_SELECTION_KEY))
         .isEqualTo(expectedCluster);
-    assertServiceConfigForMethodConfig(
-        call.service, call.method, expectedTimeoutSec,
-        (Map<String, ?>) result.getConfig());
+    assertServiceConfigForMethodConfig(expectedTimeoutSec, (Map<String, ?>) result.getConfig());
     return result;
   }
 
@@ -316,32 +314,27 @@ public class XdsNameResolver2Test {
     assertThat(selectResult.getStatus().isOk()).isTrue();
     assertThat(selectResult.getCallOptions().getOption(XdsNameResolver2.CLUSTER_SELECTION_KEY))
         .isEqualTo(cluster2);
-    assertServiceConfigForMethodConfig(
-        call1.service, call1.method, 20.0,
-        (Map<String, ?>) selectResult.getConfig());
+    assertServiceConfigForMethodConfig(20.0, (Map<String, ?>) selectResult.getConfig());
 
     selectResult = configSelector.selectConfig(
         new PickSubchannelArgsImpl(call1.methodDescriptor, new Metadata(), CallOptions.DEFAULT));
     assertThat(selectResult.getStatus().isOk()).isTrue();
     assertThat(selectResult.getCallOptions().getOption(XdsNameResolver2.CLUSTER_SELECTION_KEY))
         .isEqualTo(cluster1);
-    assertServiceConfigForMethodConfig(
-        call1.service, call1.method, 20.0,
-        (Map<String, ?>) selectResult.getConfig());
+    assertServiceConfigForMethodConfig(20.0, (Map<String, ?>) selectResult.getConfig());
   }
 
   /**
-   * Verifies teh raw service config contains a single method config for the specified
-   * service/method with the specified timeout.
+   * Verifies the raw service config contains a single method config for method with the
+   * specified timeout.
    */
   private static void assertServiceConfigForMethodConfig(
-      String service, String method, double timeoutSec, Map<String, ?> actualServiceConfig) {
+      double timeoutSec, Map<String, ?> actualServiceConfig) {
     List<Map<String, ?>> rawMethodConfigs =
         JsonUtil.getListOfObjects(actualServiceConfig, "methodConfig");
     Map<String, ?> methodConfig = Iterables.getOnlyElement(rawMethodConfigs);
     List<Map<String, ?>> methods = JsonUtil.getListOfObjects(methodConfig, "name");
-    assertThat(Iterables.getOnlyElement(methods))
-        .containsExactly("service", service, "method", method);
+    assertThat(Iterables.getOnlyElement(methods)).isEmpty();
     assertThat(JsonUtil.getString(methodConfig, "timeout")).isEqualTo(timeoutSec + "s");
   }
 
@@ -412,24 +405,17 @@ public class XdsNameResolver2Test {
 
   @SuppressWarnings("unchecked")
   @Test
-  public void generateServiceConfig_forMethodConfig() throws IOException {
-    String serviceName = "HelloWord";
-    String methodName = "greet";
+  public void generateServiceConfig_forMethodTimeoutConfig() throws IOException {
     long timeoutNano = TimeUnit.SECONDS.toNanos(1L) + 1L; // 1.0000000001s
     String expectedServiceConfigJson = "{\n"
         + "  \"methodConfig\": [{\n"
-        + "    \"name\": [{\n"
-        + "      \"service\": \"HelloWord\",\n"
-        + "      \"method\": \"greet\"\n"
-        + "    }],\n"
+        + "    \"name\": [ {} ],\n"
         + "    \"timeout\": \"1.000000001s\"\n"
         + "  }]\n"
         + "}";
     Map<String, ?> expectedServiceConfig =
         (Map<String, ?>) JsonParser.parse(expectedServiceConfigJson);
-    assertThat(
-        XdsNameResolver2.generateServiceConfigWithMethodConfig(
-            serviceName + "/" + methodName, timeoutNano))
+    assertThat(XdsNameResolver2.generateServiceConfigWithMethodTimeoutConfig(timeoutNano))
         .isEqualTo(expectedServiceConfig);
   }
 

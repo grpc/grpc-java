@@ -182,8 +182,7 @@ final class XdsNameResolver2 extends NameResolver {
       }
 
       Map<String, ?> rawServiceConfig =
-          generateServiceConfigWithMethodConfig(
-              args.getMethodDescriptor().getFullMethodName(),
+          generateServiceConfigWithMethodTimeoutConfig(
               selectedRoute.getRouteAction().getTimeoutNano());
       if (logger.isLoggable(XdsLogLevel.INFO)) {
         logger.log(XdsLogLevel.INFO,
@@ -320,18 +319,11 @@ final class XdsNameResolver2 extends NameResolver {
   }
 
   @VisibleForTesting
-  static Map<String, ?> generateServiceConfigWithMethodConfig(
-      String fullMethodName, long timeoutNano) {
-    int index = fullMethodName.lastIndexOf('/');
-    String serviceName = fullMethodName.substring(0, index);
-    String methodName = fullMethodName.substring(index + 1);
+  static Map<String, ?> generateServiceConfigWithMethodTimeoutConfig(long timeoutNano) {
     String timeout = timeoutNano / 1_000_000_000.0 + "s";
-    Map<String, String> serviceMethod = new HashMap<>();
-    serviceMethod.put("service", serviceName);
-    serviceMethod.put("method", methodName);
     Map<String, Object> methodConfig = new HashMap<>();
     methodConfig.put(
-        "name", Collections.singletonList(Collections.unmodifiableMap(serviceMethod)));
+        "name", Collections.singletonList(Collections.emptyMap()));
     methodConfig.put("timeout", timeout);
     return Collections.singletonMap(
         "methodConfig", Collections.singletonList(Collections.unmodifiableMap(methodConfig)));
