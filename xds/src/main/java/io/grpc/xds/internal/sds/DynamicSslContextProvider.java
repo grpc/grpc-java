@@ -55,7 +55,7 @@ public abstract class DynamicSslContextProvider extends SslContextProvider {
 
   /** Gets a server or client side SslContextBuilder. */
   protected abstract SslContextBuilder getSslContextBuilder(
-          CertificateValidationContext certificateValidationContext)
+      CertificateValidationContext certificateValidationContext)
       throws CertificateException, IOException, CertStoreException;
 
   // this gets called only when requested secrets are ready...
@@ -75,9 +75,14 @@ public abstract class DynamicSslContextProvider extends SslContextProvider {
                 alpnList);
         sslContextBuilder.applicationProtocolConfig(apn);
       }
-      SslContext sslContextCopy = sslContextBuilder.build();
-      sslContext = sslContextCopy;
-      makePendingCallbacks(sslContextCopy);
+      List<Callback> pendingCallbacksCopy = null;
+      SslContext sslContextCopy = null;
+      synchronized (pendingCallbacks) {
+        sslContext = sslContextBuilder.build();
+        sslContextCopy = sslContext;
+        pendingCallbacksCopy = clonePendingCallbacksAndClear();
+      }
+      makePendingCallbacks(sslContextCopy, pendingCallbacksCopy);
     } catch (Exception e) {
       onError(Status.fromThrowable(e));
       throw new RuntimeException(e);
@@ -101,34 +106,36 @@ public abstract class DynamicSslContextProvider extends SslContextProvider {
   public final void addCallback(Callback callback) {
     checkNotNull(callback, "callback");
     // if there is a computed sslContext just send it
-    SslContext sslContextCopy = sslContext;
-    if (sslContextCopy != null) {
-      callPerformCallback(callback, sslContextCopy);
-    } else {
-      synchronized (pendingCallbacks) {
+    SslContext sslContextCopy = null;
+    synchronized (pendingCallbacks) {
+      if (sslContext != null) {
+        sslContextCopy = sslContext;
+      } else {
         pendingCallbacks.add(callback);
       }
     }
+    if (sslContextCopy != null) {
+      callPerformCallback(callback, sslContextCopy);
+    }
   }
 
-  protected final void makePendingCallbacks(SslContext sslContextCopy) {
-    for (Callback callback : getPendingCallbacksCopy()) {
+  private final void makePendingCallbacks(
+      SslContext sslContextCopy, List<Callback> pendingCallbacksCopy) {
+    for (Callback callback : pendingCallbacksCopy) {
       callPerformCallback(callback, sslContextCopy);
     }
   }
 
   /** Propagates error to all the callback receivers. */
   public final void onError(Status error) {
-    for (Callback callback : getPendingCallbacksCopy()) {
+    for (Callback callback : clonePendingCallbacksAndClear()) {
       callback.onException(error.asException());
     }
   }
 
-  private List<Callback> getPendingCallbacksCopy() {
-    synchronized (pendingCallbacks) {
-      List<Callback> copy = ImmutableList.copyOf(pendingCallbacks);
-      pendingCallbacks.clear();
-      return copy;
-    }
+  private List<Callback> clonePendingCallbacksAndClear() {
+    List<Callback> copy = ImmutableList.copyOf(pendingCallbacks);
+    pendingCallbacks.clear();
+    return copy;
   }
 }
