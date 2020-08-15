@@ -112,8 +112,7 @@ public abstract class SslContextProvider implements Closeable {
           final SslContextGetter sslContextGetter, final Callback callback) {
     checkNotNull(sslContextGetter, "sslContextGetter");
     checkNotNull(callback, "callback");
-    Executor localexecutor = callback.executor;
-    localexecutor.execute(
+    callback.executor.execute(
         new Runnable() {
           @Override
           public void run() {
