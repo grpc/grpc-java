@@ -54,7 +54,7 @@ final class CertProviderClientSslContextProvider extends CertProviderSslContextP
   }
 
   @Override
-  public SslContextBuilder getSslContextBuilder(
+  protected final SslContextBuilder getSslContextBuilder(
           CertificateValidationContext certificateValidationContextdationContext)
       throws CertStoreException {
     SslContextBuilder sslContextBuilder =
