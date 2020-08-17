@@ -25,6 +25,7 @@ import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.MessageLite;
 import com.google.protobuf.Parser;
 import io.grpc.ExperimentalApi;
+import io.grpc.HasByteBuffer;
 import io.grpc.KnownLength;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor.Marshaller;
@@ -35,6 +36,9 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.ref.Reference;
 import java.lang.ref.WeakReference;
+import java.nio.ByteBuffer;
+import java.util.Iterator;
+import java.util.NoSuchElementException;
 
 /**
  * Utility methods for using protobuf with grpc.
@@ -173,7 +177,11 @@ public final class ProtoLiteUtils {
       try {
         if (stream instanceof KnownLength) {
           int size = stream.available();
-          if (size > 0 && size <= DEFAULT_MAX_MESSAGE_SIZE) {
+          // TODO(chengyuanzhang): we may still want to go with the byte array approach for small
+          //  messages.
+          if (stream instanceof HasByteBuffer && stream.markSupported()) {
+            cis = CodedInputStream.newInstance(new KnownLengthByteBufferIterable(stream, size));
+          } else if (size > 0 && size <= DEFAULT_MAX_MESSAGE_SIZE) {
             Reference<byte[]> ref;
             // buf should not be used after this method has returned.
             byte[] buf;
@@ -252,6 +260,63 @@ public final class ProtoLiteUtils {
         return (T) defaultInstance.getParserForType().parseFrom(serialized, globalRegistry);
       } catch (InvalidProtocolBufferException ipbe) {
         throw new IllegalArgumentException(ipbe);
+      }
+    }
+  }
+
+  private static final class KnownLengthByteBufferIterable implements Iterable<ByteBuffer> {
+    private final InputStream stream;
+    private final int length;
+
+    private KnownLengthByteBufferIterable(InputStream stream, int length) {
+      this.stream = stream;
+      this.length = length;
+      stream.mark(length);
+    }
+
+    @Override
+    public Iterator<ByteBuffer> iterator() {
+      try {
+        stream.reset();
+        stream.mark(length);
+        return new Iterator<ByteBuffer>() {
+          private ByteBuffer buffer;
+
+          @Override
+          public boolean hasNext() {
+            if (buffer != null) {
+              return true;
+            }
+            try {
+              buffer = ((HasByteBuffer) stream).getByteBuffer(stream.available());
+            } catch (IOException e) {
+              throw new RuntimeException(e);
+            }
+            return buffer != null;
+          }
+
+          @Override
+          public ByteBuffer next() {
+            if (!hasNext()) {
+              throw new NoSuchElementException();
+            }
+            ByteBuffer res = buffer;
+            try {
+              stream.skip(buffer.remaining());
+            } catch (IOException e) {
+              throw new RuntimeException(e);
+            }
+            buffer = null;
+            return res;
+          }
+
+          @Override
+          public void remove() {
+            throw new UnsupportedOperationException();
+          }
+        };
+      } catch (IOException e) {
+        throw new RuntimeException(e);
       }
     }
   }
