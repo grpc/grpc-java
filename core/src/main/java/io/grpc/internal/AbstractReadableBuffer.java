@@ -61,7 +61,7 @@ public abstract class AbstractReadableBuffer implements ReadableBuffer {
   }
 
   @Override
-  public ByteBuffer getByteBuffer(int length) {
+  public ByteBuffer getByteBuffer() {
     throw new UnsupportedOperationException();
   }
 

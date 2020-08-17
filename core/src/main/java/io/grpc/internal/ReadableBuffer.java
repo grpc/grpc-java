@@ -143,19 +143,19 @@ public interface ReadableBuffer extends Closeable {
   boolean canUseByteBuffer();
 
   /**
-   * Gets a {@link ByteBuffer} that contains up to {@code length} bytes of this buffer's content,
-   * or {@code null} if this buffer has been exhausted. The position of this buffer is unchanged
-   * after calling this method. The returned buffer's content should not be modified, but the
-   * position, limit, and mark may be changed. Operations for changing the position, limit, and
-   * mark of the returned {@link ByteBuffer} does not affect the position, limit, and mark of
-   * this buffer. {@link ByteBuffer}s returned by this method have independent position, limit
-   * and mark. This is an optional method, so callers should first check {@link #canUseByteBuffer}.
+   * Gets a {@link ByteBuffer} that contains some bytes of the content next to be read, or {@code
+   * null} if this buffer has been exhausted. The number of bytes contained in the returned buffer
+   * is implementation specific. The position of this buffer is unchanged after calling this
+   * method. The returned buffer's content should not be modified, but the position, limit, and
+   * mark may be changed. Operations for changing the position, limit, and mark of the returned
+   * buffer does not affect the position, limit, and mark of this buffer. Buffers returned by this
+   * method have independent position, limit and mark. This is an optional method, so callers
+   * should first check {@link #canUseByteBuffer}.
    *
-   * @param length the maximum number of bytes to contain in returned {@link ByteBuffer}.
    * @throws UnsupportedOperationException the buffer does not support this method.
    */
   @Nullable
-  ByteBuffer getByteBuffer(int length);
+  ByteBuffer getByteBuffer();
 
   /**
    * Closes this buffer and releases any resources.

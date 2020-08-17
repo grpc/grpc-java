@@ -207,12 +207,11 @@ public class CompositeReadableBuffer extends AbstractReadableBuffer {
 
   @Nullable
   @Override
-  public ByteBuffer getByteBuffer(int length) {
+  public ByteBuffer getByteBuffer() {
     if (readableBuffers.isEmpty()) {
       return null;
     }
-    ReadableBuffer buffer = readableBuffers.peek();
-    return buffer.getByteBuffer(Math.min(length, buffer.readableBytes()));
+    return readableBuffers.peek().getByteBuffer();
   }
 
   @Override

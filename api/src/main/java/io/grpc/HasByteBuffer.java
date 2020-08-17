@@ -32,10 +32,13 @@ import javax.annotation.Nullable;
 public interface HasByteBuffer {
 
   /**
-   * Gets a {@link ByteBuffer} containing up to {@code length} bytes of the content, or {@code
-   * null} if has reached end of the content.
-   * @param length the maximum number of bytes to contain in returned {@link ByteBuffer}.
+   * Gets a {@link ByteBuffer} containing some bytes of the content next to be read, or {@code
+   * null} if has reached end of the content. The number of bytes contained in the returned buffer
+   * is implementation specific. Calling this method does not change the position of the input
+   * stream. The returned buffer's content should not be modified, but the position, limit, and
+   * mark may be changed. Operations for changing the position, limit, and mark of the returned
+   * buffer does not affect the position, limit, and mark of this input stream.
    */
   @Nullable
-  ByteBuffer getByteBuffer(int length);
+  ByteBuffer getByteBuffer();
 }

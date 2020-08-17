@@ -114,8 +114,8 @@ public abstract class ForwardingReadableBuffer implements ReadableBuffer {
 
   @Nullable
   @Override
-  public ByteBuffer getByteBuffer(int length) {
-    return buf.getByteBuffer(length);
+  public ByteBuffer getByteBuffer() {
+    return buf.getByteBuffer();
   }
 
   @Override

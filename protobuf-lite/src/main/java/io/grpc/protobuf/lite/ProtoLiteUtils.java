@@ -287,11 +287,7 @@ public final class ProtoLiteUtils {
             if (buffer != null) {
               return true;
             }
-            try {
-              buffer = ((HasByteBuffer) stream).getByteBuffer(stream.available());
-            } catch (IOException e) {
-              throw new RuntimeException(e);
-            }
+            buffer = ((HasByteBuffer) stream).getByteBuffer();
             return buffer != null;
           }
 
