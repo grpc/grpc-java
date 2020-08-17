@@ -22,7 +22,7 @@ import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.nio.InvalidMarkException;
 import java.util.ArrayDeque;
-import java.util.Queue;
+import java.util.Deque;
 import javax.annotation.Nullable;
 
 /**
@@ -36,8 +36,8 @@ import javax.annotation.Nullable;
 public class CompositeReadableBuffer extends AbstractReadableBuffer {
 
   private int readableBytes;
-  private final Queue<ReadableBuffer> readableBuffers = new ArrayDeque<>();
-  private final Queue<ReadableBuffer> rewindableBuffers = new ArrayDeque<>();
+  private final Deque<ReadableBuffer> readableBuffers = new ArrayDeque<>();
+  private final Deque<ReadableBuffer> rewindableBuffers = new ArrayDeque<>();
   private boolean marked;
 
   /**
@@ -184,14 +184,10 @@ public class CompositeReadableBuffer extends AbstractReadableBuffer {
       buffer.reset();
       readableBytes += (buffer.readableBytes() - currentRemain);
     }
-    int size = readableBuffers.size();
-    while ((buffer = rewindableBuffers.poll()) != null) {
+    while ((buffer = rewindableBuffers.pollLast()) != null) {
       buffer.reset();
-      readableBuffers.add(buffer);
+      readableBuffers.addFirst(buffer);
       readableBytes += buffer.readableBytes();
-    }
-    for (int i = 0; i < size; i++) {
-      readableBuffers.add(readableBuffers.remove());
     }
   }
 
