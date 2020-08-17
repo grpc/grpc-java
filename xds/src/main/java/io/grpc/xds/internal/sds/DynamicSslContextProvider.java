@@ -134,8 +134,10 @@ public abstract class DynamicSslContextProvider extends SslContextProvider {
   }
 
   private List<Callback> clonePendingCallbacksAndClear() {
-    List<Callback> copy = ImmutableList.copyOf(pendingCallbacks);
-    pendingCallbacks.clear();
-    return copy;
+    synchronized (pendingCallbacks) {
+      List<Callback> copy = ImmutableList.copyOf(pendingCallbacks);
+      pendingCallbacks.clear();
+      return copy;
+    }
   }
 }
