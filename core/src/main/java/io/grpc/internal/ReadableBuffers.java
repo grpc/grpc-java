@@ -105,11 +105,7 @@ public final class ReadableBuffers {
    * @param owner if {@code true}, the returned stream will close the buffer when closed.
    */
   public static InputStream openStream(ReadableBuffer buffer, boolean owner) {
-    if (!owner) {
-      buffer = ignoreClose(buffer);
-    }
-    return buffer.canUseByteBuffer()
-        ? new ByteBufferInputStream(buffer) : new BufferInputStream(buffer);
+    return new BufferInputStream(owner ? buffer : ignoreClose(buffer));
   }
 
   /**
@@ -334,7 +330,8 @@ public final class ReadableBuffers {
   /**
    * An {@link InputStream} that is backed by a {@link ReadableBuffer}.
    */
-  private static class BufferInputStream extends InputStream implements KnownLength {
+  private static final class BufferInputStream extends InputStream
+      implements KnownLength, HasByteBuffer {
     final ReadableBuffer buffer;
 
     public BufferInputStream(ReadableBuffer buffer) {
@@ -390,25 +387,19 @@ public final class ReadableBuffers {
     }
 
     @Override
-    public void close() throws IOException {
-      buffer.close();
-    }
-  }
-
-  /**
-   * A {@link ReadableBuffer}-backed {@link InputStream} that supports the operation of getting
-   * bytes via {@link ByteBuffer}s.
-   */
-  private static class ByteBufferInputStream extends BufferInputStream implements HasByteBuffer {
-
-    ByteBufferInputStream(ReadableBuffer buffer) {
-      super(buffer);
+    public boolean getByteBufferSupported() {
+      return buffer.canUseByteBuffer();
     }
 
     @Nullable
     @Override
     public ByteBuffer getByteBuffer() {
       return buffer.getByteBuffer();
+    }
+
+    @Override
+    public void close() throws IOException {
+      buffer.close();
     }
   }
 

@@ -179,7 +179,8 @@ public final class ProtoLiteUtils {
           int size = stream.available();
           // TODO(chengyuanzhang): we may still want to go with the byte array approach for small
           //  messages.
-          if (stream instanceof HasByteBuffer && stream.markSupported()) {
+          if (stream instanceof HasByteBuffer
+              && stream.markSupported() && ((HasByteBuffer) stream).getByteBufferSupported()) {
             List<ByteBuffer> buffers = new ArrayList<>();
             stream.mark(size);
             while (stream.available() != 0) {
