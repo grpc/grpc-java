@@ -19,6 +19,7 @@ package io.grpc.internal;
 import static com.google.common.base.Charsets.UTF_8;
 
 import com.google.common.base.Preconditions;
+import io.grpc.HasByteBuffer;
 import io.grpc.KnownLength;
 import java.io.IOException;
 import java.io.InputStream;
@@ -26,6 +27,7 @@ import java.io.OutputStream;
 import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
+import javax.annotation.Nullable;
 
 /**
  * Utility methods for creating {@link ReadableBuffer} instances.
@@ -103,7 +105,11 @@ public final class ReadableBuffers {
    * @param owner if {@code true}, the returned stream will close the buffer when closed.
    */
   public static InputStream openStream(ReadableBuffer buffer, boolean owner) {
-    return new BufferInputStream(owner ? buffer : ignoreClose(buffer));
+    if (!owner) {
+      buffer = ignoreClose(buffer);
+    }
+    return buffer.canUseByteBuffer()
+        ? new ByteBufferInputStream(buffer) : new BufferInputStream(buffer);
   }
 
   /**
@@ -128,6 +134,7 @@ public final class ReadableBuffers {
     int offset;
     final int end;
     final byte[] bytes;
+    int mark = -1;
 
     ByteArrayWrapper(byte[] bytes) {
       this(bytes, 0, bytes.length);
@@ -203,6 +210,16 @@ public final class ReadableBuffers {
     @Override
     public int arrayOffset() {
       return offset;
+    }
+
+    @Override
+    public void mark() {
+      mark = offset;
+    }
+
+    @Override
+    public void reset() {
+      offset = mark;
     }
   }
 
@@ -292,12 +309,22 @@ public final class ReadableBuffers {
     public int arrayOffset() {
       return bytes.arrayOffset() + bytes.position();
     }
+
+    @Override
+    public void mark() {
+      bytes.mark();
+    }
+
+    @Override
+    public void reset() {
+      bytes.reset();
+    }
   }
 
   /**
    * An {@link InputStream} that is backed by a {@link ReadableBuffer}.
    */
-  private static final class BufferInputStream extends InputStream implements KnownLength {
+  private static class BufferInputStream extends InputStream implements KnownLength {
     final ReadableBuffer buffer;
 
     public BufferInputStream(ReadableBuffer buffer) {
@@ -331,8 +358,47 @@ public final class ReadableBuffers {
     }
 
     @Override
+    public long skip(long n) throws IOException {
+      int length = (int) Math.min(buffer.readableBytes(), n);
+      buffer.skipBytes(length);
+      return length;
+    }
+
+    @Override
+    public void mark(int readlimit) {
+      buffer.mark();
+    }
+
+    @Override
+    public void reset() throws IOException {
+      buffer.reset();
+    }
+
+    @Override
+    public boolean markSupported() {
+      return true;
+    }
+
+    @Override
     public void close() throws IOException {
       buffer.close();
+    }
+  }
+
+  /**
+   * A {@link ReadableBuffer}-backed {@link InputStream} that supports the operation of getting
+   * bytes via {@link ByteBuffer}s.
+   */
+  private static class ByteBufferInputStream extends BufferInputStream implements HasByteBuffer {
+
+    ByteBufferInputStream(ReadableBuffer buffer) {
+      super(buffer);
+    }
+
+    @Nullable
+    @Override
+    public ByteBuffer getByteBuffer(int length) {
+      return buffer.getByteBuffer(length);
     }
   }
 
