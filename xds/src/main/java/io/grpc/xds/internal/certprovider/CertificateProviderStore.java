@@ -129,7 +129,7 @@ public final class CertificateProviderStore {
       CertificateProviderProvider certProviderProvider =
           certificateProviderRegistry.getProvider(key.pluginName);
       if (certProviderProvider == null) {
-        throw new IllegalArgumentException("Provider not found.");
+        throw new IllegalArgumentException("Provider not found for " + key.pluginName);
       }
       CertificateProvider certProvider = certProviderProvider.createCertificateProvider(
               key.config, new CertificateProvider.DistributorWatcher(), key.notifyCertUpdates);

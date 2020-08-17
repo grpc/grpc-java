@@ -34,7 +34,6 @@ import java.io.File;
 import java.io.IOException;
 import java.security.cert.CertStoreException;
 import java.security.cert.CertificateException;
-import java.util.concurrent.Executor;
 import javax.annotation.Nullable;
 
 /** A client SslContext provider that uses file-based secrets (secret volume). */
@@ -92,9 +91,8 @@ final class SecretVolumeClientSslContextProvider extends SslContextProvider {
   }
 
   @Override
-  public void addCallback(final Callback callback, Executor executor) {
+  public void addCallback(final Callback callback) {
     checkNotNull(callback, "callback");
-    checkNotNull(executor, "executor");
     // as per the contract we will read the current secrets on disk
     // this involves I/O which can potentially block the executor
     performCallback(
@@ -104,8 +102,8 @@ final class SecretVolumeClientSslContextProvider extends SslContextProvider {
             return buildSslContextFromSecrets();
           }
         },
-        callback,
-        executor);
+        callback
+    );
   }
 
   @Override

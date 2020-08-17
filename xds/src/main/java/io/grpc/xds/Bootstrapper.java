@@ -76,9 +76,10 @@ public abstract class Bootstrapper {
    */
   public abstract BootstrapInfo readBootstrap() throws IOException;
 
+  /** Parses a raw string into {@link BootstrapInfo}. */
   @VisibleForTesting
   @SuppressWarnings("deprecation")
-  static BootstrapInfo parseConfig(String rawData) throws IOException {
+  public static BootstrapInfo parseConfig(String rawData) throws IOException {
     XdsLogger logger = XdsLogger.withPrefix(LOG_PREFIX);
     logger.log(XdsLogLevel.INFO, "Reading bootstrap information");
     @SuppressWarnings("unchecked")
@@ -264,11 +265,11 @@ public abstract class Bootstrapper {
       this.config = checkNotNull(config, "config");
     }
 
-    String getPluginName() {
+    public String getPluginName() {
       return pluginName;
     }
 
-    Map<String, ?> getConfig() {
+    public Map<String, ?> getConfig() {
       return config;
     }
   }

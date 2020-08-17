@@ -16,7 +16,7 @@
 
 package io.grpc.xds.internal.sds.trust;
 
-import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -53,9 +53,29 @@ public final class SdsTrustManagerFactory extends SimpleTrustManagerFactory {
   /** Constructor constructs from a {@link CertificateValidationContext}. */
   public SdsTrustManagerFactory(CertificateValidationContext certificateValidationContext)
       throws CertificateException, IOException, CertStoreException {
-    checkNotNull(certificateValidationContext, "certificateValidationContext");
-    sdsX509TrustManager = createSdsX509TrustManager(
-        getTrustedCaFromCertContext(certificateValidationContext), certificateValidationContext);
+    this(
+        getTrustedCaFromCertContext(certificateValidationContext),
+        certificateValidationContext,
+        false);
+  }
+
+  public SdsTrustManagerFactory(
+          X509Certificate[] certs, CertificateValidationContext staticCertificateValidationContext)
+          throws CertStoreException {
+    this(certs, staticCertificateValidationContext, true);
+  }
+
+  private SdsTrustManagerFactory(
+      X509Certificate[] certs,
+      CertificateValidationContext certificateValidationContext,
+      boolean validationContextIsStatic)
+      throws CertStoreException {
+    if (validationContextIsStatic) {
+      checkArgument(
+          certificateValidationContext == null || !certificateValidationContext.hasTrustedCa(),
+          "only static certificateValidationContext expected");
+    }
+    sdsX509TrustManager = createSdsX509TrustManager(certs, certificateValidationContext);
   }
 
   private static X509Certificate[] getTrustedCaFromCertContext(

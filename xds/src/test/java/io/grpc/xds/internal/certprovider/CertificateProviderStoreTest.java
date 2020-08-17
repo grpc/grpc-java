@@ -49,36 +49,6 @@ public class CertificateProviderStoreTest {
   private CertificateProviderStore certificateProviderStore;
   private boolean throwExceptionForCertUpdates;
 
-  private class TestCertificateProvider extends CertificateProvider {
-    Object config;
-    CertificateProviderProvider certProviderProvider;
-    int closeCalled = 0;
-    int startCalled = 0;
-
-    protected TestCertificateProvider(
-        CertificateProvider.DistributorWatcher watcher,
-        boolean notifyCertUpdates,
-        Object config,
-        CertificateProviderProvider certificateProviderProvider) {
-      super(watcher, notifyCertUpdates);
-      if (throwExceptionForCertUpdates && notifyCertUpdates) {
-        throw new UnsupportedOperationException("Provider does not support Certificate Updates.");
-      }
-      this.config = config;
-      this.certProviderProvider = certificateProviderProvider;
-    }
-
-    @Override
-    public void close() {
-      closeCalled++;
-    }
-
-    @Override
-    public void start() {
-      startCalled++;
-    }
-  }
-
   @Before
   public void setUp() {
     certificateProviderRegistry = new CertificateProviderRegistry();
@@ -94,7 +64,7 @@ public class CertificateProviderStoreTest {
               "cert-name1", "plugin1", "config", mockWatcher, true);
       fail("exception expected");
     } catch (IllegalArgumentException expected) {
-      assertThat(expected).hasMessageThat().isEqualTo("Provider not found.");
+      assertThat(expected).hasMessageThat().isEqualTo("Provider not found for plugin1");
     }
   }
 
@@ -111,7 +81,7 @@ public class CertificateProviderStoreTest {
               "cert-name1", "plugin1", "config", mockWatcher, true);
       fail("exception expected");
     } catch (IllegalArgumentException expected) {
-      assertThat(expected).hasMessageThat().isEqualTo("Provider not found.");
+      assertThat(expected).hasMessageThat().isEqualTo("Provider not found for plugin1");
     }
   }
 
@@ -369,7 +339,8 @@ public class CertificateProviderStoreTest {
                     (CertificateProvider.DistributorWatcher) args[1];
                 boolean notifyCertUpdates = (Boolean) args[2];
                 return new TestCertificateProvider(
-                    watcher, notifyCertUpdates, config, certProviderProvider);
+                    watcher, notifyCertUpdates, config, certProviderProvider,
+                    throwExceptionForCertUpdates);
               }
             });
     certificateProviderRegistry.register(certProviderProvider);
