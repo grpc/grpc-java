@@ -19,11 +19,15 @@ package io.grpc.internal;
 import static com.google.common.base.Charsets.UTF_8;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
+import io.grpc.HasByteBuffer;
+import java.io.IOException;
 import java.io.InputStream;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -127,5 +131,31 @@ public class ReadableBuffersTest {
     InputStream inputStream = ReadableBuffers.openStream(buffer, true);
     inputStream.close();
     verify(buffer, times(1)).close();
+  }
+
+  @Test
+  public void bufferInputStream_markAndReset() throws IOException {
+    ReadableBuffer buffer = ReadableBuffers.wrap(MSG_BYTES);
+    InputStream inputStream = ReadableBuffers.openStream(buffer, true);
+    assertTrue(inputStream.markSupported());
+    inputStream.mark(2);
+    byte[] first = new byte[5];
+    inputStream.read(first);
+    assertEquals(0, inputStream.available());
+    inputStream.reset();
+    assertEquals(5, inputStream.available());
+    byte[] second = new byte[5];
+    inputStream.read(second);
+    assertArrayEquals(first, second);
+  }
+
+  @Test
+  public void bufferInputStream_getByteBufferDelegatesToBuffer() {
+    ReadableBuffer buffer = mock(ReadableBuffer.class);
+    when(buffer.canUseByteBuffer()).thenReturn(true);
+    InputStream inputStream = ReadableBuffers.openStream(buffer, true);
+    assertTrue(((HasByteBuffer) inputStream).getByteBufferSupported());
+    ((HasByteBuffer) inputStream).getByteBuffer();
+    verify(buffer).getByteBuffer();
   }
 }
