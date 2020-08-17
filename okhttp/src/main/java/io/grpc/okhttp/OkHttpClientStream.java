@@ -255,10 +255,13 @@ class OkHttpClientStream extends AbstractClientStream {
       tag = PerfMark.createTag(methodName);
     }
 
+    @SuppressWarnings("GuardedBy")
     @GuardedBy("lock")
     public void start(int streamId) {
       checkState(id == ABSENT_ID, "the stream has been started with id %s", streamId);
       id = streamId;
+      // TODO(b/145386688): This access should be guarded by 'OkHttpClientStream.this.state.lock';
+      // instead found: 'this.lock'
       state.onStreamAllocated();
 
       if (canStart) {
@@ -364,6 +367,7 @@ class OkHttpClientStream extends AbstractClientStream {
       }
     }
 
+    @SuppressWarnings("GuardedBy")
     @GuardedBy("lock")
     private void cancel(Status reason, boolean stopDelivery, Metadata trailers) {
       if (cancelSent) {
@@ -372,6 +376,8 @@ class OkHttpClientStream extends AbstractClientStream {
       cancelSent = true;
       if (canStart) {
         // stream is pending.
+        // TODO(b/145386688): This access should be guarded by 'this.transport.lock'; instead found:
+        // 'this.lock'
         transport.removePendingStream(OkHttpClientStream.this);
         // release holding data, so they can be GCed or returned to pool earlier.
         requestHeaders = null;
@@ -405,6 +411,7 @@ class OkHttpClientStream extends AbstractClientStream {
       }
     }
 
+    @SuppressWarnings("GuardedBy")
     @GuardedBy("lock")
     private void streamReady(Metadata metadata, String path) {
       requestHeaders =
@@ -415,6 +422,8 @@ class OkHttpClientStream extends AbstractClientStream {
               userAgent,
               useGet,
               transport.isUsingPlaintext());
+      // TODO(b/145386688): This access should be guarded by 'this.transport.lock'; instead found:
+      // 'this.lock'
       transport.streamReadyToStart(OkHttpClientStream.this);
     }
 

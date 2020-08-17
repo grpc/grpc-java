@@ -419,12 +419,15 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     }
   }
 
+  @SuppressWarnings("GuardedBy")
   @GuardedBy("lock")
   private void startStream(OkHttpClientStream stream) {
     Preconditions.checkState(
         stream.id() == OkHttpClientStream.ABSENT_ID, "StreamId already assigned");
     streams.put(nextStreamId, stream);
     setInUse(stream);
+    // TODO(b/145386688): This access should be guarded by 'stream.transportState().lock'; instead
+    // found: 'this.lock'
     stream.transportState().start(nextStreamId);
     // For unary and server streaming, there will be a data frame soon, no need to flush the header.
     if ((stream.getType() != MethodType.UNARY && stream.getType() != MethodType.SERVER_STREAMING)
@@ -1106,6 +1109,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     /**
      * Handle an HTTP2 DATA frame.
      */
+    @SuppressWarnings("GuardedBy")
     @Override
     public void data(boolean inFinished, int streamId, BufferedSource in, int length)
         throws IOException {
@@ -1131,6 +1135,8 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         PerfMark.event("OkHttpClientTransport$ClientFrameHandler.data",
             stream.transportState().tag());
         synchronized (lock) {
+          // TODO(b/145386688): This access should be guarded by 'stream.transportState().lock';
+          // instead found: 'OkHttpClientTransport.this.lock'
           stream.transportState().transportDataReceived(buf, inFinished);
         }
       }
@@ -1148,6 +1154,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     /**
      * Handle HTTP2 HEADER and CONTINUATION frames.
      */
+    @SuppressWarnings("GuardedBy")
     @Override
     public void headers(boolean outFinished,
         boolean inFinished,
@@ -1181,6 +1188,8 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
           if (failedStatus == null) {
             PerfMark.event("OkHttpClientTransport$ClientFrameHandler.headers",
                 stream.transportState().tag());
+            // TODO(b/145386688): This access should be guarded by 'stream.transportState().lock';
+            // instead found: 'OkHttpClientTransport.this.lock'
             stream.transportState().transportHeadersReceived(headerBlock, inFinished);
           } else {
             if (!inFinished) {
