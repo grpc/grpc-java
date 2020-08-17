@@ -118,7 +118,7 @@ public abstract class ReadableBufferTestBase {
   }
 
   @Test
-  public void markAndResetWithMixedReadShouldSucceed() {
+  public void markAndResetWithReadShouldSucceed() {
     ReadableBuffer buffer = buffer();
     int offset = 5;
     buffer.readBytes(new byte[offset], 0, offset);

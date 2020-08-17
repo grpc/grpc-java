@@ -58,7 +58,7 @@ public class OkHttpReadableBufferTest extends ReadableBufferTestBase {
 
   @Override
   @Test
-  public void markAndResetWithMixedReadShouldSucceed() {
+  public void markAndResetWithReadShouldSucceed() {
     // Not supported.
   }
 
