@@ -24,6 +24,7 @@ import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.SdsSecretConfig;
 import io.grpc.netty.GrpcSslContexts;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
+import io.grpc.xds.internal.sds.trust.SdsTrustManagerFactory;
 import io.netty.handler.ssl.SslContextBuilder;
 import java.io.IOException;
 import java.security.cert.CertStoreException;
@@ -85,7 +86,11 @@ final class SdsServerSslContextProvider extends SdsSslContextProvider {
             tlsCertificate.hasPassword()
                 ? tlsCertificate.getPassword().getInlineString()
                 : null);
-    setClientAuthValues(sslContextBuilder, localCertValidationContext);
+    setClientAuthValues(
+        sslContextBuilder,
+        localCertValidationContext != null
+            ? new SdsTrustManagerFactory(localCertValidationContext)
+            : null);
     return sslContextBuilder;
   }
 }

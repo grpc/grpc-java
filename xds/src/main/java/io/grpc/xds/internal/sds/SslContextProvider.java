@@ -19,7 +19,6 @@ package io.grpc.xds.internal.sds;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
-import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.BaseTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
@@ -70,11 +69,11 @@ public abstract class SslContextProvider implements Closeable {
   }
 
   protected void setClientAuthValues(
-      SslContextBuilder sslContextBuilder, CertificateValidationContext localCertValidationContext)
+      SslContextBuilder sslContextBuilder, SdsTrustManagerFactory sdsTrustManagerFactory)
       throws CertificateException, IOException, CertStoreException {
     DownstreamTlsContext downstreamTlsContext = getDownstreamTlsContext();
-    if (localCertValidationContext != null) {
-      sslContextBuilder.trustManager(new SdsTrustManagerFactory(localCertValidationContext));
+    if (sdsTrustManagerFactory != null) {
+      sslContextBuilder.trustManager(sdsTrustManagerFactory);
       sslContextBuilder.clientAuth(
           downstreamTlsContext.isRequireClientCertificate()
               ? ClientAuth.REQUIRE
