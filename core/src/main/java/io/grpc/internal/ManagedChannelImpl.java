@@ -218,7 +218,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private final Set<InternalSubchannel> subchannels = new HashSet<>(16, .75f);
 
   // Must be accessed from syncContext
-  private final Collection<RealChannel.PendingCall<?, ?>> pendingCalls = new LinkedHashSet<>();
+  @Nullable
+  private Collection<RealChannel.PendingCall<?, ?>> pendingCalls;
+  private final Object pendingCallsInUseObject = new Object();
 
   // Must be mutated from syncContext
   private final Set<OobChannel> oobChannels = new HashSet<>(1, .75f);
@@ -927,8 +929,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
         public void run() {
           exitIdleMode();
           if (configSelector.get() == INITIAL_PENDING_SELECTOR) {
-            if (pendingCalls.isEmpty()) {
-              inUseStateAggregator.updateObjectInUse(RealChannel.this, true);
+            if (pendingCalls == null) {
+              pendingCalls = new LinkedHashSet<>();
+              inUseStateAggregator.updateObjectInUse(pendingCallsInUseObject, true);
             }
             pendingCalls.add(pendingCall);
           } else {
@@ -969,15 +972,18 @@ final class ManagedChannelImpl extends ManagedChannel implements
       }
 
       @Override
-      void setCall(ClientCall<ReqT, RespT> call) {
-        super.setCall(call);
+      protected void callCancelled() {
+        super.callCancelled();
         syncContext.execute(
             new Runnable() {
               @Override
               public void run() {
-                boolean removed = pendingCalls.remove(PendingCall.this);
-                if (removed && pendingCalls.isEmpty()) {
-                  inUseStateAggregator.updateObjectInUse(RealChannel.this, false);
+                if (pendingCalls != null) {
+                  pendingCalls.remove(PendingCall.this);
+                  if (pendingCalls.isEmpty()) {
+                    inUseStateAggregator.updateObjectInUse(pendingCallsInUseObject, false);
+                    pendingCalls = null;
+                  }
                 }
               }
             });
@@ -1622,9 +1628,14 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
     // Must run in SynchronizationContext.
     private void drainPendingCalls() {
+      if (pendingCalls == null) {
+        return;
+      }
       for (RealChannel.PendingCall<?, ?> pendingCall : pendingCalls) {
         pendingCall.pendingCallRunnable.run();
       }
+      inUseStateAggregator.updateObjectInUse(pendingCallsInUseObject, false);
+      pendingCalls = null;
     }
 
     private void scheduleExponentialBackOffInSyncContext() {
