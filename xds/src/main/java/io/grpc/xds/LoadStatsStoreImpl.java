@@ -49,7 +49,6 @@ import javax.annotation.concurrent.NotThreadSafe;
 final class LoadStatsStoreImpl implements LoadStatsStore {
   private final String clusterName;
   @Nullable
-  @SuppressWarnings("unused")
   private final String clusterServiceName;
   private final ConcurrentMap<Locality, ReferenceCounted<ClientLoadCounter>> localityLoadCounters
       = new ConcurrentHashMap<>();
@@ -79,7 +78,9 @@ final class LoadStatsStoreImpl implements LoadStatsStore {
   public ClusterStats generateLoadReport() {
     ClusterStats.Builder statsBuilder = ClusterStats.newBuilder();
     statsBuilder.setClusterName(clusterName);
-    // TODO(chengyuangzhang): also set cluster_service_name if provided.
+    if (clusterServiceName != null) {
+      statsBuilder.setClusterServiceName(clusterServiceName);
+    }
     for (Map.Entry<Locality, ReferenceCounted<ClientLoadCounter>> entry
         : localityLoadCounters.entrySet()) {
       ClientLoadSnapshot snapshot = entry.getValue().get().snapshot();
