@@ -903,15 +903,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       boolean shouldRetry = false;
       long backoffNanos = 0L;
       boolean isRetryableStatusCode = retryPolicy.retryableStatusCodes.contains(status.getCode());
-      String pushbackStr = trailer.get(GRPC_RETRY_PUSHBACK_MS);
-      Integer pushbackMillis = null;
-      if (pushbackStr != null) {
-        try {
-          pushbackMillis = Integer.valueOf(pushbackStr);
-        } catch (NumberFormatException e) {
-          pushbackMillis = -1;
-        }
-      }
+      Integer pushbackMillis = getPushbackMills(trailer);
       boolean isThrottled = false;
       if (throttle != null) {
         if (isRetryableStatusCode || (pushbackMillis != null && pushbackMillis < 0)) {
@@ -939,6 +931,19 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     }
 
     private HedgingPlan makeHedgingDecision(Status status, Metadata trailer) {
+      Integer pushbackMillis = getPushbackMills(trailer);
+      boolean isFatal = !hedgingPolicy.nonFatalStatusCodes.contains(status.getCode());
+      boolean isThrottled = false;
+      if (throttle != null) {
+        if (!isFatal || (pushbackMillis != null && pushbackMillis < 0)) {
+          isThrottled = !throttle.onQualifiedFailureThenCheckIsAboveThreshold();
+        }
+      }
+      return new HedgingPlan(!isFatal && !isThrottled, pushbackMillis);
+    }
+
+    @Nullable
+    private Integer getPushbackMills(Metadata trailer) {
       String pushbackStr = trailer.get(GRPC_RETRY_PUSHBACK_MS);
       Integer pushbackMillis = null;
       if (pushbackStr != null) {
@@ -948,14 +953,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
           pushbackMillis = -1;
         }
       }
-      boolean isFatal = !hedgingPolicy.nonFatalStatusCodes.contains(status.getCode());
-      boolean isThrottled = false;
-      if (throttle != null) {
-        if (!isFatal || (pushbackMillis != null && pushbackMillis < 0)) {
-          isThrottled = !throttle.onQualifiedFailureThenCheckIsAboveThreshold();
-        }
-      }
-      return new HedgingPlan(!isFatal && !isThrottled, pushbackMillis);
+      return pushbackMillis;
     }
 
     @Override
