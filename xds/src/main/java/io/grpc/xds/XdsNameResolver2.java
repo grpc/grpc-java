@@ -176,7 +176,7 @@ final class XdsNameResolver2 extends NameResolver {
           }
         }
       } while (!retainCluster(cluster));
-
+      // TODO(chengyuanzhang): avoid service config generation and parsing for each call.
       Map<String, ?> rawServiceConfig =
           generateServiceConfigWithMethodTimeoutConfig(
               selectedRoute.getRouteAction().getTimeoutNano());
