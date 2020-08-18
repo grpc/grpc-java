@@ -226,8 +226,10 @@ final class XdsNameResolver2 extends NameResolver {
         syncContext.execute(new Runnable() {
           @Override
           public void run() {
-            clusterRefs.remove(cluster);
-            updateResolutionResult();
+            if (clusterRefs.get(cluster).get() == 0) {
+              clusterRefs.remove(cluster);
+              updateResolutionResult();
+            }
           }
         });
       }
@@ -281,7 +283,10 @@ final class XdsNameResolver2 extends NameResolver {
       existingClusters = clusters;
       boolean shouldUpdateResult = false;
       for (String cluster : addedClusters) {
-        if (clusterRefs.putIfAbsent(cluster, new AtomicInteger(1)) == null) {
+        if (clusterRefs.containsKey(cluster)) {
+          clusterRefs.get(cluster).incrementAndGet();
+        } else {
+          clusterRefs.put(cluster, new AtomicInteger(1));
           shouldUpdateResult = true;
         }
       }
