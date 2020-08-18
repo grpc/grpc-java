@@ -218,8 +218,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private final Set<InternalSubchannel> subchannels = new HashSet<>(16, .75f);
 
   // Must be accessed from syncContext
-  @Nullable
-  private Collection<RealChannel.PendingCall<?, ?>> pendingCalls = new LinkedHashSet<>();
+  private final Collection<RealChannel.PendingCall<?, ?>> pendingCalls = new LinkedHashSet<>();
 
   // Must be mutated from syncContext
   private final Set<OobChannel> oobChannels = new HashSet<>(1, .75f);
@@ -1626,12 +1625,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
       for (RealChannel.PendingCall<?, ?> pendingCall : pendingCalls) {
         pendingCall.pendingCallRunnable.run();
       }
-      syncContext.execute(new Runnable() {
-        @Override
-        public void run() {
-          pendingCalls = null;
-        }
-      });
     }
 
     private void scheduleExponentialBackOffInSyncContext() {
