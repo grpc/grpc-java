@@ -37,6 +37,7 @@ import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.stub.StreamObserver;
+import io.grpc.xds.EnvoyProtoData.ClusterStats;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
@@ -228,10 +229,14 @@ final class LoadReportClient {
     private void sendLoadReport() {
       LoadStatsRequest.Builder requestBuilder = LoadStatsRequest.newBuilder().setNode(node);
       if (reportAllClusters) {
-        requestBuilder.addAllClusterStats(loadStatsManager.getAllLoadReports());
+        for (ClusterStats clusterStats : loadStatsManager.getAllLoadReports()) {
+          requestBuilder.addClusterStats(clusterStats.toEnvoyProtoClusterStatsV2());
+        }
       } else {
         for (String name : clusterNames) {
-          requestBuilder.addAllClusterStats(loadStatsManager.getClusterLoadReports(name));
+          for (ClusterStats clusterStats : loadStatsManager.getClusterLoadReports(name)) {
+            requestBuilder.addClusterStats(clusterStats.toEnvoyProtoClusterStatsV2());
+          }
         }
       }
       LoadStatsRequest request = requestBuilder.build();

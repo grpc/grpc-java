@@ -22,7 +22,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
-import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
 import io.grpc.Attributes;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ConnectivityState;
@@ -39,6 +38,7 @@ import io.grpc.Status;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.xds.ClientLoadCounter.LoadRecordingStreamTracerFactory;
 import io.grpc.xds.ClientLoadCounter.LoadRecordingSubchannelPicker;
+import io.grpc.xds.EnvoyProtoData.ClusterStats;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.LoadStatsManager.LoadStatsStore;
 import io.grpc.xds.LrsLoadBalancerProvider.LrsConfig;

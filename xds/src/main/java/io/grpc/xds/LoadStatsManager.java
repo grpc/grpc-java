@@ -19,7 +19,7 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
-import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
+import io.grpc.xds.EnvoyProtoData.ClusterStats;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -90,7 +90,6 @@ final class LoadStatsManager {
    * the interval between calls of this method or {@link #getAllLoadReports}. A cluster may send
    * loads to more than one cluster_service, they are included in separate stats reports.
    */
-  // TODO(chengyuanzhang): do not use proto type directly.
   List<ClusterStats> getClusterLoadReports(String cluster) {
     List<ClusterStats> res = new ArrayList<>();
     Map<String, ReferenceCounted<LoadStatsStore>> clusterLoadStatsStores =
@@ -109,7 +108,6 @@ final class LoadStatsManager {
    * interval between calls of this method or {@link #getClusterLoadReports}. Each report
    * includes stats for one cluster:cluster_service.
    */
-  // TODO(chengyuanzhang): do not use proto type directly.
   List<ClusterStats> getAllLoadReports() {
     List<ClusterStats> res = new ArrayList<>();
     for (Map<String, ReferenceCounted<LoadStatsStore>> clusterLoadStatsStores
