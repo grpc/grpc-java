@@ -707,6 +707,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
   // May only be called in constructor or syncContext
   private void handleServiceConfigUpdate() {
     serviceConfigUpdated = true;
+    // TODO(zdapeng): get rid of serviceConfigInterceptor and do handle update together with
+    // configSelector.
     serviceConfigInterceptor.handleUpdate(lastServiceConfig);
   }
 
