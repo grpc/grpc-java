@@ -176,13 +176,6 @@ final class XdsNameResolver2 extends NameResolver {
           }
         }
       } while (!retainCluster(cluster));
-      final String finalCluster = cluster;
-      class SelectionCompleted implements Runnable {
-        @Override
-        public void run() {
-          releaseCluster(finalCluster);
-        }
-      }
 
       Map<String, ?> rawServiceConfig =
           generateServiceConfigWithMethodTimeoutConfig(
@@ -194,9 +187,19 @@ final class XdsNameResolver2 extends NameResolver {
       ConfigOrError parsedServiceConfig = serviceConfigParser.parseServiceConfig(rawServiceConfig);
       Object config = parsedServiceConfig.getConfig();
       if (config == null) {
-        throw new AssertionError(
-            "Bug: invalid config", parsedServiceConfig.getError().asException());
+        releaseCluster(cluster);
+        return Result.forError(
+            parsedServiceConfig.getError().augmentDescription(
+                "Failed to parse service config (method config)"));
       }
+      final String finalCluster = cluster;
+      class SelectionCompleted implements Runnable {
+        @Override
+        public void run() {
+          releaseCluster(finalCluster);
+        }
+      }
+
       return
           Result.newBuilder()
               .setCallOptions(args.getCallOptions().withOption(CLUSTER_SELECTION_KEY, cluster))
