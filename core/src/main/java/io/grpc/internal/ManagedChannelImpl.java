@@ -962,6 +962,18 @@ final class ManagedChannelImpl extends ManagedChannel implements
                   @Override
                   public void runInContext() {
                     setCall(newClientCall(method, callOptions));
+                    syncContext.executeLater(new Runnable() {
+                      @Override
+                      public void run() {
+                        if (pendingCalls != null) {
+                          pendingCalls.remove(PendingCall.this);
+                          if (pendingCalls.isEmpty()) {
+                            inUseStateAggregator.updateObjectInUse(pendingCallsInUseObject, false);
+                            pendingCalls = null;
+                          }
+                        }
+                      }
+                    });
                   }
                 }
             );
@@ -974,7 +986,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       @Override
       protected void callCancelled() {
         super.callCancelled();
-        syncContext.execute(
+        syncContext.executeLater(
             new Runnable() {
               @Override
               public void run() {
@@ -1634,8 +1646,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
       for (RealChannel.PendingCall<?, ?> pendingCall : pendingCalls) {
         pendingCall.pendingCallRunnable.run();
       }
-      inUseStateAggregator.updateObjectInUse(pendingCallsInUseObject, false);
-      pendingCalls = null;
     }
 
     private void scheduleExponentialBackOffInSyncContext() {
