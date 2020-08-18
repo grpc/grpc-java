@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.grpc.xds.Bootstrapper;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
+import io.grpc.xds.internal.certprovider.CertProviderServerSslContextProvider;
 import io.grpc.xds.internal.sds.ReferenceCountingMap.ValueFactory;
 import java.io.IOException;
 import java.util.concurrent.Executors;
@@ -28,6 +29,20 @@ import java.util.concurrent.Executors;
 /** Factory to create server-side SslContextProvider from DownstreamTlsContext. */
 final class ServerSslContextProviderFactory
     implements ValueFactory<DownstreamTlsContext, SslContextProvider> {
+
+  private final Bootstrapper bootstrapper;
+  private final CertProviderServerSslContextProvider.Factory
+      certProviderServerSslContextProviderFactory;
+
+  ServerSslContextProviderFactory() {
+    this(Bootstrapper.getInstance(), CertProviderServerSslContextProvider.Factory.getInstance());
+  }
+
+  ServerSslContextProviderFactory(
+      Bootstrapper bootstrapper, CertProviderServerSslContextProvider.Factory factory) {
+    this.bootstrapper = bootstrapper;
+    this.certProviderServerSslContextProviderFactory = factory;
+  }
 
   /** Creates a SslContextProvider from the given DownstreamTlsContext. */
   @Override
@@ -51,6 +66,16 @@ final class ServerSslContextProviderFactory
                 .setDaemon(true)
                 .build()),
             /* channelExecutor= */ null);
+      } catch (IOException ioe) {
+        throw new RuntimeException(ioe);
+      }
+    } else if (CommonTlsContextUtil.hasCertProviderInstance(
+        downstreamTlsContext.getCommonTlsContext())) {
+      try {
+        return certProviderServerSslContextProviderFactory.getProvider(
+            downstreamTlsContext,
+            bootstrapper.readBootstrap().getNode().toEnvoyProtoNode(),
+            bootstrapper.readBootstrap().getCertProviders());
       } catch (IOException ioe) {
         throw new RuntimeException(ioe);
       }

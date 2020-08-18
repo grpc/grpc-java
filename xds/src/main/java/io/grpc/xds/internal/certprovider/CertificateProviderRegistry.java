@@ -31,7 +31,7 @@ public final class CertificateProviderRegistry {
       new LinkedHashMap<>();
 
   @VisibleForTesting
-  CertificateProviderRegistry() {
+  public CertificateProviderRegistry() {
   }
 
   /** Returns the singleton registry. */

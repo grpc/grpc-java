@@ -17,13 +17,26 @@
 package io.grpc.xds.internal.sds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.xds.internal.sds.ClientSslContextProviderFactoryTest.createAndRegisterProviderProvider;
+import static io.grpc.xds.internal.sds.ClientSslContextProviderFactoryTest.verifyWatcher;
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CA_PEM_FILE;
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_KEY_FILE;
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_PEM_FILE;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
+import io.grpc.xds.Bootstrapper;
+import io.grpc.xds.EnvoyServerProtoData;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
+import io.grpc.xds.internal.certprovider.CertProviderServerSslContextProvider;
+import io.grpc.xds.internal.certprovider.CertificateProvider;
+import io.grpc.xds.internal.certprovider.CertificateProviderRegistry;
+import io.grpc.xds.internal.certprovider.CertificateProviderStore;
+import io.grpc.xds.internal.certprovider.CommonCertProviderTestUtils;
+import java.io.IOException;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -32,8 +45,23 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class ServerSslContextProviderFactoryTest {
 
-  ServerSslContextProviderFactory serverSslContextProviderFactory =
-      new ServerSslContextProviderFactory();
+  Bootstrapper bootstrapper;
+  CertificateProviderRegistry certificateProviderRegistry;
+  CertificateProviderStore certificateProviderStore;
+  CertProviderServerSslContextProvider.Factory certProviderServerSslContextProviderFactory;
+  ServerSslContextProviderFactory serverSslContextProviderFactory;
+
+  @Before
+  public void setUp() {
+    bootstrapper = mock(Bootstrapper.class);
+    certificateProviderRegistry = new CertificateProviderRegistry();
+    certificateProviderStore = new CertificateProviderStore(certificateProviderRegistry);
+    certProviderServerSslContextProviderFactory =
+        new CertProviderServerSslContextProvider.Factory(certificateProviderStore);
+    serverSslContextProviderFactory =
+        new ServerSslContextProviderFactory(
+            bootstrapper, certProviderServerSslContextProviderFactory);
+  }
 
   @Test
   public void createSslContextProvider_allFilenames() {
@@ -59,10 +87,8 @@ public class ServerSslContextProviderFactoryTest {
       SslContextProvider unused =
           serverSslContextProviderFactory.create(downstreamTlsContext);
       Assert.fail("no exception thrown");
-    } catch (UnsupportedOperationException expected) {
-      assertThat(expected)
-          .hasMessageThat()
-          .isEqualTo("DownstreamTlsContext to have all filenames or all SdsConfig");
+    } catch (IllegalArgumentException expected) {
+      assertThat(expected).hasMessageThat().isEqualTo("unexpected TlsCertificateSdsSecretConfigs");
     }
   }
 
@@ -79,10 +105,59 @@ public class ServerSslContextProviderFactoryTest {
       SslContextProvider unused =
           serverSslContextProviderFactory.create(downstreamTlsContext);
       Assert.fail("no exception thrown");
-    } catch (UnsupportedOperationException expected) {
-      assertThat(expected)
-          .hasMessageThat()
-          .isEqualTo("DownstreamTlsContext to have all filenames or all SdsConfig");
+    } catch (IllegalStateException expected) {
+      assertThat(expected).hasMessageThat().isEqualTo("incorrect ValidationContextTypeCase");
     }
+  }
+
+  @Test
+  public void createCertProviderServerSslContextProvider() throws IOException {
+    final CertificateProvider.DistributorWatcher[] watcherCaptor =
+        new CertificateProvider.DistributorWatcher[1];
+    createAndRegisterProviderProvider(certificateProviderRegistry, watcherCaptor, "testca", 0);
+    EnvoyServerProtoData.DownstreamTlsContext downstreamTlsContext =
+        CommonTlsContextTestsUtil.buildDownstreamTlsContextForCertProviderInstance(
+            "gcp_id",
+            "cert-default",
+            "gcp_id",
+            "root-default",
+            /* alpnProtocols= */ null,
+            /* staticCertValidationContext= */ null,
+            /* requireClientCert= */ true);
+
+    Bootstrapper.BootstrapInfo bootstrapInfo = CommonCertProviderTestUtils.getTestBootstrapInfo();
+    when(bootstrapper.readBootstrap()).thenReturn(bootstrapInfo);
+    SslContextProvider sslContextProvider =
+        serverSslContextProviderFactory.create(downstreamTlsContext);
+    assertThat(sslContextProvider).isInstanceOf(CertProviderServerSslContextProvider.class);
+    verifyWatcher(sslContextProvider, watcherCaptor[0]);
+  }
+
+  @Test
+  public void createCertProviderServerSslContextProvider_2providers() throws IOException {
+    final CertificateProvider.DistributorWatcher[] watcherCaptor =
+        new CertificateProvider.DistributorWatcher[2];
+    createAndRegisterProviderProvider(certificateProviderRegistry, watcherCaptor, "testca", 0);
+
+    createAndRegisterProviderProvider(
+        certificateProviderRegistry, watcherCaptor, "file_watcher", 1);
+
+    EnvoyServerProtoData.DownstreamTlsContext downstreamTlsContext =
+        CommonTlsContextTestsUtil.buildDownstreamTlsContextForCertProviderInstance(
+            "gcp_id",
+            "cert-default",
+            "file_provider",
+            "root-default",
+            /* alpnProtocols= */ null,
+            /* staticCertValidationContext= */ null,
+            /* requireClientCert= */ true);
+
+    Bootstrapper.BootstrapInfo bootstrapInfo = CommonCertProviderTestUtils.getTestBootstrapInfo();
+    when(bootstrapper.readBootstrap()).thenReturn(bootstrapInfo);
+    SslContextProvider sslContextProvider =
+        serverSslContextProviderFactory.create(downstreamTlsContext);
+    assertThat(sslContextProvider).isInstanceOf(CertProviderServerSslContextProvider.class);
+    verifyWatcher(sslContextProvider, watcherCaptor[0]);
+    verifyWatcher(sslContextProvider, watcherCaptor[1]);
   }
 }

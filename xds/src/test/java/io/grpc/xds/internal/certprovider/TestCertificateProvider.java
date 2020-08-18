@@ -22,12 +22,13 @@ public class TestCertificateProvider extends CertificateProvider {
   int closeCalled = 0;
   int startCalled = 0;
 
-  TestCertificateProvider(
-          DistributorWatcher watcher,
-          boolean notifyCertUpdates,
-          Object config,
-          CertificateProviderProvider certificateProviderProvider,
-          boolean throwExceptionForCertUpdates) {
+  /** Creates a TestCertificateProvider instance. */
+  public TestCertificateProvider(
+      DistributorWatcher watcher,
+      boolean notifyCertUpdates,
+      Object config,
+      CertificateProviderProvider certificateProviderProvider,
+      boolean throwExceptionForCertUpdates) {
     super(watcher, notifyCertUpdates);
     if (throwExceptionForCertUpdates && notifyCertUpdates) {
       throw new UnsupportedOperationException("Provider does not support Certificate Updates.");
