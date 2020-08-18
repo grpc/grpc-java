@@ -258,6 +258,4 @@ public class MeshCaCertificateProviderProviderTest {
             certProviders.get("gcp_id");
     return gcpIdInfo.getConfig();
   }
-
-
 }
