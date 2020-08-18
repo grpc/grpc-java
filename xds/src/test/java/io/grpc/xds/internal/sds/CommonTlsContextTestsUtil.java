@@ -533,6 +533,27 @@ public class CommonTlsContextTestsUtil {
             staticCertValidationContext));
   }
 
+  /** Helper method to build DownstreamTlsContext for CertProvider tests. */
+  public static EnvoyServerProtoData.DownstreamTlsContext
+      buildDownstreamTlsContextForCertProviderInstance(
+          @Nullable String certInstanceName,
+          @Nullable String certName,
+          @Nullable String rootInstanceName,
+          @Nullable String rootCertName,
+          Iterable<String> alpnProtocols,
+          CertificateValidationContext staticCertValidationContext,
+          boolean requireClientCert) {
+    return buildInternalDownstreamTlsContext(
+            buildCommonTlsContextForCertProviderInstance(
+                    certInstanceName,
+                    certName,
+                    rootInstanceName,
+                    rootCertName,
+                    alpnProtocols,
+                    staticCertValidationContext), requireClientCert);
+  }
+
+
   /** Perform some simple checks on sslContext. */
   public static void doChecksOnSslContext(boolean server, SslContext sslContext,
       List<String> expectedApnProtos) {

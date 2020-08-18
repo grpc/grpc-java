@@ -27,6 +27,7 @@ import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.TlsCertificate;
 import io.grpc.netty.GrpcSslContexts;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
+import io.grpc.xds.internal.sds.trust.SdsTrustManagerFactory;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import java.io.File;
@@ -108,7 +109,8 @@ final class SecretVolumeServerSslContextProvider extends SslContextProvider {
     SslContextBuilder sslContextBuilder =
         GrpcSslContexts.forServer(
             new File(certificateChain), new File(privateKey), privateKeyPassword);
-    setClientAuthValues(sslContextBuilder, certContext);
+    setClientAuthValues(
+        sslContextBuilder, certContext != null ? new SdsTrustManagerFactory(certContext) : null);
     return sslContextBuilder.build();
   }
 }
