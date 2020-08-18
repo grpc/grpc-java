@@ -962,18 +962,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
                   @Override
                   public void runInContext() {
                     setCall(newClientCall(method, callOptions));
-                    syncContext.executeLater(new Runnable() {
-                      @Override
-                      public void run() {
-                        if (pendingCalls != null) {
-                          pendingCalls.remove(PendingCall.this);
-                          if (pendingCalls.isEmpty()) {
-                            inUseStateAggregator.updateObjectInUse(pendingCallsInUseObject, false);
-                            pendingCalls = null;
-                          }
-                        }
-                      }
-                    });
+                    syncContext.executeLater(new PendingCallRemoval());
                   }
                 }
             );
@@ -986,19 +975,20 @@ final class ManagedChannelImpl extends ManagedChannel implements
       @Override
       protected void callCancelled() {
         super.callCancelled();
-        syncContext.executeLater(
-            new Runnable() {
-              @Override
-              public void run() {
-                if (pendingCalls != null) {
-                  pendingCalls.remove(PendingCall.this);
-                  if (pendingCalls.isEmpty()) {
-                    inUseStateAggregator.updateObjectInUse(pendingCallsInUseObject, false);
-                    pendingCalls = null;
-                  }
-                }
-              }
-            });
+        syncContext.executeLater(new PendingCallRemoval());
+      }
+
+      final class PendingCallRemoval implements Runnable {
+        @Override
+        public void run() {
+          if (pendingCalls != null) {
+            pendingCalls.remove(PendingCall.this);
+            if (pendingCalls.isEmpty()) {
+              inUseStateAggregator.updateObjectInUse(pendingCallsInUseObject, false);
+              pendingCalls = null;
+            }
+          }
+        }
       }
     }
 
