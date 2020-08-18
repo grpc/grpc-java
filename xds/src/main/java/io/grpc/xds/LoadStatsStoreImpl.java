@@ -20,15 +20,14 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
-import com.google.protobuf.util.Durations;
-import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
-import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats.DroppedRequests;
-import io.envoyproxy.envoy.api.v2.endpoint.EndpointLoadMetricStats;
-import io.envoyproxy.envoy.api.v2.endpoint.UpstreamLocalityStats;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.xds.ClientLoadCounter.ClientLoadSnapshot;
 import io.grpc.xds.ClientLoadCounter.MetricValue;
+import io.grpc.xds.EnvoyProtoData.ClusterStats;
+import io.grpc.xds.EnvoyProtoData.ClusterStats.DroppedRequests;
+import io.grpc.xds.EnvoyProtoData.EndpointLoadMetricStats;
 import io.grpc.xds.EnvoyProtoData.Locality;
+import io.grpc.xds.EnvoyProtoData.UpstreamLocalityStats;
 import io.grpc.xds.LoadStatsManager.LoadStatsStore;
 import io.grpc.xds.LoadStatsManager.LoadStatsStoreFactory;
 import java.util.Map;
@@ -50,7 +49,6 @@ import javax.annotation.concurrent.NotThreadSafe;
 final class LoadStatsStoreImpl implements LoadStatsStore {
   private final String clusterName;
   @Nullable
-  @SuppressWarnings("unused")
   private final String clusterServiceName;
   private final ConcurrentMap<Locality, ReferenceCounted<ClientLoadCounter>> localityLoadCounters
       = new ConcurrentHashMap<>();
@@ -80,12 +78,14 @@ final class LoadStatsStoreImpl implements LoadStatsStore {
   public ClusterStats generateLoadReport() {
     ClusterStats.Builder statsBuilder = ClusterStats.newBuilder();
     statsBuilder.setClusterName(clusterName);
-    // TODO(chengyuangzhang): also set cluster_service_name if provided.
+    if (clusterServiceName != null) {
+      statsBuilder.setClusterServiceName(clusterServiceName);
+    }
     for (Map.Entry<Locality, ReferenceCounted<ClientLoadCounter>> entry
         : localityLoadCounters.entrySet()) {
       ClientLoadSnapshot snapshot = entry.getValue().get().snapshot();
       UpstreamLocalityStats.Builder localityStatsBuilder =
-          UpstreamLocalityStats.newBuilder().setLocality(entry.getKey().toEnvoyProtoLocalityV2());
+          UpstreamLocalityStats.newBuilder().setLocality(entry.getKey());
       localityStatsBuilder
           .setTotalSuccessfulRequests(snapshot.getCallsSucceeded())
           .setTotalErrorRequests(snapshot.getCallsFailed())
@@ -96,9 +96,10 @@ final class LoadStatsStoreImpl implements LoadStatsStore {
             EndpointLoadMetricStats.newBuilder()
                 .setMetricName(metric.getKey())
                 .setNumRequestsFinishedWithMetric(metric.getValue().getNumReports())
-                .setTotalMetricValue(metric.getValue().getTotalValue()));
+                .setTotalMetricValue(metric.getValue().getTotalValue())
+                .build());
       }
-      statsBuilder.addUpstreamLocalityStats(localityStatsBuilder);
+      statsBuilder.addUpstreamLocalityStats(localityStatsBuilder.build());
       // Discard counters for localities that are no longer exposed by the remote balancer and
       // no RPCs ongoing.
       if (entry.getValue().getReferenceCount() == 0 && snapshot.getCallsInProgress() == 0) {
@@ -109,13 +110,10 @@ final class LoadStatsStoreImpl implements LoadStatsStore {
     for (Map.Entry<String, AtomicLong> entry : dropCounters.entrySet()) {
       long drops = entry.getValue().getAndSet(0);
       totalDrops += drops;
-      statsBuilder.addDroppedRequests(DroppedRequests.newBuilder()
-          .setCategory(entry.getKey())
-          .setDroppedCount(drops));
+      statsBuilder.addDroppedRequests(new DroppedRequests(entry.getKey(),drops));
     }
     statsBuilder.setTotalDroppedRequests(totalDrops);
-    statsBuilder.setLoadReportInterval(
-        Durations.fromNanos(stopwatch.elapsed(TimeUnit.NANOSECONDS)));
+    statsBuilder.setLoadReportIntervalNanos(stopwatch.elapsed(TimeUnit.NANOSECONDS));
     stopwatch.reset().start();
     return statsBuilder.build();
   }
