@@ -34,12 +34,16 @@ import io.envoyproxy.envoy.type.matcher.v3.RegexMatcher;
 import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.envoyproxy.envoy.type.v3.Int64Range;
 import io.grpc.xds.EnvoyProtoData.Address;
+import io.grpc.xds.EnvoyProtoData.ClusterStats;
+import io.grpc.xds.EnvoyProtoData.ClusterStats.DroppedRequests;
 import io.grpc.xds.EnvoyProtoData.ClusterWeight;
+import io.grpc.xds.EnvoyProtoData.EndpointLoadMetricStats;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.EnvoyProtoData.Route;
 import io.grpc.xds.EnvoyProtoData.RouteAction;
 import io.grpc.xds.EnvoyProtoData.StructOrError;
+import io.grpc.xds.EnvoyProtoData.UpstreamLocalityStats;
 import io.grpc.xds.RouteMatch.FractionMatcher;
 import io.grpc.xds.RouteMatch.HeaderMatcher;
 import io.grpc.xds.RouteMatch.PathMatcher;
@@ -563,5 +567,80 @@ public class EnvoyProtoDataTest {
     ClusterWeight struct = ClusterWeight.fromEnvoyProtoClusterWeight(proto);
     assertThat(struct.getName()).isEqualTo("cluster-foo");
     assertThat(struct.getWeight()).isEqualTo(30);
+  }
+
+  @Test
+  public void clusterStats_convertToEnvoyProto() {
+    ClusterStats clusterStats =
+        ClusterStats.newBuilder()
+            .setClusterName("cluster1")
+            .setLoadReportIntervalNanos(1234)
+            .setTotalDroppedRequests(123)
+            .addUpstreamLocalityStats(UpstreamLocalityStats.newBuilder()
+                .setLocality(new Locality("region1", "zone1", "subzone1"))
+                .setTotalErrorRequests(1)
+                .setTotalRequestsInProgress(2)
+                .setTotalSuccessfulRequests(100)
+                .setTotalIssuedRequests(103)
+                .addLoadMetricStats(EndpointLoadMetricStats.newBuilder()
+                    .setMetricName("metric1")
+                    .setNumRequestsFinishedWithMetric(1000)
+                    .setTotalMetricValue(0.5D)
+                    .build())
+                .build())
+            .addDroppedRequests(new DroppedRequests("category1", 100))
+            .build();
+
+    io.envoyproxy.envoy.config.endpoint.v3.ClusterStats clusterStatsProto =
+        clusterStats.toEnvoyProtoClusterStats();
+    assertThat(clusterStatsProto).isEqualTo(
+        io.envoyproxy.envoy.config.endpoint.v3.ClusterStats.newBuilder()
+            .setClusterName("cluster1")
+            .setLoadReportInterval(Durations.fromNanos(1234))
+            .setTotalDroppedRequests(123)
+            .addUpstreamLocalityStats(
+                io.envoyproxy.envoy.config.endpoint.v3.UpstreamLocalityStats.newBuilder()
+                    .setLocality(
+                        new Locality("region1", "zone1", "subzone1").toEnvoyProtoLocality())
+                    .setTotalErrorRequests(1)
+                    .setTotalRequestsInProgress(2)
+                    .setTotalSuccessfulRequests(100)
+                    .setTotalIssuedRequests(103)
+                    .addLoadMetricStats(
+                        io.envoyproxy.envoy.config.endpoint.v3.EndpointLoadMetricStats.newBuilder()
+                            .setMetricName("metric1")
+                            .setNumRequestsFinishedWithMetric(1000)
+                            .setTotalMetricValue(0.5D)))
+            .addDroppedRequests(
+                io.envoyproxy.envoy.config.endpoint.v3.ClusterStats.DroppedRequests.newBuilder()
+                    .setCategory("category1")
+                    .setDroppedCount(100))
+            .build());
+
+    io.envoyproxy.envoy.api.v2.endpoint.ClusterStats clusterStatsProtoV2 =
+        clusterStats.toEnvoyProtoClusterStatsV2();
+    assertThat(clusterStatsProtoV2).isEqualTo(
+        io.envoyproxy.envoy.api.v2.endpoint.ClusterStats.newBuilder()
+            .setClusterName("cluster1")
+            .setLoadReportInterval(Durations.fromNanos(1234))
+            .setTotalDroppedRequests(123)
+            .addUpstreamLocalityStats(
+                io.envoyproxy.envoy.api.v2.endpoint.UpstreamLocalityStats.newBuilder()
+                    .setLocality(
+                        new Locality("region1", "zone1", "subzone1").toEnvoyProtoLocalityV2())
+                    .setTotalErrorRequests(1)
+                    .setTotalRequestsInProgress(2)
+                    .setTotalSuccessfulRequests(100)
+                    .setTotalIssuedRequests(103)
+                    .addLoadMetricStats(
+                        io.envoyproxy.envoy.api.v2.endpoint.EndpointLoadMetricStats.newBuilder()
+                            .setMetricName("metric1")
+                            .setNumRequestsFinishedWithMetric(1000)
+                            .setTotalMetricValue(0.5D)))
+            .addDroppedRequests(
+                io.envoyproxy.envoy.api.v2.endpoint.ClusterStats.DroppedRequests.newBuilder()
+                    .setCategory("category1")
+                    .setDroppedCount(100))
+            .build());
   }
 }

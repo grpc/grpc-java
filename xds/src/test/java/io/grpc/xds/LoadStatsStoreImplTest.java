@@ -20,14 +20,13 @@ import static com.google.common.truth.Truth.assertThat;
 
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.ImmutableMap;
-import com.google.protobuf.util.Durations;
-import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
-import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats.DroppedRequests;
-import io.envoyproxy.envoy.api.v2.endpoint.EndpointLoadMetricStats;
-import io.envoyproxy.envoy.api.v2.endpoint.UpstreamLocalityStats;
 import io.grpc.internal.FakeClock;
 import io.grpc.xds.ClientLoadCounter.MetricValue;
+import io.grpc.xds.EnvoyProtoData.ClusterStats;
+import io.grpc.xds.EnvoyProtoData.ClusterStats.DroppedRequests;
+import io.grpc.xds.EnvoyProtoData.EndpointLoadMetricStats;
 import io.grpc.xds.EnvoyProtoData.Locality;
+import io.grpc.xds.EnvoyProtoData.UpstreamLocalityStats;
 import io.grpc.xds.LoadStatsManager.LoadStatsStore;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -85,7 +84,7 @@ public class LoadStatsStoreImplTest {
       @Nullable List<EndpointLoadMetricStats> metrics) {
     UpstreamLocalityStats.Builder builder =
         UpstreamLocalityStats.newBuilder()
-            .setLocality(locality.toEnvoyProtoLocalityV2())
+            .setLocality(locality)
             .setTotalSuccessfulRequests(callsSucceed)
             .setTotalErrorRequests(callsFailed)
             .setTotalRequestsInProgress(callsInProgress)
@@ -97,10 +96,7 @@ public class LoadStatsStoreImplTest {
   }
 
   private static DroppedRequests buildDroppedRequests(String category, long counts) {
-    return DroppedRequests.newBuilder()
-        .setCategory(category)
-        .setDroppedCount(counts)
-        .build();
+    return new DroppedRequests(category, counts);
   }
 
   private static ClusterStats buildClusterStats(
@@ -119,15 +115,16 @@ public class LoadStatsStoreImplTest {
       }
       clusterStatsBuilder.setTotalDroppedRequests(dropCount);
     }
-    clusterStatsBuilder.setLoadReportInterval(Durations.fromNanos(intervalNano));
+    clusterStatsBuilder.setLoadReportIntervalNanos(intervalNano);
     return clusterStatsBuilder.build();
   }
 
   private static void assertClusterStatsEqual(ClusterStats expected, ClusterStats actual) {
     assertThat(actual.getClusterName()).isEqualTo(expected.getClusterName());
-    assertThat(actual.getLoadReportInterval()).isEqualTo(expected.getLoadReportInterval());
+    assertThat(actual.getLoadReportIntervalNanos())
+        .isEqualTo(expected.getLoadReportIntervalNanos());
     assertThat(actual.getTotalDroppedRequests()).isEqualTo(expected.getTotalDroppedRequests());
-    assertThat(actual.getDroppedRequestsCount()).isEqualTo(expected.getDroppedRequestsCount());
+    assertThat(actual.getDroppedRequestsList()).hasSize(expected.getDroppedRequestsList().size());
     assertThat(new HashSet<>(actual.getDroppedRequestsList()))
         .isEqualTo(new HashSet<>(expected.getDroppedRequestsList()));
     assertUpstreamLocalityStatsListsEqual(actual.getUpstreamLocalityStatsList(),
@@ -137,7 +134,7 @@ public class LoadStatsStoreImplTest {
   private static void assertUpstreamLocalityStatsListsEqual(List<UpstreamLocalityStats> expected,
       List<UpstreamLocalityStats> actual) {
     assertThat(actual).hasSize(expected.size());
-    Map<io.envoyproxy.envoy.api.v2.core.Locality, UpstreamLocalityStats> expectedLocalityStats =
+    Map<Locality, UpstreamLocalityStats> expectedLocalityStats =
         new HashMap<>();
     for (UpstreamLocalityStats stats : expected) {
       expectedLocalityStats.put(stats.getLocality(), stats);
@@ -164,10 +161,10 @@ public class LoadStatsStoreImplTest {
   @Test
   public void removeInactiveCountersAfterGeneratingLoadReport() {
     loadStatsStore.addLocality(LOCALITY1);
-    assertThat(loadStatsStore.generateLoadReport().getUpstreamLocalityStatsCount()).isEqualTo(1);
+    assertThat(loadStatsStore.generateLoadReport().getUpstreamLocalityStatsList()).hasSize(1);
     loadStatsStore.removeLocality(LOCALITY1);  // becomes inactive
-    assertThat(loadStatsStore.generateLoadReport().getUpstreamLocalityStatsCount()).isEqualTo(1);
-    assertThat(loadStatsStore.generateLoadReport().getUpstreamLocalityStatsCount()).isEqualTo(0);
+    assertThat(loadStatsStore.generateLoadReport().getUpstreamLocalityStatsList()).hasSize(1);
+    assertThat(loadStatsStore.generateLoadReport().getUpstreamLocalityStatsList()).isEmpty();
   }
 
   @Test
@@ -175,12 +172,12 @@ public class LoadStatsStoreImplTest {
     loadStatsStore.addLocality(LOCALITY1);
     loadStatsStore.addLocality(LOCALITY1);
     loadStatsStore.removeLocality(LOCALITY1);
-    assertThat(loadStatsStore.generateLoadReport().getUpstreamLocalityStatsCount()).isEqualTo(1);
-    assertThat(loadStatsStore.generateLoadReport().getUpstreamLocalityStatsCount())
-        .isEqualTo(1);  // still active
+    assertThat(loadStatsStore.generateLoadReport().getUpstreamLocalityStatsList()).hasSize(1);
+    assertThat(loadStatsStore.generateLoadReport().getUpstreamLocalityStatsList())
+        .hasSize(1);  // still active
     loadStatsStore.removeLocality(LOCALITY1);  // becomes inactive
-    assertThat(loadStatsStore.generateLoadReport().getUpstreamLocalityStatsCount()).isEqualTo(1);
-    assertThat(loadStatsStore.generateLoadReport().getUpstreamLocalityStatsCount()).isEqualTo(0);
+    assertThat(loadStatsStore.generateLoadReport().getUpstreamLocalityStatsList()).hasSize(1);
+    assertThat(loadStatsStore.generateLoadReport().getUpstreamLocalityStatsList()).isEmpty();
   }
 
   @Test
