@@ -59,7 +59,7 @@ import javax.annotation.Nullable;
  * <p>Resolving a gRPC target involves contacting the control plane management server via xDS
  * protocol to retrieve service information and produce a service config to the caller.
  *
- * @see XdsNameResolverProvider
+ * @see XdsNameResolverProvider2
  */
 final class XdsNameResolver2 extends NameResolver {
 
@@ -115,6 +115,7 @@ final class XdsNameResolver2 extends NameResolver {
 
   @Override
   public void start(Listener2 listener) {
+    this.listener = checkNotNull(listener, "listener");
     BootstrapInfo bootstrapInfo;
     try {
       bootstrapInfo = bootstrapper.readBootstrap();
@@ -123,7 +124,6 @@ final class XdsNameResolver2 extends NameResolver {
           Status.UNAVAILABLE.withDescription("Failed to load xDS bootstrap").withCause(e));
       return;
     }
-    this.listener = checkNotNull(listener, "listener");
     xdsClientPool = xdsClientPoolFactory.newXdsClientObjectPool(bootstrapInfo);
     xdsClient = xdsClientPool.getObject();
     xdsClient.watchConfigData(authority, new ConfigWatcherImpl());
