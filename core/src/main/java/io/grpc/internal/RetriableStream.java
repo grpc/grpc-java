@@ -882,7 +882,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
                   return;
                 }
                 // else, no activeHedges, no new hedges possible, try to commit
-              } // else, fatal, try to commit
+              } // else, isHedgeable is false, try to commit
             }
           }
         }
