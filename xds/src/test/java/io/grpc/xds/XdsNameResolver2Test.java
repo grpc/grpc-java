@@ -53,6 +53,7 @@ import io.grpc.xds.EnvoyProtoData.RouteAction;
 import io.grpc.xds.XdsClient.XdsClientPoolFactory;
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -293,6 +294,28 @@ public class XdsNameResolver2Test {
                 new RouteAction(TimeUnit.SECONDS.toNanos(15L), cluster2, null))));
     verifyNoMoreInteractions(mockListener);  // no cluster added/deleted
     assertCallSelectResult(call1, configSelector, "another-cluster", 15.0);
+  }
+
+  @Test
+  public void resolve_raceBetweenClusterReleasedAndResourceUpdateAddBackAgain() {
+    InternalConfigSelector configSelector = resolveToClusters();
+    Result result = assertCallSelectResult(call1, configSelector, cluster1, 15.0);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    xdsClient.deliverRoutes(
+        Collections.singletonList(
+            new Route(
+                new RouteMatch(null, call2.getFullMethodNameForPath()),
+                new RouteAction(TimeUnit.SECONDS.toNanos(15L), cluster2, null))));
+    xdsClient.deliverRoutes(
+        Arrays.asList(
+            new Route(
+                new RouteMatch(null, call1.getFullMethodNameForPath()),
+                new RouteAction(TimeUnit.SECONDS.toNanos(15L), cluster1, null)),
+            new Route(
+                new RouteMatch(null, call2.getFullMethodNameForPath()),
+                new RouteAction(TimeUnit.SECONDS.toNanos(15L), cluster2, null))));
+    result.getCommittedCallback().run();
+    verifyNoMoreInteractions(mockListener);
   }
 
   @SuppressWarnings("unchecked")
