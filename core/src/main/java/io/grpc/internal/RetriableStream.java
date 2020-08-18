@@ -836,7 +836,25 @@ abstract class RetriableStream<ReqT> implements ClientStream {
             nextBackoffIntervalNanos = retryPolicy.initialBackoffNanos;
           }
 
-          if (!isHedging) {
+          if (isHedging) {
+            HedgingPlan hedgingPlan = makeHedgingDecision(status, trailers);
+            if (hedgingPlan.isHedgeable) {
+              pushbackHedging(hedgingPlan.hedgingPushbackMillis);
+            }
+            synchronized (lock) {
+              state = state.removeActiveHedge(substream);
+              // The invariant is whether or not #(Potential Hedge + active hedges) > 0.
+              // Once hasPotentialHedging(state) is false, it will always be false, and then
+              // #(state.activeHedges) will be decreasing. This guarantees that even there may be
+              // multiple concurrent hedges, one of the hedges will end up committed.
+              if (hedgingPlan.isHedgeable) {
+                if (hasPotentialHedging(state) || !state.activeHedges.isEmpty()) {
+                  return;
+                }
+                // else, no activeHedges, no new hedges possible, try to commit
+              } // else, isHedgeable is false, try to commit
+            }
+          } else {
             RetryPlan retryPlan = makeRetryDecision(status, trailers);
             if (retryPlan.shouldRetry) {
               // The check state.winningSubstream == null, checking if is not already committed, is
@@ -865,24 +883,6 @@ abstract class RetriableStream<ReqT> implements ClientStream {
                       retryPlan.backoffNanos,
                       TimeUnit.NANOSECONDS));
               return;
-            }
-          } else {
-            HedgingPlan hedgingPlan = makeHedgingDecision(status, trailers);
-            if (hedgingPlan.isHedgeable) {
-              pushbackHedging(hedgingPlan.hedgingPushbackMillis);
-            }
-            synchronized (lock) {
-              state = state.removeActiveHedge(substream);
-              // The invariant is whether or not #(Potential Hedge + active hedges) > 0.
-              // Once hasPotentialHedging(state) is false, it will always be false, and then
-              // #(state.activeHedges) will be decreasing. This guarantees that even there may be
-              // multiple concurrent hedges, one of the hedges will end up committed.
-              if (hedgingPlan.isHedgeable) {
-                if (hasPotentialHedging(state) || !state.activeHedges.isEmpty()) {
-                  return;
-                }
-                // else, no activeHedges, no new hedges possible, try to commit
-              } // else, isHedgeable is false, try to commit
             }
           }
         }
