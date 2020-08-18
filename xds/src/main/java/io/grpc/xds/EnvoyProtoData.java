@@ -1290,6 +1290,9 @@ final class EnvoyProtoData {
       io.envoyproxy.envoy.config.endpoint.v3.ClusterStats.Builder builder =
           io.envoyproxy.envoy.config.endpoint.v3.ClusterStats.newBuilder();
       builder.setClusterName(clusterName);
+      if (clusterServiceName != null) {
+        builder.setClusterServiceName(clusterServiceName);
+      }
       for (UpstreamLocalityStats upstreamLocalityStats : upstreamLocalityStatsList) {
         builder.addUpstreamLocalityStats(upstreamLocalityStats.toEnvoyProtoUpstreamLocalityStats());
       }
