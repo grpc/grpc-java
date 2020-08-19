@@ -78,7 +78,6 @@ final class ClientSslContextProviderFactory
         throw new RuntimeException(ioe);
       }
     }
-    throw new UnsupportedOperationException(
-        "UpstreamTlsContext to have all filenames or all SdsConfig");
+    throw new UnsupportedOperationException("Unsupported configurations in UpstreamTlsContext!");
   }
 }

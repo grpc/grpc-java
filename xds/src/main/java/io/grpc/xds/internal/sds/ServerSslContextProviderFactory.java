@@ -80,7 +80,6 @@ final class ServerSslContextProviderFactory
         throw new RuntimeException(ioe);
       }
     }
-    throw new UnsupportedOperationException(
-        "DownstreamTlsContext to have all filenames or all SdsConfig");
+    throw new UnsupportedOperationException("Unsupported configurations in DownstreamTlsContext!");
   }
 }
