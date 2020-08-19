@@ -42,6 +42,7 @@ public final class MethodDescriptor<ReqT, RespT> {
   private final MethodType type;
   private final String fullMethodName;
   @Nullable private final String serviceName;
+  @Nullable private final String methodName;
   private final Marshaller<ReqT> requestMarshaller;
   private final Marshaller<RespT> responseMarshaller;
   private final @Nullable Object schemaDescriptor;
@@ -225,6 +226,7 @@ public final class MethodDescriptor<ReqT, RespT> {
     this.type = Preconditions.checkNotNull(type, "type");
     this.fullMethodName = Preconditions.checkNotNull(fullMethodName, "fullMethodName");
     this.serviceName = extractFullServiceName(fullMethodName);
+    this.methodName = extractMethodName(fullMethodName);
     this.requestMarshaller = Preconditions.checkNotNull(requestMarshaller, "requestMarshaller");
     this.responseMarshaller = Preconditions.checkNotNull(responseMarshaller, "responseMarshaller");
     this.schemaDescriptor = schemaDescriptor;
@@ -260,6 +262,17 @@ public final class MethodDescriptor<ReqT, RespT> {
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5635")
   public String getServiceName() {
     return serviceName;
+  }
+
+  /**
+   * A convenience method for {@code extractMethodName(getFullMethodName())}.
+   *
+   * @since 1.32.0
+   */
+  @Nullable
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5635")
+  public String getMethodName() {
+    return methodName;
   }
 
   /**
@@ -396,6 +409,21 @@ public final class MethodDescriptor<ReqT, RespT> {
       return null;
     }
     return fullMethodName.substring(0, index);
+  }
+
+  /**
+   * Extract the method name out of a fully qualified method name. May return {@code null}
+   * if the input is malformed, but you cannot rely on it for the validity of the input.
+   *
+   * @since 1.32.0
+   */
+  @Nullable
+  public static String extractMethodName(String fullMethodName) {
+    int index = checkNotNull(fullMethodName, "fullMethodName").lastIndexOf('/');
+    if (index == -1) {
+      return null;
+    }
+    return fullMethodName.substring(index + 1);
   }
 
   /**
