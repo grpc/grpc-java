@@ -48,7 +48,6 @@ import io.envoyproxy.envoy.service.discovery.v3.AggregatedDiscoveryServiceGrpc;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse;
 import io.grpc.InternalLogId;
-import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
@@ -117,8 +116,7 @@ final class XdsClientImpl extends XdsClient {
   private final XdsLogger logger;
   // Name of the target server this gRPC client is trying to talk to.
   private final String targetName;
-  private final ManagedChannel channel;
-  private final boolean useProtocolV3;
+  private final XdsChannel xdsChannel;
   private final SynchronizationContext syncContext;
   private final ScheduledExecutorService timeService;
   private final BackoffPolicy.Provider backoffPolicyProvider;
@@ -209,8 +207,7 @@ final class XdsClientImpl extends XdsClient {
     XdsChannel xdsChannel =
         checkNotNull(channelFactory, "channelFactory")
             .createChannel(checkNotNull(servers, "servers"));
-    this.channel = xdsChannel.getManagedChannel();
-    this.useProtocolV3 = xdsChannel.isUseProtocolV3();
+    this.xdsChannel = xdsChannel;
     this.node = checkNotNull(node, "node");
     this.syncContext = checkNotNull(syncContext, "syncContext");
     this.timeService = checkNotNull(timeService, "timeService");
@@ -225,7 +222,7 @@ final class XdsClientImpl extends XdsClient {
   @Override
   void shutdown() {
     logger.log(XdsLogLevel.INFO, "Shutting down");
-    channel.shutdown();
+    xdsChannel.getManagedChannel().shutdown();
     if (adsStream != null) {
       adsStream.close(Status.CANCELLED.withDescription("shutdown").asException());
     }
@@ -484,8 +481,8 @@ final class XdsClientImpl extends XdsClient {
           new LoadReportClient(
               targetName,
               loadStatsManager,
-              channel,
-              node.toEnvoyProtoNodeV2(),
+              xdsChannel,
+              node,
               syncContext,
               timeService,
               backoffPolicyProvider,
@@ -529,7 +526,7 @@ final class XdsClientImpl extends XdsClient {
    */
   private void startRpcStream() {
     checkState(adsStream == null, "Previous adsStream has not been cleared yet");
-    if (useProtocolV3) {
+    if (xdsChannel.isUseProtocolV3()) {
       adsStream = new AdsStream();
     } else {
       adsStream = new AdsStreamV2();
@@ -1739,8 +1736,8 @@ final class XdsClientImpl extends XdsClient {
     private StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest> requestWriterV2;
 
     AdsStreamV2() {
-      stubV2 =
-          io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.newStub(channel);
+      stubV2 = io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.newStub(
+          xdsChannel.getManagedChannel());
     }
 
     @Override
@@ -1795,7 +1792,7 @@ final class XdsClientImpl extends XdsClient {
     private StreamObserver<DiscoveryRequest> requestWriter;
 
     AdsStream() {
-      stub = AggregatedDiscoveryServiceGrpc.newStub(channel);
+      stub = AggregatedDiscoveryServiceGrpc.newStub(xdsChannel.getManagedChannel());
     }
 
     @Override
