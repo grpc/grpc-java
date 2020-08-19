@@ -183,12 +183,6 @@ final class LoadReportClient {
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
-          if (!initialResponseReceived) {
-            logger.log(XdsLogLevel.DEBUG, "Received LRS initial response:\n{0}", response);
-            initialResponseReceived = true;
-          } else {
-            logger.log(XdsLogLevel.DEBUG, "Received LRS response:\n{0}", response);
-          }
           handleResponse(response);
         }
       });
@@ -244,6 +238,10 @@ final class LoadReportClient {
     private void handleResponse(LoadStatsResponseData response) {
       if (closed) {
         return;
+      }
+      if (!initialResponseReceived) {
+        logger.log(XdsLogLevel.DEBUG, "Initial LRS response received");
+        initialResponseReceived = true;
       }
       reportAllClusters = response.getSendAllClusters();
       if (reportAllClusters) {
@@ -325,6 +323,7 @@ final class LoadReportClient {
             @Override
             public void onNext(
                 io.envoyproxy.envoy.service.load_stats.v2.LoadStatsResponse response) {
+              logger.log(XdsLogLevel.DEBUG, "Received LRS response:\n{0}", response);
               onLoadStatsResponse(LoadStatsResponseData.fromEnvoyProtoV2(response));
             }
 
