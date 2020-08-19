@@ -962,7 +962,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
                   @Override
                   public void runInContext() {
                     setCall(newClientCall(method, callOptions));
-                    syncContext.executeLater(new PendingCallRemoval());
+                    syncContext.execute(new PendingCallRemoval());
                   }
                 }
             );
@@ -975,7 +975,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       @Override
       protected void callCancelled() {
         super.callCancelled();
-        syncContext.executeLater(new PendingCallRemoval());
+        syncContext.execute(new PendingCallRemoval());
       }
 
       final class PendingCallRemoval implements Runnable {
