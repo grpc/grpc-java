@@ -24,6 +24,10 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.protobuf.util.Durations;
+import io.envoyproxy.envoy.service.load_stats.v3.LoadReportingServiceGrpc;
+import io.envoyproxy.envoy.service.load_stats.v3.LoadReportingServiceGrpc.LoadReportingServiceStub;
+import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsRequest;
+import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsResponse;
 import io.grpc.InternalLogId;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
@@ -158,9 +162,11 @@ final class LoadReportClient {
 
   private void startLrsRpc() {
     checkState(lrsStream == null, "previous lbStream has not been cleared yet");
-    // TODO(zdapeng): implement LrsStreamV3 and instantiate lrsStream based on value of
-    //  xdsChannel.useProtocolV3
-    lrsStream = new LrsStreamV2();
+    if (xdsChannel.isUseProtocolV3()) {
+      lrsStream = new LrsStreamV3();
+    } else {
+      lrsStream = new LrsStreamV2();
+    }
     retryStopwatch.reset().start();
     lrsStream.start();
   }
@@ -355,6 +361,49 @@ final class LoadReportClient {
     }
   }
 
+  private final class LrsStreamV3 extends LrsStream {
+    StreamObserver<LoadStatsRequest> lrsRequestWriterV3;
+
+    @Override
+    void start() {
+      StreamObserver<LoadStatsResponse> lrsResponseReaderV3 =
+          new StreamObserver<LoadStatsResponse>() {
+            @Override
+            public void onNext(LoadStatsResponse response) {
+              logger.log(XdsLogLevel.DEBUG, "Received LRS response:\n{0}", response);
+              handleResponse(LoadStatsResponseData.fromEnvoyProtoV3(response));
+            }
+
+            @Override
+            public void onError(Throwable t) {
+              handleRpcError(t);
+            }
+
+            @Override
+            public void onCompleted() {
+              handleRpcComplete();
+            }
+          };
+      LoadReportingServiceStub stubV3 =
+          LoadReportingServiceGrpc.newStub(xdsChannel.getManagedChannel());
+      lrsRequestWriterV3 = stubV3.withWaitForReady().streamLoadStats(lrsResponseReaderV3);
+      logger.log(XdsLogLevel.DEBUG, "Sending initial LRS request");
+      sendLoadStatsRequest(new LoadStatsRequestData(node, null));
+    }
+
+    @Override
+    void sendLoadStatsRequest(LoadStatsRequestData request) {
+      LoadStatsRequest requestProto = request.toEnvoyProtoV3();
+      lrsRequestWriterV3.onNext(requestProto);
+      logger.log(XdsLogLevel.DEBUG, "Sent LoadStatsRequest\n{0}", requestProto);
+    }
+
+    @Override
+    void sendError(Exception error) {
+      lrsRequestWriterV3.onError(error);
+    }
+  }
+
   private static final class LoadStatsRequestData {
     final Node node;
     @Nullable
@@ -372,6 +421,17 @@ final class LoadReportClient {
       if (clusterStatsList != null) {
         for (ClusterStats stats : clusterStatsList) {
           builder.addClusterStats(stats.toEnvoyProtoClusterStatsV2());
+        }
+      }
+      return builder.build();
+    }
+
+    LoadStatsRequest toEnvoyProtoV3() {
+      LoadStatsRequest.Builder builder = LoadStatsRequest.newBuilder();
+      builder.setNode(node.toEnvoyProtoNode());
+      if (clusterStatsList != null) {
+        for (ClusterStats stats : clusterStatsList) {
+          builder.addClusterStats(stats.toEnvoyProtoClusterStats());
         }
       }
       return builder.build();
@@ -404,6 +464,13 @@ final class LoadReportClient {
 
     static LoadStatsResponseData fromEnvoyProtoV2(
         io.envoyproxy.envoy.service.load_stats.v2.LoadStatsResponse loadStatsResponse) {
+      return new LoadStatsResponseData(
+          loadStatsResponse.getSendAllClusters(),
+          loadStatsResponse.getClustersList(),
+          Durations.toNanos(loadStatsResponse.getLoadReportingInterval()));
+    }
+
+    static LoadStatsResponseData fromEnvoyProtoV3(LoadStatsResponse loadStatsResponse) {
       return new LoadStatsResponseData(
           loadStatsResponse.getSendAllClusters(),
           loadStatsResponse.getClustersList(),
