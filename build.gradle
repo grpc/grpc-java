@@ -174,7 +174,7 @@ subprojects {
             // examples/example-tls/pom.xml
             netty_tcnative: 'io.netty:netty-tcnative-boringssl-static:2.0.31.Final',
 
-            conscrypt: 'org.conscrypt:conscrypt-openjdk-uber:2.2.1',
+            conscrypt: 'org.conscrypt:conscrypt-openjdk-uber:2.5.1',
             re2j: 'com.google.re2j:re2j:1.2',
 
             bouncycastle: 'org.bouncycastle:bcpkix-jdk15on:1.61',
