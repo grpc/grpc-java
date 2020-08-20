@@ -21,11 +21,11 @@ import static io.envoyproxy.envoy.api.v2.core.HealthStatus.HEALTHY;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
-import static io.grpc.xds.XdsClientTestHelper.buildClusterLoadAssignment;
+import static io.grpc.xds.XdsClientTestHelper.buildClusterLoadAssignmentV2;
 import static io.grpc.xds.XdsClientTestHelper.buildDiscoveryResponseV2;
-import static io.grpc.xds.XdsClientTestHelper.buildDropOverload;
-import static io.grpc.xds.XdsClientTestHelper.buildLbEndpoint;
-import static io.grpc.xds.XdsClientTestHelper.buildLocalityLbEndpoints;
+import static io.grpc.xds.XdsClientTestHelper.buildDropOverloadV2;
+import static io.grpc.xds.XdsClientTestHelper.buildLbEndpointV2;
+import static io.grpc.xds.XdsClientTestHelper.buildLocalityLbEndpointsV2;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
@@ -282,13 +282,13 @@ public class EdsLoadBalancerTest {
 
     // Endpoint update received.
     ClusterLoadAssignment clusterLoadAssignment =
-        buildClusterLoadAssignment(CLUSTER_NAME,
+        buildClusterLoadAssignmentV2(CLUSTER_NAME,
             ImmutableList.of(
-                buildLocalityLbEndpoints("region1", "zone1", "subzone1",
+                buildLocalityLbEndpointsV2("region1", "zone1", "subzone1",
                     ImmutableList.of(
-                        buildLbEndpoint("192.168.0.1", 8080, HEALTHY, 2)),
+                        buildLbEndpointV2("192.168.0.1", 8080, HEALTHY, 2)),
                     1, 0)),
-            ImmutableList.of(buildDropOverload("throttle", 1000)));
+            ImmutableList.of(buildDropOverloadV2("throttle", 1000)));
     deliverClusterLoadAssignments(clusterLoadAssignment);
 
     // handleResolutionError() after receiving endpoint update.
@@ -304,11 +304,11 @@ public class EdsLoadBalancerTest {
 
     deliverResolvedAddresses("edsServiceName1", null, fakeEndpointPickingPolicy);
     ClusterLoadAssignment clusterLoadAssignment =
-        buildClusterLoadAssignment("edsServiceName1",
+        buildClusterLoadAssignmentV2("edsServiceName1",
             ImmutableList.of(
-                buildLocalityLbEndpoints("region1", "zone1", "subzone1",
+                buildLocalityLbEndpointsV2("region1", "zone1", "subzone1",
                     ImmutableList.of(
-                        buildLbEndpoint("192.168.0.1", 8080, HEALTHY, 2)),
+                        buildLbEndpointV2("192.168.0.1", 8080, HEALTHY, 2)),
                     1, 0)),
             ImmutableList.<DropOverload>of());
     deliverClusterLoadAssignments(clusterLoadAssignment);
@@ -327,11 +327,11 @@ public class EdsLoadBalancerTest {
     verify(childBalancer1).shutdown();
 
     clusterLoadAssignment =
-        buildClusterLoadAssignment("edsServiceName2",
+        buildClusterLoadAssignmentV2("edsServiceName2",
             ImmutableList.of(
-                buildLocalityLbEndpoints("region2", "zone2", "subzone2",
+                buildLocalityLbEndpointsV2("region2", "zone2", "subzone2",
                     ImmutableList.of(
-                        buildLbEndpoint("192.168.0.2", 8080, HEALTHY, 2)),
+                        buildLbEndpointV2("192.168.0.2", 8080, HEALTHY, 2)),
                     1, 0)),
             ImmutableList.<DropOverload>of());
     deliverClusterLoadAssignments(clusterLoadAssignment);
@@ -354,11 +354,11 @@ public class EdsLoadBalancerTest {
     // Change edsServiceName to edsServiceName3.
     deliverResolvedAddresses("edsServiceName3", null, fakeEndpointPickingPolicy);
     clusterLoadAssignment =
-        buildClusterLoadAssignment("edsServiceName3",
+        buildClusterLoadAssignmentV2("edsServiceName3",
             ImmutableList.of(
-                buildLocalityLbEndpoints("region3", "zone3", "subzone3",
+                buildLocalityLbEndpointsV2("region3", "zone3", "subzone3",
                     ImmutableList.of(
-                        buildLbEndpoint("192.168.0.3", 8080, HEALTHY, 2)),
+                        buildLbEndpointV2("192.168.0.3", 8080, HEALTHY, 2)),
                     1, 0)),
             ImmutableList.<DropOverload>of());
     deliverClusterLoadAssignments(clusterLoadAssignment);
@@ -382,11 +382,11 @@ public class EdsLoadBalancerTest {
     verify(childBalancer3).shutdown();
 
     clusterLoadAssignment =
-        buildClusterLoadAssignment("edsServiceName4",
+        buildClusterLoadAssignmentV2("edsServiceName4",
             ImmutableList.of(
-                buildLocalityLbEndpoints("region4", "zone4", "subzone4",
+                buildLocalityLbEndpointsV2("region4", "zone4", "subzone4",
                     ImmutableList.of(
-                        buildLbEndpoint("192.168.0.4", 8080, HEALTHY, 2)),
+                        buildLbEndpointV2("192.168.0.4", 8080, HEALTHY, 2)),
                     1, 0)),
             ImmutableList.<DropOverload>of());
     deliverClusterLoadAssignments(clusterLoadAssignment);
@@ -408,11 +408,11 @@ public class EdsLoadBalancerTest {
     // Change edsServiceName to edsServiceName5.
     deliverResolvedAddresses("edsServiceName5", null, fakeEndpointPickingPolicy);
     clusterLoadAssignment =
-        buildClusterLoadAssignment("edsServiceName5",
+        buildClusterLoadAssignmentV2("edsServiceName5",
             ImmutableList.of(
-                buildLocalityLbEndpoints("region5", "zone5", "subzone5",
+                buildLocalityLbEndpointsV2("region5", "zone5", "subzone5",
                     ImmutableList.of(
-                        buildLbEndpoint("192.168.0.5", 8080, HEALTHY, 2)),
+                        buildLbEndpointV2("192.168.0.5", 8080, HEALTHY, 2)),
                     1, 0)),
             ImmutableList.<DropOverload>of());
     deliverClusterLoadAssignments(clusterLoadAssignment);
@@ -443,12 +443,12 @@ public class EdsLoadBalancerTest {
   public void edsResourceUpdate_allDrop() {
     deliverResolvedAddresses(null, null, fakeEndpointPickingPolicy);
 
-    ClusterLoadAssignment clusterLoadAssignment = buildClusterLoadAssignment(
+    ClusterLoadAssignment clusterLoadAssignment = buildClusterLoadAssignmentV2(
         CLUSTER_NAME,
         ImmutableList.of(
-            buildLocalityLbEndpoints("region1", "zone1", "subzone1",
+            buildLocalityLbEndpointsV2("region1", "zone1", "subzone1",
                 ImmutableList.of(
-                    buildLbEndpoint("192.168.0.1", 8080, HEALTHY, 2)),
+                    buildLbEndpointV2("192.168.0.1", 8080, HEALTHY, 2)),
                 1, 0)),
         ImmutableList.<DropOverload>of());
     deliverClusterLoadAssignments(clusterLoadAssignment);
@@ -469,17 +469,17 @@ public class EdsLoadBalancerTest {
     childHelper.updateBalancingState(READY, picker);
     assertLatestSubchannelPicker(subchannel);
 
-    clusterLoadAssignment = buildClusterLoadAssignment(
+    clusterLoadAssignment = buildClusterLoadAssignmentV2(
         CLUSTER_NAME,
         ImmutableList.of(
-            buildLocalityLbEndpoints("region1", "zone1", "subzone1",
+            buildLocalityLbEndpointsV2("region1", "zone1", "subzone1",
                 ImmutableList.of(
-                    buildLbEndpoint("192.168.0.1", 8080, HEALTHY, 2)),
+                    buildLbEndpointV2("192.168.0.1", 8080, HEALTHY, 2)),
                 1, 0)),
         ImmutableList.of(
-            buildDropOverload("cat_1", 3),
-            buildDropOverload("cat_2", 1_000_001),
-            buildDropOverload("cat_3", 4)));
+            buildDropOverloadV2("cat_1", 3),
+            buildDropOverloadV2("cat_2", 1_000_001),
+            buildDropOverloadV2("cat_3", 4)));
     deliverClusterLoadAssignments(clusterLoadAssignment);
 
     verify(helper, atLeastOnce()).updateBalancingState(eq(READY), pickerCaptor.capture());
@@ -492,30 +492,30 @@ public class EdsLoadBalancerTest {
   public void edsResourceUpdate_localityAssignmentChange() {
     deliverResolvedAddresses(null, null, fakeEndpointPickingPolicy);
 
-    LbEndpoint endpoint11 = buildLbEndpoint("addr11.example.com", 8011, HEALTHY, 11);
-    LbEndpoint endpoint12 = buildLbEndpoint("addr12.example.com", 8012, HEALTHY, 12);
-    LocalityLbEndpoints localityLbEndpoints1 = buildLocalityLbEndpoints(
+    LbEndpoint endpoint11 = buildLbEndpointV2("addr11.example.com", 8011, HEALTHY, 11);
+    LbEndpoint endpoint12 = buildLbEndpointV2("addr12.example.com", 8012, HEALTHY, 12);
+    LocalityLbEndpoints localityLbEndpoints1 = buildLocalityLbEndpointsV2(
         "region1", "zone1", "subzone1",
         ImmutableList.of(endpoint11, endpoint12),
         1,
         0);
 
-    LbEndpoint endpoint21 = buildLbEndpoint("addr21.example.com", 8021, HEALTHY, 21);
-    LbEndpoint endpoint22 = buildLbEndpoint("addr22.example.com", 8022, HEALTHY, 22);
-    LocalityLbEndpoints localityLbEndpoints2 = buildLocalityLbEndpoints(
+    LbEndpoint endpoint21 = buildLbEndpointV2("addr21.example.com", 8021, HEALTHY, 21);
+    LbEndpoint endpoint22 = buildLbEndpointV2("addr22.example.com", 8022, HEALTHY, 22);
+    LocalityLbEndpoints localityLbEndpoints2 = buildLocalityLbEndpointsV2(
         "region2", "zone2", "subzone2",
         ImmutableList.of(endpoint21, endpoint22),
         2,
         0);
 
-    LbEndpoint endpoint31 = buildLbEndpoint("addr31.example.com", 8031, HEALTHY, 31);
-    LocalityLbEndpoints localityLbEndpoints3 = buildLocalityLbEndpoints(
+    LbEndpoint endpoint31 = buildLbEndpointV2("addr31.example.com", 8031, HEALTHY, 31);
+    LocalityLbEndpoints localityLbEndpoints3 = buildLocalityLbEndpointsV2(
         "region3", "zone3", "subzone3",
         ImmutableList.of(endpoint31),
         3,
         0);
 
-    ClusterLoadAssignment clusterLoadAssignment = buildClusterLoadAssignment(
+    ClusterLoadAssignment clusterLoadAssignment = buildClusterLoadAssignmentV2(
         CLUSTER_NAME,
         ImmutableList.of(localityLbEndpoints1, localityLbEndpoints2, localityLbEndpoints3),
         ImmutableList.<DropOverload>of());
@@ -581,32 +581,32 @@ public class EdsLoadBalancerTest {
     assertThat(localityStores).hasSize(1);
     LocalityStore localityStore = localityStores.peekLast();
 
-    ClusterLoadAssignment clusterLoadAssignment = buildClusterLoadAssignment(
+    ClusterLoadAssignment clusterLoadAssignment = buildClusterLoadAssignmentV2(
         "edsServiceName1",
         ImmutableList.of(
-            buildLocalityLbEndpoints("region1", "zone1", "subzone1",
+            buildLocalityLbEndpointsV2("region1", "zone1", "subzone1",
                 ImmutableList.of(
-                    buildLbEndpoint("192.168.0.1", 8080, HEALTHY, 2)),
+                    buildLbEndpointV2("192.168.0.1", 8080, HEALTHY, 2)),
                 1, 0)),
         ImmutableList.of(
-            buildDropOverload("cat_1", 3),
-            buildDropOverload("cat_2", 456)));
+            buildDropOverloadV2("cat_1", 3),
+            buildDropOverloadV2("cat_2", 456)));
     deliverClusterLoadAssignments(clusterLoadAssignment);
     EndpointUpdate endpointUpdate = getEndpointUpdateFromClusterAssignmentV2(clusterLoadAssignment);
     verify(localityStore).updateDropPercentage(endpointUpdate.getDropPolicies());
     verify(localityStore).updateLocalityStore(endpointUpdate.getLocalityLbEndpointsMap());
 
-    clusterLoadAssignment = buildClusterLoadAssignment(
+    clusterLoadAssignment = buildClusterLoadAssignmentV2(
         "edsServiceName1",
         ImmutableList.of(
-            buildLocalityLbEndpoints("region1", "zone1", "subzone1",
+            buildLocalityLbEndpointsV2("region1", "zone1", "subzone1",
                 ImmutableList.of(
-                    buildLbEndpoint("192.168.0.1", 8080, HEALTHY, 2),
-                    buildLbEndpoint("192.168.0.1", 8088, HEALTHY, 2)),
+                    buildLbEndpointV2("192.168.0.1", 8080, HEALTHY, 2),
+                    buildLbEndpointV2("192.168.0.1", 8088, HEALTHY, 2)),
                 1, 0)),
         ImmutableList.of(
-            buildDropOverload("cat_1", 3),
-            buildDropOverload("cat_3", 4)));
+            buildDropOverloadV2("cat_1", 3),
+            buildDropOverloadV2("cat_3", 4)));
     deliverClusterLoadAssignments(clusterLoadAssignment);
 
     endpointUpdate = getEndpointUpdateFromClusterAssignmentV2(clusterLoadAssignment);
@@ -618,17 +618,17 @@ public class EdsLoadBalancerTest {
     assertThat(localityStores).hasSize(2);
     localityStore = localityStores.peekLast();
 
-    clusterLoadAssignment = buildClusterLoadAssignment(
+    clusterLoadAssignment = buildClusterLoadAssignmentV2(
         "edsServiceName2",
         ImmutableList.of(
-            buildLocalityLbEndpoints("region2", "zone2", "subzone2",
+            buildLocalityLbEndpointsV2("region2", "zone2", "subzone2",
                 ImmutableList.of(
-                    buildLbEndpoint("192.168.0.2", 8080, HEALTHY, 2),
-                    buildLbEndpoint("192.168.0.2", 8088, HEALTHY, 2)),
+                    buildLbEndpointV2("192.168.0.2", 8080, HEALTHY, 2),
+                    buildLbEndpointV2("192.168.0.2", 8088, HEALTHY, 2)),
                 1, 0)),
         ImmutableList.of(
-            buildDropOverload("cat_1", 3),
-            buildDropOverload("cat_3", 4)));
+            buildDropOverloadV2("cat_1", 3),
+            buildDropOverloadV2("cat_3", 4)));
     deliverClusterLoadAssignments(clusterLoadAssignment);
     endpointUpdate = getEndpointUpdateFromClusterAssignmentV2(clusterLoadAssignment);
     verify(localityStore).updateDropPercentage(endpointUpdate.getDropPolicies());
@@ -653,11 +653,11 @@ public class EdsLoadBalancerTest {
   public void edsResourceRemoved() {
     deliverResolvedAddresses(null, null, fakeEndpointPickingPolicy);
     ClusterLoadAssignment clusterLoadAssignment =
-        buildClusterLoadAssignment(CLUSTER_NAME,
+        buildClusterLoadAssignmentV2(CLUSTER_NAME,
             ImmutableList.of(
-                buildLocalityLbEndpoints("region", "zone", "subzone",
+                buildLocalityLbEndpointsV2("region", "zone", "subzone",
                     ImmutableList.of(
-                        buildLbEndpoint("192.168.0.1", 8080, HEALTHY, 2)),
+                        buildLbEndpointV2("192.168.0.1", 8080, HEALTHY, 2)),
                     1, 0)),
             ImmutableList.<DropOverload>of());
     deliverClusterLoadAssignments(clusterLoadAssignment);
@@ -709,13 +709,13 @@ public class EdsLoadBalancerTest {
     deliverResolvedAddresses(null, null, fakeEndpointPickingPolicy);
     // Endpoint update received.
     ClusterLoadAssignment clusterLoadAssignment =
-        buildClusterLoadAssignment(CLUSTER_NAME,
+        buildClusterLoadAssignmentV2(CLUSTER_NAME,
             ImmutableList.of(
-                buildLocalityLbEndpoints("region1", "zone1", "subzone1",
+                buildLocalityLbEndpointsV2("region1", "zone1", "subzone1",
                     ImmutableList.of(
-                        buildLbEndpoint("192.168.0.1", 8080, HEALTHY, 2)),
+                        buildLbEndpointV2("192.168.0.1", 8080, HEALTHY, 2)),
                     1, 0)),
-            ImmutableList.of(buildDropOverload("throttle", 1000)));
+            ImmutableList.of(buildDropOverloadV2("throttle", 1000)));
     deliverClusterLoadAssignments(clusterLoadAssignment);
 
     verify(helper, never()).updateBalancingState(
