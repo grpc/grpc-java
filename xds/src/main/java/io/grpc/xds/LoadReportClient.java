@@ -188,7 +188,7 @@ final class LoadReportClient {
       });
     }
 
-    final void onError(final Throwable t) {
+    final void handleRpcError(final Throwable t) {
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
@@ -197,7 +197,7 @@ final class LoadReportClient {
       });
     }
 
-    final void onCompleted() {
+    final void handleRpcComplete() {
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
@@ -329,12 +329,12 @@ final class LoadReportClient {
 
             @Override
             public void onError(Throwable t) {
-              LrsStreamV2.this.onError(t);
+              handleRpcError(t);
             }
 
             @Override
             public void onCompleted() {
-              LrsStreamV2.this.onCompleted();
+              handleRpcComplete();
             }
           };
       io.envoyproxy.envoy.service.load_stats.v2.LoadReportingServiceGrpc.LoadReportingServiceStub
