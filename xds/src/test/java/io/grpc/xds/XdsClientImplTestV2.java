@@ -17,18 +17,18 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
-import static io.grpc.xds.XdsClientTestHelper.buildCluster;
-import static io.grpc.xds.XdsClientTestHelper.buildClusterLoadAssignment;
+import static io.grpc.xds.XdsClientTestHelper.buildClusterLoadAssignmentV2;
+import static io.grpc.xds.XdsClientTestHelper.buildClusterV2;
 import static io.grpc.xds.XdsClientTestHelper.buildDiscoveryRequestV2;
 import static io.grpc.xds.XdsClientTestHelper.buildDiscoveryResponseV2;
-import static io.grpc.xds.XdsClientTestHelper.buildDropOverload;
-import static io.grpc.xds.XdsClientTestHelper.buildLbEndpoint;
-import static io.grpc.xds.XdsClientTestHelper.buildListener;
-import static io.grpc.xds.XdsClientTestHelper.buildLocalityLbEndpoints;
-import static io.grpc.xds.XdsClientTestHelper.buildRouteConfiguration;
-import static io.grpc.xds.XdsClientTestHelper.buildSecureCluster;
-import static io.grpc.xds.XdsClientTestHelper.buildUpstreamTlsContext;
-import static io.grpc.xds.XdsClientTestHelper.buildVirtualHost;
+import static io.grpc.xds.XdsClientTestHelper.buildDropOverloadV2;
+import static io.grpc.xds.XdsClientTestHelper.buildLbEndpointV2;
+import static io.grpc.xds.XdsClientTestHelper.buildListenerV2;
+import static io.grpc.xds.XdsClientTestHelper.buildLocalityLbEndpointsV2;
+import static io.grpc.xds.XdsClientTestHelper.buildRouteConfigurationV2;
+import static io.grpc.xds.XdsClientTestHelper.buildSecureClusterV2;
+import static io.grpc.xds.XdsClientTestHelper.buildUpstreamTlsContextV2;
+import static io.grpc.xds.XdsClientTestHelper.buildVirtualHostV2;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -341,21 +341,21 @@ public class XdsClientImplTestV2 {
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
 
     List<Any> listeners = ImmutableList.of(
-        Any.pack(buildListener("bar.googleapis.com",
+        Any.pack(buildListenerV2("bar.googleapis.com",
             Any.pack(HttpConnectionManager.newBuilder()
                 .setRouteConfig(
-                    buildRouteConfiguration("route-bar.googleapis.com",
+                    buildRouteConfigurationV2("route-bar.googleapis.com",
                         ImmutableList.of(
-                            buildVirtualHost(
+                            buildVirtualHostV2(
                                 ImmutableList.of("bar.googleapis.com"),
                                 "cluster-bar.googleapis.com"))))
                 .build()))),
-        Any.pack(buildListener("baz.googleapis.com",
+        Any.pack(buildListenerV2("baz.googleapis.com",
             Any.pack(HttpConnectionManager.newBuilder()
                 .setRouteConfig(
-                    buildRouteConfiguration("route-baz.googleapis.com",
+                    buildRouteConfigurationV2("route-baz.googleapis.com",
                         ImmutableList.of(
-                            buildVirtualHost(
+                            buildVirtualHostV2(
                                 ImmutableList.of("baz.googleapis.com"),
                                 "cluster-baz.googleapis.com"))))
                 .build()))));
@@ -396,16 +396,16 @@ public class XdsClientImplTestV2 {
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
 
     io.envoyproxy.envoy.api.v2.RouteConfiguration routeConfig =
-        buildRouteConfiguration(
+        buildRouteConfigurationV2(
             "route.googleapis.com",
             ImmutableList.of(
-                buildVirtualHost(ImmutableList.of("something does not match"),
+                buildVirtualHostV2(ImmutableList.of("something does not match"),
                     "some cluster"),
-                buildVirtualHost(ImmutableList.of("something else does not match"),
+                buildVirtualHostV2(ImmutableList.of("something else does not match"),
                     "some other cluster")));
 
     List<Any> listeners = ImmutableList.of(
-        Any.pack(buildListener(TARGET_AUTHORITY, /* matching resource */
+        Any.pack(buildListenerV2(TARGET_AUTHORITY, /* matching resource */
             Any.pack(HttpConnectionManager.newBuilder().setRouteConfig(routeConfig).build()))));
     DiscoveryResponse response =
         buildDiscoveryResponseV2("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000");
@@ -448,34 +448,34 @@ public class XdsClientImplTestV2 {
     assertThat(ldsRespTimer.isCancelled()).isFalse();
 
     List<Any> listeners = ImmutableList.of(
-        Any.pack(buildListener("bar.googleapis.com",
+        Any.pack(buildListenerV2("bar.googleapis.com",
             Any.pack(HttpConnectionManager.newBuilder()
                 .setRouteConfig(
-                    buildRouteConfiguration("route-bar.googleapis.com",
+                    buildRouteConfigurationV2("route-bar.googleapis.com",
                         ImmutableList.of(
-                            buildVirtualHost(
+                            buildVirtualHostV2(
                                 ImmutableList.of("bar.googleapis.com"),
                                 "cluster-bar.googleapis.com"))))
                 .build()))),
-        Any.pack(buildListener("baz.googleapis.com",
+        Any.pack(buildListenerV2("baz.googleapis.com",
             Any.pack(HttpConnectionManager.newBuilder()
                 .setRouteConfig(
-                    buildRouteConfiguration("route-baz.googleapis.com",
+                    buildRouteConfigurationV2("route-baz.googleapis.com",
                         ImmutableList.of(
-                            buildVirtualHost(
+                            buildVirtualHostV2(
                                 ImmutableList.of("baz.googleapis.com"),
                                 "cluster-baz.googleapis.com"))))
                 .build()))),
-        Any.pack(buildListener(TARGET_AUTHORITY, /* matching resource */
+        Any.pack(buildListenerV2(TARGET_AUTHORITY, /* matching resource */
             Any.pack(
                 HttpConnectionManager.newBuilder()
                     .setRouteConfig( // target route configuration
-                        buildRouteConfiguration("route-foo.googleapis.com",
+                        buildRouteConfigurationV2("route-foo.googleapis.com",
                             ImmutableList.of(
-                                buildVirtualHost( // matching virtual host
+                                buildVirtualHostV2( // matching virtual host
                                     ImmutableList.of(TARGET_AUTHORITY, "bar.googleapis.com"),
                                     "cluster.googleapis.com"),
-                                buildVirtualHost(
+                                buildVirtualHostV2(
                                     ImmutableList.of("something does not match"),
                                     "some cluster"))))
                     .build()))));
@@ -524,7 +524,7 @@ public class XdsClientImplTestV2 {
             .setRouteConfigName("route-foo.googleapis.com")
             .build();
     List<Any> listeners = ImmutableList.of(
-        Any.pack(buildListener(TARGET_AUTHORITY, /* matching resource */
+        Any.pack(buildListenerV2(TARGET_AUTHORITY, /* matching resource */
             Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build())))
     );
     DiscoveryResponse response =
@@ -547,17 +547,17 @@ public class XdsClientImplTestV2 {
     // VirtualHost with domains matching requested hostname. Otherwise, it is invalid data.
     List<Any> routeConfigs = ImmutableList.of(
         Any.pack(
-            buildRouteConfiguration(
+            buildRouteConfigurationV2(
                 "some resource name does not match route-foo.googleapis.com",
                 ImmutableList.of(
-                    buildVirtualHost(
+                    buildVirtualHostV2(
                         ImmutableList.of(TARGET_AUTHORITY),
                         "whatever cluster")))),
         Any.pack(
-            buildRouteConfiguration(
+            buildRouteConfigurationV2(
                 "some other resource name does not match route-foo.googleapis.com",
                 ImmutableList.of(
-                    buildVirtualHost(
+                    buildVirtualHostV2(
                         ImmutableList.of(TARGET_AUTHORITY),
                         "some more whatever cluster")))));
     response = buildDiscoveryResponseV2(
@@ -597,7 +597,7 @@ public class XdsClientImplTestV2 {
             .build();
 
     List<Any> listeners = ImmutableList.of(
-        Any.pack(buildListener(TARGET_AUTHORITY, /* matching resource */
+        Any.pack(buildListenerV2(TARGET_AUTHORITY, /* matching resource */
             Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build())))
     );
     DiscoveryResponse response =
@@ -612,18 +612,18 @@ public class XdsClientImplTestV2 {
     // VirtualHost with domains matching requested hostname. Otherwise, it is invalid data.
     List<Any> routeConfigs = ImmutableList.of(
         Any.pack(
-            buildRouteConfiguration(
+            buildRouteConfigurationV2(
                 "route-foo.googleapis.com", // target route configuration
                 ImmutableList.of(
-                    buildVirtualHost(ImmutableList.of("something does not match"),
+                    buildVirtualHostV2(ImmutableList.of("something does not match"),
                         "some cluster"),
-                    buildVirtualHost(ImmutableList.of(TARGET_AUTHORITY, "bar.googleapis.com:443"),
+                    buildVirtualHostV2(ImmutableList.of(TARGET_AUTHORITY, "bar.googleapis.com:443"),
                         "cluster.googleapis.com")))),  // matching virtual host
         Any.pack(
-            buildRouteConfiguration(
+            buildRouteConfigurationV2(
                 "some resource name does not match route-foo.googleapis.com",
                 ImmutableList.of(
-                    buildVirtualHost(ImmutableList.of("foo.googleapis.com"),
+                    buildVirtualHostV2(ImmutableList.of("foo.googleapis.com"),
                         "some more cluster")))));
     response = buildDiscoveryResponseV2(
         "0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS_V2, "0000");
@@ -662,7 +662,7 @@ public class XdsClientImplTestV2 {
             .build();
 
     List<Any> listeners = ImmutableList.of(
-            Any.pack(buildListener(TARGET_AUTHORITY, /* matching resource */
+            Any.pack(buildListenerV2(TARGET_AUTHORITY, /* matching resource */
                     Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build())))
     );
     DiscoveryResponse response =
@@ -678,7 +678,7 @@ public class XdsClientImplTestV2 {
     List<Any> routeConfigs =
         ImmutableList.of(
             Any.pack(
-                buildRouteConfiguration(
+                buildRouteConfigurationV2(
                     "route-foo.googleapis.com",
                     ImmutableList.of(
                         io.envoyproxy.envoy.api.v2.route.VirtualHost.newBuilder()
@@ -806,7 +806,7 @@ public class XdsClientImplTestV2 {
             .build();
 
     List<Any> listeners = ImmutableList.of(
-        Any.pack(buildListener(TARGET_AUTHORITY, /* matching resource */
+        Any.pack(buildListenerV2(TARGET_AUTHORITY, /* matching resource */
             Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build())))
     );
     DiscoveryResponse response =
@@ -819,19 +819,19 @@ public class XdsClientImplTestV2 {
 
     List<Any> routeConfigs = ImmutableList.of(
         Any.pack(
-            buildRouteConfiguration(
+            buildRouteConfigurationV2(
                 "route-foo.googleapis.com",
                 ImmutableList.of(
-                    buildVirtualHost(ImmutableList.of("something does not match"),
+                    buildVirtualHostV2(ImmutableList.of("something does not match"),
                         "some cluster"),
-                    buildVirtualHost(
+                    buildVirtualHostV2(
                         ImmutableList.of("something else does not match", "also does not match"),
                         "cluster.googleapis.com")))),
         Any.pack(
-            buildRouteConfiguration(
+            buildRouteConfigurationV2(
                 "some resource name does not match route-foo.googleapis.com",
                 ImmutableList.of(
-                    buildVirtualHost(ImmutableList.of("one more does not match"),
+                    buildVirtualHostV2(ImmutableList.of("one more does not match"),
                         "some more cluster")))));
     response = buildDiscoveryResponseV2(
         "0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS_V2, "0000");
@@ -873,7 +873,7 @@ public class XdsClientImplTestV2 {
             .build();
 
     List<Any> listeners = ImmutableList.of(
-        Any.pack(buildListener(TARGET_AUTHORITY, /* matching resource */
+        Any.pack(buildListenerV2(TARGET_AUTHORITY, /* matching resource */
             Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build())))
     );
     DiscoveryResponse response =
@@ -899,7 +899,7 @@ public class XdsClientImplTestV2 {
 
     List<Any> routeConfigs = ImmutableList.of(
         Any.pack(
-            buildRouteConfiguration("route-foo.googleapis.com",
+            buildRouteConfigurationV2("route-foo.googleapis.com",
                 ImmutableList.of(virtualHost))));
     response = buildDiscoveryResponseV2(
         "0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS_V2, "0000");
@@ -938,17 +938,17 @@ public class XdsClientImplTestV2 {
     // Management server sends back an LDS response containing a RouteConfiguration for the
     // requested Listener directly in-line.
     io.envoyproxy.envoy.api.v2.RouteConfiguration routeConfig =
-        buildRouteConfiguration(
+        buildRouteConfigurationV2(
             "route-foo.googleapis.com", // target route configuration
             ImmutableList.of(
-                buildVirtualHost( // matching virtual host
+                buildVirtualHostV2( // matching virtual host
                     ImmutableList.of(TARGET_AUTHORITY, "bar.googleapis.com:443"),
                     "cluster.googleapis.com"),
-                buildVirtualHost(ImmutableList.of("something does not match"),
+                buildVirtualHostV2(ImmutableList.of("something does not match"),
                     "some cluster")));
 
     List<Any> listeners = ImmutableList.of(
-        Any.pack(buildListener(TARGET_AUTHORITY, /* matching resource */
+        Any.pack(buildListenerV2(TARGET_AUTHORITY, /* matching resource */
             Any.pack(HttpConnectionManager.newBuilder().setRouteConfig(routeConfig).build())))
     );
     DiscoveryResponse response =
@@ -968,16 +968,16 @@ public class XdsClientImplTestV2 {
 
     // Management sends back another LDS response containing updates for the requested Listener.
     routeConfig =
-        buildRouteConfiguration(
+        buildRouteConfigurationV2(
             "another-route-foo.googleapis.com",
             ImmutableList.of(
-                buildVirtualHost(ImmutableList.of(TARGET_AUTHORITY, "bar.googleapis.com:443"),
+                buildVirtualHostV2(ImmutableList.of(TARGET_AUTHORITY, "bar.googleapis.com:443"),
                     "another-cluster.googleapis.com"),
-                buildVirtualHost(ImmutableList.of("something does not match"),
+                buildVirtualHostV2(ImmutableList.of("something does not match"),
                     "some cluster")));
 
     listeners = ImmutableList.of(
-        Any.pack(buildListener(TARGET_AUTHORITY, /* matching resource */
+        Any.pack(buildListenerV2(TARGET_AUTHORITY, /* matching resource */
             Any.pack(HttpConnectionManager.newBuilder().setRouteConfig(routeConfig).build())))
     );
     response =
@@ -1006,7 +1006,7 @@ public class XdsClientImplTestV2 {
             .build();
 
     listeners = ImmutableList.of(
-        Any.pack(buildListener(TARGET_AUTHORITY, /* matching resource */
+        Any.pack(buildListenerV2(TARGET_AUTHORITY, /* matching resource */
             Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build())))
     );
     response =
@@ -1027,12 +1027,12 @@ public class XdsClientImplTestV2 {
     // for the requested resource.
     List<Any> routeConfigs = ImmutableList.of(
         Any.pack(
-            buildRouteConfiguration(
+            buildRouteConfigurationV2(
                 "some-route-to-foo.googleapis.com",
                 ImmutableList.of(
-                    buildVirtualHost(ImmutableList.of("something does not match"),
+                    buildVirtualHostV2(ImmutableList.of("something does not match"),
                         "some cluster"),
-                    buildVirtualHost(ImmutableList.of(TARGET_AUTHORITY, "bar.googleapis.com:443"),
+                    buildVirtualHostV2(ImmutableList.of(TARGET_AUTHORITY, "bar.googleapis.com:443"),
                         "some-other-cluster.googleapis.com")))));
     response = buildDiscoveryResponseV2(
         "0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS_V2, "0000");
@@ -1053,10 +1053,10 @@ public class XdsClientImplTestV2 {
     // RouteConfiguration currently in-use by client.
     routeConfigs = ImmutableList.of(
         Any.pack(
-            buildRouteConfiguration(
+            buildRouteConfigurationV2(
                 "some-route-to-foo.googleapis.com",
                 ImmutableList.of(
-                    buildVirtualHost(ImmutableList.of(TARGET_AUTHORITY, "bar.googleapis.com:443"),
+                    buildVirtualHostV2(ImmutableList.of(TARGET_AUTHORITY, "bar.googleapis.com:443"),
                         "an-updated-cluster.googleapis.com")))));
     response = buildDiscoveryResponseV2(
         "1", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS_V2, "0001");
@@ -1113,7 +1113,7 @@ public class XdsClientImplTestV2 {
             .build();
 
     List<Any> listeners = ImmutableList.of(
-        Any.pack(buildListener(TARGET_AUTHORITY, /* matching resource */
+        Any.pack(buildListenerV2(TARGET_AUTHORITY, /* matching resource */
             Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build())))
     );
     DiscoveryResponse response =
@@ -1141,10 +1141,10 @@ public class XdsClientImplTestV2 {
     // for the requested resource.
     List<Any> routeConfigs = ImmutableList.of(
         Any.pack(
-            buildRouteConfiguration(
+            buildRouteConfigurationV2(
                 "some resource name does not match route-foo.googleapis.com",
                 ImmutableList.of(
-                    buildVirtualHost(
+                    buildVirtualHostV2(
                         ImmutableList.of(TARGET_AUTHORITY),
                         "some more cluster")))));
     response = buildDiscoveryResponseV2(
@@ -1166,13 +1166,13 @@ public class XdsClientImplTestV2 {
     // for the requested resource.
     routeConfigs = ImmutableList.of(
         Any.pack(
-            buildRouteConfiguration(
+            buildRouteConfigurationV2(
                 "route-foo.googleapis.com", // target route configuration
                 ImmutableList.of(
-                    buildVirtualHost(
+                    buildVirtualHostV2(
                         ImmutableList.of("something does not match"),
                         "some cluster"),
-                    buildVirtualHost( // matching virtual host
+                    buildVirtualHostV2( // matching virtual host
                         ImmutableList.of(TARGET_AUTHORITY, "bar.googleapis.com:443"),
                         "another-cluster.googleapis.com")))));
     response = buildDiscoveryResponseV2(
@@ -1217,7 +1217,7 @@ public class XdsClientImplTestV2 {
             .build();
 
     List<Any> listeners = ImmutableList.of(
-        Any.pack(buildListener(TARGET_AUTHORITY, /* matching resource */
+        Any.pack(buildListenerV2(TARGET_AUTHORITY, /* matching resource */
             Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build())))
     );
     DiscoveryResponse response =
@@ -1237,10 +1237,10 @@ public class XdsClientImplTestV2 {
     // Management server sends back an RDS response containing RouteConfiguration requested.
     List<Any> routeConfigs = ImmutableList.of(
         Any.pack(
-            buildRouteConfiguration(
+            buildRouteConfigurationV2(
                 "route-foo.googleapis.com", // target route configuration
                 ImmutableList.of(
-                    buildVirtualHost(
+                    buildVirtualHostV2(
                         ImmutableList.of(TARGET_AUTHORITY), // matching virtual host
                         "cluster.googleapis.com")))));
     response = buildDiscoveryResponseV2(
@@ -1293,7 +1293,7 @@ public class XdsClientImplTestV2 {
             .build();
 
     List<Any> listeners = ImmutableList.of(
-        Any.pack(buildListener(TARGET_AUTHORITY, /* matching resource */
+        Any.pack(buildListenerV2(TARGET_AUTHORITY, /* matching resource */
             Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build())))
     );
     DiscoveryResponse response =
@@ -1322,7 +1322,7 @@ public class XdsClientImplTestV2 {
 
     listeners = ImmutableList.of(
         Any.pack(
-            buildListener(
+            buildListenerV2(
                 TARGET_AUTHORITY, /* matching resource */
                 Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build())))
     );
@@ -1343,10 +1343,10 @@ public class XdsClientImplTestV2 {
     // Management server sends back an RDS response containing RouteConfiguration requested.
     List<Any> routeConfigs = ImmutableList.of(
         Any.pack(
-            buildRouteConfiguration(
+            buildRouteConfigurationV2(
                 "route-bar.googleapis.com", // target route configuration
                 ImmutableList.of(
-                    buildVirtualHost(
+                    buildVirtualHostV2(
                         ImmutableList.of(TARGET_AUTHORITY), // matching virtual host
                         "cluster.googleapis.com")))));
     response = buildDiscoveryResponseV2(
@@ -1375,8 +1375,8 @@ public class XdsClientImplTestV2 {
 
     // Management server sends back a CDS response without Cluster for the requested resource.
     List<Any> clusters = ImmutableList.of(
-        Any.pack(buildCluster("cluster-bar.googleapis.com", null, false)),
-        Any.pack(buildCluster("cluster-baz.googleapis.com", null, false)));
+        Any.pack(buildClusterV2("cluster-bar.googleapis.com", null, false)),
+        Any.pack(buildClusterV2("cluster-baz.googleapis.com", null, false)));
     DiscoveryResponse response =
         buildDiscoveryResponseV2("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS_V2, "0000");
     responseObserver.onNext(response);
@@ -1414,9 +1414,9 @@ public class XdsClientImplTestV2 {
 
     // Management server sends back a CDS response without Cluster for the requested resource.
     List<Any> clusters = ImmutableList.of(
-        Any.pack(buildCluster("cluster-bar.googleapis.com", null, false)),
-        Any.pack(buildCluster("cluster-foo.googleapis.com", null, false)),
-        Any.pack(buildCluster("cluster-baz.googleapis.com", null, false)));
+        Any.pack(buildClusterV2("cluster-bar.googleapis.com", null, false)),
+        Any.pack(buildClusterV2("cluster-foo.googleapis.com", null, false)),
+        Any.pack(buildClusterV2("cluster-baz.googleapis.com", null, false)));
     DiscoveryResponse response =
         buildDiscoveryResponseV2("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS_V2, "0000");
     responseObserver.onNext(response);
@@ -1437,10 +1437,10 @@ public class XdsClientImplTestV2 {
 
     // Management server sends back another CDS response updating the requested Cluster.
     clusters = ImmutableList.of(
-        Any.pack(buildCluster("cluster-bar.googleapis.com", null, false)),
+        Any.pack(buildClusterV2("cluster-bar.googleapis.com", null, false)),
         Any.pack(
-            buildCluster("cluster-foo.googleapis.com", "eds-cluster-foo.googleapis.com", true)),
-        Any.pack(buildCluster("cluster-baz.googleapis.com", null, false)));
+            buildClusterV2("cluster-foo.googleapis.com", "eds-cluster-foo.googleapis.com", true)),
+        Any.pack(buildClusterV2("cluster-baz.googleapis.com", null, false)));
     response =
         buildDiscoveryResponseV2("1", clusters, XdsClientImpl.ADS_TYPE_URL_CDS_V2, "0001");
     responseObserver.onNext(response);
@@ -1470,12 +1470,12 @@ public class XdsClientImplTestV2 {
 
     // Management server sends back CDS response with UpstreamTlsContext.
     UpstreamTlsContext testUpstreamTlsContext =
-        buildUpstreamTlsContext("secret1", "unix:/var/uds2");
+        buildUpstreamTlsContextV2("secret1", "unix:/var/uds2");
     List<Any> clusters = ImmutableList.of(
-        Any.pack(buildCluster("cluster-bar.googleapis.com", null, false)),
-        Any.pack(buildSecureCluster("cluster-foo.googleapis.com",
+        Any.pack(buildClusterV2("cluster-bar.googleapis.com", null, false)),
+        Any.pack(buildSecureClusterV2("cluster-foo.googleapis.com",
             "eds-cluster-foo.googleapis.com", true, testUpstreamTlsContext)),
-        Any.pack(buildCluster("cluster-baz.googleapis.com", null, false)));
+        Any.pack(buildClusterV2("cluster-baz.googleapis.com", null, false)));
     DiscoveryResponse response =
         buildDiscoveryResponseV2("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS_V2, "0000");
     responseObserver.onNext(response);
@@ -1527,7 +1527,7 @@ public class XdsClientImplTestV2 {
     // Management server sends back a CDS response contains Cluster for only one of
     // requested cluster.
     List<Any> clusters = ImmutableList.of(
-        Any.pack(buildCluster("cluster-foo.googleapis.com", null, false)));
+        Any.pack(buildClusterV2("cluster-foo.googleapis.com", null, false)));
     DiscoveryResponse response =
         buildDiscoveryResponseV2("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS_V2, "0000");
     responseObserver.onNext(response);
@@ -1572,9 +1572,9 @@ public class XdsClientImplTestV2 {
     // Management server sends back another CDS response contains Clusters for all
     // requested clusters.
     clusters = ImmutableList.of(
-        Any.pack(buildCluster("cluster-foo.googleapis.com", null, false)),
+        Any.pack(buildClusterV2("cluster-foo.googleapis.com", null, false)),
         Any.pack(
-            buildCluster("cluster-bar.googleapis.com",
+            buildClusterV2("cluster-bar.googleapis.com",
                 "eds-cluster-bar.googleapis.com", true)));
     response = buildDiscoveryResponseV2("1", clusters,
         XdsClientImpl.ADS_TYPE_URL_CDS_V2, "0001");
@@ -1622,7 +1622,7 @@ public class XdsClientImplTestV2 {
     // Management server sends back an CDS response with Cluster for the requested
     // cluster.
     List<Any> clusters = ImmutableList.of(
-        Any.pack(buildCluster("cluster-foo.googleapis.com", null, false)));
+        Any.pack(buildClusterV2("cluster-foo.googleapis.com", null, false)));
     DiscoveryResponse response =
         buildDiscoveryResponseV2("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS_V2, "0000");
     responseObserver.onNext(response);
@@ -1679,7 +1679,7 @@ public class XdsClientImplTestV2 {
     // Management server sends back a CDS response with Cluster for the requested
     // cluster.
     List<Any> clusters = ImmutableList.of(
-        Any.pack(buildCluster("cluster-foo.googleapis.com", null, false)));
+        Any.pack(buildClusterV2("cluster-foo.googleapis.com", null, false)));
     DiscoveryResponse response =
         buildDiscoveryResponseV2("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS_V2, "0000");
     responseObserver.onNext(response);
@@ -1711,9 +1711,9 @@ public class XdsClientImplTestV2 {
 
     // Management server sends back a CDS response with Cluster for all requested cluster.
     clusters = ImmutableList.of(
-        Any.pack(buildCluster("cluster-foo.googleapis.com", null, false)),
+        Any.pack(buildClusterV2("cluster-foo.googleapis.com", null, false)),
         Any.pack(
-            buildCluster("cluster-bar.googleapis.com",
+            buildClusterV2("cluster-bar.googleapis.com",
                 "eds-cluster-bar.googleapis.com", true)));
     response = buildDiscoveryResponseV2("1", clusters,
         XdsClientImpl.ADS_TYPE_URL_CDS_V2, "0001");
@@ -1759,9 +1759,9 @@ public class XdsClientImplTestV2 {
 
     // Management server sends back a new CDS response.
     clusters = ImmutableList.of(
-        Any.pack(buildCluster("cluster-foo.googleapis.com", null, true)),
+        Any.pack(buildClusterV2("cluster-foo.googleapis.com", null, true)),
         Any.pack(
-            buildCluster("cluster-bar.googleapis.com", null, false)));
+            buildClusterV2("cluster-bar.googleapis.com", null, false)));
     response =
         buildDiscoveryResponseV2("2", clusters, XdsClientImpl.ADS_TYPE_URL_CDS_V2, "0002");
     responseObserver.onNext(response);
@@ -1788,9 +1788,9 @@ public class XdsClientImplTestV2 {
     // Management server sends back a new CDS response for at least newly requested resources
     // (it is required to do so).
     clusters = ImmutableList.of(
-        Any.pack(buildCluster("cluster-foo.googleapis.com", null, true)),
+        Any.pack(buildClusterV2("cluster-foo.googleapis.com", null, true)),
         Any.pack(
-            buildCluster("cluster-bar.googleapis.com", null, false)));
+            buildClusterV2("cluster-bar.googleapis.com", null, false)));
     response =
         buildDiscoveryResponseV2("3", clusters, XdsClientImpl.ADS_TYPE_URL_CDS_V2, "0003");
     responseObserver.onNext(response);
@@ -1890,7 +1890,7 @@ public class XdsClientImplTestV2 {
 
     // Management server sends back a CDS response containing requested resource.
     List<Any> clusters = ImmutableList.of(
-        Any.pack(buildCluster("cluster-foo.googleapis.com", null, true)));
+        Any.pack(buildClusterV2("cluster-foo.googleapis.com", null, true)));
     DiscoveryResponse response =
         buildDiscoveryResponseV2("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS_V2, "0000");
     responseObserver.onNext(response);
@@ -1937,18 +1937,18 @@ public class XdsClientImplTestV2 {
     // Management server sends back an EDS response without ClusterLoadAssignment for the requested
     // cluster.
     List<Any> clusterLoadAssignments = ImmutableList.of(
-        Any.pack(buildClusterLoadAssignment("cluster-bar.googleapis.com",
+        Any.pack(buildClusterLoadAssignmentV2("cluster-bar.googleapis.com",
             ImmutableList.of(
-                buildLocalityLbEndpoints("region1", "zone1", "subzone1",
+                buildLocalityLbEndpointsV2("region1", "zone1", "subzone1",
                     ImmutableList.of(
-                        buildLbEndpoint("192.168.0.1", 8080, HealthStatus.HEALTHY, 2)),
+                        buildLbEndpointV2("192.168.0.1", 8080, HealthStatus.HEALTHY, 2)),
                     1, 0)),
             ImmutableList.<Policy.DropOverload>of())),
-        Any.pack(buildClusterLoadAssignment("cluster-baz.googleapis.com",
+        Any.pack(buildClusterLoadAssignmentV2("cluster-baz.googleapis.com",
             ImmutableList.of(
-                buildLocalityLbEndpoints("region2", "zone2", "subzone2",
+                buildLocalityLbEndpointsV2("region2", "zone2", "subzone2",
                     ImmutableList.of(
-                        buildLbEndpoint("192.168.234.52", 8888, HealthStatus.UNKNOWN, 5)),
+                        buildLbEndpointV2("192.168.234.52", 8888, HealthStatus.UNKNOWN, 5)),
                     6, 1)),
             ImmutableList.<Policy.DropOverload>of())));
 
@@ -1992,27 +1992,27 @@ public class XdsClientImplTestV2 {
     // Management server sends back an EDS response with ClusterLoadAssignment for the requested
     // cluster.
     List<Any> clusterLoadAssignments = ImmutableList.of(
-        Any.pack(buildClusterLoadAssignment("cluster-foo.googleapis.com",
+        Any.pack(buildClusterLoadAssignmentV2("cluster-foo.googleapis.com",
             ImmutableList.of(
-                buildLocalityLbEndpoints("region1", "zone1", "subzone1",
+                buildLocalityLbEndpointsV2("region1", "zone1", "subzone1",
                     ImmutableList.of(
-                        buildLbEndpoint("192.168.0.1", 8080, HealthStatus.HEALTHY, 2)),
+                        buildLbEndpointV2("192.168.0.1", 8080, HealthStatus.HEALTHY, 2)),
                     1, 0),
-                buildLocalityLbEndpoints("region3", "zone3", "subzone3",
+                buildLocalityLbEndpointsV2("region3", "zone3", "subzone3",
                     ImmutableList.<io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint>of(),
                     2, 1), /* locality with 0 endpoint */
-                buildLocalityLbEndpoints("region4", "zone4", "subzone4",
+                buildLocalityLbEndpointsV2("region4", "zone4", "subzone4",
                     ImmutableList.of(
-                        buildLbEndpoint("192.168.142.5", 80, HealthStatus.UNKNOWN, 5)),
+                        buildLbEndpointV2("192.168.142.5", 80, HealthStatus.UNKNOWN, 5)),
                     0, 2) /* locality with 0 weight */),
             ImmutableList.of(
-                buildDropOverload("lb", 200),
-                buildDropOverload("throttle", 1000)))),
-        Any.pack(buildClusterLoadAssignment("cluster-baz.googleapis.com",
+                buildDropOverloadV2("lb", 200),
+                buildDropOverloadV2("throttle", 1000)))),
+        Any.pack(buildClusterLoadAssignmentV2("cluster-baz.googleapis.com",
             ImmutableList.of(
-                buildLocalityLbEndpoints("region2", "zone2", "subzone2",
+                buildLocalityLbEndpointsV2("region2", "zone2", "subzone2",
                     ImmutableList.of(
-                        buildLbEndpoint("192.168.234.52", 8888, HealthStatus.UNKNOWN, 5)),
+                        buildLbEndpointV2("192.168.234.52", 8888, HealthStatus.UNKNOWN, 5)),
                     6, 1)),
             ImmutableList.<Policy.DropOverload>of())));
 
@@ -2047,7 +2047,7 @@ public class XdsClientImplTestV2 {
             new LocalityLbEndpoints(ImmutableList.<LbEndpoint>of(), 2, 1));
 
     clusterLoadAssignments = ImmutableList.of(
-        Any.pack(buildClusterLoadAssignment("cluster-foo.googleapis.com",
+        Any.pack(buildClusterLoadAssignmentV2("cluster-foo.googleapis.com",
             // 0 locality
             ImmutableList.<io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints>of(),
             ImmutableList.<Policy.DropOverload>of())));
@@ -2093,11 +2093,11 @@ public class XdsClientImplTestV2 {
     // Management server sends back an EDS response contains ClusterLoadAssignment for only one of
     // requested cluster.
     List<Any> clusterLoadAssignments = ImmutableList.of(
-        Any.pack(buildClusterLoadAssignment("cluster-foo.googleapis.com",
+        Any.pack(buildClusterLoadAssignmentV2("cluster-foo.googleapis.com",
             ImmutableList.of(
-                buildLocalityLbEndpoints("region1", "zone1", "subzone1",
+                buildLocalityLbEndpointsV2("region1", "zone1", "subzone1",
                     ImmutableList.of(
-                        buildLbEndpoint("192.168.0.1", 8080, HealthStatus.HEALTHY, 2)),
+                        buildLbEndpointV2("192.168.0.1", 8080, HealthStatus.HEALTHY, 2)),
                     1, 0)),
             ImmutableList.<Policy.DropOverload>of())));
 
@@ -2146,11 +2146,11 @@ public class XdsClientImplTestV2 {
     // Management server sends back another EDS response contains ClusterLoadAssignment for the
     // other requested cluster.
     clusterLoadAssignments = ImmutableList.of(
-        Any.pack(buildClusterLoadAssignment("cluster-bar.googleapis.com",
+        Any.pack(buildClusterLoadAssignmentV2("cluster-bar.googleapis.com",
             ImmutableList.of(
-                buildLocalityLbEndpoints("region2", "zone2", "subzone2",
+                buildLocalityLbEndpointsV2("region2", "zone2", "subzone2",
                     ImmutableList.of(
-                        buildLbEndpoint("192.168.234.52", 8888, HealthStatus.UNKNOWN, 5)),
+                        buildLbEndpointV2("192.168.234.52", 8888, HealthStatus.UNKNOWN, 5)),
                     6, 0)),
             ImmutableList.<Policy.DropOverload>of())));
 
@@ -2202,11 +2202,11 @@ public class XdsClientImplTestV2 {
     // Management server sends back an EDS response containing ClusterLoadAssignments for
     // some cluster not requested.
     List<Any> clusterLoadAssignments = ImmutableList.of(
-        Any.pack(buildClusterLoadAssignment("cluster-foo.googleapis.com",
+        Any.pack(buildClusterLoadAssignmentV2("cluster-foo.googleapis.com",
             ImmutableList.of(
-                buildLocalityLbEndpoints("region1", "zone1", "subzone1",
+                buildLocalityLbEndpointsV2("region1", "zone1", "subzone1",
                     ImmutableList.of(
-                        buildLbEndpoint("192.168.0.1", 8080, HealthStatus.HEALTHY, 2)),
+                        buildLbEndpointV2("192.168.0.1", 8080, HealthStatus.HEALTHY, 2)),
                     1, 0)),
             ImmutableList.<Policy.DropOverload>of())));
 
@@ -2278,12 +2278,12 @@ public class XdsClientImplTestV2 {
     // Management server sends back an EDS response with ClusterLoadAssignment for the requested
     // cluster.
     List<Any> clusterLoadAssignments = ImmutableList.of(
-        Any.pack(buildClusterLoadAssignment("cluster-foo.googleapis.com",
+        Any.pack(buildClusterLoadAssignmentV2("cluster-foo.googleapis.com",
             ImmutableList.of(
-                buildLocalityLbEndpoints("region1", "zone1", "subzone1",
+                buildLocalityLbEndpointsV2("region1", "zone1", "subzone1",
                     ImmutableList.of(
-                        buildLbEndpoint("192.168.0.1", 8080, HealthStatus.HEALTHY, 2),
-                        buildLbEndpoint("192.132.53.5", 80, HealthStatus.UNHEALTHY, 5)),
+                        buildLbEndpointV2("192.168.0.1", 8080, HealthStatus.HEALTHY, 2),
+                        buildLbEndpointV2("192.132.53.5", 80, HealthStatus.UNHEALTHY, 5)),
                     1, 0)),
             ImmutableList.<Policy.DropOverload>of())));
 
@@ -2325,11 +2325,11 @@ public class XdsClientImplTestV2 {
     // Management server sends back an EDS response with ClusterLoadAssignment for one of requested
     // cluster.
     clusterLoadAssignments = ImmutableList.of(
-        Any.pack(buildClusterLoadAssignment("cluster-bar.googleapis.com",
+        Any.pack(buildClusterLoadAssignmentV2("cluster-bar.googleapis.com",
             ImmutableList.of(
-                buildLocalityLbEndpoints("region2", "zone2", "subzone2",
+                buildLocalityLbEndpointsV2("region2", "zone2", "subzone2",
                     ImmutableList.of(
-                        buildLbEndpoint("192.168.312.6", 443, HealthStatus.HEALTHY, 1)),
+                        buildLbEndpointV2("192.168.312.6", 443, HealthStatus.HEALTHY, 1)),
                     6, 0)),
             ImmutableList.<Policy.DropOverload>of())));
 
@@ -2384,18 +2384,18 @@ public class XdsClientImplTestV2 {
 
     // Management server sends back an EDS response for updating previously sent resources.
     clusterLoadAssignments = ImmutableList.of(
-        Any.pack(buildClusterLoadAssignment("cluster-foo.googleapis.com",
+        Any.pack(buildClusterLoadAssignmentV2("cluster-foo.googleapis.com",
             ImmutableList.of(
-                buildLocalityLbEndpoints("region3", "zone3", "subzone3",
+                buildLocalityLbEndpointsV2("region3", "zone3", "subzone3",
                     ImmutableList.of(
-                        buildLbEndpoint("192.168.432.6", 80, HealthStatus.HEALTHY, 2)),
+                        buildLbEndpointV2("192.168.432.6", 80, HealthStatus.HEALTHY, 2)),
                     3, 0)),
             ImmutableList.<Policy.DropOverload>of())),
-        Any.pack(buildClusterLoadAssignment("cluster-bar.googleapis.com",
+        Any.pack(buildClusterLoadAssignmentV2("cluster-bar.googleapis.com",
             ImmutableList.of(
-                buildLocalityLbEndpoints("region4", "zone4", "subzone4",
+                buildLocalityLbEndpointsV2("region4", "zone4", "subzone4",
                     ImmutableList.of(
-                        buildLbEndpoint("192.168.75.6", 8888, HealthStatus.HEALTHY, 2)),
+                        buildLbEndpointV2("192.168.75.6", 8888, HealthStatus.HEALTHY, 2)),
                     3, 0)),
             ImmutableList.<Policy.DropOverload>of())));
 
@@ -2430,11 +2430,11 @@ public class XdsClientImplTestV2 {
 
     // Management server sends back an EDS response for re-subscribed resource.
     clusterLoadAssignments = ImmutableList.of(
-        Any.pack(buildClusterLoadAssignment("cluster-bar.googleapis.com",
+        Any.pack(buildClusterLoadAssignmentV2("cluster-bar.googleapis.com",
             ImmutableList.of(
-                buildLocalityLbEndpoints("region4", "zone4", "subzone4",
+                buildLocalityLbEndpointsV2("region4", "zone4", "subzone4",
                     ImmutableList.of(
-                        buildLbEndpoint("192.168.75.6", 8888, HealthStatus.HEALTHY, 2)),
+                        buildLbEndpointV2("192.168.75.6", 8888, HealthStatus.HEALTHY, 2)),
                     3, 0)),
             ImmutableList.<Policy.DropOverload>of())));
 
@@ -2535,7 +2535,7 @@ public class XdsClientImplTestV2 {
 
     // Management server sends back a CDS response containing requested resource.
     List<Any> clusters = ImmutableList.of(
-        Any.pack(buildCluster("cluster-foo.googleapis.com", "cluster-foo:service-bar", false)));
+        Any.pack(buildClusterV2("cluster-foo.googleapis.com", "cluster-foo:service-bar", false)));
     DiscoveryResponse response =
         buildDiscoveryResponseV2("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS_V2, "0000");
     responseObserver.onNext(response);
@@ -2544,11 +2544,11 @@ public class XdsClientImplTestV2 {
 
     // Management server sends back an EDS response for resource "cluster-foo:service-bar".
     List<Any> clusterLoadAssignments = ImmutableList.of(
-        Any.pack(buildClusterLoadAssignment("cluster-foo:service-bar",
+        Any.pack(buildClusterLoadAssignmentV2("cluster-foo:service-bar",
             ImmutableList.of(
-                buildLocalityLbEndpoints("region1", "zone1", "subzone1",
+                buildLocalityLbEndpointsV2("region1", "zone1", "subzone1",
                     ImmutableList.of(
-                        buildLbEndpoint("192.168.0.1", 8080, HealthStatus.HEALTHY, 2)),
+                        buildLbEndpointV2("192.168.0.1", 8080, HealthStatus.HEALTHY, 2)),
                     1, 0)),
             ImmutableList.<Policy.DropOverload>of())));
     response =
@@ -2572,7 +2572,7 @@ public class XdsClientImplTestV2 {
     // Management server sends another CDS response for removing cluster service
     // "cluster-foo:service-blade" with replacement of "cluster-foo:service-blade".
     clusters = ImmutableList.of(
-        Any.pack(buildCluster("cluster-foo.googleapis.com", "cluster-foo:service-blade", false)));
+        Any.pack(buildClusterV2("cluster-foo.googleapis.com", "cluster-foo:service-blade", false)));
     response =
         buildDiscoveryResponseV2("1", clusters, XdsClientImpl.ADS_TYPE_URL_CDS_V2, "0001");
     responseObserver.onNext(response);
@@ -2654,7 +2654,7 @@ public class XdsClientImplTestV2 {
             .build();
 
     List<Any> listeners = ImmutableList.of(
-        Any.pack(buildListener(TARGET_AUTHORITY, /* matching resource */
+        Any.pack(buildListenerV2(TARGET_AUTHORITY, /* matching resource */
             Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build())))
     );
     DiscoveryResponse ldsResponse =
@@ -2709,10 +2709,10 @@ public class XdsClientImplTestV2 {
 
     List<Any> routeConfigs = ImmutableList.of(
         Any.pack(
-            buildRouteConfiguration(
+            buildRouteConfigurationV2(
                 "route-foo.googleapis.com", // target route configuration
                 ImmutableList.of(
-                    buildVirtualHost(
+                    buildVirtualHostV2(
                         ImmutableList.of(TARGET_AUTHORITY), // matching virtual host
                         "cluster.googleapis.com")))));
     DiscoveryResponse rdsResponse =
@@ -2865,7 +2865,7 @@ public class XdsClientImplTestV2 {
 
     // Management server sends back a CDS response.
     List<Any> clusters = ImmutableList.of(
-        Any.pack(buildCluster("cluster.googleapis.com", null, false)));
+        Any.pack(buildClusterV2("cluster.googleapis.com", null, false)));
     DiscoveryResponse cdsResponse =
         buildDiscoveryResponseV2("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS_V2, "0000");
     responseObserver.onNext(cdsResponse);
@@ -3016,7 +3016,7 @@ public class XdsClientImplTestV2 {
 
     // Management server sends back a CDS response.
     List<Any> clusters = ImmutableList.of(
-        Any.pack(buildCluster("cluster.googleapis.com", null, false)));
+        Any.pack(buildClusterV2("cluster.googleapis.com", null, false)));
     DiscoveryResponse cdsResponse =
         buildDiscoveryResponseV2("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS_V2, "0000");
     responseObserver.onNext(cdsResponse);
@@ -3112,7 +3112,7 @@ public class XdsClientImplTestV2 {
             .build();
 
     List<Any> listeners = ImmutableList.of(
-        Any.pack(buildListener(TARGET_AUTHORITY, /* matching resource */
+        Any.pack(buildListenerV2(TARGET_AUTHORITY, /* matching resource */
             Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build())))
     );
     DiscoveryResponse response =
@@ -3164,10 +3164,10 @@ public class XdsClientImplTestV2 {
     // for the requested resource.
     List<Any> routeConfigs = ImmutableList.of(
         Any.pack(
-            buildRouteConfiguration(
+            buildRouteConfigurationV2(
                 "route-foo.googleapis.com", // target route configuration
                 ImmutableList.of(
-                    buildVirtualHost(
+                    buildVirtualHostV2(
                         ImmutableList.of(TARGET_AUTHORITY), // matching virtual host
                         "cluster-foo.googleapis.com")))));
     response = buildDiscoveryResponseV2(
@@ -3287,7 +3287,7 @@ public class XdsClientImplTestV2 {
             .build();
 
     List<Any> listeners = ImmutableList.of(
-        Any.pack(buildListener(TARGET_AUTHORITY, /* matching resource */
+        Any.pack(buildListenerV2(TARGET_AUTHORITY, /* matching resource */
             Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build())))
     );
     DiscoveryResponse ldsResponse =
@@ -3300,10 +3300,10 @@ public class XdsClientImplTestV2 {
     // Management server sends an RDS response.
     List<Any> routeConfigs = ImmutableList.of(
         Any.pack(
-            buildRouteConfiguration(
+            buildRouteConfigurationV2(
                 "route-foo.googleapis.com", // target route configuration
                 ImmutableList.of(
-                    buildVirtualHost(
+                    buildVirtualHostV2(
                         ImmutableList.of(TARGET_AUTHORITY), // matching virtual host
                         "cluster.googleapis.com")))));
     DiscoveryResponse rdsResponse =
@@ -3474,13 +3474,13 @@ public class XdsClientImplTestV2 {
   public void messagePrinter_printLdsResponse() {
     MessagePrinter printer = new MessagePrinter();
     List<Any> listeners = ImmutableList.of(
-        Any.pack(buildListener("foo.googleapis.com:8080",
+        Any.pack(buildListenerV2("foo.googleapis.com:8080",
             Any.pack(
                 HttpConnectionManager.newBuilder()
                     .setRouteConfig(
-                        buildRouteConfiguration("route-foo.googleapis.com",
+                        buildRouteConfigurationV2("route-foo.googleapis.com",
                             ImmutableList.of(
-                                buildVirtualHost(
+                                buildVirtualHostV2(
                                     ImmutableList.of("foo.googleapis.com", "bar.googleapis.com"),
                                     "cluster.googleapis.com"))))
                     .build()))));
@@ -3531,10 +3531,10 @@ public class XdsClientImplTestV2 {
     List<Any> routeConfigs =
         ImmutableList.of(
             Any.pack(
-                buildRouteConfiguration(
+                buildRouteConfigurationV2(
                     "route-foo.googleapis.com",
                     ImmutableList.of(
-                        buildVirtualHost(
+                        buildVirtualHostV2(
                             ImmutableList.of("foo.googleapis.com", "bar.googleapis.com"),
                             "cluster.googleapis.com")))));
     DiscoveryResponse response =
@@ -3569,8 +3569,8 @@ public class XdsClientImplTestV2 {
   public void messagePrinter_printCdsResponse() {
     MessagePrinter printer = new MessagePrinter();
     List<Any> clusters = ImmutableList.of(
-        Any.pack(buildCluster("cluster-bar.googleapis.com", "service-blaze:cluster-bar", true)),
-        Any.pack(buildCluster("cluster-foo.googleapis.com", null, false)));
+        Any.pack(buildClusterV2("cluster-bar.googleapis.com", "service-blaze:cluster-bar", true)),
+        Any.pack(buildClusterV2("cluster-foo.googleapis.com", null, false)));
     DiscoveryResponse response =
         buildDiscoveryResponseV2("14", clusters, XdsClientImpl.ADS_TYPE_URL_CDS_V2, "8");
 
@@ -3613,19 +3613,19 @@ public class XdsClientImplTestV2 {
   public void messagePrinter_printEdsResponse() {
     MessagePrinter printer = new MessagePrinter();
     List<Any> clusterLoadAssignments = ImmutableList.of(
-        Any.pack(buildClusterLoadAssignment("cluster-foo.googleapis.com",
+        Any.pack(buildClusterLoadAssignmentV2("cluster-foo.googleapis.com",
             ImmutableList.of(
-                buildLocalityLbEndpoints("region1", "zone1", "subzone1",
+                buildLocalityLbEndpointsV2("region1", "zone1", "subzone1",
                     ImmutableList.of(
-                        buildLbEndpoint("192.168.0.1", 8080, HealthStatus.HEALTHY, 2)),
+                        buildLbEndpointV2("192.168.0.1", 8080, HealthStatus.HEALTHY, 2)),
                     1, 0),
-                buildLocalityLbEndpoints("region3", "zone3", "subzone3",
+                buildLocalityLbEndpointsV2("region3", "zone3", "subzone3",
                     ImmutableList.of(
-                        buildLbEndpoint("192.168.142.5", 80, HealthStatus.UNHEALTHY, 5)),
+                        buildLbEndpointV2("192.168.142.5", 80, HealthStatus.UNHEALTHY, 5)),
                     2, 1)),
             ImmutableList.of(
-                buildDropOverload("lb", 200),
-                buildDropOverload("throttle", 1000)))));
+                buildDropOverloadV2("lb", 200),
+                buildDropOverloadV2("throttle", 1000)))));
 
     DiscoveryResponse response =
         buildDiscoveryResponseV2("5", clusterLoadAssignments,

@@ -18,9 +18,9 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.xds.XdsClientTestHelper.buildDiscoveryResponseV2;
-import static io.grpc.xds.XdsClientTestHelper.buildListener;
-import static io.grpc.xds.XdsClientTestHelper.buildRouteConfiguration;
-import static io.grpc.xds.XdsClientTestHelper.buildVirtualHost;
+import static io.grpc.xds.XdsClientTestHelper.buildListenerV2;
+import static io.grpc.xds.XdsClientTestHelper.buildRouteConfigurationV2;
+import static io.grpc.xds.XdsClientTestHelper.buildVirtualHostV2;
 import static org.junit.Assert.fail;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
@@ -311,21 +311,21 @@ public class XdsClientImplTestForListener {
     assertThat(fakeClock.getPendingTasks(LISTENER_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
 
     List<Any> listeners = ImmutableList.of(
-        Any.pack(buildListener("bar.googleapis.com",
+        Any.pack(buildListenerV2("bar.googleapis.com",
             Any.pack(HttpConnectionManager.newBuilder()
                 .setRouteConfig(
-                    buildRouteConfiguration("route-bar.googleapis.com",
+                    buildRouteConfigurationV2("route-bar.googleapis.com",
                         ImmutableList.of(
-                            buildVirtualHost(
+                            buildVirtualHostV2(
                                 ImmutableList.of("bar.googleapis.com"),
                                 "cluster-bar.googleapis.com"))))
                 .build()))),
-        Any.pack(buildListener(LISTENER_NAME,
+        Any.pack(buildListenerV2(LISTENER_NAME,
             Any.pack(HttpConnectionManager.newBuilder()
                 .setRouteConfig(
-                    buildRouteConfiguration("route-baz.googleapis.com",
+                    buildRouteConfigurationV2("route-baz.googleapis.com",
                         ImmutableList.of(
-                            buildVirtualHost(
+                            buildVirtualHostV2(
                                 ImmutableList.of("baz.googleapis.com"),
                                 "cluster-baz.googleapis.com"))))
                 .build()))));
@@ -368,12 +368,12 @@ public class XdsClientImplTestForListener {
             "ROOTCA"),
         buildTestFilter("envoy.http_connection_manager"));
     List<Any> listeners = ImmutableList.of(
-        Any.pack(buildListener("bar.googleapis.com",
+        Any.pack(buildListenerV2("bar.googleapis.com",
             Any.pack(HttpConnectionManager.newBuilder()
                 .setRouteConfig(
-                    buildRouteConfiguration("route-bar.googleapis.com",
+                    buildRouteConfigurationV2("route-bar.googleapis.com",
                         ImmutableList.of(
-                            buildVirtualHost(
+                            buildVirtualHostV2(
                                 ImmutableList.of("bar.googleapis.com"),
                                 "cluster-bar.googleapis.com"))))
                 .build()))),
@@ -420,12 +420,12 @@ public class XdsClientImplTestForListener {
             "ROOTCA"),
         buildTestFilter("envoy.http_connection_manager"));
     List<Any> listeners = ImmutableList.of(
-        Any.pack(buildListener("bar.googleapis.com",
+        Any.pack(buildListenerV2("bar.googleapis.com",
             Any.pack(HttpConnectionManager.newBuilder()
                 .setRouteConfig(
-                    buildRouteConfiguration("route-bar.googleapis.com",
+                    buildRouteConfigurationV2("route-bar.googleapis.com",
                         ImmutableList.of(
-                            buildVirtualHost(
+                            buildVirtualHostV2(
                                 ImmutableList.of("bar.googleapis.com"),
                                 "cluster-bar.googleapis.com"))))
                 .build()))),
@@ -495,12 +495,12 @@ public class XdsClientImplTestForListener {
             "ROOTCA"),
         buildTestFilter("envoy.http_connection_manager"));
     List<Any> listeners = ImmutableList.of(
-        Any.pack(buildListener("bar.googleapis.com",
+        Any.pack(buildListenerV2("bar.googleapis.com",
             Any.pack(HttpConnectionManager.newBuilder()
                 .setRouteConfig(
-                    buildRouteConfiguration("route-bar.googleapis.com",
+                    buildRouteConfigurationV2("route-bar.googleapis.com",
                         ImmutableList.of(
-                            buildVirtualHost(
+                            buildVirtualHostV2(
                                 ImmutableList.of("bar.googleapis.com"),
                                 "cluster-bar.googleapis.com"))))
                 .build()))),
@@ -591,12 +591,12 @@ public class XdsClientImplTestForListener {
             "ROOTCA"),
         buildTestFilter("envoy.http_connection_manager"));
     List<Any> listeners = ImmutableList.of(
-        Any.pack(buildListener("bar.googleapis.com",
+        Any.pack(buildListenerV2("bar.googleapis.com",
             Any.pack(HttpConnectionManager.newBuilder()
                 .setRouteConfig(
-                    buildRouteConfiguration("route-bar.googleapis.com",
+                    buildRouteConfigurationV2("route-bar.googleapis.com",
                         ImmutableList.of(
-                            buildVirtualHost(
+                            buildVirtualHostV2(
                                 ImmutableList.of("bar.googleapis.com"),
                                 "cluster-bar.googleapis.com"))))
                 .build()))),
@@ -640,12 +640,12 @@ public class XdsClientImplTestForListener {
             "ROOTCA"),
         buildTestFilter("envoy.http_connection_manager"));
     List<Any> listeners = ImmutableList.of(
-        Any.pack(buildListener("bar.googleapis.com",
+        Any.pack(buildListenerV2("bar.googleapis.com",
             Any.pack(HttpConnectionManager.newBuilder()
                 .setRouteConfig(
-                    buildRouteConfiguration("route-bar.googleapis.com",
+                    buildRouteConfigurationV2("route-bar.googleapis.com",
                         ImmutableList.of(
-                            buildVirtualHost(
+                            buildVirtualHostV2(
                                 ImmutableList.of("bar.googleapis.com"),
                                 "cluster-bar.googleapis.com"))))
                 .build()))),

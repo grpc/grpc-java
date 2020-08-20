@@ -19,37 +19,39 @@ package io.grpc.xds;
 import com.google.common.collect.ImmutableList;
 import com.google.protobuf.Any;
 import com.google.protobuf.UInt32Value;
-import io.envoyproxy.envoy.api.v2.Cluster;
-import io.envoyproxy.envoy.api.v2.Cluster.DiscoveryType;
-import io.envoyproxy.envoy.api.v2.Cluster.EdsClusterConfig;
-import io.envoyproxy.envoy.api.v2.Cluster.LbPolicy;
-import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment;
-import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy;
-import io.envoyproxy.envoy.api.v2.Listener;
-import io.envoyproxy.envoy.api.v2.RouteConfiguration;
-import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
-import io.envoyproxy.envoy.api.v2.auth.SdsSecretConfig;
-import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
-import io.envoyproxy.envoy.api.v2.core.Address;
-import io.envoyproxy.envoy.api.v2.core.AggregatedConfigSource;
-import io.envoyproxy.envoy.api.v2.core.ApiConfigSource;
-import io.envoyproxy.envoy.api.v2.core.ConfigSource;
-import io.envoyproxy.envoy.api.v2.core.GrpcService;
-import io.envoyproxy.envoy.api.v2.core.GrpcService.GoogleGrpc;
-import io.envoyproxy.envoy.api.v2.core.HealthStatus;
-import io.envoyproxy.envoy.api.v2.core.SelfConfigSource;
-import io.envoyproxy.envoy.api.v2.core.SocketAddress;
-import io.envoyproxy.envoy.api.v2.core.TransportSocket;
-import io.envoyproxy.envoy.api.v2.listener.FilterChain;
-import io.envoyproxy.envoy.api.v2.route.Route;
-import io.envoyproxy.envoy.api.v2.route.RouteAction;
-import io.envoyproxy.envoy.api.v2.route.RouteMatch;
-import io.envoyproxy.envoy.api.v2.route.VirtualHost;
-import io.envoyproxy.envoy.config.listener.v2.ApiListener;
+import io.envoyproxy.envoy.config.cluster.v3.Cluster;
+import io.envoyproxy.envoy.config.cluster.v3.Cluster.DiscoveryType;
+import io.envoyproxy.envoy.config.cluster.v3.Cluster.EdsClusterConfig;
+import io.envoyproxy.envoy.config.core.v3.Address;
+import io.envoyproxy.envoy.config.core.v3.AggregatedConfigSource;
+import io.envoyproxy.envoy.config.core.v3.ApiConfigSource;
+import io.envoyproxy.envoy.config.core.v3.ConfigSource;
+import io.envoyproxy.envoy.config.core.v3.GrpcService;
+import io.envoyproxy.envoy.config.core.v3.GrpcService.GoogleGrpc;
+import io.envoyproxy.envoy.config.core.v3.HealthStatus;
+import io.envoyproxy.envoy.config.core.v3.Locality;
+import io.envoyproxy.envoy.config.core.v3.SelfConfigSource;
+import io.envoyproxy.envoy.config.core.v3.SocketAddress;
+import io.envoyproxy.envoy.config.core.v3.TransportSocket;
+import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
+import io.envoyproxy.envoy.config.endpoint.v3.Endpoint;
+import io.envoyproxy.envoy.config.endpoint.v3.LbEndpoint;
+import io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints;
+import io.envoyproxy.envoy.config.listener.v3.ApiListener;
+import io.envoyproxy.envoy.config.listener.v3.FilterChain;
+import io.envoyproxy.envoy.config.listener.v3.Listener;
+import io.envoyproxy.envoy.config.route.v3.Route;
+import io.envoyproxy.envoy.config.route.v3.RouteAction;
+import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
+import io.envoyproxy.envoy.config.route.v3.RouteMatch;
+import io.envoyproxy.envoy.config.route.v3.VirtualHost;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.SdsSecretConfig;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse;
-import io.envoyproxy.envoy.type.FractionalPercent;
-import io.envoyproxy.envoy.type.FractionalPercent.DenominatorType;
+import io.envoyproxy.envoy.type.v3.FractionalPercent;
+import io.envoyproxy.envoy.type.v3.FractionalPercent.DenominatorType;
 import io.grpc.xds.EnvoyProtoData.Node;
 import java.util.List;
 import javax.annotation.Nullable;
@@ -125,10 +127,31 @@ class XdsClientTestHelper {
             .build();
   }
 
+  static io.envoyproxy.envoy.api.v2.Listener buildListenerV2(
+      String name, com.google.protobuf.Any apiListener) {
+    return
+        io.envoyproxy.envoy.api.v2.Listener.newBuilder()
+            .setName(name)
+            .setAddress(io.envoyproxy.envoy.api.v2.core.Address.getDefaultInstance())
+            .addFilterChains(io.envoyproxy.envoy.api.v2.listener.FilterChain.getDefaultInstance())
+            .setApiListener(io.envoyproxy.envoy.config.listener.v2.ApiListener.newBuilder()
+                .setApiListener(apiListener))
+            .build();
+  }
+
   static RouteConfiguration buildRouteConfiguration(String name,
       List<VirtualHost> virtualHosts) {
     return
         RouteConfiguration.newBuilder()
+            .setName(name)
+            .addAllVirtualHosts(virtualHosts)
+            .build();
+  }
+
+  static io.envoyproxy.envoy.api.v2.RouteConfiguration buildRouteConfigurationV2(String name,
+      List<io.envoyproxy.envoy.api.v2.route.VirtualHost> virtualHosts) {
+    return
+        io.envoyproxy.envoy.api.v2.RouteConfiguration.newBuilder()
             .setName(name)
             .addAllVirtualHosts(virtualHosts)
             .build();
@@ -145,27 +168,49 @@ class XdsClientTestHelper {
         .build();
   }
 
+  static io.envoyproxy.envoy.api.v2.route.VirtualHost buildVirtualHostV2(
+      List<String> domains, String clusterName) {
+    return io.envoyproxy.envoy.api.v2.route.VirtualHost.newBuilder()
+        .setName("virtualhost00.googleapis.com") // don't care
+        .addAllDomains(domains)
+        .addRoutes(
+            io.envoyproxy.envoy.api.v2.route.Route.newBuilder()
+                .setRoute(
+                    io.envoyproxy.envoy.api.v2.route.RouteAction.newBuilder()
+                        .setCluster(clusterName))
+                .setMatch(io.envoyproxy.envoy.api.v2.route.RouteMatch.newBuilder().setPrefix("")))
+        .build();
+  }
+
   static Cluster buildCluster(String clusterName, @Nullable String edsServiceName,
       boolean enableLrs) {
     return buildSecureCluster(clusterName, edsServiceName, enableLrs, null);
   }
 
-  static Cluster buildSecureCluster(String clusterName, @Nullable String edsServiceName,
-      boolean enableLrs, @Nullable UpstreamTlsContext upstreamTlsContext) {
+  static io.envoyproxy.envoy.api.v2.Cluster buildClusterV2(
+      String clusterName, @Nullable String edsServiceName, boolean enableLrs) {
+    return buildSecureClusterV2(clusterName, edsServiceName, enableLrs, null);
+  }
+
+  static Cluster buildSecureCluster(
+      String clusterName, @Nullable String edsServiceName, boolean enableLrs,
+      @Nullable UpstreamTlsContext upstreamTlsContext) {
     Cluster.Builder clusterBuilder = Cluster.newBuilder();
     clusterBuilder.setName(clusterName);
     clusterBuilder.setType(DiscoveryType.EDS);
     EdsClusterConfig.Builder edsClusterConfigBuilder = EdsClusterConfig.newBuilder();
     edsClusterConfigBuilder.setEdsConfig(
-        ConfigSource.newBuilder().setAds(AggregatedConfigSource.getDefaultInstance()));
+        ConfigSource.newBuilder()
+            .setAds(AggregatedConfigSource.getDefaultInstance()));
     if (edsServiceName != null) {
       edsClusterConfigBuilder.setServiceName(edsServiceName);
     }
     clusterBuilder.setEdsClusterConfig(edsClusterConfigBuilder);
-    clusterBuilder.setLbPolicy(LbPolicy.ROUND_ROBIN);
+    clusterBuilder.setLbPolicy(Cluster.LbPolicy.ROUND_ROBIN);
     if (enableLrs) {
       clusterBuilder.setLrsServer(
-          ConfigSource.newBuilder().setSelf(SelfConfigSource.getDefaultInstance()));
+          ConfigSource.newBuilder()
+              .setSelf(SelfConfigSource.getDefaultInstance()));
     }
     if (upstreamTlsContext != null) {
       clusterBuilder.setTransportSocket(
@@ -174,24 +219,69 @@ class XdsClientTestHelper {
     return clusterBuilder.build();
   }
 
-  @SuppressWarnings("deprecation")
+  static io.envoyproxy.envoy.api.v2.Cluster buildSecureClusterV2(
+      String clusterName, @Nullable String edsServiceName, boolean enableLrs,
+      @Nullable io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext upstreamTlsContext) {
+    io.envoyproxy.envoy.api.v2.Cluster.Builder clusterBuilder =
+        io.envoyproxy.envoy.api.v2.Cluster.newBuilder();
+    clusterBuilder.setName(clusterName);
+    clusterBuilder.setType(io.envoyproxy.envoy.api.v2.Cluster.DiscoveryType.EDS);
+    io.envoyproxy.envoy.api.v2.Cluster.EdsClusterConfig.Builder edsClusterConfigBuilder =
+        io.envoyproxy.envoy.api.v2.Cluster.EdsClusterConfig.newBuilder();
+    edsClusterConfigBuilder.setEdsConfig(
+        io.envoyproxy.envoy.api.v2.core.ConfigSource.newBuilder()
+            .setAds(io.envoyproxy.envoy.api.v2.core.AggregatedConfigSource.getDefaultInstance()));
+    if (edsServiceName != null) {
+      edsClusterConfigBuilder.setServiceName(edsServiceName);
+    }
+    clusterBuilder.setEdsClusterConfig(edsClusterConfigBuilder);
+    clusterBuilder.setLbPolicy(io.envoyproxy.envoy.api.v2.Cluster.LbPolicy.ROUND_ROBIN);
+    if (enableLrs) {
+      clusterBuilder.setLrsServer(
+          io.envoyproxy.envoy.api.v2.core.ConfigSource.newBuilder()
+              .setSelf(io.envoyproxy.envoy.api.v2.core.SelfConfigSource.getDefaultInstance()));
+    }
+    if (upstreamTlsContext != null) {
+      clusterBuilder.setTransportSocket(
+          io.envoyproxy.envoy.api.v2.core.TransportSocket.newBuilder()
+              .setName("tls").setTypedConfig(Any.pack(upstreamTlsContext)));
+    }
+    return clusterBuilder.build();
+  }
+
   static ClusterLoadAssignment buildClusterLoadAssignment(String clusterName,
-      List<io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints> localityLbEndpoints,
-      List<Policy.DropOverload> dropOverloads) {
+      List<LocalityLbEndpoints> localityLbEndpoints,
+      List<ClusterLoadAssignment.Policy.DropOverload> dropOverloads) {
     return
         ClusterLoadAssignment.newBuilder()
             .setClusterName(clusterName)
             .addAllEndpoints(localityLbEndpoints)
             .setPolicy(
-                Policy.newBuilder()
+                ClusterLoadAssignment.Policy.newBuilder()
+                    .addAllDropOverloads(dropOverloads))
+            .build();
+  }
+
+  @SuppressWarnings("deprecation")
+  static io.envoyproxy.envoy.api.v2.ClusterLoadAssignment buildClusterLoadAssignmentV2(
+      String clusterName,
+      List<io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints> localityLbEndpoints,
+      List<io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy.DropOverload> dropOverloads) {
+    return
+        io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.newBuilder()
+            .setClusterName(clusterName)
+            .addAllEndpoints(localityLbEndpoints)
+            .setPolicy(
+                io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy.newBuilder()
                     .setDisableOverprovisioning(true)
                     .addAllDropOverloads(dropOverloads))
             .build();
   }
 
-  static Policy.DropOverload buildDropOverload(String category, int dropPerMillion) {
+  static ClusterLoadAssignment.Policy.DropOverload buildDropOverload(
+      String category, int dropPerMillion) {
     return
-        Policy.DropOverload.newBuilder()
+        ClusterLoadAssignment.Policy.DropOverload.newBuilder()
             .setCategory(category)
             .setDropPercentage(
                 FractionalPercent.newBuilder()
@@ -200,7 +290,36 @@ class XdsClientTestHelper {
             .build();
   }
 
-  static io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints buildLocalityLbEndpoints(
+  static io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy.DropOverload buildDropOverloadV2(
+      String category, int dropPerMillion) {
+    return
+        io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy.DropOverload.newBuilder()
+            .setCategory(category)
+            .setDropPercentage(
+                io.envoyproxy.envoy.type.FractionalPercent.newBuilder()
+                    .setNumerator(dropPerMillion)
+                    .setDenominator(
+                        io.envoyproxy.envoy.type.FractionalPercent.DenominatorType.MILLION))
+            .build();
+  }
+
+  static LocalityLbEndpoints buildLocalityLbEndpoints(
+      String region, String zone, String subZone, List<LbEndpoint> lbEndpoints,
+      int loadBalancingWeight, int priority) {
+    return
+        LocalityLbEndpoints.newBuilder()
+            .setLocality(
+                Locality.newBuilder()
+                    .setRegion(region)
+                    .setZone(zone)
+                    .setSubZone(subZone))
+            .addAllLbEndpoints(lbEndpoints)
+            .setLoadBalancingWeight(UInt32Value.of(loadBalancingWeight))
+            .setPriority(priority)
+            .build();
+  }
+
+  static io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints buildLocalityLbEndpointsV2(
       String region, String zone, String subZone,
       List<io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint> lbEndpoints,
       int loadBalancingWeight, int priority) {
@@ -217,14 +336,30 @@ class XdsClientTestHelper {
             .build();
   }
 
-  static io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint buildLbEndpoint(String address,
-      int port, HealthStatus healthStatus, int loadbalancingWeight) {
+  static LbEndpoint buildLbEndpoint(
+      String address, int port, HealthStatus healthStatus, int loadbalancingWeight) {
+    return
+        LbEndpoint.newBuilder()
+            .setEndpoint(
+                Endpoint.newBuilder().setAddress(
+                    Address.newBuilder().setSocketAddress(
+                        SocketAddress.newBuilder().setAddress(address).setPortValue(port))))
+            .setHealthStatus(healthStatus)
+            .setLoadBalancingWeight(UInt32Value.of(loadbalancingWeight))
+            .build();
+  }
+
+  static io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint buildLbEndpointV2(
+      String address, int port, io.envoyproxy.envoy.api.v2.core.HealthStatus healthStatus,
+      int loadbalancingWeight) {
     return
         io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint.newBuilder()
             .setEndpoint(
                 io.envoyproxy.envoy.api.v2.endpoint.Endpoint.newBuilder().setAddress(
-                    Address.newBuilder().setSocketAddress(
-                        SocketAddress.newBuilder().setAddress(address).setPortValue(port))))
+                    io.envoyproxy.envoy.api.v2.core.Address.newBuilder().setSocketAddress(
+                        io.envoyproxy.envoy.api.v2.core.SocketAddress.newBuilder()
+                            .setAddress(address)
+                            .setPortValue(port))))
             .setHealthStatus(healthStatus)
             .setLoadBalancingWeight(UInt32Value.of(loadbalancingWeight))
             .build();
@@ -247,6 +382,30 @@ class XdsClientTestHelper {
     return UpstreamTlsContext.newBuilder()
         .setCommonTlsContext(
             CommonTlsContext.newBuilder()
+                .setValidationContextSdsSecretConfig(validationContextSdsSecretConfig))
+        .build();
+  }
+
+  static io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext buildUpstreamTlsContextV2(
+      String secretName, String targetUri) {
+    io.envoyproxy.envoy.api.v2.core.GrpcService grpcService =
+        io.envoyproxy.envoy.api.v2.core.GrpcService.newBuilder()
+            .setGoogleGrpc(io.envoyproxy.envoy.api.v2.core.GrpcService.GoogleGrpc.newBuilder()
+                .setTargetUri(targetUri))
+            .build();
+    io.envoyproxy.envoy.api.v2.core.ConfigSource sdsConfig =
+        io.envoyproxy.envoy.api.v2.core.ConfigSource.newBuilder()
+            .setApiConfigSource(io.envoyproxy.envoy.api.v2.core.ApiConfigSource.newBuilder()
+                .addGrpcServices(grpcService))
+            .build();
+    io.envoyproxy.envoy.api.v2.auth.SdsSecretConfig validationContextSdsSecretConfig =
+        io.envoyproxy.envoy.api.v2.auth.SdsSecretConfig.newBuilder()
+            .setName(secretName)
+            .setSdsConfig(sdsConfig)
+            .build();
+    return io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext.newBuilder()
+        .setCommonTlsContext(
+            io.envoyproxy.envoy.api.v2.auth.CommonTlsContext.newBuilder()
                 .setValidationContextSdsSecretConfig(validationContextSdsSecretConfig))
         .build();
   }

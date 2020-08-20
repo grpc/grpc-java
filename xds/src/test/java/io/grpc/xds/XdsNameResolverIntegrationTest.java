@@ -18,9 +18,9 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.xds.XdsClientTestHelper.buildDiscoveryResponseV2;
-import static io.grpc.xds.XdsClientTestHelper.buildListener;
-import static io.grpc.xds.XdsClientTestHelper.buildRouteConfiguration;
-import static io.grpc.xds.XdsClientTestHelper.buildVirtualHost;
+import static io.grpc.xds.XdsClientTestHelper.buildListenerV2;
+import static io.grpc.xds.XdsClientTestHelper.buildRouteConfigurationV2;
+import static io.grpc.xds.XdsClientTestHelper.buildVirtualHostV2;
 import static io.grpc.xds.XdsNameResolverTest.assertCdsPolicy;
 import static io.grpc.xds.XdsNameResolverTest.assertWeightedTargetConfigClusterWeights;
 import static io.grpc.xds.XdsNameResolverTest.assertWeightedTargetPolicy;
@@ -389,12 +389,12 @@ public class XdsNameResolverIntegrationTest {
     HttpConnectionManager httpConnectionManager =
         HttpConnectionManager.newBuilder()
             .setRouteConfig(
-                buildRouteConfiguration(
+                buildRouteConfigurationV2(
                     "route-foo.googleapis.com", // doesn't matter
                     ImmutableList.of(buildVirtualHostForRoutes(AUTHORITY, protoRoutes))))
             .build();
     List<Any> listeners =
-        ImmutableList.of(Any.pack(buildListener(AUTHORITY, Any.pack(httpConnectionManager))));
+        ImmutableList.of(Any.pack(buildListenerV2(AUTHORITY, Any.pack(httpConnectionManager))));
     responseObserver.onNext(
         buildDiscoveryResponseV2("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2,  "0000"));
 
@@ -472,7 +472,7 @@ public class XdsNameResolverIntegrationTest {
             .build();
     List<Any> routeConfigs = ImmutableList.of(
         Any.pack(
-            buildRouteConfiguration(
+            buildRouteConfigurationV2(
                 routeConfigName,
                 ImmutableList.of(
                     buildVirtualHostForRoutes(
@@ -537,13 +537,13 @@ public class XdsNameResolverIntegrationTest {
   private static DiscoveryResponse buildLdsResponseForCluster(
       String versionInfo, String host, String clusterName, String nonce) {
     List<Any> listeners = ImmutableList.of(
-        Any.pack(buildListener(host, // target Listener resource
+        Any.pack(buildListenerV2(host, // target Listener resource
             Any.pack(
                 HttpConnectionManager.newBuilder()
                     .setRouteConfig(
-                        buildRouteConfiguration("route-foo.googleapis.com", // doesn't matter
+                        buildRouteConfigurationV2("route-foo.googleapis.com", // doesn't matter
                             ImmutableList.of(
-                                buildVirtualHost(
+                                buildVirtualHostV2(
                                     ImmutableList.of(host), // exact match
                                     clusterName))))
                     .build()))));
@@ -568,7 +568,7 @@ public class XdsNameResolverIntegrationTest {
 
     List<Any> listeners = ImmutableList.of(
         Any.pack(
-            buildListener(
+            buildListenerV2(
                 host, Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build()))));
     return buildDiscoveryResponseV2(
         versionInfo, listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, nonce);
@@ -586,10 +586,10 @@ public class XdsNameResolverIntegrationTest {
       String nonce) {
     List<Any> routeConfigs = ImmutableList.of(
         Any.pack(
-            buildRouteConfiguration(
+            buildRouteConfigurationV2(
                 routeConfigName,
                 ImmutableList.of(
-                    buildVirtualHost(ImmutableList.of(host), clusterName)))));
+                    buildVirtualHostV2(ImmutableList.of(host), clusterName)))));
     return buildDiscoveryResponseV2(
         versionInfo, routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS_V2, nonce);
   }
