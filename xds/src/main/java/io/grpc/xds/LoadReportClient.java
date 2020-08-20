@@ -179,11 +179,28 @@ final class LoadReportClient {
 
     abstract void sendError(Exception error);
 
-    final void onLoadStatsResponse(final LoadStatsResponseData response) {
+    final void handleResponse(final LoadStatsResponseData response) {
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
-          handleResponse(response);
+          if (closed) {
+            return;
+          }
+          if (!initialResponseReceived) {
+            logger.log(XdsLogLevel.DEBUG, "Initial LRS response received");
+            initialResponseReceived = true;
+          }
+          reportAllClusters = response.getSendAllClusters();
+          if (reportAllClusters) {
+            logger.log(XdsLogLevel.INFO, "Report loads for all clusters");
+          } else {
+            logger.log(XdsLogLevel.INFO, "Report loads for clusters: ", response.getClustersList());
+            clusterNames = response.getClustersList();
+          }
+          long interval = response.getLoadReportingIntervalNanos();
+          logger.log(XdsLogLevel.INFO, "Update load reporting interval to {0} ns", interval);
+          loadReportIntervalNano = interval;
+          scheduleNextLoadReport();
         }
       });
     }
@@ -233,27 +250,6 @@ final class LoadReportClient {
             new LoadReportingTask(this), loadReportIntervalNano, TimeUnit.NANOSECONDS,
             timerService);
       }
-    }
-
-    private void handleResponse(LoadStatsResponseData response) {
-      if (closed) {
-        return;
-      }
-      if (!initialResponseReceived) {
-        logger.log(XdsLogLevel.DEBUG, "Initial LRS response received");
-        initialResponseReceived = true;
-      }
-      reportAllClusters = response.getSendAllClusters();
-      if (reportAllClusters) {
-        logger.log(XdsLogLevel.INFO, "Report loads for all clusters");
-      } else {
-        logger.log(XdsLogLevel.INFO, "Report loads for clusters: ", response.getClustersList());
-        clusterNames = response.getClustersList();
-      }
-      long interval = response.getLoadReportingIntervalNanos();
-      logger.log(XdsLogLevel.INFO, "Update load reporting interval to {0} ns", interval);
-      loadReportIntervalNano = interval;
-      scheduleNextLoadReport();
     }
 
     private void handleStreamClosed(Status status) {
@@ -324,7 +320,7 @@ final class LoadReportClient {
             public void onNext(
                 io.envoyproxy.envoy.service.load_stats.v2.LoadStatsResponse response) {
               logger.log(XdsLogLevel.DEBUG, "Received LRS response:\n{0}", response);
-              onLoadStatsResponse(LoadStatsResponseData.fromEnvoyProtoV2(response));
+              handleResponse(LoadStatsResponseData.fromEnvoyProtoV2(response));
             }
 
             @Override
