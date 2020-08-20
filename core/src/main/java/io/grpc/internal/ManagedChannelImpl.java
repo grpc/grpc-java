@@ -921,13 +921,23 @@ final class ManagedChannelImpl extends ManagedChannel implements
       if (configSelector.get() != INITIAL_PENDING_SELECTOR) {
         return newClientCall(method, callOptions);
       }
-      final Context context = Context.current();
-      final PendingCall<ReqT, RespT> pendingCall = new PendingCall<>(context, method, callOptions);
-
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
           exitIdleMode();
+        }
+      });
+      if (configSelector.get() != INITIAL_PENDING_SELECTOR) {
+        // This is an optimization for the case (typically with InProcessTransport) when name
+        // resolution result is immediately available at this point. Otherwise, some users'
+        // tests might observe slight behavior difference from earlier grpc versions.
+        return newClientCall(method, callOptions);
+      }
+      final Context context = Context.current();
+      final PendingCall<ReqT, RespT> pendingCall = new PendingCall<>(context, method, callOptions);
+      syncContext.execute(new Runnable() {
+        @Override
+        public void run() {
           if (configSelector.get() == INITIAL_PENDING_SELECTOR) {
             if (pendingCalls == null) {
               pendingCalls = new LinkedHashSet<>();
