@@ -30,6 +30,7 @@ import static org.mockito.Mockito.when;
 
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Struct;
@@ -56,6 +57,7 @@ import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.UpstreamLocalityStats;
 import io.grpc.xds.LoadStatsManager.LoadStatsStore;
 import io.grpc.xds.LoadStatsManager.LoadStatsStoreFactory;
+import io.grpc.xds.XdsClient.XdsChannel;
 import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.Collection;
@@ -87,14 +89,10 @@ import org.mockito.MockitoAnnotations;
 public class LoadReportClientTest {
   private static final String TARGET_NAME = "lrs-test.example.com";
   // bootstrap node identifier
-  private static final Node NODE =
-      Node.newBuilder()
+  private static final EnvoyProtoData.Node NODE =
+      EnvoyProtoData.Node.newBuilder()
           .setId("LRS test")
-          .setMetadata(
-              Struct.newBuilder()
-                  .putFields(
-                      "TRAFFICDIRECTOR_NETWORK_HOSTNAME",
-                      Value.newBuilder().setStringValue("default").build()))
+          .setMetadata(ImmutableMap.of("TRAFFICDIRECTOR_NETWORK_HOSTNAME", "default"))
           .build();
   private static final String CLUSTER1 = "cluster-foo.googleapis.com";
   private static final String CLUSTER2 = "cluster-bar.googleapis.com";
@@ -189,7 +187,7 @@ public class LoadReportClientTest {
         new LoadReportClient(
             TARGET_NAME,
             loadStatsManager,
-            channel,
+            new XdsChannel(channel, false),
             NODE,
             syncContext,
             fakeClock.getScheduledExecutorService(),
