@@ -1871,20 +1871,11 @@ final class ManagedChannelImpl extends ManagedChannel implements
     @Override
     public Channel asChannel() {
       checkState(started, "not started");
-      InternalConfigSelector noConfigConfigSelector = new InternalConfigSelector() {
-        @Override
-        public Result selectConfig(PickSubchannelArgs args) {
-          return Result.newBuilder()
-              .setConfig(ManagedChannelServiceConfig.empty())
-              .setCallOptions(args.getCallOptions())
-              .build();
-        }
-      };
       return new SubchannelChannel(
           subchannel, balancerRpcExecutorHolder.getExecutor(),
           transportFactory.getScheduledExecutorService(),
           callTracerFactory.create(),
-          new AtomicReference<>(noConfigConfigSelector));
+          new AtomicReference<InternalConfigSelector>(null));
     }
 
     @Override
