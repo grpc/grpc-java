@@ -917,7 +917,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
     @Override
     public <ReqT, RespT> ClientCall<ReqT, RespT> newCall(
-        final MethodDescriptor<ReqT, RespT> method, final CallOptions callOptions) {
+        MethodDescriptor<ReqT, RespT> method, CallOptions callOptions) {
       if (configSelector.get() != INITIAL_PENDING_SELECTOR) {
         return newClientCall(method, callOptions);
       }
@@ -933,7 +933,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
         // tests might observe slight behavior difference from earlier grpc versions.
         return newClientCall(method, callOptions);
       }
-      final Context context = Context.current();
+      Context context = Context.current();
       final PendingCall<ReqT, RespT> pendingCall = new PendingCall<>(context, method, callOptions);
       syncContext.execute(new Runnable() {
         @Override
