@@ -968,10 +968,17 @@ final class ManagedChannelImpl extends ManagedChannel implements
           @Override
           public void run() {
             getCallExecutor(callOptions).execute(
-                new ContextRunnable(context) {
+                new Runnable() {
                   @Override
-                  public void runInContext() {
-                    setCall(newClientCall(method, callOptions));
+                  public void run() {
+                    ClientCall<ReqT, RespT> realCall;
+                    Context previous = context.attach();
+                    try {
+                      realCall = newClientCall(method, callOptions);
+                    } finally {
+                      context.detach(previous);
+                    }
+                    setCall(realCall);
                     syncContext.execute(new PendingCallRemoval());
                   }
                 }
