@@ -945,7 +945,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
             }
             pendingCalls.add(pendingCall);
           } else {
-            pendingCall.pendingCallRunnable.run();
+            pendingCall.reprocess();
           }
         }
       });
@@ -958,35 +958,36 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
 
     private final class PendingCall<ReqT, RespT> extends DelayedClientCall<ReqT, RespT> {
-      final Runnable pendingCallRunnable;
+      final Context context;
+      final MethodDescriptor<ReqT, RespT> method;
+      final CallOptions callOptions;
 
       PendingCall(
-          final Context context, final MethodDescriptor<ReqT, RespT> method,
-          final CallOptions callOptions) {
+          Context context, MethodDescriptor<ReqT, RespT> method, CallOptions callOptions) {
         super(getCallExecutor(callOptions), scheduledExecutor, callOptions.getDeadline());
-        class PendingCallRunnable implements Runnable {
-          @Override
-          public void run() {
-            getCallExecutor(callOptions).execute(
-                new Runnable() {
-                  @Override
-                  public void run() {
-                    ClientCall<ReqT, RespT> realCall;
-                    Context previous = context.attach();
-                    try {
-                      realCall = newClientCall(method, callOptions);
-                    } finally {
-                      context.detach(previous);
-                    }
-                    setCall(realCall);
-                    syncContext.execute(new PendingCallRemoval());
-                  }
-                }
-            );
-          }
-        }
+        this.context = context;
+        this.method = method;
+        this.callOptions = callOptions;
+      }
 
-        pendingCallRunnable = new PendingCallRunnable();
+      /** Called when it's ready to create a real call and reprocess the pending call. */
+      void reprocess() {
+        getCallExecutor(callOptions).execute(
+            new Runnable() {
+              @Override
+              public void run() {
+                ClientCall<ReqT, RespT> realCall;
+                Context previous = context.attach();
+                try {
+                  realCall = newClientCall(method, callOptions);
+                } finally {
+                  context.detach(previous);
+                }
+                setCall(realCall);
+                syncContext.execute(new PendingCallRemoval());
+              }
+            }
+        );
       }
 
       @Override
@@ -1651,7 +1652,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
         return;
       }
       for (RealChannel.PendingCall<?, ?> pendingCall : pendingCalls) {
-        pendingCall.pendingCallRunnable.run();
+        pendingCall.reprocess();
       }
     }
 
