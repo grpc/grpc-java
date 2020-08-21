@@ -49,6 +49,7 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalChannelz.ChannelStats;
 import io.grpc.InternalChannelz.ChannelTrace;
+import io.grpc.InternalConfigSelector;
 import io.grpc.InternalInstrumented;
 import io.grpc.InternalLogId;
 import io.grpc.InternalWithLogId;
@@ -81,6 +82,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -94,6 +96,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
@@ -131,6 +134,13 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
   private static final ManagedChannelServiceConfig EMPTY_SERVICE_CONFIG =
       ManagedChannelServiceConfig.empty();
+  private static final InternalConfigSelector INITIAL_PENDING_SELECTOR =
+      new InternalConfigSelector() {
+        @Override
+        public Result selectConfig(PickSubchannelArgs args) {
+          throw new IllegalStateException("Resolution is pending");
+        }
+      };
 
   private final InternalLogId logId;
   private final String target;
@@ -207,6 +217,11 @@ final class ManagedChannelImpl extends ManagedChannel implements
   // switch to a ConcurrentHashMap.
   private final Set<InternalSubchannel> subchannels = new HashSet<>(16, .75f);
 
+  // Must be accessed from syncContext
+  @Nullable
+  private Collection<RealChannel.PendingCall<?, ?>> pendingCalls;
+  private final Object pendingCallsInUseObject = new Object();
+
   // Must be mutated from syncContext
   private final Set<OobChannel> oobChannels = new HashSet<>(1, .75f);
 
@@ -252,6 +267,11 @@ final class ManagedChannelImpl extends ManagedChannel implements
   // Must be mutated and read from constructor or syncContext
   // used for channel tracing when value changed
   private ManagedChannelServiceConfig lastServiceConfig = EMPTY_SERVICE_CONFIG;
+  // Reference to null if no config selector is available from resolution result
+  // Reference must be set() from syncContext
+  private final AtomicReference<InternalConfigSelector> configSelector =
+      new AtomicReference<>(INITIAL_PENDING_SELECTOR);
+
   @Nullable
   private final ManagedChannelServiceConfig defaultServiceConfig;
   // Must be mutated and read from constructor or syncContext
@@ -688,6 +708,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
   // May only be called in constructor or syncContext
   private void handleServiceConfigUpdate() {
     serviceConfigUpdated = true;
+    // TODO(zdapeng): get rid of serviceConfigInterceptor and do handle update together with
+    // configSelector.
     serviceConfigInterceptor.handleUpdate(lastServiceConfig);
   }
 
@@ -734,6 +756,11 @@ final class ManagedChannelImpl extends ManagedChannel implements
     throw new IllegalArgumentException(String.format(
         "cannot find a NameResolver for %s%s",
         target, uriSyntaxErrors.length() > 0 ? " (" + uriSyntaxErrors + ")" : ""));
+  }
+
+  @VisibleForTesting
+  InternalConfigSelector getConfigSelector() {
+    return configSelector.get();
   }
 
   /**
@@ -889,23 +916,113 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
 
     @Override
-    public <ReqT, RespT> ClientCall<ReqT, RespT> newCall(MethodDescriptor<ReqT, RespT> method,
-        CallOptions callOptions) {
+    public <ReqT, RespT> ClientCall<ReqT, RespT> newCall(
+        MethodDescriptor<ReqT, RespT> method, CallOptions callOptions) {
+      if (configSelector.get() != INITIAL_PENDING_SELECTOR) {
+        return newClientCall(method, callOptions);
+      }
+      syncContext.execute(new Runnable() {
+        @Override
+        public void run() {
+          exitIdleMode();
+        }
+      });
+      if (configSelector.get() != INITIAL_PENDING_SELECTOR) {
+        // This is an optimization for the case (typically with InProcessTransport) when name
+        // resolution result is immediately available at this point. Otherwise, some users'
+        // tests might observe slight behavior difference from earlier grpc versions.
+        return newClientCall(method, callOptions);
+      }
+      Context context = Context.current();
+      final PendingCall<ReqT, RespT> pendingCall = new PendingCall<>(context, method, callOptions);
+      syncContext.execute(new Runnable() {
+        @Override
+        public void run() {
+          if (configSelector.get() == INITIAL_PENDING_SELECTOR) {
+            if (pendingCalls == null) {
+              pendingCalls = new LinkedHashSet<>();
+              inUseStateAggregator.updateObjectInUse(pendingCallsInUseObject, true);
+            }
+            pendingCalls.add(pendingCall);
+          } else {
+            pendingCall.reprocess();
+          }
+        }
+      });
+      return pendingCall;
+    }
+
+    @Override
+    public String authority() {
+      return authority;
+    }
+
+    private final class PendingCall<ReqT, RespT> extends DelayedClientCall<ReqT, RespT> {
+      final Context context;
+      final MethodDescriptor<ReqT, RespT> method;
+      final CallOptions callOptions;
+
+      PendingCall(
+          Context context, MethodDescriptor<ReqT, RespT> method, CallOptions callOptions) {
+        super(getCallExecutor(callOptions), scheduledExecutor, callOptions.getDeadline());
+        this.context = context;
+        this.method = method;
+        this.callOptions = callOptions;
+      }
+
+      /** Called when it's ready to create a real call and reprocess the pending call. */
+      void reprocess() {
+        getCallExecutor(callOptions).execute(
+            new Runnable() {
+              @Override
+              public void run() {
+                ClientCall<ReqT, RespT> realCall;
+                Context previous = context.attach();
+                try {
+                  realCall = newClientCall(method, callOptions);
+                } finally {
+                  context.detach(previous);
+                }
+                setCall(realCall);
+                syncContext.execute(new PendingCallRemoval());
+              }
+            }
+        );
+      }
+
+      @Override
+      protected void callCancelled() {
+        super.callCancelled();
+        syncContext.execute(new PendingCallRemoval());
+      }
+
+      final class PendingCallRemoval implements Runnable {
+        @Override
+        public void run() {
+          if (pendingCalls != null) {
+            pendingCalls.remove(PendingCall.this);
+            if (pendingCalls.isEmpty()) {
+              inUseStateAggregator.updateObjectInUse(pendingCallsInUseObject, false);
+              pendingCalls = null;
+            }
+          }
+        }
+      }
+    }
+
+    private <ReqT, RespT> ClientCall<ReqT, RespT> newClientCall(
+        MethodDescriptor<ReqT, RespT> method, CallOptions callOptions) {
       return new ClientCallImpl<>(
           method,
           getCallExecutor(callOptions),
           callOptions,
           transportProvider,
           terminated ? null : transportFactory.getScheduledExecutorService(),
-          channelCallTracer)
+          channelCallTracer,
+          configSelector.get())
           .setFullStreamDecompression(fullStreamDecompression)
           .setDecompressorRegistry(decompressorRegistry)
           .setCompressorRegistry(compressorRegistry);
-    }
-
-    @Override
-    public String authority() {
-      return authority;
     }
   }
 
@@ -1393,9 +1510,11 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
           nameResolverBackoffPolicy = null;
           ConfigOrError configOrError = resolutionResult.getServiceConfig();
+          InternalConfigSelector resolvedConfigSelector =
+              resolutionResult.getAttributes().get(InternalConfigSelector.KEY);
           ManagedChannelServiceConfig validServiceConfig =
               configOrError != null && configOrError.getConfig() != null
-                  ? (ManagedChannelServiceConfig) resolutionResult.getServiceConfig().getConfig()
+                  ? (ManagedChannelServiceConfig) configOrError.getConfig()
                   : null;
           Status serviceConfigError = configOrError != null ? configOrError.getError() : null;
 
@@ -1408,13 +1527,21 @@ final class ManagedChannelImpl extends ManagedChannel implements
             }
             effectiveServiceConfig =
                 defaultServiceConfig == null ? EMPTY_SERVICE_CONFIG : defaultServiceConfig;
+            if (resolvedConfigSelector != null) {
+              channelLogger.log(
+                  ChannelLogLevel.INFO,
+                  "Config selector from name resolver discarded by channel settings");
+            }
+            configSelector.set(null);
           } else {
             // Try to use config if returned from name resolver
             // Otherwise, try to use the default config if available
             if (validServiceConfig != null) {
               effectiveServiceConfig = validServiceConfig;
+              configSelector.set(resolvedConfigSelector);
             } else if (defaultServiceConfig != null) {
               effectiveServiceConfig = defaultServiceConfig;
+              configSelector.set(null);
               channelLogger.log(
                   ChannelLogLevel.INFO,
                   "Received no service config, using default service config");
@@ -1431,6 +1558,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
               }
             } else {
               effectiveServiceConfig = EMPTY_SERVICE_CONFIG;
+              configSelector.set(null);
             }
             if (!effectiveServiceConfig.equals(lastServiceConfig)) {
               channelLogger.log(
@@ -1452,14 +1580,17 @@ final class ManagedChannelImpl extends ManagedChannel implements
                   re);
             }
           }
+          drainPendingCalls();
 
           Attributes effectiveAttrs = resolutionResult.getAttributes();
           // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
           if (NameResolverListener.this.helper == ManagedChannelImpl.this.lbHelper) {
+            Attributes.Builder attrBuilder =
+                effectiveAttrs.toBuilder().discard(InternalConfigSelector.KEY);
             Map<String, ?> healthCheckingConfig =
                 effectiveServiceConfig.getHealthCheckingConfig();
             if (healthCheckingConfig != null) {
-              effectiveAttrs = effectiveAttrs.toBuilder()
+              attrBuilder
                   .set(LoadBalancer.ATTR_HEALTH_CHECKING_CONFIG, healthCheckingConfig)
                   .build();
             }
@@ -1467,7 +1598,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
             Status handleResult = helper.lb.tryHandleResolvedAddresses(
                 ResolvedAddresses.newBuilder()
                     .setAddresses(servers)
-                    .setAttributes(effectiveAttrs)
+                    .setAttributes(attrBuilder.build())
                     .setLoadBalancingPolicyConfig(effectiveServiceConfig.getLoadBalancingConfig())
                     .build());
 
@@ -1497,6 +1628,10 @@ final class ManagedChannelImpl extends ManagedChannel implements
     private void handleErrorInSyncContext(Status error) {
       logger.log(Level.WARNING, "[{0}] Failed to resolve name. status={1}",
           new Object[] {getLogId(), error});
+      if (configSelector.get() == INITIAL_PENDING_SELECTOR) {
+        configSelector.set(null);
+        drainPendingCalls();
+      }
       if (lastResolutionState != ResolutionState.ERROR) {
         channelLogger.log(ChannelLogLevel.WARNING, "Failed to resolve name: {0}", error);
         lastResolutionState = ResolutionState.ERROR;
@@ -1509,6 +1644,16 @@ final class ManagedChannelImpl extends ManagedChannel implements
       helper.lb.handleNameResolutionError(error);
 
       scheduleExponentialBackOffInSyncContext();
+    }
+
+    // Must run in SynchronizationContext.
+    private void drainPendingCalls() {
+      if (pendingCalls == null) {
+        return;
+      }
+      for (RealChannel.PendingCall<?, ?> pendingCall : pendingCalls) {
+        pendingCall.reprocess();
+      }
     }
 
     private void scheduleExponentialBackOffInSyncContext() {
@@ -1737,7 +1882,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
       return new SubchannelChannel(
           subchannel, balancerRpcExecutorHolder.getExecutor(),
           transportFactory.getScheduledExecutorService(),
-          callTracerFactory.create());
+          callTracerFactory.create(),
+          new AtomicReference<InternalConfigSelector>(null));
     }
 
     @Override

@@ -40,6 +40,7 @@ import io.grpc.Context;
 import io.grpc.Context.CancellationListener;
 import io.grpc.Deadline;
 import io.grpc.DecompressorRegistry;
+import io.grpc.InternalConfigSelector;
 import io.grpc.InternalDecompressorRegistry;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -101,7 +102,8 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       MethodDescriptor<ReqT, RespT> method, Executor executor, CallOptions callOptions,
       ClientStreamProvider clientStreamProvider,
       ScheduledExecutorService deadlineCancellationExecutor,
-      CallTracer channelCallsTracer) {
+      CallTracer channelCallsTracer,
+      InternalConfigSelector configSelector) {
     this.method = method;
     // TODO(carl-mastrangelo): consider moving this construction to ManagedChannelImpl.
     this.tag = PerfMark.createTag(method.getFullMethodName(), System.identityHashCode(this));
@@ -218,6 +220,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       executeCloseObserverInContext(observer, statusFromCancelled(context));
       return;
     }
+    // TODO(zdapeng): configSelector.selectConfig()
     final String compressorName = callOptions.getCompressor();
     Compressor compressor;
     if (compressorName != null) {
