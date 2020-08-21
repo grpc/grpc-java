@@ -94,6 +94,197 @@ public class CommonCertProviderTestUtils {
     return Bootstrapper.parseConfig(rawData);
   }
 
+  static Bootstrapper.BootstrapInfo getNonDefaultTestBootstrapInfo() throws IOException {
+    String rawData =
+        "{\n"
+            + "  \"xds_servers\": [],\n"
+            + "  \"certificate_providers\": {\n"
+            + "    \"gcp_id\": {\n"
+            + "      \"plugin_name\": \"testca\",\n"
+            + "      \"config\": {\n"
+            + "        \"server\": {\n"
+            + "          \"api_type\": \"GRPC\",\n"
+            + "          \"grpc_services\": [{\n"
+            + "            \"google_grpc\": {\n"
+            + "              \"target_uri\": \"nonDefaultMeshCaUrl\",\n"
+            + "              \"channel_credentials\": {\"google_default\": {}},\n"
+            + "              \"call_credentials\": [{\n"
+            + "                \"sts_service\": {\n"
+            + "                  \"token_exchange_service\": \"test.sts.com\",\n"
+            + "                  \"subject_token_path\": \"/tmp/path4\"\n"
+            + "                }\n"
+            + "              }]\n" // end call_credentials
+            + "            },\n" // end google_grpc
+            + "            \"time_out\": {\"seconds\": 12}\n"
+            + "          }]\n" // end grpc_services
+            + "        },\n" // end server
+            + "        \"certificate_lifetime\": {\"seconds\": 234567},\n"
+            + "        \"renewal_grace_period\": {\"seconds\": 4321},\n"
+            + "        \"key_type\": \"RSA\",\n"
+            + "        \"key_size\": 512,\n"
+            + "        \"location\": \"https://container.googleapis.com/v1/projects/test-project1/locations/test-zone2/clusters/test-cluster3\"\n"
+            + "      }\n" // end config
+            + "    },\n" // end gcp_id
+            + "    \"file_provider\": {\n"
+            + "      \"plugin_name\": \"file_watcher\",\n"
+            + "      \"config\": {\"path\": \"/etc/secret/certs\"}\n"
+            + "    }\n"
+            + "  }\n"
+            + "}";
+    return Bootstrapper.parseConfig(rawData);
+  }
+
+  static Bootstrapper.BootstrapInfo getMinimalBootstrapInfo() throws IOException {
+    String rawData =
+        "{\n"
+            + "  \"xds_servers\": [],\n"
+            + "  \"certificate_providers\": {\n"
+            + "    \"gcp_id\": {\n"
+            + "      \"plugin_name\": \"testca\",\n"
+            + "      \"config\": {\n"
+            + "        \"server\": {\n"
+            + "          \"api_type\": \"GRPC\",\n"
+            + "          \"grpc_services\": [{\n"
+            + "            \"google_grpc\": {\n"
+            + "              \"call_credentials\": [{\n"
+            + "                \"sts_service\": {\n"
+            + "                  \"subject_token_path\": \"/tmp/path5\"\n"
+            + "                }\n"
+            + "              }]\n" // end call_credentials
+            + "            }\n" // end google_grpc
+            + "          }]\n" // end grpc_services
+            + "        },\n" // end server
+            + "        \"location\": \"https://container.googleapis.com/v1/projects/test-project1/locations/test-zone2/clusters/test-cluster3\"\n"
+            + "      }\n" // end config
+            + "    }\n" // end gcp_id
+            + "  }\n"
+            + "}";
+    return Bootstrapper.parseConfig(rawData);
+  }
+
+  static Bootstrapper.BootstrapInfo getMinimalAndBadClusterUrlBootstrapInfo() throws IOException {
+    String rawData =
+            "{\n"
+                    + "  \"xds_servers\": [],\n"
+                    + "  \"certificate_providers\": {\n"
+                    + "    \"gcp_id\": {\n"
+                    + "      \"plugin_name\": \"testca\",\n"
+                    + "      \"config\": {\n"
+                    + "        \"server\": {\n"
+                    + "          \"api_type\": \"GRPC\",\n"
+                    + "          \"grpc_services\": [{\n"
+                    + "            \"google_grpc\": {\n"
+                    + "              \"call_credentials\": [{\n"
+                    + "                \"sts_service\": {\n"
+                    + "                  \"subject_token_path\": \"/tmp/path5\"\n"
+                    + "                }\n"
+                    + "              }]\n" // end call_credentials
+                    + "            }\n" // end google_grpc
+                    + "          }]\n" // end grpc_services
+                    + "        },\n" // end server
+                    + "        \"location\": \"https://container.googleapis.com/v1/project/test-project1/locations/test-zone2/clusters/test-cluster3\"\n"
+                    + "      }\n" // end config
+                    + "    }\n" // end gcp_id
+                    + "  }\n"
+                    + "}";
+    return Bootstrapper.parseConfig(rawData);
+  }
+
+  static Bootstrapper.BootstrapInfo getMissingSaJwtLocation() throws IOException {
+    String rawData =
+        "{\n"
+            + "  \"xds_servers\": [],\n"
+            + "  \"certificate_providers\": {\n"
+            + "    \"gcp_id\": {\n"
+            + "      \"plugin_name\": \"testca\",\n"
+            + "      \"config\": {\n"
+            + "        \"server\": {\n"
+            + "          \"api_type\": \"GRPC\",\n"
+            + "          \"grpc_services\": [{\n"
+            + "            \"google_grpc\": {\n"
+            + "              \"call_credentials\": [{\n"
+            + "                \"sts_service\": {\n"
+            + "                }\n"
+            + "              }]\n" // end call_credentials
+            + "            }\n" // end google_grpc
+            + "          }]\n" // end grpc_services
+            + "        },\n" // end server
+            + "        \"location\": \"https://container.googleapis.com/v1/projects/test-project1/locations/test-zone2/clusters/test-cluster3\"\n"
+            + "      }\n" // end config
+            + "    }\n" // end gcp_id
+            + "  }\n"
+            + "}";
+    return Bootstrapper.parseConfig(rawData);
+  }
+
+  static Bootstrapper.BootstrapInfo getMissingGkeClusterUrl() throws IOException {
+    String rawData =
+        "{\n"
+            + "  \"xds_servers\": [],\n"
+            + "  \"certificate_providers\": {\n"
+            + "    \"gcp_id\": {\n"
+            + "      \"plugin_name\": \"testca\",\n"
+            + "      \"config\": {\n"
+            + "        \"server\": {\n"
+            + "          \"api_type\": \"GRPC\",\n"
+            + "          \"grpc_services\": [{\n"
+            + "            \"google_grpc\": {\n"
+            + "              \"target_uri\": \"meshca.com\",\n"
+            + "              \"channel_credentials\": {\"google_default\": {}},\n"
+            + "              \"call_credentials\": [{\n"
+            + "                \"sts_service\": {\n"
+            + "                  \"token_exchange_service\": \"securetoken.googleapis.com\",\n"
+            + "                  \"subject_token_path\": \"/etc/secret/sajwt.token\"\n"
+            + "                }\n"
+            + "              }]\n" // end call_credentials
+            + "            },\n" // end google_grpc
+            + "            \"time_out\": {\"seconds\": 10}\n"
+            + "          }]\n" // end grpc_services
+            + "        },\n" // end server
+            + "        \"certificate_lifetime\": {\"seconds\": 86400},\n"
+            + "        \"renewal_grace_period\": {\"seconds\": 3600},\n"
+            + "        \"key_type\": \"RSA\",\n"
+            + "        \"key_size\": 2048\n"
+            + "      }\n" // end config
+            + "    },\n" // end gcp_id
+            + "    \"file_provider\": {\n"
+            + "      \"plugin_name\": \"file_watcher\",\n"
+            + "      \"config\": {\"path\": \"/etc/secret/certs\"}\n"
+            + "    }\n"
+            + "  }\n"
+            + "}";
+    return Bootstrapper.parseConfig(rawData);
+  }
+
+  static Bootstrapper.BootstrapInfo getBadChannelCredsConfig() throws IOException {
+    String rawData =
+        "{\n"
+            + "  \"xds_servers\": [],\n"
+            + "  \"certificate_providers\": {\n"
+            + "    \"gcp_id\": {\n"
+            + "      \"plugin_name\": \"testca\",\n"
+            + "      \"config\": {\n"
+            + "        \"server\": {\n"
+            + "          \"api_type\": \"GRPC\",\n"
+            + "          \"grpc_services\": [{\n"
+            + "            \"google_grpc\": {\n"
+            + "              \"channel_credentials\": {\"mtls\": \"true\"},\n"
+            + "              \"call_credentials\": [{\n"
+            + "                \"sts_service\": {\n"
+            + "                  \"subject_token_path\": \"/tmp/path5\"\n"
+            + "                }\n"
+            + "              }]\n" // end call_credentials
+            + "            }\n" // end google_grpc
+            + "          }]\n" // end grpc_services
+            + "        },\n" // end server
+            + "        \"location\": \"https://container.googleapis.com/v1/projects/test-project1/locations/test-zone2/clusters/test-cluster3\"\n"
+            + "      }\n" // end config
+            + "    }\n" // end gcp_id
+            + "  }\n"
+            + "}";
+    return Bootstrapper.parseConfig(rawData);
+  }
+
   static PrivateKey getPrivateKey(String resourceName)
           throws Exception {
     InputStream inputStream = TestUtils.class.getResourceAsStream("/certs/" + resourceName);

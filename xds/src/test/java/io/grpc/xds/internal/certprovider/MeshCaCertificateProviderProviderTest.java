@@ -30,9 +30,9 @@ import com.google.auth.oauth2.GoogleCredentials;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.TimeProvider;
+import io.grpc.xds.Bootstrapper;
 import io.grpc.xds.internal.sts.StsCredentials;
 import java.io.IOException;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -106,10 +106,10 @@ public class MeshCaCertificateProviderProviderTest {
   }
 
   @Test
-  public void createProvider_minimalConfig() {
+  public void createProvider_minimalConfig() throws IOException {
     CertificateProvider.DistributorWatcher distWatcher =
         new CertificateProvider.DistributorWatcher();
-    Map<String, String> map = buildMinimalMap();
+    Map<String, ?> map = buildMinimalConfig();
     ScheduledExecutorService mockService = mock(ScheduledExecutorService.class);
     when(scheduledExecutorServiceFactory.create(
             eq(MeshCaCertificateProviderProvider.MESHCA_URL_DEFAULT)))
@@ -119,7 +119,7 @@ public class MeshCaCertificateProviderProviderTest {
         .create(
             eq(MeshCaCertificateProviderProvider.STS_URL_DEFAULT),
             eq(EXPECTED_AUDIENCE),
-            eq(TMP_PATH_4));
+            eq("/tmp/path5"));
     verify(meshCaCertificateProviderFactory, times(1))
         .create(
             eq(distWatcher),
@@ -141,41 +141,36 @@ public class MeshCaCertificateProviderProviderTest {
   }
 
   @Test
-  public void createProvider_missingGkeUrl_expectException() {
+  public void createProvider_missingGkeUrl_expectException() throws IOException {
     CertificateProvider.DistributorWatcher distWatcher =
             new CertificateProvider.DistributorWatcher();
-    Map<String, String> map = buildMinimalMap();
-    map.remove("gkeClusterUrl");
+    Map<String, ?> map = buildMissingGkeClusterUrlConfig();
     try {
       provider.createCertificateProvider(map, distWatcher, true);
       fail("exception expected");
     } catch (NullPointerException npe) {
-      assertThat(npe).hasMessageThat().isEqualTo("gkeClusterUrl is required in the config");
+      assertThat(npe).hasMessageThat().isEqualTo("'location' is required in the config");
     }
   }
 
   @Test
-  public void createProvider_missingGkeSaJwtLocation_expectException() {
+  public void createProvider_missingGkeSaJwtLocation_expectException() throws IOException {
     CertificateProvider.DistributorWatcher distWatcher =
             new CertificateProvider.DistributorWatcher();
-    Map<String, String> map = buildMinimalMap();
-    map.remove("gkeSaJwtLocation");
+    Map<String, ?> map = buildMissingSaJwtLocationConfig();
     try {
       provider.createCertificateProvider(map, distWatcher, true);
       fail("exception expected");
     } catch (NullPointerException npe) {
-      assertThat(npe).hasMessageThat().isEqualTo("gkeSaJwtLocation is required in the config");
+      assertThat(npe).hasMessageThat().isEqualTo("'subject_token_path' is required in the config");
     }
   }
 
   @Test
-  public void createProvider_missingProject_expectException() {
+  public void createProvider_missingProject_expectException() throws IOException {
     CertificateProvider.DistributorWatcher distWatcher =
             new CertificateProvider.DistributorWatcher();
-    Map<String, String> map = buildMinimalMap();
-    map.put(
-        "gkeClusterUrl",
-        "https://container.googleapis.com/v1/project/test-project1/locations/test-zone2/clusters/test-cluster3");
+    Map<String, ?> map = buildBadClusterUrlConfig();
     try {
       provider.createCertificateProvider(map, distWatcher, true);
       fail("exception expected");
@@ -185,17 +180,30 @@ public class MeshCaCertificateProviderProviderTest {
   }
 
   @Test
-  public void createProvider_nonDefaultFullConfig() {
+  public void createProvider_badChannelCreds_expectException() throws IOException {
     CertificateProvider.DistributorWatcher distWatcher =
             new CertificateProvider.DistributorWatcher();
-    Map<String, String> map = buildFullMap();
+    Map<String, ?> map = buildBadChannelCredsConfig();
+    try {
+      provider.createCertificateProvider(map, distWatcher, true);
+      fail("exception expected");
+    } catch (NullPointerException ex) {
+      assertThat(ex).hasMessageThat().isEqualTo("channel_credentials need to be google_default!");
+    }
+  }
+
+  @Test
+  public void createProvider_nonDefaultFullConfig() throws IOException {
+    CertificateProvider.DistributorWatcher distWatcher =
+            new CertificateProvider.DistributorWatcher();
+    Map<String, ?> map = buildFullConfig();
     ScheduledExecutorService mockService = mock(ScheduledExecutorService.class);
     when(scheduledExecutorServiceFactory.create(eq(NON_DEFAULT_MESH_CA_URL)))
         .thenReturn(mockService);
     provider.createCertificateProvider(map, distWatcher, true);
     verify(stsCredentialsFactory, times(1))
             .create(
-                    eq("nonDefaultStsUrl"),
+                    eq("test.sts.com"),
                     eq(EXPECTED_AUDIENCE),
                     eq(TMP_PATH_4));
     verify(meshCaCertificateProviderFactory, times(1))
@@ -205,39 +213,49 @@ public class MeshCaCertificateProviderProviderTest {
                     eq(NON_DEFAULT_MESH_CA_URL),
                     eq("test-zone2"),
                     eq(234567L),
-                    eq(4096),
-                    eq("KEY-ALGO1"),
-                    eq("SIG-ALGO2"),
+                    eq(512),
+                    eq("RSA"),
+                    eq("SHA256withRSA"),
                     eq(meshCaChannelFactory),
                     eq(backoffPolicyProvider),
                     eq(4321L),
-                    eq(9),
+                    eq(3),
                     (GoogleCredentials) isNull(),
                     eq(mockService),
                     eq(timeProvider),
                     eq(TimeUnit.SECONDS.toMillis(RPC_TIMEOUT_SECONDS)));
   }
 
-  private Map<String, String> buildFullMap() {
-    Map<String, String> map = new HashMap<>();
-    map.put("gkeClusterUrl", GKE_CLUSTER_URL);
-    map.put("gkeSaJwtLocation", TMP_PATH_4);
-    map.put("meshCaUrl", NON_DEFAULT_MESH_CA_URL);
-    map.put("rpcTimeoutSeconds", "123");
-    map.put("certValiditySeconds", "234567");
-    map.put("renewalGracePeriodSeconds", "4321");
-    map.put("keyAlgo", "KEY-ALGO1");
-    map.put("keySize", "4096");
-    map.put("signatureAlgo", "SIG-ALGO2");
-    map.put("maxRetryAttempts", "9");
-    map.put("stsUrl", "nonDefaultStsUrl");
-    return map;
+  private Map<String, ?> buildFullConfig() throws IOException {
+    return getCertProviderConfig(CommonCertProviderTestUtils.getNonDefaultTestBootstrapInfo());
   }
 
-  private Map<String, String> buildMinimalMap() {
-    Map<String, String> map = new HashMap<>();
-    map.put("gkeClusterUrl", GKE_CLUSTER_URL);
-    map.put("gkeSaJwtLocation", TMP_PATH_4);
-    return map;
+  private Map<String, ?> buildMinimalConfig() throws IOException {
+    return getCertProviderConfig(CommonCertProviderTestUtils.getMinimalBootstrapInfo());
+  }
+
+  private Map<String, ?> buildBadClusterUrlConfig() throws IOException {
+    return getCertProviderConfig(
+        CommonCertProviderTestUtils.getMinimalAndBadClusterUrlBootstrapInfo());
+  }
+
+  private Map<String, ?> buildMissingSaJwtLocationConfig() throws IOException {
+    return getCertProviderConfig(CommonCertProviderTestUtils.getMissingSaJwtLocation());
+  }
+
+  private Map<String, ?> buildMissingGkeClusterUrlConfig() throws IOException {
+    return getCertProviderConfig(CommonCertProviderTestUtils.getMissingGkeClusterUrl());
+  }
+
+  private Map<String, ?> buildBadChannelCredsConfig() throws IOException {
+    return getCertProviderConfig(CommonCertProviderTestUtils.getBadChannelCredsConfig());
+  }
+
+  private Map<String, ?> getCertProviderConfig(Bootstrapper.BootstrapInfo bootstrapInfo) {
+    Map<String, Bootstrapper.CertificateProviderInfo> certProviders =
+            bootstrapInfo.getCertProviders();
+    Bootstrapper.CertificateProviderInfo gcpIdInfo =
+            certProviders.get("gcp_id");
+    return gcpIdInfo.getConfig();
   }
 }
