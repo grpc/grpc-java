@@ -23,6 +23,7 @@ import io.envoyproxy.envoy.config.core.v3.Node;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext.CombinedCertificateValidationContext;
+import io.grpc.Internal;
 import io.grpc.netty.GrpcSslContexts;
 import io.grpc.xds.Bootstrapper.CertificateProviderInfo;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
@@ -36,7 +37,8 @@ import java.security.cert.X509Certificate;
 import java.util.Map;
 
 /** A server SslContext provider using CertificateProviderInstance to fetch secrets. */
-final class CertProviderServerSslContextProvider extends CertProviderSslContextProvider {
+@Internal
+public final class CertProviderServerSslContextProvider extends CertProviderSslContextProvider {
 
   private CertProviderServerSslContextProvider(
           Node node,
@@ -73,20 +75,22 @@ final class CertProviderServerSslContextProvider extends CertProviderSslContextP
   }
 
   /** Creates CertProviderServerSslContextProvider. */
-  static final class Factory {
+  @Internal
+  public static final class Factory {
     private static final Factory DEFAULT_INSTANCE =
         new Factory(CertificateProviderStore.getInstance());
     private final CertificateProviderStore certificateProviderStore;
 
-    @VisibleForTesting Factory(CertificateProviderStore certificateProviderStore) {
+    @VisibleForTesting public Factory(CertificateProviderStore certificateProviderStore) {
       this.certificateProviderStore = certificateProviderStore;
     }
 
-    static Factory getInstance() {
+    public static Factory getInstance() {
       return DEFAULT_INSTANCE;
     }
 
-    CertProviderServerSslContextProvider getProvider(
+    /** Creates a {@link CertProviderServerSslContextProvider}. */
+    public CertProviderServerSslContextProvider getProvider(
         DownstreamTlsContext downstreamTlsContext,
         Node node,
         Map<String, CertificateProviderInfo> certProviders) {

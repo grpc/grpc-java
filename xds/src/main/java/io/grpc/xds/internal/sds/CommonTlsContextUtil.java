@@ -23,6 +23,7 @@ import static com.google.common.base.Preconditions.checkState;
 import io.envoyproxy.envoy.config.core.v3.DataSource.SpecifierCase;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext.CombinedCertificateValidationContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext.ValidationContextTypeCase;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.TlsCertificate;
 import javax.annotation.Nullable;
@@ -34,18 +35,31 @@ final class CommonTlsContextUtil {
 
   /** Returns true only if given CommonTlsContext uses no SdsSecretConfigs. */
   static boolean hasAllSecretsUsingFilename(CommonTlsContext commonTlsContext) {
-    checkNotNull(commonTlsContext, "commonTlsContext");
-    // return true if it has no SdsSecretConfig(s)
-    return (commonTlsContext.getTlsCertificateSdsSecretConfigsCount() == 0)
-        && !commonTlsContext.hasValidationContextSdsSecretConfig();
+    return commonTlsContext != null
+        && (commonTlsContext.getTlsCertificatesCount() > 0
+            || commonTlsContext.hasValidationContext());
   }
 
   /** Returns true only if given CommonTlsContext uses only SdsSecretConfigs. */
   static boolean hasAllSecretsUsingSds(CommonTlsContext commonTlsContext) {
-    checkNotNull(commonTlsContext, "commonTlsContext");
-    // return true if it has only SdsSecretConfig(s)
-    return (commonTlsContext.getTlsCertificatesCount() == 0)
-        && !commonTlsContext.hasValidationContext();
+    return commonTlsContext != null
+        && (commonTlsContext.getTlsCertificateSdsSecretConfigsCount() > 0
+            || commonTlsContext.hasValidationContextSdsSecretConfig());
+  }
+
+  static boolean hasCertProviderInstance(CommonTlsContext commonTlsContext) {
+    return commonTlsContext != null
+        && (commonTlsContext.hasTlsCertificateCertificateProviderInstance()
+            || hasCertProviderValidationContext(commonTlsContext));
+  }
+
+  private static boolean hasCertProviderValidationContext(CommonTlsContext commonTlsContext) {
+    if (commonTlsContext.hasCombinedValidationContext()) {
+      CombinedCertificateValidationContext combinedCertificateValidationContext =
+          commonTlsContext.getCombinedValidationContext();
+      return combinedCertificateValidationContext.hasValidationContextCertificateProviderInstance();
+    }
+    return commonTlsContext.hasValidationContextCertificateProviderInstance();
   }
 
   @Nullable

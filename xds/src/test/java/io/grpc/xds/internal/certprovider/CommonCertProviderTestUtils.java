@@ -54,7 +54,8 @@ public class CommonCertProviderTestUtils {
                   "-+END\\s+.*PRIVATE\\s+KEY[^-]*-+",            // Footer
           Pattern.CASE_INSENSITIVE);
 
-  static Bootstrapper.BootstrapInfo getTestBootstrapInfo() throws IOException {
+  /** Creates a test bootstrap info object. */
+  public static Bootstrapper.BootstrapInfo getTestBootstrapInfo() throws IOException {
     String rawData =
         "{\n"
             + "  \"xds_servers\": [],\n"

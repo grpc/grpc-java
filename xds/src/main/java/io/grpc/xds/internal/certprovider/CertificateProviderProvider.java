@@ -16,13 +16,15 @@
 
 package io.grpc.xds.internal.certprovider;
 
+import io.grpc.Internal;
 import io.grpc.xds.internal.certprovider.CertificateProvider.Watcher;
 
 /**
  * Provider of {@link CertificateProvider}s. Implemented by the implementer of the plugin. We may
  * move this out of the internal package and make this an official API in the future.
  */
-interface CertificateProviderProvider {
+@Internal
+public interface CertificateProviderProvider {
   /** Returns the unique name of the {@link CertificateProvider} plugin. */
   String getName();
 

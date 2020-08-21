@@ -139,7 +139,7 @@ public final class CertificateProviderStore {
   }
 
   @VisibleForTesting
-  CertificateProviderStore(CertificateProviderRegistry certificateProviderRegistry) {
+  public CertificateProviderStore(CertificateProviderRegistry certificateProviderRegistry) {
     this.certificateProviderRegistry = certificateProviderRegistry;
     certProviderMap = new ReferenceCountingMap<>(new CertProviderFactory());
   }
