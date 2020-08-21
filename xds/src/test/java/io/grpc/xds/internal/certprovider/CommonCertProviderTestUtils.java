@@ -103,19 +103,7 @@ public class CommonCertProviderTestUtils {
     byte[] encodedKey = new byte[encodedKeyBuf.readableBytes()];
     encodedKeyBuf.readBytes(encodedKey).release();
     PKCS8EncodedKeySpec spec = new PKCS8EncodedKeySpec(encodedKey);
-    try {
-      return KeyFactory.getInstance("RSA").generatePrivate(spec);
-    } catch (InvalidKeySpecException ignore) {
-      try {
-        return KeyFactory.getInstance("DSA").generatePrivate(spec);
-      } catch (InvalidKeySpecException ignore2) {
-        try {
-          return KeyFactory.getInstance("EC").generatePrivate(spec);
-        } catch (InvalidKeySpecException e) {
-          throw new InvalidKeySpecException("Neither RSA, DSA nor EC worked", e);
-        }
-      }
-    }
+    return KeyFactory.getInstance("RSA").generatePrivate(spec);
   }
 
   static ByteBuf readPrivateKey(InputStream in) throws KeyException {
