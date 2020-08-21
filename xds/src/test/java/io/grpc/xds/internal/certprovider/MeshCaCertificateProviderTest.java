@@ -63,14 +63,14 @@ import java.security.PrivateKey;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Queue;
-import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Delayed;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.bouncycastle.operator.OperatorCreationException;
 import org.junit.Before;
@@ -276,7 +276,7 @@ public class MeshCaCertificateProviderTest {
 
   @Test
   public void startAndClose() {
-    ScheduledFuture<?> scheduledFuture = mock(ScheduledFuture.class);
+    TestScheduledFuture<?> scheduledFuture = new TestScheduledFuture<>();
     doReturn(scheduledFuture)
         .when(timeService)
         .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
@@ -304,7 +304,7 @@ public class MeshCaCertificateProviderTest {
 
   @Test
   public void startTwice_noException() {
-    ScheduledFuture<?> scheduledFuture = mock(ScheduledFuture.class);
+    TestScheduledFuture<?> scheduledFuture = new TestScheduledFuture<>();
     doReturn(scheduledFuture)
         .when(timeService)
         .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
@@ -327,7 +327,7 @@ public class MeshCaCertificateProviderTest {
             CommonTlsContextTestsUtil.getResourceContents(SERVER_1_PEM_FILE),
             CommonTlsContextTestsUtil.getResourceContents(CA_PEM_FILE))));
     when(timeProvider.currentTimeNanos()).thenReturn(CURRENT_TIME_NANOS);
-    ScheduledFuture<?> scheduledFuture = mock(ScheduledFuture.class);
+    TestScheduledFuture<?> scheduledFuture = new TestScheduledFuture<>();
     doReturn(scheduledFuture)
         .when(timeService)
         .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
@@ -355,7 +355,7 @@ public class MeshCaCertificateProviderTest {
     oauth2Tokens.offer(TEST_STS_TOKEN + "0");
     responsesToSend
         .offer(new ResponseThrowable(new StatusRuntimeException(Status.FAILED_PRECONDITION)));
-    ScheduledFuture<?> scheduledFuture = mock(ScheduledFuture.class);
+    TestScheduledFuture<?> scheduledFuture = new TestScheduledFuture<>();
     doReturn(scheduledFuture).when(timeService)
         .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
     provider.refreshCertificate();
@@ -384,7 +384,7 @@ public class MeshCaCertificateProviderTest {
     responsesToSend
         .offer(new ResponseThrowable(new StatusRuntimeException(Status.FAILED_PRECONDITION)));
     when(timeProvider.currentTimeNanos()).thenReturn(CURRENT_TIME_NANOS);
-    ScheduledFuture<?> scheduledFuture = mock(ScheduledFuture.class);
+    TestScheduledFuture<?> scheduledFuture = new TestScheduledFuture<>();
     doReturn(scheduledFuture).when(timeService)
         .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
     provider.refreshCertificate();
@@ -414,7 +414,7 @@ public class MeshCaCertificateProviderTest {
     responsesToSend
         .offer(new ResponseThrowable(new StatusRuntimeException(Status.FAILED_PRECONDITION)));
     when(timeProvider.currentTimeNanos()).thenReturn(CURRENT_TIME_NANOS);
-    ScheduledFuture<?> scheduledFuture = mock(ScheduledFuture.class);
+    TestScheduledFuture<?> scheduledFuture = new TestScheduledFuture<>();
     doReturn(scheduledFuture).when(timeService)
         .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
     provider.refreshCertificate();
@@ -432,7 +432,7 @@ public class MeshCaCertificateProviderTest {
   @Test
   public void getCertificate_retriesWithErrors()
       throws IOException, CertificateException, OperatorCreationException,
-      NoSuchAlgorithmException, InterruptedException, ExecutionException, TimeoutException {
+      NoSuchAlgorithmException {
     oauth2Tokens.offer(TEST_STS_TOKEN + "0");
     oauth2Tokens.offer(TEST_STS_TOKEN + "1");
     oauth2Tokens.offer(TEST_STS_TOKEN + "2");
@@ -445,10 +445,10 @@ public class MeshCaCertificateProviderTest {
         CommonTlsContextTestsUtil.getResourceContents(SERVER_1_PEM_FILE),
         CommonTlsContextTestsUtil.getResourceContents(CA_PEM_FILE))));
     when(timeProvider.currentTimeNanos()).thenReturn(CURRENT_TIME_NANOS);
-    ScheduledFuture<?> scheduledFuture = mock(ScheduledFuture.class);
+    TestScheduledFuture<?> scheduledFuture = new TestScheduledFuture<>();
     doReturn(scheduledFuture).when(timeService)
         .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
-    ScheduledFuture<?> scheduledFutureSleep = mock(ScheduledFuture.class);
+    TestScheduledFuture<?> scheduledFutureSleep = new TestScheduledFuture<>();
     doReturn(scheduledFutureSleep).when(timeService)
         .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.NANOSECONDS));
     provider.refreshCertificate();
@@ -465,7 +465,7 @@ public class MeshCaCertificateProviderTest {
   @Test
   public void getCertificate_retriesWithTimeouts()
       throws IOException, CertificateException, OperatorCreationException,
-      NoSuchAlgorithmException, InterruptedException, ExecutionException, TimeoutException {
+      NoSuchAlgorithmException {
     oauth2Tokens.offer(TEST_STS_TOKEN + "0");
     oauth2Tokens.offer(TEST_STS_TOKEN + "1");
     oauth2Tokens.offer(TEST_STS_TOKEN + "2");
@@ -478,10 +478,10 @@ public class MeshCaCertificateProviderTest {
         CommonTlsContextTestsUtil.getResourceContents(SERVER_1_PEM_FILE),
         CommonTlsContextTestsUtil.getResourceContents(CA_PEM_FILE))));
     when(timeProvider.currentTimeNanos()).thenReturn(CURRENT_TIME_NANOS);
-    ScheduledFuture<?> scheduledFuture = mock(ScheduledFuture.class);
+    TestScheduledFuture<?> scheduledFuture = new TestScheduledFuture<>();
     doReturn(scheduledFuture).when(timeService)
         .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
-    ScheduledFuture<?> scheduledFutureSleep = mock(ScheduledFuture.class);
+    TestScheduledFuture<?> scheduledFutureSleep = new TestScheduledFuture<>();
     doReturn(scheduledFutureSleep).when(timeService)
         .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.NANOSECONDS));
     provider.refreshCertificate();
@@ -495,14 +495,15 @@ public class MeshCaCertificateProviderTest {
     verifyReceivedMetadataValues(4);
   }
 
-  private void verifyRetriesWithBackoff(ScheduledFuture<?> scheduledFutureSleep, int numOfRetries)
-      throws InterruptedException, ExecutionException, TimeoutException {
+  private void verifyRetriesWithBackoff(
+      TestScheduledFuture<?> scheduledFutureSleep, int numOfRetries) {
     for (int i = 0; i < numOfRetries; i++) {
       long delayValue = DELAY_VALUES[i];
       verify(timeService, times(1)).schedule(any(Runnable.class),
           eq(delayValue),
           eq(TimeUnit.NANOSECONDS));
-      verify(scheduledFutureSleep, times(1)).get(eq(delayValue), eq(TimeUnit.NANOSECONDS));
+      assertThat(scheduledFutureSleep.calls.get(i).timeout).isEqualTo(delayValue);
+      assertThat(scheduledFutureSleep.calls.get(i).unit).isEqualTo(TimeUnit.NANOSECONDS);
     }
   }
 
@@ -534,6 +535,57 @@ public class MeshCaCertificateProviderTest {
     for (int i = 0; i < count; i++) {
       assertThat(receivedStsCreds.poll()).isEqualTo("Bearer " + TEST_STS_TOKEN + i);
       assertThat(receivedZoneValues.poll()).isEqualTo("us-west2-a");
+    }
+  }
+
+  private static class TestScheduledFuture<V> implements ScheduledFuture<V> {
+
+    static class Record {
+      long timeout;
+      TimeUnit unit;
+
+      Record(long timeout, TimeUnit unit) {
+        this.timeout = timeout;
+        this.unit = unit;
+      }
+    }
+
+    ArrayList<Record> calls = new ArrayList<>();
+
+    @Override
+    public long getDelay(TimeUnit unit) {
+      return 0;
+    }
+
+    @Override
+    public int compareTo(Delayed o) {
+      return 0;
+    }
+
+    @Override
+    public boolean cancel(boolean mayInterruptIfRunning) {
+      return false;
+    }
+
+    @Override
+    public boolean isCancelled() {
+      return false;
+    }
+
+    @Override
+    public boolean isDone() {
+      return false;
+    }
+
+    @Override
+    public V get() {
+      return null;
+    }
+
+    @Override
+    public V get(long timeout, TimeUnit unit) {
+      calls.add(new Record(timeout, unit));
+      return null;
     }
   }
 }
