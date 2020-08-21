@@ -179,7 +179,9 @@ public final class ProtoLiteUtils {
           int size = stream.available();
           // TODO(chengyuanzhang): we may still want to go with the byte array approach for small
           //  messages.
-          if (stream instanceof HasByteBuffer
+          if (size == 0) {
+            return defaultInstance;
+          } else if (size > 64 * 1024 && stream instanceof HasByteBuffer
               && stream.markSupported() && ((HasByteBuffer) stream).getByteBufferSupported()) {
             List<ByteBuffer> buffers = new ArrayList<>();
             stream.mark(size);
@@ -214,8 +216,6 @@ public final class ProtoLiteUtils {
               throw new RuntimeException("size inaccurate: " + size + " != " + position);
             }
             cis = CodedInputStream.newInstance(buf, 0, size);
-          } else if (size == 0) {
-            return defaultInstance;
           }
         }
       } catch (IOException e) {
