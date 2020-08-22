@@ -19,6 +19,7 @@ package io.grpc.alts.internal;
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;
 
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.security.GeneralSecurityException;
@@ -38,7 +39,7 @@ public class AltsFramingTest {
     buffer.order(ByteOrder.LITTLE_ENDIAN);
     buffer.putInt(-1); // write invalid length
     buffer.put((byte) 0); // write some byte
-    buffer.flip();
+    ((Buffer) buffer).flip();
 
     try {
       parser.readBytes(buffer);
@@ -56,7 +57,7 @@ public class AltsFramingTest {
     buffer.order(ByteOrder.LITTLE_ENDIAN);
     buffer.putInt(AltsFraming.getFrameMessageTypeHeaderSize() - 1); // write invalid length
     buffer.put((byte) 0); // write some byte
-    buffer.flip();
+    ((Buffer) buffer).flip();
 
     try {
       parser.readBytes(buffer);
@@ -74,7 +75,7 @@ public class AltsFramingTest {
     buffer.order(ByteOrder.LITTLE_ENDIAN);
     buffer.putInt(AltsFraming.getMaxDataLength() + 1); // write invalid length
     buffer.put((byte) 0); // write some byte
-    buffer.flip();
+    ((Buffer) buffer).flip();
 
     try {
       parser.readBytes(buffer);
@@ -97,7 +98,7 @@ public class AltsFramingTest {
     buffer.putInt(6); // default message type
     buffer.put(new byte[dataLength - AltsFraming.getFrameMessageTypeHeaderSize()]); // write data
     buffer.put((byte) 0);
-    buffer.flip();
+    ((Buffer) buffer).flip();
 
     parser.readBytes(buffer);
 
@@ -116,7 +117,7 @@ public class AltsFramingTest {
     buffer.putInt(dataLength); // write invalid length
     buffer.putInt(6); // default message type
     buffer.put((byte) 0);
-    buffer.flip();
+    ((Buffer) buffer).flip();
 
     parser.readBytes(buffer);
 
