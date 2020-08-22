@@ -37,7 +37,7 @@ public abstract class WritableBufferAllocatorTestBase {
 
     assertNotSame(buffer1, buffer2);
 
-    buffer1.release();
-    buffer2.release();
+    buffer1.close();
+    buffer2.close();
   }
 }

@@ -17,7 +17,10 @@
 package io.grpc.okhttp;
 
 import io.grpc.internal.WritableBuffer;
+import java.io.IOException;
+import java.io.InputStream;
 import okio.Buffer;
+import okio.Okio;
 
 class OkHttpWritableBuffer implements WritableBuffer {
 
@@ -38,10 +41,19 @@ class OkHttpWritableBuffer implements WritableBuffer {
   }
 
   @Override
-  public void write(byte b) {
+  public void write(int b) {
     buffer.writeByte(b);
     writableBytes -= 1;
     readableBytes += 1;
+  }
+
+  @Override
+  public int write(InputStream stream) throws IOException {
+    //TODO ensure this doesn't write more than writableBytes
+    int written = (int) buffer.writeAll(Okio.source(stream));
+    writableBytes -= written;
+    readableBytes += written;
+    return written;
   }
 
   @Override
@@ -55,7 +67,7 @@ class OkHttpWritableBuffer implements WritableBuffer {
   }
 
   @Override
-  public void release() {
+  public void close() {
   }
 
   Buffer buffer() {

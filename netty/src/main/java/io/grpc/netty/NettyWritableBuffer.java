@@ -16,13 +16,20 @@
 
 package io.grpc.netty;
 
+import io.grpc.BufferDrainable;
+import io.grpc.Drainable;
 import io.grpc.internal.WritableBuffer;
 import io.netty.buffer.ByteBuf;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.BufferOverflowException;
+import java.nio.ByteBuffer;
 
 /**
  * The {@link WritableBuffer} used by the Netty transport.
  */
-class NettyWritableBuffer implements WritableBuffer {
+class NettyWritableBuffer extends OutputStream implements WritableBuffer {
 
   private final ByteBuf bytebuf;
 
@@ -36,8 +43,34 @@ class NettyWritableBuffer implements WritableBuffer {
   }
 
   @Override
-  public void write(byte b) {
+  public void write(int b) {
     bytebuf.writeByte(b);
+  }
+
+  @Override
+  public int write(InputStream stream) throws IOException {
+    if (!bytebuf.hasArray()) {
+      if (stream instanceof BufferDrainable && bytebuf.nioBufferCount() == 1) {
+        ByteBuffer bb = bytebuf.internalNioBuffer(bytebuf.writerIndex(), bytebuf.writableBytes());
+        int positionBefore = bb.position();
+        ((BufferDrainable) stream).drainTo(bb);
+        int written = bb.position() - positionBefore;
+        bytebuf.writerIndex(bytebuf.writerIndex() + written);
+        return written;
+        // Could potentially also include composite here if stream is known length
+        // and less than first ByteBuf size. But shouldn't encounter those since
+        // output buffers come straight from the allocator
+      }
+      if (stream instanceof Drainable) {
+        return ((Drainable) stream).drainTo(this);
+      }
+    }
+    int writable = bytebuf.writableBytes();
+    int written = bytebuf.writeBytes(stream, writable);
+    if (written == writable && stream.available() != 0) {
+      throw new BufferOverflowException();
+    }
+    return written;
   }
 
   @Override
@@ -51,7 +84,7 @@ class NettyWritableBuffer implements WritableBuffer {
   }
 
   @Override
-  public void release() {
+  public void close() {
     bytebuf.release();
   }
 
