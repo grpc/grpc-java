@@ -105,6 +105,7 @@ public class CompositeReadableBuffer extends AbstractReadableBuffer {
     execute(new ReadOperation() {
       @Override
       public int readInternal(ReadableBuffer buffer, int length) {
+        // Change the limit so that only lengthToCopy bytes are available.
         int prevLimit = dest.limit();
         ((Buffer) dest).limit(dest.position() + length);
 
