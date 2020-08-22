@@ -19,12 +19,14 @@ package io.grpc.protobuf.lite;
 import com.google.protobuf.CodedOutputStream;
 import com.google.protobuf.MessageLite;
 import com.google.protobuf.Parser;
+import io.grpc.ByteBufferBacked;
 import io.grpc.Drainable;
 import io.grpc.KnownLength;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.ByteBuffer;
 import javax.annotation.Nullable;
 
 /**
@@ -49,7 +51,16 @@ final class ProtoInputStream extends InputStream implements Drainable, KnownLeng
     int written;
     if (message != null) {
       written = message.getSerializedSize();
-      message.writeTo(target);
+      ByteBuffer buffer;
+      if (target instanceof ByteBufferBacked
+          && (buffer = ((ByteBufferBacked) target).getWritableBuffer(written)) != null) {
+        CodedOutputStream coded = CodedOutputStream.newInstance(buffer);
+        message.writeTo(coded);
+        coded.flush();
+        ((ByteBufferBacked) target).bufferBytesWritten(written);
+      } else {
+        message.writeTo(target);
+      }
       message = null;
     } else if (partial != null) {
       written = (int) ProtoLiteUtils.copy(partial, target);
