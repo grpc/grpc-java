@@ -67,7 +67,9 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   private final Metadata headers;
   private final RetryPolicy.Provider retryPolicyProvider;
   private final HedgingPolicy.Provider hedgingPolicyProvider;
+  @Nullable
   private RetryPolicy retryPolicy;
+  @Nullable
   private HedgingPolicy hedgingPolicy;
   private boolean isHedging;
 
@@ -315,12 +317,9 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
     Substream substream = createSubstream(0);
     checkState(hedgingPolicy == null, "hedgingPolicy has been initialized unexpectedly");
-    // TODO(zdapeng): if substream is a DelayedStream, do this when name resolution finishes
     hedgingPolicy = hedgingPolicyProvider.get();
-    if (!HedgingPolicy.DEFAULT.equals(hedgingPolicy)) {
+    if (null != hedgingPolicy) {
       isHedging = true;
-      retryPolicy = RetryPolicy.DEFAULT;
-
       FutureCanceller scheduledHedgingRef = null;
 
       synchronized (lock) {
@@ -810,7 +809,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
             if (retryPolicy == null) {
               retryPolicy = retryPolicyProvider.get();
             }
-            if (retryPolicy.maxAttempts == 1) {
+            if (retryPolicy == null || retryPolicy.maxAttempts == 1) {
               // optimization for early commit
               commitAndRun(newSubstream);
             }
@@ -830,11 +829,6 @@ abstract class RetriableStream<ReqT> implements ClientStream {
           }
         } else {
           noMoreTransparentRetry.set(true);
-
-          if (retryPolicy == null) {
-            retryPolicy = retryPolicyProvider.get();
-            nextBackoffIntervalNanos = retryPolicy.initialBackoffNanos;
-          }
 
           if (isHedging) {
             HedgingPlan hedgingPlan = makeHedgingDecision(status, trailers);
@@ -900,6 +894,14 @@ abstract class RetriableStream<ReqT> implements ClientStream {
      * caller should check it separately. It also updates the throttle. It does not change state.
      */
     private RetryPlan makeRetryDecision(Status status, Metadata trailer) {
+      if (retryPolicy == null) {
+        retryPolicy = retryPolicyProvider.get();
+        if (retryPolicy == null) {
+          return new RetryPlan(false, 0);
+        } else {
+          nextBackoffIntervalNanos = retryPolicy.initialBackoffNanos;
+        }
+      }
       boolean shouldRetry = false;
       long backoffNanos = 0L;
       boolean isRetryableStatusCode = retryPolicy.retryableStatusCodes.contains(status.getCode());

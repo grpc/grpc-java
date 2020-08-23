@@ -82,7 +82,7 @@ final class ServiceConfigInterceptor implements ClientInterceptor {
         }
 
         verify(
-            retryPolicy.equals(RetryPolicy.DEFAULT) || hedgingPolicy.equals(HedgingPolicy.DEFAULT),
+            retryPolicy == null || hedgingPolicy == null,
             "Can not apply both retry and hedging policy for the method '%s'", method);
 
         callOptions = callOptions
@@ -97,9 +97,10 @@ final class ServiceConfigInterceptor implements ClientInterceptor {
            * <p>Note that this method is used no more than once for each call.
            */
           @Override
+          @Nullable
           public RetryPolicy get() {
             if (!initComplete) {
-              return RetryPolicy.DEFAULT;
+              return null;
             }
             return getRetryPolicyFromConfig(method);
           }
@@ -113,14 +114,14 @@ final class ServiceConfigInterceptor implements ClientInterceptor {
            * <p>Note that this method is used no more than once for each call.
            */
           @Override
+          @Nullable
           public HedgingPolicy get() {
             if (!initComplete) {
-              return HedgingPolicy.DEFAULT;
+              return null;
             }
             HedgingPolicy hedgingPolicy = getHedgingPolicyFromConfig(method);
             verify(
-                hedgingPolicy.equals(HedgingPolicy.DEFAULT)
-                    || getRetryPolicyFromConfig(method).equals(RetryPolicy.DEFAULT),
+                hedgingPolicy == null || getRetryPolicyFromConfig(method) == null,
                 "Can not apply both retry and hedging policy for the method '%s'", method);
             return hedgingPolicy;
           }
@@ -190,14 +191,16 @@ final class ServiceConfigInterceptor implements ClientInterceptor {
   }
 
   @VisibleForTesting
+  @Nullable
   RetryPolicy getRetryPolicyFromConfig(MethodDescriptor<?, ?> method) {
     MethodInfo info = getMethodInfo(method);
-    return info == null ? RetryPolicy.DEFAULT : info.retryPolicy;
+    return info == null ? null : info.retryPolicy;
   }
 
   @VisibleForTesting
+  @Nullable
   HedgingPolicy getHedgingPolicyFromConfig(MethodDescriptor<?, ?> method) {
     MethodInfo info = getMethodInfo(method);
-    return info == null ? HedgingPolicy.DEFAULT : info.hedgingPolicy;
+    return info == null ? null : info.hedgingPolicy;
   }
 }
