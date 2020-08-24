@@ -842,12 +842,12 @@ public abstract class NameResolver {
       }
     }
   }
-  
+
   /**
-   * Gets the attributes associated with the addresses resolved by name resolution.  If there are
-   * no attributes, {@link Attributes#EMPTY} will be returned.
+   * Represents either a successfully parsed service config, containing all necessary parts to be
+   * later applied by the channel, or a Status containing the error encountered while parsing.
    *
-   * @since 1.21.0
+   * @since 1.20.0
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
   public static final class ConfigOrError {
