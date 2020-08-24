@@ -918,6 +918,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
     @Override
     public <ReqT, RespT> ClientCall<ReqT, RespT> newCall(
         MethodDescriptor<ReqT, RespT> method, CallOptions callOptions) {
+      if (true) { // FIXME(zdapeng): there is a bug for using PendingCall. Temporarily disable it.
+        return newClientCall(method, callOptions);
+      }
       if (configSelector.get() != INITIAL_PENDING_SELECTOR) {
         return newClientCall(method, callOptions);
       }
