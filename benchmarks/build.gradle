@@ -60,8 +60,8 @@ task qps_client(type: CreateStartScripts) {
     defaultJvmOpts = [
         "-javaagent:" + configurations.alpnagent.asPath
     ].plus(vmArgs)
-    outputDir = new File(project.buildDir, 'tmp')
-    classpath = jar.outputs.files + project.configurations.runtime
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
 }
 
 task openloop_client(type: CreateStartScripts) {
@@ -70,15 +70,15 @@ task openloop_client(type: CreateStartScripts) {
     defaultJvmOpts = [
         "-javaagent:" + configurations.alpnagent.asPath
     ].plus(vmArgs)
-    outputDir = new File(project.buildDir, 'tmp')
-    classpath = jar.outputs.files + project.configurations.runtime
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
 }
 
 task qps_server(type: CreateStartScripts) {
     mainClassName = "io.grpc.benchmarks.qps.AsyncServer"
     applicationName = "qps_server"
-    outputDir = new File(project.buildDir, 'tmp')
-    classpath = jar.outputs.files + project.configurations.runtime
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
 }
 
 task benchmark_worker(type: CreateStartScripts) {
@@ -87,8 +87,8 @@ task benchmark_worker(type: CreateStartScripts) {
     defaultJvmOpts = [
         "-javaagent:" + configurations.alpnagent.asPath
     ].plus(vmArgs)
-    outputDir = new File(project.buildDir, 'tmp')
-    classpath = jar.outputs.files + project.configurations.runtime
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
 }
 
 applicationDistribution.into("bin") {

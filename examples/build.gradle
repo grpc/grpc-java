@@ -9,7 +9,7 @@ plugins {
 
 repositories {
     maven { // The google mirror is less flaky than mavenCentral()
-        url "https://maven-central.storage-download.googleapis.com/repos/central/data/" }
+        url "https://maven-central.storage-download.googleapis.com/maven2/" }
     mavenCentral()
     mavenLocal()
 }
@@ -22,7 +22,7 @@ targetCompatibility = 1.7
 
 // Feel free to delete the comment at the next line. It is just for safely
 // updating the version in our release process.
-def grpcVersion = '1.31.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+def grpcVersion = '1.32.0-SNAPSHOT' // CURRENT_GRPC_VERSION
 def protobufVersion = '3.12.0'
 def protocVersion = protobufVersion
 
@@ -91,6 +91,20 @@ task helloWorldClient(type: CreateStartScripts) {
     classpath = startScripts.classpath
 }
 
+task retryingHelloWorldServer(type: CreateStartScripts) {
+    mainClassName = 'io.grpc.examples.retrying.RetryingHelloWorldServer'
+    applicationName = 'retrying-hello-world-server'
+    outputDir = new File(project.buildDir, 'tmp')
+    classpath = startScripts.classpath
+}
+
+task retryingHelloWorldClient(type: CreateStartScripts) {
+    mainClassName = 'io.grpc.examples.retrying.RetryingHelloWorldClient'
+    applicationName = 'retrying-hello-world-client'
+    outputDir = new File(project.buildDir, 'tmp')
+    classpath = startScripts.classpath
+}
+
 task hedgingHelloWorldServer(type: CreateStartScripts) {
     mainClassName = 'io.grpc.examples.hedging.HedgingHelloWorldServer'
     applicationName = 'hedging-hello-world-server'
@@ -119,6 +133,8 @@ applicationDistribution.into('bin') {
     from(helloWorldClient)
     from(hedgingHelloWorldClient)
     from(hedgingHelloWorldServer)
+    from(retryingHelloWorldClient)
+    from(retryingHelloWorldServer)
     from(compressingHelloWorldClient)
     fileMode = 0755
 }

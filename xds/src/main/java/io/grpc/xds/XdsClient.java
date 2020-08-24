@@ -24,8 +24,6 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-// TODO(sanjaypujare): remove dependency on envoy data types.
-import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Status;
@@ -38,6 +36,8 @@ import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyProtoData.Route;
 import io.grpc.xds.EnvoyServerProtoData.Listener;
+import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
+import io.grpc.xds.LoadStatsManager.LoadStatsStore;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -182,6 +182,28 @@ abstract class XdsClient {
               .toString();
     }
 
+    @Override
+    public int hashCode() {
+      return Objects.hash(
+          clusterName, edsServiceName, lbPolicy, lrsServerName, upstreamTlsContext);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      ClusterUpdate that = (ClusterUpdate) o;
+      return Objects.equals(clusterName, that.clusterName)
+          && Objects.equals(edsServiceName, that.edsServiceName)
+          && Objects.equals(lbPolicy, that.lbPolicy)
+          && Objects.equals(lrsServerName, that.lrsServerName)
+          && Objects.equals(upstreamTlsContext, that.upstreamTlsContext);
+    }
+
     static Builder newBuilder() {
       return new Builder();
     }
@@ -287,9 +309,9 @@ abstract class XdsClient {
         return false;
       }
       EndpointUpdate that = (EndpointUpdate) o;
-      return clusterName.equals(that.clusterName)
-          && localityLbEndpointsMap.equals(that.localityLbEndpointsMap)
-          && dropPolicies.equals(that.dropPolicies);
+      return Objects.equals(clusterName, that.clusterName)
+          && Objects.equals(localityLbEndpointsMap, that.localityLbEndpointsMap)
+          && Objects.equals(dropPolicies, that.dropPolicies);
     }
 
     @Override
@@ -497,21 +519,34 @@ abstract class XdsClient {
   }
 
   /**
-   * Report client load stats to a remote server for the given cluster:cluster_service.
-   *
-   * <p>Note: currently we can only report loads for a single cluster:cluster_service,
-   * as the design for adding clusters to report loads for while load reporting is
-   * happening is undefined.
+   * Starts client side load reporting via LRS. All clusters report load through one LRS stream,
+   * only the first call of this method effectively starts the LRS stream.
    */
-  void reportClientStats(
-      String clusterName, @Nullable String clusterServiceName, LoadStatsStore loadStatsStore) {
+  void reportClientStats() {
+  }
+
+  /**
+   * Stops client side load reporting via LRS. All clusters report load through one LRS stream,
+   * only the last call of this method effectively stops the LRS stream.
+   */
+  void cancelClientStatsReport() {
+  }
+
+  /**
+   * Starts recording client load stats for the given cluster:cluster_service. Caller should use
+   * the returned {@link LoadStatsStore} to record and aggregate stats for load sent to the given
+   * cluster:cluster_service. Recorded stats may be reported to a load reporting server if enabled.
+   */
+  LoadStatsStore addClientStats(String clusterName, @Nullable String clusterServiceName) {
     throw new UnsupportedOperationException();
   }
 
   /**
-   * Stops reporting client load stats to the remote server for the given cluster:cluster_service.
+   * Stops recording client load stats for the given cluster:cluster_service. The load reporting
+   * server will no longer receive stats for the given cluster:cluster_service after this call.
    */
-  void cancelClientStatsReport(String clusterName, @Nullable String clusterServiceName) {
+  void removeClientStats(String clusterName, @Nullable String clusterServiceName) {
+    throw new UnsupportedOperationException();
   }
 
   abstract static class XdsClientFactory {
@@ -580,13 +615,17 @@ abstract class XdsClient {
    * Factory for creating channels to xDS severs.
    */
   abstract static class XdsChannelFactory {
-    private static final XdsChannelFactory DEFAULT_INSTANCE = new XdsChannelFactory() {
+    @VisibleForTesting
+    static boolean experimentalV3SupportEnvVar = Boolean.parseBoolean(
+        System.getenv("GRPC_XDS_EXPERIMENTAL_V3_SUPPORT"));
 
+    private static final String XDS_V3_SERVER_FEATURE = "xds_v3";
+    private static final XdsChannelFactory DEFAULT_INSTANCE = new XdsChannelFactory() {
       /**
        * Creates a channel to the first server in the given list.
        */
       @Override
-      ManagedChannel createChannel(List<ServerInfo> servers) {
+      XdsChannel createChannel(List<ServerInfo> servers) {
         checkArgument(!servers.isEmpty(), "No management server provided.");
         XdsLogger logger = XdsLogger.withPrefix("xds-client-channel-factory");
         ServerInfo serverInfo = servers.get(0);
@@ -608,9 +647,13 @@ abstract class XdsClient {
           channelBuilder = ManagedChannelBuilder.forTarget(serverUri);
         }
 
-        return channelBuilder
+        ManagedChannel channel = channelBuilder
             .keepAliveTime(5, TimeUnit.MINUTES)
             .build();
+        boolean useProtocolV3 = experimentalV3SupportEnvVar
+            && serverInfo.getServerFeatures().contains(XDS_V3_SERVER_FEATURE);
+
+        return new XdsChannel(channel, useProtocolV3);
       }
     };
 
@@ -621,6 +664,25 @@ abstract class XdsClient {
     /**
      * Creates a channel to one of the provided management servers.
      */
-    abstract ManagedChannel createChannel(List<ServerInfo> servers);
+    abstract XdsChannel createChannel(List<ServerInfo> servers);
+  }
+
+  static final class XdsChannel {
+    private final ManagedChannel managedChannel;
+    private final boolean useProtocolV3;
+
+    @VisibleForTesting
+    XdsChannel(ManagedChannel managedChannel, boolean useProtocolV3) {
+      this.managedChannel = managedChannel;
+      this.useProtocolV3 = useProtocolV3;
+    }
+
+    ManagedChannel getManagedChannel() {
+      return managedChannel;
+    }
+
+    boolean isUseProtocolV3() {
+      return useProtocolV3;
+    }
   }
 }

@@ -18,13 +18,13 @@ package io.grpc.xds.internal.sds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
-import io.envoyproxy.envoy.api.v2.auth.CertificateValidationContext;
-import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
-import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext.CombinedCertificateValidationContext;
-import io.envoyproxy.envoy.api.v2.auth.SdsSecretConfig;
-import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.core.Node;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext.CombinedCertificateValidationContext;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.SdsSecretConfig;
 import io.grpc.netty.GrpcSslContexts;
+import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.internal.sds.trust.SdsTrustManagerFactory;
 import io.netty.handler.ssl.SslContextBuilder;
 import java.io.IOException;
@@ -48,7 +48,7 @@ final class SdsClientSslContextProvider extends SdsSslContextProvider {
         validationContextSdsConfig,
         staticCertValidationContext,
         watcherExecutor,
-        channelExecutor, new UpstreamTlsContextHolder(upstreamTlsContext));
+        channelExecutor, upstreamTlsContext);
   }
 
   static SdsClientSslContextProvider getProvider(
@@ -90,7 +90,7 @@ final class SdsClientSslContextProvider extends SdsSslContextProvider {
   }
 
   @Override
-  SslContextBuilder getSslContextBuilder(
+  protected final SslContextBuilder getSslContextBuilder(
       CertificateValidationContext localCertValidationContext)
       throws CertificateException, IOException, CertStoreException {
     SslContextBuilder sslContextBuilder =

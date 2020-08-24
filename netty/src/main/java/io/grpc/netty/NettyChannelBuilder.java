@@ -68,6 +68,7 @@ public final class NettyChannelBuilder
 
   // 1MiB.
   public static final int DEFAULT_FLOW_CONTROL_WINDOW = 1024 * 1024;
+  private static final boolean DEFAULT_AUTO_FLOW_CONTROL;
 
   private static final long AS_LARGE_AS_INFINITE = TimeUnit.DAYS.toNanos(1000L);
 
@@ -75,6 +76,14 @@ public final class NettyChannelBuilder
       new ReflectiveChannelFactory<>(Utils.DEFAULT_CLIENT_CHANNEL_TYPE);
   private static final ObjectPool<? extends EventLoopGroup> DEFAULT_EVENT_LOOP_GROUP_POOL =
       SharedResourcePool.forResource(Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP);
+
+  static {
+    String autoFlowControl = System.getenv("GRPC_EXPERIMENTAL_AUTOFLOWCONTROL");
+    if (autoFlowControl == null) {
+      autoFlowControl = "true";
+    }
+    DEFAULT_AUTO_FLOW_CONTROL = Boolean.parseBoolean(autoFlowControl);
+  }
 
   private final Map<ChannelOption<?>, Object> channelOptions =
       new HashMap<>();
@@ -84,7 +93,7 @@ public final class NettyChannelBuilder
   private ChannelFactory<? extends Channel> channelFactory = DEFAULT_CHANNEL_FACTORY;
   private ObjectPool<? extends EventLoopGroup> eventLoopGroupPool = DEFAULT_EVENT_LOOP_GROUP_POOL;
   private SslContext sslContext;
-  private boolean autoFlowControl = true;
+  private boolean autoFlowControl = DEFAULT_AUTO_FLOW_CONTROL;
   private int flowControlWindow = DEFAULT_FLOW_CONTROL_WINDOW;
   private int maxHeaderListSize = GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE;
   private long keepAliveTimeNanos = KEEPALIVE_TIME_NANOS_DISABLED;

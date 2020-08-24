@@ -16,18 +16,16 @@
 
 package io.grpc.xds;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import com.google.common.annotations.VisibleForTesting;
-import com.google.protobuf.ListValue;
-import com.google.protobuf.NullValue;
-import com.google.protobuf.Struct;
-import com.google.protobuf.Value;
-import io.envoyproxy.envoy.api.v2.core.Locality;
-import io.envoyproxy.envoy.api.v2.core.Node;
 import io.grpc.Internal;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.GrpcUtil.GrpcBuildVersion;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.JsonUtil;
+import io.grpc.xds.EnvoyProtoData.Locality;
+import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -35,6 +33,7 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import javax.annotation.Nullable;
@@ -77,9 +76,10 @@ public abstract class Bootstrapper {
    */
   public abstract BootstrapInfo readBootstrap() throws IOException;
 
+  /** Parses a raw string into {@link BootstrapInfo}. */
   @VisibleForTesting
   @SuppressWarnings("deprecation")
-  static BootstrapInfo parseConfig(String rawData) throws IOException {
+  public static BootstrapInfo parseConfig(String rawData) throws IOException {
     XdsLogger logger = XdsLogger.withPrefix(LOG_PREFIX);
     logger.log(XdsLogLevel.INFO, "Reading bootstrap information");
     @SuppressWarnings("unchecked")
@@ -115,7 +115,11 @@ public abstract class Bootstrapper {
           channelCredsOptions.add(creds);
         }
       }
-      servers.add(new ServerInfo(serverUri, channelCredsOptions));
+      List<String> serverFeatures = JsonUtil.getListOfStrings(serverConfig, "server_features");
+      if (serverFeatures != null) {
+        logger.log(XdsLogLevel.INFO, "Server features: {0}", serverFeatures);
+      }
+      servers.add(new ServerInfo(serverUri, channelCredsOptions, serverFeatures));
     }
 
     Node.Builder nodeBuilder = Node.newBuilder();
@@ -133,34 +137,24 @@ public abstract class Bootstrapper {
       }
       Map<String, ?> metadata = JsonUtil.getObject(rawNode, "metadata");
       if (metadata != null) {
-        Struct.Builder structBuilder = Struct.newBuilder();
-        for (Map.Entry<String, ?> entry : metadata.entrySet()) {
-          logger.log(
-              XdsLogLevel.INFO,
-              "Node metadata field {0}: {1}", entry.getKey(), entry.getValue());
-          structBuilder.putFields(entry.getKey(), convertToValue(entry.getValue()));
-        }
-        nodeBuilder.setMetadata(structBuilder);
+        nodeBuilder.setMetadata(metadata);
       }
       Map<String, ?> rawLocality = JsonUtil.getObject(rawNode, "locality");
       if (rawLocality != null) {
-        Locality.Builder localityBuilder = Locality.newBuilder();
-        if (rawLocality.containsKey("region")) {
-          String region = JsonUtil.getString(rawLocality, "region");
+        String region = JsonUtil.getString(rawLocality, "region");
+        String zone = JsonUtil.getString(rawLocality, "zone");
+        String subZone = JsonUtil.getString(rawLocality, "sub_zone");
+        if (region != null) {
           logger.log(XdsLogLevel.INFO, "Locality region: {0}", region);
-          localityBuilder.setRegion(region);
         }
         if (rawLocality.containsKey("zone")) {
-          String zone = JsonUtil.getString(rawLocality, "zone");
           logger.log(XdsLogLevel.INFO, "Locality zone: {0}", zone);
-          localityBuilder.setZone(zone);
         }
         if (rawLocality.containsKey("sub_zone")) {
-          String subZone = JsonUtil.getString(rawLocality, "sub_zone");
           logger.log(XdsLogLevel.INFO, "Locality sub_zone: {0}", subZone);
-          localityBuilder.setSubZone(subZone);
         }
-        nodeBuilder.setLocality(localityBuilder);
+        Locality locality = new Locality(region, zone, subZone);
+        nodeBuilder.setLocality(locality);
       }
     }
     GrpcBuildVersion buildVersion = GrpcUtil.getGrpcBuildVersion();
@@ -170,44 +164,28 @@ public abstract class Bootstrapper {
     nodeBuilder.setUserAgentVersion(buildVersion.getImplementationVersion());
     nodeBuilder.addClientFeatures(CLIENT_FEATURE_DISABLE_OVERPROVISIONING);
 
-    return new BootstrapInfo(servers, nodeBuilder.build());
+    Map<String, ?> certProvidersBlob = JsonUtil.getObject(rawBootstrap, "certificate_providers");
+    Map<String, CertificateProviderInfo> certProviders = null;
+    if (certProvidersBlob != null) {
+      certProviders = new HashMap<>(certProvidersBlob.size());
+      for (String name : certProvidersBlob.keySet()) {
+        Map<String, ?> valueMap = JsonUtil.getObject(certProvidersBlob, name);
+        String pluginName =
+            checkForNull(JsonUtil.getString(valueMap, "plugin_name"), "plugin_name");
+        Map<String, ?> config = checkForNull(JsonUtil.getObject(valueMap, "config"), "config");
+        CertificateProviderInfo certificateProviderInfo =
+            new CertificateProviderInfo(pluginName, config);
+        certProviders.put(name, certificateProviderInfo);
+      }
+    }
+    return new BootstrapInfo(servers, nodeBuilder.build(), certProviders);
   }
 
-  /**
-   * Converts Java representation of the given JSON value to protobuf's {@link
-   * com.google.protobuf.Value} representation.
-   *
-   * <p>The given {@code rawObject} must be a valid JSON value in Java representation, which is
-   * either a {@code Map<String, ?>}, {@code List<?>}, {@code String}, {@code Double},
-   * {@code Boolean}, or {@code null}.
-   */
-  private static Value convertToValue(Object rawObject) {
-    Value.Builder valueBuilder = Value.newBuilder();
-    if (rawObject == null) {
-      valueBuilder.setNullValue(NullValue.NULL_VALUE);
-    } else if (rawObject instanceof Double) {
-      valueBuilder.setNumberValue((Double) rawObject);
-    } else if (rawObject instanceof String) {
-      valueBuilder.setStringValue((String) rawObject);
-    } else if (rawObject instanceof Boolean) {
-      valueBuilder.setBoolValue((Boolean) rawObject);
-    } else if (rawObject instanceof Map) {
-      Struct.Builder structBuilder = Struct.newBuilder();
-      @SuppressWarnings("unchecked")
-      Map<String, ?> map = (Map<String, ?>) rawObject;
-      for (Map.Entry<String, ?> entry : map.entrySet()) {
-        structBuilder.putFields(entry.getKey(), convertToValue(entry.getValue()));
-      }
-      valueBuilder.setStructValue(structBuilder);
-    } else if (rawObject instanceof List) {
-      ListValue.Builder listBuilder = ListValue.newBuilder();
-      List<?> list = (List<?>) rawObject;
-      for (Object obj : list) {
-        listBuilder.addValues(convertToValue(obj));
-      }
-      valueBuilder.setListValue(listBuilder);
+  static <T> T checkForNull(T value, String fieldName) throws IOException {
+    if (value == null) {
+      throw new IOException("Invalid bootstrap: '" + fieldName + "' does not exist.");
     }
-    return valueBuilder.build();
+    return value;
   }
 
   /**
@@ -247,11 +225,14 @@ public abstract class Bootstrapper {
   static class ServerInfo {
     private final String serverUri;
     private final List<ChannelCreds> channelCredsList;
+    @Nullable
+    private final List<String> serverFeatures;
 
     @VisibleForTesting
-    ServerInfo(String serverUri, List<ChannelCreds> channelCredsList) {
+    ServerInfo(String serverUri, List<ChannelCreds> channelCredsList, List<String> serverFeatures) {
       this.serverUri = serverUri;
       this.channelCredsList = channelCredsList;
+      this.serverFeatures = serverFeatures;
     }
 
     String getServerUri() {
@@ -260,6 +241,36 @@ public abstract class Bootstrapper {
 
     List<ChannelCreds> getChannelCredentials() {
       return Collections.unmodifiableList(channelCredsList);
+    }
+
+    List<String> getServerFeatures() {
+      return serverFeatures == null
+          ? Collections.<String>emptyList()
+          : Collections.unmodifiableList(serverFeatures);
+    }
+  }
+
+  /**
+   * Data class containing Certificate provider information: the plugin-name and an opaque
+   * Map that represents the config for that plugin.
+   */
+  @Internal
+  @Immutable
+  public static class CertificateProviderInfo {
+    private final String pluginName;
+    private final Map<String, ?> config;
+
+    CertificateProviderInfo(String pluginName, Map<String, ?> config) {
+      this.pluginName = checkNotNull(pluginName, "pluginName");
+      this.config = checkNotNull(config, "config");
+    }
+
+    public String getPluginName() {
+      return pluginName;
+    }
+
+    public Map<String, ?> getConfig() {
+      return config;
     }
   }
 
@@ -271,11 +282,14 @@ public abstract class Bootstrapper {
   public static class BootstrapInfo {
     private List<ServerInfo> servers;
     private final Node node;
+    @Nullable private final Map<String, CertificateProviderInfo> certProviders;
 
     @VisibleForTesting
-    BootstrapInfo(List<ServerInfo> servers, Node node) {
+    BootstrapInfo(
+        List<ServerInfo> servers, Node node, Map<String, CertificateProviderInfo> certProviders) {
       this.servers = servers;
       this.node = node;
+      this.certProviders = certProviders;
     }
 
     /**
@@ -292,5 +306,9 @@ public abstract class Bootstrapper {
       return node;
     }
 
+    /** Returns the cert-providers config map. */
+    public Map<String, CertificateProviderInfo> getCertProviders() {
+      return Collections.unmodifiableMap(certProviders);
+    }
   }
 }

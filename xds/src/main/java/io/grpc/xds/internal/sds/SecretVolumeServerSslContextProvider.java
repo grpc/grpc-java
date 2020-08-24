@@ -16,24 +16,25 @@
 
 package io.grpc.xds.internal.sds;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.xds.internal.sds.CommonTlsContextUtil.getCertificateValidationContext;
 import static io.grpc.xds.internal.sds.CommonTlsContextUtil.validateCertificateContext;
 import static io.grpc.xds.internal.sds.CommonTlsContextUtil.validateTlsCertificate;
 
 import com.google.common.annotations.VisibleForTesting;
-import io.envoyproxy.envoy.api.v2.auth.CertificateValidationContext;
-import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
-import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
-import io.envoyproxy.envoy.api.v2.auth.TlsCertificate;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.TlsCertificate;
 import io.grpc.netty.GrpcSslContexts;
+import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
+import io.grpc.xds.internal.sds.trust.SdsTrustManagerFactory;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import java.io.File;
 import java.io.IOException;
 import java.security.cert.CertStoreException;
 import java.security.cert.CertificateException;
-import java.util.concurrent.Executor;
 import javax.annotation.Nullable;
 
 /** A server SslContext provider that uses file-based secrets (secret volume). */
@@ -50,7 +51,7 @@ final class SecretVolumeServerSslContextProvider extends SslContextProvider {
       @Nullable String certificateChain,
       @Nullable CertificateValidationContext certContext,
       DownstreamTlsContext downstreamTlsContext) {
-    super(new DownstreamTlsContextHolder(downstreamTlsContext));
+    super(downstreamTlsContext);
     this.privateKey = privateKey;
     this.privateKeyPassword = privateKeyPassword;
     this.certificateChain = certificateChain;
@@ -61,6 +62,9 @@ final class SecretVolumeServerSslContextProvider extends SslContextProvider {
       DownstreamTlsContext downstreamTlsContext) {
     checkNotNull(downstreamTlsContext, "downstreamTlsContext");
     CommonTlsContext commonTlsContext = downstreamTlsContext.getCommonTlsContext();
+    checkArgument(
+        commonTlsContext.getTlsCertificateSdsSecretConfigsCount() == 0,
+        "unexpected TlsCertificateSdsSecretConfigs");
     TlsCertificate tlsCertificate = null;
     if (commonTlsContext.getTlsCertificatesCount() > 0) {
       tlsCertificate = commonTlsContext.getTlsCertificates(0);
@@ -85,9 +89,8 @@ final class SecretVolumeServerSslContextProvider extends SslContextProvider {
   }
 
   @Override
-  public void addCallback(final Callback callback, Executor executor) {
+  public void addCallback(final Callback callback) {
     checkNotNull(callback, "callback");
-    checkNotNull(executor, "executor");
     // as per the contract we will read the current secrets on disk
     // this involves I/O which can potentially block the executor
     performCallback(
@@ -97,8 +100,8 @@ final class SecretVolumeServerSslContextProvider extends SslContextProvider {
             return buildSslContextFromSecrets();
           }
         },
-        callback,
-        executor);
+        callback
+    );
   }
 
   @Override
@@ -110,7 +113,8 @@ final class SecretVolumeServerSslContextProvider extends SslContextProvider {
     SslContextBuilder sslContextBuilder =
         GrpcSslContexts.forServer(
             new File(certificateChain), new File(privateKey), privateKeyPassword);
-    setClientAuthValues(sslContextBuilder, certContext);
+    setClientAuthValues(
+        sslContextBuilder, certContext != null ? new SdsTrustManagerFactory(certContext) : null);
     return sslContextBuilder.build();
   }
 }

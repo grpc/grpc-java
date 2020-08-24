@@ -59,7 +59,6 @@ import io.grpc.ServerCallHandler;
 import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.binarylog.v1.Address;
-import io.grpc.binarylog.v1.Address.Type;
 import io.grpc.binarylog.v1.ClientHeader;
 import io.grpc.binarylog.v1.GrpcLogEntry;
 import io.grpc.binarylog.v1.GrpcLogEntry.EventType;
@@ -377,7 +376,7 @@ public final class BinlogHelperTest {
     assertEquals(
         Address
             .newBuilder()
-            .setType(Type.TYPE_IPV4)
+            .setType(Address.Type.TYPE_IPV4)
             .setAddress("127.0.0.1")
             .setIpPort(12345)
             .build(),
@@ -393,7 +392,7 @@ public final class BinlogHelperTest {
     assertEquals(
         Address
             .newBuilder()
-            .setType(Type.TYPE_IPV6)
+            .setType(Address.Type.TYPE_IPV6)
             .setAddress("2001:db8::2:1") // RFC 5952 section 4: ipv6 canonical form required
             .setIpPort(12345)
             .build(),
@@ -407,7 +406,7 @@ public final class BinlogHelperTest {
     assertEquals(
         Address
             .newBuilder()
-            .setType(Type.TYPE_UNIX)
+            .setType(Address.Type.TYPE_UNIX)
             .setAddress("/some/path")
             .build(),
         BinlogHelper.socketToProto(socketAddress)
@@ -424,7 +423,7 @@ public final class BinlogHelperTest {
     };
     assertEquals(
         Address.newBuilder()
-            .setType(Type.TYPE_UNKNOWN)
+            .setType(Address.Type.TYPE_UNKNOWN)
             .setAddress("some-socket-address")
             .build(),
         BinlogHelper.socketToProto(unknownSocket));
@@ -928,11 +927,11 @@ public final class BinlogHelperTest {
   }
 
   @Test
-  @SuppressWarnings({"rawtypes", "unchecked"})
   public void serverDeadlineLogged() {
-    final AtomicReference<ServerCall> interceptedCall =
+    final AtomicReference<ServerCall<byte[], byte[]>> interceptedCall =
         new AtomicReference<>();
-    final ServerCall.Listener mockListener = mock(ServerCall.Listener.class);
+    @SuppressWarnings("unchecked")
+    final ServerCall.Listener<byte[]> mockListener = mock(ServerCall.Listener.class);
 
     final MethodDescriptor<byte[], byte[]> method =
         MethodDescriptor.<byte[], byte[]>newBuilder()
@@ -987,7 +986,6 @@ public final class BinlogHelperTest {
   }
 
   @Test
-  @SuppressWarnings({"unchecked"})
   public void clientDeadlineLogged_deadlineSetViaCallOption() {
     MethodDescriptor<byte[], byte[]> method =
         MethodDescriptor.<byte[], byte[]>newBuilder()
@@ -996,6 +994,7 @@ public final class BinlogHelperTest {
             .setRequestMarshaller(BYTEARRAY_MARSHALLER)
             .setResponseMarshaller(BYTEARRAY_MARSHALLER)
             .build();
+    @SuppressWarnings("unchecked")
     ClientCall.Listener<byte[]> mockListener = mock(ClientCall.Listener.class);
 
     ClientCall<byte[], byte[]> call =
@@ -1036,7 +1035,6 @@ public final class BinlogHelperTest {
   }
 
   @Test
-  @SuppressWarnings({"unchecked"})
   public void clientDeadlineLogged_deadlineSetViaContext() throws Exception {
     // important: deadline is read from the ctx where call was created
     final SettableFuture<ClientCall<byte[], byte[]>> callFuture = SettableFuture.create();
@@ -1074,6 +1072,7 @@ public final class BinlogHelperTest {
                     }));
           }
         });
+    @SuppressWarnings("unchecked")
     ClientCall.Listener<byte[]> mockListener = mock(ClientCall.Listener.class);
     callFuture.get().start(mockListener, new Metadata());
     ArgumentCaptor<Duration> callOptTimeoutCaptor = ArgumentCaptor.forClass(Duration.class);
@@ -1094,9 +1093,8 @@ public final class BinlogHelperTest {
   }
 
   @Test
-  @SuppressWarnings({"rawtypes", "unchecked"})
   public void clientInterceptor() throws Exception {
-    final AtomicReference<ClientCall.Listener> interceptedListener =
+    final AtomicReference<ClientCall.Listener<byte[]>> interceptedListener =
         new AtomicReference<>();
     // capture these manually because ClientCall can not be mocked
     final AtomicReference<Metadata> actualClientInitial = new AtomicReference<>();
@@ -1110,8 +1108,9 @@ public final class BinlogHelperTest {
           MethodDescriptor<RequestT, ResponseT> methodDescriptor, CallOptions callOptions) {
         return new NoopClientCall<RequestT, ResponseT>() {
           @Override
+          @SuppressWarnings("unchecked")
           public void start(Listener<ResponseT> responseListener, Metadata headers) {
-            interceptedListener.set(responseListener);
+            interceptedListener.set((Listener<byte[]>) responseListener);
             actualClientInitial.set(headers);
           }
 
@@ -1143,6 +1142,7 @@ public final class BinlogHelperTest {
       }
     };
 
+    @SuppressWarnings("unchecked")
     ClientCall.Listener<byte[]> mockListener = mock(ClientCall.Listener.class);
 
     MethodDescriptor<byte[], byte[]> method =
@@ -1261,9 +1261,8 @@ public final class BinlogHelperTest {
   }
 
   @Test
-  @SuppressWarnings({"rawtypes", "unchecked"})
   public void clientInterceptor_trailersOnlyResponseLogsPeerAddress() throws Exception {
-    final AtomicReference<ClientCall.Listener> interceptedListener =
+    final AtomicReference<ClientCall.Listener<byte[]>> interceptedListener =
         new AtomicReference<>();
     // capture these manually because ClientCall can not be mocked
     final AtomicReference<Metadata> actualClientInitial = new AtomicReference<>();
@@ -1275,8 +1274,9 @@ public final class BinlogHelperTest {
           MethodDescriptor<RequestT, ResponseT> methodDescriptor, CallOptions callOptions) {
         return new NoopClientCall<RequestT, ResponseT>() {
           @Override
+          @SuppressWarnings("unchecked")
           public void start(Listener<ResponseT> responseListener, Metadata headers) {
-            interceptedListener.set(responseListener);
+            interceptedListener.set((Listener<byte[]>) responseListener);
             actualClientInitial.set(headers);
           }
 
@@ -1298,6 +1298,7 @@ public final class BinlogHelperTest {
       }
     };
 
+    @SuppressWarnings("unchecked")
     ClientCall.Listener<byte[]> mockListener = mock(ClientCall.Listener.class);
 
     MethodDescriptor<byte[], byte[]> method =
@@ -1346,12 +1347,12 @@ public final class BinlogHelperTest {
   }
 
   @Test
-  @SuppressWarnings({"rawtypes", "unchecked"})
   public void serverInterceptor() throws Exception {
-    final AtomicReference<ServerCall> interceptedCall =
+    final AtomicReference<ServerCall<byte[], byte[]>> interceptedCall =
         new AtomicReference<>();
     ServerCall.Listener<byte[]> capturedListener;
-    final ServerCall.Listener mockListener = mock(ServerCall.Listener.class);
+    @SuppressWarnings("unchecked")
+    final ServerCall.Listener<byte[]> mockListener = mock(ServerCall.Listener.class);
     // capture these manually because ServerCall can not be mocked
     final AtomicReference<Metadata> actualServerInitial = new AtomicReference<>();
     final AtomicReference<byte[]> actualResponse = new AtomicReference<>();

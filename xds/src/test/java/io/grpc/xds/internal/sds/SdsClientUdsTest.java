@@ -28,12 +28,12 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.google.common.util.concurrent.MoreExecutors;
-import io.envoyproxy.envoy.api.v2.auth.SdsSecretConfig;
-import io.envoyproxy.envoy.api.v2.auth.Secret;
-import io.envoyproxy.envoy.api.v2.core.ApiConfigSource;
-import io.envoyproxy.envoy.api.v2.core.ConfigSource;
-import io.envoyproxy.envoy.api.v2.core.GrpcService;
 import io.envoyproxy.envoy.api.v2.core.Node;
+import io.envoyproxy.envoy.config.core.v3.ApiConfigSource;
+import io.envoyproxy.envoy.config.core.v3.ConfigSource;
+import io.envoyproxy.envoy.config.core.v3.GrpcService;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.SdsSecretConfig;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.Secret;
 import io.netty.channel.epoll.Epoll;
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;

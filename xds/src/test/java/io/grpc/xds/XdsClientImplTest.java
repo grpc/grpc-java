@@ -19,7 +19,6 @@ package io.grpc.xds;
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.xds.XdsClientTestHelper.buildCluster;
 import static io.grpc.xds.XdsClientTestHelper.buildClusterLoadAssignment;
-import static io.grpc.xds.XdsClientTestHelper.buildDeprecatedSecureCluster;
 import static io.grpc.xds.XdsClientTestHelper.buildDiscoveryRequest;
 import static io.grpc.xds.XdsClientTestHelper.buildDiscoveryResponse;
 import static io.grpc.xds.XdsClientTestHelper.buildDropOverload;
@@ -39,8 +38,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
@@ -50,30 +49,29 @@ import com.google.protobuf.Any;
 import com.google.protobuf.BoolValue;
 import com.google.protobuf.UInt32Value;
 import com.google.protobuf.util.Durations;
-import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment;
-import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy;
-import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
-import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
-import io.envoyproxy.envoy.api.v2.RouteConfiguration;
-import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
-import io.envoyproxy.envoy.api.v2.core.AggregatedConfigSource;
-import io.envoyproxy.envoy.api.v2.core.ConfigSource;
-import io.envoyproxy.envoy.api.v2.core.HealthStatus;
-import io.envoyproxy.envoy.api.v2.core.Node;
-import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
-import io.envoyproxy.envoy.api.v2.route.QueryParameterMatcher;
-import io.envoyproxy.envoy.api.v2.route.RedirectAction;
-import io.envoyproxy.envoy.api.v2.route.Route;
-import io.envoyproxy.envoy.api.v2.route.RouteAction;
-import io.envoyproxy.envoy.api.v2.route.RouteMatch;
-import io.envoyproxy.envoy.api.v2.route.VirtualHost;
-import io.envoyproxy.envoy.api.v2.route.WeightedCluster;
-import io.envoyproxy.envoy.config.filter.network.http_connection_manager.v2.HttpConnectionManager;
-import io.envoyproxy.envoy.config.filter.network.http_connection_manager.v2.Rds;
-import io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceImplBase;
-import io.envoyproxy.envoy.service.load_stats.v2.LoadReportingServiceGrpc.LoadReportingServiceImplBase;
-import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsRequest;
-import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsResponse;
+import io.envoyproxy.envoy.config.core.v3.AggregatedConfigSource;
+import io.envoyproxy.envoy.config.core.v3.ConfigSource;
+import io.envoyproxy.envoy.config.core.v3.HealthStatus;
+import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
+import io.envoyproxy.envoy.config.endpoint.v3.ClusterStats;
+import io.envoyproxy.envoy.config.route.v3.QueryParameterMatcher;
+import io.envoyproxy.envoy.config.route.v3.RedirectAction;
+import io.envoyproxy.envoy.config.route.v3.Route;
+import io.envoyproxy.envoy.config.route.v3.RouteAction;
+import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
+import io.envoyproxy.envoy.config.route.v3.RouteMatch;
+import io.envoyproxy.envoy.config.route.v3.VirtualHost;
+import io.envoyproxy.envoy.config.route.v3.WeightedCluster;
+import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
+import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.Rds;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.SdsSecretConfig;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext;
+import io.envoyproxy.envoy.service.discovery.v3.AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceImplBase;
+import io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest;
+import io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse;
+import io.envoyproxy.envoy.service.load_stats.v3.LoadReportingServiceGrpc.LoadReportingServiceImplBase;
+import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsRequest;
+import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsResponse;
 import io.grpc.Context;
 import io.grpc.Context.CancellationListener;
 import io.grpc.ManagedChannel;
@@ -94,12 +92,14 @@ import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.LbEndpoint;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
+import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.XdsClient.ClusterUpdate;
 import io.grpc.xds.XdsClient.ClusterWatcher;
 import io.grpc.xds.XdsClient.ConfigUpdate;
 import io.grpc.xds.XdsClient.ConfigWatcher;
 import io.grpc.xds.XdsClient.EndpointUpdate;
 import io.grpc.xds.XdsClient.EndpointWatcher;
+import io.grpc.xds.XdsClient.XdsChannel;
 import io.grpc.xds.XdsClient.XdsChannelFactory;
 import io.grpc.xds.XdsClientImpl.MessagePrinter;
 import java.io.IOException;
@@ -125,14 +125,15 @@ import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
 /**
- * Tests for {@link XdsClientImpl}.
+ * Tests for {@link XdsClientImpl} with xDS v3 protocol. However, the test xDS server still sends
+ * update with v2 resources for testing compatibility.
  */
 @RunWith(JUnit4.class)
 public class XdsClientImplTest {
 
   private static final String TARGET_AUTHORITY = "foo.googleapis.com:8080";
 
-  private static final Node NODE = Node.getDefaultInstance();
+  private static final Node NODE = Node.newBuilder().build();
   private static final FakeClock.TaskFilter RPC_RETRY_TASK_FILTER =
       new FakeClock.TaskFilter() {
         @Override
@@ -279,13 +280,14 @@ public class XdsClientImplTest {
         cleanupRule.register(InProcessChannelBuilder.forName(serverName).directExecutor().build());
 
     List<ServerInfo> servers =
-        ImmutableList.of(new ServerInfo(serverName, ImmutableList.<ChannelCreds>of()));
+        ImmutableList.of(new ServerInfo(serverName, ImmutableList.<ChannelCreds>of(), null));
     XdsChannelFactory channelFactory = new XdsChannelFactory() {
       @Override
-      ManagedChannel createChannel(List<ServerInfo> servers) {
-        assertThat(Iterables.getOnlyElement(servers).getServerUri()).isEqualTo(serverName);
-        assertThat(Iterables.getOnlyElement(servers).getChannelCredentials()).isEmpty();
-        return channel;
+      XdsChannel createChannel(List<ServerInfo> servers) {
+        ServerInfo serverInfo = Iterables.getOnlyElement(servers);
+        assertThat(serverInfo.getServerUri()).isEqualTo(serverName);
+        assertThat(serverInfo.getChannelCredentials()).isEmpty();
+        return new XdsChannel(channel, /* useProtocolV3= */ true);
       }
     };
 
@@ -294,7 +296,7 @@ public class XdsClientImplTest {
             TARGET_AUTHORITY,
             servers,
             channelFactory,
-            NODE,
+            EnvoyProtoData.Node.newBuilder().build(),
             syncContext,
             fakeClock.getScheduledExecutorService(),
             backoffPolicyProvider,
@@ -307,7 +309,6 @@ public class XdsClientImplTest {
 
   @After
   public void tearDown() {
-    XdsClientImpl.enableExperimentalRouting = false;
     xdsClient.shutdown();
     assertThat(adsEnded.get()).isTrue();
     assertThat(lrsEnded.get()).isTrue();
@@ -395,7 +396,7 @@ public class XdsClientImplTest {
             XdsClientImpl.ADS_TYPE_URL_LDS, "")));
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
 
-    RouteConfiguration routeConfig =
+    io.envoyproxy.envoy.config.route.v3.RouteConfiguration routeConfig =
         buildRouteConfiguration(
             "route.googleapis.com",
             ImmutableList.of(
@@ -647,7 +648,6 @@ public class XdsClientImplTest {
    */
   @Test
   public void resolveVirtualHostWithPathMatchingInRdsResponse() {
-    XdsClientImpl.enableExperimentalRouting = true;
     xdsClient.watchConfigData(TARGET_AUTHORITY, configWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
@@ -674,40 +674,62 @@ public class XdsClientImplTest {
 
     // Management server should only sends RouteConfiguration messages with at least one
     // VirtualHost with domains matching requested hostname. Otherwise, it is invalid data.
-    List<Any> routeConfigs = ImmutableList.of(
-        Any.pack(
-            buildRouteConfiguration(
-                "route-foo.googleapis.com",
-                ImmutableList.of(
-                    VirtualHost.newBuilder()
-                        .setName("virtualhost00.googleapis.com") // don't care
-                        // domains wit a match.
-                        .addAllDomains(ImmutableList.of(TARGET_AUTHORITY, "bar.googleapis.com"))
-                        .addRoutes(Route.newBuilder()
-                            // path match with cluster route
-                            .setRoute(RouteAction.newBuilder().setCluster("cl1.googleapis.com"))
-                            .setMatch(RouteMatch.newBuilder().setPath("/service1/method1")))
-                        .addRoutes(Route.newBuilder()
-                            // path match with weighted cluster route
-                            .setRoute(RouteAction.newBuilder().setWeightedClusters(
-                                WeightedCluster.newBuilder()
-                                    .addClusters(WeightedCluster.ClusterWeight.newBuilder()
-                                        .setWeight(UInt32Value.of(30))
-                                        .setName("cl21.googleapis.com"))
-                                    .addClusters(WeightedCluster.ClusterWeight.newBuilder()
-                                        .setWeight(UInt32Value.of(70))
-                                        .setName("cl22.googleapis.com"))))
-                            .setMatch(RouteMatch.newBuilder().setPath("/service2/method2")))
-                        .addRoutes(Route.newBuilder()
-                            // prefix match with cluster route
-                            .setRoute(RouteAction.newBuilder()
-                                .setCluster("cl1.googleapis.com"))
-                            .setMatch(RouteMatch.newBuilder().setPrefix("/service1/")))
-                        .addRoutes(Route.newBuilder()
-                            // default match with cluster route
-                            .setRoute(RouteAction.newBuilder().setCluster("cluster.googleapis.com"))
-                            .setMatch(RouteMatch.newBuilder().setPrefix("")))
-                        .build()))));
+    List<Any> routeConfigs =
+        ImmutableList.of(
+            Any.pack(
+                buildRouteConfiguration(
+                    "route-foo.googleapis.com",
+                    ImmutableList.of(
+                        VirtualHost.newBuilder()
+                            .setName("virtualhost00.googleapis.com") // don't care
+                            // domains wit a match.
+                            .addAllDomains(ImmutableList.of(TARGET_AUTHORITY, "bar.googleapis.com"))
+                            .addRoutes(
+                                Route.newBuilder()
+                                    // path match with cluster route
+                                    .setRoute(
+                                        RouteAction.newBuilder()
+                                            .setCluster("cl1.googleapis.com"))
+                                    .setMatch(
+                                        RouteMatch.newBuilder()
+                                            .setPath("/service1/method1")))
+                            .addRoutes(
+                                Route.newBuilder()
+                                    // path match with weighted cluster route
+                                    .setRoute(
+                                        RouteAction.newBuilder()
+                                            .setWeightedClusters(
+                                                WeightedCluster.newBuilder()
+                                                    .addClusters(
+                                                        WeightedCluster.ClusterWeight.newBuilder()
+                                                            .setWeight(UInt32Value.of(30))
+                                                            .setName("cl21.googleapis.com"))
+                                                    .addClusters(
+                                                        WeightedCluster.ClusterWeight.newBuilder()
+                                                            .setWeight(UInt32Value.of(70))
+                                                            .setName("cl22.googleapis.com"))))
+                                    .setMatch(
+                                        RouteMatch.newBuilder()
+                                            .setPath("/service2/method2")))
+                            .addRoutes(
+                                Route.newBuilder()
+                                    // prefix match with cluster route
+                                    .setRoute(
+                                        RouteAction.newBuilder()
+                                            .setCluster("cl1.googleapis.com"))
+                                    .setMatch(
+                                        RouteMatch.newBuilder()
+                                            .setPrefix("/service1/")))
+                            .addRoutes(
+                                Route.newBuilder()
+                                    // default match with cluster route
+                                    .setRoute(
+                                        RouteAction.newBuilder()
+                                            .setCluster("cluster.googleapis.com"))
+                                    .setMatch(
+                                        RouteMatch.newBuilder()
+                                            .setPrefix("")))
+                            .build()))));
     response = buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0000");
     responseObserver.onNext(response);
 
@@ -722,40 +744,42 @@ public class XdsClientImplTest {
     verify(configWatcher).onConfigChanged(configUpdateCaptor.capture());
     List<EnvoyProtoData.Route> routes = configUpdateCaptor.getValue().getRoutes();
     assertThat(routes).hasSize(4);
-    assertThat(routes.get(0)).isEqualTo(
-        new EnvoyProtoData.Route(
-            // path match with cluster route
-            new io.grpc.xds.RouteMatch(
-                /* prefix= */ null,
-                /* path= */ "/service1/method1"),
-            new EnvoyProtoData.RouteAction("cl1.googleapis.com", null)));
-    assertThat(routes.get(1)).isEqualTo(
-        new EnvoyProtoData.Route(
-            // path match with weighted cluster route
-            new io.grpc.xds.RouteMatch(
-                /* prefix= */ null,
-                /* path= */ "/service2/method2"),
-            new EnvoyProtoData.RouteAction(
-                null,
-                ImmutableList.of(
-                    new EnvoyProtoData.ClusterWeight("cl21.googleapis.com", 30),
-                    new EnvoyProtoData.ClusterWeight("cl22.googleapis.com", 70)
-                ))));
-    assertThat(routes.get(2)).isEqualTo(
-        new EnvoyProtoData.Route(
-            // prefix match with cluster route
-            new io.grpc.xds.RouteMatch(
-                /* prefix= */ "/service1/",
-                /* path= */ null),
-            new EnvoyProtoData.RouteAction("cl1.googleapis.com", null)));
-    assertThat(routes.get(3)).isEqualTo(
-        new EnvoyProtoData.Route(
-            // default match with cluster route
-            new io.grpc.xds.RouteMatch(
-                /* prefix= */ "",
-                /* path= */ null),
-            new EnvoyProtoData.RouteAction(
-                "cluster.googleapis.com", null)));
+    assertThat(routes.get(0))
+        .isEqualTo(
+            new EnvoyProtoData.Route(
+                // path match with cluster route
+                new io.grpc.xds.RouteMatch(
+                    /* pathPrefixMatch= */ null,/* pathExactMatch= */ "/service1/method1"),
+                new EnvoyProtoData.RouteAction(
+                    TimeUnit.SECONDS.toNanos(15L), "cl1.googleapis.com", null)));
+    assertThat(routes.get(1))
+        .isEqualTo(
+            new EnvoyProtoData.Route(
+                // path match with weighted cluster route
+                new io.grpc.xds.RouteMatch(
+                    /* pathPrefixMatch= */ null,/* pathExactMatch= */ "/service2/method2"),
+                new EnvoyProtoData.RouteAction(
+                    TimeUnit.SECONDS.toNanos(15L),
+                    null,
+                    ImmutableList.of(
+                        new EnvoyProtoData.ClusterWeight("cl21.googleapis.com", 30),
+                        new EnvoyProtoData.ClusterWeight("cl22.googleapis.com", 70)))));
+    assertThat(routes.get(2))
+        .isEqualTo(
+            new EnvoyProtoData.Route(
+                // prefix match with cluster route
+                new io.grpc.xds.RouteMatch(
+                    /* pathPrefixMatch= */ "/service1/",/* pathExactMatch= */ null),
+                new EnvoyProtoData.RouteAction(
+                    TimeUnit.SECONDS.toNanos(15L), "cl1.googleapis.com", null)));
+    assertThat(routes.get(3))
+        .isEqualTo(
+            new EnvoyProtoData.Route(
+                // default match with cluster route
+                new io.grpc.xds.RouteMatch(
+                    /* pathPrefixMatch= */ "",/* pathExactMatch= */ null),
+                new EnvoyProtoData.RouteAction(
+                    TimeUnit.SECONDS.toNanos(15L), "cluster.googleapis.com", null)));
   }
 
   /**
@@ -860,7 +884,7 @@ public class XdsClientImplTest {
     // A VirtualHost with a Route that contains only redirect configuration.
     VirtualHost virtualHost =
         VirtualHost.newBuilder()
-            .setName("virtualhost00.googleapis.com")  // don't care
+            .setName("virtualhost00.googleapis.com") // don't care
             .addDomains(TARGET_AUTHORITY)
             .addRoutes(
                 Route.newBuilder()
@@ -1453,39 +1477,20 @@ public class XdsClientImplTest {
     ArgumentCaptor<ClusterUpdate> clusterUpdateCaptor = ArgumentCaptor.forClass(null);
     verify(clusterWatcher, times(1)).onClusterChanged(clusterUpdateCaptor.capture());
     ClusterUpdate clusterUpdate = clusterUpdateCaptor.getValue();
-    assertThat(clusterUpdate.getUpstreamTlsContext()).isEqualTo(testUpstreamTlsContext);
-  }
-
-  /**
-   * CDS response containing UpstreamTlsContext for a cluster in a deprecated field.
-   */
-  // TODO(sanjaypujare): remove once we move to envoy proto v3
-  @Test
-  public void cdsResponseWithDeprecatedUpstreamTlsContext() {
-    xdsClient.watchClusterData("cluster-foo.googleapis.com", clusterWatcher);
-    StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
-    StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
-
-    // Management server sends back CDS response with UpstreamTlsContext.
-    UpstreamTlsContext testUpstreamTlsContext =
-        buildUpstreamTlsContext("secret1", "unix:/var/uds2");
-    List<Any> clusters = ImmutableList.of(
-        Any.pack(buildCluster("cluster-bar.googleapis.com", null, false)),
-        Any.pack(buildDeprecatedSecureCluster("cluster-foo.googleapis.com",
-            "eds-cluster-foo.googleapis.com", true, testUpstreamTlsContext)),
-        Any.pack(buildCluster("cluster-baz.googleapis.com", null, false)));
-    DiscoveryResponse response =
-        buildDiscoveryResponse("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS, "0000");
-    responseObserver.onNext(response);
-
-    // Client sent an ACK CDS request.
-    verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest(NODE, "0", "cluster-foo.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_CDS, "0000")));
-    ArgumentCaptor<ClusterUpdate> clusterUpdateCaptor = ArgumentCaptor.forClass(null);
-    verify(clusterWatcher, times(1)).onClusterChanged(clusterUpdateCaptor.capture());
-    ClusterUpdate clusterUpdate = clusterUpdateCaptor.getValue();
-    assertThat(clusterUpdate.getUpstreamTlsContext()).isEqualTo(testUpstreamTlsContext);
+    EnvoyServerProtoData.UpstreamTlsContext upstreamTlsContext = clusterUpdate
+        .getUpstreamTlsContext();
+    SdsSecretConfig validationContextSdsSecretConfig = upstreamTlsContext.getCommonTlsContext()
+        .getValidationContextSdsSecretConfig();
+    assertThat(validationContextSdsSecretConfig.getName()).isEqualTo("secret1");
+    assertThat(
+            Iterables.getOnlyElement(
+                    validationContextSdsSecretConfig
+                        .getSdsConfig()
+                        .getApiConfigSource()
+                        .getGrpcServicesList())
+                .getGoogleGrpc()
+                .getTargetUri())
+        .isEqualTo("unix:/var/uds2");
   }
 
   @Test
@@ -1573,24 +1578,7 @@ public class XdsClientImplTest {
                     ImmutableList.of("cluster-foo.googleapis.com", "cluster-bar.googleapis.com"),
                     XdsClientImpl.ADS_TYPE_URL_CDS, "0001")));
 
-    // All watchers received notification for cluster update.
-    verify(watcher1, times(2)).onClusterChanged(clusterUpdateCaptor1.capture());
-    clusterUpdate1 = clusterUpdateCaptor1.getValue();
-    assertThat(clusterUpdate1.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
-    assertThat(clusterUpdate1.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
-    assertThat(clusterUpdate1.getEdsServiceName()).isNull();
-    assertThat(clusterUpdate1.getLbPolicy()).isEqualTo("round_robin");
-    assertThat(clusterUpdate1.getLrsServerName()).isNull();
-
-    clusterUpdateCaptor2 = ArgumentCaptor.forClass(null);
-    verify(watcher2, times(2)).onClusterChanged(clusterUpdateCaptor2.capture());
-    clusterUpdate2 = clusterUpdateCaptor2.getValue();
-    assertThat(clusterUpdate2.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
-    assertThat(clusterUpdate2.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
-    assertThat(clusterUpdate2.getEdsServiceName()).isNull();
-    assertThat(clusterUpdate2.getLbPolicy()).isEqualTo("round_robin");
-    assertThat(clusterUpdate2.getLrsServerName()).isNull();
-
+    verifyNoMoreInteractions(watcher1, watcher2); // resource has no change
     ArgumentCaptor<ClusterUpdate> clusterUpdateCaptor3 = ArgumentCaptor.forClass(null);
     verify(watcher3).onClusterChanged(clusterUpdateCaptor3.capture());
     ClusterUpdate clusterUpdate3 = clusterUpdateCaptor3.getValue();
@@ -1728,14 +1716,7 @@ public class XdsClientImplTest {
                 new DiscoveryRequestMatcher("1",
                     ImmutableList.of("cluster-foo.googleapis.com", "cluster-bar.googleapis.com"),
                     XdsClientImpl.ADS_TYPE_URL_CDS, "0001")));
-
-    verify(watcher1, times(2)).onClusterChanged(clusterUpdateCaptor1.capture());
-    clusterUpdate1 = clusterUpdateCaptor1.getValue();
-    assertThat(clusterUpdate1.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
-    assertThat(clusterUpdate1.getEdsServiceName()).isNull();
-    assertThat(clusterUpdate1.getLbPolicy()).isEqualTo("round_robin");
-    assertThat(clusterUpdate1.getLrsServerName()).isNull();
-
+    verifyNoMoreInteractions(watcher1);  // resource has no change
     ArgumentCaptor<ClusterUpdate> clusterUpdateCaptor2 = ArgumentCaptor.forClass(null);
     verify(watcher2).onClusterChanged(clusterUpdateCaptor2.capture());
     ClusterUpdate clusterUpdate2 = clusterUpdateCaptor2.getValue();
@@ -1883,7 +1864,7 @@ public class XdsClientImplTest {
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
     assertThat(timeoutTask.isCancelled()).isTrue();
 
-    verifyZeroInteractions(watcher3, watcher4);
+    verifyNoInteractions(watcher3, watcher4);
   }
 
   @Test
@@ -2008,7 +1989,7 @@ public class XdsClientImplTest {
                         buildLbEndpoint("192.168.0.1", 8080, HealthStatus.HEALTHY, 2)),
                     1, 0),
                 buildLocalityLbEndpoints("region3", "zone3", "subzone3",
-                    ImmutableList.<io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint>of(),
+                    ImmutableList.<io.envoyproxy.envoy.config.endpoint.v3.LbEndpoint>of(),
                     2, 1), /* locality with 0 endpoint */
                 buildLocalityLbEndpoints("region4", "zone4", "subzone4",
                     ImmutableList.of(
@@ -2058,7 +2039,7 @@ public class XdsClientImplTest {
     clusterLoadAssignments = ImmutableList.of(
         Any.pack(buildClusterLoadAssignment("cluster-foo.googleapis.com",
             // 0 locality
-            ImmutableList.<io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints>of(),
+            ImmutableList.<io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints>of(),
             ImmutableList.<ClusterLoadAssignment.Policy.DropOverload>of())));
     response =
         buildDiscoveryResponse(
@@ -2108,7 +2089,7 @@ public class XdsClientImplTest {
                     ImmutableList.of(
                         buildLbEndpoint("192.168.0.1", 8080, HealthStatus.HEALTHY, 2)),
                     1, 0)),
-            ImmutableList.<Policy.DropOverload>of())));
+            ImmutableList.<ClusterLoadAssignment.Policy.DropOverload>of())));
 
     DiscoveryResponse response =
         buildDiscoveryResponse("0", clusterLoadAssignments,
@@ -2150,7 +2131,7 @@ public class XdsClientImplTest {
                     new LbEndpoint("192.168.0.1", 8080,
                         2, true)), 1, 0));
 
-    verifyZeroInteractions(watcher3);
+    verifyNoInteractions(watcher3);
 
     // Management server sends back another EDS response contains ClusterLoadAssignment for the
     // other requested cluster.
@@ -2217,7 +2198,7 @@ public class XdsClientImplTest {
                     ImmutableList.of(
                         buildLbEndpoint("192.168.0.1", 8080, HealthStatus.HEALTHY, 2)),
                     1, 0)),
-            ImmutableList.<Policy.DropOverload>of())));
+            ImmutableList.<ClusterLoadAssignment.Policy.DropOverload>of())));
 
     DiscoveryResponse response =
         buildDiscoveryResponse("0", clusterLoadAssignments,
@@ -2294,7 +2275,7 @@ public class XdsClientImplTest {
                         buildLbEndpoint("192.168.0.1", 8080, HealthStatus.HEALTHY, 2),
                         buildLbEndpoint("192.132.53.5", 80, HealthStatus.UNHEALTHY, 5)),
                     1, 0)),
-            ImmutableList.<Policy.DropOverload>of())));
+            ImmutableList.<ClusterLoadAssignment.Policy.DropOverload>of())));
 
     DiscoveryResponse response =
         buildDiscoveryResponse("0", clusterLoadAssignments,
@@ -2340,7 +2321,7 @@ public class XdsClientImplTest {
                     ImmutableList.of(
                         buildLbEndpoint("192.168.312.6", 443, HealthStatus.HEALTHY, 1)),
                     6, 0)),
-            ImmutableList.<Policy.DropOverload>of())));
+            ImmutableList.<ClusterLoadAssignment.Policy.DropOverload>of())));
 
     response = buildDiscoveryResponse("1", clusterLoadAssignments,
         XdsClientImpl.ADS_TYPE_URL_EDS, "0001");
@@ -2399,14 +2380,14 @@ public class XdsClientImplTest {
                     ImmutableList.of(
                         buildLbEndpoint("192.168.432.6", 80, HealthStatus.HEALTHY, 2)),
                     3, 0)),
-            ImmutableList.<Policy.DropOverload>of())),
+            ImmutableList.<ClusterLoadAssignment.Policy.DropOverload>of())),
         Any.pack(buildClusterLoadAssignment("cluster-bar.googleapis.com",
             ImmutableList.of(
                 buildLocalityLbEndpoints("region4", "zone4", "subzone4",
                     ImmutableList.of(
                         buildLbEndpoint("192.168.75.6", 8888, HealthStatus.HEALTHY, 2)),
                     3, 0)),
-            ImmutableList.<Policy.DropOverload>of())));
+            ImmutableList.<ClusterLoadAssignment.Policy.DropOverload>of())));
 
     response = buildDiscoveryResponse("2", clusterLoadAssignments,
         XdsClientImpl.ADS_TYPE_URL_EDS, "0002");
@@ -2445,7 +2426,7 @@ public class XdsClientImplTest {
                     ImmutableList.of(
                         buildLbEndpoint("192.168.75.6", 8888, HealthStatus.HEALTHY, 2)),
                     3, 0)),
-            ImmutableList.<Policy.DropOverload>of())));
+            ImmutableList.<ClusterLoadAssignment.Policy.DropOverload>of())));
 
     response = buildDiscoveryResponse("3", clusterLoadAssignments,
         XdsClientImpl.ADS_TYPE_URL_EDS, "0003");
@@ -2534,7 +2515,7 @@ public class XdsClientImplTest {
     assertThat(fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
     assertThat(timeoutTask.isCancelled()).isTrue();
 
-    verifyZeroInteractions(watcher3, watcher4);
+    verifyNoInteractions(watcher3, watcher4);
   }
 
   @Test
@@ -2559,7 +2540,7 @@ public class XdsClientImplTest {
                     ImmutableList.of(
                         buildLbEndpoint("192.168.0.1", 8080, HealthStatus.HEALTHY, 2)),
                     1, 0)),
-            ImmutableList.<Policy.DropOverload>of())));
+            ImmutableList.<ClusterLoadAssignment.Policy.DropOverload>of())));
     response =
         buildDiscoveryResponse("0", clusterLoadAssignments,
             XdsClientImpl.ADS_TYPE_URL_EDS, "0000");
@@ -3252,9 +3233,9 @@ public class XdsClientImplTest {
   @Test
   public void reportLoadStatsToServer() {
     String clusterName = "cluster-foo.googleapis.com";
-    LoadStatsStore loadStatsStore = new LoadStatsStoreImpl(clusterName, null);
+    xdsClient.addClientStats(clusterName, null);
     ArgumentCaptor<LoadStatsRequest> requestCaptor = ArgumentCaptor.forClass(null);
-    xdsClient.reportClientStats(clusterName, null, loadStatsStore);
+    xdsClient.reportClientStats();
     LoadReportCall lrsCall = loadReportCalls.poll();
     verify(lrsCall.requestObserver).onNext(requestCaptor.capture());
     assertThat(requestCaptor.getValue().getClusterStatsCount())
@@ -3270,12 +3251,14 @@ public class XdsClientImplTest {
     ClusterStats report = Iterables.getOnlyElement(requestCaptor.getValue().getClusterStatsList());
     assertThat(report.getClusterName()).isEqualTo(clusterName);
 
-    xdsClient.cancelClientStatsReport(clusterName, null);
+    xdsClient.removeClientStats(clusterName, null);
     fakeClock.forwardNanos(1000L);
     verify(lrsCall.requestObserver, times(3)).onNext(requestCaptor.capture());
     assertThat(requestCaptor.getValue().getClusterStatsCount())
         .isEqualTo(0);  // no more stats reported
 
+    xdsClient.cancelClientStatsReport();
+    assertThat(lrsEnded.get()).isTrue();
     // See more test on LoadReportClientTest.java
   }
 
@@ -3378,8 +3361,10 @@ public class XdsClientImplTest {
             .addAllDomains(ImmutableList.of("*"))
             .build();
     RouteConfiguration routeConfig =
-        buildRouteConfiguration(
-            "route-foo.googleapis.com", ImmutableList.of(vHost1, vHost2, vHost3));
+        RouteConfiguration.newBuilder()
+            .setName("route-foo.googleapis.com")
+            .addAllVirtualHosts(ImmutableList.of(vHost1, vHost2, vHost3))
+            .build();
     assertThat(XdsClientImpl.findVirtualHostForHostName(routeConfig, hostname)).isEqualTo(vHost1);
   }
 
@@ -3402,8 +3387,10 @@ public class XdsClientImplTest {
             .addAllDomains(ImmutableList.of("*"))
             .build();
     RouteConfiguration routeConfig =
-        buildRouteConfiguration(
-            "route-foo.googleapis.com", ImmutableList.of(vHost1, vHost2, vHost3));
+        RouteConfiguration.newBuilder()
+            .setName("route-foo.googleapis.com")
+            .addAllVirtualHosts(ImmutableList.of(vHost1, vHost2, vHost3))
+            .build();
     assertThat(XdsClientImpl.findVirtualHostForHostName(routeConfig, hostname)).isEqualTo(vHost1);
   }
 
@@ -3421,8 +3408,10 @@ public class XdsClientImplTest {
             .addAllDomains(ImmutableList.of("b.googleapis.com"))
             .build();
     RouteConfiguration routeConfig =
-        buildRouteConfiguration(
-            "route-foo.googleapis.com", ImmutableList.of(vHost1, vHost2));
+        RouteConfiguration.newBuilder()
+            .setName("route-foo.googleapis.com")
+            .addAllVirtualHosts(ImmutableList.of(vHost1, vHost2))
+            .build();
     assertThat(XdsClientImpl.findVirtualHostForHostName(routeConfig, hostname)).isEqualTo(vHost1);
   }
 
@@ -3439,25 +3428,6 @@ public class XdsClientImplTest {
                         RouteMatch.newBuilder()
                             .setPrefix("")
                             .setCaseSensitive(BoolValue.newBuilder().setValue(false))))
-            .build();
-
-    thrown.expect(XdsClientImpl.InvalidProtoDataException.class);
-    XdsClientImpl.populateRoutesInVirtualHost(virtualHost);
-  }
-
-  @Test
-  public void populateRoutesInVirtualHost_lastRouteIsNotDefaultRoute() {
-    VirtualHost virtualHost =
-        VirtualHost.newBuilder()
-            .setName("virtualhost00.googleapis.com")  // don't care
-            .addDomains(TARGET_AUTHORITY)
-            .addRoutes(
-                Route.newBuilder()
-                    .setRoute(RouteAction.newBuilder().setCluster("cluster.googleapis.com"))
-                    .setMatch(
-                        RouteMatch.newBuilder()
-                            .setPrefix("/service/method")
-                            .setCaseSensitive(BoolValue.newBuilder().setValue(true))))
             .build();
 
     thrown.expect(XdsClientImpl.InvalidProtoDataException.class);
@@ -3509,7 +3479,7 @@ public class XdsClientImplTest {
     String expectedString = "{\n"
         + "  \"versionInfo\": \"0\",\n"
         + "  \"resources\": [{\n"
-        + "    \"@type\": \"type.googleapis.com/envoy.api.v2.Listener\",\n"
+        + "    \"@type\": \"type.googleapis.com/envoy.config.listener.v3.Listener\",\n"
         + "    \"name\": \"foo.googleapis.com:8080\",\n"
         + "    \"address\": {\n"
         + "    },\n"
@@ -3517,21 +3487,14 @@ public class XdsClientImplTest {
         + "    }],\n"
         + "    \"apiListener\": {\n"
         + "      \"apiListener\": {\n"
-        + "        \"@type\": \"type.googleapis.com/envoy.config.filter.network"
-        + ".http_connection_manager.v2.HttpConnectionManager\",\n"
+        + "        \"@type\": \"type.googleapis.com/envoy.extensions.filters.network"
+        + ".http_connection_manager.v3.HttpConnectionManager\",\n"
         + "        \"routeConfig\": {\n"
         + "          \"name\": \"route-foo.googleapis.com\",\n"
         + "          \"virtualHosts\": [{\n"
         + "            \"name\": \"virtualhost00.googleapis.com\",\n"
         + "            \"domains\": [\"foo.googleapis.com\", \"bar.googleapis.com\"],\n"
         + "            \"routes\": [{\n"
-        + "              \"match\": {\n"
-        + "                \"prefix\": \"\"\n"
-        + "              },\n"
-        + "              \"route\": {\n"
-        + "                \"cluster\": \"whatever cluster\"\n"
-        + "              }\n"
-        + "            }, {\n"
         + "              \"match\": {\n"
         + "                \"prefix\": \"\"\n"
         + "              },\n"
@@ -3544,7 +3507,7 @@ public class XdsClientImplTest {
         + "      }\n"
         + "    }\n"
         + "  }],\n"
-        + "  \"typeUrl\": \"type.googleapis.com/envoy.api.v2.Listener\",\n"
+        + "  \"typeUrl\": \"type.googleapis.com/envoy.config.listener.v3.Listener\",\n"
         + "  \"nonce\": \"0000\"\n"
         + "}";
     String res = printer.print(response);
@@ -3569,7 +3532,7 @@ public class XdsClientImplTest {
     String expectedString = "{\n"
         + "  \"versionInfo\": \"213\",\n"
         + "  \"resources\": [{\n"
-        + "    \"@type\": \"type.googleapis.com/envoy.api.v2.RouteConfiguration\",\n"
+        + "    \"@type\": \"type.googleapis.com/envoy.config.route.v3.RouteConfiguration\",\n"
         + "    \"name\": \"route-foo.googleapis.com\",\n"
         + "    \"virtualHosts\": [{\n"
         + "      \"name\": \"virtualhost00.googleapis.com\",\n"
@@ -3579,19 +3542,12 @@ public class XdsClientImplTest {
         + "          \"prefix\": \"\"\n"
         + "        },\n"
         + "        \"route\": {\n"
-        + "          \"cluster\": \"whatever cluster\"\n"
-        + "        }\n"
-        + "      }, {\n"
-        + "        \"match\": {\n"
-        + "          \"prefix\": \"\"\n"
-        + "        },\n"
-        + "        \"route\": {\n"
         + "          \"cluster\": \"cluster.googleapis.com\"\n"
         + "        }\n"
         + "      }]\n"
         + "    }]\n"
         + "  }],\n"
-        + "  \"typeUrl\": \"type.googleapis.com/envoy.api.v2.RouteConfiguration\",\n"
+        + "  \"typeUrl\": \"type.googleapis.com/envoy.config.route.v3.RouteConfiguration\",\n"
         + "  \"nonce\": \"0052\"\n"
         + "}";
     String res = printer.print(response);
@@ -3610,7 +3566,7 @@ public class XdsClientImplTest {
     String expectedString = "{\n"
         + "  \"versionInfo\": \"14\",\n"
         + "  \"resources\": [{\n"
-        + "    \"@type\": \"type.googleapis.com/envoy.api.v2.Cluster\",\n"
+        + "    \"@type\": \"type.googleapis.com/envoy.config.cluster.v3.Cluster\",\n"
         + "    \"name\": \"cluster-bar.googleapis.com\",\n"
         + "    \"type\": \"EDS\",\n"
         + "    \"edsClusterConfig\": {\n"
@@ -3625,7 +3581,7 @@ public class XdsClientImplTest {
         + "      }\n"
         + "    }\n"
         + "  }, {\n"
-        + "    \"@type\": \"type.googleapis.com/envoy.api.v2.Cluster\",\n"
+        + "    \"@type\": \"type.googleapis.com/envoy.config.cluster.v3.Cluster\",\n"
         + "    \"name\": \"cluster-foo.googleapis.com\",\n"
         + "    \"type\": \"EDS\",\n"
         + "    \"edsClusterConfig\": {\n"
@@ -3635,7 +3591,7 @@ public class XdsClientImplTest {
         + "      }\n"
         + "    }\n"
         + "  }],\n"
-        + "  \"typeUrl\": \"type.googleapis.com/envoy.api.v2.Cluster\",\n"
+        + "  \"typeUrl\": \"type.googleapis.com/envoy.config.cluster.v3.Cluster\",\n"
         + "  \"nonce\": \"8\"\n"
         + "}";
     String res = printer.print(response);
@@ -3667,7 +3623,7 @@ public class XdsClientImplTest {
     String expectedString = "{\n"
         + "  \"versionInfo\": \"5\",\n"
         + "  \"resources\": [{\n"
-        + "    \"@type\": \"type.googleapis.com/envoy.api.v2.ClusterLoadAssignment\",\n"
+        + "    \"@type\": \"type.googleapis.com/envoy.config.endpoint.v3.ClusterLoadAssignment\",\n"
         + "    \"clusterName\": \"cluster-foo.googleapis.com\",\n"
         + "    \"endpoints\": [{\n"
         + "      \"locality\": {\n"
@@ -3722,11 +3678,10 @@ public class XdsClientImplTest {
         + "          \"numerator\": 1000,\n"
         + "          \"denominator\": \"MILLION\"\n"
         + "        }\n"
-        + "      }],\n"
-        + "      \"disableOverprovisioning\": true\n"
+        + "      }]\n"
         + "    }\n"
         + "  }],\n"
-        + "  \"typeUrl\": \"type.googleapis.com/envoy.api.v2.ClusterLoadAssignment\",\n"
+        + "  \"typeUrl\": \"type.googleapis.com/envoy.config.endpoint.v3.ClusterLoadAssignment\",\n"
         + "  \"nonce\": \"004\"\n"
         + "}";
     String res = printer.print(response);
@@ -3782,7 +3737,7 @@ public class XdsClientImplTest {
       if (!resourceNames.equals(new HashSet<>(argument.getResourceNamesList()))) {
         return false;
       }
-      return NODE.equals(argument.getNode());
+      return argument.getNode().equals(NODE.toEnvoyProtoNode());
     }
   }
 

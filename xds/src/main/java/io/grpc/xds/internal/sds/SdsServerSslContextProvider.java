@@ -18,12 +18,13 @@ package io.grpc.xds.internal.sds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
-import io.envoyproxy.envoy.api.v2.auth.CertificateValidationContext;
-import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
-import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
-import io.envoyproxy.envoy.api.v2.auth.SdsSecretConfig;
 import io.envoyproxy.envoy.api.v2.core.Node;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.SdsSecretConfig;
 import io.grpc.netty.GrpcSslContexts;
+import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
+import io.grpc.xds.internal.sds.trust.SdsTrustManagerFactory;
 import io.netty.handler.ssl.SslContextBuilder;
 import java.io.IOException;
 import java.security.cert.CertStoreException;
@@ -45,7 +46,7 @@ final class SdsServerSslContextProvider extends SdsSslContextProvider {
         validationContextSdsConfig,
         null,
         watcherExecutor,
-        channelExecutor, new DownstreamTlsContextHolder(downstreamTlsContext));
+        channelExecutor, downstreamTlsContext);
   }
 
   static SdsServerSslContextProvider getProvider(
@@ -75,7 +76,7 @@ final class SdsServerSslContextProvider extends SdsSslContextProvider {
   }
 
   @Override
-  SslContextBuilder getSslContextBuilder(
+  protected final SslContextBuilder getSslContextBuilder(
       CertificateValidationContext localCertValidationContext)
       throws CertificateException, IOException, CertStoreException {
     SslContextBuilder sslContextBuilder =
@@ -85,7 +86,11 @@ final class SdsServerSslContextProvider extends SdsSslContextProvider {
             tlsCertificate.hasPassword()
                 ? tlsCertificate.getPassword().getInlineString()
                 : null);
-    setClientAuthValues(sslContextBuilder, localCertValidationContext);
+    setClientAuthValues(
+        sslContextBuilder,
+        localCertValidationContext != null
+            ? new SdsTrustManagerFactory(localCertValidationContext)
+            : null);
     return sslContextBuilder;
   }
 }

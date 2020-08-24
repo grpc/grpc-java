@@ -44,8 +44,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.verifyZeroInteractions;
 
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
@@ -1586,7 +1586,7 @@ public class OkHttpClientTransportTest {
   @Test
   public void transportReady() throws Exception {
     initTransport();
-    verifyZeroInteractions(transportListener);
+    verifyNoInteractions(transportListener);
     frameHandler().settings(false, new Settings());
     verify(transportListener).transportReady();
     shutdownAndVerify();

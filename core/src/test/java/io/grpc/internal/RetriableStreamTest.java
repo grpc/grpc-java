@@ -37,6 +37,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
@@ -2284,7 +2285,7 @@ public class RetriableStreamTest {
   }
 
   @Test
-  public void hedging_throttled() {
+  public void hedging_throttledByOtherCall() {
     Throttle throttle = new Throttle(4f, 0.8f);
     RetriableStream<String> hedgingStream = newThrottledHedgingStream(throttle);
 
@@ -2310,6 +2311,37 @@ public class RetriableStreamTest {
 
     fakeClock.forwardTime(HEDGING_DELAY_IN_SECONDS, TimeUnit.SECONDS);
     verify(mockStream3).start(any(ClientStreamListener.class));
+    assertEquals(0, fakeClock.numPendingTasks());
+  }
+
+  @Test
+  public void hedging_throttledByHedgingStreams() {
+    Throttle throttle = new Throttle(4f, 0.8f);
+    RetriableStream<String> hedgingStream = newThrottledHedgingStream(throttle);
+
+    ClientStream mockStream1 = mock(ClientStream.class);
+    ClientStream mockStream2 = mock(ClientStream.class);
+    ClientStream mockStream3 = mock(ClientStream.class);
+    when(retriableStreamRecorder.newSubstream(anyInt()))
+        .thenReturn(mockStream1, mockStream2, mockStream3);
+
+    hedgingStream.start(masterListener);
+    ArgumentCaptor<ClientStreamListener> sublistenerCaptor1 =
+        ArgumentCaptor.forClass(ClientStreamListener.class);
+    verify(mockStream1).start(sublistenerCaptor1.capture());
+
+    fakeClock.forwardTime(HEDGING_DELAY_IN_SECONDS, TimeUnit.SECONDS);
+    ArgumentCaptor<ClientStreamListener> sublistenerCaptor2 =
+        ArgumentCaptor.forClass(ClientStreamListener.class);
+    verify(mockStream2).start(sublistenerCaptor2.capture());
+
+    sublistenerCaptor1.getValue().closed(Status.fromCode(NON_FATAL_STATUS_CODE_1), new Metadata());
+    assertTrue(throttle.isAboveThreshold()); // count = 3
+    sublistenerCaptor2.getValue().closed(Status.fromCode(NON_FATAL_STATUS_CODE_1), new Metadata());
+    assertFalse(throttle.isAboveThreshold()); // count = 2
+
+    verify(masterListener).closed(any(Status.class), any(Metadata.class));
+    verifyNoInteractions(mockStream3);
     assertEquals(0, fakeClock.numPendingTasks());
   }
 

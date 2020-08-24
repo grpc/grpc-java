@@ -117,6 +117,7 @@ public class AbstractManagedChannelImplBuilderTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
   public void nameResolverFactory_normal() {
     NameResolver.Factory nameResolverFactory = mock(NameResolver.Factory.class);
     assertEquals(builder, builder.nameResolverFactory(nameResolverFactory));
@@ -124,6 +125,7 @@ public class AbstractManagedChannelImplBuilderTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
   public void nameResolverFactory_null() {
     NameResolver.Factory defaultValue = builder.getNameResolverFactory();
     builder.nameResolverFactory(mock(NameResolver.Factory.class));
@@ -132,6 +134,7 @@ public class AbstractManagedChannelImplBuilderTest {
   }
 
   @Test(expected = IllegalStateException.class)
+  @SuppressWarnings("deprecation")
   public void nameResolverFactory_notAllowedWithDirectAddress() {
     directAddressBuilder.nameResolverFactory(mock(NameResolver.Factory.class));
   }

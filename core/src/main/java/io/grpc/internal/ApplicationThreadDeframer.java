@@ -18,10 +18,11 @@ package io.grpc.internal;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Decompressor;
+import java.io.Closeable;
+import java.io.IOException;
 import java.io.InputStream;
-import java.util.ArrayDeque;
-import java.util.Queue;
 import javax.annotation.Nullable;
 
 /**
@@ -31,25 +32,21 @@ import javax.annotation.Nullable;
  * client thread. Calls from the deframer back to the transport use {@link
  * TransportExecutor#runOnTransportThread} to run on the transport thread.
  */
-public class ApplicationThreadDeframer implements Deframer, MessageDeframer.Listener {
-  interface TransportExecutor {
-    void runOnTransportThread(Runnable r);
-  }
+public class ApplicationThreadDeframer implements Deframer {
+  interface TransportExecutor extends ApplicationThreadDeframerListener.TransportExecutor {}
 
   private final MessageDeframer.Listener storedListener;
+  private final ApplicationThreadDeframerListener appListener;
   private final MessageDeframer deframer;
-  private final TransportExecutor transportExecutor;
-
-  /** Queue for messages returned by the deframer when deframing in the application thread. */
-  private final Queue<InputStream> messageReadQueue = new ArrayDeque<>();
 
   ApplicationThreadDeframer(
       MessageDeframer.Listener listener,
       TransportExecutor transportExecutor,
       MessageDeframer deframer) {
-    this.storedListener = checkNotNull(listener, "listener");
-    this.transportExecutor = checkNotNull(transportExecutor, "transportExecutor");
-    deframer.setListener(this);
+    this.storedListener =
+        new SquelchLateMessagesAvailableDeframerListener(checkNotNull(listener, "listener"));
+    this.appListener = new ApplicationThreadDeframerListener(storedListener, transportExecutor);
+    deframer.setListener(appListener);
     this.deframer = deframer;
   }
 
@@ -81,7 +78,7 @@ public class ApplicationThreadDeframer implements Deframer, MessageDeframer.List
                 try {
                   deframer.request(numMessages);
                 } catch (Throwable t) {
-                  storedListener.deframeFailed(t);
+                  appListener.deframeFailed(t);
                   deframer.close(); // unrecoverable state
                 }
               }
@@ -91,16 +88,22 @@ public class ApplicationThreadDeframer implements Deframer, MessageDeframer.List
   @Override
   public void deframe(final ReadableBuffer data) {
     storedListener.messagesAvailable(
-        new InitializingMessageProducer(
+        new CloseableInitializingMessageProducer(
             new Runnable() {
               @Override
               public void run() {
                 try {
                   deframer.deframe(data);
                 } catch (Throwable t) {
-                  deframeFailed(t);
+                  appListener.deframeFailed(t);
                   deframer.close(); // unrecoverable state
                 }
+              }
+            },
+            new Closeable() {
+              @Override
+              public void close() {
+                data.close();
               }
             }));
   }
@@ -130,45 +133,9 @@ public class ApplicationThreadDeframer implements Deframer, MessageDeframer.List
             }));
   }
 
-  @Override
-  public void bytesRead(final int numBytes) {
-    transportExecutor.runOnTransportThread(
-        new Runnable() {
-          @Override
-          public void run() {
-            storedListener.bytesRead(numBytes);
-          }
-        });
-  }
-
-  @Override
-  public void messagesAvailable(StreamListener.MessageProducer producer) {
-    InputStream message;
-    while ((message = producer.next()) != null) {
-      messageReadQueue.add(message);
-    }
-  }
-
-  @Override
-  public void deframerClosed(final boolean hasPartialMessage) {
-    transportExecutor.runOnTransportThread(
-        new Runnable() {
-          @Override
-          public void run() {
-            storedListener.deframerClosed(hasPartialMessage);
-          }
-        });
-  }
-
-  @Override
-  public void deframeFailed(final Throwable cause) {
-    transportExecutor.runOnTransportThread(
-        new Runnable() {
-          @Override
-          public void run() {
-            storedListener.deframeFailed(cause);
-          }
-        });
+  @VisibleForTesting
+  MessageDeframer.Listener getAppListener() {
+    return appListener;
   }
 
   private class InitializingMessageProducer implements StreamListener.MessageProducer {
@@ -190,7 +157,22 @@ public class ApplicationThreadDeframer implements Deframer, MessageDeframer.List
     @Override
     public InputStream next() {
       initialize();
-      return messageReadQueue.poll();
+      return appListener.messageReadQueuePoll();
+    }
+  }
+
+  private class CloseableInitializingMessageProducer extends InitializingMessageProducer
+      implements Closeable {
+    private final Closeable closeable;
+
+    public CloseableInitializingMessageProducer(Runnable runnable, Closeable closeable) {
+      super(runnable);
+      this.closeable = closeable;
+    }
+
+    @Override
+    public void close() throws IOException {
+      closeable.close();
     }
   }
 }

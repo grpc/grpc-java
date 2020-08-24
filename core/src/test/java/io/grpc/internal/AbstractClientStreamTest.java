@@ -333,9 +333,8 @@ public class AbstractClientStreamTest {
     AbstractClientStream stream =
         new BaseAbstractClientStream(allocator, statsTraceCtx, transportTracer);
     stream.start(mockListener);
-    // The application will call request when waiting for a message, which will in turn call this
-    // on the transport thread.
-    stream.transportState().requestMessagesFromDeframer(1);
+    // The application will call request when waiting for a message
+    stream.request(1);
     // Send first byte of 2 byte message
     stream.transportState().deframe(ReadableBuffers.wrap(new byte[] {0, 0, 0, 0, 2, 1}));
     Status status = Status.INTERNAL.withDescription("rst___stream");
@@ -359,7 +358,7 @@ public class AbstractClientStreamTest {
     Status status = Status.INTERNAL.withDescription("rst___stream");
     // Simulate getting a reset
     stream.transportState().transportReportStatus(status, false /*stop delivery*/, new Metadata());
-    stream.transportState().requestMessagesFromDeframer(1);
+    stream.request(1);
 
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
     verify(mockListener)
@@ -373,7 +372,7 @@ public class AbstractClientStreamTest {
         new BaseAbstractClientStream(allocator, statsTraceCtx, transportTracer);
     stream.start(mockListener);
 
-    stream.transportState().requestMessagesFromDeframer(1);
+    stream.request(1);
     stream.transportState().deframe(ReadableBuffers.wrap(new byte[] {0, 0, 0, 0, 2, 1}));
     stream.transportState().inboundTrailersReceived(new Metadata(), Status.OK);
 
@@ -390,7 +389,7 @@ public class AbstractClientStreamTest {
         new BaseAbstractClientStream(allocator, statsTraceCtx, transportTracer);
     stream.start(mockListener);
 
-    stream.transportState().requestMessagesFromDeframer(1);
+    stream.request(1);
     stream.transportState().deframe(ReadableBuffers.wrap(new byte[] {0, 0, 0, 0, 2, 1}));
     stream.transportState().inboundTrailersReceived(
         new Metadata(), Status.DATA_LOSS.withDescription("data___loss"));
@@ -550,9 +549,6 @@ public class AbstractClientStreamTest {
   private static class BaseSink implements AbstractClientStream.Sink {
     @Override
     public void writeHeaders(Metadata headers, byte[] payload) {}
-
-    @Override
-    public void request(int numMessages) {}
 
     @Override
     public void writeFrame(

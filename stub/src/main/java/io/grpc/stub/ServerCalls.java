@@ -48,7 +48,7 @@ public final class ServerCalls {
    */
   public static <ReqT, RespT> ServerCallHandler<ReqT, RespT> asyncUnaryCall(
       UnaryMethod<ReqT, RespT> method) {
-    return asyncUnaryRequestCall(method);
+    return new UnaryServerCallHandler<>(method);
   }
 
   /**
@@ -58,7 +58,7 @@ public final class ServerCalls {
    */
   public static <ReqT, RespT> ServerCallHandler<ReqT, RespT> asyncServerStreamingCall(
       ServerStreamingMethod<ReqT, RespT> method) {
-    return asyncUnaryRequestCall(method);
+    return new UnaryServerCallHandler<>(method);
   }
 
   /**
@@ -68,7 +68,7 @@ public final class ServerCalls {
    */
   public static <ReqT, RespT> ServerCallHandler<ReqT, RespT> asyncClientStreamingCall(
       ClientStreamingMethod<ReqT, RespT> method) {
-    return asyncStreamingRequestCall(method);
+    return new StreamingServerCallHandler<>(method);
   }
 
   /**
@@ -78,28 +78,36 @@ public final class ServerCalls {
    */
   public static <ReqT, RespT> ServerCallHandler<ReqT, RespT> asyncBidiStreamingCall(
       BidiStreamingMethod<ReqT, RespT> method) {
-    return asyncStreamingRequestCall(method);
+    return new StreamingServerCallHandler<>(method);
   }
 
   /**
    * Adaptor to a unary call method.
    */
-  public interface UnaryMethod<ReqT, RespT> extends UnaryRequestMethod<ReqT, RespT> {}
+  public interface UnaryMethod<ReqT, RespT> extends UnaryRequestMethod<ReqT, RespT> {
+    @Override void invoke(ReqT request, StreamObserver<RespT> responseObserver);
+  }
 
   /**
    * Adaptor to a server streaming method.
    */
-  public interface ServerStreamingMethod<ReqT, RespT> extends UnaryRequestMethod<ReqT, RespT> {}
+  public interface ServerStreamingMethod<ReqT, RespT> extends UnaryRequestMethod<ReqT, RespT> {
+    @Override void invoke(ReqT request, StreamObserver<RespT> responseObserver);
+  }
 
   /**
    * Adaptor to a client streaming method.
    */
-  public interface ClientStreamingMethod<ReqT, RespT> extends StreamingRequestMethod<ReqT, RespT> {}
+  public interface ClientStreamingMethod<ReqT, RespT> extends StreamingRequestMethod<ReqT, RespT> {
+    @Override StreamObserver<ReqT> invoke(StreamObserver<RespT> responseObserver);
+  }
 
   /**
    * Adaptor to a bidirectional streaming method.
    */
-  public interface BidiStreamingMethod<ReqT, RespT> extends StreamingRequestMethod<ReqT, RespT> {}
+  public interface BidiStreamingMethod<ReqT, RespT> extends StreamingRequestMethod<ReqT, RespT> {
+    @Override StreamObserver<ReqT> invoke(StreamObserver<RespT> responseObserver);
+  }
 
   private static final class UnaryServerCallHandler<ReqT, RespT>
       implements ServerCallHandler<ReqT, RespT> {
@@ -197,16 +205,6 @@ public final class ServerCalls {
     }
   }
 
-  /**
-   * Creates a {@link ServerCallHandler} for a unary request call method of the service.
-   *
-   * @param method an adaptor to the actual method on the service implementation.
-   */
-  private static <ReqT, RespT> ServerCallHandler<ReqT, RespT> asyncUnaryRequestCall(
-      UnaryRequestMethod<ReqT, RespT> method) {
-    return new UnaryServerCallHandler<>(method);
-  }
-
   private static final class StreamingServerCallHandler<ReqT, RespT>
       implements ServerCallHandler<ReqT, RespT> {
 
@@ -285,21 +283,17 @@ public final class ServerCalls {
     }
   }
 
-  /**
-   * Creates a {@link ServerCallHandler} for a streaming request call method of the service.
-   *
-   * @param method an adaptor to the actual method on the service implementation.
-   */
-  private static <ReqT, RespT> ServerCallHandler<ReqT, RespT> asyncStreamingRequestCall(
-      StreamingRequestMethod<ReqT, RespT> method) {
-    return new StreamingServerCallHandler<>(method);
-  }
-
   private interface UnaryRequestMethod<ReqT, RespT> {
+    /**
+     * The provided {@code responseObserver} will extend {@link ServerCallStreamObserver}.
+     */
     void invoke(ReqT request, StreamObserver<RespT> responseObserver);
   }
 
   private interface StreamingRequestMethod<ReqT, RespT> {
+    /**
+     * The provided {@code responseObserver} will extend {@link ServerCallStreamObserver}.
+     */
     StreamObserver<ReqT> invoke(StreamObserver<RespT> responseObserver);
   }
 

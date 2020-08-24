@@ -49,6 +49,7 @@ import io.grpc.internal.TestUtils.StandardLoadBalancerProvider;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -129,8 +130,10 @@ public class PriorityLoadBalancerTest {
 
   @Test
   public void handleResolvedAddresses() {
-    List<EquivalentAddressGroup> addresses =
-        ImmutableList.of(new EquivalentAddressGroup(new InetSocketAddress(8080)));
+    SocketAddress socketAddress = new InetSocketAddress(8080);
+    EquivalentAddressGroup eag = new EquivalentAddressGroup(socketAddress);
+    eag = AddressFilter.setPathFilter(eag, ImmutableList.of("p1"));
+    List<EquivalentAddressGroup> addresses = ImmutableList.of(eag);
     Attributes attributes =
         Attributes.newBuilder().set(Attributes.Key.create("fakeKey"), "fakeValue").build();
     Object fooConfig0 = new Object();
@@ -154,7 +157,7 @@ public class PriorityLoadBalancerTest {
     LoadBalancer fooBalancer0 = Iterables.getOnlyElement(fooBalancers);
     verify(fooBalancer0).handleResolvedAddresses(resolvedAddressesCaptor.capture());
     ResolvedAddresses addressesReceived = resolvedAddressesCaptor.getValue();
-    assertThat(addressesReceived.getAddresses()).containsAtLeastElementsIn(addresses);
+    assertThat(addressesReceived.getAddresses()).isEmpty();
     assertThat(addressesReceived.getAttributes()).isEqualTo(attributes);
     assertThat(addressesReceived.getLoadBalancingPolicyConfig()).isEqualTo(fooConfig0);
 
@@ -165,7 +168,8 @@ public class PriorityLoadBalancerTest {
     LoadBalancer barBalancer0 = Iterables.getOnlyElement(barBalancers);
     verify(barBalancer0).handleResolvedAddresses(resolvedAddressesCaptor.capture());
     addressesReceived = resolvedAddressesCaptor.getValue();
-    assertThat(addressesReceived.getAddresses()).containsAtLeastElementsIn(addresses);
+    assertThat(Iterables.getOnlyElement(addressesReceived.getAddresses()).getAddresses())
+        .containsExactly(socketAddress);
     assertThat(addressesReceived.getAttributes()).isEqualTo(attributes);
     assertThat(addressesReceived.getLoadBalancingPolicyConfig()).isEqualTo(barConfig0);
 
@@ -176,13 +180,15 @@ public class PriorityLoadBalancerTest {
     LoadBalancer fooBalancer1 = Iterables.getLast(fooBalancers);
     verify(fooBalancer1).handleResolvedAddresses(resolvedAddressesCaptor.capture());
     addressesReceived = resolvedAddressesCaptor.getValue();
-    assertThat(addressesReceived.getAddresses()).containsAtLeastElementsIn(addresses);
+    assertThat(addressesReceived.getAddresses()).isEmpty();
     assertThat(addressesReceived.getAttributes()).isEqualTo(attributes);
     assertThat(addressesReceived.getLoadBalancingPolicyConfig()).isEqualTo(fooConfig1);
 
     // New update: p0 and p2 deleted; p1 config changed.
-    List<EquivalentAddressGroup> newAddresses =
-        ImmutableList.of(new EquivalentAddressGroup(new InetSocketAddress(8081)));
+    SocketAddress newSocketAddress = new InetSocketAddress(8081);
+    EquivalentAddressGroup newEag = new EquivalentAddressGroup(newSocketAddress);
+    newEag = AddressFilter.setPathFilter(newEag, ImmutableList.of("p1"));
+    List<EquivalentAddressGroup> newAddresses = ImmutableList.of(newEag);
     Object newBarConfig = new Object();
     PolicySelection newBarPolicy = new PolicySelection(barLbProvider, null, newBarConfig);
     PriorityLbConfig newPriorityLbConfig =
@@ -196,7 +202,8 @@ public class PriorityLoadBalancerTest {
     assertThat(barBalancers).hasSize(1);
     verify(barBalancer0, times(2)).handleResolvedAddresses(resolvedAddressesCaptor.capture());
     addressesReceived = resolvedAddressesCaptor.getValue();
-    assertThat(addressesReceived.getAddresses()).containsAtLeastElementsIn(newAddresses);
+    assertThat(Iterables.getOnlyElement(addressesReceived.getAddresses()).getAddresses())
+        .containsExactly(newSocketAddress);
     assertThat(addressesReceived.getAttributes()).isEqualTo(Attributes.EMPTY);
     assertThat(addressesReceived.getLoadBalancingPolicyConfig()).isEqualTo(newBarConfig);
     verify(fooBalancer0, never()).shutdown();

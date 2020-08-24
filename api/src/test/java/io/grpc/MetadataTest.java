@@ -30,7 +30,6 @@ import static org.junit.Assert.fail;
 
 import com.google.common.collect.Lists;
 import com.google.common.io.ByteStreams;
-import io.grpc.Metadata.Key;
 import io.grpc.internal.GrpcUtil;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -115,9 +114,9 @@ public class MetadataTest {
   private static final byte[] LANCE_BYTES = LANCE.getBytes(US_ASCII);
   private static final Metadata.Key<Fish> KEY = Metadata.Key.of("test-bin", FISH_MARSHALLER);
   private static final Metadata.Key<Fish> KEY_STREAMED =
-      Key.of("streamed-bin", FISH_STREAM_MARSHALLER);
+      Metadata.Key.of("streamed-bin", FISH_STREAM_MARSHALLER);
   private static final Metadata.Key<Fish> KEY_IMMUTABLE =
-      Key.of("immutable-bin", IMMUTABLE_FISH_MARSHALLER);
+      Metadata.Key.of("immutable-bin", IMMUTABLE_FISH_MARSHALLER);
 
   @Test
   public void noPseudoHeaders() {
@@ -348,7 +347,7 @@ public class MetadataTest {
   public void removeIgnoresMissingValue() {
     Metadata m = new Metadata();
     // Any key will work.
-    Key<String> key = GrpcUtil.USER_AGENT_KEY;
+    Metadata.Key<String> key = GrpcUtil.USER_AGENT_KEY;
 
     boolean success = m.remove(key, "agent");
     assertFalse(success);
@@ -358,7 +357,7 @@ public class MetadataTest {
   public void removeAllIgnoresMissingValue() {
     Metadata m = new Metadata();
     // Any key will work.
-    Key<String> key = GrpcUtil.USER_AGENT_KEY;
+    Metadata.Key<String> key = GrpcUtil.USER_AGENT_KEY;
 
     Iterable<String> removed = m.removeAll(key);
     assertNull(removed);
@@ -366,9 +365,9 @@ public class MetadataTest {
 
   @Test
   public void keyEqualsHashNameWorks() {
-    Key<?> k1 = Key.of("case", Metadata.ASCII_STRING_MARSHALLER);
+    Metadata.Key<?> k1 = Metadata.Key.of("case", Metadata.ASCII_STRING_MARSHALLER);
 
-    Key<?> k2 = Key.of("CASE", Metadata.ASCII_STRING_MARSHALLER);
+    Metadata.Key<?> k2 = Metadata.Key.of("CASE", Metadata.ASCII_STRING_MARSHALLER);
     assertEquals(k1, k1);
     assertNotEquals(k1, null);
     assertNotEquals(k1, new Object(){});
@@ -383,7 +382,7 @@ public class MetadataTest {
   @Test
   public void invalidKeyName() {
     try {
-      Key.of("io.grpc/key1", Metadata.ASCII_STRING_MARSHALLER);
+      Metadata.Key.of("io.grpc/key1", Metadata.ASCII_STRING_MARSHALLER);
       fail("Should have thrown");
     } catch (IllegalArgumentException e) {
       assertEquals("Invalid character '/' in key name 'io.grpc/key1'", e.getMessage());
@@ -512,7 +511,8 @@ public class MetadataTest {
     }
   }
 
-  private static <T> Key<T> copyKey(Key<T> key, Metadata.BinaryStreamMarshaller<T> marshaller) {
-    return Key.of(key.originalName(), marshaller);
+  private static <T> Metadata.Key<T> copyKey(
+      Metadata.Key<T> key, Metadata.BinaryStreamMarshaller<T> marshaller) {
+    return Metadata.Key.of(key.originalName(), marshaller);
   }
 }

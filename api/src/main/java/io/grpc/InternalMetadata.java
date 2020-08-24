@@ -19,7 +19,6 @@ package io.grpc;
 import com.google.common.io.BaseEncoding;
 import io.grpc.Metadata.AsciiMarshaller;
 import io.grpc.Metadata.BinaryStreamMarshaller;
-import io.grpc.Metadata.Key;
 import java.nio.charset.Charset;
 
 /**
@@ -53,13 +52,13 @@ public final class InternalMetadata {
       = Metadata.BASE64_ENCODING_OMIT_PADDING;
 
   @Internal
-  public static <T> Key<T> keyOf(String name, TrustedAsciiMarshaller<T> marshaller) {
+  public static <T> Metadata.Key<T> keyOf(String name, TrustedAsciiMarshaller<T> marshaller) {
     boolean isPseudo = name != null && !name.isEmpty() && name.charAt(0) == ':';
     return Metadata.Key.of(name, isPseudo, marshaller);
   }
 
   @Internal
-  public static <T> Key<T> keyOf(String name, AsciiMarshaller<T> marshaller) {
+  public static <T> Metadata.Key<T> keyOf(String name, AsciiMarshaller<T> marshaller) {
     boolean isPseudo = name != null && !name.isEmpty() && name.charAt(0) == ':';
     return Metadata.Key.of(name, isPseudo, marshaller);
   }

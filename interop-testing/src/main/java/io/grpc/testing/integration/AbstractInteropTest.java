@@ -49,6 +49,7 @@ import io.grpc.ClientStreamTracer;
 import io.grpc.Context;
 import io.grpc.Grpc;
 import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Server;
@@ -192,7 +193,7 @@ public abstract class AbstractInteropTest {
   /**
    * Constructor for tests.
    */
-  public AbstractInteropTest() {
+  protected AbstractInteropTest() {
     TestRule timeout = Timeout.seconds(60);
     try {
       timeout = new DisableOnDebug(timeout);
@@ -337,7 +338,11 @@ public abstract class AbstractInteropTest {
     stopServer();
   }
 
-  protected abstract ManagedChannel createChannel();
+  protected ManagedChannel createChannel() {
+    return createChannelBuilder().build();
+  }
+
+  protected abstract ManagedChannelBuilder<?> createChannelBuilder();
 
   @Nullable
   protected ClientInterceptor[] getAdditionalInterceptors() {
@@ -372,6 +377,13 @@ public abstract class AbstractInteropTest {
   @Test
   public void emptyUnary() throws Exception {
     assertEquals(EMPTY, blockingStub.emptyCall(EMPTY));
+  }
+
+  @Test
+  public void emptyUnaryWithRetriableStream() throws Exception {
+    channel.shutdown();
+    channel = createChannelBuilder().enableRetry().build();
+    assertEquals(EMPTY, TestServiceGrpc.newBlockingStub(channel).emptyCall(EMPTY));
   }
 
   /** Sends a cacheable unary rpc using GET. Requires that the server is behind a caching proxy. */
@@ -1102,7 +1114,7 @@ public abstract class AbstractInteropTest {
     // warm up the channel and JVM
     blockingStub.emptyCall(Empty.getDefaultInstance());
     TestServiceGrpc.TestServiceBlockingStub stub =
-        blockingStub.withDeadlineAfter(100, TimeUnit.MILLISECONDS);
+        blockingStub.withDeadlineAfter(1, TimeUnit.SECONDS);
     StreamingOutputCallRequest request = StreamingOutputCallRequest.newBuilder()
         .addResponseParameters(ResponseParameters.newBuilder()
             .setIntervalUs((int) TimeUnit.SECONDS.toMicros(20)))

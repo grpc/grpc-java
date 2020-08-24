@@ -23,7 +23,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.google.common.base.Strings;
-import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
+import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import io.netty.channel.Channel;
 import java.io.IOException;
@@ -168,8 +168,10 @@ public class XdsClientWrapperForServerSdsTest {
     xdsClientWrapperForServerSds = new XdsClientWrapperForServerSds(PORT);
     xdsClientWrapperForServerSds.start(xdsClient);
     tlsContexts[0] = null;
-    tlsContexts[1] = CommonTlsContextTestsUtil.buildTestDownstreamTlsContext("CERT1", "VA1");
-    tlsContexts[2] = CommonTlsContextTestsUtil.buildTestDownstreamTlsContext("CERT2", "VA2");
+    tlsContexts[1] =
+        CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1");
+    tlsContexts[2] =
+        CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT2", "VA2");
   }
 
   @After

@@ -27,8 +27,8 @@ import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.base.Preconditions;
@@ -634,7 +634,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     PolicySelection policySelection = (PolicySelection) parsed.getConfig();
     assertThat(policySelection.config).isNotNull();
     assertThat(policySelection.provider).isInstanceOf(GrpclbLoadBalancerProvider.class);
-    verifyZeroInteractions(channelLogger);
+    verifyNoInteractions(channelLogger);
   }
 
   public static class ForwardingLoadBalancer extends LoadBalancer {

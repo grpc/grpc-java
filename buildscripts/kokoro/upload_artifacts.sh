@@ -56,7 +56,7 @@ gpg --version
 if gpg --version | grep 'gpg (GnuPG) 1.'; then
   # This command was tested on 1.4.16
   find "$LOCAL_MVN_ARTIFACTS" -type f \
-    -not -name "maven-metadata.xml*" -not -name "*.sha1" -not -name "*.md5" -exec \
+    -not -name "maven-metadata.xml*" -not -name "*.sha*" -not -name "*.md5" -exec \
     bash -c 'cat ~/java_signing/passphrase | gpg --batch --passphrase-fd 0 --detach-sign -a {}' \;
 fi
 
@@ -64,7 +64,7 @@ fi
 if gpg --version | grep 'gpg (GnuPG) 2.'; then
   # This command was tested on 2.2.2
   find "$LOCAL_MVN_ARTIFACTS" -type f \
-    -not -name "maven-metadata.xml*" -not -name "*.sha1" -not -name "*.md5" -exec \
+    -not -name "maven-metadata.xml*" -not -name "*.sha*" -not -name "*.md5" -exec \
     gpg --batch --passphrase-file ~/java_signing/passphrase --pinentry-mode loopback \
     --detach-sign -a {} \;
 fi
@@ -73,7 +73,7 @@ fi
 VERSION="$(cat $LOCAL_OTHER_ARTIFACTS/version)"
 EXAMPLE_HOSTNAME_ID="$(cat "$LOCAL_OTHER_ARTIFACTS/example-hostname.id")"
 docker load --input "$LOCAL_OTHER_ARTIFACTS/example-hostname.tar"
-LATEST_VERSION="$((echo "v$VERSION"; git ls-remote -t https://github.com/grpc/grpc-java.git | cut -f 2 | sed s#refs/tags/##) | sort -V | tail -n 1)"
+LATEST_VERSION="$((echo "v$VERSION"; git ls-remote -t --refs https://github.com/grpc/grpc-java.git | cut -f 2 | sed s#refs/tags/##) | sort -V | tail -n 1)"
 
 
 STAGING_REPO=a93898609ef848
@@ -81,7 +81,7 @@ STAGING_REPO=a93898609ef848
 
 docker tag "$EXAMPLE_HOSTNAME_ID" "grpc/java-example-hostname:${VERSION}"
 docker push "grpc/java-example-hostname:${VERSION}"
-if [[ "$VERSION" = "$LATEST_VERSION" ]]; then
+if [[ "v$VERSION" = "$LATEST_VERSION" ]]; then
   docker tag "$EXAMPLE_HOSTNAME_ID" grpc/java-example-hostname:latest
   docker push grpc/java-example-hostname:latest
 fi

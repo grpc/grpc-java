@@ -71,7 +71,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -424,7 +423,7 @@ final class GrpclbState {
           newBackendList.add(entry);
         }
         // Close Subchannels whose addresses have been delisted
-        for (Entry<List<EquivalentAddressGroup>, Subchannel> entry : subchannels.entrySet()) {
+        for (Map.Entry<List<EquivalentAddressGroup>, Subchannel> entry : subchannels.entrySet()) {
           List<EquivalentAddressGroup> eagList = entry.getKey();
           if (!newSubchannelMap.containsKey(eagList)) {
             returnSubchannelToPool(entry.getValue());

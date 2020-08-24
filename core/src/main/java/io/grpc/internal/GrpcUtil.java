@@ -42,6 +42,7 @@ import io.grpc.Status;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.internal.StreamListener.MessageProducer;
+import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.InvocationTargetException;
@@ -196,7 +197,7 @@ public final class GrpcUtil {
 
   public static final Splitter ACCEPT_ENCODING_SPLITTER = Splitter.on(',').trimResults();
 
-  private static final String IMPLEMENTATION_VERSION = "1.31.0-SNAPSHOT"; // CURRENT_GRPC_VERSION
+  private static final String IMPLEMENTATION_VERSION = "1.32.0-SNAPSHOT"; // CURRENT_GRPC_VERSION
 
   /**
    * The default timeout in nanos for a keepalive ping request.
@@ -746,10 +747,10 @@ public final class GrpcUtil {
   }
 
   /**
-   * Closes an InputStream, ignoring IOExceptions.
+   * Closes a Closeable, ignoring IOExceptions.
    * This method exists because Guava's {@code Closeables.closeQuietly()} is beta.
    */
-  public static void closeQuietly(@Nullable InputStream message) {
+  public static void closeQuietly(@Nullable Closeable message) {
     if (message == null) {
       return;
     }

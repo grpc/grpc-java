@@ -19,10 +19,10 @@ package io.grpc.xds.internal.sds;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
-import io.envoyproxy.envoy.api.v2.auth.CertificateValidationContext;
-import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
-import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
-import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
+import io.grpc.xds.EnvoyServerProtoData.BaseTlsContext;
+import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
+import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.internal.sds.trust.SdsTrustManagerFactory;
 import io.netty.handler.ssl.ClientAuth;
 import io.netty.handler.ssl.SslContext;
@@ -40,36 +40,42 @@ import java.util.logging.Logger;
  * stream that is receiving the requested secret(s) or it could represent file-system based
  * secret(s) that are dynamic.
  */
-public abstract class SslContextProvider {
+public abstract class SslContextProvider implements Closeable {
 
   private static final Logger logger = Logger.getLogger(SslContextProvider.class.getName());
 
-  protected final TlsContextHolder tlsContextHolder;
+  protected final BaseTlsContext tlsContext;
 
-  public interface Callback {
+  abstract static class Callback {
+    private final Executor executor;
+
+    protected Callback(Executor executor) {
+      this.executor = executor;
+    }
+
     /** Informs callee of new/updated SslContext. */
-    void updateSecret(SslContext sslContext);
+    abstract void updateSecret(SslContext sslContext);
 
     /** Informs callee of an exception that was generated. */
-    void onException(Throwable throwable);
+    abstract void onException(Throwable throwable);
   }
 
-  SslContextProvider(TlsContextHolder tlsContextHolder) {
-    this.tlsContextHolder = checkNotNull(tlsContextHolder, "tlsContextHolder");
+  protected SslContextProvider(BaseTlsContext tlsContext) {
+    this.tlsContext = checkNotNull(tlsContext, "tlsContext");
   }
 
-  CommonTlsContext getCommonTlsContext() {
-    return tlsContextHolder.getCommonTlsContext();
+  protected CommonTlsContext getCommonTlsContext() {
+    return tlsContext.getCommonTlsContext();
   }
 
   protected void setClientAuthValues(
-      SslContextBuilder sslContextBuilder, CertificateValidationContext localCertValidationContext)
+      SslContextBuilder sslContextBuilder, SdsTrustManagerFactory sdsTrustManagerFactory)
       throws CertificateException, IOException, CertStoreException {
     DownstreamTlsContext downstreamTlsContext = getDownstreamTlsContext();
-    if (localCertValidationContext != null) {
-      sslContextBuilder.trustManager(new SdsTrustManagerFactory(localCertValidationContext));
+    if (sdsTrustManagerFactory != null) {
+      sslContextBuilder.trustManager(sdsTrustManagerFactory);
       sslContextBuilder.clientAuth(
-          downstreamTlsContext.hasRequireClientCertificate()
+          downstreamTlsContext.isRequireClientCertificate()
               ? ClientAuth.REQUIRE
               : ClientAuth.OPTIONAL);
     } else {
@@ -79,33 +85,33 @@ public abstract class SslContextProvider {
 
   /** Returns the DownstreamTlsContext in this SslContextProvider if this is server side. **/
   public DownstreamTlsContext getDownstreamTlsContext() {
-    checkState(tlsContextHolder instanceof DownstreamTlsContextHolder,
-        "expected DownstreamTlsContextHolder");
-    return ((DownstreamTlsContextHolder) tlsContextHolder).getDownstreamTlsContext();
+    checkState(tlsContext instanceof DownstreamTlsContext,
+        "expected DownstreamTlsContext");
+    return ((DownstreamTlsContext)tlsContext);
   }
 
   /** Returns the UpstreamTlsContext in this SslContextProvider if this is client side. **/
   public UpstreamTlsContext getUpstreamTlsContext() {
-    checkState(tlsContextHolder instanceof UpstreamTlsContextHolder,
-        "expected UpstreamTlsContextHolder");
-    return ((UpstreamTlsContextHolder) tlsContextHolder).getUpstreamTlsContext();
+    checkState(tlsContext instanceof UpstreamTlsContext,
+        "expected UpstreamTlsContext");
+    return ((UpstreamTlsContext)tlsContext);
   }
 
   /** Closes this provider and releases any resources. */
-  void close() {}
+  @Override
+  public abstract void close();
 
   /**
    * Registers a callback on the given executor. The callback will run when SslContext becomes
    * available or immediately if the result is already available.
    */
-  public abstract void addCallback(Callback callback, Executor executor);
+  public abstract void addCallback(Callback callback);
 
-  final void performCallback(
-      final SslContextGetter sslContextGetter, final Callback callback, Executor executor) {
+  protected final void performCallback(
+          final SslContextGetter sslContextGetter, final Callback callback) {
     checkNotNull(sslContextGetter, "sslContextGetter");
     checkNotNull(callback, "callback");
-    checkNotNull(executor, "executor");
-    executor.execute(
+    callback.executor.execute(
         new Runnable() {
           @Override
           public void run() {

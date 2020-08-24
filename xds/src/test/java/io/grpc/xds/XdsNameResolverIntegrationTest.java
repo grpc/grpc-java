@@ -17,10 +17,10 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
-import static io.grpc.xds.XdsClientTestHelper.buildDiscoveryResponse;
-import static io.grpc.xds.XdsClientTestHelper.buildListener;
-import static io.grpc.xds.XdsClientTestHelper.buildRouteConfiguration;
-import static io.grpc.xds.XdsClientTestHelper.buildVirtualHost;
+import static io.grpc.xds.XdsClientTestHelper.buildDiscoveryResponseV2;
+import static io.grpc.xds.XdsClientTestHelper.buildListenerV2;
+import static io.grpc.xds.XdsClientTestHelper.buildRouteConfigurationV2;
+import static io.grpc.xds.XdsClientTestHelper.buildVirtualHostV2;
 import static io.grpc.xds.XdsNameResolverTest.assertCdsPolicy;
 import static io.grpc.xds.XdsNameResolverTest.assertWeightedTargetConfigClusterWeights;
 import static io.grpc.xds.XdsNameResolverTest.assertWeightedTargetPolicy;
@@ -37,7 +37,6 @@ import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
 import io.envoyproxy.envoy.api.v2.core.AggregatedConfigSource;
 import io.envoyproxy.envoy.api.v2.core.ConfigSource;
-import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.api.v2.route.Route;
 import io.envoyproxy.envoy.api.v2.route.RouteAction;
 import io.envoyproxy.envoy.api.v2.route.RouteMatch;
@@ -65,6 +64,8 @@ import io.grpc.internal.ObjectPool;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.Bootstrapper.ServerInfo;
+import io.grpc.xds.EnvoyProtoData.Node;
+import io.grpc.xds.XdsClient.XdsChannel;
 import io.grpc.xds.XdsClient.XdsChannelFactory;
 import java.io.IOException;
 import java.util.ArrayDeque;
@@ -159,19 +160,17 @@ public class XdsNameResolverIntegrationTest {
 
     channelFactory = new XdsChannelFactory() {
       @Override
-      ManagedChannel createChannel(List<ServerInfo> servers) {
+      XdsChannel createChannel(List<ServerInfo> servers) {
         assertThat(Iterables.getOnlyElement(servers).getServerUri()).isEqualTo(serverName);
-        return channel;
+        return new XdsChannel(channel, false);
       }
     };
     Bootstrapper bootstrapper = new Bootstrapper() {
       @Override
       public BootstrapInfo readBootstrap() {
         List<ServerInfo> serverList =
-            ImmutableList.of(
-                new ServerInfo(serverName,
-                    ImmutableList.<ChannelCreds>of()));
-        return new BootstrapInfo(serverList, FAKE_BOOTSTRAP_NODE);
+            ImmutableList.of(new ServerInfo(serverName, ImmutableList.<ChannelCreds>of(), null));
+        return new BootstrapInfo(serverList, FAKE_BOOTSTRAP_NODE, null);
       }
     };
     xdsNameResolver =
@@ -188,7 +187,6 @@ public class XdsNameResolverIntegrationTest {
   @After
   public void tearDown() {
     xdsNameResolver.shutdown();
-    XdsClientImpl.enableExperimentalRouting = false;
   }
 
   @Test
@@ -196,7 +194,7 @@ public class XdsNameResolverIntegrationTest {
     Bootstrapper bootstrapper = new Bootstrapper() {
       @Override
       public BootstrapInfo readBootstrap() {
-        return new BootstrapInfo(ImmutableList.<ServerInfo>of(), FAKE_BOOTSTRAP_NODE);
+        return new BootstrapInfo(ImmutableList.<ServerInfo>of(), FAKE_BOOTSTRAP_NODE, null);
       }
     };
 
@@ -352,7 +350,6 @@ public class XdsNameResolverIntegrationTest {
   @Test
   @SuppressWarnings("unchecked")
   public void resolve_xdsRoutingLoadBalancing() {
-    XdsClientImpl.enableExperimentalRouting = true;
     xdsNameResolver.start(mockListener);
     assertThat(responseObservers).hasSize(1);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
@@ -392,14 +389,14 @@ public class XdsNameResolverIntegrationTest {
     HttpConnectionManager httpConnectionManager =
         HttpConnectionManager.newBuilder()
             .setRouteConfig(
-                buildRouteConfiguration(
+                buildRouteConfigurationV2(
                     "route-foo.googleapis.com", // doesn't matter
                     ImmutableList.of(buildVirtualHostForRoutes(AUTHORITY, protoRoutes))))
             .build();
     List<Any> listeners =
-        ImmutableList.of(Any.pack(buildListener(AUTHORITY, Any.pack(httpConnectionManager))));
+        ImmutableList.of(Any.pack(buildListenerV2(AUTHORITY, Any.pack(httpConnectionManager))));
     responseObserver.onNext(
-        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS,  "0000"));
+        buildDiscoveryResponseV2("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2,  "0000"));
 
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
@@ -453,7 +450,6 @@ public class XdsNameResolverIntegrationTest {
   @SuppressWarnings("unchecked")
   @Test
   public void resolve_weightedTargetLoadBalancing() {
-    XdsClientImpl.enableExperimentalRouting = true;
     xdsNameResolver.start(mockListener);
     assertThat(responseObservers).hasSize(1);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
@@ -476,13 +472,13 @@ public class XdsNameResolverIntegrationTest {
             .build();
     List<Any> routeConfigs = ImmutableList.of(
         Any.pack(
-            buildRouteConfiguration(
+            buildRouteConfigurationV2(
                 routeConfigName,
                 ImmutableList.of(
                     buildVirtualHostForRoutes(
                         AUTHORITY, ImmutableList.of(weightedClustersDefaultRoute))))));
     responseObserver.onNext(
-        buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0000"));
+        buildDiscoveryResponseV2("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS_V2, "0000"));
 
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
@@ -541,17 +537,18 @@ public class XdsNameResolverIntegrationTest {
   private static DiscoveryResponse buildLdsResponseForCluster(
       String versionInfo, String host, String clusterName, String nonce) {
     List<Any> listeners = ImmutableList.of(
-        Any.pack(buildListener(host, // target Listener resource
+        Any.pack(buildListenerV2(host, // target Listener resource
             Any.pack(
                 HttpConnectionManager.newBuilder()
                     .setRouteConfig(
-                        buildRouteConfiguration("route-foo.googleapis.com", // doesn't matter
+                        buildRouteConfigurationV2("route-foo.googleapis.com", // doesn't matter
                             ImmutableList.of(
-                                buildVirtualHost(
+                                buildVirtualHostV2(
                                     ImmutableList.of(host), // exact match
                                     clusterName))))
                     .build()))));
-    return buildDiscoveryResponse(versionInfo, listeners, XdsClientImpl.ADS_TYPE_URL_LDS, nonce);
+    return buildDiscoveryResponseV2(
+        versionInfo, listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, nonce);
   }
 
   /**
@@ -571,9 +568,10 @@ public class XdsNameResolverIntegrationTest {
 
     List<Any> listeners = ImmutableList.of(
         Any.pack(
-            buildListener(
+            buildListenerV2(
                 host, Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build()))));
-    return buildDiscoveryResponse(versionInfo, listeners, XdsClientImpl.ADS_TYPE_URL_LDS, nonce);
+    return buildDiscoveryResponseV2(
+        versionInfo, listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, nonce);
   }
 
   /**
@@ -588,11 +586,12 @@ public class XdsNameResolverIntegrationTest {
       String nonce) {
     List<Any> routeConfigs = ImmutableList.of(
         Any.pack(
-            buildRouteConfiguration(
+            buildRouteConfigurationV2(
                 routeConfigName,
                 ImmutableList.of(
-                    buildVirtualHost(ImmutableList.of(host), clusterName)))));
-    return buildDiscoveryResponse(versionInfo, routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, nonce);
+                    buildVirtualHostV2(ImmutableList.of(host), clusterName)))));
+    return buildDiscoveryResponseV2(
+        versionInfo, routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS_V2, nonce);
   }
 
   private static RouteAction buildClusterRoute(String clusterName) {

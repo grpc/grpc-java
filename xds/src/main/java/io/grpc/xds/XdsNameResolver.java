@@ -26,7 +26,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import com.google.gson.Gson;
 import com.google.re2j.Pattern;
-import io.envoyproxy.envoy.api.v2.core.Node;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.InternalLogId;
@@ -39,6 +38,7 @@ import io.grpc.internal.ObjectPool;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.ClusterWeight;
+import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.EnvoyProtoData.Route;
 import io.grpc.xds.EnvoyProtoData.RouteAction;
 import io.grpc.xds.RouteMatch.FractionMatcher;
@@ -60,7 +60,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import javax.annotation.Nullable;
 
 /**
- * A {@link NameResolver} for resolving gRPC target names with "xds-experimental" scheme.
+ * A {@link NameResolver} for resolving gRPC target names with "xds:" scheme.
  *
  * <p>Resolving a gRPC target involves contacting the control plane management server via xDS
  * protocol to retrieve service information and produce a service config to the caller.
@@ -224,7 +224,7 @@ final class XdsNameResolver extends NameResolver {
       logger.log(
           XdsLogLevel.WARNING,
           "Received error from xDS client {0}: {1}", xdsClient, error.getDescription());
-      listener.onError(Status.UNAVAILABLE.withDescription(error.getDescription()));
+      listener.onError(error);
     }
   }
 

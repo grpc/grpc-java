@@ -114,6 +114,10 @@ public class TlsTest {
           // Java 9+
         } catch (ClassNotFoundException ignored) {
           // Before Java 9
+          // TODO(ejona): remove this assume once we upgrade to Netty 4.1.50.Final. GrpcSslContexts
+          // detects the Java 9 ALPN API in Java 8 u252, but Netty does not support it in our
+          // current version
+          Assume.assumeTrue("Jetty ALPN not found", JettyTlsUtil.isJettyAlpnConfigured());
           try {
             GrpcSslContexts.configure(SslContextBuilder.forClient(), jdkProvider);
           } catch (IllegalArgumentException ex) {

@@ -67,6 +67,9 @@ public class NoopClientStream implements ClientStream {
   }
 
   @Override
+  public void optimizeForDirectExecutor() {}
+
+  @Override
   public void setCompressor(Compressor compressor) {}
 
   @Override

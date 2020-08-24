@@ -22,18 +22,17 @@ import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_KEY_FILE
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_PEM_FILE;
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_KEY_FILE;
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_PEM_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.doChecksOnSslContext;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.getValueThruCallback;
 
-import com.google.common.util.concurrent.MoreExecutors;
-import io.envoyproxy.envoy.api.v2.auth.CertificateValidationContext;
-import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
-import io.envoyproxy.envoy.api.v2.auth.TlsCertificate;
-import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
-import io.envoyproxy.envoy.api.v2.core.DataSource;
+import io.envoyproxy.envoy.config.core.v3.DataSource;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.TlsCertificate;
+import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.TestCallback;
 import io.netty.handler.ssl.SslContext;
 import java.io.IOException;
 import java.security.cert.CertStoreException;
 import java.security.cert.CertificateException;
-import java.util.List;
 import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
@@ -260,7 +259,7 @@ public class SecretVolumeSslContextProviderTest {
     TlsCertificate tlsCert = TlsCertificate.getDefaultInstance();
     try {
       SecretVolumeServerSslContextProvider.getProvider(
-          CommonTlsContextTestsUtil.buildDownstreamTlsContext(
+          CommonTlsContextTestsUtil.buildInternalDownstreamTlsContext(
               CommonTlsContextTestsUtil.getCommonTlsContext(tlsCert, /* certContext= */ null),
               /* requireClientCert= */ false));
       Assert.fail("no exception thrown");
@@ -282,7 +281,7 @@ public class SecretVolumeSslContextProviderTest {
             .build();
     try {
       SecretVolumeServerSslContextProvider.getProvider(
-          CommonTlsContextTestsUtil.buildDownstreamTlsContext(
+          CommonTlsContextTestsUtil.buildInternalDownstreamTlsContext(
               CommonTlsContextTestsUtil.getCommonTlsContext(tlsCert, certContext),
               /* requireClientCert= */ false));
       Assert.fail("no exception thrown");
@@ -296,7 +295,7 @@ public class SecretVolumeSslContextProviderTest {
     CertificateValidationContext certContext = CertificateValidationContext.getDefaultInstance();
     try {
       SecretVolumeClientSslContextProvider.getProvider(
-          buildUpstreamTlsContext(
+          CommonTlsContextTestsUtil.buildUpstreamTlsContext(
               CommonTlsContextTestsUtil.getCommonTlsContext(
                   /* tlsCertificate= */ null, certContext)));
       Assert.fail("no exception thrown");
@@ -318,7 +317,7 @@ public class SecretVolumeSslContextProviderTest {
             .build();
     try {
       SecretVolumeClientSslContextProvider.getProvider(
-          buildUpstreamTlsContext(
+          CommonTlsContextTestsUtil.buildUpstreamTlsContext(
               CommonTlsContextTestsUtil.getCommonTlsContext(tlsCert, certContext)));
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
@@ -339,7 +338,7 @@ public class SecretVolumeSslContextProviderTest {
             .build();
     try {
       SecretVolumeClientSslContextProvider.getProvider(
-          buildUpstreamTlsContext(
+          CommonTlsContextTestsUtil.buildUpstreamTlsContext(
               CommonTlsContextTestsUtil.getCommonTlsContext(tlsCert, certContext)));
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
@@ -371,31 +370,6 @@ public class SecretVolumeSslContextProviderTest {
       sslContext = provider.buildSslContextFromSecrets();
     }
     doChecksOnSslContext(server, sslContext, /* expectedApnProtos= */ null);
-  }
-
-  static void doChecksOnSslContext(boolean server, SslContext sslContext,
-      List<String> expectedApnProtos) {
-    if (server) {
-      assertThat(sslContext.isServer()).isTrue();
-    } else {
-      assertThat(sslContext.isClient()).isTrue();
-    }
-    List<String> apnProtos = sslContext.applicationProtocolNegotiator().protocols();
-    assertThat(apnProtos).isNotNull();
-    if (expectedApnProtos != null) {
-      assertThat(apnProtos).isEqualTo(expectedApnProtos);
-    } else {
-      assertThat(apnProtos).contains("h2");
-    }
-  }
-
-  /**
-   * Helper method to build UpstreamTlsContext for above tests. Called from other classes as well.
-   */
-  static UpstreamTlsContext buildUpstreamTlsContext(CommonTlsContext commonTlsContext) {
-    UpstreamTlsContext upstreamTlsContext =
-        UpstreamTlsContext.newBuilder().setCommonTlsContext(commonTlsContext).build();
-    return upstreamTlsContext;
   }
 
   @Test
@@ -430,32 +404,6 @@ public class SecretVolumeSslContextProviderTest {
     } catch (IllegalArgumentException expected) {
       assertThat(expected).hasMessageThat().contains("File does not contain valid private key");
     }
-  }
-
-  static class TestCallback implements SslContextProvider.Callback {
-
-    SslContext updatedSslContext;
-    Throwable updatedThrowable;
-
-    @Override
-    public void updateSecret(SslContext sslContext) {
-      updatedSslContext = sslContext;
-    }
-
-    @Override
-    public void onException(Throwable throwable) {
-      updatedThrowable = throwable;
-    }
-  }
-
-  /**
-   * Helper method to get the value thru directExecutor callback. Because of directExecutor this is
-   * a synchronous callback - so need to provide a listener.
-   */
-  static TestCallback getValueThruCallback(SslContextProvider provider) {
-    TestCallback testCallback = new TestCallback();
-    provider.addCallback(testCallback, MoreExecutors.directExecutor());
-    return testCallback;
   }
 
   @Test

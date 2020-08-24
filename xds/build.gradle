@@ -23,9 +23,11 @@ dependencies {
             project(':grpc-stub'),
             project(':grpc-core'),
             project(':grpc-services'),
+            project(':grpc-auth'),
             project(path: ':grpc-alts', configuration: 'shadow'),
             libraries.gson,
-            libraries.re2j
+            libraries.re2j,
+            libraries.bouncycastle
     def nettyDependency = implementation project(':grpc-netty')
 
     implementation (libraries.opencensus_proto) {
@@ -66,6 +68,8 @@ sourceSets {
             srcDir 'third_party/envoy/src/main/proto'
             srcDir 'third_party/protoc-gen-validate/src/main/proto'
             srcDir 'third_party/udpa/src/main/proto'
+            srcDir 'third_party/googleapis/src/main/proto'
+            srcDir 'third_party/istio/src/main/proto'
         }
     }
 }
@@ -88,10 +92,12 @@ shadowJar {
     dependencies {
         include(project(':grpc-xds'))
     }
+    relocate 'com.google.api.expr', 'io.grpc.xds.shaded.com.google.api.expr'
     relocate 'com.github.udpa', 'io.grpc.xds.shaded.com.github.udpa'
     relocate 'io.envoyproxy', 'io.grpc.xds.shaded.io.envoyproxy'
     relocate 'io.grpc.netty', 'io.grpc.netty.shaded.io.grpc.netty'
     relocate 'io.netty', 'io.grpc.netty.shaded.io.netty'
+    relocate 'com.google.security', 'io.grpc.xds.shaded.com.google.security'
     exclude "**/*.proto"
 }
 
@@ -99,6 +105,7 @@ jacocoTestReport {
     classDirectories.from = sourceSets.main.output.collect {
         fileTree(dir: it,
         exclude: [
+                '**/com/google/api/**',
                 '**/com/github/**',
                 '**/envoy/annotations/**',
                 '**/io/envoyproxy/**',

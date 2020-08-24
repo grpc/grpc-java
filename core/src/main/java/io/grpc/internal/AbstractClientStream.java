@@ -75,17 +75,10 @@ public abstract class AbstractClientStream extends AbstractStream
      * @param endOfStream {@code true} if this is the last frame; {@code flush} is guaranteed to be
      *     {@code true} if this is {@code true}
      * @param flush {@code true} if more data may not be arriving soon
-     * @Param numMessages the number of messages this series of frames represents, must be >= 0.
+     * @param numMessages the number of messages this series of frames represents, must be >= 0.
      */
     void writeFrame(
         @Nullable WritableBuffer frame, boolean endOfStream, boolean flush, int numMessages);
-
-    /**
-     * Requests up to the given number of messages from the call to be delivered to the client. This
-     * should end up triggering {@link TransportState#requestMessagesFromDeframer(int)} on the
-     * transport thread.
-     */
-    void request(int numMessages);
 
     /**
      * Tears down the stream, typically in the event of a timeout. This method may be called
@@ -185,11 +178,6 @@ public abstract class AbstractClientStream extends AbstractStream
    */
   public final boolean shouldBeCountedForInUse() {
     return shouldBeCountedForInUse;
-  }
-
-  @Override
-  public final void request(int numMessages) {
-    abstractClientStreamSink().request(numMessages);
   }
 
   @Override
