@@ -221,19 +221,6 @@ public class XdsNameResolver2Test {
   }
 
   @SuppressWarnings("unchecked")
-  private static Result assertCallSelectResult(
-      CallInfo call, InternalConfigSelector configSelector, String expectedCluster,
-      double expectedTimeoutSec) {
-    Result result = configSelector.selectConfig(
-        new PickSubchannelArgsImpl(call.methodDescriptor, new Metadata(), CallOptions.DEFAULT));
-    assertThat(result.getStatus().isOk()).isTrue();
-    assertThat(result.getCallOptions().getOption(XdsNameResolver2.CLUSTER_SELECTION_KEY))
-        .isEqualTo(expectedCluster);
-    assertServiceConfigForMethodConfig(expectedTimeoutSec, (Map<String, ?>) result.getConfig());
-    return result;
-  }
-
-  @SuppressWarnings("unchecked")
   @Test
   public void resolve_resourceUpdatedBeforeCallStarted() {
     InternalConfigSelector configSelector = resolveToClusters();
@@ -319,27 +306,6 @@ public class XdsNameResolver2Test {
   }
 
   @SuppressWarnings("unchecked")
-  private InternalConfigSelector resolveToClusters() {
-    resolver.start(mockListener);
-    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
-    xdsClient.deliverRoutes(
-        Arrays.asList(
-            new Route(
-                new RouteMatch(null, call1.getFullMethodNameForPath()),
-                new RouteAction(TimeUnit.SECONDS.toNanos(15L), cluster1, null)),
-            new Route(
-                new RouteMatch(null, call2.getFullMethodNameForPath()),
-                new RouteAction(TimeUnit.SECONDS.toNanos(15L), cluster2, null))));
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
-    ResolutionResult result = resolutionResultCaptor.getValue();
-    assertThat(result.getAddresses()).isEmpty();
-    assertServiceConfigForLoadBalancingConfig(
-        Arrays.asList(cluster1, cluster2), (Map<String, ?>) result.getServiceConfig().getConfig());
-    assertThat(result.getAttributes().get(XdsAttributes.XDS_CLIENT_POOL)).isNotNull();
-    return result.getAttributes().get(InternalConfigSelector.KEY);
-  }
-
-  @SuppressWarnings("unchecked")
   @Test
   public void resolve_simpleCallSucceeds_routeToWeightedCluster() {
     when(mockRandom.nextInt(anyInt())).thenReturn(90, 10);
@@ -373,6 +339,40 @@ public class XdsNameResolver2Test {
     assertThat(selectResult.getCallOptions().getOption(XdsNameResolver2.CLUSTER_SELECTION_KEY))
         .isEqualTo(cluster1);
     assertServiceConfigForMethodConfig(20.0, (Map<String, ?>) selectResult.getConfig());
+  }
+
+  @SuppressWarnings("unchecked")
+  private static Result assertCallSelectResult(
+      CallInfo call, InternalConfigSelector configSelector, String expectedCluster,
+      double expectedTimeoutSec) {
+    Result result = configSelector.selectConfig(
+        new PickSubchannelArgsImpl(call.methodDescriptor, new Metadata(), CallOptions.DEFAULT));
+    assertThat(result.getStatus().isOk()).isTrue();
+    assertThat(result.getCallOptions().getOption(XdsNameResolver2.CLUSTER_SELECTION_KEY))
+        .isEqualTo(expectedCluster);
+    assertServiceConfigForMethodConfig(expectedTimeoutSec, (Map<String, ?>) result.getConfig());
+    return result;
+  }
+
+  @SuppressWarnings("unchecked")
+  private InternalConfigSelector resolveToClusters() {
+    resolver.start(mockListener);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    xdsClient.deliverRoutes(
+        Arrays.asList(
+            new Route(
+                new RouteMatch(null, call1.getFullMethodNameForPath()),
+                new RouteAction(TimeUnit.SECONDS.toNanos(15L), cluster1, null)),
+            new Route(
+                new RouteMatch(null, call2.getFullMethodNameForPath()),
+                new RouteAction(TimeUnit.SECONDS.toNanos(15L), cluster2, null))));
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    ResolutionResult result = resolutionResultCaptor.getValue();
+    assertThat(result.getAddresses()).isEmpty();
+    assertServiceConfigForLoadBalancingConfig(
+        Arrays.asList(cluster1, cluster2), (Map<String, ?>) result.getServiceConfig().getConfig());
+    assertThat(result.getAttributes().get(XdsAttributes.XDS_CLIENT_POOL)).isNotNull();
+    return result.getAttributes().get(InternalConfigSelector.KEY);
   }
 
   /**

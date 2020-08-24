@@ -51,7 +51,6 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
-import javax.annotation.Nullable;
 
 /**
  * A {@link NameResolver} for resolving gRPC target names with "xds:" scheme.
@@ -78,9 +77,7 @@ final class XdsNameResolver2 extends NameResolver {
 
   private volatile List<Route> routes = Collections.emptyList();
   private Listener2 listener;
-  @Nullable
   private ObjectPool<XdsClient> xdsClientPool;
-  @Nullable
   private XdsClient xdsClient;
 
   XdsNameResolver2(String name,
@@ -129,8 +126,69 @@ final class XdsNameResolver2 extends NameResolver {
     xdsClient.watchConfigData(authority, new ConfigWatcherImpl());
   }
 
+  @Override
+  public void shutdown() {
+    logger.log(XdsLogLevel.INFO, "Shutdown");
+    if (xdsClient != null) {
+      xdsClient = xdsClientPool.returnObject(xdsClient);
+    }
+  }
+
   @VisibleForTesting
-  final class ConfigSelector extends InternalConfigSelector {
+  static Map<String, ?> generateServiceConfigWithMethodTimeoutConfig(long timeoutNano) {
+    String timeout = timeoutNano / 1_000_000_000.0 + "s";
+    Map<String, Object> methodConfig = new HashMap<>();
+    methodConfig.put(
+        "name", Collections.singletonList(Collections.emptyMap()));
+    methodConfig.put("timeout", timeout);
+    return Collections.singletonMap(
+        "methodConfig", Collections.singletonList(Collections.unmodifiableMap(methodConfig)));
+  }
+
+  @VisibleForTesting
+  static Map<String, ?> generateServiceConfigWithLoadBalancingConfig(Collection<String> clusters) {
+    Map<String, Object> childPolicy = new HashMap<>();
+    for (String cluster : clusters) {
+      List<Map<String, Map<String, String>>> lbPolicy =
+          Collections.singletonList(
+              Collections.singletonMap(
+                  "cds_experimental", Collections.singletonMap("cluster", cluster)));
+      childPolicy.put(cluster, Collections.singletonMap("lbPolicy", lbPolicy));
+    }
+    return Collections.singletonMap("loadBalancingConfig",
+        Collections.singletonList(
+            Collections.singletonMap(
+                "cluster_manager_experimental", Collections.singletonMap(
+                    "childPolicy", Collections.unmodifiableMap(childPolicy)))));
+  }
+
+  @VisibleForTesting
+  XdsClient getXdsClient() {
+    return xdsClient;
+  }
+
+  private void updateResolutionResult() {
+    Map<String, ?> rawServiceConfig =
+        generateServiceConfigWithLoadBalancingConfig(clusterRefs.keySet());
+    if (logger.isLoggable(XdsLogLevel.INFO)) {
+      logger.log(
+          XdsLogLevel.INFO, "Generated service config:\n{0}", new Gson().toJson(rawServiceConfig));
+    }
+    ConfigOrError parsedServiceConfig = serviceConfigParser.parseServiceConfig(rawServiceConfig);
+    Attributes attrs =
+        Attributes.newBuilder()
+            .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
+            .set(InternalConfigSelector.KEY, configSelector)
+            .build();
+    ResolutionResult result =
+        ResolutionResult.newBuilder()
+            .setAttributes(attrs)
+            .setServiceConfig(parsedServiceConfig)
+            .build();
+    listener.onResult(result);
+  }
+
+  private final class ConfigSelector extends InternalConfigSelector {
     @Override
     public Result selectConfig(PickSubchannelArgs args) {
       // Index ASCII headers by keys.
@@ -239,27 +297,6 @@ final class XdsNameResolver2 extends NameResolver {
     }
   }
 
-  private void updateResolutionResult() {
-    Map<String, ?> rawServiceConfig =
-        generateServiceConfigWithLoadBalancingConfig(clusterRefs.keySet());
-    if (logger.isLoggable(XdsLogLevel.INFO)) {
-      logger.log(
-          XdsLogLevel.INFO, "Generated service config:\n{0}", new Gson().toJson(rawServiceConfig));
-    }
-    ConfigOrError parsedServiceConfig = serviceConfigParser.parseServiceConfig(rawServiceConfig);
-    Attributes attrs =
-        Attributes.newBuilder()
-            .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
-            .set(InternalConfigSelector.KEY, configSelector)
-            .build();
-    ResolutionResult result =
-        ResolutionResult.newBuilder()
-            .setAttributes(attrs)
-            .setServiceConfig(parsedServiceConfig)
-            .build();
-    listener.onResult(result);
-  }
-
   // https://github.com/google/error-prone/issues/1767
   @SuppressWarnings("ModifyCollectionInEnhancedForLoop")
   private class ConfigWatcherImpl implements ConfigWatcher {
@@ -332,48 +369,6 @@ final class XdsNameResolver2 extends NameResolver {
           XdsLogLevel.WARNING,
           "Received error from xDS client {0}: {1}", xdsClient, error.getDescription());
       listener.onError(error);
-    }
-  }
-
-  @VisibleForTesting
-  static Map<String, ?> generateServiceConfigWithMethodTimeoutConfig(long timeoutNano) {
-    String timeout = timeoutNano / 1_000_000_000.0 + "s";
-    Map<String, Object> methodConfig = new HashMap<>();
-    methodConfig.put(
-        "name", Collections.singletonList(Collections.emptyMap()));
-    methodConfig.put("timeout", timeout);
-    return Collections.singletonMap(
-        "methodConfig", Collections.singletonList(Collections.unmodifiableMap(methodConfig)));
-  }
-
-  @VisibleForTesting
-  static Map<String, ?> generateServiceConfigWithLoadBalancingConfig(Collection<String> clusters) {
-    Map<String, Object> childPolicy = new HashMap<>();
-    for (String cluster : clusters) {
-      List<Map<String, Map<String, String>>> lbPolicy =
-          Collections.singletonList(
-              Collections.singletonMap(
-                  "cds_experimental", Collections.singletonMap("cluster", cluster)));
-      childPolicy.put(cluster, Collections.singletonMap("lbPolicy", lbPolicy));
-    }
-    return Collections.singletonMap("loadBalancingConfig",
-        Collections.singletonList(
-            Collections.singletonMap(
-                "cluster_manager_experimental", Collections.singletonMap(
-                    "childPolicy", Collections.unmodifiableMap(childPolicy)))));
-  }
-
-  @VisibleForTesting
-  @Nullable
-  XdsClient getXdsClient() {
-    return xdsClient;
-  }
-
-  @Override
-  public void shutdown() {
-    logger.log(XdsLogLevel.INFO, "Shutdown");
-    if (xdsClient != null) {
-      xdsClient = xdsClientPool.returnObject(xdsClient);
     }
   }
 }
