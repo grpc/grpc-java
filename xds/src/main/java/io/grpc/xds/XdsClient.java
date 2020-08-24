@@ -29,6 +29,7 @@ import io.grpc.ManagedChannelBuilder;
 import io.grpc.Status;
 import io.grpc.alts.GoogleDefaultChannelBuilder;
 import io.grpc.internal.ObjectPool;
+import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.Bootstrapper.ChannelCreds;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
@@ -549,6 +550,7 @@ abstract class XdsClient {
     throw new UnsupportedOperationException();
   }
 
+  // TODO(chengyuanzhang): eliminate this factory
   abstract static class XdsClientFactory {
     abstract XdsClient createXdsClient();
   }
@@ -684,5 +686,9 @@ abstract class XdsClient {
     boolean isUseProtocolV3() {
       return useProtocolV3;
     }
+  }
+
+  interface XdsClientPoolFactory {
+    ObjectPool<XdsClient> newXdsClientObjectPool(BootstrapInfo bootstrapInfo);
   }
 }

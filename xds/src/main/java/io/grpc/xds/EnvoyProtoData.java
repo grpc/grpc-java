@@ -1153,6 +1153,9 @@ final class EnvoyProtoData {
         case WEIGHTED_CLUSTERS:
           List<io.envoyproxy.envoy.config.route.v3.WeightedCluster.ClusterWeight> clusterWeights
               = proto.getWeightedClusters().getClustersList();
+          if (clusterWeights.isEmpty()) {
+            return StructOrError.fromError("No cluster found in weighted cluster list");
+          }
           weightedClusters = new ArrayList<>();
           for (io.envoyproxy.envoy.config.route.v3.WeightedCluster.ClusterWeight clusterWeight
               : clusterWeights) {
