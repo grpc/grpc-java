@@ -37,6 +37,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
@@ -64,7 +65,9 @@ import io.grpc.xds.XdsClient.RefCountedXdsClientObjectPool;
 import io.grpc.xds.XdsClient.XdsClientFactory;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import io.grpc.xds.internal.sds.SslContextProvider;
+import io.grpc.xds.internal.sds.SslContextProviderSupplier;
 import io.grpc.xds.internal.sds.TlsContextManager;
+import io.netty.handler.ssl.SslContext;
 import java.net.InetSocketAddress;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -391,8 +394,8 @@ public class CdsLoadBalancerTest {
     verify(helper, never())
         .createSubchannel(any(LoadBalancer.CreateSubchannelArgs.class));
     edsLbHelper1.createSubchannel(createSubchannelArgs);
-    verifyUpstreamTlsContextAttribute(upstreamTlsContext,
-        createSubchannelArgsCaptor1);
+    SslContextProviderSupplier sslContextProviderSupplier =
+        verifySslContextProviderSupplierAttribute(upstreamTlsContext, createSubchannelArgsCaptor1);
 
     // update with same upstreamTlsContext
     reset(mockTlsContextManager);
@@ -408,6 +411,29 @@ public class CdsLoadBalancerTest {
         .releaseClientSslContextProvider(any(SslContextProvider.class));
     verify(mockTlsContextManager, never()).findOrCreateClientSslContextProvider(
         any(UpstreamTlsContext.class));
+
+    // verify SslContextProviderSupplier.updateSslContext
+    doReturn(mockSslContextProvider)
+        .when(mockTlsContextManager)
+        .findOrCreateClientSslContextProvider(same(upstreamTlsContext));
+    sslContextProviderSupplier.updateSslContext(
+        new SslContextProvider.Callback(MoreExecutors.directExecutor()) {
+          @Override
+          public void updateSecret(SslContext sslContext) {}
+
+          @Override
+          protected void onException(Throwable throwable) {}
+        });
+    verify(mockTlsContextManager, times(2))
+        .findOrCreateClientSslContextProvider(eq(upstreamTlsContext));
+    verify(mockTlsContextManager, never())
+        .releaseClientSslContextProvider(eq(mockSslContextProvider));
+    ArgumentCaptor<SslContextProvider.Callback> callbackCaptor = ArgumentCaptor.forClass(null);
+    verify(mockSslContextProvider).addCallback(callbackCaptor.capture());
+    SslContextProvider.Callback capturedCallback = callbackCaptor.getValue();
+    assertThat(capturedCallback).isNotNull();
+    capturedCallback.updateSecret(null);
+    verify(mockTlsContextManager).releaseClientSslContextProvider(eq(mockSslContextProvider));
 
     // update with different upstreamTlsContext
     reset(mockTlsContextManager);
@@ -428,12 +454,22 @@ public class CdsLoadBalancerTest {
             .build());
 
     verify(mockTlsContextManager).releaseClientSslContextProvider(same(mockSslContextProvider));
-    verify(mockTlsContextManager).findOrCreateClientSslContextProvider(same(upstreamTlsContext1));
+    verify(mockTlsContextManager, never())
+        .findOrCreateClientSslContextProvider(same(upstreamTlsContext1));
     ArgumentCaptor<LoadBalancer.CreateSubchannelArgs> createSubchannelArgsCaptor2 =
         ArgumentCaptor.forClass(null);
     edsLbHelper1.createSubchannel(createSubchannelArgs);
-    verifyUpstreamTlsContextAttribute(upstreamTlsContext1,
-        createSubchannelArgsCaptor2);
+    SslContextProviderSupplier sslContextProviderSupplier1 =
+        verifySslContextProviderSupplierAttribute(upstreamTlsContext1, createSubchannelArgsCaptor2);
+    // initialize sslContextProviderSupplier1 with sslContextProvider
+    sslContextProviderSupplier1.updateSslContext(
+        new SslContextProvider.Callback(MoreExecutors.directExecutor()) {
+          @Override
+          public void updateSecret(SslContext sslContext) {}
+
+          @Override
+          protected void onException(Throwable throwable) {}
+        });
 
     // update with null
     reset(mockTlsContextManager);
@@ -451,7 +487,7 @@ public class CdsLoadBalancerTest {
     ArgumentCaptor<LoadBalancer.CreateSubchannelArgs> createSubchannelArgsCaptor3 =
         ArgumentCaptor.forClass(null);
     edsLbHelper1.createSubchannel(createSubchannelArgs);
-    verifyUpstreamTlsContextAttribute(null,
+    verifySslContextProviderSupplierAttribute(null,
         createSubchannelArgsCaptor3);
 
     LoadBalancer edsLoadBalancer1 = edsLoadBalancers.poll();
@@ -462,23 +498,32 @@ public class CdsLoadBalancerTest {
     assertThat(xdsClientPool.xdsClient).isNull();
   }
 
-  private void verifyUpstreamTlsContextAttribute(
+  private SslContextProviderSupplier verifySslContextProviderSupplierAttribute(
       UpstreamTlsContext upstreamTlsContext,
       ArgumentCaptor<CreateSubchannelArgs> createSubchannelArgsCaptor1) {
-    verify(helper, times(1)).createSubchannel(createSubchannelArgsCaptor1.capture());
+    verify(helper).createSubchannel(createSubchannelArgsCaptor1.capture());
     CreateSubchannelArgs capturedValue = createSubchannelArgsCaptor1.getValue();
     List<EquivalentAddressGroup> capturedEagList = capturedValue.getAddresses();
     assertThat(capturedEagList.size()).isEqualTo(2);
     EquivalentAddressGroup capturedEag = capturedEagList.get(0);
-    UpstreamTlsContext capturedUpstreamTlsContext =
-        capturedEag.getAttributes().get(XdsAttributes.ATTR_UPSTREAM_TLS_CONTEXT);
-    assertThat(capturedUpstreamTlsContext).isSameInstanceAs(upstreamTlsContext);
+
+    SslContextProviderSupplier capturedSslContextProviderSupplier =
+        capturedEag.getAttributes().get(XdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER);
+    if (upstreamTlsContext == null) {
+      assertThat(capturedSslContextProviderSupplier).isNull();
+    } else {
+      assertThat(capturedSslContextProviderSupplier).isNotNull();
+      assertThat(capturedSslContextProviderSupplier.getUpstreamTlsContext())
+          .isSameInstanceAs(upstreamTlsContext);
+    }
     capturedEag = capturedEagList.get(1);
-    capturedUpstreamTlsContext =
-        capturedEag.getAttributes().get(XdsAttributes.ATTR_UPSTREAM_TLS_CONTEXT);
-    assertThat(capturedUpstreamTlsContext).isSameInstanceAs(upstreamTlsContext);
+    SslContextProviderSupplier capturedSslContextProviderSupplier1 =
+            capturedEag.getAttributes().get(XdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER);
+    assertThat(capturedSslContextProviderSupplier1)
+        .isSameInstanceAs(capturedSslContextProviderSupplier);
     assertThat(capturedEag.getAttributes().get(XdsAttributes.XDS_CLIENT_POOL))
         .isSameInstanceAs(xdsClientPool);
+    return capturedSslContextProviderSupplier;
   }
 
   @Test
