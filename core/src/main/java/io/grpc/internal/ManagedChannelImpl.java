@@ -783,6 +783,10 @@ final class ManagedChannelImpl extends ManagedChannel implements
       public void run() {
         channelLogger.log(ChannelLogLevel.INFO, "Entering SHUTDOWN state");
         channelStateManager.gotoState(SHUTDOWN);
+        if (configSelector.get() == INITIAL_PENDING_SELECTOR) {
+          configSelector.set(null);
+          drainPendingCalls();
+        }
       }
     }
 
@@ -1919,10 +1923,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
     @Override
     public void transportShutdown(Status s) {
       checkState(shutdown.get(), "Channel must have been shut down");
-      if (configSelector.get() == INITIAL_PENDING_SELECTOR) {
-        configSelector.set(null);
-        drainPendingCalls();
-      }
     }
 
     @Override
