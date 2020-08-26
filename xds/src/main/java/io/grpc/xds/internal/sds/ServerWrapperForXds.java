@@ -21,11 +21,14 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Server;
 import io.grpc.ServerServiceDefinition;
+import io.grpc.Status;
+import io.grpc.xds.EnvoyServerProtoData;
 import io.grpc.xds.XdsClientWrapperForServerSds;
 import java.io.IOException;
 import java.net.SocketAddress;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import javax.annotation.Nullable;
 
 /**
  * Wraps a {@link Server} delegate and {@link XdsClientWrapperForServerSds} and intercepts {@link
@@ -36,16 +39,39 @@ import java.util.concurrent.TimeUnit;
 public final class ServerWrapperForXds extends Server {
   private final Server delegate;
   private final XdsClientWrapperForServerSds xdsClientWrapperForServerSds;
+  @Nullable XdsServerBuilder.ErrorNotifier errorNotifier;
 
-  ServerWrapperForXds(Server delegate, XdsClientWrapperForServerSds xdsClientWrapperForServerSds) {
+  ServerWrapperForXds(
+      Server delegate,
+      XdsClientWrapperForServerSds xdsClientWrapperForServerSds,
+      @Nullable XdsServerBuilder.ErrorNotifier errorNotifier) {
     this.delegate = checkNotNull(delegate, "delegate");
     this.xdsClientWrapperForServerSds =
         checkNotNull(xdsClientWrapperForServerSds, "xdsClientWrapperForServerSds");
+    this.errorNotifier = errorNotifier;
   }
 
   @Override
-  public Server start() throws IOException {
-    delegate.start();
+  public Server start() {
+    xdsClientWrapperForServerSds.addServerWatcher(
+        new XdsClientWrapperForServerSds.ServerWatcher() {
+          @Override
+          public void onError(Status error) {
+            if (errorNotifier != null) {
+              errorNotifier.onError(error);
+            }
+          }
+
+          @Override
+          public void onSuccess(EnvoyServerProtoData.DownstreamTlsContext downstreamTlsContext) {
+            try {
+              delegate.start();
+              xdsClientWrapperForServerSds.removeServerWatcher(this);
+            } catch (IOException e) {
+              onError(Status.fromThrowable(e));
+            }
+          }
+        });
     if (!xdsClientWrapperForServerSds.hasXdsClient()) {
       xdsClientWrapperForServerSds.createXdsClientAndStart();
     }

@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableSet;
 import io.grpc.Internal;
 import io.grpc.InternalLogId;
 import io.grpc.Status;
@@ -43,7 +44,9 @@ import java.net.SocketAddress;
 import java.net.UnknownHostException;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
@@ -70,6 +73,7 @@ public final class XdsClientWrapperForServerSds {
   private final int port;
   private ScheduledExecutorService timeService;
   private XdsClient.ListenerWatcher listenerWatcher;
+  @VisibleForTesting final Set<ServerWatcher> serverWatchers = new HashSet<>();
 
   /**
    * Thrown when no suitable management server was found in the bootstrap file.
@@ -170,18 +174,20 @@ public final class XdsClientWrapperForServerSds {
                 "Setting myListener from ConfigUpdate listener: {0}",
                 update.getListener());
             curListener = update.getListener();
+            reportSuccess();
           }
 
           @Override
           public void onResourceDoesNotExist(String resourceName) {
             logger.log(Level.INFO, "Resource {0} is unavailable", resourceName);
             curListener = null;
+            reportError(Status.NOT_FOUND.withDescription(resourceName));
           }
 
           @Override
           public void onError(Status error) {
-            // TODO(sanjaypujare): Implement logic for other cases based on final design.
             logger.log(Level.SEVERE, "ListenerWatcher in XdsClientWrapperForServerSds: {0}", error);
+            reportError(error);
           }
         };
     xdsClient.watchListenerData(port, listenerWatcher);
@@ -202,6 +208,14 @@ public final class XdsClientWrapperForServerSds {
       checkState(
           port == localInetAddr.getPort(),
           "Channel localAddress port does not match requested listener port");
+      return getDownstreamTlsContext(localInetAddr);
+    }
+    return null;
+  }
+
+  DownstreamTlsContext getDownstreamTlsContext(InetSocketAddress localInetAddr) {
+    checkNotNull(localInetAddr, "localInetAddr");
+    if (curListener != null) {
       List<FilterChain> filterChains = curListener.getFilterChains();
       FilterChainComparator comparator = new FilterChainComparator(localInetAddr);
       FilterChain bestMatch =
@@ -213,9 +227,56 @@ public final class XdsClientWrapperForServerSds {
     return null;
   }
 
+  /** Adds a {@link ServerWatcher} to the list. Returns true if added. */
+  public boolean addServerWatcher(ServerWatcher serverWatcher) {
+    checkNotNull(serverWatcher, "serverWatcher");
+    synchronized (serverWatchers) {
+      return serverWatchers.add(serverWatcher);
+    }
+  }
+
+  /** Removes a {@link ServerWatcher} from the list. Returns true if removed. */
+  public boolean removeServerWatcher(ServerWatcher serverWatcher) {
+    checkNotNull(serverWatcher, "serverWatcher");
+    synchronized (serverWatchers) {
+      return serverWatchers.remove(serverWatcher);
+    }
+  }
+
+  private Set<ServerWatcher> getServerWatchers() {
+    synchronized (serverWatchers) {
+      return ImmutableSet.copyOf(serverWatchers);
+    }
+  }
+
+  private void reportError(Status status) {
+    for (ServerWatcher watcher : getServerWatchers()) {
+      watcher.onError(status);
+    }
+  }
+
+  private void reportSuccess() {
+    DownstreamTlsContext downstreamTlsContext =
+        getDownstreamTlsContext(new InetSocketAddress(port));
+    for (ServerWatcher watcher : getServerWatchers()) {
+      watcher.onSuccess(downstreamTlsContext);
+    }
+  }
+
+
   @VisibleForTesting
   XdsClient.ListenerWatcher getListenerWatcher() {
     return listenerWatcher;
+  }
+
+  /** Watcher interface for the clients of this class. */
+  public interface ServerWatcher {
+
+    /** Called to report errors from the control plane including "not found". */
+    void onError(Status error);
+
+    /** Called to report successful receipt of server config. */
+    void onSuccess(DownstreamTlsContext downstreamTlsContext);
   }
 
   private static final class FilterChainComparator implements Comparator<FilterChain> {

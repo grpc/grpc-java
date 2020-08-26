@@ -28,6 +28,7 @@ import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_PEM_FILE
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_KEY_FILE;
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_PEM_FILE;
 import static org.junit.Assert.fail;
+import static org.mockito.Mockito.mock;
 
 import com.google.common.collect.ImmutableList;
 import io.grpc.Attributes;
@@ -283,7 +284,7 @@ public class XdsSdsClientServerTest {
         XdsClientWrapperForServerSdsTest.createXdsClientWrapperForServerSds(
             port, /* downstreamTlsContext= */ downstreamTlsContext);
     buildServerWithFallbackProtocolNegotiator(xdsClientWrapperForServerSds,
-        InternalProtocolNegotiators.serverPlaintext());
+        InternalProtocolNegotiators.serverPlaintext(), downstreamTlsContext);
 
     XdsClient.ListenerWatcher listenerWatcher = xdsClientWrapperForServerSds.getListenerWatcher();
 
@@ -302,27 +303,40 @@ public class XdsSdsClientServerTest {
   private void buildServerWithTlsContext(DownstreamTlsContext downstreamTlsContext,
       ProtocolNegotiator fallbackProtocolNegotiator)
       throws IOException {
-    final XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
-        XdsClientWrapperForServerSdsTest.createXdsClientWrapperForServerSds(
-            port, /* downstreamTlsContext= */ downstreamTlsContext);
-    buildServerWithFallbackProtocolNegotiator(xdsClientWrapperForServerSds,
-        fallbackProtocolNegotiator);
+    XdsClient mockXdsClient = mock(XdsClient.class);
+    XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
+        new XdsClientWrapperForServerSds(port);
+    xdsClientWrapperForServerSds.start(mockXdsClient);
+    buildServerWithFallbackProtocolNegotiator(
+        xdsClientWrapperForServerSds, fallbackProtocolNegotiator, downstreamTlsContext);
   }
 
   private void buildServerWithFallbackProtocolNegotiator(
       XdsClientWrapperForServerSds xdsClientWrapperForServerSds,
-      ProtocolNegotiator fallbackProtocolNegotiator) throws IOException {
+      ProtocolNegotiator fallbackProtocolNegotiator,
+      DownstreamTlsContext downstreamTlsContext)
+      throws IOException {
     SdsProtocolNegotiators.ServerSdsProtocolNegotiator serverSdsProtocolNegotiator =
         new SdsProtocolNegotiators.ServerSdsProtocolNegotiator(xdsClientWrapperForServerSds,
             fallbackProtocolNegotiator);
-    buildServer(port, serverSdsProtocolNegotiator);
+    buildServer(
+        port, serverSdsProtocolNegotiator, xdsClientWrapperForServerSds, downstreamTlsContext);
   }
 
   private void buildServer(
-      int port, SdsProtocolNegotiators.ServerSdsProtocolNegotiator serverSdsProtocolNegotiator)
+      int port,
+      SdsProtocolNegotiators.ServerSdsProtocolNegotiator serverSdsProtocolNegotiator,
+      XdsClientWrapperForServerSds xdsClientWrapperForServerSds,
+      DownstreamTlsContext downstreamTlsContext)
       throws IOException {
     XdsServerBuilder builder = XdsServerBuilder.forPort(port).addService(new SimpleServiceImpl());
     cleanupRule.register(builder.buildServer(serverSdsProtocolNegotiator)).start();
+    XdsServerBuilderTest.generateListenerUpdate(
+        xdsClientWrapperForServerSds.getListenerWatcher(),
+        port,
+        port,
+        downstreamTlsContext,
+        /* tlsContext2= */null);
   }
 
   private static int findFreePort() throws IOException {
