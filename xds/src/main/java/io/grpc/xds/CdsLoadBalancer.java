@@ -121,8 +121,6 @@ public final class CdsLoadBalancer extends LoadBalancer {
   private final class ChannelSecurityLbHelper extends ForwardingLoadBalancerHelper {
     @Nullable
     private SslContextProvider sslContextProvider;
-    @Nullable
-    private LoadBalancer lb;
 
     @Override
     public Subchannel createSubchannel(CreateSubchannelArgs createSubchannelArgs) {
@@ -166,6 +164,8 @@ public final class CdsLoadBalancer extends LoadBalancer {
 
   private final class ChildLbState implements ClusterWatcher {
     private final ChannelSecurityLbHelper lbHelper = new ChannelSecurityLbHelper();
+    @Nullable
+    private LoadBalancer lb;
 
     @Override
     public void onClusterChanged(ClusterUpdate update) {
@@ -182,11 +182,10 @@ public final class CdsLoadBalancer extends LoadBalancer {
       if (enableSecurity) {
         updateSslContextProvider(update.getUpstreamTlsContext());
       }
-      if (lbHelper.lb == null) {
-        lbHelper.lb =
-            lbRegistry.getProvider(XdsLbPolicies.EDS_POLICY_NAME).newLoadBalancer(lbHelper);
+      if (lb == null) {
+        lb = lbRegistry.getProvider(XdsLbPolicies.EDS_POLICY_NAME).newLoadBalancer(lbHelper);
       }
-      lbHelper.lb.handleResolvedAddresses(
+      lb.handleResolvedAddresses(
           ResolvedAddresses.newBuilder()
               .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
               .setAttributes(
@@ -218,9 +217,9 @@ public final class CdsLoadBalancer extends LoadBalancer {
     @Override
     public void onResourceDoesNotExist(String resourceName) {
       logger.log(XdsLogLevel.INFO, "Resource {0} is unavailable", resourceName);
-      if (lbHelper.lb != null) {
-        lbHelper.lb.shutdown();
-        lbHelper.lb = null;
+      if (lb != null) {
+        lb.shutdown();
+        lb = null;
       }
       helper.updateBalancingState(
           TRANSIENT_FAILURE,
@@ -231,7 +230,7 @@ public final class CdsLoadBalancer extends LoadBalancer {
     @Override
     public void onError(Status error) {
       logger.log(XdsLogLevel.WARNING, "Received error from xDS client {0}: {1}", error);
-      if (lbHelper.lb == null) {
+      if (lb == null) {
         helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
       }
     }
@@ -246,16 +245,16 @@ public final class CdsLoadBalancer extends LoadBalancer {
       xdsClient.cancelClusterDataWatch(clusterName, this);
       logger.log(XdsLogLevel.INFO,
           "Cancelled watcher for cluster {0} with xDS client {1}", clusterName, xdsClient);
-      if (lbHelper.lb != null) {
-        lbHelper.lb.shutdown();
+      if (lb != null) {
+        lb.shutdown();
       }
     }
 
     void propagateError(Status error) {
-      if (lbHelper.lb != null) {
-        lbHelper.lb.handleNameResolutionError(error);
+      if (lb != null) {
+        lb.handleNameResolutionError(error);
       } else {
-        lbHelper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
+        helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
       }
     }
   }
