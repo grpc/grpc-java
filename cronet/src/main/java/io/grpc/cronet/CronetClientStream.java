@@ -42,6 +42,7 @@ import io.grpc.internal.TransportTracer;
 import io.grpc.internal.WritableBuffer;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
@@ -218,7 +219,7 @@ class CronetClientStream extends AbstractClientStream {
         ByteBuffer byteBuffer;
         if (buffer != null) {
           byteBuffer = ((CronetWritableBuffer) buffer).buffer();
-          byteBuffer.flip();
+          ((Buffer) byteBuffer).flip();
         } else {
           byteBuffer = EMPTY_BUFFER;
         }
@@ -471,7 +472,7 @@ class CronetClientStream extends AbstractClientStream {
     @Override
     public void onReadCompleted(BidirectionalStream stream, UrlResponseInfo info,
         ByteBuffer buffer, boolean endOfStream) {
-      buffer.flip();
+      ((Buffer) buffer).flip();
       if (Log.isLoggable(LOG_TAG, Log.VERBOSE)) {
         Log.v(LOG_TAG, "onReadCompleted. Size=" + buffer.remaining());
       }

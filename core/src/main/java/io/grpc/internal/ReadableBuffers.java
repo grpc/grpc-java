@@ -210,8 +210,7 @@ public final class ReadableBuffers {
    * A {@link ReadableBuffer} that is backed by a {@link ByteBuffer}.
    */
   private static class ByteReadableBufferWrapper extends AbstractReadableBuffer {
-    // Use Buffer instead of ByteBuffer for JDK 9+ compatibility.
-    final Buffer bytes;
+    final ByteBuffer bytes;
 
     ByteReadableBufferWrapper(ByteBuffer bytes) {
       this.bytes = Preconditions.checkNotNull(bytes, "bytes");
@@ -225,19 +224,19 @@ public final class ReadableBuffers {
     @Override
     public int readUnsignedByte() {
       checkReadable(1);
-      return ((ByteBuffer) bytes).get() & 0xFF;
+      return bytes.get() & 0xFF;
     }
 
     @Override
     public void skipBytes(int length) {
       checkReadable(length);
-      bytes.position(bytes.position() + length);
+      ((Buffer) bytes).position(bytes.position() + length);
     }
 
     @Override
     public void readBytes(byte[] dest, int destOffset, int length) {
       checkReadable(length);
-      ((ByteBuffer) bytes).get(dest, destOffset, length);
+      bytes.get(dest, destOffset, length);
     }
 
     @Override
@@ -248,10 +247,10 @@ public final class ReadableBuffers {
 
       // Change the limit so that only length bytes are available.
       int prevLimit = bytes.limit();
-      bytes.limit(bytes.position() + length);
+      ((Buffer) bytes).limit(bytes.position() + length);
 
       // Write the bytes and restore the original limit.
-      dest.put((ByteBuffer) bytes);
+      dest.put(bytes);
       bytes.limit(prevLimit);
     }
 
@@ -260,11 +259,11 @@ public final class ReadableBuffers {
       checkReadable(length);
       if (hasArray()) {
         dest.write(array(), arrayOffset(), length);
-        bytes.position(bytes.position() + length);
+        ((Buffer) bytes).position(bytes.position() + length);
       } else {
         // The buffer doesn't support array(). Copy the data to an intermediate buffer.
         byte[] array = new byte[length];
-        ((ByteBuffer) bytes).get(array);
+        bytes.get(array);
         dest.write(array);
       }
     }
@@ -272,9 +271,9 @@ public final class ReadableBuffers {
     @Override
     public ByteReadableBufferWrapper readBytes(int length) {
       checkReadable(length);
-      ByteBuffer buffer = ((ByteBuffer) bytes).duplicate();
+      ByteBuffer buffer = bytes.duplicate();
       ((Buffer) buffer).limit(bytes.position() + length);
-      bytes.position(bytes.position() + length);
+      ((Buffer) bytes).position(bytes.position() + length);
       return new ByteReadableBufferWrapper(buffer);
     }
 
@@ -285,7 +284,7 @@ public final class ReadableBuffers {
 
     @Override
     public byte[] array() {
-      return ((ByteBuffer) bytes).array();
+      return bytes.array();
     }
 
     @Override

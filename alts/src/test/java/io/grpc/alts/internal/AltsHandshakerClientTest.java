@@ -29,6 +29,7 @@ import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
 import com.google.protobuf.ByteString;
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 import org.junit.Before;
@@ -178,7 +179,7 @@ public class AltsHandshakerClientTest {
         .thenReturn(MockAltsHandshakerResp.getOkResponse(BYTES_CONSUMED));
 
     ByteBuffer inBytes = ByteBuffer.allocate(IN_BYTES_SIZE);
-    inBytes.position(PREFIX_POSITION);
+    ((Buffer) inBytes).position(PREFIX_POSITION);
     ByteBuffer outFrame = handshaker.startServerHandshake(inBytes);
 
     assertEquals(ByteString.copyFrom(outFrame), MockAltsHandshakerResp.getOutFrame());

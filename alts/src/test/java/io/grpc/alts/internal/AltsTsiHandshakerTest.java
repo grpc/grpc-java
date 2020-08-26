@@ -26,6 +26,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.google.protobuf.ByteString;
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import org.junit.Before;
 import org.junit.Test;
@@ -112,7 +113,7 @@ public class AltsTsiHandshakerTest {
     verify(mockServer, never()).startClientHandshake();
     verify(mockServer, never()).next(ArgumentMatchers.<ByteBuffer>any());
     // Mock transport buffer all consumed by processBytesFromPeer and there is an output frame.
-    transportBuffer.position(transportBuffer.limit());
+    ((Buffer) transportBuffer).position(transportBuffer.limit());
     when(mockServer.startServerHandshake(transportBuffer)).thenReturn(outputFrame);
     when(mockServer.isFinished()).thenReturn(false);
 
@@ -127,7 +128,7 @@ public class AltsTsiHandshakerTest {
     verify(mockServer, never()).next(ArgumentMatchers.<ByteBuffer>any());
     // Mock transport buffer all consumed by processBytesFromPeer and output frame is empty.
     // Expect processBytesFromPeer return False, because more data are needed from the peer.
-    transportBuffer.position(transportBuffer.limit());
+    ((Buffer) transportBuffer).position(transportBuffer.limit());
     when(mockServer.startServerHandshake(transportBuffer)).thenReturn(emptyOutputFrame);
     when(mockServer.isFinished()).thenReturn(false);
 
@@ -174,7 +175,7 @@ public class AltsTsiHandshakerTest {
     when(mockClient.isFinished()).thenReturn(false);
 
     handshakerClient.getBytesToSendToPeer(transportBuffer);
-    transportBuffer.position(transportBuffer.limit());
+    ((Buffer) transportBuffer).position(transportBuffer.limit());
     assertFalse(handshakerClient.processBytesFromPeer(transportBuffer));
   }
 
