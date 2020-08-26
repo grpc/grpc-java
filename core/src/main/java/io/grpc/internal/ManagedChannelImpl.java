@@ -800,6 +800,16 @@ final class ManagedChannelImpl extends ManagedChannel implements
     return this;
   }
 
+  // Must run in SynchronizationContext.
+  private void drainPendingCalls() {
+    if (pendingCalls == null) {
+      return;
+    }
+    for (RealChannel.PendingCall<?, ?> pendingCall : pendingCalls) {
+      pendingCall.reprocess();
+    }
+  }
+
   /**
    * Initiates a forceful shutdown in which preexisting and new calls are cancelled. Although
    * forceful, the shutdown process is still not instantaneous; {@link #isTerminated()} will likely
@@ -918,9 +928,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
     @Override
     public <ReqT, RespT> ClientCall<ReqT, RespT> newCall(
         MethodDescriptor<ReqT, RespT> method, CallOptions callOptions) {
-      if (true) { // FIXME(zdapeng): there is a bug for using PendingCall. Temporarily disable it.
-        return newClientCall(method, callOptions);
-      }
       if (configSelector.get() != INITIAL_PENDING_SELECTOR) {
         return newClientCall(method, callOptions);
       }
@@ -1649,16 +1656,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
       scheduleExponentialBackOffInSyncContext();
     }
 
-    // Must run in SynchronizationContext.
-    private void drainPendingCalls() {
-      if (pendingCalls == null) {
-        return;
-      }
-      for (RealChannel.PendingCall<?, ?> pendingCall : pendingCalls) {
-        pendingCall.reprocess();
-      }
-    }
-
     private void scheduleExponentialBackOffInSyncContext() {
       if (scheduledNameResolverRefresh != null && scheduledNameResolverRefresh.isPending()) {
         // The name resolver may invoke onError multiple times, but we only want to
@@ -1922,6 +1919,10 @@ final class ManagedChannelImpl extends ManagedChannel implements
     @Override
     public void transportShutdown(Status s) {
       checkState(shutdown.get(), "Channel must have been shut down");
+      if (configSelector.get() == INITIAL_PENDING_SELECTOR) {
+        configSelector.set(null);
+        drainPendingCalls();
+      }
     }
 
     @Override

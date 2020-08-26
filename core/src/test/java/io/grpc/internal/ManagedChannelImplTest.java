@@ -544,6 +544,37 @@ public class ManagedChannelImplTest {
   }
 
   @Test
+  public void shutdown_pendingCallShouldFail() {
+    channelBuilder.nameResolverFactory(
+        new FakeNameResolverFactory.Builder(expectedUri)
+            .setResolvedAtStart(false)
+            .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
+            .build());
+    createChannel();
+    ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
+    call.start(mockCallListener, new Metadata());
+    channel.shutdown();
+    assertTrue(channel.isShutdown());
+    executor.runDueTasks();
+    verify(mockCallListener).onClose(any(Status.class), any(Metadata.class));
+  }
+
+  @Test
+  public void shutdownWithNoNameResolution_newCallShouldFail() {
+    channelBuilder.nameResolverFactory(
+        new FakeNameResolverFactory.Builder(expectedUri)
+            .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
+            .build());
+    requestConnection = false;
+    createChannel();
+    channel.shutdown();
+    ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
+    call.start(mockCallListener, new Metadata());
+    executor.runDueTasks();
+    verify(mockCallListener).onClose(any(Status.class), any(Metadata.class));
+  }
+
+  @Test
   public void channelzMembership() throws Exception {
     createChannel();
     assertNotNull(channelz.getRootChannel(channel.getLogId().getId()));
