@@ -42,7 +42,6 @@ public final class MethodDescriptor<ReqT, RespT> {
   private final MethodType type;
   private final String fullMethodName;
   @Nullable private final String serviceName;
-  @Nullable private final String methodName;
   private final Marshaller<ReqT> requestMarshaller;
   private final Marshaller<RespT> responseMarshaller;
   private final @Nullable Object schemaDescriptor;
@@ -226,7 +225,6 @@ public final class MethodDescriptor<ReqT, RespT> {
     this.type = Preconditions.checkNotNull(type, "type");
     this.fullMethodName = Preconditions.checkNotNull(fullMethodName, "fullMethodName");
     this.serviceName = extractFullServiceName(fullMethodName);
-    this.methodName = extractMethodName(fullMethodName);
     this.requestMarshaller = Preconditions.checkNotNull(requestMarshaller, "requestMarshaller");
     this.responseMarshaller = Preconditions.checkNotNull(responseMarshaller, "responseMarshaller");
     this.schemaDescriptor = schemaDescriptor;
@@ -271,8 +269,8 @@ public final class MethodDescriptor<ReqT, RespT> {
    */
   @Nullable
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5635")
-  public String getMethodName() {
-    return methodName;
+  public String getBareMethodName() {
+    return extractBareMethodName(fullMethodName);
   }
 
   /**
@@ -418,7 +416,8 @@ public final class MethodDescriptor<ReqT, RespT> {
    * @since 1.32.0
    */
   @Nullable
-  public static String extractMethodName(String fullMethodName) {
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5635")
+  public static String extractBareMethodName(String fullMethodName) {
     int index = checkNotNull(fullMethodName, "fullMethodName").lastIndexOf('/');
     if (index == -1) {
       return null;

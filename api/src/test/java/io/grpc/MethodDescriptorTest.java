@@ -178,36 +178,36 @@ public class MethodDescriptorTest {
   }
 
   @Test
-  public void getMethodName_extractsMethod() {
+  public void getBareMethodName_extractsMethod() {
     Marshaller<Void> marshaller = TestMethodDescriptors.voidMarshaller();
     MethodDescriptor<?, ?> md = MethodDescriptor.newBuilder(marshaller, marshaller)
         .setType(MethodType.UNARY)
         .setFullMethodName("foo/bar")
         .build();
 
-    assertEquals("bar", md.getMethodName());
+    assertEquals("bar", md.getBareMethodName());
   }
 
   @Test
-  public void getMethodName_returnsNull() {
+  public void getBareMethodName_returnsNull() {
     Marshaller<Void> marshaller = TestMethodDescriptors.voidMarshaller();
     MethodDescriptor<?, ?> md = MethodDescriptor.newBuilder(marshaller, marshaller)
         .setType(MethodType.UNARY)
         .setFullMethodName("foo-bar")
         .build();
 
-    assertNull(md.getMethodName());
+    assertNull(md.getBareMethodName());
   }
 
   @Test
-  public void getMethodName_returnsEmptyStringWithMethodMissing() {
+  public void getBareMethodName_returnsEmptyStringWithMethodMissing() {
     Marshaller<Void> marshaller = TestMethodDescriptors.voidMarshaller();
     MethodDescriptor<?, ?> md = MethodDescriptor.newBuilder(marshaller, marshaller)
         .setType(MethodType.UNARY)
         .setFullMethodName("foo/")
         .build();
 
-    assertTrue(md.getMethodName().isEmpty());
+    assertTrue(md.getBareMethodName().isEmpty());
   }
 
   @Test
