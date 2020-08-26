@@ -48,7 +48,7 @@ import javax.annotation.Nullable;
 /**
  * Load balancer for cds_experimental LB policy. One instance per cluster.
  */
-public final class CdsLoadBalancer extends LoadBalancer {
+final class CdsLoadBalancer extends LoadBalancer {
   // TODO(sanjaypujare): remove once xds security is released
   @VisibleForTesting
   static boolean enableSecurity =
