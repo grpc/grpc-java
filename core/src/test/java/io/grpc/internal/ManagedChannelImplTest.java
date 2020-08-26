@@ -553,10 +553,11 @@ public class ManagedChannelImplTest {
     createChannel();
     ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
     call.start(mockCallListener, new Metadata());
+    verify(mockCallListener, never()).onClose(any(Status.class), any(Metadata.class));
     channel.shutdown();
-    assertTrue(channel.isShutdown());
     executor.runDueTasks();
-    verify(mockCallListener).onClose(any(Status.class), any(Metadata.class));
+    verify(mockCallListener).onClose(statusCaptor.capture(), any(Metadata.class));
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.UNAVAILABLE);
   }
 
   @Test
@@ -571,7 +572,8 @@ public class ManagedChannelImplTest {
     ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
     call.start(mockCallListener, new Metadata());
     executor.runDueTasks();
-    verify(mockCallListener).onClose(any(Status.class), any(Metadata.class));
+    verify(mockCallListener).onClose(statusCaptor.capture(), any(Metadata.class));
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.UNAVAILABLE);
   }
 
   @Test
