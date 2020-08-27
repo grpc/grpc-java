@@ -97,10 +97,12 @@ public final class ReflectionLongAdderCounter implements LongCounter {
     return initializationException == null;
   }
 
+  private static final Object[] ONE = new Object[] { 1L };
+
   @Override
   public void add(long delta) {
     try {
-      addMethod.invoke(instance, delta);
+      addMethod.invoke(instance, delta == 1L ? ONE : new Object[] { delta });
     } catch (IllegalAccessException e) {
       throw new RuntimeException(e);
     } catch (InvocationTargetException e) {

@@ -20,6 +20,7 @@ import static java.util.concurrent.ForkJoinPool.defaultForkJoinWorkerThreadFacto
 
 import com.google.common.util.concurrent.UncaughtExceptionHandlers;
 import com.google.protobuf.ByteString;
+import com.google.protobuf.UnsafeByteOperations;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Status;
@@ -252,7 +253,7 @@ public final class Utils {
         throw Status.INTERNAL.augmentDescription("Error creating payload.").asRuntimeException();
       }
 
-      ByteString body = ByteString.copyFrom(new byte[request.getResponseSize()]);
+      ByteString body = UnsafeByteOperations.unsafeWrap(new byte[request.getResponseSize()]);
       Messages.PayloadType type = request.getResponseType();
 
       Payload payload = Payload.newBuilder().setType(type).setBody(body).build();
@@ -266,7 +267,7 @@ public final class Utils {
    */
   public static SimpleRequest makeRequest(Messages.PayloadType payloadType, int reqLength,
                                           int respLength) {
-    ByteString body = ByteString.copyFrom(new byte[reqLength]);
+    ByteString body = UnsafeByteOperations.unsafeWrap(new byte[reqLength]);
     Payload payload = Payload.newBuilder()
         .setType(payloadType)
         .setBody(body)
