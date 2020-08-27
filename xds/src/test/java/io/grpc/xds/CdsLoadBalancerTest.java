@@ -191,8 +191,7 @@ public class CdsLoadBalancerTest {
 
   @Test
   public void receiveClusterResourceInfoWithUpstreamTlsContext() {
-    boolean originalEnableSecurity = CdsLoadBalancer.enableSecurity;
-    CdsLoadBalancer.enableSecurity = true;
+    loadBalancer.setXdsSecurity(true);
     UpstreamTlsContext upstreamTlsContext =
         CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
             CommonTlsContextTestsUtil.CLIENT_KEY_FILE,
@@ -228,8 +227,6 @@ public class CdsLoadBalancerTest {
       assertThat(eag.getAttributes().get(XdsAttributes.ATTR_UPSTREAM_TLS_CONTEXT))
           .isEqualTo(upstreamTlsContext);
     }
-
-    CdsLoadBalancer.enableSecurity = originalEnableSecurity;
   }
 
   @Test
