@@ -20,7 +20,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
-import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
@@ -41,7 +40,6 @@ import io.grpc.xds.internal.sds.SslContextProvider;
 import io.grpc.xds.internal.sds.TlsContextManager;
 import io.grpc.xds.internal.sds.TlsContextManagerImpl;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import javax.annotation.Nullable;
 
@@ -61,7 +59,7 @@ final class CdsLoadBalancer extends LoadBalancer {
   private ObjectPool<XdsClient> xdsClientPool;
   private XdsClient xdsClient;
   private ChildLbState childLbState;
-  private Attributes attributes;
+  private ResolvedAddresses resolvedAddresses;
 
   CdsLoadBalancer(LoadBalancer.Helper helper) {
     this(helper, LoadBalancerRegistry.getDefaultRegistry(), TlsContextManagerImpl.getInstance());
@@ -83,8 +81,8 @@ final class CdsLoadBalancer extends LoadBalancer {
       return;
     }
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
-    attributes = resolvedAddresses.getAttributes();
-    xdsClientPool = attributes.get(XdsAttributes.XDS_CLIENT_POOL);
+    this.resolvedAddresses = resolvedAddresses;
+    xdsClientPool = resolvedAddresses.getAttributes().get(XdsAttributes.XDS_CLIENT_POOL);
     xdsClient = xdsClientPool.getObject();
     Object lbConfig = resolvedAddresses.getLoadBalancingPolicyConfig();
     CdsConfig newCdsConfig = (CdsConfig) lbConfig;
@@ -195,10 +193,7 @@ final class CdsLoadBalancer extends LoadBalancer {
         lb = lbRegistry.getProvider(XdsLbPolicies.EDS_POLICY_NAME).newLoadBalancer(lbHelper);
       }
       lb.handleResolvedAddresses(
-          ResolvedAddresses.newBuilder()
-              .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
-              .setAttributes(attributes)
-              .setLoadBalancingPolicyConfig(edsConfig).build());
+          resolvedAddresses.toBuilder().setLoadBalancingPolicyConfig(edsConfig).build());
     }
 
     /** For new UpstreamTlsContext value, release old SslContextProvider. */
