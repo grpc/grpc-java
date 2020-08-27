@@ -17,7 +17,6 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -43,6 +42,7 @@ import io.grpc.SynchronizationContext;
 import io.grpc.internal.ObjectPool;
 import io.grpc.xds.CdsLoadBalancerProvider.CdsConfig;
 import io.grpc.xds.EdsLoadBalancerProvider.EdsConfig;
+import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import io.grpc.xds.internal.sds.SslContextProvider;
@@ -58,10 +58,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
-import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
-import org.mockito.invocation.InvocationOnMock;
-import org.mockito.stubbing.Answer;
 
 /**
  * Tests for {@link CdsLoadBalancer}.
@@ -79,8 +76,7 @@ public class CdsLoadBalancerTest {
       });
   private final List<FakeLoadBalancer> childBalancers = new ArrayList<>();
   private final FakeXdsClient xdsClient = new FakeXdsClient();
-  @Mock
-  private TlsContextManager tlsContextManager;
+  private final TlsContextManager tlsContextManager = new FakeTlsContextManager();
   private LoadBalancer.Helper helper = new FakeLbHelper();
   private int xdsClientRefs;
   private ConnectivityState currentState;
@@ -90,17 +86,6 @@ public class CdsLoadBalancerTest {
   @Before
   public void setUp() {
     MockitoAnnotations.initMocks(this);
-    when(tlsContextManager.findOrCreateClientSslContextProvider(any(UpstreamTlsContext.class)))
-        .thenAnswer(
-            new Answer<SslContextProvider>() {
-              @Override
-              public SslContextProvider answer(InvocationOnMock invocation) {
-                SslContextProvider sslContextProvider = mock(SslContextProvider.class);
-                when(sslContextProvider.getUpstreamTlsContext())
-                    .thenReturn((UpstreamTlsContext) invocation.getArgument(0));
-                return sslContextProvider;
-              }
-            });
 
     LoadBalancerRegistry registry = new LoadBalancerRegistry();
     registry.register(new FakeLoadBalancerProvider(XdsLbPolicies.EDS_POLICY_NAME));
@@ -510,6 +495,36 @@ public class CdsLoadBalancerTest {
     @Override
     public Attributes getAttributes() {
       return Attributes.EMPTY;
+    }
+  }
+
+  private static final class FakeTlsContextManager implements TlsContextManager {
+
+    @Override
+    public SslContextProvider findOrCreateClientSslContextProvider(
+        UpstreamTlsContext upstreamTlsContext) {
+      SslContextProvider sslContextProvider = mock(SslContextProvider.class);
+      when(sslContextProvider.getUpstreamTlsContext()).thenReturn(upstreamTlsContext);
+      return sslContextProvider;
+    }
+
+    @Override
+    public SslContextProvider releaseClientSslContextProvider(
+        SslContextProvider sslContextProvider) {
+      // no-op
+      return null;
+    }
+
+    @Override
+    public SslContextProvider findOrCreateServerSslContextProvider(
+        DownstreamTlsContext downstreamTlsContext) {
+      throw new UnsupportedOperationException("should not be called");
+    }
+
+    @Override
+    public SslContextProvider releaseServerSslContextProvider(
+        SslContextProvider sslContextProvider) {
+      throw new UnsupportedOperationException("should not be called");
     }
   }
 }
