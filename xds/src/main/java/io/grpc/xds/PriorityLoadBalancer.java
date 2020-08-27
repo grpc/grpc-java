@@ -101,11 +101,15 @@ final class PriorityLoadBalancer extends LoadBalancer {
   @Override
   public void handleNameResolutionError(Status error) {
     logger.log(XdsLogLevel.WARNING, "Received name resolution error: {0}", error);
-    if (children.isEmpty()) {
-      updateOverallState(TRANSIENT_FAILURE, new ErrorPicker(error));
-    }
+    boolean gotoTransientFailure = true;
     for (ChildLbState child : children.values()) {
-      child.lb.handleNameResolutionError(error);
+      if (priorityNames.contains(child.priority)) {
+        child.lb.handleNameResolutionError(error);
+        gotoTransientFailure = false;
+      }
+    }
+    if (gotoTransientFailure) {
+      updateOverallState(TRANSIENT_FAILURE, new ErrorPicker(error));
     }
   }
 
