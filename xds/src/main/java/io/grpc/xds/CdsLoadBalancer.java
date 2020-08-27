@@ -174,11 +174,13 @@ final class CdsLoadBalancer extends LoadBalancer {
 
     @Override
     public void onClusterChanged(ClusterUpdate update) {
+      logger.log(XdsLogLevel.DEBUG,
+          "Received cluster update from xDS client {0}: {1}", xdsClient, update);
       if (logger.isLoggable(XdsLogLevel.INFO)) {
-        logger.log(XdsLogLevel.INFO, "Received cluster update from xDS client {0}: "
-                + "cluster_name={1}, eds_service_name={2}, lb_policy={3}, report_load={4}",
-            xdsClient, update.getClusterName(), update.getEdsServiceName(),
-            update.getLbPolicy(), update.getLrsServerName() != null);
+        logger.log(XdsLogLevel.INFO, "Received cluster update: cluster_name={1}, "
+                + "eds_service_name={2}, lb_policy={3}, report_load={4}",
+            update.getClusterName(), update.getEdsServiceName(), update.getLbPolicy(),
+            update.getLrsServerName() != null);
       }
       LoadBalancerProvider lbProvider = lbRegistry.getProvider(update.getLbPolicy());
       final EdsConfig edsConfig =
