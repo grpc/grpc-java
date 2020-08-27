@@ -47,6 +47,7 @@ import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.ClientCallImpl.ClientStreamProvider;
+import io.grpc.internal.ManagedChannelServiceConfig.MethodInfo;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -85,7 +86,7 @@ final class OobChannel extends ManagedChannel implements InternalInstrumented<Ch
   private final ClientStreamProvider transportProvider = new ClientStreamProvider() {
     @Override
     public ClientStream newStream(MethodDescriptor<?, ?> method,
-        CallOptions callOptions, Metadata headers, Context context) {
+        CallOptions callOptions, Metadata headers, Context context, MethodInfo methodInfo) {
       Context origContext = context.attach();
       // delayed transport's newStream() always acquires a lock, but concurrent performance doesn't
       // matter here because OOB communication should be sparse, and it's not on application RPC's

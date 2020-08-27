@@ -29,6 +29,7 @@ import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.internal.ClientCallImpl.ClientStreamProvider;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
+import io.grpc.internal.ManagedChannelServiceConfig.MethodInfo;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
@@ -52,7 +53,7 @@ final class SubchannelChannel extends Channel {
   private final ClientStreamProvider transportProvider = new ClientStreamProvider() {
       @Override
       public ClientStream newStream(MethodDescriptor<?, ?> method,
-          CallOptions callOptions, Metadata headers, Context context) {
+          CallOptions callOptions, Metadata headers, Context context, MethodInfo methodInfo) {
         ClientTransport transport = subchannel.getTransport();
         if (transport == null) {
           transport = notReadyTransport;

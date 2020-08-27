@@ -144,24 +144,14 @@ public class RetriableStreamTest {
         ChannelBufferMeter channelBufferUsed, long perRpcBufferLimit, long channelBufferLimit,
         Executor callExecutor,
         ScheduledExecutorService scheduledExecutorService,
-        @Nullable final RetryPolicy retryPolicy,
-        @Nullable final HedgingPolicy hedgingPolicy,
+        @Nullable RetryPolicy retryPolicy,
+        @Nullable HedgingPolicy hedgingPolicy,
         @Nullable Throttle throttle) {
       super(
           method, headers, channelBufferUsed, perRpcBufferLimit, channelBufferLimit, callExecutor,
           scheduledExecutorService,
-          new RetryPolicy.Provider() {
-            @Override
-            public RetryPolicy get() {
-              return retryPolicy;
-            }
-          },
-          new HedgingPolicy.Provider() {
-            @Override
-            public HedgingPolicy get() {
-              return hedgingPolicy;
-            }
-          },
+          retryPolicy,
+          hedgingPolicy,
           throttle);
     }
 

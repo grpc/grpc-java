@@ -28,6 +28,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
@@ -57,6 +58,7 @@ import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.internal.ClientCallImpl.ClientStreamProvider;
+import io.grpc.internal.ManagedChannelServiceConfig.MethodInfo;
 import io.grpc.internal.testing.SingleMessageProducer;
 import io.grpc.testing.TestMethodDescriptors;
 import java.io.ByteArrayInputStream;
@@ -119,8 +121,7 @@ public class ClientCallImplTest {
   @Mock
   private ClientStream stream;
 
-  @Mock
-  private InternalConfigSelector configSelector;
+  private InternalConfigSelector configSelector = null;
 
   @Mock
   private ClientCall.Listener<Void> callListener;
@@ -142,7 +143,8 @@ public class ClientCallImplTest {
             (MethodDescriptor<?, ?>) any(MethodDescriptor.class),
             any(CallOptions.class),
             any(Metadata.class),
-            any(Context.class)))
+            any(Context.class),
+            nullable(MethodInfo.class)))
         .thenReturn(stream);
     doAnswer(new Answer<Void>() {
         @Override
@@ -346,8 +348,9 @@ public class ClientCallImplTest {
     call.start(callListener, new Metadata());
 
     ArgumentCaptor<Metadata> metadataCaptor = ArgumentCaptor.forClass(Metadata.class);
-    verify(clientStreamProvider)
-        .newStream(eq(method), same(baseCallOptions), metadataCaptor.capture(), any(Context.class));
+    verify(clientStreamProvider).newStream(
+        eq(method), same(baseCallOptions), metadataCaptor.capture(), any(Context.class),
+        nullable(MethodInfo.class));
     Metadata actual = metadataCaptor.getValue();
 
     // there should only be one.
@@ -386,8 +389,9 @@ public class ClientCallImplTest {
 
     call.start(callListener, metadata);
 
-    verify(clientStreamProvider)
-        .newStream(same(method), same(callOptions), same(metadata), any(Context.class));
+    verify(clientStreamProvider).newStream(
+        same(method), same(callOptions), same(metadata), any(Context.class),
+        nullable(MethodInfo.class));
   }
 
   @Test
@@ -727,7 +731,8 @@ public class ClientCallImplTest {
             (MethodDescriptor<?, ?>) any(MethodDescriptor.class),
             any(CallOptions.class),
             any(Metadata.class),
-            any(Context.class));
+            any(Context.class),
+            nullable(MethodInfo.class));
     verify(callListener, timeout(1000)).onClose(statusCaptor.capture(), any(Metadata.class));
     assertEquals(Status.Code.DEADLINE_EXCEEDED, statusCaptor.getValue().getCode());
     assertThat(statusCaptor.getValue().getDescription())

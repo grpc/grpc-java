@@ -23,6 +23,8 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.base.Strings;
+import io.grpc.InternalConfigSelector;
+import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.MethodDescriptor;
 import io.grpc.internal.RetriableStream.Throttle;
 import java.util.Collections;
@@ -186,6 +188,34 @@ final class ManagedChannelServiceConfig {
     return defaultMethodConfig;
   }
 
+  /**
+   * Used as a fallback per-RPC config supplier when the attributes value of {@link
+   * InternalConfigSelector#KEY} is not available.
+   */
+  @Nullable
+  InternalConfigSelector getDefaultConfigSelector() {
+    if (serviceMap.isEmpty() && serviceMethodMap.isEmpty() && defaultMethodConfig == null) {
+      return null;
+    }
+    return new InternalConfigSelector() {
+      @Override
+      public Result selectConfig(PickSubchannelArgs args) {
+        MethodInfo methodInfo = getMethodConfig(args.getMethodDescriptor());
+        return Result.newBuilder()
+            .setConfig(
+                new ManagedChannelServiceConfig(
+                    methodInfo,
+                    Collections.<String, MethodInfo>emptyMap(),
+                    Collections.<String, MethodInfo>emptyMap(),
+                    null,
+                    null,
+                    null))
+            .setCallOptions(args.getCallOptions())
+            .build();
+      }
+    };
+  }
+
   @VisibleForTesting
   @Nullable
   Object getLoadBalancingConfig() {
@@ -195,6 +225,19 @@ final class ManagedChannelServiceConfig {
   @Nullable
   Throttle getRetryThrottling() {
     return retryThrottling;
+  }
+
+  @Nullable
+  MethodInfo getMethodConfig(MethodDescriptor<?, ?> method) {
+    MethodInfo methodInfo = serviceMethodMap.get(method.getFullMethodName());
+    if (methodInfo == null) {
+      String serviceName = method.getServiceName();
+      methodInfo = serviceMap.get(serviceName);
+    }
+    if (methodInfo == null) {
+      methodInfo = defaultMethodConfig;
+    }
+    return methodInfo;
   }
 
   @Override
