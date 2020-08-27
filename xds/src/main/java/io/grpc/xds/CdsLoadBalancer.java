@@ -89,7 +89,6 @@ final class CdsLoadBalancer extends LoadBalancer {
     logger.log(XdsLogLevel.INFO, "Received CDS lb config: cluster={0}", newCdsConfig.name);
     clusterName = newCdsConfig.name;
     childLbState = new ChildLbState();
-    childLbState.start();
   }
 
   @Override
@@ -167,6 +166,12 @@ final class CdsLoadBalancer extends LoadBalancer {
     @Nullable
     private LoadBalancer lb;
 
+    private ChildLbState() {
+      xdsClient.watchClusterData(clusterName, this);
+      logger.log(XdsLogLevel.INFO,
+          "Started watcher for cluster {0} with xDS client {1}", clusterName, xdsClient);
+    }
+
     @Override
     public void onClusterChanged(ClusterUpdate update) {
       if (logger.isLoggable(XdsLogLevel.INFO)) {
@@ -233,12 +238,6 @@ final class CdsLoadBalancer extends LoadBalancer {
       if (lb == null) {
         helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
       }
-    }
-
-    void start() {
-      xdsClient.watchClusterData(clusterName, this);
-      logger.log(XdsLogLevel.INFO,
-          "Started watcher for cluster {0} with xDS client {1}", clusterName, xdsClient);
     }
 
     void shutdown() {
