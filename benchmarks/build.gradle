@@ -57,9 +57,7 @@ def vmArgs = [
 task qps_client(type: CreateStartScripts) {
     mainClassName = "io.grpc.benchmarks.qps.AsyncClient"
     applicationName = "qps_client"
-    defaultJvmOpts = [
-        "-javaagent:" + configurations.alpnagent.asPath
-    ].plus(vmArgs)
+    defaultJvmOpts = vmArgs
     outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
 }
@@ -67,9 +65,7 @@ task qps_client(type: CreateStartScripts) {
 task openloop_client(type: CreateStartScripts) {
     mainClassName = "io.grpc.benchmarks.qps.OpenLoopClient"
     applicationName = "openloop_client"
-    defaultJvmOpts = [
-        "-javaagent:" + configurations.alpnagent.asPath
-    ].plus(vmArgs)
+    defaultJvmOpts = vmArgs
     outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
 }
@@ -84,9 +80,7 @@ task qps_server(type: CreateStartScripts) {
 task benchmark_worker(type: CreateStartScripts) {
     mainClassName = "io.grpc.benchmarks.driver.LoadWorker"
     applicationName = "benchmark_worker"
-    defaultJvmOpts = [
-        "-javaagent:" + configurations.alpnagent.asPath
-    ].plus(vmArgs)
+    defaultJvmOpts = vmArgs
     outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
 }
