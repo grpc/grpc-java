@@ -544,7 +544,7 @@ public class ManagedChannelImplTest {
   }
 
   @Test
-  public void shutdown_pendingCallShouldFail() {
+  public void shutdownNow_pendingCallShouldFail() {
     channelBuilder.nameResolverFactory(
         new FakeNameResolverFactory.Builder(expectedUri)
             .setResolvedAtStart(false)
@@ -553,20 +553,22 @@ public class ManagedChannelImplTest {
     createChannel();
     ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
     call.start(mockCallListener, new Metadata());
-    verify(mockCallListener, never()).onClose(any(Status.class), any(Metadata.class));
     channel.shutdown();
     executor.runDueTasks();
+    verify(mockCallListener, never()).onClose(any(Status.class), any(Metadata.class));
+    channel.shutdownNow();
+    executor.runDueTasks();
     verify(mockCallListener).onClose(statusCaptor.capture(), any(Metadata.class));
-    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.CANCELLED);
   }
 
   @Test
   public void shutdownWithNoNameResolution_newCallShouldFail() {
     channelBuilder.nameResolverFactory(
         new FakeNameResolverFactory.Builder(expectedUri)
+            .setResolvedAtStart(false)
             .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
             .build());
-    requestConnection = false;
     createChannel();
     channel.shutdown();
     ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);

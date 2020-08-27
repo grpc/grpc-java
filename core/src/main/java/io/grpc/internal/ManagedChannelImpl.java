@@ -217,9 +217,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
   // switch to a ConcurrentHashMap.
   private final Set<InternalSubchannel> subchannels = new HashSet<>(16, .75f);
 
-  // Must be accessed from syncContext
+  // Value write and item access must be from syncContext
   @Nullable
-  private Collection<RealChannel.PendingCall<?, ?>> pendingCalls;
+  private volatile Collection<RealChannel.PendingCall<?, ?>> pendingCalls;
   private final Object pendingCallsInUseObject = new Object();
 
   // Must be mutated from syncContext
@@ -783,16 +783,21 @@ final class ManagedChannelImpl extends ManagedChannel implements
       public void run() {
         channelLogger.log(ChannelLogLevel.INFO, "Entering SHUTDOWN state");
         channelStateManager.gotoState(SHUTDOWN);
-        if (configSelector.get() == INITIAL_PENDING_SELECTOR) {
-          configSelector.set(null);
-          drainPendingCalls();
+        if (pendingCalls == null) {
+          if (configSelector.get() == INITIAL_PENDING_SELECTOR) {
+            configSelector.set(null);
+          }
+          uncommittedRetriableStreamsRegistry.onShutdown(SHUTDOWN_STATUS);
         }
       }
     }
 
     syncContext.executeLater(new Shutdown());
 
-    uncommittedRetriableStreamsRegistry.onShutdown(SHUTDOWN_STATUS);
+    if (configSelector.get() != INITIAL_PENDING_SELECTOR && pendingCalls == null) {
+      uncommittedRetriableStreamsRegistry.onShutdown(SHUTDOWN_STATUS);
+    }
+
     final class CancelIdleTimer implements Runnable {
       @Override
       public void run() {
@@ -804,16 +809,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
     return this;
   }
 
-  // Must run in SynchronizationContext.
-  private void drainPendingCalls() {
-    if (pendingCalls == null) {
-      return;
-    }
-    for (RealChannel.PendingCall<?, ?> pendingCall : pendingCalls) {
-      pendingCall.reprocess();
-    }
-  }
-
   /**
    * Initiates a forceful shutdown in which preexisting and new calls are cancelled. Although
    * forceful, the shutdown process is still not instantaneous; {@link #isTerminated()} will likely
@@ -823,7 +818,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
   public ManagedChannelImpl shutdownNow() {
     channelLogger.log(ChannelLogLevel.DEBUG, "shutdownNow() called");
     shutdown();
-    uncommittedRetriableStreamsRegistry.onShutdownNow(SHUTDOWN_NOW_STATUS);
+    if (configSelector.get() != INITIAL_PENDING_SELECTOR && pendingCalls == null) {
+      uncommittedRetriableStreamsRegistry.onShutdownNow(SHUTDOWN_NOW_STATUS);
+    }
     final class ShutdownNow implements Runnable {
       @Override
       public void run() {
@@ -831,6 +828,16 @@ final class ManagedChannelImpl extends ManagedChannel implements
           return;
         }
         shutdownNowed = true;
+        if (configSelector.get() == INITIAL_PENDING_SELECTOR) {
+          configSelector.set(null);
+        }
+        if (pendingCalls == null) {
+          uncommittedRetriableStreamsRegistry.onShutdownNow(SHUTDOWN_NOW_STATUS);
+        } else {
+          for (RealChannel.PendingCall<?, ?> pendingCall : pendingCalls) {
+            pendingCall.cancel("Channel is forcefully shutdown", null);
+          }
+        }
         maybeShutdownNowSubchannels();
       }
     }
@@ -947,6 +954,23 @@ final class ManagedChannelImpl extends ManagedChannel implements
         // tests might observe slight behavior difference from earlier grpc versions.
         return newClientCall(method, callOptions);
       }
+      if (shutdown.get()) {
+        // Return a failing ClientCall.
+        return new ClientCall<ReqT, RespT>() {
+          @Override
+          public void start(Listener<RespT> responseListener, Metadata headers) {
+            responseListener.onClose(SHUTDOWN_STATUS, new Metadata());
+          }
+
+          @Override public void request(int numMessages) {}
+
+          @Override public void cancel(@Nullable String message, @Nullable Throwable cause) {}
+
+          @Override public void halfClose() {}
+
+          @Override public void sendMessage(ReqT message) {}
+        };
+      }
       Context context = Context.current();
       final PendingCall<ReqT, RespT> pendingCall = new PendingCall<>(context, method, callOptions);
       syncContext.execute(new Runnable() {
@@ -1018,6 +1042,11 @@ final class ManagedChannelImpl extends ManagedChannel implements
             if (pendingCalls.isEmpty()) {
               inUseStateAggregator.updateObjectInUse(pendingCallsInUseObject, false);
               pendingCalls = null;
+              if (shutdownNowed) {
+                uncommittedRetriableStreamsRegistry.onShutdownNow(SHUTDOWN_NOW_STATUS);
+              } else if (shutdown.get()) {
+                uncommittedRetriableStreamsRegistry.onShutdown(SHUTDOWN_STATUS);
+              }
             }
           }
         }
@@ -1658,6 +1687,16 @@ final class ManagedChannelImpl extends ManagedChannel implements
       helper.lb.handleNameResolutionError(error);
 
       scheduleExponentialBackOffInSyncContext();
+    }
+
+    // Must run in SynchronizationContext.
+    private void drainPendingCalls() {
+      if (pendingCalls == null) {
+        return;
+      }
+      for (RealChannel.PendingCall<?, ?> pendingCall : pendingCalls) {
+        pendingCall.reprocess();
+      }
     }
 
     private void scheduleExponentialBackOffInSyncContext() {
