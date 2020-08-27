@@ -74,14 +74,10 @@ public class HedgingPolicyTest {
       MethodDescriptor.Builder<Void, Void> builder = TestMethodDescriptors.voidMethod().toBuilder();
 
       MethodDescriptor<Void, Void> method = builder.setFullMethodName("not/exist").build();
-      assertEquals(
-          HedgingPolicy.DEFAULT,
-          serviceConfigInterceptor.getHedgingPolicyFromConfig(method));
+      assertThat(serviceConfigInterceptor.getHedgingPolicyFromConfig(method)).isNull();
 
       method = builder.setFullMethodName("not_exist/Foo1").build();
-      assertEquals(
-          HedgingPolicy.DEFAULT,
-          serviceConfigInterceptor.getHedgingPolicyFromConfig(method));
+      assertThat(serviceConfigInterceptor.getHedgingPolicyFromConfig(method)).isNull();
 
       method = builder.setFullMethodName("SimpleService1/not_exist").build();
 
@@ -101,9 +97,7 @@ public class HedgingPolicyTest {
           serviceConfigInterceptor.getHedgingPolicyFromConfig(method));
 
       method = builder.setFullMethodName("SimpleService2/not_exist").build();
-      assertEquals(
-          HedgingPolicy.DEFAULT,
-          serviceConfigInterceptor.getHedgingPolicyFromConfig(method));
+      assertThat(serviceConfigInterceptor.getHedgingPolicyFromConfig(method)).isNull();
 
       method = builder.setFullMethodName("SimpleService2/Foo2").build();
       assertEquals(

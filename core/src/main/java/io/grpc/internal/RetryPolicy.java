@@ -19,11 +19,10 @@ package io.grpc.internal;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.collect.ImmutableSet;
-import io.grpc.Status;
 import io.grpc.Status.Code;
-import java.util.Collections;
 import java.util.Set;
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 
 /**
@@ -36,10 +35,6 @@ final class RetryPolicy {
   final long maxBackoffNanos;
   final double backoffMultiplier;
   final Set<Code> retryableStatusCodes;
-
-  /** No retry. */
-  static final RetryPolicy DEFAULT =
-      new RetryPolicy(1, 0, 0, 1, Collections.<Status.Code>emptySet());
 
   /**
    * The caller is supposed to have validated the arguments and handled throwing exception or
@@ -92,14 +87,17 @@ final class RetryPolicy {
         .toString();
   }
 
+  // TODO(zdapeng): delete this because RetryPolicy will be always available prior to starting
+  //  RetriableStream.
   /**
    * Provides the most suitable retry policy for a call.
    */
   interface Provider {
 
     /**
-     * This method is used no more than once for each call. Never returns null.
+     * This method is used no more than once for each call.
      */
+    @Nullable
     RetryPolicy get();
   }
 }

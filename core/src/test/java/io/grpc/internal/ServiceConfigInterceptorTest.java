@@ -123,9 +123,9 @@ public class ServiceConfigInterceptorTest {
     verify(channel).newCall(eq(methodDescriptor), callOptionsCap.capture());
     assertThat(callOptionsCap.getValue().isWaitForReady()).isFalse();
     assertThat(callOptionsCap.getValue().getOption(RETRY_POLICY_KEY).get())
-        .isEqualTo(RetryPolicy.DEFAULT);
+        .isNull();
     assertThat(callOptionsCap.getValue().getOption(HEDGING_POLICY_KEY).get())
-        .isEqualTo(HedgingPolicy.DEFAULT);
+        .isNull();
   }
 
   @Test
