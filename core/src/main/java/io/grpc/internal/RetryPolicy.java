@@ -95,7 +95,7 @@ final class RetryPolicy {
   interface Provider {
 
     /**
-     * This method is used no more than once for each call. Never returns null.
+     * This method is used no more than once for each call.
      */
     @Nullable
     RetryPolicy get();
