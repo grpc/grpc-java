@@ -111,7 +111,7 @@ class NettyReadableBuffer extends AbstractReadableBuffer {
 
   @Override
   public ByteBuffer getByteBuffer() {
-    return buffer.nioBuffers()[0];
+    return buffer.nioBufferCount() == 1 ? buffer.nioBuffer() : buffer.nioBuffers()[0];
   }
 
   /**
