@@ -186,7 +186,6 @@ public class CdsLoadBalancerTest {
     assertThat(edsConfig.lrsServerName).isEqualTo(loadReportServer);
     assertThat(edsConfig.endpointPickingPolicy.getProvider().getPolicyName())
         .isEqualTo("round_robin");
-
   }
 
   @Test
