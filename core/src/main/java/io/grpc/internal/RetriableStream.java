@@ -67,7 +67,9 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   private final Metadata headers;
   private final RetryPolicy.Provider retryPolicyProvider;
   private final HedgingPolicy.Provider hedgingPolicyProvider;
+  @Nullable
   private RetryPolicy retryPolicy;
+  @Nullable
   private HedgingPolicy hedgingPolicy;
   private boolean isHedging;
 
@@ -315,12 +317,9 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
     Substream substream = createSubstream(0);
     checkState(hedgingPolicy == null, "hedgingPolicy has been initialized unexpectedly");
-    // TODO(zdapeng): if substream is a DelayedStream, do this when name resolution finishes
     hedgingPolicy = hedgingPolicyProvider.get();
-    if (!HedgingPolicy.DEFAULT.equals(hedgingPolicy)) {
+    if (null != hedgingPolicy) {
       isHedging = true;
-      retryPolicy = RetryPolicy.DEFAULT;
-
       FutureCanceller scheduledHedgingRef = null;
 
       synchronized (lock) {
@@ -783,7 +782,6 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       }
 
       if (state.winningSubstream == null) {
-        boolean isFatal = false;
         if (rpcProgress == RpcProgress.REFUSED
             && noMoreTransparentRetry.compareAndSet(false, true)) {
           // transparent retry
@@ -811,7 +809,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
             if (retryPolicy == null) {
               retryPolicy = retryPolicyProvider.get();
             }
-            if (retryPolicy.maxAttempts == 1) {
+            if (retryPolicy == null || retryPolicy.maxAttempts == 1) {
               // optimization for early commit
               commitAndRun(newSubstream);
             }
@@ -832,56 +830,54 @@ abstract class RetriableStream<ReqT> implements ClientStream {
         } else {
           noMoreTransparentRetry.set(true);
 
-          if (retryPolicy == null) {
-            retryPolicy = retryPolicyProvider.get();
-            nextBackoffIntervalNanos = retryPolicy.initialBackoffNanos;
-          }
-
-          RetryPlan retryPlan = makeRetryDecision(status, trailers);
-          if (retryPlan.shouldRetry) {
-            // The check state.winningSubstream == null, checking if is not already committed, is
-            // racy, but is still safe b/c the retry will also handle committed/cancellation
-            FutureCanceller scheduledRetryCopy;
-            synchronized (lock) {
-              scheduledRetry = scheduledRetryCopy = new FutureCanceller(lock);
+          if (isHedging) {
+            HedgingPlan hedgingPlan = makeHedgingDecision(status, trailers);
+            if (hedgingPlan.isHedgeable) {
+              pushbackHedging(hedgingPlan.hedgingPushbackMillis);
             }
-            scheduledRetryCopy.setFuture(scheduledExecutorService.schedule(
-                new Runnable() {
-                  @Override
-                  public void run() {
-                    callExecutor.execute(new Runnable() {
-                      @Override
-                      public void run() {
-                        // retry
-                        Substream newSubstream
-                            = createSubstream(substream.previousAttemptCount + 1);
-                        drain(newSubstream);
-                      }
-                    });
-                  }
-                },
-                retryPlan.backoffNanos,
-                TimeUnit.NANOSECONDS));
-            return;
-          }
-          isFatal = retryPlan.isFatal;
-          pushbackHedging(retryPlan.hedgingPushbackMillis);
-        }
-
-        if (isHedging) {
-          synchronized (lock) {
-            state = state.removeActiveHedge(substream);
-
-            // The invariant is whether or not #(Potential Hedge + active hedges) > 0.
-            // Once hasPotentialHedging(state) is false, it will always be false, and then
-            // #(state.activeHedges) will be decreasing. This guarantees that even there may be
-            // multiple concurrent hedges, one of the hedges will end up committed.
-            if (!isFatal) {
-              if (hasPotentialHedging(state) || !state.activeHedges.isEmpty()) {
-                return;
+            synchronized (lock) {
+              state = state.removeActiveHedge(substream);
+              // The invariant is whether or not #(Potential Hedge + active hedges) > 0.
+              // Once hasPotentialHedging(state) is false, it will always be false, and then
+              // #(state.activeHedges) will be decreasing. This guarantees that even there may be
+              // multiple concurrent hedges, one of the hedges will end up committed.
+              if (hedgingPlan.isHedgeable) {
+                if (hasPotentialHedging(state) || !state.activeHedges.isEmpty()) {
+                  return;
+                }
+                // else, no activeHedges, no new hedges possible, try to commit
+              } // else, isHedgeable is false, try to commit
+            }
+          } else {
+            RetryPlan retryPlan = makeRetryDecision(status, trailers);
+            if (retryPlan.shouldRetry) {
+              // The check state.winningSubstream == null, checking if is not already committed, is
+              // racy, but is still safe b/c the retry will also handle committed/cancellation
+              FutureCanceller scheduledRetryCopy;
+              synchronized (lock) {
+                scheduledRetry = scheduledRetryCopy = new FutureCanceller(lock);
               }
-              // else, no activeHedges, no new hedges possible, try to commit
-            } // else, fatal, try to commit
+              scheduledRetryCopy.setFuture(
+                  scheduledExecutorService.schedule(
+                      new Runnable() {
+                        @Override
+                        public void run() {
+                          callExecutor.execute(
+                              new Runnable() {
+                                @Override
+                                public void run() {
+                                  // retry
+                                  Substream newSubstream =
+                                      createSubstream(substream.previousAttemptCount + 1);
+                                  drain(newSubstream);
+                                }
+                              });
+                        }
+                      },
+                      retryPlan.backoffNanos,
+                      TimeUnit.NANOSECONDS));
+              return;
+            }
           }
         }
       }
@@ -898,29 +894,21 @@ abstract class RetriableStream<ReqT> implements ClientStream {
      * caller should check it separately. It also updates the throttle. It does not change state.
      */
     private RetryPlan makeRetryDecision(Status status, Metadata trailer) {
+      if (retryPolicy == null) {
+        retryPolicy = retryPolicyProvider.get();
+        if (retryPolicy == null) {
+          return new RetryPlan(false, 0);
+        } else {
+          nextBackoffIntervalNanos = retryPolicy.initialBackoffNanos;
+        }
+      }
       boolean shouldRetry = false;
       long backoffNanos = 0L;
       boolean isRetryableStatusCode = retryPolicy.retryableStatusCodes.contains(status.getCode());
-      boolean isNonFatalStatusCode = hedgingPolicy.nonFatalStatusCodes.contains(status.getCode());
-      if (isHedging && !isNonFatalStatusCode) {
-        // isFatal is true, no pushback
-        return new RetryPlan(/* shouldRetry = */ false, /* isFatal = */ true, 0, null);
-      }
-
-      String pushbackStr = trailer.get(GRPC_RETRY_PUSHBACK_MS);
-      Integer pushbackMillis = null;
-      if (pushbackStr != null) {
-        try {
-          pushbackMillis = Integer.valueOf(pushbackStr);
-        } catch (NumberFormatException e) {
-          pushbackMillis = -1;
-        }
-      }
-
+      Integer pushbackMillis = getPushbackMills(trailer);
       boolean isThrottled = false;
       if (throttle != null) {
-        if (isRetryableStatusCode || isNonFatalStatusCode
-            || (pushbackMillis != null && pushbackMillis < 0)) {
+        if (isRetryableStatusCode || (pushbackMillis != null && pushbackMillis < 0)) {
           isThrottled = !throttle.onQualifiedFailureThenCheckIsAboveThreshold();
         }
       }
@@ -933,7 +921,6 @@ abstract class RetriableStream<ReqT> implements ClientStream {
             nextBackoffIntervalNanos = Math.min(
                 (long) (nextBackoffIntervalNanos * retryPolicy.backoffMultiplier),
                 retryPolicy.maxBackoffNanos);
-
           } // else no retry
         } else if (pushbackMillis >= 0) {
           shouldRetry = true;
@@ -942,8 +929,33 @@ abstract class RetriableStream<ReqT> implements ClientStream {
         } // else no retry
       } // else no retry
 
-      return new RetryPlan(
-          shouldRetry, /* isFatal = */ false, backoffNanos, isHedging ? pushbackMillis : null);
+      return new RetryPlan(shouldRetry, backoffNanos);
+    }
+
+    private HedgingPlan makeHedgingDecision(Status status, Metadata trailer) {
+      Integer pushbackMillis = getPushbackMills(trailer);
+      boolean isFatal = !hedgingPolicy.nonFatalStatusCodes.contains(status.getCode());
+      boolean isThrottled = false;
+      if (throttle != null) {
+        if (!isFatal || (pushbackMillis != null && pushbackMillis < 0)) {
+          isThrottled = !throttle.onQualifiedFailureThenCheckIsAboveThreshold();
+        }
+      }
+      return new HedgingPlan(!isFatal && !isThrottled, pushbackMillis);
+    }
+
+    @Nullable
+    private Integer getPushbackMills(Metadata trailer) {
+      String pushbackStr = trailer.get(GRPC_RETRY_PUSHBACK_MS);
+      Integer pushbackMillis = null;
+      if (pushbackStr != null) {
+        try {
+          pushbackMillis = Integer.valueOf(pushbackStr);
+        } catch (NumberFormatException e) {
+          pushbackMillis = -1;
+        }
+      }
+      return pushbackMillis;
     }
 
     @Override
@@ -1361,17 +1373,22 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
   private static final class RetryPlan {
     final boolean shouldRetry;
-    final boolean isFatal; // receiving a status not among the nonFatalStatusCodes
     final long backoffNanos;
+
+    RetryPlan(boolean shouldRetry, long backoffNanos) {
+      this.shouldRetry = shouldRetry;
+      this.backoffNanos = backoffNanos;
+    }
+  }
+
+  private static final class HedgingPlan {
+    final boolean isHedgeable;
     @Nullable
     final Integer hedgingPushbackMillis;
 
-    RetryPlan(
-        boolean shouldRetry, boolean isFatal, long backoffNanos,
-        @Nullable Integer hedgingPushbackMillis) {
-      this.shouldRetry = shouldRetry;
-      this.isFatal = isFatal;
-      this.backoffNanos = backoffNanos;
+    public HedgingPlan(
+        boolean isHedgeable, @Nullable Integer hedgingPushbackMillis) {
+      this.isHedgeable = isHedgeable;
       this.hedgingPushbackMillis = hedgingPushbackMillis;
     }
   }

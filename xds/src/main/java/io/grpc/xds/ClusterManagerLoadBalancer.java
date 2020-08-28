@@ -24,7 +24,6 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.xds.XdsSubchannelPickers.BUFFER_PICKER;
 
 import com.google.common.annotations.VisibleForTesting;
-import io.grpc.CallOptions;
 import io.grpc.ConnectivityState;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
@@ -51,9 +50,6 @@ class ClusterManagerLoadBalancer extends LoadBalancer {
 
   @VisibleForTesting
   static final int DELAYED_CHILD_DELETION_TIME_MINUTES = 15;
-  @VisibleForTesting
-  static final CallOptions.Key<String> ROUTING_CLUSTER_NAME_KEY =
-      CallOptions.Key.create("io.grpc.xds.ROUTING_CLUSTER_NAME_KEY");
 
   private final Map<String, ChildLbState> childLbStates = new HashMap<>();
   private final Helper helper;
@@ -148,7 +144,8 @@ class ClusterManagerLoadBalancer extends LoadBalancer {
       SubchannelPicker picker = new SubchannelPicker() {
         @Override
         public PickResult pickSubchannel(PickSubchannelArgs args) {
-          String clusterName = args.getCallOptions().getOption(ROUTING_CLUSTER_NAME_KEY);
+          String clusterName =
+              args.getCallOptions().getOption(XdsNameResolver2.CLUSTER_SELECTION_KEY);
           SubchannelPicker delegate = childPickers.get(clusterName);
           if (delegate == null) {
             return

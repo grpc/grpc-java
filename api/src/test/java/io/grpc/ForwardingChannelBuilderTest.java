@@ -88,7 +88,7 @@ public class ForwardingChannelBuilderTest {
   }
 
   @Test
-  public void buildReturnsDelegateBuildByDefualt() {
+  public void buildReturnsDelegateBuildByDefault() {
     ManagedChannel mockChannel = mock(ManagedChannel.class);
     doReturn(mockChannel).when(mockDelegate).build();
 

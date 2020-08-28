@@ -267,12 +267,12 @@ final class ManagedChannelServiceConfig {
       Map<String, ?> retryPolicyMap =
           retryEnabled ? ServiceConfigUtil.getRetryPolicyFromMethodConfig(methodConfig) : null;
       retryPolicy = retryPolicyMap == null
-          ? RetryPolicy.DEFAULT : retryPolicy(retryPolicyMap, maxRetryAttemptsLimit);
+          ? null : retryPolicy(retryPolicyMap, maxRetryAttemptsLimit);
 
       Map<String, ?> hedgingPolicyMap =
           retryEnabled ? ServiceConfigUtil.getHedgingPolicyFromMethodConfig(methodConfig) : null;
       hedgingPolicy = hedgingPolicyMap == null
-          ? HedgingPolicy.DEFAULT : hedgingPolicy(hedgingPolicyMap, maxHedgedAttemptsLimit);
+          ? null : hedgingPolicy(hedgingPolicyMap, maxHedgedAttemptsLimit);
     }
 
     @Override

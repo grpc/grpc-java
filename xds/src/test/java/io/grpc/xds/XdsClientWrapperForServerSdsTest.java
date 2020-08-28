@@ -109,7 +109,7 @@ public class XdsClientWrapperForServerSdsTest {
             "exact IP over IPANY match, expect filter2"
           },
           {
-            PORT,// matches dest port but no address match
+            PORT, // matches dest port but no address match
             "168.20.20.2",
             "10.1.2.4",
             "192.168.10.1",

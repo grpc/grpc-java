@@ -276,7 +276,7 @@ public class ClusterManagerLoadBalancerTest {
                 .build(),
             new Metadata(),
             CallOptions.DEFAULT.withOption(
-                ClusterManagerLoadBalancer.ROUTING_CLUSTER_NAME_KEY, name));
+                XdsNameResolver2.CLUSTER_SELECTION_KEY, name));
     return picker.pickSubchannel(args);
   }
 

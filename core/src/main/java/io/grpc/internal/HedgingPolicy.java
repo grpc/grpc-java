@@ -20,8 +20,8 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.collect.ImmutableSet;
 import io.grpc.Status.Code;
-import java.util.Collections;
 import java.util.Set;
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 
 /**
@@ -32,10 +32,6 @@ final class HedgingPolicy {
   final int maxAttempts;
   final long hedgingDelayNanos;
   final Set<Code> nonFatalStatusCodes;
-
-  /** No hedging. */
-  static final HedgingPolicy DEFAULT =
-      new HedgingPolicy(1, 0, Collections.<Code>emptySet());
 
   /**
    * The caller is supposed to have validated the arguments and handled throwing exception or
@@ -75,14 +71,17 @@ final class HedgingPolicy {
         .toString();
   }
 
+  // TODO(zdapeng): delete this because HedgingPolicy will be always available prior to starting
+  //  RetriableStream.
   /**
    * Provides the most suitable hedging policy for a call.
    */
   interface Provider {
 
     /**
-     * This method is used no more than once for each call. Never returns null.
+     * This method is used no more than once for each call.
      */
+    @Nullable
     HedgingPolicy get();
   }
 }

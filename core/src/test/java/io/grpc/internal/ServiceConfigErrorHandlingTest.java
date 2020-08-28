@@ -26,6 +26,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -36,6 +37,7 @@ import io.grpc.ClientInterceptor;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.InternalChannelz;
+import io.grpc.InternalConfigSelector;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.ResolvedAddresses;
@@ -59,7 +61,6 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
@@ -101,7 +102,6 @@ public class ServiceConfigErrorHandlingTest {
 
   private final InternalChannelz channelz = new InternalChannelz();
 
-  @Rule public final ExpectedException thrown = ExpectedException.none();
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
   private ManagedChannelImpl channel;
@@ -449,6 +449,11 @@ public class ServiceConfigErrorHandlingTest {
     Map<String, Object> rawServiceConfig =
         parseJson("{\"loadBalancingConfig\": [{\"mock_lb\": {\"check\": \"1st raw config\"}}]}");
     nameResolverFactory.nextRawServiceConfig.set(rawServiceConfig);
+    InternalConfigSelector configSelector = mock(InternalConfigSelector.class);
+    nameResolverFactory.nextAttributes.set(
+        Attributes.newBuilder()
+            .set(InternalConfigSelector.KEY, configSelector)
+            .build());
 
     createChannel();
 
@@ -458,6 +463,7 @@ public class ServiceConfigErrorHandlingTest {
     ResolvedAddresses resolvedAddresses = resultCaptor.getValue();
     assertThat(resolvedAddresses.getAddresses()).containsExactly(addressGroup);
     assertThat(resolvedAddresses.getLoadBalancingPolicyConfig()).isEqualTo("1st raw config");
+    assertThat(channel.getConfigSelector()).isSameInstanceAs(configSelector);
     verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
 
     assertThat(channel.getState(false)).isNotEqualTo(ConnectivityState.TRANSIENT_FAILURE);
@@ -471,10 +477,54 @@ public class ServiceConfigErrorHandlingTest {
     verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
     ResolvedAddresses newResolvedAddress = resultCaptor.getValue();
     // should use previous service config because new service config is invalid.
-    assertThat(resolvedAddresses.getLoadBalancingPolicyConfig()).isEqualTo("1st raw config");
-    assertThat(newResolvedAddress.getAttributes()).isNotEqualTo(Attributes.EMPTY);
+    assertThat(newResolvedAddress.getLoadBalancingPolicyConfig()).isEqualTo("1st raw config");
+    assertThat(channel.getConfigSelector()).isSameInstanceAs(configSelector);
     verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
     assertThat(channel.getState(false)).isEqualTo(ConnectivityState.IDLE);
+  }
+
+  @Test
+  public void validConfig_thenNoConfig_withDefaultConfig() throws Exception {
+    FakeNameResolverFactory nameResolverFactory =
+        new FakeNameResolverFactory.Builder(expectedUri)
+            .setServers(ImmutableList.of(addressGroup))
+            .build();
+    channelBuilder.nameResolverFactory(nameResolverFactory);
+    Map<String, Object> defaultServiceConfig =
+        parseJson("{\"loadBalancingConfig\": [{\"mock_lb\": {\"check\": \"mate\"}}]}");
+    channelBuilder.defaultServiceConfig(defaultServiceConfig);
+
+    Map<String, Object> rawServiceConfig =
+        parseJson("{\"loadBalancingConfig\": [{\"mock_lb\": {\"check\": \"1st raw config\"}}]}");
+    nameResolverFactory.nextRawServiceConfig.set(rawServiceConfig);
+    InternalConfigSelector configSelector = mock(InternalConfigSelector.class);
+    nameResolverFactory.nextAttributes.set(
+        Attributes.newBuilder()
+            .set(InternalConfigSelector.KEY, configSelector)
+            .build());
+
+    createChannel();
+
+    ArgumentCaptor<ResolvedAddresses> resultCaptor =
+        ArgumentCaptor.forClass(ResolvedAddresses.class);
+    verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
+    ResolvedAddresses resolvedAddresses = resultCaptor.getValue();
+    assertThat(resolvedAddresses.getAddresses()).containsExactly(addressGroup);
+    // should use previous service config because new resolution result is no config.
+    assertThat(resolvedAddresses.getLoadBalancingPolicyConfig()).isEqualTo("1st raw config");
+    assertThat(channel.getConfigSelector()).isSameInstanceAs(configSelector);
+    verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
+
+    // 2nd resolution lbConfig is no config
+    nameResolverFactory.nextRawServiceConfig.set(null);
+    nameResolverFactory.allResolved();
+
+    verify(mockLoadBalancer, times(2)).handleResolvedAddresses(resultCaptor.capture());
+    ResolvedAddresses newResolvedAddress = resultCaptor.getValue();
+    assertThat(newResolvedAddress.getLoadBalancingPolicyConfig()).isEqualTo("mate");
+    assertThat(newResolvedAddress.getAttributes().get(InternalConfigSelector.KEY))
+        .isNull();
+    verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
   }
 
   private static final class ChannelBuilder
@@ -513,6 +563,7 @@ public class ServiceConfigErrorHandlingTest {
     final boolean resolvedAtStart;
     final ArrayList<FakeNameResolver> resolvers = new ArrayList<>();
     final AtomicReference<Map<String, ?>> nextRawServiceConfig = new AtomicReference<>();
+    final AtomicReference<Attributes> nextAttributes = new AtomicReference<>(Attributes.EMPTY);
 
     FakeNameResolverFactory(
         URI expectedUri,
@@ -574,7 +625,8 @@ public class ServiceConfigErrorHandlingTest {
 
       void resolved() {
         Map<String, ?> rawServiceConfig = nextRawServiceConfig.get();
-        ResolutionResult.Builder builder = ResolutionResult.newBuilder().setAddresses(servers);
+        ResolutionResult.Builder builder =
+            ResolutionResult.newBuilder().setAddresses(servers).setAttributes(nextAttributes.get());
         if (rawServiceConfig != null) {
           builder
               .setServiceConfig(serviceConfigParser.parseServiceConfig(rawServiceConfig));

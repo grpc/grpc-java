@@ -19,7 +19,6 @@ package io.grpc.xds.internal.sds;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
-import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.BaseTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
@@ -47,28 +46,34 @@ public abstract class SslContextProvider implements Closeable {
 
   protected final BaseTlsContext tlsContext;
 
-  public interface Callback {
+  abstract static class Callback {
+    private final Executor executor;
+
+    protected Callback(Executor executor) {
+      this.executor = executor;
+    }
+
     /** Informs callee of new/updated SslContext. */
-    void updateSecret(SslContext sslContext);
+    abstract void updateSecret(SslContext sslContext);
 
     /** Informs callee of an exception that was generated. */
-    void onException(Throwable throwable);
+    abstract void onException(Throwable throwable);
   }
 
-  SslContextProvider(BaseTlsContext tlsContext) {
+  protected SslContextProvider(BaseTlsContext tlsContext) {
     this.tlsContext = checkNotNull(tlsContext, "tlsContext");
   }
 
-  CommonTlsContext getCommonTlsContext() {
+  protected CommonTlsContext getCommonTlsContext() {
     return tlsContext.getCommonTlsContext();
   }
 
   protected void setClientAuthValues(
-      SslContextBuilder sslContextBuilder, CertificateValidationContext localCertValidationContext)
+      SslContextBuilder sslContextBuilder, SdsTrustManagerFactory sdsTrustManagerFactory)
       throws CertificateException, IOException, CertStoreException {
     DownstreamTlsContext downstreamTlsContext = getDownstreamTlsContext();
-    if (localCertValidationContext != null) {
-      sslContextBuilder.trustManager(new SdsTrustManagerFactory(localCertValidationContext));
+    if (sdsTrustManagerFactory != null) {
+      sslContextBuilder.trustManager(sdsTrustManagerFactory);
       sslContextBuilder.clientAuth(
           downstreamTlsContext.isRequireClientCertificate()
               ? ClientAuth.REQUIRE
@@ -100,14 +105,13 @@ public abstract class SslContextProvider implements Closeable {
    * Registers a callback on the given executor. The callback will run when SslContext becomes
    * available or immediately if the result is already available.
    */
-  public abstract void addCallback(Callback callback, Executor executor);
+  public abstract void addCallback(Callback callback);
 
-  final void performCallback(
-      final SslContextGetter sslContextGetter, final Callback callback, Executor executor) {
+  protected final void performCallback(
+          final SslContextGetter sslContextGetter, final Callback callback) {
     checkNotNull(sslContextGetter, "sslContextGetter");
     checkNotNull(callback, "callback");
-    checkNotNull(executor, "executor");
-    executor.execute(
+    callback.executor.execute(
         new Runnable() {
           @Override
           public void run() {

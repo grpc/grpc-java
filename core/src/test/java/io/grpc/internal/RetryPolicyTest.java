@@ -77,14 +77,10 @@ public class RetryPolicyTest {
       MethodDescriptor.Builder<Void, Void> builder = TestMethodDescriptors.voidMethod().toBuilder();
 
       MethodDescriptor<Void, Void> method = builder.setFullMethodName("not/exist").build();
-      assertEquals(
-          RetryPolicy.DEFAULT,
-          serviceConfigInterceptor.getRetryPolicyFromConfig(method));
+      assertThat(serviceConfigInterceptor.getRetryPolicyFromConfig(method)).isNull();
 
       method = builder.setFullMethodName("not_exist/Foo1").build();
-      assertEquals(
-          RetryPolicy.DEFAULT,
-          serviceConfigInterceptor.getRetryPolicyFromConfig(method));
+      assertThat(serviceConfigInterceptor.getRetryPolicyFromConfig(method)).isNull();
 
       method = builder.setFullMethodName("SimpleService1/not_exist").build();
 
@@ -108,9 +104,7 @@ public class RetryPolicyTest {
           serviceConfigInterceptor.getRetryPolicyFromConfig(method));
 
       method = builder.setFullMethodName("SimpleService2/not_exist").build();
-      assertEquals(
-          RetryPolicy.DEFAULT,
-          serviceConfigInterceptor.getRetryPolicyFromConfig(method));
+      assertThat(serviceConfigInterceptor.getRetryPolicyFromConfig(method)).isNull();
 
       method = builder.setFullMethodName("SimpleService2/Foo2").build();
       assertEquals(

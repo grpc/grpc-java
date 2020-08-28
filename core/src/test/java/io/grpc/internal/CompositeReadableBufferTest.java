@@ -28,6 +28,7 @@ import static org.mockito.Mockito.when;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.nio.InvalidMarkException;
 import org.junit.After;
@@ -125,17 +126,17 @@ public class CompositeReadableBufferTest {
     ByteBuffer byteBuffer = ByteBuffer.allocate(EXPECTED_VALUE.length());
     int remaining = EXPECTED_VALUE.length();
 
-    byteBuffer.limit(1);
+    ((Buffer) byteBuffer).limit(1);
     composite.readBytes(byteBuffer);
     remaining--;
     assertEquals(remaining, composite.readableBytes());
 
-    byteBuffer.limit(byteBuffer.limit() + 5);
+    ((Buffer) byteBuffer).limit(byteBuffer.limit() + 5);
     composite.readBytes(byteBuffer);
     remaining -= 5;
     assertEquals(remaining, composite.readableBytes());
 
-    byteBuffer.limit(byteBuffer.limit() + remaining);
+    ((Buffer) byteBuffer).limit(byteBuffer.limit() + remaining);
     composite.readBytes(byteBuffer);
     assertEquals(0, composite.readableBytes());
     assertEquals(EXPECTED_VALUE, new String(byteBuffer.array(), UTF_8));

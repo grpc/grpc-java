@@ -21,6 +21,7 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 
 import java.io.ByteArrayOutputStream;
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import org.junit.Assume;
@@ -87,7 +88,7 @@ public abstract class ReadableBufferTestBase {
     ReadableBuffer buffer = buffer();
     ByteBuffer byteBuffer = ByteBuffer.allocate(msg.length());
     buffer.readBytes(byteBuffer);
-    byteBuffer.flip();
+    ((Buffer) byteBuffer).flip();
     byte[] array = new byte[msg.length()];
     byteBuffer.get(array);
     assertArrayEquals(msg.getBytes(UTF_8), array);
@@ -99,7 +100,7 @@ public abstract class ReadableBufferTestBase {
     ReadableBuffer buffer = buffer();
     ByteBuffer byteBuffer = ByteBuffer.allocate(2);
     buffer.readBytes(byteBuffer);
-    byteBuffer.flip();
+    ((Buffer) byteBuffer).flip();
     byte[] array = new byte[2];
     byteBuffer.get(array);
     assertArrayEquals(new byte[]{'h', 'e'}, array);
