@@ -330,13 +330,13 @@ public class XdsSdsClientServerTest {
       DownstreamTlsContext downstreamTlsContext)
       throws IOException {
     XdsServerBuilder builder = XdsServerBuilder.forPort(port).addService(new SimpleServiceImpl());
-    cleanupRule.register(builder.buildServer(serverSdsProtocolNegotiator)).start();
     XdsServerBuilderTest.generateListenerUpdate(
         xdsClientWrapperForServerSds.getListenerWatcher(),
         port,
         port,
         downstreamTlsContext,
         /* tlsContext2= */null);
+    cleanupRule.register(builder.buildServer(serverSdsProtocolNegotiator)).start();
   }
 
   private static int findFreePort() throws IOException {

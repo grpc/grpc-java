@@ -126,8 +126,7 @@ public class XdsClientWrapperForServerSdsTestMisc {
   public void registerServerWatcher() throws UnknownHostException {
     XdsClientWrapperForServerSds.ServerWatcher mockServerWatcher =
         mock(XdsClientWrapperForServerSds.ServerWatcher.class);
-    assertThat(xdsClientWrapperForServerSds.addServerWatcher(mockServerWatcher)).isTrue();
-    assertThat(xdsClientWrapperForServerSds.addServerWatcher(mockServerWatcher)).isFalse();
+    xdsClientWrapperForServerSds.addServerWatcher(mockServerWatcher);
     InetAddress ipLocalAddress = InetAddress.getByName("10.1.2.3");
     InetSocketAddress localAddress = new InetSocketAddress(ipLocalAddress, PORT);
     EnvoyServerProtoData.DownstreamTlsContext tlsContext =
@@ -137,15 +136,28 @@ public class XdsClientWrapperForServerSdsTestMisc {
     DownstreamTlsContext returnedTlsContext = sendListenerUpdate(localAddress, tlsContext, null);
     assertThat(returnedTlsContext).isSameInstanceAs(tlsContext);
     verify(mockServerWatcher).onSuccess(same(tlsContext));
-    assertThat(xdsClientWrapperForServerSds.removeServerWatcher(mockServerWatcher)).isTrue();
-    assertThat(xdsClientWrapperForServerSds.removeServerWatcher(mockServerWatcher)).isFalse();
+    xdsClientWrapperForServerSds.removeServerWatcher(mockServerWatcher);
+  }
+
+  @Test
+  public void registerServerWatcher_afterListenerUpdate() throws UnknownHostException {
+    InetAddress ipLocalAddress = InetAddress.getByName("10.1.2.3");
+    InetSocketAddress localAddress = new InetSocketAddress(ipLocalAddress, PORT);
+    EnvoyServerProtoData.DownstreamTlsContext tlsContext =
+            CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1");
+    DownstreamTlsContext returnedTlsContext = sendListenerUpdate(localAddress, tlsContext, null);
+    assertThat(returnedTlsContext).isSameInstanceAs(tlsContext);
+    XdsClientWrapperForServerSds.ServerWatcher mockServerWatcher =
+            mock(XdsClientWrapperForServerSds.ServerWatcher.class);
+    xdsClientWrapperForServerSds.addServerWatcher(mockServerWatcher);
+    verify(mockServerWatcher).onSuccess(same(tlsContext));
   }
 
   @Test
   public void registerServerWatcher_notifyError() throws UnknownHostException {
     XdsClientWrapperForServerSds.ServerWatcher mockServerWatcher =
         mock(XdsClientWrapperForServerSds.ServerWatcher.class);
-    assertThat(xdsClientWrapperForServerSds.addServerWatcher(mockServerWatcher)).isTrue();
+    xdsClientWrapperForServerSds.addServerWatcher(mockServerWatcher);
     registeredWatcher.onError(Status.INTERNAL);
     verify(mockServerWatcher).onError(eq(Status.INTERNAL));
     reset(mockServerWatcher);

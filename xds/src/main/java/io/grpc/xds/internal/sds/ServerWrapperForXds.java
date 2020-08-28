@@ -19,6 +19,7 @@ package io.grpc.xds.internal.sds;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Server;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
@@ -27,6 +28,8 @@ import io.grpc.xds.XdsClientWrapperForServerSds;
 import java.io.IOException;
 import java.net.SocketAddress;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
@@ -40,6 +43,7 @@ public final class ServerWrapperForXds extends Server {
   private final Server delegate;
   private final XdsClientWrapperForServerSds xdsClientWrapperForServerSds;
   @Nullable XdsServerBuilder.ErrorNotifier errorNotifier;
+  @Nullable XdsClientWrapperForServerSds.ServerWatcher myServerWatcher;
 
   ServerWrapperForXds(
       Server delegate,
@@ -52,8 +56,26 @@ public final class ServerWrapperForXds extends Server {
   }
 
   @Override
-  public Server start() {
-    xdsClientWrapperForServerSds.addServerWatcher(
+  public Server start() throws IOException {
+    Future<EnvoyServerProtoData.DownstreamTlsContext> future = addServerWatcher();
+    if (!xdsClientWrapperForServerSds.hasXdsClient()) {
+      xdsClientWrapperForServerSds.createXdsClientAndStart();
+    }
+    try {
+      future.get();
+    } catch (InterruptedException | ExecutionException ex) {
+      xdsClientWrapperForServerSds.removeServerWatcher(myServerWatcher);
+      myServerWatcher = null;
+      throw new RuntimeException(ex);
+    }
+    delegate.start();
+    return this;
+  }
+
+  private Future<EnvoyServerProtoData.DownstreamTlsContext> addServerWatcher() {
+    final SettableFuture<EnvoyServerProtoData.DownstreamTlsContext> settableFuture =
+        SettableFuture.create();
+    myServerWatcher =
         new XdsClientWrapperForServerSds.ServerWatcher() {
           @Override
           public void onError(Status error) {
@@ -64,18 +86,13 @@ public final class ServerWrapperForXds extends Server {
 
           @Override
           public void onSuccess(EnvoyServerProtoData.DownstreamTlsContext downstreamTlsContext) {
-            try {
-              delegate.start();
-              xdsClientWrapperForServerSds.removeServerWatcher(this);
-            } catch (IOException e) {
-              onError(Status.fromThrowable(e));
-            }
+            xdsClientWrapperForServerSds.removeServerWatcher(this);
+            myServerWatcher = null;
+            settableFuture.set(downstreamTlsContext);
           }
-        });
-    if (!xdsClientWrapperForServerSds.hasXdsClient()) {
-      xdsClientWrapperForServerSds.createXdsClientAndStart();
-    }
-    return this;
+        };
+    xdsClientWrapperForServerSds.addServerWatcher(myServerWatcher);
+    return settableFuture;
   }
 
   @Override

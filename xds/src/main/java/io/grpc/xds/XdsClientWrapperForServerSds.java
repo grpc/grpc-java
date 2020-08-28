@@ -227,19 +227,22 @@ public final class XdsClientWrapperForServerSds {
     return null;
   }
 
-  /** Adds a {@link ServerWatcher} to the list. Returns true if added. */
-  public boolean addServerWatcher(ServerWatcher serverWatcher) {
+  /** Adds a {@link ServerWatcher} to the list. */
+  public void addServerWatcher(ServerWatcher serverWatcher) {
     checkNotNull(serverWatcher, "serverWatcher");
     synchronized (serverWatchers) {
-      return serverWatchers.add(serverWatcher);
+      serverWatchers.add(serverWatcher);
+    }
+    if (curListener != null) {
+      serverWatcher.onSuccess(getDownstreamTlsContext(new InetSocketAddress(port)));
     }
   }
 
-  /** Removes a {@link ServerWatcher} from the list. Returns true if removed. */
-  public boolean removeServerWatcher(ServerWatcher serverWatcher) {
+  /** Removes a {@link ServerWatcher} from the list. */
+  public void removeServerWatcher(ServerWatcher serverWatcher) {
     checkNotNull(serverWatcher, "serverWatcher");
     synchronized (serverWatchers) {
-      return serverWatchers.remove(serverWatcher);
+      serverWatchers.remove(serverWatcher);
     }
   }
 
