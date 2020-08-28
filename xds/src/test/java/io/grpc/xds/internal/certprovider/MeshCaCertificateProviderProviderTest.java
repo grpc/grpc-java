@@ -226,32 +226,32 @@ public class MeshCaCertificateProviderProviderTest {
                     eq(TimeUnit.SECONDS.toMillis(RPC_TIMEOUT_SECONDS)));
   }
 
-  private Map<String, ?> buildFullConfig() throws IOException {
+  private static Map<String, ?> buildFullConfig() throws IOException {
     return getCertProviderConfig(CommonCertProviderTestUtils.getNonDefaultTestBootstrapInfo());
   }
 
-  private Map<String, ?> buildMinimalConfig() throws IOException {
+  private static Map<String, ?> buildMinimalConfig() throws IOException {
     return getCertProviderConfig(CommonCertProviderTestUtils.getMinimalBootstrapInfo());
   }
 
-  private Map<String, ?> buildBadClusterUrlConfig() throws IOException {
+  private static Map<String, ?> buildBadClusterUrlConfig() throws IOException {
     return getCertProviderConfig(
         CommonCertProviderTestUtils.getMinimalAndBadClusterUrlBootstrapInfo());
   }
 
-  private Map<String, ?> buildMissingSaJwtLocationConfig() throws IOException {
+  private static Map<String, ?> buildMissingSaJwtLocationConfig() throws IOException {
     return getCertProviderConfig(CommonCertProviderTestUtils.getMissingSaJwtLocation());
   }
 
-  private Map<String, ?> buildMissingGkeClusterUrlConfig() throws IOException {
+  private static Map<String, ?> buildMissingGkeClusterUrlConfig() throws IOException {
     return getCertProviderConfig(CommonCertProviderTestUtils.getMissingGkeClusterUrl());
   }
 
-  private Map<String, ?> buildBadChannelCredsConfig() throws IOException {
+  private static Map<String, ?> buildBadChannelCredsConfig() throws IOException {
     return getCertProviderConfig(CommonCertProviderTestUtils.getBadChannelCredsConfig());
   }
 
-  private Map<String, ?> getCertProviderConfig(Bootstrapper.BootstrapInfo bootstrapInfo) {
+  private static Map<String, ?> getCertProviderConfig(Bootstrapper.BootstrapInfo bootstrapInfo) {
     Map<String, Bootstrapper.CertificateProviderInfo> certProviders =
             bootstrapInfo.getCertProviders();
     Bootstrapper.CertificateProviderInfo gcpIdInfo =

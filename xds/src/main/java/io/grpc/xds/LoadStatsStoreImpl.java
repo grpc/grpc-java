@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static java.util.concurrent.TimeUnit.NANOSECONDS;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
@@ -33,7 +34,6 @@ import io.grpc.xds.LoadStatsManager.LoadStatsStoreFactory;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
@@ -113,7 +113,7 @@ final class LoadStatsStoreImpl implements LoadStatsStore {
       statsBuilder.addDroppedRequests(new DroppedRequests(entry.getKey(),drops));
     }
     statsBuilder.setTotalDroppedRequests(totalDrops);
-    statsBuilder.setLoadReportIntervalNanos(stopwatch.elapsed(TimeUnit.NANOSECONDS));
+    statsBuilder.setLoadReportIntervalNanos(stopwatch.elapsed(NANOSECONDS));
     stopwatch.reset().start();
     return statsBuilder.build();
   }
