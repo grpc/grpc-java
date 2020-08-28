@@ -102,7 +102,7 @@ public class AuthorizationEngine {
    * @param allowPolicy input Envoy RBAC policy with ALLOW action.
    * @throws IllegalArgumentException if the user inputs an invalid RBAC list.
    */
-  public AuthorizationEngine(RBAC denyPolicy, RBAC allowPolicy) throws IllegalArgumentException {
+  public AuthorizationEngine(RBAC denyPolicy, RBAC allowPolicy) {
     checkArgument(
         denyPolicy.getAction() == Action.DENY && allowPolicy.getAction() == Action.ALLOW,
         "Invalid RBAC list, " 
@@ -140,7 +140,7 @@ public class AuthorizationEngine {
       if (authzDecision != null) {
         return authzDecision;
       }
-      if (unknownPolicyNames.size() > 0) {
+      if (!unknownPolicyNames.isEmpty()) {
         return new AuthorizationDecision(
             AuthorizationDecision.Output.UNKNOWN, unknownPolicyNames);
       }
@@ -154,7 +154,7 @@ public class AuthorizationEngine {
       if (authzDecision != null) {
         return authzDecision;
       }
-      if (unknownPolicyNames.size() > 0) {
+      if (!unknownPolicyNames.isEmpty()) {
         return new AuthorizationDecision(
             AuthorizationDecision.Output.UNKNOWN, unknownPolicyNames);
       }
@@ -198,7 +198,7 @@ public class AuthorizationEngine {
     try {
       Object result = interpretable.eval(activation);
       if (result instanceof Boolean) {
-        return Boolean.valueOf(result.toString());
+        return Boolean.parseBoolean(result.toString());
       }
       // Throw an InterpreterException if there are missing Envoy Attributes.
       if (result instanceof IncompleteData) {

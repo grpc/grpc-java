@@ -71,20 +71,20 @@ public class AuthorizationDecision {
   public String toString() {
     StringBuilder authzStr = new StringBuilder();
     switch (this.decision) {
-      case ALLOW: 
+      case ALLOW:
         authzStr.append("Authorization Decision: ALLOW. \n");
         break;
-      case DENY: 
+      case DENY:
         authzStr.append("Authorization Decision: DENY. \n");
         break;
-      case UNKNOWN: 
+      case UNKNOWN:
         authzStr.append("Authorization Decision: UNKNOWN. \n");
         break;
-      default: 
+      default:
         break;
     }
     for (String policyName : this.policyNames) {
-      authzStr.append(policyName + "; \n");
+      authzStr.append(policyName).append("; \n");
     }
     return authzStr.toString();
   }

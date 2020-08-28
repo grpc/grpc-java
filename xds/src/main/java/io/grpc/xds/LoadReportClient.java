@@ -416,8 +416,8 @@ final class LoadReportClient {
 
     io.envoyproxy.envoy.service.load_stats.v2.LoadStatsRequest toEnvoyProtoV2() {
       io.envoyproxy.envoy.service.load_stats.v2.LoadStatsRequest.Builder builder
-          = io.envoyproxy.envoy.service.load_stats.v2.LoadStatsRequest.newBuilder();
-      builder.setNode(node.toEnvoyProtoNodeV2());
+          = io.envoyproxy.envoy.service.load_stats.v2.LoadStatsRequest.newBuilder()
+              .setNode(node.toEnvoyProtoNodeV2());
       if (clusterStatsList != null) {
         for (ClusterStats stats : clusterStatsList) {
           builder.addClusterStats(stats.toEnvoyProtoClusterStatsV2());
@@ -427,8 +427,8 @@ final class LoadReportClient {
     }
 
     LoadStatsRequest toEnvoyProtoV3() {
-      LoadStatsRequest.Builder builder = LoadStatsRequest.newBuilder();
-      builder.setNode(node.toEnvoyProtoNode());
+      LoadStatsRequest.Builder builder = LoadStatsRequest.newBuilder()
+          .setNode(node.toEnvoyProtoNode());
       if (clusterStatsList != null) {
         for (ClusterStats stats : clusterStatsList) {
           builder.addClusterStats(stats.toEnvoyProtoClusterStats());

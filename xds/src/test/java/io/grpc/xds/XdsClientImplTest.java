@@ -749,7 +749,7 @@ public class XdsClientImplTest {
             new EnvoyProtoData.Route(
                 // path match with cluster route
                 new io.grpc.xds.RouteMatch(
-                    /* pathPrefixMatch= */ null,/* pathExactMatch= */ "/service1/method1"),
+                    /* pathPrefixMatch= */ null, /* pathExactMatch= */ "/service1/method1"),
                 new EnvoyProtoData.RouteAction(
                     TimeUnit.SECONDS.toNanos(15L), "cl1.googleapis.com", null)));
     assertThat(routes.get(1))
@@ -757,7 +757,7 @@ public class XdsClientImplTest {
             new EnvoyProtoData.Route(
                 // path match with weighted cluster route
                 new io.grpc.xds.RouteMatch(
-                    /* pathPrefixMatch= */ null,/* pathExactMatch= */ "/service2/method2"),
+                    /* pathPrefixMatch= */ null, /* pathExactMatch= */ "/service2/method2"),
                 new EnvoyProtoData.RouteAction(
                     TimeUnit.SECONDS.toNanos(15L),
                     null,
@@ -769,7 +769,7 @@ public class XdsClientImplTest {
             new EnvoyProtoData.Route(
                 // prefix match with cluster route
                 new io.grpc.xds.RouteMatch(
-                    /* pathPrefixMatch= */ "/service1/",/* pathExactMatch= */ null),
+                    /* pathPrefixMatch= */ "/service1/", /* pathExactMatch= */ null),
                 new EnvoyProtoData.RouteAction(
                     TimeUnit.SECONDS.toNanos(15L), "cl1.googleapis.com", null)));
     assertThat(routes.get(3))
@@ -777,7 +777,7 @@ public class XdsClientImplTest {
             new EnvoyProtoData.Route(
                 // default match with cluster route
                 new io.grpc.xds.RouteMatch(
-                    /* pathPrefixMatch= */ "",/* pathExactMatch= */ null),
+                    /* pathPrefixMatch= */ "", /* pathExactMatch= */ null),
                 new EnvoyProtoData.RouteAction(
                     TimeUnit.SECONDS.toNanos(15L), "cluster.googleapis.com", null)));
   }

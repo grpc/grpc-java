@@ -16,8 +16,8 @@
 
 package io.grpc.xds.internal.rbac.engine;
 
+import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
@@ -31,7 +31,6 @@ import io.envoyproxy.envoy.config.rbac.v2.RBAC;
 import io.envoyproxy.envoy.config.rbac.v2.RBAC.Action;
 import io.grpc.xds.internal.rbac.engine.cel.Activation;
 import io.grpc.xds.internal.rbac.engine.cel.InterpreterException;
-import java.lang.StringBuilder;
 import java.util.Map;
 import org.junit.Before;
 import org.junit.Rule;
@@ -51,14 +50,9 @@ public class AuthzEngineEvaluationTest {
   
   @Mock
   private EvaluateArgs args;
-
-  @Mock
-  private Activation activation;
-
   @Mock
   private Map<String, Object> attributes;
 
-  private AuthorizationEngine engine;
   private AuthorizationEngine spyEngine;
   private AuthorizationDecision evaluateResult;
 
@@ -130,7 +124,7 @@ public class AuthzEngineEvaluationTest {
   @Before
   public void setupEngineSingleRbacAllow() {
     buildRbac();
-    engine = new AuthorizationEngine(rbacAllow);
+    AuthorizationEngine engine = new AuthorizationEngine(rbacAllow);
     spyEngine = Mockito.spy(engine);
     doReturn(ImmutableMap.copyOf(attributes)).when(args).generateEnvoyAttributes();
   }
@@ -139,7 +133,7 @@ public class AuthzEngineEvaluationTest {
   @Before
   public void setupEngineSingleRbacDeny() {
     buildRbac();
-    engine = new AuthorizationEngine(rbacDeny);
+    AuthorizationEngine engine = new AuthorizationEngine(rbacDeny);
     spyEngine = Mockito.spy(engine);
     doReturn(ImmutableMap.copyOf(attributes)).when(args).generateEnvoyAttributes();
   }
@@ -148,7 +142,7 @@ public class AuthzEngineEvaluationTest {
   @Before
   public void setupEngineRbacPair() {
     buildRbac();
-    engine = new AuthorizationEngine(rbacDeny, rbacAllow);
+    AuthorizationEngine engine = new AuthorizationEngine(rbacDeny, rbacAllow);
     spyEngine = Mockito.spy(engine);
     doReturn(ImmutableMap.copyOf(attributes)).when(args).generateEnvoyAttributes();
   }
@@ -166,9 +160,9 @@ public class AuthzEngineEvaluationTest {
     doReturn(true).when(spyEngine).matches(eq(condition2), any(Activation.class));
     doReturn(true).when(spyEngine).matches(eq(condition3), any(Activation.class));
     evaluateResult = spyEngine.evaluate(args);
-    assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Output.ALLOW);
-    assertEquals(evaluateResult.getPolicyNames().size(), 1);
-    assertTrue(evaluateResult.getPolicyNames().contains("Policy 1"));
+    assertThat(evaluateResult.getDecision()).isEqualTo(AuthorizationDecision.Output.ALLOW);
+    assertThat(evaluateResult.getPolicyNames()).hasSize(1);
+    assertThat(evaluateResult.getPolicyNames()).contains("Policy 1");
   }
 
   /**
@@ -184,9 +178,9 @@ public class AuthzEngineEvaluationTest {
     doReturn(false).when(spyEngine).matches(eq(condition2), any(Activation.class));
     doReturn(false).when(spyEngine).matches(eq(condition3), any(Activation.class));
     evaluateResult = spyEngine.evaluate(args);
-    assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Output.DENY);
-    assertEquals(evaluateResult.getPolicyNames().size(), 0);
-    assertEquals(evaluateResult.toString(), 
+    assertThat(evaluateResult.getDecision()).isEqualTo(AuthorizationDecision.Output.DENY);
+    assertThat(evaluateResult.getPolicyNames()).isEmpty();
+    assertThat(evaluateResult.toString()).isEqualTo(
         new StringBuilder("Authorization Decision: DENY. \n").toString());
   }
 
@@ -207,7 +201,7 @@ public class AuthzEngineEvaluationTest {
     evaluateResult = spyEngine.evaluate(args);
     assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Output.ALLOW);
     assertEquals(evaluateResult.getPolicyNames().size(), 1);
-    assertTrue(evaluateResult.getPolicyNames().contains("Policy 2"));
+    assertThat(evaluateResult.getPolicyNames()).contains("Policy 2");
   }
 
   /**
@@ -226,11 +220,11 @@ public class AuthzEngineEvaluationTest {
     doThrow(new InterpreterException.Builder("Unknown result").build())
         .when(spyEngine).matches(eq(condition3), any(Activation.class));
     evaluateResult = spyEngine.evaluate(args);
-    assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Output.UNKNOWN);
-    assertEquals(evaluateResult.getPolicyNames().size(), 2);
-    assertTrue(evaluateResult.getPolicyNames().contains("Policy 2"));
-    assertTrue(evaluateResult.getPolicyNames().contains("Policy 3"));
-    assertEquals(evaluateResult.toString(), 
+    assertThat(evaluateResult.getDecision()).isEqualTo(AuthorizationDecision.Output.UNKNOWN);
+    assertThat(evaluateResult.getPolicyNames()).hasSize(2);
+    assertThat(evaluateResult.getPolicyNames()).contains("Policy 2");
+    assertThat(evaluateResult.getPolicyNames()).contains("Policy 3");
+    assertThat(evaluateResult.toString()).isEqualTo(
         new StringBuilder("Authorization Decision: UNKNOWN. \n" 
             + "Policy 2; \n" + "Policy 3; \n").toString());
   }
@@ -250,10 +244,10 @@ public class AuthzEngineEvaluationTest {
     doThrow(new InterpreterException.Builder("Unknown result").build())
         .when(spyEngine).matches(eq(condition3), any(Activation.class));
     evaluateResult = spyEngine.evaluate(args);
-    assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Output.ALLOW);
-    assertEquals(evaluateResult.getPolicyNames().size(), 1);
-    assertTrue(evaluateResult.getPolicyNames().contains("Policy 2"));
-    assertEquals(evaluateResult.toString(), 
+    assertThat(evaluateResult.getDecision()).isEqualTo(AuthorizationDecision.Output.ALLOW);
+    assertThat(evaluateResult.getPolicyNames()).hasSize(1);
+    assertThat(evaluateResult.getPolicyNames()).contains("Policy 2");
+    assertThat(evaluateResult.toString()).isEqualTo(
         new StringBuilder("Authorization Decision: ALLOW. \n" + "Policy 2; \n").toString());
   }
 
@@ -270,9 +264,9 @@ public class AuthzEngineEvaluationTest {
     doReturn(true).when(spyEngine).matches(eq(condition5), any(Activation.class));
     doReturn(true).when(spyEngine).matches(eq(condition6), any(Activation.class));
     evaluateResult = spyEngine.evaluate(args);
-    assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Output.DENY);
-    assertEquals(evaluateResult.getPolicyNames().size(), 1);
-    assertTrue(evaluateResult.getPolicyNames().contains("Policy 4"));
+    assertThat(evaluateResult.getDecision()).isEqualTo(AuthorizationDecision.Output.DENY);
+    assertThat(evaluateResult.getPolicyNames()).hasSize(1);
+    assertThat(evaluateResult.getPolicyNames()).contains("Policy 4");
   }
 
   /**
@@ -288,8 +282,8 @@ public class AuthzEngineEvaluationTest {
     doReturn(false).when(spyEngine).matches(eq(condition5), any(Activation.class));
     doReturn(false).when(spyEngine).matches(eq(condition6), any(Activation.class));
     evaluateResult = spyEngine.evaluate(args);
-    assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Output.ALLOW);
-    assertEquals(evaluateResult.getPolicyNames().size(), 0);
+    assertThat(evaluateResult.getDecision()).isEqualTo(AuthorizationDecision.Output.ALLOW);
+    assertThat(evaluateResult.getPolicyNames()).isEmpty();
   }
 
   /**
@@ -307,9 +301,9 @@ public class AuthzEngineEvaluationTest {
     doReturn(true).when(spyEngine).matches(eq(condition5), any(Activation.class));
     doReturn(true).when(spyEngine).matches(eq(condition6), any(Activation.class));
     evaluateResult = spyEngine.evaluate(args);
-    assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Output.DENY);
-    assertEquals(evaluateResult.getPolicyNames().size(), 1);
-    assertTrue(evaluateResult.getPolicyNames().contains("Policy 5"));
+    assertThat(evaluateResult.getDecision()).isEqualTo(AuthorizationDecision.Output.DENY);
+    assertThat(evaluateResult.getPolicyNames()).hasSize(1);
+    assertThat(evaluateResult.getPolicyNames()).contains("Policy 5");
   }
 
   /**
@@ -328,10 +322,10 @@ public class AuthzEngineEvaluationTest {
     doThrow(new InterpreterException.Builder("Unknown result").build())
         .when(spyEngine).matches(eq(condition6), any(Activation.class));
     evaluateResult = spyEngine.evaluate(args);
-    assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Output.UNKNOWN);
-    assertEquals(evaluateResult.getPolicyNames().size(), 2);
-    assertTrue(evaluateResult.getPolicyNames().contains("Policy 5"));
-    assertTrue(evaluateResult.getPolicyNames().contains("Policy 6"));
+    assertThat(evaluateResult.getDecision()).isEqualTo(AuthorizationDecision.Output.UNKNOWN);
+    assertThat(evaluateResult.getPolicyNames()).hasSize(2);
+    assertThat(evaluateResult.getPolicyNames()).contains("Policy 5");
+    assertThat(evaluateResult.getPolicyNames()).contains("Policy 6");
   }
 
   /**
@@ -349,9 +343,9 @@ public class AuthzEngineEvaluationTest {
     doThrow(new InterpreterException.Builder("Unknown result").build())
         .when(spyEngine).matches(eq(condition6), any(Activation.class));
     evaluateResult = spyEngine.evaluate(args);
-    assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Output.DENY);
-    assertEquals(evaluateResult.getPolicyNames().size(), 1);
-    assertTrue(evaluateResult.getPolicyNames().contains("Policy 5"));
+    assertThat(evaluateResult.getDecision()).isEqualTo(AuthorizationDecision.Output.DENY);
+    assertThat(evaluateResult.getPolicyNames()).hasSize(1);
+    assertThat(evaluateResult.getPolicyNames()).contains("Policy 5");
   }
 
   /**
@@ -371,9 +365,9 @@ public class AuthzEngineEvaluationTest {
     doReturn(true).when(spyEngine).matches(eq(condition5), any(Activation.class));
     doReturn(true).when(spyEngine).matches(eq(condition6), any(Activation.class));
     evaluateResult = spyEngine.evaluate(args);
-    assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Output.DENY);
-    assertEquals(evaluateResult.getPolicyNames().size(), 1);
-    assertTrue(evaluateResult.getPolicyNames().contains("Policy 4"));
+    assertThat(evaluateResult.getDecision()).isEqualTo(AuthorizationDecision.Output.DENY);
+    assertThat(evaluateResult.getPolicyNames()).hasSize(1);
+    assertThat(evaluateResult.getPolicyNames()).contains("Policy 4");
   }
 
   /**
@@ -396,9 +390,9 @@ public class AuthzEngineEvaluationTest {
     doThrow(new InterpreterException.Builder("Unknown result").build())
         .when(spyEngine).matches(eq(condition6), any(Activation.class));
     evaluateResult = spyEngine.evaluate(args);
-    assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Output.DENY);
-    assertEquals(evaluateResult.getPolicyNames().size(), 1);
-    assertTrue(evaluateResult.getPolicyNames().contains("Policy 5"));
+    assertThat(evaluateResult.getDecision()).isEqualTo(AuthorizationDecision.Output.DENY);
+    assertThat(evaluateResult.getPolicyNames()).hasSize(1);
+    assertThat(evaluateResult.getPolicyNames()).contains("Policy 5");
   }
 
   /**
@@ -419,10 +413,10 @@ public class AuthzEngineEvaluationTest {
     doThrow(new InterpreterException.Builder("Unknown result").build())
         .when(spyEngine).matches(eq(condition6), any(Activation.class));
     evaluateResult = spyEngine.evaluate(args);
-    assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Output.UNKNOWN);
-    assertEquals(evaluateResult.getPolicyNames().size(), 2);
-    assertTrue(evaluateResult.getPolicyNames().contains("Policy 5"));
-    assertTrue(evaluateResult.getPolicyNames().contains("Policy 6"));
+    assertThat(evaluateResult.getDecision()).isEqualTo(AuthorizationDecision.Output.UNKNOWN);
+    assertThat(evaluateResult.getPolicyNames()).hasSize(2);
+    assertThat(evaluateResult.getPolicyNames()).contains("Policy 5");
+    assertThat(evaluateResult.getPolicyNames()).contains("Policy 6");
   }
 
   /**
@@ -446,10 +440,10 @@ public class AuthzEngineEvaluationTest {
     doReturn(false).when(spyEngine).matches(eq(condition5), any(Activation.class));
     doReturn(false).when(spyEngine).matches(eq(condition6), any(Activation.class));
     evaluateResult = spyEngine.evaluate(args);
-    assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Output.UNKNOWN);
-    assertEquals(evaluateResult.getPolicyNames().size(), 2);
-    assertTrue(evaluateResult.getPolicyNames().contains("Policy 2"));
-    assertTrue(evaluateResult.getPolicyNames().contains("Policy 3"));
+    assertThat(evaluateResult.getDecision()).isEqualTo(AuthorizationDecision.Output.UNKNOWN);
+    assertThat(evaluateResult.getPolicyNames()).hasSize(2);
+    assertThat(evaluateResult.getPolicyNames()).contains("Policy 2");
+    assertThat(evaluateResult.getPolicyNames()).contains("Policy 3");
   }
 
   /**
@@ -469,7 +463,7 @@ public class AuthzEngineEvaluationTest {
     doReturn(false).when(spyEngine).matches(eq(condition5), any(Activation.class));
     doReturn(false).when(spyEngine).matches(eq(condition6), any(Activation.class));
     evaluateResult = spyEngine.evaluate(args);
-    assertEquals(evaluateResult.getDecision(), AuthorizationDecision.Output.DENY);
-    assertEquals(evaluateResult.getPolicyNames().size(), 0);
+    assertThat(evaluateResult.getDecision()).isEqualTo(AuthorizationDecision.Output.DENY);
+    assertThat(evaluateResult.getPolicyNames()).isEmpty();
   }
 }

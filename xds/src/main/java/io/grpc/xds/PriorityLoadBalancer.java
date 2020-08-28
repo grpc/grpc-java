@@ -260,7 +260,6 @@ final class PriorityLoadBalancer extends LoadBalancer {
                 policy = newPolicy;
                 lb.switchTo(lbProvider);
               }
-              // TODO(zdapeng): Implement address filtering.
               lb.handleResolvedAddresses(
                   addresses
                       .toBuilder()
