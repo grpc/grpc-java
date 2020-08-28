@@ -37,6 +37,8 @@ import java.io.OutputStream;
 import java.lang.ref.Reference;
 import java.lang.ref.WeakReference;
 import java.nio.ByteBuffer;
+import java.security.AccessController;
+import java.security.PrivilegedAction;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -52,11 +54,26 @@ public final class ProtoLiteUtils {
 
   private static final int BUF_SIZE = 8192;
 
+  private static final String JAVA_VERSION = getSystemProperty("java.specification.version");
+
+  /**
+   * Assume Java 9+ if it isn't Java 7 or Java 8.
+   */
+  @VisibleForTesting
+  static final boolean IS_JAVA9_OR_HIGHER =
+      !"1.7".equals(JAVA_VERSION) && !"1.8".equals(JAVA_VERSION);
+
   /**
    * The same value as {@link io.grpc.internal.GrpcUtil#DEFAULT_MAX_MESSAGE_SIZE}.
    */
   @VisibleForTesting
   static final int DEFAULT_MAX_MESSAGE_SIZE = 4 * 1024 * 1024;
+
+  /**
+   * Threshold for passing {@link ByteBuffer}s directly into Protobuf.
+   */
+  @VisibleForTesting
+  static final int MESSAGE_ZERO_COPY_THRESHOLD = 64 * 1024;
 
   /**
    * Sets the global registry for proto marshalling shared across all servers and clients.
@@ -177,12 +194,14 @@ public final class ProtoLiteUtils {
       try {
         if (stream instanceof KnownLength) {
           int size = stream.available();
-          // TODO(chengyuanzhang): we may still want to go with the byte array approach for small
-          //  messages.
           if (size == 0) {
             return defaultInstance;
-          } else if (size > 64 * 1024 && stream instanceof HasByteBuffer
-              && stream.markSupported() && ((HasByteBuffer) stream).getByteBufferSupported()) {
+          }
+          if (IS_JAVA9_OR_HIGHER
+              && size >= MESSAGE_ZERO_COPY_THRESHOLD
+              && stream instanceof HasByteBuffer
+              && ((HasByteBuffer) stream).getByteBufferSupported()
+              && stream.markSupported()) {
             List<ByteBuffer> buffers = new ArrayList<>();
             stream.mark(size);
             while (stream.available() != 0) {
@@ -271,5 +290,26 @@ public final class ProtoLiteUtils {
         throw new IllegalArgumentException(ipbe);
       }
     }
+  }
+
+  private static String getSystemProperty(final String key) {
+    String value;
+    if (System.getSecurityManager() == null) {
+      value = System.getProperty(key);
+    } else {
+      value =
+          AccessController.doPrivileged(
+              new PrivilegedAction<String>() {
+                @Override
+                public String run() {
+                  try {
+                    return System.getProperty(key);
+                  } catch (SecurityException e) {
+                    return null;
+                  }
+                }
+              });
+    }
+    return value;
   }
 }

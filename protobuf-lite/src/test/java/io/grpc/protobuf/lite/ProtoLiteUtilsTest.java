@@ -22,6 +22,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.fail;
 
+import com.google.common.base.Strings;
 import com.google.common.io.ByteStreams;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Empty;
@@ -44,6 +45,7 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import javax.annotation.Nullable;
+import org.junit.Assume;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -231,8 +233,12 @@ public class ProtoLiteUtilsTest {
 
   @Test
   public void parseFromKnownLengthByteBufferInputStream() {
+    Assume.assumeTrue(ProtoLiteUtils.IS_JAVA9_OR_HIGHER);
     Marshaller<Type> marshaller = ProtoLiteUtils.marshaller(Type.getDefaultInstance());
-    Type expect = Type.newBuilder().setName("expected name").build();
+    Type expect =
+        Type.newBuilder()
+            .setName(Strings.repeat("M", ProtoLiteUtils.MESSAGE_ZERO_COPY_THRESHOLD))
+            .build();
 
     Type result = marshaller.parse(
         new CustomKnownLengthByteBufferInputStream(expect.toByteString().asReadOnlyByteBuffer()));
