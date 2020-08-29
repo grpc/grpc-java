@@ -123,10 +123,8 @@ subprojects {
                         release { java { srcDir "${generatedSourcePath}/release/grpc" } }
                     }
                 } else {
-                    project.sourceSets {
-                        main { java { srcDir "${generatedSourcePath}/main/grpc" } }
-                        test { java { srcDir "${generatedSourcePath}/test/grpc" } }
-                    }
+                    project.compileJava.source "${generatedSourcePath}/main/grpc"
+                    project.compileTestJava.source "${generatedSourcePath}/test/grpc"
                 }
             }
 
