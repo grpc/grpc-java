@@ -32,6 +32,7 @@ import io.grpc.Status;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.util.ForwardingLoadBalancerHelper;
+import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.CdsLoadBalancerProvider.CdsConfig;
 import io.grpc.xds.EdsLoadBalancerProvider.EdsConfig;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
@@ -44,24 +45,31 @@ import io.grpc.xds.internal.sds.TlsContextManager;
 import io.grpc.xds.internal.sds.TlsContextManagerImpl;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
+import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nullable;
 
 /**
- * Load balancer for cds_experimental LB policy. One instance per cluster.
+ * Load balancer for cds_experimental LB policy.
  */
-final class CdsLoadBalancer extends LoadBalancer {
+public final class CdsLoadBalancer extends LoadBalancer {
   private final XdsLogger logger;
-  private final Helper helper;
   private final LoadBalancerRegistry lbRegistry;
+  private final GracefulSwitchLoadBalancer switchingLoadBalancer;
   private final TlsContextManager tlsContextManager;
   // TODO(sanjaypujare): remove once xds security is released
   private boolean enableXdsSecurity;
   private static final String XDS_SECURITY_ENV_VAR = "GRPC_XDS_EXPERIMENTAL_SECURITY_SUPPORT";
+
+  // The following fields become non-null once handleResolvedAddresses() successfully.
+
+  // Most recent cluster name.
+  @Nullable
   private String clusterName;
+  @Nullable
   private ObjectPool<XdsClient> xdsClientPool;
+  @Nullable
   private XdsClient xdsClient;
-  private ChildLbState childLbState;
-  private ResolvedAddresses resolvedAddresses;
 
   CdsLoadBalancer(Helper helper) {
     this(helper, LoadBalancerRegistry.getDefaultRegistry(), TlsContextManagerImpl.getInstance());
@@ -70,8 +78,9 @@ final class CdsLoadBalancer extends LoadBalancer {
   @VisibleForTesting
   CdsLoadBalancer(Helper helper, LoadBalancerRegistry lbRegistry,
       TlsContextManager tlsContextManager) {
-    this.helper = checkNotNull(helper, "helper");
+    checkNotNull(helper, "helper");
     this.lbRegistry = lbRegistry;
+    this.switchingLoadBalancer = new GracefulSwitchLoadBalancer(helper);
     this.tlsContextManager = tlsContextManager;
     logger = XdsLogger.withLogId(InternalLogId.allocate("cds-lb", helper.getAuthority()));
     logger.log(XdsLogLevel.INFO, "Created");
@@ -79,32 +88,33 @@ final class CdsLoadBalancer extends LoadBalancer {
 
   @Override
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-    if (clusterName != null) {
-      return;
-    }
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
-    this.resolvedAddresses = resolvedAddresses;
-    xdsClientPool = resolvedAddresses.getAttributes().get(XdsAttributes.XDS_CLIENT_POOL);
-    checkNotNull(xdsClientPool, "missing xDS client pool");
-    xdsClient = xdsClientPool.getObject();
+    if (xdsClientPool == null) {
+      xdsClientPool = resolvedAddresses.getAttributes().get(XdsAttributes.XDS_CLIENT_POOL);
+      checkNotNull(xdsClientPool, "missing xDS client pool");
+      xdsClient = xdsClientPool.getObject();
+    }
+
     Object lbConfig = resolvedAddresses.getLoadBalancingPolicyConfig();
     checkNotNull(lbConfig, "missing CDS lb config");
     CdsConfig newCdsConfig = (CdsConfig) lbConfig;
     logger.log(
         XdsLogLevel.INFO,
         "Received CDS lb config: cluster={0}", newCdsConfig.name);
+
+    // If cluster is changed, do a graceful switch.
+    if (!newCdsConfig.name.equals(clusterName)) {
+      LoadBalancer.Factory clusterBalancerFactory = new ClusterBalancerFactory(newCdsConfig.name);
+      switchingLoadBalancer.switchTo(clusterBalancerFactory);
+    }
+    switchingLoadBalancer.handleResolvedAddresses(resolvedAddresses);
     clusterName = newCdsConfig.name;
-    childLbState = new ChildLbState();
   }
 
   @Override
   public void handleNameResolutionError(Status error) {
     logger.log(XdsLogLevel.WARNING, "Received name resolution error: {0}", error);
-    if (childLbState != null) {
-      childLbState.propagateError(error);
-    } else {
-      helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
-    }
+    switchingLoadBalancer.handleNameResolutionError(error);
   }
 
   @Override
@@ -115,9 +125,7 @@ final class CdsLoadBalancer extends LoadBalancer {
   @Override
   public void shutdown() {
     logger.log(XdsLogLevel.INFO, "Shutdown");
-    if (childLbState != null) {
-      childLbState.shutdown();
-    }
+    switchingLoadBalancer.shutdown();
     if (xdsClientPool != null) {
       xdsClientPool.returnObject(xdsClient);
     }
@@ -134,25 +142,107 @@ final class CdsLoadBalancer extends LoadBalancer {
     enableXdsSecurity = enable;
   }
 
-  private final class ChannelSecurityLbHelper extends ForwardingLoadBalancerHelper {
-    @Nullable
-    private SslContextProvider sslContextProvider;
+  /**
+   * A load balancer factory that provides a load balancer for a given cluster.
+   */
+  private final class ClusterBalancerFactory extends LoadBalancer.Factory {
+
+    final String clusterName;
+
+    ClusterBalancerFactory(String clusterName) {
+      this.clusterName = clusterName;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (!(o instanceof ClusterBalancerFactory)) {
+        return false;
+      }
+      ClusterBalancerFactory that = (ClusterBalancerFactory) o;
+      return clusterName.equals(that.clusterName);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(super.hashCode(), clusterName);
+    }
+
+    @Override
+    public LoadBalancer newLoadBalancer(final Helper helper) {
+      return new LoadBalancer() {
+        // Becomes non-null once handleResolvedAddresses() successfully.
+        // Assigned at most once.
+        @Nullable
+        ClusterWatcherImpl clusterWatcher;
+
+        @Override
+        public void handleNameResolutionError(Status error) {
+          if (clusterWatcher == null || clusterWatcher.edsBalancer == null) {
+            // Go into TRANSIENT_FAILURE if we have not yet received any cluster resource.
+            // Otherwise, we keep running with the data we had previously.
+            helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
+          }
+        }
+
+        @Override
+        public boolean canHandleEmptyAddressListFromNameResolution() {
+          return true;
+        }
+
+        @Override
+        public void shutdown() {
+          if (clusterWatcher != null) {
+            if (clusterWatcher.edsBalancer != null) {
+              clusterWatcher.edsBalancer.shutdown();
+            }
+            xdsClient.cancelClusterDataWatch(clusterName, clusterWatcher);
+            logger.log(
+                XdsLogLevel.INFO,
+                "Cancelled cluster watcher on {0} with xDS client {1}",
+                clusterName, xdsClient);
+          }
+        }
+
+        @Override
+        public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+          if (clusterWatcher == null) {
+            clusterWatcher = new ClusterWatcherImpl(helper, resolvedAddresses);
+            logger.log(
+                XdsLogLevel.INFO,
+                "Start cluster watcher on {0} with xDS client {1}",
+                clusterName, xdsClient);
+            xdsClient.watchClusterData(clusterName, clusterWatcher);
+          }
+        }
+      };
+    }
+  }
+
+  private static final class EdsLoadBalancingHelper extends ForwardingLoadBalancerHelper {
+    private final Helper delegate;
+    private final AtomicReference<SslContextProvider> sslContextProvider;
+
+    EdsLoadBalancingHelper(Helper helper,
+        AtomicReference<SslContextProvider> sslContextProvider) {
+      this.delegate = helper;
+      this.sslContextProvider = sslContextProvider;
+    }
 
     @Override
     public Subchannel createSubchannel(CreateSubchannelArgs createSubchannelArgs) {
-      if (sslContextProvider != null) {
+      if (sslContextProvider.get() != null) {
         createSubchannelArgs =
             createSubchannelArgs
                 .toBuilder()
                 .setAddresses(
                     addUpstreamTlsContext(createSubchannelArgs.getAddresses(),
-                        sslContextProvider.getUpstreamTlsContext()))
+                        sslContextProvider.get().getUpstreamTlsContext()))
                 .build();
       }
-      return delegate().createSubchannel(createSubchannelArgs);
+      return delegate.createSubchannel(createSubchannelArgs);
     }
 
-    private List<EquivalentAddressGroup> addUpstreamTlsContext(
+    private static List<EquivalentAddressGroup> addUpstreamTlsContext(
         List<EquivalentAddressGroup> addresses,
         UpstreamTlsContext upstreamTlsContext) {
       if (upstreamTlsContext == null || addresses == null) {
@@ -174,19 +264,22 @@ final class CdsLoadBalancer extends LoadBalancer {
 
     @Override
     protected Helper delegate() {
-      return helper;
+      return delegate;
     }
   }
 
-  private final class ChildLbState implements ClusterWatcher {
-    private final ChannelSecurityLbHelper lbHelper = new ChannelSecurityLbHelper();
+  private final class ClusterWatcherImpl implements ClusterWatcher {
+
+    final EdsLoadBalancingHelper helper;
+    final ResolvedAddresses resolvedAddresses;
+
     @Nullable
     LoadBalancer edsBalancer;
 
-    private ChildLbState() {
-      xdsClient.watchClusterData(clusterName, this);
-      logger.log(XdsLogLevel.INFO,
-          "Started watcher for cluster {0} with xDS client {1}", clusterName, xdsClient);
+    ClusterWatcherImpl(Helper helper, ResolvedAddresses resolvedAddresses) {
+      this.helper = new EdsLoadBalancingHelper(helper,
+          new AtomicReference<SslContextProvider>());
+      this.resolvedAddresses = resolvedAddresses;
     }
 
     @Override
@@ -215,7 +308,7 @@ final class CdsLoadBalancer extends LoadBalancer {
         updateSslContextProvider(newUpdate.getUpstreamTlsContext());
       }
       if (edsBalancer == null) {
-        edsBalancer = lbRegistry.getProvider(EDS_POLICY_NAME).newLoadBalancer(lbHelper);
+        edsBalancer = lbRegistry.getProvider(EDS_POLICY_NAME).newLoadBalancer(helper);
       }
       edsBalancer.handleResolvedAddresses(
           resolvedAddresses.toBuilder().setLoadBalancingPolicyConfig(edsConfig).build());
@@ -223,7 +316,8 @@ final class CdsLoadBalancer extends LoadBalancer {
 
     /** For new UpstreamTlsContext value, release old SslContextProvider. */
     private void updateSslContextProvider(UpstreamTlsContext newUpstreamTlsContext) {
-      SslContextProvider oldSslContextProvider = lbHelper.sslContextProvider;
+      SslContextProvider oldSslContextProvider =
+          helper.sslContextProvider.get();
       if (oldSslContextProvider != null) {
         UpstreamTlsContext oldUpstreamTlsContext = oldSslContextProvider.getUpstreamTlsContext();
 
@@ -233,10 +327,11 @@ final class CdsLoadBalancer extends LoadBalancer {
         tlsContextManager.releaseClientSslContextProvider(oldSslContextProvider);
       }
       if (newUpstreamTlsContext != null) {
-        lbHelper.sslContextProvider =
+        SslContextProvider newSslContextProvider =
             tlsContextManager.findOrCreateClientSslContextProvider(newUpstreamTlsContext);
+        helper.sslContextProvider.set(newSslContextProvider);
       } else {
-        lbHelper.sslContextProvider = null;
+        helper.sslContextProvider.set(null);
       }
     }
 
@@ -265,22 +360,6 @@ final class CdsLoadBalancer extends LoadBalancer {
         helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
       }
     }
-
-    void shutdown() {
-      xdsClient.cancelClusterDataWatch(clusterName, this);
-      logger.log(XdsLogLevel.INFO,
-          "Cancelled watcher for cluster {0} with xDS client {1}", clusterName, xdsClient);
-      if (edsBalancer != null) {
-        edsBalancer.shutdown();
-      }
-    }
-
-    void propagateError(Status error) {
-      if (edsBalancer != null) {
-        edsBalancer.handleNameResolutionError(error);
-      } else {
-        helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
-      }
-    }
   }
+
 }
