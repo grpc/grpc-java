@@ -286,7 +286,7 @@ final class XdsClientImpl extends XdsClient {
   }
 
   @Override
-  void watchClusterData(String clusterName, ClusterWatcher watcher) {
+  void watchClusterData(final String clusterName, final ClusterWatcher watcher) {
     checkNotNull(clusterName, "clusterName");
     checkNotNull(watcher, "watcher");
     boolean needRequest = false;
@@ -301,12 +301,22 @@ final class XdsClientImpl extends XdsClient {
     // If local cache contains cluster information to be watched, notify the watcher immediately.
     if (absentCdsResources.contains(clusterName)) {
       logger.log(XdsLogLevel.DEBUG, "Cluster resource {0} is known to be absent", clusterName);
-      watcher.onResourceDoesNotExist(clusterName);
+      syncContext.execute(new Runnable() {
+        @Override
+        public void run() {
+          watcher.onResourceDoesNotExist(clusterName);
+        }
+      });
       return;
     }
     if (clusterNamesToClusterUpdates.containsKey(clusterName)) {
       logger.log(XdsLogLevel.DEBUG, "Retrieve cluster info {0} from local cache", clusterName);
-      watcher.onClusterChanged(clusterNamesToClusterUpdates.get(clusterName));
+      syncContext.execute(new Runnable() {
+        @Override
+        public void run() {
+          watcher.onClusterChanged(clusterNamesToClusterUpdates.get(clusterName));
+        }
+      });
       return;
     }
 
@@ -360,7 +370,7 @@ final class XdsClientImpl extends XdsClient {
   }
 
   @Override
-  void watchEndpointData(String clusterName, EndpointWatcher watcher) {
+  void watchEndpointData(final String clusterName, final EndpointWatcher watcher) {
     checkNotNull(watcher, "watcher");
     boolean needRequest = false;
     if (!endpointWatchers.containsKey(clusterName)) {
@@ -377,14 +387,24 @@ final class XdsClientImpl extends XdsClient {
       logger.log(
           XdsLogLevel.DEBUG,
           "Endpoint resource for cluster {0} is known to be absent.", clusterName);
-      watcher.onResourceDoesNotExist(clusterName);
+      syncContext.execute(new Runnable() {
+        @Override
+        public void run() {
+          watcher.onResourceDoesNotExist(clusterName);
+        }
+      });
       return;
     }
     if (clusterNamesToEndpointUpdates.containsKey(clusterName)) {
       logger.log(
           XdsLogLevel.DEBUG,
           "Retrieve endpoints info for cluster {0} from local cache.", clusterName);
-      watcher.onEndpointChanged(clusterNamesToEndpointUpdates.get(clusterName));
+      syncContext.execute(new Runnable() {
+        @Override
+        public void run() {
+          watcher.onEndpointChanged(clusterNamesToEndpointUpdates.get(clusterName));
+        }
+      });
       return;
     }
 
