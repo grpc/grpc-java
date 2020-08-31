@@ -213,7 +213,7 @@ public final class XdsClientWrapperForServerSds {
     return null;
   }
 
-  DownstreamTlsContext getDownstreamTlsContext(InetSocketAddress localInetAddr) {
+  private DownstreamTlsContext getDownstreamTlsContext(InetSocketAddress localInetAddr) {
     checkNotNull(localInetAddr, "localInetAddr");
     if (curListener != null) {
       List<FilterChain> filterChains = curListener.getFilterChains();

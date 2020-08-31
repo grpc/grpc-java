@@ -55,7 +55,6 @@ import io.netty.handler.ssl.NotSslRecordException;
 import java.io.IOException;
 import java.net.Inet4Address;
 import java.net.InetSocketAddress;
-import java.net.ServerSocket;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
@@ -82,7 +81,7 @@ public class XdsSdsClientServerTest {
 
   @Before
   public void setUp() throws IOException {
-    port = findFreePort();
+    port = XdsServerTestHelper.findFreePort();
   }
 
   @After
@@ -330,20 +329,13 @@ public class XdsSdsClientServerTest {
       DownstreamTlsContext downstreamTlsContext)
       throws IOException {
     XdsServerBuilder builder = XdsServerBuilder.forPort(port).addService(new SimpleServiceImpl());
-    XdsServerBuilderTest.generateListenerUpdate(
+    XdsServerTestHelper.generateListenerUpdate(
         xdsClientWrapperForServerSds.getListenerWatcher(),
         port,
         port,
         downstreamTlsContext,
         /* tlsContext2= */null);
     cleanupRule.register(builder.buildServer(serverSdsProtocolNegotiator)).start();
-  }
-
-  private static int findFreePort() throws IOException {
-    try (ServerSocket socket = new ServerSocket(0)) {
-      socket.setReuseAddress(true);
-      return socket.getLocalPort();
-    }
   }
 
   static EnvoyServerProtoData.Listener buildListener(

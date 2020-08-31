@@ -64,7 +64,7 @@ public class XdsClientWrapperForServerSdsTestMisc {
     MockitoAnnotations.initMocks(this);
     xdsClientWrapperForServerSds = new XdsClientWrapperForServerSds(PORT);
     registeredWatcher =
-        XdsServerBuilderTest.startAndGetWatcher(xdsClientWrapperForServerSds, xdsClient, PORT);
+        XdsServerTestHelper.startAndGetWatcher(xdsClientWrapperForServerSds, xdsClient, PORT);
   }
 
   @After
@@ -183,7 +183,7 @@ public class XdsClientWrapperForServerSdsTestMisc {
       DownstreamTlsContext tlsContext1,
       DownstreamTlsContext tlsContext2) {
     when(channel.localAddress()).thenReturn(localAddress);
-    XdsServerBuilderTest.generateListenerUpdate(
+    XdsServerTestHelper.generateListenerUpdate(
         registeredWatcher, PORT, PORT, tlsContext1, tlsContext2);
     return xdsClientWrapperForServerSds.getDownstreamTlsContext(channel);
   }
