@@ -17,7 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
-import static io.grpc.xds.XdsClientWrapperForServerSdsTest.buildFilterChainMatch;
+import static io.grpc.xds.XdsServerTestHelper.buildFilterChainMatch;
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.BAD_CLIENT_KEY_FILE;
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.BAD_CLIENT_PEM_FILE;
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.BAD_SERVER_KEY_FILE;
@@ -332,8 +332,7 @@ public class XdsSdsClientServerTest {
     XdsServerTestHelper.generateListenerUpdate(
         xdsClientWrapperForServerSds.getListenerWatcher(),
         port,
-        port,
-        downstreamTlsContext,
+            downstreamTlsContext,
         /* tlsContext2= */null);
     cleanupRule.register(builder.buildServer(serverSdsProtocolNegotiator)).start();
   }

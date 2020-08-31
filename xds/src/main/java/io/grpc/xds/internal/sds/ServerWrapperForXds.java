@@ -32,8 +32,8 @@ import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
 
 /**
  * Wraps a {@link Server} delegate and {@link XdsClientWrapperForServerSds} and intercepts {@link
@@ -46,7 +46,7 @@ public final class ServerWrapperForXds extends Server {
   private final XdsClientWrapperForServerSds xdsClientWrapperForServerSds;
   @Nullable XdsServerBuilder.ErrorNotifier errorNotifier;
   @Nullable XdsClientWrapperForServerSds.ServerWatcher serverWatcher;
-  @GuardedBy("this") private boolean started;
+  private AtomicBoolean started = new AtomicBoolean();
 
   ServerWrapperForXds(
       Server delegate,
@@ -59,8 +59,8 @@ public final class ServerWrapperForXds extends Server {
   }
 
   @Override
-  public synchronized Server start() throws IOException {
-    checkState(!started, "Already started");
+  public Server start() throws IOException {
+    checkState(started.compareAndSet(false, true), "Already started");
     Future<EnvoyServerProtoData.DownstreamTlsContext> future = addServerWatcher();
     if (!xdsClientWrapperForServerSds.hasXdsClient()) {
       xdsClientWrapperForServerSds.createXdsClientAndStart();
@@ -68,12 +68,14 @@ public final class ServerWrapperForXds extends Server {
     try {
       future.get();
     } catch (InterruptedException | ExecutionException ex) {
-      xdsClientWrapperForServerSds.removeServerWatcher(serverWatcher);
-      serverWatcher = null;
-      throw new RuntimeException(ex);
+      removeServerWatcher();
+      if (ex instanceof InterruptedException) {
+        Thread.currentThread().interrupt();
+      } else {
+        throw new RuntimeException(ex);
+      }
     }
     delegate.start();
-    started = true;
     return this;
   }
 
@@ -91,13 +93,21 @@ public final class ServerWrapperForXds extends Server {
 
           @Override
           public void onSuccess(EnvoyServerProtoData.DownstreamTlsContext downstreamTlsContext) {
-            xdsClientWrapperForServerSds.removeServerWatcher(this);
-            serverWatcher = null;
+            removeServerWatcher();
             settableFuture.set(downstreamTlsContext);
           }
         };
     xdsClientWrapperForServerSds.addServerWatcher(serverWatcher);
     return settableFuture;
+  }
+
+  private void removeServerWatcher() {
+    synchronized (xdsClientWrapperForServerSds) {
+      if (serverWatcher != null) {
+        xdsClientWrapperForServerSds.removeServerWatcher(serverWatcher);
+        serverWatcher = null;
+      }
+    }
   }
 
   @Override

@@ -132,7 +132,7 @@ public final class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
   }
 
   /** Set the {@link ErrorNotifier}. Pass null to unset a previously set value. */
-  public XdsServerBuilder withErrorNotifier(ErrorNotifier errorNotifier) {
+  public XdsServerBuilder errorNotifier(ErrorNotifier errorNotifier) {
     this.errorNotifier = errorNotifier;
     return this;
   }
@@ -162,7 +162,7 @@ public final class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
         errorNotifier);
   }
 
-  /** Watcher to receive error notifications from the xDS control plane. */
+  /** Watcher to receive error notifications from xDS control plane during {@code start()}. */
   public interface ErrorNotifier {
 
     void onError(Status error);

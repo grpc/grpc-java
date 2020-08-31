@@ -78,7 +78,7 @@ public final class XdsClientWrapperForServerSds {
   /**
    * Thrown when no suitable management server was found in the bootstrap file.
    */
-  public static final class ManagementServerNotFoundException extends Exception {
+  public static final class ManagementServerNotFoundException extends IOException {
 
     private static final long serialVersionUID = 1;
 
@@ -129,7 +129,7 @@ public final class XdsClientWrapperForServerSds {
   }
 
   /** Creates an XdsClient and starts a watch. */
-  public void createXdsClientAndStart() {
+  public void createXdsClientAndStart() throws IOException {
     checkState(xdsClient == null, "start() called more than once");
     Bootstrapper.BootstrapInfo bootstrapInfo;
     List<Bootstrapper.ServerInfo> serverList;
@@ -139,10 +139,9 @@ public final class XdsClientWrapperForServerSds {
       if (serverList.isEmpty()) {
         throw new ManagementServerNotFoundException("No management server provided by bootstrap");
       }
-    } catch (IOException | ManagementServerNotFoundException e) {
-      logger.log(Level.FINE, "Exception reading bootstrap", e);
-      logger.log(Level.INFO, "Fallback to plaintext for server at port {0}", port);
-      return;
+    } catch (IOException e) {
+      reportError(Status.fromThrowable(e));
+      throw e;
     }
     Node node = bootstrapInfo.getNode();
     timeService = SharedResourceHolder.get(timeServiceResource);
@@ -169,24 +168,21 @@ public final class XdsClientWrapperForServerSds {
         new XdsClient.ListenerWatcher() {
           @Override
           public void onListenerChanged(XdsClient.ListenerUpdate update) {
-            logger.log(
-                Level.INFO,
-                "Setting myListener from ConfigUpdate listener: {0}",
-                update.getListener());
             curListener = update.getListener();
             reportSuccess();
           }
 
           @Override
           public void onResourceDoesNotExist(String resourceName) {
-            logger.log(Level.INFO, "Resource {0} is unavailable", resourceName);
+            logger.log(Level.WARNING, "Resource {0} is unavailable", resourceName);
             curListener = null;
             reportError(Status.NOT_FOUND.withDescription(resourceName));
           }
 
           @Override
           public void onError(Status error) {
-            logger.log(Level.SEVERE, "ListenerWatcher in XdsClientWrapperForServerSds: {0}", error);
+            logger.log(
+                Level.WARNING, "ListenerWatcher in XdsClientWrapperForServerSds: {0}", error);
             reportError(error);
           }
         };
