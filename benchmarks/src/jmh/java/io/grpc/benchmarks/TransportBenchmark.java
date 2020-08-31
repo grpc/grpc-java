@@ -22,6 +22,7 @@ import com.google.protobuf.ByteString;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Server;
+import io.grpc.ServerBuilder;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.benchmarks.proto.BenchmarkServiceGrpc;
@@ -31,7 +32,6 @@ import io.grpc.benchmarks.proto.Messages.SimpleResponse;
 import io.grpc.benchmarks.qps.AsyncServer;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
-import io.grpc.internal.AbstractServerImplBuilder;
 import io.grpc.netty.NegotiationType;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.netty.NettyServerBuilder;
@@ -80,7 +80,7 @@ public class TransportBenchmark {
 
   @Setup
   public void setUp() throws Exception {
-    AbstractServerImplBuilder<?> serverBuilder;
+    ServerBuilder<?> serverBuilder;
     ManagedChannelBuilder<?> channelBuilder;
     switch (transport) {
       case INPROCESS:
