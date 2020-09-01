@@ -26,10 +26,14 @@ import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.ChannelLogger;
 import io.grpc.ExperimentalApi;
-import io.grpc.internal.AbstractManagedChannelImplBuilder;
+import io.grpc.ForwardingChannelBuilder;
+import io.grpc.Internal;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.ManagedChannelImplBuilder;
+import io.grpc.internal.ManagedChannelImplBuilder.ClientTransportFactoryBuilder;
 import io.grpc.internal.SharedResourceHolder;
 import io.grpc.internal.TransportTracer;
 import java.lang.reflect.InvocationTargetException;
@@ -46,8 +50,7 @@ import org.chromium.net.ExperimentalCronetEngine;
 
 /** Convenience class for building channels with the cronet transport. */
 @ExperimentalApi("There is no plan to make this API stable, given transport API instability")
-public final class CronetChannelBuilder extends
-    AbstractManagedChannelImplBuilder<CronetChannelBuilder> {
+public final class CronetChannelBuilder extends ForwardingChannelBuilder<CronetChannelBuilder> {
 
   private static final String LOG_TAG = "CronetChannelBuilder";
 
@@ -81,6 +84,8 @@ public final class CronetChannelBuilder extends
   private ScheduledExecutorService scheduledExecutorService;
 
   private final CronetEngine cronetEngine;
+  private final ManagedChannelImplBuilder managedChannelImplBuilder;
+  private TransportTracer.Factory transportTracerFactory = TransportTracer.getDefaultFactory();
 
   private boolean alwaysUsePut = false;
 
@@ -103,10 +108,25 @@ public final class CronetChannelBuilder extends
   private int trafficStatsUid;
 
   private CronetChannelBuilder(String host, int port, CronetEngine cronetEngine) {
-    super(
+    final class CronetChannelTransportFactoryBuilder implements ClientTransportFactoryBuilder {
+      @Override
+      public ClientTransportFactory buildClientTransportFactory() {
+        return buildTransportFactory();
+      }
+    }
+
+    managedChannelImplBuilder = new ManagedChannelImplBuilder(
         InetSocketAddress.createUnresolved(host, port),
-        GrpcUtil.authorityFromHostAndPort(host, port));
+        GrpcUtil.authorityFromHostAndPort(host, port),
+        new CronetChannelTransportFactoryBuilder(),
+        null);
     this.cronetEngine = Preconditions.checkNotNull(cronetEngine, "cronetEngine");
+  }
+
+  @Internal
+  @Override
+  protected ManagedChannelBuilder<?> delegate() {
+    return managedChannelImplBuilder;
   }
 
   /**
@@ -188,8 +208,7 @@ public final class CronetChannelBuilder extends
     return this;
   }
 
-  @Override
-  protected final ClientTransportFactory buildTransportFactory() {
+  ClientTransportFactory buildTransportFactory() {
     return new CronetTransportFactory(
         new TaggingStreamFactory(
             cronetEngine, trafficStatsTagSet, trafficStatsTag, trafficStatsUidSet, trafficStatsUid),
