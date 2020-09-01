@@ -28,7 +28,7 @@ import javax.annotation.Nullable;
  * interface from an {@link java.io.InputStream} to {@link ByteBuffer}s, without copying the
  * content to a byte array and read from it.
  */
-// TODO(chengyuanzhang): add ExperimentalApi annotation.
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/7387")
 public interface HasByteBuffer {
 
   /**
