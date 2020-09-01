@@ -107,6 +107,8 @@ import io.grpc.StringMarshaller;
 import io.grpc.internal.ClientTransportFactory.ClientTransportOptions;
 import io.grpc.internal.InternalSubchannel.TransportLogger;
 import io.grpc.internal.ManagedChannelImpl.ScParser;
+import io.grpc.internal.ManagedChannelImplBuilder.ClientTransportFactoryBuilder;
+import io.grpc.internal.ManagedChannelImplBuilder.FixedPortProvider;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.internal.TestUtils.MockClientTransportInfo;
 import io.grpc.stub.ClientCalls;
@@ -269,7 +271,7 @@ public class ManagedChannelImplTest {
   private CallCredentials creds;
   @Mock
   private Executor offloadExecutor;
-  private ChannelBuilder channelBuilder;
+  private ManagedChannelImplBuilder channelBuilder;
   private boolean requestConnection = true;
   private BlockingQueue<MockClientTransportInfo> transports;
   private boolean panicExpected;
@@ -325,14 +327,20 @@ public class ManagedChannelImplTest {
     when(balancerRpcExecutorPool.getObject())
         .thenReturn(balancerRpcExecutor.getScheduledExecutorService());
 
-    channelBuilder =
-        new ChannelBuilder()
-            .nameResolverFactory(new FakeNameResolverFactory.Builder(expectedUri).build())
-            .defaultLoadBalancingPolicy(MOCK_POLICY_NAME)
-            .userAgent(USER_AGENT)
-            .idleTimeout(
-                AbstractManagedChannelImplBuilder.IDLE_MODE_MAX_TIMEOUT_DAYS, TimeUnit.DAYS)
-            .offloadExecutor(offloadExecutor);
+    channelBuilder = new ManagedChannelImplBuilder(TARGET,
+        new ClientTransportFactoryBuilder() {
+          @Override
+          public ClientTransportFactory buildClientTransportFactory() {
+            throw new UnsupportedOperationException();
+          }
+        },
+        new FixedPortProvider(DEFAULT_PORT));
+    channelBuilder
+        .nameResolverFactory(new FakeNameResolverFactory.Builder(expectedUri).build())
+        .defaultLoadBalancingPolicy(MOCK_POLICY_NAME)
+        .userAgent(USER_AGENT)
+        .idleTimeout(ManagedChannelImplBuilder.IDLE_MODE_MAX_TIMEOUT_DAYS, TimeUnit.DAYS)
+        .offloadExecutor(offloadExecutor);
     channelBuilder.executorPool = executorPool;
     channelBuilder.binlog = null;
     channelBuilder.channelz = channelz;
@@ -3466,21 +3474,18 @@ public class ManagedChannelImplTest {
     }
 
     FakeNameResolverFactory2 factory = new FakeNameResolverFactory2();
-    final class CustomBuilder extends AbstractManagedChannelImplBuilder<CustomBuilder> {
 
-      CustomBuilder() {
-        super(TARGET);
-        this.executorPool = ManagedChannelImplTest.this.executorPool;
-        this.channelz = ManagedChannelImplTest.this.channelz;
-      }
-
-      @Override
-      protected ClientTransportFactory buildTransportFactory() {
-        return mockTransportFactory;
-      }
-    }
-
-    ManagedChannel mychannel = new CustomBuilder().nameResolverFactory(factory).build();
+    ManagedChannelImplBuilder customBuilder = new ManagedChannelImplBuilder(TARGET,
+        new ClientTransportFactoryBuilder() {
+          @Override
+          public ClientTransportFactory buildClientTransportFactory() {
+            return mockTransportFactory;
+          }
+        },
+        null);
+    customBuilder.executorPool = executorPool;
+    customBuilder.channelz = channelz;
+    ManagedChannel mychannel = customBuilder.nameResolverFactory(factory).build();
 
     ClientCall<Void, Void> call1 =
         mychannel.newCall(TestMethodDescriptors.voidMethod(), CallOptions.DEFAULT);
@@ -4022,22 +4027,6 @@ public class ManagedChannelImplTest {
       if (resolvedOobChannel != null) {
         resolvedOobChannel.shutdownNow();
       }
-    }
-  }
-
-  private static final class ChannelBuilder
-      extends AbstractManagedChannelImplBuilder<ChannelBuilder> {
-
-    ChannelBuilder() {
-      super(TARGET);
-    }
-
-    @Override protected ClientTransportFactory buildTransportFactory() {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override protected int getDefaultPort() {
-      return DEFAULT_PORT;
     }
   }
 
