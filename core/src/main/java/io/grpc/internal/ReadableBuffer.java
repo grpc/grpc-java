@@ -140,7 +140,7 @@ public interface ReadableBuffer extends Closeable {
   /**
    * Indicates whether or not {@link #getByteBuffer} operation is supported for this buffer.
    */
-  boolean canUseByteBuffer();
+  boolean hasByteBuffer();
 
   /**
    * Gets a {@link ByteBuffer} that contains some bytes of the content next to be read, or {@code
@@ -150,7 +150,7 @@ public interface ReadableBuffer extends Closeable {
    * mark may be changed. Operations for changing the position, limit, and mark of the returned
    * buffer does not affect the position, limit, and mark of this buffer. Buffers returned by this
    * method have independent position, limit and mark. This is an optional method, so callers
-   * should first check {@link #canUseByteBuffer}.
+   * should first check {@link #hasByteBuffer}.
    *
    * @throws UnsupportedOperationException the buffer does not support this method.
    */

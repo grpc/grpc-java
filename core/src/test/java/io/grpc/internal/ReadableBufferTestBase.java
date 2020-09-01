@@ -153,7 +153,7 @@ public abstract class ReadableBufferTestBase {
   @Test
   public void getByteBufferDoesNotAffectBufferPosition() {
     ReadableBuffer buffer = buffer();
-    Assume.assumeTrue(buffer.canUseByteBuffer());
+    Assume.assumeTrue(buffer.hasByteBuffer());
     ByteBuffer byteBuffer = buffer.getByteBuffer();
     assertEquals(msg.length(), buffer.readableBytes());
     byteBuffer.get(new byte[byteBuffer.remaining()]);
@@ -163,7 +163,7 @@ public abstract class ReadableBufferTestBase {
   @Test
   public void getByteBufferIsNotAffectedByBufferRead() {
     ReadableBuffer buffer = buffer();
-    Assume.assumeTrue(buffer.canUseByteBuffer());
+    Assume.assumeTrue(buffer.hasByteBuffer());
     ByteBuffer byteBuffer = buffer.getByteBuffer();
     int initialRemaining = byteBuffer.remaining();
     buffer.readBytes(new byte[100], 0, 100);

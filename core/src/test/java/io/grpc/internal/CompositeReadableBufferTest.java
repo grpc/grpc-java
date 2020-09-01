@@ -262,15 +262,15 @@ public class CompositeReadableBufferTest {
     ReadableBuffer buffer1 = mock(ReadableBuffer.class);
     ReadableBuffer buffer2 = mock(ReadableBuffer.class);
     ReadableBuffer buffer3 = mock(ReadableBuffer.class);
-    when(buffer1.canUseByteBuffer()).thenReturn(true);
-    when(buffer2.canUseByteBuffer()).thenReturn(true);
-    when(buffer3.canUseByteBuffer()).thenReturn(false);
+    when(buffer1.hasByteBuffer()).thenReturn(true);
+    when(buffer2.hasByteBuffer()).thenReturn(true);
+    when(buffer3.hasByteBuffer()).thenReturn(false);
     composite.addBuffer(buffer1);
-    assertTrue(composite.canUseByteBuffer());
+    assertTrue(composite.hasByteBuffer());
     composite.addBuffer(buffer2);
-    assertTrue(composite.canUseByteBuffer());
+    assertTrue(composite.hasByteBuffer());
     composite.addBuffer(buffer3);
-    assertFalse(composite.canUseByteBuffer());
+    assertFalse(composite.hasByteBuffer());
   }
 
   @Test
