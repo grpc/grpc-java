@@ -209,7 +209,6 @@ public final class ProtoLiteUtils {
               stream.skip(buffer.remaining());
               buffers.add(buffer);
             }
-            stream.reset();
             cis = CodedInputStream.newInstance(buffers);
           } else if (size > 0 && size <= DEFAULT_MAX_MESSAGE_SIZE) {
             Reference<byte[]> ref;
