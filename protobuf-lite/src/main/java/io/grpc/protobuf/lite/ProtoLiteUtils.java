@@ -37,8 +37,6 @@ import java.io.OutputStream;
 import java.lang.ref.Reference;
 import java.lang.ref.WeakReference;
 import java.nio.ByteBuffer;
-import java.security.AccessController;
-import java.security.PrivilegedAction;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -54,14 +52,11 @@ public final class ProtoLiteUtils {
 
   private static final int BUF_SIZE = 8192;
 
-  private static final String JAVA_VERSION = getSystemProperty("java.specification.version");
-
   /**
    * Assume Java 9+ if it isn't Java 7 or Java 8.
    */
   @VisibleForTesting
-  static final boolean IS_JAVA9_OR_HIGHER =
-      !"1.7".equals(JAVA_VERSION) && !"1.8".equals(JAVA_VERSION);
+  static final boolean IS_JAVA9_OR_HIGHER;
 
   /**
    * The same value as {@link io.grpc.internal.GrpcUtil#DEFAULT_MAX_MESSAGE_SIZE}.
@@ -74,6 +69,16 @@ public final class ProtoLiteUtils {
    */
   @VisibleForTesting
   static final int MESSAGE_ZERO_COPY_THRESHOLD = 64 * 1024;
+
+  static {
+    boolean isJava9OrHigher = true;
+    try {
+      Class.forName("java.lang.StackWalker");
+    } catch (ClassNotFoundException e) {
+      isJava9OrHigher = false;
+    }
+    IS_JAVA9_OR_HIGHER = isJava9OrHigher;
+  }
 
   /**
    * Sets the global registry for proto marshalling shared across all servers and clients.
@@ -289,26 +294,5 @@ public final class ProtoLiteUtils {
         throw new IllegalArgumentException(ipbe);
       }
     }
-  }
-
-  private static String getSystemProperty(final String key) {
-    String value;
-    if (System.getSecurityManager() == null) {
-      value = System.getProperty(key);
-    } else {
-      value =
-          AccessController.doPrivileged(
-              new PrivilegedAction<String>() {
-                @Override
-                public String run() {
-                  try {
-                    return System.getProperty(key);
-                  } catch (SecurityException e) {
-                    return null;
-                  }
-                }
-              });
-    }
-    return value;
   }
 }
