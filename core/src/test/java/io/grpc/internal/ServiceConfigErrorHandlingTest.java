@@ -46,6 +46,8 @@ import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
+import io.grpc.internal.ManagedChannelImplBuilder.ClientTransportFactoryBuilder;
+import io.grpc.internal.ManagedChannelImplBuilder.FixedPortProvider;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.util.ArrayList;
@@ -151,7 +153,7 @@ public class ServiceConfigErrorHandlingTest {
   private ObjectPool<Executor> balancerRpcExecutorPool;
   @Mock
   private Executor blockingExecutor;
-  private ChannelBuilder channelBuilder;
+  private ManagedChannelImplBuilder channelBuilder;
 
   private void createChannel(ClientInterceptor... interceptors) {
     checkState(channel == null);
@@ -197,14 +199,21 @@ public class ServiceConfigErrorHandlingTest {
         .thenReturn(timer.getScheduledExecutorService());
     when(executorPool.getObject()).thenReturn(executor.getScheduledExecutorService());
 
-    channelBuilder =
-        new ChannelBuilder()
-            .nameResolverFactory(new FakeNameResolverFactory.Builder(expectedUri).build())
-            .defaultLoadBalancingPolicy(MOCK_POLICY_NAME)
-            .userAgent(USER_AGENT)
-            .idleTimeout(
-                AbstractManagedChannelImplBuilder.IDLE_MODE_MAX_TIMEOUT_DAYS, TimeUnit.DAYS)
-            .offloadExecutor(blockingExecutor);
+    channelBuilder = new ManagedChannelImplBuilder(TARGET,
+        new ClientTransportFactoryBuilder() {
+          @Override
+          public ClientTransportFactory buildClientTransportFactory() {
+            throw new UnsupportedOperationException();
+          }
+        },
+        new FixedPortProvider(DEFAULT_PORT));
+
+    channelBuilder
+        .nameResolverFactory(new FakeNameResolverFactory.Builder(expectedUri).build())
+        .defaultLoadBalancingPolicy(MOCK_POLICY_NAME)
+        .userAgent(USER_AGENT)
+        .idleTimeout(ManagedChannelImplBuilder.IDLE_MODE_MAX_TIMEOUT_DAYS, TimeUnit.DAYS)
+        .offloadExecutor(blockingExecutor);
     channelBuilder.executorPool = executorPool;
     channelBuilder.binlog = null;
     channelBuilder.channelz = channelz;
@@ -525,22 +534,6 @@ public class ServiceConfigErrorHandlingTest {
     assertThat(newResolvedAddress.getAttributes().get(InternalConfigSelector.KEY))
         .isNull();
     verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
-  }
-
-  private static final class ChannelBuilder
-      extends AbstractManagedChannelImplBuilder<ChannelBuilder> {
-
-    ChannelBuilder() {
-      super(TARGET);
-    }
-
-    @Override protected ClientTransportFactory buildTransportFactory() {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override protected int getDefaultPort() {
-      return DEFAULT_PORT;
-    }
   }
 
   private static final class FakeBackoffPolicyProvider implements BackoffPolicy.Provider {
