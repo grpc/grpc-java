@@ -18,6 +18,7 @@ package io.grpc.testing.integration;
 
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
+import io.grpc.inprocess.InternalInProcessChannelBuilder;
 import io.grpc.internal.AbstractServerImplBuilder;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -38,7 +39,7 @@ public class InProcessTest extends AbstractInteropTest {
   protected InProcessChannelBuilder createChannelBuilder() {
     InProcessChannelBuilder builder = InProcessChannelBuilder.forName(SERVER_NAME);
     // Disable the default census stats interceptor, use testing interceptor instead.
-    io.grpc.internal.TestingAccessor.setStatsEnabled(builder, false);
+    InternalInProcessChannelBuilder.setStatsEnabled(builder, false);
     return builder.intercept(createCensusStatsClientInterceptor());
   }
 
