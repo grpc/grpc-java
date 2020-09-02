@@ -45,7 +45,7 @@ public class Http2NettyTest extends AbstractInteropTest {
     // Starts the server with HTTPS.
     try {
       return NettyServerBuilder.forPort(0)
-          .flowControlWindow(65 * 1024)
+          .flowControlWindow(AbstractInteropTest.TEST_FLOW_CONTROL_WINDOW)
           .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
           .sslContext(GrpcSslContexts
               .forServer(TestUtils.loadCert("server1.pem"), TestUtils.loadCert("server1.key"))
@@ -63,7 +63,7 @@ public class Http2NettyTest extends AbstractInteropTest {
     try {
       NettyChannelBuilder builder = NettyChannelBuilder
           .forAddress(TestUtils.testServerAddress((InetSocketAddress) getListenAddress()))
-          .flowControlWindow(65 * 1024)
+          .flowControlWindow(AbstractInteropTest.TEST_FLOW_CONTROL_WINDOW)
           .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
           .sslContext(GrpcSslContexts
               .forClient()

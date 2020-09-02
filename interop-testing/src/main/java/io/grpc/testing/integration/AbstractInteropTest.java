@@ -148,6 +148,12 @@ public abstract class AbstractInteropTest {
   /** Must be at least {@link #unaryPayloadLength()}, plus some to account for encoding overhead. */
   public static final int MAX_MESSAGE_SIZE = 16 * 1024 * 1024;
 
+  /**
+   * Use a small flow control to help detect flow control bugs. Don't use 64KiB to test
+   * SETTINGS/WINDOW_UPDATE exchange.
+   */
+  public static final int TEST_FLOW_CONTROL_WINDOW = 65 * 1024;
+
   private static final FakeTagger tagger = new FakeTagger();
   private static final FakeTagContextBinarySerializer tagContextBinarySerializer =
       new FakeTagContextBinarySerializer();

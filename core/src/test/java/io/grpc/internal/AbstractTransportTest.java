@@ -89,6 +89,12 @@ import org.mockito.InOrder;
 /** Standard unit tests for {@link ClientTransport}s and {@link ServerTransport}s. */
 @RunWith(JUnit4.class)
 public abstract class AbstractTransportTest {
+  /**
+   * Use a small flow control to help detect flow control bugs. Don't use 64KiB to test
+   * SETTINGS/WINDOW_UPDATE exchange.
+   */
+  public static final int TEST_FLOW_CONTROL_WINDOW = 65 * 1024;
+
   private static final int TIMEOUT_MS = 5000;
 
   private static final Attributes.Key<String> ADDITIONAL_TRANSPORT_ATTR_KEY =
