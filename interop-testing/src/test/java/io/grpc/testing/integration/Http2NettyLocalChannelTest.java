@@ -41,7 +41,7 @@ public class Http2NettyLocalChannelTest extends AbstractInteropTest {
   protected AbstractServerImplBuilder<?> getServerBuilder() {
     return NettyServerBuilder
         .forAddress(new LocalAddress("in-process-1"))
-        .flowControlWindow(65 * 1024)
+        .flowControlWindow(AbstractInteropTest.TEST_FLOW_CONTROL_WINDOW)
         .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
         .channelType(LocalServerChannel.class)
         .workerEventLoopGroup(eventLoopGroup)
@@ -55,7 +55,7 @@ public class Http2NettyLocalChannelTest extends AbstractInteropTest {
         .negotiationType(NegotiationType.PLAINTEXT)
         .channelType(LocalChannel.class)
         .eventLoopGroup(eventLoopGroup)
-        .flowControlWindow(65 * 1024)
+        .flowControlWindow(AbstractInteropTest.TEST_FLOW_CONTROL_WINDOW)
         .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE);
     // Disable the default census stats interceptor, use testing interceptor instead.
     InternalNettyChannelBuilder.setStatsEnabled(builder, false);

@@ -56,7 +56,7 @@ public class OkHttpTransportTest extends AbstractTransportTest {
     return AccessProtectedHack.serverBuilderBuildTransportServer(
         NettyServerBuilder
             .forPort(0)
-            .flowControlWindow(65 * 1024),
+            .flowControlWindow(AbstractTransportTest.TEST_FLOW_CONTROL_WINDOW),
         streamTracerFactories,
         fakeClockTransportTracer);
   }
@@ -67,7 +67,7 @@ public class OkHttpTransportTest extends AbstractTransportTest {
     return AccessProtectedHack.serverBuilderBuildTransportServer(
         NettyServerBuilder
             .forAddress(new InetSocketAddress(port))
-            .flowControlWindow(65 * 1024),
+            .flowControlWindow(AbstractTransportTest.TEST_FLOW_CONTROL_WINDOW),
         streamTracerFactories,
         fakeClockTransportTracer);
   }

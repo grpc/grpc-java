@@ -134,7 +134,8 @@ public final class NettyClientInteropServlet extends HttpServlet {
           ManagedChannelBuilder.forTarget(INTEROP_TEST_ADDRESS)
               .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE);
       assertTrue(builder instanceof NettyChannelBuilder);
-      ((NettyChannelBuilder) builder).flowControlWindow(65 * 1024);
+      ((NettyChannelBuilder) builder)
+          .flowControlWindow(AbstractInteropTest.TEST_FLOW_CONTROL_WINDOW);
       return builder;
     }
 
