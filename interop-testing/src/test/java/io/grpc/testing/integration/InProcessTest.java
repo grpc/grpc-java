@@ -16,10 +16,11 @@
 
 package io.grpc.testing.integration;
 
+import io.grpc.ServerBuilder;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.inprocess.InternalInProcessChannelBuilder;
-import io.grpc.internal.AbstractServerImplBuilder;
+import io.grpc.inprocess.InternalInProcessServerBuilder;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -30,9 +31,12 @@ public class InProcessTest extends AbstractInteropTest {
   private static final String SERVER_NAME = "test";
 
   @Override
-  protected AbstractServerImplBuilder<?> getServerBuilder() {
+  protected ServerBuilder<?> getServerBuilder() {
     // Starts the in-process server.
-    return InProcessServerBuilder.forName(SERVER_NAME);
+    InProcessServerBuilder builder = InProcessServerBuilder.forName(SERVER_NAME);
+    // Disable the default census stats tracer, use testing tracer instead.
+    InternalInProcessServerBuilder.setStatsEnabled(builder, false);
+    return builder.addStreamTracerFactory(createCustomCensusTracerFactory());
   }
 
   @Override
@@ -41,6 +45,12 @@ public class InProcessTest extends AbstractInteropTest {
     // Disable the default census stats interceptor, use testing interceptor instead.
     InternalInProcessChannelBuilder.setStatsEnabled(builder, false);
     return builder.intercept(createCensusStatsClientInterceptor());
+  }
+
+  @Override
+  protected boolean customCensusModulePresent() {
+    // Metrics values are not expected, but custom census module is still used.
+    return true;
   }
 
   @Override

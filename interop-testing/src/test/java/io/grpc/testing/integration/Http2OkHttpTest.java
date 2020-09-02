@@ -23,11 +23,12 @@ import static org.junit.Assert.assertTrue;
 import com.google.common.base.Throwables;
 import com.squareup.okhttp.ConnectionSpec;
 import io.grpc.ManagedChannel;
-import io.grpc.internal.AbstractServerImplBuilder;
+import io.grpc.ServerBuilder;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.testing.StreamRecorder;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.GrpcSslContexts;
+import io.grpc.netty.InternalNettyServerBuilder;
 import io.grpc.netty.NettyServerBuilder;
 import io.grpc.okhttp.InternalOkHttpChannelBuilder;
 import io.grpc.okhttp.OkHttpChannelBuilder;
@@ -64,7 +65,7 @@ public class Http2OkHttpTest extends AbstractInteropTest {
   }
 
   @Override
-  protected AbstractServerImplBuilder<?> getServerBuilder() {
+  protected ServerBuilder<?> getServerBuilder() {
     // Starts the server with HTTPS.
     try {
       SslProvider sslProvider = SslContext.defaultServerProvider();
@@ -77,10 +78,13 @@ public class Http2OkHttpTest extends AbstractInteropTest {
           .forServer(TestUtils.loadCert("server1.pem"), TestUtils.loadCert("server1.key"));
       GrpcSslContexts.configure(contextBuilder, sslProvider);
       contextBuilder.ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE);
-      return NettyServerBuilder.forPort(0)
+      NettyServerBuilder builder = NettyServerBuilder.forPort(0)
           .flowControlWindow(AbstractInteropTest.TEST_FLOW_CONTROL_WINDOW)
           .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
           .sslContext(contextBuilder.build());
+      // Disable the default census stats tracer, use testing tracer instead.
+      InternalNettyServerBuilder.setStatsEnabled(builder, false);
+      return builder.addStreamTracerFactory(createCustomCensusTracerFactory());
     } catch (IOException ex) {
       throw new RuntimeException(ex);
     }

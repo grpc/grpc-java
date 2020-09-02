@@ -18,12 +18,12 @@ package io.grpc.okhttp;
 
 import io.grpc.ServerStreamTracer;
 import io.grpc.internal.AbstractTransportTest;
-import io.grpc.internal.AccessProtectedHack;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.InternalServer;
 import io.grpc.internal.ManagedClientTransport;
+import io.grpc.netty.InternalNettyServerBuilder;
 import io.grpc.netty.NettyServerBuilder;
 import java.net.InetSocketAddress;
 import java.util.List;
@@ -53,23 +53,21 @@ public class OkHttpTransportTest extends AbstractTransportTest {
   @Override
   protected List<? extends InternalServer> newServer(
       List<ServerStreamTracer.Factory> streamTracerFactories) {
-    return AccessProtectedHack.serverBuilderBuildTransportServer(
-        NettyServerBuilder
-            .forPort(0)
-            .flowControlWindow(AbstractTransportTest.TEST_FLOW_CONTROL_WINDOW),
-        streamTracerFactories,
-        fakeClockTransportTracer);
+    NettyServerBuilder builder = NettyServerBuilder
+        .forPort(0)
+        .flowControlWindow(AbstractTransportTest.TEST_FLOW_CONTROL_WINDOW);
+    InternalNettyServerBuilder.setTransportTracerFactory(builder, fakeClockTransportTracer);
+    return InternalNettyServerBuilder.buildTransportServers(builder, streamTracerFactories);
   }
 
   @Override
   protected List<? extends InternalServer> newServer(
       int port, List<ServerStreamTracer.Factory> streamTracerFactories) {
-    return AccessProtectedHack.serverBuilderBuildTransportServer(
-        NettyServerBuilder
-            .forAddress(new InetSocketAddress(port))
-            .flowControlWindow(AbstractTransportTest.TEST_FLOW_CONTROL_WINDOW),
-        streamTracerFactories,
-        fakeClockTransportTracer);
+    NettyServerBuilder builder = NettyServerBuilder
+        .forAddress(new InetSocketAddress(port))
+        .flowControlWindow(AbstractTransportTest.TEST_FLOW_CONTROL_WINDOW);
+    InternalNettyServerBuilder.setTransportTracerFactory(builder, fakeClockTransportTracer);
+    return InternalNettyServerBuilder.buildTransportServers(builder, streamTracerFactories);
   }
 
   @Override

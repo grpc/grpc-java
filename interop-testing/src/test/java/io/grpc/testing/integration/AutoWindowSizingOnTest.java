@@ -16,8 +16,9 @@
 
 package io.grpc.testing.integration;
 
-import io.grpc.internal.AbstractServerImplBuilder;
+import io.grpc.ServerBuilder;
 import io.grpc.netty.InternalNettyChannelBuilder;
+import io.grpc.netty.InternalNettyServerBuilder;
 import io.grpc.netty.NegotiationType;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.netty.NettyServerBuilder;
@@ -28,9 +29,12 @@ import org.junit.runners.JUnit4;
 public class AutoWindowSizingOnTest extends AbstractInteropTest {
 
   @Override
-  protected AbstractServerImplBuilder<?> getServerBuilder() {
-    return NettyServerBuilder.forPort(0)
+  protected ServerBuilder<?> getServerBuilder() {
+    NettyServerBuilder builder = NettyServerBuilder.forPort(0)
         .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE);
+    // Disable the default census stats tracer, use testing tracer instead.
+    InternalNettyServerBuilder.setStatsEnabled(builder, false);
+    return builder.addStreamTracerFactory(createCustomCensusTracerFactory());
   }
 
   @Override
