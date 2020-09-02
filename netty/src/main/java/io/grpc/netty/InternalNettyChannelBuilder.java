@@ -31,12 +31,29 @@ public final class InternalNettyChannelBuilder {
   /**
    * Checks authority upon channel construction.  The purpose of this interface is to raise the
    * visibility of {@link NettyChannelBuilder.OverrideAuthorityChecker}.
+   * @deprecated To be removed, use {@link #disableCheckAuthority(NettyChannelBuilder builder)} to
+   *     disable authority check.
    */
+  @Deprecated
   public interface OverrideAuthorityChecker extends NettyChannelBuilder.OverrideAuthorityChecker {}
 
+  /**
+   * Overrides authority checker.
+   * @deprecated To be removed, use {@link #disableCheckAuthority(NettyChannelBuilder builder)} to
+   *     disable authority check.
+   */
+  @Deprecated
   public static void overrideAuthorityChecker(
       NettyChannelBuilder channelBuilder, OverrideAuthorityChecker authorityChecker) {
     channelBuilder.overrideAuthorityChecker(authorityChecker);
+  }
+
+  public static void disableCheckAuthority(NettyChannelBuilder builder) {
+    builder.disableCheckAuthority();
+  }
+
+  public static void enableCheckAuthority(NettyChannelBuilder builder) {
+    builder.enableCheckAuthority();
   }
 
   /** A class that provides a Netty handler to control protocol negotiation. */
@@ -66,6 +83,10 @@ public final class InternalNettyChannelBuilder {
 
   public static void setStatsRecordStartedRpcs(NettyChannelBuilder builder, boolean value) {
     builder.setStatsRecordStartedRpcs(value);
+  }
+
+  public static void setStatsRecordFinishedRpcs(NettyChannelBuilder builder, boolean value) {
+    builder.setStatsRecordFinishedRpcs(value);
   }
 
   public static void setStatsRecordRealTimeMetrics(NettyChannelBuilder builder, boolean value) {

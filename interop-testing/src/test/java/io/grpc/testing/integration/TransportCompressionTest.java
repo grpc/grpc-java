@@ -37,6 +37,7 @@ import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.internal.AbstractServerImplBuilder;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.netty.InternalNettyChannelBuilder;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.netty.NettyServerBuilder;
 import io.grpc.testing.integration.Messages.BoolValue;
@@ -165,7 +166,7 @@ public class TransportCompressionTest extends AbstractInteropTest {
         })
         .usePlaintext();
     // Disable the default census stats interceptor, use testing interceptor instead.
-    io.grpc.internal.TestingAccessor.setStatsEnabled(builder, false);
+    InternalNettyChannelBuilder.setStatsEnabled(builder, false);
     return builder.intercept(createCensusStatsClientInterceptor());
   }
 

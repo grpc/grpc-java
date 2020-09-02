@@ -17,6 +17,7 @@
 package io.grpc.testing.integration;
 
 import io.grpc.internal.AbstractServerImplBuilder;
+import io.grpc.netty.InternalNettyChannelBuilder;
 import io.grpc.netty.NegotiationType;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.netty.NettyServerBuilder;
@@ -39,7 +40,7 @@ public class AutoWindowSizingOnTest extends AbstractInteropTest {
         .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
         .initialFlowControlWindow(NettyChannelBuilder.DEFAULT_FLOW_CONTROL_WINDOW);
     // Disable the default census stats interceptor, use testing interceptor instead.
-    io.grpc.internal.TestingAccessor.setStatsEnabled(builder, false);
+    InternalNettyChannelBuilder.setStatsEnabled(builder, false);
     return builder.intercept(createCensusStatsClientInterceptor());
   }
 }

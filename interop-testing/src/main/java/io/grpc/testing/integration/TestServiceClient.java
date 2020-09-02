@@ -27,6 +27,7 @@ import io.grpc.internal.AbstractManagedChannelImplBuilder;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.GrpcSslContexts;
+import io.grpc.netty.InternalNettyChannelBuilder;
 import io.grpc.netty.NegotiationType;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.okhttp.OkHttpChannelBuilder;
@@ -425,7 +426,9 @@ public class TestServiceClient {
         if (fullStreamDecompression) {
           nettyBuilder.enableFullStreamDecompression();
         }
-        builder = nettyBuilder;
+        // Disable the default census stats interceptor, use testing interceptor instead.
+        InternalNettyChannelBuilder.setStatsEnabled(nettyBuilder, false);
+        return nettyBuilder.intercept(createCensusStatsClientInterceptor());
       } else {
         OkHttpChannelBuilder okBuilder = OkHttpChannelBuilder.forAddress(serverHost, serverPort);
         if (serverHostOverride != null) {
