@@ -22,6 +22,7 @@ import static org.junit.Assert.assertNotEquals;
 import io.grpc.internal.AbstractServerImplBuilder;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.GrpcSslContexts;
+import io.grpc.netty.InternalNettyChannelBuilder;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.netty.NettyServerBuilder;
 import io.netty.handler.ssl.ClientAuth;
@@ -71,7 +72,7 @@ public class Http2NettyTest extends AbstractInteropTest {
               .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE)
               .build());
       // Disable the default census stats interceptor, use testing interceptor instead.
-      io.grpc.internal.TestingAccessor.setStatsEnabled(builder, false);
+      InternalNettyChannelBuilder.setStatsEnabled(builder, false);
       return builder.intercept(createCensusStatsClientInterceptor());
     } catch (Exception ex) {
       throw new RuntimeException(ex);
