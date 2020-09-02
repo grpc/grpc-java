@@ -121,7 +121,7 @@ public class XdsServerBuilderTest {
       }
     });
     // wait until xdsClientWrapperForServerSds.serverWatchers populated
-    while (xdsClientWrapperForServerSds.serverWatchers.isEmpty()) {
+    for (int i = 0; i < 10 && xdsClientWrapperForServerSds.serverWatchers.isEmpty(); i++) {
       Thread.sleep(100L);
     }
     return settableFuture;
