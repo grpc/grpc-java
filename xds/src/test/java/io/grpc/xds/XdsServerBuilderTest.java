@@ -107,7 +107,7 @@ public class XdsServerBuilderTest {
     verify(mockXdsClient, times(1)).shutdown();
   }
 
-  private Future<Throwable> startServerAsync() {
+  private Future<Throwable> startServerAsync() throws InterruptedException {
     final SettableFuture<Throwable> settableFuture = SettableFuture.create();
     Executors.newSingleThreadExecutor().execute(new Runnable() {
       @Override
@@ -120,6 +120,10 @@ public class XdsServerBuilderTest {
         }
       }
     });
+    // wait until xdsClientWrapperForServerSds.serverWatchers populated
+    while (xdsClientWrapperForServerSds.serverWatchers.isEmpty()) {
+      Thread.sleep(100L);
+    }
     return settableFuture;
   }
 
