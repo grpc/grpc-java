@@ -316,7 +316,7 @@ public final class ReadableBuffers {
     }
 
     @Override
-    public boolean hasByteBuffer() {
+    public boolean getByteBufferSupported() {
       return true;
     }
 
@@ -387,7 +387,7 @@ public final class ReadableBuffers {
 
     @Override
     public boolean getByteBufferSupported() {
-      return buffer.hasByteBuffer();
+      return buffer.getByteBufferSupported();
     }
 
     @Nullable

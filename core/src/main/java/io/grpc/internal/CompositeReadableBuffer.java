@@ -190,9 +190,9 @@ public class CompositeReadableBuffer extends AbstractReadableBuffer {
   }
 
   @Override
-  public boolean hasByteBuffer() {
+  public boolean getByteBufferSupported() {
     for (ReadableBuffer buffer : readableBuffers) {
-      if (!buffer.hasByteBuffer()) {
+      if (!buffer.getByteBufferSupported()) {
         return false;
       }
     }

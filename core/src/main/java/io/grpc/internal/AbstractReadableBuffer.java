@@ -56,7 +56,7 @@ public abstract class AbstractReadableBuffer implements ReadableBuffer {
   }
 
   @Override
-  public boolean hasByteBuffer() {
+  public boolean getByteBufferSupported() {
     return false;
   }
 

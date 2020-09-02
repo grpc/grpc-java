@@ -108,8 +108,8 @@ public abstract class ForwardingReadableBuffer implements ReadableBuffer {
   }
 
   @Override
-  public boolean hasByteBuffer() {
-    return buf.hasByteBuffer();
+  public boolean getByteBufferSupported() {
+    return buf.getByteBufferSupported();
   }
 
   @Nullable
