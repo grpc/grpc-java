@@ -20,13 +20,6 @@ package io.grpc.internal;
  * Test helper that allows accessing package-private stuff.
  */
 public final class TestingAccessor {
-  /**
-   * Disable or enable client side census stats features.
-   */
-  public static void setStatsEnabled(
-      AbstractManagedChannelImplBuilder<?> builder, boolean statsEnabled) {
-    builder.setStatsEnabled(statsEnabled);
-  }
 
   /**
    * Disable or enable server side census stats features.
