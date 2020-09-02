@@ -29,6 +29,7 @@ import io.grpc.internal.testing.StreamRecorder;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.GrpcSslContexts;
 import io.grpc.netty.NettyServerBuilder;
+import io.grpc.okhttp.InternalOkHttpChannelBuilder;
 import io.grpc.okhttp.OkHttpChannelBuilder;
 import io.grpc.okhttp.internal.Platform;
 import io.grpc.stub.StreamObserver;
@@ -102,7 +103,7 @@ public class Http2OkHttpTest extends AbstractInteropTest {
       throw new RuntimeException(e);
     }
     // Disable the default census stats interceptor, use testing interceptor instead.
-    io.grpc.internal.TestingAccessor.setStatsEnabled(builder, false);
+    InternalOkHttpChannelBuilder.setStatsEnabled(builder, false);
     return builder.intercept(createCensusStatsClientInterceptor());
   }
 

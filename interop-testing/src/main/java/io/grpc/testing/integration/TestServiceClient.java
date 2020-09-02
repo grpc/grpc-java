@@ -23,13 +23,13 @@ import io.grpc.ManagedChannelBuilder;
 import io.grpc.alts.AltsChannelBuilder;
 import io.grpc.alts.ComputeEngineChannelBuilder;
 import io.grpc.alts.GoogleDefaultChannelBuilder;
-import io.grpc.internal.AbstractManagedChannelImplBuilder;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.GrpcSslContexts;
 import io.grpc.netty.InternalNettyChannelBuilder;
 import io.grpc.netty.NegotiationType;
 import io.grpc.netty.NettyChannelBuilder;
+import io.grpc.okhttp.InternalOkHttpChannelBuilder;
 import io.grpc.okhttp.OkHttpChannelBuilder;
 import io.grpc.okhttp.internal.Platform;
 import io.netty.handler.ssl.SslContext;
@@ -403,7 +403,7 @@ public class TestServiceClient {
       if (useAlts) {
         return AltsChannelBuilder.forAddress(serverHost, serverPort);
       }
-      AbstractManagedChannelImplBuilder<?> builder;
+
       if (!useOkHttp) {
         SslContext sslContext = null;
         if (useTestCa) {
@@ -429,34 +429,33 @@ public class TestServiceClient {
         // Disable the default census stats interceptor, use testing interceptor instead.
         InternalNettyChannelBuilder.setStatsEnabled(nettyBuilder, false);
         return nettyBuilder.intercept(createCensusStatsClientInterceptor());
-      } else {
-        OkHttpChannelBuilder okBuilder = OkHttpChannelBuilder.forAddress(serverHost, serverPort);
-        if (serverHostOverride != null) {
-          // Force the hostname to match the cert the server uses.
-          okBuilder.overrideAuthority(
-              GrpcUtil.authorityFromHostAndPort(serverHostOverride, serverPort));
-        }
-        if (useTls) {
-          if (useTestCa) {
-            try {
-              SSLSocketFactory factory = TestUtils.newSslSocketFactoryForCa(
-                  Platform.get().getProvider(), TestUtils.loadCert("ca.pem"));
-              okBuilder.sslSocketFactory(factory);
-            } catch (Exception e) {
-              throw new RuntimeException(e);
-            }
+      }
+
+      OkHttpChannelBuilder okBuilder = OkHttpChannelBuilder.forAddress(serverHost, serverPort);
+      if (serverHostOverride != null) {
+        // Force the hostname to match the cert the server uses.
+        okBuilder.overrideAuthority(
+            GrpcUtil.authorityFromHostAndPort(serverHostOverride, serverPort));
+      }
+      if (useTls) {
+        if (useTestCa) {
+          try {
+            SSLSocketFactory factory = TestUtils.newSslSocketFactoryForCa(
+                Platform.get().getProvider(), TestUtils.loadCert("ca.pem"));
+            okBuilder.sslSocketFactory(factory);
+          } catch (Exception e) {
+            throw new RuntimeException(e);
           }
-        } else {
-          okBuilder.usePlaintext();
         }
-        if (fullStreamDecompression) {
-          okBuilder.enableFullStreamDecompression();
-        }
-        builder = okBuilder;
+      } else {
+        okBuilder.usePlaintext();
+      }
+      if (fullStreamDecompression) {
+        okBuilder.enableFullStreamDecompression();
       }
       // Disable the default census stats interceptor, use testing interceptor instead.
-      io.grpc.internal.TestingAccessor.setStatsEnabled(builder, false);
-      return builder.intercept(createCensusStatsClientInterceptor());
+      InternalOkHttpChannelBuilder.setStatsEnabled(okBuilder, false);
+      return okBuilder.intercept(createCensusStatsClientInterceptor());
     }
 
     @Override

@@ -72,20 +72,26 @@ public class OkHttpChannelBuilderTest {
   }
 
   @Test
-  public void overrideAllowsInvalidAuthority() {
-    OkHttpChannelBuilder builder = new OkHttpChannelBuilder("good", 1234) {
-      @Override
-      protected String checkAuthority(String authority) {
-        return authority;
-      }
-    };
+  public void failOverrideInvalidAuthority() {
+    OkHttpChannelBuilder builder = new OkHttpChannelBuilder("good", 1234);
 
+    thrown.expect(IllegalArgumentException.class);
+    thrown.expectMessage("Invalid authority:");
+    builder.overrideAuthority("[invalidauthority");
+  }
+
+  @Test
+  public void disableCheckAuthorityAllowsInvalidAuthority() {
+    OkHttpChannelBuilder builder = new OkHttpChannelBuilder("good", 1234)
+        .disableCheckAuthority();
     builder.overrideAuthority("[invalidauthority").usePlaintext().buildTransportFactory();
   }
 
   @Test
-  public void failOverrideInvalidAuthority() {
-    OkHttpChannelBuilder builder = new OkHttpChannelBuilder("good", 1234);
+  public void enableCheckAuthorityFailOverrideInvalidAuthority() {
+    OkHttpChannelBuilder builder = new OkHttpChannelBuilder("good", 1234)
+        .disableCheckAuthority()
+        .enableCheckAuthority();
 
     thrown.expect(IllegalArgumentException.class);
     thrown.expectMessage("Invalid authority:");
