@@ -263,7 +263,7 @@ public final class MethodDescriptor<ReqT, RespT> {
   }
 
   /**
-   * A convenience method for {@code extractMethodName(getFullMethodName())}.
+   * A convenience method for {@code extractBareMethodName(getFullMethodName())}.
    *
    * @since 1.32.0
    */
