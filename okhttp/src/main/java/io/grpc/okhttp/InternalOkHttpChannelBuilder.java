@@ -29,5 +29,13 @@ public final class InternalOkHttpChannelBuilder {
     builder.setStatsEnabled(value);
   }
 
+  public static void disableCheckAuthority(OkHttpChannelBuilder builder) {
+    builder.disableCheckAuthority();
+  }
+
+  public static void enableCheckAuthority(OkHttpChannelBuilder builder) {
+    builder.enableCheckAuthority();
+  }
+
   private InternalOkHttpChannelBuilder() {}
 }
