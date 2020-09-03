@@ -18,7 +18,6 @@ package io.grpc.xds.internal.sds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
-import com.google.common.annotations.VisibleForTesting;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.netty.handler.ssl.SslContext;
 
@@ -44,10 +43,6 @@ public final class SslContextProviderSupplier implements Closeable {
 
   public UpstreamTlsContext getUpstreamTlsContext() {
     return upstreamTlsContext;
-  }
-
-  @VisibleForTesting public boolean isShutdown() {
-    return shutdown;
   }
 
   /** Updates SslContext via the passed callback. */

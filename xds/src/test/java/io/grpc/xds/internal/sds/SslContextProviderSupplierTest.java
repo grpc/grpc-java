@@ -83,7 +83,10 @@ public class SslContextProviderSupplierTest {
     capturedCallback.updateSecret(null);
     verify(mockTlsContextManager, times(1))
             .releaseClientSslContextProvider(eq(mockSslContextProvider));
-    assertThat(supplier.isShutdown()).isFalse();
+    SslContextProvider.Callback mockCallback = mock(SslContextProvider.Callback.class);
+    supplier.updateSslContext(mockCallback);
+    verify(mockTlsContextManager, times(3))
+            .findOrCreateClientSslContextProvider(eq(upstreamTlsContext));
   }
 
   @Test
@@ -96,7 +99,6 @@ public class SslContextProviderSupplierTest {
     capturedCallback.onException(new Exception("test"));
     verify(mockTlsContextManager, times(1))
             .releaseClientSslContextProvider(eq(mockSslContextProvider));
-    assertThat(supplier.isShutdown()).isFalse();
   }
 
   @Test
@@ -105,7 +107,6 @@ public class SslContextProviderSupplierTest {
     supplier.close();
     verify(mockTlsContextManager, times(1))
             .releaseClientSslContextProvider(eq(mockSslContextProvider));
-    assertThat(supplier.isShutdown()).isTrue();
     SslContextProvider.Callback mockCallback = mock(SslContextProvider.Callback.class);
     reset(mockTlsContextManager);
     reset(mockSslContextProvider);
