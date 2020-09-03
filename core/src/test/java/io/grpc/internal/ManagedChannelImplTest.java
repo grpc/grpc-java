@@ -3664,8 +3664,8 @@ public class ManagedChannelImplTest {
 
     assertThat(coe.getError()).isNull();
     ManagedChannelServiceConfig cfg = (ManagedChannelServiceConfig) coe.getConfig();
-    assertThat(cfg.getServiceMap()).isEmpty();
-    assertThat(cfg.getServiceMethodMap()).isEmpty();
+    assertThat(cfg.getMethodConfig(method)).isEqualTo(
+        ManagedChannelServiceConfig.empty().getMethodConfig(method));
   }
 
   @Test

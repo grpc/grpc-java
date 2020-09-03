@@ -164,28 +164,9 @@ final class ManagedChannelServiceConfig {
             healthCheckingConfig);
   }
 
-  /**
-   * Returns the per-service configuration for the channel.
-   */
-  Map<String, MethodInfo> getServiceMap() {
-    return serviceMap;
-  }
-
   @Nullable
   Map<String, ?> getHealthCheckingConfig() {
     return healthCheckingConfig;
-  }
-
-  /**
-   * Returns the per-method configuration for the channel.
-   */
-  Map<String, MethodInfo> getServiceMethodMap() {
-    return serviceMethodMap;
-  }
-
-  @Nullable
-  MethodInfo getDefaultMethodConfig() {
-    return defaultMethodConfig;
   }
 
   /**
