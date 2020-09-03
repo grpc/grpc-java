@@ -6,6 +6,7 @@ plugins {
     id "net.ltgt.errorprone" apply false
 }
 
+import groovy.json.JsonSlurper
 import net.ltgt.gradle.errorprone.CheckSeverity
 
 subprojects {
@@ -391,8 +392,18 @@ subprojects {
             jmh 'org.openjdk.jmh:jmh-core:1.19',
                     'org.openjdk.jmh:jmh-generator-bytecode:1.19'
         }
-        // invoke jmh on a single benchmark class like so:
-        //   ./gradlew -PjmhIncludeSingleClass=StatsTraceContextBenchmark clean :grpc-core:jmh
+        /*
+        invoke jmh on a single benchmark class like so:
+            ./gradlew -Pjmh.include=StatsTraceContextBenchmark clean :grpc-core:jmh
+
+        invoking jmh on selected tests with given params:
+            ./gradlew -Pjmh.include='TransportBenchmark\.(unaryCallsByteThroughput|streamingCallsByteThroughput)' \
+                      -Pjmh.benchmarkParameters='{"direct": ["false"], "transport": ["NETTY", "OKHTTP"]}' \
+                      :grpc-benchmarks:jmh
+
+        jmh.include: (string) a single regex matching test name(s)
+        jmh.benchmarkParameters: (string) json dict, where key=param name, value=param values to benchmark
+         */
         jmh {
             warmupIterations = 10
             iterations = 10
@@ -401,10 +412,14 @@ subprojects {
             // dependencies that break when including them. (context's testCompile
             // depends on core; core's testCompile depends on testing)
             includeTests = false
-            if (project.hasProperty('jmhIncludeSingleClass')) {
+            if (project.hasProperty('jmh.include')) {
                 include = [
-                    project.property('jmhIncludeSingleClass')
+                    project.property('jmh.include')
                 ]
+            }
+            if (project.hasProperty('jmh.benchmarkParameters')) {
+                benchmarkParameters = new JsonSlurper().parseText(
+                        project.property('jmh.benchmarkParameters') as String)
             }
         }
     }
