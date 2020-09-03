@@ -144,7 +144,7 @@ final class EdsLoadBalancer2 extends LoadBalancer {
 
     @Override
     public LoadBalancer newLoadBalancer(Helper helper) {
-      return new ChildLbState();
+      return new ChildLbState(helper);
     }
 
     @Override
@@ -175,7 +175,7 @@ final class EdsLoadBalancer2 extends LoadBalancer {
       @Nullable
       private LoadBalancer lb;
 
-      private ChildLbState() {
+      private ChildLbState(Helper helper) {
         logger.log(
             XdsLogLevel.INFO,
             "Start endpoint watcher on {0} with xDS client {1}", resourceName, xdsClient);
@@ -191,7 +191,7 @@ final class EdsLoadBalancer2 extends LoadBalancer {
           loadStatsStore = null;
           attributes = resolvedAddresses.getAttributes();
         }
-        lbHelper = new DropHandlingLbHelper();
+        lbHelper = new DropHandlingLbHelper(helper);
       }
 
       @Override
@@ -316,7 +316,12 @@ final class EdsLoadBalancer2 extends LoadBalancer {
       }
 
       private final class DropHandlingLbHelper extends ForwardingLoadBalancerHelper {
+        private final Helper helper;
         private List<DropOverload> dropPolicies = Collections.emptyList();
+
+        private DropHandlingLbHelper(Helper helper) {
+          this.helper = helper;
+        }
 
         @Override
         public void updateBalancingState(
