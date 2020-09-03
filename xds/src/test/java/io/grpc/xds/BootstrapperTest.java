@@ -24,6 +24,7 @@ import com.google.common.collect.Iterables;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.GrpcUtil.GrpcBuildVersion;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
+import io.grpc.xds.Bootstrapper.ChannelCreds;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.Node;
@@ -234,7 +235,10 @@ public class BootstrapperTest {
     String rawData = "{\n"
         + "  \"xds_servers\": [\n"
         + "    {\n"
-        + "      \"server_uri\": \"trafficdirector.googleapis.com:443\"\n"
+        + "      \"server_uri\": \"trafficdirector.googleapis.com:443\",\n"
+        + "      \"channel_creds\": [\n"
+        + "        {\"type\": \"insecure\"}\n"
+        + "      ]\n"
         + "    }\n"
         + "  ]\n"
         + "}";
@@ -243,7 +247,10 @@ public class BootstrapperTest {
     assertThat(info.getServers()).hasSize(1);
     ServerInfo serverInfo = Iterables.getOnlyElement(info.getServers());
     assertThat(serverInfo.getServerUri()).isEqualTo("trafficdirector.googleapis.com:443");
-    assertThat(serverInfo.getChannelCredentials()).isEmpty();
+    assertThat(serverInfo.getChannelCredentials()).hasSize(1);
+    ChannelCreds creds = Iterables.getOnlyElement(serverInfo.getChannelCredentials());
+    assertThat(creds.getType()).isEqualTo("insecure");
+    assertThat(creds.getConfig()).isNull();
     assertThat(info.getNode()).isEqualTo(getNodeBuilder().build());
   }
 
