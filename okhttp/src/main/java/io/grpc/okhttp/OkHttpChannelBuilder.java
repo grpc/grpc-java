@@ -146,6 +146,7 @@ public class OkHttpChannelBuilder extends ForwardingChannelBuilder<OkHttpChannel
     this(GrpcUtil.authorityFromHostAndPort(host, port));
   }
 
+  @SuppressWarnings("deprecation")
   private OkHttpChannelBuilder(String target) {
     final class OkHttpChannelTransportFactoryBuilder implements ClientTransportFactoryBuilder {
       @Override
@@ -164,6 +165,14 @@ public class OkHttpChannelBuilder extends ForwardingChannelBuilder<OkHttpChannel
     managedChannelImplBuilder = new ManagedChannelImplBuilder(target,
         new OkHttpChannelTransportFactoryBuilder(),
         new OkHttpChannelDefaultPortProvider());
+
+    managedChannelImplBuilder.overrideAuthorityChecker(
+        new io.grpc.internal.ManagedChannelImplBuilder.OverrideAuthorityChecker() {
+          @Override
+          public String checkAuthority(String authority) {
+            return OkHttpChannelBuilder.this.checkAuthority(authority);
+          }
+        });
   }
 
   @Internal
@@ -422,6 +431,10 @@ public class OkHttpChannelBuilder extends ForwardingChannelBuilder<OkHttpChannel
         maxInboundMetadataSize,
         transportTracerFactory,
         useGetForSafeMethods);
+  }
+
+  protected String checkAuthority(String authority) {
+    return GrpcUtil.checkAuthority(authority);
   }
 
   final OkHttpChannelBuilder disableCheckAuthority() {
