@@ -71,9 +71,8 @@ public final class ServerWrapperForXds extends Server {
       removeServerWatcher();
       if (ex instanceof InterruptedException) {
         Thread.currentThread().interrupt();
-      } else {
-        throw new RuntimeException(ex);
       }
+      throw new RuntimeException(ex);
     }
     delegate.start();
     return this;
