@@ -169,7 +169,6 @@ public class OkHttpChannelBuilder extends ForwardingChannelBuilder<OkHttpChannel
     managedChannelImplBuilder.overrideAuthorityChecker(
         new io.grpc.internal.ManagedChannelImplBuilder.OverrideAuthorityChecker() {
           @Override
-          @SuppressWarnings("deprecation")
           public String checkAuthority(String authority) {
             return OkHttpChannelBuilder.this.checkAuthority(authority);
           }
@@ -434,7 +433,6 @@ public class OkHttpChannelBuilder extends ForwardingChannelBuilder<OkHttpChannel
         useGetForSafeMethods);
   }
 
-  @Deprecated
   protected String checkAuthority(String authority) {
     return GrpcUtil.checkAuthority(authority);
   }

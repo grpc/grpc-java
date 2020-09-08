@@ -81,7 +81,6 @@ public class OkHttpChannelBuilderTest {
   }
 
   @Test
-  @Deprecated
   public void checkAuthorityOverrideAllowsInvalidAuthority() {
     OkHttpChannelBuilder builder = new OkHttpChannelBuilder("good", 1234) {
       @Override
