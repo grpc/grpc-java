@@ -35,7 +35,6 @@ import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.ManagedChannelImplBuilder;
 import io.grpc.internal.ManagedChannelImplBuilder.ChannelBuilderDefaultPortProvider;
 import io.grpc.internal.ManagedChannelImplBuilder.ClientTransportFactoryBuilder;
-import io.grpc.internal.ManagedChannelImplBuilder.OverrideAuthorityChecker;
 import io.grpc.internal.SharedResourceHolder;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.internal.TransportTracer;
@@ -147,6 +146,7 @@ public class OkHttpChannelBuilder extends ForwardingChannelBuilder<OkHttpChannel
     this(GrpcUtil.authorityFromHostAndPort(host, port));
   }
 
+  @SuppressWarnings("deprecation")
   private OkHttpChannelBuilder(String target) {
     final class OkHttpChannelTransportFactoryBuilder implements ClientTransportFactoryBuilder {
       @Override
@@ -166,12 +166,14 @@ public class OkHttpChannelBuilder extends ForwardingChannelBuilder<OkHttpChannel
         new OkHttpChannelTransportFactoryBuilder(),
         new OkHttpChannelDefaultPortProvider());
 
-    managedChannelImplBuilder.overrideAuthorityChecker(new OverrideAuthorityChecker() {
-      @Override
-      public String checkAuthority(String authority) {
-        return OkHttpChannelBuilder.this.checkAuthority(authority);
-      }
-    });
+    managedChannelImplBuilder.overrideAuthorityChecker(
+        new io.grpc.internal.ManagedChannelImplBuilder.OverrideAuthorityChecker() {
+          @Override
+          @SuppressWarnings("deprecation")
+          public String checkAuthority(String authority) {
+            return OkHttpChannelBuilder.this.checkAuthority(authority);
+          }
+        });
   }
 
   @Internal
