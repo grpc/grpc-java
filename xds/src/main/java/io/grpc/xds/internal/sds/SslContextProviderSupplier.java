@@ -17,6 +17,7 @@
 package io.grpc.xds.internal.sds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.netty.handler.ssl.SslContext;
@@ -48,7 +49,8 @@ public final class SslContextProviderSupplier implements Closeable {
   /** Updates SslContext via the passed callback. */
   public synchronized void updateSslContext(final SslContextProvider.Callback callback) {
     checkNotNull(callback, "callback");
-    if (sslContextProvider == null && !shutdown) {
+    checkState(!shutdown, "Supplier is shutdown!");
+    if (sslContextProvider == null) {
       sslContextProvider =
           tlsContextManager.findOrCreateClientSslContextProvider(upstreamTlsContext);
     }
