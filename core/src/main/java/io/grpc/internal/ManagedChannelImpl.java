@@ -1066,9 +1066,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
             if (pendingCalls.isEmpty()) {
               inUseStateAggregator.updateObjectInUse(pendingCallsInUseObject, false);
               pendingCalls = null;
-              if (shutdownNowed) {
-                uncommittedRetriableStreamsRegistry.onShutdownNow(SHUTDOWN_NOW_STATUS);
-              } else if (shutdown.get()) {
+              if (shutdown.get()) {
                 uncommittedRetriableStreamsRegistry.onShutdown(SHUTDOWN_STATUS);
               }
             }
