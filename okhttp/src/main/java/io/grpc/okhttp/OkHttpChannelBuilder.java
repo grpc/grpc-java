@@ -35,6 +35,7 @@ import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.ManagedChannelImplBuilder;
 import io.grpc.internal.ManagedChannelImplBuilder.ChannelBuilderDefaultPortProvider;
 import io.grpc.internal.ManagedChannelImplBuilder.ClientTransportFactoryBuilder;
+import io.grpc.internal.ManagedChannelImplBuilder.OverrideAuthorityChecker;
 import io.grpc.internal.SharedResourceHolder;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.internal.TransportTracer;
@@ -164,6 +165,13 @@ public class OkHttpChannelBuilder extends ForwardingChannelBuilder<OkHttpChannel
     managedChannelImplBuilder = new ManagedChannelImplBuilder(target,
         new OkHttpChannelTransportFactoryBuilder(),
         new OkHttpChannelDefaultPortProvider());
+
+    managedChannelImplBuilder.overrideAuthorityChecker(new OverrideAuthorityChecker() {
+      @Override
+      public String checkAuthority(String authority) {
+        return OkHttpChannelBuilder.this.checkAuthority(authority);
+      }
+    });
   }
 
   @Internal
@@ -422,6 +430,11 @@ public class OkHttpChannelBuilder extends ForwardingChannelBuilder<OkHttpChannel
         maxInboundMetadataSize,
         transportTracerFactory,
         useGetForSafeMethods);
+  }
+
+  @Deprecated
+  protected String checkAuthority(String authority) {
+    return GrpcUtil.checkAuthority(authority);
   }
 
   final OkHttpChannelBuilder disableCheckAuthority() {
