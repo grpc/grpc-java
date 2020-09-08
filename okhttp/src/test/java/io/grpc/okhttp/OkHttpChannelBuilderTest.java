@@ -81,6 +81,18 @@ public class OkHttpChannelBuilderTest {
   }
 
   @Test
+  @Deprecated
+  public void checkAuthorityOverrideAllowsInvalidAuthority() {
+    OkHttpChannelBuilder builder = new OkHttpChannelBuilder("good", 1234) {
+      @Override
+      protected String checkAuthority(String authority) {
+        return authority;
+      }
+    };
+    builder.overrideAuthority("[invalidauthority").usePlaintext().buildTransportFactory();
+  }
+
+  @Test
   public void disableCheckAuthorityAllowsInvalidAuthority() {
     OkHttpChannelBuilder builder = new OkHttpChannelBuilder("good", 1234)
         .disableCheckAuthority();
