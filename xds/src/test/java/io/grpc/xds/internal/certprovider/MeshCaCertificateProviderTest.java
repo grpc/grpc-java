@@ -534,7 +534,7 @@ public class MeshCaCertificateProviderTest {
     assertThat(receivedZoneValues).hasSize(count);
     for (int i = 0; i < count; i++) {
       assertThat(receivedStsCreds.poll()).isEqualTo("Bearer " + TEST_STS_TOKEN + i);
-      assertThat(receivedZoneValues.poll()).isEqualTo("us-west2-a");
+      assertThat(receivedZoneValues.poll()).isEqualTo("location=locations/us-west2-a");
     }
   }
 

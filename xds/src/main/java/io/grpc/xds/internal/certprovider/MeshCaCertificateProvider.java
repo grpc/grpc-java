@@ -457,7 +457,7 @@ final class MeshCaCertificateProvider extends CertificateProvider {
 
         @Override
         public void start(Listener<RespT> responseListener, Metadata headers) {
-          headers.put(KEY_FOR_ZONE_INFO, zone);
+          headers.put(KEY_FOR_ZONE_INFO, "location=locations/" + zone);
           super.start(responseListener, headers);
         }
       };
