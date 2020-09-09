@@ -23,6 +23,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.base.Strings;
+import io.grpc.CallOptions;
 import io.grpc.InternalConfigSelector;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.MethodDescriptor;
@@ -255,6 +256,9 @@ final class ManagedChannelServiceConfig {
    * Equivalent of MethodConfig from a ServiceConfig with restrictions from Channel setting.
    */
   static final class MethodInfo {
+    static final CallOptions.Key<MethodInfo> KEY =
+        CallOptions.Key.create("io.grpc.internal.ManagedChannelServiceConfig.MethodInfo");
+
     // TODO(carl-mastrangelo): add getters for these fields and make them private.
     final Long timeoutNanos;
     final Boolean waitForReady;

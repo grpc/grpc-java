@@ -160,8 +160,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         MethodDescriptor<?, ?> method,
         CallOptions callOptions,
         Metadata headers,
-        Context context,
-        @Nullable MethodInfo methodInfo);
+        Context context);
   }
 
   ClientCallImpl<ReqT, RespT> setFullStreamDecompression(boolean fullStreamDecompression) {
@@ -268,7 +267,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     if (!deadlineExceeded) {
       logIfContextNarrowedTimeout(
           effectiveDeadline, context.getDeadline(), callOptions.getDeadline());
-      stream = clientStreamProvider.newStream(method, callOptions, headers, context, methodInfo);
+      stream = clientStreamProvider.newStream(method, callOptions, headers, context);
     } else {
       stream = new FailingClientStream(
           DEADLINE_EXCEEDED.withDescription(
@@ -354,6 +353,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     if (info == null) {
       return;
     }
+    callOptions = callOptions.withOption(MethodInfo.KEY, info);
     if (info.timeoutNanos != null) {
       Deadline newDeadline = Deadline.after(info.timeoutNanos, TimeUnit.NANOSECONDS);
       Deadline existingDeadline = callOptions.getDeadline();

@@ -30,7 +30,6 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
@@ -149,8 +148,7 @@ public class ClientCallImplTest {
             (MethodDescriptor<?, ?>) any(MethodDescriptor.class),
             any(CallOptions.class),
             any(Metadata.class),
-            any(Context.class),
-            nullable(MethodInfo.class)))
+            any(Context.class)))
         .thenReturn(stream);
     doAnswer(new Answer<Void>() {
         @Override
@@ -355,8 +353,7 @@ public class ClientCallImplTest {
 
     ArgumentCaptor<Metadata> metadataCaptor = ArgumentCaptor.forClass(Metadata.class);
     verify(clientStreamProvider).newStream(
-        eq(method), same(baseCallOptions), metadataCaptor.capture(), any(Context.class),
-        nullable(MethodInfo.class));
+        eq(method), same(baseCallOptions), metadataCaptor.capture(), any(Context.class));
     Metadata actual = metadataCaptor.getValue();
 
     // there should only be one.
@@ -396,8 +393,7 @@ public class ClientCallImplTest {
     call.start(callListener, metadata);
 
     verify(clientStreamProvider).newStream(
-        same(method), same(callOptions), same(metadata), any(Context.class),
-        nullable(MethodInfo.class));
+        same(method), same(callOptions), same(metadata), any(Context.class));
   }
 
   @Test
@@ -422,8 +418,7 @@ public class ClientCallImplTest {
         .setDecompressorRegistry(decompressorRegistry);
     call.start(callListener, new Metadata());
     verify(clientStreamProvider).newStream(
-        same(method), callOptionsCaptor.capture(), any(Metadata.class), any(Context.class),
-        nullable(MethodInfo.class));
+        same(method), callOptionsCaptor.capture(), any(Metadata.class), any(Context.class));
     assertThat(callOptionsCaptor.getValue().getAuthority()).isEqualTo("dummy_value");
   }
 
@@ -464,9 +459,10 @@ public class ClientCallImplTest {
         channelCallTracer, configSelector)
         .setDecompressorRegistry(decompressorRegistry);
     call.start(callListener, new Metadata());
+    ArgumentCaptor<CallOptions> callOptionsCaptor = ArgumentCaptor.forClass(null);
     verify(clientStreamProvider).newStream(
-        same(method), any(CallOptions.class), any(Metadata.class), any(Context.class),
-        eq(methodInfo));
+        same(method), callOptionsCaptor.capture(), any(Metadata.class), any(Context.class));
+    assertThat(callOptionsCaptor.getValue().getOption(MethodInfo.KEY)).isEqualTo(methodInfo);
   }
 
   @Test
@@ -505,8 +501,7 @@ public class ClientCallImplTest {
         .setDecompressorRegistry(decompressorRegistry);
     call.start(callListener, new Metadata());
     verify(clientStreamProvider).newStream(
-        same(method), callOptionsCaptor.capture(), any(Metadata.class), any(Context.class),
-        nullable(MethodInfo.class));
+        same(method), callOptionsCaptor.capture(), any(Metadata.class), any(Context.class));
     Deadline actualDeadline = callOptionsCaptor.getValue().getDeadline();
     assertThat(actualDeadline).isLessThan(Deadline.after(2001, SECONDS));
 
@@ -541,8 +536,7 @@ public class ClientCallImplTest {
         .setDecompressorRegistry(decompressorRegistry);
     call.start(callListener, new Metadata());
     verify(clientStreamProvider, times(2)).newStream(
-        same(method), callOptionsCaptor.capture(), any(Metadata.class), any(Context.class),
-        nullable(MethodInfo.class));
+        same(method), callOptionsCaptor.capture(), any(Metadata.class), any(Context.class));
     actualDeadline = callOptionsCaptor.getValue().getDeadline();
     assertThat(actualDeadline).isLessThan(Deadline.after(1001, MINUTES));
   }
@@ -884,8 +878,7 @@ public class ClientCallImplTest {
             (MethodDescriptor<?, ?>) any(MethodDescriptor.class),
             any(CallOptions.class),
             any(Metadata.class),
-            any(Context.class),
-            nullable(MethodInfo.class));
+            any(Context.class));
     verify(callListener, timeout(1000)).onClose(statusCaptor.capture(), any(Metadata.class));
     assertEquals(Status.Code.DEADLINE_EXCEEDED, statusCaptor.getValue().getCode());
     assertThat(statusCaptor.getValue().getDescription())

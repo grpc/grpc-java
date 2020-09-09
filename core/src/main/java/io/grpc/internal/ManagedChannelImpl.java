@@ -513,8 +513,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
         final MethodDescriptor<?, ?> method,
         final CallOptions callOptions,
         final Metadata headers,
-        final Context context,
-        MethodInfo methodInfo) {
+        final Context context) {
       if (!retryEnabled) {
         ClientTransport transport =
             getTransport(new PickSubchannelArgsImpl(method, headers, callOptions));
@@ -526,6 +525,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
         }
       } else {
         final Throttle throttle = lastServiceConfig.getRetryThrottling();
+        MethodInfo methodInfo = callOptions.getOption(MethodInfo.KEY);
         final RetryPolicy retryPolicy = methodInfo == null ? null : methodInfo.retryPolicy;
         final HedgingPolicy hedgingPolicy = methodInfo == null ? null : methodInfo.hedgingPolicy;
         final class RetryStream<ReqT> extends RetriableStream<ReqT> {
