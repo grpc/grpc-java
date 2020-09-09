@@ -770,6 +770,20 @@ final class ManagedChannelImpl extends ManagedChannel implements
   @Override
   public ManagedChannelImpl shutdown() {
     channelLogger.log(ChannelLogLevel.DEBUG, "shutdown() called");
+    if (!shutdown.compareAndSet(false, true)) {
+      return this;
+    }
+    // Put gotoState(SHUTDOWN) as early into the syncContext's queue as possible.
+    // delayedTransport.shutdown() may also add some tasks into the queue. But some things inside
+    // delayedTransport.shutdown() like setting delayedTransport.shutdown = true are not run in
+    // the syncContext's queue and should not be blocked, so we do not drain() immediately here.
+    syncContext.executeLater(new Runnable() {
+      @Override
+      public void run() {
+        channelLogger.log(ChannelLogLevel.INFO, "Entering SHUTDOWN state");
+        channelStateManager.gotoState(SHUTDOWN);
+      }
+    });
     realChannel.shutdown();
 
     final class CancelIdleTimer implements Runnable {
@@ -951,20 +965,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
 
     void shutdown() {
-      if (!shutdown.compareAndSet(false, true)) {
-        return;
-      }
-      // Put gotoState(SHUTDOWN) as early into the syncContext's queue as possible.
-      // delayedTransport.shutdown() may also add some tasks into the queue. But some things inside
-      // delayedTransport.shutdown() like setting delayedTransport.shutdown = true are not run in
-      // the syncContext's queue and should not be blocked, so we do not drain() immediately here.
-      syncContext.executeLater(new Runnable() {
-        @Override
-        public void run() {
-          channelLogger.log(ChannelLogLevel.INFO, "Entering SHUTDOWN state");
-          channelStateManager.gotoState(SHUTDOWN);
-        }
-      });
       if (configSelector.get() != INITIAL_PENDING_SELECTOR && pendingCalls == null) {
         uncommittedRetriableStreamsRegistry.onShutdown(SHUTDOWN_STATUS);
         syncContext.drain();
