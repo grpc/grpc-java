@@ -53,8 +53,6 @@ public class MeshCaCertificateProviderProviderTest {
           "identitynamespace:test-project1.svc.id.goog:https://container.googleapis.com/v1beta1/projects/test-project1/zones/test-zone2/clusters/test-cluster3";
   public static final String TMP_PATH_4 = "/tmp/path4";
   public static final String NON_DEFAULT_MESH_CA_URL = "nonDefaultMeshCaUrl";
-  public static final String GKE_CLUSTER_URL =
-      "https://container.googleapis.com/v1/projects/test-project1/locations/test-zone2/clusters/test-cluster3";
 
   @Mock
   StsCredentials.Factory stsCredentialsFactory;
