@@ -32,7 +32,6 @@ import io.grpc.Status;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.util.ForwardingLoadBalancerHelper;
-import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.CdsLoadBalancerProvider.CdsConfig;
 import io.grpc.xds.EdsLoadBalancerProvider.EdsConfig;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
@@ -45,31 +44,24 @@ import io.grpc.xds.internal.sds.TlsContextManager;
 import io.grpc.xds.internal.sds.TlsContextManagerImpl;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
-import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nullable;
 
 /**
- * Load balancer for cds_experimental LB policy.
+ * Load balancer for cds_experimental LB policy. One instance per cluster.
  */
-public final class CdsLoadBalancer extends LoadBalancer {
+final class CdsLoadBalancer extends LoadBalancer {
   private final XdsLogger logger;
+  private final Helper helper;
   private final LoadBalancerRegistry lbRegistry;
-  private final GracefulSwitchLoadBalancer switchingLoadBalancer;
   private final TlsContextManager tlsContextManager;
   // TODO(sanjaypujare): remove once xds security is released
   private boolean enableXdsSecurity;
   private static final String XDS_SECURITY_ENV_VAR = "GRPC_XDS_EXPERIMENTAL_SECURITY_SUPPORT";
-
-  // The following fields become non-null once handleResolvedAddresses() successfully.
-
-  // Most recent cluster name.
-  @Nullable
   private String clusterName;
-  @Nullable
   private ObjectPool<XdsClient> xdsClientPool;
-  @Nullable
   private XdsClient xdsClient;
+  private CdsLbState cdsLbState;
+  private ResolvedAddresses resolvedAddresses;
 
   CdsLoadBalancer(Helper helper) {
     this(helper, LoadBalancerRegistry.getDefaultRegistry(), TlsContextManagerImpl.getInstance());
@@ -78,9 +70,8 @@ public final class CdsLoadBalancer extends LoadBalancer {
   @VisibleForTesting
   CdsLoadBalancer(Helper helper, LoadBalancerRegistry lbRegistry,
       TlsContextManager tlsContextManager) {
-    checkNotNull(helper, "helper");
+    this.helper = checkNotNull(helper, "helper");
     this.lbRegistry = lbRegistry;
-    this.switchingLoadBalancer = new GracefulSwitchLoadBalancer(helper);
     this.tlsContextManager = tlsContextManager;
     logger = XdsLogger.withLogId(InternalLogId.allocate("cds-lb", helper.getAuthority()));
     logger.log(XdsLogLevel.INFO, "Created");
@@ -88,33 +79,32 @@ public final class CdsLoadBalancer extends LoadBalancer {
 
   @Override
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-    logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
-    if (xdsClientPool == null) {
-      xdsClientPool = resolvedAddresses.getAttributes().get(XdsAttributes.XDS_CLIENT_POOL);
-      checkNotNull(xdsClientPool, "missing xDS client pool");
-      xdsClient = xdsClientPool.getObject();
+    if (clusterName != null) {
+      return;
     }
-
+    logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
+    this.resolvedAddresses = resolvedAddresses;
+    xdsClientPool = resolvedAddresses.getAttributes().get(XdsAttributes.XDS_CLIENT_POOL);
+    checkNotNull(xdsClientPool, "missing xDS client pool");
+    xdsClient = xdsClientPool.getObject();
     Object lbConfig = resolvedAddresses.getLoadBalancingPolicyConfig();
     checkNotNull(lbConfig, "missing CDS lb config");
     CdsConfig newCdsConfig = (CdsConfig) lbConfig;
     logger.log(
         XdsLogLevel.INFO,
         "Received CDS lb config: cluster={0}", newCdsConfig.name);
-
-    // If cluster is changed, do a graceful switch.
-    if (!newCdsConfig.name.equals(clusterName)) {
-      LoadBalancer.Factory clusterBalancerFactory = new ClusterBalancerFactory(newCdsConfig.name);
-      switchingLoadBalancer.switchTo(clusterBalancerFactory);
-    }
-    switchingLoadBalancer.handleResolvedAddresses(resolvedAddresses);
     clusterName = newCdsConfig.name;
+    cdsLbState = new CdsLbState();
   }
 
   @Override
   public void handleNameResolutionError(Status error) {
     logger.log(XdsLogLevel.WARNING, "Received name resolution error: {0}", error);
-    switchingLoadBalancer.handleNameResolutionError(error);
+    if (cdsLbState != null) {
+      cdsLbState.propagateError(error);
+    } else {
+      helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
+    }
   }
 
   @Override
@@ -125,7 +115,9 @@ public final class CdsLoadBalancer extends LoadBalancer {
   @Override
   public void shutdown() {
     logger.log(XdsLogLevel.INFO, "Shutdown");
-    switchingLoadBalancer.shutdown();
+    if (cdsLbState != null) {
+      cdsLbState.shutdown();
+    }
     if (xdsClientPool != null) {
       xdsClientPool.returnObject(xdsClient);
     }
@@ -142,107 +134,25 @@ public final class CdsLoadBalancer extends LoadBalancer {
     enableXdsSecurity = enable;
   }
 
-  /**
-   * A load balancer factory that provides a load balancer for a given cluster.
-   */
-  private final class ClusterBalancerFactory extends LoadBalancer.Factory {
-
-    final String clusterName;
-
-    ClusterBalancerFactory(String clusterName) {
-      this.clusterName = clusterName;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-      if (!(o instanceof ClusterBalancerFactory)) {
-        return false;
-      }
-      ClusterBalancerFactory that = (ClusterBalancerFactory) o;
-      return clusterName.equals(that.clusterName);
-    }
-
-    @Override
-    public int hashCode() {
-      return Objects.hash(super.hashCode(), clusterName);
-    }
-
-    @Override
-    public LoadBalancer newLoadBalancer(final Helper helper) {
-      return new LoadBalancer() {
-        // Becomes non-null once handleResolvedAddresses() successfully.
-        // Assigned at most once.
-        @Nullable
-        ClusterWatcherImpl clusterWatcher;
-
-        @Override
-        public void handleNameResolutionError(Status error) {
-          if (clusterWatcher == null || clusterWatcher.edsBalancer == null) {
-            // Go into TRANSIENT_FAILURE if we have not yet received any cluster resource.
-            // Otherwise, we keep running with the data we had previously.
-            helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
-          }
-        }
-
-        @Override
-        public boolean canHandleEmptyAddressListFromNameResolution() {
-          return true;
-        }
-
-        @Override
-        public void shutdown() {
-          if (clusterWatcher != null) {
-            if (clusterWatcher.edsBalancer != null) {
-              clusterWatcher.edsBalancer.shutdown();
-            }
-            xdsClient.cancelClusterDataWatch(clusterName, clusterWatcher);
-            logger.log(
-                XdsLogLevel.INFO,
-                "Cancelled cluster watcher on {0} with xDS client {1}",
-                clusterName, xdsClient);
-          }
-        }
-
-        @Override
-        public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-          if (clusterWatcher == null) {
-            clusterWatcher = new ClusterWatcherImpl(helper, resolvedAddresses);
-            logger.log(
-                XdsLogLevel.INFO,
-                "Start cluster watcher on {0} with xDS client {1}",
-                clusterName, xdsClient);
-            xdsClient.watchClusterData(clusterName, clusterWatcher);
-          }
-        }
-      };
-    }
-  }
-
-  private static final class EdsLoadBalancingHelper extends ForwardingLoadBalancerHelper {
-    private final Helper delegate;
-    private final AtomicReference<SslContextProviderSupplier> sslContextProviderSupplier;
-
-    EdsLoadBalancingHelper(Helper helper,
-        AtomicReference<SslContextProviderSupplier> sslContextProviderSupplier) {
-      this.delegate = helper;
-      this.sslContextProviderSupplier = sslContextProviderSupplier;
-    }
+  private final class ChannelSecurityLbHelper extends ForwardingLoadBalancerHelper {
+    @Nullable
+    private SslContextProviderSupplier sslContextProviderSupplier;
 
     @Override
     public Subchannel createSubchannel(CreateSubchannelArgs createSubchannelArgs) {
-      if (sslContextProviderSupplier.get() != null) {
+      if (sslContextProviderSupplier != null) {
         createSubchannelArgs =
             createSubchannelArgs
                 .toBuilder()
                 .setAddresses(
                     addSslContextProviderSupplier(createSubchannelArgs.getAddresses(),
-                        sslContextProviderSupplier.get()))
+                        sslContextProviderSupplier))
                 .build();
       }
-      return delegate.createSubchannel(createSubchannelArgs);
+      return delegate().createSubchannel(createSubchannelArgs);
     }
 
-    private static List<EquivalentAddressGroup> addSslContextProviderSupplier(
+    private List<EquivalentAddressGroup> addSslContextProviderSupplier(
         List<EquivalentAddressGroup> addresses,
         SslContextProviderSupplier supplier) {
       if (supplier == null || addresses == null) {
@@ -253,10 +163,9 @@ public final class CdsLoadBalancer extends LoadBalancer {
         EquivalentAddressGroup eagCopy =
             new EquivalentAddressGroup(eag.getAddresses(),
                 eag.getAttributes()
-                .toBuilder()
-                .set(XdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER, supplier)
-                .build()
-                );
+                    .toBuilder()
+                    .set(XdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER, supplier)
+                    .build());
         copyList.add(eagCopy);
       }
       return copyList;
@@ -264,22 +173,19 @@ public final class CdsLoadBalancer extends LoadBalancer {
 
     @Override
     protected Helper delegate() {
-      return delegate;
+      return helper;
     }
   }
 
-  private final class ClusterWatcherImpl implements ClusterWatcher {
-
-    final EdsLoadBalancingHelper helper;
-    final ResolvedAddresses resolvedAddresses;
-
+  private final class CdsLbState implements ClusterWatcher {
+    private final ChannelSecurityLbHelper lbHelper = new ChannelSecurityLbHelper();
     @Nullable
     LoadBalancer edsBalancer;
 
-    ClusterWatcherImpl(Helper helper, ResolvedAddresses resolvedAddresses) {
-      this.helper = new EdsLoadBalancingHelper(helper,
-          new AtomicReference<SslContextProviderSupplier>());
-      this.resolvedAddresses = resolvedAddresses;
+    private CdsLbState() {
+      xdsClient.watchClusterData(clusterName, this);
+      logger.log(XdsLogLevel.INFO,
+          "Started watcher for cluster {0} with xDS client {1}", clusterName, xdsClient);
     }
 
     @Override
@@ -308,7 +214,7 @@ public final class CdsLoadBalancer extends LoadBalancer {
         updateSslContextProviderSupplier(newUpdate.getUpstreamTlsContext());
       }
       if (edsBalancer == null) {
-        edsBalancer = lbRegistry.getProvider(EDS_POLICY_NAME).newLoadBalancer(helper);
+        edsBalancer = lbRegistry.getProvider(EDS_POLICY_NAME).newLoadBalancer(lbHelper);
       }
       edsBalancer.handleResolvedAddresses(
           resolvedAddresses.toBuilder().setLoadBalancingPolicyConfig(edsConfig).build());
@@ -317,7 +223,7 @@ public final class CdsLoadBalancer extends LoadBalancer {
     /** For new UpstreamTlsContext value, release old SslContextProvider. */
     private void updateSslContextProviderSupplier(UpstreamTlsContext newUpstreamTlsContext) {
       SslContextProviderSupplier oldSslContextProviderSupplier =
-          helper.sslContextProviderSupplier.get();
+          lbHelper.sslContextProviderSupplier;
       if (oldSslContextProviderSupplier != null) {
         UpstreamTlsContext oldUpstreamTlsContext =
             oldSslContextProviderSupplier.getUpstreamTlsContext();
@@ -328,11 +234,10 @@ public final class CdsLoadBalancer extends LoadBalancer {
         oldSslContextProviderSupplier.close();
       }
       if (newUpstreamTlsContext != null) {
-        SslContextProviderSupplier newSslContextProviderSupplier =
+        lbHelper.sslContextProviderSupplier =
             new SslContextProviderSupplier(newUpstreamTlsContext, tlsContextManager);
-        helper.sslContextProviderSupplier.set(newSslContextProviderSupplier);
       } else {
-        helper.sslContextProviderSupplier.set(null);
+        lbHelper.sslContextProviderSupplier = null;
       }
     }
 
@@ -361,6 +266,22 @@ public final class CdsLoadBalancer extends LoadBalancer {
         helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
       }
     }
-  }
 
+    void shutdown() {
+      xdsClient.cancelClusterDataWatch(clusterName, this);
+      logger.log(XdsLogLevel.INFO,
+          "Cancelled watcher for cluster {0} with xDS client {1}", clusterName, xdsClient);
+      if (edsBalancer != null) {
+        edsBalancer.shutdown();
+      }
+    }
+
+    void propagateError(Status error) {
+      if (edsBalancer != null) {
+        edsBalancer.handleNameResolutionError(error);
+      } else {
+        helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
+      }
+    }
+  }
 }
