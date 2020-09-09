@@ -163,6 +163,34 @@ public class CommonCertProviderTestUtils {
     return Bootstrapper.parseConfig(rawData);
   }
 
+  static Bootstrapper.BootstrapInfo getMinimalBootstrapInfo_v1beta1AndZone() throws IOException {
+    String rawData =
+        "{\n"
+            + "  \"xds_servers\": [],\n"
+            + "  \"certificate_providers\": {\n"
+            + "    \"gcp_id\": {\n"
+            + "      \"plugin_name\": \"testca\",\n"
+            + "      \"config\": {\n"
+            + "        \"server\": {\n"
+            + "          \"api_type\": \"GRPC\",\n"
+            + "          \"grpc_services\": [{\n"
+            + "            \"google_grpc\": {\n"
+            + "              \"call_credentials\": [{\n"
+            + "                \"sts_service\": {\n"
+            + "                  \"subject_token_path\": \"/tmp/path5\"\n"
+            + "                }\n"
+            + "              }]\n" // end call_credentials
+            + "            }\n" // end google_grpc
+            + "          }]\n" // end grpc_services
+            + "        },\n" // end server
+            + "        \"location\": \"https://container.googleapis.com/v1beta1/projects/test-project1/zones/test-zone2/clusters/test-cluster3\"\n"
+            + "      }\n" // end config
+            + "    }\n" // end gcp_id
+            + "  }\n"
+            + "}";
+    return Bootstrapper.parseConfig(rawData);
+  }
+
   static Bootstrapper.BootstrapInfo getMinimalAndBadClusterUrlBootstrapInfo() throws IOException {
     String rawData =
             "{\n"

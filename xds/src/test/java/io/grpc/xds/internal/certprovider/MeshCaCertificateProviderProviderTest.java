@@ -49,10 +49,10 @@ public class MeshCaCertificateProviderProviderTest {
 
   public static final String EXPECTED_AUDIENCE =
       "identitynamespace:test-project1.svc.id.goog:https://container.googleapis.com/v1/projects/test-project1/locations/test-zone2/clusters/test-cluster3";
+  public static final String EXPECTED_AUDIENCE_V1BETA1_ZONE =
+          "identitynamespace:test-project1.svc.id.goog:https://container.googleapis.com/v1beta1/projects/test-project1/zones/test-zone2/clusters/test-cluster3";
   public static final String TMP_PATH_4 = "/tmp/path4";
   public static final String NON_DEFAULT_MESH_CA_URL = "nonDefaultMeshCaUrl";
-  public static final String GKE_CLUSTER_URL =
-      "https://container.googleapis.com/v1/projects/test-project1/locations/test-zone2/clusters/test-cluster3";
 
   @Mock
   StsCredentials.Factory stsCredentialsFactory;
@@ -119,6 +119,41 @@ public class MeshCaCertificateProviderProviderTest {
         .create(
             eq(MeshCaCertificateProviderProvider.STS_URL_DEFAULT),
             eq(EXPECTED_AUDIENCE),
+            eq("/tmp/path5"));
+    verify(meshCaCertificateProviderFactory, times(1))
+        .create(
+            eq(distWatcher),
+            eq(true),
+            eq(MeshCaCertificateProviderProvider.MESHCA_URL_DEFAULT),
+            eq("test-zone2"),
+            eq(MeshCaCertificateProviderProvider.CERT_VALIDITY_SECONDS_DEFAULT),
+            eq(MeshCaCertificateProviderProvider.KEY_SIZE_DEFAULT),
+            eq(MeshCaCertificateProviderProvider.KEY_ALGO_DEFAULT),
+            eq(MeshCaCertificateProviderProvider.SIGNATURE_ALGO_DEFAULT),
+            eq(meshCaChannelFactory),
+            eq(backoffPolicyProvider),
+            eq(MeshCaCertificateProviderProvider.RENEWAL_GRACE_PERIOD_SECONDS_DEFAULT),
+            eq(MeshCaCertificateProviderProvider.MAX_RETRY_ATTEMPTS_DEFAULT),
+            (GoogleCredentials) isNull(),
+            eq(mockService),
+            eq(timeProvider),
+            eq(TimeUnit.SECONDS.toMillis(RPC_TIMEOUT_SECONDS)));
+  }
+
+  @Test
+  public void createProvider_minimalConfig_v1beta1AndZone() throws IOException {
+    CertificateProvider.DistributorWatcher distWatcher =
+        new CertificateProvider.DistributorWatcher();
+    Map<String, ?> map = buildMinimalConfig_v1beta1AndZone();
+    ScheduledExecutorService mockService = mock(ScheduledExecutorService.class);
+    when(scheduledExecutorServiceFactory.create(
+            eq(MeshCaCertificateProviderProvider.MESHCA_URL_DEFAULT)))
+        .thenReturn(mockService);
+    provider.createCertificateProvider(map, distWatcher, true);
+    verify(stsCredentialsFactory, times(1))
+        .create(
+            eq(MeshCaCertificateProviderProvider.STS_URL_DEFAULT),
+            eq(EXPECTED_AUDIENCE_V1BETA1_ZONE),
             eq("/tmp/path5"));
     verify(meshCaCertificateProviderFactory, times(1))
         .create(
@@ -232,6 +267,11 @@ public class MeshCaCertificateProviderProviderTest {
 
   private static Map<String, ?> buildMinimalConfig() throws IOException {
     return getCertProviderConfig(CommonCertProviderTestUtils.getMinimalBootstrapInfo());
+  }
+
+  private static Map<String, ?> buildMinimalConfig_v1beta1AndZone() throws IOException {
+    return getCertProviderConfig(
+        CommonCertProviderTestUtils.getMinimalBootstrapInfo_v1beta1AndZone());
   }
 
   private static Map<String, ?> buildBadClusterUrlConfig() throws IOException {
