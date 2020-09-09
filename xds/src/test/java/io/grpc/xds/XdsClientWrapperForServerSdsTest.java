@@ -22,7 +22,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.google.common.base.Strings;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import io.netty.channel.Channel;
@@ -31,7 +30,6 @@ import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
-import java.util.ArrayList;
 import java.util.Arrays;
 import org.junit.After;
 import org.junit.Before;
@@ -193,7 +191,7 @@ public class XdsClientWrapperForServerSdsTest {
     InetSocketAddress localAddress = new InetSocketAddress(ipLocalAddress, PORT);
     when(channel.localAddress()).thenReturn(localAddress);
     EnvoyServerProtoData.Listener listener =
-        buildTestListener(
+        XdsServerTestHelper.buildTestListener(
             "listener1",
             "10.1.2.3",
             destPort1,
@@ -212,45 +210,4 @@ public class XdsClientWrapperForServerSdsTest {
     assertThat(downstreamTlsContext).isSameInstanceAs(tlsContexts[expectedIndex]);
   }
 
-  static EnvoyServerProtoData.Listener buildTestListener(
-      String name,
-      String address,
-      int destPort1,
-      int destPort2,
-      String addressPrefix11,
-      String addressPrefix12,
-      String addressPrefix21,
-      String addressPrefix22,
-      DownstreamTlsContext tlsContext1,
-      DownstreamTlsContext tlsContext2) {
-    EnvoyServerProtoData.FilterChainMatch filterChainMatch1 =
-        destPort1 > 0 ? buildFilterChainMatch(destPort1, addressPrefix11, addressPrefix12) : null;
-    EnvoyServerProtoData.FilterChainMatch filterChainMatch2 =
-        destPort2 > 0 ? buildFilterChainMatch(destPort2, addressPrefix21, addressPrefix22) : null;
-    EnvoyServerProtoData.FilterChain filterChain1 =
-        new EnvoyServerProtoData.FilterChain(filterChainMatch1, tlsContext1);
-    EnvoyServerProtoData.FilterChain filterChain2 =
-        new EnvoyServerProtoData.FilterChain(filterChainMatch2, tlsContext2);
-    EnvoyServerProtoData.Listener listener =
-        new EnvoyServerProtoData.Listener(name, address, Arrays.asList(filterChain1, filterChain2));
-    return listener;
-  }
-
-  static EnvoyServerProtoData.FilterChainMatch buildFilterChainMatch(
-      int destPort, String... addressPrefix) {
-    ArrayList<EnvoyServerProtoData.CidrRange> prefixRanges = new ArrayList<>();
-    for (String address : addressPrefix) {
-      if (!Strings.isNullOrEmpty(address)) {
-        prefixRanges.add(new EnvoyServerProtoData.CidrRange(address, 32));
-      }
-    }
-    return new EnvoyServerProtoData.FilterChainMatch(
-        destPort, prefixRanges, Arrays.<String>asList());
-  }
-
-  static EnvoyServerProtoData.FilterChainMatch buildFilterChainMatch(
-      int destPort, EnvoyServerProtoData.CidrRange... prefixRanges) {
-    return new EnvoyServerProtoData.FilterChainMatch(
-        destPort, Arrays.asList(prefixRanges), Arrays.<String>asList());
-  }
 }
