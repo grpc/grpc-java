@@ -23,7 +23,6 @@ import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Iterables;
 import com.google.gson.Gson;
 import com.google.re2j.Pattern;
 import io.grpc.Attributes;
@@ -155,35 +154,12 @@ final class XdsNameResolver extends NameResolver {
 
     @Override
     public void onConfigChanged(ConfigUpdate update) {
-      Map<String, ?> rawLbConfig;
-      if (update.getRoutes().size() > 1) {
-        logger.log(
-            XdsLogLevel.INFO,
-            "Received config update with {0} routes from xDS client {1}",
-            update.getRoutes().size(),
-            xdsClient);
-        rawLbConfig = generateXdsRoutingRawConfig(update.getRoutes());
-      } else {
-        Route defaultRoute = Iterables.getOnlyElement(update.getRoutes());
-        RouteAction action = defaultRoute.getRouteAction();
-        String clusterName = defaultRoute.getRouteAction().getCluster();
-        if (action.getCluster() != null) {
-          logger.log(
-              XdsLogLevel.INFO,
-              "Received config update from xDS client {0}: cluster_name={1}",
-              xdsClient,
-              clusterName);
-          rawLbConfig = generateCdsRawConfig(clusterName);
-        } else {
-          logger.log(
-              XdsLogLevel.INFO,
-              "Received config update with one weighted cluster route from xDS client {0}",
-              xdsClient);
-          List<ClusterWeight> clusterWeights = defaultRoute.getRouteAction().getWeightedCluster();
-          rawLbConfig = generateWeightedTargetRawConfig(clusterWeights);
-        }
-      }
-
+      logger.log(
+          XdsLogLevel.INFO,
+          "Received config update with {0} routes from xDS client {1}",
+          update.getRoutes().size(),
+          xdsClient);
+      Map<String, ?> rawLbConfig = generateXdsRoutingRawConfig(update.getRoutes());
       Map<String, ?> serviceConfig =
           ImmutableMap.of("loadBalancingConfig", ImmutableList.of(rawLbConfig));
       if (logger.isLoggable(XdsLogLevel.INFO)) {
