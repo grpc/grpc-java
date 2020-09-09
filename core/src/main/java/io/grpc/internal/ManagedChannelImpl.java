@@ -217,9 +217,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
   // switch to a ConcurrentHashMap.
   private final Set<InternalSubchannel> subchannels = new HashSet<>(16, .75f);
 
-  // Value write and item access must be from syncContext
+  // Must be accessed from syncContext
   @Nullable
-  private volatile Collection<RealChannel.PendingCall<?, ?>> pendingCalls;
+  private Collection<RealChannel.PendingCall<?, ?>> pendingCalls;
   private final Object pendingCallsInUseObject = new Object();
 
   // Must be mutated from syncContext
@@ -773,11 +773,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     if (!shutdown.compareAndSet(false, true)) {
       return this;
     }
-    // Put gotoState(SHUTDOWN) as early into the syncContext's queue as possible.
-    // delayedTransport.shutdown() may also add some tasks into the queue. But some things inside
-    // delayedTransport.shutdown() like setting delayedTransport.shutdown = true are not run in
-    // the syncContext's queue and should not be blocked, so we do not drain() immediately here.
-    syncContext.executeLater(new Runnable() {
+    syncContext.execute(new Runnable() {
       @Override
       public void run() {
         channelLogger.log(ChannelLogLevel.INFO, "Entering SHUTDOWN state");
@@ -807,6 +803,17 @@ final class ManagedChannelImpl extends ManagedChannel implements
     channelLogger.log(ChannelLogLevel.DEBUG, "shutdownNow() called");
     shutdown();
     realChannel.shutdownNow();
+    syncContext.execute(
+        new Runnable() {
+          @Override
+          public void run() {
+            if (shutdownNowed) {
+              return;
+            }
+            shutdownNowed = true;
+            maybeShutdownNowSubchannels();
+          }
+        });
     return this;
   }
 
@@ -965,12 +972,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
 
     void shutdown() {
-      if (configSelector.get() != INITIAL_PENDING_SELECTOR && pendingCalls == null) {
-        uncommittedRetriableStreamsRegistry.onShutdown(SHUTDOWN_STATUS);
-        syncContext.drain();
-        return;
-      }
-
       final class Shutdown implements Runnable {
         @Override
         public void run() {
@@ -987,16 +988,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
 
     void shutdownNow() {
-      if (configSelector.get() != INITIAL_PENDING_SELECTOR && pendingCalls == null) {
-        uncommittedRetriableStreamsRegistry.onShutdownNow(SHUTDOWN_NOW_STATUS);
-      }
       final class ShutdownNow implements Runnable {
         @Override
         public void run() {
-          if (shutdownNowed) {
-            return;
-          }
-          shutdownNowed = true;
           if (configSelector.get() == INITIAL_PENDING_SELECTOR) {
             configSelector.set(null);
           }
@@ -1006,7 +1000,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
             }
           }
           uncommittedRetriableStreamsRegistry.onShutdownNow(SHUTDOWN_NOW_STATUS);
-          maybeShutdownNowSubchannels();
         }
       }
 
