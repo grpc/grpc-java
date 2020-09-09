@@ -773,15 +773,16 @@ final class ManagedChannelImpl extends ManagedChannel implements
     if (!shutdown.compareAndSet(false, true)) {
       return this;
     }
-    syncContext.execute(new Runnable() {
+    final class Shutdown implements Runnable {
       @Override
       public void run() {
         channelLogger.log(ChannelLogLevel.INFO, "Entering SHUTDOWN state");
         channelStateManager.gotoState(SHUTDOWN);
       }
-    });
-    realChannel.shutdown();
+    }
 
+    syncContext.execute(new Shutdown());
+    realChannel.shutdown();
     final class CancelIdleTimer implements Runnable {
       @Override
       public void run() {
@@ -973,7 +974,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
 
     void shutdown() {
-      final class Shutdown implements Runnable {
+      final class RealChannelShutdown implements Runnable {
         @Override
         public void run() {
           if (pendingCalls == null) {
@@ -985,7 +986,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
         }
       }
 
-      syncContext.execute(new Shutdown());
+      syncContext.execute(new RealChannelShutdown());
     }
 
     void shutdownNow() {
