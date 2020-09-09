@@ -1534,7 +1534,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
                 configSelector.set(resolvedConfigSelector);
                 if (effectiveServiceConfig.getDefaultConfigSelector() != null) {
                   channelLogger.log(
-                      ChannelLogLevel.INFO,
+                      ChannelLogLevel.DEBUG,
                       "Method configs in service config will be discarded due to presence of"
                           + "config-selector");
                 }
