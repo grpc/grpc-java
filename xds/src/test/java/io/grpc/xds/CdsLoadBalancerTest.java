@@ -46,6 +46,7 @@ import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import io.grpc.xds.internal.sds.SslContextProvider;
+import io.grpc.xds.internal.sds.SslContextProviderSupplier;
 import io.grpc.xds.internal.sds.TlsContextManager;
 import java.net.SocketAddress;
 import java.util.ArrayList;
@@ -205,14 +206,16 @@ public class CdsLoadBalancerTest {
             .build();
     Subchannel subchannel = childBalancer.helper.createSubchannel(args);
     for (EquivalentAddressGroup eag : subchannel.getAllAddresses()) {
-      assertThat(eag.getAttributes().get(XdsAttributes.ATTR_UPSTREAM_TLS_CONTEXT))
-          .isEqualTo(upstreamTlsContext);
+      SslContextProviderSupplier supplier =
+          eag.getAttributes().get(XdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER);
+      assertThat(supplier.getUpstreamTlsContext()).isEqualTo(upstreamTlsContext);
     }
 
     xdsClient.deliverClusterInfo(null, null);
     subchannel = childBalancer.helper.createSubchannel(args);
     for (EquivalentAddressGroup eag : subchannel.getAllAddresses()) {
-      assertThat(eag.getAttributes().get(XdsAttributes.ATTR_UPSTREAM_TLS_CONTEXT)).isNull();
+      assertThat(eag.getAttributes().get(XdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER))
+          .isNull();
     }
 
     upstreamTlsContext =
@@ -223,8 +226,9 @@ public class CdsLoadBalancerTest {
     xdsClient.deliverClusterInfo(null, null, upstreamTlsContext);
     subchannel = childBalancer.helper.createSubchannel(args);
     for (EquivalentAddressGroup eag : subchannel.getAllAddresses()) {
-      assertThat(eag.getAttributes().get(XdsAttributes.ATTR_UPSTREAM_TLS_CONTEXT))
-          .isEqualTo(upstreamTlsContext);
+      SslContextProviderSupplier supplier =
+          eag.getAttributes().get(XdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER);
+      assertThat(supplier.getUpstreamTlsContext()).isEqualTo(upstreamTlsContext);
     }
   }
 

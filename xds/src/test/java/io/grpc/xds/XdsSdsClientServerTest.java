@@ -48,6 +48,8 @@ import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import io.grpc.xds.internal.sds.SdsProtocolNegotiators;
+import io.grpc.xds.internal.sds.SslContextProviderSupplier;
+import io.grpc.xds.internal.sds.TlsContextManagerImpl;
 import io.grpc.xds.internal.sds.XdsChannelBuilder;
 import io.grpc.xds.internal.sds.XdsServerBuilder;
 import io.netty.handler.ssl.NotSslRecordException;
@@ -358,7 +360,9 @@ public class XdsSdsClientServerTest {
     Attributes attrs =
         (upstreamTlsContext != null)
             ? Attributes.newBuilder()
-                .set(XdsAttributes.ATTR_UPSTREAM_TLS_CONTEXT, upstreamTlsContext)
+                .set(XdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
+                    new SslContextProviderSupplier(
+                        upstreamTlsContext, TlsContextManagerImpl.getInstance()))
                 .build()
             : Attributes.EMPTY;
     fakeNameResolverFactory.setServers(
