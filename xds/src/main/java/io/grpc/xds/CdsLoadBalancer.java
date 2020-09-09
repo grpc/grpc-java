@@ -60,7 +60,7 @@ final class CdsLoadBalancer extends LoadBalancer {
   private String clusterName;
   private ObjectPool<XdsClient> xdsClientPool;
   private XdsClient xdsClient;
-  private ChildLbState childLbState;
+  private CdsLbState cdsLbState;
   private ResolvedAddresses resolvedAddresses;
 
   CdsLoadBalancer(Helper helper) {
@@ -94,14 +94,14 @@ final class CdsLoadBalancer extends LoadBalancer {
         XdsLogLevel.INFO,
         "Received CDS lb config: cluster={0}", newCdsConfig.name);
     clusterName = newCdsConfig.name;
-    childLbState = new ChildLbState();
+    cdsLbState = new CdsLbState();
   }
 
   @Override
   public void handleNameResolutionError(Status error) {
     logger.log(XdsLogLevel.WARNING, "Received name resolution error: {0}", error);
-    if (childLbState != null) {
-      childLbState.propagateError(error);
+    if (cdsLbState != null) {
+      cdsLbState.propagateError(error);
     } else {
       helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
     }
@@ -115,8 +115,8 @@ final class CdsLoadBalancer extends LoadBalancer {
   @Override
   public void shutdown() {
     logger.log(XdsLogLevel.INFO, "Shutdown");
-    if (childLbState != null) {
-      childLbState.shutdown();
+    if (cdsLbState != null) {
+      cdsLbState.shutdown();
     }
     if (xdsClientPool != null) {
       xdsClientPool.returnObject(xdsClient);
@@ -177,12 +177,12 @@ final class CdsLoadBalancer extends LoadBalancer {
     }
   }
 
-  private final class ChildLbState implements ClusterWatcher {
+  private final class CdsLbState implements ClusterWatcher {
     private final ChannelSecurityLbHelper lbHelper = new ChannelSecurityLbHelper();
     @Nullable
     LoadBalancer edsBalancer;
 
-    private ChildLbState() {
+    private CdsLbState() {
       xdsClient.watchClusterData(clusterName, this);
       logger.log(XdsLogLevel.INFO,
           "Started watcher for cluster {0} with xDS client {1}", clusterName, xdsClient);
