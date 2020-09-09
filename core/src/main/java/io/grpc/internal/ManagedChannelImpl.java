@@ -1000,13 +1000,12 @@ final class ManagedChannelImpl extends ManagedChannel implements
           if (configSelector.get() == INITIAL_PENDING_SELECTOR) {
             configSelector.set(null);
           }
-          if (pendingCalls == null) {
-            uncommittedRetriableStreamsRegistry.onShutdownNow(SHUTDOWN_NOW_STATUS);
-          } else {
+          if (pendingCalls != null) {
             for (RealChannel.PendingCall<?, ?> pendingCall : pendingCalls) {
               pendingCall.cancel("Channel is forcefully shutdown", null);
             }
           }
+          uncommittedRetriableStreamsRegistry.onShutdownNow(SHUTDOWN_NOW_STATUS);
           maybeShutdownNowSubchannels();
         }
       }
