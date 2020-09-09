@@ -803,17 +803,18 @@ final class ManagedChannelImpl extends ManagedChannel implements
     channelLogger.log(ChannelLogLevel.DEBUG, "shutdownNow() called");
     shutdown();
     realChannel.shutdownNow();
-    syncContext.execute(
-        new Runnable() {
-          @Override
-          public void run() {
-            if (shutdownNowed) {
-              return;
-            }
-            shutdownNowed = true;
-            maybeShutdownNowSubchannels();
-          }
-        });
+    final class ShutdownNow implements Runnable {
+      @Override
+      public void run() {
+        if (shutdownNowed) {
+          return;
+        }
+        shutdownNowed = true;
+        maybeShutdownNowSubchannels();
+      }
+    }
+
+    syncContext.execute(new ShutdownNow());
     return this;
   }
 
@@ -988,7 +989,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
 
     void shutdownNow() {
-      final class ShutdownNow implements Runnable {
+      final class RealChannelShutdownNow implements Runnable {
         @Override
         public void run() {
           if (configSelector.get() == INITIAL_PENDING_SELECTOR) {
@@ -1003,7 +1004,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
         }
       }
 
-      syncContext.execute(new ShutdownNow());
+      syncContext.execute(new RealChannelShutdownNow());
     }
 
     @Override
