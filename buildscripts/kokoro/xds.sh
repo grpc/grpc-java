@@ -27,7 +27,7 @@ grpc/tools/run_tests/helper_scripts/prep_xds.sh
 # TODO(ericgribkoff): remove "path_matching" and "header_matching" from
 # --test_case after they are added into "all".
 JAVA_OPTS=-Djava.util.logging.config.file=grpc-java/buildscripts/xds_logging.properties \
-  python3 grpc/tools/run_tests/run_xds_tests.py \
+  python3.6 grpc/tools/run_tests/run_xds_tests.py \
     --test_case="all,path_matching,header_matching" \
     --project_id=grpc-testing \
     --source_image=projects/grpc-testing/global/images/xds-test-server-2 \
