@@ -101,7 +101,7 @@ public abstract class Bootstrapper {
       logger.log(XdsLogLevel.INFO, "xDS server URI: {0}", serverUri);
       List<ChannelCreds> channelCredsOptions = new ArrayList<>();
       List<?> rawChannelCredsList = JsonUtil.getList(serverConfig, "channel_creds");
-      if (rawChannelCredsList == null) {
+      if (rawChannelCredsList == null || rawChannelCredsList.isEmpty()) {
         throw new IOException("Invalid bootstrap: 'channel_creds' required");
       }
       List<Map<String, ?>> channelCredsList = JsonUtil.checkObjectList(rawChannelCredsList);
