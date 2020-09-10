@@ -552,6 +552,41 @@ public class ManagedChannelImplTest {
   }
 
   @Test
+  public void shutdownNow_pendingCallShouldFail() {
+    channelBuilder.nameResolverFactory(
+        new FakeNameResolverFactory.Builder(expectedUri)
+            .setResolvedAtStart(false)
+            .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
+            .build());
+    createChannel();
+    ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
+    call.start(mockCallListener, new Metadata());
+    channel.shutdown();
+    executor.runDueTasks();
+    verify(mockCallListener, never()).onClose(any(Status.class), any(Metadata.class));
+    channel.shutdownNow();
+    executor.runDueTasks();
+    verify(mockCallListener).onClose(statusCaptor.capture(), any(Metadata.class));
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.CANCELLED);
+  }
+
+  @Test
+  public void shutdownWithNoNameResolution_newCallShouldFail() {
+    channelBuilder.nameResolverFactory(
+        new FakeNameResolverFactory.Builder(expectedUri)
+            .setResolvedAtStart(false)
+            .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
+            .build());
+    createChannel();
+    channel.shutdown();
+    ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
+    call.start(mockCallListener, new Metadata());
+    executor.runDueTasks();
+    verify(mockCallListener).onClose(statusCaptor.capture(), any(Metadata.class));
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.UNAVAILABLE);
+  }
+
+  @Test
   public void channelzMembership() throws Exception {
     createChannel();
     assertNotNull(channelz.getRootChannel(channel.getLogId().getId()));

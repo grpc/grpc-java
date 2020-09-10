@@ -260,7 +260,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private final ChannelTracer channelTracer;
   private final ChannelLogger channelLogger;
   private final InternalChannelz channelz;
-
+  private final RealChannel realChannel;
   // Must be mutated and read from syncContext
   // a flag for doing channel tracing when flipped
   private ResolutionState lastResolutionState = ResolutionState.NO_RESOLUTION;
@@ -655,8 +655,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
       this.defaultServiceConfig = null;
     }
     this.lookUpServiceConfig = builder.lookUpServiceConfig;
-    Channel channel = new RealChannel(nameResolver.getServiceAuthority());
-    channel = ClientInterceptors.intercept(channel, serviceConfigInterceptor);
+    realChannel = new RealChannel(nameResolver.getServiceAuthority());
+    Channel channel = ClientInterceptors.intercept(realChannel, serviceConfigInterceptor);
     if (builder.binlog != null) {
       channel = builder.binlog.wrapChannel(channel);
     }
@@ -773,11 +773,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
     if (!shutdown.compareAndSet(false, true)) {
       return this;
     }
-
-    // Put gotoState(SHUTDOWN) as early into the syncContext's queue as possible.
-    // delayedTransport.shutdown() may also add some tasks into the queue. But some things inside
-    // delayedTransport.shutdown() like setting delayedTransport.shutdown = true are not run in the
-    // syncContext's queue and should not be blocked, so we do not drain() immediately here.
     final class Shutdown implements Runnable {
       @Override
       public void run() {
@@ -786,9 +781,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
       }
     }
 
-    syncContext.executeLater(new Shutdown());
-
-    uncommittedRetriableStreamsRegistry.onShutdown(SHUTDOWN_STATUS);
+    syncContext.execute(new Shutdown());
+    realChannel.shutdown();
     final class CancelIdleTimer implements Runnable {
       @Override
       public void run() {
@@ -809,7 +803,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
   public ManagedChannelImpl shutdownNow() {
     channelLogger.log(ChannelLogLevel.DEBUG, "shutdownNow() called");
     shutdown();
-    uncommittedRetriableStreamsRegistry.onShutdownNow(SHUTDOWN_NOW_STATUS);
+    realChannel.shutdownNow();
     final class ShutdownNow implements Runnable {
       @Override
       public void run() {
@@ -918,9 +912,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
     @Override
     public <ReqT, RespT> ClientCall<ReqT, RespT> newCall(
         MethodDescriptor<ReqT, RespT> method, CallOptions callOptions) {
-      if (true) { // FIXME(zdapeng): there is a bug for using PendingCall. Temporarily disable it.
-        return newClientCall(method, callOptions);
-      }
       if (configSelector.get() != INITIAL_PENDING_SELECTOR) {
         return newClientCall(method, callOptions);
       }
@@ -935,6 +926,23 @@ final class ManagedChannelImpl extends ManagedChannel implements
         // resolution result is immediately available at this point. Otherwise, some users'
         // tests might observe slight behavior difference from earlier grpc versions.
         return newClientCall(method, callOptions);
+      }
+      if (shutdown.get()) {
+        // Return a failing ClientCall.
+        return new ClientCall<ReqT, RespT>() {
+          @Override
+          public void start(Listener<RespT> responseListener, Metadata headers) {
+            responseListener.onClose(SHUTDOWN_STATUS, new Metadata());
+          }
+
+          @Override public void request(int numMessages) {}
+
+          @Override public void cancel(@Nullable String message, @Nullable Throwable cause) {}
+
+          @Override public void halfClose() {}
+
+          @Override public void sendMessage(ReqT message) {}
+        };
       }
       Context context = Context.current();
       final PendingCall<ReqT, RespT> pendingCall = new PendingCall<>(context, method, callOptions);
@@ -953,6 +961,51 @@ final class ManagedChannelImpl extends ManagedChannel implements
         }
       });
       return pendingCall;
+    }
+
+    // Must run in SynchronizationContext.
+    private void drainPendingCalls() {
+      if (pendingCalls == null) {
+        return;
+      }
+      for (RealChannel.PendingCall<?, ?> pendingCall : pendingCalls) {
+        pendingCall.reprocess();
+      }
+    }
+
+    void shutdown() {
+      final class RealChannelShutdown implements Runnable {
+        @Override
+        public void run() {
+          if (pendingCalls == null) {
+            if (configSelector.get() == INITIAL_PENDING_SELECTOR) {
+              configSelector.set(null);
+            }
+            uncommittedRetriableStreamsRegistry.onShutdown(SHUTDOWN_STATUS);
+          }
+        }
+      }
+
+      syncContext.execute(new RealChannelShutdown());
+    }
+
+    void shutdownNow() {
+      final class RealChannelShutdownNow implements Runnable {
+        @Override
+        public void run() {
+          if (configSelector.get() == INITIAL_PENDING_SELECTOR) {
+            configSelector.set(null);
+          }
+          if (pendingCalls != null) {
+            for (RealChannel.PendingCall<?, ?> pendingCall : pendingCalls) {
+              pendingCall.cancel("Channel is forcefully shutdown", null);
+            }
+          }
+          uncommittedRetriableStreamsRegistry.onShutdownNow(SHUTDOWN_NOW_STATUS);
+        }
+      }
+
+      syncContext.execute(new RealChannelShutdownNow());
     }
 
     @Override
@@ -1007,6 +1060,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
             if (pendingCalls.isEmpty()) {
               inUseStateAggregator.updateObjectInUse(pendingCallsInUseObject, false);
               pendingCalls = null;
+              if (shutdown.get()) {
+                uncommittedRetriableStreamsRegistry.onShutdown(SHUTDOWN_STATUS);
+              }
             }
           }
         }
@@ -1583,7 +1639,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
                   re);
             }
           }
-          drainPendingCalls();
+          realChannel.drainPendingCalls();
 
           Attributes effectiveAttrs = resolutionResult.getAttributes();
           // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
@@ -1633,7 +1689,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
           new Object[] {getLogId(), error});
       if (configSelector.get() == INITIAL_PENDING_SELECTOR) {
         configSelector.set(null);
-        drainPendingCalls();
+        realChannel.drainPendingCalls();
       }
       if (lastResolutionState != ResolutionState.ERROR) {
         channelLogger.log(ChannelLogLevel.WARNING, "Failed to resolve name: {0}", error);
@@ -1647,16 +1703,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
       helper.lb.handleNameResolutionError(error);
 
       scheduleExponentialBackOffInSyncContext();
-    }
-
-    // Must run in SynchronizationContext.
-    private void drainPendingCalls() {
-      if (pendingCalls == null) {
-        return;
-      }
-      for (RealChannel.PendingCall<?, ?> pendingCall : pendingCalls) {
-        pendingCall.reprocess();
-      }
     }
 
     private void scheduleExponentialBackOffInSyncContext() {
