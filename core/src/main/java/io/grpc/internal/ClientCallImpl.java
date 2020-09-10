@@ -227,7 +227,6 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       return;
     }
 
-    MethodInfo methodInfo = null;
     if (configSelector != null) {
       PickSubchannelArgs args = new PickSubchannelArgsImpl(method, headers, callOptions);
       InternalConfigSelector.Result result = configSelector.selectConfig(args);
@@ -242,7 +241,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         observer = new CommittedCallbackListener(observer, committedCallback);
       }
       ManagedChannelServiceConfig config = (ManagedChannelServiceConfig) result.getConfig();
-      methodInfo = config.getMethodConfig(method);
+      MethodInfo methodInfo = config.getMethodConfig(method);
       applyMethodConfig(methodInfo);
     }
 
