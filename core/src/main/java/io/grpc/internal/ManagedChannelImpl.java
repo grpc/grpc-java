@@ -1568,6 +1568,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
           Status serviceConfigError = configOrError != null ? configOrError.getError() : null;
 
           ManagedChannelServiceConfig effectiveServiceConfig;
+          InternalConfigSelector prevConfigSelector = configSelector.get();
           if (!lookUpServiceConfig) {
             if (validServiceConfig != null) {
               channelLogger.log(
@@ -1639,7 +1640,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
                   re);
             }
           }
-          realChannel.drainPendingCalls();
+          if (prevConfigSelector == INITIAL_PENDING_SELECTOR) {
+            realChannel.drainPendingCalls();
+          }
 
           Attributes effectiveAttrs = resolutionResult.getAttributes();
           // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
