@@ -22,7 +22,6 @@ import com.google.common.collect.ImmutableSet;
 import io.grpc.Status.Code;
 import java.util.Set;
 import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 
 /**
@@ -85,19 +84,5 @@ final class RetryPolicy {
         .add("backoffMultiplier", backoffMultiplier)
         .add("retryableStatusCodes", retryableStatusCodes)
         .toString();
-  }
-
-  // TODO(zdapeng): delete this because RetryPolicy will be always available prior to starting
-  //  RetriableStream.
-  /**
-   * Provides the most suitable retry policy for a call.
-   */
-  interface Provider {
-
-    /**
-     * This method is used no more than once for each call.
-     */
-    @Nullable
-    RetryPolicy get();
   }
 }

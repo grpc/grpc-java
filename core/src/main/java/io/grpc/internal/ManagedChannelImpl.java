@@ -22,8 +22,6 @@ import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
-import static io.grpc.internal.ServiceConfigInterceptor.HEDGING_POLICY_KEY;
-import static io.grpc.internal.ServiceConfigInterceptor.RETRY_POLICY_KEY;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
@@ -74,6 +72,7 @@ import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.AutoConfiguredLoadBalancerFactory.AutoConfiguredLoadBalancer;
 import io.grpc.internal.ClientCallImpl.ClientStreamProvider;
+import io.grpc.internal.ManagedChannelServiceConfig.MethodInfo;
 import io.grpc.internal.RetriableStream.ChannelBufferMeter;
 import io.grpc.internal.RetriableStream.Throttle;
 import java.net.URI;
@@ -181,9 +180,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private final long idleTimeoutMillis;
 
   private final ConnectivityStateManager channelStateManager = new ConnectivityStateManager();
-
-  private final ServiceConfigInterceptor serviceConfigInterceptor;
-
   private final BackoffPolicy.Provider backoffPolicyProvider;
 
   /**
@@ -529,6 +525,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
         }
       } else {
         final Throttle throttle = lastServiceConfig.getRetryThrottling();
+        MethodInfo methodInfo = callOptions.getOption(MethodInfo.KEY);
+        final RetryPolicy retryPolicy = methodInfo == null ? null : methodInfo.retryPolicy;
+        final HedgingPolicy hedgingPolicy = methodInfo == null ? null : methodInfo.hedgingPolicy;
         final class RetryStream<ReqT> extends RetriableStream<ReqT> {
           @SuppressWarnings("unchecked")
           RetryStream() {
@@ -540,8 +539,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
                 channelBufferLimit,
                 getCallExecutor(callOptions),
                 transportFactory.getScheduledExecutorService(),
-                callOptions.getOption(RETRY_POLICY_KEY),
-                callOptions.getOption(HEDGING_POLICY_KEY),
+                retryPolicy,
+                hedgingPolicy,
                 throttle);
           }
 
@@ -640,7 +639,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
     this.delayedTransport.start(delayedTransportListener);
     this.backoffPolicyProvider = backoffPolicyProvider;
 
-    serviceConfigInterceptor = new ServiceConfigInterceptor(retryEnabled);
     if (builder.defaultServiceConfig != null) {
       ConfigOrError parsedDefaultServiceConfig =
           serviceConfigParser.parseServiceConfig(builder.defaultServiceConfig);
@@ -656,7 +654,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
     this.lookUpServiceConfig = builder.lookUpServiceConfig;
     realChannel = new RealChannel(nameResolver.getServiceAuthority());
-    Channel channel = ClientInterceptors.intercept(realChannel, serviceConfigInterceptor);
+    Channel channel = realChannel;
     if (builder.binlog != null) {
       channel = builder.binlog.wrapChannel(channel);
     }
@@ -701,16 +699,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
         channelLogger.log(
             ChannelLogLevel.INFO, "Service config look-up disabled, using default service config");
       }
-      handleServiceConfigUpdate();
+      serviceConfigUpdated = true;
     }
-  }
-
-  // May only be called in constructor or syncContext
-  private void handleServiceConfigUpdate() {
-    serviceConfigUpdated = true;
-    // TODO(zdapeng): get rid of serviceConfigInterceptor and do handle update together with
-    // configSelector.
-    serviceConfigInterceptor.handleUpdate(lastServiceConfig);
   }
 
   @VisibleForTesting
@@ -1591,16 +1581,26 @@ final class ManagedChannelImpl extends ManagedChannel implements
                   ChannelLogLevel.INFO,
                   "Config selector from name resolver discarded by channel settings");
             }
-            configSelector.set(null);
+            configSelector.set(effectiveServiceConfig.getDefaultConfigSelector());
           } else {
             // Try to use config if returned from name resolver
             // Otherwise, try to use the default config if available
             if (validServiceConfig != null) {
               effectiveServiceConfig = validServiceConfig;
-              configSelector.set(resolvedConfigSelector);
+              if (resolvedConfigSelector != null) {
+                configSelector.set(resolvedConfigSelector);
+                if (effectiveServiceConfig.getDefaultConfigSelector() != null) {
+                  channelLogger.log(
+                      ChannelLogLevel.DEBUG,
+                      "Method configs in service config will be discarded due to presence of"
+                          + "config-selector");
+                }
+              } else {
+                configSelector.set(effectiveServiceConfig.getDefaultConfigSelector());
+              }
             } else if (defaultServiceConfig != null) {
               effectiveServiceConfig = defaultServiceConfig;
-              configSelector.set(null);
+              configSelector.set(effectiveServiceConfig.getDefaultConfigSelector());
               channelLogger.log(
                   ChannelLogLevel.INFO,
                   "Received no service config, using default service config");
@@ -1631,7 +1631,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
               // TODO(creamsoup): when `servers` is empty and lastResolutionStateCopy == SUCCESS
               //  and lbNeedAddress, it shouldn't call the handleServiceConfigUpdate. But,
               //  lbNeedAddress is not deterministic
-              handleServiceConfigUpdate();
+              serviceConfigUpdated = true;
             } catch (RuntimeException re) {
               logger.log(
                   Level.WARNING,

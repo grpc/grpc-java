@@ -21,7 +21,6 @@ import com.google.common.base.Objects;
 import com.google.common.collect.ImmutableSet;
 import io.grpc.Status.Code;
 import java.util.Set;
-import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 
 /**
@@ -69,19 +68,5 @@ final class HedgingPolicy {
         .add("hedgingDelayNanos", hedgingDelayNanos)
         .add("nonFatalStatusCodes", nonFatalStatusCodes)
         .toString();
-  }
-
-  // TODO(zdapeng): delete this because HedgingPolicy will be always available prior to starting
-  //  RetriableStream.
-  /**
-   * Provides the most suitable hedging policy for a call.
-   */
-  interface Provider {
-
-    /**
-     * This method is used no more than once for each call.
-     */
-    @Nullable
-    HedgingPolicy get();
   }
 }
