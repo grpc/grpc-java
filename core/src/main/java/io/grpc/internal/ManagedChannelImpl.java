@@ -1581,7 +1581,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
                   ChannelLogLevel.INFO,
                   "Config selector from name resolver discarded by channel settings");
             }
-            configSelector.set(effectiveServiceConfig.asConfigSelector());
+            configSelector.set(effectiveServiceConfig.getDefaultConfigSelector());
           } else {
             // Try to use config if returned from name resolver
             // Otherwise, try to use the default config if available
@@ -1589,12 +1589,18 @@ final class ManagedChannelImpl extends ManagedChannel implements
               effectiveServiceConfig = validServiceConfig;
               if (resolvedConfigSelector != null) {
                 configSelector.set(resolvedConfigSelector);
+                if (effectiveServiceConfig.getDefaultConfigSelector() != null) {
+                  channelLogger.log(
+                      ChannelLogLevel.DEBUG,
+                      "Method configs in service config will be discarded due to presence of"
+                          + "config-selector");
+                }
               } else {
-                configSelector.set(effectiveServiceConfig.asConfigSelector());
+                configSelector.set(effectiveServiceConfig.getDefaultConfigSelector());
               }
             } else if (defaultServiceConfig != null) {
               effectiveServiceConfig = defaultServiceConfig;
-              configSelector.set(effectiveServiceConfig.asConfigSelector());
+              configSelector.set(effectiveServiceConfig.getDefaultConfigSelector());
               channelLogger.log(
                   ChannelLogLevel.INFO,
                   "Received no service config, using default service config");

@@ -174,12 +174,24 @@ final class ManagedChannelServiceConfig {
    * Used as a fallback per-RPC config supplier when the attributes value of {@link
    * InternalConfigSelector#KEY} is not available.
    */
-  InternalConfigSelector asConfigSelector() {
+  @Nullable
+  InternalConfigSelector getDefaultConfigSelector() {
+    if (serviceMap.isEmpty() && serviceMethodMap.isEmpty() && defaultMethodConfig == null) {
+      return null;
+    }
     return new InternalConfigSelector() {
       @Override
       public Result selectConfig(PickSubchannelArgs args) {
+        MethodInfo methodInfo = getMethodConfig(args.getMethodDescriptor());
         return Result.newBuilder()
-            .setConfig(ManagedChannelServiceConfig.this)
+            .setConfig(
+                new ManagedChannelServiceConfig(
+                    methodInfo,
+                    Collections.<String, MethodInfo>emptyMap(),
+                    Collections.<String, MethodInfo>emptyMap(),
+                    null,
+                    null,
+                    null))
             .setCallOptions(args.getCallOptions())
             .build();
       }
