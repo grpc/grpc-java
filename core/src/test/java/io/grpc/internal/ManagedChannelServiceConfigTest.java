@@ -201,7 +201,7 @@ public class ManagedChannelServiceConfigTest {
         ImmutableMap.of("methodConfig", ImmutableList.of(methodConfig));
     ManagedChannelServiceConfig serviceConfig =
         ManagedChannelServiceConfig.fromServiceConfig(rawServiceConfig, false, 0, 0, null);
-    InternalConfigSelector configSelector = serviceConfig.getDefaultConfigSelector();
+    InternalConfigSelector configSelector = serviceConfig.asConfigSelector();
     MethodDescriptor<?, ?> method = methodForName("service1", "method1");
     Result result = configSelector.selectConfig(
         new PickSubchannelArgsImpl(method, new Metadata(), CallOptions.DEFAULT));
