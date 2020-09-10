@@ -23,8 +23,8 @@ import io.grpc.ServerCall;
 
 /** The EvaluateArgs class holds evaluate arguments used in CEL-based Authorization Engine. */
 public class EvaluateArgs {
-  private Metadata headers;
-  private ServerCall<?, ?> call;
+  private final Metadata headers;
+  private final ServerCall<?, ?> call;
 
   /**
    * Creates a new EvaluateArgs using the input {@code headers} for resolving headers

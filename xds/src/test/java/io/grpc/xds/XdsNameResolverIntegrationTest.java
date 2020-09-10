@@ -22,7 +22,6 @@ import static io.grpc.xds.XdsClientTestHelper.buildListenerV2;
 import static io.grpc.xds.XdsClientTestHelper.buildRouteConfigurationV2;
 import static io.grpc.xds.XdsClientTestHelper.buildVirtualHostV2;
 import static io.grpc.xds.XdsNameResolverTest.assertCdsPolicy;
-import static io.grpc.xds.XdsNameResolverTest.assertWeightedTargetConfigClusterWeights;
 import static io.grpc.xds.XdsNameResolverTest.assertWeightedTargetPolicy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -295,9 +294,15 @@ public class XdsNameResolverIntegrationTest {
     List<Map<String, ?>> rawLbConfigs =
         (List<Map<String, ?>>) serviceConfig.get("loadBalancingConfig");
     Map<String, ?> lbConfig = Iterables.getOnlyElement(rawLbConfigs);
-    assertThat(lbConfig.keySet()).containsExactly("cds_experimental");
-    Map<String, ?> rawConfigValues = (Map<String, ?>) lbConfig.get("cds_experimental");
-    assertThat(rawConfigValues).containsExactly("cluster", "cluster-foo.googleapis.com");
+    assertThat(lbConfig.keySet()).containsExactly("xds_routing_experimental");
+    Map<String, ?> rawConfigValues = (Map<String, ?>) lbConfig.get("xds_routing_experimental");
+    Map<String, Map<String, ?>> actions =
+        (Map<String, Map<String, ?>>) rawConfigValues.get("action");
+    List<Map<String, ?>> routes = (List<Map<String, ?>>) rawConfigValues.get("route");
+    Map<String, ?> route = Iterables.getOnlyElement(routes);
+    assertThat(route.keySet()).containsExactly("prefix", "action");
+    assertThat((String) route.get("prefix")).isEqualTo("");
+    assertCdsPolicy(actions.get(route.get("action")), "cluster-foo.googleapis.com");
 
     // Simulate receiving another LDS response that tells client to do RDS.
     String routeConfigName = "route-foo.googleapis.com";
@@ -318,33 +323,14 @@ public class XdsNameResolverIntegrationTest {
     serviceConfig = (Map<String, ?>) result.getServiceConfig().getConfig();
     rawLbConfigs = (List<Map<String, ?>>) serviceConfig.get("loadBalancingConfig");
     lbConfig = Iterables.getOnlyElement(rawLbConfigs);
-    assertThat(lbConfig.keySet()).containsExactly("cds_experimental");
-    rawConfigValues = (Map<String, ?>) lbConfig.get("cds_experimental");
-    assertThat(rawConfigValues).containsExactly("cluster", "cluster-blade.googleapis.com");
-  }
-
-  @SuppressWarnings("unchecked")
-  @Test
-  public void resolve_cdsLoadBalancing() {
-    xdsNameResolver.start(mockListener);
-    assertThat(responseObservers).hasSize(1);
-    StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
-
-    // Simulate receiving an LDS response that contains cluster resolution directly in-line.
-    String clusterName = "cluster-foo.googleapis.com";
-    responseObserver.onNext(
-        buildLdsResponseForCluster("0", AUTHORITY, clusterName, "0000"));
-
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
-    ResolutionResult result = resolutionResultCaptor.getValue();
-    assertThat(result.getAddresses()).isEmpty();
-    Map<String, ?> serviceConfig = (Map<String, ?>) result.getServiceConfig().getConfig();
-    List<Map<String, ?>> rawLbConfigs =
-        (List<Map<String, ?>>) serviceConfig.get("loadBalancingConfig");
-    Map<String, ?> lbConfig = Iterables.getOnlyElement(rawLbConfigs);
-    assertThat(lbConfig.keySet()).containsExactly("cds_experimental");
-    Map<String, ?> rawConfigValues = (Map<String, ?>) lbConfig.get("cds_experimental");
-    assertThat(rawConfigValues).containsExactly("cluster", clusterName);
+    assertThat(lbConfig.keySet()).containsExactly("xds_routing_experimental");
+    rawConfigValues = (Map<String, ?>) lbConfig.get("xds_routing_experimental");
+    actions = (Map<String, Map<String, ?>>) rawConfigValues.get("action");
+    routes = (List<Map<String, ?>>) rawConfigValues.get("route");
+    route = Iterables.getOnlyElement(routes);
+    assertThat(route.keySet()).containsExactly("prefix", "action");
+    assertThat((String) route.get("prefix")).isEqualTo("");
+    assertCdsPolicy(actions.get(route.get("action")), "cluster-blade.googleapis.com");
   }
 
   @Test
@@ -447,54 +433,6 @@ public class XdsNameResolverIntegrationTest {
     assertCdsPolicy(actions.get(route4.get("action")), "cluster-hello.googleapis.com");
   }
 
-  @SuppressWarnings("unchecked")
-  @Test
-  public void resolve_weightedTargetLoadBalancing() {
-    xdsNameResolver.start(mockListener);
-    assertThat(responseObservers).hasSize(1);
-    StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
-
-    // Simulate receiving another LDS response that tells client to do RDS.
-    String routeConfigName = "route-foo.googleapis.com";
-    responseObserver.onNext(
-        buildLdsResponseForRdsResource("1", AUTHORITY, routeConfigName, "0001"));
-
-    // Client sent an RDS request for resource "route-foo.googleapis.com" (Omitted in this test).
-
-    // Simulate receiving an RDS response that contains the resource "route-foo.googleapis.com"
-    // with a route resolution for a single weighted cluster route.
-    Route weightedClustersDefaultRoute =
-        Route.newBuilder()
-            .setMatch(RouteMatch.newBuilder().setPrefix(""))
-            .setRoute(buildWeightedClusterRoute(
-                ImmutableMap.of(
-                    "cluster-foo.googleapis.com", 20, "cluster-bar.googleapis.com", 80)))
-            .build();
-    List<Any> routeConfigs = ImmutableList.of(
-        Any.pack(
-            buildRouteConfigurationV2(
-                routeConfigName,
-                ImmutableList.of(
-                    buildVirtualHostForRoutes(
-                        AUTHORITY, ImmutableList.of(weightedClustersDefaultRoute))))));
-    responseObserver.onNext(
-        buildDiscoveryResponseV2("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS_V2, "0000"));
-
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
-    ResolutionResult result = resolutionResultCaptor.getValue();
-    assertThat(result.getAddresses()).isEmpty();
-    Map<String, ?> serviceConfig = (Map<String, ?>) result.getServiceConfig().getConfig();
-    List<Map<String, ?>> rawLbConfigs =
-        (List<Map<String, ?>>) serviceConfig.get("loadBalancingConfig");
-    Map<String, ?> lbConfig = Iterables.getOnlyElement(rawLbConfigs);
-    assertThat(lbConfig.keySet()).containsExactly("weighted_target_experimental");
-    Map<String, ?> rawConfigValues = (Map<String, ?>) lbConfig.get("weighted_target_experimental");
-    assertWeightedTargetConfigClusterWeights(
-        rawConfigValues,
-        ImmutableMap.of(
-            "cluster-foo.googleapis.com", 20, "cluster-bar.googleapis.com", 80));
-  }
-
   @Test
   @SuppressWarnings("unchecked")
   public void resolve_resourceNewlyAdded() {
@@ -511,6 +449,7 @@ public class XdsNameResolverIntegrationTest {
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
     assertThat(result.getAddresses()).isEmpty();
+    assertThat((Map<String, ?>) result.getServiceConfig().getConfig()).isEmpty();
 
     // Simulate receiving another LDS response that contains cluster resolution directly in-line.
     responseObserver.onNext(
@@ -524,9 +463,15 @@ public class XdsNameResolverIntegrationTest {
     List<Map<String, ?>> rawLbConfigs =
         (List<Map<String, ?>>) serviceConfig.get("loadBalancingConfig");
     Map<String, ?> lbConfig = Iterables.getOnlyElement(rawLbConfigs);
-    assertThat(lbConfig.keySet()).containsExactly("cds_experimental");
-    Map<String, ?> rawConfigValues = (Map<String, ?>) lbConfig.get("cds_experimental");
-    assertThat(rawConfigValues).containsExactly("cluster", "cluster-foo.googleapis.com");
+    assertThat(lbConfig.keySet()).containsExactly("xds_routing_experimental");
+    Map<String, ?> rawConfigValues = (Map<String, ?>) lbConfig.get("xds_routing_experimental");
+    Map<String, Map<String, ?>> actions =
+        (Map<String, Map<String, ?>>) rawConfigValues.get("action");
+    List<Map<String, ?>> routes = (List<Map<String, ?>>) rawConfigValues.get("route");
+    Map<String, ?> route = Iterables.getOnlyElement(routes);
+    assertThat(route.keySet()).containsExactly("prefix", "action");
+    assertThat((String) route.get("prefix")).isEqualTo("");
+    assertCdsPolicy(actions.get(route.get("action")), "cluster-foo.googleapis.com");
   }
 
   /**

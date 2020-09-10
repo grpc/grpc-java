@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 The gRPC Authors
+ * Copyright 2020 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,17 +29,16 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 /**
- * Unit tests for {@link ForwardingChannelBuilder}.
+ * Unit tests for {@link ForwardingServerBuilder}.
  */
 @RunWith(JUnit4.class)
-public class ForwardingChannelBuilderTest {
-  private final ManagedChannelBuilder<?> mockDelegate = mock(ManagedChannelBuilder.class);
+public class ForwardingServerBuilderTest {
+  private final ServerBuilder<?> mockDelegate = mock(ServerBuilder.class);
+  private final ForwardingServerBuilder<?> testServerBuilder = new TestBuilder();
 
-  private final ForwardingChannelBuilder<?> testChannelBuilder = new TestBuilder();
-
-  private final class TestBuilder extends ForwardingChannelBuilder<TestBuilder> {
+  private final class TestBuilder extends ForwardingServerBuilder<TestBuilder> {
     @Override
-    protected ManagedChannelBuilder<?> delegate() {
+    protected ServerBuilder<?> delegate() {
       return mockDelegate;
     }
   }
@@ -47,25 +46,15 @@ public class ForwardingChannelBuilderTest {
   @Test
   public void allMethodsForwarded() throws Exception {
     ForwardingTestUtil.testMethodsForwarded(
-        ManagedChannelBuilder.class,
+        ServerBuilder.class,
         mockDelegate,
-        testChannelBuilder,
-        Collections.<Method>emptyList(),
-        new ForwardingTestUtil.ArgumentProvider() {
-          @Override
-          public Object get(Method method, int argPos, Class<?> clazz) {
-            if (method.getName().equals("maxInboundMetadataSize")) {
-              assertThat(argPos).isEqualTo(0);
-              return 1; // an arbitrary positive number
-            }
-            return null;
-          }
-        });
+        testServerBuilder,
+        Collections.<Method>emptyList());
   }
 
   @Test
   public void allBuilderMethodsReturnThis() throws Exception {
-    for (Method method : ManagedChannelBuilder.class.getDeclaredMethods()) {
+    for (Method method : ServerBuilder.class.getDeclaredMethods()) {
       if (Modifier.isStatic(method.getModifiers()) || Modifier.isPrivate(method.getModifiers())) {
         continue;
       }
@@ -77,21 +66,18 @@ public class ForwardingChannelBuilderTest {
       for (int i = 0; i < argTypes.length; i++) {
         args[i] = Defaults.defaultValue(argTypes[i]);
       }
-      if (method.getName().equals("maxInboundMetadataSize")) {
-        args[0] = 1; // an arbitrary positive number
-      }
 
-      Object returnedValue = method.invoke(testChannelBuilder, args);
+      Object returnedValue = method.invoke(testServerBuilder, args);
 
-      assertThat(returnedValue).isSameInstanceAs(testChannelBuilder);
+      assertThat(returnedValue).isSameInstanceAs(testServerBuilder);
     }
   }
 
   @Test
   public void buildReturnsDelegateBuildByDefault() {
-    ManagedChannel mockChannel = mock(ManagedChannel.class);
-    doReturn(mockChannel).when(mockDelegate).build();
+    Server server = mock(Server.class);
+    doReturn(server).when(mockDelegate).build();
 
-    assertThat(testChannelBuilder.build()).isSameInstanceAs(mockChannel);
+    assertThat(testServerBuilder.build()).isSameInstanceAs(server);
   }
 }

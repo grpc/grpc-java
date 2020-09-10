@@ -62,6 +62,7 @@ import io.grpc.NameResolver.ResolutionResult;
 import io.grpc.Status;
 import io.grpc.StringMarshaller;
 import io.grpc.internal.FakeClock.ScheduledTask;
+import io.grpc.internal.ManagedChannelImplBuilder.ClientTransportFactoryBuilder;
 import io.grpc.internal.TestUtils.MockClientTransportInfo;
 import java.net.SocketAddress;
 import java.net.URI;
@@ -159,21 +160,15 @@ public class ManagedChannelImplIdlenessTest {
     when(mockTransportFactory.getScheduledExecutorService())
         .thenReturn(timer.getScheduledExecutorService());
 
-    class Builder extends AbstractManagedChannelImplBuilder<Builder> {
-      Builder(String target) {
-        super(target);
-      }
+    ManagedChannelImplBuilder builder = new ManagedChannelImplBuilder("fake://target",
+        new ClientTransportFactoryBuilder() {
+          @Override public ClientTransportFactory buildClientTransportFactory() {
+            throw new UnsupportedOperationException();
+          }
+        },
+        null);
 
-      @Override protected ClientTransportFactory buildTransportFactory() {
-        throw new UnsupportedOperationException();
-      }
-
-      @Override public Builder usePlaintext() {
-        throw new UnsupportedOperationException();
-      }
-    }
-
-    Builder builder = new Builder("fake://target")
+    builder
         .nameResolverFactory(mockNameResolverFactory)
         .defaultLoadBalancingPolicy(MOCK_POLICY_NAME)
         .idleTimeout(IDLE_TIMEOUT_SECONDS, TimeUnit.SECONDS)

@@ -27,6 +27,7 @@ import io.grpc.ServerInterceptor;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerStreamTracer;
 import io.grpc.ServerTransportFilter;
+import io.grpc.Status;
 import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import io.grpc.netty.NettyServerBuilder;
 import io.grpc.xds.internal.sds.SdsProtocolNegotiators.ServerSdsProtocolNegotiator;
@@ -45,6 +46,7 @@ public final class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
   private final NettyServerBuilder delegate;
   private final int port;
   private ProtocolNegotiator fallbackProtocolNegotiator;
+  private ErrorNotifier errorNotifier;
 
   private XdsServerBuilder(NettyServerBuilder nettyDelegate, int port) {
     this.delegate = nettyDelegate;
@@ -129,6 +131,12 @@ public final class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
     return this;
   }
 
+  /** Set the {@link ErrorNotifier}. Pass null to unset a previously set value. */
+  public XdsServerBuilder errorNotifier(ErrorNotifier errorNotifier) {
+    this.errorNotifier = errorNotifier;
+    return this;
+  }
+
   /** Creates a gRPC server builder for the given port. */
   public static XdsServerBuilder forPort(int port) {
     NettyServerBuilder nettyDelegate = NettyServerBuilder.forAddress(new InetSocketAddress(port));
@@ -150,6 +158,13 @@ public final class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
   public ServerWrapperForXds buildServer(ServerSdsProtocolNegotiator serverProtocolNegotiator) {
     delegate.protocolNegotiator(serverProtocolNegotiator);
     return new ServerWrapperForXds(
-        delegate.build(), serverProtocolNegotiator.getXdsClientWrapperForServerSds());
+        delegate.build(), serverProtocolNegotiator.getXdsClientWrapperForServerSds(),
+        errorNotifier);
+  }
+
+  /** Watcher to receive error notifications from xDS control plane during {@code start()}. */
+  public interface ErrorNotifier {
+
+    void onError(Status error);
   }
 }

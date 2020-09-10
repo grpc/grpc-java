@@ -24,13 +24,17 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import io.grpc.ChannelLogger;
 import io.grpc.ExperimentalApi;
+import io.grpc.ForwardingChannelBuilder;
 import io.grpc.Internal;
-import io.grpc.internal.AbstractManagedChannelImplBuilder;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.internal.AtomicBackoff;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.KeepAliveManager;
+import io.grpc.internal.ManagedChannelImplBuilder;
+import io.grpc.internal.ManagedChannelImplBuilder.ChannelBuilderDefaultPortProvider;
+import io.grpc.internal.ManagedChannelImplBuilder.ClientTransportFactoryBuilder;
 import io.grpc.internal.SharedResourceHolder;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.internal.TransportTracer;
@@ -54,10 +58,12 @@ import javax.net.ssl.SSLSocketFactory;
 
 /** Convenience class for building channels with the OkHttp transport. */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1785")
-public class OkHttpChannelBuilder extends
-        AbstractManagedChannelImplBuilder<OkHttpChannelBuilder> {
+public class OkHttpChannelBuilder extends ForwardingChannelBuilder<OkHttpChannelBuilder> {
 
   public static final int DEFAULT_FLOW_CONTROL_WINDOW = 65535;
+  private final ManagedChannelImplBuilder managedChannelImplBuilder;
+  private TransportTracer.Factory transportTracerFactory = TransportTracer.getDefaultFactory();
+
 
   /** Identifies the negotiation used for starting up HTTP/2. */
   private enum NegotiationType {
@@ -127,6 +133,7 @@ public class OkHttpChannelBuilder extends
   private long keepAliveTimeoutNanos = DEFAULT_KEEPALIVE_TIMEOUT_NANOS;
   private int flowControlWindow = DEFAULT_FLOW_CONTROL_WINDOW;
   private boolean keepAliveWithoutCalls;
+  private int maxInboundMessageSize = GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
   private int maxInboundMetadataSize = Integer.MAX_VALUE;
 
   /**
@@ -139,8 +146,39 @@ public class OkHttpChannelBuilder extends
     this(GrpcUtil.authorityFromHostAndPort(host, port));
   }
 
+  @SuppressWarnings("deprecation")
   private OkHttpChannelBuilder(String target) {
-    super(target);
+    final class OkHttpChannelTransportFactoryBuilder implements ClientTransportFactoryBuilder {
+      @Override
+      public ClientTransportFactory buildClientTransportFactory() {
+        return buildTransportFactory();
+      }
+    }
+
+    final class OkHttpChannelDefaultPortProvider implements ChannelBuilderDefaultPortProvider {
+      @Override
+      public int getDefaultPort() {
+        return OkHttpChannelBuilder.this.getDefaultPort();
+      }
+    }
+
+    managedChannelImplBuilder = new ManagedChannelImplBuilder(target,
+        new OkHttpChannelTransportFactoryBuilder(),
+        new OkHttpChannelDefaultPortProvider());
+
+    managedChannelImplBuilder.overrideAuthorityChecker(
+        new io.grpc.internal.ManagedChannelImplBuilder.OverrideAuthorityChecker() {
+          @Override
+          public String checkAuthority(String authority) {
+            return OkHttpChannelBuilder.this.checkAuthority(authority);
+          }
+        });
+  }
+
+  @Internal
+  @Override
+  protected final ManagedChannelBuilder<?> delegate() {
+    return managedChannelImplBuilder;
   }
 
   @VisibleForTesting
@@ -363,9 +401,19 @@ public class OkHttpChannelBuilder extends
     return this;
   }
 
+  /**
+   * Sets the maximum message size allowed for a single gRPC frame. If an inbound messages
+   * larger than this limit is received it will not be processed and the RPC will fail with
+   * RESOURCE_EXHAUSTED.
+   */
   @Override
-  @Internal
-  protected final ClientTransportFactory buildTransportFactory() {
+  public final OkHttpChannelBuilder maxInboundMessageSize(int max) {
+    Preconditions.checkArgument(max >= 0, "negative max");
+    maxInboundMessageSize = max;
+    return this;
+  }
+
+  final ClientTransportFactory buildTransportFactory() {
     boolean enableKeepAlive = keepAliveTimeNanos != KEEPALIVE_TIME_NANOS_DISABLED;
     return new OkHttpTransportFactory(
         transportExecutor,
@@ -374,7 +422,7 @@ public class OkHttpChannelBuilder extends
         createSslSocketFactory(),
         hostnameVerifier,
         connectionSpec,
-        maxInboundMessageSize(),
+        maxInboundMessageSize,
         enableKeepAlive,
         keepAliveTimeNanos,
         keepAliveTimeoutNanos,
@@ -385,8 +433,21 @@ public class OkHttpChannelBuilder extends
         useGetForSafeMethods);
   }
 
-  @Override
-  protected int getDefaultPort() {
+  protected String checkAuthority(String authority) {
+    return GrpcUtil.checkAuthority(authority);
+  }
+
+  final OkHttpChannelBuilder disableCheckAuthority() {
+    this.managedChannelImplBuilder.disableCheckAuthority();
+    return this;
+  }
+
+  final OkHttpChannelBuilder enableCheckAuthority() {
+    this.managedChannelImplBuilder.enableCheckAuthority();
+    return this;
+  }
+
+  final int getDefaultPort() {
     switch (negotiationType) {
       case PLAINTEXT:
         return GrpcUtil.DEFAULT_PORT_PLAINTEXT;
@@ -395,6 +456,10 @@ public class OkHttpChannelBuilder extends
       default:
         throw new AssertionError(negotiationType + " not handled");
     }
+  }
+
+  final void setStatsEnabled(boolean value) {
+    this.managedChannelImplBuilder.setStatsEnabled(value);
   }
 
   @VisibleForTesting
