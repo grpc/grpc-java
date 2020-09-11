@@ -102,14 +102,15 @@ public abstract class Bootstrapper {
       List<ChannelCreds> channelCredsOptions = new ArrayList<>();
       List<?> rawChannelCredsList = JsonUtil.getList(serverConfig, "channel_creds");
       if (rawChannelCredsList == null || rawChannelCredsList.isEmpty()) {
-        throw new IOException("Invalid bootstrap: 'channel_creds' required");
+        throw new IOException(
+            "Invalid bootstrap: server " + serverUri + " 'channel_creds' required");
       }
       List<Map<String, ?>> channelCredsList = JsonUtil.checkObjectList(rawChannelCredsList);
       for (Map<String, ?> channelCreds : channelCredsList) {
         String type = JsonUtil.getString(channelCreds, "type");
         if (type == null) {
-          throw new IOException("Invalid bootstrap: 'xds_servers' contains server with "
-              + "unknown type 'channel_creds'.");
+          throw new IOException(
+              "Invalid bootstrap: server " + serverUri + " with 'channel_creds' type unspecified");
         }
         logger.log(XdsLogLevel.INFO, "Channel credentials option: {0}", type);
         ChannelCreds creds = new ChannelCreds(type, JsonUtil.getObject(channelCreds, "config"));
