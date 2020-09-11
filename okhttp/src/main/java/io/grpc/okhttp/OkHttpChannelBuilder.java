@@ -146,7 +146,6 @@ public class OkHttpChannelBuilder extends ForwardingChannelBuilder<OkHttpChannel
     this(GrpcUtil.authorityFromHostAndPort(host, port));
   }
 
-  @SuppressWarnings("deprecation")
   private OkHttpChannelBuilder(String target) {
     final class OkHttpChannelTransportFactoryBuilder implements ClientTransportFactoryBuilder {
       @Override
