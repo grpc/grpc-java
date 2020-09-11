@@ -29,9 +29,6 @@ public final class ManagedChannelImplBuilder
     extends AbstractManagedChannelImplBuilder<ManagedChannelImplBuilder> {
 
   private boolean authorityCheckerDisabled;
-  @Deprecated
-  @Nullable
-  private OverrideAuthorityChecker authorityChecker;
 
   /**
    * An interface for Transport implementors to provide the {@link ClientTransportFactory}
@@ -137,23 +134,10 @@ public final class ManagedChannelImplBuilder
     return this;
   }
 
-  @Deprecated
-  public interface OverrideAuthorityChecker {
-    String checkAuthority(String authority);
-  }
-
-  @Deprecated
-  public void overrideAuthorityChecker(@Nullable OverrideAuthorityChecker authorityChecker) {
-    this.authorityChecker = authorityChecker;
-  }
-
   @Override
   protected String checkAuthority(String authority) {
     if (authorityCheckerDisabled) {
       return authority;
-    }
-    if (authorityChecker != null) {
-      return authorityChecker.checkAuthority(authority);
     }
     return super.checkAuthority(authority);
   }

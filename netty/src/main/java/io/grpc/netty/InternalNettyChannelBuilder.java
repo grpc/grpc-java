@@ -28,26 +28,6 @@ import io.netty.channel.socket.nio.NioSocketChannel;
 @Internal
 public final class InternalNettyChannelBuilder {
 
-  /**
-   * Checks authority upon channel construction.  The purpose of this interface is to raise the
-   * visibility of {@link NettyChannelBuilder.OverrideAuthorityChecker}.
-   * @deprecated To be removed, use {@link #disableCheckAuthority(NettyChannelBuilder builder)} to
-   *     disable authority check.
-   */
-  @Deprecated
-  public interface OverrideAuthorityChecker extends NettyChannelBuilder.OverrideAuthorityChecker {}
-
-  /**
-   * Overrides authority checker.
-   * @deprecated To be removed, use {@link #disableCheckAuthority(NettyChannelBuilder builder)} to
-   *     disable authority check.
-   */
-  @Deprecated
-  public static void overrideAuthorityChecker(
-      NettyChannelBuilder channelBuilder, OverrideAuthorityChecker authorityChecker) {
-    channelBuilder.overrideAuthorityChecker(authorityChecker);
-  }
-
   public static void disableCheckAuthority(NettyChannelBuilder builder) {
     builder.disableCheckAuthority();
   }

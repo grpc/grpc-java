@@ -132,31 +132,4 @@ public class ManagedChannelImplBuilderTest {
     builder.disableCheckAuthority().enableCheckAuthority();
     builder.checkAuthority(DUMMY_AUTHORITY_INVALID);
   }
-
-  /** Ensure authority check can disabled with custom authority check implementation. */
-  @Test
-  @SuppressWarnings("deprecation")
-  public void overrideAuthorityChecker_default() {
-    builder.overrideAuthorityChecker(
-        new io.grpc.internal.ManagedChannelImplBuilder.OverrideAuthorityChecker() {
-          @Override public String checkAuthority(String authority) {
-            return authority;
-          }
-        });
-    assertEquals(DUMMY_AUTHORITY_INVALID, builder.checkAuthority(DUMMY_AUTHORITY_INVALID));
-  }
-
-  /** Ensure custom authority is ignored after disableCheckAuthority(). */
-  @Test
-  @SuppressWarnings("deprecation")
-  public void overrideAuthorityChecker_ignored() {
-    builder.overrideAuthorityChecker(
-        new io.grpc.internal.ManagedChannelImplBuilder.OverrideAuthorityChecker() {
-          @Override public String checkAuthority(String authority) {
-            throw new IllegalArgumentException();
-          }
-        });
-    builder.disableCheckAuthority();
-    assertEquals(DUMMY_AUTHORITY_INVALID, builder.checkAuthority(DUMMY_AUTHORITY_INVALID));
-  }
 }
