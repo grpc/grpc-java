@@ -122,7 +122,9 @@ public class BootstrapperTest {
         + "    },\n"
         + "    {\n"
         + "      \"server_uri\": \"trafficdirector-bar.googleapis.com:443\",\n"
-        + "      \"channel_creds\": []\n"
+        + "      \"channel_creds\": [\n"
+        + "        {\"type\": \"insecure\"}"
+        + "      ]\n"
         + "    }\n"
         + "  ]\n"
         + "}";
@@ -143,7 +145,9 @@ public class BootstrapperTest {
     assertThat(serverInfoList.get(0).getServerFeatures()).contains("xds_v3");
     assertThat(serverInfoList.get(1).getServerUri())
         .isEqualTo("trafficdirector-bar.googleapis.com:443");
-    assertThat(serverInfoList.get(1).getChannelCredentials()).isEmpty();
+    assertThat(serverInfoList.get(1).getChannelCredentials().get(0).getType())
+        .isEqualTo("insecure");
+    assertThat(serverInfoList.get(0).getChannelCredentials().get(0).getConfig()).isNull();
     assertThat(info.getNode()).isEqualTo(
         getNodeBuilder()
             .setId("ENVOY_NODE_ID")
