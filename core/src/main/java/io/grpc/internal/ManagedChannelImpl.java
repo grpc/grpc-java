@@ -263,10 +263,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
   // Must be mutated and read from constructor or syncContext
   // used for channel tracing when value changed
   private ManagedChannelServiceConfig lastServiceConfig = EMPTY_SERVICE_CONFIG;
-  // Reference to null if no config selector is available from resolution result
-  // Reference must be set() from syncContext
-  private final AtomicReference<InternalConfigSelector> configSelector =
-      new AtomicReference<>(INITIAL_PENDING_SELECTOR);
 
   @Nullable
   private final ManagedChannelServiceConfig defaultServiceConfig;
@@ -750,7 +746,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
   @VisibleForTesting
   InternalConfigSelector getConfigSelector() {
-    return configSelector.get();
+    return realChannel.configSelector.get();
   }
 
   /**
@@ -891,6 +887,10 @@ final class ManagedChannelImpl extends ManagedChannel implements
   }
 
   private class RealChannel extends Channel {
+    // Reference to null if no config selector is available from resolution result
+    // Reference must be set() from syncContext
+    private final AtomicReference<InternalConfigSelector> configSelector =
+        new AtomicReference<>(INITIAL_PENDING_SELECTOR);
     // Set when the NameResolver is initially created. When we create a new NameResolver for the
     // same target, the new instance must have the same value.
     private final String authority;
@@ -954,12 +954,20 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
 
     // Must run in SynchronizationContext.
-    private void drainPendingCalls() {
-      if (pendingCalls == null) {
-        return;
+    void updateConfigSelector(@Nullable InternalConfigSelector config) {
+      InternalConfigSelector prevConfig = configSelector.get();
+      configSelector.set(config);
+      if (prevConfig == INITIAL_PENDING_SELECTOR && pendingCalls != null) {
+        for (RealChannel.PendingCall<?, ?> pendingCall : pendingCalls) {
+          pendingCall.reprocess();
+        }
       }
-      for (RealChannel.PendingCall<?, ?> pendingCall : pendingCalls) {
-        pendingCall.reprocess();
+    }
+
+    // Must run in SynchronizationContext.
+    void onConfigError() {
+      if (configSelector.get() == INITIAL_PENDING_SELECTOR) {
+        updateConfigSelector(null);
       }
     }
 
@@ -1568,7 +1576,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
           Status serviceConfigError = configOrError != null ? configOrError.getError() : null;
 
           ManagedChannelServiceConfig effectiveServiceConfig;
-          InternalConfigSelector prevConfigSelector = configSelector.get();
           if (!lookUpServiceConfig) {
             if (validServiceConfig != null) {
               channelLogger.log(
@@ -1582,14 +1589,14 @@ final class ManagedChannelImpl extends ManagedChannel implements
                   ChannelLogLevel.INFO,
                   "Config selector from name resolver discarded by channel settings");
             }
-            configSelector.set(effectiveServiceConfig.getDefaultConfigSelector());
+            realChannel.updateConfigSelector(effectiveServiceConfig.getDefaultConfigSelector());
           } else {
             // Try to use config if returned from name resolver
             // Otherwise, try to use the default config if available
             if (validServiceConfig != null) {
               effectiveServiceConfig = validServiceConfig;
               if (resolvedConfigSelector != null) {
-                configSelector.set(resolvedConfigSelector);
+                realChannel.updateConfigSelector(resolvedConfigSelector);
                 if (effectiveServiceConfig.getDefaultConfigSelector() != null) {
                   channelLogger.log(
                       ChannelLogLevel.DEBUG,
@@ -1597,11 +1604,11 @@ final class ManagedChannelImpl extends ManagedChannel implements
                           + "config-selector");
                 }
               } else {
-                configSelector.set(effectiveServiceConfig.getDefaultConfigSelector());
+                realChannel.updateConfigSelector(effectiveServiceConfig.getDefaultConfigSelector());
               }
             } else if (defaultServiceConfig != null) {
               effectiveServiceConfig = defaultServiceConfig;
-              configSelector.set(effectiveServiceConfig.getDefaultConfigSelector());
+              realChannel.updateConfigSelector(effectiveServiceConfig.getDefaultConfigSelector());
               channelLogger.log(
                   ChannelLogLevel.INFO,
                   "Received no service config, using default service config");
@@ -1618,7 +1625,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
               }
             } else {
               effectiveServiceConfig = EMPTY_SERVICE_CONFIG;
-              configSelector.set(null);
+              realChannel.updateConfigSelector(null);
             }
             if (!effectiveServiceConfig.equals(lastServiceConfig)) {
               channelLogger.log(
@@ -1639,9 +1646,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
                   "[" + getLogId() + "] Unexpected exception from parsing service config",
                   re);
             }
-          }
-          if (prevConfigSelector == INITIAL_PENDING_SELECTOR) {
-            realChannel.drainPendingCalls();
           }
 
           Attributes effectiveAttrs = resolutionResult.getAttributes();
@@ -1690,10 +1694,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     private void handleErrorInSyncContext(Status error) {
       logger.log(Level.WARNING, "[{0}] Failed to resolve name. status={1}",
           new Object[] {getLogId(), error});
-      if (configSelector.get() == INITIAL_PENDING_SELECTOR) {
-        configSelector.set(null);
-        realChannel.drainPendingCalls();
-      }
+      realChannel.onConfigError();
       if (lastResolutionState != ResolutionState.ERROR) {
         channelLogger.log(ChannelLogLevel.WARNING, "Failed to resolve name: {0}", error);
         lastResolutionState = ResolutionState.ERROR;
