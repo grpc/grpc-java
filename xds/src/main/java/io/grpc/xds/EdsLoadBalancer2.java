@@ -105,7 +105,9 @@ final class EdsLoadBalancer2 extends LoadBalancer {
     if (cluster == null) {
       cluster = config.clusterName;
     }
-    switchingLoadBalancer.switchTo(new EdsLbState(config.edsServiceName, config.lrsServerName));
+    switchingLoadBalancer.switchTo(new EdsLbState(
+        config.edsServiceName, config.lrsServerName, config.localityPickingPolicy,
+        config.endpointPickingPolicy));
     switchingLoadBalancer.handleResolvedAddresses(resolvedAddresses);
   }
 
@@ -135,10 +137,16 @@ final class EdsLoadBalancer2 extends LoadBalancer {
     @Nullable
     private final String lrsServerName;
     private final String resourceName;
+    private PolicySelection localityPickingPolicy;
+    private PolicySelection endpointPickingPolicy;
 
-    private EdsLbState(@Nullable String edsServiceName, @Nullable String lrsServerName) {
+    private EdsLbState(
+        @Nullable String edsServiceName, @Nullable String lrsServerName,
+        PolicySelection localityPickingPolicy, PolicySelection endpointPickingPolicy) {
       this.edsServiceName = edsServiceName;
       this.lrsServerName = lrsServerName;
+      this.localityPickingPolicy = localityPickingPolicy;
+      this.endpointPickingPolicy = endpointPickingPolicy;
       resourceName = edsServiceName == null ? cluster : edsServiceName;
     }
 
@@ -165,33 +173,25 @@ final class EdsLoadBalancer2 extends LoadBalancer {
     private final class ChildLbState extends LoadBalancer implements EndpointWatcher {
       @Nullable
       private final LoadStatsStore loadStatsStore;
-      private final Attributes attributes;
       private final DropHandlingLbHelper lbHelper;
       private List<EquivalentAddressGroup> endpointAddresses = Collections.emptyList();
       private Map<Integer, Map<Locality, Integer>> prioritizedLocalityWeights
           = Collections.emptyMap();
-      private PolicySelection localityPickingPolicy;
-      private PolicySelection endpointPickingPolicy;
       @Nullable
       private LoadBalancer lb;
 
       private ChildLbState(Helper helper) {
+        if (lrsServerName != null) {
+          loadStatsStore = xdsClient.addClientStats(cluster, edsServiceName);
+          xdsClient.reportClientStats();
+        } else {
+          loadStatsStore = null;
+        }
+        lbHelper = new DropHandlingLbHelper(helper);
         logger.log(
             XdsLogLevel.INFO,
             "Start endpoint watcher on {0} with xDS client {1}", resourceName, xdsClient);
         xdsClient.watchEndpointData(resourceName, this);
-        if (lrsServerName != null) {
-          loadStatsStore = xdsClient.addClientStats(cluster, edsServiceName);
-          xdsClient.reportClientStats();
-          attributes =
-              resolvedAddresses.getAttributes().toBuilder()
-                  .set(XdsAttributes.ATTR_CLUSTER_SERVICE_LOAD_STATS_STORE, loadStatsStore)
-                  .build();
-        } else {
-          loadStatsStore = null;
-          attributes = resolvedAddresses.getAttributes();
-        }
-        lbHelper = new DropHandlingLbHelper(helper);
       }
 
       @Override
@@ -204,6 +204,16 @@ final class EdsLoadBalancer2 extends LoadBalancer {
                 generatePriorityLbConfig(cluster, edsServiceName, lrsServerName,
                     config.localityPickingPolicy, config.endpointPickingPolicy, lbRegistry,
                     prioritizedLocalityWeights);
+            // TODO(chengyuanzhang): to be deleted after migrating to use XdsClient API.
+            Attributes attributes;
+            if (lrsServerName != null) {
+              attributes =
+                  resolvedAddresses.getAttributes().toBuilder()
+                      .set(XdsAttributes.ATTR_CLUSTER_SERVICE_LOAD_STATS_STORE, loadStatsStore)
+                      .build();
+            } else {
+              attributes = resolvedAddresses.getAttributes();
+            }
             lb.handleResolvedAddresses(
                 resolvedAddresses.toBuilder()
                     .setAddresses(endpointAddresses)
@@ -283,6 +293,16 @@ final class EdsLoadBalancer2 extends LoadBalancer {
                 endpointPickingPolicy, lbRegistry, prioritizedLocalityWeights);
         if (lb == null) {
           lb = lbRegistry.getProvider(PRIORITY_POLICY_NAME).newLoadBalancer(lbHelper);
+        }
+        // TODO(chengyuanzhang): to be deleted after migrating to use XdsClient API.
+        Attributes attributes;
+        if (lrsServerName != null) {
+          attributes =
+              resolvedAddresses.getAttributes().toBuilder()
+                  .set(XdsAttributes.ATTR_CLUSTER_SERVICE_LOAD_STATS_STORE, loadStatsStore)
+                  .build();
+        } else {
+          attributes = resolvedAddresses.getAttributes();
         }
         lb.handleResolvedAddresses(
             resolvedAddresses.toBuilder()
