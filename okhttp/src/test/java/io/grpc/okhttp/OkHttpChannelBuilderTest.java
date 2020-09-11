@@ -73,7 +73,7 @@ public class OkHttpChannelBuilderTest {
 
   @Test
   public void failOverrideInvalidAuthority() {
-    OkHttpChannelBuilder builder = new OkHttpChannelBuilder("good", 1234);
+    OkHttpChannelBuilder builder = OkHttpChannelBuilder.forAddress("good", 1234);
 
     thrown.expect(IllegalArgumentException.class);
     thrown.expectMessage("Invalid authority:");
@@ -82,14 +82,14 @@ public class OkHttpChannelBuilderTest {
 
   @Test
   public void disableCheckAuthorityAllowsInvalidAuthority() {
-    OkHttpChannelBuilder builder = new OkHttpChannelBuilder("good", 1234)
+    OkHttpChannelBuilder builder = OkHttpChannelBuilder.forAddress("good", 1234)
         .disableCheckAuthority();
     builder.overrideAuthority("[invalidauthority").usePlaintext().buildTransportFactory();
   }
 
   @Test
   public void enableCheckAuthorityFailOverrideInvalidAuthority() {
-    OkHttpChannelBuilder builder = new OkHttpChannelBuilder("good", 1234)
+    OkHttpChannelBuilder builder = OkHttpChannelBuilder.forAddress("good", 1234)
         .disableCheckAuthority()
         .enableCheckAuthority();
 

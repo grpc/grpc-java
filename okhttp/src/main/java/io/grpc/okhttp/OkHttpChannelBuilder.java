@@ -58,7 +58,7 @@ import javax.net.ssl.SSLSocketFactory;
 
 /** Convenience class for building channels with the OkHttp transport. */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1785")
-public class OkHttpChannelBuilder extends ForwardingChannelBuilder<OkHttpChannelBuilder> {
+public final class OkHttpChannelBuilder extends ForwardingChannelBuilder<OkHttpChannelBuilder> {
 
   public static final int DEFAULT_FLOW_CONTROL_WINDOW = 65535;
   private final ManagedChannelImplBuilder managedChannelImplBuilder;
@@ -142,7 +142,7 @@ public class OkHttpChannelBuilder extends ForwardingChannelBuilder<OkHttpChannel
    */
   private final boolean useGetForSafeMethods = false;
 
-  protected OkHttpChannelBuilder(String host, int port) {
+  private OkHttpChannelBuilder(String host, int port) {
     this(GrpcUtil.authorityFromHostAndPort(host, port));
   }
 
@@ -168,13 +168,12 @@ public class OkHttpChannelBuilder extends ForwardingChannelBuilder<OkHttpChannel
 
   @Internal
   @Override
-  protected final ManagedChannelBuilder<?> delegate() {
+  protected ManagedChannelBuilder<?> delegate() {
     return managedChannelImplBuilder;
   }
 
   @VisibleForTesting
-  final OkHttpChannelBuilder setTransportTracerFactory(
-      TransportTracer.Factory transportTracerFactory) {
+  OkHttpChannelBuilder setTransportTracerFactory(TransportTracer.Factory transportTracerFactory) {
     this.transportTracerFactory = transportTracerFactory;
     return this;
   }
@@ -185,7 +184,7 @@ public class OkHttpChannelBuilder extends ForwardingChannelBuilder<OkHttpChannel
    * <p>The channel does not take ownership of the given executor. It is the caller' responsibility
    * to shutdown the executor when appropriate.
    */
-  public final OkHttpChannelBuilder transportExecutor(@Nullable Executor transportExecutor) {
+  public OkHttpChannelBuilder transportExecutor(@Nullable Executor transportExecutor) {
     this.transportExecutor = transportExecutor;
     return this;
   }
@@ -196,7 +195,7 @@ public class OkHttpChannelBuilder extends ForwardingChannelBuilder<OkHttpChannel
    *
    * @since 1.20.0
    */
-  public final OkHttpChannelBuilder socketFactory(@Nullable SocketFactory socketFactory) {
+  public OkHttpChannelBuilder socketFactory(@Nullable SocketFactory socketFactory) {
     this.socketFactory = socketFactory;
     return this;
   }
@@ -214,7 +213,7 @@ public class OkHttpChannelBuilder extends ForwardingChannelBuilder<OkHttpChannel
    * @deprecated use {@link #usePlaintext()} or {@link #useTransportSecurity()} instead.
    */
   @Deprecated
-  public final OkHttpChannelBuilder negotiationType(io.grpc.okhttp.NegotiationType type) {
+  public OkHttpChannelBuilder negotiationType(io.grpc.okhttp.NegotiationType type) {
     Preconditions.checkNotNull(type, "type");
     switch (type) {
       case TLS:
@@ -284,7 +283,7 @@ public class OkHttpChannelBuilder extends ForwardingChannelBuilder<OkHttpChannel
   /**
    * Override the default {@link SSLSocketFactory} and enable TLS negotiation.
    */
-  public final OkHttpChannelBuilder sslSocketFactory(SSLSocketFactory factory) {
+  public OkHttpChannelBuilder sslSocketFactory(SSLSocketFactory factory) {
     this.sslSocketFactory = factory;
     negotiationType = NegotiationType.TLS;
     return this;
@@ -310,7 +309,7 @@ public class OkHttpChannelBuilder extends ForwardingChannelBuilder<OkHttpChannel
    * @return this
    *
    */
-  public final OkHttpChannelBuilder hostnameVerifier(@Nullable HostnameVerifier hostnameVerifier) {
+  public OkHttpChannelBuilder hostnameVerifier(@Nullable HostnameVerifier hostnameVerifier) {
     this.hostnameVerifier = hostnameVerifier;
     return this;
   }
@@ -327,7 +326,7 @@ public class OkHttpChannelBuilder extends ForwardingChannelBuilder<OkHttpChannel
    * @throws IllegalArgumentException
    *         If {@code connectionSpec} is not with TLS
    */
-  public final OkHttpChannelBuilder connectionSpec(
+  public OkHttpChannelBuilder connectionSpec(
       com.squareup.okhttp.ConnectionSpec connectionSpec) {
     Preconditions.checkArgument(connectionSpec.isTls(), "plaintext ConnectionSpec is not accepted");
     this.connectionSpec = Utils.convertSpec(connectionSpec);
@@ -336,7 +335,7 @@ public class OkHttpChannelBuilder extends ForwardingChannelBuilder<OkHttpChannel
 
   /** Sets the negotiation type for the HTTP/2 connection to plaintext. */
   @Override
-  public final OkHttpChannelBuilder usePlaintext() {
+  public OkHttpChannelBuilder usePlaintext() {
     negotiationType = NegotiationType.PLAINTEXT;
     return this;
   }
@@ -350,7 +349,7 @@ public class OkHttpChannelBuilder extends ForwardingChannelBuilder<OkHttpChannel
    * socket factory used.
    */
   @Override
-  public final OkHttpChannelBuilder useTransportSecurity() {
+  public OkHttpChannelBuilder useTransportSecurity() {
     negotiationType = NegotiationType.TLS;
     return this;
   }
@@ -365,7 +364,7 @@ public class OkHttpChannelBuilder extends ForwardingChannelBuilder<OkHttpChannel
    *
    * @since 1.11.0
    */
-  public final OkHttpChannelBuilder scheduledExecutorService(
+  public OkHttpChannelBuilder scheduledExecutorService(
       ScheduledExecutorService scheduledExecutorService) {
     this.scheduledExecutorService =
         checkNotNull(scheduledExecutorService, "scheduledExecutorService");
@@ -398,13 +397,13 @@ public class OkHttpChannelBuilder extends ForwardingChannelBuilder<OkHttpChannel
    * RESOURCE_EXHAUSTED.
    */
   @Override
-  public final OkHttpChannelBuilder maxInboundMessageSize(int max) {
+  public OkHttpChannelBuilder maxInboundMessageSize(int max) {
     Preconditions.checkArgument(max >= 0, "negative max");
     maxInboundMessageSize = max;
     return this;
   }
 
-  final ClientTransportFactory buildTransportFactory() {
+  ClientTransportFactory buildTransportFactory() {
     boolean enableKeepAlive = keepAliveTimeNanos != KEEPALIVE_TIME_NANOS_DISABLED;
     return new OkHttpTransportFactory(
         transportExecutor,
@@ -424,17 +423,17 @@ public class OkHttpChannelBuilder extends ForwardingChannelBuilder<OkHttpChannel
         useGetForSafeMethods);
   }
 
-  final OkHttpChannelBuilder disableCheckAuthority() {
+  OkHttpChannelBuilder disableCheckAuthority() {
     this.managedChannelImplBuilder.disableCheckAuthority();
     return this;
   }
 
-  final OkHttpChannelBuilder enableCheckAuthority() {
+  OkHttpChannelBuilder enableCheckAuthority() {
     this.managedChannelImplBuilder.enableCheckAuthority();
     return this;
   }
 
-  final int getDefaultPort() {
+  int getDefaultPort() {
     switch (negotiationType) {
       case PLAINTEXT:
         return GrpcUtil.DEFAULT_PORT_PLAINTEXT;
@@ -445,7 +444,7 @@ public class OkHttpChannelBuilder extends ForwardingChannelBuilder<OkHttpChannel
     }
   }
 
-  final void setStatsEnabled(boolean value) {
+  void setStatsEnabled(boolean value) {
     this.managedChannelImplBuilder.setStatsEnabled(value);
   }
 
