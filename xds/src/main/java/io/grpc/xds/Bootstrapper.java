@@ -101,19 +101,20 @@ public abstract class Bootstrapper {
       logger.log(XdsLogLevel.INFO, "xDS server URI: {0}", serverUri);
       List<ChannelCreds> channelCredsOptions = new ArrayList<>();
       List<?> rawChannelCredsList = JsonUtil.getList(serverConfig, "channel_creds");
-      // List of channel creds is optional.
-      if (rawChannelCredsList != null) {
-        List<Map<String, ?>> channelCredsList = JsonUtil.checkObjectList(rawChannelCredsList);
-        for (Map<String, ?> channelCreds : channelCredsList) {
-          String type = JsonUtil.getString(channelCreds, "type");
-          if (type == null) {
-            throw new IOException("Invalid bootstrap: 'xds_servers' contains server with "
-                + "unknown type 'channel_creds'.");
-          }
-          logger.log(XdsLogLevel.INFO, "Channel credentials option: {0}", type);
-          ChannelCreds creds = new ChannelCreds(type, JsonUtil.getObject(channelCreds, "config"));
-          channelCredsOptions.add(creds);
+      if (rawChannelCredsList == null || rawChannelCredsList.isEmpty()) {
+        throw new IOException(
+            "Invalid bootstrap: server " + serverUri + " 'channel_creds' required");
+      }
+      List<Map<String, ?>> channelCredsList = JsonUtil.checkObjectList(rawChannelCredsList);
+      for (Map<String, ?> channelCreds : channelCredsList) {
+        String type = JsonUtil.getString(channelCreds, "type");
+        if (type == null) {
+          throw new IOException(
+              "Invalid bootstrap: server " + serverUri + " with 'channel_creds' type unspecified");
         }
+        logger.log(XdsLogLevel.INFO, "Channel credentials option: {0}", type);
+        ChannelCreds creds = new ChannelCreds(type, JsonUtil.getObject(channelCreds, "config"));
+        channelCredsOptions.add(creds);
       }
       List<String> serverFeatures = JsonUtil.getListOfStrings(serverConfig, "server_features");
       if (serverFeatures != null) {
