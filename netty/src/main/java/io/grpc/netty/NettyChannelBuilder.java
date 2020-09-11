@@ -517,14 +517,6 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder<NettyCha
     }
   }
 
-  @Deprecated
-  interface OverrideAuthorityChecker extends ManagedChannelImplBuilder.OverrideAuthorityChecker {}
-
-  @Deprecated
-  void overrideAuthorityChecker(@Nullable OverrideAuthorityChecker authorityChecker) {
-    this.managedChannelImplBuilder.overrideAuthorityChecker(authorityChecker);
-  }
-
   NettyChannelBuilder disableCheckAuthority() {
     this.managedChannelImplBuilder.disableCheckAuthority();
     return this;

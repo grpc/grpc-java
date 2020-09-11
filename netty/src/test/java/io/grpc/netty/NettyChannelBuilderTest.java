@@ -22,7 +22,6 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 
 import io.grpc.ManagedChannel;
-import io.grpc.internal.GrpcUtil;
 import io.grpc.netty.NettyTestUtil.TrackingObjectPoolForTest;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFactory;
@@ -89,41 +88,6 @@ public class NettyChannelBuilderTest {
     } finally {
       shutdown(channel);
     }
-  }
-
-  @Test
-  @Deprecated
-  public void overrideAllowsInvalidAuthority() {
-    NettyChannelBuilder builder = new NettyChannelBuilder(new SocketAddress(){});
-    InternalNettyChannelBuilder.overrideAuthorityChecker(builder,
-        new io.grpc.netty.InternalNettyChannelBuilder.OverrideAuthorityChecker() {
-          @Override
-          public String checkAuthority(String authority) {
-            return authority;
-          }
-        });
-    Object unused = builder.overrideAuthority("[invalidauthority")
-        .negotiationType(NegotiationType.PLAINTEXT)
-        .buildTransportFactory();
-  }
-
-  @Test
-  @Deprecated
-  public void overrideFailsInvalidAuthority() {
-    NettyChannelBuilder builder = new NettyChannelBuilder(new SocketAddress(){});
-    InternalNettyChannelBuilder.overrideAuthorityChecker(builder,
-        new io.grpc.netty.InternalNettyChannelBuilder.OverrideAuthorityChecker() {
-          @Override
-          public String checkAuthority(String authority) {
-            return GrpcUtil.checkAuthority(authority);
-          }
-        });
-
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("Invalid authority:");
-    Object unused = builder.overrideAuthority("[invalidauthority")
-        .negotiationType(NegotiationType.PLAINTEXT)
-        .buildTransportFactory();
   }
 
   @Test
