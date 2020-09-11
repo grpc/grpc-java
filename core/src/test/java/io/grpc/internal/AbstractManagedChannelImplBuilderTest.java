@@ -67,8 +67,8 @@ public class AbstractManagedChannelImplBuilderTest {
         }
       };
 
-  private Builder builder = new Builder("fake");
-  private Builder directAddressBuilder = new Builder(new SocketAddress(){}, "fake");
+  private final Builder builder = new Builder("fake");
+  private final Builder directAddressBuilder = new Builder(new SocketAddress(){}, "fake");
 
   @Test
   public void executor_default() {
@@ -261,7 +261,6 @@ public class AbstractManagedChannelImplBuilderTest {
 
   @Test
   public void overrideAuthority_getNameResolverFactory() {
-    Builder builder = new Builder("target");
     assertNull(builder.authorityOverride);
     assertFalse(builder.getNameResolverFactory() instanceof OverrideAuthorityNameResolverFactory);
     builder.overrideAuthority("google.com");
@@ -323,8 +322,6 @@ public class AbstractManagedChannelImplBuilderTest {
 
   @Test
   public void idleTimeout() {
-    Builder builder = new Builder("target");
-
     assertEquals(AbstractManagedChannelImplBuilder.IDLE_MODE_DEFAULT_TIMEOUT_MILLIS,
         builder.getIdleTimeoutMillis());
 
@@ -352,7 +349,6 @@ public class AbstractManagedChannelImplBuilderTest {
 
   @Test
   public void maxRetryAttempts() {
-    Builder builder = new Builder("target");
     assertEquals(5, builder.maxRetryAttempts);
 
     builder.maxRetryAttempts(3);
@@ -361,7 +357,6 @@ public class AbstractManagedChannelImplBuilderTest {
 
   @Test
   public void maxHedgedAttempts() {
-    Builder builder = new Builder("target");
     assertEquals(5, builder.maxHedgedAttempts);
 
     builder.maxHedgedAttempts(3);
@@ -370,7 +365,6 @@ public class AbstractManagedChannelImplBuilderTest {
 
   @Test
   public void retryBufferSize() {
-    Builder builder = new Builder("target");
     assertEquals(1L << 24, builder.retryBufferSize);
 
     builder.retryBufferSize(3456L);
@@ -379,7 +373,6 @@ public class AbstractManagedChannelImplBuilderTest {
 
   @Test
   public void perRpcBufferLimit() {
-    Builder builder = new Builder("target");
     assertEquals(1L << 20, builder.perRpcBufferLimit);
 
     builder.perRpcBufferLimit(3456L);
@@ -388,24 +381,18 @@ public class AbstractManagedChannelImplBuilderTest {
 
   @Test
   public void retryBufferSizeInvalidArg() {
-    Builder builder = new Builder("target");
-
     thrown.expect(IllegalArgumentException.class);
     builder.retryBufferSize(0L);
   }
 
   @Test
   public void perRpcBufferLimitInvalidArg() {
-    Builder builder = new Builder("target");
-
     thrown.expect(IllegalArgumentException.class);
     builder.perRpcBufferLimit(0L);
   }
 
   @Test
   public void disableRetry() {
-    Builder builder = new Builder("target");
-
     builder.enableRetry();
     assertTrue(builder.retryEnabled);
 
@@ -421,7 +408,6 @@ public class AbstractManagedChannelImplBuilderTest {
 
   @Test
   public void defaultServiceConfig_nullKey() {
-    Builder builder = new Builder("target");
     Map<String, Object> config = new HashMap<>();
     config.put(null, "val");
 
@@ -431,7 +417,6 @@ public class AbstractManagedChannelImplBuilderTest {
 
   @Test
   public void defaultServiceConfig_intKey() {
-    Builder builder = new Builder("target");
     Map<Integer, Object> subConfig = new HashMap<>();
     subConfig.put(3, "val");
     Map<String, Object> config = new HashMap<>();
@@ -443,7 +428,6 @@ public class AbstractManagedChannelImplBuilderTest {
 
   @Test
   public void defaultServiceConfig_intValue() {
-    Builder builder = new Builder("target");
     Map<String, Object> config = new HashMap<>();
     config.put("key", 3);
 
@@ -453,7 +437,6 @@ public class AbstractManagedChannelImplBuilderTest {
 
   @Test
   public void defaultServiceConfig_nested() {
-    Builder builder = new Builder("target");
     Map<String, Object> config = new HashMap<>();
     List<Object> list1 = new ArrayList<>();
     list1.add(123D);
@@ -476,7 +459,6 @@ public class AbstractManagedChannelImplBuilderTest {
 
   @Test
   public void disableNameResolverServiceConfig() {
-    Builder builder = new Builder("target");
     assertThat(builder.lookUpServiceConfig).isTrue();
 
     builder.disableServiceConfigLookUp();
