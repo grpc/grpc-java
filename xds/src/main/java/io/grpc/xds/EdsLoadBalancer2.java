@@ -133,7 +133,7 @@ final class EdsLoadBalancer2 extends LoadBalancer {
     @Nullable
     private final String edsServiceName;
     @Nullable
-    private final String lrsServerName;  // assume LRS server never change
+    private final String lrsServerName;
     private final String resourceName;
 
     private EdsLbState(@Nullable String edsServiceName, @Nullable String lrsServerName) {
