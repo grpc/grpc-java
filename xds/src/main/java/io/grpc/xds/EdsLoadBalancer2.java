@@ -62,7 +62,6 @@ final class EdsLoadBalancer2 extends LoadBalancer {
   private final InternalLogId logId;
   private final XdsLogger logger;
   private final LoadBalancerRegistry lbRegistry;
-  private final LoadBalancer.Helper helper;
   private final ThreadSafeRandom random;
   private final GracefulSwitchLoadBalancer switchingLoadBalancer;
   private ObjectPool<XdsClient> xdsClientPool;
@@ -77,10 +76,9 @@ final class EdsLoadBalancer2 extends LoadBalancer {
   @VisibleForTesting
   EdsLoadBalancer2(
       LoadBalancer.Helper helper, LoadBalancerRegistry lbRegistry, ThreadSafeRandom random) {
-    this.helper = checkNotNull(helper, "helper");
     this.lbRegistry = checkNotNull(lbRegistry, "lbRegistry");
     this.random = checkNotNull(random, "random");
-    switchingLoadBalancer = new GracefulSwitchLoadBalancer(helper);
+    switchingLoadBalancer = new GracefulSwitchLoadBalancer(checkNotNull(helper, "helper"));
     logId = InternalLogId.allocate("eds-lb", helper.getAuthority());
     logger = XdsLogger.withLogId(logId);
     logger.log(XdsLogLevel.INFO, "Created");
@@ -231,7 +229,7 @@ final class EdsLoadBalancer2 extends LoadBalancer {
         if (lb != null) {
           lb.handleNameResolutionError(error);
         } else {
-          helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
+          lbHelper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
         }
       }
 
@@ -319,7 +317,7 @@ final class EdsLoadBalancer2 extends LoadBalancer {
           lb.shutdown();
           lb = null;
         }
-        helper.updateBalancingState(
+        lbHelper.updateBalancingState(
             TRANSIENT_FAILURE,
             new ErrorPicker(
                 Status.UNAVAILABLE.withDescription(
@@ -331,7 +329,7 @@ final class EdsLoadBalancer2 extends LoadBalancer {
         logger.log(
             XdsLogLevel.WARNING, "Received error from xDS client {0}: {1}", xdsClient, error);
         if (lb == null) {
-          helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
+          lbHelper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
         }
       }
 
