@@ -21,6 +21,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import com.google.common.io.CharStreams;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.xds.Bootstrapper;
+import io.grpc.xds.XdsInitializationException;
 import io.grpc.xds.internal.sds.trust.CertificateUtils;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -55,7 +56,8 @@ public class CommonCertProviderTestUtils {
           Pattern.CASE_INSENSITIVE);
 
   /** Creates a test bootstrap info object. */
-  public static Bootstrapper.BootstrapInfo getTestBootstrapInfo() throws IOException {
+  public static Bootstrapper.BootstrapInfo getTestBootstrapInfo()
+      throws XdsInitializationException {
     String rawData =
         "{\n"
             + "  \"xds_servers\": [],\n"
@@ -95,7 +97,8 @@ public class CommonCertProviderTestUtils {
     return Bootstrapper.parseConfig(rawData);
   }
 
-  static Bootstrapper.BootstrapInfo getNonDefaultTestBootstrapInfo() throws IOException {
+  static Bootstrapper.BootstrapInfo getNonDefaultTestBootstrapInfo()
+      throws XdsInitializationException {
     String rawData =
         "{\n"
             + "  \"xds_servers\": [],\n"
@@ -135,7 +138,8 @@ public class CommonCertProviderTestUtils {
     return Bootstrapper.parseConfig(rawData);
   }
 
-  static Bootstrapper.BootstrapInfo getMinimalBootstrapInfo() throws IOException {
+  static Bootstrapper.BootstrapInfo getMinimalBootstrapInfo()
+      throws XdsInitializationException {
     String rawData =
         "{\n"
             + "  \"xds_servers\": [],\n"
@@ -163,7 +167,8 @@ public class CommonCertProviderTestUtils {
     return Bootstrapper.parseConfig(rawData);
   }
 
-  static Bootstrapper.BootstrapInfo getMinimalBootstrapInfo_v1beta1AndZone() throws IOException {
+  static Bootstrapper.BootstrapInfo getMinimalBootstrapInfo_v1beta1AndZone()
+      throws XdsInitializationException {
     String rawData =
         "{\n"
             + "  \"xds_servers\": [],\n"
@@ -191,7 +196,8 @@ public class CommonCertProviderTestUtils {
     return Bootstrapper.parseConfig(rawData);
   }
 
-  static Bootstrapper.BootstrapInfo getMinimalAndBadClusterUrlBootstrapInfo() throws IOException {
+  static Bootstrapper.BootstrapInfo getMinimalAndBadClusterUrlBootstrapInfo()
+      throws XdsInitializationException {
     String rawData =
             "{\n"
                     + "  \"xds_servers\": [],\n"
@@ -219,7 +225,8 @@ public class CommonCertProviderTestUtils {
     return Bootstrapper.parseConfig(rawData);
   }
 
-  static Bootstrapper.BootstrapInfo getMissingSaJwtLocation() throws IOException {
+  static Bootstrapper.BootstrapInfo getMissingSaJwtLocation()
+      throws XdsInitializationException {
     String rawData =
         "{\n"
             + "  \"xds_servers\": [],\n"
@@ -246,7 +253,8 @@ public class CommonCertProviderTestUtils {
     return Bootstrapper.parseConfig(rawData);
   }
 
-  static Bootstrapper.BootstrapInfo getMissingGkeClusterUrl() throws IOException {
+  static Bootstrapper.BootstrapInfo getMissingGkeClusterUrl()
+      throws XdsInitializationException {
     String rawData =
         "{\n"
             + "  \"xds_servers\": [],\n"
@@ -285,7 +293,8 @@ public class CommonCertProviderTestUtils {
     return Bootstrapper.parseConfig(rawData);
   }
 
-  static Bootstrapper.BootstrapInfo getBadChannelCredsConfig() throws IOException {
+  static Bootstrapper.BootstrapInfo getBadChannelCredsConfig()
+      throws XdsInitializationException {
     String rawData =
         "{\n"
             + "  \"xds_servers\": [],\n"

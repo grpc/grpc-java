@@ -242,7 +242,7 @@ public class XdsServerBuilderTest {
     verify(mockErrorNotifier).onError(argCaptor.capture());
     Status captured = argCaptor.getValue();
     assertThat(captured.getCode()).isEqualTo(Status.Code.UNKNOWN);
-    assertThat(captured.getCause()).isInstanceOf(IOException.class);
+    assertThat(captured.getCause()).isInstanceOf(XdsInitializationException.class);
     assertThat(captured.getCause())
             .hasMessageThat()
             .contains("Environment variable GRPC_XDS_BOOTSTRAP not defined");

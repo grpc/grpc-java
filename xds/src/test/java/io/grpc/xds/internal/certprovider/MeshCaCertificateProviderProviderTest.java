@@ -31,6 +31,7 @@ import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.TimeProvider;
 import io.grpc.xds.Bootstrapper;
+import io.grpc.xds.XdsInitializationException;
 import io.grpc.xds.internal.sts.StsCredentials;
 import java.io.IOException;
 import java.util.Map;
@@ -106,7 +107,7 @@ public class MeshCaCertificateProviderProviderTest {
   }
 
   @Test
-  public void createProvider_minimalConfig() throws IOException {
+  public void createProvider_minimalConfig() throws XdsInitializationException {
     CertificateProvider.DistributorWatcher distWatcher =
         new CertificateProvider.DistributorWatcher();
     Map<String, ?> map = buildMinimalConfig();
@@ -141,7 +142,8 @@ public class MeshCaCertificateProviderProviderTest {
   }
 
   @Test
-  public void createProvider_minimalConfig_v1beta1AndZone() throws IOException {
+  public void createProvider_minimalConfig_v1beta1AndZone()
+      throws XdsInitializationException {
     CertificateProvider.DistributorWatcher distWatcher =
         new CertificateProvider.DistributorWatcher();
     Map<String, ?> map = buildMinimalConfig_v1beta1AndZone();
@@ -176,7 +178,8 @@ public class MeshCaCertificateProviderProviderTest {
   }
 
   @Test
-  public void createProvider_missingGkeUrl_expectException() throws IOException {
+  public void createProvider_missingGkeUrl_expectException()
+      throws XdsInitializationException {
     CertificateProvider.DistributorWatcher distWatcher =
             new CertificateProvider.DistributorWatcher();
     Map<String, ?> map = buildMissingGkeClusterUrlConfig();
@@ -189,7 +192,8 @@ public class MeshCaCertificateProviderProviderTest {
   }
 
   @Test
-  public void createProvider_missingGkeSaJwtLocation_expectException() throws IOException {
+  public void createProvider_missingGkeSaJwtLocation_expectException()
+      throws XdsInitializationException {
     CertificateProvider.DistributorWatcher distWatcher =
             new CertificateProvider.DistributorWatcher();
     Map<String, ?> map = buildMissingSaJwtLocationConfig();
@@ -202,7 +206,8 @@ public class MeshCaCertificateProviderProviderTest {
   }
 
   @Test
-  public void createProvider_missingProject_expectException() throws IOException {
+  public void createProvider_missingProject_expectException()
+      throws XdsInitializationException {
     CertificateProvider.DistributorWatcher distWatcher =
             new CertificateProvider.DistributorWatcher();
     Map<String, ?> map = buildBadClusterUrlConfig();
@@ -215,7 +220,8 @@ public class MeshCaCertificateProviderProviderTest {
   }
 
   @Test
-  public void createProvider_badChannelCreds_expectException() throws IOException {
+  public void createProvider_badChannelCreds_expectException()
+      throws XdsInitializationException {
     CertificateProvider.DistributorWatcher distWatcher =
             new CertificateProvider.DistributorWatcher();
     Map<String, ?> map = buildBadChannelCredsConfig();
@@ -228,7 +234,7 @@ public class MeshCaCertificateProviderProviderTest {
   }
 
   @Test
-  public void createProvider_nonDefaultFullConfig() throws IOException {
+  public void createProvider_nonDefaultFullConfig() throws XdsInitializationException {
     CertificateProvider.DistributorWatcher distWatcher =
             new CertificateProvider.DistributorWatcher();
     Map<String, ?> map = buildFullConfig();
@@ -261,33 +267,37 @@ public class MeshCaCertificateProviderProviderTest {
                     eq(TimeUnit.SECONDS.toMillis(RPC_TIMEOUT_SECONDS)));
   }
 
-  private static Map<String, ?> buildFullConfig() throws IOException {
+  private static Map<String, ?> buildFullConfig() throws XdsInitializationException {
     return getCertProviderConfig(CommonCertProviderTestUtils.getNonDefaultTestBootstrapInfo());
   }
 
-  private static Map<String, ?> buildMinimalConfig() throws IOException {
+  private static Map<String, ?> buildMinimalConfig() throws XdsInitializationException {
     return getCertProviderConfig(CommonCertProviderTestUtils.getMinimalBootstrapInfo());
   }
 
-  private static Map<String, ?> buildMinimalConfig_v1beta1AndZone() throws IOException {
+  private static Map<String, ?> buildMinimalConfig_v1beta1AndZone()
+      throws XdsInitializationException {
     return getCertProviderConfig(
         CommonCertProviderTestUtils.getMinimalBootstrapInfo_v1beta1AndZone());
   }
 
-  private static Map<String, ?> buildBadClusterUrlConfig() throws IOException {
+  private static Map<String, ?> buildBadClusterUrlConfig() throws XdsInitializationException {
     return getCertProviderConfig(
         CommonCertProviderTestUtils.getMinimalAndBadClusterUrlBootstrapInfo());
   }
 
-  private static Map<String, ?> buildMissingSaJwtLocationConfig() throws IOException {
+  private static Map<String, ?> buildMissingSaJwtLocationConfig()
+      throws XdsInitializationException {
     return getCertProviderConfig(CommonCertProviderTestUtils.getMissingSaJwtLocation());
   }
 
-  private static Map<String, ?> buildMissingGkeClusterUrlConfig() throws IOException {
+  private static Map<String, ?> buildMissingGkeClusterUrlConfig()
+      throws XdsInitializationException {
     return getCertProviderConfig(CommonCertProviderTestUtils.getMissingGkeClusterUrl());
   }
 
-  private static Map<String, ?> buildBadChannelCredsConfig() throws IOException {
+  private static Map<String, ?> buildBadChannelCredsConfig()
+      throws XdsInitializationException {
     return getCertProviderConfig(CommonCertProviderTestUtils.getBadChannelCredsConfig());
   }
 

@@ -76,18 +76,6 @@ public final class XdsClientWrapperForServerSds {
   @VisibleForTesting final Set<ServerWatcher> serverWatchers = new HashSet<>();
 
   /**
-   * Thrown when no suitable management server was found in the bootstrap file.
-   */
-  public static final class ManagementServerNotFoundException extends IOException {
-
-    private static final long serialVersionUID = 1;
-
-    public ManagementServerNotFoundException(String msg) {
-      super(msg);
-    }
-  }
-
-  /**
    * Creates a {@link XdsClientWrapperForServerSds}.
    *
    * @param port server's port for which listener config is needed.
@@ -137,11 +125,11 @@ public final class XdsClientWrapperForServerSds {
       bootstrapInfo = Bootstrapper.getInstance().readBootstrap();
       serverList = bootstrapInfo.getServers();
       if (serverList.isEmpty()) {
-        throw new ManagementServerNotFoundException("No management server provided by bootstrap");
+        throw new XdsInitializationException("No management server provided by bootstrap");
       }
-    } catch (IOException e) {
+    } catch (XdsInitializationException e) {
       reportError(Status.fromThrowable(e));
-      throw e;
+      throw new IOException(e);
     }
     Node node = bootstrapInfo.getNode();
     timeService = SharedResourceHolder.get(timeServiceResource);
