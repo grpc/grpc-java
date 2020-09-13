@@ -106,7 +106,7 @@ public abstract class Bootstrapper {
       String serverUri = JsonUtil.getString(serverConfig, "server_uri");
       if (serverUri == null) {
         throw new XdsInitializationException(
-            "Invalid bootstrap: 'xds_servers' contains unknown server.");
+            "Invalid bootstrap: missing 'xds_servers'");
       }
       logger.log(XdsLogLevel.INFO, "xDS server URI: {0}", serverUri);
       List<ChannelCreds> channelCredsOptions = new ArrayList<>();

@@ -306,7 +306,7 @@ public class BootstrapperTest {
         + "}";
 
     thrown.expect(XdsInitializationException.class);
-    thrown.expectMessage("Invalid bootstrap: 'xds_servers' contains unknown server.");
+    thrown.expectMessage("Invalid bootstrap: missing 'xds_servers'");
     Bootstrapper.parseConfig(rawData);
   }
 
