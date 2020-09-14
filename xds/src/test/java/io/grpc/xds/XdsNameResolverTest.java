@@ -126,8 +126,8 @@ public class XdsNameResolverTest {
   public void resolve_failToBootstrap() {
     Bootstrapper bootstrapper = new Bootstrapper() {
       @Override
-      public BootstrapInfo readBootstrap() throws IOException {
-        throw new IOException("Fail to read bootstrap file");
+      public BootstrapInfo readBootstrap() throws XdsInitializationException {
+        throw new XdsInitializationException("Fail to read bootstrap file");
       }
     };
     resolver = new XdsNameResolver(AUTHORITY, serviceConfigParser, syncContext, bootstrapper,

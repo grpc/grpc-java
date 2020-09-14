@@ -53,17 +53,22 @@ public abstract class Bootstrapper {
 
   private static final Bootstrapper DEFAULT_INSTANCE = new Bootstrapper() {
     @Override
-    public BootstrapInfo readBootstrap() throws IOException {
+    public BootstrapInfo readBootstrap() throws XdsInitializationException {
       String filePath = System.getenv(BOOTSTRAP_PATH_SYS_ENV_VAR);
       if (filePath == null) {
-        throw
-            new IOException("Environment variable " + BOOTSTRAP_PATH_SYS_ENV_VAR + " not defined.");
+        throw new XdsInitializationException(
+            "Environment variable " + BOOTSTRAP_PATH_SYS_ENV_VAR + " not defined.");
       }
       XdsLogger
           .withPrefix(LOG_PREFIX)
           .log(XdsLogLevel.INFO, BOOTSTRAP_PATH_SYS_ENV_VAR + "={0}", filePath);
-      return parseConfig(
-          new String(Files.readAllBytes(Paths.get(filePath)), StandardCharsets.UTF_8));
+      String fileContent;
+      try {
+        fileContent = new String(Files.readAllBytes(Paths.get(filePath)), StandardCharsets.UTF_8);
+      } catch (IOException e) {
+        throw new XdsInitializationException("Fail to read bootstrap file", e);
+      }
+      return parseConfig(fileContent);
     }
   };
 
@@ -74,42 +79,47 @@ public abstract class Bootstrapper {
   /**
    * Returns configurations from bootstrap.
    */
-  public abstract BootstrapInfo readBootstrap() throws IOException;
+  public abstract BootstrapInfo readBootstrap() throws XdsInitializationException;
 
   /** Parses a raw string into {@link BootstrapInfo}. */
   @VisibleForTesting
-  @SuppressWarnings("deprecation")
-  public static BootstrapInfo parseConfig(String rawData) throws IOException {
+  @SuppressWarnings("unchecked")
+  public static BootstrapInfo parseConfig(String rawData) throws XdsInitializationException {
     XdsLogger logger = XdsLogger.withPrefix(LOG_PREFIX);
     logger.log(XdsLogLevel.INFO, "Reading bootstrap information");
-    @SuppressWarnings("unchecked")
-    Map<String, ?> rawBootstrap = (Map<String, ?>) JsonParser.parse(rawData);
+    Map<String, ?> rawBootstrap;
+    try {
+      rawBootstrap = (Map<String, ?>) JsonParser.parse(rawData);
+    } catch (IOException e) {
+      throw new XdsInitializationException("Failed to parse JSON", e);
+    }
     logger.log(XdsLogLevel.DEBUG, "Bootstrap configuration:\n{0}", rawBootstrap);
 
     List<ServerInfo> servers = new ArrayList<>();
     List<?> rawServerConfigs = JsonUtil.getList(rawBootstrap, "xds_servers");
     if (rawServerConfigs == null) {
-      throw new IOException("Invalid bootstrap: 'xds_servers' does not exist.");
+      throw new XdsInitializationException("Invalid bootstrap: 'xds_servers' does not exist.");
     }
     logger.log(XdsLogLevel.INFO, "Configured with {0} xDS servers", rawServerConfigs.size());
     List<Map<String, ?>> serverConfigList = JsonUtil.checkObjectList(rawServerConfigs);
     for (Map<String, ?> serverConfig : serverConfigList) {
       String serverUri = JsonUtil.getString(serverConfig, "server_uri");
       if (serverUri == null) {
-        throw new IOException("Invalid bootstrap: 'xds_servers' contains unknown server.");
+        throw new XdsInitializationException(
+            "Invalid bootstrap: missing 'xds_servers'");
       }
       logger.log(XdsLogLevel.INFO, "xDS server URI: {0}", serverUri);
       List<ChannelCreds> channelCredsOptions = new ArrayList<>();
       List<?> rawChannelCredsList = JsonUtil.getList(serverConfig, "channel_creds");
       if (rawChannelCredsList == null || rawChannelCredsList.isEmpty()) {
-        throw new IOException(
+        throw new XdsInitializationException(
             "Invalid bootstrap: server " + serverUri + " 'channel_creds' required");
       }
       List<Map<String, ?>> channelCredsList = JsonUtil.checkObjectList(rawChannelCredsList);
       for (Map<String, ?> channelCreds : channelCredsList) {
         String type = JsonUtil.getString(channelCreds, "type");
         if (type == null) {
-          throw new IOException(
+          throw new XdsInitializationException(
               "Invalid bootstrap: server " + serverUri + " with 'channel_creds' type unspecified");
         }
         logger.log(XdsLogLevel.INFO, "Channel credentials option: {0}", type);
@@ -182,9 +192,10 @@ public abstract class Bootstrapper {
     return new BootstrapInfo(servers, nodeBuilder.build(), certProviders);
   }
 
-  static <T> T checkForNull(T value, String fieldName) throws IOException {
+  static <T> T checkForNull(T value, String fieldName) throws XdsInitializationException {
     if (value == null) {
-      throw new IOException("Invalid bootstrap: '" + fieldName + "' does not exist.");
+      throw new XdsInitializationException(
+          "Invalid bootstrap: '" + fieldName + "' does not exist.");
     }
     return value;
   }

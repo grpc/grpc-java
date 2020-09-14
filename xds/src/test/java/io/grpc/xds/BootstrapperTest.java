@@ -28,7 +28,6 @@ import io.grpc.xds.Bootstrapper.ChannelCreds;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.Node;
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import org.junit.Rule;
@@ -44,7 +43,7 @@ public class BootstrapperTest {
   @Rule public ExpectedException thrown = ExpectedException.none();
 
   @Test
-  public void parseBootstrap_validData_singleXdsServer() throws IOException {
+  public void parseBootstrap_validData_singleXdsServer() throws XdsInitializationException {
     String rawData = "{\n"
         + "  \"node\": {\n"
         + "    \"id\": \"ENVOY_NODE_ID\",\n"
@@ -95,7 +94,7 @@ public class BootstrapperTest {
   }
 
   @Test
-  public void parseBootstrap_validData_multipleXdsServers() throws IOException {
+  public void parseBootstrap_validData_multipleXdsServers() throws XdsInitializationException {
     String rawData = "{\n"
         + "  \"node\": {\n"
         + "    \"id\": \"ENVOY_NODE_ID\",\n"
@@ -163,7 +162,7 @@ public class BootstrapperTest {
   }
 
   @Test
-  public void parseBootstrap_IgnoreIrrelevantFields() throws IOException {
+  public void parseBootstrap_IgnoreIrrelevantFields() throws XdsInitializationException {
     String rawData = "{\n"
         + "  \"node\": {\n"
         + "    \"id\": \"ENVOY_NODE_ID\",\n"
@@ -216,15 +215,15 @@ public class BootstrapperTest {
   }
 
   @Test
-  public void parseBootstrap_emptyData() throws IOException {
+  public void parseBootstrap_emptyData() throws XdsInitializationException {
     String rawData = "";
 
-    thrown.expect(IOException.class);
+    thrown.expect(XdsInitializationException.class);
     Bootstrapper.parseConfig(rawData);
   }
 
   @Test
-  public void parseBootstrap_minimumRequiredFields() throws IOException {
+  public void parseBootstrap_minimumRequiredFields() throws XdsInitializationException {
     String rawData = "{\n"
         + "  \"xds_servers\": []\n"
         + "}";
@@ -235,7 +234,7 @@ public class BootstrapperTest {
   }
 
   @Test
-  public void parseBootstrap_minimalUsableData() throws IOException {
+  public void parseBootstrap_minimalUsableData() throws XdsInitializationException {
     String rawData = "{\n"
         + "  \"xds_servers\": [\n"
         + "    {\n"
@@ -259,7 +258,7 @@ public class BootstrapperTest {
   }
 
   @Test
-  public void parseBootstrap_noXdsServers() throws IOException {
+  public void parseBootstrap_noXdsServers() throws XdsInitializationException {
     String rawData = "{\n"
         + "  \"node\": {\n"
         + "    \"id\": \"ENVOY_NODE_ID\",\n"
@@ -276,13 +275,13 @@ public class BootstrapperTest {
         + "  }\n"
         + "}";
 
-    thrown.expect(IOException.class);
+    thrown.expect(XdsInitializationException.class);
     thrown.expectMessage("Invalid bootstrap: 'xds_servers' does not exist.");
     Bootstrapper.parseConfig(rawData);
   }
 
   @Test
-  public void parseBootstrap_serverWithoutServerUri() throws IOException {
+  public void parseBootstrap_serverWithoutServerUri() throws XdsInitializationException {
     String rawData = "{"
         + "  \"node\": {\n"
         + "    \"id\": \"ENVOY_NODE_ID\",\n"
@@ -306,13 +305,13 @@ public class BootstrapperTest {
         + "  ]\n "
         + "}";
 
-    thrown.expect(IOException.class);
-    thrown.expectMessage("Invalid bootstrap: 'xds_servers' contains unknown server.");
+    thrown.expect(XdsInitializationException.class);
+    thrown.expectMessage("Invalid bootstrap: missing 'xds_servers'");
     Bootstrapper.parseConfig(rawData);
   }
 
   @Test
-  public void parseBootstrap_validData_certProviderInstances() throws IOException {
+  public void parseBootstrap_validData_certProviderInstances() throws XdsInitializationException {
     String rawData =
         "{\n"
             + "  \"xds_servers\": [],\n"
@@ -366,7 +365,7 @@ public class BootstrapperTest {
   }
 
   @Test
-  public void parseBootstrap_badPluginName() throws IOException {
+  public void parseBootstrap_badPluginName() throws XdsInitializationException {
     String rawData =
         "{\n"
             + "  \"xds_servers\": [],\n"
@@ -413,7 +412,7 @@ public class BootstrapperTest {
   }
 
   @Test
-  public void parseBootstrap_badConfig() throws IOException {
+  public void parseBootstrap_badConfig() throws XdsInitializationException {
     String rawData =
         "{\n"
             + "  \"xds_servers\": [],\n"
@@ -438,7 +437,7 @@ public class BootstrapperTest {
   }
 
   @Test
-  public void parseBootstrap_missingConfig() throws IOException {
+  public void parseBootstrap_missingConfig() {
     String rawData =
         "{\n"
             + "  \"xds_servers\": [],\n"
@@ -456,7 +455,7 @@ public class BootstrapperTest {
     try {
       Bootstrapper.parseConfig(rawData);
       fail("exception expected");
-    } catch (IOException expected) {
+    } catch (XdsInitializationException expected) {
       assertThat(expected)
           .hasMessageThat()
           .isEqualTo("Invalid bootstrap: 'config' does not exist.");
@@ -464,7 +463,7 @@ public class BootstrapperTest {
   }
 
   @Test
-  public void parseBootstrap_missingPluginName() throws IOException {
+  public void parseBootstrap_missingPluginName() {
     String rawData =
         "{\n"
             + "  \"xds_servers\": [],\n"
@@ -504,7 +503,7 @@ public class BootstrapperTest {
     try {
       Bootstrapper.parseConfig(rawData);
       fail("exception expected");
-    } catch (IOException expected) {
+    } catch (XdsInitializationException expected) {
       assertThat(expected)
           .hasMessageThat()
           .isEqualTo("Invalid bootstrap: 'plugin_name' does not exist.");
