@@ -135,7 +135,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
    * @param rootContext context that callbacks for new RPCs should be derived from
    */
   ServerImpl(
-      AbstractServerImplBuilder<?> builder,
+      ServerImplBuilder builder,
       List<? extends InternalServer> transportServers,
       Context rootContext) {
     this.executorPool = Preconditions.checkNotNull(builder.executorPool, "executorPool");

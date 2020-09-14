@@ -16,11 +16,13 @@
 
 package io.grpc.internal;
 
+import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.verify;
 
+import io.grpc.Metadata;
 import io.grpc.ServerStreamTracer;
 import io.grpc.internal.ServerImplBuilder.ClientTransportServersBuilder;
 import java.util.List;
@@ -37,6 +39,14 @@ import org.mockito.junit.MockitoRule;
 /** Unit tests for {@link ServerImplBuilder}. */
 @RunWith(JUnit4.class)
 public class ServerImplBuilderTest {
+  private static final ServerStreamTracer.Factory DUMMY_USER_TRACER =
+      new ServerStreamTracer.Factory() {
+        @Override
+        public ServerStreamTracer newServerStreamTracer(String fullMethodName, Metadata headers) {
+          throw new UnsupportedOperationException();
+        }
+      };
+
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
   @Mock private ClientTransportServersBuilder mockClientTransportServersBuilder;
@@ -46,11 +56,19 @@ public class ServerImplBuilderTest {
 
   @Before
   public void setUp() throws Exception {
-    builder = new ServerImplBuilder(mockClientTransportServersBuilder);
+    builder = new ServerImplBuilder(
+        new ClientTransportServersBuilder() {
+          @Override
+          public List<? extends InternalServer> buildClientTransportServers(
+              List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
+            throw new UnsupportedOperationException();
+          }
+        });
   }
 
   @Test
   public void buildTransportServers() {
+    builder = new ServerImplBuilder(mockClientTransportServersBuilder);
     doReturn(mockInternalServers).when(mockClientTransportServersBuilder)
         .buildClientTransportServers(ArgumentMatchers.<ServerStreamTracer.Factory>anyList());
 
@@ -60,5 +78,54 @@ public class ServerImplBuilderTest {
     assertNotNull(servers);
     verify(mockClientTransportServersBuilder)
         .buildClientTransportServers(mockServerStreamTracerFactories);
+  }
+
+  @Test
+  public void getTracerFactories_default() {
+    builder.addStreamTracerFactory(DUMMY_USER_TRACER);
+
+    List<? extends ServerStreamTracer.Factory> factories = builder.getTracerFactories();
+
+    assertEquals(3, factories.size());
+    assertThat(factories.get(0).getClass().getName())
+        .isEqualTo("io.grpc.census.CensusStatsModule$ServerTracerFactory");
+    assertThat(factories.get(1).getClass().getName())
+        .isEqualTo("io.grpc.census.CensusTracingModule$ServerTracerFactory");
+    assertThat(factories.get(2)).isSameInstanceAs(DUMMY_USER_TRACER);
+  }
+
+  @Test
+  public void getTracerFactories_disableStats() {
+    builder.addStreamTracerFactory(DUMMY_USER_TRACER);
+    builder.setStatsEnabled(false);
+
+    List<? extends ServerStreamTracer.Factory> factories = builder.getTracerFactories();
+
+    assertEquals(2, factories.size());
+    assertThat(factories.get(0).getClass().getName())
+        .isEqualTo("io.grpc.census.CensusTracingModule$ServerTracerFactory");
+    assertThat(factories.get(1)).isSameInstanceAs(DUMMY_USER_TRACER);
+  }
+
+  @Test
+  public void getTracerFactories_disableTracing() {
+    builder.addStreamTracerFactory(DUMMY_USER_TRACER);
+    builder.setTracingEnabled(false);
+
+    List<? extends ServerStreamTracer.Factory> factories = builder.getTracerFactories();
+
+    assertEquals(2, factories.size());
+    assertThat(factories.get(0).getClass().getName())
+        .isEqualTo("io.grpc.census.CensusStatsModule$ServerTracerFactory");
+    assertThat(factories.get(1)).isSameInstanceAs(DUMMY_USER_TRACER);
+  }
+
+  @Test
+  public void getTracerFactories_disableBoth() {
+    builder.addStreamTracerFactory(DUMMY_USER_TRACER);
+    builder.setTracingEnabled(false);
+    builder.setStatsEnabled(false);
+    List<? extends ServerStreamTracer.Factory> factories = builder.getTracerFactories();
+    assertThat(factories).containsExactly(DUMMY_USER_TRACER);
   }
 }
