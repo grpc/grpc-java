@@ -283,6 +283,7 @@ public class WriteBufferingAndExceptionHandlerTest {
     }
   }
 
+  @SuppressWarnings("TruthIncompatibleType")
   @Test
   public void writesBuffered() throws Exception {
     final AtomicBoolean handlerAdded = new AtomicBoolean();
@@ -345,7 +346,10 @@ public class WriteBufferingAndExceptionHandlerTest {
     assertThat(chan.pipeline().context(handler)).isNull();
     assertThat(write.get().getClass()).isSameInstanceAs(Object.class);
     assertTrue(flush.get());
-    assertThat(chan.pipeline()).doesNotContain(handler);
+    assertThat(chan.pipeline())
+        .doesNotContain(
+            /* expected: Entry<String, ChannelHandler>, actual: WriteBufferingAndExceptionHandler */
+            handler);
   }
 
   @Test

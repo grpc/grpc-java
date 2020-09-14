@@ -307,6 +307,7 @@ public class ClientInterceptorsTest {
     assertThat(examinedHeaders).contains(inboundHeaders);
   }
 
+  @SuppressWarnings("TruthIncompatibleType")
   @Test
   public void normalCall() {
     ClientInterceptor interceptor = new ClientInterceptor() {
@@ -329,7 +330,8 @@ public class ClientInterceptorsTest {
     assertSame(listener, call.listener);
     assertSame(headers, call.headers);
     interceptedCall.sendMessage(null /*request*/);
-    assertThat(call.messages).containsExactly((Void) null /*request*/);
+    assertThat(call.messages)
+        .containsExactly(/* expected: String, actual: Void */ (Void) null /*request*/);
     interceptedCall.halfClose();
     assertTrue(call.halfClosed);
     interceptedCall.request(1);
