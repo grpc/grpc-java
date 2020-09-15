@@ -33,6 +33,7 @@ import io.grpc.xds.EnvoyServerProtoData.CidrRange;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
 import io.grpc.xds.EnvoyServerProtoData.FilterChainMatch;
+import io.grpc.xds.XdsClient.XdsChannel;
 import io.netty.channel.Channel;
 import io.netty.channel.epoll.Epoll;
 import io.netty.channel.epoll.EpollEventLoopGroup;
@@ -120,13 +121,14 @@ public final class XdsClientWrapperForServerSds {
   public void createXdsClientAndStart() throws IOException {
     checkState(xdsClient == null, "start() called more than once");
     Bootstrapper.BootstrapInfo bootstrapInfo;
-    List<Bootstrapper.ServerInfo> serverList;
+    XdsChannel channel;
     try {
       bootstrapInfo = Bootstrapper.getInstance().readBootstrap();
-      serverList = bootstrapInfo.getServers();
+      List<Bootstrapper.ServerInfo> serverList = bootstrapInfo.getServers();
       if (serverList.isEmpty()) {
         throw new XdsInitializationException("No management server provided by bootstrap");
       }
+      channel = XdsChannelFactory.getInstance().createChannel(serverList);
     } catch (XdsInitializationException e) {
       reportError(Status.fromThrowable(e));
       throw new IOException(e);
@@ -136,8 +138,7 @@ public final class XdsClientWrapperForServerSds {
     XdsClientImpl xdsClientImpl =
         new XdsClientImpl(
             "",
-            serverList,
-            XdsClient.XdsChannelFactory.getInstance(),
+            channel,
             node,
             createSynchronizationContext(),
             timeService,

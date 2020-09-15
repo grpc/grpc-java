@@ -32,7 +32,6 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
-import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EdsLoadBalancerProvider.EdsConfig;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
@@ -43,7 +42,7 @@ import io.grpc.xds.LocalityStore.LocalityStoreFactory;
 import io.grpc.xds.XdsClient.EndpointUpdate;
 import io.grpc.xds.XdsClient.EndpointWatcher;
 import io.grpc.xds.XdsClient.RefCountedXdsClientObjectPool;
-import io.grpc.xds.XdsClient.XdsChannelFactory;
+import io.grpc.xds.XdsClient.XdsChannel;
 import io.grpc.xds.XdsClient.XdsClientFactory;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
@@ -129,8 +128,10 @@ final class EdsLoadBalancer extends LoadBalancer {
       xdsClientPool = attributes.get(XdsAttributes.XDS_CLIENT_POOL);
       if (xdsClientPool == null) {
         final BootstrapInfo bootstrapInfo;
+        final XdsChannel channel;
         try {
           bootstrapInfo = bootstrapper.readBootstrap();
+          channel = channelFactory.createChannel(bootstrapInfo.getServers());
         } catch (Exception e) {
           helper.updateBalancingState(
               TRANSIENT_FAILURE,
@@ -139,24 +140,14 @@ final class EdsLoadBalancer extends LoadBalancer {
           return;
         }
 
-        final List<ServerInfo> serverList = bootstrapInfo.getServers();
         final Node node = bootstrapInfo.getNode();
-        if (serverList.isEmpty()) {
-          helper.updateBalancingState(
-              TRANSIENT_FAILURE,
-              new ErrorPicker(
-                  Status.UNAVAILABLE
-                      .withDescription("No management server provided by bootstrap")));
-          return;
-        }
         XdsClientFactory xdsClientFactory = new XdsClientFactory() {
           @Override
           XdsClient createXdsClient() {
             return
                 new XdsClientImpl(
                     helper.getAuthority(),
-                    serverList,
-                    channelFactory,
+                    channel,
                     node,
                     helper.getSynchronizationContext(),
                     helper.getScheduledExecutorService(),

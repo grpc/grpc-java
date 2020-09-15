@@ -39,8 +39,9 @@ import io.grpc.xds.EnvoyProtoData.RouteAction;
 import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
 import io.grpc.xds.XdsClient.ConfigUpdate;
 import io.grpc.xds.XdsClient.ConfigWatcher;
-import io.grpc.xds.XdsClient.XdsClientPoolFactory;
+import io.grpc.xds.XdsClient.XdsChannel;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
+import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -70,6 +71,7 @@ final class XdsNameResolver extends NameResolver {
   private final ServiceConfigParser serviceConfigParser;
   private final SynchronizationContext syncContext;
   private final Bootstrapper bootstrapper;
+  private final XdsChannelFactory channelFactory;
   private final XdsClientPoolFactory xdsClientPoolFactory;
   private final ThreadSafeRandom random;
   private final ConcurrentMap<String, AtomicInteger> clusterRefs = new ConcurrentHashMap<>();
@@ -85,20 +87,23 @@ final class XdsNameResolver extends NameResolver {
       SynchronizationContext syncContext,
       XdsClientPoolFactory xdsClientPoolFactory) {
     this(name, serviceConfigParser, syncContext, Bootstrapper.getInstance(),
-        xdsClientPoolFactory, ThreadSafeRandomImpl.instance);
+        XdsChannelFactory.getInstance(), xdsClientPoolFactory, ThreadSafeRandomImpl.instance);
   }
 
+  @VisibleForTesting
   XdsNameResolver(
       String name,
       ServiceConfigParser serviceConfigParser,
       SynchronizationContext syncContext,
       Bootstrapper bootstrapper,
+      XdsChannelFactory channelFactory,
       XdsClientPoolFactory xdsClientPoolFactory,
       ThreadSafeRandom random) {
     authority = GrpcUtil.checkAuthority(checkNotNull(name, "name"));
     this.serviceConfigParser = checkNotNull(serviceConfigParser, "serviceConfigParser");
     this.syncContext = checkNotNull(syncContext, "syncContext");
     this.bootstrapper = checkNotNull(bootstrapper, "bootstrapper");
+    this.channelFactory = checkNotNull(channelFactory, "channelFactory");
     this.xdsClientPoolFactory = checkNotNull(xdsClientPoolFactory, "xdsClientPoolFactory");
     this.random = checkNotNull(random, "random");
     logger = XdsLogger.withLogId(InternalLogId.allocate("xds-resolver", name));
@@ -114,14 +119,16 @@ final class XdsNameResolver extends NameResolver {
   public void start(Listener2 listener) {
     this.listener = checkNotNull(listener, "listener");
     BootstrapInfo bootstrapInfo;
+    XdsChannel channel;
     try {
       bootstrapInfo = bootstrapper.readBootstrap();
+      channel = channelFactory.createChannel(bootstrapInfo.getServers());
     } catch (Exception e) {
       listener.onError(
-          Status.UNAVAILABLE.withDescription("Failed to load xDS bootstrap").withCause(e));
+          Status.UNAVAILABLE.withDescription("Failed to initialize xDS").withCause(e));
       return;
     }
-    xdsClientPool = xdsClientPoolFactory.newXdsClientObjectPool(bootstrapInfo);
+    xdsClientPool = xdsClientPoolFactory.newXdsClientObjectPool(bootstrapInfo, channel);
     xdsClient = xdsClientPool.getObject();
     xdsClient.watchConfigData(authority, new ConfigWatcherImpl());
   }
