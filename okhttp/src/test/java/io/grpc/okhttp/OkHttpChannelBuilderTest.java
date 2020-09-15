@@ -21,7 +21,6 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
-import static org.junit.Assert.assertTrue;
 
 import com.squareup.okhttp.ConnectionSpec;
 import io.grpc.ChannelLogger;
@@ -30,11 +29,11 @@ import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SharedResourceHolder;
+import io.grpc.testing.GrpcCleanupRule;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 import javax.net.SocketFactory;
 import org.junit.Rule;
 import org.junit.Test;
@@ -49,44 +48,34 @@ import org.junit.runners.JUnit4;
 public class OkHttpChannelBuilderTest {
 
   @Rule public final ExpectedException thrown = ExpectedException.none();
+  @Rule public final GrpcCleanupRule grpcCleanupRule = new GrpcCleanupRule();
 
   @Test
-  public void authorityIsReadable() throws Exception {
+  public void authorityIsReadable() {
     OkHttpChannelBuilder builder = OkHttpChannelBuilder.forAddress("original", 1234);
     ManagedChannel channel = builder.build();
-    try {
-      assertEquals("original:1234", channel.authority());
-    } finally {
-      shutdown(channel);
-    }
+    grpcCleanupRule.register(channel);
+    assertEquals("original:1234", channel.authority());
   }
 
   @Test
-  public void overrideAuthorityIsReadableForAddress() throws Exception {
+  public void overrideAuthorityIsReadableForAddress() {
     OkHttpChannelBuilder builder = OkHttpChannelBuilder.forAddress("original", 1234);
     overrideAuthorityIsReadableHelper(builder, "override:5678");
   }
 
   @Test
-  public void overrideAuthorityIsReadableForTarget() throws Exception {
+  public void overrideAuthorityIsReadableForTarget() {
     OkHttpChannelBuilder builder = OkHttpChannelBuilder.forTarget("original:1234");
     overrideAuthorityIsReadableHelper(builder, "override:5678");
   }
 
-  private void shutdown(ManagedChannel mc) throws Exception {
-    mc.shutdownNow();
-    assertTrue(mc.awaitTermination(1, TimeUnit.SECONDS));
-  }
-
   private void overrideAuthorityIsReadableHelper(OkHttpChannelBuilder builder,
-      String overrideAuthority) throws Exception {
+      String overrideAuthority) {
     builder.overrideAuthority(overrideAuthority);
     ManagedChannel channel = builder.build();
-    try {
-      assertEquals(overrideAuthority, channel.authority());
-    } finally {
-      shutdown(channel);
-    }
+    grpcCleanupRule.register(channel);
+    assertEquals(overrideAuthority, channel.authority());
   }
 
   @Test
