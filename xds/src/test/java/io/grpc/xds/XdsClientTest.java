@@ -21,12 +21,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
-import com.google.common.collect.ImmutableList;
-import io.grpc.xds.Bootstrapper.ChannelCreds;
-import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.XdsClient.RefCountedXdsClientObjectPool;
-import io.grpc.xds.XdsClient.XdsChannel;
-import io.grpc.xds.XdsClient.XdsChannelFactory;
 import io.grpc.xds.XdsClient.XdsClientFactory;
 import org.junit.Rule;
 import org.junit.Test;
@@ -106,59 +101,5 @@ public class XdsClientTest {
 
     XdsClient xdsClient2 = xdsClientPool.getObject();
     assertThat(xdsClient2).isNotSameInstanceAs(xdsClient1);
-  }
-
-  @Test
-  public void channelFactorySupportsV3() {
-    boolean originalV3SupportEnvVar = XdsChannelFactory.experimentalV3SupportEnvVar;
-    try {
-      XdsChannelFactory xdsChannelFactory = XdsChannelFactory.getInstance();
-      XdsChannelFactory.experimentalV3SupportEnvVar = true;
-      XdsChannel xdsChannel =
-          xdsChannelFactory.createChannel(
-              ImmutableList.of(
-                  new ServerInfo(
-                      "xdsserver.com",
-                      ImmutableList.<ChannelCreds>of(),
-                      ImmutableList.<String>of()),
-                  new ServerInfo(
-                      "xdsserver2.com",
-                      ImmutableList.<ChannelCreds>of(),
-                      ImmutableList.of("xds_v3"))));
-      xdsChannel.getManagedChannel().shutdown();
-      assertThat(xdsChannel.isUseProtocolV3()).isFalse();
-
-      XdsChannelFactory.experimentalV3SupportEnvVar = false;
-      xdsChannel =
-          xdsChannelFactory.createChannel(
-              ImmutableList.of(
-                  new ServerInfo(
-                      "xdsserver.com",
-                      ImmutableList.<ChannelCreds>of(),
-                      ImmutableList.of("xds_v3")),
-                  new ServerInfo(
-                      "xdsserver2.com",
-                      ImmutableList.<ChannelCreds>of(),
-                      ImmutableList.of("baz"))));
-      xdsChannel.getManagedChannel().shutdown();
-      assertThat(xdsChannel.isUseProtocolV3()).isFalse();
-
-      XdsChannelFactory.experimentalV3SupportEnvVar = true;
-      xdsChannel =
-          xdsChannelFactory.createChannel(
-              ImmutableList.of(
-                  new ServerInfo(
-                      "xdsserver.com",
-                      ImmutableList.<ChannelCreds>of(),
-                      ImmutableList.of("xds_v3")),
-                  new ServerInfo(
-                      "xdsserver2.com",
-                      ImmutableList.<ChannelCreds>of(),
-                      ImmutableList.of("baz"))));
-      xdsChannel.getManagedChannel().shutdown();
-      assertThat(xdsChannel.isUseProtocolV3()).isTrue();
-    } finally {
-      XdsChannelFactory.experimentalV3SupportEnvVar = originalV3SupportEnvVar;
-    }
   }
 }
