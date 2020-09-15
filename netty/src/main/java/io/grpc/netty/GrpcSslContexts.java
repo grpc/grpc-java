@@ -187,8 +187,7 @@ public class GrpcSslContexts {
   @CanIgnoreReturnValue
   public static SslContextBuilder configure(SslContextBuilder builder, Provider jdkProvider) {
     ApplicationProtocolConfig apc;
-    if (SUN_PROVIDER_NAME.equals(jdkProvider.getName())
-        || IBM_PROVIDER_NAME.equals(jdkProvider.getName())) {
+    if (SUN_PROVIDER_NAME.equals(jdkProvider.getName())) {
       // Jetty ALPN/NPN only supports one of NPN or ALPN
       if (JettyTlsUtil.isJettyAlpnConfigured()) {
         apc = ALPN;
@@ -199,6 +198,13 @@ public class GrpcSslContexts {
       } else {
         throw new IllegalArgumentException(
             jdkProvider.getName() + " selected, but Java 9+ and Jetty NPN/ALPN unavailable");
+      }
+    } else if (IBM_PROVIDER_NAME.equals(jdkProvider.getName())) {
+      if (JettyTlsUtil.isJava9AlpnAvailable()) {
+        apc = ALPN;
+      } else {
+        throw new IllegalArgumentException(
+            jdkProvider.getName() + " selected, but Java 9+ ALPN unavailable");
       }
     } else if (ConscryptLoader.isConscrypt(jdkProvider)) {
       apc = ALPN;
@@ -239,11 +245,14 @@ public class GrpcSslContexts {
 
   private static Provider findJdkProvider() {
     for (Provider provider : Security.getProviders("SSLContext.TLS")) {
-      if (SUN_PROVIDER_NAME.equals(provider.getName())
-          || IBM_PROVIDER_NAME.equals(provider.getName())) {
+      if (SUN_PROVIDER_NAME.equals(provider.getName())) {
         if (JettyTlsUtil.isJettyAlpnConfigured()
             || JettyTlsUtil.isJettyNpnConfigured()
             || JettyTlsUtil.isJava9AlpnAvailable()) {
+          return provider;
+        }
+      } else if (IBM_PROVIDER_NAME.equals(provider.getName())) {
+        if (JettyTlsUtil.isJava9AlpnAvailable()) {
           return provider;
         }
       } else if (ConscryptLoader.isConscrypt(provider)) {
