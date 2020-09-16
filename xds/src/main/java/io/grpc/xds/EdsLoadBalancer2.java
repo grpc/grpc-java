@@ -59,7 +59,6 @@ import java.util.Objects;
 import javax.annotation.Nullable;
 
 final class EdsLoadBalancer2 extends LoadBalancer {
-  private final InternalLogId logId;
   private final XdsLogger logger;
   private final LoadBalancerRegistry lbRegistry;
   private final ThreadSafeRandom random;
@@ -80,7 +79,7 @@ final class EdsLoadBalancer2 extends LoadBalancer {
     this.lbRegistry = checkNotNull(lbRegistry, "lbRegistry");
     this.random = checkNotNull(random, "random");
     switchingLoadBalancer = new GracefulSwitchLoadBalancer(checkNotNull(helper, "helper"));
-    logId = InternalLogId.allocate("eds-lb", helper.getAuthority());
+    InternalLogId logId = InternalLogId.allocate("eds-lb", helper.getAuthority());
     logger = XdsLogger.withLogId(logId);
     logger.log(XdsLogLevel.INFO, "Created");
   }
