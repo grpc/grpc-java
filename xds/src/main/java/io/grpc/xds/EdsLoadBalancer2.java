@@ -103,9 +103,7 @@ final class EdsLoadBalancer2 extends LoadBalancer {
     if (cluster == null) {
       cluster = config.clusterName;
     }
-    switchingLoadBalancer.switchTo(new EdsLbState(
-        config.edsServiceName, config.lrsServerName, config.localityPickingPolicy,
-        config.endpointPickingPolicy));
+    switchingLoadBalancer.switchTo(new EdsLbState(config.edsServiceName, config.lrsServerName));
     switchingLoadBalancer.handleResolvedAddresses(resolvedAddresses);
   }
 
@@ -135,16 +133,10 @@ final class EdsLoadBalancer2 extends LoadBalancer {
     @Nullable
     private final String lrsServerName;
     private final String resourceName;
-    private PolicySelection localityPickingPolicy;
-    private PolicySelection endpointPickingPolicy;
 
-    private EdsLbState(
-        @Nullable String edsServiceName, @Nullable String lrsServerName,
-        PolicySelection localityPickingPolicy, PolicySelection endpointPickingPolicy) {
+    private EdsLbState(@Nullable String edsServiceName, @Nullable String lrsServerName) {
       this.edsServiceName = edsServiceName;
       this.lrsServerName = lrsServerName;
-      this.localityPickingPolicy = localityPickingPolicy;
-      this.endpointPickingPolicy = endpointPickingPolicy;
       resourceName = edsServiceName == null ? cluster : edsServiceName;
     }
 
@@ -175,6 +167,8 @@ final class EdsLoadBalancer2 extends LoadBalancer {
       private List<EquivalentAddressGroup> endpointAddresses = Collections.emptyList();
       private Map<Integer, Map<Locality, Integer>> prioritizedLocalityWeights
           = Collections.emptyMap();
+      private PolicySelection localityPickingPolicy;
+      private PolicySelection endpointPickingPolicy;
       @Nullable
       private LoadBalancer lb;
 
@@ -286,28 +280,30 @@ final class EdsLoadBalancer2 extends LoadBalancer {
           prioritizedLocalityWeights.get(priority).put(
               locality, localityLbInfo.getLocalityWeight());
         }
-        PriorityLbConfig config =
-            generatePriorityLbConfig(cluster, edsServiceName, lrsServerName, localityPickingPolicy,
-                endpointPickingPolicy, lbRegistry, prioritizedLocalityWeights);
         if (lb == null) {
           lb = lbRegistry.getProvider(PRIORITY_POLICY_NAME).newLoadBalancer(lbHelper);
         }
-        // TODO(chengyuanzhang): to be deleted after migrating to use XdsClient API.
-        Attributes attributes;
-        if (lrsServerName != null) {
-          attributes =
-              resolvedAddresses.getAttributes().toBuilder()
-                  .set(XdsAttributes.ATTR_CLUSTER_SERVICE_LOAD_STATS_STORE, loadStatsStore)
-                  .build();
-        } else {
-          attributes = resolvedAddresses.getAttributes();
+        if (localityPickingPolicy != null && endpointPickingPolicy != null) {
+          PriorityLbConfig config = generatePriorityLbConfig(cluster, edsServiceName,
+              lrsServerName, localityPickingPolicy, endpointPickingPolicy, lbRegistry,
+              prioritizedLocalityWeights);
+          // TODO(chengyuanzhang): to be deleted after migrating to use XdsClient API.
+          Attributes attributes;
+          if (lrsServerName != null) {
+            attributes =
+                resolvedAddresses.getAttributes().toBuilder()
+                    .set(XdsAttributes.ATTR_CLUSTER_SERVICE_LOAD_STATS_STORE, loadStatsStore)
+                    .build();
+          } else {
+            attributes = resolvedAddresses.getAttributes();
+          }
+          lb.handleResolvedAddresses(
+              resolvedAddresses.toBuilder()
+                  .setAddresses(endpointAddresses)
+                  .setAttributes(attributes)
+                  .setLoadBalancingPolicyConfig(config)
+                  .build());
         }
-        lb.handleResolvedAddresses(
-            resolvedAddresses.toBuilder()
-                .setAddresses(endpointAddresses)
-                .setAttributes(attributes)
-                .setLoadBalancingPolicyConfig(config)
-                .build());
       }
 
       @Override
