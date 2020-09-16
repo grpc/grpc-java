@@ -215,6 +215,43 @@ public class PriorityLoadBalancerTest {
   }
 
   @Test
+  public void handleNameResolutionError() {
+    Object fooConfig0 = new Object();
+    PolicySelection fooPolicy0 = new PolicySelection(fooLbProvider, null, fooConfig0);
+    Object fooConfig1 = new Object();
+    PolicySelection fooPolicy1 = new PolicySelection(fooLbProvider, null, fooConfig1);
+
+    PriorityLbConfig priorityLbConfig =
+        new PriorityLbConfig(ImmutableMap.of("p0", fooPolicy0), ImmutableList.of("p0"));
+    priorityLb.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+            .setLoadBalancingPolicyConfig(priorityLbConfig)
+            .build());
+    LoadBalancer fooLb0 = Iterables.getOnlyElement(fooBalancers);
+    Status status = Status.DATA_LOSS.withDescription("fake error");
+    priorityLb.handleNameResolutionError(status);
+    verify(fooLb0).handleNameResolutionError(status);
+
+    priorityLbConfig =
+        new PriorityLbConfig(ImmutableMap.of("p1", fooPolicy1), ImmutableList.of("p1"));
+    priorityLb.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+            .setLoadBalancingPolicyConfig(priorityLbConfig)
+            .build());
+    assertThat(fooBalancers).hasSize(2);
+    LoadBalancer fooLb1 = Iterables.getLast(fooBalancers);
+    status = Status.UNAVAILABLE.withDescription("fake error");
+    priorityLb.handleNameResolutionError(status);
+    // fooLb0 is deactivated but not yet deleted. However, because it is delisted by the latest
+    // address update, name resolution error will not be propagated to it.
+    verify(fooLb0, never()).shutdown();
+    verify(fooLb0, never()).handleNameResolutionError(status);
+    verify(fooLb1).handleNameResolutionError(status);
+  }
+
+  @Test
   public void typicalPriorityFailOverFlow() {
     PolicySelection policy0 = new PolicySelection(fooLbProvider, null, new Object());
     PolicySelection policy1 = new PolicySelection(fooLbProvider, null, new Object());

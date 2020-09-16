@@ -68,7 +68,6 @@ public class AuthzEngineTest {
   private AuthorizationEngine engine;  
   private RBAC rbacDeny;
   private RBAC rbacAllow;
-  private Expr expr;
   private Object result;
 
   @Before
@@ -130,7 +129,7 @@ public class AuthzEngineTest {
   public void testCelInterface() throws InterpreterException {
     engine = new AuthorizationEngine(rbacAllow);
     when(interpretable.eval(any(Activation.class))).thenReturn(true);
-    expr = Expr.newBuilder().build();
+    Expr expr = Expr.getDefaultInstance();
     result = engine.matches(expr, activation);
     assertThat(messageProvider).isNotNull();
     assertThat(dispatcher).isNotNull();

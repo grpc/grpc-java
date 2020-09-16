@@ -17,7 +17,6 @@
 package io.grpc.xds.internal.certprovider;
 
 import static com.google.common.truth.Truth.assertThat;
-import static io.grpc.xds.internal.certprovider.CertProviderClientSslContextProviderTest.QueuedExecutor;
 import static io.grpc.xds.internal.certprovider.CommonCertProviderTestUtils.getCertFromResourceName;
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CA_PEM_FILE;
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_PEM_FILE;
@@ -34,6 +33,7 @@ import io.envoyproxy.envoy.config.core.v3.DataSource;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.grpc.xds.Bootstrapper;
 import io.grpc.xds.EnvoyServerProtoData;
+import io.grpc.xds.internal.certprovider.CertProviderClientSslContextProviderTest.QueuedExecutor;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.TestCallback;
 import org.junit.Before;

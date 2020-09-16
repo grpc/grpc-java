@@ -75,8 +75,8 @@ public abstract class DynamicSslContextProvider extends SslContextProvider {
                 alpnList);
         sslContextBuilder.applicationProtocolConfig(apn);
       }
-      List<Callback> pendingCallbacksCopy = null;
-      SslContext sslContextCopy = null;
+      List<Callback> pendingCallbacksCopy;
+      SslContext sslContextCopy;
       synchronized (pendingCallbacks) {
         sslContext = sslContextBuilder.build();
         sslContextCopy = sslContext;

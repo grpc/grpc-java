@@ -22,7 +22,6 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 
 import io.grpc.ManagedChannel;
-import io.grpc.netty.InternalNettyChannelBuilder.OverrideAuthorityChecker;
 import io.grpc.netty.NettyTestUtil.TrackingObjectPoolForTest;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFactory;
@@ -44,7 +43,7 @@ public class NettyChannelBuilderTest {
 
   @Rule public final ExpectedException thrown = ExpectedException.none();
   private final SslContext noSslContext = null;
-  
+
   private void shutdown(ManagedChannel mc) throws Exception {
     mc.shutdownNow();
     assertTrue(mc.awaitTermination(1, TimeUnit.SECONDS));
@@ -92,26 +91,33 @@ public class NettyChannelBuilderTest {
   }
 
   @Test
-  public void overrideAllowsInvalidAuthority() {
-    NettyChannelBuilder builder = new NettyChannelBuilder(new SocketAddress(){});
-    InternalNettyChannelBuilder.overrideAuthorityChecker(builder, new OverrideAuthorityChecker() {
-      @Override
-      public String checkAuthority(String authority) {
-        return authority;
-      }
-    });
-    Object unused = builder.overrideAuthority("[invalidauthority")
-        .negotiationType(NegotiationType.PLAINTEXT)
-        .buildTransportFactory();
-  }
-
-  @Test
   public void failOverrideInvalidAuthority() {
     NettyChannelBuilder builder = new NettyChannelBuilder(new SocketAddress(){});
 
     thrown.expect(IllegalArgumentException.class);
     thrown.expectMessage("Invalid authority:");
 
+    builder.overrideAuthority("[invalidauthority");
+  }
+
+  @Test
+  public void disableCheckAuthorityAllowsInvalidAuthority() {
+    NettyChannelBuilder builder = new NettyChannelBuilder(new SocketAddress(){})
+        .disableCheckAuthority();
+
+    Object unused = builder.overrideAuthority("[invalidauthority")
+        .negotiationType(NegotiationType.PLAINTEXT)
+        .buildTransportFactory();
+  }
+
+  @Test
+  public void enableCheckAuthorityFailOverrideInvalidAuthority() {
+    NettyChannelBuilder builder = new NettyChannelBuilder(new SocketAddress(){})
+        .disableCheckAuthority()
+        .enableCheckAuthority();
+
+    thrown.expect(IllegalArgumentException.class);
+    thrown.expectMessage("Invalid authority:");
     builder.overrideAuthority("[invalidauthority");
   }
 

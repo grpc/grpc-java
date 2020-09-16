@@ -21,20 +21,20 @@ import io.grpc.Grpc;
 import io.grpc.Internal;
 import io.grpc.NameResolver;
 import io.grpc.internal.ObjectPool;
-import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.LoadStatsManager.LoadStatsStore;
+import io.grpc.xds.internal.sds.SslContextProviderSupplier;
 
 /**
  * Special attributes that are only useful to gRPC in the XDS context.
  */
 @Internal
 public final class XdsAttributes {
-  /**
-   * Attribute key for UpstreamTlsContext (used by client) for subchannel.
-   */
+
+  /** Attribute key for SslContextProviderSupplier (used from client) for a subchannel. */
   @Grpc.TransportAttr
-  public static final Attributes.Key<UpstreamTlsContext> ATTR_UPSTREAM_TLS_CONTEXT =
-      Attributes.Key.create("io.grpc.xds.XdsAttributes.upstreamTlsContext");
+  public static final Attributes.Key<SslContextProviderSupplier>
+      ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER =
+          Attributes.Key.create("io.grpc.xds.internal.sds.SslContextProviderSupplier");
 
   @NameResolver.ResolutionResultAttr
   static final Attributes.Key<ObjectPool<XdsClient>> XDS_CLIENT_POOL =

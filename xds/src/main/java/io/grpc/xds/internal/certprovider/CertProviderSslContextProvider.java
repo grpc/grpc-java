@@ -83,7 +83,7 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
     }
   }
 
-  private CertificateProviderInfo getCertProviderConfig(
+  private static CertificateProviderInfo getCertProviderConfig(
       Map<String, CertificateProviderInfo> certProviders, String pluginInstanceName) {
     return certProviders.get(pluginInstanceName);
   }

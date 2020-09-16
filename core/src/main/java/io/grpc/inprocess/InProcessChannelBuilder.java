@@ -21,11 +21,14 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import io.grpc.ChannelLogger;
 import io.grpc.ExperimentalApi;
+import io.grpc.ForwardingChannelBuilder;
 import io.grpc.Internal;
-import io.grpc.internal.AbstractManagedChannelImplBuilder;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.ManagedChannelImplBuilder;
+import io.grpc.internal.ManagedChannelImplBuilder.ClientTransportFactoryBuilder;
 import io.grpc.internal.SharedResourceHolder;
 import java.net.SocketAddress;
 import java.util.concurrent.ScheduledExecutorService;
@@ -42,7 +45,7 @@ import javax.annotation.Nullable;
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1783")
 public final class InProcessChannelBuilder extends
-        AbstractManagedChannelImplBuilder<InProcessChannelBuilder> {
+    ForwardingChannelBuilder<InProcessChannelBuilder> {
   /**
    * Create a channel builder that will connect to the server with the given name.
    *
@@ -67,18 +70,35 @@ public final class InProcessChannelBuilder extends
     throw new UnsupportedOperationException("call forName() instead");
   }
 
+  private final ManagedChannelImplBuilder managedChannelImplBuilder;
   private final String name;
   private ScheduledExecutorService scheduledExecutorService;
   private int maxInboundMetadataSize = Integer.MAX_VALUE;
   private boolean transportIncludeStatusCause = false;
 
   private InProcessChannelBuilder(String name) {
-    super(new InProcessSocketAddress(name), "localhost");
     this.name = checkNotNull(name, "name");
+
+    final class InProcessChannelTransportFactoryBuilder implements ClientTransportFactoryBuilder {
+      @Override
+      public ClientTransportFactory buildClientTransportFactory() {
+        return buildTransportFactory();
+      }
+    }
+
+    managedChannelImplBuilder = new ManagedChannelImplBuilder(new InProcessSocketAddress(name),
+        "localhost", new InProcessChannelTransportFactoryBuilder(), null);
+
     // In-process transport should not record its traffic to the stats module.
     // https://github.com/grpc/grpc-java/issues/2284
-    setStatsRecordStartedRpcs(false);
-    setStatsRecordFinishedRpcs(false);
+    managedChannelImplBuilder.setStatsRecordStartedRpcs(false);
+    managedChannelImplBuilder.setStatsRecordFinishedRpcs(false);
+  }
+
+  @Internal
+  @Override
+  protected ManagedChannelBuilder<?> delegate() {
+    return managedChannelImplBuilder;
   }
 
   @Override
@@ -177,11 +197,13 @@ public final class InProcessChannelBuilder extends
     return this;
   }
 
-  @Override
-  @Internal
-  protected ClientTransportFactory buildTransportFactory() {
+  ClientTransportFactory buildTransportFactory() {
     return new InProcessClientTransportFactory(
         name, scheduledExecutorService, maxInboundMetadataSize, transportIncludeStatusCause);
+  }
+
+  void setStatsEnabled(boolean value) {
+    this.managedChannelImplBuilder.setStatsEnabled(value);
   }
 
   /**

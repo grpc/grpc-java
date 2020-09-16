@@ -22,6 +22,7 @@ import com.google.protobuf.UInt32Value;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.DiscoveryType;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.EdsClusterConfig;
+import io.envoyproxy.envoy.config.cluster.v3.Cluster.LbPolicy;
 import io.envoyproxy.envoy.config.core.v3.Address;
 import io.envoyproxy.envoy.config.core.v3.AggregatedConfigSource;
 import io.envoyproxy.envoy.config.core.v3.ApiConfigSource;
@@ -34,6 +35,8 @@ import io.envoyproxy.envoy.config.core.v3.SelfConfigSource;
 import io.envoyproxy.envoy.config.core.v3.SocketAddress;
 import io.envoyproxy.envoy.config.core.v3.TransportSocket;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
+import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment.Policy;
+import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment.Policy.DropOverload;
 import io.envoyproxy.envoy.config.endpoint.v3.Endpoint;
 import io.envoyproxy.envoy.config.endpoint.v3.LbEndpoint;
 import io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints;
@@ -206,7 +209,7 @@ class XdsClientTestHelper {
       edsClusterConfigBuilder.setServiceName(edsServiceName);
     }
     clusterBuilder.setEdsClusterConfig(edsClusterConfigBuilder);
-    clusterBuilder.setLbPolicy(Cluster.LbPolicy.ROUND_ROBIN);
+    clusterBuilder.setLbPolicy(LbPolicy.ROUND_ROBIN);
     if (enableLrs) {
       clusterBuilder.setLrsServer(
           ConfigSource.newBuilder()
@@ -223,19 +226,20 @@ class XdsClientTestHelper {
       String clusterName, @Nullable String edsServiceName, boolean enableLrs,
       @Nullable io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext upstreamTlsContext) {
     io.envoyproxy.envoy.api.v2.Cluster.Builder clusterBuilder =
-        io.envoyproxy.envoy.api.v2.Cluster.newBuilder();
-    clusterBuilder.setName(clusterName);
-    clusterBuilder.setType(io.envoyproxy.envoy.api.v2.Cluster.DiscoveryType.EDS);
+        io.envoyproxy.envoy.api.v2.Cluster.newBuilder()
+            .setName(clusterName)
+            .setType(io.envoyproxy.envoy.api.v2.Cluster.DiscoveryType.EDS);
     io.envoyproxy.envoy.api.v2.Cluster.EdsClusterConfig.Builder edsClusterConfigBuilder =
-        io.envoyproxy.envoy.api.v2.Cluster.EdsClusterConfig.newBuilder();
-    edsClusterConfigBuilder.setEdsConfig(
-        io.envoyproxy.envoy.api.v2.core.ConfigSource.newBuilder()
-            .setAds(io.envoyproxy.envoy.api.v2.core.AggregatedConfigSource.getDefaultInstance()));
+        io.envoyproxy.envoy.api.v2.Cluster.EdsClusterConfig.newBuilder()
+            .setEdsConfig(
+                io.envoyproxy.envoy.api.v2.core.ConfigSource.newBuilder().setAds(
+                    io.envoyproxy.envoy.api.v2.core.AggregatedConfigSource.getDefaultInstance()));
     if (edsServiceName != null) {
       edsClusterConfigBuilder.setServiceName(edsServiceName);
     }
-    clusterBuilder.setEdsClusterConfig(edsClusterConfigBuilder);
-    clusterBuilder.setLbPolicy(io.envoyproxy.envoy.api.v2.Cluster.LbPolicy.ROUND_ROBIN);
+    clusterBuilder
+        .setEdsClusterConfig(edsClusterConfigBuilder)
+        .setLbPolicy(io.envoyproxy.envoy.api.v2.Cluster.LbPolicy.ROUND_ROBIN);
     if (enableLrs) {
       clusterBuilder.setLrsServer(
           io.envoyproxy.envoy.api.v2.core.ConfigSource.newBuilder()
@@ -250,19 +254,16 @@ class XdsClientTestHelper {
   }
 
   static ClusterLoadAssignment buildClusterLoadAssignment(String clusterName,
-      List<LocalityLbEndpoints> localityLbEndpoints,
-      List<ClusterLoadAssignment.Policy.DropOverload> dropOverloads) {
+      List<LocalityLbEndpoints> localityLbEndpoints, List<DropOverload> dropOverloads) {
     return
         ClusterLoadAssignment.newBuilder()
             .setClusterName(clusterName)
             .addAllEndpoints(localityLbEndpoints)
-            .setPolicy(
-                ClusterLoadAssignment.Policy.newBuilder()
-                    .addAllDropOverloads(dropOverloads))
+            .setPolicy(Policy.newBuilder().addAllDropOverloads(dropOverloads))
             .build();
   }
 
-  @SuppressWarnings("deprecation")
+  @SuppressWarnings("deprecation") // disableOverprovisioning is deprecated by needed for v2
   static io.envoyproxy.envoy.api.v2.ClusterLoadAssignment buildClusterLoadAssignmentV2(
       String clusterName,
       List<io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints> localityLbEndpoints,
@@ -278,10 +279,9 @@ class XdsClientTestHelper {
             .build();
   }
 
-  static ClusterLoadAssignment.Policy.DropOverload buildDropOverload(
-      String category, int dropPerMillion) {
+  static DropOverload buildDropOverload(String category, int dropPerMillion) {
     return
-        ClusterLoadAssignment.Policy.DropOverload.newBuilder()
+        DropOverload.newBuilder()
             .setCategory(category)
             .setDropPercentage(
                 FractionalPercent.newBuilder()

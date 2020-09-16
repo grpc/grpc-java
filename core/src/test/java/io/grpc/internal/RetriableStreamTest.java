@@ -144,24 +144,14 @@ public class RetriableStreamTest {
         ChannelBufferMeter channelBufferUsed, long perRpcBufferLimit, long channelBufferLimit,
         Executor callExecutor,
         ScheduledExecutorService scheduledExecutorService,
-        final RetryPolicy retryPolicy,
-        final HedgingPolicy hedgingPolicy,
+        @Nullable RetryPolicy retryPolicy,
+        @Nullable HedgingPolicy hedgingPolicy,
         @Nullable Throttle throttle) {
       super(
           method, headers, channelBufferUsed, perRpcBufferLimit, channelBufferLimit, callExecutor,
           scheduledExecutorService,
-          new RetryPolicy.Provider() {
-            @Override
-            public RetryPolicy get() {
-              return retryPolicy;
-            }
-          },
-          new HedgingPolicy.Provider() {
-            @Override
-            public HedgingPolicy get() {
-              return hedgingPolicy;
-            }
-          },
+          retryPolicy,
+          hedgingPolicy,
           throttle);
     }
 
@@ -196,14 +186,14 @@ public class RetriableStreamTest {
     return new RecordedRetriableStream(
         method, new Metadata(), channelBufferUsed, PER_RPC_BUFFER_LIMIT, CHANNEL_BUFFER_LIMIT,
         MoreExecutors.directExecutor(), fakeClock.getScheduledExecutorService(), RETRY_POLICY,
-        HedgingPolicy.DEFAULT, throttle);
+        null, throttle);
   }
 
   private RetriableStream<String> newThrottledHedgingStream(Throttle throttle) {
     return new RecordedRetriableStream(
         method, new Metadata(), channelBufferUsed, PER_RPC_BUFFER_LIMIT, CHANNEL_BUFFER_LIMIT,
         MoreExecutors.directExecutor(), fakeClock.getScheduledExecutorService(),
-        RetryPolicy.DEFAULT, HEDGING_POLICY, throttle);
+        null, HEDGING_POLICY, throttle);
   }
 
   @After
@@ -1576,7 +1566,7 @@ public class RetriableStreamTest {
     RetriableStream<String> unretriableStream = new RecordedRetriableStream(
         method, new Metadata(), channelBufferUsed, PER_RPC_BUFFER_LIMIT, CHANNEL_BUFFER_LIMIT,
         MoreExecutors.directExecutor(), fakeClock.getScheduledExecutorService(),
-        RetryPolicy.DEFAULT, HedgingPolicy.DEFAULT, null);
+        null, null, null);
 
     // start
     doReturn(mockStream1).when(retriableStreamRecorder).newSubstream(0);

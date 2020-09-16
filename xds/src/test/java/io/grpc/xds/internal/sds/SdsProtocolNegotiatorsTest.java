@@ -163,10 +163,12 @@ public class SdsProtocolNegotiatorsTest {
             getCommonTlsContext(/* tlsCertificate= */ null, /* certContext= */ null));
     ClientSdsProtocolNegotiator pn = new ClientSdsProtocolNegotiator();
     GrpcHttp2ConnectionHandler mockHandler = mock(GrpcHttp2ConnectionHandler.class);
+    TlsContextManager mockTlsContextManager = mock(TlsContextManager.class);
     when(mockHandler.getEagAttributes())
         .thenReturn(
             Attributes.newBuilder()
-                .set(XdsAttributes.ATTR_UPSTREAM_TLS_CONTEXT, upstreamTlsContext)
+                .set(XdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
+                    new SslContextProviderSupplier(upstreamTlsContext, mockTlsContextManager))
                 .build());
     ChannelHandler newHandler = pn.newHandler(mockHandler);
     assertThat(newHandler).isNotNull();
@@ -178,8 +180,10 @@ public class SdsProtocolNegotiatorsTest {
     UpstreamTlsContext upstreamTlsContext =
         buildUpstreamTlsContextFromFilenames(CLIENT_KEY_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
 
+    SslContextProviderSupplier sslContextProviderSupplier =
+        new SslContextProviderSupplier(upstreamTlsContext, TlsContextManagerImpl.getInstance());
     SdsProtocolNegotiators.ClientSdsHandler clientSdsHandler =
-        new SdsProtocolNegotiators.ClientSdsHandler(grpcHandler, upstreamTlsContext);
+        new SdsProtocolNegotiators.ClientSdsHandler(grpcHandler, sslContextProviderSupplier);
     pipeline.addLast(clientSdsHandler);
     channelHandlerCtx = pipeline.context(clientSdsHandler);
     assertNotNull(channelHandlerCtx); // clientSdsHandler ctx is non-null since we just added it
@@ -334,8 +338,10 @@ public class SdsProtocolNegotiatorsTest {
     UpstreamTlsContext upstreamTlsContext =
         buildUpstreamTlsContextFromFilenames(CLIENT_KEY_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
 
+    SslContextProviderSupplier sslContextProviderSupplier =
+        new SslContextProviderSupplier(upstreamTlsContext, TlsContextManagerImpl.getInstance());
     SdsProtocolNegotiators.ClientSdsHandler clientSdsHandler =
-        new SdsProtocolNegotiators.ClientSdsHandler(grpcHandler, upstreamTlsContext);
+        new SdsProtocolNegotiators.ClientSdsHandler(grpcHandler, sslContextProviderSupplier);
 
     pipeline.addLast(clientSdsHandler);
     channelHandlerCtx = pipeline.context(clientSdsHandler);

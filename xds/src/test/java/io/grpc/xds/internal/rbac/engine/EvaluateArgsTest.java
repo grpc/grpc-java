@@ -106,7 +106,7 @@ public class EvaluateArgsTest<ReqT,RespT> {
     verify(spyArgs, times(1)).getConnectionUriSanPeerCertificate();
     verify(spyArgs, times(1)).getSourcePrincipal();
   }
-  
+
   @Test
   public void testEvaluateArgsAccessorFunctions() {
     // Set up args and call.

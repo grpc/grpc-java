@@ -17,9 +17,19 @@
 package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.MethodDescriptor.MethodType.UNARY;
+import static io.grpc.Status.Code.UNAVAILABLE;
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import io.grpc.CallOptions;
+import io.grpc.InternalConfigSelector;
+import io.grpc.InternalConfigSelector.Result;
+import io.grpc.Metadata;
+import io.grpc.MethodDescriptor;
+import io.grpc.internal.ManagedChannelServiceConfig.MethodInfo;
+import io.grpc.testing.TestMethodDescriptors;
 import java.util.Collections;
 import java.util.Map;
 import org.junit.Rule;
@@ -134,6 +144,80 @@ public class ManagedChannelServiceConfigTest {
     thrown.expectMessage("missing service");
 
     ManagedChannelServiceConfig.fromServiceConfig(serviceConfig, true, 3, 4, null);
+  }
+
+  @Test
+  public void managedChannelServiceConfig_parseMethodConfig() {
+    Map<String, ?> name1 = ImmutableMap.of("service", "service1", "method", "method1");
+    Map<String, ?> name2 = ImmutableMap.of("service", "service2");
+    Map<String, ?> methodConfig = ImmutableMap.of(
+        "name", ImmutableList.of(name1, name2),
+        "timeout", "1.234s",
+        "retryPolicy",
+        ImmutableMap.of(
+            "maxAttempts", 3.0D,
+            "initialBackoff", "1s",
+            "maxBackoff", "10s",
+            "backoffMultiplier", 1.5D,
+            "retryableStatusCodes", ImmutableList.of("UNAVAILABLE")
+        ));
+    Map<String, ?> defaultMethodConfig = ImmutableMap.of(
+        "name", ImmutableList.of(ImmutableMap.of()),
+        "timeout", "4.321s");
+    Map<String, ?> rawServiceConfig =
+        ImmutableMap.of("methodConfig", ImmutableList.of(methodConfig, defaultMethodConfig));
+
+    // retry disabled
+    ManagedChannelServiceConfig serviceConfig =
+        ManagedChannelServiceConfig.fromServiceConfig(rawServiceConfig, false, 0, 0, null);
+    MethodInfo methodInfo = serviceConfig.getMethodConfig(methodForName("service1", "method1"));
+    assertThat(methodInfo.timeoutNanos).isEqualTo(MILLISECONDS.toNanos(1234));
+    assertThat(methodInfo.retryPolicy).isNull();
+    methodInfo = serviceConfig.getMethodConfig(methodForName("service1", "methodX"));
+    assertThat(methodInfo.timeoutNanos).isEqualTo(MILLISECONDS.toNanos(4321));
+    assertThat(methodInfo.retryPolicy).isNull();
+    methodInfo = serviceConfig.getMethodConfig(methodForName("service2", "methodX"));
+    assertThat(methodInfo.timeoutNanos).isEqualTo(MILLISECONDS.toNanos(1234));
+    assertThat(methodInfo.retryPolicy).isNull();
+
+    // retry enabled
+    serviceConfig =
+        ManagedChannelServiceConfig.fromServiceConfig(rawServiceConfig, true, 2, 0, null);
+    methodInfo = serviceConfig.getMethodConfig(methodForName("service1", "method1"));
+    assertThat(methodInfo.timeoutNanos).isEqualTo(MILLISECONDS.toNanos(1234));
+    assertThat(methodInfo.retryPolicy.maxAttempts).isEqualTo(2);
+    assertThat(methodInfo.retryPolicy.retryableStatusCodes).containsExactly(UNAVAILABLE);
+    methodInfo = serviceConfig.getMethodConfig(methodForName("service1", "methodX"));
+    assertThat(methodInfo.timeoutNanos).isEqualTo(MILLISECONDS.toNanos(4321));
+    assertThat(methodInfo.retryPolicy).isNull();
+  }
+
+  @Test
+  public void getDefaultConfigSelectorFromConfig() {
+    Map<String, ?> name = ImmutableMap.of("service", "service1", "method", "method1");
+    Map<String, ?> methodConfig = ImmutableMap.of(
+        "name", ImmutableList.of(name), "timeout", "1.234s");
+    Map<String, ?> rawServiceConfig =
+        ImmutableMap.of("methodConfig", ImmutableList.of(methodConfig));
+    ManagedChannelServiceConfig serviceConfig =
+        ManagedChannelServiceConfig.fromServiceConfig(rawServiceConfig, false, 0, 0, null);
+    InternalConfigSelector configSelector = serviceConfig.getDefaultConfigSelector();
+    MethodDescriptor<?, ?> method = methodForName("service1", "method1");
+    Result result = configSelector.selectConfig(
+        new PickSubchannelArgsImpl(method, new Metadata(), CallOptions.DEFAULT));
+    MethodInfo methodInfoFromDefaultConfigSelector =
+        ((ManagedChannelServiceConfig) result.getConfig()).getMethodConfig(method);
+    assertThat(methodInfoFromDefaultConfigSelector)
+        .isEqualTo(serviceConfig.getMethodConfig(method));
+  }
+
+  private static MethodDescriptor<?, ?> methodForName(String service, String method) {
+    return MethodDescriptor.<Void, Void>newBuilder()
+        .setFullMethodName(service + "/" + method)
+        .setRequestMarshaller(TestMethodDescriptors.voidMarshaller())
+        .setResponseMarshaller(TestMethodDescriptors.voidMarshaller())
+        .setType(UNARY)
+        .build();
   }
 
   @SuppressWarnings("unchecked")

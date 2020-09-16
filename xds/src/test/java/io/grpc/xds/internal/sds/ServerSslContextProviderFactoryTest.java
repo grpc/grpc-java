@@ -31,6 +31,7 @@ import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.envoyproxy.envoy.type.matcher.v3.StringMatcher;
 import io.grpc.xds.Bootstrapper;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
+import io.grpc.xds.XdsInitializationException;
 import io.grpc.xds.internal.certprovider.CertProviderServerSslContextProvider;
 import io.grpc.xds.internal.certprovider.CertificateProvider;
 import io.grpc.xds.internal.certprovider.CertificateProviderRegistry;
@@ -113,7 +114,7 @@ public class ServerSslContextProviderFactoryTest {
   }
 
   @Test
-  public void createCertProviderServerSslContextProvider() throws IOException {
+  public void createCertProviderServerSslContextProvider() throws XdsInitializationException {
     final CertificateProvider.DistributorWatcher[] watcherCaptor =
         new CertificateProvider.DistributorWatcher[1];
     createAndRegisterProviderProvider(certificateProviderRegistry, watcherCaptor, "testca", 0);
@@ -136,7 +137,8 @@ public class ServerSslContextProviderFactoryTest {
   }
 
   @Test
-  public void createCertProviderServerSslContextProvider_onlyCertInstance() throws IOException {
+  public void createCertProviderServerSslContextProvider_onlyCertInstance()
+      throws XdsInitializationException {
     final CertificateProvider.DistributorWatcher[] watcherCaptor =
             new CertificateProvider.DistributorWatcher[1];
     createAndRegisterProviderProvider(certificateProviderRegistry, watcherCaptor, "testca", 0);
@@ -159,7 +161,8 @@ public class ServerSslContextProviderFactoryTest {
   }
 
   @Test
-  public void createCertProviderServerSslContextProvider_withStaticContext() throws IOException {
+  public void createCertProviderServerSslContextProvider_withStaticContext()
+      throws XdsInitializationException {
     final CertificateProvider.DistributorWatcher[] watcherCaptor =
             new CertificateProvider.DistributorWatcher[1];
     createAndRegisterProviderProvider(certificateProviderRegistry, watcherCaptor, "testca", 0);
@@ -189,7 +192,8 @@ public class ServerSslContextProviderFactoryTest {
   }
 
   @Test
-  public void createCertProviderServerSslContextProvider_2providers() throws IOException {
+  public void createCertProviderServerSslContextProvider_2providers()
+      throws XdsInitializationException {
     final CertificateProvider.DistributorWatcher[] watcherCaptor =
         new CertificateProvider.DistributorWatcher[2];
     createAndRegisterProviderProvider(certificateProviderRegistry, watcherCaptor, "testca", 0);
@@ -217,7 +221,8 @@ public class ServerSslContextProviderFactoryTest {
   }
 
   @Test
-  public void createCertProviderServerSslContextProvider_ioException() throws IOException {
+  public void createCertProviderServerSslContextProvider_exception()
+      throws XdsInitializationException {
     DownstreamTlsContext downstreamTlsContext =
         CommonTlsContextTestsUtil.buildDownstreamTlsContextForCertProviderInstance(
             "gcp_id",
@@ -227,12 +232,13 @@ public class ServerSslContextProviderFactoryTest {
             /* alpnProtocols= */ null,
             /* staticCertValidationContext= */ null,
             /* requireClientCert= */ true);
-    when(bootstrapper.readBootstrap()).thenThrow(new IOException("test IOException"));
+    when(bootstrapper.readBootstrap())
+        .thenThrow(new XdsInitializationException("test exception"));
     try {
       serverSslContextProviderFactory.create(downstreamTlsContext);
       Assert.fail("no exception thrown");
     } catch (RuntimeException expected) {
-      assertThat(expected).hasMessageThat().isEqualTo("java.io.IOException: test IOException");
+      assertThat(expected).hasMessageThat().contains("test exception");
     }
   }
 

@@ -24,13 +24,17 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import io.grpc.ChannelLogger;
 import io.grpc.ExperimentalApi;
+import io.grpc.ForwardingChannelBuilder;
 import io.grpc.Internal;
-import io.grpc.internal.AbstractManagedChannelImplBuilder;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.internal.AtomicBackoff;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.KeepAliveManager;
+import io.grpc.internal.ManagedChannelImplBuilder;
+import io.grpc.internal.ManagedChannelImplBuilder.ChannelBuilderDefaultPortProvider;
+import io.grpc.internal.ManagedChannelImplBuilder.ClientTransportFactoryBuilder;
 import io.grpc.internal.SharedResourceHolder;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.internal.TransportTracer;
@@ -54,10 +58,12 @@ import javax.net.ssl.SSLSocketFactory;
 
 /** Convenience class for building channels with the OkHttp transport. */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1785")
-public class OkHttpChannelBuilder extends
-        AbstractManagedChannelImplBuilder<OkHttpChannelBuilder> {
+public final class OkHttpChannelBuilder extends ForwardingChannelBuilder<OkHttpChannelBuilder> {
 
   public static final int DEFAULT_FLOW_CONTROL_WINDOW = 65535;
+  private final ManagedChannelImplBuilder managedChannelImplBuilder;
+  private TransportTracer.Factory transportTracerFactory = TransportTracer.getDefaultFactory();
+
 
   /** Identifies the negotiation used for starting up HTTP/2. */
   private enum NegotiationType {
@@ -127,6 +133,7 @@ public class OkHttpChannelBuilder extends
   private long keepAliveTimeoutNanos = DEFAULT_KEEPALIVE_TIMEOUT_NANOS;
   private int flowControlWindow = DEFAULT_FLOW_CONTROL_WINDOW;
   private boolean keepAliveWithoutCalls;
+  private int maxInboundMessageSize = GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
   private int maxInboundMetadataSize = Integer.MAX_VALUE;
 
   /**
@@ -135,17 +142,38 @@ public class OkHttpChannelBuilder extends
    */
   private final boolean useGetForSafeMethods = false;
 
-  protected OkHttpChannelBuilder(String host, int port) {
+  private OkHttpChannelBuilder(String host, int port) {
     this(GrpcUtil.authorityFromHostAndPort(host, port));
   }
 
   private OkHttpChannelBuilder(String target) {
-    super(target);
+    final class OkHttpChannelTransportFactoryBuilder implements ClientTransportFactoryBuilder {
+      @Override
+      public ClientTransportFactory buildClientTransportFactory() {
+        return buildTransportFactory();
+      }
+    }
+
+    final class OkHttpChannelDefaultPortProvider implements ChannelBuilderDefaultPortProvider {
+      @Override
+      public int getDefaultPort() {
+        return OkHttpChannelBuilder.this.getDefaultPort();
+      }
+    }
+
+    managedChannelImplBuilder = new ManagedChannelImplBuilder(target,
+        new OkHttpChannelTransportFactoryBuilder(),
+        new OkHttpChannelDefaultPortProvider());
+  }
+
+  @Internal
+  @Override
+  protected ManagedChannelBuilder<?> delegate() {
+    return managedChannelImplBuilder;
   }
 
   @VisibleForTesting
-  final OkHttpChannelBuilder setTransportTracerFactory(
-      TransportTracer.Factory transportTracerFactory) {
+  OkHttpChannelBuilder setTransportTracerFactory(TransportTracer.Factory transportTracerFactory) {
     this.transportTracerFactory = transportTracerFactory;
     return this;
   }
@@ -156,7 +184,7 @@ public class OkHttpChannelBuilder extends
    * <p>The channel does not take ownership of the given executor. It is the caller' responsibility
    * to shutdown the executor when appropriate.
    */
-  public final OkHttpChannelBuilder transportExecutor(@Nullable Executor transportExecutor) {
+  public OkHttpChannelBuilder transportExecutor(@Nullable Executor transportExecutor) {
     this.transportExecutor = transportExecutor;
     return this;
   }
@@ -167,7 +195,7 @@ public class OkHttpChannelBuilder extends
    *
    * @since 1.20.0
    */
-  public final OkHttpChannelBuilder socketFactory(@Nullable SocketFactory socketFactory) {
+  public OkHttpChannelBuilder socketFactory(@Nullable SocketFactory socketFactory) {
     this.socketFactory = socketFactory;
     return this;
   }
@@ -185,7 +213,7 @@ public class OkHttpChannelBuilder extends
    * @deprecated use {@link #usePlaintext()} or {@link #useTransportSecurity()} instead.
    */
   @Deprecated
-  public final OkHttpChannelBuilder negotiationType(io.grpc.okhttp.NegotiationType type) {
+  public OkHttpChannelBuilder negotiationType(io.grpc.okhttp.NegotiationType type) {
     Preconditions.checkNotNull(type, "type");
     switch (type) {
       case TLS:
@@ -255,7 +283,7 @@ public class OkHttpChannelBuilder extends
   /**
    * Override the default {@link SSLSocketFactory} and enable TLS negotiation.
    */
-  public final OkHttpChannelBuilder sslSocketFactory(SSLSocketFactory factory) {
+  public OkHttpChannelBuilder sslSocketFactory(SSLSocketFactory factory) {
     this.sslSocketFactory = factory;
     negotiationType = NegotiationType.TLS;
     return this;
@@ -281,7 +309,7 @@ public class OkHttpChannelBuilder extends
    * @return this
    *
    */
-  public final OkHttpChannelBuilder hostnameVerifier(@Nullable HostnameVerifier hostnameVerifier) {
+  public OkHttpChannelBuilder hostnameVerifier(@Nullable HostnameVerifier hostnameVerifier) {
     this.hostnameVerifier = hostnameVerifier;
     return this;
   }
@@ -298,7 +326,7 @@ public class OkHttpChannelBuilder extends
    * @throws IllegalArgumentException
    *         If {@code connectionSpec} is not with TLS
    */
-  public final OkHttpChannelBuilder connectionSpec(
+  public OkHttpChannelBuilder connectionSpec(
       com.squareup.okhttp.ConnectionSpec connectionSpec) {
     Preconditions.checkArgument(connectionSpec.isTls(), "plaintext ConnectionSpec is not accepted");
     this.connectionSpec = Utils.convertSpec(connectionSpec);
@@ -307,7 +335,7 @@ public class OkHttpChannelBuilder extends
 
   /** Sets the negotiation type for the HTTP/2 connection to plaintext. */
   @Override
-  public final OkHttpChannelBuilder usePlaintext() {
+  public OkHttpChannelBuilder usePlaintext() {
     negotiationType = NegotiationType.PLAINTEXT;
     return this;
   }
@@ -321,7 +349,7 @@ public class OkHttpChannelBuilder extends
    * socket factory used.
    */
   @Override
-  public final OkHttpChannelBuilder useTransportSecurity() {
+  public OkHttpChannelBuilder useTransportSecurity() {
     negotiationType = NegotiationType.TLS;
     return this;
   }
@@ -336,7 +364,7 @@ public class OkHttpChannelBuilder extends
    *
    * @since 1.11.0
    */
-  public final OkHttpChannelBuilder scheduledExecutorService(
+  public OkHttpChannelBuilder scheduledExecutorService(
       ScheduledExecutorService scheduledExecutorService) {
     this.scheduledExecutorService =
         checkNotNull(scheduledExecutorService, "scheduledExecutorService");
@@ -363,9 +391,19 @@ public class OkHttpChannelBuilder extends
     return this;
   }
 
+  /**
+   * Sets the maximum message size allowed for a single gRPC frame. If an inbound messages
+   * larger than this limit is received it will not be processed and the RPC will fail with
+   * RESOURCE_EXHAUSTED.
+   */
   @Override
-  @Internal
-  protected final ClientTransportFactory buildTransportFactory() {
+  public OkHttpChannelBuilder maxInboundMessageSize(int max) {
+    Preconditions.checkArgument(max >= 0, "negative max");
+    maxInboundMessageSize = max;
+    return this;
+  }
+
+  ClientTransportFactory buildTransportFactory() {
     boolean enableKeepAlive = keepAliveTimeNanos != KEEPALIVE_TIME_NANOS_DISABLED;
     return new OkHttpTransportFactory(
         transportExecutor,
@@ -374,7 +412,7 @@ public class OkHttpChannelBuilder extends
         createSslSocketFactory(),
         hostnameVerifier,
         connectionSpec,
-        maxInboundMessageSize(),
+        maxInboundMessageSize,
         enableKeepAlive,
         keepAliveTimeNanos,
         keepAliveTimeoutNanos,
@@ -385,8 +423,17 @@ public class OkHttpChannelBuilder extends
         useGetForSafeMethods);
   }
 
-  @Override
-  protected int getDefaultPort() {
+  OkHttpChannelBuilder disableCheckAuthority() {
+    this.managedChannelImplBuilder.disableCheckAuthority();
+    return this;
+  }
+
+  OkHttpChannelBuilder enableCheckAuthority() {
+    this.managedChannelImplBuilder.enableCheckAuthority();
+    return this;
+  }
+
+  int getDefaultPort() {
     switch (negotiationType) {
       case PLAINTEXT:
         return GrpcUtil.DEFAULT_PORT_PLAINTEXT;
@@ -395,6 +442,10 @@ public class OkHttpChannelBuilder extends
       default:
         throw new AssertionError(negotiationType + " not handled");
     }
+  }
+
+  void setStatsEnabled(boolean value) {
+    this.managedChannelImplBuilder.setStatsEnabled(value);
   }
 
   @VisibleForTesting

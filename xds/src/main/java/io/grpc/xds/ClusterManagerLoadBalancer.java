@@ -145,7 +145,7 @@ class ClusterManagerLoadBalancer extends LoadBalancer {
         @Override
         public PickResult pickSubchannel(PickSubchannelArgs args) {
           String clusterName =
-              args.getCallOptions().getOption(XdsNameResolver2.CLUSTER_SELECTION_KEY);
+              args.getCallOptions().getOption(XdsNameResolver.CLUSTER_SELECTION_KEY);
           SubchannelPicker delegate = childPickers.get(clusterName);
           if (delegate == null) {
             return

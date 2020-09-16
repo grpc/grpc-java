@@ -24,10 +24,12 @@ import static org.junit.Assert.assertSame;
 
 import com.squareup.okhttp.ConnectionSpec;
 import io.grpc.ChannelLogger;
+import io.grpc.ManagedChannel;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SharedResourceHolder;
+import io.grpc.testing.GrpcCleanupRule;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
@@ -46,11 +48,13 @@ import org.junit.runners.JUnit4;
 public class OkHttpChannelBuilderTest {
 
   @Rule public final ExpectedException thrown = ExpectedException.none();
+  @Rule public final GrpcCleanupRule grpcCleanupRule = new GrpcCleanupRule();
 
   @Test
   public void authorityIsReadable() {
     OkHttpChannelBuilder builder = OkHttpChannelBuilder.forAddress("original", 1234);
-    assertEquals("original:1234", builder.build().authority());
+    ManagedChannel channel = grpcCleanupRule.register(builder.build());
+    assertEquals("original:1234", channel.authority());
   }
 
   @Test
@@ -68,24 +72,31 @@ public class OkHttpChannelBuilderTest {
   private void overrideAuthorityIsReadableHelper(OkHttpChannelBuilder builder,
       String overrideAuthority) {
     builder.overrideAuthority(overrideAuthority);
-    assertEquals(overrideAuthority, builder.build().authority());
-  }
-
-  @Test
-  public void overrideAllowsInvalidAuthority() {
-    OkHttpChannelBuilder builder = new OkHttpChannelBuilder("good", 1234) {
-      @Override
-      protected String checkAuthority(String authority) {
-        return authority;
-      }
-    };
-
-    builder.overrideAuthority("[invalidauthority").usePlaintext().buildTransportFactory();
+    ManagedChannel channel = grpcCleanupRule.register(builder.build());
+    assertEquals(overrideAuthority, channel.authority());
   }
 
   @Test
   public void failOverrideInvalidAuthority() {
-    OkHttpChannelBuilder builder = new OkHttpChannelBuilder("good", 1234);
+    OkHttpChannelBuilder builder = OkHttpChannelBuilder.forAddress("good", 1234);
+
+    thrown.expect(IllegalArgumentException.class);
+    thrown.expectMessage("Invalid authority:");
+    builder.overrideAuthority("[invalidauthority");
+  }
+
+  @Test
+  public void disableCheckAuthorityAllowsInvalidAuthority() {
+    OkHttpChannelBuilder builder = OkHttpChannelBuilder.forAddress("good", 1234)
+        .disableCheckAuthority();
+    builder.overrideAuthority("[invalidauthority").usePlaintext().buildTransportFactory();
+  }
+
+  @Test
+  public void enableCheckAuthorityFailOverrideInvalidAuthority() {
+    OkHttpChannelBuilder builder = OkHttpChannelBuilder.forAddress("good", 1234)
+        .disableCheckAuthority()
+        .enableCheckAuthority();
 
     thrown.expect(IllegalArgumentException.class);
     thrown.expectMessage("Invalid authority:");

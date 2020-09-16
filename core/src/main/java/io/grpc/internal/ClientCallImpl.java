@@ -40,12 +40,15 @@ import io.grpc.Context;
 import io.grpc.Context.CancellationListener;
 import io.grpc.Deadline;
 import io.grpc.DecompressorRegistry;
+import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener;
 import io.grpc.InternalConfigSelector;
 import io.grpc.InternalDecompressorRegistry;
+import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.Status;
+import io.grpc.internal.ManagedChannelServiceConfig.MethodInfo;
 import io.perfmark.Link;
 import io.perfmark.PerfMark;
 import io.perfmark.Tag;
@@ -83,7 +86,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   private final CallTracer channelCallsTracer;
   private final Context context;
   private final boolean unaryRequest;
-  private final CallOptions callOptions;
+  private CallOptions callOptions;
   private ClientStream stream;
   private volatile boolean cancelListenersShouldBeRemoved;
   private boolean cancelCalled;
@@ -91,6 +94,8 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   private final ClientStreamProvider clientStreamProvider;
   private ContextCancellationListener cancellationListener;
   private final ScheduledExecutorService deadlineCancellationExecutor;
+  @Nullable
+  private final InternalConfigSelector configSelector;
   private boolean fullStreamDecompression;
   private DecompressorRegistry decompressorRegistry = DecompressorRegistry.getDefaultInstance();
   private CompressorRegistry compressorRegistry = CompressorRegistry.getDefaultInstance();
@@ -103,7 +108,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       ClientStreamProvider clientStreamProvider,
       ScheduledExecutorService deadlineCancellationExecutor,
       CallTracer channelCallsTracer,
-      InternalConfigSelector configSelector) {
+      @Nullable InternalConfigSelector configSelector) {
     this.method = method;
     // TODO(carl-mastrangelo): consider moving this construction to ManagedChannelImpl.
     this.tag = PerfMark.createTag(method.getFullMethodName(), System.identityHashCode(this));
@@ -125,6 +130,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     this.callOptions = callOptions;
     this.clientStreamProvider = clientStreamProvider;
     this.deadlineCancellationExecutor = deadlineCancellationExecutor;
+    this.configSelector = configSelector;
     PerfMark.event("ClientCall.<init>", tag);
   }
 
@@ -207,7 +213,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     }
   }
 
-  private void startInternal(final Listener<RespT> observer, Metadata headers) {
+  private void startInternal(Listener<RespT> observer, Metadata headers) {
     checkState(stream == null, "Already started");
     checkState(!cancelCalled, "call was cancelled");
     checkNotNull(observer, "observer");
@@ -220,7 +226,25 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       executeCloseObserverInContext(observer, statusFromCancelled(context));
       return;
     }
-    // TODO(zdapeng): configSelector.selectConfig()
+
+    if (configSelector != null) {
+      PickSubchannelArgs args = new PickSubchannelArgsImpl(method, headers, callOptions);
+      InternalConfigSelector.Result result = configSelector.selectConfig(args);
+      Status status = result.getStatus();
+      if (!status.isOk()) {
+        executeCloseObserverInContext(observer, status);
+        return;
+      }
+      callOptions = result.getCallOptions();
+      Runnable committedCallback = result.getCommittedCallback();
+      if (committedCallback != null) {
+        observer = new CommittedCallbackListener(observer, committedCallback);
+      }
+      ManagedChannelServiceConfig config = (ManagedChannelServiceConfig) result.getConfig();
+      MethodInfo methodInfo = config.getMethodConfig(method);
+      applyMethodConfig(methodInfo);
+    }
+
     final String compressorName = callOptions.getCompressor();
     Compressor compressor;
     if (compressorName != null) {
@@ -294,6 +318,72 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       // and listener from being cancelled. Go ahead and cancel again, just to be sure it
       // was cancelled.
       removeContextListenerAndCancelDeadlineFuture();
+    }
+  }
+
+  private final class CommittedCallbackListener extends
+      SimpleForwardingClientCallListener<RespT> {
+    final Runnable committedCallback;
+    boolean committed;
+
+    CommittedCallbackListener(Listener<RespT> delegate, Runnable committedCallback) {
+      super(delegate);
+      this.committedCallback = committedCallback;
+    }
+
+    @Override
+    public void onHeaders(Metadata headers) {
+      committed = true;
+      committedCallback.run();
+      delegate().onHeaders(headers);
+    }
+
+    @Override
+    public void onClose(Status status, Metadata trailers) {
+      if (!committed) {
+        committed = true;
+        committedCallback.run();
+      }
+      delegate().onClose(status, trailers);
+    }
+  }
+
+  private void applyMethodConfig(MethodInfo info) {
+    if (info == null) {
+      return;
+    }
+    callOptions = callOptions.withOption(MethodInfo.KEY, info);
+    if (info.timeoutNanos != null) {
+      Deadline newDeadline = Deadline.after(info.timeoutNanos, TimeUnit.NANOSECONDS);
+      Deadline existingDeadline = callOptions.getDeadline();
+      // If the new deadline is sooner than the existing deadline, swap them.
+      if (existingDeadline == null || newDeadline.compareTo(existingDeadline) < 0) {
+        callOptions = callOptions.withDeadline(newDeadline);
+      }
+    }
+    if (info.waitForReady != null) {
+      callOptions =
+          info.waitForReady ? callOptions.withWaitForReady() : callOptions.withoutWaitForReady();
+    }
+    if (info.maxInboundMessageSize != null) {
+      Integer existingLimit = callOptions.getMaxInboundMessageSize();
+      if (existingLimit != null) {
+        callOptions =
+            callOptions.withMaxInboundMessageSize(
+                Math.min(existingLimit, info.maxInboundMessageSize));
+      } else {
+        callOptions = callOptions.withMaxInboundMessageSize(info.maxInboundMessageSize);
+      }
+    }
+    if (info.maxOutboundMessageSize != null) {
+      Integer existingLimit = callOptions.getMaxOutboundMessageSize();
+      if (existingLimit != null) {
+        callOptions =
+            callOptions.withMaxOutboundMessageSize(
+                Math.min(existingLimit, info.maxOutboundMessageSize));
+      } else {
+        callOptions = callOptions.withMaxOutboundMessageSize(info.maxOutboundMessageSize);
+      }
     }
   }
 

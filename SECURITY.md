@@ -232,13 +232,8 @@ import java.security.Security;
 ...
 
 // Somewhere in main()
-Security.insertProviderAt(
-    Conscrypt.newProviderBuilder().provideTrustManager(false).build(), 1);
+Security.insertProviderAt(Conscrypt.newProvider(), 1);
 ```
-
-Note: according to [Conscrypt Implementation Notes](https://github.com/google/conscrypt/blob/2.4.0/IMPLEMENTATION_NOTES.md#hostname-verification),
-its default `HostnameVerifier` on OpenJDK always fails. This can be worked 
-around by disabling its default `TrustManager` implementation as shown above.
 
 ### TLS with Jetty ALPN
 
