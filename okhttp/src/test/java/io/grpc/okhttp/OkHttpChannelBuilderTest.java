@@ -53,8 +53,7 @@ public class OkHttpChannelBuilderTest {
   @Test
   public void authorityIsReadable() {
     OkHttpChannelBuilder builder = OkHttpChannelBuilder.forAddress("original", 1234);
-    ManagedChannel channel = builder.build();
-    grpcCleanupRule.register(channel);
+    ManagedChannel channel = grpcCleanupRule.register(builder.build());
     assertEquals("original:1234", channel.authority());
   }
 
@@ -73,8 +72,7 @@ public class OkHttpChannelBuilderTest {
   private void overrideAuthorityIsReadableHelper(OkHttpChannelBuilder builder,
       String overrideAuthority) {
     builder.overrideAuthority(overrideAuthority);
-    ManagedChannel channel = builder.build();
-    grpcCleanupRule.register(channel);
+    ManagedChannel channel = grpcCleanupRule.register(builder.build());
     assertEquals(overrideAuthority, channel.authority());
   }
 
