@@ -226,7 +226,7 @@ final class XdsClientImpl extends XdsClient {
     if (adsStream != null) {
       adsStream.close(Status.CANCELLED.withDescription("shutdown").asException());
     }
-    cleanUpResources();
+    cleanUpResourceTimers();
     if (lrsClient != null) {
       lrsClient.stopLoadReporting();
       lrsClient = null;
@@ -236,15 +236,7 @@ final class XdsClientImpl extends XdsClient {
     }
   }
 
-  /**
-   * Purge cache for resources and cancel resource fetch timers.
-   */
-  private void cleanUpResources() {
-    clusterNamesToClusterUpdates.clear();
-    absentCdsResources.clear();
-    clusterNamesToEndpointUpdates.clear();
-    absentEdsResources.clear();
-
+  private void cleanUpResourceTimers() {
     if (ldsRespTimer != null) {
       ldsRespTimer.cancel();
       ldsRespTimer = null;
@@ -1558,7 +1550,7 @@ final class XdsClientImpl extends XdsClient {
         }
       }
       cleanUp();
-      cleanUpResources();
+      cleanUpResourceTimers();
       if (responseReceived || retryBackoffPolicy == null) {
         // Reset the backoff sequence if had received a response, or backoff sequence
         // has never been initialized.
