@@ -158,6 +158,7 @@ final class GrpclbState {
   private List<BackendEntry> backendList = Collections.emptyList();
   private RoundRobinPicker currentPicker =
       new RoundRobinPicker(Collections.<DropEntry>emptyList(), Arrays.asList(BUFFER_ENTRY));
+  private boolean requestConnectionPending;
 
   GrpclbState(
       GrpclbConfig config,
@@ -242,9 +243,11 @@ final class GrpclbState {
   }
 
   void requestConnection() {
+    requestConnectionPending = true;
     for (RoundRobinEntry entry : currentPicker.pickList) {
       if (entry instanceof IdleSubchannelEntry) {
         ((IdleSubchannelEntry) entry).subchannel.requestConnection();
+        requestConnectionPending = false;
       }
     }
   }
@@ -471,6 +474,10 @@ final class GrpclbState {
               handleSubchannelState(subchannel, newState);
             }
           });
+          if (requestConnectionPending) {
+            subchannel.requestConnection();
+            requestConnectionPending = false;
+          }
         } else {
           subchannel = subchannels.values().iterator().next();
           subchannel.updateAddresses(eagList);
