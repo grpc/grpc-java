@@ -68,6 +68,7 @@ final class EdsLoadBalancer2 extends LoadBalancer {
   private XdsClient xdsClient;
   private String cluster;
   private ResolvedAddresses resolvedAddresses;
+  private EdsLbState edsLbState;
 
   EdsLoadBalancer2(LoadBalancer.Helper helper) {
     this(helper, LoadBalancerRegistry.getDefaultRegistry(), ThreadSafeRandomImpl.instance);
@@ -103,7 +104,10 @@ final class EdsLoadBalancer2 extends LoadBalancer {
     if (cluster == null) {
       cluster = config.clusterName;
     }
-    switchingLoadBalancer.switchTo(new EdsLbState(config.edsServiceName, config.lrsServerName));
+    if (edsLbState == null || !Objects.equals(edsLbState.edsServiceName, config.edsServiceName)) {
+      edsLbState = new EdsLbState(config.edsServiceName, config.lrsServerName);
+      switchingLoadBalancer.switchTo(edsLbState);
+    }
     switchingLoadBalancer.handleResolvedAddresses(resolvedAddresses);
   }
 
@@ -143,21 +147,6 @@ final class EdsLoadBalancer2 extends LoadBalancer {
     @Override
     public LoadBalancer newLoadBalancer(Helper helper) {
       return new ChildLbState(helper);
-    }
-
-    @Override
-    public int hashCode() {
-      return Objects.hash(edsServiceName, lrsServerName);
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-      if (!(obj instanceof EdsLbState)) {
-        return false;
-      }
-      EdsLbState that = (EdsLbState) obj;
-      return Objects.equals(edsServiceName, that.edsServiceName)
-          && Objects.equals(lrsServerName, that.lrsServerName);
     }
 
     private final class ChildLbState extends LoadBalancer implements EndpointWatcher {
