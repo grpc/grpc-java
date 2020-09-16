@@ -1737,7 +1737,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
     final InternalLogId subchannelLogId;
     final ChannelLoggerImpl subchannelLogger;
     final ChannelTracer subchannelTracer;
-    SubchannelStateListener listener;
     InternalSubchannel subchannel;
     boolean started;
     boolean shutdown;
@@ -1759,7 +1758,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
       checkState(!started, "already started");
       checkState(!shutdown, "already shutdown");
       started = true;
-      this.listener = listener;
       // TODO(zhangkun): possibly remove the volatile of terminating when this whole method is
       // required to be called from syncContext
       if (terminating) {
