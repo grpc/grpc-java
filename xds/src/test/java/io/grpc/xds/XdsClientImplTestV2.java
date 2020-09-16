@@ -2682,7 +2682,7 @@ public class XdsClientImplTestV2 {
     responseObserver = responseObserverCaptor.getValue();
     requestObserver = requestObservers.poll();
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequestV2(NODE, "", TARGET_AUTHORITY,
+        .onNext(eq(buildDiscoveryRequestV2(NODE, "0", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
 
     // RPC stream closed immediately
@@ -2699,10 +2699,12 @@ public class XdsClientImplTestV2 {
     responseObserver = responseObserverCaptor.getValue();
     requestObserver = requestObservers.poll();
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequestV2(NODE, "", TARGET_AUTHORITY,
+        .onNext(eq(buildDiscoveryRequestV2(NODE, "0", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
 
     // Management server sends an LDS response.
+    ldsResponse =
+        buildDiscoveryResponseV2("1", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0001");
     responseObserver.onNext(ldsResponse);
 
     // Client sends an ACK LDS request and an RDS request for "route-foo.googleapis.com". (Omitted)
@@ -2734,7 +2736,7 @@ public class XdsClientImplTestV2 {
     fakeClock.runDueTasks();
     requestObserver = requestObservers.poll();
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequestV2(NODE, "", TARGET_AUTHORITY,
+        .onNext(eq(buildDiscoveryRequestV2(NODE, "1", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
 
     verifyNoMoreInteractions(backoffPolicyProvider, backoffPolicy1, backoffPolicy2);
@@ -2796,7 +2798,7 @@ public class XdsClientImplTestV2 {
 
     // Retry resumes requests for all wanted resources.
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequestV2(NODE, "", TARGET_AUTHORITY,
+        .onNext(eq(buildDiscoveryRequestV2(NODE, "0", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequestV2(NODE, "", "cluster.googleapis.com",
@@ -2825,7 +2827,7 @@ public class XdsClientImplTestV2 {
     responseObserver = responseObserverCaptor.getValue();
     requestObserver = requestObservers.poll();
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequestV2(NODE, "", TARGET_AUTHORITY,
+        .onNext(eq(buildDiscoveryRequestV2(NODE, "0", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequestV2(NODE, "", "cluster.googleapis.com",
@@ -2854,7 +2856,7 @@ public class XdsClientImplTestV2 {
     responseObserver = responseObserverCaptor.getValue();
     requestObserver = requestObservers.poll();
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequestV2(NODE, "", TARGET_AUTHORITY,
+        .onNext(eq(buildDiscoveryRequestV2(NODE, "0", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequestV2(NODE, "", "cluster.googleapis.com",
@@ -2887,10 +2889,10 @@ public class XdsClientImplTestV2 {
     requestObserver = requestObservers.poll();
 
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequestV2(NODE, "", TARGET_AUTHORITY,
+        .onNext(eq(buildDiscoveryRequestV2(NODE, "0", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequestV2(NODE, "", "cluster.googleapis.com",
+        .onNext(eq(buildDiscoveryRequestV2(NODE, "0", "cluster.googleapis.com",
             XdsClientImpl.ADS_TYPE_URL_CDS_V2, "")));
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequestV2(NODE, "", "cluster.googleapis.com",
@@ -2915,10 +2917,10 @@ public class XdsClientImplTestV2 {
         .streamAggregatedResources(responseObserverCaptor.capture());
     requestObserver = requestObservers.poll();
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequestV2(NODE, "", TARGET_AUTHORITY,
+        .onNext(eq(buildDiscoveryRequestV2(NODE, "0", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequestV2(NODE, "", "cluster.googleapis.com",
+        .onNext(eq(buildDiscoveryRequestV2(NODE, "0", "cluster.googleapis.com",
             XdsClientImpl.ADS_TYPE_URL_CDS_V2, "")));
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequestV2(NODE, "", "cluster.googleapis.com",
@@ -2960,7 +2962,7 @@ public class XdsClientImplTestV2 {
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
 
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequestV2(NODE, "", TARGET_AUTHORITY,
+        .onNext(eq(buildDiscoveryRequestV2(NODE, "0", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
 
     // Management server becomes unreachable.
@@ -2981,7 +2983,7 @@ public class XdsClientImplTestV2 {
     requestObserver = requestObservers.poll();
 
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequestV2(NODE, "", TARGET_AUTHORITY,
+        .onNext(eq(buildDiscoveryRequestV2(NODE, "0", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequestV2(NODE, "", "cluster.googleapis.com",
@@ -3005,7 +3007,7 @@ public class XdsClientImplTestV2 {
     requestObserver = requestObservers.poll();
 
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequestV2(NODE, "", TARGET_AUTHORITY,
+        .onNext(eq(buildDiscoveryRequestV2(NODE, "0", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequestV2(NODE, "", "cluster.googleapis.com",
@@ -3048,10 +3050,10 @@ public class XdsClientImplTestV2 {
     responseObserver = responseObserverCaptor.getValue();
     requestObserver = requestObservers.poll();
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequestV2(NODE, "", TARGET_AUTHORITY,
+        .onNext(eq(buildDiscoveryRequestV2(NODE, "0", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequestV2(NODE, "", "cluster.googleapis.com",
+        .onNext(eq(buildDiscoveryRequestV2(NODE, "0", "cluster.googleapis.com",
             XdsClientImpl.ADS_TYPE_URL_CDS_V2, "")));
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequestV2(NODE, "", "cluster2.googleapis.com",
@@ -3075,10 +3077,10 @@ public class XdsClientImplTestV2 {
     requestObserver = requestObservers.poll();
 
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequestV2(NODE, "", TARGET_AUTHORITY,
+        .onNext(eq(buildDiscoveryRequestV2(NODE, "0", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
     verify(requestObserver, never())
-        .onNext(eq(buildDiscoveryRequestV2(NODE, "", "cluster.googleapis.com",
+        .onNext(eq(buildDiscoveryRequestV2(NODE, "0", "cluster.googleapis.com",
             XdsClientImpl.ADS_TYPE_URL_CDS_V2, "")));
     verify(requestObserver, never())
         .onNext(eq(buildDiscoveryRequestV2(NODE, "", "cluster2.googleapis.com",

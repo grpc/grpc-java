@@ -708,6 +708,8 @@ public class XdsClientImplTestForListener {
         buildDiscoveryResponseV2("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000");
     responseObserver.onNext(response);
 
+    // Client sent an ACK CDS request (Omitted).
+
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
 
     // Management server closes the RPC stream with an error.
@@ -725,7 +727,7 @@ public class XdsClientImplTestForListener {
 
     // Retry resumes requests for all wanted resources.
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "",
+        .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "0",
             XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
 
     // Management server becomes unreachable.
@@ -744,7 +746,7 @@ public class XdsClientImplTestForListener {
     responseObserver = responseObserverCaptor.getValue();
     requestObserver = requestObservers.poll();
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "",
+        .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "0",
             XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
 
     // Management server is still not reachable.
@@ -763,7 +765,7 @@ public class XdsClientImplTestForListener {
     responseObserver = responseObserverCaptor.getValue();
     requestObserver = requestObservers.poll();
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "",
+        .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "0",
             XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
 
     // Management server sends back a LDS response.
@@ -786,7 +788,7 @@ public class XdsClientImplTestForListener {
     requestObserver = requestObservers.poll();
 
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "",
+        .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "1",
             XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
 
     // Management server becomes unreachable again.
@@ -804,7 +806,7 @@ public class XdsClientImplTestForListener {
         .streamAggregatedResources(responseObserverCaptor.capture());
     requestObserver = requestObservers.poll();
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "",
+        .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "1",
             XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
 
     verifyNoMoreInteractions(mockedDiscoveryService, backoffPolicyProvider, backoffPolicy1,
