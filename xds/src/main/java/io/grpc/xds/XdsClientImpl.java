@@ -163,6 +163,14 @@ final class XdsClientImpl extends XdsClient {
 
   private final LoadStatsManager loadStatsManager = new LoadStatsManager();
 
+  // Last successfully applied version_info for each resource type. Starts with empty string.
+  // A version_info is used to update management server with client's most recent knowledge of
+  // resources.
+  private String ldsVersion = "";
+  private String rdsVersion = "";
+  private String cdsVersion = "";
+  private String edsVersion = "";
+
   // Timer for concluding the currently requesting LDS resource not found.
   @Nullable
   private ScheduledHandle ldsRespTimer;
@@ -1425,14 +1433,6 @@ final class XdsClientImpl extends XdsClient {
   private abstract class AbstractAdsStream {
     private boolean responseReceived;
     private boolean closed;
-
-    // Last successfully applied version_info for each resource type. Starts with empty string.
-    // A version_info is used to update management server with client's most recent knowledge of
-    // resources.
-    private String ldsVersion = "";
-    private String rdsVersion = "";
-    private String cdsVersion = "";
-    private String edsVersion = "";
 
     // Response nonce for the most recently received discovery responses of each resource type.
     // Client initiated requests start response nonce with empty string.
