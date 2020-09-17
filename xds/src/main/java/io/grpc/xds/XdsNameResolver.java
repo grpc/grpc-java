@@ -238,10 +238,6 @@ final class XdsNameResolver extends NameResolver {
       Map<String, ?> rawServiceConfig =
           generateServiceConfigWithMethodTimeoutConfig(
               selectedRoute.getRouteAction().getTimeoutNano());
-      if (logger.isLoggable(XdsLogLevel.INFO)) {
-        logger.log(XdsLogLevel.INFO,
-            "Generated service config (method config):\n{0}", new Gson().toJson(rawServiceConfig));
-      }
       ConfigOrError parsedServiceConfig = serviceConfigParser.parseServiceConfig(rawServiceConfig);
       Object config = parsedServiceConfig.getConfig();
       if (config == null) {
