@@ -778,7 +778,7 @@ public class EdsLoadBalancer2Test {
 
     @Override
     public Subchannel createSubchannel(CreateSubchannelArgs args) {
-      return new FakeSubchannel(args.getAddresses());
+      return mock(Subchannel.class);
     }
 
     @Override
@@ -805,32 +805,6 @@ public class EdsLoadBalancer2Test {
     @Override
     public String getAuthority() {
       return AUTHORITY;
-    }
-  }
-
-  private static final class FakeSubchannel extends Subchannel {
-    private final List<EquivalentAddressGroup> eags;
-
-    private FakeSubchannel(List<EquivalentAddressGroup> eags) {
-      this.eags = eags;
-    }
-
-    @Override
-    public void shutdown() {
-    }
-
-    @Override
-    public void requestConnection() {
-    }
-
-    @Override
-    public List<EquivalentAddressGroup> getAllAddresses() {
-      return eags;
-    }
-
-    @Override
-    public Attributes getAttributes() {
-      return Attributes.EMPTY;
     }
   }
 }
