@@ -148,12 +148,13 @@ public class SdsProtocolNegotiatorsTest {
 
   @Test
   public void clientSdsProtocolNegotiatorNewHandler_noTlsContextAttribute() {
-    ClientSdsProtocolNegotiator pn = new ClientSdsProtocolNegotiator();
+    ChannelHandler mockChannelHandler = mock(ChannelHandler.class);
+    ProtocolNegotiator mockProtocolNegotiator = mock(ProtocolNegotiator.class);
+    when(mockProtocolNegotiator.newHandler(grpcHandler)).thenReturn(mockChannelHandler);
+    ClientSdsProtocolNegotiator pn = new ClientSdsProtocolNegotiator(mockProtocolNegotiator);
     ChannelHandler newHandler = pn.newHandler(grpcHandler);
     assertThat(newHandler).isNotNull();
-    // ProtocolNegotiators.WaitUntilActiveHandler not accessible, get canonical name
-    assertThat(newHandler.getClass().getCanonicalName())
-        .contains("io.grpc.netty.ProtocolNegotiators.WaitUntilActiveHandler");
+    assertThat(newHandler).isSameInstanceAs(mockChannelHandler);
   }
 
   @Test
@@ -161,7 +162,8 @@ public class SdsProtocolNegotiatorsTest {
     UpstreamTlsContext upstreamTlsContext =
         CommonTlsContextTestsUtil.buildUpstreamTlsContext(
             getCommonTlsContext(/* tlsCertificate= */ null, /* certContext= */ null));
-    ClientSdsProtocolNegotiator pn = new ClientSdsProtocolNegotiator();
+    ClientSdsProtocolNegotiator pn =
+        new ClientSdsProtocolNegotiator(InternalProtocolNegotiators.plaintext());
     GrpcHttp2ConnectionHandler mockHandler = mock(GrpcHttp2ConnectionHandler.class);
     TlsContextManager mockTlsContextManager = mock(TlsContextManager.class);
     when(mockHandler.getEagAttributes())

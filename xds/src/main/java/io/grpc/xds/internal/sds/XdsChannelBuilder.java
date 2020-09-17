@@ -16,10 +16,13 @@
 
 package io.grpc.xds.internal.sds;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import io.grpc.ForwardingChannelBuilder;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.netty.InternalNettyChannelBuilder;
+import io.grpc.netty.InternalProtocolNegotiator;
 import io.grpc.netty.NettyChannelBuilder;
 import java.net.SocketAddress;
 import javax.annotation.CheckReturnValue;
@@ -31,6 +34,7 @@ import javax.annotation.CheckReturnValue;
 public final class XdsChannelBuilder extends ForwardingChannelBuilder<XdsChannelBuilder> {
 
   private final NettyChannelBuilder delegate;
+  private InternalProtocolNegotiator.ProtocolNegotiator fallbackProtocolNegotiator;
 
   private XdsChannelBuilder(NettyChannelBuilder delegate) {
     this.delegate = delegate;
@@ -63,6 +67,14 @@ public final class XdsChannelBuilder extends ForwardingChannelBuilder<XdsChannel
     return new XdsChannelBuilder(NettyChannelBuilder.forTarget(target));
   }
 
+  /** Set the fallback protocolNegotiator. */
+  public XdsChannelBuilder fallbackProtocolNegotiator(
+          InternalProtocolNegotiator.ProtocolNegotiator fallbackProtocolNegotiator) {
+    checkNotNull(fallbackProtocolNegotiator, "fallbackProtocolNegotiator");
+    this.fallbackProtocolNegotiator = fallbackProtocolNegotiator;
+    return this;
+  }
+
   @Override
   protected ManagedChannelBuilder<?> delegate() {
     return delegate;
@@ -71,7 +83,8 @@ public final class XdsChannelBuilder extends ForwardingChannelBuilder<XdsChannel
   @Override
   public ManagedChannel build() {
     InternalNettyChannelBuilder.setProtocolNegotiatorFactory(
-        delegate, SdsProtocolNegotiators.clientProtocolNegotiatorFactory());
+        delegate,
+        SdsProtocolNegotiators.clientProtocolNegotiatorFactory(fallbackProtocolNegotiator));
     return delegate.build();
   }
 }
