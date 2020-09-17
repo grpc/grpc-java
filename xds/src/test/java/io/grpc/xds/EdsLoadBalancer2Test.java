@@ -312,7 +312,7 @@ public class EdsLoadBalancer2Test {
   @Test
   public void handleDrops() {
     FakeLoadBalancerProvider fakeRoundRobinProvider = new FakeLoadBalancerProvider("round_robin");
-    recreateLoadBalancerWithRealDownstreamLbPolicies(fakeRoundRobinProvider);
+    prepareRealDownstreamLbPolicies(fakeRoundRobinProvider);
     when(mockRandom.nextInt(anyInt())).thenReturn(499_999, 1_000_000);
     EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr-1");
     LocalityLbEndpoints localityLbEndpoints1 =
@@ -377,7 +377,7 @@ public class EdsLoadBalancer2Test {
   @Test
   public void configUpdate_changeEndpointPickingPolicy() {
     FakeLoadBalancerProvider fakeRoundRobinProvider = new FakeLoadBalancerProvider("round_robin");
-    recreateLoadBalancerWithRealDownstreamLbPolicies(fakeRoundRobinProvider);
+    prepareRealDownstreamLbPolicies(fakeRoundRobinProvider);
     deliverSimpleClusterLoadAssignment(EDS_SERVICE_NAME);  // downstream LB policies instantiated
     FakeLoadBalancer leafBalancer = Iterables.getOnlyElement(downstreamBalancers);
     assertThat(leafBalancer.name).isEqualTo("round_robin");
@@ -527,19 +527,16 @@ public class EdsLoadBalancer2Test {
   }
 
   /**
-   * Recreate a new {@link EdsLoadBalancer2} that will instantiate its downstream LB policies with
-   * real implementations, except the leaf policy is replaced with a fake implementation to avoid
-   * creating connections.
+   * Instantiates the downstream LB policy subtree with real implementations, except the leaf
+   * policy is replaced with a fake implementation to avoid creating connections.
    */
-  private void recreateLoadBalancerWithRealDownstreamLbPolicies(
-      FakeLoadBalancerProvider fakeLeafPolicyProvider) {
-    LoadBalancerRegistry lbRegistry = LoadBalancerRegistry.getDefaultRegistry();
-    lbRegistry.deregister(lbRegistry.getProvider(fakeLeafPolicyProvider.getPolicyName()));
-    lbRegistry.register(fakeLeafPolicyProvider);
-    loadBalancer.shutdown();
-    loadBalancer = new EdsLoadBalancer2(helper, lbRegistry, mockRandom);
+  private void prepareRealDownstreamLbPolicies(FakeLoadBalancerProvider fakeLeafPolicyProvider) {
+    registry.deregister(registry.getProvider(PRIORITY_POLICY_NAME));
+    registry.register(new PriorityLoadBalancerProvider());
+    registry.deregister(registry.getProvider(LRS_POLICY_NAME));
+    registry.register(new LrsLoadBalancerProvider());
     PolicySelection weightedTargetSelection =
-        new PolicySelection(lbRegistry.getProvider(WEIGHTED_TARGET_POLICY_NAME), null, null);
+        new PolicySelection(new WeightedTargetLoadBalancerProvider(), null, null);
     PolicySelection fakeLeafPolicySelection =
         new PolicySelection(fakeLeafPolicyProvider, null, null);
     loadBalancer.handleResolvedAddresses(
