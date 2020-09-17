@@ -69,7 +69,7 @@ final class MeshCaCertificateProviderProvider implements CertificateProviderProv
   static final long RPC_TIMEOUT_SECONDS = 10L;
 
   private static final Pattern CLUSTER_URL_PATTERN = Pattern
-      .compile(".*/projects/(.*)/locations/(.*)/clusters/.*");
+      .compile(".*/projects/(.*)/(?:locations|zones)/(.*)/clusters/.*");
 
   private static final String TRUST_DOMAIN_SUFFIX = ".svc.id.goog";
   private static final String AUDIENCE_PREFIX = "identitynamespace:";

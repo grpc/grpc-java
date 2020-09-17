@@ -16,6 +16,7 @@
 
 package io.grpc.internal;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
@@ -65,11 +66,11 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   private final ScheduledExecutorService scheduledExecutorService;
   // Must not modify it.
   private final Metadata headers;
-  private final RetryPolicy.Provider retryPolicyProvider;
-  private final HedgingPolicy.Provider hedgingPolicyProvider;
-  private RetryPolicy retryPolicy;
-  private HedgingPolicy hedgingPolicy;
-  private boolean isHedging;
+  @Nullable
+  private final RetryPolicy retryPolicy;
+  @Nullable
+  private final HedgingPolicy hedgingPolicy;
+  private final boolean isHedging;
 
   /** Must be held when updating state, accessing state.buffer, or certain substream attributes. */
   private final Object lock = new Object();
@@ -107,7 +108,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       MethodDescriptor<ReqT, ?> method, Metadata headers,
       ChannelBufferMeter channelBufferUsed, long perRpcBufferLimit, long channelBufferLimit,
       Executor callExecutor, ScheduledExecutorService scheduledExecutorService,
-      RetryPolicy.Provider retryPolicyProvider, HedgingPolicy.Provider hedgingPolicyProvider,
+      @Nullable RetryPolicy retryPolicy, @Nullable HedgingPolicy hedgingPolicy,
       @Nullable Throttle throttle) {
     this.method = method;
     this.channelBufferUsed = channelBufferUsed;
@@ -116,8 +117,15 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     this.callExecutor = callExecutor;
     this.scheduledExecutorService = scheduledExecutorService;
     this.headers = headers;
-    this.retryPolicyProvider = checkNotNull(retryPolicyProvider, "retryPolicyProvider");
-    this.hedgingPolicyProvider = checkNotNull(hedgingPolicyProvider, "hedgingPolicyProvider");
+    this.retryPolicy = retryPolicy;
+    if (retryPolicy != null) {
+      this.nextBackoffIntervalNanos = retryPolicy.initialBackoffNanos;
+    }
+    this.hedgingPolicy = hedgingPolicy;
+    checkArgument(
+        retryPolicy == null || hedgingPolicy == null,
+        "Should not provide both retryPolicy and hedgingPolicy");
+    this.isHedging = hedgingPolicy != null;
     this.throttle = throttle;
   }
 
@@ -314,13 +322,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     }
 
     Substream substream = createSubstream(0);
-    checkState(hedgingPolicy == null, "hedgingPolicy has been initialized unexpectedly");
-    // TODO(zdapeng): if substream is a DelayedStream, do this when name resolution finishes
-    hedgingPolicy = hedgingPolicyProvider.get();
-    if (!HedgingPolicy.DEFAULT.equals(hedgingPolicy)) {
-      isHedging = true;
-      retryPolicy = RetryPolicy.DEFAULT;
-
+    if (isHedging) {
       FutureCanceller scheduledHedgingRef = null;
 
       synchronized (lock) {
@@ -807,10 +809,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
               commitAndRun(newSubstream);
             }
           } else {
-            if (retryPolicy == null) {
-              retryPolicy = retryPolicyProvider.get();
-            }
-            if (retryPolicy.maxAttempts == 1) {
+            if (retryPolicy == null || retryPolicy.maxAttempts == 1) {
               // optimization for early commit
               commitAndRun(newSubstream);
             }
@@ -830,11 +829,6 @@ abstract class RetriableStream<ReqT> implements ClientStream {
           }
         } else {
           noMoreTransparentRetry.set(true);
-
-          if (retryPolicy == null) {
-            retryPolicy = retryPolicyProvider.get();
-            nextBackoffIntervalNanos = retryPolicy.initialBackoffNanos;
-          }
 
           if (isHedging) {
             HedgingPlan hedgingPlan = makeHedgingDecision(status, trailers);
@@ -900,6 +894,9 @@ abstract class RetriableStream<ReqT> implements ClientStream {
      * caller should check it separately. It also updates the throttle. It does not change state.
      */
     private RetryPlan makeRetryDecision(Status status, Metadata trailer) {
+      if (retryPolicy == null) {
+        return new RetryPlan(false, 0);
+      }
       boolean shouldRetry = false;
       long backoffNanos = 0L;
       boolean isRetryableStatusCode = retryPolicy.retryableStatusCodes.contains(status.getCode());

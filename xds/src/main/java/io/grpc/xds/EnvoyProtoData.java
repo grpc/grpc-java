@@ -1153,6 +1153,9 @@ final class EnvoyProtoData {
         case WEIGHTED_CLUSTERS:
           List<io.envoyproxy.envoy.config.route.v3.WeightedCluster.ClusterWeight> clusterWeights
               = proto.getWeightedClusters().getClustersList();
+          if (clusterWeights.isEmpty()) {
+            return StructOrError.fromError("No cluster found in weighted cluster list");
+          }
           weightedClusters = new ArrayList<>();
           for (io.envoyproxy.envoy.config.route.v3.WeightedCluster.ClusterWeight clusterWeight
               : clusterWeights) {
@@ -1289,8 +1292,8 @@ final class EnvoyProtoData {
 
     io.envoyproxy.envoy.config.endpoint.v3.ClusterStats toEnvoyProtoClusterStats() {
       io.envoyproxy.envoy.config.endpoint.v3.ClusterStats.Builder builder =
-          io.envoyproxy.envoy.config.endpoint.v3.ClusterStats.newBuilder();
-      builder.setClusterName(clusterName);
+          io.envoyproxy.envoy.config.endpoint.v3.ClusterStats.newBuilder()
+              .setClusterName(clusterName);
       if (clusterServiceName != null) {
         builder.setClusterServiceName(clusterServiceName);
       }
@@ -1300,15 +1303,16 @@ final class EnvoyProtoData {
       for (DroppedRequests droppedRequests : droppedRequestsList) {
         builder.addDroppedRequests(droppedRequests.toEnvoyProtoDroppedRequests());
       }
-      builder.setTotalDroppedRequests(totalDroppedRequests);
-      builder.setLoadReportInterval(Durations.fromNanos(loadReportIntervalNanos));
-      return builder.build();
+      return builder
+          .setTotalDroppedRequests(totalDroppedRequests)
+          .setLoadReportInterval(Durations.fromNanos(loadReportIntervalNanos))
+          .build();
     }
 
     io.envoyproxy.envoy.api.v2.endpoint.ClusterStats toEnvoyProtoClusterStatsV2() {
       io.envoyproxy.envoy.api.v2.endpoint.ClusterStats.Builder builder =
-          io.envoyproxy.envoy.api.v2.endpoint.ClusterStats.newBuilder();
-      builder.setClusterName(clusterName);
+          io.envoyproxy.envoy.api.v2.endpoint.ClusterStats.newBuilder()
+              .setClusterName(clusterName);
       for (UpstreamLocalityStats upstreamLocalityStats : upstreamLocalityStatsList) {
         builder.addUpstreamLocalityStats(
             upstreamLocalityStats.toEnvoyProtoUpstreamLocalityStatsV2());
@@ -1316,9 +1320,10 @@ final class EnvoyProtoData {
       for (DroppedRequests droppedRequests : droppedRequestsList) {
         builder.addDroppedRequests(droppedRequests.toEnvoyProtoDroppedRequestsV2());
       }
-      builder.setTotalDroppedRequests(totalDroppedRequests);
-      builder.setLoadReportInterval(Durations.fromNanos(loadReportIntervalNanos));
-      return builder.build();
+      return builder
+          .setTotalDroppedRequests(totalDroppedRequests)
+          .setLoadReportInterval(Durations.fromNanos(loadReportIntervalNanos))
+          .build();
     }
 
     @VisibleForTesting
@@ -1531,13 +1536,12 @@ final class EnvoyProtoData {
     private io.envoyproxy.envoy.config.endpoint.v3.UpstreamLocalityStats
         toEnvoyProtoUpstreamLocalityStats() {
       io.envoyproxy.envoy.config.endpoint.v3.UpstreamLocalityStats.Builder builder
-          = io.envoyproxy.envoy.config.endpoint.v3.UpstreamLocalityStats.newBuilder();
-      builder
-          .setLocality(locality.toEnvoyProtoLocality())
-          .setTotalSuccessfulRequests(totalSuccessfulRequests)
-          .setTotalErrorRequests(totalErrorRequests)
-          .setTotalRequestsInProgress(totalRequestsInProgress)
-          .setTotalIssuedRequests(totalIssuedRequests);
+          = io.envoyproxy.envoy.config.endpoint.v3.UpstreamLocalityStats.newBuilder()
+              .setLocality(locality.toEnvoyProtoLocality())
+              .setTotalSuccessfulRequests(totalSuccessfulRequests)
+              .setTotalErrorRequests(totalErrorRequests)
+              .setTotalRequestsInProgress(totalRequestsInProgress)
+              .setTotalIssuedRequests(totalIssuedRequests);
       for (EndpointLoadMetricStats endpointLoadMetricStats : loadMetricStatsList) {
         builder.addLoadMetricStats(endpointLoadMetricStats.toEnvoyProtoEndpointLoadMetricStats());
       }
@@ -1547,13 +1551,12 @@ final class EnvoyProtoData {
     private io.envoyproxy.envoy.api.v2.endpoint.UpstreamLocalityStats
         toEnvoyProtoUpstreamLocalityStatsV2() {
       io.envoyproxy.envoy.api.v2.endpoint.UpstreamLocalityStats.Builder builder
-          = io.envoyproxy.envoy.api.v2.endpoint.UpstreamLocalityStats.newBuilder();
-      builder
-          .setLocality(locality.toEnvoyProtoLocalityV2())
-          .setTotalSuccessfulRequests(totalSuccessfulRequests)
-          .setTotalErrorRequests(totalErrorRequests)
-          .setTotalRequestsInProgress(totalRequestsInProgress)
-          .setTotalIssuedRequests(totalIssuedRequests);
+          = io.envoyproxy.envoy.api.v2.endpoint.UpstreamLocalityStats.newBuilder()
+              .setLocality(locality.toEnvoyProtoLocalityV2())
+              .setTotalSuccessfulRequests(totalSuccessfulRequests)
+              .setTotalErrorRequests(totalErrorRequests)
+              .setTotalRequestsInProgress(totalRequestsInProgress)
+              .setTotalIssuedRequests(totalIssuedRequests);
       for (EndpointLoadMetricStats endpointLoadMetricStats : loadMetricStatsList) {
         builder.addLoadMetricStats(endpointLoadMetricStats.toEnvoyProtoEndpointLoadMetricStatsV2());
       }

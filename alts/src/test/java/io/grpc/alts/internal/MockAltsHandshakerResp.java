@@ -20,6 +20,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 
 import com.google.protobuf.ByteString;
 import io.grpc.Status;
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.security.SecureRandom;
@@ -62,7 +63,7 @@ class MockAltsHandshakerResp {
     buffer.order(ByteOrder.LITTLE_ENDIAN);
     buffer.putInt(frameSize);
     buffer.put(TEST_OUT_FRAME.getBytes(UTF_8));
-    buffer.flip();
+    ((Buffer) buffer).flip();
     return ByteString.copyFrom(buffer);
   }
 

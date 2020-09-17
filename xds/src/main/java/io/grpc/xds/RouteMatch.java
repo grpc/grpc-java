@@ -45,6 +45,7 @@ final class RouteMatch {
     this.headerMatchers = headerMatchers;
   }
 
+  @VisibleForTesting
   RouteMatch(@Nullable String pathPrefixMatch, @Nullable String pathExactMatch) {
     this(
         new PathMatcher(pathExactMatch, pathPrefixMatch, null),

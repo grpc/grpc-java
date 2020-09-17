@@ -51,7 +51,7 @@ import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
- * The base class for channel builders.
+ * Abstract base class for channel builders.
  *
  * @param <T> The concrete type of this builder.
  */

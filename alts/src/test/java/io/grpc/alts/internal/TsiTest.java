@@ -26,6 +26,7 @@ import io.grpc.alts.internal.TsiFrameProtector.Consumer;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.buffer.UnpooledByteBufAllocator;
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
@@ -83,7 +84,7 @@ public final class TsiTest {
 
     byte[] transportBufferBytes = new byte[transportBufferSize];
     ByteBuffer transportBuffer = ByteBuffer.wrap(transportBufferBytes);
-    transportBuffer.limit(0); // Start off with an empty buffer
+    ((Buffer) transportBuffer).limit(0); // Start off with an empty buffer
 
     while (clientHandshaker.isInProgress() || serverHandshaker.isInProgress()) {
       for (TsiHandshaker handshaker : new TsiHandshaker[] {clientHandshaker, serverHandshaker}) {
@@ -94,9 +95,9 @@ public final class TsiTest {
           }
           // Put new bytes on the wire, if needed.
           if (handshaker.isInProgress()) {
-            transportBuffer.clear();
+            ((Buffer) transportBuffer).clear();
             handshaker.getBytesToSendToPeer(transportBuffer);
-            transportBuffer.flip();
+            ((Buffer) transportBuffer).flip();
           }
         }
       }

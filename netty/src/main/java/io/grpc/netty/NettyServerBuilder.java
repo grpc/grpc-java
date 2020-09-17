@@ -27,14 +27,19 @@ import static io.grpc.internal.GrpcUtil.SERVER_KEEPALIVE_TIME_NANOS_DISABLED;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import io.grpc.ExperimentalApi;
+import io.grpc.ForwardingServerBuilder;
 import io.grpc.Internal;
+import io.grpc.ServerBuilder;
 import io.grpc.ServerStreamTracer;
-import io.grpc.internal.AbstractServerImplBuilder;
 import io.grpc.internal.FixedObjectPool;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.InternalServer;
 import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.ObjectPool;
+import io.grpc.internal.ServerImplBuilder;
+import io.grpc.internal.ServerImplBuilder.ClientTransportServersBuilder;
 import io.grpc.internal.SharedResourcePool;
+import io.grpc.internal.TransportTracer;
 import io.netty.channel.ChannelFactory;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
@@ -61,7 +66,7 @@ import javax.net.ssl.SSLException;
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1784")
 @CanIgnoreReturnValue
-public final class NettyServerBuilder extends AbstractServerImplBuilder<NettyServerBuilder> {
+public final class NettyServerBuilder extends ForwardingServerBuilder<NettyServerBuilder> {
 
   // 1MiB
   public static final int DEFAULT_FLOW_CONTROL_WINDOW = 1024 * 1024;
@@ -80,8 +85,10 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
   private static final ObjectPool<? extends EventLoopGroup> DEFAULT_WORKER_EVENT_LOOP_GROUP_POOL =
       SharedResourcePool.forResource(Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP);
 
+  private final ServerImplBuilder serverImplBuilder;
   private final List<SocketAddress> listenAddresses = new ArrayList<>();
 
+  private TransportTracer.Factory transportTracerFactory = TransportTracer.getDefaultFactory();
   private ChannelFactory<? extends ServerChannel> channelFactory =
       Utils.DEFAULT_SERVER_CHANNEL_FACTORY;
   private final Map<ChannelOption<?>, Object> channelOptions = new HashMap<>();
@@ -128,14 +135,30 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
     return new NettyServerBuilder(address);
   }
 
+  private final class NettyClientTransportServersBuilder implements ClientTransportServersBuilder {
+    @Override
+    public List<? extends InternalServer> buildClientTransportServers(
+        List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
+      return buildTransportServers(streamTracerFactories);
+    }
+  }
+
   @CheckReturnValue
   private NettyServerBuilder(int port) {
+    serverImplBuilder = new ServerImplBuilder(new NettyClientTransportServersBuilder());
     this.listenAddresses.add(new InetSocketAddress(port));
   }
 
   @CheckReturnValue
   private NettyServerBuilder(SocketAddress address) {
+    serverImplBuilder = new ServerImplBuilder(new NettyClientTransportServersBuilder());
     this.listenAddresses.add(address);
+  }
+
+  @Internal
+  @Override
+  protected ServerBuilder<?> delegate() {
+    return serverImplBuilder;
   }
 
   /**
@@ -316,24 +339,20 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
     return this;
   }
 
-  @Override
-  protected void setTracingEnabled(boolean value) {
-    super.setTracingEnabled(value);
+  void setTracingEnabled(boolean value) {
+    this.serverImplBuilder.setTracingEnabled(value);
   }
 
-  @Override
-  protected void setStatsEnabled(boolean value) {
-    super.setStatsEnabled(value);
+  void setStatsEnabled(boolean value) {
+    this.serverImplBuilder.setStatsEnabled(value);
   }
 
-  @Override
-  protected void setStatsRecordStartedRpcs(boolean value) {
-    super.setStatsRecordStartedRpcs(value);
+  void setStatsRecordStartedRpcs(boolean value) {
+    this.serverImplBuilder.setStatsRecordStartedRpcs(value);
   }
 
-  @Override
-  protected void setStatsRecordRealTimeMetrics(boolean value) {
-    super.setStatsRecordRealTimeMetrics(value);
+  void setStatsRecordRealTimeMetrics(boolean value) {
+    this.serverImplBuilder.setStatsRecordRealTimeMetrics(value);
   }
 
   /**
@@ -562,16 +581,15 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
     return this;
   }
 
-  @Override
   @CheckReturnValue
-  protected List<NettyServer> buildTransportServers(
+  List<NettyServer> buildTransportServers(
       List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
     assertEventLoopsAndChannelType();
 
     ProtocolNegotiator negotiator = protocolNegotiator;
     if (negotiator == null) {
       negotiator = sslContext != null
-          ? ProtocolNegotiators.serverTls(sslContext, this.getExecutorPool())
+          ? ProtocolNegotiators.serverTls(sslContext, this.serverImplBuilder.getExecutorPool())
           : ProtocolNegotiators.serverPlaintext();
     }
 
@@ -580,12 +598,12 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
       NettyServer transportServer = new NettyServer(
           listenAddress, channelFactory, channelOptions, childChannelOptions,
           bossEventLoopGroupPool, workerEventLoopGroupPool, forceHeapBuffer, negotiator,
-          streamTracerFactories, getTransportTracerFactory(), maxConcurrentCallsPerConnection,
+          streamTracerFactories, transportTracerFactory, maxConcurrentCallsPerConnection,
           autoFlowControl, flowControlWindow, maxMessageSize, maxHeaderListSize,
           keepAliveTimeInNanos, keepAliveTimeoutInNanos,
           maxConnectionIdleInNanos, maxConnectionAgeInNanos,
           maxConnectionAgeGraceInNanos, permitKeepAliveWithoutCalls, permitKeepAliveTimeInNanos,
-          getChannelz());
+          this.serverImplBuilder.getChannelz());
       transportServers.add(transportServer);
     }
     return Collections.unmodifiableList(transportServers);
@@ -603,6 +621,12 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
         allProvided || nonProvided,
         "All of BossEventLoopGroup, WorkerEventLoopGroup and ChannelType should be provided or "
             + "neither should be");
+  }
+
+  NettyServerBuilder setTransportTracerFactory(
+      TransportTracer.Factory transportTracerFactory) {
+    this.transportTracerFactory = transportTracerFactory;
+    return this;
   }
 
   @Override

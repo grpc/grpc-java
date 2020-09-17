@@ -163,6 +163,14 @@ final class XdsClientImpl extends XdsClient {
 
   private final LoadStatsManager loadStatsManager = new LoadStatsManager();
 
+  // Last successfully applied version_info for each resource type. Starts with empty string.
+  // A version_info is used to update management server with client's most recent knowledge of
+  // resources.
+  private String ldsVersion = "";
+  private String rdsVersion = "";
+  private String cdsVersion = "";
+  private String edsVersion = "";
+
   // Timer for concluding the currently requesting LDS resource not found.
   @Nullable
   private ScheduledHandle ldsRespTimer;
@@ -226,7 +234,7 @@ final class XdsClientImpl extends XdsClient {
     if (adsStream != null) {
       adsStream.close(Status.CANCELLED.withDescription("shutdown").asException());
     }
-    cleanUpResources();
+    cleanUpResourceTimers();
     if (lrsClient != null) {
       lrsClient.stopLoadReporting();
       lrsClient = null;
@@ -236,15 +244,7 @@ final class XdsClientImpl extends XdsClient {
     }
   }
 
-  /**
-   * Purge cache for resources and cancel resource fetch timers.
-   */
-  private void cleanUpResources() {
-    clusterNamesToClusterUpdates.clear();
-    absentCdsResources.clear();
-    clusterNamesToEndpointUpdates.clear();
-    absentEdsResources.clear();
-
+  private void cleanUpResourceTimers() {
     if (ldsRespTimer != null) {
       ldsRespTimer.cancel();
       ldsRespTimer = null;
@@ -1434,14 +1434,6 @@ final class XdsClientImpl extends XdsClient {
     private boolean responseReceived;
     private boolean closed;
 
-    // Last successfully applied version_info for each resource type. Starts with empty string.
-    // A version_info is used to update management server with client's most recent knowledge of
-    // resources.
-    private String ldsVersion = "";
-    private String rdsVersion = "";
-    private String cdsVersion = "";
-    private String edsVersion = "";
-
     // Response nonce for the most recently received discovery responses of each resource type.
     // Client initiated requests start response nonce with empty string.
     // A nonce is used to indicate the specific DiscoveryResponse each DiscoveryRequest
@@ -1558,7 +1550,7 @@ final class XdsClientImpl extends XdsClient {
         }
       }
       cleanUp();
-      cleanUpResources();
+      cleanUpResourceTimers();
       if (responseReceived || retryBackoffPolicy == null) {
         // Reset the backoff sequence if had received a response, or backoff sequence
         // has never been initialized.

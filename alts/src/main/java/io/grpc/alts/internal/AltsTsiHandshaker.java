@@ -22,6 +22,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import io.grpc.alts.internal.HandshakerServiceGrpc.HandshakerServiceStub;
 import io.netty.buffer.ByteBufAllocator;
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
@@ -151,10 +152,10 @@ public final class AltsTsiHandshaker implements TsiHandshaker {
     ByteBuffer outputFrameAlias = outputFrame;
     if (outputFrame.remaining() > bytes.remaining()) {
       outputFrameAlias = outputFrame.duplicate();
-      outputFrameAlias.limit(outputFrameAlias.position() + bytes.remaining());
+      ((Buffer) outputFrameAlias).limit(outputFrameAlias.position() + bytes.remaining());
     }
     bytes.put(outputFrameAlias);
-    outputFrame.position(outputFrameAlias.position());
+    ((Buffer) outputFrame).position(outputFrameAlias.position());
   }
 
   /**
