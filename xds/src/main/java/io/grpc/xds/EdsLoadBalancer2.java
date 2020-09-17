@@ -211,7 +211,7 @@ final class EdsLoadBalancer2 extends LoadBalancer {
         if (lb != null) {
           lb.handleNameResolutionError(error);
         } else {
-          lbHelper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
+          lbHelper.helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
         }
       }
 
@@ -301,7 +301,7 @@ final class EdsLoadBalancer2 extends LoadBalancer {
           lb.shutdown();
           lb = null;
         }
-        lbHelper.updateBalancingState(
+        lbHelper.helper.updateBalancingState(
             TRANSIENT_FAILURE,
             new ErrorPicker(
                 Status.UNAVAILABLE.withDescription(
@@ -313,7 +313,7 @@ final class EdsLoadBalancer2 extends LoadBalancer {
         logger.log(
             XdsLogLevel.WARNING, "Received error from xDS client {0}: {1}", xdsClient, error);
         if (lb == null) {
-          lbHelper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
+          lbHelper.helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
         }
       }
 
