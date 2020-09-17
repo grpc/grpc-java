@@ -19,6 +19,7 @@ package io.grpc.xds.internal.sds;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
+import io.grpc.xds.Bootstrapper;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.internal.sds.ReferenceCountingMap.ValueFactory;
@@ -36,8 +37,11 @@ public final class TlsContextManagerImpl implements TlsContextManager {
   private final ReferenceCountingMap<UpstreamTlsContext, SslContextProvider> mapForClients;
   private final ReferenceCountingMap<DownstreamTlsContext, SslContextProvider> mapForServers;
 
-  private TlsContextManagerImpl() {
-    this(new ClientSslContextProviderFactory(), new ServerSslContextProviderFactory());
+  /** Create a TlsContextManagerImpl instance using the passed in {@link Bootstrapper}. */
+  @VisibleForTesting public TlsContextManagerImpl(Bootstrapper bootstrapper) {
+    this(
+        new ClientSslContextProviderFactory(bootstrapper),
+        new ServerSslContextProviderFactory(bootstrapper));
   }
 
   @VisibleForTesting
@@ -53,7 +57,7 @@ public final class TlsContextManagerImpl implements TlsContextManager {
   /** Gets the TlsContextManagerImpl singleton. */
   public static synchronized TlsContextManagerImpl getInstance() {
     if (instance == null) {
-      instance = new TlsContextManagerImpl();
+      instance = new TlsContextManagerImpl(Bootstrapper.getInstance());
     }
     return instance;
   }

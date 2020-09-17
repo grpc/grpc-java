@@ -30,6 +30,7 @@ import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValida
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.envoyproxy.envoy.type.matcher.v3.StringMatcher;
 import io.grpc.xds.Bootstrapper;
+import io.grpc.xds.CommonBootstrapperTestUtils;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.XdsInitializationException;
 import io.grpc.xds.internal.certprovider.CertProviderClientSslContextProvider;
@@ -37,7 +38,6 @@ import io.grpc.xds.internal.certprovider.CertificateProvider;
 import io.grpc.xds.internal.certprovider.CertificateProviderProvider;
 import io.grpc.xds.internal.certprovider.CertificateProviderRegistry;
 import io.grpc.xds.internal.certprovider.CertificateProviderStore;
-import io.grpc.xds.internal.certprovider.CommonCertProviderTestUtils;
 import io.grpc.xds.internal.certprovider.TestCertificateProvider;
 import java.io.IOException;
 import org.junit.Assert;
@@ -131,7 +131,7 @@ public class ClientSslContextProviderFactoryTest {
             /* alpnProtocols= */ null,
             /* staticCertValidationContext= */ null);
 
-    Bootstrapper.BootstrapInfo bootstrapInfo = CommonCertProviderTestUtils.getTestBootstrapInfo();
+    Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
     when(bootstrapper.readBootstrap()).thenReturn(bootstrapInfo);
     SslContextProvider sslContextProvider =
         clientSslContextProviderFactory.create(upstreamTlsContext);
@@ -154,7 +154,7 @@ public class ClientSslContextProviderFactoryTest {
                     /* alpnProtocols= */ null,
                     /* staticCertValidationContext= */ null);
 
-    Bootstrapper.BootstrapInfo bootstrapInfo = CommonCertProviderTestUtils.getTestBootstrapInfo();
+    Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
     when(bootstrapper.readBootstrap()).thenReturn(bootstrapInfo);
     SslContextProvider sslContextProvider =
             clientSslContextProviderFactory.create(upstreamTlsContext);
@@ -184,7 +184,7 @@ public class ClientSslContextProviderFactoryTest {
                     /* alpnProtocols= */ null,
                     staticCertValidationContext);
 
-    Bootstrapper.BootstrapInfo bootstrapInfo = CommonCertProviderTestUtils.getTestBootstrapInfo();
+    Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
     when(bootstrapper.readBootstrap()).thenReturn(bootstrapInfo);
     SslContextProvider sslContextProvider =
             clientSslContextProviderFactory.create(upstreamTlsContext);
@@ -211,7 +211,7 @@ public class ClientSslContextProviderFactoryTest {
             /* alpnProtocols= */ null,
             /* staticCertValidationContext= */ null);
 
-    Bootstrapper.BootstrapInfo bootstrapInfo = CommonCertProviderTestUtils.getTestBootstrapInfo();
+    Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
     when(bootstrapper.readBootstrap()).thenReturn(bootstrapInfo);
     SslContextProvider sslContextProvider =
         clientSslContextProviderFactory.create(upstreamTlsContext);

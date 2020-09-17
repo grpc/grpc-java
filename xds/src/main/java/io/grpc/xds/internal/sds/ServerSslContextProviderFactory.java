@@ -34,8 +34,8 @@ final class ServerSslContextProviderFactory
   private final CertProviderServerSslContextProvider.Factory
       certProviderServerSslContextProviderFactory;
 
-  ServerSslContextProviderFactory() {
-    this(Bootstrapper.getInstance(), CertProviderServerSslContextProvider.Factory.getInstance());
+  ServerSslContextProviderFactory(Bootstrapper bootstrapper) {
+    this(bootstrapper, CertProviderServerSslContextProvider.Factory.getInstance());
   }
 
   ServerSslContextProviderFactory(
@@ -60,7 +60,7 @@ final class ServerSslContextProviderFactory
       try {
         return SdsServerSslContextProvider.getProvider(
             downstreamTlsContext,
-            Bootstrapper.getInstance().readBootstrap().getNode().toEnvoyProtoNodeV2(),
+            bootstrapper.readBootstrap().getNode().toEnvoyProtoNodeV2(),
             Executors.newSingleThreadExecutor(new ThreadFactoryBuilder()
                 .setNameFormat("server-sds-sslcontext-provider-%d")
                 .setDaemon(true)
@@ -72,10 +72,11 @@ final class ServerSslContextProviderFactory
     } else if (CommonTlsContextUtil.hasCertProviderInstance(
         downstreamTlsContext.getCommonTlsContext())) {
       try {
+        Bootstrapper.BootstrapInfo bootstrapInfo = bootstrapper.readBootstrap();
         return certProviderServerSslContextProviderFactory.getProvider(
             downstreamTlsContext,
-            bootstrapper.readBootstrap().getNode().toEnvoyProtoNode(),
-            bootstrapper.readBootstrap().getCertProviders());
+            bootstrapInfo.getNode().toEnvoyProtoNode(),
+            bootstrapInfo.getCertProviders());
       } catch (XdsInitializationException e) {
         throw new RuntimeException(e);
       }

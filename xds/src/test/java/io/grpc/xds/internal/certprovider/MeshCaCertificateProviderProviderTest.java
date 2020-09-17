@@ -29,9 +29,8 @@ import static org.mockito.Mockito.when;
 import com.google.auth.oauth2.GoogleCredentials;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.ExponentialBackoffPolicy;
+import io.grpc.internal.JsonParser;
 import io.grpc.internal.TimeProvider;
-import io.grpc.xds.Bootstrapper;
-import io.grpc.xds.XdsInitializationException;
 import io.grpc.xds.internal.sts.StsCredentials;
 import java.io.IOException;
 import java.util.Map;
@@ -107,10 +106,11 @@ public class MeshCaCertificateProviderProviderTest {
   }
 
   @Test
-  public void createProvider_minimalConfig() throws XdsInitializationException {
+  public void createProvider_minimalConfig() throws IOException {
     CertificateProvider.DistributorWatcher distWatcher =
         new CertificateProvider.DistributorWatcher();
-    Map<String, ?> map = buildMinimalConfig();
+    @SuppressWarnings("unchecked")
+    Map<String, ?> map = (Map<String, ?>) JsonParser.parse(MINIMAL_MESHCA_CONFIG);
     ScheduledExecutorService mockService = mock(ScheduledExecutorService.class);
     when(scheduledExecutorServiceFactory.create(
             eq(MeshCaCertificateProviderProvider.MESHCA_URL_DEFAULT)))
@@ -143,10 +143,11 @@ public class MeshCaCertificateProviderProviderTest {
 
   @Test
   public void createProvider_minimalConfig_v1beta1AndZone()
-      throws XdsInitializationException {
+      throws IOException {
     CertificateProvider.DistributorWatcher distWatcher =
         new CertificateProvider.DistributorWatcher();
-    Map<String, ?> map = buildMinimalConfig_v1beta1AndZone();
+    @SuppressWarnings("unchecked")
+    Map<String, ?> map = (Map<String, ?>) JsonParser.parse(V1BETA1_ZONE_MESHCA_CONFIG);
     ScheduledExecutorService mockService = mock(ScheduledExecutorService.class);
     when(scheduledExecutorServiceFactory.create(
             eq(MeshCaCertificateProviderProvider.MESHCA_URL_DEFAULT)))
@@ -179,10 +180,11 @@ public class MeshCaCertificateProviderProviderTest {
 
   @Test
   public void createProvider_missingGkeUrl_expectException()
-      throws XdsInitializationException {
+      throws IOException {
     CertificateProvider.DistributorWatcher distWatcher =
             new CertificateProvider.DistributorWatcher();
-    Map<String, ?> map = buildMissingGkeClusterUrlConfig();
+    @SuppressWarnings("unchecked")
+    Map<String, ?> map = (Map<String, ?>) JsonParser.parse(MISSING_GKE_CLUSTER_URL_MESHCA_CONFIG);
     try {
       provider.createCertificateProvider(map, distWatcher, true);
       fail("exception expected");
@@ -192,11 +194,12 @@ public class MeshCaCertificateProviderProviderTest {
   }
 
   @Test
-  public void createProvider_missingGkeSaJwtLocation_expectException()
-      throws XdsInitializationException {
+  public void createProvider_missingSaJwtLocation_expectException()
+      throws IOException {
     CertificateProvider.DistributorWatcher distWatcher =
             new CertificateProvider.DistributorWatcher();
-    Map<String, ?> map = buildMissingSaJwtLocationConfig();
+    @SuppressWarnings("unchecked")
+    Map<String, ?> map = (Map<String, ?>) JsonParser.parse(MISSING_SAJWT_MESHCA_CONFIG);
     try {
       provider.createCertificateProvider(map, distWatcher, true);
       fail("exception expected");
@@ -207,10 +210,11 @@ public class MeshCaCertificateProviderProviderTest {
 
   @Test
   public void createProvider_missingProject_expectException()
-      throws XdsInitializationException {
+      throws IOException {
     CertificateProvider.DistributorWatcher distWatcher =
             new CertificateProvider.DistributorWatcher();
-    Map<String, ?> map = buildBadClusterUrlConfig();
+    @SuppressWarnings("unchecked")
+    Map<String, ?> map = (Map<String, ?>) JsonParser.parse(MINIMAL_BAD_CLUSTER_URL_MESHCA_CONFIG);
     try {
       provider.createCertificateProvider(map, distWatcher, true);
       fail("exception expected");
@@ -221,10 +225,11 @@ public class MeshCaCertificateProviderProviderTest {
 
   @Test
   public void createProvider_badChannelCreds_expectException()
-      throws XdsInitializationException {
+      throws IOException {
     CertificateProvider.DistributorWatcher distWatcher =
             new CertificateProvider.DistributorWatcher();
-    Map<String, ?> map = buildBadChannelCredsConfig();
+    @SuppressWarnings("unchecked")
+    Map<String, ?> map = (Map<String, ?>) JsonParser.parse(BAD_CHANNEL_CREDS_MESHCA_CONFIG);
     try {
       provider.createCertificateProvider(map, distWatcher, true);
       fail("exception expected");
@@ -234,10 +239,11 @@ public class MeshCaCertificateProviderProviderTest {
   }
 
   @Test
-  public void createProvider_nonDefaultFullConfig() throws XdsInitializationException {
+  public void createProvider_nonDefaultFullConfig() throws IOException {
     CertificateProvider.DistributorWatcher distWatcher =
             new CertificateProvider.DistributorWatcher();
-    Map<String, ?> map = buildFullConfig();
+    @SuppressWarnings("unchecked")
+    Map<String, ?> map = (Map<String, ?>) JsonParser.parse(NONDEFAULT_MESHCA_CONFIG);
     ScheduledExecutorService mockService = mock(ScheduledExecutorService.class);
     when(scheduledExecutorServiceFactory.create(eq(NON_DEFAULT_MESH_CA_URL)))
         .thenReturn(mockService);
@@ -267,45 +273,137 @@ public class MeshCaCertificateProviderProviderTest {
                     eq(TimeUnit.SECONDS.toMillis(RPC_TIMEOUT_SECONDS)));
   }
 
-  private static Map<String, ?> buildFullConfig() throws XdsInitializationException {
-    return getCertProviderConfig(CommonCertProviderTestUtils.getNonDefaultTestBootstrapInfo());
-  }
+  private static final String NONDEFAULT_MESHCA_CONFIG =
+      "{\n"
+          + "        \"server\": {\n"
+          + "          \"api_type\": \"GRPC\",\n"
+          + "          \"grpc_services\": [{\n"
+          + "            \"google_grpc\": {\n"
+          + "              \"target_uri\": \"nonDefaultMeshCaUrl\",\n"
+          + "              \"channel_credentials\": {\"google_default\": {}},\n"
+          + "              \"call_credentials\": [{\n"
+          + "                \"sts_service\": {\n"
+          + "                  \"token_exchange_service\": \"test.sts.com\",\n"
+          + "                  \"subject_token_path\": \"/tmp/path4\"\n"
+          + "                }\n"
+          + "              }]\n" // end call_credentials
+          + "            },\n" // end google_grpc
+          + "            \"time_out\": {\"seconds\": 12}\n"
+          + "          }]\n" // end grpc_services
+          + "        },\n" // end server
+          + "        \"certificate_lifetime\": {\"seconds\": 234567},\n"
+          + "        \"renewal_grace_period\": {\"seconds\": 4321},\n"
+          + "        \"key_type\": \"RSA\",\n"
+          + "        \"key_size\": 512,\n"
+          + "        \"location\": \"https://container.googleapis.com/v1/projects/test-project1/locations/test-zone2/clusters/test-cluster3\"\n"
+          + "      }";
 
-  private static Map<String, ?> buildMinimalConfig() throws XdsInitializationException {
-    return getCertProviderConfig(CommonCertProviderTestUtils.getMinimalBootstrapInfo());
-  }
+  private static final String MINIMAL_MESHCA_CONFIG =
+      "{\n"
+          + "        \"server\": {\n"
+          + "          \"api_type\": \"GRPC\",\n"
+          + "          \"grpc_services\": [{\n"
+          + "            \"google_grpc\": {\n"
+          + "              \"call_credentials\": [{\n"
+          + "                \"sts_service\": {\n"
+          + "                  \"subject_token_path\": \"/tmp/path5\"\n"
+          + "                }\n"
+          + "              }]\n" // end call_credentials
+          + "            }\n" // end google_grpc
+          + "          }]\n" // end grpc_services
+          + "        },\n" // end server
+          + "        \"location\": \"https://container.googleapis.com/v1/projects/test-project1/locations/test-zone2/clusters/test-cluster3\"\n"
+          + "      }";
 
-  private static Map<String, ?> buildMinimalConfig_v1beta1AndZone()
-      throws XdsInitializationException {
-    return getCertProviderConfig(
-        CommonCertProviderTestUtils.getMinimalBootstrapInfo_v1beta1AndZone());
-  }
+  private static final String V1BETA1_ZONE_MESHCA_CONFIG =
+      "{\n"
+          + "        \"server\": {\n"
+          + "          \"api_type\": \"GRPC\",\n"
+          + "          \"grpc_services\": [{\n"
+          + "            \"google_grpc\": {\n"
+          + "              \"call_credentials\": [{\n"
+          + "                \"sts_service\": {\n"
+          + "                  \"subject_token_path\": \"/tmp/path5\"\n"
+          + "                }\n"
+          + "              }]\n" // end call_credentials
+          + "            }\n" // end google_grpc
+          + "          }]\n" // end grpc_services
+          + "        },\n" // end server
+          + "        \"location\": \"https://container.googleapis.com/v1beta1/projects/test-project1/zones/test-zone2/clusters/test-cluster3\"\n"
+          + "      }";
 
-  private static Map<String, ?> buildBadClusterUrlConfig() throws XdsInitializationException {
-    return getCertProviderConfig(
-        CommonCertProviderTestUtils.getMinimalAndBadClusterUrlBootstrapInfo());
-  }
+  private static final String MINIMAL_BAD_CLUSTER_URL_MESHCA_CONFIG =
+      "{\n"
+          + "        \"server\": {\n"
+          + "          \"api_type\": \"GRPC\",\n"
+          + "          \"grpc_services\": [{\n"
+          + "            \"google_grpc\": {\n"
+          + "              \"call_credentials\": [{\n"
+          + "                \"sts_service\": {\n"
+          + "                  \"subject_token_path\": \"/tmp/path5\"\n"
+          + "                }\n"
+          + "              }]\n" // end call_credentials
+          + "            }\n" // end google_grpc
+          + "          }]\n" // end grpc_services
+          + "        },\n" // end server
+          + "        \"location\": \"https://container.googleapis.com/v1/project/test-project1/locations/test-zone2/clusters/test-cluster3\"\n"
+          + "      }";
 
-  private static Map<String, ?> buildMissingSaJwtLocationConfig()
-      throws XdsInitializationException {
-    return getCertProviderConfig(CommonCertProviderTestUtils.getMissingSaJwtLocation());
-  }
+  private static final String MISSING_SAJWT_MESHCA_CONFIG =
+      "{\n"
+          + "        \"server\": {\n"
+          + "          \"api_type\": \"GRPC\",\n"
+          + "          \"grpc_services\": [{\n"
+          + "            \"google_grpc\": {\n"
+          + "              \"call_credentials\": [{\n"
+          + "                \"sts_service\": {\n"
+          + "                }\n"
+          + "              }]\n" // end call_credentials
+          + "            }\n" // end google_grpc
+          + "          }]\n" // end grpc_services
+          + "        },\n" // end server
+          + "        \"location\": \"https://container.googleapis.com/v1/projects/test-project1/locations/test-zone2/clusters/test-cluster3\"\n"
+          + "      }";
 
-  private static Map<String, ?> buildMissingGkeClusterUrlConfig()
-      throws XdsInitializationException {
-    return getCertProviderConfig(CommonCertProviderTestUtils.getMissingGkeClusterUrl());
-  }
+  private static final String MISSING_GKE_CLUSTER_URL_MESHCA_CONFIG =
+      "{\n"
+          + "        \"server\": {\n"
+          + "          \"api_type\": \"GRPC\",\n"
+          + "          \"grpc_services\": [{\n"
+          + "            \"google_grpc\": {\n"
+          + "              \"target_uri\": \"meshca.com\",\n"
+          + "              \"channel_credentials\": {\"google_default\": {}},\n"
+          + "              \"call_credentials\": [{\n"
+          + "                \"sts_service\": {\n"
+          + "                  \"token_exchange_service\": \"securetoken.googleapis.com\",\n"
+          + "                  \"subject_token_path\": \"/etc/secret/sajwt.token\"\n"
+          + "                }\n"
+          + "              }]\n" // end call_credentials
+          + "            },\n" // end google_grpc
+          + "            \"time_out\": {\"seconds\": 10}\n"
+          + "          }]\n" // end grpc_services
+          + "        },\n" // end server
+          + "        \"certificate_lifetime\": {\"seconds\": 86400},\n"
+          + "        \"renewal_grace_period\": {\"seconds\": 3600},\n"
+          + "        \"key_type\": \"RSA\",\n"
+          + "        \"key_size\": 2048\n"
+          + "      }";
 
-  private static Map<String, ?> buildBadChannelCredsConfig()
-      throws XdsInitializationException {
-    return getCertProviderConfig(CommonCertProviderTestUtils.getBadChannelCredsConfig());
-  }
-
-  private static Map<String, ?> getCertProviderConfig(Bootstrapper.BootstrapInfo bootstrapInfo) {
-    Map<String, Bootstrapper.CertificateProviderInfo> certProviders =
-            bootstrapInfo.getCertProviders();
-    Bootstrapper.CertificateProviderInfo gcpIdInfo =
-            certProviders.get("gcp_id");
-    return gcpIdInfo.getConfig();
-  }
+  private static final String BAD_CHANNEL_CREDS_MESHCA_CONFIG =
+      "{\n"
+          + "        \"server\": {\n"
+          + "          \"api_type\": \"GRPC\",\n"
+          + "          \"grpc_services\": [{\n"
+          + "            \"google_grpc\": {\n"
+          + "              \"channel_credentials\": {\"mtls\": \"true\"},\n"
+          + "              \"call_credentials\": [{\n"
+          + "                \"sts_service\": {\n"
+          + "                  \"subject_token_path\": \"/tmp/path5\"\n"
+          + "                }\n"
+          + "              }]\n" // end call_credentials
+          + "            }\n" // end google_grpc
+          + "          }]\n" // end grpc_services
+          + "        },\n" // end server
+          + "        \"location\": \"https://container.googleapis.com/v1/projects/test-project1/locations/test-zone2/clusters/test-cluster3\"\n"
+          + "      }";
 }
