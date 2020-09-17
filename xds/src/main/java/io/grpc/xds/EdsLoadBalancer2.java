@@ -66,7 +66,6 @@ final class EdsLoadBalancer2 extends LoadBalancer {
   private ObjectPool<XdsClient> xdsClientPool;
   private XdsClient xdsClient;
   private String cluster;
-  private ResolvedAddresses resolvedAddresses;
   private EdsLbState edsLbState;
 
   EdsLoadBalancer2(LoadBalancer.Helper helper) {
@@ -87,7 +86,6 @@ final class EdsLoadBalancer2 extends LoadBalancer {
   @Override
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
-    this.resolvedAddresses = resolvedAddresses;
     if (xdsClientPool == null) {
       xdsClientPool = resolvedAddresses.getAttributes().get(XdsAttributes.XDS_CLIENT_POOL);
       xdsClient = xdsClientPool.getObject();
@@ -155,6 +153,7 @@ final class EdsLoadBalancer2 extends LoadBalancer {
       private List<EquivalentAddressGroup> endpointAddresses = Collections.emptyList();
       private Map<Integer, Map<Locality, Integer>> prioritizedLocalityWeights
           = Collections.emptyMap();
+      private ResolvedAddresses resolvedAddresses;
       private PolicySelection localityPickingPolicy;
       private PolicySelection endpointPickingPolicy;
       @Nullable
@@ -176,6 +175,7 @@ final class EdsLoadBalancer2 extends LoadBalancer {
 
       @Override
       public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+        this.resolvedAddresses = resolvedAddresses;
         EdsConfig config = (EdsConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
         if (lb != null) {
           if (!config.localityPickingPolicy.equals(localityPickingPolicy)
