@@ -18,11 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 
-import io.grpc.NameResolver.ConfigOrError;
-import io.grpc.internal.JsonParser;
-import io.grpc.xds.EdsLoadBalancerProvider.EdsConfig;
-import java.io.IOException;
-import java.util.Map;
+import io.grpc.LoadBalancerRegistry;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -33,44 +29,13 @@ public class EdsLoadBalancerProviderTest {
   private final EdsLoadBalancerProvider provider = new EdsLoadBalancerProvider();
 
   @Test
-  public void parseEdsLoadBalancingPolicyConfig() throws IOException {
-    String rawEdsLbConfig = "{\n"
-        + "  \"cluster\": \"cluster-foo.googleapis.com\",\n"
-        + "  \"edsServiceName\": \"cluster-foo:service-blade\",\n"
-        + "  \"lrsLoadReportingServerName\": \"trafficdirector.googleapis.com\",\n"
-        + "  \"endpointPickingPolicy\": [\n"
-        + "     { \"policy_foo\": {} },\n"
-        + "     { \"pick_first\": {} }\n"
-        + "  ]\n"
-        + "}";
-
-    @SuppressWarnings("unchecked")
-    Map<String, ?> rawLbConfigMap = (Map<String, ?>) JsonParser.parse(rawEdsLbConfig);
-    ConfigOrError result = provider.parseLoadBalancingPolicyConfig(rawLbConfigMap);
-    assertThat(result.getConfig()).isNotNull();
-    EdsConfig config = (EdsConfig) result.getConfig();
-    assertThat(config.clusterName).isEqualTo("cluster-foo.googleapis.com");
-    assertThat(config.edsServiceName).isEqualTo("cluster-foo:service-blade");
-    assertThat(config.lrsServerName).isEqualTo("trafficdirector.googleapis.com");
-    assertThat(config.endpointPickingPolicy.getProvider().getPolicyName())
-        .isEqualTo("pick_first");
+  public void isAvailable() {
+    assertThat(provider.isAvailable()).isTrue();
   }
 
   @Test
-  public void parseEdsLoadBalancingPolicyConfig_defaultEndpointPickingPolicy_roundRobin()
-      throws IOException {
-    String rawEdsLbConfig = "{\n"
-        + "  \"cluster\": \"cluster-foo.googleapis.com\",\n"
-        + "  \"edsServiceName\": \"cluster-foo:service-blade\",\n"
-        + "  \"lrsLoadReportingServerName\": \"trafficdirector.googleapis.com\"\n"
-        + "}";
-
-    @SuppressWarnings("unchecked")
-    Map<String, ?> rawLbConfigMap = (Map<String, ?>) JsonParser.parse(rawEdsLbConfig);
-    ConfigOrError result = provider.parseLoadBalancingPolicyConfig(rawLbConfigMap);
-    assertThat(result.getConfig()).isNotNull();
-    EdsConfig config = (EdsConfig) result.getConfig();
-    assertThat(config.endpointPickingPolicy.getProvider().getPolicyName())
-        .isEqualTo("round_robin");
+  public void provided() {
+    LoadBalancerRegistry lbRegistry = LoadBalancerRegistry.getDefaultRegistry();
+    assertThat(lbRegistry.getProvider(XdsLbPolicies.EDS_POLICY_NAME)).isNotNull();
   }
 }

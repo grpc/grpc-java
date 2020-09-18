@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.MoreObjects;
+import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancerProvider;
@@ -31,7 +32,8 @@ import java.util.List;
 import java.util.Map;
 
 /** Provider for priority load balancing policy. */
-final class PriorityLoadBalancerProvider extends LoadBalancerProvider {
+@Internal
+public final class PriorityLoadBalancerProvider extends LoadBalancerProvider {
 
   @Override
   public boolean isAvailable() {
