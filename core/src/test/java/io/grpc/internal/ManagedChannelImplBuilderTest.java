@@ -115,25 +115,25 @@ public class ManagedChannelImplBuilderTest {
   /** Ensure getDefaultPort() delegates to the custom implementation. */
   @Test
   public void getDefaultPort_custom() {
-    int custom_port = 43;
+    int customPort = 43;
     ChannelBuilderDefaultPortProvider mockChannelBuilderDefaultPortProvider = mock(
         ChannelBuilderDefaultPortProvider.class);
-    when(mockChannelBuilderDefaultPortProvider.getDefaultPort()).thenReturn(custom_port);
+    when(mockChannelBuilderDefaultPortProvider.getDefaultPort()).thenReturn(customPort);
 
     builder = new ManagedChannelImplBuilder(DUMMY_TARGET,
         new UnsupportedClientTransportFactoryBuilder(),
         mockChannelBuilderDefaultPortProvider);
-    assertEquals(custom_port, builder.getDefaultPort());
+    assertEquals(customPort, builder.getDefaultPort());
     verify(mockChannelBuilderDefaultPortProvider).getDefaultPort();
   }
 
   /** Test FixedPortProvider(int port). */
   @Test
   public void getDefaultPort_fixedPortProvider() {
-    int fixed_port = 43;
+    int fixedPort = 43;
     builder = new ManagedChannelImplBuilder(DUMMY_TARGET,
-        new UnsupportedClientTransportFactoryBuilder(), new FixedPortProvider(fixed_port));
-    assertEquals(fixed_port, builder.getDefaultPort());
+        new UnsupportedClientTransportFactoryBuilder(), new FixedPortProvider(fixedPort));
+    assertEquals(fixedPort, builder.getDefaultPort());
   }
 
   @Test
