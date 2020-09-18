@@ -227,7 +227,9 @@ public final class ServerImplBuilder extends ServerBuilder<ServerImplBuilder> {
 
   @Override
   public Server build() {
-    return new ServerImpl(this, buildTransportServers(getTracerFactories()), Context.ROOT);
+    return new ServerImpl(this,
+        clientTransportServersBuilder.buildClientTransportServers(getTracerFactories()),
+        Context.ROOT);
   }
 
   @VisibleForTesting
@@ -295,19 +297,6 @@ public final class ServerImplBuilder extends ServerBuilder<ServerImplBuilder> {
 
   public InternalChannelz getChannelz() {
     return channelz;
-  }
-
-  /**
-   * Transport implementors must implement {@link ClientTransportServersBuilder} to transport
-   * specific information for the server. This method is mean for Transport implementors and should
-   * not be used by normal users.
-   *
-   * @param streamTracerFactories an immutable list of stream tracer factories
-   */
-  @VisibleForTesting
-  List<? extends InternalServer> buildTransportServers(
-      List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
-    return clientTransportServersBuilder.buildClientTransportServers(streamTracerFactories);
   }
 
   private static final class DefaultFallbackRegistry extends HandlerRegistry {

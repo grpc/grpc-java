@@ -18,9 +18,6 @@ package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.verify;
 
 import io.grpc.Metadata;
 import io.grpc.ServerStreamTracer;
@@ -31,7 +28,6 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
-import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
@@ -64,20 +60,6 @@ public class ServerImplBuilderTest {
             throw new UnsupportedOperationException();
           }
         });
-  }
-
-  @Test
-  public void buildTransportServers() {
-    builder = new ServerImplBuilder(mockClientTransportServersBuilder);
-    doReturn(mockInternalServers).when(mockClientTransportServersBuilder)
-        .buildClientTransportServers(ArgumentMatchers.<ServerStreamTracer.Factory>anyList());
-
-    List<? extends InternalServer> servers = builder
-        .buildTransportServers(mockServerStreamTracerFactories);
-    assertEquals(mockInternalServers, servers);
-    assertNotNull(servers);
-    verify(mockClientTransportServersBuilder)
-        .buildClientTransportServers(mockServerStreamTracerFactories);
   }
 
   @Test
