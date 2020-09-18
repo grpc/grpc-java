@@ -1459,68 +1459,54 @@ final class XdsClientImpl extends XdsClient {
 
     abstract void sendError(Exception error);
 
-    final void onDiscoveryResponse(final DiscoveryResponseData response) {
-      syncContext.execute(
-          new Runnable() {
-            @Override
-            public void run() {
-              if (closed) {
-                return;
-              }
-              responseReceived = true;
-              String respNonce = response.getNonce();
-              // Nonce in each response is echoed back in the following ACK/NACK request. It is
-              // used for management server to identify which response the client is ACKing/NACking.
-              // To avoid confusion, client-initiated requests will always use the nonce in
-              // most recently received responses of each resource type.
-              ResourceType resourceType = response.getResourceType();
-              switch (resourceType) {
-                case LDS:
-                  ldsRespNonce = respNonce;
-                  handleLdsResponse(response);
-                  break;
-                case RDS:
-                  rdsRespNonce = respNonce;
-                  handleRdsResponse(response);
-                  break;
-                case CDS:
-                  cdsRespNonce = respNonce;
-                  handleCdsResponse(response);
-                  break;
-                case EDS:
-                  edsRespNonce = respNonce;
-                  handleEdsResponse(response);
-                  break;
-                case UNKNOWN:
-                  logger.log(
-                      XdsLogLevel.WARNING,
-                      "Received an unknown type of DiscoveryResponse\n{0}",
-                      respNonce);
-                  break;
-                default:
-                  throw new AssertionError("Missing case in enum switch: " + resourceType);
-              }
-            }
-          });
+    // Must run in syncContext.
+    final void onDiscoveryResponse(DiscoveryResponseData response) {
+      if (closed) {
+        return;
+      }
+      responseReceived = true;
+      String respNonce = response.getNonce();
+      // Nonce in each response is echoed back in the following ACK/NACK request. It is
+      // used for management server to identify which response the client is ACKing/NACking.
+      // To avoid confusion, client-initiated requests will always use the nonce in
+      // most recently received responses of each resource type.
+      ResourceType resourceType = response.getResourceType();
+      switch (resourceType) {
+        case LDS:
+          ldsRespNonce = respNonce;
+          handleLdsResponse(response);
+          break;
+        case RDS:
+          rdsRespNonce = respNonce;
+          handleRdsResponse(response);
+          break;
+        case CDS:
+          cdsRespNonce = respNonce;
+          handleCdsResponse(response);
+          break;
+        case EDS:
+          edsRespNonce = respNonce;
+          handleEdsResponse(response);
+          break;
+        case UNKNOWN:
+          logger.log(
+              XdsLogLevel.WARNING,
+              "Received an unknown type of DiscoveryResponse\n{0}",
+              respNonce);
+          break;
+        default:
+          throw new AssertionError("Missing case in enum switch: " + resourceType);
+      }
     }
 
-    final void onError(final Throwable t) {
-      syncContext.execute(new Runnable() {
-        @Override
-        public void run() {
-          handleStreamClosed(Status.fromThrowable(t));
-        }
-      });
+    // Must run in syncContext.
+    final void onError(Throwable t) {
+      handleStreamClosed(Status.fromThrowable(t));
     }
 
+    // Must run in syncContext.
     final void onCompleted() {
-      syncContext.execute(new Runnable() {
-        @Override
-        public void run() {
-          handleStreamClosed(
-              Status.UNAVAILABLE.withDescription("Closed by server"));
-        }
-      });
+      handleStreamClosed(Status.UNAVAILABLE.withDescription("Closed by server"));
     }
 
     private void handleStreamClosed(Status error) {
@@ -1737,27 +1723,42 @@ final class XdsClientImpl extends XdsClient {
       StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseReaderV2 =
           new StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse>() {
             @Override
-            public void onNext(io.envoyproxy.envoy.api.v2.DiscoveryResponse response) {
-              DiscoveryResponseData responseData =
-                  DiscoveryResponseData.fromEnvoyProtoV2(response);
-              if (logger.isLoggable(XdsLogLevel.DEBUG)) {
-                logger.log(
-                    XdsLogLevel.DEBUG,
-                    "Received {0} response:\n{1}",
-                    responseData.getResourceType(),
-                    respPrinter.print(response));
-              }
-              onDiscoveryResponse(responseData);
+            public void onNext(final io.envoyproxy.envoy.api.v2.DiscoveryResponse response) {
+              syncContext.execute(new Runnable() {
+                @Override
+                public void run() {
+                  DiscoveryResponseData responseData =
+                      DiscoveryResponseData.fromEnvoyProtoV2(response);
+                  if (logger.isLoggable(XdsLogLevel.DEBUG)) {
+                    logger.log(
+                        XdsLogLevel.DEBUG,
+                        "Received {0} response:\n{1}",
+                        responseData.getResourceType(),
+                        respPrinter.print(response));
+                  }
+                  onDiscoveryResponse(responseData);
+                }
+              });
             }
 
             @Override
-            public void onError(Throwable t) {
-              AdsStreamV2.this.onError(t);
+            public void onError(final Throwable t) {
+              syncContext.execute(new Runnable() {
+                @Override
+                public void run() {
+                  AdsStreamV2.this.onError(t);
+                }
+              });
             }
 
             @Override
             public void onCompleted() {
-              AdsStreamV2.this.onCompleted();
+              syncContext.execute(new Runnable() {
+                @Override
+                public void run() {
+                  AdsStreamV2.this.onCompleted();
+                }
+              });
             }
           };
       requestWriterV2 = stubV2.withWaitForReady().streamAggregatedResources(responseReaderV2);
@@ -1791,27 +1792,42 @@ final class XdsClientImpl extends XdsClient {
     void start() {
       StreamObserver<DiscoveryResponse> responseReader = new StreamObserver<DiscoveryResponse>() {
         @Override
-        public void onNext(DiscoveryResponse response) {
-          DiscoveryResponseData responseData =
-              DiscoveryResponseData.fromEnvoyProto(response);
-          if (logger.isLoggable(XdsLogLevel.DEBUG)) {
-            logger.log(
-                XdsLogLevel.DEBUG,
-                "Received {0} response:\n{1}",
-                responseData.getResourceType(),
-                respPrinter.print(response));
-          }
-          onDiscoveryResponse(responseData);
+        public void onNext(final DiscoveryResponse response) {
+          syncContext.execute(new Runnable() {
+            @Override
+            public void run() {
+              DiscoveryResponseData responseData =
+                  DiscoveryResponseData.fromEnvoyProto(response);
+              if (logger.isLoggable(XdsLogLevel.DEBUG)) {
+                logger.log(
+                    XdsLogLevel.DEBUG,
+                    "Received {0} response:\n{1}",
+                    responseData.getResourceType(),
+                    respPrinter.print(response));
+              }
+              onDiscoveryResponse(responseData);
+            }
+          });
         }
 
         @Override
-        public void onError(Throwable t) {
-          AdsStream.this.onError(t);
+        public void onError(final Throwable t) {
+          syncContext.execute(new Runnable() {
+            @Override
+            public void run() {
+              AdsStream.this.onError(t);
+            }
+          });
         }
 
         @Override
         public void onCompleted() {
-          AdsStream.this.onCompleted();
+          syncContext.execute(new Runnable() {
+            @Override
+            public void run() {
+              AdsStream.this.onCompleted();
+            }
+          });
         }
       };
       requestWriter = stub.withWaitForReady().streamAggregatedResources(responseReader);
