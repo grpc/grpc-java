@@ -213,7 +213,7 @@ final class LoadReportClient {
     }
 
     // Must run in syncContext.
-    final void handleRpcComplete() {
+    final void handleRpcCompleted() {
       handleStreamClosed(Status.UNAVAILABLE.withDescription("Closed by server"));
     }
 
@@ -336,7 +336,7 @@ final class LoadReportClient {
               syncContext.execute(new Runnable() {
                 @Override
                 public void run() {
-                  handleRpcComplete();
+                  handleRpcCompleted();
                 }
               });
             }
@@ -396,7 +396,7 @@ final class LoadReportClient {
               syncContext.execute(new Runnable() {
                 @Override
                 public void run() {
-                  handleRpcComplete();
+                  handleRpcCompleted();
                 }
               });
             }

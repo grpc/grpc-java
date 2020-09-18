@@ -1460,7 +1460,7 @@ final class XdsClientImpl extends XdsClient {
     abstract void sendError(Exception error);
 
     // Must run in syncContext.
-    final void onDiscoveryResponse(DiscoveryResponseData response) {
+    final void handleResponse(DiscoveryResponseData response) {
       if (closed) {
         return;
       }
@@ -1500,12 +1500,12 @@ final class XdsClientImpl extends XdsClient {
     }
 
     // Must run in syncContext.
-    final void onError(Throwable t) {
+    final void handleRpcError(Throwable t) {
       handleStreamClosed(Status.fromThrowable(t));
     }
 
     // Must run in syncContext.
-    final void onCompleted() {
+    final void handleRpcCompleted() {
       handleStreamClosed(Status.UNAVAILABLE.withDescription("Closed by server"));
     }
 
@@ -1734,7 +1734,7 @@ final class XdsClientImpl extends XdsClient {
                   }
                   DiscoveryResponseData responseData =
                       DiscoveryResponseData.fromEnvoyProtoV2(response);
-                  onDiscoveryResponse(responseData);
+                  handleResponse(responseData);
                 }
               });
             }
@@ -1744,7 +1744,7 @@ final class XdsClientImpl extends XdsClient {
               syncContext.execute(new Runnable() {
                 @Override
                 public void run() {
-                  AdsStreamV2.this.onError(t);
+                  handleRpcError(t);
                 }
               });
             }
@@ -1754,7 +1754,7 @@ final class XdsClientImpl extends XdsClient {
               syncContext.execute(new Runnable() {
                 @Override
                 public void run() {
-                  AdsStreamV2.this.onCompleted();
+                  handleRpcCompleted();
                 }
               });
             }
@@ -1800,7 +1800,7 @@ final class XdsClientImpl extends XdsClient {
                     "Received DiscoveryResponse:\n{0}", respPrinter.print(response));
               }
               DiscoveryResponseData responseData = DiscoveryResponseData.fromEnvoyProto(response);
-              onDiscoveryResponse(responseData);
+              handleResponse(responseData);
             }
           });
         }
@@ -1810,7 +1810,7 @@ final class XdsClientImpl extends XdsClient {
           syncContext.execute(new Runnable() {
             @Override
             public void run() {
-              AdsStream.this.onError(t);
+              handleRpcError(t);
             }
           });
         }
@@ -1820,7 +1820,7 @@ final class XdsClientImpl extends XdsClient {
           syncContext.execute(new Runnable() {
             @Override
             public void run() {
-              AdsStream.this.onCompleted();
+              handleRpcCompleted();
             }
           });
         }
