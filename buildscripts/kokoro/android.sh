@@ -19,7 +19,7 @@ cat <<EOF >> gradle.properties
 # defaults to -Xmx512m -XX:MaxMetaspaceSize=256m
 # https://docs.gradle.org/current/userguide/build_environment.html#sec:configuring_jvm_memory
 # Increased due to java.lang.OutOfMemoryError: Metaspace failures
-org.gradle.jvmargs=-Xmx512m -XX:MaxMetaspaceSize=512m
+org.gradle.jvmargs=-Xmx512m -XX:MaxMetaspaceSize=1024m
 EOF
 
 echo y | ${ANDROID_HOME}/tools/bin/sdkmanager "build-tools;28.0.3"
