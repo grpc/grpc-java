@@ -51,8 +51,7 @@ public class CommonBootstrapperTestUtils {
 
   /** Creates a test bootstrap info object. */
   @SuppressWarnings("unchecked")
-  public static Bootstrapper.BootstrapInfo getTestBootstrapInfo()
-          throws XdsInitializationException {
+  public static Bootstrapper.BootstrapInfo getTestBootstrapInfo() {
     try {
       Bootstrapper.CertificateProviderInfo gcpId =
           new Bootstrapper.CertificateProviderInfo(
@@ -69,7 +68,7 @@ public class CommonBootstrapperTestUtils {
               certProviders);
       return bootstrapInfo;
     } catch (IOException e) {
-      throw new XdsInitializationException("", e);
+      throw new AssertionError(e);
     }
   }
 }
