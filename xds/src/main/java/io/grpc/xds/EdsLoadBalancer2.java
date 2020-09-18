@@ -253,8 +253,10 @@ final class EdsLoadBalancer2 extends LoadBalancer {
         for (Locality locality : localityLbEndpoints.keySet()) {
           LocalityLbEndpoints localityLbInfo = localityLbEndpoints.get(locality);
           int priority = localityLbInfo.getPriority();
+          boolean discard = true;
           for (LbEndpoint endpoint : localityLbInfo.getEndpoints()) {
             if (endpoint.isHealthy()) {
+              discard = false;
               EquivalentAddressGroup eag =
                   AddressFilter.setPathFilter(
                       endpoint.getAddress(),
@@ -262,11 +264,22 @@ final class EdsLoadBalancer2 extends LoadBalancer {
               endpointAddresses.add(eag);
             }
           }
+          if (discard) {
+            logger.log(XdsLogLevel.INFO, "Discard locality {0} with 0 healthy endpoints");
+            continue;
+          }
           if (!prioritizedLocalityWeights.containsKey(priority)) {
             prioritizedLocalityWeights.put(priority, new HashMap<Locality, Integer>());
           }
           prioritizedLocalityWeights.get(priority).put(
               locality, localityLbInfo.getLocalityWeight());
+        }
+        if (prioritizedLocalityWeights.isEmpty()) {
+          lbHelper.helper.updateBalancingState(
+              TRANSIENT_FAILURE,
+              new ErrorPicker(
+                  Status.UNAVAILABLE.withDescription("No usable priority/locality/endpoint")));
+          return;
         }
         if (lb == null) {
           lb = lbRegistry.getProvider(PRIORITY_POLICY_NAME).newLoadBalancer(lbHelper);
