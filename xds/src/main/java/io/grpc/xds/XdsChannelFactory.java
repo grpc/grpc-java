@@ -16,8 +16,6 @@
 
 package io.grpc.xds;
 
-import static com.google.common.base.Preconditions.checkArgument;
-
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
@@ -44,7 +42,9 @@ abstract class XdsChannelFactory {
      */
     @Override
     XdsChannel createChannel(List<ServerInfo> servers) throws XdsInitializationException {
-      checkArgument(!servers.isEmpty(), "No management server provided.");
+      if (servers.isEmpty()) {
+        throw new XdsInitializationException("No server provided");
+      }
       XdsLogger logger = XdsLogger.withPrefix("xds-client-channel-factory");
       ServerInfo serverInfo = servers.get(0);
       String serverUri = serverInfo.getServerUri();
