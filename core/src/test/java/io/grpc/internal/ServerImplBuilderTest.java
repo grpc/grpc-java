@@ -24,13 +24,9 @@ import io.grpc.ServerStreamTracer;
 import io.grpc.internal.ServerImplBuilder.ClientTransportServersBuilder;
 import java.util.List;
 import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
-import org.mockito.Mock;
-import org.mockito.junit.MockitoJUnit;
-import org.mockito.junit.MockitoRule;
 
 /** Unit tests for {@link ServerImplBuilder}. */
 @RunWith(JUnit4.class)
@@ -43,11 +39,6 @@ public class ServerImplBuilderTest {
         }
       };
 
-  @Rule public final MockitoRule mocks = MockitoJUnit.rule();
-
-  @Mock private ClientTransportServersBuilder mockClientTransportServersBuilder;
-  @Mock private List<? extends ServerStreamTracer.Factory> mockServerStreamTracerFactories;
-  @Mock private List<? extends InternalServer> mockInternalServers;
   private ServerImplBuilder builder;
 
   @Before
