@@ -17,7 +17,6 @@
 package io.grpc.internal;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.LoadBalancer.ATTR_LOAD_BALANCING_CONFIG;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
@@ -111,11 +110,6 @@ public final class AutoConfiguredLoadBalancerFactory {
     Status tryHandleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       List<EquivalentAddressGroup> servers = resolvedAddresses.getAddresses();
       Attributes attributes = resolvedAddresses.getAttributes();
-      if (attributes.get(ATTR_LOAD_BALANCING_CONFIG) != null) {
-        throw new IllegalArgumentException(
-            "Unexpected ATTR_LOAD_BALANCING_CONFIG from upstream: "
-                + attributes.get(ATTR_LOAD_BALANCING_CONFIG));
-      }
       PolicySelection policySelection =
           (PolicySelection) resolvedAddresses.getLoadBalancingPolicyConfig();
 
@@ -150,10 +144,6 @@ public final class AutoConfiguredLoadBalancerFactory {
       if (lbConfig != null) {
         helper.getChannelLogger().log(
             ChannelLogLevel.DEBUG, "Load-balancing config: {0}", policySelection.config);
-        attributes =
-            attributes.toBuilder()
-                .set(ATTR_LOAD_BALANCING_CONFIG, policySelection.rawConfig)
-                .build();
       }
 
       LoadBalancer delegate = getDelegate();

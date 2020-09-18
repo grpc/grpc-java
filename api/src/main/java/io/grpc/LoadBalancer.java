@@ -110,18 +110,6 @@ import javax.annotation.concurrent.ThreadSafe;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
 @NotThreadSafe
 public abstract class LoadBalancer {
-  /**
-   * The load-balancing config converted from an JSON object injected by the GRPC library.
-   *
-   * <p>{@link NameResolver}s should not produce this attribute.
-   *
-   * <p>Deprecated: LB implementations should use parsed object from {@link
-   * LoadBalancerProvider#parseLoadBalancingPolicyConfig(Map)} instead of raw config.
-   */
-  @Deprecated
-  @NameResolver.ResolutionResultAttr
-  public static final Attributes.Key<Map<String, ?>> ATTR_LOAD_BALANCING_CONFIG =
-      Attributes.Key.create("io.grpc.LoadBalancer.loadBalancingConfig");
 
   @Internal
   @NameResolver.ResolutionResultAttr

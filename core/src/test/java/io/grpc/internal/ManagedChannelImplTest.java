@@ -1159,6 +1159,7 @@ public class ManagedChannelImplTest {
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri).build();
     String rawLbConfig = "{ \"setting1\": \"high\" }";
+    Object parsedLbConfig = new Object();
     Map<String, Object> rawServiceConfig =
         parseConfig("{\"loadBalancingConfig\": [ {\"mock_lb\": " + rawLbConfig + " } ] }");
     ManagedChannelServiceConfig parsedServiceConfig =
@@ -1167,7 +1168,7 @@ public class ManagedChannelImplTest {
             new PolicySelection(
                 mockLoadBalancerProvider,
                 parseConfig(rawLbConfig),
-                new Object()));
+                parsedLbConfig));
     nameResolverFactory.nextConfigOrError.set(ConfigOrError.fromConfig(parsedServiceConfig));
     channelBuilder.nameResolverFactory(nameResolverFactory);
     createChannel();
@@ -1178,9 +1179,7 @@ public class ManagedChannelImplTest {
         ArgumentCaptor.forClass(ResolvedAddresses.class);
     verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
     assertThat(resultCaptor.getValue().getAddresses()).isEmpty();
-    Attributes actualAttrs = resultCaptor.getValue().getAttributes();
-    Map<String, ?> lbConfig = actualAttrs.get(LoadBalancer.ATTR_LOAD_BALANCING_CONFIG);
-    assertEquals(ImmutableMap.of("setting1", "high"), lbConfig);
+    assertThat(resultCaptor.getValue().getLoadBalancingPolicyConfig()).isEqualTo(parsedLbConfig);
 
     // A no resolution retry
     assertEquals(0, timer.numPendingTasks(NAME_RESOLVER_REFRESH_TASK_FILTER));

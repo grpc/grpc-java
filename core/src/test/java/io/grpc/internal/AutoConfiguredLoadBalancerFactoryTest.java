@@ -17,7 +17,6 @@
 package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
-import static io.grpc.LoadBalancer.ATTR_LOAD_BALANCING_CONFIG;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
@@ -265,8 +264,6 @@ public class AutoConfiguredLoadBalancerFactoryTest {
         ArgumentCaptor.forClass(ResolvedAddresses.class);
     verify(testLbBalancer).handleResolvedAddresses(resultCaptor.capture());
     assertThat(resultCaptor.getValue().getAddresses()).containsExactlyElementsIn(servers).inOrder();
-    assertThat(resultCaptor.getValue().getAttributes().get(ATTR_LOAD_BALANCING_CONFIG))
-        .containsExactly("setting1", "high");
     verify(testLbBalancer, atLeast(0)).canHandleEmptyAddressListFromNameResolution();
     ArgumentCaptor<Map<String, ?>> lbConfigCaptor = ArgumentCaptor.forClass(Map.class);
     verify(testLbBalancerProvider).parseLoadBalancingPolicyConfig(lbConfigCaptor.capture());
@@ -288,8 +285,6 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     verify(testLbBalancer, times(2)).handleResolvedAddresses(resultCaptor.capture());
     assertThat(handleResult.getCode()).isEqualTo(Status.Code.OK);
     assertThat(resultCaptor.getValue().getAddresses()).containsExactlyElementsIn(servers).inOrder();
-    assertThat(resultCaptor.getValue().getAttributes().get(ATTR_LOAD_BALANCING_CONFIG))
-        .containsExactly("setting1", "low");
     verify(testLbBalancerProvider, times(2))
         .parseLoadBalancingPolicyConfig(lbConfigCaptor.capture());
     assertThat(lbConfigCaptor.getValue()).containsExactly("setting1", "low");
@@ -383,8 +378,6 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     assertThat(resultCaptor.getValue().getAddresses()).isEmpty();
     assertThat(resultCaptor.getValue().getLoadBalancingPolicyConfig())
         .isEqualTo(nextParsedConfigOrError2.get().getConfig());
-    assertThat(resultCaptor.getValue().getAttributes().get(ATTR_LOAD_BALANCING_CONFIG))
-        .containsExactly("setting1", "high");
   }
 
   @Test
