@@ -165,11 +165,11 @@ public class EdsLoadBalancer2Test {
     EquivalentAddressGroup endpoint3 = makeAddress("endpoint-addr-3");
     EquivalentAddressGroup endpoint4 = makeAddress("endpoint-addr-4");
     LocalityLbEndpoints localityLbEndpoints1 =
-        buildLocalityLbEndpoints(1, 70, Arrays.asList(endpoint1, endpoint2));
+        buildLocalityLbEndpoints(1, 70, ImmutableMap.of(endpoint1, true, endpoint2, true));
     LocalityLbEndpoints localityLbEndpoints2 =
-        buildLocalityLbEndpoints(1, 10, Collections.singletonList(endpoint3));
+        buildLocalityLbEndpoints(1, 10, Collections.singletonMap(endpoint3, true));
     LocalityLbEndpoints localityLbEndpoints3 =
-        buildLocalityLbEndpoints(2, 20, Collections.singletonList(endpoint4));
+        buildLocalityLbEndpoints(2, 20, Collections.singletonMap(endpoint4, true));
     xdsClient.deliverClusterLoadAssignment(
         EDS_SERVICE_NAME,
         ImmutableMap.of(
@@ -232,7 +232,7 @@ public class EdsLoadBalancer2Test {
   public void endpointResourceUpdated() {
     EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr-1");
     LocalityLbEndpoints localityLbEndpoints1 =
-        buildLocalityLbEndpoints(1, 10, Collections.singletonList(endpoint1));
+        buildLocalityLbEndpoints(1, 10, Collections.singletonMap(endpoint1, true));
     xdsClient.deliverClusterLoadAssignment(
         EDS_SERVICE_NAME, ImmutableMap.of(locality1, localityLbEndpoints1));
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(downstreamBalancers);
@@ -260,7 +260,7 @@ public class EdsLoadBalancer2Test {
 
     EquivalentAddressGroup endpoint2 = makeAddress("endpoint-addr-2");
     LocalityLbEndpoints localityLbEndpoints2 =
-        buildLocalityLbEndpoints(1, 30, Collections.singletonList(endpoint2));
+        buildLocalityLbEndpoints(1, 30, Collections.singletonMap(endpoint2, true));
     xdsClient.deliverClusterLoadAssignment(
         EDS_SERVICE_NAME, ImmutableMap.of(locality2, localityLbEndpoints2));
 
@@ -310,13 +310,110 @@ public class EdsLoadBalancer2Test {
   }
 
   @Test
+  public void handleEndpointResource_ignoreUnhealthyEndpoints() {
+    EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr-1");
+    EquivalentAddressGroup endpoint2 = makeAddress("endpoint-addr-2");
+    LocalityLbEndpoints localityLbEndpoints =
+        buildLocalityLbEndpoints(1, 10, ImmutableMap.of(endpoint1, false, endpoint2, true));
+    xdsClient.deliverClusterLoadAssignment(
+        EDS_SERVICE_NAME, Collections.singletonMap(locality1, localityLbEndpoints));
+
+    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(downstreamBalancers);
+    PriorityLbConfig config = (PriorityLbConfig) childBalancer.config;
+    PolicySelection child = config.childConfigs.get("priority1");
+    WeightedTargetConfig childConfig = (WeightedTargetConfig) child.getConfig();
+    assertThat(childConfig.targets.keySet()).containsExactly(locality1.toString());
+
+    List<EquivalentAddressGroup> priorityAddr =
+        AddressFilter.filter(childBalancer.addresses, "priority1");
+    assertThat(priorityAddr).hasSize(1);
+    assertAddressesEqual(Collections.singletonList(endpoint2), priorityAddr);
+    assertAddressesEqual(
+        Collections.singletonList(endpoint2),
+        AddressFilter.filter(priorityAddr, locality1.toString()));
+  }
+
+  @Test
+  public void handleEndpointResource_ignoreLocalitiesWithNoHealthyEndpoints() {
+    EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr-1");
+    EquivalentAddressGroup endpoint2 = makeAddress("endpoint-addr-2");
+    LocalityLbEndpoints localityLbEndpoints1 =
+        buildLocalityLbEndpoints(1, 10, Collections.singletonMap(endpoint1, false));
+    LocalityLbEndpoints localityLbEndpoints2 =
+        buildLocalityLbEndpoints(1, 10, Collections.singletonMap(endpoint2, true));
+    xdsClient.deliverClusterLoadAssignment(
+        EDS_SERVICE_NAME,
+        ImmutableMap.of(locality1, localityLbEndpoints1, locality2, localityLbEndpoints2));
+
+    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(downstreamBalancers);
+    PriorityLbConfig config = (PriorityLbConfig) childBalancer.config;
+    PolicySelection child = config.childConfigs.get("priority1");
+    WeightedTargetConfig childConfig = (WeightedTargetConfig) child.getConfig();
+    assertThat(childConfig.targets.keySet()).containsExactly(locality2.toString());
+
+    List<EquivalentAddressGroup> priorityAddr =
+        AddressFilter.filter(childBalancer.addresses, "priority1");
+    assertThat(priorityAddr).hasSize(1);
+    assertAddressesEqual(Collections.singletonList(endpoint2), priorityAddr);
+    assertAddressesEqual(
+        Collections.singletonList(endpoint2),
+        AddressFilter.filter(priorityAddr, locality2.toString()));
+  }
+
+  @Test
+  public void handleEndpointResource_ignorePrioritiesWithNoHealthyEndpoints() {
+    EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr-1");
+    EquivalentAddressGroup endpoint2 = makeAddress("endpoint-addr-2");
+    LocalityLbEndpoints localityLbEndpoints1 =
+        buildLocalityLbEndpoints(1, 10, Collections.singletonMap(endpoint1, false));
+    LocalityLbEndpoints localityLbEndpoints2 =
+        buildLocalityLbEndpoints(2, 10, Collections.singletonMap(endpoint2, true));
+    xdsClient.deliverClusterLoadAssignment(
+        EDS_SERVICE_NAME,
+        ImmutableMap.of(locality1, localityLbEndpoints1, locality2, localityLbEndpoints2));
+
+    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(downstreamBalancers);
+    PriorityLbConfig config = (PriorityLbConfig) childBalancer.config;
+    assertThat(config.priorities).containsExactly("priority2");
+
+    List<EquivalentAddressGroup> priorityAddr =
+        AddressFilter.filter(childBalancer.addresses, "priority2");
+    assertThat(priorityAddr).hasSize(1);
+    assertAddressesEqual(Collections.singletonList(endpoint2), priorityAddr);
+    assertAddressesEqual(
+        Collections.singletonList(endpoint2),
+        AddressFilter.filter(priorityAddr, locality2.toString()));
+  }
+
+  @Test
+  public void handleEndpointResource_errorIfNoUsableEndpoints() {
+    EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr-1");
+    EquivalentAddressGroup endpoint2 = makeAddress("endpoint-addr-2");
+    LocalityLbEndpoints localityLbEndpoints1 =
+        buildLocalityLbEndpoints(1, 10, Collections.singletonMap(endpoint1, false));
+    LocalityLbEndpoints localityLbEndpoints2 =
+        buildLocalityLbEndpoints(2, 10, Collections.singletonMap(endpoint2, false));
+    xdsClient.deliverClusterLoadAssignment(
+        EDS_SERVICE_NAME,
+        ImmutableMap.of(locality1, localityLbEndpoints1, locality2, localityLbEndpoints2));
+
+    assertThat(downstreamBalancers).isEmpty();
+    assertThat(currentState).isEqualTo(ConnectivityState.TRANSIENT_FAILURE);
+    PickResult result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
+    assertThat(result.getStatus().isOk()).isFalse();
+    assertThat(result.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat(result.getStatus().getDescription())
+        .isEqualTo("No usable priority/locality/endpoint");
+  }
+
+  @Test
   public void handleDrops() {
     FakeLoadBalancerProvider fakeRoundRobinProvider = new FakeLoadBalancerProvider("round_robin");
     prepareRealDownstreamLbPolicies(fakeRoundRobinProvider);
     when(mockRandom.nextInt(anyInt())).thenReturn(499_999, 1_000_000);
     EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr-1");
     LocalityLbEndpoints localityLbEndpoints1 =
-        buildLocalityLbEndpoints(1, 10, Collections.singletonList(endpoint1));
+        buildLocalityLbEndpoints(1, 10, Collections.singletonMap(endpoint1, true));
     xdsClient.deliverClusterLoadAssignment(
         EDS_SERVICE_NAME,
         Collections.singletonList(new DropOverload("throttle", 500_000)),
@@ -520,7 +617,7 @@ public class EdsLoadBalancer2Test {
   private void deliverSimpleClusterLoadAssignment(String resourceName) {
     EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr-1");
     LocalityLbEndpoints localityLbEndpoints1 =
-        buildLocalityLbEndpoints(1, 10, Collections.singletonList(endpoint1));
+        buildLocalityLbEndpoints(1, 10, Collections.singletonMap(endpoint1, true));
     xdsClient.deliverClusterLoadAssignment(
         resourceName,
         Collections.singletonMap(locality1, localityLbEndpoints1));
@@ -570,10 +667,11 @@ public class EdsLoadBalancer2Test {
   }
 
   private static LocalityLbEndpoints buildLocalityLbEndpoints(
-      int priority, int localityWeight, List<EquivalentAddressGroup> endpointAddresses) {
+      int priority, int localityWeight, Map<EquivalentAddressGroup, Boolean> managedEndpoints) {
     List<LbEndpoint> endpoints = new ArrayList<>();
-    for (EquivalentAddressGroup addr : endpointAddresses) {
-      endpoints.add(new LbEndpoint(addr, 100, true));
+    for (EquivalentAddressGroup addr : managedEndpoints.keySet()) {
+      boolean status = managedEndpoints.get(addr);
+      endpoints.add(new LbEndpoint(addr, 100 /* used */, status));
     }
     return new LocalityLbEndpoints(endpoints, localityWeight, priority);
   }
