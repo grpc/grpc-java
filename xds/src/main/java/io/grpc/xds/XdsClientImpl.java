@@ -1727,15 +1727,13 @@ final class XdsClientImpl extends XdsClient {
               syncContext.execute(new Runnable() {
                 @Override
                 public void run() {
-                  DiscoveryResponseData responseData =
-                      DiscoveryResponseData.fromEnvoyProtoV2(response);
                   if (logger.isLoggable(XdsLogLevel.DEBUG)) {
                     logger.log(
                         XdsLogLevel.DEBUG,
-                        "Received {0} response:\n{1}",
-                        responseData.getResourceType(),
-                        respPrinter.print(response));
+                        "Received DiscoveryResponse:\n{0}", respPrinter.print(response));
                   }
+                  DiscoveryResponseData responseData =
+                      DiscoveryResponseData.fromEnvoyProtoV2(response);
                   onDiscoveryResponse(responseData);
                 }
               });
@@ -1796,15 +1794,12 @@ final class XdsClientImpl extends XdsClient {
           syncContext.execute(new Runnable() {
             @Override
             public void run() {
-              DiscoveryResponseData responseData =
-                  DiscoveryResponseData.fromEnvoyProto(response);
               if (logger.isLoggable(XdsLogLevel.DEBUG)) {
                 logger.log(
                     XdsLogLevel.DEBUG,
-                    "Received {0} response:\n{1}",
-                    responseData.getResourceType(),
-                    respPrinter.print(response));
+                    "Received DiscoveryResponse:\n{0}", respPrinter.print(response));
               }
+              DiscoveryResponseData responseData = DiscoveryResponseData.fromEnvoyProto(response);
               onDiscoveryResponse(responseData);
             }
           });

@@ -315,7 +315,7 @@ final class LoadReportClient {
               syncContext.execute(new Runnable() {
                 @Override
                 public void run() {
-                  logger.log(XdsLogLevel.DEBUG, "Received LRS response:\n{0}", response);
+                  logger.log(XdsLogLevel.DEBUG, "Received LoadStatsResponse:\n{0}", response);
                   handleResponse(LoadStatsResponseData.fromEnvoyProtoV2(response));
                 }
               });
