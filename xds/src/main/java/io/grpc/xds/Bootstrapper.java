@@ -84,7 +84,7 @@ public abstract class Bootstrapper {
   /** Parses a raw string into {@link BootstrapInfo}. */
   @VisibleForTesting
   @SuppressWarnings("unchecked")
-  public static BootstrapInfo parseConfig(String rawData) throws XdsInitializationException {
+  static BootstrapInfo parseConfig(String rawData) throws XdsInitializationException {
     XdsLogger logger = XdsLogger.withPrefix(LOG_PREFIX);
     logger.log(XdsLogLevel.INFO, "Reading bootstrap information");
     Map<String, ?> rawBootstrap;

@@ -34,6 +34,7 @@ import com.google.common.util.concurrent.MoreExecutors;
 import io.envoyproxy.envoy.config.core.v3.DataSource;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.grpc.xds.Bootstrapper;
+import io.grpc.xds.CommonBootstrapperTestUtils;
 import io.grpc.xds.EnvoyServerProtoData;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.TestCallback;
@@ -96,7 +97,7 @@ public class CertProviderClientSslContextProviderTest {
         getSslContextProvider(
             "gcp_id",
             "gcp_id",
-            CommonCertProviderTestUtils.getTestBootstrapInfo(),
+            CommonBootstrapperTestUtils.getTestBootstrapInfo(),
             /* alpnProtocols= */ null,
             /* staticCertValidationContext= */ null);
 
@@ -159,7 +160,7 @@ public class CertProviderClientSslContextProviderTest {
         getSslContextProvider(
             "gcp_id",
             "gcp_id",
-            CommonCertProviderTestUtils.getTestBootstrapInfo(),
+            CommonBootstrapperTestUtils.getTestBootstrapInfo(),
             /* alpnProtocols= */ null,
             /* staticCertValidationContext= */ null);
     QueuedExecutor queuedExecutor = new QueuedExecutor();
@@ -192,7 +193,7 @@ public class CertProviderClientSslContextProviderTest {
         getSslContextProvider(
             /* certInstanceName= */ null,
             "gcp_id",
-            CommonCertProviderTestUtils.getTestBootstrapInfo(),
+            CommonBootstrapperTestUtils.getTestBootstrapInfo(),
             /* alpnProtocols= */ null,
             /* staticCertValidationContext= */ null);
 
@@ -229,7 +230,7 @@ public class CertProviderClientSslContextProviderTest {
             getSslContextProvider(
                     /* certInstanceName= */ null,
                     "gcp_id",
-                    CommonCertProviderTestUtils.getTestBootstrapInfo(),
+                    CommonBootstrapperTestUtils.getTestBootstrapInfo(),
                     /* alpnProtocols= */null,
                     staticCertValidationContext);
 
@@ -260,7 +261,7 @@ public class CertProviderClientSslContextProviderTest {
       getSslContextProvider(
           /* certInstanceName= */ null,
           /* rootInstanceName= */ null,
-          CommonCertProviderTestUtils.getTestBootstrapInfo(),
+          CommonBootstrapperTestUtils.getTestBootstrapInfo(),
           /* alpnProtocols= */ null,
           /* staticCertValidationContext= */ null);
       fail("exception expected");
