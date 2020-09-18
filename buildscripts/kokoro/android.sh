@@ -91,7 +91,7 @@ new_apk_size="$(stat --printf=%s $HELLO_WORLD_OUTPUT_DIR/apk/release/app-release
 cd $BASE_DIR/github/grpc-java
 git checkout HEAD^
 ./gradlew clean
-./gradlew --stop
+./gradlew --stop  # use a new daemon to build the previous commit
 ./gradlew publishToMavenLocal
 cd examples/android/helloworld/
 ../../gradlew build
