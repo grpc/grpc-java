@@ -16,8 +16,6 @@
 
 package io.grpc.xds.internal.sds;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-
 import io.grpc.ForwardingChannelBuilder;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
@@ -67,10 +65,9 @@ public final class XdsChannelBuilder extends ForwardingChannelBuilder<XdsChannel
     return new XdsChannelBuilder(NettyChannelBuilder.forTarget(target));
   }
 
-  /** Set the fallback protocolNegotiator. */
+  /** Set the fallback protocolNegotiator. Pass null to unset a previously set value. */
   public XdsChannelBuilder fallbackProtocolNegotiator(
           InternalProtocolNegotiator.ProtocolNegotiator fallbackProtocolNegotiator) {
-    checkNotNull(fallbackProtocolNegotiator, "fallbackProtocolNegotiator");
     this.fallbackProtocolNegotiator = fallbackProtocolNegotiator;
     return this;
   }

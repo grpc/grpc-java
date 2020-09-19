@@ -158,6 +158,18 @@ public class SdsProtocolNegotiatorsTest {
   }
 
   @Test
+  public void clientSdsProtocolNegotiatorNewHandler_noFallback_expectException() {
+    ClientSdsProtocolNegotiator pn =
+        new ClientSdsProtocolNegotiator(/* fallbackProtocolNegotiator= */ null);
+    try {
+      pn.newHandler(grpcHandler);
+      fail("exception expected!");
+    } catch (NullPointerException expected) {
+      assertThat(expected).hasMessageThat().contains("fallbackProtocolNegotiator not set!");
+    }
+  }
+
+  @Test
   public void clientSdsProtocolNegotiatorNewHandler_withTlsContextAttribute() {
     UpstreamTlsContext upstreamTlsContext =
         CommonTlsContextTestsUtil.buildUpstreamTlsContext(

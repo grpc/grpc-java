@@ -19,9 +19,7 @@ package io.grpc.xds.internal.sds;
 import static com.google.common.truth.Truth.assertThat;
 
 import io.grpc.ManagedChannel;
-import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.netty.NettyChannelBuilder;
-import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -37,19 +35,7 @@ public class XdsChannelBuilderTest {
     XdsChannelBuilder builder = XdsChannelBuilder.forTarget("localhost:8080");
     assertThat(builder).isNotNull();
     assertThat(builder.delegate()).isInstanceOf(NettyChannelBuilder.class);
-    builder = builder.fallbackProtocolNegotiator(InternalProtocolNegotiators.plaintext());
     ManagedChannel channel = builder.build();
     assertThat(channel).isNotNull();
-  }
-
-  @Test
-  public void buildsXdsChannelBuilder_noFallbackNegotiator() {
-    XdsChannelBuilder builder = XdsChannelBuilder.forTarget("localhost:8080");
-    try {
-      builder.build();
-      Assert.fail("no exception thrown");
-    } catch (NullPointerException expected) {
-      assertThat(expected).hasMessageThat().isEqualTo("fallbackProtocolNegotiator");
-    }
   }
 }
