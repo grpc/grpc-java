@@ -16,7 +16,6 @@
 
 package io.grpc.xds;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -25,13 +24,8 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 import io.grpc.Status;
-import io.grpc.alts.GoogleDefaultChannelBuilder;
 import io.grpc.internal.ObjectPool;
-import io.grpc.xds.Bootstrapper.BootstrapInfo;
-import io.grpc.xds.Bootstrapper.ChannelCreds;
-import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
@@ -39,7 +33,6 @@ import io.grpc.xds.EnvoyProtoData.Route;
 import io.grpc.xds.EnvoyServerProtoData.Listener;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.LoadStatsManager.LoadStatsStore;
-import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -47,7 +40,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
 /**
@@ -613,62 +605,6 @@ abstract class XdsClient {
     }
   }
 
-  /**
-   * Factory for creating channels to xDS severs.
-   */
-  abstract static class XdsChannelFactory {
-    @VisibleForTesting
-    static boolean experimentalV3SupportEnvVar = Boolean.parseBoolean(
-        System.getenv("GRPC_XDS_EXPERIMENTAL_V3_SUPPORT"));
-
-    private static final String XDS_V3_SERVER_FEATURE = "xds_v3";
-    private static final XdsChannelFactory DEFAULT_INSTANCE = new XdsChannelFactory() {
-      /**
-       * Creates a channel to the first server in the given list.
-       */
-      @Override
-      XdsChannel createChannel(List<ServerInfo> servers) {
-        checkArgument(!servers.isEmpty(), "No management server provided.");
-        XdsLogger logger = XdsLogger.withPrefix("xds-client-channel-factory");
-        ServerInfo serverInfo = servers.get(0);
-        String serverUri = serverInfo.getServerUri();
-        logger.log(XdsLogLevel.INFO, "Creating channel to {0}", serverUri);
-        List<ChannelCreds> channelCredsList = serverInfo.getChannelCredentials();
-        ManagedChannelBuilder<?> channelBuilder = null;
-        // Use the first supported channel credentials configuration.
-        // Currently, only "google_default" is supported.
-        for (ChannelCreds creds : channelCredsList) {
-          if (creds.getType().equals("google_default")) {
-            logger.log(XdsLogLevel.INFO, "Using channel credentials: google_default");
-            channelBuilder = GoogleDefaultChannelBuilder.forTarget(serverUri);
-            break;
-          }
-        }
-        if (channelBuilder == null) {
-          logger.log(XdsLogLevel.INFO, "Using default channel credentials");
-          channelBuilder = ManagedChannelBuilder.forTarget(serverUri);
-        }
-
-        ManagedChannel channel = channelBuilder
-            .keepAliveTime(5, TimeUnit.MINUTES)
-            .build();
-        boolean useProtocolV3 = experimentalV3SupportEnvVar
-            && serverInfo.getServerFeatures().contains(XDS_V3_SERVER_FEATURE);
-
-        return new XdsChannel(channel, useProtocolV3);
-      }
-    };
-
-    static XdsChannelFactory getInstance() {
-      return DEFAULT_INSTANCE;
-    }
-
-    /**
-     * Creates a channel to one of the provided management servers.
-     */
-    abstract XdsChannel createChannel(List<ServerInfo> servers);
-  }
-
   static final class XdsChannel {
     private final ManagedChannel managedChannel;
     private final boolean useProtocolV3;
@@ -686,9 +622,5 @@ abstract class XdsClient {
     boolean isUseProtocolV3() {
       return useProtocolV3;
     }
-  }
-
-  interface XdsClientPoolFactory {
-    ObjectPool<XdsClient> newXdsClientObjectPool(BootstrapInfo bootstrapInfo);
   }
 }

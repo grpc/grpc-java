@@ -86,8 +86,6 @@ import io.grpc.internal.FakeClock.ScheduledTask;
 import io.grpc.internal.FakeClock.TaskFilter;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
-import io.grpc.xds.Bootstrapper.ChannelCreds;
-import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.LbEndpoint;
 import io.grpc.xds.EnvoyProtoData.Locality;
@@ -100,7 +98,6 @@ import io.grpc.xds.XdsClient.ConfigWatcher;
 import io.grpc.xds.XdsClient.EndpointUpdate;
 import io.grpc.xds.XdsClient.EndpointWatcher;
 import io.grpc.xds.XdsClient.XdsChannel;
-import io.grpc.xds.XdsClient.XdsChannelFactory;
 import io.grpc.xds.XdsClientImpl.MessagePrinter;
 import java.io.IOException;
 import java.util.ArrayDeque;
@@ -279,23 +276,10 @@ public class XdsClientImplTest {
     channel =
         cleanupRule.register(InProcessChannelBuilder.forName(serverName).directExecutor().build());
 
-    List<ServerInfo> servers =
-        ImmutableList.of(new ServerInfo(serverName, ImmutableList.<ChannelCreds>of(), null));
-    XdsChannelFactory channelFactory = new XdsChannelFactory() {
-      @Override
-      XdsChannel createChannel(List<ServerInfo> servers) {
-        ServerInfo serverInfo = Iterables.getOnlyElement(servers);
-        assertThat(serverInfo.getServerUri()).isEqualTo(serverName);
-        assertThat(serverInfo.getChannelCredentials()).isEmpty();
-        return new XdsChannel(channel, /* useProtocolV3= */ true);
-      }
-    };
-
     xdsClient =
         new XdsClientImpl(
             TARGET_AUTHORITY,
-            servers,
-            channelFactory,
+            new XdsChannel(channel, /* useProtocolV3= */ true),
             EnvoyProtoData.Node.newBuilder().build(),
             syncContext,
             fakeClock.getScheduledExecutorService(),

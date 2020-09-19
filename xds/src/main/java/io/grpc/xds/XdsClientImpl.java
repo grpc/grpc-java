@@ -53,7 +53,6 @@ import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.stub.StreamObserver;
-import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
@@ -204,18 +203,14 @@ final class XdsClientImpl extends XdsClient {
 
   XdsClientImpl(
       String targetName,
-      List<ServerInfo> servers,  // list of management servers
-      XdsChannelFactory channelFactory,
+      XdsChannel channel,
       Node node,
       SynchronizationContext syncContext,
       ScheduledExecutorService timeService,
       BackoffPolicy.Provider backoffPolicyProvider,
       Supplier<Stopwatch> stopwatchSupplier) {
     this.targetName = checkNotNull(targetName, "targetName");
-    XdsChannel xdsChannel =
-        checkNotNull(channelFactory, "channelFactory")
-            .createChannel(checkNotNull(servers, "servers"));
-    this.xdsChannel = xdsChannel;
+    this.xdsChannel = checkNotNull(channel, "channel");
     this.node = checkNotNull(node, "node");
     this.syncContext = checkNotNull(syncContext, "syncContext");
     this.timeService = checkNotNull(timeService, "timeService");

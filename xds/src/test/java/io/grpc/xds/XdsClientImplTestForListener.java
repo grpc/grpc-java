@@ -64,15 +64,12 @@ import io.grpc.internal.FakeClock;
 import io.grpc.internal.FakeClock.TaskFilter;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
-import io.grpc.xds.Bootstrapper.ChannelCreds;
-import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.Address;
 import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.XdsClient.ConfigWatcher;
 import io.grpc.xds.XdsClient.ListenerUpdate;
 import io.grpc.xds.XdsClient.ListenerWatcher;
 import io.grpc.xds.XdsClient.XdsChannel;
-import io.grpc.xds.XdsClient.XdsChannelFactory;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import java.io.IOException;
 import java.util.ArrayDeque;
@@ -200,21 +197,9 @@ public class XdsClientImplTestForListener {
     channel =
         cleanupRule.register(InProcessChannelBuilder.forName(serverName).directExecutor().build());
 
-    List<ServerInfo> servers =
-        ImmutableList.of(new ServerInfo(serverName, ImmutableList.<ChannelCreds>of(), null));
-    XdsChannelFactory channelFactory = new XdsChannelFactory() {
-      @Override
-      XdsChannel createChannel(List<ServerInfo> servers) {
-        ServerInfo serverInfo = Iterables.getOnlyElement(servers);
-        assertThat(serverInfo.getServerUri()).isEqualTo(serverName);
-        assertThat(serverInfo.getChannelCredentials()).isEmpty();
-        return new XdsChannel(channel, false);
-      }
-    };
-
     xdsClient =
-        new XdsClientImpl("", servers, channelFactory, NODE, syncContext,
-            fakeClock.getScheduledExecutorService(), backoffPolicyProvider,
+        new XdsClientImpl("", new XdsChannel(channel, /* useProtocolV3= */ false), NODE,
+            syncContext, fakeClock.getScheduledExecutorService(), backoffPolicyProvider,
             fakeClock.getStopwatchSupplier());
     // Only the connection to management server is established, no RPC request is sent until at
     // least one watcher is registered.

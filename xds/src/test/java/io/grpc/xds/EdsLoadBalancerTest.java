@@ -80,7 +80,6 @@ import io.grpc.xds.LoadStatsManager.LoadStatsStore;
 import io.grpc.xds.LocalityStore.LocalityStoreFactory;
 import io.grpc.xds.XdsClient.EndpointUpdate;
 import io.grpc.xds.XdsClient.XdsChannel;
-import io.grpc.xds.XdsClient.XdsChannelFactory;
 import java.net.InetSocketAddress;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -240,8 +239,7 @@ public class EdsLoadBalancerTest {
       xdsClientPoolFromResolveAddresses = new FakeXdsClientPool(
           new XdsClientImpl(
               SERVICE_AUTHORITY,
-              serverList,
-              channelFactory,
+              new XdsChannel(channel, /* useProtocolV3= */ false),
               node,
               syncContext,
               fakeClock.getScheduledExecutorService(),
