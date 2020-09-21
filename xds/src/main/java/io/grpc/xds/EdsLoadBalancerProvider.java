@@ -17,7 +17,6 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.xds.XdsLbPolicies.WEIGHTED_TARGET_POLICY_NAME;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
@@ -25,7 +24,6 @@ import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancerProvider;
-import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import java.util.Map;
@@ -73,21 +71,6 @@ public class EdsLoadBalancerProvider extends LoadBalancerProvider {
     final String lrsServerName;
     final PolicySelection localityPickingPolicy;
     final PolicySelection endpointPickingPolicy;
-
-    // TODO(chengyuanzhang): delete me.
-    EdsConfig(
-        String clusterName,
-        @Nullable String edsServiceName,
-        @Nullable String lrsServerName,
-        PolicySelection endpointPickingPolicy) {
-      this.clusterName = checkNotNull(clusterName, "clusterName");
-      this.edsServiceName = edsServiceName;
-      this.lrsServerName = lrsServerName;
-      this.endpointPickingPolicy = checkNotNull(endpointPickingPolicy, "endpointPickingPolicy");
-      LoadBalancerProvider provider =
-          LoadBalancerRegistry.getDefaultRegistry().getProvider(WEIGHTED_TARGET_POLICY_NAME);
-      localityPickingPolicy = new PolicySelection(provider, null, null);
-    }
 
     EdsConfig(
         String clusterName,
