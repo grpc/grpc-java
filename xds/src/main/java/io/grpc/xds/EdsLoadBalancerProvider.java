@@ -56,7 +56,7 @@ public class EdsLoadBalancerProvider extends LoadBalancerProvider {
 
   @Override
   public LoadBalancer newLoadBalancer(Helper helper) {
-    return new EdsLoadBalancer(helper);
+    return new EdsLoadBalancer2(helper);
   }
 
   @Override
