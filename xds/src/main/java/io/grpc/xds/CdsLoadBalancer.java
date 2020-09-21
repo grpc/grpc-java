@@ -20,9 +20,9 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.xds.XdsLbPolicies.EDS_POLICY_NAME;
+import static io.grpc.xds.XdsLbPolicies.WEIGHTED_TARGET_POLICY_NAME;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.ImmutableMap;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
@@ -198,18 +198,20 @@ final class CdsLoadBalancer extends LoadBalancer {
             xdsClient, newUpdate.getClusterName(), newUpdate.getEdsServiceName(),
             newUpdate.getLbPolicy(), newUpdate.getLrsServerName() != null);
       }
+      // FIXME(chengyuanzhang): handle error correctly to avoid being unnecessarily fragile.
       checkArgument(
           newUpdate.getLbPolicy().equals("round_robin"), "can only support round_robin policy");
-
-      LoadBalancerProvider lbProvider = lbRegistry.getProvider(newUpdate.getLbPolicy());
-      Object lbConfig =
-          lbProvider.parseLoadBalancingPolicyConfig(ImmutableMap.<String, Object>of()).getConfig();
+      LoadBalancerProvider endpointPickingPolicyProvider =
+          lbRegistry.getProvider(newUpdate.getLbPolicy());
+      LoadBalancerProvider localityPickingPolicyProvider =
+          lbRegistry.getProvider(WEIGHTED_TARGET_POLICY_NAME);  // hardcode to weighted-target
       final EdsConfig edsConfig =
           new EdsConfig(
               /* clusterName = */ newUpdate.getClusterName(),
               /* edsServiceName = */ newUpdate.getEdsServiceName(),
               /* lrsServerName = */ newUpdate.getLrsServerName(),
-              new PolicySelection(lbProvider, ImmutableMap.<String, Object>of(), lbConfig));
+              new PolicySelection(localityPickingPolicyProvider, null, null /* by EDS policy */),
+              new PolicySelection(endpointPickingPolicyProvider, null, null));
       if (isXdsSecurityEnabled()) {
         updateSslContextProviderSupplier(newUpdate.getUpstreamTlsContext());
       }
