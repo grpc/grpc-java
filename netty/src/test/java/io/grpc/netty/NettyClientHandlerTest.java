@@ -713,6 +713,68 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     assertEquals(1, transportTracer.getStats().keepAlivesSent);
   }
 
+  @Test
+  public void bdpPingAvoidsTooManyPingsOnSpecialServers() throws Exception {
+    // gRPC servers limit PINGs based on what they _send_. Some servers limit PINGs based on what is
+    // _received_.
+    createStream();
+    handler().setAutoTuneFlowControl(true);
+
+    Http2Headers headers = new DefaultHttp2Headers().status(STATUS_OK)
+        .set(CONTENT_TYPE_HEADER, CONTENT_TYPE_GRPC);
+    channelRead(headersFrame(3, headers));
+    channelRead(dataFrame(3, false, content()));
+    verifyWrite().writePing(eq(ctx()), eq(false), eq(1234L), any(ChannelPromise.class));
+    channelRead(pingFrame(true, 1234));
+
+    channelRead(dataFrame(3, false, content()));
+    verifyWrite(times(2)).writePing(eq(ctx()), eq(false), eq(1234L), any(ChannelPromise.class));
+    channelRead(pingFrame(true, 1234));
+
+    channelRead(dataFrame(3, false, content()));
+    // No ping was sent
+    verifyWrite(times(2)).writePing(eq(ctx()), eq(false), eq(1234L), any(ChannelPromise.class));
+  }
+
+  @Test
+  public void bdpPingAllowedAfterSendingData() throws Exception {
+    // gRPC servers limit PINGs based on what they _send_. Some servers limit PINGs based on what is
+    // _received_.
+    flowControlWindow = 64 * 1024;
+    manualSetUp();
+    createStream();
+    handler().setAutoTuneFlowControl(true);
+
+    ByteBuf content = Unpooled.buffer(64 * 1024 + 1024);
+    content.writerIndex(content.capacity());
+    ChannelFuture future
+        = enqueue(new SendGrpcFrameCommand(streamTransportState, content, false));
+    assertFalse(future.isDone()); // flow control limits send
+
+    Http2Headers headers = new DefaultHttp2Headers().status(STATUS_OK)
+        .set(CONTENT_TYPE_HEADER, CONTENT_TYPE_GRPC);
+    channelRead(headersFrame(3, headers));
+    channelRead(dataFrame(3, false, content()));
+    verifyWrite().writePing(eq(ctx()), eq(false), eq(1234L), any(ChannelPromise.class));
+    channelRead(pingFrame(true, 1234));
+
+    channelRead(dataFrame(3, false, content()));
+    verifyWrite(times(2)).writePing(eq(ctx()), eq(false), eq(1234L), any(ChannelPromise.class));
+    channelRead(pingFrame(true, 1234));
+
+    channelRead(dataFrame(3, false, content()));
+    // No ping was sent
+    verifyWrite(times(2)).writePing(eq(ctx()), eq(false), eq(1234L), any(ChannelPromise.class));
+
+    channelRead(windowUpdate(0, 2024));
+    channelRead(windowUpdate(3, 2024));
+    assertTrue(future.isDone());
+    assertTrue(future.isSuccess());
+    // But now one is sent
+    channelRead(dataFrame(3, false, content()));
+    verifyWrite(times(3)).writePing(eq(ctx()), eq(false), eq(1234L), any(ChannelPromise.class));
+  }
+
   @Override
   public void dataPingAckIsRecognized() throws Exception {
     super.dataPingAckIsRecognized();
