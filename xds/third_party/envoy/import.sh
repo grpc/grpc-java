@@ -18,7 +18,7 @@
 set -e
 BRANCH=master
 # import VERSION from one of the google internal CLs
-VERSION=3dedf1693f45239c670c5ba7598db44ff2e32c2f
+VERSION=fd28e42f31730f5ed6f13f52999692a4885dd312
 GIT_REPO="https://github.com/envoyproxy/envoy.git"
 GIT_BASE_DIR=envoy
 SOURCE_PROTO_BASE_DIR=envoy/api
@@ -130,8 +130,11 @@ envoy/type/matcher/metadata.proto
 envoy/type/matcher/path.proto
 envoy/type/matcher/value.proto
 envoy/type/matcher/number.proto
+envoy/type/matcher/v3/metadata.proto
+envoy/type/matcher/v3/number.proto
 envoy/type/matcher/v3/regex.proto
 envoy/type/matcher/v3/string.proto
+envoy/type/matcher/v3/value.proto
 envoy/type/metadata/v2/metadata.proto
 envoy/type/metadata/v3/metadata.proto
 envoy/type/percent.proto
