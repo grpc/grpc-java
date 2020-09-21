@@ -226,6 +226,7 @@ final class EnvoyProtoData {
       private Map<String, ?> metadata;
       @Nullable
       private Locality locality;
+      // TODO(sanjaypujare): eliminate usage of listening_addresses field.
       private final List<Address> listeningAddresses = new ArrayList<>();
       private String buildVersion = "";
       private String userAgentName = "";
@@ -326,6 +327,7 @@ final class EnvoyProtoData {
       return listeningAddresses;
     }
 
+    @SuppressWarnings("deprecation")
     @VisibleForTesting
     public io.envoyproxy.envoy.config.core.v3.Node toEnvoyProtoNode() {
       io.envoyproxy.envoy.config.core.v3.Node.Builder builder =
