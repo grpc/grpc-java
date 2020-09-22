@@ -1728,9 +1728,9 @@ final class XdsClientImpl extends XdsClient {
                 @Override
                 public void run() {
                   if (logger.isLoggable(XdsLogLevel.DEBUG)) {
-                    logger.log(
-                        XdsLogLevel.DEBUG,
-                        "Received DiscoveryResponse:\n{0}", respPrinter.print(response));
+                    logger.log(XdsLogLevel.DEBUG, "Received {0} response:\n{1}",
+                        ResourceType.fromTypeUrl(response.getTypeUrl()),
+                        respPrinter.print(response));
                   }
                   DiscoveryResponseData responseData =
                       DiscoveryResponseData.fromEnvoyProtoV2(response);
@@ -1795,9 +1795,8 @@ final class XdsClientImpl extends XdsClient {
             @Override
             public void run() {
               if (logger.isLoggable(XdsLogLevel.DEBUG)) {
-                logger.log(
-                    XdsLogLevel.DEBUG,
-                    "Received DiscoveryResponse:\n{0}", respPrinter.print(response));
+                logger.log(XdsLogLevel.DEBUG, "Received {0} response:\n{1}",
+                    ResourceType.fromTypeUrl(response.getTypeUrl()), respPrinter.print(response));
               }
               DiscoveryResponseData responseData = DiscoveryResponseData.fromEnvoyProto(response);
               handleResponse(responseData);
