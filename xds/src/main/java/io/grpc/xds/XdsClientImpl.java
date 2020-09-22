@@ -462,6 +462,7 @@ final class XdsClientImpl extends XdsClient {
       newMetadata.putAll(node.getMetadata());
     }
     newMetadata.put("TRAFFICDIRECTOR_PROXYLESS", "1");
+    // TODO(sanjaypujare): eliminate usage of listening_addresses.
     EnvoyProtoData.Address listeningAddress =
         new EnvoyProtoData.Address("0.0.0.0", port);
     node =

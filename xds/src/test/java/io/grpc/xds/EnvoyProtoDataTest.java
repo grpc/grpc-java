@@ -96,6 +96,7 @@ public class EnvoyProtoDataTest {
         .testEquals();
   }
 
+  @SuppressWarnings("deprecation")
   @Test
   public void convertNode() {
     Node node = Node.newBuilder()
