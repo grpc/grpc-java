@@ -21,7 +21,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import io.grpc.Attributes;
-import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
@@ -126,7 +125,7 @@ public final class AutoConfiguredLoadBalancerFactory {
           return Status.OK;
         }
         policySelection =
-            new PolicySelection(defaultProvider, /* rawConfig= */ null, /* config= */ null);
+            new PolicySelection(defaultProvider, /* config= */ null);
       }
 
       if (delegateProvider == null
@@ -227,7 +226,7 @@ public final class AutoConfiguredLoadBalancerFactory {
    * @return the parsed {@link PolicySelection}, or {@code null} if no selection could be made.
    */
   @Nullable
-  ConfigOrError parseLoadBalancerPolicy(Map<String, ?> serviceConfig, ChannelLogger channelLogger) {
+  ConfigOrError parseLoadBalancerPolicy(Map<String, ?> serviceConfig) {
     try {
       List<LbConfig> loadBalancerConfigs = null;
       if (serviceConfig != null) {

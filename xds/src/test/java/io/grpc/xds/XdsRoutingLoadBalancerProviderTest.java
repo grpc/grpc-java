@@ -34,7 +34,6 @@ import io.grpc.xds.XdsRoutingLoadBalancerProvider.Route;
 import io.grpc.xds.XdsRoutingLoadBalancerProvider.XdsRoutingConfig;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.Test;
@@ -224,9 +223,9 @@ public class XdsRoutingLoadBalancerProviderTest {
     assertThat(configActions).hasSize(2);
     assertThat(configActions).containsExactly(
         "action_foo",
-        new PolicySelection(lbProviderFoo, new HashMap<String, Object>(), fooConfig),
+        new PolicySelection(lbProviderFoo, fooConfig),
         "action_bar",
         new PolicySelection(
-            lbProviderBar, new HashMap<String, Object>(), barConfig));
+            lbProviderBar, barConfig));
   }
 }

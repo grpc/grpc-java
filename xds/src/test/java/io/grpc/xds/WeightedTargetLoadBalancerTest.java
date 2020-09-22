@@ -133,13 +133,13 @@ public class WeightedTargetLoadBalancerTest {
   };
 
   private final WeightedPolicySelection weightedLbConfig0 = new WeightedPolicySelection(
-      weights[0], new PolicySelection(fooLbProvider, null, configs[0]));
+      weights[0], new PolicySelection(fooLbProvider, configs[0]));
   private final WeightedPolicySelection weightedLbConfig1 = new WeightedPolicySelection(
-      weights[1], new PolicySelection(barLbProvider, null, configs[1]));
+      weights[1], new PolicySelection(barLbProvider, configs[1]));
   private final WeightedPolicySelection weightedLbConfig2 = new WeightedPolicySelection(
-      weights[2],  new PolicySelection(barLbProvider, null, configs[2]));
+      weights[2],  new PolicySelection(barLbProvider, configs[2]));
   private final WeightedPolicySelection weightedLbConfig3 = new WeightedPolicySelection(
-      weights[3], new PolicySelection(fooLbProvider, null, configs[3]));
+      weights[3], new PolicySelection(fooLbProvider, configs[3]));
 
   @Mock
   private Helper helper;
@@ -220,16 +220,16 @@ public class WeightedTargetLoadBalancerTest {
     Map<String, WeightedPolicySelection> newTargets = ImmutableMap.of(
         "target1",
         new WeightedPolicySelection(
-            newWeights[0], new PolicySelection(barLbProvider, null, newConfigs[0])),
+            newWeights[0], new PolicySelection(barLbProvider, newConfigs[0])),
         "target2",
         new WeightedPolicySelection(
-            newWeights[1], new PolicySelection(barLbProvider, null, newConfigs[1])),
+            newWeights[1], new PolicySelection(barLbProvider, newConfigs[1])),
         "target3",
         new WeightedPolicySelection(
-            newWeights[2], new PolicySelection(fooLbProvider, null, newConfigs[2])),
+            newWeights[2], new PolicySelection(fooLbProvider, newConfigs[2])),
         "target4",
         new WeightedPolicySelection(
-            newWeights[3], new PolicySelection(fooLbProvider, null, newConfigs[3])));
+            newWeights[3], new PolicySelection(fooLbProvider, newConfigs[3])));
     weightedTargetLb.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(ImmutableList.<EquivalentAddressGroup>of())

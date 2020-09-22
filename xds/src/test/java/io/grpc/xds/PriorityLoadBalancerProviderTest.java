@@ -40,7 +40,7 @@ public class PriorityLoadBalancerProviderTest {
   @Test
   public void priorityLbConfig_emptyPriorities() {
     Map<String, PolicySelection> childConfigs =
-        ImmutableMap.of("p0", new PolicySelection(mock(LoadBalancerProvider.class), null, null));
+        ImmutableMap.of("p0", new PolicySelection(mock(LoadBalancerProvider.class), null));
     List<String> priorities = ImmutableList.of();
 
     thrown.expect(IllegalArgumentException.class);
@@ -51,7 +51,7 @@ public class PriorityLoadBalancerProviderTest {
   @Test
   public void priorityLbConfig_missingChildConfig() {
     Map<String, PolicySelection> childConfigs =
-        ImmutableMap.of("p1", new PolicySelection(mock(LoadBalancerProvider.class), null, null));
+        ImmutableMap.of("p1", new PolicySelection(mock(LoadBalancerProvider.class), null));
     List<String> priorities = ImmutableList.of("p0", "p1");
 
     thrown.expect(IllegalArgumentException.class);
