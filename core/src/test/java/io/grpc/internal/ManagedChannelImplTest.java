@@ -109,6 +109,7 @@ import io.grpc.internal.InternalSubchannel.TransportLogger;
 import io.grpc.internal.ManagedChannelImpl.ScParser;
 import io.grpc.internal.ManagedChannelImplBuilder.ClientTransportFactoryBuilder;
 import io.grpc.internal.ManagedChannelImplBuilder.FixedPortProvider;
+import io.grpc.internal.ManagedChannelImplBuilder.UnsupportedClientTransportFactoryBuilder;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.internal.TestUtils.MockClientTransportInfo;
 import io.grpc.stub.ClientCalls;
@@ -328,13 +329,8 @@ public class ManagedChannelImplTest {
         .thenReturn(balancerRpcExecutor.getScheduledExecutorService());
 
     channelBuilder = new ManagedChannelImplBuilder(TARGET,
-        new ClientTransportFactoryBuilder() {
-          @Override
-          public ClientTransportFactory buildClientTransportFactory() {
-            throw new UnsupportedOperationException();
-          }
-        },
-        new FixedPortProvider(DEFAULT_PORT));
+        new UnsupportedClientTransportFactoryBuilder(), new FixedPortProvider(DEFAULT_PORT));
+
     channelBuilder
         .nameResolverFactory(new FakeNameResolverFactory.Builder(expectedUri).build())
         .defaultLoadBalancingPolicy(MOCK_POLICY_NAME)

@@ -44,6 +44,7 @@ import io.grpc.ConnectivityStateInfo;
 import io.grpc.Context;
 import io.grpc.DecompressorRegistry;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.ForwardingChannelBuilder;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalChannelz.ChannelStats;
 import io.grpc.InternalChannelz.ChannelTrace;
@@ -72,6 +73,8 @@ import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.AutoConfiguredLoadBalancerFactory.AutoConfiguredLoadBalancer;
 import io.grpc.internal.ClientCallImpl.ClientStreamProvider;
+import io.grpc.internal.ManagedChannelImplBuilder.FixedPortProvider;
+import io.grpc.internal.ManagedChannelImplBuilder.UnsupportedClientTransportFactoryBuilder;
 import io.grpc.internal.ManagedChannelServiceConfig.MethodInfo;
 import io.grpc.internal.RetriableStream.ChannelBufferMeter;
 import io.grpc.internal.RetriableStream.Throttle;
@@ -574,7 +577,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private final Rescheduler idleTimer;
 
   ManagedChannelImpl(
-      AbstractManagedChannelImplBuilder<?> builder,
+      ManagedChannelImplBuilder builder,
       ClientTransportFactory clientTransportFactory,
       BackoffPolicy.Provider backoffPolicyProvider,
       ObjectPool<? extends Executor> balancerRpcExecutorPool,
@@ -661,7 +664,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     } else {
       checkArgument(
           builder.idleTimeoutMillis
-              >= AbstractManagedChannelImplBuilder.IDLE_MODE_MIN_TIMEOUT_MILLIS,
+              >= ManagedChannelImplBuilder.IDLE_MODE_MIN_TIMEOUT_MILLIS,
           "invalid idleTimeoutMillis %s", builder.idleTimeoutMillis);
       this.idleTimeoutMillis = builder.idleTimeoutMillis;
     }
@@ -1446,28 +1449,27 @@ final class ManagedChannelImpl extends ManagedChannel implements
     @Override
     public ManagedChannelBuilder<?> createResolvingOobChannelBuilder(String target) {
       final class ResolvingOobChannelBuilder
-          extends AbstractManagedChannelImplBuilder<ResolvingOobChannelBuilder> {
-        int defaultPort = -1;
+          extends ForwardingChannelBuilder<ResolvingOobChannelBuilder> {
+        private final ManagedChannelImplBuilder managedChannelImplBuilder;
 
         ResolvingOobChannelBuilder(String target) {
-          super(target);
+          managedChannelImplBuilder = new ManagedChannelImplBuilder(target,
+              new UnsupportedClientTransportFactoryBuilder(),
+              new FixedPortProvider(nameResolverArgs.getDefaultPort()));
+          managedChannelImplBuilder.executorPool = executorPool;
+          managedChannelImplBuilder.offloadExecutorPool = offloadExecutorHolder.pool;
         }
 
         @Override
-        public int getDefaultPort() {
-          return defaultPort;
-        }
-
-        @Override
-        protected ClientTransportFactory buildTransportFactory() {
-          throw new UnsupportedOperationException();
+        protected ManagedChannelBuilder<?> delegate() {
+          return managedChannelImplBuilder;
         }
 
         @Override
         public ManagedChannel build() {
           // TODO(creamsoup) prevent main channel to shutdown if oob channel is not terminated
           return new ManagedChannelImpl(
-                  this,
+                  managedChannelImplBuilder,
                   transportFactory,
                   backoffPolicyProvider,
                   balancerRpcExecutorPool,
@@ -1479,17 +1481,15 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
       checkState(!terminated, "Channel is terminated");
 
-      ResolvingOobChannelBuilder builder = new ResolvingOobChannelBuilder(target);
-      builder.offloadExecutorPool = offloadExecutorHolder.pool;
-      builder.overrideAuthority(getAuthority());
       @SuppressWarnings("deprecation")
-      ResolvingOobChannelBuilder unused = builder.nameResolverFactory(nameResolverFactory);
-      builder.executorPool = executorPool;
-      builder.maxTraceEvents = maxTraceEvents;
-      builder.proxyDetector = nameResolverArgs.getProxyDetector();
-      builder.defaultPort = nameResolverArgs.getDefaultPort();
-      builder.userAgent = userAgent;
-      return builder;
+      ResolvingOobChannelBuilder builder = new ResolvingOobChannelBuilder(target)
+          .nameResolverFactory(nameResolverFactory);
+
+      return builder
+          .overrideAuthority(getAuthority())
+          .maxTraceEvents(maxTraceEvents)
+          .proxyDetector(nameResolverArgs.getProxyDetector())
+          .userAgent(userAgent);
     }
 
     @Override

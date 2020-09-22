@@ -46,8 +46,8 @@ import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
-import io.grpc.internal.ManagedChannelImplBuilder.ClientTransportFactoryBuilder;
 import io.grpc.internal.ManagedChannelImplBuilder.FixedPortProvider;
+import io.grpc.internal.ManagedChannelImplBuilder.UnsupportedClientTransportFactoryBuilder;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.util.ArrayList;
@@ -200,13 +200,7 @@ public class ServiceConfigErrorHandlingTest {
     when(executorPool.getObject()).thenReturn(executor.getScheduledExecutorService());
 
     channelBuilder = new ManagedChannelImplBuilder(TARGET,
-        new ClientTransportFactoryBuilder() {
-          @Override
-          public ClientTransportFactory buildClientTransportFactory() {
-            throw new UnsupportedOperationException();
-          }
-        },
-        new FixedPortProvider(DEFAULT_PORT));
+        new UnsupportedClientTransportFactoryBuilder(), new FixedPortProvider(DEFAULT_PORT));
 
     channelBuilder
         .nameResolverFactory(new FakeNameResolverFactory.Builder(expectedUri).build())
