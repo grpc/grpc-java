@@ -89,6 +89,7 @@ public class CdsLoadBalancerTest {
     MockitoAnnotations.initMocks(this);
 
     LoadBalancerRegistry registry = new LoadBalancerRegistry();
+    registry.register(new FakeLoadBalancerProvider(XdsLbPolicies.WEIGHTED_TARGET_POLICY_NAME));
     registry.register(new FakeLoadBalancerProvider(XdsLbPolicies.EDS_POLICY_NAME));
     registry.register(new FakeLoadBalancerProvider("round_robin"));
     ObjectPool<XdsClient> xdsClientPool = new ObjectPool<XdsClient>() {
@@ -135,6 +136,8 @@ public class CdsLoadBalancerTest {
     assertThat(edsConfig.clusterName).isEqualTo(CLUSTER);
     assertThat(edsConfig.edsServiceName).isNull();
     assertThat(edsConfig.lrsServerName).isNull();
+    assertThat(edsConfig.localityPickingPolicy.getProvider().getPolicyName())
+        .isEqualTo(XdsLbPolicies.WEIGHTED_TARGET_POLICY_NAME);  // hardcoded to weighted-target
     assertThat(edsConfig.endpointPickingPolicy.getProvider().getPolicyName())
         .isEqualTo("round_robin");
   }
@@ -174,6 +177,8 @@ public class CdsLoadBalancerTest {
     assertThat(edsConfig.clusterName).isEqualTo(CLUSTER);
     assertThat(edsConfig.edsServiceName).isNull();
     assertThat(edsConfig.lrsServerName).isNull();
+    assertThat(edsConfig.localityPickingPolicy.getProvider().getPolicyName())
+        .isEqualTo(XdsLbPolicies.WEIGHTED_TARGET_POLICY_NAME);  // hardcoded to weighted-target
     assertThat(edsConfig.endpointPickingPolicy.getProvider().getPolicyName())
         .isEqualTo("round_robin");
 
@@ -185,6 +190,8 @@ public class CdsLoadBalancerTest {
     assertThat(edsConfig.clusterName).isEqualTo(CLUSTER);
     assertThat(edsConfig.edsServiceName).isEqualTo(edsService);
     assertThat(edsConfig.lrsServerName).isEqualTo(loadReportServer);
+    assertThat(edsConfig.localityPickingPolicy.getProvider().getPolicyName())
+        .isEqualTo(XdsLbPolicies.WEIGHTED_TARGET_POLICY_NAME);  // hardcoded to weighted-target
     assertThat(edsConfig.endpointPickingPolicy.getProvider().getPolicyName())
         .isEqualTo("round_robin");
   }
