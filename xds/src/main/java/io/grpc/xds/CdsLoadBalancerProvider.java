@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkArgument;
 
+import com.google.common.base.MoreObjects;
 import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
@@ -26,7 +27,6 @@ import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.internal.JsonUtil;
 import java.util.Map;
-import java.util.Objects;
 
 /**
  * The provider for the "cds" balancing policy.  This class should not be directly referenced in
@@ -96,20 +96,8 @@ public class CdsLoadBalancerProvider extends LoadBalancerProvider {
     }
 
     @Override
-    public boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (o == null || getClass() != o.getClass()) {
-        return false;
-      }
-      CdsConfig cdsConfig = (CdsConfig) o;
-      return Objects.equals(name, cdsConfig.name);
-    }
-
-    @Override
-    public int hashCode() {
-      return Objects.hash(name);
+    public String toString() {
+      return MoreObjects.toStringHelper(this).add("name", name).toString();
     }
   }
 }
