@@ -59,9 +59,14 @@ public final class SdsProtocolNegotiators {
 
   private static final AsciiString SCHEME = AsciiString.of("http");
 
-  /** Returns a {@link ProtocolNegotiatorFactory} to be used on {@link NettyChannelBuilder}. */
-  public static ProtocolNegotiatorFactory clientProtocolNegotiatorFactory() {
-    return new ClientSdsProtocolNegotiatorFactory();
+  /**
+   * Returns a {@link ProtocolNegotiatorFactory} to be used on {@link NettyChannelBuilder}.
+   *
+   * @param fallbackNegotiator protocol negotiator to use as fallback.
+   */
+  public static ProtocolNegotiatorFactory clientProtocolNegotiatorFactory(
+      @Nullable ProtocolNegotiator fallbackNegotiator) {
+    return new ClientSdsProtocolNegotiatorFactory(fallbackNegotiator);
   }
 
   /**
@@ -80,9 +85,16 @@ public final class SdsProtocolNegotiators {
   private static final class ClientSdsProtocolNegotiatorFactory
       implements InternalNettyChannelBuilder.ProtocolNegotiatorFactory {
 
+    private final ProtocolNegotiator fallbackProtocolNegotiator;
+
+    private ClientSdsProtocolNegotiatorFactory(ProtocolNegotiator fallbackNegotiator) {
+      this.fallbackProtocolNegotiator = fallbackNegotiator;
+    }
+
     @Override
     public InternalProtocolNegotiator.ProtocolNegotiator buildProtocolNegotiator() {
-      final ClientSdsProtocolNegotiator negotiator = new ClientSdsProtocolNegotiator();
+      final ClientSdsProtocolNegotiator negotiator =
+          new ClientSdsProtocolNegotiator(fallbackProtocolNegotiator);
       final class LocalSdsNegotiator implements InternalProtocolNegotiator.ProtocolNegotiator {
 
         @Override
@@ -108,6 +120,12 @@ public final class SdsProtocolNegotiators {
   @VisibleForTesting
   static final class ClientSdsProtocolNegotiator implements ProtocolNegotiator {
 
+    @Nullable private final ProtocolNegotiator fallbackProtocolNegotiator;
+
+    ClientSdsProtocolNegotiator(@Nullable ProtocolNegotiator fallbackProtocolNegotiator) {
+      this.fallbackProtocolNegotiator = fallbackProtocolNegotiator;
+    }
+
     @Override
     public AsciiString scheme() {
       return SCHEME;
@@ -119,7 +137,9 @@ public final class SdsProtocolNegotiators {
       SslContextProviderSupplier localSslContextProviderSupplier =
           grpcHandler.getEagAttributes().get(XdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER);
       if (localSslContextProviderSupplier == null) {
-        return InternalProtocolNegotiators.plaintext().newHandler(grpcHandler);
+        checkNotNull(
+            fallbackProtocolNegotiator, "No TLS config and no fallbackProtocolNegotiator!");
+        return fallbackProtocolNegotiator.newHandler(grpcHandler);
       }
       return new ClientSdsHandler(grpcHandler, localSslContextProviderSupplier);
     }

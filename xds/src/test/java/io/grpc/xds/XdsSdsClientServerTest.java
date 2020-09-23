@@ -358,7 +358,8 @@ public class XdsSdsClientServerTest {
     fakeNameResolverFactory = new FakeNameResolverFactory.Builder(expectedUri).build();
     NameResolverRegistry.getDefaultRegistry().register(fakeNameResolverFactory);
     XdsChannelBuilder channelBuilder =
-        XdsChannelBuilder.forTarget("sdstest://localhost:" + port);
+        XdsChannelBuilder.forTarget("sdstest://localhost:" + port)
+            .fallbackProtocolNegotiator(InternalProtocolNegotiators.plaintext());
     if (overrideAuthority != null) {
       channelBuilder = channelBuilder.overrideAuthority(overrideAuthority);
     }
