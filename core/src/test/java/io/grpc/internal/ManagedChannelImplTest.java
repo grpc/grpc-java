@@ -1163,7 +1163,6 @@ public class ManagedChannelImplTest {
             rawServiceConfig,
             new PolicySelection(
                 mockLoadBalancerProvider,
-                parseConfig(rawLbConfig),
                 parsedLbConfig));
     nameResolverFactory.nextConfigOrError.set(ConfigOrError.fromConfig(parsedServiceConfig));
     channelBuilder.nameResolverFactory(nameResolverFactory);
@@ -2951,7 +2950,7 @@ public class ManagedChannelImplTest {
     ManagedChannelServiceConfig mcsc1 = createManagedChannelServiceConfig(
         ImmutableMap.<String, Object>of(),
         new PolicySelection(
-            mockLoadBalancerProvider, ImmutableMap.of("foo", "bar"), null));
+            mockLoadBalancerProvider, null));
     ResolutionResult resolutionResult1 = ResolutionResult.newBuilder()
         .setAddresses(Collections.singletonList(
             new EquivalentAddressGroup(
@@ -3608,7 +3607,7 @@ public class ManagedChannelImplTest {
     Object fakeLbConfig = new Object();
     PolicySelection lbConfigs =
         new PolicySelection(
-            mockLoadBalancerProvider, rawServiceConfig, fakeLbConfig);
+            mockLoadBalancerProvider, fakeLbConfig);
     mockLoadBalancerProvider.parseLoadBalancingPolicyConfig(rawServiceConfig);
     ManagedChannelServiceConfig managedChannelServiceConfig =
         createManagedChannelServiceConfig(rawServiceConfig, lbConfigs);
@@ -3766,8 +3765,7 @@ public class ManagedChannelImplTest {
         retryEnabled,
         maxRetryAttemptsLimit,
         maxHedgedAttemptsLimit,
-        autoConfiguredLoadBalancerFactory,
-        mock(ChannelLogger.class));
+        autoConfiguredLoadBalancerFactory);
 
     ConfigOrError coe = parser.parseServiceConfig(ImmutableMap.<String, Object>of());
 
@@ -3789,8 +3787,7 @@ public class ManagedChannelImplTest {
         retryEnabled,
         maxRetryAttemptsLimit,
         maxHedgedAttemptsLimit,
-        autoConfiguredLoadBalancerFactory,
-        mock(ChannelLogger.class));
+        autoConfiguredLoadBalancerFactory);
 
     ConfigOrError coe =
         parser.parseServiceConfig(ImmutableMap.<String, Object>of("methodConfig", "bogus"));
@@ -3813,8 +3810,7 @@ public class ManagedChannelImplTest {
         retryEnabled,
         maxRetryAttemptsLimit,
         maxHedgedAttemptsLimit,
-        autoConfiguredLoadBalancerFactory,
-        mock(ChannelLogger.class));
+        autoConfiguredLoadBalancerFactory);
 
     ConfigOrError coe =
         parser.parseServiceConfig(ImmutableMap.of("loadBalancingConfig", ImmutableList.of()));

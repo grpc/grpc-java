@@ -334,7 +334,7 @@ public class XdsRoutingLoadBalancerTest {
       String childPolicyName = childPolicies.get(route);
       Object childConfig = lbConfigInventory.get(childActionName);
       PolicySelection policy =
-          new PolicySelection(new FakeLoadBalancerProvider(childPolicyName), null, childConfig);
+          new PolicySelection(new FakeLoadBalancerProvider(childPolicyName), childConfig);
       childPolicySelections.put(childActionName, policy);
       routeList.add(route);
     }

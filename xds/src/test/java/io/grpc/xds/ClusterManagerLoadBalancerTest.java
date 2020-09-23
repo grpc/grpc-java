@@ -259,7 +259,7 @@ public class ClusterManagerLoadBalancerTest {
       String childPolicyName = childPolicies.get(name);
       Object childConfig = lbConfigInventory.get(name);
       PolicySelection policy =
-          new PolicySelection(new FakeLoadBalancerProvider(childPolicyName), null, childConfig);
+          new PolicySelection(new FakeLoadBalancerProvider(childPolicyName), childConfig);
       childPolicySelections.put(name, policy);
     }
     return new ClusterManagerConfig(childPolicySelections);

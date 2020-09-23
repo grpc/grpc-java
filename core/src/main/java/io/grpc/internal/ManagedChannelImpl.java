@@ -612,8 +612,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
             retryEnabled,
             builder.maxRetryAttempts,
             builder.maxHedgedAttempts,
-            loadBalancerFactory,
-            channelLogger);
+            loadBalancerFactory);
     this.nameResolverArgs =
         NameResolver.Args.newBuilder()
             .setDefaultPort(builder.getDefaultPort())
@@ -2146,20 +2145,17 @@ final class ManagedChannelImpl extends ManagedChannel implements
     private final int maxRetryAttemptsLimit;
     private final int maxHedgedAttemptsLimit;
     private final AutoConfiguredLoadBalancerFactory autoLoadBalancerFactory;
-    private final ChannelLogger channelLogger;
 
     ScParser(
         boolean retryEnabled,
         int maxRetryAttemptsLimit,
         int maxHedgedAttemptsLimit,
-        AutoConfiguredLoadBalancerFactory autoLoadBalancerFactory,
-        ChannelLogger channelLogger) {
+        AutoConfiguredLoadBalancerFactory autoLoadBalancerFactory) {
       this.retryEnabled = retryEnabled;
       this.maxRetryAttemptsLimit = maxRetryAttemptsLimit;
       this.maxHedgedAttemptsLimit = maxHedgedAttemptsLimit;
       this.autoLoadBalancerFactory =
           checkNotNull(autoLoadBalancerFactory, "autoLoadBalancerFactory");
-      this.channelLogger = checkNotNull(channelLogger, "channelLogger");
     }
 
     @Override
@@ -2167,7 +2163,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       try {
         Object loadBalancingPolicySelection;
         ConfigOrError choiceFromLoadBalancer =
-            autoLoadBalancerFactory.parseLoadBalancerPolicy(rawServiceConfig, channelLogger);
+            autoLoadBalancerFactory.parseLoadBalancerPolicy(rawServiceConfig);
         if (choiceFromLoadBalancer == null) {
           loadBalancingPolicySelection = null;
         } else if (choiceFromLoadBalancer.getError() != null) {

@@ -27,7 +27,6 @@ import io.grpc.internal.JsonParser;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.xds.ClusterManagerLoadBalancerProvider.ClusterManagerConfig;
 import java.io.IOException;
-import java.util.Collections;
 import java.util.Map;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -132,9 +131,9 @@ public class ClusterManagerLoadBalancerProviderTest {
         .containsExactly(
             "child1",
             new PolicySelection(
-                lbProviderFoo, Collections.singletonMap("config_name", "config_value"), fooConfig),
+                lbProviderFoo, fooConfig),
             "child2",
-            new PolicySelection(lbProviderBar, Collections.<String, Object>emptyMap(), barConfig));
+            new PolicySelection(lbProviderBar, barConfig));
   }
 
   @Test

@@ -144,9 +144,9 @@ public class EdsLoadBalancerTest {
   };
 
   private final PolicySelection fakeLocalityPickingPolicy =
-      new PolicySelection(mock(LoadBalancerProvider.class), null, null);
+      new PolicySelection(mock(LoadBalancerProvider.class), null);
   private final PolicySelection fakeEndpointPickingPolicy =
-      new PolicySelection(mock(LoadBalancerProvider.class), null, new Object());
+      new PolicySelection(mock(LoadBalancerProvider.class), new Object());
 
   @Mock
   private Helper helper;

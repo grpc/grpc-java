@@ -149,7 +149,7 @@ public class LrsLoadBalancerTest {
   private void deliverResolvedAddresses(
       List<EquivalentAddressGroup> addresses, String childPolicy) {
     PolicySelection childPolicyConfig =
-        new PolicySelection(new FakeLoadBalancerProvider(childPolicy), null, null);
+        new PolicySelection(new FakeLoadBalancerProvider(childPolicy), null);
     LrsConfig config =
         new LrsConfig(
             CLUSTER_NAME, EDS_SERVICE_NAME, LRS_SERVER_NAME, TEST_LOCALITY, childPolicyConfig);

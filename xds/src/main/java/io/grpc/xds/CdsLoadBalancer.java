@@ -210,8 +210,8 @@ final class CdsLoadBalancer extends LoadBalancer {
               /* clusterName = */ newUpdate.getClusterName(),
               /* edsServiceName = */ newUpdate.getEdsServiceName(),
               /* lrsServerName = */ newUpdate.getLrsServerName(),
-              new PolicySelection(localityPickingPolicyProvider, null, null /* by EDS policy */),
-              new PolicySelection(endpointPickingPolicyProvider, null, null));
+              new PolicySelection(localityPickingPolicyProvider, null /* by EDS policy */),
+              new PolicySelection(endpointPickingPolicyProvider, null));
       if (isXdsSecurityEnabled()) {
         updateSslContextProviderSupplier(newUpdate.getUpstreamTlsContext());
       }
