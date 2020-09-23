@@ -390,7 +390,7 @@ final class EdsLoadBalancer2 extends LoadBalancer {
           generateWeightedTargetLbConfig(cluster, edsServiceName, lrsServerName,
               endpointPickingPolicy, lbRegistry, prioritizedLocalityWeights.get(priority));
       PolicySelection childPolicySelection =
-          new PolicySelection(localityPickingPolicy.getProvider(), null, childConfig);
+          new PolicySelection(localityPickingPolicy.getProvider(), childConfig);
       String childName = priorityName(priority);
       childPolicies.put(childName, childPolicySelection);
       priorities.add(childName);
@@ -413,7 +413,7 @@ final class EdsLoadBalancer2 extends LoadBalancer {
         LrsConfig childConfig =
             new LrsConfig(cluster, edsServiceName, lrsServerName, locality, endpointPickingPolicy);
         LoadBalancerProvider childPolicyProvider = lbRegistry.getProvider(LRS_POLICY_NAME);
-        childPolicy = new PolicySelection(childPolicyProvider, null, childConfig);
+        childPolicy = new PolicySelection(childPolicyProvider, childConfig);
       } else {
         childPolicy = endpointPickingPolicy;
       }

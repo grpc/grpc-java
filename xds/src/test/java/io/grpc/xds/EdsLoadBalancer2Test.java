@@ -105,9 +105,9 @@ public class EdsLoadBalancer2Test {
   private final FakeClock fakeClock = new FakeClock();
   private final LoadBalancerRegistry registry = new LoadBalancerRegistry();
   private final PolicySelection roundRobin =
-      new PolicySelection(new FakeLoadBalancerProvider("round_robin"), null, null);
+      new PolicySelection(new FakeLoadBalancerProvider("round_robin"), null);
   private final PolicySelection weightedTarget =
-      new PolicySelection(new FakeLoadBalancerProvider(WEIGHTED_TARGET_POLICY_NAME), null, null);
+      new PolicySelection(new FakeLoadBalancerProvider(WEIGHTED_TARGET_POLICY_NAME), null);
   private final List<FakeLoadBalancer> downstreamBalancers = new ArrayList<>();
   private final FakeXdsClient xdsClient = new FakeXdsClient();
   private final ObjectPool<XdsClient> xdsClientPool = new ObjectPool<XdsClient>() {
@@ -480,7 +480,7 @@ public class EdsLoadBalancer2Test {
     assertThat(leafBalancer.name).isEqualTo("round_robin");
     FakeLoadBalancerProvider fakePickFirstProvider = new FakeLoadBalancerProvider("pick_first");
     PolicySelection fakePickFirstSelection =
-        new PolicySelection(fakePickFirstProvider, null, null);
+        new PolicySelection(fakePickFirstProvider, null);
     loadBalancer.handleResolvedAddresses(ResolvedAddresses.newBuilder()
         .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
         .setAttributes(
@@ -633,9 +633,9 @@ public class EdsLoadBalancer2Test {
     registry.deregister(registry.getProvider(LRS_POLICY_NAME));
     registry.register(new LrsLoadBalancerProvider());
     PolicySelection weightedTargetSelection =
-        new PolicySelection(new WeightedTargetLoadBalancerProvider(), null, null);
+        new PolicySelection(new WeightedTargetLoadBalancerProvider(), null);
     PolicySelection fakeLeafPolicySelection =
-        new PolicySelection(fakeLeafPolicyProvider, null, null);
+        new PolicySelection(fakeLeafPolicyProvider, null);
     loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
