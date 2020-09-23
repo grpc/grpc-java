@@ -185,49 +185,36 @@ final class LoadReportClient {
 
     abstract void sendError(Exception error);
 
-    final void handleResponse(final LoadStatsResponseData response) {
-      syncContext.execute(new Runnable() {
-        @Override
-        public void run() {
-          if (closed) {
-            return;
-          }
-          if (!initialResponseReceived) {
-            logger.log(XdsLogLevel.DEBUG, "Initial LRS response received");
-            initialResponseReceived = true;
-          }
-          reportAllClusters = response.getSendAllClusters();
-          if (reportAllClusters) {
-            logger.log(XdsLogLevel.INFO, "Report loads for all clusters");
-          } else {
-            logger.log(XdsLogLevel.INFO, "Report loads for clusters: ", response.getClustersList());
-            clusterNames = response.getClustersList();
-          }
-          long interval = response.getLoadReportingIntervalNanos();
-          logger.log(XdsLogLevel.INFO, "Update load reporting interval to {0} ns", interval);
-          loadReportIntervalNano = interval;
-          scheduleNextLoadReport();
-        }
-      });
+    // Must run in syncContext.
+    final void handleResponse(LoadStatsResponseData response) {
+      if (closed) {
+        return;
+      }
+      if (!initialResponseReceived) {
+        logger.log(XdsLogLevel.DEBUG, "Initial LRS response received");
+        initialResponseReceived = true;
+      }
+      reportAllClusters = response.getSendAllClusters();
+      if (reportAllClusters) {
+        logger.log(XdsLogLevel.INFO, "Report loads for all clusters");
+      } else {
+        logger.log(XdsLogLevel.INFO, "Report loads for clusters: ", response.getClustersList());
+        clusterNames = response.getClustersList();
+      }
+      long interval = response.getLoadReportingIntervalNanos();
+      logger.log(XdsLogLevel.INFO, "Update load reporting interval to {0} ns", interval);
+      loadReportIntervalNano = interval;
+      scheduleNextLoadReport();
     }
 
-    final void handleRpcError(final Throwable t) {
-      syncContext.execute(new Runnable() {
-        @Override
-        public void run() {
-          handleStreamClosed(Status.fromThrowable(t));
-        }
-      });
+    // Must run in syncContext.
+    final void handleRpcError(Throwable t) {
+      handleStreamClosed(Status.fromThrowable(t));
     }
 
-    final void handleRpcComplete() {
-      syncContext.execute(new Runnable() {
-        @Override
-        public void run() {
-          handleStreamClosed(
-              Status.UNAVAILABLE.withDescription("Closed by server"));
-        }
-      });
+    // Must run in syncContext.
+    final void handleRpcCompleted() {
+      handleStreamClosed(Status.UNAVAILABLE.withDescription("Closed by server"));
     }
 
     private void sendLoadReport() {
@@ -324,19 +311,34 @@ final class LoadReportClient {
           new StreamObserver<io.envoyproxy.envoy.service.load_stats.v2.LoadStatsResponse>() {
             @Override
             public void onNext(
-                io.envoyproxy.envoy.service.load_stats.v2.LoadStatsResponse response) {
-              logger.log(XdsLogLevel.DEBUG, "Received LRS response:\n{0}", response);
-              handleResponse(LoadStatsResponseData.fromEnvoyProtoV2(response));
+                final io.envoyproxy.envoy.service.load_stats.v2.LoadStatsResponse response) {
+              syncContext.execute(new Runnable() {
+                @Override
+                public void run() {
+                  logger.log(XdsLogLevel.DEBUG, "Received LoadStatsResponse:\n{0}", response);
+                  handleResponse(LoadStatsResponseData.fromEnvoyProtoV2(response));
+                }
+              });
             }
 
             @Override
-            public void onError(Throwable t) {
-              handleRpcError(t);
+            public void onError(final Throwable t) {
+              syncContext.execute(new Runnable() {
+                @Override
+                public void run() {
+                  handleRpcError(t);
+                }
+              });
             }
 
             @Override
             public void onCompleted() {
-              handleRpcComplete();
+              syncContext.execute(new Runnable() {
+                @Override
+                public void run() {
+                  handleRpcCompleted();
+                }
+              });
             }
           };
       io.envoyproxy.envoy.service.load_stats.v2.LoadReportingServiceGrpc.LoadReportingServiceStub
@@ -369,19 +371,34 @@ final class LoadReportClient {
       StreamObserver<LoadStatsResponse> lrsResponseReaderV3 =
           new StreamObserver<LoadStatsResponse>() {
             @Override
-            public void onNext(LoadStatsResponse response) {
-              logger.log(XdsLogLevel.DEBUG, "Received LRS response:\n{0}", response);
-              handleResponse(LoadStatsResponseData.fromEnvoyProtoV3(response));
+            public void onNext(final LoadStatsResponse response) {
+              syncContext.execute(new Runnable() {
+                @Override
+                public void run() {
+                  logger.log(XdsLogLevel.DEBUG, "Received LRS response:\n{0}", response);
+                  handleResponse(LoadStatsResponseData.fromEnvoyProtoV3(response));
+                }
+              });
             }
 
             @Override
-            public void onError(Throwable t) {
-              handleRpcError(t);
+            public void onError(final Throwable t) {
+              syncContext.execute(new Runnable() {
+                @Override
+                public void run() {
+                  handleRpcError(t);
+                }
+              });
             }
 
             @Override
             public void onCompleted() {
-              handleRpcComplete();
+              syncContext.execute(new Runnable() {
+                @Override
+                public void run() {
+                  handleRpcCompleted();
+                }
+              });
             }
           };
       LoadReportingServiceStub stubV3 =
