@@ -105,7 +105,7 @@ abstract class XdsClient {
 
   static final class LdsUpdate {
     // Total number of nanoseconds to keep alive an HTTP request/response stream.
-    private final long httpMaxStreamDuration;
+    private final long httpMaxStreamDurationNano;
     // The name of the route configuration to be used for RDS resource discovery.
     @Nullable
     private final String rdsName;
@@ -113,15 +113,15 @@ abstract class XdsClient {
     @Nullable
     private final List<VirtualHost> virtualHosts;
 
-    private LdsUpdate(long httpMaxStreamDuration, @Nullable String rdsName,
+    private LdsUpdate(long httpMaxStreamDurationNano, @Nullable String rdsName,
         @Nullable List<VirtualHost> virtualHosts) {
-      this.httpMaxStreamDuration = httpMaxStreamDuration;
+      this.httpMaxStreamDurationNano = httpMaxStreamDurationNano;
       this.rdsName = rdsName;
       this.virtualHosts = virtualHosts;
     }
 
-    long getHttpMaxStreamDuration() {
-      return httpMaxStreamDuration;
+    long getHttpMaxStreamDurationNano() {
+      return httpMaxStreamDurationNano;
     }
 
     @Nullable
@@ -137,7 +137,7 @@ abstract class XdsClient {
     @Override
     public String toString() {
       ToStringHelper toStringHelper = MoreObjects.toStringHelper(this);
-      toStringHelper.add("httpMaxStreamDuration", httpMaxStreamDuration);
+      toStringHelper.add("httpMaxStreamDurationNano", httpMaxStreamDurationNano);
       if (rdsName != null) {
         toStringHelper.add("rdsName", rdsName);
       } else {
@@ -151,7 +151,7 @@ abstract class XdsClient {
     }
 
     private static class Builder {
-      private long httpMaxStreamDuration;
+      private long httpMaxStreamDurationNano;
       @Nullable
       private String rdsName;
       @Nullable
@@ -160,8 +160,8 @@ abstract class XdsClient {
       private Builder() {
       }
 
-      Builder addHttpMaxStreamDuration(long httpMaxStreamDuration) {
-        this.httpMaxStreamDuration = httpMaxStreamDuration;
+      Builder setHttpMaxStreamDurationNano(long httpMaxStreamDurationNano) {
+        this.httpMaxStreamDurationNano = httpMaxStreamDurationNano;
         return this;
       }
 
@@ -177,7 +177,7 @@ abstract class XdsClient {
 
       LdsUpdate build() {
         checkState((rdsName == null) != (virtualHosts == null), "one of rdsName and virtualHosts");
-        return new LdsUpdate(httpMaxStreamDuration, rdsName, virtualHosts);
+        return new LdsUpdate(httpMaxStreamDurationNano, rdsName, virtualHosts);
       }
     }
   }
