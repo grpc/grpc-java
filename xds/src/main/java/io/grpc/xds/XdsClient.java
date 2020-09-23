@@ -24,7 +24,6 @@ import com.google.common.base.MoreObjects.ToStringHelper;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import com.google.errorprone.annotations.Immutable;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.internal.ObjectPool;
@@ -104,7 +103,6 @@ abstract class XdsClient {
     }
   }
 
-  @Immutable
   static final class LdsUpdate {
     // Total number of nanoseconds to keep alive an HTTP request/response stream.
     private final long httpMaxStreamDuration;
@@ -184,7 +182,6 @@ abstract class XdsClient {
     }
   }
 
-  @Immutable
   static final class RdsUpdate {
     // The list virtual hosts that make up the route table.
     private final List<VirtualHost> virtualHosts;
