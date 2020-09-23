@@ -165,7 +165,9 @@ public class SdsProtocolNegotiatorsTest {
       pn.newHandler(grpcHandler);
       fail("exception expected!");
     } catch (NullPointerException expected) {
-      assertThat(expected).hasMessageThat().contains("fallbackProtocolNegotiator not set!");
+      assertThat(expected)
+          .hasMessageThat()
+          .contains("No TLS config and no fallbackProtocolNegotiator!");
     }
   }
 

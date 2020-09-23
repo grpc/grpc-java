@@ -65,7 +65,7 @@ public final class SdsProtocolNegotiators {
    * @param fallbackNegotiator protocol negotiator to use as fallback.
    */
   public static ProtocolNegotiatorFactory clientProtocolNegotiatorFactory(
-      ProtocolNegotiator fallbackNegotiator) {
+      @Nullable ProtocolNegotiator fallbackNegotiator) {
     return new ClientSdsProtocolNegotiatorFactory(fallbackNegotiator);
   }
 
@@ -120,9 +120,9 @@ public final class SdsProtocolNegotiators {
   @VisibleForTesting
   static final class ClientSdsProtocolNegotiator implements ProtocolNegotiator {
 
-    private final ProtocolNegotiator fallbackProtocolNegotiator;
+    @Nullable private final ProtocolNegotiator fallbackProtocolNegotiator;
 
-    ClientSdsProtocolNegotiator(ProtocolNegotiator fallbackProtocolNegotiator) {
+    ClientSdsProtocolNegotiator(@Nullable ProtocolNegotiator fallbackProtocolNegotiator) {
       this.fallbackProtocolNegotiator = fallbackProtocolNegotiator;
     }
 
@@ -137,7 +137,8 @@ public final class SdsProtocolNegotiators {
       SslContextProviderSupplier localSslContextProviderSupplier =
           grpcHandler.getEagAttributes().get(XdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER);
       if (localSslContextProviderSupplier == null) {
-        checkNotNull(fallbackProtocolNegotiator, "fallbackProtocolNegotiator not set!");
+        checkNotNull(
+            fallbackProtocolNegotiator, "No TLS config and no fallbackProtocolNegotiator!");
         return fallbackProtocolNegotiator.newHandler(grpcHandler);
       }
       return new ClientSdsHandler(grpcHandler, localSslContextProviderSupplier);
