@@ -206,12 +206,7 @@ abstract class XdsClient {
     }
   }
 
-  /**
-   * Data class containing the results of performing a resource discovery RPC via CDS protocol.
-   * The results include configurations for a single upstream cluster, such as endpoint discovery
-   * type, load balancing policy, connection timeout and etc.
-   */
-  static final class ClusterUpdate {
+  static final class CdsUpdate {
     private final String clusterName;
     @Nullable
     private final String edsServiceName;
@@ -220,7 +215,7 @@ abstract class XdsClient {
     private final String lrsServerName;
     private final UpstreamTlsContext upstreamTlsContext;
 
-    private ClusterUpdate(
+    private CdsUpdate(
         String clusterName,
         @Nullable String edsServiceName,
         String lbPolicy,
@@ -295,7 +290,7 @@ abstract class XdsClient {
       if (o == null || getClass() != o.getClass()) {
         return false;
       }
-      ClusterUpdate that = (ClusterUpdate) o;
+      CdsUpdate that = (CdsUpdate) o;
       return Objects.equals(clusterName, that.clusterName)
           && Objects.equals(edsServiceName, that.edsServiceName)
           && Objects.equals(lbPolicy, that.lbPolicy)
@@ -317,7 +312,6 @@ abstract class XdsClient {
       @Nullable
       private UpstreamTlsContext upstreamTlsContext;
 
-      // Use ClusterUpdate.newBuilder().
       private Builder() {
       }
 
@@ -346,29 +340,23 @@ abstract class XdsClient {
         return this;
       }
 
-      ClusterUpdate build() {
+      CdsUpdate build() {
         checkState(clusterName != null, "clusterName is not set");
         checkState(lbPolicy != null, "lbPolicy is not set");
 
         return
-            new ClusterUpdate(
+            new CdsUpdate(
                 clusterName, edsServiceName, lbPolicy, lrsServerName, upstreamTlsContext);
       }
     }
   }
 
-  /**
-   * Data class containing the results of performing a resource discovery RPC via EDS protocol.
-   * The results include endpoint addresses running the requested service, as well as
-   * configurations for traffic control such as drop overloads, inter-cluster load balancing
-   * policy and etc.
-   */
-  static final class EndpointUpdate {
+  static final class EdsUpdate {
     private final String clusterName;
     private final Map<Locality, LocalityLbEndpoints> localityLbEndpointsMap;
     private final List<DropOverload> dropPolicies;
 
-    private EndpointUpdate(
+    private EdsUpdate(
         String clusterName,
         Map<Locality, LocalityLbEndpoints> localityLbEndpoints,
         List<DropOverload> dropPolicies) {
@@ -407,7 +395,7 @@ abstract class XdsClient {
       if (o == null || getClass() != o.getClass()) {
         return false;
       }
-      EndpointUpdate that = (EndpointUpdate) o;
+      EdsUpdate that = (EdsUpdate) o;
       return Objects.equals(clusterName, that.clusterName)
           && Objects.equals(localityLbEndpointsMap, that.localityLbEndpointsMap)
           && Objects.equals(dropPolicies, that.dropPolicies);
@@ -434,7 +422,6 @@ abstract class XdsClient {
       private Map<Locality, LocalityLbEndpoints> localityLbEndpointsMap = new LinkedHashMap<>();
       private List<DropOverload> dropPolicies = new ArrayList<>();
 
-      // Use EndpointUpdate.newBuilder().
       private Builder() {
       }
 
@@ -453,10 +440,10 @@ abstract class XdsClient {
         return this;
       }
 
-      EndpointUpdate build() {
+      EdsUpdate build() {
         checkState(clusterName != null, "clusterName is not set");
         return
-            new EndpointUpdate(
+            new EdsUpdate(
                 clusterName,
                 ImmutableMap.copyOf(localityLbEndpointsMap),
                 ImmutableList.copyOf(dropPolicies));
@@ -539,6 +526,7 @@ abstract class XdsClient {
   /**
    * Config watcher interface. To be implemented by the xDS resolver.
    */
+  // TODO(chengyuanzhang): delete me.
   interface ConfigWatcher extends ResourceWatcher {
 
     /**
@@ -547,20 +535,14 @@ abstract class XdsClient {
     void onConfigChanged(ConfigUpdate update);
   }
 
-  /**
-   * Cluster watcher interface.
-   */
-  interface ClusterWatcher extends ResourceWatcher {
+  interface CdsResourceWatcher extends ResourceWatcher {
 
-    void onClusterChanged(ClusterUpdate update);
+    void onChanged(CdsUpdate update);
   }
 
-  /**
-   * Endpoint watcher interface.
-   */
-  interface EndpointWatcher extends ResourceWatcher {
+  interface EdsResourceWatcher extends ResourceWatcher {
 
-    void onEndpointChanged(EndpointUpdate update);
+    void onChanged(EdsUpdate update);
   }
 
   /**
@@ -619,29 +601,27 @@ abstract class XdsClient {
   }
 
   /**
-   * Registers a data watcher for the given cluster.
+   * Registers a data watcher for the given CDS resource.
    */
-  void watchClusterData(String clusterName, ClusterWatcher watcher) {
+  void watchCdsResource(String resourceName, CdsResourceWatcher watcher) {
   }
 
   /**
-   * Unregisters the given cluster watcher, which was registered to receive updates for the
-   * given cluster.
+   * Unregisters the given CDS resource watcher.
    */
-  void cancelClusterDataWatch(String clusterName, ClusterWatcher watcher) {
+  void cancelCdsResourceWatch(String resourceName, CdsResourceWatcher watcher) {
   }
 
   /**
-   * Registers a data watcher for endpoints in the given cluster.
+   * Registers a data watcher for the given EDS resource.
    */
-  void watchEndpointData(String clusterName, EndpointWatcher watcher) {
+  void watchEdsResource(String resourceName, EdsResourceWatcher watcher) {
   }
 
   /**
-   * Unregisters the given endpoints watcher, which was registered to receive updates for
-   * endpoints information in the given cluster.
+   * Unregisters the given EDS resource watcher.
    */
-  void cancelEndpointDataWatch(String clusterName, EndpointWatcher watcher) {
+  void cancelEdsResourceWatch(String resourceName, EdsResourceWatcher watcher) {
   }
 
   /**

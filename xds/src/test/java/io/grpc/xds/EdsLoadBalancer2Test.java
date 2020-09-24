@@ -711,7 +711,7 @@ public class EdsLoadBalancer2Test {
   }
 
   private final class FakeXdsClient extends XdsClient {
-    private final Map<String, EndpointWatcher> watchers = new HashMap<>();
+    private final Map<String, EdsResourceWatcher> watchers = new HashMap<>();
     private final Map<String, ConcurrentMap<String, AtomicLong>> dropStats = new HashMap<>();
 
     @Override
@@ -720,13 +720,13 @@ public class EdsLoadBalancer2Test {
     }
 
     @Override
-    void watchEndpointData(String clusterName, EndpointWatcher watcher) {
-      watchers.put(clusterName, watcher);
+    void watchEdsResource(String resourceName, EdsResourceWatcher watcher) {
+      watchers.put(resourceName, watcher);
     }
 
     @Override
-    void cancelEndpointDataWatch(String clusterName, EndpointWatcher watcher) {
-      watchers.remove(clusterName);
+    void cancelEdsResourceWatch(String resourceName, EdsResourceWatcher watcher) {
+      watchers.remove(resourceName);
     }
 
     @Override
@@ -755,14 +755,14 @@ public class EdsLoadBalancer2Test {
         @Override
         public void run() {
           if (watchers.containsKey(resource)) {
-            EndpointUpdate.Builder builder  = EndpointUpdate.newBuilder().setClusterName(resource);
+            EdsUpdate.Builder builder  = EdsUpdate.newBuilder().setClusterName(resource);
             for (DropOverload dropOverload : dropOverloads) {
               builder.addDropPolicy(dropOverload);
             }
             for (Locality locality : localityLbEndpointsMap.keySet()) {
               builder.addLocalityLbEndpoints(locality, localityLbEndpointsMap.get(locality));
             }
-            watchers.get(resource).onEndpointChanged(builder.build());
+            watchers.get(resource).onChanged(builder.build());
           }
         }
       });
@@ -783,7 +783,7 @@ public class EdsLoadBalancer2Test {
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
-          for (EndpointWatcher watcher : watchers.values()) {
+          for (EdsResourceWatcher watcher : watchers.values()) {
             watcher.onError(error);
           }
         }

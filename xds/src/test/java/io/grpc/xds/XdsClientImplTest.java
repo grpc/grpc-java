@@ -91,12 +91,12 @@ import io.grpc.xds.EnvoyProtoData.LbEndpoint;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyProtoData.Node;
-import io.grpc.xds.XdsClient.ClusterUpdate;
-import io.grpc.xds.XdsClient.ClusterWatcher;
+import io.grpc.xds.XdsClient.CdsResourceWatcher;
+import io.grpc.xds.XdsClient.CdsUpdate;
 import io.grpc.xds.XdsClient.ConfigUpdate;
 import io.grpc.xds.XdsClient.ConfigWatcher;
-import io.grpc.xds.XdsClient.EndpointUpdate;
-import io.grpc.xds.XdsClient.EndpointWatcher;
+import io.grpc.xds.XdsClient.EdsResourceWatcher;
+import io.grpc.xds.XdsClient.EdsUpdate;
 import io.grpc.xds.XdsClient.XdsChannel;
 import io.grpc.xds.XdsClientImpl.MessagePrinter;
 import java.io.IOException;
@@ -206,9 +206,9 @@ public class XdsClientImplTest {
   @Mock
   private ConfigWatcher configWatcher;
   @Mock
-  private ClusterWatcher clusterWatcher;
+  private CdsResourceWatcher cdsResourceWatcher;
   @Mock
-  private EndpointWatcher endpointWatcher;
+  private EdsResourceWatcher edsResourceWatcher;
 
   private ManagedChannel channel;
   private XdsClientImpl xdsClient;
@@ -1337,7 +1337,7 @@ public class XdsClientImplTest {
    */
   @Test
   public void cdsResponseWithoutMatchingResource() {
-    xdsClient.watchClusterData("cluster-foo.googleapis.com", clusterWatcher);
+    xdsClient.watchCdsResource("cluster-foo.googleapis.com", cdsResourceWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
 
@@ -1359,12 +1359,12 @@ public class XdsClientImplTest {
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "0", "cluster-foo.googleapis.com",
             XdsClientImpl.ADS_TYPE_URL_CDS, "0000")));
-    verify(clusterWatcher, never()).onClusterChanged(any(ClusterUpdate.class));
-    verify(clusterWatcher, never()).onResourceDoesNotExist("cluster-foo.googleapis.com");
-    verify(clusterWatcher, never()).onError(any(Status.class));
+    verify(cdsResourceWatcher, never()).onChanged(any(CdsUpdate.class));
+    verify(cdsResourceWatcher, never()).onResourceDoesNotExist("cluster-foo.googleapis.com");
+    verify(cdsResourceWatcher, never()).onError(any(Status.class));
 
     fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
-    verify(clusterWatcher).onResourceDoesNotExist("cluster-foo.googleapis.com");
+    verify(cdsResourceWatcher).onResourceDoesNotExist("cluster-foo.googleapis.com");
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
 
@@ -1374,7 +1374,7 @@ public class XdsClientImplTest {
    */
   @Test
   public void cdsResponseWithMatchingResource() {
-    xdsClient.watchClusterData("cluster-foo.googleapis.com", clusterWatcher);
+    xdsClient.watchCdsResource("cluster-foo.googleapis.com", cdsResourceWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
 
@@ -1401,13 +1401,13 @@ public class XdsClientImplTest {
             XdsClientImpl.ADS_TYPE_URL_CDS, "0000")));
     assertThat(cdsRespTimer.isCancelled()).isTrue();
 
-    ArgumentCaptor<ClusterUpdate> clusterUpdateCaptor = ArgumentCaptor.forClass(null);
-    verify(clusterWatcher).onClusterChanged(clusterUpdateCaptor.capture());
-    ClusterUpdate clusterUpdate = clusterUpdateCaptor.getValue();
-    assertThat(clusterUpdate.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
-    assertThat(clusterUpdate.getEdsServiceName()).isNull();
-    assertThat(clusterUpdate.getLbPolicy()).isEqualTo("round_robin");
-    assertThat(clusterUpdate.getLrsServerName()).isNull();
+    ArgumentCaptor<CdsUpdate> cdsUpdateCaptor = ArgumentCaptor.forClass(null);
+    verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
+    CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
+    assertThat(cdsUpdate.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
+    assertThat(cdsUpdate.getEdsServiceName()).isNull();
+    assertThat(cdsUpdate.getLbPolicy()).isEqualTo("round_robin");
+    assertThat(cdsUpdate.getLrsServerName()).isNull();
 
     // Management server sends back another CDS response updating the requested Cluster.
     clusters = ImmutableList.of(
@@ -1424,13 +1424,13 @@ public class XdsClientImplTest {
         .onNext(eq(buildDiscoveryRequest(NODE, "1", "cluster-foo.googleapis.com",
             XdsClientImpl.ADS_TYPE_URL_CDS, "0001")));
 
-    verify(clusterWatcher, times(2)).onClusterChanged(clusterUpdateCaptor.capture());
-    clusterUpdate = clusterUpdateCaptor.getValue();
-    assertThat(clusterUpdate.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
-    assertThat(clusterUpdate.getEdsServiceName())
+    verify(cdsResourceWatcher, times(2)).onChanged(cdsUpdateCaptor.capture());
+    cdsUpdate = cdsUpdateCaptor.getValue();
+    assertThat(cdsUpdate.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
+    assertThat(cdsUpdate.getEdsServiceName())
         .isEqualTo("eds-cluster-foo.googleapis.com");
-    assertThat(clusterUpdate.getLbPolicy()).isEqualTo("round_robin");
-    assertThat(clusterUpdate.getLrsServerName()).isEqualTo("");
+    assertThat(cdsUpdate.getLbPolicy()).isEqualTo("round_robin");
+    assertThat(cdsUpdate.getLrsServerName()).isEqualTo("");
   }
 
   /**
@@ -1438,7 +1438,7 @@ public class XdsClientImplTest {
    */
   @Test
   public void cdsResponseWithUpstreamTlsContext() {
-    xdsClient.watchClusterData("cluster-foo.googleapis.com", clusterWatcher);
+    xdsClient.watchCdsResource("cluster-foo.googleapis.com", cdsResourceWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
 
@@ -1458,10 +1458,10 @@ public class XdsClientImplTest {
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "0", "cluster-foo.googleapis.com",
             XdsClientImpl.ADS_TYPE_URL_CDS, "0000")));
-    ArgumentCaptor<ClusterUpdate> clusterUpdateCaptor = ArgumentCaptor.forClass(null);
-    verify(clusterWatcher, times(1)).onClusterChanged(clusterUpdateCaptor.capture());
-    ClusterUpdate clusterUpdate = clusterUpdateCaptor.getValue();
-    EnvoyServerProtoData.UpstreamTlsContext upstreamTlsContext = clusterUpdate
+    ArgumentCaptor<CdsUpdate> cdsUpdateCaptor = ArgumentCaptor.forClass(null);
+    verify(cdsResourceWatcher, times(1)).onChanged(cdsUpdateCaptor.capture());
+    CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
+    EnvoyServerProtoData.UpstreamTlsContext upstreamTlsContext = cdsUpdate
         .getUpstreamTlsContext();
     SdsSecretConfig validationContextSdsSecretConfig = upstreamTlsContext.getCommonTlsContext()
         .getValidationContextSdsSecretConfig();
@@ -1478,13 +1478,13 @@ public class XdsClientImplTest {
   }
 
   @Test
-  public void multipleClusterWatchers() {
-    ClusterWatcher watcher1 = mock(ClusterWatcher.class);
-    ClusterWatcher watcher2 = mock(ClusterWatcher.class);
-    ClusterWatcher watcher3 = mock(ClusterWatcher.class);
-    xdsClient.watchClusterData("cluster-foo.googleapis.com", watcher1);
-    xdsClient.watchClusterData("cluster-foo.googleapis.com", watcher2);
-    xdsClient.watchClusterData("cluster-bar.googleapis.com", watcher3);
+  public void multipleCdsWatchers() {
+    CdsResourceWatcher watcher1 = mock(CdsResourceWatcher.class);
+    CdsResourceWatcher watcher2 = mock(CdsResourceWatcher.class);
+    CdsResourceWatcher watcher3 = mock(CdsResourceWatcher.class);
+    xdsClient.watchCdsResource("cluster-foo.googleapis.com", watcher1);
+    xdsClient.watchCdsResource("cluster-foo.googleapis.com", watcher2);
+    xdsClient.watchCdsResource("cluster-bar.googleapis.com", watcher3);
 
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
@@ -1516,25 +1516,25 @@ public class XdsClientImplTest {
                     XdsClientImpl.ADS_TYPE_URL_CDS, "0000")));
 
     // Two watchers get notification of cluster update for the cluster they are interested in.
-    ArgumentCaptor<ClusterUpdate> clusterUpdateCaptor1 = ArgumentCaptor.forClass(null);
-    verify(watcher1).onClusterChanged(clusterUpdateCaptor1.capture());
-    ClusterUpdate clusterUpdate1 = clusterUpdateCaptor1.getValue();
-    assertThat(clusterUpdate1.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
-    assertThat(clusterUpdate1.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
-    assertThat(clusterUpdate1.getEdsServiceName()).isNull();
-    assertThat(clusterUpdate1.getLbPolicy()).isEqualTo("round_robin");
-    assertThat(clusterUpdate1.getLrsServerName()).isNull();
+    ArgumentCaptor<CdsUpdate> cdsUpdateCaptor1 = ArgumentCaptor.forClass(null);
+    verify(watcher1).onChanged(cdsUpdateCaptor1.capture());
+    CdsUpdate cdsUpdate1 = cdsUpdateCaptor1.getValue();
+    assertThat(cdsUpdate1.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
+    assertThat(cdsUpdate1.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
+    assertThat(cdsUpdate1.getEdsServiceName()).isNull();
+    assertThat(cdsUpdate1.getLbPolicy()).isEqualTo("round_robin");
+    assertThat(cdsUpdate1.getLrsServerName()).isNull();
 
-    ArgumentCaptor<ClusterUpdate> clusterUpdateCaptor2 = ArgumentCaptor.forClass(null);
-    verify(watcher2).onClusterChanged(clusterUpdateCaptor2.capture());
-    ClusterUpdate clusterUpdate2 = clusterUpdateCaptor2.getValue();
-    assertThat(clusterUpdate2.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
-    assertThat(clusterUpdate2.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
-    assertThat(clusterUpdate2.getEdsServiceName()).isNull();
-    assertThat(clusterUpdate2.getLbPolicy()).isEqualTo("round_robin");
-    assertThat(clusterUpdate2.getLrsServerName()).isNull();
+    ArgumentCaptor<CdsUpdate> cdsUpdateCaptor2 = ArgumentCaptor.forClass(null);
+    verify(watcher2).onChanged(cdsUpdateCaptor2.capture());
+    CdsUpdate cdsUpdate2 = cdsUpdateCaptor2.getValue();
+    assertThat(cdsUpdate2.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
+    assertThat(cdsUpdate2.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
+    assertThat(cdsUpdate2.getEdsServiceName()).isNull();
+    assertThat(cdsUpdate2.getLbPolicy()).isEqualTo("round_robin");
+    assertThat(cdsUpdate2.getLrsServerName()).isNull();
 
-    verify(watcher3, never()).onClusterChanged(any(ClusterUpdate.class));
+    verify(watcher3, never()).onChanged(any(CdsUpdate.class));
     verify(watcher3, never()).onResourceDoesNotExist("cluster-bar.googleapis.com");
     verify(watcher3, never()).onError(any(Status.class));
 
@@ -1563,14 +1563,14 @@ public class XdsClientImplTest {
                     XdsClientImpl.ADS_TYPE_URL_CDS, "0001")));
 
     verifyNoMoreInteractions(watcher1, watcher2); // resource has no change
-    ArgumentCaptor<ClusterUpdate> clusterUpdateCaptor3 = ArgumentCaptor.forClass(null);
-    verify(watcher3).onClusterChanged(clusterUpdateCaptor3.capture());
-    ClusterUpdate clusterUpdate3 = clusterUpdateCaptor3.getValue();
-    assertThat(clusterUpdate3.getClusterName()).isEqualTo("cluster-bar.googleapis.com");
-    assertThat(clusterUpdate3.getEdsServiceName())
+    ArgumentCaptor<CdsUpdate> cdsUpdateCaptor3 = ArgumentCaptor.forClass(null);
+    verify(watcher3).onChanged(cdsUpdateCaptor3.capture());
+    CdsUpdate cdsUpdate3 = cdsUpdateCaptor3.getValue();
+    assertThat(cdsUpdate3.getClusterName()).isEqualTo("cluster-bar.googleapis.com");
+    assertThat(cdsUpdate3.getEdsServiceName())
         .isEqualTo("eds-cluster-bar.googleapis.com");
-    assertThat(clusterUpdate3.getLbPolicy()).isEqualTo("round_robin");
-    assertThat(clusterUpdate3.getLrsServerName()).isEqualTo("");
+    assertThat(cdsUpdate3.getLbPolicy()).isEqualTo("round_robin");
+    assertThat(cdsUpdate3.getLrsServerName()).isEqualTo("");
   }
 
   /**
@@ -1580,8 +1580,8 @@ public class XdsClientImplTest {
    */
   @Test
   public void watchClusterAlreadyBeingWatched() {
-    ClusterWatcher watcher1 = mock(ClusterWatcher.class);
-    xdsClient.watchClusterData("cluster-foo.googleapis.com", watcher1);
+    CdsResourceWatcher watcher1 = mock(CdsResourceWatcher.class);
+    xdsClient.watchCdsResource("cluster-foo.googleapis.com", watcher1);
 
     // Streaming RPC starts after a first watcher is added.
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
@@ -1606,28 +1606,28 @@ public class XdsClientImplTest {
         .onNext(eq(buildDiscoveryRequest(NODE, "0", "cluster-foo.googleapis.com",
             XdsClientImpl.ADS_TYPE_URL_CDS, "0000")));
 
-    ArgumentCaptor<ClusterUpdate> clusterUpdateCaptor1 = ArgumentCaptor.forClass(null);
-    verify(watcher1).onClusterChanged(clusterUpdateCaptor1.capture());
-    ClusterUpdate clusterUpdate1 = clusterUpdateCaptor1.getValue();
-    assertThat(clusterUpdate1.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
-    assertThat(clusterUpdate1.getEdsServiceName()).isNull();
-    assertThat(clusterUpdate1.getLbPolicy()).isEqualTo("round_robin");
-    assertThat(clusterUpdate1.getLrsServerName()).isNull();
+    ArgumentCaptor<CdsUpdate> cdsUpdateCaptor1 = ArgumentCaptor.forClass(null);
+    verify(watcher1).onChanged(cdsUpdateCaptor1.capture());
+    CdsUpdate cdsUpdate1 = cdsUpdateCaptor1.getValue();
+    assertThat(cdsUpdate1.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
+    assertThat(cdsUpdate1.getEdsServiceName()).isNull();
+    assertThat(cdsUpdate1.getLbPolicy()).isEqualTo("round_robin");
+    assertThat(cdsUpdate1.getLrsServerName()).isNull();
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
 
     // Another cluster watcher interested in the same cluster is added.
-    ClusterWatcher watcher2 = mock(ClusterWatcher.class);
-    xdsClient.watchClusterData("cluster-foo.googleapis.com", watcher2);
+    CdsResourceWatcher watcher2 = mock(CdsResourceWatcher.class);
+    xdsClient.watchCdsResource("cluster-foo.googleapis.com", watcher2);
 
     // Since the client has received cluster update for this cluster before, cached result is
     // notified to the newly added watcher immediately.
-    ArgumentCaptor<ClusterUpdate> clusterUpdateCaptor2 = ArgumentCaptor.forClass(null);
-    verify(watcher2).onClusterChanged(clusterUpdateCaptor2.capture());
-    ClusterUpdate clusterUpdate2 = clusterUpdateCaptor2.getValue();
-    assertThat(clusterUpdate2.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
-    assertThat(clusterUpdate2.getEdsServiceName()).isNull();
-    assertThat(clusterUpdate2.getLbPolicy()).isEqualTo("round_robin");
-    assertThat(clusterUpdate2.getLrsServerName()).isNull();
+    ArgumentCaptor<CdsUpdate> cdsUpdateCaptor2 = ArgumentCaptor.forClass(null);
+    verify(watcher2).onChanged(cdsUpdateCaptor2.capture());
+    CdsUpdate cdsUpdate2 = cdsUpdateCaptor2.getValue();
+    assertThat(cdsUpdate2.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
+    assertThat(cdsUpdate2.getEdsServiceName()).isNull();
+    assertThat(cdsUpdate2.getLbPolicy()).isEqualTo("round_robin");
+    assertThat(cdsUpdate2.getLrsServerName()).isNull();
 
     verifyNoMoreInteractions(requestObserver);
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
@@ -1637,9 +1637,9 @@ public class XdsClientImplTest {
    * Basic operations of adding/canceling cluster data watchers.
    */
   @Test
-  public void addRemoveClusterWatchers() {
-    ClusterWatcher watcher1 = mock(ClusterWatcher.class);
-    xdsClient.watchClusterData("cluster-foo.googleapis.com", watcher1);
+  public void addRemoveCdsWatchers() {
+    CdsResourceWatcher watcher1 = mock(CdsResourceWatcher.class);
+    xdsClient.watchCdsResource("cluster-foo.googleapis.com", watcher1);
 
     // Streaming RPC starts after a first watcher is added.
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
@@ -1663,17 +1663,17 @@ public class XdsClientImplTest {
         .onNext(eq(buildDiscoveryRequest(NODE, "0", "cluster-foo.googleapis.com",
             XdsClientImpl.ADS_TYPE_URL_CDS, "0000")));
 
-    ArgumentCaptor<ClusterUpdate> clusterUpdateCaptor1 = ArgumentCaptor.forClass(null);
-    verify(watcher1).onClusterChanged(clusterUpdateCaptor1.capture());
-    ClusterUpdate clusterUpdate1 = clusterUpdateCaptor1.getValue();
-    assertThat(clusterUpdate1.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
-    assertThat(clusterUpdate1.getEdsServiceName()).isNull();
-    assertThat(clusterUpdate1.getLbPolicy()).isEqualTo("round_robin");
-    assertThat(clusterUpdate1.getLrsServerName()).isNull();
+    ArgumentCaptor<CdsUpdate> cdsUpdateCaptor1 = ArgumentCaptor.forClass(null);
+    verify(watcher1).onChanged(cdsUpdateCaptor1.capture());
+    CdsUpdate cdsUpdate1 = cdsUpdateCaptor1.getValue();
+    assertThat(cdsUpdate1.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
+    assertThat(cdsUpdate1.getEdsServiceName()).isNull();
+    assertThat(cdsUpdate1.getLbPolicy()).isEqualTo("round_robin");
+    assertThat(cdsUpdate1.getLrsServerName()).isNull();
 
     // Add another cluster watcher for a different cluster.
-    ClusterWatcher watcher2 = mock(ClusterWatcher.class);
-    xdsClient.watchClusterData("cluster-bar.googleapis.com", watcher2);
+    CdsResourceWatcher watcher2 = mock(CdsResourceWatcher.class);
+    xdsClient.watchCdsResource("cluster-bar.googleapis.com", watcher2);
 
     // Client sent a new CDS request for all interested resources.
     verify(requestObserver)
@@ -1701,17 +1701,17 @@ public class XdsClientImplTest {
                     ImmutableList.of("cluster-foo.googleapis.com", "cluster-bar.googleapis.com"),
                     XdsClientImpl.ADS_TYPE_URL_CDS, "0001")));
     verifyNoMoreInteractions(watcher1);  // resource has no change
-    ArgumentCaptor<ClusterUpdate> clusterUpdateCaptor2 = ArgumentCaptor.forClass(null);
-    verify(watcher2).onClusterChanged(clusterUpdateCaptor2.capture());
-    ClusterUpdate clusterUpdate2 = clusterUpdateCaptor2.getValue();
-    assertThat(clusterUpdate2.getClusterName()).isEqualTo("cluster-bar.googleapis.com");
-    assertThat(clusterUpdate2.getEdsServiceName())
+    ArgumentCaptor<CdsUpdate> cdsUpdateCaptor2 = ArgumentCaptor.forClass(null);
+    verify(watcher2).onChanged(cdsUpdateCaptor2.capture());
+    CdsUpdate cdsUpdate2 = cdsUpdateCaptor2.getValue();
+    assertThat(cdsUpdate2.getClusterName()).isEqualTo("cluster-bar.googleapis.com");
+    assertThat(cdsUpdate2.getEdsServiceName())
         .isEqualTo("eds-cluster-bar.googleapis.com");
-    assertThat(clusterUpdate2.getLbPolicy()).isEqualTo("round_robin");
-    assertThat(clusterUpdate2.getLrsServerName()).isEqualTo("");
+    assertThat(cdsUpdate2.getLbPolicy()).isEqualTo("round_robin");
+    assertThat(cdsUpdate2.getLrsServerName()).isEqualTo("");
 
     // Cancel one of the watcher.
-    xdsClient.cancelClusterDataWatch("cluster-foo.googleapis.com", watcher1);
+    xdsClient.cancelCdsResourceWatch("cluster-foo.googleapis.com", watcher1);
 
     // Since the cancelled watcher was the last watcher interested in that cluster (but there
     // is still interested resource), client sent an new CDS request to unsubscribe from
@@ -1723,7 +1723,7 @@ public class XdsClientImplTest {
     // Management server has nothing to respond.
 
     // Cancel the other watcher. All resources have been unsubscribed.
-    xdsClient.cancelClusterDataWatch("cluster-bar.googleapis.com", watcher2);
+    xdsClient.cancelCdsResourceWatch("cluster-bar.googleapis.com", watcher2);
 
     verify(requestObserver)
         .onNext(
@@ -1750,9 +1750,9 @@ public class XdsClientImplTest {
     verifyNoMoreInteractions(watcher1, watcher2);
 
     // A new cluster watcher is added to watch cluster foo again.
-    ClusterWatcher watcher3 = mock(ClusterWatcher.class);
-    xdsClient.watchClusterData("cluster-foo.googleapis.com", watcher3);
-    verify(watcher3, never()).onClusterChanged(any(ClusterUpdate.class));
+    CdsResourceWatcher watcher3 = mock(CdsResourceWatcher.class);
+    xdsClient.watchCdsResource("cluster-foo.googleapis.com", watcher3);
+    verify(watcher3, never()).onChanged(any(CdsUpdate.class));
 
     // A CDS request is sent to indicate subscription of "cluster-foo.googleapis.com" only.
     verify(requestObserver)
@@ -1770,13 +1770,13 @@ public class XdsClientImplTest {
     responseObserver.onNext(response);
 
     // Notified with cached data immediately.
-    ArgumentCaptor<ClusterUpdate> clusterUpdateCaptor3 = ArgumentCaptor.forClass(null);
-    verify(watcher3).onClusterChanged(clusterUpdateCaptor3.capture());
-    ClusterUpdate clusterUpdate3 = clusterUpdateCaptor3.getValue();
-    assertThat(clusterUpdate3.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
-    assertThat(clusterUpdate3.getEdsServiceName()).isNull();
-    assertThat(clusterUpdate3.getLbPolicy()).isEqualTo("round_robin");
-    assertThat(clusterUpdate2.getLrsServerName()).isEqualTo("");
+    ArgumentCaptor<CdsUpdate> cdsUpdateCaptor3 = ArgumentCaptor.forClass(null);
+    verify(watcher3).onChanged(cdsUpdateCaptor3.capture());
+    CdsUpdate cdsUpdate3 = cdsUpdateCaptor3.getValue();
+    assertThat(cdsUpdate3.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
+    assertThat(cdsUpdate3.getEdsServiceName()).isNull();
+    assertThat(cdsUpdate3.getLbPolicy()).isEqualTo("round_robin");
+    assertThat(cdsUpdate2.getLrsServerName()).isEqualTo("");
 
     verifyNoMoreInteractions(watcher1, watcher2);
 
@@ -1787,9 +1787,9 @@ public class XdsClientImplTest {
   }
 
   @Test
-  public void addRemoveClusterWatcherWhileInitialResourceFetchInProgress() {
-    ClusterWatcher watcher1 = mock(ClusterWatcher.class);
-    xdsClient.watchClusterData("cluster-foo.googleapis.com", watcher1);
+  public void addRemoveCdsWatcherWhileInitialResourceFetchInProgress() {
+    CdsResourceWatcher watcher1 = mock(CdsResourceWatcher.class);
+    xdsClient.watchCdsResource("cluster-foo.googleapis.com", watcher1);
 
     // Streaming RPC starts after a first watcher is added.
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
@@ -1804,12 +1804,12 @@ public class XdsClientImplTest {
 
     fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC - 1, TimeUnit.SECONDS);
 
-    ClusterWatcher watcher2 = mock(ClusterWatcher.class);
-    ClusterWatcher watcher3 = mock(ClusterWatcher.class);
-    ClusterWatcher watcher4 = mock(ClusterWatcher.class);
-    xdsClient.watchClusterData("cluster-foo.googleapis.com", watcher2);
-    xdsClient.watchClusterData("cluster-bar.googleapis.com", watcher3);
-    xdsClient.watchClusterData("cluster-bar.googleapis.com", watcher4);
+    CdsResourceWatcher watcher2 = mock(CdsResourceWatcher.class);
+    CdsResourceWatcher watcher3 = mock(CdsResourceWatcher.class);
+    CdsResourceWatcher watcher4 = mock(CdsResourceWatcher.class);
+    xdsClient.watchCdsResource("cluster-foo.googleapis.com", watcher2);
+    xdsClient.watchCdsResource("cluster-bar.googleapis.com", watcher3);
+    xdsClient.watchCdsResource("cluster-bar.googleapis.com", watcher4);
 
     // Client sends a new CDS request for updating the latest resource subscription.
     verify(requestObserver)
@@ -1828,8 +1828,8 @@ public class XdsClientImplTest {
     verify(watcher2).onResourceDoesNotExist("cluster-foo.googleapis.com");
 
     // The absence result is known immediately.
-    ClusterWatcher watcher5 = mock(ClusterWatcher.class);
-    xdsClient.watchClusterData("cluster-foo.googleapis.com", watcher5);
+    CdsResourceWatcher watcher5 = mock(CdsResourceWatcher.class);
+    xdsClient.watchCdsResource("cluster-foo.googleapis.com", watcher5);
     verify(watcher5).onResourceDoesNotExist("cluster-foo.googleapis.com");
 
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
@@ -1837,9 +1837,9 @@ public class XdsClientImplTest {
 
     // Cancel watchers while discovery for resource "cluster-bar.googleapis.com" is still
     // in progress.
-    xdsClient.cancelClusterDataWatch("cluster-bar.googleapis.com", watcher3);
+    xdsClient.cancelCdsResourceWatch("cluster-bar.googleapis.com", watcher3);
     assertThat(timeoutTask.isCancelled()).isFalse();
-    xdsClient.cancelClusterDataWatch("cluster-bar.googleapis.com", watcher4);
+    xdsClient.cancelCdsResourceWatch("cluster-bar.googleapis.com", watcher4);
 
     // Client sends a CDS request for resource subscription update (Omitted).
 
@@ -1853,7 +1853,7 @@ public class XdsClientImplTest {
 
   @Test
   public void cdsUpdateForClusterBeingRemoved() {
-    xdsClient.watchClusterData("cluster-foo.googleapis.com", clusterWatcher);
+    xdsClient.watchCdsResource("cluster-foo.googleapis.com", cdsResourceWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
 
@@ -1871,13 +1871,13 @@ public class XdsClientImplTest {
 
     // Client sent an ACK CDS request (Omitted).
 
-    ArgumentCaptor<ClusterUpdate> clusterUpdateCaptor = ArgumentCaptor.forClass(null);
-    verify(clusterWatcher).onClusterChanged(clusterUpdateCaptor.capture());
-    ClusterUpdate clusterUpdate = clusterUpdateCaptor.getValue();
-    assertThat(clusterUpdate.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
-    assertThat(clusterUpdate.getEdsServiceName()).isNull();
-    assertThat(clusterUpdate.getLbPolicy()).isEqualTo("round_robin");
-    assertThat(clusterUpdate.getLrsServerName()).isEqualTo("");
+    ArgumentCaptor<CdsUpdate> cdsUpdateCaptor = ArgumentCaptor.forClass(null);
+    verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
+    CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
+    assertThat(cdsUpdate.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
+    assertThat(cdsUpdate.getEdsServiceName()).isNull();
+    assertThat(cdsUpdate.getLbPolicy()).isEqualTo("round_robin");
+    assertThat(cdsUpdate.getLrsServerName()).isEqualTo("");
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
 
     // No cluster is available.
@@ -1886,7 +1886,7 @@ public class XdsClientImplTest {
             XdsClientImpl.ADS_TYPE_URL_CDS, "0001");
     responseObserver.onNext(response);
 
-    verify(clusterWatcher).onResourceDoesNotExist("cluster-foo.googleapis.com");
+    verify(cdsResourceWatcher).onResourceDoesNotExist("cluster-foo.googleapis.com");
   }
 
   /**
@@ -1898,7 +1898,7 @@ public class XdsClientImplTest {
    */
   @Test
   public void edsResponseWithoutMatchingResource() {
-    xdsClient.watchEndpointData("cluster-foo.googleapis.com", endpointWatcher);
+    xdsClient.watchEdsResource("cluster-foo.googleapis.com", edsResourceWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
 
@@ -1936,11 +1936,11 @@ public class XdsClientImplTest {
         .onNext(eq(buildDiscoveryRequest(NODE, "0", "cluster-foo.googleapis.com",
             XdsClientImpl.ADS_TYPE_URL_EDS, "0000")));
 
-    verify(endpointWatcher, never()).onEndpointChanged(any(EndpointUpdate.class));
-    verify(endpointWatcher, never()).onResourceDoesNotExist("cluster-foo.googleapis.com");
-    verify(endpointWatcher, never()).onError(any(Status.class));
+    verify(edsResourceWatcher, never()).onChanged(any(EdsUpdate.class));
+    verify(edsResourceWatcher, never()).onResourceDoesNotExist("cluster-foo.googleapis.com");
+    verify(edsResourceWatcher, never()).onError(any(Status.class));
     fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
-    verify(endpointWatcher).onResourceDoesNotExist("cluster-foo.googleapis.com");
+    verify(edsResourceWatcher).onResourceDoesNotExist("cluster-foo.googleapis.com");
     assertThat(fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
 
@@ -1950,7 +1950,7 @@ public class XdsClientImplTest {
    */
   @Test
   public void edsResponseWithMatchingResource() {
-    xdsClient.watchEndpointData("cluster-foo.googleapis.com", endpointWatcher);
+    xdsClient.watchEdsResource("cluster-foo.googleapis.com", edsResourceWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
 
@@ -2002,15 +2002,15 @@ public class XdsClientImplTest {
         .onNext(eq(buildDiscoveryRequest(NODE, "0", "cluster-foo.googleapis.com",
             XdsClientImpl.ADS_TYPE_URL_EDS, "0000")));
 
-    ArgumentCaptor<EndpointUpdate> endpointUpdateCaptor = ArgumentCaptor.forClass(null);
-    verify(endpointWatcher).onEndpointChanged(endpointUpdateCaptor.capture());
-    EndpointUpdate endpointUpdate = endpointUpdateCaptor.getValue();
-    assertThat(endpointUpdate.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
-    assertThat(endpointUpdate.getDropPolicies())
+    ArgumentCaptor<EdsUpdate> edsUpdateCaptor = ArgumentCaptor.forClass(null);
+    verify(edsResourceWatcher).onChanged(edsUpdateCaptor.capture());
+    EdsUpdate edsUpdate = edsUpdateCaptor.getValue();
+    assertThat(edsUpdate.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
+    assertThat(edsUpdate.getDropPolicies())
         .containsExactly(
             new DropOverload("lb", 200),
             new DropOverload("throttle", 1000));
-    assertThat(endpointUpdate.getLocalityLbEndpointsMap())
+    assertThat(edsUpdate.getLocalityLbEndpointsMap())
         .containsExactly(
             new Locality("region1", "zone1", "subzone1"),
             new LocalityLbEndpoints(
@@ -2035,21 +2035,21 @@ public class XdsClientImplTest {
         .onNext(eq(buildDiscoveryRequest(NODE, "1", "cluster-foo.googleapis.com",
             XdsClientImpl.ADS_TYPE_URL_EDS, "0001")));
 
-    verify(endpointWatcher, times(2)).onEndpointChanged(endpointUpdateCaptor.capture());
-    endpointUpdate = endpointUpdateCaptor.getValue();
-    assertThat(endpointUpdate.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
-    assertThat(endpointUpdate.getDropPolicies()).isEmpty();
-    assertThat(endpointUpdate.getLocalityLbEndpointsMap()).isEmpty();
+    verify(edsResourceWatcher, times(2)).onChanged(edsUpdateCaptor.capture());
+    edsUpdate = edsUpdateCaptor.getValue();
+    assertThat(edsUpdate.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
+    assertThat(edsUpdate.getDropPolicies()).isEmpty();
+    assertThat(edsUpdate.getLocalityLbEndpointsMap()).isEmpty();
   }
 
   @Test
-  public void multipleEndpointWatchers() {
-    EndpointWatcher watcher1 = mock(EndpointWatcher.class);
-    EndpointWatcher watcher2 = mock(EndpointWatcher.class);
-    EndpointWatcher watcher3 = mock(EndpointWatcher.class);
-    xdsClient.watchEndpointData("cluster-foo.googleapis.com", watcher1);
-    xdsClient.watchEndpointData("cluster-foo.googleapis.com", watcher2);
-    xdsClient.watchEndpointData("cluster-bar.googleapis.com", watcher3);
+  public void multipleEdsWatchers() {
+    EdsResourceWatcher watcher1 = mock(EdsResourceWatcher.class);
+    EdsResourceWatcher watcher2 = mock(EdsResourceWatcher.class);
+    EdsResourceWatcher watcher3 = mock(EdsResourceWatcher.class);
+    xdsClient.watchEdsResource("cluster-foo.googleapis.com", watcher1);
+    xdsClient.watchEdsResource("cluster-foo.googleapis.com", watcher2);
+    xdsClient.watchEdsResource("cluster-bar.googleapis.com", watcher3);
 
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
@@ -2091,11 +2091,11 @@ public class XdsClientImplTest {
                     XdsClientImpl.ADS_TYPE_URL_EDS, "0000")));
 
     // Two watchers get notification of endpoint update for the cluster they are interested in.
-    ArgumentCaptor<EndpointUpdate> endpointUpdateCaptor1 = ArgumentCaptor.forClass(null);
-    verify(watcher1).onEndpointChanged(endpointUpdateCaptor1.capture());
-    EndpointUpdate endpointUpdate1 = endpointUpdateCaptor1.getValue();
-    assertThat(endpointUpdate1.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
-    assertThat(endpointUpdate1.getLocalityLbEndpointsMap())
+    ArgumentCaptor<EdsUpdate> edsUpdateCaptor1 = ArgumentCaptor.forClass(null);
+    verify(watcher1).onChanged(edsUpdateCaptor1.capture());
+    EdsUpdate edsUpdate1 = edsUpdateCaptor1.getValue();
+    assertThat(edsUpdate1.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
+    assertThat(edsUpdate1.getLocalityLbEndpointsMap())
         .containsExactly(
             new Locality("region1", "zone1", "subzone1"),
             new LocalityLbEndpoints(
@@ -2103,11 +2103,11 @@ public class XdsClientImplTest {
                     new LbEndpoint("192.168.0.1", 8080,
                         2, true)), 1, 0));
 
-    ArgumentCaptor<EndpointUpdate> endpointUpdateCaptor2 = ArgumentCaptor.forClass(null);
-    verify(watcher1).onEndpointChanged(endpointUpdateCaptor2.capture());
-    EndpointUpdate endpointUpdate2 = endpointUpdateCaptor2.getValue();
-    assertThat(endpointUpdate2.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
-    assertThat(endpointUpdate2.getLocalityLbEndpointsMap())
+    ArgumentCaptor<EdsUpdate> edsUpdateCaptor2 = ArgumentCaptor.forClass(null);
+    verify(watcher1).onChanged(edsUpdateCaptor2.capture());
+    EdsUpdate edsUpdate2 = edsUpdateCaptor2.getValue();
+    assertThat(edsUpdate2.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
+    assertThat(edsUpdate2.getLocalityLbEndpointsMap())
         .containsExactly(
             new Locality("region1", "zone1", "subzone1"),
             new LocalityLbEndpoints(
@@ -2141,11 +2141,11 @@ public class XdsClientImplTest {
                     XdsClientImpl.ADS_TYPE_URL_EDS, "0001")));
 
     // The corresponding watcher gets notified.
-    ArgumentCaptor<EndpointUpdate> endpointUpdateCaptor3 = ArgumentCaptor.forClass(null);
-    verify(watcher3).onEndpointChanged(endpointUpdateCaptor3.capture());
-    EndpointUpdate endpointUpdate3 = endpointUpdateCaptor3.getValue();
-    assertThat(endpointUpdate3.getClusterName()).isEqualTo("cluster-bar.googleapis.com");
-    assertThat(endpointUpdate3.getLocalityLbEndpointsMap())
+    ArgumentCaptor<EdsUpdate> edsUpdateCaptor3 = ArgumentCaptor.forClass(null);
+    verify(watcher3).onChanged(edsUpdateCaptor3.capture());
+    EdsUpdate edsUpdate3 = edsUpdateCaptor3.getValue();
+    assertThat(edsUpdate3.getClusterName()).isEqualTo("cluster-bar.googleapis.com");
+    assertThat(edsUpdate3.getLocalityLbEndpointsMap())
         .containsExactly(
             new Locality("region2", "zone2", "subzone2"),
             new LocalityLbEndpoints(
@@ -2161,8 +2161,8 @@ public class XdsClientImplTest {
    */
   @Test
   public void watchEndpointsForClusterAlreadyBeingWatched() {
-    EndpointWatcher watcher1 = mock(EndpointWatcher.class);
-    xdsClient.watchEndpointData("cluster-foo.googleapis.com", watcher1);
+    EdsResourceWatcher watcher1 = mock(EdsResourceWatcher.class);
+    xdsClient.watchEdsResource("cluster-foo.googleapis.com", watcher1);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
 
@@ -2196,12 +2196,12 @@ public class XdsClientImplTest {
         .onNext(eq(buildDiscoveryRequest(NODE, "0", "cluster-foo.googleapis.com",
             XdsClientImpl.ADS_TYPE_URL_EDS, "0000")));
 
-    ArgumentCaptor<EndpointUpdate> endpointUpdateCaptor1 = ArgumentCaptor.forClass(null);
-    verify(watcher1).onEndpointChanged(endpointUpdateCaptor1.capture());
-    EndpointUpdate endpointUpdate1 = endpointUpdateCaptor1.getValue();
-    assertThat(endpointUpdate1.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
-    assertThat(endpointUpdate1.getDropPolicies()).isEmpty();
-    assertThat(endpointUpdate1.getLocalityLbEndpointsMap())
+    ArgumentCaptor<EdsUpdate> edsUpdateCaptor1 = ArgumentCaptor.forClass(null);
+    verify(watcher1).onChanged(edsUpdateCaptor1.capture());
+    EdsUpdate edsUpdate1 = edsUpdateCaptor1.getValue();
+    assertThat(edsUpdate1.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
+    assertThat(edsUpdate1.getDropPolicies()).isEmpty();
+    assertThat(edsUpdate1.getLocalityLbEndpointsMap())
         .containsExactly(
             new Locality("region1", "zone1", "subzone1"),
             new LocalityLbEndpoints(
@@ -2210,17 +2210,17 @@ public class XdsClientImplTest {
                         2, true)), 1, 0));
 
     // A second endpoint watcher is registered for endpoints in the same cluster.
-    EndpointWatcher watcher2 = mock(EndpointWatcher.class);
-    xdsClient.watchEndpointData("cluster-foo.googleapis.com", watcher2);
+    EdsResourceWatcher watcher2 = mock(EdsResourceWatcher.class);
+    xdsClient.watchEdsResource("cluster-foo.googleapis.com", watcher2);
 
     // Cached endpoint information is notified to the new watcher immediately, without sending
     // another EDS request.
-    ArgumentCaptor<EndpointUpdate> endpointUpdateCaptor2 = ArgumentCaptor.forClass(null);
-    verify(watcher2).onEndpointChanged(endpointUpdateCaptor2.capture());
-    EndpointUpdate endpointUpdate2 = endpointUpdateCaptor2.getValue();
-    assertThat(endpointUpdate2.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
-    assertThat(endpointUpdate2.getDropPolicies()).isEmpty();
-    assertThat(endpointUpdate2.getLocalityLbEndpointsMap())
+    ArgumentCaptor<EdsUpdate> edsUpdateCaptor2 = ArgumentCaptor.forClass(null);
+    verify(watcher2).onChanged(edsUpdateCaptor2.capture());
+    EdsUpdate edsUpdate2 = edsUpdateCaptor2.getValue();
+    assertThat(edsUpdate2.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
+    assertThat(edsUpdate2.getDropPolicies()).isEmpty();
+    assertThat(edsUpdate2.getLocalityLbEndpointsMap())
         .containsExactly(
             new Locality("region1", "zone1", "subzone1"),
             new LocalityLbEndpoints(
@@ -2236,9 +2236,9 @@ public class XdsClientImplTest {
    * Basic operations of adding/canceling endpoint data watchers.
    */
   @Test
-  public void addRemoveEndpointWatchers() {
-    EndpointWatcher watcher1 = mock(EndpointWatcher.class);
-    xdsClient.watchEndpointData("cluster-foo.googleapis.com", watcher1);
+  public void addRemoveEdsWatchers() {
+    EdsResourceWatcher watcher1 = mock(EdsResourceWatcher.class);
+    xdsClient.watchEdsResource("cluster-foo.googleapis.com", watcher1);
 
     // Streaming RPC starts after a first watcher is added.
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
@@ -2271,11 +2271,11 @@ public class XdsClientImplTest {
         .onNext(eq(buildDiscoveryRequest(NODE, "0", "cluster-foo.googleapis.com",
             XdsClientImpl.ADS_TYPE_URL_EDS, "0000")));
 
-    ArgumentCaptor<EndpointUpdate> endpointUpdateCaptor1 = ArgumentCaptor.forClass(null);
-    verify(watcher1).onEndpointChanged(endpointUpdateCaptor1.capture());
-    EndpointUpdate endpointUpdate1 = endpointUpdateCaptor1.getValue();
-    assertThat(endpointUpdate1.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
-    assertThat(endpointUpdate1.getLocalityLbEndpointsMap())
+    ArgumentCaptor<EdsUpdate> edsUpdateCaptor1 = ArgumentCaptor.forClass(null);
+    verify(watcher1).onChanged(edsUpdateCaptor1.capture());
+    EdsUpdate edsUpdate1 = edsUpdateCaptor1.getValue();
+    assertThat(edsUpdate1.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
+    assertThat(edsUpdate1.getLocalityLbEndpointsMap())
         .containsExactly(
             new Locality("region1", "zone1", "subzone1"),
             new LocalityLbEndpoints(
@@ -2285,8 +2285,8 @@ public class XdsClientImplTest {
                 1, 0));
 
     // Add another endpoint watcher for a different cluster.
-    EndpointWatcher watcher2 = mock(EndpointWatcher.class);
-    xdsClient.watchEndpointData("cluster-bar.googleapis.com", watcher2);
+    EdsResourceWatcher watcher2 = mock(EdsResourceWatcher.class);
+    xdsClient.watchEdsResource("cluster-bar.googleapis.com", watcher2);
 
     // Client sent a new EDS request for all interested resources.
     verify(requestObserver)
@@ -2319,11 +2319,11 @@ public class XdsClientImplTest {
                     ImmutableList.of("cluster-foo.googleapis.com", "cluster-bar.googleapis.com"),
                     XdsClientImpl.ADS_TYPE_URL_EDS, "0001")));
 
-    ArgumentCaptor<EndpointUpdate> endpointUpdateCaptor2 = ArgumentCaptor.forClass(null);
-    verify(watcher2).onEndpointChanged(endpointUpdateCaptor2.capture());
-    EndpointUpdate endpointUpdate2 = endpointUpdateCaptor2.getValue();
-    assertThat(endpointUpdate2.getClusterName()).isEqualTo("cluster-bar.googleapis.com");
-    assertThat(endpointUpdate2.getLocalityLbEndpointsMap())
+    ArgumentCaptor<EdsUpdate> edsUpdateCaptor2 = ArgumentCaptor.forClass(null);
+    verify(watcher2).onChanged(edsUpdateCaptor2.capture());
+    EdsUpdate edsUpdate2 = edsUpdateCaptor2.getValue();
+    assertThat(edsUpdate2.getClusterName()).isEqualTo("cluster-bar.googleapis.com");
+    assertThat(edsUpdate2.getLocalityLbEndpointsMap())
         .containsExactly(
             new Locality("region2", "zone2", "subzone2"),
             new LocalityLbEndpoints(
@@ -2332,7 +2332,7 @@ public class XdsClientImplTest {
                 6, 0));
 
     // Cancel one of the watcher.
-    xdsClient.cancelEndpointDataWatch("cluster-foo.googleapis.com", watcher1);
+    xdsClient.cancelEdsResourceWatch("cluster-foo.googleapis.com", watcher1);
 
     // Since the cancelled watcher was the last watcher interested in that cluster, client
     // sent an new EDS request to unsubscribe from that cluster.
@@ -2343,7 +2343,7 @@ public class XdsClientImplTest {
     // Management server should not respond as it had previously sent the requested resource.
 
     // Cancel the other watcher.
-    xdsClient.cancelEndpointDataWatch("cluster-bar.googleapis.com", watcher2);
+    xdsClient.cancelEdsResourceWatch("cluster-bar.googleapis.com", watcher2);
 
     // Since the cancelled watcher was the last watcher interested in that cluster, client
     // sent an new EDS request to unsubscribe from that cluster.
@@ -2389,13 +2389,13 @@ public class XdsClientImplTest {
     verifyNoMoreInteractions(watcher1, watcher2);
 
     // A new endpoint watcher is added to watch an old but was no longer interested in cluster.
-    EndpointWatcher watcher3 = mock(EndpointWatcher.class);
-    xdsClient.watchEndpointData("cluster-bar.googleapis.com", watcher3);
+    EdsResourceWatcher watcher3 = mock(EdsResourceWatcher.class);
+    xdsClient.watchEdsResource("cluster-bar.googleapis.com", watcher3);
 
     // Nothing should be notified to the new watcher as we are still waiting management server's
     // latest response.
     // Cached endpoint data should have been purged.
-    verify(watcher3, never()).onEndpointChanged(any(EndpointUpdate.class));
+    verify(watcher3, never()).onChanged(any(EdsUpdate.class));
 
     // An EDS request is sent to re-subscribe the cluster again.
     verify(requestObserver)
@@ -2416,11 +2416,11 @@ public class XdsClientImplTest {
         XdsClientImpl.ADS_TYPE_URL_EDS, "0003");
     responseObserver.onNext(response);
 
-    ArgumentCaptor<EndpointUpdate> endpointUpdateCaptor3 = ArgumentCaptor.forClass(null);
-    verify(watcher3).onEndpointChanged(endpointUpdateCaptor3.capture());
-    EndpointUpdate endpointUpdate3 = endpointUpdateCaptor3.getValue();
-    assertThat(endpointUpdate3.getClusterName()).isEqualTo("cluster-bar.googleapis.com");
-    assertThat(endpointUpdate3.getLocalityLbEndpointsMap())
+    ArgumentCaptor<EdsUpdate> edsUpdateCaptor3 = ArgumentCaptor.forClass(null);
+    verify(watcher3).onChanged(edsUpdateCaptor3.capture());
+    EdsUpdate edsUpdate3 = edsUpdateCaptor3.getValue();
+    assertThat(edsUpdate3.getClusterName()).isEqualTo("cluster-bar.googleapis.com");
+    assertThat(edsUpdate3.getLocalityLbEndpointsMap())
         .containsExactly(
             new Locality("region4", "zone4", "subzone4"),
             new LocalityLbEndpoints(
@@ -2438,9 +2438,9 @@ public class XdsClientImplTest {
   }
 
   @Test
-  public void addRemoveEndpointWatcherWhileInitialResourceFetchInProgress() {
-    EndpointWatcher watcher1 = mock(EndpointWatcher.class);
-    xdsClient.watchEndpointData("cluster-foo.googleapis.com", watcher1);
+  public void addRemoveEdsWatcherWhileInitialResourceFetchInProgress() {
+    EdsResourceWatcher watcher1 = mock(EdsResourceWatcher.class);
+    xdsClient.watchEdsResource("cluster-foo.googleapis.com", watcher1);
 
     // Streaming RPC starts after a first watcher is added.
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
@@ -2455,12 +2455,12 @@ public class XdsClientImplTest {
 
     fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC - 1, TimeUnit.SECONDS);
 
-    EndpointWatcher watcher2 = mock(EndpointWatcher.class);
-    EndpointWatcher watcher3 = mock(EndpointWatcher.class);
-    EndpointWatcher watcher4 = mock(EndpointWatcher.class);
-    xdsClient.watchEndpointData("cluster-foo.googleapis.com", watcher2);
-    xdsClient.watchEndpointData("cluster-bar.googleapis.com", watcher3);
-    xdsClient.watchEndpointData("cluster-bar.googleapis.com", watcher4);
+    EdsResourceWatcher watcher2 = mock(EdsResourceWatcher.class);
+    EdsResourceWatcher watcher3 = mock(EdsResourceWatcher.class);
+    EdsResourceWatcher watcher4 = mock(EdsResourceWatcher.class);
+    xdsClient.watchEdsResource("cluster-foo.googleapis.com", watcher2);
+    xdsClient.watchEdsResource("cluster-bar.googleapis.com", watcher3);
+    xdsClient.watchEdsResource("cluster-bar.googleapis.com", watcher4);
 
     // Client sends a new EDS request for updating the latest resource subscription.
     verify(requestObserver)
@@ -2479,8 +2479,8 @@ public class XdsClientImplTest {
     verify(watcher2).onResourceDoesNotExist("cluster-foo.googleapis.com");
 
     // The absence result is known immediately.
-    EndpointWatcher watcher5 = mock(EndpointWatcher.class);
-    xdsClient.watchEndpointData("cluster-foo.googleapis.com", watcher5);
+    EdsResourceWatcher watcher5 = mock(EdsResourceWatcher.class);
+    xdsClient.watchEdsResource("cluster-foo.googleapis.com", watcher5);
     verify(watcher5).onResourceDoesNotExist("cluster-foo.googleapis.com");
 
     assertThat(fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
@@ -2488,9 +2488,9 @@ public class XdsClientImplTest {
 
     // Cancel watchers while discovery for resource "cluster-bar.googleapis.com" is still
     // in progress.
-    xdsClient.cancelEndpointDataWatch("cluster-bar.googleapis.com", watcher3);
+    xdsClient.cancelEdsResourceWatch("cluster-bar.googleapis.com", watcher3);
     assertThat(timeoutTask.isCancelled()).isFalse();
-    xdsClient.cancelEndpointDataWatch("cluster-bar.googleapis.com", watcher4);
+    xdsClient.cancelEdsResourceWatch("cluster-bar.googleapis.com", watcher4);
 
     // Client sends an EDS request for resource subscription update (Omitted).
 
@@ -2504,7 +2504,7 @@ public class XdsClientImplTest {
 
   @Test
   public void cdsUpdateForEdsServiceNameChange() {
-    xdsClient.watchClusterData("cluster-foo.googleapis.com", clusterWatcher);
+    xdsClient.watchCdsResource("cluster-foo.googleapis.com", cdsResourceWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
 
     // Management server sends back a CDS response containing requested resource.
@@ -2514,7 +2514,7 @@ public class XdsClientImplTest {
         buildDiscoveryResponse("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS, "0000");
     responseObserver.onNext(response);
 
-    xdsClient.watchEndpointData("cluster-foo:service-bar", endpointWatcher);
+    xdsClient.watchEdsResource("cluster-foo:service-bar", edsResourceWatcher);
 
     // Management server sends back an EDS response for resource "cluster-foo:service-bar".
     List<Any> clusterLoadAssignments = ImmutableList.of(
@@ -2530,12 +2530,12 @@ public class XdsClientImplTest {
             XdsClientImpl.ADS_TYPE_URL_EDS, "0000");
     responseObserver.onNext(response);
 
-    ArgumentCaptor<EndpointUpdate> endpointUpdateCaptor = ArgumentCaptor.forClass(null);
-    verify(endpointWatcher).onEndpointChanged(endpointUpdateCaptor.capture());
-    EndpointUpdate endpointUpdate = endpointUpdateCaptor.getValue();
-    assertThat(endpointUpdate.getClusterName()).isEqualTo("cluster-foo:service-bar");
-    assertThat(endpointUpdate.getDropPolicies()).isEmpty();
-    assertThat(endpointUpdate.getLocalityLbEndpointsMap())
+    ArgumentCaptor<EdsUpdate> edsUpdateCaptor = ArgumentCaptor.forClass(null);
+    verify(edsResourceWatcher).onChanged(edsUpdateCaptor.capture());
+    EdsUpdate edsUpdate = edsUpdateCaptor.getValue();
+    assertThat(edsUpdate.getClusterName()).isEqualTo("cluster-foo:service-bar");
+    assertThat(edsUpdate.getDropPolicies()).isEmpty();
+    assertThat(edsUpdate.getLocalityLbEndpointsMap())
         .containsExactly(
             new Locality("region1", "zone1", "subzone1"),
             new LocalityLbEndpoints(
@@ -2552,7 +2552,7 @@ public class XdsClientImplTest {
     responseObserver.onNext(response);
 
     // Watcher get notification for endpoint resource "cluster-foo:service-bar" being deleted.
-    verify(endpointWatcher).onResourceDoesNotExist("cluster-foo:service-bar");
+    verify(edsResourceWatcher).onResourceDoesNotExist("cluster-foo:service-bar");
   }
 
   /**
@@ -2737,7 +2737,7 @@ public class XdsClientImplTest {
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
 
     // Start watching cluster information.
-    xdsClient.watchClusterData("cluster.googleapis.com", clusterWatcher);
+    xdsClient.watchCdsResource("cluster.googleapis.com", cdsResourceWatcher);
 
     // Client sent first CDS request.
     verify(requestObserver)
@@ -2745,7 +2745,7 @@ public class XdsClientImplTest {
             XdsClientImpl.ADS_TYPE_URL_CDS, "")));
 
     // Start watching endpoint information.
-    xdsClient.watchEndpointData("cluster.googleapis.com", endpointWatcher);
+    xdsClient.watchEdsResource("cluster.googleapis.com", edsResourceWatcher);
 
     // Client sent first EDS request.
     verify(requestObserver)
@@ -2756,9 +2756,9 @@ public class XdsClientImplTest {
     responseObserver.onError(Status.UNKNOWN.asException());
     verify(configWatcher).onError(statusCaptor.capture());
     assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.UNKNOWN);
-    verify(clusterWatcher).onError(statusCaptor.capture());
+    verify(cdsResourceWatcher).onError(statusCaptor.capture());
     assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.UNKNOWN);
-    verify(endpointWatcher).onError(statusCaptor.capture());
+    verify(edsResourceWatcher).onError(statusCaptor.capture());
     assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.UNKNOWN);
 
     // Resets backoff and retry immediately.
@@ -2784,9 +2784,9 @@ public class XdsClientImplTest {
     responseObserver.onError(Status.UNAVAILABLE.asException());
     verify(configWatcher, times(2)).onError(statusCaptor.capture());
     assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.UNAVAILABLE);
-    verify(clusterWatcher, times(2)).onError(statusCaptor.capture());
+    verify(cdsResourceWatcher, times(2)).onError(statusCaptor.capture());
     assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.UNAVAILABLE);
-    verify(endpointWatcher, times(2)).onError(statusCaptor.capture());
+    verify(edsResourceWatcher, times(2)).onError(statusCaptor.capture());
     assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.UNAVAILABLE);
     inOrder.verify(backoffPolicy1).nextBackoffNanos();
     assertThat(fakeClock.getPendingTasks(RPC_RETRY_TASK_FILTER)).hasSize(1);
@@ -2813,9 +2813,9 @@ public class XdsClientImplTest {
     responseObserver.onError(Status.UNAVAILABLE.asException());
     verify(configWatcher, times(3)).onError(statusCaptor.capture());
     assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.UNAVAILABLE);
-    verify(clusterWatcher, times(3)).onError(statusCaptor.capture());
+    verify(cdsResourceWatcher, times(3)).onError(statusCaptor.capture());
     assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.UNAVAILABLE);
-    verify(endpointWatcher, times(3)).onError(statusCaptor.capture());
+    verify(edsResourceWatcher, times(3)).onError(statusCaptor.capture());
     assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.UNAVAILABLE);
     inOrder.verify(backoffPolicy1).nextBackoffNanos();
     assertThat(fakeClock.getPendingTasks(RPC_RETRY_TASK_FILTER)).hasSize(1);
@@ -2850,8 +2850,8 @@ public class XdsClientImplTest {
     // Management server closes the RPC stream.
     responseObserver.onCompleted();
     verify(configWatcher, times(4)).onError(any(Status.class));
-    verify(clusterWatcher, times(4)).onError(any(Status.class));
-    verify(endpointWatcher, times(4)).onError(any(Status.class));
+    verify(cdsResourceWatcher, times(4)).onError(any(Status.class));
+    verify(edsResourceWatcher, times(4)).onError(any(Status.class));
 
     // Resets backoff and retry immediately
     inOrder.verify(backoffPolicyProvider).get();
@@ -2875,9 +2875,9 @@ public class XdsClientImplTest {
     responseObserver.onError(Status.UNAVAILABLE.asException());
     verify(configWatcher, times(5)).onError(statusCaptor.capture());
     assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.UNAVAILABLE);
-    verify(clusterWatcher, times(5)).onError(statusCaptor.capture());
+    verify(cdsResourceWatcher, times(5)).onError(statusCaptor.capture());
     assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.UNAVAILABLE);
-    verify(endpointWatcher, times(5)).onError(statusCaptor.capture());
+    verify(edsResourceWatcher, times(5)).onError(statusCaptor.capture());
     assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.UNAVAILABLE);
     inOrder.verify(backoffPolicy2).nextBackoffNanos();
     assertThat(fakeClock.getPendingTasks(RPC_RETRY_TASK_FILTER)).hasSize(1);
@@ -2944,7 +2944,7 @@ public class XdsClientImplTest {
     assertThat(fakeClock.getPendingTasks(RPC_RETRY_TASK_FILTER)).hasSize(1);
 
     // Start watching cluster information while RPC stream is still in retry backoff.
-    xdsClient.watchClusterData("cluster.googleapis.com", clusterWatcher);
+    xdsClient.watchCdsResource("cluster.googleapis.com", cdsResourceWatcher);
 
     // Retry after backoff.
     fakeClock.forwardNanos(9L);
@@ -2968,7 +2968,7 @@ public class XdsClientImplTest {
     assertThat(fakeClock.getPendingTasks(RPC_RETRY_TASK_FILTER)).hasSize(1);
 
     // Start watching endpoint information while RPC stream is still in retry backoff.
-    xdsClient.watchEndpointData("cluster.googleapis.com", endpointWatcher);
+    xdsClient.watchEdsResource("cluster.googleapis.com", edsResourceWatcher);
 
     // Retry after backoff.
     fakeClock.forwardNanos(99L);
@@ -2999,14 +2999,14 @@ public class XdsClientImplTest {
     // Client sent an CDS ACK request (Omitted).
 
     // No longer interested in endpoint information after RPC resumes.
-    xdsClient.cancelEndpointDataWatch("cluster.googleapis.com", endpointWatcher);
+    xdsClient.cancelEdsResourceWatch("cluster.googleapis.com", edsResourceWatcher);
     // Client updates EDS resource subscription immediately.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", ImmutableList.<String>of(),
             XdsClientImpl.ADS_TYPE_URL_EDS, "")));
 
     // Become interested in endpoints of another cluster.
-    xdsClient.watchEndpointData("cluster2.googleapis.com", endpointWatcher);
+    xdsClient.watchEdsResource("cluster2.googleapis.com", edsResourceWatcher);
     // Client updates EDS resource subscription immediately.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "", "cluster2.googleapis.com",
@@ -3038,8 +3038,8 @@ public class XdsClientImplTest {
     assertThat(fakeClock.getPendingTasks(RPC_RETRY_TASK_FILTER)).hasSize(1);
 
     // No longer interested in previous cluster and endpoints in that cluster.
-    xdsClient.cancelClusterDataWatch("cluster.googleapis.com", clusterWatcher);
-    xdsClient.cancelEndpointDataWatch("cluster2.googleapis.com", endpointWatcher);
+    xdsClient.cancelCdsResourceWatch("cluster.googleapis.com", cdsResourceWatcher);
+    xdsClient.cancelEdsResourceWatch("cluster2.googleapis.com", edsResourceWatcher);
 
     // Retry after backoff.
     fakeClock.forwardNanos(19L);
@@ -3162,7 +3162,7 @@ public class XdsClientImplTest {
     // Client/server resumed LDS/RDS request/response (Omitted).
 
     // Start watching cluster data.
-    xdsClient.watchClusterData("cluster-foo.googleapis.com", clusterWatcher);
+    xdsClient.watchCdsResource("cluster-foo.googleapis.com", cdsResourceWatcher);
     ScheduledTask cdsRespTimeoutTask =
         Iterables.getOnlyElement(
             fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER));
@@ -3190,7 +3190,7 @@ public class XdsClientImplTest {
         .isEqualTo(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC);
 
     // Start watching endpoint data.
-    xdsClient.watchEndpointData("cluster-foo.googleapis.com", endpointWatcher);
+    xdsClient.watchEdsResource("cluster-foo.googleapis.com", edsResourceWatcher);
     ScheduledTask edsTimeoutTask =
         Iterables.getOnlyElement(
             fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER));

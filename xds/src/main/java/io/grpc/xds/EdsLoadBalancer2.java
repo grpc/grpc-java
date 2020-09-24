@@ -45,8 +45,8 @@ import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig;
 import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedPolicySelection;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedTargetConfig;
-import io.grpc.xds.XdsClient.EndpointUpdate;
-import io.grpc.xds.XdsClient.EndpointWatcher;
+import io.grpc.xds.XdsClient.EdsResourceWatcher;
+import io.grpc.xds.XdsClient.EdsUpdate;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.ArrayList;
@@ -146,7 +146,7 @@ final class EdsLoadBalancer2 extends LoadBalancer {
       return new ChildLbState(helper);
     }
 
-    private final class ChildLbState extends LoadBalancer implements EndpointWatcher {
+    private final class ChildLbState extends LoadBalancer implements EdsResourceWatcher {
       @Nullable
       private final LoadStatsStore loadStatsStore;
       private final DropHandlingLbHelper lbHelper;
@@ -170,7 +170,7 @@ final class EdsLoadBalancer2 extends LoadBalancer {
         logger.log(
             XdsLogLevel.INFO,
             "Start endpoint watcher on {0} with xDS client {1}", resourceName, xdsClient);
-        xdsClient.watchEndpointData(resourceName, this);
+        xdsClient.watchEdsResource(resourceName, this);
       }
 
       @Override
@@ -221,7 +221,7 @@ final class EdsLoadBalancer2 extends LoadBalancer {
           xdsClient.cancelClientStatsReport();
           xdsClient.removeClientStats(cluster, edsServiceName);
         }
-        xdsClient.cancelEndpointDataWatch(resourceName, this);
+        xdsClient.cancelEdsResourceWatch(resourceName, this);
         logger.log(
             XdsLogLevel.INFO,
             "Cancelled endpoint watcher on {0} with xDS client {1}", resourceName, xdsClient);
@@ -236,7 +236,7 @@ final class EdsLoadBalancer2 extends LoadBalancer {
       }
 
       @Override
-      public void onEndpointChanged(EndpointUpdate update) {
+      public void onChanged(EdsUpdate update) {
         logger.log(XdsLogLevel.DEBUG,
             "Received endpoint update from xDS client {0}: {1}", xdsClient, update);
         if (logger.isLoggable(XdsLogLevel.INFO)) {

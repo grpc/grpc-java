@@ -306,17 +306,17 @@ public class CdsLoadBalancerTest {
   }
 
   private final class FakeXdsClient extends XdsClient {
-    private ClusterWatcher watcher;
+    private CdsResourceWatcher watcher;
 
     @Override
-    void watchClusterData(String clusterName, ClusterWatcher watcher) {
-      assertThat(clusterName).isEqualTo(CLUSTER);
+    void watchCdsResource(String resourceName, CdsResourceWatcher watcher) {
+      assertThat(resourceName).isEqualTo(CLUSTER);
       this.watcher = watcher;
     }
 
     @Override
-    void cancelClusterDataWatch(String clusterName, ClusterWatcher watcher) {
-      assertThat(clusterName).isEqualTo(CLUSTER);
+    void cancelCdsResourceWatch(String resourceName, CdsResourceWatcher watcher) {
+      assertThat(resourceName).isEqualTo(CLUSTER);
       assertThat(watcher).isSameInstanceAs(this.watcher);
       this.watcher = null;
     }
@@ -331,8 +331,8 @@ public class CdsLoadBalancerTest {
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
-          watcher.onClusterChanged(
-              ClusterUpdate.newBuilder()
+          watcher.onChanged(
+              CdsUpdate.newBuilder()
                   .setClusterName(CLUSTER)
                   .setEdsServiceName(edsServiceName)
                   .setLbPolicy("round_robin")  // only supported policy
@@ -348,8 +348,8 @@ public class CdsLoadBalancerTest {
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
-          watcher.onClusterChanged(
-              ClusterUpdate.newBuilder()
+          watcher.onChanged(
+              CdsUpdate.newBuilder()
                   .setClusterName(CLUSTER)
                   .setEdsServiceName(edsServiceName)
                   .setLbPolicy("round_robin")  // only supported policy

@@ -35,8 +35,8 @@ import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.xds.CdsLoadBalancerProvider.CdsConfig;
 import io.grpc.xds.EdsLoadBalancerProvider.EdsConfig;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
-import io.grpc.xds.XdsClient.ClusterUpdate;
-import io.grpc.xds.XdsClient.ClusterWatcher;
+import io.grpc.xds.XdsClient.CdsResourceWatcher;
+import io.grpc.xds.XdsClient.CdsUpdate;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import io.grpc.xds.internal.sds.SslContextProviderSupplier;
@@ -177,19 +177,19 @@ final class CdsLoadBalancer extends LoadBalancer {
     }
   }
 
-  private final class CdsLbState implements ClusterWatcher {
+  private final class CdsLbState implements CdsResourceWatcher {
     private final ChannelSecurityLbHelper lbHelper = new ChannelSecurityLbHelper();
     @Nullable
     LoadBalancer edsBalancer;
 
     private CdsLbState() {
-      xdsClient.watchClusterData(clusterName, this);
+      xdsClient.watchCdsResource(clusterName, this);
       logger.log(XdsLogLevel.INFO,
           "Started watcher for cluster {0} with xDS client {1}", clusterName, xdsClient);
     }
 
     @Override
-    public void onClusterChanged(ClusterUpdate newUpdate) {
+    public void onChanged(CdsUpdate newUpdate) {
       if (logger.isLoggable(XdsLogLevel.INFO)) {
         logger.log(
             XdsLogLevel.INFO,
@@ -270,7 +270,7 @@ final class CdsLoadBalancer extends LoadBalancer {
     }
 
     void shutdown() {
-      xdsClient.cancelClusterDataWatch(clusterName, this);
+      xdsClient.cancelCdsResourceWatch(clusterName, this);
       logger.log(XdsLogLevel.INFO,
           "Cancelled watcher for cluster {0} with xDS client {1}", clusterName, xdsClient);
       if (edsBalancer != null) {
