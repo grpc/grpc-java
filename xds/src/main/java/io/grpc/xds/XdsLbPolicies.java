@@ -23,8 +23,6 @@ final class XdsLbPolicies {
   static final String PRIORITY_POLICY_NAME = "priority_experimental";
   static final String WEIGHTED_TARGET_POLICY_NAME = "weighted_target_experimental";
   static final String LRS_POLICY_NAME = "lrs_experimental";
-  // TODO(chengyuanzhang): delete routing policy.
-  static final String XDS_ROUTING_POLICY_NAME = "xds_routing_experimental";
 
   private XdsLbPolicies() {}
 }
