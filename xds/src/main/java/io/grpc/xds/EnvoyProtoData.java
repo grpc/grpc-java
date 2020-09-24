@@ -59,6 +59,7 @@ import javax.annotation.Nullable;
  * gRPC. If the protobuf message contains invalid data, the conversion should fail and no object
  * should be instantiated.
  */
+// TODO(chengyuanzhang): put data types into smaller categories.
 final class EnvoyProtoData {
 
   // Prevent instantiation.
@@ -836,6 +837,52 @@ final class EnvoyProtoData {
           .add("category", category)
           .add("dropsPerMillion", dropsPerMillion)
           .toString();
+    }
+  }
+
+  /** See corresponding Envoy proto message {@link
+   * io.envoyproxy.envoy.config.route.v3.VirtualHost}. */
+  static final class VirtualHost {
+    // Canonical name of this virtual host.
+    private final String name;
+    // A list of domains (host/authority header) that will be matched to this virtual host.
+    private final List<String> domains;
+    // The list of routes that will be matched, in order, for incoming requests.
+    private final List<Route> routes;
+
+    private VirtualHost(String name, List<String> domains, List<Route> routes) {
+      this.name = name;
+      this.domains = domains;
+      this.routes = routes;
+    }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(this)
+          .add("name", name)
+          .add("domains", domains)
+          .add("routes", routes)
+          .toString();
+    }
+
+    static StructOrError<VirtualHost> fromEnvoyProtoVirtualHost(
+        io.envoyproxy.envoy.config.route.v3.VirtualHost proto) {
+      String name = proto.getName();
+      List<Route> routes = new ArrayList<>(proto.getRoutesCount());
+      for (io.envoyproxy.envoy.config.route.v3.Route routeProto : proto.getRoutesList()) {
+        StructOrError<Route> route = Route.fromEnvoyProtoRoute(routeProto);
+        if (route == null) {
+          continue;
+        }
+        if (route.getErrorDetail() != null) {
+          return StructOrError.fromError(
+              "Virtual host [" + name + "] contains invalid route : " + route.getErrorDetail());
+        }
+        routes.add(route.getStruct());
+      }
+      return StructOrError.fromStruct(
+          new VirtualHost(name, Collections.unmodifiableList(proto.getDomainsList()),
+              Collections.unmodifiableList(routes)));
     }
   }
 

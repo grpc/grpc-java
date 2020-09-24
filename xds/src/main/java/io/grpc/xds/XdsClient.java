@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
+import com.google.common.base.MoreObjects.ToStringHelper;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -30,6 +31,7 @@ import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyProtoData.Route;
+import io.grpc.xds.EnvoyProtoData.VirtualHost;
 import io.grpc.xds.EnvoyServerProtoData.Listener;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.LoadStatsManager.LoadStatsStore;
@@ -56,6 +58,7 @@ abstract class XdsClient {
    * traffic mirroring, retry or hedging, default timeouts and load balancing policy that will
    * be used to generate a service config.
    */
+  // TODO(chengyuanzhang): delete me.
   static final class ConfigUpdate {
     private final List<Route> routes;
 
@@ -97,6 +100,109 @@ abstract class XdsClient {
         checkState(!routes.isEmpty(), "routes is empty");
         return new ConfigUpdate(Collections.unmodifiableList(routes));
       }
+    }
+  }
+
+  static final class LdsUpdate {
+    // Total number of nanoseconds to keep alive an HTTP request/response stream.
+    private final long httpMaxStreamDurationNano;
+    // The name of the route configuration to be used for RDS resource discovery.
+    @Nullable
+    private final String rdsName;
+    // The list virtual hosts that make up the route table.
+    @Nullable
+    private final List<VirtualHost> virtualHosts;
+
+    private LdsUpdate(long httpMaxStreamDurationNano, @Nullable String rdsName,
+        @Nullable List<VirtualHost> virtualHosts) {
+      this.httpMaxStreamDurationNano = httpMaxStreamDurationNano;
+      this.rdsName = rdsName;
+      this.virtualHosts = virtualHosts;
+    }
+
+    long getHttpMaxStreamDurationNano() {
+      return httpMaxStreamDurationNano;
+    }
+
+    @Nullable
+    String getRdsName() {
+      return rdsName;
+    }
+
+    @Nullable
+    List<VirtualHost> getVirtualHosts() {
+      return virtualHosts;
+    }
+
+    @Override
+    public String toString() {
+      ToStringHelper toStringHelper = MoreObjects.toStringHelper(this);
+      toStringHelper.add("httpMaxStreamDurationNano", httpMaxStreamDurationNano);
+      if (rdsName != null) {
+        toStringHelper.add("rdsName", rdsName);
+      } else {
+        toStringHelper.add("virtualHosts", virtualHosts);
+      }
+      return toStringHelper.toString();
+    }
+
+    static Builder newBuilder() {
+      return new Builder();
+    }
+
+    private static class Builder {
+      private long httpMaxStreamDurationNano;
+      @Nullable
+      private String rdsName;
+      @Nullable
+      private List<VirtualHost> virtualHosts;
+
+      private Builder() {
+      }
+
+      Builder setHttpMaxStreamDurationNano(long httpMaxStreamDurationNano) {
+        this.httpMaxStreamDurationNano = httpMaxStreamDurationNano;
+        return this;
+      }
+
+      Builder setRdsName(String rdsName) {
+        this.rdsName = rdsName;
+        return this;
+      }
+
+      Builder setVirtualHosts(List<VirtualHost> virtualHosts) {
+        this.virtualHosts = virtualHosts;
+        return this;
+      }
+
+      LdsUpdate build() {
+        checkState((rdsName == null) != (virtualHosts == null), "one of rdsName and virtualHosts");
+        return new LdsUpdate(httpMaxStreamDurationNano, rdsName, virtualHosts);
+      }
+    }
+  }
+
+  static final class RdsUpdate {
+    // The list virtual hosts that make up the route table.
+    private final List<VirtualHost> virtualHosts;
+
+    private RdsUpdate(List<VirtualHost> virtualHosts) {
+      this.virtualHosts = virtualHosts;
+    }
+
+    static RdsUpdate fromVirtualHosts(List<VirtualHost> virtualHosts) {
+      return new RdsUpdate(virtualHosts);
+    }
+
+    List<VirtualHost> getVirtualHosts() {
+      return virtualHosts;
+    }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(this)
+          .add("virtualHosts", virtualHosts)
+          .toString();
     }
   }
 
@@ -422,6 +528,14 @@ abstract class XdsClient {
     void onResourceDoesNotExist(String resourceName);
   }
 
+  interface LdsResourceWatcher extends ResourceWatcher {
+    void onChanged(LdsUpdate update);
+  }
+
+  interface RdsResourceWatcher extends ResourceWatcher {
+    void onChanged(RdsUpdate update);
+  }
+
   /**
    * Config watcher interface. To be implemented by the xDS resolver.
    */
@@ -476,7 +590,32 @@ abstract class XdsClient {
    *     targets for.
    * @param watcher the {@link ConfigWatcher} to receive {@link ConfigUpdate}.
    */
+  // TODO(chengyuanzhang): delete me.
   void watchConfigData(String targetAuthority, ConfigWatcher watcher) {
+  }
+
+  /**
+   * Registers a data watcher for the given LDS resource.
+   */
+  void watchLdsResource(String resourceName, LdsResourceWatcher watcher) {
+  }
+
+  /**
+   * Unregisters the given LDS resource watcher.
+   */
+  void cancelLdsResourceWatch(String resourceName, LdsResourceWatcher watcher) {
+  }
+
+  /**
+   * Registers a data watcher for the given RDS resource.
+   */
+  void watchRdsResource(String resourceName, RdsResourceWatcher watcher) {
+  }
+
+  /**
+   * Unregisters the given RDS resource watcher.
+   */
+  void cancelRdsResourceWatch(String resourceName, RdsResourceWatcher watcher) {
   }
 
   /**
