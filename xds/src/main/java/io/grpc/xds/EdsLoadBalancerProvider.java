@@ -19,7 +19,6 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.MoreObjects;
-import com.google.common.base.Objects;
 import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
@@ -94,30 +93,6 @@ public class EdsLoadBalancerProvider extends LoadBalancerProvider {
           .add("localityPickingPolicy", localityPickingPolicy)
           .add("endpointPickingPolicy", endpointPickingPolicy)
           .toString();
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-      if (!(obj instanceof EdsConfig)) {
-        return false;
-      }
-      EdsConfig that = (EdsConfig) obj;
-      return Objects.equal(this.clusterName, that.clusterName)
-          && Objects.equal(this.edsServiceName, that.edsServiceName)
-          && Objects.equal(this.lrsServerName, that.lrsServerName)
-          && Objects.equal(this.localityPickingPolicy, that.localityPickingPolicy)
-          && Objects.equal(this.endpointPickingPolicy, that.endpointPickingPolicy);
-    }
-
-    @Override
-    public int hashCode() {
-      return
-          Objects.hashCode(
-              clusterName,
-              edsServiceName,
-              lrsServerName,
-              localityPickingPolicy,
-              endpointPickingPolicy);
     }
   }
 }

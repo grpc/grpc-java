@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.common.base.MoreObjects;
 import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
@@ -79,6 +80,17 @@ public final class LrsLoadBalancerProvider extends LoadBalancerProvider {
       this.lrsServerName = checkNotNull(lrsServerName, "lrsServerName");
       this.locality = checkNotNull(locality, "locality");
       this.childPolicy = checkNotNull(childPolicy, "childPolicy");
+    }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(this)
+          .add("clusterName", clusterName)
+          .add("edsServiceName", edsServiceName)
+          .add("lrsServerName", lrsServerName)
+          .add("locality", locality)
+          .add("childPolicy", childPolicy)
+          .toString();
     }
   }
 }
