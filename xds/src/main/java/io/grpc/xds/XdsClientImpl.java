@@ -127,29 +127,29 @@ final class XdsClientImpl extends XdsClient {
   private Node node;
 
   // Cached data for CDS responses, keyed by cluster names.
-  // Optimization: cache ClusterUpdate, which contains only information needed by gRPC, instead
+  // Optimization: cache CdsUpdate, which contains only information needed by gRPC, instead
   // of whole Cluster messages to reduce memory usage.
-  private final Map<String, ClusterUpdate> clusterNamesToClusterUpdates = new HashMap<>();
+  private final Map<String, CdsUpdate> clusterNamesToCdsUpdates = new HashMap<>();
 
   // Cached CDS resources that are known to be absent.
   private final Set<String> absentCdsResources = new HashSet<>();
 
   // Cached data for EDS responses, keyed by cluster names.
   // CDS responses indicate absence of clusters and EDS responses indicate presence of clusters.
-  // Optimization: cache EndpointUpdate, which contains only information needed by gRPC, instead
+  // Optimization: cache EdsUpdate, which contains only information needed by gRPC, instead
   // of whole ClusterLoadAssignment messages to reduce memory usage.
-  private final Map<String, EndpointUpdate> clusterNamesToEndpointUpdates = new HashMap<>();
+  private final Map<String, EdsUpdate> clusterNamesToEdsUpdates = new HashMap<>();
 
   // Cached EDS resources that are known to be absent.
   private final Set<String> absentEdsResources = new HashSet<>();
 
   // Cluster watchers waiting for cluster information updates. Multiple cluster watchers
   // can watch on information for the same cluster.
-  private final Map<String, Set<ClusterWatcher>> clusterWatchers = new HashMap<>();
+  private final Map<String, Set<CdsResourceWatcher>> cdsWatchers = new HashMap<>();
 
   // Endpoint watchers waiting for endpoint updates for each cluster. Multiple endpoint
   // watchers can watch endpoints in the same cluster.
-  private final Map<String, Set<EndpointWatcher>> endpointWatchers = new HashMap<>();
+  private final Map<String, Set<EdsResourceWatcher>> edsWatchers = new HashMap<>();
 
   // Resource fetch timers are used to conclude absence of resources. Each timer is activated when
   // subscription for the resource starts and disarmed on first update for the resource.
@@ -281,27 +281,27 @@ final class XdsClientImpl extends XdsClient {
   }
 
   @Override
-  void watchClusterData(String clusterName, ClusterWatcher watcher) {
-    checkNotNull(clusterName, "clusterName");
+  void watchCdsResource(String resourceName, CdsResourceWatcher watcher) {
+    checkNotNull(resourceName, "resourceName");
     checkNotNull(watcher, "watcher");
     boolean needRequest = false;
-    if (!clusterWatchers.containsKey(clusterName)) {
-      logger.log(XdsLogLevel.INFO, "Start watching cluster {0}", clusterName);
+    if (!cdsWatchers.containsKey(resourceName)) {
+      logger.log(XdsLogLevel.INFO, "Start watching cluster {0}", resourceName);
       needRequest = true;
-      clusterWatchers.put(clusterName, new HashSet<ClusterWatcher>());
+      cdsWatchers.put(resourceName, new HashSet<CdsResourceWatcher>());
     }
-    Set<ClusterWatcher> watchers = clusterWatchers.get(clusterName);
-    checkState(!watchers.contains(watcher), "watcher for %s already registered", clusterName);
+    Set<CdsResourceWatcher> watchers = cdsWatchers.get(resourceName);
+    checkState(!watchers.contains(watcher), "watcher for %s already registered", resourceName);
     watchers.add(watcher);
     // If local cache contains cluster information to be watched, notify the watcher immediately.
-    if (absentCdsResources.contains(clusterName)) {
-      logger.log(XdsLogLevel.DEBUG, "Cluster resource {0} is known to be absent", clusterName);
-      watcher.onResourceDoesNotExist(clusterName);
+    if (absentCdsResources.contains(resourceName)) {
+      logger.log(XdsLogLevel.DEBUG, "Cluster resource {0} is known to be absent", resourceName);
+      watcher.onResourceDoesNotExist(resourceName);
       return;
     }
-    if (clusterNamesToClusterUpdates.containsKey(clusterName)) {
-      logger.log(XdsLogLevel.DEBUG, "Retrieve cluster info {0} from local cache", clusterName);
-      watcher.onClusterChanged(clusterNamesToClusterUpdates.get(clusterName));
+    if (clusterNamesToCdsUpdates.containsKey(resourceName)) {
+      logger.log(XdsLogLevel.DEBUG, "Retrieve cluster info {0} from local cache", resourceName);
+      watcher.onChanged(clusterNamesToCdsUpdates.get(resourceName));
       return;
     }
 
@@ -313,34 +313,34 @@ final class XdsClientImpl extends XdsClient {
       if (adsStream == null) {
         startRpcStream();
       }
-      adsStream.sendXdsRequest(ResourceType.CDS, clusterWatchers.keySet());
+      adsStream.sendXdsRequest(ResourceType.CDS, cdsWatchers.keySet());
       ScheduledHandle timeoutHandle =
           syncContext
               .schedule(
-                  new CdsResourceFetchTimeoutTask(clusterName),
+                  new CdsResourceFetchTimeoutTask(resourceName),
                   INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS, timeService);
-      cdsRespTimers.put(clusterName, timeoutHandle);
+      cdsRespTimers.put(resourceName, timeoutHandle);
     }
   }
 
   @Override
-  void cancelClusterDataWatch(String clusterName, ClusterWatcher watcher) {
+  void cancelCdsResourceWatch(String resourceName, CdsResourceWatcher watcher) {
     checkNotNull(watcher, "watcher");
-    Set<ClusterWatcher> watchers = clusterWatchers.get(clusterName);
+    Set<CdsResourceWatcher> watchers = cdsWatchers.get(resourceName);
     checkState(
         watchers != null && watchers.contains(watcher),
-        "watcher for %s was not registered", clusterName);
+        "watcher for %s was not registered", resourceName);
     watchers.remove(watcher);
     if (watchers.isEmpty()) {
-      logger.log(XdsLogLevel.INFO, "Stop watching cluster {0}", clusterName);
-      clusterWatchers.remove(clusterName);
+      logger.log(XdsLogLevel.INFO, "Stop watching cluster {0}", resourceName);
+      cdsWatchers.remove(resourceName);
       // Remove the corresponding CDS entry.
-      absentCdsResources.remove(clusterName);
-      clusterNamesToClusterUpdates.remove(clusterName);
+      absentCdsResources.remove(resourceName);
+      clusterNamesToCdsUpdates.remove(resourceName);
       // Cancel and delete response timer waiting for the corresponding resource.
-      if (cdsRespTimers.containsKey(clusterName)) {
-        cdsRespTimers.get(clusterName).cancel();
-        cdsRespTimers.remove(clusterName);
+      if (cdsRespTimers.containsKey(resourceName)) {
+        cdsRespTimers.get(resourceName).cancel();
+        cdsRespTimers.remove(resourceName);
       }
       // No longer interested in this cluster, send an updated CDS request to unsubscribe
       // this resource.
@@ -350,36 +350,36 @@ final class XdsClientImpl extends XdsClient {
       }
       checkState(adsStream != null,
           "Severe bug: ADS stream was not created while an endpoint watcher was registered");
-      adsStream.sendXdsRequest(ResourceType.CDS, clusterWatchers.keySet());
+      adsStream.sendXdsRequest(ResourceType.CDS, cdsWatchers.keySet());
     }
   }
 
   @Override
-  void watchEndpointData(String clusterName, EndpointWatcher watcher) {
+  void watchEdsResource(String resourceName, EdsResourceWatcher watcher) {
     checkNotNull(watcher, "watcher");
     boolean needRequest = false;
-    if (!endpointWatchers.containsKey(clusterName)) {
-      logger.log(XdsLogLevel.INFO, "Start watching endpoints in cluster {0}", clusterName);
+    if (!edsWatchers.containsKey(resourceName)) {
+      logger.log(XdsLogLevel.INFO, "Start watching endpoints in cluster {0}", resourceName);
       needRequest = true;
-      endpointWatchers.put(clusterName, new HashSet<EndpointWatcher>());
+      edsWatchers.put(resourceName, new HashSet<EdsResourceWatcher>());
     }
-    Set<EndpointWatcher> watchers = endpointWatchers.get(clusterName);
-    checkState(!watchers.contains(watcher), "watcher for %s already registered", clusterName);
+    Set<EdsResourceWatcher> watchers = edsWatchers.get(resourceName);
+    checkState(!watchers.contains(watcher), "watcher for %s already registered", resourceName);
     watchers.add(watcher);
     // If local cache contains endpoint information for the cluster to be watched, notify
     // the watcher immediately.
-    if (absentEdsResources.contains(clusterName)) {
+    if (absentEdsResources.contains(resourceName)) {
       logger.log(
           XdsLogLevel.DEBUG,
-          "Endpoint resource for cluster {0} is known to be absent.", clusterName);
-      watcher.onResourceDoesNotExist(clusterName);
+          "Endpoint resource for cluster {0} is known to be absent.", resourceName);
+      watcher.onResourceDoesNotExist(resourceName);
       return;
     }
-    if (clusterNamesToEndpointUpdates.containsKey(clusterName)) {
+    if (clusterNamesToEdsUpdates.containsKey(resourceName)) {
       logger.log(
           XdsLogLevel.DEBUG,
-          "Retrieve endpoints info for cluster {0} from local cache.", clusterName);
-      watcher.onEndpointChanged(clusterNamesToEndpointUpdates.get(clusterName));
+          "Retrieve endpoints info for cluster {0} from local cache.", resourceName);
+      watcher.onChanged(clusterNamesToEdsUpdates.get(resourceName));
       return;
     }
 
@@ -391,34 +391,34 @@ final class XdsClientImpl extends XdsClient {
       if (adsStream == null) {
         startRpcStream();
       }
-      adsStream.sendXdsRequest(ResourceType.EDS, endpointWatchers.keySet());
+      adsStream.sendXdsRequest(ResourceType.EDS, edsWatchers.keySet());
       ScheduledHandle timeoutHandle =
           syncContext
               .schedule(
-                  new EdsResourceFetchTimeoutTask(clusterName),
+                  new EdsResourceFetchTimeoutTask(resourceName),
                   INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS, timeService);
-      edsRespTimers.put(clusterName, timeoutHandle);
+      edsRespTimers.put(resourceName, timeoutHandle);
     }
   }
 
   @Override
-  void cancelEndpointDataWatch(String clusterName, EndpointWatcher watcher) {
+  void cancelEdsResourceWatch(String resourceName, EdsResourceWatcher watcher) {
     checkNotNull(watcher, "watcher");
-    Set<EndpointWatcher> watchers = endpointWatchers.get(clusterName);
+    Set<EdsResourceWatcher> watchers = edsWatchers.get(resourceName);
     checkState(
         watchers != null && watchers.contains(watcher),
-        "watcher for %s was not registered", clusterName);
+        "watcher for %s was not registered", resourceName);
     watchers.remove(watcher);
     if (watchers.isEmpty()) {
-      logger.log(XdsLogLevel.INFO, "Stop watching endpoints in cluster {0}", clusterName);
-      endpointWatchers.remove(clusterName);
+      logger.log(XdsLogLevel.INFO, "Stop watching endpoints in cluster {0}", resourceName);
+      edsWatchers.remove(resourceName);
       // Remove the corresponding EDS cache entry.
-      absentEdsResources.remove(clusterName);
-      clusterNamesToEndpointUpdates.remove(clusterName);
+      absentEdsResources.remove(resourceName);
+      clusterNamesToEdsUpdates.remove(resourceName);
       // Cancel and delete response timer waiting for the corresponding resource.
-      if (edsRespTimers.containsKey(clusterName)) {
-        edsRespTimers.get(clusterName).cancel();
-        edsRespTimers.remove(clusterName);
+      if (edsRespTimers.containsKey(resourceName)) {
+        edsRespTimers.get(resourceName).cancel();
+        edsRespTimers.remove(resourceName);
       }
       // No longer interested in this cluster, send an updated EDS request to unsubscribe
       // this resource.
@@ -426,7 +426,7 @@ final class XdsClientImpl extends XdsClient {
         // Currently in retry backoff.
         return;
       }
-      adsStream.sendXdsRequest(ResourceType.EDS, endpointWatchers.keySet());
+      adsStream.sendXdsRequest(ResourceType.EDS, edsWatchers.keySet());
     }
   }
 
@@ -949,7 +949,7 @@ final class XdsClientImpl extends XdsClient {
     } catch (InvalidProtocolBufferException e) {
       logger.log(XdsLogLevel.WARNING, "Failed to unpack Clusters in CDS response {0}", e);
       adsStream.sendNackRequest(
-          ResourceType.CDS, clusterWatchers.keySet(),
+          ResourceType.CDS, cdsWatchers.keySet(),
           cdsResponse.getVersionInfo(), "Malformed CDS response: " + e);
       return;
     }
@@ -957,7 +957,7 @@ final class XdsClientImpl extends XdsClient {
 
     String errorMessage = null;
     // Cluster information update for requested clusters received in this CDS response.
-    Map<String, ClusterUpdate> clusterUpdates = new HashMap<>();
+    Map<String, CdsUpdate> cdsUpdates = new HashMap<>();
     // CDS responses represents the state of the world, EDS services not referenced by
     // Clusters are those no longer exist.
     Set<String> edsServices = new HashSet<>();
@@ -967,10 +967,10 @@ final class XdsClientImpl extends XdsClient {
       // Management server is required to always send newly requested resources, even if they
       // may have been sent previously (proactively). Thus, client does not need to cache
       // unrequested resources.
-      if (!clusterWatchers.containsKey(clusterName)) {
+      if (!cdsWatchers.containsKey(clusterName)) {
         continue;
       }
-      ClusterUpdate.Builder updateBuilder = ClusterUpdate.newBuilder();
+      CdsUpdate.Builder updateBuilder = CdsUpdate.newBuilder();
       updateBuilder.setClusterName(clusterName);
       // The type field must be set to EDS.
       if (!cluster.getType().equals(DiscoveryType.EDS)) {
@@ -1020,48 +1020,48 @@ final class XdsClientImpl extends XdsClient {
         errorMessage = "Cluster " + clusterName + " : " + e.getMessage();
         break;
       }
-      clusterUpdates.put(clusterName, updateBuilder.build());
+      cdsUpdates.put(clusterName, updateBuilder.build());
     }
     if (errorMessage != null) {
       adsStream.sendNackRequest(
           ResourceType.CDS,
-          clusterWatchers.keySet(),
+          cdsWatchers.keySet(),
           cdsResponse.getVersionInfo(),
           errorMessage);
       return;
     }
-    adsStream.sendAckRequest(ResourceType.CDS, clusterWatchers.keySet(),
+    adsStream.sendAckRequest(ResourceType.CDS, cdsWatchers.keySet(),
         cdsResponse.getVersionInfo());
 
     // Update local CDS cache with data in this response.
-    absentCdsResources.removeAll(clusterUpdates.keySet());
-    for (Map.Entry<String, ClusterUpdate> entry : clusterNamesToClusterUpdates.entrySet()) {
-      if (!clusterUpdates.containsKey(entry.getKey())) {
+    absentCdsResources.removeAll(cdsUpdates.keySet());
+    for (Map.Entry<String, CdsUpdate> entry : clusterNamesToCdsUpdates.entrySet()) {
+      if (!cdsUpdates.containsKey(entry.getKey())) {
         // Some previously existing resource no longer exists.
         absentCdsResources.add(entry.getKey());
-      } else if (clusterUpdates.get(entry.getKey()).equals(entry.getValue())) {
-        clusterUpdates.remove(entry.getKey());
+      } else if (cdsUpdates.get(entry.getKey()).equals(entry.getValue())) {
+        cdsUpdates.remove(entry.getKey());
       }
     }
-    clusterNamesToClusterUpdates.keySet().removeAll(absentCdsResources);
-    clusterNamesToClusterUpdates.putAll(clusterUpdates);
+    clusterNamesToCdsUpdates.keySet().removeAll(absentCdsResources);
+    clusterNamesToCdsUpdates.putAll(cdsUpdates);
 
     // Remove EDS cache entries for ClusterLoadAssignments not referenced by this CDS response.
-    for (String clusterName : clusterNamesToEndpointUpdates.keySet()) {
+    for (String clusterName : clusterNamesToEdsUpdates.keySet()) {
       if (!edsServices.contains(clusterName)) {
         absentEdsResources.add(clusterName);
         // Notify EDS resource removal to watchers.
-        if (endpointWatchers.containsKey(clusterName)) {
-          Set<EndpointWatcher> watchers = endpointWatchers.get(clusterName);
-          for (EndpointWatcher watcher : watchers) {
+        if (edsWatchers.containsKey(clusterName)) {
+          Set<EdsResourceWatcher> watchers = edsWatchers.get(clusterName);
+          for (EdsResourceWatcher watcher : watchers) {
             watcher.onResourceDoesNotExist(clusterName);
           }
         }
       }
     }
-    clusterNamesToEndpointUpdates.keySet().retainAll(edsServices);
+    clusterNamesToEdsUpdates.keySet().retainAll(edsServices);
 
-    for (String clusterName : clusterUpdates.keySet()) {
+    for (String clusterName : cdsUpdates.keySet()) {
       if (cdsRespTimers.containsKey(clusterName)) {
         cdsRespTimers.get(clusterName).cancel();
         cdsRespTimers.remove(clusterName);
@@ -1069,17 +1069,17 @@ final class XdsClientImpl extends XdsClient {
     }
 
     // Notify watchers if clusters interested in present in this CDS response.
-    for (Map.Entry<String, Set<ClusterWatcher>> entry : clusterWatchers.entrySet()) {
+    for (Map.Entry<String, Set<CdsResourceWatcher>> entry : cdsWatchers.entrySet()) {
       String clusterName = entry.getKey();
-      if (clusterUpdates.containsKey(entry.getKey())) {
-        ClusterUpdate clusterUpdate = clusterUpdates.get(clusterName);
-        for (ClusterWatcher watcher : entry.getValue()) {
-          watcher.onClusterChanged(clusterUpdate);
+      if (cdsUpdates.containsKey(entry.getKey())) {
+        CdsUpdate cdsUpdate = cdsUpdates.get(clusterName);
+        for (CdsResourceWatcher watcher : entry.getValue()) {
+          watcher.onChanged(cdsUpdate);
         }
-      } else if (!clusterNamesToClusterUpdates.containsKey(entry.getKey())
+      } else if (!clusterNamesToCdsUpdates.containsKey(entry.getKey())
           && !cdsRespTimers.containsKey(clusterName)) {
         // Update for previously present resource being removed.
-        for (ClusterWatcher watcher : entry.getValue()) {
+        for (CdsResourceWatcher watcher : entry.getValue()) {
           watcher.onResourceDoesNotExist(entry.getKey());
         }
       }
@@ -1124,7 +1124,7 @@ final class XdsClientImpl extends XdsClient {
       logger.log(
           XdsLogLevel.WARNING, "Failed to unpack ClusterLoadAssignments in EDS response {0}", e);
       adsStream.sendNackRequest(
-          ResourceType.EDS, endpointWatchers.keySet(),
+          ResourceType.EDS, edsWatchers.keySet(),
           edsResponse.getVersionInfo(), "Malformed EDS response: " + e);
       return;
     }
@@ -1132,7 +1132,7 @@ final class XdsClientImpl extends XdsClient {
 
     String errorMessage = null;
     // Endpoint information updates for requested clusters received in this EDS response.
-    Map<String, EndpointUpdate> endpointUpdates = new HashMap<>();
+    Map<String, EdsUpdate> edsUpdates = new HashMap<>();
     // Walk through each ClusterLoadAssignment message. If any of them for requested clusters
     // contain invalid information for gRPC's load balancing usage, the whole response is rejected.
     for (ClusterLoadAssignment assignment : clusterLoadAssignments) {
@@ -1141,10 +1141,10 @@ final class XdsClientImpl extends XdsClient {
       // Management server is required to always send newly requested resources, even if they
       // may have been sent previously (proactively). Thus, client does not need to cache
       // unrequested resources.
-      if (!endpointWatchers.containsKey(clusterName)) {
+      if (!edsWatchers.containsKey(clusterName)) {
         continue;
       }
-      EndpointUpdate.Builder updateBuilder = EndpointUpdate.newBuilder();
+      EdsUpdate.Builder updateBuilder = EdsUpdate.newBuilder();
       updateBuilder.setClusterName(clusterName);
       Set<Integer> priorities = new HashSet<>();
       int maxPriority = -1;
@@ -1192,37 +1192,37 @@ final class XdsClientImpl extends XdsClient {
           : assignment.getPolicy().getDropOverloadsList()) {
         updateBuilder.addDropPolicy(DropOverload.fromEnvoyProtoDropOverload(dropOverload));
       }
-      EndpointUpdate update = updateBuilder.build();
-      endpointUpdates.put(clusterName, update);
+      EdsUpdate update = updateBuilder.build();
+      edsUpdates.put(clusterName, update);
     }
     if (errorMessage != null) {
       adsStream.sendNackRequest(
           ResourceType.EDS,
-          endpointWatchers.keySet(),
+          edsWatchers.keySet(),
           edsResponse.getVersionInfo(),
           errorMessage);
       return;
     }
-    adsStream.sendAckRequest(ResourceType.EDS, endpointWatchers.keySet(),
+    adsStream.sendAckRequest(ResourceType.EDS, edsWatchers.keySet(),
         edsResponse.getVersionInfo());
 
     // Update local EDS cache by inserting updated endpoint information.
-    clusterNamesToEndpointUpdates.putAll(endpointUpdates);
-    absentEdsResources.removeAll(endpointUpdates.keySet());
+    clusterNamesToEdsUpdates.putAll(edsUpdates);
+    absentEdsResources.removeAll(edsUpdates.keySet());
 
     // Notify watchers waiting for updates of endpoint information received in this EDS response.
     // Based on xDS protocol, the management server should not send endpoint data again if
     // nothing has changed.
-    for (Map.Entry<String, EndpointUpdate> entry : endpointUpdates.entrySet()) {
+    for (Map.Entry<String, EdsUpdate> entry : edsUpdates.entrySet()) {
       String clusterName = entry.getKey();
       // Cancel and delete response timeout timer.
       if (edsRespTimers.containsKey(clusterName)) {
         edsRespTimers.get(clusterName).cancel();
         edsRespTimers.remove(clusterName);
       }
-      if (endpointWatchers.containsKey(clusterName)) {
-        for (EndpointWatcher watcher : endpointWatchers.get(clusterName)) {
-          watcher.onEndpointChanged(entry.getValue());
+      if (edsWatchers.containsKey(clusterName)) {
+        for (EdsResourceWatcher watcher : edsWatchers.get(clusterName)) {
+          watcher.onChanged(entry.getValue());
         }
       }
     }
@@ -1249,9 +1249,9 @@ final class XdsClientImpl extends XdsClient {
                     new ListenerResourceFetchTimeoutTask(":" + listenerPort),
                     INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS, timeService);
       }
-      if (!clusterWatchers.isEmpty()) {
-        adsStream.sendXdsRequest(ResourceType.CDS, clusterWatchers.keySet());
-        for (String clusterName : clusterWatchers.keySet()) {
+      if (!cdsWatchers.isEmpty()) {
+        adsStream.sendXdsRequest(ResourceType.CDS, cdsWatchers.keySet());
+        for (String clusterName : cdsWatchers.keySet()) {
           ScheduledHandle timeoutHandle =
               syncContext
                   .schedule(
@@ -1260,9 +1260,9 @@ final class XdsClientImpl extends XdsClient {
           cdsRespTimers.put(clusterName, timeoutHandle);
         }
       }
-      if (!endpointWatchers.isEmpty()) {
-        adsStream.sendXdsRequest(ResourceType.EDS, endpointWatchers.keySet());
-        for (String clusterName : endpointWatchers.keySet()) {
+      if (!edsWatchers.isEmpty()) {
+        adsStream.sendXdsRequest(ResourceType.EDS, edsWatchers.keySet());
+        for (String clusterName : edsWatchers.keySet()) {
           ScheduledHandle timeoutHandle =
               syncContext
                   .schedule(
@@ -1521,13 +1521,13 @@ final class XdsClientImpl extends XdsClient {
       if (listenerWatcher != null) {
         listenerWatcher.onError(error);
       }
-      for (Set<ClusterWatcher> watchers : clusterWatchers.values()) {
-        for (ClusterWatcher watcher : watchers) {
+      for (Set<CdsResourceWatcher> watchers : cdsWatchers.values()) {
+        for (CdsResourceWatcher watcher : watchers) {
           watcher.onError(error);
         }
       }
-      for (Set<EndpointWatcher> watchers : endpointWatchers.values()) {
-        for (EndpointWatcher watcher : watchers) {
+      for (Set<EdsResourceWatcher> watchers : edsWatchers.values()) {
+        for (EdsResourceWatcher watcher : watchers) {
           watcher.onError(error);
         }
       }
@@ -1910,7 +1910,7 @@ final class XdsClientImpl extends XdsClient {
       super.run();
       cdsRespTimers.remove(resourceName);
       absentCdsResources.add(resourceName);
-      for (ClusterWatcher wat : clusterWatchers.get(resourceName)) {
+      for (CdsResourceWatcher wat : cdsWatchers.get(resourceName)) {
         wat.onResourceDoesNotExist(resourceName);
       }
     }
@@ -1928,7 +1928,7 @@ final class XdsClientImpl extends XdsClient {
       super.run();
       edsRespTimers.remove(resourceName);
       absentEdsResources.add(resourceName);
-      for (EndpointWatcher wat : endpointWatchers.get(resourceName)) {
+      for (EdsResourceWatcher wat : edsWatchers.get(resourceName)) {
         wat.onResourceDoesNotExist(resourceName);
       }
     }
