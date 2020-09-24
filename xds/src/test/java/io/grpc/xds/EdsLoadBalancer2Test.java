@@ -407,6 +407,27 @@ public class EdsLoadBalancer2Test {
   }
 
   @Test
+  public void handleEndpointResource_shutDownExistingChildLbPoliciesIfNoUsableEndpoints() {
+    deliverSimpleClusterLoadAssignment(EDS_SERVICE_NAME);
+    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(downstreamBalancers);
+    assertThat(childBalancer.shutdown).isFalse();
+
+    EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr-1");
+    LocalityLbEndpoints localityLbEndpoints1 =
+        buildLocalityLbEndpoints(1, 10, Collections.singletonMap(endpoint1, false));
+    xdsClient.deliverClusterLoadAssignment(
+        EDS_SERVICE_NAME, Collections.singletonMap(locality1, localityLbEndpoints1));
+
+    assertThat(childBalancer.shutdown).isTrue();
+    assertThat(currentState).isEqualTo(ConnectivityState.TRANSIENT_FAILURE);
+    PickResult result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
+    assertThat(result.getStatus().isOk()).isFalse();
+    assertThat(result.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat(result.getStatus().getDescription())
+        .isEqualTo("No usable priority/locality/endpoint");
+  }
+
+  @Test
   public void handleDrops() {
     FakeLoadBalancerProvider fakeRoundRobinProvider = new FakeLoadBalancerProvider("round_robin");
     prepareRealDownstreamLbPolicies(fakeRoundRobinProvider);
