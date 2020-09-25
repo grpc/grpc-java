@@ -204,7 +204,6 @@ final class CachingRlsLbClient {
    */
   @CheckReturnValue
   final CachedRouteLookupResponse get(final RouteLookupRequest request) {
-    synchronizationContext.throwIfNotInThisSynchronizationContext();
     synchronized (lock) {
       final CacheEntry cacheEntry;
       cacheEntry = linkedHashLruCache.read(request);
@@ -455,7 +454,7 @@ final class CachingRlsLbClient {
     private final RouteLookupResponse response;
     private final long expireTime;
     private final long staleTime;
-    private ChildPolicyWrapper childPolicyWrapper;
+    private final ChildPolicyWrapper childPolicyWrapper;
 
     DataCacheEntry(RouteLookupRequest request, final RouteLookupResponse response) {
       super(request);
@@ -469,19 +468,10 @@ final class CachingRlsLbClient {
       staleTime = now + staleAgeNanos;
 
       if (childPolicyWrapper.getPicker() != null) {
-        // using cached childPolicyWrapper
-        updateLbState();
+        childPolicyWrapper.refreshState();
       } else {
         createChildLbPolicy();
       }
-    }
-
-    private void updateLbState() {
-      childPolicyWrapper
-          .getHelper()
-          .updateBalancingState(
-              childPolicyWrapper.getConnectivityStateInfo().getState(),
-              childPolicyWrapper.getPicker());
     }
 
     private void createChildLbPolicy() {
@@ -865,19 +855,15 @@ final class CachingRlsLbClient {
       PickSubchannelArgs rlsAppliedArgs = getApplyRlsHeader(args, response);
       if (response.hasData()) {
         ChildPolicyWrapper childPolicyWrapper = response.getChildPolicyWrapper();
-        ConnectivityState connectivityState =
-            childPolicyWrapper.getConnectivityStateInfo().getState();
-        switch (connectivityState) {
-          case IDLE:
-          case CONNECTING:
-            return PickResult.withNoResult();
-          case READY:
-            return childPolicyWrapper.getPicker().pickSubchannel(rlsAppliedArgs);
-          case TRANSIENT_FAILURE:
-          case SHUTDOWN:
-          default:
-            return useFallback(rlsAppliedArgs);
+        SubchannelPicker picker = childPolicyWrapper.getPicker();
+        if (picker == null) {
+          return PickResult.withNoResult();
         }
+        PickResult result = picker.pickSubchannel(rlsAppliedArgs);
+        if (result.getStatus().isOk()) {
+          return result;
+        }
+        return useFallback(rlsAppliedArgs);
       } else if (response.hasError()) {
         return useFallback(rlsAppliedArgs);
       } else {
@@ -907,26 +893,11 @@ final class CachingRlsLbClient {
         // TODO(creamsoup) wait until lb is ready
         startFallbackChildPolicy();
       }
-      switch (fallbackChildPolicyWrapper.getConnectivityStateInfo().getState()) {
-        case IDLE:
-          // fall through
-        case CONNECTING:
-          return PickResult.withNoResult();
-        case TRANSIENT_FAILURE:
-          // fall through
-        case SHUTDOWN:
-          return
-              PickResult
-                  .withError(fallbackChildPolicyWrapper.getConnectivityStateInfo().getStatus());
-        case READY:
-          SubchannelPicker picker = fallbackChildPolicyWrapper.getPicker();
-          if (picker == null) {
-            return PickResult.withNoResult();
-          }
-          return picker.pickSubchannel(args);
-        default:
-          throw new AssertionError();
+      SubchannelPicker picker = fallbackChildPolicyWrapper.getPicker();
+      if (picker == null) {
+        return PickResult.withNoResult();
       }
+      return picker.pickSubchannel(args);
     }
 
     private void startFallbackChildPolicy() {
