@@ -39,9 +39,7 @@ import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.XdsClient.XdsChannel;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
@@ -53,9 +51,6 @@ import javax.annotation.concurrent.NotThreadSafe;
  */
 @NotThreadSafe
 final class LoadReportClient {
-  @VisibleForTesting
-  static final String TARGET_NAME_METADATA_KEY = "PROXYLESS_CLIENT_HOSTNAME";
-
   private final InternalLogId logId;
   private final XdsLogger logger;
   private final XdsChannel xdsChannel;
@@ -91,14 +86,7 @@ final class LoadReportClient {
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     checkNotNull(stopwatchSupplier, "stopwatchSupplier");
     this.retryStopwatch = stopwatchSupplier.get();
-    checkNotNull(targetName, "targetName");
-    checkNotNull(node, "node");
-    Map<String, Object> newMetadata = new HashMap<>();
-    if (node.getMetadata() != null) {
-      newMetadata.putAll(node.getMetadata());
-    }
-    newMetadata.put(TARGET_NAME_METADATA_KEY, targetName);
-    this.node = node.toBuilder().setMetadata(newMetadata).build();
+    this.node = checkNotNull(node, "node");
     logId = InternalLogId.allocate("lrs-client", targetName);
     logger = XdsLogger.withLogId(logId);
     logger.log(XdsLogLevel.INFO, "Created");
