@@ -17,7 +17,6 @@
 package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
-import static io.grpc.internal.ClientCallImpl.DEADLINE_EXPIRATION_CANCEL_DELAY_NANOS;
 import static io.grpc.internal.GrpcUtil.ACCEPT_ENCODING_SPLITTER;
 import static java.util.concurrent.TimeUnit.MINUTES;
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -60,7 +59,6 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.Status;
-import io.grpc.Status.Code;
 import io.grpc.internal.ClientCallImpl.ClientStreamProvider;
 import io.grpc.internal.ManagedChannelServiceConfig.MethodInfo;
 import io.grpc.internal.testing.SingleMessageProducer;
@@ -136,9 +134,6 @@ public class ClientCallImplTest {
 
   @Captor
   private ArgumentCaptor<Status> statusArgumentCaptor;
-
-  @Captor
-  private ArgumentCaptor<Metadata> metadataArgumentCaptor;
 
   private CallOptions baseCallOptions;
 
@@ -1005,21 +1000,9 @@ public class ClientCallImplTest {
 
     call.start(callListener, new Metadata());
 
-    fakeClock.forwardTime(1000, TimeUnit.MILLISECONDS);
+    fakeClock.forwardNanos(TimeUnit.SECONDS.toNanos(1) + 1);
 
-    // Verify cancel sent to application when deadline just past
-    verify(callListener).onClose(statusCaptor.capture(), metadataArgumentCaptor.capture());
-    assertThat(statusCaptor.getValue().getDescription())
-        .matches("deadline exceeded after [0-9]+\\.[0-9]+s. \\[remote_addr=127\\.0\\.0\\.1:443\\]");
-    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.DEADLINE_EXCEEDED);
-    verify(stream, never()).cancel(statusCaptor.capture());
-
-    fakeClock.forwardNanos(DEADLINE_EXPIRATION_CANCEL_DELAY_NANOS - 1);
-    verify(stream, never()).cancel(any(Status.class));
-
-    // verify cancel send to server is delayed with DEADLINE_EXPIRATION_CANCEL_DELAY
-    fakeClock.forwardNanos(1);
-    verify(stream).cancel(statusCaptor.capture());
+    verify(stream, times(1)).cancel(statusCaptor.capture());
     assertEquals(Status.Code.DEADLINE_EXCEEDED, statusCaptor.getValue().getCode());
     assertThat(statusCaptor.getValue().getDescription())
         .matches("deadline exceeded after [0-9]+\\.[0-9]+s. \\[remote_addr=127\\.0\\.0\\.1:443\\]");
@@ -1029,8 +1012,8 @@ public class ClientCallImplTest {
   public void expiredDeadlineCancelsStream_Context() {
     fakeClock.forwardTime(System.nanoTime(), TimeUnit.NANOSECONDS);
 
-    Deadline deadline = Deadline.after(1, TimeUnit.SECONDS, fakeClock.getDeadlineTicker());
-    Context context = Context.current().withDeadline(deadline, deadlineCancellationExecutor);
+    Context context = Context.current()
+        .withDeadlineAfter(1, TimeUnit.SECONDS, deadlineCancellationExecutor);
     Context origContext = context.attach();
 
     ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
@@ -1045,16 +1028,9 @@ public class ClientCallImplTest {
 
     call.start(callListener, new Metadata());
 
-    fakeClock.forwardTime(1000, TimeUnit.MILLISECONDS);
-    verify(stream, never()).cancel(statusCaptor.capture());
-    // verify app is notified.
-    verify(callListener).onClose(statusCaptor.capture(), metadataArgumentCaptor.capture());
-    assertThat(statusCaptor.getValue().getDescription()).contains("context timed out");
-    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.DEADLINE_EXCEEDED);
+    fakeClock.forwardNanos(TimeUnit.SECONDS.toNanos(1) + 1);
 
-    // verify cancel send to server is delayed with DEADLINE_EXPIRATION_CANCEL_DELAY
-    fakeClock.forwardNanos(DEADLINE_EXPIRATION_CANCEL_DELAY_NANOS);
-    verify(stream).cancel(statusCaptor.capture());
+    verify(stream, times(1)).cancel(statusCaptor.capture());
     assertEquals(Status.Code.DEADLINE_EXCEEDED, statusCaptor.getValue().getCode());
     assertThat(statusCaptor.getValue().getDescription()).isEqualTo("context timed out");
   }

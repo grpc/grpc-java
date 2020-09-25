@@ -71,13 +71,6 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   private static final Logger log = Logger.getLogger(ClientCallImpl.class.getName());
   private static final byte[] FULL_STREAM_DECOMPRESSION_ENCODINGS
       = "gzip".getBytes(Charset.forName("US-ASCII"));
-  // When a deadline is exceeded, there is a race between the server receiving the cancellation from
-  // the client and the server cancelling the stream itself. If the client's cancellation is
-  // received first, then the stream's status will be CANCELLED instead of DEADLINE_EXCEEDED.
-  // This prevents server monitoring from noticing high rate of DEADLINE_EXCEEDED, a common
-  // monitoring metric (b/118879795). Mitigate this by delayed sending of the client's cancellation.
-  @VisibleForTesting
-  static final long DEADLINE_EXPIRATION_CANCEL_DELAY_NANOS = TimeUnit.SECONDS.toNanos(1);
 
   private final MethodDescriptor<ReqT, RespT> method;
   private final Tag tag;
@@ -85,6 +78,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   private final boolean callExecutorIsDirect;
   private final CallTracer channelCallsTracer;
   private final Context context;
+  private volatile ScheduledFuture<?> deadlineCancellationFuture;
   private final boolean unaryRequest;
   private CallOptions callOptions;
   private ClientStream stream;
@@ -92,16 +86,14 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   private boolean cancelCalled;
   private boolean halfCloseCalled;
   private final ClientStreamProvider clientStreamProvider;
-  private ContextCancellationListener cancellationListener;
+  private final ContextCancellationListener cancellationListener =
+      new ContextCancellationListener();
   private final ScheduledExecutorService deadlineCancellationExecutor;
   @Nullable
   private final InternalConfigSelector configSelector;
   private boolean fullStreamDecompression;
   private DecompressorRegistry decompressorRegistry = DecompressorRegistry.getDefaultInstance();
   private CompressorRegistry compressorRegistry = CompressorRegistry.getDefaultInstance();
-  private volatile ScheduledFuture<?> deadlineCancellationNotifyApplicationFuture;
-  private volatile ScheduledFuture<?> deadlineCancellationSendToServerFuture;
-  private boolean observerClosed = false;
 
   ClientCallImpl(
       MethodDescriptor<ReqT, RespT> method, Executor executor, CallOptions callOptions,
@@ -135,20 +127,9 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   }
 
   private final class ContextCancellationListener implements CancellationListener {
-    private Listener<RespT> observer;
-
-    private ContextCancellationListener(Listener<RespT> observer) {
-      this.observer = observer;
-    }
-
     @Override
     public void cancelled(Context context) {
-      if (context.getDeadline() == null || !context.getDeadline().isExpired()) {
-        stream.cancel(statusFromCancelled(context));
-      } else {
-        Status status = statusFromCancelled(context);
-        delayedCancelOnDeadlineExceeded(status, observer);
-      }
+      stream.cancel(statusFromCancelled(context));
     }
   }
 
@@ -223,7 +204,19 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       // Context is already cancelled so no need to create a real stream, just notify the observer
       // of cancellation via callback on the executor
       stream = NoopClientStream.INSTANCE;
-      executeCloseObserverInContext(observer, statusFromCancelled(context));
+      final Listener<RespT> finalObserver = observer;
+      class ClosedByContext extends ContextRunnable {
+        ClosedByContext() {
+          super(context);
+        }
+
+        @Override
+        public void runInContext() {
+          closeObserver(finalObserver, statusFromCancelled(context), new Metadata());
+        }
+      }
+
+      callExecutor.execute(new ClosedByContext());
       return;
     }
 
@@ -251,9 +244,23 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       compressor = compressorRegistry.lookupCompressor(compressorName);
       if (compressor == null) {
         stream = NoopClientStream.INSTANCE;
-        Status status = Status.INTERNAL.withDescription(
-            String.format("Unable to find compressor by name %s", compressorName));
-        executeCloseObserverInContext(observer, status);
+        final Listener<RespT> finalObserver = observer;
+        class ClosedByNotFoundCompressor extends ContextRunnable {
+          ClosedByNotFoundCompressor() {
+            super(context);
+          }
+
+          @Override
+          public void runInContext() {
+            closeObserver(
+                finalObserver,
+                Status.INTERNAL.withDescription(
+                    String.format("Unable to find compressor by name %s", compressorName)),
+                new Metadata());
+          }
+        }
+
+        callExecutor.execute(new ClosedByNotFoundCompressor());
         return;
       }
     } else {
@@ -294,7 +301,6 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     }
     stream.setDecompressorRegistry(decompressorRegistry);
     channelCallsTracer.reportCallStarted();
-    cancellationListener = new ContextCancellationListener(observer);
     stream.start(new ClientStreamListenerImpl(observer));
 
     // Delay any sources of cancellation after start(), because most of the transports are broken if
@@ -306,11 +312,8 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         // If the context has the effective deadline, we don't need to schedule an extra task.
         && !effectiveDeadline.equals(context.getDeadline())
         // If the channel has been terminated, we don't need to schedule an extra task.
-        && deadlineCancellationExecutor != null
-        // if already expired deadline let failing stream handle
-        && !(stream instanceof FailingClientStream)) {
-      deadlineCancellationNotifyApplicationFuture =
-          startDeadlineNotifyApplicationTimer(effectiveDeadline, observer);
+        && deadlineCancellationExecutor != null) {
+      deadlineCancellationFuture = startDeadlineTimer(effectiveDeadline);
     }
     if (cancelListenersShouldBeRemoved) {
       // Race detected! ClientStreamListener.closed may have been called before
@@ -410,76 +413,46 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
   private void removeContextListenerAndCancelDeadlineFuture() {
     context.removeListener(cancellationListener);
-    ScheduledFuture<?> f = deadlineCancellationSendToServerFuture;
-    if (f != null) {
-      f.cancel(false);
-    }
-
-    f = deadlineCancellationNotifyApplicationFuture;
+    ScheduledFuture<?> f = deadlineCancellationFuture;
     if (f != null) {
       f.cancel(false);
     }
   }
 
-  private ScheduledFuture<?> startDeadlineNotifyApplicationTimer(Deadline deadline,
-      final Listener<RespT> observer) {
-    final long remainingNanos = deadline.timeRemaining(TimeUnit.NANOSECONDS);
+  private class DeadlineTimer implements Runnable {
+    private final long remainingNanos;
 
-    class DeadlineExceededNotifyApplicationTimer implements Runnable {
-      @Override
-      public void run() {
-        Status status = buildDeadlineExceededStatusWithRemainingNanos(remainingNanos);
-        delayedCancelOnDeadlineExceeded(status, observer);
-      }
+    DeadlineTimer(long remainingNanos) {
+      this.remainingNanos = remainingNanos;
     }
 
+    @Override
+    public void run() {
+      InsightBuilder insight = new InsightBuilder();
+      stream.appendTimeoutInsight(insight);
+      // DelayedStream.cancel() is safe to call from a thread that is different from where the
+      // stream is created.
+      long seconds = Math.abs(remainingNanos) / TimeUnit.SECONDS.toNanos(1);
+      long nanos = Math.abs(remainingNanos) % TimeUnit.SECONDS.toNanos(1);
+
+      StringBuilder buf = new StringBuilder();
+      buf.append("deadline exceeded after ");
+      if (remainingNanos < 0) {
+        buf.append('-');
+      }
+      buf.append(seconds);
+      buf.append(String.format(".%09d", nanos));
+      buf.append("s. ");
+      buf.append(insight);
+      stream.cancel(DEADLINE_EXCEEDED.augmentDescription(buf.toString()));
+    }
+  }
+
+  private ScheduledFuture<?> startDeadlineTimer(Deadline deadline) {
+    long remainingNanos = deadline.timeRemaining(TimeUnit.NANOSECONDS);
     return deadlineCancellationExecutor.schedule(
-        new LogExceptionRunnable(new DeadlineExceededNotifyApplicationTimer()),
-        remainingNanos,
-        TimeUnit.NANOSECONDS);
-  }
-
-  private Status buildDeadlineExceededStatusWithRemainingNanos(long remainingNanos) {
-    final InsightBuilder insight = new InsightBuilder();
-    stream.appendTimeoutInsight(insight);
-
-    long seconds = Math.abs(remainingNanos) / TimeUnit.SECONDS.toNanos(1);
-    long nanos = Math.abs(remainingNanos) % TimeUnit.SECONDS.toNanos(1);
-
-    StringBuilder buf = new StringBuilder();
-    buf.append("deadline exceeded after ");
-    if (remainingNanos < 0) {
-      buf.append('-');
-    }
-    buf.append(seconds);
-    buf.append(String.format(".%09d", nanos));
-    buf.append("s. ");
-    buf.append(insight);
-
-    return DEADLINE_EXCEEDED.augmentDescription(buf.toString());
-  }
-
-  private void delayedCancelOnDeadlineExceeded(final Status status, Listener<RespT> observer) {
-    if (deadlineCancellationSendToServerFuture != null) {
-      return;
-    }
-
-    class DeadlineExceededSendCancelToServerTimer implements Runnable {
-      @Override
-      public void run() {
-        // DelayedStream.cancel() is safe to call from a thread that is different from where the
-        // stream is created.
-        stream.cancel(status);
-      }
-    }
-
-    // This races with removeContextListenerAndCancelDeadlineFuture(). Since calling cancel() on a
-    // stream multiple time is safe, the race here is fine.
-    deadlineCancellationSendToServerFuture =  deadlineCancellationExecutor.schedule(
-        new LogExceptionRunnable(new DeadlineExceededSendCancelToServerTimer()),
-        DEADLINE_EXPIRATION_CANCEL_DELAY_NANOS,
-        TimeUnit.NANOSECONDS);
-    executeCloseObserverInContext(observer, status);
+        new LogExceptionRunnable(
+            new DeadlineTimer(remainingNanos)), remainingNanos, TimeUnit.NANOSECONDS);
   }
 
   private void executeCloseObserverInContext(final Listener<RespT> observer, final Status status) {
@@ -495,13 +468,6 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     }
 
     callExecutor.execute(new CloseInContext());
-  }
-
-  private void closeObserver(Listener<RespT> observer, Status status, Metadata trailers) {
-    if (!observerClosed) {
-      observerClosed = true;
-      observer.onClose(status, trailers);
-    }
   }
 
   @Nullable
@@ -644,6 +610,10 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       return stream.getAttributes();
     }
     return Attributes.EMPTY;
+  }
+
+  private void closeObserver(Listener<RespT> observer, Status status, Metadata trailers) {
+    observer.onClose(status, trailers);
   }
 
   @Override
