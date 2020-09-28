@@ -43,7 +43,6 @@ import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.ExponentialBackoffPolicy;
-import io.grpc.internal.PickSubchannelArgsImpl;
 import io.grpc.internal.TimeProvider;
 import io.grpc.lookup.v1.RouteLookupServiceGrpc;
 import io.grpc.lookup.v1.RouteLookupServiceGrpc.RouteLookupServiceStub;
@@ -204,7 +203,6 @@ final class CachingRlsLbClient {
    */
   @CheckReturnValue
   final CachedRouteLookupResponse get(final RouteLookupRequest request) {
-    synchronizationContext.throwIfNotInThisSynchronizationContext();
     synchronized (lock) {
       final CacheEntry cacheEntry;
       cacheEntry = linkedHashLruCache.read(request);
@@ -844,6 +842,7 @@ final class CachingRlsLbClient {
   }
 
   /** A header will be added when RLS server respond with additional header data. */
+  @VisibleForTesting
   static final Metadata.Key<String> RLS_DATA_KEY =
       Metadata.Key.of("X-Google-RLS-Data", Metadata.ASCII_STRING_MARSHALLER);
 
@@ -862,7 +861,11 @@ final class CachingRlsLbClient {
           requestFactory.create(methodName[0], methodName[1], args.getHeaders());
       final CachedRouteLookupResponse response = CachingRlsLbClient.this.get(request);
 
-      PickSubchannelArgs rlsAppliedArgs = getApplyRlsHeader(args, response);
+      if (response.getHeaderData() != null && !response.getHeaderData().isEmpty()) {
+        Metadata headers = args.getHeaders();
+        headers.discardAll(RLS_DATA_KEY);
+        headers.put(RLS_DATA_KEY, response.getHeaderData());
+      }
       if (response.hasData()) {
         ChildPolicyWrapper childPolicyWrapper = response.getChildPolicyWrapper();
         ConnectivityState connectivityState =
@@ -872,29 +875,17 @@ final class CachingRlsLbClient {
           case CONNECTING:
             return PickResult.withNoResult();
           case READY:
-            return childPolicyWrapper.getPicker().pickSubchannel(rlsAppliedArgs);
+            return childPolicyWrapper.getPicker().pickSubchannel(args);
           case TRANSIENT_FAILURE:
           case SHUTDOWN:
           default:
-            return useFallback(rlsAppliedArgs);
+            return useFallback(args);
         }
       } else if (response.hasError()) {
-        return useFallback(rlsAppliedArgs);
+        return useFallback(args);
       } else {
         return PickResult.withNoResult();
       }
-    }
-
-    private PickSubchannelArgs getApplyRlsHeader(
-        PickSubchannelArgs args, CachedRouteLookupResponse response) {
-      if (response.getHeaderData() == null || response.getHeaderData().isEmpty()) {
-        return args;
-      }
-
-      Metadata headers = new Metadata();
-      headers.merge(args.getHeaders());
-      headers.put(RLS_DATA_KEY, response.getHeaderData());
-      return new PickSubchannelArgsImpl(args.getMethodDescriptor(), headers, args.getCallOptions());
     }
 
     private ChildPolicyWrapper fallbackChildPolicyWrapper;
