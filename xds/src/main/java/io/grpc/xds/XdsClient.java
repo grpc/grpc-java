@@ -135,6 +135,25 @@ abstract class XdsClient {
     }
 
     @Override
+    public int hashCode() {
+      return Objects.hash(httpMaxStreamDurationNano, rdsName, virtualHosts);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      LdsUpdate that = (LdsUpdate) o;
+      return Objects.equals(httpMaxStreamDurationNano, that.httpMaxStreamDurationNano)
+          && Objects.equals(rdsName, that.rdsName)
+          && Objects.equals(virtualHosts, that.virtualHosts);
+    }
+
+    @Override
     public String toString() {
       ToStringHelper toStringHelper = MoreObjects.toStringHelper(this);
       toStringHelper.add("httpMaxStreamDurationNano", httpMaxStreamDurationNano);
