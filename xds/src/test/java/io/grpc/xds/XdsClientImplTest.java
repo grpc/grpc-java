@@ -176,6 +176,7 @@ public class XdsClientImplTest {
 
   @Rule
   public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
+  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
   @Rule
   public ExpectedException thrown = ExpectedException.none();
 

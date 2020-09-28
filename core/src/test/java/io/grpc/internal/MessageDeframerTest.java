@@ -337,6 +337,7 @@ public class MessageDeframerTest {
 
   @RunWith(JUnit4.class)
   public static class SizeEnforcingInputStreamTests {
+    @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
     @Rule
     public final ExpectedException thrown = ExpectedException.none();
 

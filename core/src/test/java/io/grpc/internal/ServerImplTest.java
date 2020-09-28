@@ -139,6 +139,7 @@ public class ServerImplTest {
       };
   private static final String AUTHORITY = "some_authority";
 
+  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
   @Rule public final ExpectedException thrown = ExpectedException.none();
 
   @BeforeClass

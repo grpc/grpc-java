@@ -34,6 +34,7 @@ import org.junit.runners.JUnit4;
 /** Tests for {@link PriorityLoadBalancerProvider}. */
 @RunWith(JUnit4.class)
 public class PriorityLoadBalancerProviderTest {
+  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
   @Rule public final ExpectedException thrown = ExpectedException.none();
 
   @SuppressWarnings("ExpectedExceptionChecker")

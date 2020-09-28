@@ -52,6 +52,7 @@ public class ServerServiceDefinitionTest {
         = ServerMethodDefinition.create(method1, methodHandler1);
   private ServerMethodDefinition<String, Integer> methodDef2
         = ServerMethodDefinition.create(method2, methodHandler2);
+  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
   @Rule
   public ExpectedException thrown = ExpectedException.none();
 
