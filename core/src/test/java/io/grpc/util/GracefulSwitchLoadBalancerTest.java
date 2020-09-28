@@ -62,6 +62,7 @@ import org.mockito.InOrder;
  */
 @RunWith(JUnit4.class)
 public class GracefulSwitchLoadBalancerTest {
+  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
   @Rule
   public final ExpectedException thrown = ExpectedException.none();
 

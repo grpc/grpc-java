@@ -122,6 +122,7 @@ public class ProtocolNegotiatorsTest {
 
   private static final int TIMEOUT_SECONDS = 60;
   @Rule public final TestRule globalTimeout = new DisableOnDebug(Timeout.seconds(TIMEOUT_SECONDS));
+  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
   @Rule public final ExpectedException thrown = ExpectedException.none();
 
   private final EventLoopGroup group = new DefaultEventLoop();

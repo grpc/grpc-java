@@ -275,10 +275,8 @@ final class EdsLoadBalancer2 extends LoadBalancer {
               locality, localityLbInfo.getLocalityWeight());
         }
         if (prioritizedLocalityWeights.isEmpty()) {
-          lbHelper.helper.updateBalancingState(
-              TRANSIENT_FAILURE,
-              new ErrorPicker(
-                  Status.UNAVAILABLE.withDescription("No usable priority/locality/endpoint")));
+          propagateResourceError(
+              Status.UNAVAILABLE.withDescription("No usable priority/locality/endpoint"));
           return;
         }
         if (lb == null) {
@@ -310,15 +308,8 @@ final class EdsLoadBalancer2 extends LoadBalancer {
       @Override
       public void onResourceDoesNotExist(String resourceName) {
         logger.log(XdsLogLevel.INFO, "Resource {0} is unavailable", resourceName);
-        if (lb != null) {
-          lb.shutdown();
-          lb = null;
-        }
-        lbHelper.helper.updateBalancingState(
-            TRANSIENT_FAILURE,
-            new ErrorPicker(
-                Status.UNAVAILABLE.withDescription(
-                    "Resource " + resourceName + " is unavailable")));
+        propagateResourceError(
+            Status.UNAVAILABLE.withDescription("Resource " + resourceName + " is unavailable"));
       }
 
       @Override
@@ -328,6 +319,14 @@ final class EdsLoadBalancer2 extends LoadBalancer {
         if (lb == null) {
           lbHelper.helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
         }
+      }
+
+      private void propagateResourceError(Status error) {
+        if (lb != null) {
+          lb.shutdown();
+          lb = null;
+        }
+        lbHelper.helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
       }
 
       private final class DropHandlingLbHelper extends ForwardingLoadBalancerHelper {
