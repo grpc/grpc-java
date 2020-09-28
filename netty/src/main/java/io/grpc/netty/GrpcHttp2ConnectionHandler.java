@@ -32,6 +32,10 @@ import javax.annotation.Nullable;
 @Internal
 public abstract class GrpcHttp2ConnectionHandler extends Http2ConnectionHandler {
 
+  {
+    setCumulator(COMPOSITE_CUMULATOR);
+  }
+
   @Nullable
   protected final ChannelPromise channelUnused;
 
