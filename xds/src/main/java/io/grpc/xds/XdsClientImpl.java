@@ -908,8 +908,8 @@ final class XdsClientImpl extends XdsClient {
       }
     }
     for (String resource : edsResourceSubscribers.keySet()) {
-      ResourceSubscriber subscriber = edsResourceSubscribers.get(resource);
       if (!edsServices.contains(resource)) {
+        ResourceSubscriber subscriber = edsResourceSubscribers.get(resource);
         subscriber.onAbsent();
       }
     }
@@ -1157,6 +1157,11 @@ final class XdsClientImpl extends XdsClient {
     private final ResourceType type;
     private final String resource;
     private final Set<ResourceWatcher> watchers = new HashSet<>();
+    // Resource states:
+    // - present: data != null; data is the cached data for the resource
+    // - absent: absent == true
+    // - unknown: anything else
+    // Note absent -> data == null, but not vice versa.
     private ResourceUpdate data;
     private boolean absent;
     private ScheduledHandle respTimer;
@@ -1234,10 +1239,9 @@ final class XdsClientImpl extends XdsClient {
       if (respTimer != null && respTimer.isPending()) {  // too early to conclude absence
         return;
       }
-      boolean oldAbsent = absent;
-      data = null;
-      absent = true;
-      if (!oldAbsent) {
+      if (!absent) {
+        data = null;
+        absent = true;
         for (ResourceWatcher watcher : watchers) {
           watcher.onResourceDoesNotExist(resource);
         }
