@@ -272,6 +272,7 @@ final class LbPolicyConfiguration {
           .add("target", target)
           .add("helper", helper)
           .add("picker", picker)
+          .add("state", state)
           .toString();
     }
 
