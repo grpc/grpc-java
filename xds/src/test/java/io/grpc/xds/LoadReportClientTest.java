@@ -469,10 +469,7 @@ public class LoadReportClientTest {
                         Struct.newBuilder()
                             .putFields(
                                 "TRAFFICDIRECTOR_NETWORK_HOSTNAME",
-                                Value.newBuilder().setStringValue("default").build())
-                            .putFields(
-                                LoadReportClient.TARGET_NAME_METADATA_KEY,
-                                Value.newBuilder().setStringValue(TARGET_NAME).build())))
+                                Value.newBuilder().setStringValue("default").build())))
             .build();
   }
 
@@ -490,11 +487,6 @@ public class LoadReportClientTest {
 
     @Override
     public boolean matches(LoadStatsRequest argument) {
-      if (!argument.getNode().getMetadata()
-          .getFieldsOrThrow(LoadReportClient.TARGET_NAME_METADATA_KEY)
-          .getStringValue().equals(TARGET_NAME)) {
-        return false;
-      }
       if (argument.getClusterStatsCount() != expectedStats.size()) {
         return false;
       }

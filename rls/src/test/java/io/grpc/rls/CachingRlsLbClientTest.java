@@ -19,6 +19,7 @@ package io.grpc.rls;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.rls.CachingRlsLbClient.RLS_DATA_KEY;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.CALLS_REAL_METHODS;
@@ -33,6 +34,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
+import io.grpc.CallOptions;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.ForwardingChannelBuilder;
@@ -42,12 +44,14 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
+import io.grpc.Metadata;
 import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.BackoffPolicy;
+import io.grpc.internal.PickSubchannelArgsImpl;
 import io.grpc.lookup.v1.RouteLookupServiceGrpc;
 import io.grpc.rls.CachingRlsLbClient.CacheEntry;
 import io.grpc.rls.CachingRlsLbClient.CachedRouteLookupResponse;
@@ -66,6 +70,7 @@ import io.grpc.rls.RlsProtoData.RouteLookupRequest;
 import io.grpc.rls.RlsProtoData.RouteLookupResponse;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
+import io.grpc.testing.TestMethodDescriptors;
 import java.io.IOException;
 import java.lang.Thread.UncaughtExceptionHandler;
 import java.net.SocketAddress;
@@ -268,11 +273,11 @@ public class CachingRlsLbClientTest {
   public void get_updatesLbState() throws Exception {
     InOrder inOrder = inOrder(helper);
     RouteLookupRequest routeLookupRequest =
-        new RouteLookupRequest("server", "/foo/bar", "grpc", ImmutableMap.<String, String>of());
+        new RouteLookupRequest("service1", "/foo/bar", "grpc", ImmutableMap.<String, String>of());
     rlsServerImpl.setLookupTable(
         ImmutableMap.of(
             routeLookupRequest,
-            new RouteLookupResponse(ImmutableList.of("target"), "header")));
+            new RouteLookupResponse(ImmutableList.of("target"), "header-rls-data-value")));
 
     // valid channel
     CachedRouteLookupResponse resp = getInSyncContext(routeLookupRequest);
@@ -291,7 +296,13 @@ public class CachingRlsLbClientTest {
     assertThat(new HashSet<>(pickerCaptor.getAllValues())).hasSize(1);
     assertThat(stateCaptor.getAllValues())
         .containsExactly(ConnectivityState.CONNECTING, ConnectivityState.READY);
-    assertThat(pickerCaptor.getValue()).isInstanceOf(RlsPicker.class);
+    Metadata headers = new Metadata();
+    pickerCaptor.getValue().pickSubchannel(
+        new PickSubchannelArgsImpl(
+            TestMethodDescriptors.voidMethod().toBuilder().setFullMethodName("foo/bar").build(),
+            headers,
+            CallOptions.DEFAULT));
+    assertThat(headers.get(RLS_DATA_KEY)).isEqualTo("header-rls-data-value");
 
     // move backoff further back to only test error behavior
     fakeBackoffProvider.nextPolicy = createBackoffPolicy(100, TimeUnit.MILLISECONDS);
