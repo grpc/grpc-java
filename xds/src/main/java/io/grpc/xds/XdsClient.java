@@ -103,7 +103,7 @@ abstract class XdsClient {
     }
   }
 
-  static final class LdsUpdate {
+  static final class LdsUpdate implements ResourceUpdate {
     // Total number of nanoseconds to keep alive an HTTP request/response stream.
     private final long httpMaxStreamDurationNano;
     // The name of the route configuration to be used for RDS resource discovery.
@@ -132,6 +132,25 @@ abstract class XdsClient {
     @Nullable
     List<VirtualHost> getVirtualHosts() {
       return virtualHosts;
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(httpMaxStreamDurationNano, rdsName, virtualHosts);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      LdsUpdate that = (LdsUpdate) o;
+      return Objects.equals(httpMaxStreamDurationNano, that.httpMaxStreamDurationNano)
+          && Objects.equals(rdsName, that.rdsName)
+          && Objects.equals(virtualHosts, that.virtualHosts);
     }
 
     @Override
@@ -182,7 +201,7 @@ abstract class XdsClient {
     }
   }
 
-  static final class RdsUpdate {
+  static final class RdsUpdate implements ResourceUpdate {
     // The list virtual hosts that make up the route table.
     private final List<VirtualHost> virtualHosts;
 
@@ -206,7 +225,7 @@ abstract class XdsClient {
     }
   }
 
-  static final class CdsUpdate {
+  static final class CdsUpdate implements ResourceUpdate {
     private final String clusterName;
     @Nullable
     private final String edsServiceName;
@@ -351,7 +370,7 @@ abstract class XdsClient {
     }
   }
 
-  static final class EdsUpdate {
+  static final class EdsUpdate implements ResourceUpdate {
     private final String clusterName;
     private final Map<Locality, LocalityLbEndpoints> localityLbEndpointsMap;
     private final List<DropOverload> dropPolicies;
@@ -497,10 +516,13 @@ abstract class XdsClient {
     }
   }
 
+  interface ResourceUpdate {
+  }
+
   /**
    * Watcher interface for a single requested xDS resource.
    */
-  private interface ResourceWatcher {
+  interface ResourceWatcher {
 
     /**
      * Called when the resource discovery RPC encounters some transient error.
@@ -523,6 +545,14 @@ abstract class XdsClient {
     void onChanged(RdsUpdate update);
   }
 
+  interface CdsResourceWatcher extends ResourceWatcher {
+    void onChanged(CdsUpdate update);
+  }
+
+  interface EdsResourceWatcher extends ResourceWatcher {
+    void onChanged(EdsUpdate update);
+  }
+
   /**
    * Config watcher interface. To be implemented by the xDS resolver.
    */
@@ -533,16 +563,6 @@ abstract class XdsClient {
      * Called when receiving an update on virtual host configurations.
      */
     void onConfigChanged(ConfigUpdate update);
-  }
-
-  interface CdsResourceWatcher extends ResourceWatcher {
-
-    void onChanged(CdsUpdate update);
-  }
-
-  interface EdsResourceWatcher extends ResourceWatcher {
-
-    void onChanged(EdsUpdate update);
   }
 
   /**

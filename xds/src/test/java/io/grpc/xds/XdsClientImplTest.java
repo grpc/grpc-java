@@ -99,6 +99,7 @@ import io.grpc.xds.XdsClient.EdsResourceWatcher;
 import io.grpc.xds.XdsClient.EdsUpdate;
 import io.grpc.xds.XdsClient.XdsChannel;
 import io.grpc.xds.XdsClientImpl.MessagePrinter;
+import io.grpc.xds.XdsClientImpl.ResourceType;
 import java.io.IOException;
 import java.util.ArrayDeque;
 import java.util.HashSet;
@@ -161,8 +162,7 @@ public class XdsClientImplTest {
       new TaskFilter() {
         @Override
         public boolean shouldAccept(Runnable command) {
-          return command.toString()
-              .contains(XdsClientImpl.CdsResourceFetchTimeoutTask.class.getSimpleName());
+          return command.toString().contains(ResourceType.CDS.toString());
         }
       };
 
@@ -170,8 +170,7 @@ public class XdsClientImplTest {
       new FakeClock.TaskFilter() {
         @Override
         public boolean shouldAccept(Runnable command) {
-          return command.toString()
-              .contains(XdsClientImpl.EdsResourceFetchTimeoutTask.class.getSimpleName());
+          return command.toString().contains(ResourceType.EDS.toString());
         }
       };
 
@@ -1794,7 +1793,6 @@ public class XdsClientImplTest {
     // Streaming RPC starts after a first watcher is added.
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
 
-    // Client sends an EDS request to management server.
     verify(requestObserver)
         .onNext(
             argThat(
