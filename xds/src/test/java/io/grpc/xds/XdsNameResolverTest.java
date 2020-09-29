@@ -53,6 +53,7 @@ import io.grpc.xds.EnvoyProtoData.ClusterWeight;
 import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.EnvoyProtoData.Route;
 import io.grpc.xds.EnvoyProtoData.RouteAction;
+import io.grpc.xds.EnvoyProtoData.VirtualHost;
 import io.grpc.xds.XdsClient.XdsChannel;
 import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
 import java.io.IOException;
@@ -61,6 +62,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -132,6 +134,16 @@ public class XdsNameResolverTest {
         channelFactory, xdsClientPoolFactory, mockRandom);
   }
 
+  @After
+  public void tearDown() {
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    resolver.shutdown();
+    if (xdsClient != null) {
+      assertThat(xdsClient.ldsWatcher).isNull();
+      assertThat(xdsClient.rdsWatcher).isNull();
+    }
+  }
+
   @Test
   public void resolve_failToBootstrap() {
     Bootstrapper bootstrapper = new Bootstrapper() {
@@ -183,10 +195,30 @@ public class XdsNameResolverTest {
 
   @SuppressWarnings("unchecked")
   @Test
-  public void resolve_resourceNotFound() {
+  public void resolve_ldsResourceNotFound() {
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
-    xdsClient.deliverResourceNotFound();
+    assertThat(xdsClient.ldsResource).isEqualTo(AUTHORITY);
+    assertThat(xdsClient.ldsWatcher).isNotNull();
+    xdsClient.deliverLdsResourceNotFound(AUTHORITY);
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    ResolutionResult result = resolutionResultCaptor.getValue();
+    assertThat(result.getAddresses()).isEmpty();
+    assertThat((Map<String, ?>) result.getServiceConfig().getConfig()).isEmpty();
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test
+  public void resolve_rdsResourceNotFound() {
+    String rdsResource = "route-configuration.googleapis.com";
+    resolver.start(mockListener);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    assertThat(xdsClient.ldsResource).isEqualTo(AUTHORITY);
+    assertThat(xdsClient.ldsWatcher).isNotNull();
+    xdsClient.deliverRdsName(AUTHORITY, rdsResource);
+    assertThat(xdsClient.rdsResource).isEqualTo(rdsResource);
+    assertThat(xdsClient.rdsWatcher).isNotNull();
+    xdsClient.deliverRdsResourceNotFound(rdsResource);
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
     assertThat(result.getAddresses()).isEmpty();
@@ -202,6 +234,14 @@ public class XdsNameResolverTest {
     Status error = errorCaptor.getValue();
     assertThat(error.getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(error.getDescription()).isEqualTo("server unreachable");
+  }
+
+  @Test
+  public void resolve_encounterErrorInRds() {
+  }
+
+  @Test
+  public void resolve_matchingVirtualHostNotFound() {
   }
 
   @Test
@@ -233,7 +273,8 @@ public class XdsNameResolverTest {
 
     reset(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
-    xdsClient.deliverRoutes(
+    xdsClient.deliverRoutesViaLds(
+        AUTHORITY,
         Arrays.asList(
             new Route(
                 new RouteMatch(null, call1.getFullMethodNameForPath()),
@@ -267,7 +308,8 @@ public class XdsNameResolverTest {
     InternalConfigSelector configSelector = resolveToClusters();
     reset(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
-    xdsClient.deliverRoutes(
+    xdsClient.deliverRoutesViaLds(
+        AUTHORITY,
         Arrays.asList(
             new Route(
                 new RouteMatch(null, call1.getFullMethodNameForPath()),
@@ -297,7 +339,8 @@ public class XdsNameResolverTest {
 
     reset(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
-    xdsClient.deliverRoutes(
+    xdsClient.deliverRoutesViaLds(
+        AUTHORITY,
         Arrays.asList(
             new Route(
                 new RouteMatch(null, call1.getFullMethodNameForPath()),
@@ -312,7 +355,8 @@ public class XdsNameResolverTest {
         Arrays.asList(cluster1, cluster2, "another-cluster"),
         (Map<String, ?>) result.getServiceConfig().getConfig());
 
-    xdsClient.deliverRoutes(
+    xdsClient.deliverRoutesViaLds(
+        AUTHORITY,
         Arrays.asList(
             new Route(
                 new RouteMatch(null, call1.getFullMethodNameForPath()),
@@ -329,12 +373,14 @@ public class XdsNameResolverTest {
     InternalConfigSelector configSelector = resolveToClusters();
     Result result = assertCallSelectResult(call1, configSelector, cluster1, 15.0);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
-    xdsClient.deliverRoutes(
+    xdsClient.deliverRoutesViaLds(
+        AUTHORITY,
         Collections.singletonList(
             new Route(
                 new RouteMatch(null, call2.getFullMethodNameForPath()),
                 new RouteAction(TimeUnit.SECONDS.toNanos(15L), cluster2, null))));
-    xdsClient.deliverRoutes(
+    xdsClient.deliverRoutesViaLds(
+        AUTHORITY,
         Arrays.asList(
             new Route(
                 new RouteMatch(null, call1.getFullMethodNameForPath()),
@@ -352,7 +398,8 @@ public class XdsNameResolverTest {
     when(mockRandom.nextInt(anyInt())).thenReturn(90, 10);
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
-    xdsClient.deliverRoutes(
+    xdsClient.deliverRoutesViaLds(
+        AUTHORITY,
         Arrays.asList(
             new Route(
                 new RouteMatch(null, call1.getFullMethodNameForPath()),
@@ -399,7 +446,8 @@ public class XdsNameResolverTest {
   private InternalConfigSelector resolveToClusters() {
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
-    xdsClient.deliverRoutes(
+    xdsClient.deliverRoutesViaLds(
+        AUTHORITY,
         Arrays.asList(
             new Route(
                 new RouteMatch(null, call1.getFullMethodNameForPath()),
@@ -511,6 +559,94 @@ public class XdsNameResolverTest {
         .isEqualTo(expectedServiceConfig);
   }
 
+  @Test
+  public void matchHostName_exactlyMatch() {
+    String pattern = "foo.googleapis.com";
+    assertThat(XdsNameResolver.matchHostName("bar.googleapis.com", pattern)).isFalse();
+    assertThat(XdsNameResolver.matchHostName("fo.googleapis.com", pattern)).isFalse();
+    assertThat(XdsNameResolver.matchHostName("oo.googleapis.com", pattern)).isFalse();
+    assertThat(XdsNameResolver.matchHostName("googleapis.com", pattern)).isFalse();
+    assertThat(XdsNameResolver.matchHostName("foo.googleapis", pattern)).isFalse();
+    assertThat(XdsNameResolver.matchHostName("foo.googleapis.com", pattern)).isTrue();
+  }
+
+  @Test
+  public void matchHostName_prefixWildcard() {
+    String pattern = "*.foo.googleapis.com";
+    assertThat(XdsNameResolver.matchHostName("foo.googleapis.com", pattern)).isFalse();
+    assertThat(XdsNameResolver.matchHostName("bar-baz.foo.googleapis", pattern)).isFalse();
+    assertThat(XdsNameResolver.matchHostName("bar.foo.googleapis.com", pattern)).isTrue();
+    pattern = "*-bar.foo.googleapis.com";
+    assertThat(XdsNameResolver.matchHostName("bar.foo.googleapis.com", pattern)).isFalse();
+    assertThat(XdsNameResolver.matchHostName("baz-bar.foo.googleapis", pattern)).isFalse();
+    assertThat(XdsNameResolver.matchHostName("-bar.foo.googleapis.com", pattern)).isFalse();
+    assertThat(XdsNameResolver.matchHostName("baz-bar.foo.googleapis.com", pattern))
+        .isTrue();
+  }
+
+  @Test
+  public void matchHostName_postfixWildCard() {
+    String pattern = "foo.*";
+    assertThat(XdsNameResolver.matchHostName("bar.googleapis.com", pattern)).isFalse();
+    assertThat(XdsNameResolver.matchHostName("bar.foo.googleapis.com", pattern)).isFalse();
+    assertThat(XdsNameResolver.matchHostName("foo.googleapis.com", pattern)).isTrue();
+    assertThat(XdsNameResolver.matchHostName("foo.com", pattern)).isTrue();
+    pattern = "foo-*";
+    assertThat(XdsNameResolver.matchHostName("bar-.googleapis.com", pattern)).isFalse();
+    assertThat(XdsNameResolver.matchHostName("foo.googleapis.com", pattern)).isFalse();
+    assertThat(XdsNameResolver.matchHostName("foo.googleapis.com", pattern)).isFalse();
+    assertThat(XdsNameResolver.matchHostName("foo-", pattern)).isFalse();
+    assertThat(XdsNameResolver.matchHostName("foo-bar.com", pattern)).isTrue();
+    assertThat(XdsNameResolver.matchHostName("foo-.com", pattern)).isTrue();
+    assertThat(XdsNameResolver.matchHostName("foo-bar", pattern)).isTrue();
+  }
+
+  @Test
+  public void findVirtualHostForHostName_exactMatchFirst() {
+    String hostname = "a.googleapis.com";
+    List<Route> routes = Collections.emptyList();
+    VirtualHost vHost1 = new VirtualHost("virtualhost01.googleapis.com",
+        Arrays.asList("a.googleapis.com", "b.googleapis.com"), routes);
+    VirtualHost vHost2 = new VirtualHost("virtualhost02.googleapis.com",
+        Collections.singletonList("*.googleapis.com"), routes);
+    VirtualHost vHost3 =
+        new VirtualHost("virtualhost03.googleapis.com", Collections.singletonList("*"), routes);
+    List<VirtualHost> virtualHosts = Arrays.asList(vHost1, vHost2, vHost3);
+    assertThat(XdsNameResolver.findVirtualHostForHostName(virtualHosts, hostname))
+        .isEqualTo(vHost1);
+  }
+
+  @Test
+  public void findVirtualHostForHostName_preferSuffixDomainOverPrefixDomain() {
+    String hostname = "a.googleapis.com";
+    List<Route> routes = Collections.emptyList();
+    VirtualHost vHost1 =
+        new VirtualHost("virtualhost01.googleapis.com",
+            Arrays.asList("*.googleapis.com", "b.googleapis.com"), routes);
+    VirtualHost vHost2 =
+        new VirtualHost("virtualhost02.googleapis.com",
+            Collections.singletonList("a.googleapis.*"), routes);
+    VirtualHost vHost3 =
+        new VirtualHost("virtualhost03.googleapis.com", Collections.singletonList("*"), routes);
+    List<VirtualHost> virtualHosts = Arrays.asList(vHost1, vHost2, vHost3);
+    assertThat(XdsNameResolver.findVirtualHostForHostName(virtualHosts, hostname))
+        .isEqualTo(vHost1);
+  }
+
+  @Test
+  public void findVirtualHostForHostName_asteriskMatchAnyDomain() {
+    String hostname = "a.googleapis.com";
+    List<Route> routes = Collections.emptyList();
+    VirtualHost vHost1 =
+        new VirtualHost("virtualhost01.googleapis.com", Collections.singletonList("*"), routes);
+    VirtualHost vHost2 =
+        new VirtualHost("virtualhost02.googleapis.com",
+            Collections.singletonList("b.googleapis.com"), routes);
+    List<VirtualHost> virtualHosts = Arrays.asList(vHost1, vHost2);
+    assertThat(XdsNameResolver.findVirtualHostForHostName(virtualHosts, hostname))
+        .isEqualTo(vHost1);;
+  }
+
   private final class FakeXdsClientPoolFactory implements XdsClientPoolFactory {
     @Override
     public ObjectPool<XdsClient> newXdsClientObjectPool(
@@ -530,13 +666,39 @@ public class XdsNameResolverTest {
   }
 
   private class FakeXdsClient extends XdsClient {
-    private String resource;
-    private ConfigWatcher watcher;
+    private String ldsResource;
+    private String rdsResource;
+    private LdsResourceWatcher ldsWatcher;
+    private RdsResourceWatcher rdsWatcher;
 
     @Override
-    void watchConfigData(String targetAuthority, ConfigWatcher watcher) {
-      resource = targetAuthority;
-      this.watcher = watcher;
+    void watchLdsResource(String resourceName, LdsResourceWatcher watcher) {
+      Preconditions.checkArgument(ldsResource == null && ldsWatcher == null, "already watched");
+      ldsResource = resourceName;
+      ldsWatcher = watcher;
+    }
+
+    @Override
+    void cancelLdsResourceWatch(String resourceName, LdsResourceWatcher watcher) {
+      Preconditions.checkArgument(resourceName.equals(ldsResource), "unknown resource");
+      Preconditions.checkArgument(watcher.equals(ldsWatcher), "unknown watcher");
+      ldsResource = null;
+      ldsWatcher = null;
+    }
+
+    @Override
+    void watchRdsResource(String resourceName, RdsResourceWatcher watcher) {
+      Preconditions.checkArgument(rdsResource == null && rdsWatcher == null, "already watched");
+      rdsResource = resourceName;
+      rdsWatcher = watcher;
+    }
+
+    @Override
+    void cancelRdsResourceWatch(String resourceName, RdsResourceWatcher watcher) {
+      Preconditions.checkArgument(resourceName.equals(rdsResource), "unknown resource");
+      Preconditions.checkArgument(watcher.equals(rdsWatcher), "unknown watcher");
+      rdsResource = null;
+      rdsWatcher = null;
     }
 
     @Override
@@ -544,11 +706,66 @@ public class XdsNameResolverTest {
       // no-op
     }
 
-    void deliverRoutes(final List<Route> routes) {
+    void deliverRoutesViaLds(final String resourceName, final List<Route> routes) {
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
-          watcher.onConfigChanged(ConfigUpdate.newBuilder().addRoutes(routes).build());
+          if (!resourceName.equals(ldsResource)) {
+            return;
+          }
+          VirtualHost virtualHost =
+              new VirtualHost("virtual-host", Collections.singletonList(AUTHORITY), routes);
+          ldsWatcher.onChanged(LdsUpdate.newBuilder().addVirtualHost(virtualHost).build());
+        }
+      });
+    }
+
+    void deliverRdsName(final String resourceName, final String rdsName) {
+      syncContext.execute(new Runnable() {
+        @Override
+        public void run() {
+          if (!resourceName.equals(ldsResource)) {
+            return;
+          }
+          ldsWatcher.onChanged(LdsUpdate.newBuilder().setRdsName(rdsName).build());
+        }
+      });
+    }
+
+    void deliverLdsResourceNotFound(final String resourceName) {
+      syncContext.execute(new Runnable() {
+        @Override
+        public void run() {
+          if (!resourceName.equals(ldsResource)) {
+            return;
+          }
+          ldsWatcher.onResourceDoesNotExist(ldsResource);
+        }
+      });
+    }
+
+    void deliverRoutesViaRds(final String resourceName, final List<Route> routes) {
+      syncContext.execute(new Runnable() {
+        @Override
+        public void run() {
+          if (!resourceName.equals(rdsResource)) {
+            return;
+          }
+          VirtualHost virtualHost =
+              new VirtualHost("virtual-host", Collections.singletonList(AUTHORITY), routes);
+          rdsWatcher.onChanged(RdsUpdate.fromVirtualHosts(Collections.singletonList(virtualHost)));
+        }
+      });
+    }
+
+    void deliverRdsResourceNotFound(final String resourceName) {
+      syncContext.execute(new Runnable() {
+        @Override
+        public void run() {
+          if (!resourceName.equals(rdsResource)) {
+            return;
+          }
+          rdsWatcher.onResourceDoesNotExist(rdsResource);
         }
       });
     }
@@ -557,17 +774,12 @@ public class XdsNameResolverTest {
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
-          watcher.onError(error);
-        }
-      });
-    }
-
-    void deliverResourceNotFound() {
-      Preconditions.checkState(resource != null, "no resource subscribed");
-      syncContext.execute(new Runnable() {
-        @Override
-        public void run() {
-          watcher.onResourceDoesNotExist(resource);
+          if (ldsWatcher != null) {
+            ldsWatcher.onError(error);
+          }
+          if (rdsWatcher != null) {
+            rdsWatcher.onError(error);
+          }
         }
       });
     }
