@@ -1058,6 +1058,7 @@ final class XdsClientImpl2 extends XdsClient {
       class ResourceNotFound implements Runnable {
         @Override
         public void run() {
+          logger.log(XdsLogLevel.INFO, "{0} resource {1} initial fetch timeout", type, resource);
           respTimer = null;
           onAbsent();
         }
@@ -1103,6 +1104,7 @@ final class XdsClientImpl2 extends XdsClient {
       if (respTimer != null && respTimer.isPending()) {  // too early to conclude absence
         return;
       }
+      logger.log(XdsLogLevel.INFO, "Conclude {0} resource {1} not exist", type, resource);
       boolean oldAbsent = absent;
       data = null;
       absent = true;
