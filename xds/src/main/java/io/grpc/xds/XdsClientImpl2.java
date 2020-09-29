@@ -77,19 +77,13 @@ import javax.annotation.Nullable;
 final class XdsClientImpl2 extends XdsClient {
 
   // Longest time to wait, since the subscription to some resource, for concluding its absence.
-  @VisibleForTesting
-  static final int INITIAL_RESOURCE_FETCH_TIMEOUT_SEC = 15;
-
-  @VisibleForTesting
-  static final String ADS_TYPE_URL_LDS_V2 = "type.googleapis.com/envoy.api.v2.Listener";
-  @VisibleForTesting
-  static final String ADS_TYPE_URL_LDS =
+  private static final int INITIAL_RESOURCE_FETCH_TIMEOUT_SEC = 15;
+  private static final String ADS_TYPE_URL_LDS_V2 = "type.googleapis.com/envoy.api.v2.Listener";
+  private static final String ADS_TYPE_URL_LDS =
       "type.googleapis.com/envoy.config.listener.v3.Listener";
-  @VisibleForTesting
-  static final String ADS_TYPE_URL_RDS_V2 =
+  private static final String ADS_TYPE_URL_RDS_V2 =
       "type.googleapis.com/envoy.api.v2.RouteConfiguration";
-  @VisibleForTesting
-  static final String ADS_TYPE_URL_RDS =
+  private static final String ADS_TYPE_URL_RDS =
       "type.googleapis.com/envoy.config.route.v3.RouteConfiguration";
   private static final String TYPE_URL_HTTP_CONNECTION_MANAGER_V2 =
       "type.googleapis.com/envoy.config.filter.network.http_connection_manager.v2"
@@ -97,16 +91,12 @@ final class XdsClientImpl2 extends XdsClient {
   private static final String TYPE_URL_HTTP_CONNECTION_MANAGER =
       "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3"
           + ".HttpConnectionManager";
-  @VisibleForTesting
-  static final String ADS_TYPE_URL_CDS_V2 = "type.googleapis.com/envoy.api.v2.Cluster";
-  @VisibleForTesting
-  static final String ADS_TYPE_URL_CDS =
+  private static final String ADS_TYPE_URL_CDS_V2 = "type.googleapis.com/envoy.api.v2.Cluster";
+  private static final String ADS_TYPE_URL_CDS =
       "type.googleapis.com/envoy.config.cluster.v3.Cluster";
-  @VisibleForTesting
-  static final String ADS_TYPE_URL_EDS_V2 =
+  private static final String ADS_TYPE_URL_EDS_V2 =
       "type.googleapis.com/envoy.api.v2.ClusterLoadAssignment";
-  @VisibleForTesting
-  static final String ADS_TYPE_URL_EDS =
+  private static final String ADS_TYPE_URL_EDS =
       "type.googleapis.com/envoy.config.endpoint.v3.ClusterLoadAssignment";
 
   private final MessagePrinter respPrinter = new MessagePrinter();
