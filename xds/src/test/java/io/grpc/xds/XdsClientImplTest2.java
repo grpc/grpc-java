@@ -130,7 +130,7 @@ public class XdsClientImplTest2 {
       new FakeClock.TaskFilter() {
         @Override
         public boolean shouldAccept(Runnable command) {
-          return command.toString().contains(XdsClientImpl.RpcRetryTask.class.getSimpleName());
+          return command.toString().contains(XdsClientImpl2.RpcRetryTask.class.getSimpleName());
         }
       };
 
@@ -316,7 +316,7 @@ public class XdsClientImplTest2 {
         eq(buildDiscoveryRequest(NODE, "0", LDS_RESOURCE, ResourceType.LDS.typeUrl(), "0000")));
 
     verifyNoInteractions(ldsResourceWatcher);
-    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(XdsClientImpl2.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(ldsResourceWatcher).onResourceDoesNotExist(LDS_RESOURCE);
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
@@ -403,7 +403,7 @@ public class XdsClientImplTest2 {
   public void cachedLdsResource_absent() {
     RpcCall<DiscoveryRequest, DiscoveryResponse> call =
         startResourceWatcher(ResourceType.LDS, LDS_RESOURCE, ldsResourceWatcher);
-    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(XdsClientImpl2.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(ldsResourceWatcher).onResourceDoesNotExist(LDS_RESOURCE);
     LdsResourceWatcher watcher = mock(LdsResourceWatcher.class);
     xdsClient.watchLdsResource(LDS_RESOURCE, watcher);
@@ -496,7 +496,7 @@ public class XdsClientImplTest2 {
         argThat(new DiscoveryRequestMatcher(NODE, "", Arrays.asList(LDS_RESOURCE, ldsResource),
             ResourceType.LDS.typeUrl(), "")));
 
-    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(XdsClientImpl2.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(ldsResourceWatcher).onResourceDoesNotExist(LDS_RESOURCE);
     verify(watcher1).onResourceDoesNotExist(ldsResource);
     verify(watcher2).onResourceDoesNotExist(ldsResource);
@@ -538,7 +538,7 @@ public class XdsClientImplTest2 {
         eq(buildDiscoveryRequest(NODE, "0", RDS_RESOURCE, ResourceType.RDS.typeUrl(), "0000")));
 
     verifyNoInteractions(rdsResourceWatcher);
-    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(XdsClientImpl2.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(rdsResourceWatcher).onResourceDoesNotExist(RDS_RESOURCE);
     assertThat(fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
@@ -586,7 +586,7 @@ public class XdsClientImplTest2 {
   public void cachedRdsResource_absent() {
     RpcCall<DiscoveryRequest, DiscoveryResponse> call =
         startResourceWatcher(ResourceType.RDS, RDS_RESOURCE, rdsResourceWatcher);
-    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(XdsClientImpl2.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(rdsResourceWatcher).onResourceDoesNotExist(RDS_RESOURCE);
     RdsResourceWatcher watcher = mock(RdsResourceWatcher.class);
     xdsClient.watchRdsResource(RDS_RESOURCE, watcher);
@@ -678,7 +678,7 @@ public class XdsClientImplTest2 {
         argThat(new DiscoveryRequestMatcher(NODE, "", Arrays.asList(RDS_RESOURCE, rdsResource),
             ResourceType.RDS.typeUrl(), "")));
 
-    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(XdsClientImpl2.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(rdsResourceWatcher).onResourceDoesNotExist(RDS_RESOURCE);
     verify(watcher1).onResourceDoesNotExist(rdsResource);
     verify(watcher2).onResourceDoesNotExist(rdsResource);
@@ -723,7 +723,7 @@ public class XdsClientImplTest2 {
         eq(buildDiscoveryRequest(NODE, "0", CDS_RESOURCE, ResourceType.CDS.typeUrl(), "0000")));
     verifyNoInteractions(cdsResourceWatcher);
 
-    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(XdsClientImpl2.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(cdsResourceWatcher).onResourceDoesNotExist(CDS_RESOURCE);
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
@@ -766,7 +766,7 @@ public class XdsClientImplTest2 {
             "eds-cluster-foo.googleapis.com", true, testUpstreamTlsContext)),
         Any.pack(buildCluster("cluster-baz.googleapis.com", null, false)));
     DiscoveryResponse response =
-        buildDiscoveryResponse("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS, "0000");
+        buildDiscoveryResponse("0", clusters, ResourceType.CDS.typeUrl(), "0000");
     call.responseObserver.onNext(response);
 
     // Client sent an ACK CDS request.
@@ -818,7 +818,7 @@ public class XdsClientImplTest2 {
   public void cachedCdsResource_absent() {
     RpcCall<DiscoveryRequest, DiscoveryResponse> call =
         startResourceWatcher(ResourceType.CDS, CDS_RESOURCE, cdsResourceWatcher);
-    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(XdsClientImpl2.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(cdsResourceWatcher).onResourceDoesNotExist(CDS_RESOURCE);
     CdsResourceWatcher watcher = mock(CdsResourceWatcher.class);
     xdsClient.watchCdsResource(CDS_RESOURCE, watcher);
@@ -903,7 +903,7 @@ public class XdsClientImplTest2 {
         argThat(new DiscoveryRequestMatcher(NODE, "", Arrays.asList(CDS_RESOURCE, cdsResource),
             ResourceType.CDS.typeUrl(), "")));
 
-    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(XdsClientImpl2.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(cdsResourceWatcher).onResourceDoesNotExist(CDS_RESOURCE);
     verify(watcher1).onResourceDoesNotExist(cdsResource);
     verify(watcher2).onResourceDoesNotExist(cdsResource);
@@ -949,8 +949,8 @@ public class XdsClientImplTest2 {
                         buildLbEndpoint("192.168.0.1", 8080, HealthStatus.HEALTHY, 2)),
                     1, 0)),
                     ImmutableList.<ClusterLoadAssignment.Policy.DropOverload>of())));
-    DiscoveryResponse response = buildDiscoveryResponse("0", clusterLoadAssignments,
-        XdsClientImpl.ADS_TYPE_URL_EDS, "0000");
+    DiscoveryResponse response =
+        buildDiscoveryResponse("0", clusterLoadAssignments, ResourceType.EDS.typeUrl(), "0000");
     call.responseObserver.onNext(response);
 
     // Client sent an ACK EDS request.
@@ -958,7 +958,7 @@ public class XdsClientImplTest2 {
         eq(buildDiscoveryRequest(NODE, "0", EDS_RESOURCE, ResourceType.EDS.typeUrl(), "0000")));
     verifyNoInteractions(edsResourceWatcher);
 
-    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(XdsClientImpl2.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(edsResourceWatcher).onResourceDoesNotExist(EDS_RESOURCE);
     assertThat(fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
@@ -1067,7 +1067,7 @@ public class XdsClientImplTest2 {
   public void cachedEdsResource_absent() {
     RpcCall<DiscoveryRequest, DiscoveryResponse> call =
         startResourceWatcher(ResourceType.EDS, EDS_RESOURCE, edsResourceWatcher);
-    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(XdsClientImpl2.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(edsResourceWatcher).onResourceDoesNotExist(EDS_RESOURCE);
     EdsResourceWatcher watcher = mock(EdsResourceWatcher.class);
     xdsClient.watchEdsResource(EDS_RESOURCE, watcher);
@@ -1203,7 +1203,7 @@ public class XdsClientImplTest2 {
         argThat(new DiscoveryRequestMatcher(NODE, "", Arrays.asList(EDS_RESOURCE, edsResource),
             ResourceType.EDS.typeUrl(), "")));
 
-    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(XdsClientImpl2.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(edsResourceWatcher).onResourceDoesNotExist(EDS_RESOURCE);
     verify(watcher1).onResourceDoesNotExist(edsResource);
     verify(watcher2).onResourceDoesNotExist(edsResource);
@@ -1551,7 +1551,7 @@ public class XdsClientImplTest2 {
                                     "cluster.googleapis.com"))))
                     .build()))));
     DiscoveryResponse response =
-        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS, "0000");
+        buildDiscoveryResponse("0", listeners, ResourceType.LDS.typeUrl(), "0000");
 
     String expectedString = "{\n"
         + "  \"versionInfo\": \"0\",\n"
@@ -1604,7 +1604,7 @@ public class XdsClientImplTest2 {
                             ImmutableList.of("foo.googleapis.com", "bar.googleapis.com"),
                             "cluster.googleapis.com")))));
     DiscoveryResponse response =
-        buildDiscoveryResponse("213", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0052");
+        buildDiscoveryResponse("213", routeConfigs, ResourceType.RDS.typeUrl(), "0052");
 
     String expectedString = "{\n"
         + "  \"versionInfo\": \"213\",\n"
@@ -1638,7 +1638,7 @@ public class XdsClientImplTest2 {
         Any.pack(buildCluster("cluster-bar.googleapis.com", "service-blaze:cluster-bar", true)),
         Any.pack(buildCluster("cluster-foo.googleapis.com", null, false)));
     DiscoveryResponse response =
-        buildDiscoveryResponse("14", clusters, XdsClientImpl.ADS_TYPE_URL_CDS, "8");
+        buildDiscoveryResponse("14", clusters, ResourceType.CDS.typeUrl(), "8");
 
     String expectedString = "{\n"
         + "  \"versionInfo\": \"14\",\n"
@@ -1695,7 +1695,7 @@ public class XdsClientImplTest2 {
 
     DiscoveryResponse response =
         buildDiscoveryResponse("5", clusterLoadAssignments,
-            XdsClientImpl.ADS_TYPE_URL_EDS, "004");
+            ResourceType.EDS.typeUrl(), "004");
 
     String expectedString = "{\n"
         + "  \"versionInfo\": \"5\",\n"

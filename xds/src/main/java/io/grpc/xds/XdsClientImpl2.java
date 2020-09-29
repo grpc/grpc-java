@@ -77,7 +77,8 @@ import javax.annotation.Nullable;
 final class XdsClientImpl2 extends XdsClient {
 
   // Longest time to wait, since the subscription to some resource, for concluding its absence.
-  private static final int INITIAL_RESOURCE_FETCH_TIMEOUT_SEC = 15;
+  @VisibleForTesting
+  static final int INITIAL_RESOURCE_FETCH_TIMEOUT_SEC = 15;
   private static final String ADS_TYPE_URL_LDS_V2 = "type.googleapis.com/envoy.api.v2.Listener";
   private static final String ADS_TYPE_URL_LDS =
       "type.googleapis.com/envoy.config.listener.v3.Listener";
