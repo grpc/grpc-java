@@ -1767,17 +1767,22 @@ public class XdsClientImplTest2 {
 
   private RpcCall<DiscoveryRequest, DiscoveryResponse> startResourceWatcher(
       ResourceType type, String name, ResourceWatcher watcher) {
+    FakeClock.TaskFilter timeoutTaskFilter;
     switch (type) {
       case LDS:
+        timeoutTaskFilter = LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER;
         xdsClient.watchLdsResource(name, (LdsResourceWatcher) watcher);
         break;
       case RDS:
+        timeoutTaskFilter = RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER;
         xdsClient.watchRdsResource(name, (RdsResourceWatcher) watcher);
         break;
       case CDS:
+        timeoutTaskFilter = CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER;
         xdsClient.watchCdsResource(name, (CdsResourceWatcher) watcher);
         break;
       case EDS:
+        timeoutTaskFilter = EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER;
         xdsClient.watchEdsResource(name, (EdsResourceWatcher) watcher);
         break;
       case UNKNOWN:
@@ -1787,7 +1792,10 @@ public class XdsClientImplTest2 {
     RpcCall<DiscoveryRequest, DiscoveryResponse> call = resourceDiscoveryCalls.poll();
     verify(call.requestObserver).onNext(
         eq(buildDiscoveryRequest(NODE, "", name, type.typeUrl(), "")));
-    // TODO: check task scheduled.
+    ScheduledTask timeoutTask =
+        Iterables.getOnlyElement(fakeClock.getPendingTasks(timeoutTaskFilter));
+    assertThat(timeoutTask.getDelay(TimeUnit.SECONDS))
+        .isEqualTo(XdsClientImpl2.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC);
     return call;
   }
 
