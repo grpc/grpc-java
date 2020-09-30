@@ -46,7 +46,6 @@ import io.grpc.xds.XdsClient.RdsUpdate;
 import io.grpc.xds.XdsClient.XdsChannel;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -54,7 +53,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -89,6 +87,7 @@ final class XdsNameResolver extends NameResolver {
   private Listener2 listener;
   private ObjectPool<XdsClient> xdsClientPool;
   private XdsClient xdsClient;
+  private ResolverState resolverState;
 
   XdsNameResolver(String name,
       ServiceConfigParser serviceConfigParser,
@@ -138,12 +137,16 @@ final class XdsNameResolver extends NameResolver {
     }
     xdsClientPool = xdsClientPoolFactory.newXdsClientObjectPool(bootstrapInfo, channel);
     xdsClient = xdsClientPool.getObject();
-    xdsClient.watchLdsResource(authority, new LdsResourceWatcherImpl());
+    resolverState = new ResolverState();
+    resolverState.start();
   }
 
   @Override
   public void shutdown() {
     logger.log(XdsLogLevel.INFO, "Shutdown");
+    if (resolverState != null) {
+      resolverState.stop();
+    }
     if (xdsClient != null) {
       xdsClient = xdsClientPool.returnObject(xdsClient);
     }
@@ -409,14 +412,15 @@ final class XdsNameResolver extends NameResolver {
     }
   }
 
-  private class LdsResourceWatcherImpl implements LdsResourceWatcher {
-    private ConfigOrError emptyServiceConfig =
+  private class ResolverState implements LdsResourceWatcher {
+    private final ConfigOrError emptyServiceConfig =
         serviceConfigParser.parseServiceConfig(Collections.<String, Object>emptyMap());
     private final ResolutionResult emptyResult =
         ResolutionResult.newBuilder()
             .setServiceConfig(emptyServiceConfig)
             // let channel take action for no config selector
             .build();
+    private boolean started;
     private Set<String> existingClusters;
     @Nullable
     private String rdsResource;
@@ -425,6 +429,9 @@ final class XdsNameResolver extends NameResolver {
 
     @Override
     public void onChanged(LdsUpdate update) {
+      if (!started) {
+        return;
+      }
       logger.log(XdsLogLevel.INFO, "Receive LDS resource update: {0}", update);
       List<VirtualHost> virtualHosts = update.getVirtualHosts();
       String rdsName = update.getRdsName();
@@ -437,12 +444,16 @@ final class XdsNameResolver extends NameResolver {
       } else {
         rdsResource = rdsName;
         rdsWatcher = new RdsResourceWatcherImpl();
+        logger.log(XdsLogLevel.INFO, "Start watching RDS resource {0}", rdsResource);
         xdsClient.watchRdsResource(rdsResource, rdsWatcher);
       }
     }
 
     @Override
     public void onError(Status error) {
+      if (!started) {
+        return;
+      }
       logger.log(
           XdsLogLevel.WARNING,
           "Received error from xDS client {0}: {1}", xdsClient, error.getDescription());
@@ -451,9 +462,31 @@ final class XdsNameResolver extends NameResolver {
 
     @Override
     public void onResourceDoesNotExist(String resourceName) {
+      if (!started) {
+        return;
+      }
       logger.log(XdsLogLevel.INFO, "LDS resource {0} unavailable", resourceName);
       cleanUpRdsWatcher();
       listener.onResult(emptyResult);
+    }
+
+    private void start() {
+      if (started) {
+        return;
+      }
+      logger.log(XdsLogLevel.INFO, "Start watching LDS resource {0}", authority);
+      started = true;
+      xdsClient.watchLdsResource(authority, this);
+    }
+
+    private void stop() {
+      if (!started) {
+        return;
+      }
+      logger.log(XdsLogLevel.INFO, "Stop watching LDS resource {0}", authority);
+      started = false;
+      xdsClient.cancelLdsResourceWatch(authority, this);
+      cleanUpRdsWatcher();
     }
 
     private void updateRoutes(List<VirtualHost> virtualHosts) {
@@ -511,6 +544,7 @@ final class XdsNameResolver extends NameResolver {
 
     private void cleanUpRdsWatcher() {
       if (rdsWatcher != null) {
+        logger.log(XdsLogLevel.INFO, "Stop watching RDS resource {0}", rdsResource);
         xdsClient.cancelRdsResourceWatch(rdsResource, rdsWatcher);
         rdsResource = null;
         rdsWatcher = null;
@@ -521,11 +555,17 @@ final class XdsNameResolver extends NameResolver {
 
       @Override
       public void onChanged(RdsUpdate update) {
+        if (this != rdsWatcher) {
+          return;
+        }
         updateRoutes(update.getVirtualHosts());
       }
 
       @Override
       public void onError(Status error) {
+        if (this != rdsWatcher) {
+          return;
+        }
         logger.log(
             XdsLogLevel.WARNING,
             "Received error from xDS client {0}: {1}", xdsClient, error.getDescription());
@@ -534,6 +574,9 @@ final class XdsNameResolver extends NameResolver {
 
       @Override
       public void onResourceDoesNotExist(String resourceName) {
+        if (this != rdsWatcher) {
+          return;
+        }
         logger.log(XdsLogLevel.INFO, "RDS resource {0} unavailable", resourceName);
         listener.onResult(emptyResult);
       }
