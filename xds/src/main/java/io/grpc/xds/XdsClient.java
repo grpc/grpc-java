@@ -211,8 +211,8 @@ abstract class XdsClient {
     private final List<VirtualHost> virtualHosts;
 
     private RdsUpdate(List<VirtualHost> virtualHosts) {
-      this.virtualHosts =
-          Collections.unmodifiableList(new ArrayList<>(checkNotNull(virtualHosts)));
+      this.virtualHosts = Collections.unmodifiableList(
+          new ArrayList<>(checkNotNull(virtualHosts, "virtualHosts")));
     }
 
     static RdsUpdate fromVirtualHosts(List<VirtualHost> virtualHosts) {
