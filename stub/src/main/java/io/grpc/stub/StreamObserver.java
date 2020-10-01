@@ -47,17 +47,9 @@ public interface StreamObserver<V>  {
    * server streaming calls, but may receive many onNext callbacks.  Servers may invoke onNext at
    * most once for client streaming calls, but may receive many onNext callbacks.
    *
-   * <p>Although implementations are expected to not throw exceptions, if an exception occurs the
-   * caller is encouraged to call {@link #onError} as part of normal application exception handling.
-   * That is to say, {@code onError} should be called if any related part of the application throws
-   * an exception, generally independent of the source, to avoid leaks. gRPC will call {@code
-   * onError()} when an application's implementation throws.
-   *
-   * <p>As an exception to the rule and for historical reasons, on server-side, {@code onNext()} may
-   * throw with a {@code StatusRuntimeException} if the call is cancelled. This was necessary
-   * because there was not a callback available to notify the service. Services are encouraged to
-   * use {@link ServerCallStreamObserver#setOnCancelHandler} which provides a callback and disables
-   * this exception-throwing behavior.
+   * <p>For historical reasons, on server-side {@code onNext()} may throw {@code
+   * StatusRuntimeException} if the call is cancelled. Services are encouraged to use {@link
+   * ServerCallStreamObserver#setOnCancelHandler} which disables this exception-throwing behavior.
    *
    * @param value the value passed to the stream
    */
@@ -66,9 +58,7 @@ public interface StreamObserver<V>  {
   /**
    * Receives a terminating error from the stream.
    *
-   * <p>May only be called once and if called it must be the last method called. Although
-   * implementations are expected to not throw exceptions, if an exception is thrown by {@code
-   * onError()} further calls to the observer should be avoided.
+   * <p>May only be called once and if called it must be the last method called.
    *
    * <p>{@code t} should be a {@link io.grpc.StatusException} or {@link
    * io.grpc.StatusRuntimeException}, but other {@code Throwable} types are possible. Callers should
@@ -83,9 +73,7 @@ public interface StreamObserver<V>  {
   /**
    * Receives a notification of successful stream completion.
    *
-   * <p>May only be called once and if called it must be the last method called. Although
-   * implementations are expected to not throw exceptions, if an exception is thrown by {@code
-   * onCompleted()} further calls to the observer should be avoided.
+   * <p>May only be called once and if called it must be the last method called.
    */
   void onCompleted();
 }
