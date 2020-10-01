@@ -87,7 +87,7 @@ final class XdsNameResolver extends NameResolver {
   private Listener2 listener;
   private ObjectPool<XdsClient> xdsClientPool;
   private XdsClient xdsClient;
-  private ResolverState resolverState;
+  private ResolveState resolveState;
 
   XdsNameResolver(String name,
       ServiceConfigParser serviceConfigParser,
@@ -137,15 +137,15 @@ final class XdsNameResolver extends NameResolver {
     }
     xdsClientPool = xdsClientPoolFactory.newXdsClientObjectPool(bootstrapInfo, channel);
     xdsClient = xdsClientPool.getObject();
-    resolverState = new ResolverState();
-    resolverState.start();
+    resolveState = new ResolveState();
+    resolveState.start();
   }
 
   @Override
   public void shutdown() {
     logger.log(XdsLogLevel.INFO, "Shutdown");
-    if (resolverState != null) {
-      resolverState.stop();
+    if (resolveState != null) {
+      resolveState.stop();
     }
     if (xdsClient != null) {
       xdsClient = xdsClientPool.returnObject(xdsClient);
@@ -412,7 +412,7 @@ final class XdsNameResolver extends NameResolver {
     }
   }
 
-  private class ResolverState implements LdsResourceWatcher {
+  private class ResolveState implements LdsResourceWatcher {
     private final ConfigOrError emptyServiceConfig =
         serviceConfigParser.parseServiceConfig(Collections.<String, Object>emptyMap());
     private final ResolutionResult emptyResult =
