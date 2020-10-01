@@ -32,9 +32,9 @@ package io.grpc.stub;
  * Since individual {@code StreamObserver}s are not thread-safe, if multiple threads will be
  * writing to a {@code StreamObserver} concurrently, the application must synchronize calls.
  *
- * <p>Implementations are expected to not throw exceptions, except when called incorrectly. For
- * example, a call to {@code onNext()} after {@code onCompleted()} may throw. {@link Error}s may
- * also still occur.
+ * <p>Implementations should not throw exceptions, except when called incorrectly. For example, a
+ * call to {@code onNext()} after {@code onCompleted()} may throw. {@link Error}s may also still
+ * occur.
  */
 public interface StreamObserver<V>  {
   /**
