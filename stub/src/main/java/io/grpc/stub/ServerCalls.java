@@ -347,7 +347,7 @@ public final class ServerCalls {
         if (serverStreamingOrBidi) {
           throw Status.CANCELLED
               .withDescription("call already cancelled. "
-                  + "ServerCallStreamObserver.setOnCancelHandler() disables this exception")
+                  + "Use ServerCallStreamObserver.setOnCancelHandler() to disable this exception")
               .asRuntimeException();
         } else {
           // We choose not to throw for unary responses. The exception is intended to stop servers
