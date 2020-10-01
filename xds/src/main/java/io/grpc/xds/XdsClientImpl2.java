@@ -398,13 +398,13 @@ final class XdsClientImpl2 extends XdsClient {
 
   private void handleLdsResponse(DiscoveryResponseData ldsResponse) {
     if (listenerWatcher != null) {
-      handleLdsResponseForListener(ldsResponse);
+      handleLdsResponseForServer(ldsResponse);
     } else {
-      handleLdsResponse2(ldsResponse);
+      handleLdsResponseForClient(ldsResponse);
     }
   }
 
-  private void handleLdsResponse2(DiscoveryResponseData ldsResponse) {
+  private void handleLdsResponseForClient(DiscoveryResponseData ldsResponse) {
     // Unpack Listener messages.
     List<Listener> listeners = new ArrayList<>(ldsResponse.getResourcesList().size());
     List<String> listenerNames = new ArrayList<>(ldsResponse.getResourcesList().size());
@@ -577,7 +577,7 @@ final class XdsClientImpl2 extends XdsClient {
     }
   }
 
-  private void handleLdsResponseForListener(DiscoveryResponseData ldsResponse) {
+  private void handleLdsResponseForServer(DiscoveryResponseData ldsResponse) {
     // Unpack Listener messages.
     Listener requestedListener = null;
     logger.log(XdsLogLevel.DEBUG, "Listener count: {0}", ldsResponse.getResourcesList().size());
