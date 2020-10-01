@@ -12,7 +12,7 @@ subprojects {
     apply plugin: "checkstyle"
     apply plugin: "idea"
     apply plugin: "signing"
-    apply plugin: "jacoco"
+    apply plugin: "jacocu"
 
     apply plugin: "com.google.osdetector"
     apply plugin: "net.ltgt.errorprone"
