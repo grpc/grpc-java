@@ -84,9 +84,9 @@ final class LoadReportClient {
     this.syncContext = checkNotNull(syncContext, "syncContext");
     this.timerService = checkNotNull(scheduledExecutorService, "timeService");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
-    checkNotNull(stopwatchSupplier, "stopwatchSupplier");
-    this.retryStopwatch = stopwatchSupplier.get();
-    this.node = checkNotNull(node, "node");
+    this.retryStopwatch = checkNotNull(stopwatchSupplier, "stopwatchSupplier").get();
+    this.node = checkNotNull(node, "node").toBuilder()
+        .addClientFeatures("envoy.lrs.supports_send_all_clusters").build();
     logId = InternalLogId.allocate("lrs-client", targetName);
     logger = XdsLogger.withLogId(logId);
     logger.log(XdsLogLevel.INFO, "Created");
