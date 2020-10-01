@@ -58,6 +58,7 @@ import io.netty.util.Attribute;
 import io.netty.util.AttributeMap;
 import java.net.SocketAddress;
 import java.net.URI;
+import java.nio.channels.ClosedChannelException;
 import java.util.Arrays;
 import java.util.concurrent.Executor;
 import java.util.logging.Level;
@@ -372,7 +373,18 @@ final class ProtocolNegotiators {
             ctx.fireExceptionCaught(ex);
           }
         } else {
-          ctx.fireExceptionCaught(handshakeEvent.cause());
+          Throwable t = handshakeEvent.cause();
+          if (t instanceof ClosedChannelException) {
+            // On channelInactive(), SslHandler creates its own ClosedChannelException and
+            // propagates it before the actual channelInactive(). So we assume here that any
+            // such exception is from channelInactive() and emulate the normal behavior of
+            // WriteBufferingAndExceptionHandler
+            t = Status.UNAVAILABLE
+                .withDescription("Connection closed while performing TLS negotiation")
+                .withCause(t)
+                .asRuntimeException();
+          }
+          ctx.fireExceptionCaught(t);
         }
       } else {
         super.userEventTriggered0(ctx, evt);

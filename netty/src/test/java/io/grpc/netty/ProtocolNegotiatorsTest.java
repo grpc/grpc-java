@@ -33,6 +33,8 @@ import io.grpc.Attributes;
 import io.grpc.Grpc;
 import io.grpc.InternalChannelz.Security;
 import io.grpc.SecurityLevel;
+import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.ProtocolNegotiators.ClientTlsHandler;
@@ -532,6 +534,20 @@ public class ProtocolNegotiatorsTest {
     assertThat(error.get()).hasMessageThat().contains("Unable to find compatible protocol");
     ChannelHandlerContext grpcHandlerCtx = pipeline.context(grpcHandler);
     assertNull(grpcHandlerCtx);
+  }
+
+  @Test
+  public void clientTlsHandler_closeDuringNegotiation() throws Exception {
+    ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext, "authority", null);
+    pipeline.addLast(new WriteBufferingAndExceptionHandler(handler));
+    ChannelFuture pendingWrite = channel.writeAndFlush(NettyClientHandler.NOOP_MESSAGE);
+
+    // SslHandler fires userEventTriggered() before channelInactive()
+    pipeline.fireChannelInactive();
+
+    assertThat(pendingWrite.cause()).isInstanceOf(StatusRuntimeException.class);
+    assertThat(Status.fromThrowable(pendingWrite.cause()).getCode())
+        .isEqualTo(Status.Code.UNAVAILABLE);
   }
 
   @Test
