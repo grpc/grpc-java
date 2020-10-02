@@ -186,6 +186,10 @@ final class XdsClientImpl2 extends XdsClient {
   }
 
   private void cleanUpResourceTimers() {
+    if (ldsRespTimer != null) {
+      ldsRespTimer.cancel();
+      ldsRespTimer = null;
+    }
     for (ResourceSubscriber subscriber : ldsResourceSubscribers.values()) {
       subscriber.stopTimer();
     }
@@ -922,6 +926,14 @@ final class XdsClientImpl2 extends XdsClient {
     @Override
     public void run() {
       startRpcStream();
+      if (listenerWatcher != null) {
+        adsStream.sendXdsRequest(ResourceType.LDS, ImmutableList.<String>of());
+        ldsRespTimer =
+            syncContext
+                .schedule(
+                    new ListenerResourceFetchTimeoutTask(":" + listenerPort),
+                    INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS, timeService);
+      }
       if (!ldsResourceSubscribers.isEmpty()) {
         adsStream.sendXdsRequest(ResourceType.LDS, ldsResourceSubscribers.keySet());
         for (ResourceSubscriber subscriber : ldsResourceSubscribers.values()) {
@@ -1311,6 +1323,9 @@ final class XdsClientImpl2 extends XdsClient {
           "ADS stream closed with status {0}: {1}. Cause: {2}",
           error.getCode(), error.getDescription(), error.getCause());
       closed = true;
+      if (listenerWatcher != null) {
+        listenerWatcher.onError(error);
+      }
       for (ResourceSubscriber subscriber : ldsResourceSubscribers.values()) {
         subscriber.onError(error);
       }
