@@ -229,6 +229,23 @@ abstract class XdsClient {
           .add("virtualHosts", virtualHosts)
           .toString();
     }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(virtualHosts);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      RdsUpdate that = (RdsUpdate) o;
+      return Objects.equals(virtualHosts, that.virtualHosts);
+    }
   }
 
   static final class CdsUpdate implements ResourceUpdate {
