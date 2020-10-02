@@ -1108,10 +1108,9 @@ final class XdsClientImpl2 extends XdsClient {
         return;
       }
       logger.log(XdsLogLevel.INFO, "Conclude {0} resource {1} not exist", type, resource);
-      boolean oldAbsent = absent;
-      data = null;
-      absent = true;
-      if (!oldAbsent) {
+      if (!absent) {
+        data = null;
+        absent = true;
         for (ResourceWatcher watcher : watchers) {
           watcher.onResourceDoesNotExist(resource);
         }
