@@ -16,6 +16,7 @@
 
 package io.grpc.xds;
 
+import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -117,7 +118,8 @@ abstract class XdsClient {
         @Nullable List<VirtualHost> virtualHosts) {
       this.httpMaxStreamDurationNano = httpMaxStreamDurationNano;
       this.rdsName = rdsName;
-      this.virtualHosts = virtualHosts;
+      this.virtualHosts = virtualHosts == null
+          ? null : Collections.unmodifiableList(new ArrayList<>(virtualHosts));
     }
 
     long getHttpMaxStreamDurationNano() {
@@ -169,7 +171,7 @@ abstract class XdsClient {
       return new Builder();
     }
 
-    private static class Builder {
+    static class Builder {
       private long httpMaxStreamDurationNano;
       @Nullable
       private String rdsName;
@@ -189,8 +191,11 @@ abstract class XdsClient {
         return this;
       }
 
-      Builder setVirtualHosts(List<VirtualHost> virtualHosts) {
-        this.virtualHosts = virtualHosts;
+      Builder addVirtualHost(VirtualHost virtualHost) {
+        if (virtualHosts == null) {
+          virtualHosts = new ArrayList<>();
+        }
+        virtualHosts.add(virtualHost);
         return this;
       }
 
@@ -206,7 +211,8 @@ abstract class XdsClient {
     private final List<VirtualHost> virtualHosts;
 
     private RdsUpdate(List<VirtualHost> virtualHosts) {
-      this.virtualHosts = virtualHosts;
+      this.virtualHosts = Collections.unmodifiableList(
+          new ArrayList<>(checkNotNull(virtualHosts, "virtualHosts")));
     }
 
     static RdsUpdate fromVirtualHosts(List<VirtualHost> virtualHosts) {
@@ -222,6 +228,23 @@ abstract class XdsClient {
       return MoreObjects.toStringHelper(this)
           .add("virtualHosts", virtualHosts)
           .toString();
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(virtualHosts);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      RdsUpdate that = (RdsUpdate) o;
+      return Objects.equals(virtualHosts, that.virtualHosts);
     }
   }
 
@@ -474,7 +497,7 @@ abstract class XdsClient {
    * Updates via resource discovery RPCs using LDS. Includes {@link Listener} object containing
    * config for security, RBAC or other server side features such as rate limit.
    */
-  static final class ListenerUpdate {
+  static final class ListenerUpdate implements ResourceUpdate {
     // TODO(sanjaypujare): flatten structure by moving Listener class members here.
     private final Listener listener;
 
