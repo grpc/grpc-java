@@ -224,6 +224,8 @@ public class XdsClientImplTest2 {
       @Override
       public StreamObserver<DiscoveryRequest> streamAggregatedResources(
           final StreamObserver<DiscoveryResponse> responseObserver) {
+        assertThat(adsEnded.get()).isTrue();  // ensure previous call was ended
+        adsEnded.set(false);
         @SuppressWarnings("unchecked")
         StreamObserver<DiscoveryRequest> requestObserver = mock(StreamObserver.class);
         RpcCall<DiscoveryRequest, DiscoveryResponse> call =
