@@ -418,7 +418,14 @@ public class CachingRlsLbClientTest {
         @Override
         public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
           // TODO: make the picker accessible
-          helper.updateBalancingState(ConnectivityState.READY, mock(SubchannelPicker.class));
+          helper.updateBalancingState(
+              ConnectivityState.READY,
+              new SubchannelPicker() {
+                @Override
+                public PickResult pickSubchannel(PickSubchannelArgs args) {
+                  return PickResult.withSubchannel(mock(Subchannel.class));
+                }
+              });
         }
 
         @Override

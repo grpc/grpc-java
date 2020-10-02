@@ -465,6 +465,7 @@ public class LoadReportClientTest {
             .setNode(
                 Node.newBuilder()
                     .setId("LRS test")
+                    .addClientFeatures("envoy.lrs.supports_send_all_clusters")
                     .setMetadata(
                         Struct.newBuilder()
                             .putFields(

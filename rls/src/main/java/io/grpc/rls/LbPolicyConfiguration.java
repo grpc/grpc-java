@@ -23,19 +23,15 @@ import static com.google.common.base.Preconditions.checkState;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import io.grpc.ConnectivityState;
-import io.grpc.ConnectivityStateInfo;
-import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
-import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.internal.ObjectPool;
 import io.grpc.rls.ChildLoadBalancerHelper.ChildLoadBalancerHelperProvider;
 import io.grpc.rls.RlsProtoData.RouteLookupConfig;
 import io.grpc.util.ForwardingLoadBalancerHelper;
-import io.grpc.util.ForwardingSubchannel;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -242,9 +238,8 @@ final class LbPolicyConfiguration {
 
     private final String target;
     private final ChildPolicyReportingHelper helper;
-    private ConnectivityStateInfo connectivityStateInfo =
-        ConnectivityStateInfo.forNonError(ConnectivityState.IDLE);
-    private SubchannelPicker picker;
+    private volatile SubchannelPicker picker;
+    private ConnectivityState state;
 
     public ChildPolicyWrapper(
         String target,
@@ -259,10 +254,6 @@ final class LbPolicyConfiguration {
       return target;
     }
 
-    void setPicker(SubchannelPicker picker) {
-      this.picker = checkNotNull(picker, "picker");
-    }
-
     SubchannelPicker getPicker() {
       return picker;
     }
@@ -271,32 +262,8 @@ final class LbPolicyConfiguration {
       return helper;
     }
 
-    void setConnectivityStateInfo(ConnectivityStateInfo connectivityStateInfo) {
-      this.connectivityStateInfo = connectivityStateInfo;
-    }
-
-    ConnectivityStateInfo getConnectivityStateInfo() {
-      return connectivityStateInfo;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (o == null || getClass() != o.getClass()) {
-        return false;
-      }
-      ChildPolicyWrapper that = (ChildPolicyWrapper) o;
-      return Objects.equals(target, that.target)
-          && Objects.equals(helper, that.helper)
-          && Objects.equals(connectivityStateInfo, that.connectivityStateInfo)
-          && Objects.equals(picker, that.picker);
-    }
-
-    @Override
-    public int hashCode() {
-      return Objects.hash(target, helper, connectivityStateInfo, picker);
+    void refreshState() {
+      helper.updateBalancingState(state, picker);
     }
 
     @Override
@@ -304,8 +271,8 @@ final class LbPolicyConfiguration {
       return MoreObjects.toStringHelper(this)
           .add("target", target)
           .add("helper", helper)
-          .add("connectivityStateInfo", connectivityStateInfo)
           .add("picker", picker)
+          .add("state", state)
           .toString();
     }
 
@@ -335,31 +302,10 @@ final class LbPolicyConfiguration {
 
       @Override
       public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
-        setPicker(newPicker);
+        picker = newPicker;
+        state = newState;
         super.updateBalancingState(newState, newPicker);
         listener.onStatusChanged(newState);
-      }
-
-      @Override
-      public Subchannel createSubchannel(CreateSubchannelArgs args) {
-        final Subchannel subchannel = super.createSubchannel(args);
-        return new ForwardingSubchannel() {
-          @Override
-          protected Subchannel delegate() {
-            return subchannel;
-          }
-
-          @Override
-          public void start(final SubchannelStateListener listener) {
-            super.start(new SubchannelStateListener() {
-              @Override
-              public void onSubchannelState(ConnectivityStateInfo newState) {
-                setConnectivityStateInfo(newState);
-                listener.onSubchannelState(newState);
-              }
-            });
-          }
-        };
       }
     }
   }
