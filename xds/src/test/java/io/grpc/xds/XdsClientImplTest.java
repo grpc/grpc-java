@@ -734,17 +734,14 @@ public class XdsClientImplTest {
                 // path match with cluster route
                 new io.grpc.xds.RouteMatch(
                     /* pathPrefixMatch= */ null, /* pathExactMatch= */ "/service1/method1"),
-                new EnvoyProtoData.RouteAction(
-                    TimeUnit.SECONDS.toNanos(15L), "cl1.googleapis.com", null)));
+                new EnvoyProtoData.RouteAction(0, "cl1.googleapis.com", null)));
     assertThat(routes.get(1))
         .isEqualTo(
             new EnvoyProtoData.Route(
                 // path match with weighted cluster route
                 new io.grpc.xds.RouteMatch(
                     /* pathPrefixMatch= */ null, /* pathExactMatch= */ "/service2/method2"),
-                new EnvoyProtoData.RouteAction(
-                    TimeUnit.SECONDS.toNanos(15L),
-                    null,
+                new EnvoyProtoData.RouteAction(0, null,
                     ImmutableList.of(
                         new EnvoyProtoData.ClusterWeight("cl21.googleapis.com", 30),
                         new EnvoyProtoData.ClusterWeight("cl22.googleapis.com", 70)))));
@@ -754,16 +751,14 @@ public class XdsClientImplTest {
                 // prefix match with cluster route
                 new io.grpc.xds.RouteMatch(
                     /* pathPrefixMatch= */ "/service1/", /* pathExactMatch= */ null),
-                new EnvoyProtoData.RouteAction(
-                    TimeUnit.SECONDS.toNanos(15L), "cl1.googleapis.com", null)));
+                new EnvoyProtoData.RouteAction(0, "cl1.googleapis.com", null)));
     assertThat(routes.get(3))
         .isEqualTo(
             new EnvoyProtoData.Route(
                 // default match with cluster route
                 new io.grpc.xds.RouteMatch(
                     /* pathPrefixMatch= */ "", /* pathExactMatch= */ null),
-                new EnvoyProtoData.RouteAction(
-                    TimeUnit.SECONDS.toNanos(15L), "cluster.googleapis.com", null)));
+                new EnvoyProtoData.RouteAction(0, "cluster.googleapis.com", null)));
   }
 
   /**

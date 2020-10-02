@@ -42,7 +42,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
 /**
@@ -1217,14 +1216,15 @@ final class EnvoyProtoData {
           return StructOrError.fromError(
               "Unknown cluster specifier: " + proto.getClusterSpecifierCase());
       }
-      long timeoutNano = TimeUnit.SECONDS.toNanos(15L);  // default 15s
-      if (proto.hasMaxGrpcTimeout()) {
-        timeoutNano = Durations.toNanos(proto.getMaxGrpcTimeout());
-      } else if (proto.hasTimeout()) {
-        timeoutNano = Durations.toNanos(proto.getTimeout());
-      }
-      if (timeoutNano == 0) {
-        timeoutNano = Long.MAX_VALUE;
+      long timeoutNano = 0;
+      if (proto.hasMaxStreamDuration()) {
+        io.envoyproxy.envoy.config.route.v3.RouteAction.MaxStreamDuration maxStreamDuration
+            = proto.getMaxStreamDuration();
+        if (maxStreamDuration.hasGrpcTimeoutHeaderMax()) {
+          timeoutNano = Durations.toNanos(maxStreamDuration.getGrpcTimeoutHeaderMax());
+        } else if (maxStreamDuration.hasMaxStreamDuration()) {
+          timeoutNano = Durations.toNanos(maxStreamDuration.getMaxStreamDuration());
+        }
       }
       return StructOrError.fromStruct(new RouteAction(timeoutNano, cluster, weightedClusters));
     }
