@@ -57,7 +57,7 @@ import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
- * Serves as a wrapper for {@link XdsClientImpl} used on the server side by {@link
+ * Serves as a wrapper for {@link XdsClient} used on the server side by {@link
  * io.grpc.xds.internal.sds.XdsServerBuilder}.
  */
 @Internal
