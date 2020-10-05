@@ -214,6 +214,12 @@ final class GrpclbState {
    */
   void handleAddresses(
       List<LbAddressGroup> newLbAddressGroups, List<EquivalentAddressGroup> newBackendServers) {
+    logger.log(
+        ChannelLogLevel.DEBUG,
+        "[grpclb-<{0}>] Resolved addresses: lb addresses {0}, backends: {1}",
+        serviceName,
+        newLbAddressGroups,
+        newBackendServers);
     if (newLbAddressGroups.isEmpty()) {
       // No balancer address: close existing balancer connection and enter fallback mode
       // immediately.

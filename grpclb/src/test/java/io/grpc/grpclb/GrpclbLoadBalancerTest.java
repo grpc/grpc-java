@@ -1326,8 +1326,7 @@ public class GrpclbLoadBalancerTest {
     List<EquivalentAddressGroup> backendList = createResolvedBackendAddresses(2);
     deliverResolvedAddresses(backendList, Collections.<EquivalentAddressGroup>emptyList());
 
-    assertThat(logs).containsExactly(
-            "INFO: [grpclb-<api.google.com>] Created",
+    assertThat(logs).containsAtLeast(
             "INFO: [grpclb-<api.google.com>] Using fallback backends",
             "INFO: [grpclb-<api.google.com>] "
                 + "Using RR list=[[[FakeSocketAddress-fake-address-0]/{}], "
