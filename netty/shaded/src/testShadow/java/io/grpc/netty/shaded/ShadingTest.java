@@ -40,7 +40,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-/** Unit tests for {@link Shading}. */
+/** Unit tests for shaded gRPC Netty. */
 @RunWith(JUnit4.class)
 public final class ShadingTest {
   private ManagedChannel channel;
