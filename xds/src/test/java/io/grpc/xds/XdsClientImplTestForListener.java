@@ -154,7 +154,7 @@ public class XdsClientImplTestForListener {
   private ListenerWatcher listenerWatcher;
 
   private ManagedChannel channel;
-  private XdsClientImpl xdsClient;
+  private XdsClientImpl2 xdsClient;
 
   @Before
   public void setUp() throws IOException {
@@ -198,7 +198,7 @@ public class XdsClientImplTestForListener {
         cleanupRule.register(InProcessChannelBuilder.forName(serverName).directExecutor().build());
 
     xdsClient =
-        new XdsClientImpl("", new XdsChannel(channel, /* useProtocolV3= */ false), NODE,
+        new XdsClientImpl2("", new XdsChannel(channel, /* useProtocolV3= */ false), NODE,
             syncContext, fakeClock.getScheduledExecutorService(), backoffPolicyProvider,
             fakeClock.getStopwatchSupplier());
     // Only the connection to management server is established, no RPC request is sent until at

@@ -115,7 +115,7 @@ public final class XdsNameResolverProvider extends NameResolverProvider {
       XdsClientFactory xdsClientFactory = new XdsClientFactory() {
         @Override
         XdsClient createXdsClient() {
-          return new XdsClientImpl(
+          return new XdsClientImpl2(
               serviceName, channel, bootstrapInfo.getNode(), syncContext, timeService,
               backoffPolicyProvider, stopwatchSupplier);
         }
