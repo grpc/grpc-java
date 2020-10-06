@@ -337,7 +337,7 @@ public class CommonTlsContextTestsUtil {
         buildTestDownstreamTlsContext(certName, validationContextName));
   }
 
-  static String getTempFileNameForResourcesFile(String resFile) throws IOException {
+  public static String getTempFileNameForResourcesFile(String resFile) throws IOException {
     return TestUtils.loadCert(resFile).getAbsolutePath();
   }
 
