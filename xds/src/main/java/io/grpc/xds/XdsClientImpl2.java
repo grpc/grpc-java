@@ -27,6 +27,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.MessageOrBuilder;
+import com.google.protobuf.TypeRegistry;
 import com.google.protobuf.util.Durations;
 import com.google.protobuf.util.JsonFormat;
 import com.google.rpc.Code;
@@ -1670,8 +1671,8 @@ final class XdsClientImpl2 extends XdsClient {
 
     @VisibleForTesting
     MessagePrinter() {
-      com.google.protobuf.TypeRegistry registry =
-          com.google.protobuf.TypeRegistry.newBuilder()
+      TypeRegistry registry =
+          TypeRegistry.newBuilder()
               .add(Listener.getDescriptor())
               .add(io.envoyproxy.envoy.api.v2.Listener.getDescriptor())
               .add(HttpConnectionManager.getDescriptor())
