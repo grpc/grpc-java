@@ -43,8 +43,6 @@ compat_repositories()
 
 load("@io_grpc_grpc_java//:repositories.bzl", "grpc_java_repositories")
 
-# Run grpc_java_repositories after compat_repositories to ensure the
-# maven_install-selected dependencies are used.
 grpc_java_repositories()
 
 load("@com_google_protobuf//:protobuf_deps.bzl", "protobuf_deps")
