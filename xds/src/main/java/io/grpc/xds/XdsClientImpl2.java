@@ -27,6 +27,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.MessageOrBuilder;
+import com.google.protobuf.TypeRegistry;
 import com.google.protobuf.util.Durations;
 import com.google.protobuf.util.JsonFormat;
 import com.google.rpc.Code;
@@ -45,6 +46,7 @@ import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
 import io.envoyproxy.envoy.config.route.v3.VirtualHost;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.Rds;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext;
 import io.envoyproxy.envoy.service.discovery.v3.AggregatedDiscoveryServiceGrpc;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse;
@@ -59,7 +61,6 @@ import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.EnvoyProtoData.StructOrError;
-import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.LoadStatsManager.LoadStatsStore;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.util.ArrayList;
@@ -745,7 +746,8 @@ final class XdsClientImpl2 extends XdsClient {
         updateBuilder.setLrsServerName("");
       }
       try {
-        UpstreamTlsContext upstreamTlsContext = getTlsContextFromCluster(cluster);
+        EnvoyServerProtoData.UpstreamTlsContext upstreamTlsContext =
+            getTlsContextFromCluster(cluster);
         if (upstreamTlsContext != null && upstreamTlsContext.getCommonTlsContext() != null) {
           updateBuilder.setUpstreamTlsContext(upstreamTlsContext);
         }
@@ -783,13 +785,12 @@ final class XdsClientImpl2 extends XdsClient {
   }
 
   @Nullable
-  private static UpstreamTlsContext getTlsContextFromCluster(Cluster cluster)
+  private static EnvoyServerProtoData.UpstreamTlsContext getTlsContextFromCluster(Cluster cluster)
       throws InvalidProtocolBufferException {
     if (cluster.hasTransportSocket() && "tls".equals(cluster.getTransportSocket().getName())) {
       Any any = cluster.getTransportSocket().getTypedConfig();
-      return UpstreamTlsContext.fromEnvoyProtoUpstreamTlsContext(
-          io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext.parseFrom(
-              any.getValue()));
+      return EnvoyServerProtoData.UpstreamTlsContext.fromEnvoyProtoUpstreamTlsContext(
+          any.unpack(UpstreamTlsContext.class));
     }
     return null;
   }
@@ -1670,8 +1671,8 @@ final class XdsClientImpl2 extends XdsClient {
 
     @VisibleForTesting
     MessagePrinter() {
-      com.google.protobuf.TypeRegistry registry =
-          com.google.protobuf.TypeRegistry.newBuilder()
+      TypeRegistry registry =
+          TypeRegistry.newBuilder()
               .add(Listener.getDescriptor())
               .add(io.envoyproxy.envoy.api.v2.Listener.getDescriptor())
               .add(HttpConnectionManager.getDescriptor())
