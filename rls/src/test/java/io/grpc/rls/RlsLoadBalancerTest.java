@@ -406,7 +406,7 @@ public class RlsLoadBalancerTest {
 
     @Override
     public String getAuthority() {
-      throw new UnsupportedOperationException();
+      return "fake-bigtable.googleapis.com";
     }
 
     @Override

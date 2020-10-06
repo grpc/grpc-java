@@ -26,6 +26,8 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
+import io.grpc.ChannelLogger;
+import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ConnectivityState;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
@@ -114,6 +116,7 @@ final class CachingRlsLbClient {
   private final RlsPicker rlsPicker;
   private final ResolvedAddressFactory childLbResolvedAddressFactory;
   private final RefCountedChildPolicyWrapperFactory refCountedChildPolicyWrapperFactory;
+  private final ChannelLogger logger;
 
   private CachingRlsLbClient(Builder builder) {
     helper = checkNotNull(builder.helper, "helper");
@@ -136,7 +139,12 @@ final class CachingRlsLbClient {
     rlsPicker = new RlsPicker(requestFactory);
     ManagedChannelBuilder<?> rlsChannelBuilder =
         helper.createResolvingOobChannelBuilder(rlsConfig.getLookupService());
+    logger = helper.getChannelLogger();
     if (enableOobChannelDirectPath) {
+      logger.log(
+          ChannelLogLevel.DEBUG,
+          "RLS channel direct path enabled. RLS channel service config: {0}",
+          getDirectpathServiceConfig());
       rlsChannelBuilder.defaultServiceConfig(getDirectpathServiceConfig());
       rlsChannelBuilder.disableServiceConfigLookUp();
     }
@@ -151,6 +159,7 @@ final class CachingRlsLbClient {
     refCountedChildPolicyWrapperFactory =
         new RefCountedChildPolicyWrapperFactory(
             childLbHelperProvider, new BackoffRefreshListener());
+    logger.log(ChannelLogLevel.DEBUG, "CachingRlsLbClient created");
   }
 
   private static ImmutableMap<String, Object> getDirectpathServiceConfig() {
@@ -170,20 +179,25 @@ final class CachingRlsLbClient {
   private ListenableFuture<RouteLookupResponse> asyncRlsCall(RouteLookupRequest request) {
     final SettableFuture<RouteLookupResponse> response = SettableFuture.create();
     if (throttler.shouldThrottle()) {
+      logger.log(ChannelLogLevel.DEBUG, "Request is throttled");
       response.setException(new ThrottledException());
       return response;
     }
+    io.grpc.lookup.v1.RouteLookupRequest routeLookupRequest = REQUEST_CONVERTER.convert(request);
+    logger.log(ChannelLogLevel.DEBUG, "Sending RouteLookupRequest: {0}", routeLookupRequest);
     rlsStub.withDeadlineAfter(callTimeoutNanos, TimeUnit.NANOSECONDS)
         .routeLookup(
-            REQUEST_CONVERTER.convert(request),
+            routeLookupRequest,
             new StreamObserver<io.grpc.lookup.v1.RouteLookupResponse>() {
               @Override
               public void onNext(io.grpc.lookup.v1.RouteLookupResponse value) {
+                logger.log(ChannelLogLevel.DEBUG, "Received RouteLookupResponse: {0}", value);
                 response.set(RESPONSE_CONVERTER.reverse().convert(value));
               }
 
               @Override
               public void onError(Throwable t) {
+                logger.log(ChannelLogLevel.DEBUG, "Error looking up route:", t);
                 response.setException(t);
                 throttler.registerBackendResponse(false);
               }
@@ -212,6 +226,7 @@ final class CachingRlsLbClient {
 
       if (cacheEntry instanceof DataCacheEntry) {
         // cache hit, initiate async-refresh if entry is staled
+        logger.log(ChannelLogLevel.DEBUG, "Cache hit for the request");
         DataCacheEntry dataEntry = ((DataCacheEntry) cacheEntry);
         if (dataEntry.isStaled(timeProvider.currentTimeNanos())) {
           dataEntry.maybeRefresh();
@@ -224,6 +239,7 @@ final class CachingRlsLbClient {
 
   /** Performs any pending maintenance operations needed by the cache. */
   void close() {
+    logger.log(ChannelLogLevel.DEBUG, "CachingRlsLbClient closed");
     synchronized (lock) {
       // all childPolicyWrapper will be returned via AutoCleaningEvictionListener
       linkedHashLruCache.close();
@@ -408,12 +424,17 @@ final class CachingRlsLbClient {
 
     private void transitionToDataEntry(RouteLookupResponse routeLookupResponse) {
       synchronized (lock) {
+        logger.log(
+            ChannelLogLevel.DEBUG,
+            "Transition to data cache: routeLookupResponse={0}",
+            routeLookupResponse);
         linkedHashLruCache.cache(request, new DataCacheEntry(request, routeLookupResponse));
       }
     }
 
     private void transitionToBackOff(Status status) {
       synchronized (lock) {
+        logger.log(ChannelLogLevel.DEBUG, "Transition to back off: status={0}", status);
         linkedHashLruCache.cache(request, new BackoffCacheEntry(request, status, backoffPolicy));
       }
     }
@@ -482,6 +503,10 @@ final class CachingRlsLbClient {
                   childPolicy.getEffectiveChildPolicy(childPolicyWrapper.getTarget()));
 
       LoadBalancer lb = lbProvider.newLoadBalancer(childPolicyWrapper.getHelper());
+      logger.log(
+          ChannelLogLevel.DEBUG,
+          "RLS child lb created. config: {0}",
+          lbConfig.getConfig());
       lb.handleResolvedAddresses(childLbResolvedAddressFactory.create(lbConfig.getConfig()));
       lb.requestConnection();
     }
@@ -848,6 +873,9 @@ final class CachingRlsLbClient {
     @Override
     public PickResult pickSubchannel(PickSubchannelArgs args) {
       String[] methodName = args.getMethodDescriptor().getFullMethodName().split("/", 2);
+      logger.log(ChannelLogLevel.DEBUG,
+          "Creating lookup request for service={0}, method={1}, headers={2}",
+          new Object[]{methodName[0], methodName[1], args.getHeaders()});
       RouteLookupRequest request =
           requestFactory.create(methodName[0], methodName[1], args.getHeaders());
       final CachedRouteLookupResponse response = CachingRlsLbClient.this.get(request);
