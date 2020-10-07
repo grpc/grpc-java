@@ -885,6 +885,8 @@ final class CachingRlsLbClient {
         headers.discardAll(RLS_DATA_KEY);
         headers.put(RLS_DATA_KEY, response.getHeaderData());
       }
+      String defaultTarget = lbPolicyConfig.getRouteLookupConfig().getDefaultTarget();
+      boolean hasFallback = defaultTarget != null && !defaultTarget.isEmpty();
       if (response.hasData()) {
         ChildPolicyWrapper childPolicyWrapper = response.getChildPolicyWrapper();
         SubchannelPicker picker = childPolicyWrapper.getPicker();
@@ -895,9 +897,15 @@ final class CachingRlsLbClient {
         if (result.getStatus().isOk()) {
           return result;
         }
-        return useFallback(args);
+        if (hasFallback) {
+          return useFallback(args);
+        }
+        return PickResult.withError(result.getStatus());
       } else if (response.hasError()) {
-        return useFallback(args);
+        if (hasFallback) {
+          return useFallback(args);
+        }
+        return PickResult.withError(response.getStatus());
       } else {
         return PickResult.withNoResult();
       }
@@ -907,12 +915,8 @@ final class CachingRlsLbClient {
 
     /** Uses Subchannel connected to default target. */
     private PickResult useFallback(PickSubchannelArgs args) {
-      String defaultTarget = lbPolicyConfig.getRouteLookupConfig().getDefaultTarget();
-      if (fallbackChildPolicyWrapper == null
-          || !fallbackChildPolicyWrapper.getTarget().equals(defaultTarget)) {
-        // TODO(creamsoup) wait until lb is ready
-        startFallbackChildPolicy();
-      }
+      // TODO(creamsoup) wait until lb is ready
+      startFallbackChildPolicy();
       SubchannelPicker picker = fallbackChildPolicyWrapper.getPicker();
       if (picker == null) {
         return PickResult.withNoResult();
@@ -922,8 +926,12 @@ final class CachingRlsLbClient {
 
     private void startFallbackChildPolicy() {
       String defaultTarget = lbPolicyConfig.getRouteLookupConfig().getDefaultTarget();
-      fallbackChildPolicyWrapper = refCountedChildPolicyWrapperFactory.createOrGet(defaultTarget);
-
+      synchronized (lock) {
+        if (fallbackChildPolicyWrapper != null) {
+          return;
+        }
+        fallbackChildPolicyWrapper = refCountedChildPolicyWrapperFactory.createOrGet(defaultTarget);
+      }
       LoadBalancerProvider lbProvider =
           lbPolicyConfig.getLoadBalancingPolicy().getEffectiveLbProvider();
       final LoadBalancer lb =

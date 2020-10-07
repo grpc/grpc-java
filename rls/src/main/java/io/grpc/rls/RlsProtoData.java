@@ -195,6 +195,7 @@ final class RlsProtoData {
 
     private final ImmutableList<String> validTargets;
 
+    @Nullable
     private final String defaultTarget;
 
     RouteLookupConfig(
@@ -205,6 +206,7 @@ final class RlsProtoData {
         @Nullable Long staleAgeInMillis,
         long cacheSizeBytes,
         List<String> validTargets,
+        @Nullable
         String defaultTarget) {
       checkState(
           !checkNotNull(grpcKeyBuilders, "grpcKeyBuilders").isEmpty(),
@@ -233,7 +235,7 @@ final class RlsProtoData {
       checkArgument(cacheSizeBytes > 0, "cacheSize must be positive");
       this.cacheSizeBytes = cacheSizeBytes;
       this.validTargets = ImmutableList.copyOf(checkNotNull(validTargets, "validTargets"));
-      this.defaultTarget = checkNotNull(defaultTarget, "defaultTarget");
+      this.defaultTarget = defaultTarget;
     }
 
     /**
