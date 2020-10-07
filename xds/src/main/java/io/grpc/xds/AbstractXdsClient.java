@@ -25,6 +25,7 @@ import com.google.common.base.Stopwatch;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.MessageOrBuilder;
+import com.google.protobuf.TypeRegistry;
 import com.google.protobuf.util.JsonFormat;
 import com.google.rpc.Code;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
@@ -96,7 +97,7 @@ abstract class AbstractXdsClient extends XdsClient {
   @Nullable
   private BackoffPolicy retryBackoffPolicy;
   @Nullable
-  private ScheduledHandle rpcRetryTimer;
+  protected ScheduledHandle rpcRetryTimer;
 
   AbstractXdsClient(
       XdsChannel channel,
@@ -116,6 +117,42 @@ abstract class AbstractXdsClient extends XdsClient {
     logger.log(XdsLogLevel.INFO, "Created");
   }
 
+  /**
+   * Called when an LDS response is received.
+   */
+  protected void handleLdsResponse(String versionInfo, List<Any> resources, String nonce) {
+  }
+
+  /**
+   * Called when a RDS response is received.
+   */
+  protected void handleRdsResponse(String versionInfo, List<Any> resources, String nonce) {
+  }
+
+  /**
+   * Called when a CDS response is received.
+   */
+  protected void handleCdsResponse(String versionInfo, List<Any> resources, String nonce) {
+  }
+
+  /**
+   * Called when an EDS response is received.
+   */
+  protected void handleEdsResponse(String versionInfo, List<Any> resources, String nonce) {
+  }
+
+  /**
+   * Called when the ADS stream is closed passively.
+   */
+  protected void handleStreamClosed(Status error) {
+  }
+
+  /**
+   * Called when the ADS stream has been recreated.
+   */
+  protected void handleStreamRestarted() {
+  }
+
   @Override
   void shutdown() {
     logger.log(XdsLogLevel.INFO, "Shutting down");
@@ -127,7 +164,6 @@ abstract class AbstractXdsClient extends XdsClient {
       rpcRetryTimer.cancel();
     }
   }
-
 
   @Override
   public String toString() {
@@ -144,25 +180,6 @@ abstract class AbstractXdsClient extends XdsClient {
   @Nullable
   Collection<String> getSubscribedResources(ResourceType type) {
     return null;
-  }
-
-  void handleLdsResponse(
-      ResourceType type, String versionInfo, List<Any> resources, String nonce) {
-  }
-
-  void handleRdsResponse(
-      ResourceType type, String versionInfo, List<Any> resources, String nonce) {
-  }
-
-  void handleCdsResponse(
-      ResourceType type, String versionInfo, List<Any> resources, String nonce) {
-  }
-
-  void handleEdsResponse(
-      ResourceType type, String versionInfo, List<Any> resources, String nonce) {
-  }
-
-  void handleStreamClosed(Status error) {
   }
 
   /**
@@ -268,6 +285,16 @@ abstract class AbstractXdsClient extends XdsClient {
     @Override
     public void run() {
       startRpcStream();
+      for (ResourceType type : ResourceType.values()) {
+        if (type == ResourceType.UNKNOWN) {
+          continue;
+        }
+        Collection<String> resources = getSubscribedResources(type);
+        if (resources != null) {
+          adsStream.sendDiscoveryRequest(type, resources);
+        }
+      }
+      handleStreamRestarted();
     }
   }
 
@@ -397,19 +424,19 @@ abstract class AbstractXdsClient extends XdsClient {
       switch (type) {
         case LDS:
           ldsRespNonce = nonce;
-          handleLdsResponse(type, versionInfo, resources, nonce);
+          handleLdsResponse(versionInfo, resources, nonce);
           break;
         case RDS:
           rdsRespNonce = nonce;
-          handleRdsResponse(type, versionInfo, resources, nonce);
+          handleRdsResponse(versionInfo, resources, nonce);
           break;
         case CDS:
           cdsRespNonce = nonce;
-          handleCdsResponse(type, versionInfo, resources, nonce);
+          handleCdsResponse(versionInfo, resources, nonce);
           break;
         case EDS:
           edsRespNonce = nonce;
-          handleEdsResponse(type, versionInfo, resources, nonce);
+          handleEdsResponse(versionInfo, resources, nonce);
           break;
         case UNKNOWN:
         default:
@@ -437,6 +464,7 @@ abstract class AbstractXdsClient extends XdsClient {
           "ADS stream closed with status {0}: {1}. Cause: {2}",
           error.getCode(), error.getDescription(), error.getCause());
       closed = true;
+      handleStreamClosed(error);
       cleanUp();
       if (responseReceived || retryBackoffPolicy == null) {
         // Reset the backoff sequence if had received a response, or backoff sequence
@@ -647,8 +675,8 @@ abstract class AbstractXdsClient extends XdsClient {
 
     @VisibleForTesting
     MessagePrinter() {
-      com.google.protobuf.TypeRegistry registry =
-          com.google.protobuf.TypeRegistry.newBuilder()
+      TypeRegistry registry =
+          TypeRegistry.newBuilder()
               .add(Listener.getDescriptor())
               .add(io.envoyproxy.envoy.api.v2.Listener.getDescriptor())
               .add(HttpConnectionManager.getDescriptor())

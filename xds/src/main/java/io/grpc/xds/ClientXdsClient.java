@@ -99,14 +99,14 @@ final class ClientXdsClient extends AbstractXdsClient {
   }
 
   @Override
-  void handleLdsResponse(ResourceType type, String versionInfo, List<Any> resources, String nonce) {
+  protected void handleLdsResponse(String versionInfo, List<Any> resources, String nonce) {
     // Unpack Listener messages.
     List<Listener> listeners = new ArrayList<>(resources.size());
     List<String> listenerNames = new ArrayList<>(resources.size());
     try {
       for (com.google.protobuf.Any res : resources) {
-        if (res.getTypeUrl().equals(type.typeUrlV2())) {
-          res = res.toBuilder().setTypeUrl(type.typeUrl()).build();
+        if (res.getTypeUrl().equals(ResourceType.LDS.typeUrlV2())) {
+          res = res.toBuilder().setTypeUrl(ResourceType.LDS.typeUrl()).build();
         }
         Listener listener = res.unpack(Listener.class);
         listeners.add(listener);
@@ -204,13 +204,13 @@ final class ClientXdsClient extends AbstractXdsClient {
   }
 
   @Override
-  void handleRdsResponse(ResourceType type, String versionInfo, List<Any> resources, String nonce) {
+  protected void handleRdsResponse(String versionInfo, List<Any> resources, String nonce) {
     // Unpack RouteConfiguration messages.
     Map<String, RouteConfiguration> routeConfigs = new HashMap<>(resources.size());
     try {
       for (com.google.protobuf.Any res : resources) {
-        if (res.getTypeUrl().equals(type.typeUrlV2())) {
-          res = res.toBuilder().setTypeUrl(type.typeUrl()).build();
+        if (res.getTypeUrl().equals(ResourceType.RDS.typeUrlV2())) {
+          res = res.toBuilder().setTypeUrl(ResourceType.RDS.typeUrl()).build();
         }
         RouteConfiguration rc = res.unpack(RouteConfiguration.class);
         routeConfigs.put(rc.getName(), rc);
@@ -262,14 +262,14 @@ final class ClientXdsClient extends AbstractXdsClient {
   }
 
   @Override
-  void handleCdsResponse(ResourceType type, String versionInfo, List<Any> resources, String nonce) {
+  protected void handleCdsResponse(String versionInfo, List<Any> resources, String nonce) {
     // Unpack Cluster messages.
     List<Cluster> clusters = new ArrayList<>(resources.size());
     List<String> clusterNames = new ArrayList<>(resources.size());
     try {
       for (com.google.protobuf.Any res : resources) {
-        if (res.getTypeUrl().equals(type.typeUrlV2())) {
-          res = res.toBuilder().setTypeUrl(type.typeUrl()).build();
+        if (res.getTypeUrl().equals(ResourceType.CDS.typeUrlV2())) {
+          res = res.toBuilder().setTypeUrl(ResourceType.CDS.typeUrl()).build();
         }
         Cluster cluster = res.unpack(Cluster.class);
         clusters.add(cluster);
@@ -384,14 +384,14 @@ final class ClientXdsClient extends AbstractXdsClient {
   }
 
   @Override
-  void handleEdsResponse(ResourceType type, String versionInfo, List<Any> resources, String nonce) {
+  protected void handleEdsResponse(String versionInfo, List<Any> resources, String nonce) {
     // Unpack ClusterLoadAssignment messages.
     List<ClusterLoadAssignment> clusterLoadAssignments = new ArrayList<>(resources.size());
     List<String> claNames = new ArrayList<>(resources.size());
     try {
       for (com.google.protobuf.Any res : resources) {
-        if (res.getTypeUrl().equals(type.typeUrlV2())) {
-          res = res.toBuilder().setTypeUrl(type.typeUrl()).build();
+        if (res.getTypeUrl().equals(ResourceType.EDS.typeUrlV2())) {
+          res = res.toBuilder().setTypeUrl(ResourceType.EDS.typeUrl()).build();
         }
         ClusterLoadAssignment assignment = res.unpack(ClusterLoadAssignment.class);
         clusterLoadAssignments.add(assignment);
@@ -485,7 +485,7 @@ final class ClientXdsClient extends AbstractXdsClient {
   }
 
   @Override
-  void handleStreamClosed(Status error) {
+  protected void handleStreamClosed(Status error) {
     cleanUpResourceTimers();
     for (ResourceSubscriber subscriber : ldsResourceSubscribers.values()) {
       subscriber.onError(error);
@@ -498,6 +498,22 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
     for (ResourceSubscriber subscriber : edsResourceSubscribers.values()) {
       subscriber.onError(error);
+    }
+  }
+
+  @Override
+  protected void handleStreamRestarted() {
+    for (ResourceSubscriber subscriber : ldsResourceSubscribers.values()) {
+      subscriber.restartTimer();
+    }
+    for (ResourceSubscriber subscriber : rdsResourceSubscribers.values()) {
+      subscriber.restartTimer();
+    }
+    for (ResourceSubscriber subscriber : cdsResourceSubscribers.values()) {
+      subscriber.restartTimer();
+    }
+    for (ResourceSubscriber subscriber : edsResourceSubscribers.values()) {
+      subscriber.restartTimer();
     }
   }
 
@@ -678,9 +694,6 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
   }
 
-
-
-
   /**
    * Tracks a single subscribed resource.
    */
@@ -716,6 +729,7 @@ final class ClientXdsClient extends AbstractXdsClient {
       watchers.remove(watcher);
     }
 
+    // FIXME(chengyuanzhang): should only restart timer if the resource is still unresolved.
     void restartTimer() {
       class ResourceNotFound implements Runnable {
         @Override
