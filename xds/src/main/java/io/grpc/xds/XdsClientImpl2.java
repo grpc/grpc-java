@@ -983,7 +983,8 @@ final class XdsClientImpl2 extends XdsClient {
       }
     }
 
-    private String typeUrlV2() {
+    @VisibleForTesting
+    String typeUrlV2() {
       switch (this) {
         case LDS:
           return ADS_TYPE_URL_LDS_V2;

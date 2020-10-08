@@ -57,7 +57,7 @@ import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
- * Serves as a wrapper for {@link XdsClientImpl} used on the server side by {@link
+ * Serves as a wrapper for {@link XdsClient} used on the server side by {@link
  * io.grpc.xds.internal.sds.XdsServerBuilder}.
  */
 @Internal
@@ -135,8 +135,8 @@ public final class XdsClientWrapperForServerSds {
     }
     Node node = bootstrapInfo.getNode();
     timeService = SharedResourceHolder.get(timeServiceResource);
-    XdsClientImpl xdsClientImpl =
-        new XdsClientImpl(
+    XdsClientImpl2 xdsClientImpl =
+        new XdsClientImpl2(
             "",
             channel,
             node,
