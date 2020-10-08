@@ -396,9 +396,10 @@ public class TestServiceClient {
   private class Tester extends AbstractInteropTest {
     @Override
     protected ManagedChannelBuilder<?> createChannelBuilder() {
+      boolean useGeneric = false;
       ChannelCredentials channelCredentials;
       if (customCredentialsType != null) {
-        useOkHttp = false; // Retain old behavior; avoids erroring if incompatible
+        useGeneric = true; // Retain old behavior; avoids erroring if incompatible
         if (customCredentialsType.equals("google_default_credentials")) {
           channelCredentials = GoogleDefaultChannelCredentials.create();
         } else if (customCredentialsType.equals("compute_engine_channel_creds")) {
@@ -409,7 +410,7 @@ public class TestServiceClient {
         }
 
       } else if (useAlts) {
-        useOkHttp = false; // Retain old behavior; avoids erroring if incompatible
+        useGeneric = true; // Retain old behavior; avoids erroring if incompatible
         channelCredentials = AltsChannelCredentials.create();
 
       } else if (useTls) {
@@ -441,6 +442,14 @@ public class TestServiceClient {
         } else {
           channelCredentials = InsecureChannelCredentials.create();
         }
+      }
+      if (useGeneric) {
+        ManagedChannelBuilder<?> channelBuilder =
+            Grpc.newChannelBuilderForAddress(serverHost, serverPort, channelCredentials);
+        if (serverHostOverride != null) {
+          channelBuilder.overrideAuthority(serverHostOverride);
+        }
+        return channelBuilder;
       }
       if (!useOkHttp) {
         NettyChannelBuilder nettyBuilder =
