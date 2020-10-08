@@ -23,13 +23,20 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.errorprone.annotations.ForOverride;
 import io.grpc.Attributes;
+import io.grpc.CallCredentials;
+import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
+import io.grpc.ChoiceChannelCredentials;
+import io.grpc.CompositeCallCredentials;
+import io.grpc.CompositeChannelCredentials;
 import io.grpc.Grpc;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.InternalChannelz.Security;
 import io.grpc.InternalChannelz.Tls;
 import io.grpc.SecurityLevel;
 import io.grpc.Status;
+import io.grpc.TlsChannelCredentials;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
@@ -60,11 +67,14 @@ import java.net.SocketAddress;
 import java.net.URI;
 import java.nio.channels.ClosedChannelException;
 import java.util.Arrays;
+import java.util.EnumSet;
+import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
 import javax.net.ssl.SSLEngine;
+import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLParameters;
 import javax.net.ssl.SSLSession;
 
@@ -73,8 +83,88 @@ import javax.net.ssl.SSLSession;
  */
 final class ProtocolNegotiators {
   private static final Logger log = Logger.getLogger(ProtocolNegotiators.class.getName());
+  private static final EnumSet<TlsChannelCredentials.Feature> understoodTlsFeatures =
+      EnumSet.noneOf(TlsChannelCredentials.Feature.class);
+
 
   private ProtocolNegotiators() {
+  }
+
+  public static FromChannelCredentialsResult from(ChannelCredentials creds) {
+    if (creds instanceof TlsChannelCredentials) {
+      TlsChannelCredentials tlsCreds = (TlsChannelCredentials) creds;
+      Set<TlsChannelCredentials.Feature> incomprehensible =
+          tlsCreds.incomprehensible(understoodTlsFeatures);
+      if (!incomprehensible.isEmpty()) {
+        return FromChannelCredentialsResult.error(
+            "TLS features not understood: " + incomprehensible);
+      }
+      return FromChannelCredentialsResult.negotiator(tlsClientFactory(null));
+
+    } else if (creds instanceof InsecureChannelCredentials) {
+      return FromChannelCredentialsResult.negotiator(plaintextClientFactory());
+
+    } else if (creds instanceof CompositeChannelCredentials) {
+      CompositeChannelCredentials compCreds = (CompositeChannelCredentials) creds;
+      return from(compCreds.getChannelCredentials())
+          .withCallCredentials(compCreds.getCallCredentials());
+
+    } else if (creds instanceof NettyChannelCredentials) {
+      NettyChannelCredentials nettyCreds = (NettyChannelCredentials) creds;
+      return FromChannelCredentialsResult.negotiator(nettyCreds.getNegotiator());
+
+    } else if (creds instanceof ChoiceChannelCredentials) {
+      ChoiceChannelCredentials choiceCreds = (ChoiceChannelCredentials) creds;
+      StringBuilder error = new StringBuilder();
+      for (ChannelCredentials innerCreds : choiceCreds.getCredentialsList()) {
+        FromChannelCredentialsResult result = from(innerCreds);
+        if (result.error == null) {
+          return result;
+        }
+        error.append(", ");
+        error.append(result.error);
+      }
+      return FromChannelCredentialsResult.error(error.substring(2));
+
+    } else {
+      return FromChannelCredentialsResult.error(
+          "Unsupported credential type: " + creds.getClass().getName());
+    }
+  }
+
+  public static final class FromChannelCredentialsResult {
+    public final ProtocolNegotiator.ClientFactory negotiator;
+    public final CallCredentials callCredentials;
+    public final String error;
+
+    private FromChannelCredentialsResult(ProtocolNegotiator.ClientFactory negotiator,
+        CallCredentials creds, String error) {
+      this.negotiator = negotiator;
+      this.callCredentials = creds;
+      this.error = error;
+    }
+
+    public static FromChannelCredentialsResult error(String error) {
+      return new FromChannelCredentialsResult(
+          null, null, Preconditions.checkNotNull(error, "error"));
+    }
+
+    public static FromChannelCredentialsResult negotiator(
+        ProtocolNegotiator.ClientFactory factory) {
+      return new FromChannelCredentialsResult(
+          Preconditions.checkNotNull(factory, "factory"), null, null);
+    }
+
+    public FromChannelCredentialsResult withCallCredentials(CallCredentials callCreds) {
+      Preconditions.checkNotNull(callCreds, "callCreds");
+      if (error != null) {
+        return this;
+      }
+      if (this.callCredentials != null) {
+        callCreds = new CompositeCallCredentials(this.callCredentials, callCreds);
+      }
+      return new FromChannelCredentialsResult(negotiator, callCreds, null);
+    }
   }
 
   static ChannelLogger negotiationLogger(ChannelHandlerContext ctx) {
@@ -446,6 +536,36 @@ final class ProtocolNegotiators {
     return tls(sslContext, null);
   }
 
+  public static ProtocolNegotiator.ClientFactory tlsClientFactory(SslContext sslContext) {
+    return new TlsProtocolNegotiatorClientFactory(sslContext);
+  }
+
+  @VisibleForTesting
+  static final class TlsProtocolNegotiatorClientFactory
+      implements ProtocolNegotiator.ClientFactory {
+    private final SslContext sslContext;
+
+    public TlsProtocolNegotiatorClientFactory(SslContext sslContext) {
+      this.sslContext = sslContext;
+    }
+
+    @Override public ProtocolNegotiator newNegotiator() {
+      SslContext sslContext = this.sslContext;
+      if (sslContext == null) {
+        try {
+          sslContext = GrpcSslContexts.forClient().build();
+        } catch (SSLException ex) {
+          throw new RuntimeException(ex);
+        }
+      }
+      return tls(sslContext);
+    }
+
+    @Override public int getDefaultPort() {
+      return GrpcUtil.DEFAULT_PORT_SSL;
+    }
+  }
+
   /** A tuple of (host, port). */
   @VisibleForTesting
   static final class HostPort {
@@ -463,6 +583,21 @@ final class ProtocolNegotiators {
    */
   public static ProtocolNegotiator plaintextUpgrade() {
     return new PlaintextUpgradeProtocolNegotiator();
+  }
+
+  public static ProtocolNegotiator.ClientFactory plaintextUpgradeClientFactory() {
+    return new PlaintextUpgradeProtocolNegotiatorClientFactory();
+  }
+
+  private static final class PlaintextUpgradeProtocolNegotiatorClientFactory
+      implements ProtocolNegotiator.ClientFactory {
+    @Override public ProtocolNegotiator newNegotiator() {
+      return plaintextUpgrade();
+    }
+
+    @Override public int getDefaultPort() {
+      return GrpcUtil.DEFAULT_PORT_PLAINTEXT;
+    }
   }
 
   static final class PlaintextUpgradeProtocolNegotiator implements ProtocolNegotiator {
@@ -546,6 +681,22 @@ final class ProtocolNegotiators {
    */
   public static ProtocolNegotiator plaintext() {
     return new PlaintextProtocolNegotiator();
+  }
+
+  public static ProtocolNegotiator.ClientFactory plaintextClientFactory() {
+    return new PlaintextProtocolNegotiatorClientFactory();
+  }
+
+  @VisibleForTesting
+  static final class PlaintextProtocolNegotiatorClientFactory
+      implements ProtocolNegotiator.ClientFactory {
+    @Override public ProtocolNegotiator newNegotiator() {
+      return plaintext();
+    }
+
+    @Override public int getDefaultPort() {
+      return GrpcUtil.DEFAULT_PORT_PLAINTEXT;
+    }
   }
 
   private static RuntimeException unavailableException(String msg) {

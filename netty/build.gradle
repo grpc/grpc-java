@@ -24,6 +24,7 @@ dependencies {
 
     // Tests depend on base class defined by core module.
     testImplementation project(':grpc-core').sourceSets.test.output,
+            project(':grpc-api').sourceSets.test.output,
             project(':grpc-testing'),
             project(':grpc-testing-proto')
     testRuntimeOnly libraries.netty_tcnative,

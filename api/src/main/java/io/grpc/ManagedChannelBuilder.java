@@ -182,6 +182,7 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * not perform HTTP/1.1 upgrades.
    *
    * @return this
+   * @throws IllegalStateException if ChannelCredentials were provided when constructing the builder
    * @throws UnsupportedOperationException if plaintext mode is not supported.
    * @since 1.11.0
    */
@@ -193,6 +194,7 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * Makes the client use TLS.
    *
    * @return this
+   * @throws IllegalStateException if ChannelCredentials were provided when constructing the builder
    * @throws UnsupportedOperationException if transport security is not supported.
    * @since 1.9.0
    */

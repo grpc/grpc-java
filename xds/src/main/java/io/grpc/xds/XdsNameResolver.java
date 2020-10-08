@@ -16,6 +16,7 @@
 
 package io.grpc.xds;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -36,9 +37,12 @@ import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.EnvoyProtoData.ClusterWeight;
 import io.grpc.xds.EnvoyProtoData.Route;
 import io.grpc.xds.EnvoyProtoData.RouteAction;
+import io.grpc.xds.EnvoyProtoData.VirtualHost;
 import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
-import io.grpc.xds.XdsClient.ConfigUpdate;
-import io.grpc.xds.XdsClient.ConfigWatcher;
+import io.grpc.xds.XdsClient.LdsResourceWatcher;
+import io.grpc.xds.XdsClient.LdsUpdate;
+import io.grpc.xds.XdsClient.RdsResourceWatcher;
+import io.grpc.xds.XdsClient.RdsUpdate;
 import io.grpc.xds.XdsClient.XdsChannel;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
@@ -47,11 +51,13 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import javax.annotation.Nullable;
 
 /**
  * A {@link NameResolver} for resolving gRPC target names with "xds:" scheme.
@@ -77,10 +83,11 @@ final class XdsNameResolver extends NameResolver {
   private final ConcurrentMap<String, AtomicInteger> clusterRefs = new ConcurrentHashMap<>();
   private final ConfigSelector configSelector = new ConfigSelector();
 
-  private volatile List<Route> routes = Collections.emptyList();
+  private volatile List<Route> currentRoutes = Collections.emptyList();
   private Listener2 listener;
   private ObjectPool<XdsClient> xdsClientPool;
   private XdsClient xdsClient;
+  private ResolveState resolveState;
 
   XdsNameResolver(String name,
       ServiceConfigParser serviceConfigParser,
@@ -130,12 +137,16 @@ final class XdsNameResolver extends NameResolver {
     }
     xdsClientPool = xdsClientPoolFactory.newXdsClientObjectPool(bootstrapInfo, channel);
     xdsClient = xdsClientPool.getObject();
-    xdsClient.watchConfigData(authority, new ConfigWatcherImpl());
+    resolveState = new ResolveState();
+    resolveState.start();
   }
 
   @Override
   public void shutdown() {
     logger.log(XdsLogLevel.INFO, "Shutdown");
+    if (resolveState != null) {
+      resolveState.stop();
+    }
     if (xdsClient != null) {
       xdsClient = xdsClientPool.returnObject(xdsClient);
     }
@@ -195,6 +206,107 @@ final class XdsNameResolver extends NameResolver {
     listener.onResult(result);
   }
 
+  @VisibleForTesting
+  @Nullable
+  static VirtualHost findVirtualHostForHostName(List<VirtualHost> virtualHosts, String hostName) {
+    // Domain search order:
+    //  1. Exact domain names: ``www.foo.com``.
+    //  2. Suffix domain wildcards: ``*.foo.com`` or ``*-bar.foo.com``.
+    //  3. Prefix domain wildcards: ``foo.*`` or ``foo-*``.
+    //  4. Special wildcard ``*`` matching any domain.
+    //
+    //  The longest wildcards match first.
+    //  Assuming only a single virtual host in the entire route configuration can match
+    //  on ``*`` and a domain must be unique across all virtual hosts.
+    int matchingLen = -1; // longest length of wildcard pattern that matches host name
+    boolean exactMatchFound = false;  // true if a virtual host with exactly matched domain found
+    VirtualHost targetVirtualHost = null;  // target VirtualHost with longest matched domain
+    for (VirtualHost vHost : virtualHosts) {
+      for (String domain : vHost.getDomains()) {
+        boolean selected = false;
+        if (matchHostName(hostName, domain)) { // matching
+          if (!domain.contains("*")) { // exact matching
+            exactMatchFound = true;
+            targetVirtualHost = vHost;
+            break;
+          } else if (domain.length() > matchingLen) { // longer matching pattern
+            selected = true;
+          } else if (domain.length() == matchingLen && domain.startsWith("*")) { // suffix matching
+            selected = true;
+          }
+        }
+        if (selected) {
+          matchingLen = domain.length();
+          targetVirtualHost = vHost;
+        }
+      }
+      if (exactMatchFound) {
+        break;
+      }
+    }
+    return targetVirtualHost;
+  }
+
+  /**
+   * Returns {@code true} iff {@code hostName} matches the domain name {@code pattern} with
+   * case-insensitive.
+   *
+   * <p>Wildcard pattern rules:
+   * <ol>
+   * <li>A single asterisk (*) matches any domain.</li>
+   * <li>Asterisk (*) is only permitted in the left-most or the right-most part of the pattern,
+   *     but not both.</li>
+   * </ol>
+   */
+  @VisibleForTesting
+  static boolean matchHostName(String hostName, String pattern) {
+    checkArgument(hostName.length() != 0 && !hostName.startsWith(".") && !hostName.endsWith("."),
+        "Invalid host name");
+    checkArgument(pattern.length() != 0 && !pattern.startsWith(".") && !pattern.endsWith("."),
+        "Invalid pattern/domain name");
+
+    hostName = hostName.toLowerCase(Locale.US);
+    pattern = pattern.toLowerCase(Locale.US);
+    // hostName and pattern are now in lower case -- domain names are case-insensitive.
+
+    if (!pattern.contains("*")) {
+      // Not a wildcard pattern -- hostName and pattern must match exactly.
+      return hostName.equals(pattern);
+    }
+    // Wildcard pattern
+
+    if (pattern.length() == 1) {
+      return true;
+    }
+
+    int index = pattern.indexOf('*');
+
+    // At most one asterisk (*) is allowed.
+    if (pattern.indexOf('*', index + 1) != -1) {
+      return false;
+    }
+
+    // Asterisk can only match prefix or suffix.
+    if (index != 0 && index != pattern.length() - 1) {
+      return false;
+    }
+
+    // HostName must be at least as long as the pattern because asterisk has to
+    // match one or more characters.
+    if (hostName.length() < pattern.length()) {
+      return false;
+    }
+
+    if (index == 0 && hostName.endsWith(pattern.substring(1))) {
+      // Prefix matching fails.
+      return true;
+    }
+
+    // Pattern matches hostname if suffix matching succeeds.
+    return index == pattern.length() - 1
+        && hostName.startsWith(pattern.substring(0, pattern.length() - 1));
+  }
+
   private final class ConfigSelector extends InternalConfigSelector {
     @Override
     public Result selectConfig(PickSubchannelArgs args) {
@@ -211,7 +323,7 @@ final class XdsNameResolver extends NameResolver {
       String cluster = null;
       Route selectedRoute = null;
       do {
-        for (Route route : routes) {
+        for (Route route : currentRoutes) {
           if (route.getRouteMatch().matches(
               "/" + args.getMethodDescriptor().getFullMethodName(), asciiHeaders)) {
             selectedRoute = route;
@@ -300,15 +412,74 @@ final class XdsNameResolver extends NameResolver {
     }
   }
 
-  // https://github.com/google/error-prone/issues/1767
-  @SuppressWarnings("ModifyCollectionInEnhancedForLoop")
-  private class ConfigWatcherImpl implements ConfigWatcher {
+  private class ResolveState implements LdsResourceWatcher {
+    private final ConfigOrError emptyServiceConfig =
+        serviceConfigParser.parseServiceConfig(Collections.<String, Object>emptyMap());
+    private final ResolutionResult emptyResult =
+        ResolutionResult.newBuilder()
+            .setServiceConfig(emptyServiceConfig)
+            // let channel take action for no config selector
+            .build();
     private Set<String> existingClusters;
+    @Nullable
+    private String rdsResource;
+    @Nullable
+    private RdsResourceWatcher rdsWatcher;
 
     @Override
-    public void onConfigChanged(ConfigUpdate update) {
+    public void onChanged(LdsUpdate update) {
+      logger.log(XdsLogLevel.INFO, "Receive LDS resource update: {0}", update);
+      List<VirtualHost> virtualHosts = update.getVirtualHosts();
+      String rdsName = update.getRdsName();
+      if (rdsName != null && rdsName.equals(rdsResource)) {
+        return;
+      }
+      cleanUpRdsWatcher();
+      if (virtualHosts != null) {
+        updateRoutes(virtualHosts);
+      } else {
+        rdsResource = rdsName;
+        rdsWatcher = new RdsResourceWatcherImpl();
+        logger.log(XdsLogLevel.INFO, "Start watching RDS resource {0}", rdsResource);
+        xdsClient.watchRdsResource(rdsResource, rdsWatcher);
+      }
+    }
+
+    @Override
+    public void onError(Status error) {
+      logger.log(
+          XdsLogLevel.WARNING,
+          "Received error from xDS client {0}: {1}", xdsClient, error.getDescription());
+      listener.onError(error);
+    }
+
+    @Override
+    public void onResourceDoesNotExist(String resourceName) {
+      logger.log(XdsLogLevel.INFO, "LDS resource {0} unavailable", resourceName);
+      cleanUpRdsWatcher();
+      listener.onResult(emptyResult);
+    }
+
+    private void start() {
+      logger.log(XdsLogLevel.INFO, "Start watching LDS resource {0}", authority);
+      xdsClient.watchLdsResource(authority, this);
+    }
+
+    private void stop() {
+      logger.log(XdsLogLevel.INFO, "Stop watching LDS resource {0}", authority);
+      cleanUpRdsWatcher();
+      xdsClient.cancelLdsResourceWatch(authority, this);
+    }
+
+    private void updateRoutes(List<VirtualHost> virtualHosts) {
+      VirtualHost virtualHost = findVirtualHostForHostName(virtualHosts, authority);
+      if (virtualHost == null) {
+        listener.onResult(emptyResult);
+        return;
+      }
+      List<Route> routes = virtualHost.getRoutes();
       Set<String> clusters = new HashSet<>();
-      for (Route route : update.getRoutes()) {
+      for (Route route : routes) {
         RouteAction action = route.getRouteAction();
         if (action.getCluster() != null) {
           clusters.add(action.getCluster());
@@ -339,7 +510,7 @@ final class XdsNameResolver extends NameResolver {
       }
       // Make newly added clusters selectable by config selector and deleted clusters no longer
       // selectable.
-      routes = update.getRoutes();
+      currentRoutes = routes;
       shouldUpdateResult = false;
       for (String cluster : deletedClusters) {
         int count = clusterRefs.get(cluster).decrementAndGet();
@@ -353,25 +524,35 @@ final class XdsNameResolver extends NameResolver {
       }
     }
 
-    @Override
-    public void onResourceDoesNotExist(String resourceName) {
-      logger.log(XdsLogLevel.INFO, "Resource {0} is unavailable", resourceName);
-      ConfigOrError parsedServiceConfig =
-          serviceConfigParser.parseServiceConfig(Collections.<String, Object>emptyMap());
-      ResolutionResult result =
-          ResolutionResult.newBuilder()
-              .setServiceConfig(parsedServiceConfig)
-              // let channel take action for no config selector
-              .build();
-      listener.onResult(result);
+    private void cleanUpRdsWatcher() {
+      if (rdsWatcher != null) {
+        logger.log(XdsLogLevel.INFO, "Stop watching RDS resource {0}", rdsResource);
+        xdsClient.cancelRdsResourceWatch(rdsResource, rdsWatcher);
+        rdsResource = null;
+        rdsWatcher = null;
+      }
     }
 
-    @Override
-    public void onError(Status error) {
-      logger.log(
-          XdsLogLevel.WARNING,
-          "Received error from xDS client {0}: {1}", xdsClient, error.getDescription());
-      listener.onError(error);
+    private class RdsResourceWatcherImpl implements RdsResourceWatcher {
+
+      @Override
+      public void onChanged(RdsUpdate update) {
+        updateRoutes(update.getVirtualHosts());
+      }
+
+      @Override
+      public void onError(Status error) {
+        logger.log(
+            XdsLogLevel.WARNING,
+            "Received error from xDS client {0}: {1}", xdsClient, error.getDescription());
+        listener.onError(error);
+      }
+
+      @Override
+      public void onResourceDoesNotExist(String resourceName) {
+        logger.log(XdsLogLevel.INFO, "RDS resource {0} unavailable", resourceName);
+        listener.onResult(emptyResult);
+      }
     }
   }
 }

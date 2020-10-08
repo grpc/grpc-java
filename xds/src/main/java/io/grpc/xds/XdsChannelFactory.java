@@ -17,9 +17,12 @@
 package io.grpc.xds;
 
 import com.google.common.annotations.VisibleForTesting;
+import io.grpc.ChannelCredentials;
+import io.grpc.Grpc;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
-import io.grpc.alts.GoogleDefaultChannelBuilder;
+import io.grpc.TlsChannelCredentials;
+import io.grpc.alts.GoogleDefaultChannelCredentials;
 import io.grpc.xds.Bootstrapper.ChannelCreds;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.XdsClient.XdsChannel;
@@ -50,33 +53,33 @@ abstract class XdsChannelFactory {
       String serverUri = serverInfo.getServerUri();
       logger.log(XdsLogLevel.INFO, "Creating channel to {0}", serverUri);
       List<ChannelCreds> channelCredsList = serverInfo.getChannelCredentials();
-      ManagedChannelBuilder<?> channelBuilder = null;
+      ChannelCredentials channelCreds = null;
       // Use the first supported channel credentials configuration.
       for (ChannelCreds creds : channelCredsList) {
         switch (creds.getType()) {
           case "google_default":
             logger.log(XdsLogLevel.INFO, "Using channel credentials: google_default");
-            channelBuilder = GoogleDefaultChannelBuilder.forTarget(serverUri);
+            channelCreds = GoogleDefaultChannelCredentials.create();
             break;
           case "insecure":
             logger.log(XdsLogLevel.INFO, "Using channel credentials: insecure");
-            channelBuilder = ManagedChannelBuilder.forTarget(serverUri).usePlaintext();
+            channelCreds = InsecureChannelCredentials.create();
             break;
           case "tls":
             logger.log(XdsLogLevel.INFO, "Using channel credentials: tls");
-            channelBuilder = ManagedChannelBuilder.forTarget(serverUri);
+            channelCreds = TlsChannelCredentials.create();
             break;
           default:
         }
-        if (channelBuilder != null) {
+        if (channelCreds != null) {
           break;
         }
       }
-      if (channelBuilder == null) {
+      if (channelCreds == null) {
         throw new XdsInitializationException("No server with supported channel creds found");
       }
 
-      ManagedChannel channel = channelBuilder
+      ManagedChannel channel = Grpc.newChannelBuilder(serverUri, channelCreds)
           .keepAliveTime(5, TimeUnit.MINUTES)
           .build();
       boolean useProtocolV3 = experimentalV3SupportEnvVar
