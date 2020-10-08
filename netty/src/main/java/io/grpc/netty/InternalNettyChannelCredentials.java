@@ -34,8 +34,15 @@ public final class InternalNettyChannelCredentials {
     return NettyChannelCredentials.create(negotiator);
   }
 
-  public static InternalProtocolNegotiator.ClientFactory toNegotiator(ChannelCredentials channelCredentials) {
-    final ProtocolNegotiators.FromChannelCredentialsResult result = ProtocolNegotiators.from(channelCredentials);
+  /**
+   * Converts a {@link ChannelCredentials} to a negotiator, in similar fashion as for a new channel.
+   *
+   * @throws IllegalArgumentException if unable to convert
+   */
+  public static InternalProtocolNegotiator.ClientFactory toNegotiator(
+      ChannelCredentials channelCredentials) {
+    final ProtocolNegotiators.FromChannelCredentialsResult result =
+        ProtocolNegotiators.from(channelCredentials);
     if (result.error != null) {
       throw new IllegalArgumentException(result.error);
     }
@@ -44,7 +51,8 @@ public final class InternalNettyChannelCredentials {
       @Override
       public InternalProtocolNegotiator.ProtocolNegotiator newNegotiator() {
         final ProtocolNegotiator pn = result.negotiator.newNegotiator();
-        final class LocalProtocolNegotiator implements InternalProtocolNegotiator.ProtocolNegotiator {
+        final class LocalProtocolNegotiator
+            implements InternalProtocolNegotiator.ProtocolNegotiator {
 
           @Override
           public AsciiString scheme() {
@@ -61,6 +69,7 @@ public final class InternalNettyChannelCredentials {
             pn.close();
           }
         }
+
         return new LocalProtocolNegotiator();
       }
 
@@ -69,6 +78,7 @@ public final class InternalNettyChannelCredentials {
         return result.negotiator.getDefaultPort();
       }
     }
+
     return new ClientFactory();
   }
 }
