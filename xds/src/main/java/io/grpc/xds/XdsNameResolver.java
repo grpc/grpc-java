@@ -467,8 +467,8 @@ final class XdsNameResolver extends NameResolver {
 
     private void stop() {
       logger.log(XdsLogLevel.INFO, "Stop watching LDS resource {0}", authority);
-      xdsClient.cancelLdsResourceWatch(authority, this);
       cleanUpRdsWatcher();
+      xdsClient.cancelLdsResourceWatch(authority, this);
     }
 
     private void updateRoutes(List<VirtualHost> virtualHosts) {
