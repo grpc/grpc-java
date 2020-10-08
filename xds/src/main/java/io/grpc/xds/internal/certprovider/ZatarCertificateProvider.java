@@ -176,51 +176,6 @@ final class ZatarCertificateProvider extends CertificateProvider {
     }
   }
 
-  /** Factory for creating ZatarCertificateProvider. */
-  abstract static class Factory {
-    private static final Factory DEFAULT_INSTANCE =
-        new Factory() {
-
-          @Override
-          ZatarCertificateProvider create(
-              DistributorWatcher watcher,
-              boolean notifyCertUpdates,
-              String directory,
-              String certFile,
-              String privateKeyFile,
-              String trustFile,
-              long refreshIntervalInSeconds,
-              ScheduledExecutorService scheduledExecutorService,
-              TimeProvider timeProvider) {
-            return new ZatarCertificateProvider(
-                watcher,
-                notifyCertUpdates,
-                directory,
-                certFile,
-                privateKeyFile,
-                trustFile,
-                refreshIntervalInSeconds,
-                scheduledExecutorService,
-                timeProvider);
-          }
-        };
-
-    static Factory getInstance() {
-      return DEFAULT_INSTANCE;
-    }
-
-    abstract ZatarCertificateProvider create(
-        DistributorWatcher watcher,
-        boolean notifyCertUpdates,
-        String directory,
-        String certFile,
-        String privateKeyFile,
-        String trustFile,
-        long refreshIntervalInSeconds,
-        ScheduledExecutorService scheduledExecutorService,
-        TimeProvider timeProvider);
-  }
-
   private final SynchronizationContext syncContext;
   private final ScheduledExecutorService scheduledExecutorService;
   private final TimeProvider timeProvider;

@@ -200,6 +200,18 @@ public class ZatarCertificateProviderTest {
   }
 
   @Test
+  public void getCertificate_badKeyFile() throws IOException {
+    commonErrorTest(
+        CLIENT_PEM_FILE,
+        SERVER_0_PEM_FILE,
+        CA_PEM_FILE,
+        true,
+        true,
+         java.security.KeyException.class,
+        "could not find a PKCS #8 private key in input stream");
+  }
+
+  @Test
   public void getCertificate_missingRootFile() throws IOException {
     commonErrorTest(
         CLIENT_PEM_FILE,
