@@ -40,7 +40,6 @@ public abstract class InternalConfigSelector {
 
   public static final class Result {
     private final Status status;
-    @Nullable
     private final Object config;
     private final CallOptions callOptions;
     @Nullable
@@ -74,7 +73,6 @@ public abstract class InternalConfigSelector {
      * Returns a parsed config. Must have been returned via
      * ServiceConfigParser.parseServiceConfig().getConfig()
      */
-    @Nullable
     public Object getConfig() {
       return config;
     }
