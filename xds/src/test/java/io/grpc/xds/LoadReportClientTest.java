@@ -87,7 +87,6 @@ import org.mockito.MockitoAnnotations;
  */
 @RunWith(JUnit4.class)
 public class LoadReportClientTest {
-  private static final String TARGET_NAME = "lrs-test.example.com";
   // bootstrap node identifier
   private static final EnvoyProtoData.Node NODE =
       EnvoyProtoData.Node.newBuilder()
@@ -185,7 +184,6 @@ public class LoadReportClientTest {
         .thenReturn(TimeUnit.SECONDS.toNanos(2L), TimeUnit.SECONDS.toNanos(20L));
     lrsClient =
         new LoadReportClient(
-            TARGET_NAME,
             loadStatsManager,
             new XdsChannel(channel, false),
             NODE,
