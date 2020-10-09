@@ -331,23 +331,12 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   }
 
   @Test
-  public void receivedGoAwayShouldCancelBufferedStream() throws Exception {
-    // Force the stream to be buffered.
-    receiveMaxConcurrentStreams(0);
-    ChannelFuture future = enqueue(newCreateStreamCommand(grpcHeaders, streamTransportState));
-    channelRead(goAwayFrame(0));
-    assertTrue(future.isDone());
-    assertFalse(future.isSuccess());
-    Status status = Status.fromThrowable(future.cause());
-    assertEquals(Status.Code.UNAVAILABLE, status.getCode());
-    assertEquals("HTTP/2 error code: NO_ERROR\nReceived Goaway", status.getDescription());
-  }
-
-  @Test
   public void receivedGoAwayShouldRefuseLaterStreamId() throws Exception {
     ChannelFuture future = enqueue(newCreateStreamCommand(grpcHeaders, streamTransportState));
     channelRead(goAwayFrame(streamId - 1));
-    verify(streamListener).closed(any(Status.class), eq(REFUSED), any(Metadata.class));
+    // This _should_ be REFUSED, but we purposefully use PROCESSED. See comment for
+    // abruptGoAwayStatusConservative in NettyClientHandler
+    verify(streamListener).closed(any(Status.class), eq(PROCESSED), any(Metadata.class));
     assertTrue(future.isDone());
   }
 
@@ -386,8 +375,10 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
     verify(streamListener).closed(captor.capture(), same(REFUSED),
         ArgumentMatchers.<Metadata>notNull());
-    assertEquals(Status.CANCELLED.getCode(), captor.getValue().getCode());
-    assertEquals("HTTP/2 error code: CANCEL\nReceived Goaway\nthis is a test",
+    assertEquals(Status.UNAVAILABLE.getCode(), captor.getValue().getCode());
+    assertEquals(
+        "Abrupt GOAWAY closed unsent stream. HTTP/2 error code: CANCEL, "
+          + "debug data: this is a test",
         captor.getValue().getDescription());
     assertTrue(future.isDone());
   }
@@ -415,15 +406,18 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     // Read a GOAWAY that indicates our stream was never processed by the server.
     channelRead(goAwayFrame(0, 8 /* Cancel */, Unpooled.copiedBuffer("this is a test", UTF_8)));
     ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
-    verify(streamListener).closed(captor.capture(), same(REFUSED),
+    // See comment for abruptGoAwayStatusConservative in NettyClientHandler
+    verify(streamListener).closed(captor.capture(), same(PROCESSED),
         ArgumentMatchers.<Metadata>notNull());
     assertEquals(Status.CANCELLED.getCode(), captor.getValue().getCode());
-    assertEquals("HTTP/2 error code: CANCEL\nReceived Goaway\nthis is a test",
+    assertEquals(
+        "Abrupt GOAWAY closed sent stream. HTTP/2 error code: CANCEL, "
+          + "debug data: this is a test",
         captor.getValue().getDescription());
   }
 
   @Test
-  public void receivedGoAwayShouldFailUnknownBufferedStreams() throws Exception {
+  public void receivedGoAwayShouldFailBufferedStreams() throws Exception {
     receiveMaxConcurrentStreams(0);
 
     ChannelFuture future = enqueue(newCreateStreamCommand(grpcHeaders, streamTransportState));
@@ -433,8 +427,10 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     assertTrue(future.isDone());
     assertFalse(future.isSuccess());
     Status status = Status.fromThrowable(future.cause());
-    assertEquals(Status.CANCELLED.getCode(), status.getCode());
-    assertEquals("HTTP/2 error code: CANCEL\nReceived Goaway\nthis is a test",
+    assertEquals(Status.UNAVAILABLE.getCode(), status.getCode());
+    assertEquals(
+        "GOAWAY closed buffered stream. HTTP/2 error code: CANCEL, "
+          + "debug data: this is a test",
         status.getDescription());
   }
 
@@ -448,8 +444,10 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     assertTrue(future.isDone());
     assertFalse(future.isSuccess());
     Status status = Status.fromThrowable(future.cause());
-    assertEquals(Status.CANCELLED.getCode(), status.getCode());
-    assertEquals("HTTP/2 error code: CANCEL\nReceived Goaway\nthis is a test",
+    assertEquals(Status.UNAVAILABLE.getCode(), status.getCode());
+    assertEquals(
+        "GOAWAY shut down transport. HTTP/2 error code: CANCEL, "
+          + "debug data: this is a test",
         status.getDescription());
   }
 
