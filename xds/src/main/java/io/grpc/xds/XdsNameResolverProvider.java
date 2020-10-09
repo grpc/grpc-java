@@ -123,4 +123,8 @@ public final class XdsNameResolverProvider extends NameResolverProvider {
   interface XdsClientPoolFactory {
     ObjectPool<XdsClient> newXdsClientObjectPool(BootstrapInfo bootstrapInfo, XdsChannel channel);
   }
+
+  interface XdsClientPoolFactory2 {
+    ObjectPool<XdsClient> getXdsClientPool() throws XdsInitializationException;
+  }
 }
