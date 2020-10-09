@@ -933,31 +933,6 @@ class NettyClientHandler extends AbstractNettyHandler {
     }
 
     @Override
-    public ChannelFuture writeHeaders(
-        ChannelHandlerContext ctx, int streamId, Http2Headers headers,
-        int padding, boolean endStream, ChannelPromise promise) {
-      pingCount = 0;
-      return super.writeHeaders(ctx, streamId, headers, padding, endStream, promise);
-    }
-
-    @Override
-    public ChannelFuture writeHeaders(
-        ChannelHandlerContext ctx, int streamId, Http2Headers headers,
-        int streamDependency, short weight, boolean exclusive,
-        int padding, boolean endStream, ChannelPromise promise) {
-      pingCount = 0;
-      return super.writeHeaders(ctx, streamId, headers, streamDependency, weight, exclusive,
-          padding, endStream, promise);
-    }
-
-    @Override
-    public ChannelFuture writeWindowUpdate(
-        ChannelHandlerContext ctx, int streamId, int windowSizeIncrement, ChannelPromise promise) {
-      pingCount = 0;
-      return super.writeWindowUpdate(ctx, streamId, windowSizeIncrement, promise);
-    }
-
-    @Override
     public ChannelFuture writePing(
         ChannelHandlerContext ctx, boolean ack, long data, ChannelPromise promise) {
       if (!ack) {
