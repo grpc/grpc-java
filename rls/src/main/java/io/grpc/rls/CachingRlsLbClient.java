@@ -292,8 +292,6 @@ final class CachingRlsLbClient {
    * Viewer class for cached {@link RouteLookupResponse} and associated {@link ChildPolicyWrapper}.
    */
   static final class CachedRouteLookupResponse {
-    private final RouteLookupRequest request;
-
     // Should only have 1 of following 3 cache entries
     @Nullable
     private final DataCacheEntry dataCacheEntry;
@@ -303,11 +301,9 @@ final class CachingRlsLbClient {
     private final BackoffCacheEntry backoffCacheEntry;
 
     CachedRouteLookupResponse(
-        RouteLookupRequest request,
         DataCacheEntry dataCacheEntry,
         PendingCacheEntry pendingCacheEntry,
         BackoffCacheEntry backoffCacheEntry) {
-      this.request = checkNotNull(request, "request");
       this.dataCacheEntry = dataCacheEntry;
       this.pendingCacheEntry = pendingCacheEntry;
       this.backoffCacheEntry = backoffCacheEntry;
@@ -317,15 +313,15 @@ final class CachingRlsLbClient {
     }
 
     static CachedRouteLookupResponse pendingResponse(PendingCacheEntry pendingEntry) {
-      return new CachedRouteLookupResponse(pendingEntry.request, null, pendingEntry, null);
+      return new CachedRouteLookupResponse(null, pendingEntry, null);
     }
 
     static CachedRouteLookupResponse backoffEntry(BackoffCacheEntry backoffEntry) {
-      return new CachedRouteLookupResponse(backoffEntry.request, null, null, backoffEntry);
+      return new CachedRouteLookupResponse(null, null, backoffEntry);
     }
 
     static CachedRouteLookupResponse dataEntry(DataCacheEntry dataEntry) {
-      return new CachedRouteLookupResponse(dataEntry.request, dataEntry, null, null);
+      return new CachedRouteLookupResponse(dataEntry, null, null);
     }
 
     boolean hasData() {
@@ -367,7 +363,6 @@ final class CachingRlsLbClient {
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(this)
-          .add("request", request)
           .add("dataCacheEntry", dataCacheEntry)
           .add("pendingCacheEntry", pendingCacheEntry)
           .add("backoffCacheEntry", backoffCacheEntry)
