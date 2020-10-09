@@ -537,7 +537,8 @@ abstract class XdsClient {
   /**
    * Shutdown this {@link XdsClient} and release resources.
    */
-  abstract void shutdown();
+  void shutdown() {
+  }
 
   /**
    * Registers a data watcher for the given LDS resource.
@@ -629,6 +630,7 @@ abstract class XdsClient {
     abstract XdsClient createXdsClient();
   }
 
+  // TODO(chengyuanzhang): delete me
   /**
    * An {@link ObjectPool} holding reference and ref-count of an {@link XdsClient} instance.
    * Initially the instance is null and the ref-count is zero. {@link #getObject()} will create a
