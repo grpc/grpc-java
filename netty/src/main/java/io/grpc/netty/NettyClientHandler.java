@@ -129,6 +129,7 @@ class NettyClientHandler extends AbstractNettyHandler {
   private Http2Ping ping;
   private Attributes attributes;
   private InternalChannelz.Security securityInfo;
+  private Status abruptGoAwayStatus;
 
   static NettyClientHandler newHandler(
       ClientTransportLifecycleManager lifecycleManager,
@@ -556,6 +557,21 @@ class NettyClientHandler extends AbstractNettyHandler {
       }
       return;
     }
+    if (connection().goAwayReceived()
+        && streamId > connection().local().lastStreamKnownByPeer()) {
+      // This should only be reachable during onGoAwayReceived, as otherwise
+      // getShutdownThrowable() != null
+      command.stream().setNonExistent();
+      Status s = abruptGoAwayStatus;
+      if (s == null) {
+        // Should be impossible, but handle psuedo-gracefully
+        s = Status.INTERNAL.withDescription(
+            "Failed due to abrupt GOAWAY, but can't find GOAWAY details");
+      }
+      command.stream().transportReportStatus(s, RpcProgress.REFUSED, true, new Metadata());
+      promise.setFailure(s.asRuntimeException());
+      return;
+    }
 
     NettyClientStream.TransportState stream = command.stream();
     Http2Headers headers = command.headers();
@@ -772,6 +788,7 @@ class NettyClientHandler extends AbstractNettyHandler {
    */
   private void goingAway(Status status) {
     lifecycleManager.notifyGracefulShutdown(status);
+    abruptGoAwayStatus = status;
     // Try to allocate as many in-flight streams as possible, to reduce race window of
     // https://github.com/grpc/grpc-java/issues/2562 . To be of any help, the server has to
     // gracefully shut down the connection with two GOAWAYs. gRPC servers generally send a PING
