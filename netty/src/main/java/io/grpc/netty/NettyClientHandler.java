@@ -130,6 +130,7 @@ class NettyClientHandler extends AbstractNettyHandler {
   private Attributes attributes;
   private InternalChannelz.Security securityInfo;
   private Status abruptGoAwayStatus;
+  private Status channelInactiveReason;
 
   static NettyClientHandler newHandler(
       ClientTransportLifecycleManager lifecycleManager,
@@ -278,7 +279,7 @@ class NettyClientHandler extends AbstractNettyHandler {
       @Override
       public void onGoAwayReceived(int lastStreamId, long errorCode, ByteBuf debugData) {
         byte[] debugDataBytes = ByteBufUtil.getBytes(debugData);
-        goingAway(statusFromGoAway(errorCode, debugDataBytes));
+        goingAway(errorCode, debugDataBytes);
         if (errorCode == Http2Error.ENHANCE_YOUR_CALM.code()) {
           String data = new String(debugDataBytes, UTF_8);
           logger.log(
@@ -400,8 +401,7 @@ class NettyClientHandler extends AbstractNettyHandler {
     NettyClientStream.TransportState stream = clientStream(connection().stream(streamId));
     if (stream != null) {
       PerfMark.event("NettyClientHandler.onRstStreamRead", stream.tag());
-      Status status = GrpcUtil.Http2Error.statusForCode((int) errorCode)
-          .augmentDescription("Received Rst Stream");
+      Status status = statusFromH2Error(null, "RST_STREAM closed stream", errorCode, null);
       stream.transportReportStatus(
           status,
           errorCode == Http2Error.REFUSED_STREAM.code()
@@ -433,6 +433,12 @@ class NettyClientHandler extends AbstractNettyHandler {
       logger.fine("Network channel is closed");
       Status status = Status.UNAVAILABLE.withDescription("Network closed for unknown reason");
       lifecycleManager.notifyShutdown(status);
+      final Status streamStatus;
+      if (channelInactiveReason != null) {
+        streamStatus = channelInactiveReason;
+      } else {
+        streamStatus = lifecycleManager.getShutdownStatus();
+      }
       try {
         cancelPing(lifecycleManager.getShutdownThrowable());
         // Report status to the application layer for any open streams
@@ -441,8 +447,7 @@ class NettyClientHandler extends AbstractNettyHandler {
           public boolean visit(Http2Stream stream) throws Http2Exception {
             NettyClientStream.TransportState clientStream = clientStream(stream);
             if (clientStream != null) {
-              clientStream.transportReportStatus(
-                  lifecycleManager.getShutdownStatus(), false, new Metadata());
+              clientStream.transportReportStatus(streamStatus, false, new Metadata());
             }
             return true;
           }
@@ -630,8 +635,11 @@ class NettyClientHandler extends AbstractNettyHandler {
               if (cause instanceof StreamBufferingEncoder.Http2GoAwayException) {
                 StreamBufferingEncoder.Http2GoAwayException e =
                     (StreamBufferingEncoder.Http2GoAwayException) cause;
-                lifecycleManager.notifyShutdown(statusFromGoAway(e.errorCode(), e.debugData()));
-                promise.setFailure(lifecycleManager.getShutdownThrowable());
+                Status status = statusFromH2Error(
+                    Status.Code.UNAVAILABLE, "GOAWAY closed buffered stream",
+                    e.errorCode(), e.debugData());
+                stream.transportReportStatus(status, RpcProgress.REFUSED, true, new Metadata());
+                promise.setFailure(status.asRuntimeException());
               } else {
                 promise.setFailure(cause);
               }
@@ -786,9 +794,20 @@ class NettyClientHandler extends AbstractNettyHandler {
    * Handler for a GOAWAY being received. Fails any streams created after the
    * last known stream. May only be called during a read.
    */
-  private void goingAway(Status status) {
-    lifecycleManager.notifyGracefulShutdown(status);
-    abruptGoAwayStatus = status;
+  private void goingAway(long errorCode, byte[] debugData) {
+    Status finalStatus = statusFromH2Error(
+        Status.Code.UNAVAILABLE, "GOAWAY shut down transport", errorCode, debugData);
+    lifecycleManager.notifyGracefulShutdown(finalStatus);
+    abruptGoAwayStatus = statusFromH2Error(
+        Status.Code.UNAVAILABLE, "Abrupt GOAWAY closed unsent stream", errorCode, debugData);
+    // While this _should_ be UNAVAILABLE, Netty uses the wrong stream id in the GOAWAY when it
+    // fails streams due to HPACK failures (e.g., header list too large). To be more conservative,
+    // we assume any sent streams may be related to the GOAWAY. This should rarely impact users
+    // since the main time servers should use abrupt GOAWAYs is if there is a protocol error, and if
+    // there wasn't a protocol error the error code was probably NO_ERROR which is mapped to
+    // UNAVAILABLE. https://github.com/netty/netty/issues/10670
+    final Status abruptGoAwayStatusConservative = statusFromH2Error(
+        null, "Abrupt GOAWAY closed sent stream", errorCode, debugData);
     // Try to allocate as many in-flight streams as possible, to reduce race window of
     // https://github.com/grpc/grpc-java/issues/2562 . To be of any help, the server has to
     // gracefully shut down the connection with two GOAWAYs. gRPC servers generally send a PING
@@ -798,9 +817,13 @@ class NettyClientHandler extends AbstractNettyHandler {
     // This can cause reentrancy, but should be minor since it is normal to handle writes in
     // response to a read. Also, the call stack is rather shallow at this point
     clientWriteQueue.drainNow();
-    lifecycleManager.notifyShutdown(status);
+    if (lifecycleManager.notifyShutdown(finalStatus)) {
+      // This is for the only RPCs that are actually covered by the GOAWAY error code. All other
+      // RPCs were not observed by the remote and so should be UNAVAILABLE.
+      channelInactiveReason = statusFromH2Error(
+          null, "Connection closed after GOAWAY", errorCode, debugData);
+    }
 
-    final Status goAwayStatus = lifecycleManager.getShutdownStatus();
     final int lastKnownStream = connection().local().lastStreamKnownByPeer();
     try {
       connection().forEachActiveStream(new Http2StreamVisitor() {
@@ -809,8 +832,13 @@ class NettyClientHandler extends AbstractNettyHandler {
           if (stream.id() > lastKnownStream) {
             NettyClientStream.TransportState clientStream = clientStream(stream);
             if (clientStream != null) {
+              // RpcProgress _should_ be REFUSED, but are being conservative. See comment for
+              // abruptGoAwayStatusConservative. This does reduce our ability to perform transparent
+              // retries, but our main goal of transporent retries is to resolve the local race. We
+              // still hope/expect servers to use the graceful double-GOAWAY when closing
+              // connections.
               clientStream.transportReportStatus(
-                  goAwayStatus, RpcProgress.REFUSED, false, new Metadata());
+                  abruptGoAwayStatusConservative, RpcProgress.PROCESSED, false, new Metadata());
             }
             stream.close();
           }
@@ -829,15 +857,20 @@ class NettyClientHandler extends AbstractNettyHandler {
     }
   }
 
-  private Status statusFromGoAway(long errorCode, byte[] debugData) {
-    Status status = GrpcUtil.Http2Error.statusForCode((int) errorCode)
-        .augmentDescription("Received Goaway");
+  /** If {@code statusCode} is non-null, it will be used instead of the http2 error code mapping. */
+  private Status statusFromH2Error(
+      Status.Code statusCode, String context, long errorCode, byte[] debugData) {
+    Status status = GrpcUtil.Http2Error.statusForCode((int) errorCode);
+    if (statusCode == null) {
+      statusCode = status.getCode();
+    }
+    String debugString = "";
     if (debugData != null && debugData.length > 0) {
       // If a debug message was provided, use it.
-      String msg = new String(debugData, UTF_8);
-      status = status.augmentDescription(msg);
+      debugString = ", debug data: " + new String(debugData, UTF_8);
     }
-    return status;
+    return statusCode.toStatus()
+        .withDescription(context + ". " + status.getDescription() + debugString);
   }
 
   /**
