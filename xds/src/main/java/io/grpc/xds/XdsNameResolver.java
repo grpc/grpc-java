@@ -71,6 +71,9 @@ final class XdsNameResolver extends NameResolver {
 
   static final CallOptions.Key<String> CLUSTER_SELECTION_KEY =
       CallOptions.Key.create("io.grpc.xds.CLUSTER_SELECTION_KEY");
+  @VisibleForTesting
+  static boolean enableTimeout =
+      Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_ENABLE_TIMEOUT"));
 
   private final XdsLogger logger;
   private final String authority;
@@ -354,9 +357,11 @@ final class XdsNameResolver extends NameResolver {
         }
       } while (!retainCluster(cluster));
       // TODO(chengyuanzhang): avoid service config generation and parsing for each call.
-      Map<String, ?> rawServiceConfig =
-          generateServiceConfigWithMethodTimeoutConfig(
-              selectedRoute.getRouteAction().getTimeoutNano());
+      Map<String, ?> rawServiceConfig = Collections.emptyMap();
+      if (enableTimeout) {
+        rawServiceConfig = generateServiceConfigWithMethodTimeoutConfig(
+            selectedRoute.getRouteAction().getTimeoutNano());
+      }
       ConfigOrError parsedServiceConfig = serviceConfigParser.parseServiceConfig(rawServiceConfig);
       Object config = parsedServiceConfig.getConfig();
       if (config == null) {
