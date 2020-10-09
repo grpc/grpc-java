@@ -104,7 +104,6 @@ final class XdsClientImpl2 extends XdsClient {
   private final MessagePrinter respPrinter = new MessagePrinter();
   private final InternalLogId logId;
   private final XdsLogger logger;
-  private final String targetName;  // TODO: delete me.
   private final XdsChannel xdsChannel;
   private final SynchronizationContext syncContext;
   private final ScheduledExecutorService timeService;
@@ -149,14 +148,12 @@ final class XdsClientImpl2 extends XdsClient {
   private ScheduledHandle ldsRespTimer;
 
   XdsClientImpl2(
-      String targetName,
       XdsChannel channel,
       Node node,
       SynchronizationContext syncContext,
       ScheduledExecutorService timeService,
       BackoffPolicy.Provider backoffPolicyProvider,
       Supplier<Stopwatch> stopwatchSupplier) {
-    this.targetName = checkNotNull(targetName, "targetName");
     this.xdsChannel = checkNotNull(channel, "channel");
     this.node = checkNotNull(node, "node");
     this.syncContext = checkNotNull(syncContext, "syncContext");
@@ -344,7 +341,6 @@ final class XdsClientImpl2 extends XdsClient {
       logger.log(XdsLogLevel.INFO, "Turning on load reporting");
       lrsClient =
           new LoadReportClient(
-              targetName,
               loadStatsManager,
               xdsChannel,
               node,

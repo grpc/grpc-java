@@ -120,7 +120,6 @@ import org.mockito.MockitoAnnotations;
  */
 @RunWith(JUnit4.class)
 public class XdsClientImplTest2 {
-  private static final String TARGET_NAME = "hello.googleapis.com";
   private static final String LDS_RESOURCE = "listener.googleapis.com";
   private static final String RDS_RESOURCE = "route-configuration.googleapis.com";
   private static final String CDS_RESOURCE = "cluster.googleapis.com";
@@ -277,7 +276,6 @@ public class XdsClientImplTest2 {
 
     xdsClient =
         new XdsClientImpl2(
-            TARGET_NAME,
             new XdsChannel(channel, /* useProtocolV3= */ true),
             EnvoyProtoData.Node.newBuilder().build(),
             syncContext,

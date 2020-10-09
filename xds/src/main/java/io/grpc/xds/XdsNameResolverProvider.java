@@ -62,9 +62,9 @@ public final class XdsNameResolverProvider extends NameResolverProvider {
           targetUri);
       String name = targetPath.substring(1);
       XdsClientPoolFactory xdsClientPoolFactory =
-          new RefCountedXdsClientPoolFactory(
-              name, args.getSynchronizationContext(), args.getScheduledExecutorService(),
-              new ExponentialBackoffPolicy.Provider(), GrpcUtil.STOPWATCH_SUPPLIER);
+          new RefCountedXdsClientPoolFactory(args.getSynchronizationContext(),
+              args.getScheduledExecutorService(), new ExponentialBackoffPolicy.Provider(),
+              GrpcUtil.STOPWATCH_SUPPLIER);
       return new XdsNameResolver(
           name, args.getServiceConfigParser(),
           args.getSynchronizationContext(), xdsClientPoolFactory);
@@ -90,19 +90,16 @@ public final class XdsNameResolverProvider extends NameResolverProvider {
   }
 
   static class RefCountedXdsClientPoolFactory implements XdsClientPoolFactory {
-    private final String serviceName;
     private final SynchronizationContext syncContext;
     private final ScheduledExecutorService timeService;
     private final BackoffPolicy.Provider backoffPolicyProvider;
     private final Supplier<Stopwatch> stopwatchSupplier;
 
     RefCountedXdsClientPoolFactory(
-        String serviceName,
         SynchronizationContext syncContext,
         ScheduledExecutorService timeService,
         BackoffPolicy.Provider backoffPolicyProvider,
         Supplier<Stopwatch> stopwatchSupplier) {
-      this.serviceName = checkNotNull(serviceName, "serviceName");
       this.syncContext = checkNotNull(syncContext, "syncContext");
       this.timeService = checkNotNull(timeService, "timeService");
       this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
@@ -115,8 +112,7 @@ public final class XdsNameResolverProvider extends NameResolverProvider {
       XdsClientFactory xdsClientFactory = new XdsClientFactory() {
         @Override
         XdsClient createXdsClient() {
-          return new XdsClientImpl2(
-              serviceName, channel, bootstrapInfo.getNode(), syncContext, timeService,
+          return new XdsClientImpl2(channel, bootstrapInfo.getNode(), syncContext, timeService,
               backoffPolicyProvider, stopwatchSupplier);
         }
       };
