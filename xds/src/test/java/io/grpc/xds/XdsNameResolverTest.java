@@ -119,6 +119,7 @@ public class XdsNameResolverTest {
 
   @Before
   public void setUp() {
+    XdsNameResolver.enableTimeout = true;
     Bootstrapper bootstrapper = new Bootstrapper() {
       @Override
       public BootstrapInfo readBootstrap() {
