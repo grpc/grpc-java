@@ -16,6 +16,8 @@
 
 package io.grpc.xds;
 
+import static io.grpc.xds.EnvoyProtoData.TRANSPORT_SOCKET_NAME_TLS;
+
 import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
@@ -295,7 +297,7 @@ public final class EnvoyServerProtoData {
         io.envoyproxy.envoy.config.listener.v3.FilterChain filterChain)
         throws InvalidProtocolBufferException {
       if (filterChain.hasTransportSocket()
-          && "tls".equals(filterChain.getTransportSocket().getName())) {
+          && TRANSPORT_SOCKET_NAME_TLS.equals(filterChain.getTransportSocket().getName())) {
         Any any = filterChain.getTransportSocket().getTypedConfig();
         return DownstreamTlsContext.fromEnvoyProtoDownstreamTlsContext(
             io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext.parseFrom(

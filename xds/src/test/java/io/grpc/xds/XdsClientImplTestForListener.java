@@ -786,15 +786,17 @@ public class XdsClientImplTestForListener {
   @SuppressWarnings("deprecation")
   static FilterChain buildFilterChain(FilterChainMatch filterChainMatch,
                                       DownstreamTlsContext tlsContext, Filter...filters) {
-    return
-        FilterChain.newBuilder()
-            .setFilterChainMatch(filterChainMatch)
-            .setTransportSocket(tlsContext == null
+    return FilterChain.newBuilder()
+        .setFilterChainMatch(filterChainMatch)
+        .setTransportSocket(
+            tlsContext == null
                 ? TransportSocket.getDefaultInstance()
-                : TransportSocket.newBuilder().setName("tls").setTypedConfig(Any.pack(tlsContext))
+                : TransportSocket.newBuilder()
+                    .setName("envoy.transport_sockets.tls")
+                    .setTypedConfig(Any.pack(tlsContext))
                     .build())
-            .addAllFilters(Arrays.asList(filters))
-            .build();
+        .addAllFilters(Arrays.asList(filters))
+        .build();
   }
 
   static FilterChainMatch buildFilterChainMatch(int destPort, CidrRange...prefixRanges) {
