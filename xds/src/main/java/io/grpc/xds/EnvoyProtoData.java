@@ -1230,7 +1230,7 @@ final class EnvoyProtoData {
           return StructOrError.fromError(
               "Unknown cluster specifier: " + proto.getClusterSpecifierCase());
       }
-      long timeoutNano = 0;
+      long timeoutNano = 0L;
       if (proto.hasMaxStreamDuration()) {
         io.envoyproxy.envoy.config.route.v3.RouteAction.MaxStreamDuration maxStreamDuration
             = proto.getMaxStreamDuration();
