@@ -35,6 +35,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
+import io.grpc.ChannelLogger;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.ForwardingChannelBuilder;
@@ -556,6 +557,11 @@ public class CachingRlsLbClientTest {
     @Override
     public SynchronizationContext getSynchronizationContext() {
       return syncContext;
+    }
+
+    @Override
+    public ChannelLogger getChannelLogger() {
+      return mock(ChannelLogger.class);
     }
   }
 

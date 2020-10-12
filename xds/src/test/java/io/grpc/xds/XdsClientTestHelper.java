@@ -56,6 +56,7 @@ import io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse;
 import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.envoyproxy.envoy.type.v3.FractionalPercent.DenominatorType;
 import io.grpc.xds.EnvoyProtoData.Node;
+import java.util.ArrayList;
 import java.util.List;
 import javax.annotation.Nullable;
 
@@ -160,6 +161,23 @@ class XdsClientTestHelper {
             .build();
   }
 
+  static List<VirtualHost> buildVirtualHosts(int num) {
+    List<VirtualHost> virtualHosts = new ArrayList<>(num);
+    for (int i = 0; i < num; i++) {
+      VirtualHost virtualHost =
+          VirtualHost.newBuilder()
+              .setName(num + ": do not care")
+              .addDomains("do not care")
+              .addRoutes(
+                  Route.newBuilder()
+                      .setRoute(RouteAction.newBuilder().setCluster("do not care"))
+                      .setMatch(RouteMatch.newBuilder().setPrefix("do not care")))
+              .build();
+      virtualHosts.add(virtualHost);
+    }
+    return virtualHosts;
+  }
+
   static VirtualHost buildVirtualHost(List<String> domains, String clusterName) {
     return VirtualHost.newBuilder()
         .setName("virtualhost00.googleapis.com") // don't care
@@ -217,7 +235,9 @@ class XdsClientTestHelper {
     }
     if (upstreamTlsContext != null) {
       clusterBuilder.setTransportSocket(
-          TransportSocket.newBuilder().setName("tls").setTypedConfig(Any.pack(upstreamTlsContext)));
+          TransportSocket.newBuilder()
+              .setName("envoy.transport_sockets.tls")
+              .setTypedConfig(Any.pack(upstreamTlsContext)));
     }
     return clusterBuilder.build();
   }

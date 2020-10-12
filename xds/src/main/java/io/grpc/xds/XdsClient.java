@@ -16,6 +16,7 @@
 
 package io.grpc.xds;
 
+import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -30,13 +31,11 @@ import io.grpc.internal.ObjectPool;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
-import io.grpc.xds.EnvoyProtoData.Route;
 import io.grpc.xds.EnvoyProtoData.VirtualHost;
 import io.grpc.xds.EnvoyServerProtoData.Listener;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.LoadStatsManager.LoadStatsStore;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -52,57 +51,6 @@ import javax.annotation.Nullable;
  */
 abstract class XdsClient {
 
-  /**
-   * Data class containing the results of performing a series of resource discovery RPCs via
-   * LDS/RDS/VHDS protocols. The results may include configurations for path/host rewriting,
-   * traffic mirroring, retry or hedging, default timeouts and load balancing policy that will
-   * be used to generate a service config.
-   */
-  // TODO(chengyuanzhang): delete me.
-  static final class ConfigUpdate {
-    private final List<Route> routes;
-
-    private ConfigUpdate(List<Route> routes) {
-      this.routes = routes;
-    }
-
-    List<Route> getRoutes() {
-      return routes;
-    }
-
-    @Override
-    public String toString() {
-      return
-          MoreObjects
-              .toStringHelper(this)
-              .add("routes", routes)
-              .toString();
-    }
-
-    static Builder newBuilder() {
-      return new Builder();
-    }
-
-    static final class Builder {
-      private final List<Route> routes = new ArrayList<>();
-
-      // Use ConfigUpdate.newBuilder().
-      private Builder() {
-      }
-
-
-      Builder addRoutes(Collection<Route> route) {
-        routes.addAll(route);
-        return this;
-      }
-
-      ConfigUpdate build() {
-        checkState(!routes.isEmpty(), "routes is empty");
-        return new ConfigUpdate(Collections.unmodifiableList(routes));
-      }
-    }
-  }
-
   static final class LdsUpdate implements ResourceUpdate {
     // Total number of nanoseconds to keep alive an HTTP request/response stream.
     private final long httpMaxStreamDurationNano;
@@ -117,7 +65,8 @@ abstract class XdsClient {
         @Nullable List<VirtualHost> virtualHosts) {
       this.httpMaxStreamDurationNano = httpMaxStreamDurationNano;
       this.rdsName = rdsName;
-      this.virtualHosts = virtualHosts;
+      this.virtualHosts = virtualHosts == null
+          ? null : Collections.unmodifiableList(new ArrayList<>(virtualHosts));
     }
 
     long getHttpMaxStreamDurationNano() {
@@ -169,7 +118,7 @@ abstract class XdsClient {
       return new Builder();
     }
 
-    private static class Builder {
+    static class Builder {
       private long httpMaxStreamDurationNano;
       @Nullable
       private String rdsName;
@@ -189,8 +138,11 @@ abstract class XdsClient {
         return this;
       }
 
-      Builder setVirtualHosts(List<VirtualHost> virtualHosts) {
-        this.virtualHosts = virtualHosts;
+      Builder addVirtualHost(VirtualHost virtualHost) {
+        if (virtualHosts == null) {
+          virtualHosts = new ArrayList<>();
+        }
+        virtualHosts.add(virtualHost);
         return this;
       }
 
@@ -206,7 +158,8 @@ abstract class XdsClient {
     private final List<VirtualHost> virtualHosts;
 
     private RdsUpdate(List<VirtualHost> virtualHosts) {
-      this.virtualHosts = virtualHosts;
+      this.virtualHosts = Collections.unmodifiableList(
+          new ArrayList<>(checkNotNull(virtualHosts, "virtualHosts")));
     }
 
     static RdsUpdate fromVirtualHosts(List<VirtualHost> virtualHosts) {
@@ -222,6 +175,23 @@ abstract class XdsClient {
       return MoreObjects.toStringHelper(this)
           .add("virtualHosts", virtualHosts)
           .toString();
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(virtualHosts);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      RdsUpdate that = (RdsUpdate) o;
+      return Objects.equals(virtualHosts, that.virtualHosts);
     }
   }
 
@@ -474,7 +444,7 @@ abstract class XdsClient {
    * Updates via resource discovery RPCs using LDS. Includes {@link Listener} object containing
    * config for security, RBAC or other server side features such as rate limit.
    */
-  static final class ListenerUpdate {
+  static final class ListenerUpdate implements ResourceUpdate {
     // TODO(sanjaypujare): flatten structure by moving Listener class members here.
     private final Listener listener;
 
@@ -554,18 +524,6 @@ abstract class XdsClient {
   }
 
   /**
-   * Config watcher interface. To be implemented by the xDS resolver.
-   */
-  // TODO(chengyuanzhang): delete me.
-  interface ConfigWatcher extends ResourceWatcher {
-
-    /**
-     * Called when receiving an update on virtual host configurations.
-     */
-    void onConfigChanged(ConfigUpdate update);
-  }
-
-  /**
    * Listener watcher interface. To be used by {@link io.grpc.xds.internal.sds.XdsServerBuilder}.
    */
   interface ListenerWatcher extends ResourceWatcher {
@@ -580,21 +538,6 @@ abstract class XdsClient {
    * Shutdown this {@link XdsClient} and release resources.
    */
   abstract void shutdown();
-
-  /**
-   * Registers a watcher to receive {@link ConfigUpdate} for service with the given target
-   * authority.
-   *
-   * <p>Unlike watchers for cluster data and endpoint data, at most one ConfigWatcher can be
-   * registered. Once it is registered, it cannot be unregistered.
-   *
-   * @param targetAuthority authority of the "xds:" URI for the server name that the gRPC client
-   *     targets for.
-   * @param watcher the {@link ConfigWatcher} to receive {@link ConfigUpdate}.
-   */
-  // TODO(chengyuanzhang): delete me.
-  void watchConfigData(String targetAuthority, ConfigWatcher watcher) {
-  }
 
   /**
    * Registers a data watcher for the given LDS resource.

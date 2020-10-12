@@ -60,6 +60,7 @@ import javax.annotation.Nullable;
  */
 // TODO(chengyuanzhang): put data types into smaller categories.
 final class EnvoyProtoData {
+  static final String TRANSPORT_SOCKET_NAME_TLS = "envoy.transport_sockets.tls";
 
   // Prevent instantiation.
   private EnvoyProtoData() {
@@ -849,10 +850,23 @@ final class EnvoyProtoData {
     // The list of routes that will be matched, in order, for incoming requests.
     private final List<Route> routes;
 
-    private VirtualHost(String name, List<String> domains, List<Route> routes) {
+    @VisibleForTesting
+    VirtualHost(String name, List<String> domains, List<Route> routes) {
       this.name = name;
       this.domains = domains;
       this.routes = routes;
+    }
+
+    String getName() {
+      return name;
+    }
+
+    List<String> getDomains() {
+      return domains;
+    }
+
+    List<Route> getRoutes() {
+      return routes;
     }
 
     @Override
