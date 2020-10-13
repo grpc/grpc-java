@@ -16,10 +16,13 @@
 
 package io.grpc.xds.internal.sds;
 
+import static com.google.common.base.Preconditions.checkState;
+
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.BindableService;
 import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
+import io.grpc.ExperimentalApi;
 import io.grpc.HandlerRegistry;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
@@ -29,13 +32,19 @@ import io.grpc.ServerStreamTracer;
 import io.grpc.ServerTransportFilter;
 import io.grpc.Status;
 import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
+import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.netty.NettyServerBuilder;
+import io.grpc.xds.XdsClientWrapperForServerSds;
 import io.grpc.xds.internal.sds.SdsProtocolNegotiators.ServerSdsProtocolNegotiator;
+import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslContextBuilder;
 import java.io.File;
+import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
+import javax.net.ssl.SSLException;
 
 /**
  * A version of {@link ServerBuilder} to create xDS managed servers that will use SDS to set up SSL
@@ -43,6 +52,9 @@ import javax.annotation.Nullable;
  */
 public final class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
 
+  private static final String XDS_SECURITY_ENV_VAR = "GRPC_XDS_EXPERIMENTAL_SECURITY_SUPPORT";
+  // TODO(sanjaypujare): remove once xds security is released
+  private boolean enableXdsSecurity;
   private final NettyServerBuilder delegate;
   private final int port;
   private ProtocolNegotiator fallbackProtocolNegotiator;
@@ -51,6 +63,17 @@ public final class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
   private XdsServerBuilder(NettyServerBuilder nettyDelegate, int port) {
     this.delegate = nettyDelegate;
     this.port = port;
+  }
+
+  // TODO(sanjaypujare): remove once xDS security is released
+  private boolean isXdsSecurityEnabled() {
+    return enableXdsSecurity || Boolean.valueOf(System.getenv(XDS_SECURITY_ENV_VAR));
+  }
+
+  // TODO(sanjaypujare): remove once xDS security is released
+  @VisibleForTesting
+  public void setXdsSecurity(boolean enable) {
+    enableXdsSecurity = enable;
   }
 
   @Override
@@ -103,7 +126,52 @@ public final class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
 
   @Override
   public XdsServerBuilder useTransportSecurity(File certChain, File privateKey) {
-    throw new UnsupportedOperationException("Cannot set security parameters on XdsServerBuilder");
+    delegate.useTransportSecurity(certChain, privateKey);
+    return this;
+  }
+
+  @Override
+  public XdsServerBuilder useTransportSecurity(InputStream certChain, InputStream privateKey) {
+    delegate.useTransportSecurity(certChain, privateKey);
+    return this;
+  }
+
+  /** Use xDS provided security with plaintext as fallback. */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/7514")
+  public XdsServerBuilder useXdsSecurityWithPlaintextFallback() {
+    checkState(isXdsSecurityEnabled(), "Xds Security not enabled!");
+    this.fallbackProtocolNegotiator = InternalProtocolNegotiators.serverPlaintext();
+    return this;
+  }
+
+  /**
+   * Use xDS provided security with TLS as fallback.
+   *
+   * @param certChain file containing the full certificate chain
+   * @param privateKey file containing the private key
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/7514")
+  public XdsServerBuilder useXdsSecurityWithTransportSecurityFallback(
+      File certChain, File privateKey) throws SSLException {
+    checkState(isXdsSecurityEnabled(), "Xds Security not enabled!");
+    SslContext sslContext = SslContextBuilder.forServer(certChain, privateKey).build();
+    this.fallbackProtocolNegotiator = InternalProtocolNegotiators.serverTls(sslContext);
+    return this;
+  }
+
+  /**
+   * Use xDS provided security with TLS as fallback.
+   *
+   * @param certChain InputStream containing the full certificate chain
+   * @param privateKey InputStream containing the private key
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/7514")
+  public XdsServerBuilder useXdsSecurityWithTransportSecurityFallback(
+          InputStream certChain, InputStream privateKey) throws SSLException {
+    checkState(isXdsSecurityEnabled(), "Xds Security not enabled!");
+    SslContext sslContext = SslContextBuilder.forServer(certChain, privateKey).build();
+    this.fallbackProtocolNegotiator = InternalProtocolNegotiators.serverTls(sslContext);
+    return this;
   }
 
   @Override
@@ -145,9 +213,14 @@ public final class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
 
   @Override
   public Server build() {
-    ServerSdsProtocolNegotiator serverProtocolNegotiator =
-        SdsProtocolNegotiators.serverProtocolNegotiator(port, fallbackProtocolNegotiator);
-    return buildServer(serverProtocolNegotiator);
+    if (fallbackProtocolNegotiator != null) {
+      ServerSdsProtocolNegotiator serverProtocolNegotiator =
+          SdsProtocolNegotiators.serverProtocolNegotiator(port, fallbackProtocolNegotiator);
+      return buildServer(serverProtocolNegotiator);
+    } else {
+      return new ServerWrapperForXds(
+          delegate.build(), new XdsClientWrapperForServerSds(port), errorNotifier);
+    }
   }
 
   /**
