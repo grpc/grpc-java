@@ -77,7 +77,6 @@ final class ClientXdsClient extends AbstractXdsClient {
   private final LoadStatsManager loadStatsManager = new LoadStatsManager();
 
   private final XdsChannel channel;
-  private final Node node;
   private final BackoffPolicy.Provider backoffPolicyProvider;
   private final Supplier<Stopwatch> stopwatchSupplier;
   @Nullable
@@ -93,7 +92,6 @@ final class ClientXdsClient extends AbstractXdsClient {
       Supplier<Stopwatch> stopwatchSupplier) {
     super(channel, node, syncContext, timeService, backoffPolicyProvider, stopwatchSupplier.get());
     this.channel = checkNotNull(channel, "channel");
-    this.node = checkNotNull(node, "node");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
   }
@@ -637,7 +635,6 @@ final class ClientXdsClient extends AbstractXdsClient {
       logger.log(XdsLogLevel.INFO, "Turning on load reporting");
       lrsClient =
           new LoadReportClient(
-              "hello.googleapis.com",  // FIXME(chengyuanzhang): eliminate me.
               loadStatsManager,
               channel,
               node,

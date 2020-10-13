@@ -201,7 +201,7 @@ abstract class AbstractXdsClient extends XdsClient {
 
   /**
    * Accepts the update for the given resource type by updating the latest resource version
-   * and sends an ACK request to the management server
+   * and sends an ACK request to the management server.
    */
   protected void ackResponse(ResourceType type, String versionInfo, String nonce) {
     switch (type) {
