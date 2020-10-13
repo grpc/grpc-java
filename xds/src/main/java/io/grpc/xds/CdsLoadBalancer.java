@@ -210,6 +210,7 @@ final class CdsLoadBalancer extends LoadBalancer {
               /* clusterName = */ newUpdate.getClusterName(),
               /* edsServiceName = */ newUpdate.getEdsServiceName(),
               /* lrsServerName = */ newUpdate.getLrsServerName(),
+              /* maxConcurrentRequets = */ newUpdate.getMaxConcurrentRequests(),
               new PolicySelection(localityPickingPolicyProvider, null /* by EDS policy */),
               new PolicySelection(endpointPickingPolicyProvider, null));
       if (isXdsSecurityEnabled()) {
