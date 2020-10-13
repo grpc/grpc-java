@@ -19,6 +19,7 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
+import static io.grpc.xds.EnvoyProtoData.TRANSPORT_SOCKET_NAME_TLS;
 
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
@@ -373,7 +374,8 @@ final class ClientXdsClient extends AbstractXdsClient {
   @Nullable
   private static EnvoyServerProtoData.UpstreamTlsContext getTlsContextFromCluster(Cluster cluster)
       throws InvalidProtocolBufferException {
-    if (cluster.hasTransportSocket() && "tls".equals(cluster.getTransportSocket().getName())) {
+    if (cluster.hasTransportSocket()
+        && TRANSPORT_SOCKET_NAME_TLS.equals(cluster.getTransportSocket().getName())) {
       Any any = cluster.getTransportSocket().getTypedConfig();
       return EnvoyServerProtoData.UpstreamTlsContext.fromEnvoyProtoUpstreamTlsContext(
           any.unpack(UpstreamTlsContext.class));
