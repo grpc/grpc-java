@@ -27,6 +27,7 @@ import static org.mockito.Mockito.when;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import io.grpc.Attributes;
+import io.grpc.ClientStreamTracer;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
@@ -40,6 +41,7 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
+import io.grpc.Metadata;
 import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.Status.Code;
@@ -48,6 +50,7 @@ import io.grpc.internal.FakeClock;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.xds.EdsLoadBalancerProvider.EdsConfig;
+import io.grpc.xds.EnvoyProtoData.ClusterStats;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.LbEndpoint;
 import io.grpc.xds.EnvoyProtoData.Locality;
@@ -65,10 +68,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import org.junit.After;
@@ -145,7 +145,7 @@ public class EdsLoadBalancer2Test {
                 Attributes.newBuilder().set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool).build())
             .setLoadBalancingPolicyConfig(
                 new EdsConfig(
-                    CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME, weightedTarget, roundRobin))
+                    CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME, null, weightedTarget, roundRobin))
             .build());
   }
 
@@ -153,7 +153,7 @@ public class EdsLoadBalancer2Test {
   public void tearDown() {
     loadBalancer.shutdown();
     assertThat(xdsClient.watchers).isEmpty();
-    assertThat(xdsClient.dropStats).isEmpty();
+    assertThat(xdsClient.clusterStats).isEmpty();
     assertThat(xdsClientRefs).isEqualTo(0);
     assertThat(downstreamBalancers).isEmpty();
   }
@@ -430,7 +430,17 @@ public class EdsLoadBalancer2Test {
   @Test
   public void handleDrops() {
     FakeLoadBalancerProvider fakeRoundRobinProvider = new FakeLoadBalancerProvider("round_robin");
-    prepareRealDownstreamLbPolicies(fakeRoundRobinProvider);
+    PolicySelection fakeRoundRobinSelection = new PolicySelection(fakeRoundRobinProvider, null);
+    PolicySelection weightedTargetSelection = prepareRealDownstreamLbPolicies();
+    loadBalancer.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
+            .setAttributes(
+                Attributes.newBuilder().set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool).build())
+            .setLoadBalancingPolicyConfig(
+                new EdsConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME, null,
+                    weightedTargetSelection, fakeRoundRobinSelection))
+            .build());
     when(mockRandom.nextInt(anyInt())).thenReturn(499_999, 1_000_000);
     EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr-1");
     LocalityLbEndpoints localityLbEndpoints1 =
@@ -452,11 +462,107 @@ public class EdsLoadBalancer2Test {
     assertThat(result.getStatus().isOk()).isFalse();
     assertThat(result.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(result.getStatus().getDescription()).isEqualTo("Dropped: throttle");
-    assertThat(xdsClient.dropStats.get(EDS_SERVICE_NAME).get("throttle").get()).isEqualTo(1);
+    assertThat(xdsClient.clusterStats.get(EDS_SERVICE_NAME).categorizedDrops.get("throttle"))
+        .isEqualTo(1);
 
     result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
     assertThat(result.getStatus().isOk()).isTrue();
     assertThat(result.getSubchannel()).isSameInstanceAs(subchannel);
+  }
+
+  @Test
+  public void maxConcurrentRequests_appliedByLbConfig() {
+    long maxConcurrentRequests = 100L;
+    FakeLoadBalancerProvider fakeRoundRobinProvider = new FakeLoadBalancerProvider("round_robin");
+    PolicySelection fakeRoundRobinSelection = new PolicySelection(fakeRoundRobinProvider, null);
+    PolicySelection weightedTargetSelection = prepareRealDownstreamLbPolicies();
+    loadBalancer.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
+            .setAttributes(
+                Attributes.newBuilder().set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool).build())
+            .setLoadBalancingPolicyConfig(
+                new EdsConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME, maxConcurrentRequests,
+                    weightedTargetSelection, fakeRoundRobinSelection))
+            .build());
+    EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr-1");
+    LocalityLbEndpoints localityLbEndpoints1 =
+        buildLocalityLbEndpoints(1, 10, Collections.singletonMap(endpoint1, true));
+    xdsClient.deliverClusterLoadAssignment(
+        EDS_SERVICE_NAME, Collections.singletonMap(locality1, localityLbEndpoints1));
+    assertThat(downstreamBalancers).hasSize(1);  // one leaf balancer
+    FakeLoadBalancer leafBalancer = Iterables.getOnlyElement(downstreamBalancers);
+    assertThat(leafBalancer.name).isEqualTo("round_robin");
+    assertAddressesEqual(Collections.singletonList(makeAddress("endpoint-addr-1")),
+        leafBalancer.addresses);
+    Subchannel subchannel = leafBalancer.helper.createSubchannel(
+        CreateSubchannelArgs.newBuilder().setAddresses(leafBalancer.addresses).build());
+    leafBalancer.deliverSubchannelState(subchannel, ConnectivityState.READY);
+    assertThat(currentState).isEqualTo(ConnectivityState.READY);
+    for (int i = 0; i < maxConcurrentRequests; i++) {
+      PickResult result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
+      assertThat(result.getStatus().isOk()).isTrue();
+      assertThat(result.getSubchannel()).isSameInstanceAs(subchannel);
+      assertThat(result.getStreamTracerFactory()).isNotNull();
+      ClientStreamTracer.Factory streamTracerFactory = result.getStreamTracerFactory();
+      streamTracerFactory.newClientStreamTracer(ClientStreamTracer.StreamInfo.newBuilder().build(),
+          new Metadata());
+    }
+    assertThat(xdsClient.clusterStats.get(EDS_SERVICE_NAME).totalDrops).isEqualTo(0L);
+
+    PickResult result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
+    assertThat(result.getStatus().isOk()).isFalse();
+    assertThat(result.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat(result.getStatus().getDescription())
+        .isEqualTo("Cluster max concurrent requests limit exceeded");
+    assertThat(xdsClient.clusterStats.get(EDS_SERVICE_NAME).totalDrops).isEqualTo(1L);
+  }
+
+  @Test
+  public void maxConcurrentRequests_appliedWithDefaultValue() {
+    FakeLoadBalancerProvider fakeRoundRobinProvider = new FakeLoadBalancerProvider("round_robin");
+    PolicySelection fakeRoundRobinSelection = new PolicySelection(fakeRoundRobinProvider, null);
+    PolicySelection weightedTargetSelection = prepareRealDownstreamLbPolicies();
+    loadBalancer.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
+            .setAttributes(
+                Attributes.newBuilder().set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool).build())
+            .setLoadBalancingPolicyConfig(
+                new EdsConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME, null,
+                    weightedTargetSelection, fakeRoundRobinSelection))
+            .build());
+    EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr-1");
+    LocalityLbEndpoints localityLbEndpoints1 =
+        buildLocalityLbEndpoints(1, 10, Collections.singletonMap(endpoint1, true));
+    xdsClient.deliverClusterLoadAssignment(
+        EDS_SERVICE_NAME, Collections.singletonMap(locality1, localityLbEndpoints1));
+    assertThat(downstreamBalancers).hasSize(1);  // one leaf balancer
+    FakeLoadBalancer leafBalancer = Iterables.getOnlyElement(downstreamBalancers);
+    assertThat(leafBalancer.name).isEqualTo("round_robin");
+    assertAddressesEqual(Collections.singletonList(makeAddress("endpoint-addr-1")),
+        leafBalancer.addresses);
+    Subchannel subchannel = leafBalancer.helper.createSubchannel(
+        CreateSubchannelArgs.newBuilder().setAddresses(leafBalancer.addresses).build());
+    leafBalancer.deliverSubchannelState(subchannel, ConnectivityState.READY);
+    assertThat(currentState).isEqualTo(ConnectivityState.READY);
+    for (int i = 0; i < EdsLoadBalancer2.DEFAULT_PER_CLUSTER_MAX_CONCURRENT_REQUESTS; i++) {
+      PickResult result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
+      assertThat(result.getStatus().isOk()).isTrue();
+      assertThat(result.getSubchannel()).isSameInstanceAs(subchannel);
+      assertThat(result.getStreamTracerFactory()).isNotNull();
+      ClientStreamTracer.Factory streamTracerFactory = result.getStreamTracerFactory();
+      streamTracerFactory.newClientStreamTracer(ClientStreamTracer.StreamInfo.newBuilder().build(),
+          new Metadata());
+    }
+    assertThat(xdsClient.clusterStats.get(EDS_SERVICE_NAME).totalDrops).isEqualTo(0L);
+
+    PickResult result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
+    assertThat(result.getStatus().isOk()).isFalse();
+    assertThat(result.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat(result.getStatus().getDescription())
+        .isEqualTo("Cluster max concurrent requests limit exceeded");
+    assertThat(xdsClient.clusterStats.get(EDS_SERVICE_NAME).totalDrops).isEqualTo(1L);
   }
 
   @Test
@@ -476,8 +582,8 @@ public class EdsLoadBalancer2Test {
             .setAttributes(
                 Attributes.newBuilder().set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool).build())
             .setLoadBalancingPolicyConfig(
-                new EdsConfig(
-                    CLUSTER, newEdsServiceName, LRS_SERVER_NAME, weightedTarget, roundRobin))
+                new EdsConfig(CLUSTER, newEdsServiceName, LRS_SERVER_NAME, null, weightedTarget,
+                    roundRobin))
             .build());
     deliverSimpleClusterLoadAssignment(newEdsServiceName);  // instantiate the new subtree
     assertThat(downstreamBalancers).hasSize(2);
@@ -495,7 +601,17 @@ public class EdsLoadBalancer2Test {
   @Test
   public void configUpdate_changeEndpointPickingPolicy() {
     FakeLoadBalancerProvider fakeRoundRobinProvider = new FakeLoadBalancerProvider("round_robin");
-    prepareRealDownstreamLbPolicies(fakeRoundRobinProvider);
+    PolicySelection fakeRoundRobinSelection = new PolicySelection(fakeRoundRobinProvider, null);
+    PolicySelection weightedTargetSelection = prepareRealDownstreamLbPolicies();
+    loadBalancer.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
+            .setAttributes(
+                Attributes.newBuilder().set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool).build())
+            .setLoadBalancingPolicyConfig(
+                new EdsConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME, null,
+                    weightedTargetSelection, fakeRoundRobinSelection))
+            .build());
     deliverSimpleClusterLoadAssignment(EDS_SERVICE_NAME);  // downstream LB policies instantiated
     FakeLoadBalancer leafBalancer = Iterables.getOnlyElement(downstreamBalancers);
     assertThat(leafBalancer.name).isEqualTo("round_robin");
@@ -507,8 +623,8 @@ public class EdsLoadBalancer2Test {
         .setAttributes(
             Attributes.newBuilder().set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool).build())
         .setLoadBalancingPolicyConfig(
-            new EdsConfig(
-                CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME, weightedTarget, fakePickFirstSelection))
+            new EdsConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME, null, weightedTarget,
+                fakePickFirstSelection))
         .build());
     assertThat(leafBalancer.shutdown).isTrue();
     leafBalancer = Iterables.getOnlyElement(downstreamBalancers);
@@ -645,27 +761,15 @@ public class EdsLoadBalancer2Test {
   }
 
   /**
-   * Instantiates the downstream LB policy subtree with real implementations, except the leaf
-   * policy is replaced with a fake implementation to avoid creating connections.
+   * Prepare the LB registry with real LB policy implementations for downstream LB policies.
    */
-  private void prepareRealDownstreamLbPolicies(FakeLoadBalancerProvider fakeLeafPolicyProvider) {
+  private PolicySelection prepareRealDownstreamLbPolicies() {
     registry.deregister(registry.getProvider(PRIORITY_POLICY_NAME));
     registry.register(new PriorityLoadBalancerProvider());
     registry.deregister(registry.getProvider(LRS_POLICY_NAME));
     registry.register(new LrsLoadBalancerProvider());
-    PolicySelection weightedTargetSelection =
-        new PolicySelection(new WeightedTargetLoadBalancerProvider(), null);
-    PolicySelection fakeLeafPolicySelection =
-        new PolicySelection(fakeLeafPolicyProvider, null);
-    loadBalancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder()
-            .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
-            .setAttributes(
-                Attributes.newBuilder().set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool).build())
-            .setLoadBalancingPolicyConfig(
-                new EdsConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME, weightedTargetSelection,
-                    fakeLeafPolicySelection))
-            .build());
+    // weighted_target LB policy is not required to be in the registry
+    return new PolicySelection(new WeightedTargetLoadBalancerProvider(), null);
   }
 
   private static void assertLrsConfig(
@@ -733,7 +837,7 @@ public class EdsLoadBalancer2Test {
 
   private final class FakeXdsClient extends XdsClient {
     private final Map<String, EdsResourceWatcher> watchers = new HashMap<>();
-    private final Map<String, ConcurrentMap<String, AtomicLong>> dropStats = new HashMap<>();
+    private final Map<String, FakeLoadStatsStore> clusterStats = new HashMap<>();
 
     @Override
     void shutdown() {
@@ -752,15 +856,14 @@ public class EdsLoadBalancer2Test {
 
     @Override
     LoadStatsStore addClientStats(String clusterName, @Nullable String clusterServiceName) {
-      ConcurrentMap<String, AtomicLong> dropCounters = new ConcurrentHashMap<>();
-      dropStats.put(clusterServiceName, dropCounters);
-      return new LoadStatsStoreImpl(clusterName, clusterServiceName,
-          fakeClock.getStopwatchSupplier().get(), dropCounters);
+      FakeLoadStatsStore stats = new FakeLoadStatsStore();
+      clusterStats.put(clusterServiceName, stats);
+      return stats;
     }
 
     @Override
     void removeClientStats(String clusterName, @Nullable String clusterServiceName) {
-      dropStats.remove(clusterServiceName);
+      clusterStats.remove(clusterServiceName);
     }
 
     void deliverClusterLoadAssignment(
@@ -809,6 +912,41 @@ public class EdsLoadBalancer2Test {
           }
         }
       });
+    }
+  }
+
+  private static final class FakeLoadStatsStore implements LoadStatsStore {
+    private final Map<String, Long> categorizedDrops = new HashMap<>();
+    private int totalDrops;
+
+    @Override
+    public ClusterStats generateLoadReport() {
+      throw new UnsupportedOperationException("should not be called");
+    }
+
+    @Override
+    public ClientLoadCounter addLocality(Locality locality) {
+      return new ClientLoadCounter();
+    }
+
+    @Override
+    public void removeLocality(Locality locality) {
+      // no-op
+    }
+
+    @Override
+    public void recordDroppedRequest(String category) {
+      if (!categorizedDrops.containsKey(category)) {
+        categorizedDrops.put(category, 1L);
+      } else {
+        categorizedDrops.put(category, categorizedDrops.get(category) + 1L);
+      }
+      totalDrops++;
+    }
+
+    @Override
+    public void recordDroppedRequest() {
+      totalDrops++;
     }
   }
 
