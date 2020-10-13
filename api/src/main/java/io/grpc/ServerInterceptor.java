@@ -30,11 +30,10 @@ import javax.annotation.concurrent.ThreadSafe;
  * <li>Delegating calls to other servers</li>
  * </ul>
  *
- * <p><b>Implementation note:</b> Implementations that provide thread local variables must remove
- * them before they return from {@link #interceptCall(ServerCall, Metadata, ServerCallHandler)}
- * because each message that is processed as part of the call might be handled by a different
- * thread (including the first message). If you wish to provide the thread local for the duration
- * of the entire call you have to reassign and clear them in each method of the returned listener.
+ * <p>The interceptor may be called for multiple {@link ServerCall calls} by one or more threads
+ * without completing the previous ones first. Refer to the
+ * {@link io.grpc.ServerCall.Listener ServerCall.Listener} docs for more details regarding thread
+ * safety of the returned listener.
  */
 @ThreadSafe
 public interface ServerInterceptor {
