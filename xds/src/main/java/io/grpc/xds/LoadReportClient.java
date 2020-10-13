@@ -71,7 +71,6 @@ final class LoadReportClient {
   private LrsStream lrsStream;
 
   LoadReportClient(
-      String targetName,
       LoadStatsManager loadStatsManager,
       XdsChannel xdsChannel,
       Node node,
@@ -87,7 +86,7 @@ final class LoadReportClient {
     this.retryStopwatch = checkNotNull(stopwatchSupplier, "stopwatchSupplier").get();
     this.node = checkNotNull(node, "node").toBuilder()
         .addClientFeatures("envoy.lrs.supports_send_all_clusters").build();
-    logId = InternalLogId.allocate("lrs-client", targetName);
+    logId = InternalLogId.allocate("lrs-client", null);
     logger = XdsLogger.withLogId(logId);
     logger.log(XdsLogLevel.INFO, "Created");
   }

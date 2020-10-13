@@ -16,12 +16,19 @@
 
 package io.grpc.netty;
 
+import io.grpc.Internal;
+
 /**
  * Internal accessor for {@link ProtocolNegotiator}.
  */
+@Internal
 public final class InternalProtocolNegotiator {
 
   private InternalProtocolNegotiator() {}
 
   public interface ProtocolNegotiator extends io.grpc.netty.ProtocolNegotiator {}
+
+  public interface ClientFactory extends io.grpc.netty.ProtocolNegotiator.ClientFactory {
+    @Override ProtocolNegotiator newNegotiator();
+  }
 }

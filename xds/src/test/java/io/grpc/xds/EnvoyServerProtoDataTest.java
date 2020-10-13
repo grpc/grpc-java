@@ -118,7 +118,7 @@ public class EnvoyServerProtoDataTest {
                         .build())
                     .addApplicationProtocols("managed-mtls")
                     .build())
-            .setTransportSocket(TransportSocket.newBuilder().setName("tls")
+            .setTransportSocket(TransportSocket.newBuilder().setName("envoy.transport_sockets.tls")
                 .setTypedConfig(
                     Any.pack(CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
                         "google-sds-config-default", "ROOTCA")))

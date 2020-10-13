@@ -33,6 +33,9 @@ import static org.mockito.Mockito.mock;
 import com.google.common.collect.ImmutableList;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.Grpc;
+import io.grpc.InsecureChannelCredentials;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.NameResolver;
 import io.grpc.NameResolverProvider;
 import io.grpc.NameResolverRegistry;
@@ -101,6 +104,15 @@ public class XdsSdsClientServerTest {
 
     SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
         getBlockingStub(/* upstreamTlsContext= */ null, /* overrideAuthority= */ null);
+    assertThat(unaryRpc("buddy", blockingStub)).isEqualTo("Hello buddy");
+  }
+
+  @Test
+  public void plaintextClientServer_withXdsChannelCreds() throws IOException, URISyntaxException {
+    buildServerWithTlsContext(/* downstreamTlsContext= */ null);
+
+    SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
+            getBlockingStubNewApi(/* upstreamTlsContext= */ null, /* overrideAuthority= */ null);
     assertThat(unaryRpc("buddy", blockingStub)).isEqualTo("Hello buddy");
   }
 
@@ -197,7 +209,8 @@ public class XdsSdsClientServerTest {
         CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
             BAD_CLIENT_KEY_FILE, BAD_CLIENT_PEM_FILE, CA_PEM_FILE);
     try {
-      XdsClient.ListenerWatcher unused = performMtlsTestAndGetListenerWatcher(upstreamTlsContext);
+      XdsClient.ListenerWatcher unused = performMtlsTestAndGetListenerWatcher(upstreamTlsContext,
+          false);
       fail("exception expected");
     } catch (StatusRuntimeException sre) {
       assertThat(sre).hasCauseThat().isInstanceOf(SSLHandshakeException.class);
@@ -211,7 +224,17 @@ public class XdsSdsClientServerTest {
     UpstreamTlsContext upstreamTlsContext =
         CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
             CLIENT_KEY_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
-    XdsClient.ListenerWatcher unused = performMtlsTestAndGetListenerWatcher(upstreamTlsContext);
+    performMtlsTestAndGetListenerWatcher(upstreamTlsContext, false);
+  }
+
+  /** mTLS - client auth enabled - using {@link XdsChannelCredentials} API. */
+  @Test
+  public void mtlsClientServer_withClientAuthentication_withXdsChannelCreds()
+      throws IOException, URISyntaxException {
+    UpstreamTlsContext upstreamTlsContext =
+        CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
+            CLIENT_KEY_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
+    performMtlsTestAndGetListenerWatcher(upstreamTlsContext, true);
   }
 
   @Test
@@ -260,7 +283,7 @@ public class XdsSdsClientServerTest {
         CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
             CLIENT_KEY_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
     XdsClient.ListenerWatcher listenerWatcher =
-        performMtlsTestAndGetListenerWatcher(upstreamTlsContext);
+        performMtlsTestAndGetListenerWatcher(upstreamTlsContext, false);
     DownstreamTlsContext downstreamTlsContext =
         CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(
             BAD_SERVER_KEY_FILE, BAD_SERVER_PEM_FILE, CA_PEM_FILE);
@@ -278,7 +301,8 @@ public class XdsSdsClientServerTest {
   }
 
   private XdsClient.ListenerWatcher performMtlsTestAndGetListenerWatcher(
-      UpstreamTlsContext upstreamTlsContext) throws IOException, URISyntaxException {
+      UpstreamTlsContext upstreamTlsContext, boolean newApi)
+      throws IOException, URISyntaxException {
     DownstreamTlsContext downstreamTlsContext =
         CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenamesWithClientCertRequired(
             SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, CA_PEM_FILE);
@@ -291,7 +315,8 @@ public class XdsSdsClientServerTest {
 
     XdsClient.ListenerWatcher listenerWatcher = xdsClientWrapperForServerSds.getListenerWatcher();
 
-    SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
+    SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub = newApi
+        ? getBlockingStubNewApi(upstreamTlsContext, "foo.test.google.fr") :
         getBlockingStub(upstreamTlsContext, "foo.test.google.fr");
     assertThat(unaryRpc("buddy", blockingStub)).isEqualTo("Hello buddy");
     return listenerWatcher;
@@ -360,6 +385,35 @@ public class XdsSdsClientServerTest {
     XdsChannelBuilder channelBuilder =
         XdsChannelBuilder.forTarget("sdstest://localhost:" + port)
             .fallbackProtocolNegotiator(InternalProtocolNegotiators.plaintext());
+    if (overrideAuthority != null) {
+      channelBuilder = channelBuilder.overrideAuthority(overrideAuthority);
+    }
+    InetSocketAddress socketAddress =
+        new InetSocketAddress(Inet4Address.getLoopbackAddress(), port);
+    Attributes attrs =
+        (upstreamTlsContext != null)
+            ? Attributes.newBuilder()
+                .set(XdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
+                    new SslContextProviderSupplier(
+                        upstreamTlsContext, new TlsContextManagerImpl(mockBootstrapper)))
+                .build()
+            : Attributes.EMPTY;
+    fakeNameResolverFactory.setServers(
+        ImmutableList.of(new EquivalentAddressGroup(socketAddress, attrs)));
+    return SimpleServiceGrpc.newBlockingStub(cleanupRule.register(channelBuilder.build()));
+  }
+
+  private SimpleServiceGrpc.SimpleServiceBlockingStub getBlockingStubNewApi(
+          final UpstreamTlsContext upstreamTlsContext, String overrideAuthority)
+          throws URISyntaxException {
+    URI expectedUri = new URI("sdstest://localhost:" + port);
+    fakeNameResolverFactory = new FakeNameResolverFactory.Builder(expectedUri).build();
+    NameResolverRegistry.getDefaultRegistry().register(fakeNameResolverFactory);
+    ManagedChannelBuilder<?> channelBuilder =
+        Grpc.newChannelBuilder(
+            "sdstest://localhost:" + port,
+            XdsChannelCredentials.create(InsecureChannelCredentials.create()));
+
     if (overrideAuthority != null) {
       channelBuilder = channelBuilder.overrideAuthority(overrideAuthority);
     }

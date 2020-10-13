@@ -16,11 +16,7 @@
 
 package io.grpc;
 
-import com.google.common.annotations.VisibleForTesting;
-import io.grpc.ServiceProviders.PriorityAccessor;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
+import com.google.common.base.Preconditions;
 
 /**
  * Provider of managed channels for transport agnostic consumption.
@@ -36,31 +32,13 @@ import java.util.List;
  */
 @Internal
 public abstract class ManagedChannelProvider {
-  @VisibleForTesting
-  static final Iterable<Class<?>> HARDCODED_CLASSES = new HardcodedClasses();
-
-  private static final ManagedChannelProvider provider = ServiceProviders.load(
-      ManagedChannelProvider.class,
-      HARDCODED_CLASSES,
-      ManagedChannelProvider.class.getClassLoader(),
-      new PriorityAccessor<ManagedChannelProvider>() {
-        @Override
-        public boolean isAvailable(ManagedChannelProvider provider) {
-          return provider.isAvailable();
-        }
-
-        @Override
-        public int getPriority(ManagedChannelProvider provider) {
-          return provider.priority();
-        }
-      });
-
   /**
    * Returns the ClassLoader-wide default channel.
    *
    * @throws ProviderNotFoundException if no provider is available
    */
   public static ManagedChannelProvider provider() {
+    ManagedChannelProvider provider = ManagedChannelRegistry.getDefaultRegistry().provider();
     if (provider == null) {
       throw new ProviderNotFoundException("No functional channel service provider found. "
           + "Try adding a dependency on the grpc-okhttp, grpc-netty, or grpc-netty-shaded "
@@ -94,6 +72,40 @@ public abstract class ManagedChannelProvider {
   protected abstract ManagedChannelBuilder<?> builderForTarget(String target);
 
   /**
+   * Creates a new builder with the given target URI and credentials. Returns an error-string result
+   * if unable to understand the credentials.
+   */
+  protected NewChannelBuilderResult newChannelBuilder(String target, ChannelCredentials creds) {
+    return NewChannelBuilderResult.error("ChannelCredentials are unsupported");
+  }
+
+  public static final class NewChannelBuilderResult {
+    private final ManagedChannelBuilder<?> channelBuilder;
+    private final String error;
+
+    private NewChannelBuilderResult(ManagedChannelBuilder<?> channelBuilder, String error) {
+      this.channelBuilder = channelBuilder;
+      this.error = error;
+    }
+
+    public static NewChannelBuilderResult channelBuilder(ManagedChannelBuilder<?> builder) {
+      return new NewChannelBuilderResult(Preconditions.checkNotNull(builder), null);
+    }
+
+    public static NewChannelBuilderResult error(String error) {
+      return new NewChannelBuilderResult(null, Preconditions.checkNotNull(error));
+    }
+
+    public ManagedChannelBuilder<?> getChannelBuilder() {
+      return channelBuilder;
+    }
+
+    public String getError() {
+      return error;
+    }
+  }
+
+  /**
    * Thrown when no suitable {@link ManagedChannelProvider} objects can be found.
    */
   public static final class ProviderNotFoundException extends RuntimeException {
@@ -101,24 +113,6 @@ public abstract class ManagedChannelProvider {
 
     public ProviderNotFoundException(String msg) {
       super(msg);
-    }
-  }
-
-  private static final class HardcodedClasses implements Iterable<Class<?>> {
-    @Override
-    public Iterator<Class<?>> iterator() {
-      List<Class<?>> list = new ArrayList<>();
-      try {
-        list.add(Class.forName("io.grpc.okhttp.OkHttpChannelProvider"));
-      } catch (ClassNotFoundException ex) {
-        // ignore
-      }
-      try {
-        list.add(Class.forName("io.grpc.netty.NettyChannelProvider"));
-      } catch (ClassNotFoundException ex) {
-        // ignore
-      }
-      return list.iterator();
     }
   }
 }

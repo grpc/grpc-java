@@ -19,6 +19,7 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
+import static io.grpc.xds.EnvoyProtoData.TRANSPORT_SOCKET_NAME_TLS;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
@@ -104,7 +105,6 @@ final class XdsClientImpl2 extends XdsClient {
   private final MessagePrinter respPrinter = new MessagePrinter();
   private final InternalLogId logId;
   private final XdsLogger logger;
-  private final String targetName;  // TODO: delete me.
   private final XdsChannel xdsChannel;
   private final SynchronizationContext syncContext;
   private final ScheduledExecutorService timeService;
@@ -149,14 +149,12 @@ final class XdsClientImpl2 extends XdsClient {
   private ScheduledHandle ldsRespTimer;
 
   XdsClientImpl2(
-      String targetName,
       XdsChannel channel,
       Node node,
       SynchronizationContext syncContext,
       ScheduledExecutorService timeService,
       BackoffPolicy.Provider backoffPolicyProvider,
       Supplier<Stopwatch> stopwatchSupplier) {
-    this.targetName = checkNotNull(targetName, "targetName");
     this.xdsChannel = checkNotNull(channel, "channel");
     this.node = checkNotNull(node, "node");
     this.syncContext = checkNotNull(syncContext, "syncContext");
@@ -344,7 +342,6 @@ final class XdsClientImpl2 extends XdsClient {
       logger.log(XdsLogLevel.INFO, "Turning on load reporting");
       lrsClient =
           new LoadReportClient(
-              targetName,
               loadStatsManager,
               xdsChannel,
               node,
@@ -787,7 +784,8 @@ final class XdsClientImpl2 extends XdsClient {
   @Nullable
   private static EnvoyServerProtoData.UpstreamTlsContext getTlsContextFromCluster(Cluster cluster)
       throws InvalidProtocolBufferException {
-    if (cluster.hasTransportSocket() && "tls".equals(cluster.getTransportSocket().getName())) {
+    if (cluster.hasTransportSocket()
+        && TRANSPORT_SOCKET_NAME_TLS.equals(cluster.getTransportSocket().getName())) {
       Any any = cluster.getTransportSocket().getTypedConfig();
       return EnvoyServerProtoData.UpstreamTlsContext.fromEnvoyProtoUpstreamTlsContext(
           any.unpack(UpstreamTlsContext.class));
@@ -983,7 +981,8 @@ final class XdsClientImpl2 extends XdsClient {
       }
     }
 
-    private String typeUrlV2() {
+    @VisibleForTesting
+    String typeUrlV2() {
       switch (this) {
         case LDS:
           return ADS_TYPE_URL_LDS_V2;

@@ -31,13 +31,11 @@ import io.grpc.internal.ObjectPool;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
-import io.grpc.xds.EnvoyProtoData.Route;
 import io.grpc.xds.EnvoyProtoData.VirtualHost;
 import io.grpc.xds.EnvoyServerProtoData.Listener;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.LoadStatsManager.LoadStatsStore;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -52,57 +50,6 @@ import javax.annotation.Nullable;
  * are provided for each set of data needed by gRPC.
  */
 abstract class XdsClient {
-
-  /**
-   * Data class containing the results of performing a series of resource discovery RPCs via
-   * LDS/RDS/VHDS protocols. The results may include configurations for path/host rewriting,
-   * traffic mirroring, retry or hedging, default timeouts and load balancing policy that will
-   * be used to generate a service config.
-   */
-  // TODO(chengyuanzhang): delete me.
-  static final class ConfigUpdate {
-    private final List<Route> routes;
-
-    private ConfigUpdate(List<Route> routes) {
-      this.routes = routes;
-    }
-
-    List<Route> getRoutes() {
-      return routes;
-    }
-
-    @Override
-    public String toString() {
-      return
-          MoreObjects
-              .toStringHelper(this)
-              .add("routes", routes)
-              .toString();
-    }
-
-    static Builder newBuilder() {
-      return new Builder();
-    }
-
-    static final class Builder {
-      private final List<Route> routes = new ArrayList<>();
-
-      // Use ConfigUpdate.newBuilder().
-      private Builder() {
-      }
-
-
-      Builder addRoutes(Collection<Route> route) {
-        routes.addAll(route);
-        return this;
-      }
-
-      ConfigUpdate build() {
-        checkState(!routes.isEmpty(), "routes is empty");
-        return new ConfigUpdate(Collections.unmodifiableList(routes));
-      }
-    }
-  }
 
   static final class LdsUpdate implements ResourceUpdate {
     // Total number of nanoseconds to keep alive an HTTP request/response stream.
@@ -577,18 +524,6 @@ abstract class XdsClient {
   }
 
   /**
-   * Config watcher interface. To be implemented by the xDS resolver.
-   */
-  // TODO(chengyuanzhang): delete me.
-  interface ConfigWatcher extends ResourceWatcher {
-
-    /**
-     * Called when receiving an update on virtual host configurations.
-     */
-    void onConfigChanged(ConfigUpdate update);
-  }
-
-  /**
    * Listener watcher interface. To be used by {@link io.grpc.xds.internal.sds.XdsServerBuilder}.
    */
   interface ListenerWatcher extends ResourceWatcher {
@@ -603,21 +538,6 @@ abstract class XdsClient {
    * Shutdown this {@link XdsClient} and release resources.
    */
   abstract void shutdown();
-
-  /**
-   * Registers a watcher to receive {@link ConfigUpdate} for service with the given target
-   * authority.
-   *
-   * <p>Unlike watchers for cluster data and endpoint data, at most one ConfigWatcher can be
-   * registered. Once it is registered, it cannot be unregistered.
-   *
-   * @param targetAuthority authority of the "xds:" URI for the server name that the gRPC client
-   *     targets for.
-   * @param watcher the {@link ConfigWatcher} to receive {@link ConfigUpdate}.
-   */
-  // TODO(chengyuanzhang): delete me.
-  void watchConfigData(String targetAuthority, ConfigWatcher watcher) {
-  }
 
   /**
    * Registers a data watcher for the given LDS resource.
