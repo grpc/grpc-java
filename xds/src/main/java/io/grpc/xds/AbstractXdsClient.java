@@ -51,6 +51,10 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
+/**
+ * Common base type for XdsClient implementations, which encapsulates the layer abstraction of
+ * the xDS RPC stream.
+ */
 abstract class AbstractXdsClient extends XdsClient {
 
   // Longest time to wait, since the subscription to some resource, for concluding its absence.

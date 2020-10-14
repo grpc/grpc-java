@@ -62,6 +62,9 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
+/**
+ * XdsClient implementation for client side usages.
+ */
 final class ClientXdsClient extends AbstractXdsClient {
 
   private static final String TYPE_URL_HTTP_CONNECTION_MANAGER_V2 =

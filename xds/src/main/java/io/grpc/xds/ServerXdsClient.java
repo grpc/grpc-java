@@ -43,6 +43,9 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
+/**
+ * XdsClient implementation for server side usages.
+ */
 final class ServerXdsClient extends AbstractXdsClient {
 
   @Nullable
