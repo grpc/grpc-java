@@ -121,8 +121,8 @@ public final class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
   }
 
   /**
-   * Use xDS provided security with plaintext as fallback. Note, this experimental API is not ready
-   * for wide usage as it is likely to be replaced in the near future.
+   * Use xDS provided security with plaintext as fallback. Note, this experimental functionality
+   * is not ready for wide usage.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/7514")
   public XdsServerBuilder useXdsSecurityWithPlaintextFallback() {
@@ -131,8 +131,8 @@ public final class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
   }
 
   /**
-   * Use xDS provided security with TLS as fallback. Note, this experimental API is not
-   * ready for wide usage as it is likely to be replaced in the near future.
+   * Use xDS provided security with TLS as fallback. Note, this experimental functionality
+   * is not ready for wide usage.
    *
    * @param certChain file containing the full certificate chain
    * @param privateKey file containing the private key
@@ -146,8 +146,8 @@ public final class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
   }
 
   /**
-   * Use xDS provided security with TLS as fallback. Note, this experimental API is not
-   * ready for wide usage as it is likely to be replaced in the near future.
+   * Use xDS provided security with TLS as fallback. Note, this experimental functionality
+   * is not ready for wide usage.
    *
    * @param certChain InputStream containing the full certificate chain
    * @param privateKey InputStream containing the private key
