@@ -45,6 +45,7 @@ import io.grpc.stub.StreamObserver;
 import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -224,6 +225,9 @@ abstract class AbstractXdsClient extends XdsClient {
     logger.log(XdsLogLevel.INFO, "Sending ACK for {0} update, nonce: {1}, current version: {2}",
         type, nonce, versionInfo);
     Collection<String> resources = getSubscribedResources(type);
+    if (resources == null) {
+      resources = Collections.emptyList();
+    }
     adsStream.sendDiscoveryRequest(type, versionInfo, resources, nonce, null);
   }
 
@@ -236,6 +240,9 @@ abstract class AbstractXdsClient extends XdsClient {
     logger.log(XdsLogLevel.INFO, "Sending NACK for {0} update, nonce: {1}, current version: {2}",
         type, nonce, versionInfo);
     Collection<String> resources = getSubscribedResources(type);
+    if (resources == null) {
+      resources = Collections.emptyList();
+    }
     adsStream.sendDiscoveryRequest(type, versionInfo, resources, nonce, errorDetail);
   }
 
