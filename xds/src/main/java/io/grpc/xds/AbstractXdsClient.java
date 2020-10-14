@@ -83,7 +83,8 @@ abstract class AbstractXdsClient extends XdsClient {
   // The node identifier to be included in xDS requests. Management server only requires the
   // first request to carry the node identifier on a stream. It should be identical if present
   // more than once.
-  // FIXME(chengyuanzhang): should not be visible to child classes.
+  // FIXME(chengyuanzhang): should immutable and invisible to child classes. Currently server side
+  //  has some protocol workaround usages.
   protected Node node;
 
   // Last successfully applied version_info for each resource type. Starts with empty string.
