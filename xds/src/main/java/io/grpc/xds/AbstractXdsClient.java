@@ -78,7 +78,7 @@ abstract class AbstractXdsClient extends XdsClient {
   private final XdsChannel xdsChannel;
   protected final SynchronizationContext syncContext;
   protected final ScheduledExecutorService timeService;
-  protected final BackoffPolicy.Provider backoffPolicyProvider;
+  private final BackoffPolicy.Provider backoffPolicyProvider;
   private final Stopwatch stopwatch;
   // The node identifier to be included in xDS requests. Management server only requires the
   // first request to carry the node identifier on a stream. It should be identical if present

@@ -17,7 +17,6 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.xds.EnvoyProtoData.TRANSPORT_SOCKET_NAME_TLS;
 
@@ -83,11 +82,7 @@ final class ClientXdsClient extends AbstractXdsClient {
   private final Map<String, ResourceSubscriber> cdsResourceSubscribers = new HashMap<>();
   private final Map<String, ResourceSubscriber> edsResourceSubscribers = new HashMap<>();
   private final LoadStatsManager loadStatsManager = new LoadStatsManager();
-
-  private final XdsChannel channel;
-  private final Supplier<Stopwatch> stopwatchSupplier;
-  @Nullable
-  private LoadReportClient lrsClient;
+  private final LoadReportClient lrsClient;
   private int loadReportCount;  // number of clusters enabling load reporting
 
   ClientXdsClient(
@@ -98,8 +93,8 @@ final class ClientXdsClient extends AbstractXdsClient {
       BackoffPolicy.Provider backoffPolicyProvider,
       Supplier<Stopwatch> stopwatchSupplier) {
     super(channel, node, syncContext, timeService, backoffPolicyProvider, stopwatchSupplier.get());
-    this.channel = checkNotNull(channel, "channel");
-    this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
+    lrsClient = new LoadReportClient(loadStatsManager, channel, node, syncContext, timeService,
+        backoffPolicyProvider, stopwatchSupplier);
   }
 
   @Override
@@ -638,19 +633,8 @@ final class ClientXdsClient extends AbstractXdsClient {
 
   @Override
   void reportClientStats() {
-    if (lrsClient == null) {
-      logger.log(XdsLogLevel.INFO, "Turning on load reporting");
-      lrsClient =
-          new LoadReportClient(
-              loadStatsManager,
-              channel,
-              node,
-              syncContext,
-              timeService,
-              backoffPolicyProvider,
-              stopwatchSupplier);
-    }
     if (loadReportCount == 0) {
+      logger.log(XdsLogLevel.INFO, "Turning on load reporting");
       lrsClient.startLoadReporting();
     }
     loadReportCount++;
@@ -663,7 +647,6 @@ final class ClientXdsClient extends AbstractXdsClient {
     if (loadReportCount == 0) {
       logger.log(XdsLogLevel.INFO, "Turning off load reporting");
       lrsClient.stopLoadReporting();
-      lrsClient = null;
     }
   }
 
