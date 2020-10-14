@@ -712,7 +712,7 @@ final class ClientXdsClient extends AbstractXdsClient {
     ResourceSubscriber(ResourceType type, String resource) {
       this.type = type;
       this.resource = resource;
-      if (rpcRetryTimer != null && rpcRetryTimer.isPending()) {
+      if (isInBackoff()) {
         return;
       }
       restartTimer();

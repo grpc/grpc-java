@@ -99,7 +99,7 @@ abstract class AbstractXdsClient extends XdsClient {
   @Nullable
   private BackoffPolicy retryBackoffPolicy;
   @Nullable
-  protected ScheduledHandle rpcRetryTimer;
+  private ScheduledHandle rpcRetryTimer;
 
   AbstractXdsClient(
       XdsChannel channel,
@@ -188,8 +188,7 @@ abstract class AbstractXdsClient extends XdsClient {
    * Updates the resource subscription for the given resource type.
    */
   protected void adjustResourceSubscription(ResourceType type) {
-    if (rpcRetryTimer != null && rpcRetryTimer.isPending()) {
-      // Currently in retry backoff.
+    if (isInBackoff()) {
       return;
     }
     if (adsStream == null) {
@@ -245,6 +244,13 @@ abstract class AbstractXdsClient extends XdsClient {
       resources = Collections.emptyList();
     }
     adsStream.sendDiscoveryRequest(type, versionInfo, resources, nonce, errorDetail);
+  }
+
+  /**
+   * Returns {@code true} if the RPC stream is currently in retry backoff.
+   */
+  protected boolean isInBackoff() {
+    return rpcRetryTimer != null && rpcRetryTimer.isPending();
   }
 
   /**
