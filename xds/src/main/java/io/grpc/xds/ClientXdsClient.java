@@ -78,7 +78,6 @@ final class ClientXdsClient extends AbstractXdsClient {
   private final LoadStatsManager loadStatsManager = new LoadStatsManager();
 
   private final XdsChannel channel;
-  private final BackoffPolicy.Provider backoffPolicyProvider;
   private final Supplier<Stopwatch> stopwatchSupplier;
   @Nullable
   private LoadReportClient lrsClient;
@@ -93,7 +92,6 @@ final class ClientXdsClient extends AbstractXdsClient {
       Supplier<Stopwatch> stopwatchSupplier) {
     super(channel, node, syncContext, timeService, backoffPolicyProvider, stopwatchSupplier.get());
     this.channel = checkNotNull(channel, "channel");
-    this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
   }
 
