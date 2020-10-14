@@ -61,6 +61,7 @@ import io.grpc.rls.RlsProtoData.RouteLookupRequest;
 import io.grpc.rls.RlsProtoData.RouteLookupResponse;
 import io.grpc.rls.Throttler.ThrottledException;
 import io.grpc.stub.StreamObserver;
+import io.grpc.util.ForwardingLoadBalancerHelper;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
@@ -110,7 +111,7 @@ final class CachingRlsLbClient {
   private final long staleAgeNanos;
   private final long callTimeoutNanos;
 
-  private final Helper helper;
+  private final RlsLbHelper helper;
   private final ManagedChannel rlsChannel;
   private final RouteLookupServiceStub rlsStub;
   private final RlsPicker rlsPicker;
@@ -119,7 +120,7 @@ final class CachingRlsLbClient {
   private final ChannelLogger logger;
 
   private CachingRlsLbClient(Builder builder) {
-    helper = checkNotNull(builder.helper, "helper");
+    helper = new RlsLbHelper(checkNotNull(builder.helper, "helper"));
     scheduledExecutorService = helper.getScheduledExecutorService();
     synchronizationContext = helper.getSynchronizationContext();
     lbPolicyConfig = checkNotNull(builder.lbPolicyConfig, "lbPolicyConfig");
@@ -200,6 +201,7 @@ final class CachingRlsLbClient {
                 logger.log(ChannelLogLevel.DEBUG, "Error looking up route:", t);
                 response.setException(t);
                 throttler.registerBackendResponse(false);
+                helper.propagateRlsError();
               }
 
               @Override
@@ -286,6 +288,41 @@ final class CachingRlsLbClient {
 
   void requestConnection() {
     rlsChannel.getState(true);
+  }
+
+  private static final class RlsLbHelper extends ForwardingLoadBalancerHelper {
+
+    final Helper helper;
+    private ConnectivityState state;
+    private SubchannelPicker picker;
+
+    RlsLbHelper(Helper helper) {
+      this.helper = helper;
+    }
+
+    @Override
+    protected Helper delegate() {
+      return helper;
+    }
+
+    @Override
+    public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
+      state = newState;
+      picker = newPicker;
+      super.updateBalancingState(newState, newPicker);
+    }
+
+    void propagateRlsError() {
+      getSynchronizationContext().execute(new Runnable() {
+        @Override
+        public void run() {
+          if (picker != null) {
+            // Refresh the channel state and let pending RPCs reprocess the picker.
+            updateBalancingState(state, picker);
+          }
+        }
+      });
+    }
   }
 
   /**
