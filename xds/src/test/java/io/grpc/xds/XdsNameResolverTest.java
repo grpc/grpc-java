@@ -297,7 +297,7 @@ public class XdsNameResolverTest {
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     Route route = new Route(new RouteMatch(null, call1.getFullMethodNameForPath()),
-        new RouteAction(0L, cluster1, null));  // per-route timeout unset
+        new RouteAction(null, cluster1, null));  // per-route timeout unset
     VirtualHost virtualHost = new VirtualHost("does not matter",
         Collections.singletonList(AUTHORITY), Collections.singletonList(route));
     xdsClient.deliverLdsUpdate(AUTHORITY, 0L, Collections.singletonList(virtualHost));
@@ -317,7 +317,7 @@ public class XdsNameResolverTest {
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     Route route = new Route(new RouteMatch(null, call1.getFullMethodNameForPath()),
-        new RouteAction(0L, cluster1, null));  // per-route timeout unset
+        new RouteAction(null, cluster1, null));  // per-route timeout unset
     VirtualHost virtualHost = new VirtualHost("does not matter",
         Collections.singletonList(AUTHORITY), Collections.singletonList(route));
     xdsClient.deliverLdsUpdate(AUTHORITY, TimeUnit.SECONDS.toNanos(5L),

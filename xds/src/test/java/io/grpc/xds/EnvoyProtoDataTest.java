@@ -214,7 +214,7 @@ public class EnvoyProtoDataTest {
             new Route(
                 new RouteMatch(new PathMatcher("/service/method", null, null),
                     Collections.<HeaderMatcher>emptyList(), null),
-                new RouteAction(0, "cluster-foo", null)));
+                new RouteAction(null, "cluster-foo", null)));
 
     io.envoyproxy.envoy.config.route.v3.Route unsupportedProto =
         io.envoyproxy.envoy.config.route.v3.Route.newBuilder()
@@ -477,7 +477,7 @@ public class EnvoyProtoDataTest {
             .setCluster("cluster-foo")
             .build();
     StructOrError<RouteAction> struct = RouteAction.fromEnvoyProtoRouteAction(proto);
-    assertThat(struct.getStruct().getTimeoutNano()).isEqualTo(0);
+    assertThat(struct.getStruct().getTimeoutNano()).isNull();
   }
 
   @Test

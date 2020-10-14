@@ -359,8 +359,8 @@ final class XdsNameResolver extends NameResolver {
       // TODO(chengyuanzhang): avoid service config generation and parsing for each call.
       Map<String, ?> rawServiceConfig = Collections.emptyMap();
       if (enableTimeout) {
-        long timeoutNano = selectedRoute.getRouteAction().getTimeoutNano();
-        if (timeoutNano == 0) {
+        Long timeoutNano = selectedRoute.getRouteAction().getTimeoutNano();
+        if (timeoutNano == null) {
           timeoutNano = routingConfig.fallbackTimeoutNano;
         }
         if (timeoutNano > 0) {

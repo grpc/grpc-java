@@ -1136,7 +1136,8 @@ final class EnvoyProtoData {
    * See corresponding Envoy proto message {@link io.envoyproxy.envoy.config.route.v3.RouteAction}.
    */
   static final class RouteAction {
-    private final long timeoutNano;
+    @Nullable
+    private final Long timeoutNano;
     // Exactly one of the following fields is non-null.
     @Nullable
     private final String cluster;
@@ -1144,16 +1145,14 @@ final class EnvoyProtoData {
     private final List<ClusterWeight> weightedClusters;
 
     @VisibleForTesting
-    RouteAction(
-        long timeoutNano,
-        @Nullable String cluster,
+    RouteAction(@Nullable Long timeoutNano, @Nullable String cluster,
         @Nullable List<ClusterWeight> weightedClusters) {
       this.timeoutNano = timeoutNano;
       this.cluster = cluster;
       this.weightedClusters = weightedClusters;
     }
 
-
+    @Nullable
     Long getTimeoutNano() {
       return timeoutNano;
     }
@@ -1190,7 +1189,9 @@ final class EnvoyProtoData {
     @Override
     public String toString() {
       ToStringHelper toStringHelper = MoreObjects.toStringHelper(this);
-      toStringHelper.add("timeout", timeoutNano + "ns");
+      if (timeoutNano != null) {
+        toStringHelper.add("timeout", timeoutNano + "ns");
+      }
       if (cluster != null) {
         toStringHelper.add("cluster", cluster);
       }
@@ -1230,7 +1231,7 @@ final class EnvoyProtoData {
           return StructOrError.fromError(
               "Unknown cluster specifier: " + proto.getClusterSpecifierCase());
       }
-      long timeoutNano = 0L;
+      Long timeoutNano = null;
       if (proto.hasMaxStreamDuration()) {
         io.envoyproxy.envoy.config.route.v3.RouteAction.MaxStreamDuration maxStreamDuration
             = proto.getMaxStreamDuration();
