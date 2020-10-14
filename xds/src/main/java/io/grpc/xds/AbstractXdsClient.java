@@ -247,7 +247,7 @@ abstract class AbstractXdsClient extends XdsClient {
   }
 
   /**
-   * Returns {@code true} if the RPC stream is currently in retry backoff.
+   * Returns {@code true} if the resource discovery is currently in backoff.
    */
   protected boolean isInBackoff() {
     return rpcRetryTimer != null && rpcRetryTimer.isPending();
