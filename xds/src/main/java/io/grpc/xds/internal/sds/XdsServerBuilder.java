@@ -20,6 +20,7 @@ import com.google.common.annotations.VisibleForTesting;
 import io.grpc.BindableService;
 import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
+import io.grpc.ExperimentalApi;
 import io.grpc.HandlerRegistry;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
@@ -29,13 +30,19 @@ import io.grpc.ServerStreamTracer;
 import io.grpc.ServerTransportFilter;
 import io.grpc.Status;
 import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
+import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.netty.NettyServerBuilder;
+import io.grpc.xds.XdsClientWrapperForServerSds;
 import io.grpc.xds.internal.sds.SdsProtocolNegotiators.ServerSdsProtocolNegotiator;
+import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslContextBuilder;
 import java.io.File;
+import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
+import javax.net.ssl.SSLException;
 
 /**
  * A version of {@link ServerBuilder} to create xDS managed servers that will use SDS to set up SSL
@@ -103,7 +110,54 @@ public final class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
 
   @Override
   public XdsServerBuilder useTransportSecurity(File certChain, File privateKey) {
-    throw new UnsupportedOperationException("Cannot set security parameters on XdsServerBuilder");
+    delegate.useTransportSecurity(certChain, privateKey);
+    return this;
+  }
+
+  @Override
+  public XdsServerBuilder useTransportSecurity(InputStream certChain, InputStream privateKey) {
+    delegate.useTransportSecurity(certChain, privateKey);
+    return this;
+  }
+
+  /**
+   * Use xDS provided security with plaintext as fallback. Note, this experimental API is not ready
+   * for wide usage as it is likely to be replaced in the near future.
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/7514")
+  public XdsServerBuilder useXdsSecurityWithPlaintextFallback() {
+    this.fallbackProtocolNegotiator = InternalProtocolNegotiators.serverPlaintext();
+    return this;
+  }
+
+  /**
+   * Use xDS provided security with TLS as fallback. Note, this experimental API is not
+   * ready for wide usage as it is likely to be replaced in the near future.
+   *
+   * @param certChain file containing the full certificate chain
+   * @param privateKey file containing the private key
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/7514")
+  public XdsServerBuilder useXdsSecurityWithTransportSecurityFallback(
+      File certChain, File privateKey) throws SSLException {
+    SslContext sslContext = SslContextBuilder.forServer(certChain, privateKey).build();
+    this.fallbackProtocolNegotiator = InternalProtocolNegotiators.serverTls(sslContext);
+    return this;
+  }
+
+  /**
+   * Use xDS provided security with TLS as fallback. Note, this experimental API is not
+   * ready for wide usage as it is likely to be replaced in the near future.
+   *
+   * @param certChain InputStream containing the full certificate chain
+   * @param privateKey InputStream containing the private key
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/7514")
+  public XdsServerBuilder useXdsSecurityWithTransportSecurityFallback(
+      InputStream certChain, InputStream privateKey) throws SSLException {
+    SslContext sslContext = SslContextBuilder.forServer(certChain, privateKey).build();
+    this.fallbackProtocolNegotiator = InternalProtocolNegotiators.serverTls(sslContext);
+    return this;
   }
 
   @Override
@@ -145,9 +199,14 @@ public final class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
 
   @Override
   public Server build() {
-    ServerSdsProtocolNegotiator serverProtocolNegotiator =
-        SdsProtocolNegotiators.serverProtocolNegotiator(port, fallbackProtocolNegotiator);
-    return buildServer(serverProtocolNegotiator);
+    if (fallbackProtocolNegotiator != null) {
+      ServerSdsProtocolNegotiator serverProtocolNegotiator =
+          SdsProtocolNegotiators.serverProtocolNegotiator(port, fallbackProtocolNegotiator);
+      return buildServer(serverProtocolNegotiator);
+    } else {
+      return new ServerWrapperForXds(
+          delegate.build(), new XdsClientWrapperForServerSds(port), errorNotifier);
+    }
   }
 
   /**
