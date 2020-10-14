@@ -296,7 +296,7 @@ public class ServerXdsClientTest {
     verify(listenerWatcher, never()).onListenerChanged(any(ListenerUpdate.class));
     verify(listenerWatcher, never()).onResourceDoesNotExist(":" + PORT);
     verify(listenerWatcher, never()).onError(any(Status.class));
-    fakeClock.forwardTime(AbstractXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(ServerXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(listenerWatcher).onResourceDoesNotExist(":" + PORT);
     assertThat(fakeClock.getPendingTasks(LISTENER_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
@@ -348,7 +348,7 @@ public class ServerXdsClientTest {
     verify(listenerWatcher, never()).onListenerChanged(any(ListenerUpdate.class));
     verify(listenerWatcher, never()).onResourceDoesNotExist(":" + PORT);
     verify(listenerWatcher, never()).onError(any(Status.class));
-    fakeClock.forwardTime(AbstractXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(ServerXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(listenerWatcher).onResourceDoesNotExist(":" + PORT);
     assertThat(fakeClock.getPendingTasks(LISTENER_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
@@ -620,7 +620,7 @@ public class ServerXdsClientTest {
     verify(listenerWatcher, never()).onListenerChanged(any(ListenerUpdate.class));
     verify(listenerWatcher, never()).onResourceDoesNotExist(":" + PORT);
     verify(listenerWatcher, never()).onError(any(Status.class));
-    fakeClock.forwardTime(AbstractXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(ServerXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(listenerWatcher).onResourceDoesNotExist(":" + PORT);
     assertThat(fakeClock.getPendingTasks(LISTENER_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }

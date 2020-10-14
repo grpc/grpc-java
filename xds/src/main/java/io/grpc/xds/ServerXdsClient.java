@@ -48,6 +48,9 @@ import javax.annotation.Nullable;
  */
 final class ServerXdsClient extends AbstractXdsClient {
 
+  // Longest time to wait, since the subscription to some resource, for concluding its absence.
+  @VisibleForTesting
+  static final int INITIAL_RESOURCE_FETCH_TIMEOUT_SEC = 15;
   @Nullable
   private ListenerWatcher listenerWatcher;
   private int listenerPort = -1;

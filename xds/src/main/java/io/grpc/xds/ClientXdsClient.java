@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.xds.EnvoyProtoData.TRANSPORT_SOCKET_NAME_TLS;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.protobuf.Any;
@@ -67,6 +68,9 @@ import javax.annotation.Nullable;
  */
 final class ClientXdsClient extends AbstractXdsClient {
 
+  // Longest time to wait, since the subscription to some resource, for concluding its absence.
+  @VisibleForTesting
+  static final int INITIAL_RESOURCE_FETCH_TIMEOUT_SEC = 15;
   private static final String TYPE_URL_HTTP_CONNECTION_MANAGER_V2 =
       "type.googleapis.com/envoy.config.filter.network.http_connection_manager.v2"
           + ".HttpConnectionManager";

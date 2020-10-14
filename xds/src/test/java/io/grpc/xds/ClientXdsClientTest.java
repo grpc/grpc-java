@@ -314,7 +314,7 @@ public class ClientXdsClientTest {
         eq(buildDiscoveryRequest(NODE, "0", LDS_RESOURCE, ResourceType.LDS.typeUrl(), "0000")));
 
     verifyNoInteractions(ldsResourceWatcher);
-    fakeClock.forwardTime(AbstractXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(ldsResourceWatcher).onResourceDoesNotExist(LDS_RESOURCE);
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
@@ -401,7 +401,7 @@ public class ClientXdsClientTest {
   public void cachedLdsResource_absent() {
     RpcCall<DiscoveryRequest, DiscoveryResponse> call =
         startResourceWatcher(ResourceType.LDS, LDS_RESOURCE, ldsResourceWatcher);
-    fakeClock.forwardTime(AbstractXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(ldsResourceWatcher).onResourceDoesNotExist(LDS_RESOURCE);
     LdsResourceWatcher watcher = mock(LdsResourceWatcher.class);
     xdsClient.watchLdsResource(LDS_RESOURCE, watcher);
@@ -494,7 +494,7 @@ public class ClientXdsClientTest {
         argThat(new DiscoveryRequestMatcher(NODE, "", Arrays.asList(LDS_RESOURCE, ldsResource),
             ResourceType.LDS.typeUrl(), "")));
 
-    fakeClock.forwardTime(AbstractXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(ldsResourceWatcher).onResourceDoesNotExist(LDS_RESOURCE);
     verify(watcher1).onResourceDoesNotExist(ldsResource);
     verify(watcher2).onResourceDoesNotExist(ldsResource);
@@ -536,7 +536,7 @@ public class ClientXdsClientTest {
         eq(buildDiscoveryRequest(NODE, "0", RDS_RESOURCE, ResourceType.RDS.typeUrl(), "0000")));
 
     verifyNoInteractions(rdsResourceWatcher);
-    fakeClock.forwardTime(AbstractXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(rdsResourceWatcher).onResourceDoesNotExist(RDS_RESOURCE);
     assertThat(fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
@@ -584,7 +584,7 @@ public class ClientXdsClientTest {
   public void cachedRdsResource_absent() {
     RpcCall<DiscoveryRequest, DiscoveryResponse> call =
         startResourceWatcher(ResourceType.RDS, RDS_RESOURCE, rdsResourceWatcher);
-    fakeClock.forwardTime(AbstractXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(rdsResourceWatcher).onResourceDoesNotExist(RDS_RESOURCE);
     RdsResourceWatcher watcher = mock(RdsResourceWatcher.class);
     xdsClient.watchRdsResource(RDS_RESOURCE, watcher);
@@ -676,7 +676,7 @@ public class ClientXdsClientTest {
         argThat(new DiscoveryRequestMatcher(NODE, "", Arrays.asList(RDS_RESOURCE, rdsResource),
             ResourceType.RDS.typeUrl(), "")));
 
-    fakeClock.forwardTime(AbstractXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(rdsResourceWatcher).onResourceDoesNotExist(RDS_RESOURCE);
     verify(watcher1).onResourceDoesNotExist(rdsResource);
     verify(watcher2).onResourceDoesNotExist(rdsResource);
@@ -721,7 +721,7 @@ public class ClientXdsClientTest {
         eq(buildDiscoveryRequest(NODE, "0", CDS_RESOURCE, ResourceType.CDS.typeUrl(), "0000")));
     verifyNoInteractions(cdsResourceWatcher);
 
-    fakeClock.forwardTime(AbstractXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(cdsResourceWatcher).onResourceDoesNotExist(CDS_RESOURCE);
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
@@ -816,7 +816,7 @@ public class ClientXdsClientTest {
   public void cachedCdsResource_absent() {
     RpcCall<DiscoveryRequest, DiscoveryResponse> call =
         startResourceWatcher(ResourceType.CDS, CDS_RESOURCE, cdsResourceWatcher);
-    fakeClock.forwardTime(AbstractXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(cdsResourceWatcher).onResourceDoesNotExist(CDS_RESOURCE);
     CdsResourceWatcher watcher = mock(CdsResourceWatcher.class);
     xdsClient.watchCdsResource(CDS_RESOURCE, watcher);
@@ -901,7 +901,7 @@ public class ClientXdsClientTest {
         argThat(new DiscoveryRequestMatcher(NODE, "", Arrays.asList(CDS_RESOURCE, cdsResource),
             ResourceType.CDS.typeUrl(), "")));
 
-    fakeClock.forwardTime(AbstractXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(cdsResourceWatcher).onResourceDoesNotExist(CDS_RESOURCE);
     verify(watcher1).onResourceDoesNotExist(cdsResource);
     verify(watcher2).onResourceDoesNotExist(cdsResource);
@@ -956,7 +956,7 @@ public class ClientXdsClientTest {
         eq(buildDiscoveryRequest(NODE, "0", EDS_RESOURCE, ResourceType.EDS.typeUrl(), "0000")));
     verifyNoInteractions(edsResourceWatcher);
 
-    fakeClock.forwardTime(AbstractXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(edsResourceWatcher).onResourceDoesNotExist(EDS_RESOURCE);
     assertThat(fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
@@ -1065,7 +1065,7 @@ public class ClientXdsClientTest {
   public void cachedEdsResource_absent() {
     RpcCall<DiscoveryRequest, DiscoveryResponse> call =
         startResourceWatcher(ResourceType.EDS, EDS_RESOURCE, edsResourceWatcher);
-    fakeClock.forwardTime(AbstractXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(edsResourceWatcher).onResourceDoesNotExist(EDS_RESOURCE);
     EdsResourceWatcher watcher = mock(EdsResourceWatcher.class);
     xdsClient.watchEdsResource(EDS_RESOURCE, watcher);
@@ -1201,7 +1201,7 @@ public class ClientXdsClientTest {
         argThat(new DiscoveryRequestMatcher(NODE, "", Arrays.asList(EDS_RESOURCE, edsResource),
             ResourceType.EDS.typeUrl(), "")));
 
-    fakeClock.forwardTime(AbstractXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(edsResourceWatcher).onResourceDoesNotExist(EDS_RESOURCE);
     verify(watcher1).onResourceDoesNotExist(edsResource);
     verify(watcher2).onResourceDoesNotExist(edsResource);
@@ -1564,7 +1564,7 @@ public class ClientXdsClientTest {
     ScheduledTask timeoutTask =
         Iterables.getOnlyElement(fakeClock.getPendingTasks(timeoutTaskFilter));
     assertThat(timeoutTask.getDelay(TimeUnit.SECONDS))
-        .isEqualTo(AbstractXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC);
+        .isEqualTo(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC);
     return call;
   }
 
