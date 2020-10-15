@@ -190,7 +190,7 @@ public class LoadReportClientTest {
             syncContext,
             fakeClock.getScheduledExecutorService(),
             backoffPolicyProvider,
-            fakeClock.getStopwatchSupplier().get());
+            fakeClock.getStopwatchSupplier());
     lrsClient.startLoadReporting();
   }
 
