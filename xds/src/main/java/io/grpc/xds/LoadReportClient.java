@@ -22,7 +22,6 @@ import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
-import com.google.common.base.Supplier;
 import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadReportingServiceGrpc;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadReportingServiceGrpc.LoadReportingServiceStub;
@@ -57,7 +56,7 @@ final class LoadReportClient {
   private final Node node;
   private final SynchronizationContext syncContext;
   private final ScheduledExecutorService timerService;
-  private final Stopwatch retryStopwatch;
+  private final Stopwatch stopwatch;
   private final BackoffPolicy.Provider backoffPolicyProvider;
   private final LoadStatsManager loadStatsManager;
 
@@ -77,13 +76,13 @@ final class LoadReportClient {
       SynchronizationContext syncContext,
       ScheduledExecutorService scheduledExecutorService,
       BackoffPolicy.Provider backoffPolicyProvider,
-      Supplier<Stopwatch> stopwatchSupplier) {
+      Stopwatch stopwatch) {
     this.loadStatsManager = checkNotNull(loadStatsManager, "loadStatsManager");
     this.xdsChannel = checkNotNull(xdsChannel, "xdsChannel");
     this.syncContext = checkNotNull(syncContext, "syncContext");
     this.timerService = checkNotNull(scheduledExecutorService, "timeService");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
-    this.retryStopwatch = checkNotNull(stopwatchSupplier, "stopwatchSupplier").get();
+    this.stopwatch = checkNotNull(stopwatch, "stopwatch");
     this.node = checkNotNull(node, "node").toBuilder()
         .addClientFeatures("envoy.lrs.supports_send_all_clusters").build();
     logId = InternalLogId.allocate("lrs-client", null);
@@ -154,7 +153,7 @@ final class LoadReportClient {
     } else {
       lrsStream = new LrsStreamV2();
     }
-    retryStopwatch.reset().start();
+    stopwatch.reset().start();
     lrsStream.start();
   }
 
@@ -256,7 +255,7 @@ final class LoadReportClient {
         // actual delay may be smaller than the value from the back-off policy, or even negative,
         // depending how much time was spent in the previous RPC.
         delayNanos =
-            lrsRpcRetryPolicy.nextBackoffNanos() - retryStopwatch.elapsed(TimeUnit.NANOSECONDS);
+            lrsRpcRetryPolicy.nextBackoffNanos() - stopwatch.elapsed(TimeUnit.NANOSECONDS);
       }
       logger.log(XdsLogLevel.INFO, "Retry LRS stream in {0} ns", delayNanos);
       if (delayNanos <= 0) {
