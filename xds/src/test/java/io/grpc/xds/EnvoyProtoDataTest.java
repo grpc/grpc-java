@@ -29,6 +29,7 @@ import com.google.re2j.Pattern;
 import io.envoyproxy.envoy.config.core.v3.RuntimeFractionalPercent;
 import io.envoyproxy.envoy.config.route.v3.QueryParameterMatcher;
 import io.envoyproxy.envoy.config.route.v3.RedirectAction;
+import io.envoyproxy.envoy.config.route.v3.RouteAction.MaxStreamDuration;
 import io.envoyproxy.envoy.config.route.v3.WeightedCluster;
 import io.envoyproxy.envoy.type.matcher.v3.RegexMatcher;
 import io.envoyproxy.envoy.type.v3.FractionalPercent;
@@ -212,7 +213,7 @@ public class EnvoyProtoDataTest {
             new Route(
                 new RouteMatch(PathMatcher.fromPath("/service/method", false),
                     Collections.<HeaderMatcher>emptyList(), null),
-                new RouteAction(TimeUnit.SECONDS.toNanos(15L), "cluster-foo", null)));
+                new RouteAction(null, "cluster-foo", null)));
 
     io.envoyproxy.envoy.config.route.v3.Route unsupportedProto =
         io.envoyproxy.envoy.config.route.v3.Route.newBuilder()
@@ -370,74 +371,84 @@ public class EnvoyProtoDataTest {
   }
 
   @Test
-  public void convertRouteAction() {
-    // cluster_specifier = cluster, default timeout
-    io.envoyproxy.envoy.config.route.v3.RouteAction proto1 =
+  public void convertRouteAction_cluster() {
+    io.envoyproxy.envoy.config.route.v3.RouteAction proto =
         io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
             .setCluster("cluster-foo")
             .build();
-    StructOrError<RouteAction> struct1 = RouteAction.fromEnvoyProtoRouteAction(proto1);
-    assertThat(struct1.getErrorDetail()).isNull();
-    assertThat(struct1.getStruct().getTimeoutNano())
-        .isEqualTo(TimeUnit.SECONDS.toNanos(15L)); // default value
-    assertThat(struct1.getStruct().getCluster()).isEqualTo("cluster-foo");
-    assertThat(struct1.getStruct().getWeightedCluster()).isNull();
+    StructOrError<RouteAction> struct = RouteAction.fromEnvoyProtoRouteAction(proto);
+    assertThat(struct.getErrorDetail()).isNull();
+    assertThat(struct.getStruct().getCluster()).isEqualTo("cluster-foo");
+    assertThat(struct.getStruct().getWeightedCluster()).isNull();
+  }
 
-    // cluster_specifier = cluster, infinity timeout
-    io.envoyproxy.envoy.config.route.v3.RouteAction proto2 =
+  @Test
+  public void convertRouteAction_weightedCluster() {
+    io.envoyproxy.envoy.config.route.v3.RouteAction proto =
         io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
-            .setMaxGrpcTimeout(Durations.fromNanos(0))
-            .setTimeout(Durations.fromMicros(20L))
-            .setCluster("cluster-foo")
-            .build();
-    StructOrError<RouteAction> struct2 = RouteAction.fromEnvoyProtoRouteAction(proto2);
-    assertThat(struct2.getStruct().getTimeoutNano())
-        .isEqualTo(Long.MAX_VALUE); // infinite
-
-    // cluster_specifier = cluster, infinity timeout
-    io.envoyproxy.envoy.config.route.v3.RouteAction proto3 =
-        io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
-            .setTimeout(Durations.fromNanos(0))
-            .setCluster("cluster-foo")
-            .build();
-    StructOrError<RouteAction> struct3 = RouteAction.fromEnvoyProtoRouteAction(proto3);
-    assertThat(struct3.getStruct().getTimeoutNano()).isEqualTo(Long.MAX_VALUE); // infinite
-
-    // cluster_specifier = cluster_header
-    io.envoyproxy.envoy.config.route.v3.RouteAction proto4 =
-        io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
-            .setClusterHeader("cluster-bar")
-            .build();
-    StructOrError<RouteAction> struct4 = RouteAction.fromEnvoyProtoRouteAction(proto4);
-    assertThat(struct4).isNull();
-
-    // cluster_specifier = weighted_cluster
-    io.envoyproxy.envoy.config.route.v3.RouteAction proto5 =
-        io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
-            .setMaxGrpcTimeout(Durations.fromSeconds(6L))
-            .setTimeout(Durations.fromMicros(20L))
             .setWeightedClusters(
                 WeightedCluster.newBuilder()
                     .addClusters(
                         WeightedCluster.ClusterWeight
                             .newBuilder()
-                            .setName("cluster-baz")
-                            .setWeight(UInt32Value.newBuilder().setValue(100))))
+                            .setName("cluster-foo")
+                            .setWeight(UInt32Value.newBuilder().setValue(30)))
+                    .addClusters(WeightedCluster.ClusterWeight
+                        .newBuilder()
+                        .setName("cluster-bar")
+                        .setWeight(UInt32Value.newBuilder().setValue(70))))
             .build();
-    StructOrError<RouteAction> struct5 = RouteAction.fromEnvoyProtoRouteAction(proto5);
-    assertThat(struct5.getErrorDetail()).isNull();
-    assertThat(struct5.getStruct().getTimeoutNano())
-        .isEqualTo(TimeUnit.SECONDS.toNanos(6L));
-    assertThat(struct5.getStruct().getCluster()).isNull();
-    assertThat(struct5.getStruct().getWeightedCluster())
-        .containsExactly(new ClusterWeight("cluster-baz", 100));
+    StructOrError<RouteAction> struct = RouteAction.fromEnvoyProtoRouteAction(proto);
+    assertThat(struct.getErrorDetail()).isNull();
+    assertThat(struct.getStruct().getCluster()).isNull();
+    assertThat(struct.getStruct().getWeightedCluster()).containsExactly(
+        new ClusterWeight("cluster-foo", 30), new ClusterWeight("cluster-bar", 70));
+  }
 
-    // cluster_specifier unset
-    io.envoyproxy.envoy.config.route.v3.RouteAction unsetProto =
+  @Test
+  public void convertRouteAction_unspecifiedClusterError() {
+    io.envoyproxy.envoy.config.route.v3.RouteAction proto =
         io.envoyproxy.envoy.config.route.v3.RouteAction.getDefaultInstance();
-    StructOrError<RouteAction> unsetStruct = RouteAction.fromEnvoyProtoRouteAction(unsetProto);
-    assertThat(unsetStruct.getErrorDetail()).isNotNull();
+    StructOrError<RouteAction> unsetStruct = RouteAction.fromEnvoyProtoRouteAction(proto);
     assertThat(unsetStruct.getStruct()).isNull();
+    assertThat(unsetStruct.getErrorDetail()).isNotNull();
+  }
+
+  @Test
+  public void convertRouteAction_timeoutByGrpcTimeoutHeaderMax() {
+    io.envoyproxy.envoy.config.route.v3.RouteAction proto =
+        io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
+            .setCluster("cluster-foo")
+            .setMaxStreamDuration(
+                MaxStreamDuration.newBuilder()
+                    .setGrpcTimeoutHeaderMax(Durations.fromSeconds(5L))
+                    .setMaxStreamDuration(Durations.fromMillis(20L)))
+            .build();
+    StructOrError<RouteAction> struct = RouteAction.fromEnvoyProtoRouteAction(proto);
+    assertThat(struct.getStruct().getTimeoutNano()).isEqualTo(TimeUnit.SECONDS.toNanos(5L));
+  }
+
+  @Test
+  public void convertRouteAction_timeoutByMaxStreamDuration() {
+    io.envoyproxy.envoy.config.route.v3.RouteAction proto =
+        io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
+            .setCluster("cluster-foo")
+            .setMaxStreamDuration(
+                MaxStreamDuration.newBuilder()
+                    .setMaxStreamDuration(Durations.fromSeconds(5L)))
+            .build();
+    StructOrError<RouteAction> struct = RouteAction.fromEnvoyProtoRouteAction(proto);
+    assertThat(struct.getStruct().getTimeoutNano()).isEqualTo(TimeUnit.SECONDS.toNanos(5L));
+  }
+
+  @Test
+  public void convertRouteAction_timeoutUnset() {
+    io.envoyproxy.envoy.config.route.v3.RouteAction proto =
+        io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
+            .setCluster("cluster-foo")
+            .build();
+    StructOrError<RouteAction> struct = RouteAction.fromEnvoyProtoRouteAction(proto);
+    assertThat(struct.getStruct().getTimeoutNano()).isNull();
   }
 
   @Test
