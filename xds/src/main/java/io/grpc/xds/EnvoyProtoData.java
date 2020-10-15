@@ -919,16 +919,6 @@ final class EnvoyProtoData {
       return routeAction;
     }
 
-    // TODO(chengyuanzhang): delete and do not use after routing feature is always ON.
-    boolean isDefaultRoute() {
-      // For backward compatibility, all the other matchers are ignored.
-      String prefix = routeMatch.getPathMatch().getPrefix();
-      if (prefix != null) {
-        return prefix.isEmpty() || prefix.equals("/");
-      }
-      return false;
-    }
-
     @Override
     public boolean equals(Object o) {
       if (this == o) {
@@ -993,17 +983,12 @@ final class EnvoyProtoData {
     }
 
     @VisibleForTesting
-    @SuppressWarnings("deprecation")
     @Nullable
     static StructOrError<RouteMatch> convertEnvoyProtoRouteMatch(
         io.envoyproxy.envoy.config.route.v3.RouteMatch proto) {
       if (proto.getQueryParametersCount() != 0) {
         return null;
       }
-      if (proto.hasCaseSensitive() && !proto.getCaseSensitive().getValue()) {
-        return StructOrError.fromError("Unsupported match option: case insensitive");
-      }
-
       StructOrError<PathMatcher> pathMatch = convertEnvoyProtoPathMatcher(proto);
       if (pathMatch.getErrorDetail() != null) {
         return StructOrError.fromError(pathMatch.getErrorDetail());
@@ -1033,32 +1018,28 @@ final class EnvoyProtoData {
               pathMatch.getStruct(), Collections.unmodifiableList(headerMatchers), fractionMatch));
     }
 
-    @SuppressWarnings("deprecation")
     private static StructOrError<PathMatcher> convertEnvoyProtoPathMatcher(
         io.envoyproxy.envoy.config.route.v3.RouteMatch proto) {
-      String path = null;
-      String prefix = null;
-      Pattern safeRegEx = null;
+      boolean caseSensitive = proto.getCaseSensitive().getValue();
       switch (proto.getPathSpecifierCase()) {
         case PREFIX:
-          prefix = proto.getPrefix();
-          break;
+          return StructOrError.fromStruct(
+              PathMatcher.fromPrefix(proto.getPrefix(), caseSensitive));
         case PATH:
-          path = proto.getPath();
-          break;
+          return StructOrError.fromStruct(PathMatcher.fromPath(proto.getPath(), caseSensitive));
         case SAFE_REGEX:
           String rawPattern = proto.getSafeRegex().getRegex();
+          Pattern safeRegEx;
           try {
             safeRegEx = Pattern.compile(rawPattern);
           } catch (PatternSyntaxException e) {
             return StructOrError.fromError("Malformed safe regex pattern: " + e.getMessage());
           }
-          break;
+          return StructOrError.fromStruct(PathMatcher.fromRegEx(safeRegEx));
         case PATHSPECIFIER_NOT_SET:
         default:
           return StructOrError.fromError("Unknown path match type");
       }
-      return StructOrError.fromStruct(new PathMatcher(path, prefix, safeRegEx));
     }
 
     private static StructOrError<FractionMatcher> convertEnvoyProtoFraction(
