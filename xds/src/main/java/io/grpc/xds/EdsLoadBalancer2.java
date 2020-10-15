@@ -162,7 +162,6 @@ final class EdsLoadBalancer2 extends LoadBalancer {
       private ChildLbState(Helper helper) {
         if (lrsServerName != null) {
           loadStatsStore = xdsClient.addClientStats(cluster, edsServiceName);
-          xdsClient.reportClientStats();
         } else {
           loadStatsStore = null;
         }
@@ -218,7 +217,6 @@ final class EdsLoadBalancer2 extends LoadBalancer {
       @Override
       public void shutdown() {
         if (lrsServerName != null) {
-          xdsClient.cancelClientStatsReport();
           xdsClient.removeClientStats(cluster, edsServiceName);
         }
         xdsClient.cancelEdsResourceWatch(resourceName, this);
