@@ -45,10 +45,8 @@ final class RouteMatch {
     this.headerMatchers = headerMatchers;
   }
 
-  @VisibleForTesting
-  RouteMatch(@Nullable String pathPrefixMatch, @Nullable String pathExactMatch) {
-    this(
-        new PathMatcher(pathExactMatch, pathPrefixMatch, null),
+  static RouteMatch withPathExactOnly(String pathExact) {
+    return new RouteMatch(PathMatcher.fromPath(pathExact, true),
         Collections.<HeaderMatcher>emptyList(), null);
   }
 
@@ -80,19 +78,6 @@ final class RouteMatch {
       }
     }
     return fractionMatch == null || fractionMatch.matches();
-  }
-
-  PathMatcher getPathMatch() {
-    return pathMatch;
-  }
-
-  List<HeaderMatcher> getHeaderMatchers() {
-    return Collections.unmodifiableList(headerMatchers);
-  }
-
-  @Nullable
-  FractionMatcher getFractionMatch() {
-    return fractionMatch;
   }
 
   @Override
@@ -132,35 +117,37 @@ final class RouteMatch {
     private final String prefix;
     @Nullable
     private final Pattern regEx;
+    private final boolean caseSensitive;
 
-    PathMatcher(@Nullable String path, @Nullable String prefix, @Nullable Pattern regEx) {
+    private PathMatcher(@Nullable String path, @Nullable String prefix, @Nullable Pattern regEx,
+        boolean caseSensitive) {
       this.path = path;
       this.prefix = prefix;
       this.regEx = regEx;
+      this.caseSensitive = caseSensitive;
     }
 
-    private boolean matches(String fullMethodName) {
+    static PathMatcher fromPath(String path, boolean caseSensitive) {
+      return new PathMatcher(path, null, null, caseSensitive);
+    }
+
+    static PathMatcher fromPrefix(String prefix, boolean caseSensitive) {
+      return new PathMatcher(null, prefix, null, caseSensitive);
+    }
+
+    static PathMatcher fromRegEx(Pattern regEx) {
+      return new PathMatcher(null, null, regEx, false /* doesn't matter */);
+    }
+
+    boolean matches(String fullMethodName) {
       if (path != null) {
-        return path.equals(fullMethodName);
+        return caseSensitive ? path.equals(fullMethodName) : path.equalsIgnoreCase(fullMethodName);
       } else if (prefix != null) {
-        return fullMethodName.startsWith(prefix);
+        return caseSensitive
+            ? fullMethodName.startsWith(prefix)
+            : fullMethodName.toLowerCase().startsWith(prefix.toLowerCase());
       }
       return regEx.matches(fullMethodName);
-    }
-
-    @Nullable
-    String getPath() {
-      return path;
-    }
-
-    @Nullable
-    String getPrefix() {
-      return prefix;
-    }
-
-    @Nullable
-    Pattern getRegEx() {
-      return regEx;
     }
 
     @Override
@@ -174,6 +161,7 @@ final class RouteMatch {
       PathMatcher that = (PathMatcher) o;
       return Objects.equals(path, that.path)
           && Objects.equals(prefix, that.prefix)
+          && Objects.equals(caseSensitive, that.caseSensitive)
           && Objects.equals(
               regEx == null ? null : regEx.pattern(),
               that.regEx == null ? null : that.regEx.pattern());
@@ -181,7 +169,7 @@ final class RouteMatch {
 
     @Override
     public int hashCode() {
-      return Objects.hash(path, prefix, regEx == null ? null : regEx.pattern());
+      return Objects.hash(path, prefix, caseSensitive, regEx == null ? null : regEx.pattern());
     }
 
     @Override
@@ -189,10 +177,10 @@ final class RouteMatch {
       ToStringHelper toStringHelper =
           MoreObjects.toStringHelper(this);
       if (path != null) {
-        toStringHelper.add("path", path);
+        toStringHelper.add("path", path).add("caseSensitive", caseSensitive);
       }
       if (prefix != null) {
-        toStringHelper.add("prefix", prefix);
+        toStringHelper.add("prefix", prefix).add("caseSensitive", caseSensitive);
       }
       if (regEx != null) {
         toStringHelper.add("regEx", regEx.pattern());
