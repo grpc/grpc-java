@@ -34,7 +34,6 @@ import static org.mockito.Mockito.when;
 
 import io.grpc.Status;
 import io.grpc.internal.TimeProvider;
-import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.internal.certprovider.CertificateProvider.DistributorWatcher;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import java.io.File;
@@ -65,10 +64,6 @@ public class ZatarCertificateProviderTest {
   private static final String CERT_FILE = "cert.pem";
   private static final String KEY_FILE = "key.pem";
   private static final String ROOT_FILE = "root.pem";
-
-  @Rule
-  public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
-
 
   @Mock private CertificateProvider.Watcher mockWatcher;
   @Mock private ScheduledExecutorService timeService;
@@ -245,7 +240,7 @@ public class ZatarCertificateProviderTest {
     when(timeProvider.currentTimeNanos())
         .thenReturn(
             TimeUnit.MILLISECONDS.toNanos(
-                MeshCaCertificateProviderTest.CERT0_EXPIRY_TIME_MILLIS - 5000L));
+                MeshCaCertificateProviderTest.CERT0_EXPIRY_TIME_MILLIS - 610_000L));
     provider.scheduledHandle.cancel();
     provider.checkAndReloadCertificates();
     verifyWatcherErrorUpdates(null, null, (String[]) null);
@@ -254,7 +249,7 @@ public class ZatarCertificateProviderTest {
     when(timeProvider.currentTimeNanos())
         .thenReturn(
             TimeUnit.MILLISECONDS.toNanos(
-                MeshCaCertificateProviderTest.CERT0_EXPIRY_TIME_MILLIS - 3000L));
+                MeshCaCertificateProviderTest.CERT0_EXPIRY_TIME_MILLIS - 590_000L));
     provider.scheduledHandle.cancel();
     provider.checkAndReloadCertificates();
     verifyWatcherErrorUpdates(Status.Code.UNKNOWN, throwableType, causeMessages);

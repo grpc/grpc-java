@@ -41,14 +41,17 @@ import java.util.logging.Logger;
 final class ZatarCertificateProvider extends CertificateProvider {
   private static final Logger logger = Logger.getLogger(ZatarCertificateProvider.class.getName());
 
-  /**
-   * After the previous cert has expired, if we are unable to get new certificates we will report
-   * errors. We will start doing this a few seconds before the previous cert expiry whose value is
-   * given by this constant.
-   */
-  @VisibleForTesting static final long GRACE_INTERVAL_IN_SECONDS = 4L;
+  private final SynchronizationContext syncContext;
+  private final ScheduledExecutorService scheduledExecutorService;
+  private final TimeProvider timeProvider;
+  private final Path directory;
+  private final String certFile;
+  private final String privateKeyFile;
+  private final String trustFile;
+  private final long refreshIntervalInSeconds;
+  @VisibleForTesting SynchronizationContext.ScheduledHandle scheduledHandle;
+  private Path lastModifiedTarget;
 
-  @VisibleForTesting
   ZatarCertificateProvider(
       DistributorWatcher watcher,
       boolean notifyCertUpdates,
@@ -112,10 +115,6 @@ final class ZatarCertificateProvider extends CertificateProvider {
   }
 
   private void scheduleNextRefreshCertificate(long delayInSeconds) {
-    if (scheduledHandle != null && scheduledHandle.isPending()) {
-      logger.log(Level.SEVERE, "Pending task found: inconsistent state in scheduledHandle!");
-      scheduledHandle.cancel();
-    }
     RefreshCertificateTask runnable = new RefreshCertificateTask();
     scheduledHandle =
         syncContext.schedule(runnable, delayInSeconds, TimeUnit.SECONDS, scheduledExecutorService);
@@ -128,17 +127,18 @@ final class ZatarCertificateProvider extends CertificateProvider {
       if (targetPath.equals(lastModifiedTarget)) {
         return;
       }
-      PrivateKey privateKey =
-          CertificateUtils.getPrivateKey(
-              new FileInputStream(new File(targetPath.toFile(), privateKeyFile)));
-      X509Certificate[] certs =
-          CertificateUtils.toX509Certificates(
-              new FileInputStream(new File(targetPath.toFile(), certFile)));
-      X509Certificate[] caCerts =
-          CertificateUtils.toX509Certificates(
-              new FileInputStream(new File(targetPath.toFile(), trustFile)));
-      getWatcher().updateCertificate(privateKey, Arrays.asList(certs));
-      getWatcher().updateTrustedRoots(Arrays.asList(caCerts));
+      try (FileInputStream privateKeyStream =
+              new FileInputStream(new File(targetPath.toFile(), privateKeyFile));
+          FileInputStream certsStream =
+              new FileInputStream(new File(targetPath.toFile(), certFile));
+          FileInputStream caCertsStream =
+              new FileInputStream(new File(targetPath.toFile(), trustFile))) {
+        PrivateKey privateKey = CertificateUtils.getPrivateKey(privateKeyStream);
+        X509Certificate[] certs = CertificateUtils.toX509Certificates(certsStream);
+        X509Certificate[] caCerts = CertificateUtils.toX509Certificates(caCertsStream);
+        getWatcher().updateCertificate(privateKey, Arrays.asList(certs));
+        getWatcher().updateTrustedRoots(Arrays.asList(caCerts));
+      }
       lastModifiedTarget = targetPath;
     } catch (Throwable t) {
       generateErrorIfCurrentCertExpired(t);
@@ -151,10 +151,12 @@ final class ZatarCertificateProvider extends CertificateProvider {
     X509Certificate currentCert = getWatcher().getLastIdentityCert();
     if (currentCert != null) {
       long delaySeconds = computeDelaySecondsToCertExpiry(currentCert);
-      if (delaySeconds > GRACE_INTERVAL_IN_SECONDS) {
+      if (delaySeconds > refreshIntervalInSeconds) {
         logger.log(Level.FINER, "reload certificate error", t);
         return;
       }
+      // The current cert is going to expire in less than {@link refreshIntervalInSeconds}
+      // Clear the current cert and notify our watchers thru {@code onError}
       getWatcher().clearValues();
     }
     getWatcher().onError(Status.fromThrowable(t));
@@ -175,15 +177,4 @@ final class ZatarCertificateProvider extends CertificateProvider {
       checkAndReloadCertificates();
     }
   }
-
-  private final SynchronizationContext syncContext;
-  private final ScheduledExecutorService scheduledExecutorService;
-  private final TimeProvider timeProvider;
-  private final Path directory;
-  private final String certFile;
-  private final String privateKeyFile;
-  private final String trustFile;
-  private final long refreshIntervalInSeconds;
-  @VisibleForTesting SynchronizationContext.ScheduledHandle scheduledHandle;
-  private Path lastModifiedTarget;
 }
