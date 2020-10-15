@@ -663,6 +663,10 @@ final class ClientXdsClient extends AbstractXdsClient {
   @Override
   void shutdown() {
     super.shutdown();
+    if (loadReportCount > 0) {
+      logger.log(XdsLogLevel.INFO, "Turning off load reporting");
+      lrsClient.stopLoadReporting();
+    }
     cleanUpResourceTimers();
   }
 
