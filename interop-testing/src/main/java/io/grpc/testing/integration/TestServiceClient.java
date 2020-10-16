@@ -61,19 +61,6 @@ public class TestServiceClient {
     client.parseArgs(args);
     client.setUp();
 
-    Runtime.getRuntime().addShutdownHook(new Thread() {
-      @Override
-      @SuppressWarnings("CatchAndPrintStackTrace")
-      public void run() {
-        System.out.println("Shutting down");
-        try {
-          client.tearDown();
-        } catch (Exception e) {
-          e.printStackTrace();
-        }
-      }
-    });
-
     try {
       client.run();
     } finally {
