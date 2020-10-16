@@ -1507,7 +1507,6 @@ public class ClientXdsClientTest {
     String clusterName = "cluster-foo.googleapis.com";
     xdsClient.addClientStats(clusterName, null);
     ArgumentCaptor<LoadStatsRequest> requestCaptor = ArgumentCaptor.forClass(null);
-    xdsClient.reportClientStats();
     RpcCall<LoadStatsRequest, LoadStatsResponse> lrsCall = loadReportCalls.poll();
     verify(lrsCall.requestObserver).onNext(requestCaptor.capture());
     assertThat(requestCaptor.getValue().getClusterStatsCount())
@@ -1529,8 +1528,6 @@ public class ClientXdsClientTest {
     assertThat(requestCaptor.getValue().getClusterStatsCount())
         .isEqualTo(0);  // no more stats reported
 
-    xdsClient.cancelClientStatsReport();
-    assertThat(lrsEnded.get()).isTrue();
     // See more test on LoadReportClientTest.java
   }
 

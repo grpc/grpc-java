@@ -17,7 +17,6 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.xds.EnvoyProtoData.TRANSPORT_SOCKET_NAME_TLS;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -83,7 +82,7 @@ final class ClientXdsClient extends AbstractXdsClient {
   private final Map<String, ResourceSubscriber> edsResourceSubscribers = new HashMap<>();
   private final LoadStatsManager loadStatsManager = new LoadStatsManager();
   private final LoadReportClient lrsClient;
-  private int loadReportCount;  // number of clusters enabling load reporting
+  private boolean reportingLoad;
 
   ClientXdsClient(
       XdsChannel channel,
@@ -632,27 +631,13 @@ final class ClientXdsClient extends AbstractXdsClient {
   }
 
   @Override
-  void reportClientStats() {
-    if (loadReportCount == 0) {
-      logger.log(XdsLogLevel.INFO, "Turning on load reporting");
-      lrsClient.startLoadReporting();
-    }
-    loadReportCount++;
-  }
-
-  @Override
-  void cancelClientStatsReport() {
-    checkState(loadReportCount > 0, "load reporting was never started");
-    loadReportCount--;
-    if (loadReportCount == 0) {
-      logger.log(XdsLogLevel.INFO, "Turning off load reporting");
-      lrsClient.stopLoadReporting();
-    }
-  }
-
-  @Override
   LoadStatsStore addClientStats(String clusterName, @Nullable String clusterServiceName) {
-    return loadStatsManager.addLoadStats(clusterName, clusterServiceName);
+    LoadStatsStore loadStatsStore = loadStatsManager.addLoadStats(clusterName, clusterServiceName);
+    if (!reportingLoad) {
+      lrsClient.startLoadReporting();
+      reportingLoad = true;
+    }
+    return loadStatsStore;
   }
 
   @Override
@@ -663,8 +648,7 @@ final class ClientXdsClient extends AbstractXdsClient {
   @Override
   void shutdown() {
     super.shutdown();
-    if (loadReportCount > 0) {
-      logger.log(XdsLogLevel.INFO, "Turning off load reporting");
+    if (reportingLoad) {
       lrsClient.stopLoadReporting();
     }
     cleanUpResourceTimers();
