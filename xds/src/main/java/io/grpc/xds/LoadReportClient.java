@@ -39,6 +39,7 @@ import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.XdsClient.XdsChannel;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -55,14 +56,23 @@ final class LoadReportClient {
   private final XdsLogger logger;
   private final XdsChannel xdsChannel;
   private final Node node;
-  private final SynchronizationContext syncContext;
   private final ScheduledExecutorService timerService;
   private final Stopwatch retryStopwatch;
   private final BackoffPolicy.Provider backoffPolicyProvider;
   private final LoadStatsManager loadStatsManager;
+  private final SynchronizationContext syncContext = new SynchronizationContext(
+      new Thread.UncaughtExceptionHandler() {
+        @Override
+        public void uncaughtException(Thread t, Throwable e) {
+          logger.log(
+              XdsLogLevel.ERROR,
+              "[" + logId + "] Uncaught exception in the SynchronizationContext. Panic!",
+              e);
+          panic(e);
+        }
+      });
 
   private boolean started;
-
   @Nullable
   private BackoffPolicy lrsRpcRetryPolicy;
   @Nullable
@@ -74,13 +84,11 @@ final class LoadReportClient {
       LoadStatsManager loadStatsManager,
       XdsChannel xdsChannel,
       Node node,
-      SynchronizationContext syncContext,
       ScheduledExecutorService scheduledExecutorService,
       BackoffPolicy.Provider backoffPolicyProvider,
       Supplier<Stopwatch> stopwatchSupplier) {
     this.loadStatsManager = checkNotNull(loadStatsManager, "loadStatsManager");
     this.xdsChannel = checkNotNull(xdsChannel, "xdsChannel");
-    this.syncContext = checkNotNull(syncContext, "syncContext");
     this.timerService = checkNotNull(scheduledExecutorService, "timeService");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     this.retryStopwatch = checkNotNull(stopwatchSupplier, "stopwatchSupplier").get();
@@ -97,12 +105,17 @@ final class LoadReportClient {
    * no-op.
    */
   void startLoadReporting() {
-    if (started) {
-      return;
-    }
-    started = true;
-    logger.log(XdsLogLevel.INFO, "Starting load reporting RPC");
-    startLrsRpc();
+    syncContext.execute(new Runnable() {
+      @Override
+      public void run() {
+        if (started) {
+          return;
+        }
+        started = true;
+        logger.log(XdsLogLevel.INFO, "Starting load reporting RPC");
+        startLrsRpc();
+      }
+    });
   }
 
   /**
@@ -110,18 +123,33 @@ final class LoadReportClient {
    * {@link LoadReportClient} is no-op.
    */
   void stopLoadReporting() {
-    if (!started) {
-      return;
-    }
-    logger.log(XdsLogLevel.INFO, "Stopping load reporting RPC");
+    syncContext.execute(new Runnable() {
+      @Override
+      public void run() {
+        if (!started) {
+          return;
+        }
+        started = false;
+        logger.log(XdsLogLevel.INFO, "Stopping load reporting RPC");
+        if (lrsRpcRetryTimer != null) {
+          lrsRpcRetryTimer.cancel();
+        }
+        if (lrsStream != null) {
+          lrsStream.close(Status.CANCELLED.withDescription("stop load reporting").asException());
+        }
+        // Do not shutdown channel as it is not owned by LrsClient.
+      }
+    });
+  }
+
+  private void panic(Throwable t) {
     if (lrsRpcRetryTimer != null) {
       lrsRpcRetryTimer.cancel();
     }
     if (lrsStream != null) {
-      lrsStream.close(Status.CANCELLED.withDescription("stop load reporting").asException());
+      lrsStream.close(
+          Status.INTERNAL.withDescription("Panic! This is bug!").withCause(t).asException());
     }
-    started = false;
-    // Do not shutdown channel as it is not owned by LrsClient.
   }
 
   @VisibleForTesting
@@ -168,7 +196,7 @@ final class LoadReportClient {
 
     abstract void start();
 
-    abstract void sendLoadStatsRequest(LoadStatsRequestData request);
+    abstract void sendLoadStatsRequest(List<ClusterStats> clusterStatsList);
 
     abstract void sendError(Exception error);
 
@@ -214,8 +242,7 @@ final class LoadReportClient {
           clusterStatsList.addAll(loadStatsManager.getClusterLoadReports(name));
         }
       }
-      LoadStatsRequestData request = new LoadStatsRequestData(node, clusterStatsList);
-      sendLoadStatsRequest(request);
+      sendLoadStatsRequest(clusterStatsList);
       scheduleNextLoadReport();
     }
 
@@ -334,15 +361,20 @@ final class LoadReportClient {
               xdsChannel.getManagedChannel());
       lrsRequestWriterV2 = stubV2.withWaitForReady().streamLoadStats(lrsResponseReaderV2);
       logger.log(XdsLogLevel.DEBUG, "Sending initial LRS request");
-      sendLoadStatsRequest(new LoadStatsRequestData(node, null));
+      sendLoadStatsRequest(Collections.<ClusterStats>emptyList());
     }
 
     @Override
-    void sendLoadStatsRequest(LoadStatsRequestData request) {
-      io.envoyproxy.envoy.service.load_stats.v2.LoadStatsRequest requestProto =
-          request.toEnvoyProtoV2();
-      lrsRequestWriterV2.onNext(requestProto);
-      logger.log(XdsLogLevel.DEBUG, "Sent LoadStatsRequest\n{0}", requestProto);
+    void sendLoadStatsRequest(List<ClusterStats> clusterStatsList) {
+      io.envoyproxy.envoy.service.load_stats.v2.LoadStatsRequest.Builder requestBuilder =
+          io.envoyproxy.envoy.service.load_stats.v2.LoadStatsRequest.newBuilder()
+              .setNode(node.toEnvoyProtoNodeV2());
+      for (ClusterStats stats : clusterStatsList) {
+        requestBuilder.addClusterStats(stats.toEnvoyProtoClusterStatsV2());
+      }
+      io.envoyproxy.envoy.service.load_stats.v2.LoadStatsRequest request = requestBuilder.build();
+      lrsRequestWriterV2.onNext(requestBuilder.build());
+      logger.log(XdsLogLevel.DEBUG, "Sent LoadStatsRequest\n{0}", request);
     }
 
     @Override
@@ -394,53 +426,24 @@ final class LoadReportClient {
           LoadReportingServiceGrpc.newStub(xdsChannel.getManagedChannel());
       lrsRequestWriterV3 = stubV3.withWaitForReady().streamLoadStats(lrsResponseReaderV3);
       logger.log(XdsLogLevel.DEBUG, "Sending initial LRS request");
-      sendLoadStatsRequest(new LoadStatsRequestData(node, null));
+      sendLoadStatsRequest(Collections.<ClusterStats>emptyList());
     }
 
     @Override
-    void sendLoadStatsRequest(LoadStatsRequestData request) {
-      LoadStatsRequest requestProto = request.toEnvoyProtoV3();
-      lrsRequestWriterV3.onNext(requestProto);
-      logger.log(XdsLogLevel.DEBUG, "Sent LoadStatsRequest\n{0}", requestProto);
+    void sendLoadStatsRequest(List<ClusterStats> clusterStatsList) {
+      LoadStatsRequest.Builder requestBuilder =
+          LoadStatsRequest.newBuilder().setNode(node.toEnvoyProtoNode());
+      for (ClusterStats stats : clusterStatsList) {
+        requestBuilder.addClusterStats(stats.toEnvoyProtoClusterStats());
+      }
+      LoadStatsRequest request = requestBuilder.build();
+      lrsRequestWriterV3.onNext(request);
+      logger.log(XdsLogLevel.DEBUG, "Sent LoadStatsRequest\n{0}", request);
     }
 
     @Override
     void sendError(Exception error) {
       lrsRequestWriterV3.onError(error);
-    }
-  }
-
-  private static final class LoadStatsRequestData {
-    final Node node;
-    @Nullable
-    final List<ClusterStats> clusterStatsList;
-
-    LoadStatsRequestData(Node node, @Nullable List<ClusterStats> clusterStatsList) {
-      this.node = checkNotNull(node, "node");
-      this.clusterStatsList = clusterStatsList;
-    }
-
-    io.envoyproxy.envoy.service.load_stats.v2.LoadStatsRequest toEnvoyProtoV2() {
-      io.envoyproxy.envoy.service.load_stats.v2.LoadStatsRequest.Builder builder
-          = io.envoyproxy.envoy.service.load_stats.v2.LoadStatsRequest.newBuilder()
-              .setNode(node.toEnvoyProtoNodeV2());
-      if (clusterStatsList != null) {
-        for (ClusterStats stats : clusterStatsList) {
-          builder.addClusterStats(stats.toEnvoyProtoClusterStatsV2());
-        }
-      }
-      return builder.build();
-    }
-
-    LoadStatsRequest toEnvoyProtoV3() {
-      LoadStatsRequest.Builder builder = LoadStatsRequest.newBuilder()
-          .setNode(node.toEnvoyProtoNode());
-      if (clusterStatsList != null) {
-        for (ClusterStats stats : clusterStatsList) {
-          builder.addClusterStats(stats.toEnvoyProtoClusterStats());
-        }
-      }
-      return builder.build();
     }
   }
 }
