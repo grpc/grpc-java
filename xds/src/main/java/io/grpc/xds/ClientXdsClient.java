@@ -40,7 +40,6 @@ import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
-import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
@@ -62,7 +61,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
 
 /**
  * XdsClient implementation for client side usages.
@@ -100,7 +98,8 @@ final class ClientXdsClient extends AbstractXdsClient {
         new UncaughtExceptionHandler() {
           @Override
           public void uncaughtException(Thread t, Throwable e) {
-            logger.log(XdsLogLevel.WARNING, "Uncaught exception in the SynchronizationContext.");
+            getLogger().log(XdsLogLevel.WARNING,
+                "Uncaught exception in the SynchronizationContext.");
           }
         });
     lrsClient = new LoadReportClient(loadStatsManager, channel, node, syncContext, timeService,
@@ -122,11 +121,11 @@ final class ClientXdsClient extends AbstractXdsClient {
         listenerNames.add(listener.getName());
       }
     } catch (InvalidProtocolBufferException e) {
-      logger.log(XdsLogLevel.WARNING, "Failed to unpack Listeners in LDS response {0}", e);
+      getLogger().log(XdsLogLevel.WARNING, "Failed to unpack Listeners in LDS response {0}", e);
       nackResponse(ResourceType.LDS, nonce, "Malformed LDS response: " + e);
       return;
     }
-    logger.log(XdsLogLevel.INFO, "Received LDS response for resources: {0}", listenerNames);
+    getLogger().log(XdsLogLevel.INFO, "Received LDS response for resources: {0}", listenerNames);
 
     // Unpack HttpConnectionManager messages.
     Map<String, HttpConnectionManager> httpConnectionManagers = new HashMap<>(listeners.size());
@@ -141,7 +140,7 @@ final class ClientXdsClient extends AbstractXdsClient {
         httpConnectionManagers.put(listener.getName(), hcm);
       }
     } catch (InvalidProtocolBufferException e) {
-      logger.log(
+      getLogger().log(
           XdsLogLevel.WARNING,
           "Failed to unpack HttpConnectionManagers in Listeners of LDS response {0}", e);
       nackResponse(ResourceType.LDS, nonce, "Malformed LDS response: " + e);
@@ -225,12 +224,12 @@ final class ClientXdsClient extends AbstractXdsClient {
         routeConfigs.put(rc.getName(), rc);
       }
     } catch (InvalidProtocolBufferException e) {
-      logger.log(
+      getLogger().log(
           XdsLogLevel.WARNING, "Failed to unpack RouteConfiguration in RDS response {0}", e);
       nackResponse(ResourceType.RDS, nonce, "Malformed RDS response: " + e);
       return;
     }
-    logger.log(
+    getLogger().log(
         XdsLogLevel.INFO, "Received RDS response for resources: {0}", routeConfigs.keySet());
 
     Map<String, RdsUpdate> rdsUpdates = new HashMap<>();
@@ -285,11 +284,11 @@ final class ClientXdsClient extends AbstractXdsClient {
         clusterNames.add(cluster.getName());
       }
     } catch (InvalidProtocolBufferException e) {
-      logger.log(XdsLogLevel.WARNING, "Failed to unpack Clusters in CDS response {0}", e);
+      getLogger().log(XdsLogLevel.WARNING, "Failed to unpack Clusters in CDS response {0}", e);
       nackResponse(ResourceType.CDS, nonce, "Malformed CDS response: " + e);
       return;
     }
-    logger.log(XdsLogLevel.INFO, "Received CDS response for resources: {0}", clusterNames);
+    getLogger().log(XdsLogLevel.INFO, "Received CDS response for resources: {0}", clusterNames);
 
     String errorMessage = null;
     // Cluster information update for requested clusters received in this CDS response.
@@ -408,12 +407,12 @@ final class ClientXdsClient extends AbstractXdsClient {
         claNames.add(assignment.getClusterName());
       }
     } catch (InvalidProtocolBufferException e) {
-      logger.log(
+      getLogger().log(
           XdsLogLevel.WARNING, "Failed to unpack ClusterLoadAssignments in EDS response {0}", e);
       nackResponse(ResourceType.EDS, nonce, "Malformed EDS response: " + e);
       return;
     }
-    logger.log(XdsLogLevel.INFO, "Received EDS response for resources: {0}", claNames);
+    getLogger().log(XdsLogLevel.INFO, "Received EDS response for resources: {0}", claNames);
 
     String errorMessage = null;
     // Endpoint information updates for requested clusters received in this EDS response.
@@ -558,7 +557,7 @@ final class ClientXdsClient extends AbstractXdsClient {
     synchronized (lock) {
       ResourceSubscriber subscriber = ldsResourceSubscribers.get(resourceName);
       if (subscriber == null) {
-        logger.log(XdsLogLevel.INFO, "Subscribe CDS resource {0}", resourceName);
+        getLogger().log(XdsLogLevel.INFO, "Subscribe CDS resource {0}", resourceName);
         subscriber = new ResourceSubscriber(ResourceType.LDS, resourceName);
         ldsResourceSubscribers.put(resourceName, subscriber);
         adjustResourceSubscription(ResourceType.LDS);
@@ -574,7 +573,7 @@ final class ClientXdsClient extends AbstractXdsClient {
       subscriber.removeWatcher(watcher);
       if (!subscriber.isWatched()) {
         subscriber.stopTimer();
-        logger.log(XdsLogLevel.INFO, "Unsubscribe LDS resource {0}", resourceName);
+        getLogger().log(XdsLogLevel.INFO, "Unsubscribe LDS resource {0}", resourceName);
         ldsResourceSubscribers.remove(resourceName);
         adjustResourceSubscription(ResourceType.LDS);
       }
@@ -586,7 +585,7 @@ final class ClientXdsClient extends AbstractXdsClient {
     synchronized (lock) {
       ResourceSubscriber subscriber = rdsResourceSubscribers.get(resourceName);
       if (subscriber == null) {
-        logger.log(XdsLogLevel.INFO, "Subscribe RDS resource {0}", resourceName);
+        getLogger().log(XdsLogLevel.INFO, "Subscribe RDS resource {0}", resourceName);
         subscriber = new ResourceSubscriber(ResourceType.RDS, resourceName);
         rdsResourceSubscribers.put(resourceName, subscriber);
         adjustResourceSubscription(ResourceType.RDS);
@@ -602,7 +601,7 @@ final class ClientXdsClient extends AbstractXdsClient {
       subscriber.removeWatcher(watcher);
       if (!subscriber.isWatched()) {
         subscriber.stopTimer();
-        logger.log(XdsLogLevel.INFO, "Unsubscribe RDS resource {0}", resourceName);
+        getLogger().log(XdsLogLevel.INFO, "Unsubscribe RDS resource {0}", resourceName);
         rdsResourceSubscribers.remove(resourceName);
         adjustResourceSubscription(ResourceType.RDS);
       }
@@ -614,7 +613,7 @@ final class ClientXdsClient extends AbstractXdsClient {
     synchronized (lock) {
       ResourceSubscriber subscriber = cdsResourceSubscribers.get(resourceName);
       if (subscriber == null) {
-        logger.log(XdsLogLevel.INFO, "Subscribe CDS resource {0}", resourceName);
+        getLogger().log(XdsLogLevel.INFO, "Subscribe CDS resource {0}", resourceName);
         subscriber = new ResourceSubscriber(ResourceType.CDS, resourceName);
         cdsResourceSubscribers.put(resourceName, subscriber);
         adjustResourceSubscription(ResourceType.CDS);
@@ -630,7 +629,7 @@ final class ClientXdsClient extends AbstractXdsClient {
       subscriber.removeWatcher(watcher);
       if (!subscriber.isWatched()) {
         subscriber.stopTimer();
-        logger.log(XdsLogLevel.INFO, "Unsubscribe CDS resource {0}", resourceName);
+        getLogger().log(XdsLogLevel.INFO, "Unsubscribe CDS resource {0}", resourceName);
         cdsResourceSubscribers.remove(resourceName);
         adjustResourceSubscription(ResourceType.CDS);
       }
@@ -642,7 +641,7 @@ final class ClientXdsClient extends AbstractXdsClient {
     synchronized (lock) {
       ResourceSubscriber subscriber = edsResourceSubscribers.get(resourceName);
       if (subscriber == null) {
-        logger.log(XdsLogLevel.INFO, "Subscribe EDS resource {0}", resourceName);
+        getLogger().log(XdsLogLevel.INFO, "Subscribe EDS resource {0}", resourceName);
         subscriber = new ResourceSubscriber(ResourceType.EDS, resourceName);
         edsResourceSubscribers.put(resourceName, subscriber);
         adjustResourceSubscription(ResourceType.EDS);
@@ -658,7 +657,7 @@ final class ClientXdsClient extends AbstractXdsClient {
       subscriber.removeWatcher(watcher);
       if (!subscriber.isWatched()) {
         subscriber.stopTimer();
-        logger.log(XdsLogLevel.INFO, "Unsubscribe EDS resource {0}", resourceName);
+        getLogger().log(XdsLogLevel.INFO, "Unsubscribe EDS resource {0}", resourceName);
         edsResourceSubscribers.remove(resourceName);
         adjustResourceSubscription(ResourceType.EDS);
       }
@@ -748,7 +747,8 @@ final class ClientXdsClient extends AbstractXdsClient {
         @Override
         public void run() {
           synchronized (lock) {
-            logger.log(XdsLogLevel.INFO, "{0} resource {1} initial fetch timeout", type, resource);
+            getLogger().log(XdsLogLevel.INFO, "{0} resource {1} initial fetch timeout",
+                type, resource);
             respTimer = null;
             onAbsent();
           }
@@ -794,7 +794,7 @@ final class ClientXdsClient extends AbstractXdsClient {
       if (respTimer != null && !respTimer.isDone()) {  // too early to conclude absence
         return;
       }
-      logger.log(XdsLogLevel.INFO, "Conclude {0} resource {1} not exist", type, resource);
+      getLogger().log(XdsLogLevel.INFO, "Conclude {0} resource {1} not exist", type, resource);
       if (!absent) {
         data = null;
         absent = true;

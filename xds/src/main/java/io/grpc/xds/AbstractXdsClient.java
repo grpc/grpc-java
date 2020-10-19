@@ -73,7 +73,7 @@ abstract class AbstractXdsClient extends XdsClient {
 
   private final MessagePrinter respPrinter = new MessagePrinter();
   private final InternalLogId logId;
-  protected final XdsLogger logger;
+  private final XdsLogger logger;
   private final XdsChannel xdsChannel;
   private final ScheduledExecutorService timeService;
   private final BackoffPolicy.Provider backoffPolicyProvider;
@@ -276,6 +276,10 @@ abstract class AbstractXdsClient extends XdsClient {
 
   protected ScheduledExecutorService getTimeService() {
     return timeService;
+  }
+
+  protected XdsLogger getLogger() {
+    return logger;
   }
 
   /**

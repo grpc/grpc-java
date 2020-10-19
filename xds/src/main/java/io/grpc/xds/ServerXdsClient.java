@@ -75,7 +75,7 @@ final class ServerXdsClient extends AbstractXdsClient {
     listenerWatcher = checkNotNull(watcher, "watcher");
     checkArgument(port > 0, "port needs to be > 0");
     this.listenerPort = port;
-    logger.log(XdsLogLevel.INFO, "Started watching listener for port {0}", port);
+    getLogger().log(XdsLogLevel.INFO, "Started watching listener for port {0}", port);
     updateNodeMetadataForListenerRequest(port);
     adjustResourceSubscription(ResourceType.LDS);
     ldsRespTimer =
@@ -112,21 +112,21 @@ final class ServerXdsClient extends AbstractXdsClient {
   protected void handleLdsResponse(String versionInfo, List<Any> resources, String nonce) {
     // Unpack Listener messages.
     Listener requestedListener = null;
-    logger.log(XdsLogLevel.DEBUG, "Listener count: {0}", resources.size());
+    getLogger().log(XdsLogLevel.DEBUG, "Listener count: {0}", resources.size());
     try {
       for (com.google.protobuf.Any res : resources) {
         if (res.getTypeUrl().equals(ResourceType.LDS.typeUrlV2())) {
           res = res.toBuilder().setTypeUrl(ResourceType.LDS.typeUrl()).build();
         }
         Listener listener = res.unpack(Listener.class);
-        logger.log(XdsLogLevel.DEBUG, "Found listener {0}", listener.toString());
+        getLogger().log(XdsLogLevel.DEBUG, "Found listener {0}", listener.toString());
         if (isRequestedListener(listener)) {
           requestedListener = listener;
-          logger.log(XdsLogLevel.DEBUG, "Requested listener found: {0}", listener.getName());
+          getLogger().log(XdsLogLevel.DEBUG, "Requested listener found: {0}", listener.getName());
         }
       }
     } catch (InvalidProtocolBufferException e) {
-      logger.log(XdsLogLevel.WARNING, "Failed to unpack Listeners in LDS response {0}", e);
+      getLogger().log(XdsLogLevel.WARNING, "Failed to unpack Listeners in LDS response {0}", e);
       nackResponse(ResourceType.LDS, nonce, "Malformed LDS response: " + e);
       return;
     }
@@ -141,7 +141,7 @@ final class ServerXdsClient extends AbstractXdsClient {
             .setListener(EnvoyServerProtoData.Listener.fromEnvoyProtoListener(requestedListener))
             .build();
       } catch (InvalidProtocolBufferException e) {
-        logger.log(XdsLogLevel.WARNING, "Failed to unpack Listener in LDS response {0}", e);
+        getLogger().log(XdsLogLevel.WARNING, "Failed to unpack Listener in LDS response {0}", e);
         nackResponse(ResourceType.LDS, nonce, "Malformed LDS response: " + e);
         return;
       }
@@ -226,7 +226,7 @@ final class ServerXdsClient extends AbstractXdsClient {
 
     @Override
     public void run() {
-      logger.log(
+      getLogger().log(
           XdsLogLevel.WARNING,
           "Did not receive resource info {0} after {1} seconds, conclude it absent",
           resourceName, INITIAL_RESOURCE_FETCH_TIMEOUT_SEC);
