@@ -63,7 +63,7 @@ final class LoadReportClient {
   @Nullable
   private BackoffPolicy lrsRpcRetryPolicy;
   @Nullable
-  private ScheduledFuture lrsRpcRetryTimer;
+  private ScheduledFuture<?> lrsRpcRetryTimer;
   @Nullable
   private LrsStream lrsStream;
 
@@ -170,7 +170,7 @@ final class LoadReportClient {
     long intervalNano = -1;
     boolean reportAllClusters;
     List<String> clusterNames;  // clusters to report loads for, if not report all.
-    ScheduledFuture loadReportTimer;
+    ScheduledFuture<?> loadReportTimer;
 
     abstract void start();
 
