@@ -35,26 +35,25 @@ class NettyAdaptiveCumulator implements io.netty.handler.codec.ByteToMessageDeco
    * compose strategies.
    *
    * <p>This cumulator applies a heuristic to make a decision whether to track a reference to the
-   * buffer with bytes received from the network stack in an array ("zero-copy"), or to merge it
-   * with merge into the last component (the tail) and appending the incoming buffer by performing
-   * memory copy.
+   * buffer with bytes received from the network stack in an array ("zero-copy"), or to merge into
+   * the last component (the tail) by performing a memory copy.
    *
    * <p>It is necessary as a protection from a potential attack on the {@link
    * io.netty.handler.codec.ByteToMessageDecoder#COMPOSITE_CUMULATOR}. Consider a pathological case
-   * when an attacker sends TCP packages containing a single byte of data, and forcing cumulator to
-   * track each one in a separate buffer. The cost is memory overhead for each buffer, as well as
-   * extra compute to read the cumulation.
+   * when an attacker sends TCP packages containing a single byte of data, and forcing the cumulator
+   * to track each one in a separate buffer. The cost is memory overhead for each buffer, and extra
+   * compute to read the cumulation.
    *
-   * <p>Implemented heuristic establishes minimal threshold for the total size of the tail and
+   * <p>Implemented heuristic establishes a minimal threshold for the total size of the tail and
    * incoming buffer, below which they are merged. The sum of the tail and the incoming buffer is
    * used to avoid a case where attacker alternates the size of data packets to trick the cumulator
    * into always selecting compose strategy.
    *
-   * <p>The merging strategy attempts to minimize unnecessary memory writes. When possible, it
-   * expands the tail capacity and only copies the incoming buffer into available memory. Otherwise,
-   * when both tail and the buffer must be copied, the tail is reallocated (or fully replaced) with
-   * a new buffer of exponentially increasing capacity (bounded to minComposeSize) to ensure runtime
-   * {@code O(n^2)} amortized to {@code O(n)}.
+   * <p>Merging strategy attempts to minimize unnecessary memory writes. When possible, it expands
+   * the tail capacity and only copies the incoming buffer into available memory. Otherwise, when
+   * both tail and the buffer must be copied, the tail is reallocated (or fully replaced) with a new
+   * buffer of exponentially increasing capacity (bounded to {@link #composeMinSize}) to ensure
+   * runtime {@code O(n^2)} is amortized to {@code O(n)}.
    */
   @Override
   @SuppressWarnings("ReferenceEquality")
