@@ -51,6 +51,7 @@ final class ServerXdsClient extends AbstractXdsClient {
   // Longest time to wait, since the subscription to some resource, for concluding its absence.
   @VisibleForTesting
   static final int INITIAL_RESOURCE_FETCH_TIMEOUT_SEC = 15;
+  private final SynchronizationContext syncContext;
   @Nullable
   private ListenerWatcher listenerWatcher;
   private int listenerPort = -1;
@@ -64,7 +65,8 @@ final class ServerXdsClient extends AbstractXdsClient {
       ScheduledExecutorService timeService,
       BackoffPolicy.Provider backoffPolicyProvider,
       Stopwatch stopwatch) {
-    super(channel, node, syncContext, timeService, backoffPolicyProvider, stopwatch);
+    super(channel, node, timeService, backoffPolicyProvider, stopwatch);
+    this.syncContext = checkNotNull(syncContext, "syncContext");
   }
 
   @Override
@@ -198,9 +200,13 @@ final class ServerXdsClient extends AbstractXdsClient {
   }
 
   @Override
-  void shutdown() {
-    super.shutdown();
+  protected void handleShutdown() {
     cleanUpResourceTimer();
+  }
+
+  @Override
+  protected void runWithSynchronized(Runnable runnable) {
+    syncContext.execute(runnable);
   }
 
   private void cleanUpResourceTimer() {
