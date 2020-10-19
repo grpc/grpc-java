@@ -213,7 +213,7 @@ abstract class AbstractXdsClient extends XdsClient {
    * Updates the resource subscription for the given resource type.
    */
   // Must be synchronized.
-  protected void adjustResourceSubscription(ResourceType type) {
+  protected final void adjustResourceSubscription(ResourceType type) {
     if (isInBackoff()) {
       return;
     }
@@ -231,7 +231,7 @@ abstract class AbstractXdsClient extends XdsClient {
    * and sends an ACK request to the management server.
    */
   // Must be synchronized.
-  protected void ackResponse(ResourceType type, String versionInfo, String nonce) {
+  protected final void ackResponse(ResourceType type, String versionInfo, String nonce) {
     switch (type) {
       case LDS:
         ldsVersion = versionInfo;
@@ -263,7 +263,7 @@ abstract class AbstractXdsClient extends XdsClient {
    * accepted version) to the management server.
    */
   // Must be synchronized.
-  protected void nackResponse(ResourceType type, String nonce, String errorDetail) {
+  protected final void nackResponse(ResourceType type, String nonce, String errorDetail) {
     String versionInfo = getCurrentVersion(type);
     logger.log(XdsLogLevel.INFO, "Sending NACK for {0} update, nonce: {1}, current version: {2}",
         type, nonce, versionInfo);
@@ -274,11 +274,11 @@ abstract class AbstractXdsClient extends XdsClient {
     adsStream.sendDiscoveryRequest(type, versionInfo, resources, nonce, errorDetail);
   }
 
-  protected ScheduledExecutorService getTimeService() {
+  protected final ScheduledExecutorService getTimeService() {
     return timeService;
   }
 
-  protected XdsLogger getLogger() {
+  protected final XdsLogger getLogger() {
     return logger;
   }
 
@@ -286,7 +286,7 @@ abstract class AbstractXdsClient extends XdsClient {
    * Returns {@code true} if the resource discovery is currently in backoff.
    */
   // Must be synchronized.
-  protected boolean isInBackoff() {
+  protected final boolean isInBackoff() {
     return rpcRetryTimer != null && !rpcRetryTimer.isDone();
   }
 
