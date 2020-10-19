@@ -38,8 +38,6 @@ import io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse;
 import io.grpc.InternalLogId;
 import io.grpc.Status;
-import io.grpc.SynchronizationContext;
-import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.stub.StreamObserver;
 import io.grpc.xds.EnvoyProtoData.Node;
@@ -48,6 +46,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
@@ -76,7 +75,6 @@ abstract class AbstractXdsClient extends XdsClient {
   private final InternalLogId logId;
   protected final XdsLogger logger;
   private final XdsChannel xdsChannel;
-  protected final SynchronizationContext syncContext;
   protected final ScheduledExecutorService timeService;
   private final BackoffPolicy.Provider backoffPolicyProvider;
   private final Stopwatch stopwatch;
@@ -95,23 +93,22 @@ abstract class AbstractXdsClient extends XdsClient {
   private String cdsVersion = "";
   private String edsVersion = "";
 
+  private boolean shutdown;
   @Nullable
   private AbstractAdsStream adsStream;
   @Nullable
   private BackoffPolicy retryBackoffPolicy;
   @Nullable
-  private ScheduledHandle rpcRetryTimer;
+  private ScheduledFuture<?> rpcRetryTimer;
 
   AbstractXdsClient(
       XdsChannel channel,
       Node node,
-      SynchronizationContext syncContext,
       ScheduledExecutorService timeService,
       BackoffPolicy.Provider backoffPolicyProvider,
       Stopwatch stopwatch) {
     this.xdsChannel = checkNotNull(channel, "channel");
     this.node = checkNotNull(node, "node");
-    this.syncContext = checkNotNull(syncContext, "syncContext");
     this.timeService = checkNotNull(timeService, "timeService");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     this.stopwatch = checkNotNull(stopwatch, "stopwatch");
@@ -123,49 +120,75 @@ abstract class AbstractXdsClient extends XdsClient {
   /**
    * Called when an LDS response is received.
    */
+  // Must be synchronized.
   protected void handleLdsResponse(String versionInfo, List<Any> resources, String nonce) {
   }
 
   /**
    * Called when a RDS response is received.
    */
+  // Must be synchronized.
   protected void handleRdsResponse(String versionInfo, List<Any> resources, String nonce) {
   }
 
   /**
    * Called when a CDS response is received.
    */
+  // Must be synchronized.
   protected void handleCdsResponse(String versionInfo, List<Any> resources, String nonce) {
   }
 
   /**
    * Called when an EDS response is received.
    */
+  // Must be synchronized.
   protected void handleEdsResponse(String versionInfo, List<Any> resources, String nonce) {
   }
 
   /**
    * Called when the ADS stream is closed passively.
    */
+  // Must be synchronized.
   protected void handleStreamClosed(Status error) {
   }
 
   /**
    * Called when the ADS stream has been recreated.
    */
+  // Must be synchronized.
   protected void handleStreamRestarted() {
   }
 
+  /**
+   * Called when being shut down.
+   */
+  // Must be synchronized.
+  protected void handleShutdown() {
+  }
+
+  /**
+   * Invokes the {@code runnable} inside the context that synchronizes with other state mutation
+   * operations.
+   */
+  protected abstract void runWithSynchronized(Runnable runnable);
+
   @Override
-  void shutdown() {
-    logger.log(XdsLogLevel.INFO, "Shutting down");
-    xdsChannel.getManagedChannel().shutdown();
-    if (adsStream != null) {
-      adsStream.close(Status.CANCELLED.withDescription("shutdown").asException());
-    }
-    if (rpcRetryTimer != null) {
-      rpcRetryTimer.cancel();
-    }
+  final void shutdown() {
+    runWithSynchronized(new Runnable() {
+      @Override
+      public void run() {
+        shutdown = true;
+        logger.log(XdsLogLevel.INFO, "Shutting down");
+        xdsChannel.getManagedChannel().shutdown();
+        if (adsStream != null) {
+          adsStream.close(Status.CANCELLED.withDescription("shutdown").asException());
+        }
+        if (rpcRetryTimer != null) {
+          rpcRetryTimer.cancel(false);
+        }
+        handleShutdown();
+      }
+    });
   }
 
   @Override
@@ -180,6 +203,7 @@ abstract class AbstractXdsClient extends XdsClient {
    * <p>Note a empty collection indicates subscribing to resources of the given type with
    * wildcard mode.
    */
+  // Must be synchronized.
   @Nullable
   Collection<String> getSubscribedResources(ResourceType type) {
     return null;
@@ -188,6 +212,7 @@ abstract class AbstractXdsClient extends XdsClient {
   /**
    * Updates the resource subscription for the given resource type.
    */
+  // Must be synchronized.
   protected void adjustResourceSubscription(ResourceType type) {
     if (isInBackoff()) {
       return;
@@ -205,6 +230,7 @@ abstract class AbstractXdsClient extends XdsClient {
    * Accepts the update for the given resource type by updating the latest resource version
    * and sends an ACK request to the management server.
    */
+  // Must be synchronized.
   protected void ackResponse(ResourceType type, String versionInfo, String nonce) {
     switch (type) {
       case LDS:
@@ -236,6 +262,7 @@ abstract class AbstractXdsClient extends XdsClient {
    * Rejects the update for the given resource type and sends an NACK request (request with last
    * accepted version) to the management server.
    */
+  // Must be synchronized.
   protected void nackResponse(ResourceType type, String nonce, String errorDetail) {
     String versionInfo = getCurrentVersion(type);
     logger.log(XdsLogLevel.INFO, "Sending NACK for {0} update, nonce: {1}, current version: {2}",
@@ -250,14 +277,16 @@ abstract class AbstractXdsClient extends XdsClient {
   /**
    * Returns {@code true} if the resource discovery is currently in backoff.
    */
+  // Must be synchronized.
   protected boolean isInBackoff() {
-    return rpcRetryTimer != null && rpcRetryTimer.isPending();
+    return rpcRetryTimer != null && !rpcRetryTimer.isDone();
   }
 
   /**
    * Establishes the RPC connection by creating a new RPC stream on the given channel for
    * xDS protocol communication.
    */
+  // Must be synchronized.
   private void startRpcStream() {
     checkState(adsStream == null, "Previous adsStream has not been cleared yet");
     if (xdsChannel.isUseProtocolV3()) {
@@ -273,6 +302,7 @@ abstract class AbstractXdsClient extends XdsClient {
   /**
    * Returns the latest accepted version of the given resource type.
    */
+  // Must be synchronized.
   private String getCurrentVersion(ResourceType type) {
     String version;
     switch (type) {
@@ -299,17 +329,25 @@ abstract class AbstractXdsClient extends XdsClient {
   final class RpcRetryTask implements Runnable {
     @Override
     public void run() {
-      startRpcStream();
-      for (ResourceType type : ResourceType.values()) {
-        if (type == ResourceType.UNKNOWN) {
-          continue;
+      runWithSynchronized(new Runnable() {
+        @Override
+        public void run() {
+          if (shutdown) {
+            return;
+          }
+          startRpcStream();
+          for (ResourceType type : ResourceType.values()) {
+            if (type == ResourceType.UNKNOWN) {
+              continue;
+            }
+            Collection<String> resources = getSubscribedResources(type);
+            if (resources != null) {
+              adsStream.sendDiscoveryRequest(type, resources);
+            }
+          }
+          handleStreamRestarted();
         }
-        Collection<String> resources = getSubscribedResources(type);
-        if (resources != null) {
-          adsStream.sendDiscoveryRequest(type, resources);
-        }
-      }
-      handleStreamRestarted();
+      });
     }
   }
 
@@ -425,7 +463,6 @@ abstract class AbstractXdsClient extends XdsClient {
       sendDiscoveryRequest(type, getCurrentVersion(type), resources, nonce, null);
     }
 
-    // Must run in syncContext.
     final void handleRpcResponse(
         ResourceType type, String versionInfo, List<Any> resources, String nonce) {
       if (closed) {
@@ -459,12 +496,10 @@ abstract class AbstractXdsClient extends XdsClient {
       }
     }
 
-    // Must run in syncContext.
     final void handleRpcError(Throwable t) {
       handleRpcStreamClosed(Status.fromThrowable(t));
     }
 
-    // Must run in syncContext.
     final void handleRpcCompleted() {
       handleRpcStreamClosed(Status.UNAVAILABLE.withDescription("Closed by server"));
     }
@@ -495,9 +530,7 @@ abstract class AbstractXdsClient extends XdsClient {
                     - stopwatch.elapsed(TimeUnit.NANOSECONDS));
       }
       logger.log(XdsLogLevel.INFO, "Retry ADS stream in {0} ns", delayNanos);
-      rpcRetryTimer =
-          syncContext.schedule(
-              new RpcRetryTask(), delayNanos, TimeUnit.NANOSECONDS, timeService);
+      rpcRetryTimer = timeService.schedule(new RpcRetryTask(), delayNanos, TimeUnit.NANOSECONDS);
     }
 
     private void close(Exception error) {
@@ -532,7 +565,7 @@ abstract class AbstractXdsClient extends XdsClient {
           new StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse>() {
             @Override
             public void onNext(final io.envoyproxy.envoy.api.v2.DiscoveryResponse response) {
-              syncContext.execute(new Runnable() {
+              runWithSynchronized(new Runnable() {
                 @Override
                 public void run() {
                   ResourceType type = ResourceType.fromTypeUrl(response.getTypeUrl());
@@ -548,7 +581,7 @@ abstract class AbstractXdsClient extends XdsClient {
 
             @Override
             public void onError(final Throwable t) {
-              syncContext.execute(new Runnable() {
+              runWithSynchronized(new Runnable() {
                 @Override
                 public void run() {
                   handleRpcError(t);
@@ -558,7 +591,7 @@ abstract class AbstractXdsClient extends XdsClient {
 
             @Override
             public void onCompleted() {
-              syncContext.execute(new Runnable() {
+              runWithSynchronized(new Runnable() {
                 @Override
                 public void run() {
                   handleRpcCompleted();
@@ -613,7 +646,7 @@ abstract class AbstractXdsClient extends XdsClient {
       StreamObserver<DiscoveryResponse> responseReader = new StreamObserver<DiscoveryResponse>() {
         @Override
         public void onNext(final DiscoveryResponse response) {
-          syncContext.execute(new Runnable() {
+          runWithSynchronized(new Runnable() {
             @Override
             public void run() {
               ResourceType type = ResourceType.fromTypeUrl(response.getTypeUrl());
@@ -629,7 +662,7 @@ abstract class AbstractXdsClient extends XdsClient {
 
         @Override
         public void onError(final Throwable t) {
-          syncContext.execute(new Runnable() {
+          runWithSynchronized(new Runnable() {
             @Override
             public void run() {
               handleRpcError(t);
@@ -639,7 +672,7 @@ abstract class AbstractXdsClient extends XdsClient {
 
         @Override
         public void onCompleted() {
-          syncContext.execute(new Runnable() {
+          runWithSynchronized(new Runnable() {
             @Override
             public void run() {
               handleRpcCompleted();
