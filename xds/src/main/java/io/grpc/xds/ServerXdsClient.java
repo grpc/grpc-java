@@ -82,7 +82,7 @@ final class ServerXdsClient extends AbstractXdsClient {
         syncContext
             .schedule(
                 new ListenerResourceFetchTimeoutTask(":" + port),
-                INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS, timeService);
+                INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS, getTimeService());
   }
 
   @Nullable
@@ -195,7 +195,7 @@ final class ServerXdsClient extends AbstractXdsClient {
           syncContext
               .schedule(
                   new ListenerResourceFetchTimeoutTask(":" + listenerPort),
-                  INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS, timeService);
+                  INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS, getTimeService());
     }
   }
 

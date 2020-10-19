@@ -75,7 +75,7 @@ abstract class AbstractXdsClient extends XdsClient {
   private final InternalLogId logId;
   protected final XdsLogger logger;
   private final XdsChannel xdsChannel;
-  protected final ScheduledExecutorService timeService;
+  private final ScheduledExecutorService timeService;
   private final BackoffPolicy.Provider backoffPolicyProvider;
   private final Stopwatch stopwatch;
   // The node identifier to be included in xDS requests. Management server only requires the
@@ -272,6 +272,10 @@ abstract class AbstractXdsClient extends XdsClient {
       resources = Collections.emptyList();
     }
     adsStream.sendDiscoveryRequest(type, versionInfo, resources, nonce, errorDetail);
+  }
+
+  protected ScheduledExecutorService getTimeService() {
+    return timeService;
   }
 
   /**

@@ -760,7 +760,7 @@ final class ClientXdsClient extends AbstractXdsClient {
         }
       }
 
-      respTimer = timeService.schedule(
+      respTimer = getTimeService().schedule(
           new ResourceNotFound(), INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     }
 
