@@ -30,8 +30,6 @@ import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsRequest;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsResponse;
 import io.grpc.InternalLogId;
 import io.grpc.Status;
-import io.grpc.SynchronizationContext;
-import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.stub.StreamObserver;
 import io.grpc.xds.EnvoyProtoData.ClusterStats;
@@ -42,15 +40,14 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.NotThreadSafe;
 
 /**
  * Client of xDS load reporting service based on LRS protocol, which reports load stats of
  * gRPC client's perspective to a management server.
  */
-@NotThreadSafe
 final class LoadReportClient {
   private final InternalLogId logId;
   private final XdsLogger logger;
@@ -60,23 +57,13 @@ final class LoadReportClient {
   private final Stopwatch retryStopwatch;
   private final BackoffPolicy.Provider backoffPolicyProvider;
   private final LoadStatsManager loadStatsManager;
-  private final SynchronizationContext syncContext = new SynchronizationContext(
-      new Thread.UncaughtExceptionHandler() {
-        @Override
-        public void uncaughtException(Thread t, Throwable e) {
-          logger.log(
-              XdsLogLevel.ERROR,
-              "[" + logId + "] Uncaught exception in the SynchronizationContext. Panic!",
-              e);
-          panic(e);
-        }
-      });
+  private final Object lock = new Object();
 
   private boolean started;
   @Nullable
   private BackoffPolicy lrsRpcRetryPolicy;
   @Nullable
-  private ScheduledHandle lrsRpcRetryTimer;
+  private ScheduledFuture lrsRpcRetryTimer;
   @Nullable
   private LrsStream lrsStream;
 
@@ -105,17 +92,14 @@ final class LoadReportClient {
    * no-op.
    */
   void startLoadReporting() {
-    syncContext.execute(new Runnable() {
-      @Override
-      public void run() {
-        if (started) {
-          return;
-        }
-        started = true;
-        logger.log(XdsLogLevel.INFO, "Starting load reporting RPC");
-        startLrsRpc();
+    synchronized (lock) {
+      if (started) {
+        return;
       }
-    });
+      started = true;
+      logger.log(XdsLogLevel.INFO, "Starting load reporting RPC");
+      startLrsRpc();
+    }
   }
 
   /**
@@ -123,37 +107,24 @@ final class LoadReportClient {
    * {@link LoadReportClient} is no-op.
    */
   void stopLoadReporting() {
-    syncContext.execute(new Runnable() {
-      @Override
-      public void run() {
-        if (!started) {
-          return;
-        }
-        started = false;
-        logger.log(XdsLogLevel.INFO, "Stopping load reporting RPC");
-        if (lrsRpcRetryTimer != null) {
-          lrsRpcRetryTimer.cancel();
-        }
-        if (lrsStream != null) {
-          lrsStream.close(Status.CANCELLED.withDescription("stop load reporting").asException());
-        }
-        // Do not shutdown channel as it is not owned by LrsClient.
+    synchronized (lock) {
+      if (!started) {
+        return;
       }
-    });
-  }
-
-  private void panic(Throwable t) {
-    if (lrsRpcRetryTimer != null) {
-      lrsRpcRetryTimer.cancel();
-    }
-    if (lrsStream != null) {
-      lrsStream.close(
-          Status.INTERNAL.withDescription("Panic! This is bug!").withCause(t).asException());
+      started = false;
+      logger.log(XdsLogLevel.INFO, "Stopping load reporting RPC");
+      if (lrsRpcRetryTimer != null) {
+        lrsRpcRetryTimer.cancel(false);
+      }
+      if (lrsStream != null) {
+        lrsStream.close(Status.CANCELLED.withDescription("stop load reporting").asException());
+      }
+      // Do not shutdown channel as it is not owned by LrsClient.
     }
   }
 
   @VisibleForTesting
-  static class LoadReportingTask implements Runnable {
+  class LoadReportingTask implements Runnable {
     private final LrsStream stream;
 
     LoadReportingTask(LrsStream stream) {
@@ -162,7 +133,9 @@ final class LoadReportClient {
 
     @Override
     public void run() {
-      stream.sendLoadReport();
+      synchronized (lock) {
+        stream.sendLoadReport();
+      }
     }
   }
 
@@ -171,11 +144,16 @@ final class LoadReportClient {
 
     @Override
     public void run() {
-      startLrsRpc();
+      synchronized (lock) {
+        startLrsRpc();
+      }
     }
   }
 
   private void startLrsRpc() {
+    if (!started) {
+      return;
+    }
     checkState(lrsStream == null, "previous lbStream has not been cleared yet");
     if (xdsChannel.isUseProtocolV3()) {
       lrsStream = new LrsStreamV3();
@@ -192,7 +170,7 @@ final class LoadReportClient {
     long intervalNano = -1;
     boolean reportAllClusters;
     List<String> clusterNames;  // clusters to report loads for, if not report all.
-    ScheduledHandle loadReportTimer;
+    ScheduledFuture loadReportTimer;
 
     abstract void start();
 
@@ -200,7 +178,6 @@ final class LoadReportClient {
 
     abstract void sendError(Exception error);
 
-    // Must run in syncContext.
     final void handleRpcResponse(List<String> clusters, boolean sendAllClusters,
         long loadReportIntervalNano) {
       if (closed) {
@@ -222,17 +199,18 @@ final class LoadReportClient {
       scheduleNextLoadReport();
     }
 
-    // Must run in syncContext.
     final void handleRpcError(Throwable t) {
       handleStreamClosed(Status.fromThrowable(t));
     }
 
-    // Must run in syncContext.
     final void handleRpcCompleted() {
       handleStreamClosed(Status.UNAVAILABLE.withDescription("Closed by server"));
     }
 
     private void sendLoadReport() {
+      if (closed) {
+        return;
+      }
       List<ClusterStats> clusterStatsList;
       if (reportAllClusters) {
         clusterStatsList = loadStatsManager.getAllLoadReports();
@@ -248,14 +226,13 @@ final class LoadReportClient {
 
     private void scheduleNextLoadReport() {
       // Cancel pending load report and reschedule with updated load reporting interval.
-      if (loadReportTimer != null && loadReportTimer.isPending()) {
-        loadReportTimer.cancel();
+      if (loadReportTimer != null && !loadReportTimer.isDone()) {
+        loadReportTimer.cancel(false);
         loadReportTimer = null;
       }
       if (intervalNano > 0) {
-        loadReportTimer = syncContext.schedule(
-            new LoadReportingTask(this), intervalNano, TimeUnit.NANOSECONDS,
-            timerService);
+        loadReportTimer = timerService.schedule(
+            new LoadReportingTask(this), intervalNano, TimeUnit.NANOSECONDS);
       }
     }
 
@@ -290,8 +267,7 @@ final class LoadReportClient {
         startLrsRpc();
       } else {
         lrsRpcRetryTimer =
-            syncContext.schedule(new LrsRpcRetryTask(), delayNanos, TimeUnit.NANOSECONDS,
-                timerService);
+            timerService.schedule(new LrsRpcRetryTask(), delayNanos, TimeUnit.NANOSECONDS);
       }
     }
 
@@ -306,7 +282,7 @@ final class LoadReportClient {
 
     private void cleanUp() {
       if (loadReportTimer != null) {
-        loadReportTimer.cancel();
+        loadReportTimer.cancel(false);
         loadReportTimer = null;
       }
       if (lrsStream == this) {
@@ -325,35 +301,26 @@ final class LoadReportClient {
           new StreamObserver<io.envoyproxy.envoy.service.load_stats.v2.LoadStatsResponse>() {
             @Override
             public void onNext(
-                final io.envoyproxy.envoy.service.load_stats.v2.LoadStatsResponse response) {
-              syncContext.execute(new Runnable() {
-                @Override
-                public void run() {
-                  logger.log(XdsLogLevel.DEBUG, "Received LoadStatsResponse:\n{0}", response);
-                  handleRpcResponse(response.getClustersList(), response.getSendAllClusters(),
-                      Durations.toNanos(response.getLoadReportingInterval()));
-                }
-              });
+                io.envoyproxy.envoy.service.load_stats.v2.LoadStatsResponse response) {
+              synchronized (lock) {
+                logger.log(XdsLogLevel.DEBUG, "Received LoadStatsResponse:\n{0}", response);
+                handleRpcResponse(response.getClustersList(), response.getSendAllClusters(),
+                    Durations.toNanos(response.getLoadReportingInterval()));
+              }
             }
 
             @Override
-            public void onError(final Throwable t) {
-              syncContext.execute(new Runnable() {
-                @Override
-                public void run() {
-                  handleRpcError(t);
-                }
-              });
+            public void onError(Throwable t) {
+              synchronized (lock) {
+                handleRpcError(t);
+              }
             }
 
             @Override
             public void onCompleted() {
-              syncContext.execute(new Runnable() {
-                @Override
-                public void run() {
-                  handleRpcCompleted();
-                }
-              });
+              synchronized (lock) {
+                handleRpcCompleted();
+              }
             }
           };
       io.envoyproxy.envoy.service.load_stats.v2.LoadReportingServiceGrpc.LoadReportingServiceStub
@@ -391,35 +358,26 @@ final class LoadReportClient {
       StreamObserver<LoadStatsResponse> lrsResponseReaderV3 =
           new StreamObserver<LoadStatsResponse>() {
             @Override
-            public void onNext(final LoadStatsResponse response) {
-              syncContext.execute(new Runnable() {
-                @Override
-                public void run() {
-                  logger.log(XdsLogLevel.DEBUG, "Received LRS response:\n{0}", response);
-                  handleRpcResponse(response.getClustersList(), response.getSendAllClusters(),
-                      Durations.toNanos(response.getLoadReportingInterval()));
-                }
-              });
+            public void onNext(LoadStatsResponse response) {
+              synchronized (lock) {
+                logger.log(XdsLogLevel.DEBUG, "Received LRS response:\n{0}", response);
+                handleRpcResponse(response.getClustersList(), response.getSendAllClusters(),
+                    Durations.toNanos(response.getLoadReportingInterval()));
+              }
             }
 
             @Override
-            public void onError(final Throwable t) {
-              syncContext.execute(new Runnable() {
-                @Override
-                public void run() {
-                  handleRpcError(t);
-                }
-              });
+            public void onError(Throwable t) {
+              synchronized (lock) {
+                handleRpcError(t);
+              }
             }
 
             @Override
             public void onCompleted() {
-              syncContext.execute(new Runnable() {
-                @Override
-                public void run() {
-                  handleRpcCompleted();
-                }
-              });
+              synchronized (lock) {
+                handleRpcCompleted();
+              }
             }
           };
       LoadReportingServiceStub stubV3 =
