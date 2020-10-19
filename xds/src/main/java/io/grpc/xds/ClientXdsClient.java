@@ -799,6 +799,7 @@ final class ClientXdsClient extends AbstractXdsClient {
         data = null;
         absent = true;
         for (ResourceWatcher watcher : watchers) {
+          // TODO(chengyuanzhang): should invoke callback with watcher's own executor.
           watcher.onResourceDoesNotExist(resource);
         }
       }
@@ -810,11 +811,13 @@ final class ClientXdsClient extends AbstractXdsClient {
         respTimer = null;
       }
       for (ResourceWatcher watcher : watchers) {
+        // TODO(chengyuanzhang): should invoke callback with watcher's own executor.
         watcher.onError(error);
       }
     }
 
     private void notifyWatcher(ResourceWatcher watcher, ResourceUpdate update) {
+      // TODO(chengyuanzhang): should invoke callbacks with watcher's own executor.
       switch (type) {
         case LDS:
           ((LdsResourceWatcher) watcher).onChanged((LdsUpdate) update);
