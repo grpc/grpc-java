@@ -53,8 +53,8 @@ final class ZatarCertificateProviderProvider implements CertificateProviderProvi
   }
 
   final ZatarCertificateProvider.Factory zatarCertificateProviderFactory;
-  final ScheduledExecutorServiceFactory scheduledExecutorServiceFactory;
-  final TimeProvider timeProvider;
+  private final ScheduledExecutorServiceFactory scheduledExecutorServiceFactory;
+  private final TimeProvider timeProvider;
 
   @VisibleForTesting
   ZatarCertificateProviderProvider(
