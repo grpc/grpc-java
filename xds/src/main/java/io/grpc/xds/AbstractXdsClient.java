@@ -167,8 +167,7 @@ abstract class AbstractXdsClient extends XdsClient {
   }
 
   /**
-   * Invokes the {@code runnable} inside the context that synchronizes with other state mutation
-   * operations.
+   * Synchronizes the execution of the given {@code runnable} with other state mutating operations.
    */
   protected abstract void runWithSynchronized(Runnable runnable);
 
