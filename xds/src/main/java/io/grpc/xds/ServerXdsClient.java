@@ -22,6 +22,7 @@ import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
+import com.google.common.base.Supplier;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import io.envoyproxy.envoy.config.core.v3.Address;
@@ -64,8 +65,8 @@ final class ServerXdsClient extends AbstractXdsClient {
       SynchronizationContext syncContext,
       ScheduledExecutorService timeService,
       BackoffPolicy.Provider backoffPolicyProvider,
-      Stopwatch stopwatch) {
-    super(channel, node, timeService, backoffPolicyProvider, stopwatch);
+      Supplier<Stopwatch> stopwatchSupplier) {
+    super(channel, node, timeService, backoffPolicyProvider, stopwatchSupplier.get());
     this.syncContext = checkNotNull(syncContext, "syncContext");
   }
 
