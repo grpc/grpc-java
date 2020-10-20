@@ -1,7 +1,6 @@
 """External dependencies for grpc-java."""
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
-load("@bazel_tools//tools/build_defs/repo:jvm.bzl", "jvm_maven_import_external")
 
 # For use with maven_install's artifacts.
 # maven_install(
