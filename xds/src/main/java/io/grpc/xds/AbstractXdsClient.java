@@ -204,9 +204,7 @@ abstract class AbstractXdsClient extends XdsClient {
    */
   // Must be synchronized.
   @Nullable
-  Collection<String> getSubscribedResources(ResourceType type) {
-    return null;
-  }
+  abstract Collection<String> getSubscribedResources(ResourceType type);
 
   /**
    * Updates the resource subscription for the given resource type.
