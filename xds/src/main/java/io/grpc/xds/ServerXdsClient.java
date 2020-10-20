@@ -79,11 +79,13 @@ final class ServerXdsClient extends AbstractXdsClient {
     getLogger().log(XdsLogLevel.INFO, "Started watching listener for port {0}", port);
     updateNodeMetadataForListenerRequest(port);
     adjustResourceSubscription(ResourceType.LDS);
-    ldsRespTimer =
-        syncContext
-            .schedule(
-                new ListenerResourceFetchTimeoutTask(":" + port),
-                INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS, getTimeService());
+    if (!isInBackoff()) {
+      ldsRespTimer =
+          syncContext
+              .schedule(
+                  new ListenerResourceFetchTimeoutTask(":" + port),
+                  INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS, getTimeService());
+    }
   }
 
   @Nullable
