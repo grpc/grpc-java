@@ -430,6 +430,7 @@ final class XdsNameResolver extends NameResolver {
             .setServiceConfig(emptyServiceConfig)
             // let channel take action for no config selector
             .build();
+    private boolean stopped;
     private Set<String> existingClusters;
     @Nullable
     private String rdsResource;
@@ -438,38 +439,62 @@ final class XdsNameResolver extends NameResolver {
     private long httpMaxStreamDurationNano;
 
     @Override
-    public void onChanged(LdsUpdate update) {
-      logger.log(XdsLogLevel.INFO, "Receive LDS resource update: {0}", update);
-      httpMaxStreamDurationNano = update.getHttpMaxStreamDurationNano();
-      List<VirtualHost> virtualHosts = update.getVirtualHosts();
-      String rdsName = update.getRdsName();
-      if (rdsName != null && rdsName.equals(rdsResource)) {
-        return;
-      }
-      cleanUpRdsWatcher();
-      if (virtualHosts != null) {
-        updateRoutes(virtualHosts);
-      } else {
-        rdsResource = rdsName;
-        rdsWatcher = new RdsResourceWatcherImpl();
-        logger.log(XdsLogLevel.INFO, "Start watching RDS resource {0}", rdsResource);
-        xdsClient.watchRdsResource(rdsResource, rdsWatcher);
-      }
+    public void onChanged(final LdsUpdate update) {
+      syncContext.execute(new Runnable() {
+        @Override
+        public void run() {
+          if (stopped) {
+            return;
+          }
+          logger.log(XdsLogLevel.INFO, "Receive LDS resource update: {0}", update);
+          httpMaxStreamDurationNano = update.getHttpMaxStreamDurationNano();
+          List<VirtualHost> virtualHosts = update.getVirtualHosts();
+          String rdsName = update.getRdsName();
+          if (rdsName != null && rdsName.equals(rdsResource)) {
+            return;
+          }
+          cleanUpRdsWatcher();
+          if (virtualHosts != null) {
+            updateRoutes(virtualHosts);
+          } else {
+            rdsResource = rdsName;
+            rdsWatcher = new RdsResourceWatcherImpl();
+            logger.log(XdsLogLevel.INFO, "Start watching RDS resource {0}", rdsResource);
+            xdsClient.watchRdsResource(rdsResource, rdsWatcher);
+          }
+        }
+      });
     }
 
     @Override
-    public void onError(Status error) {
-      logger.log(
-          XdsLogLevel.WARNING,
-          "Received error from xDS client {0}: {1}", xdsClient, error.getDescription());
-      listener.onError(error);
+    public void onError(final Status error) {
+      syncContext.execute(new Runnable() {
+        @Override
+        public void run() {
+          if (stopped) {
+            return;
+          }
+          logger.log(
+              XdsLogLevel.WARNING,
+              "Received error from xDS client {0}: {1}", xdsClient, error.getDescription());
+          listener.onError(error);
+        }
+      });
     }
 
     @Override
-    public void onResourceDoesNotExist(String resourceName) {
-      logger.log(XdsLogLevel.INFO, "LDS resource {0} unavailable", resourceName);
-      cleanUpRdsWatcher();
-      listener.onResult(emptyResult);
+    public void onResourceDoesNotExist(final String resourceName) {
+      syncContext.execute(new Runnable() {
+        @Override
+        public void run() {
+          if (stopped) {
+            return;
+          }
+          logger.log(XdsLogLevel.INFO, "LDS resource {0} unavailable", resourceName);
+          cleanUpRdsWatcher();
+          listener.onResult(emptyResult);
+        }
+      });
     }
 
     private void start() {
@@ -479,6 +504,7 @@ final class XdsNameResolver extends NameResolver {
 
     private void stop() {
       logger.log(XdsLogLevel.INFO, "Stop watching LDS resource {0}", authority);
+      stopped = true;
       cleanUpRdsWatcher();
       xdsClient.cancelLdsResourceWatch(authority, this);
     }
@@ -550,22 +576,46 @@ final class XdsNameResolver extends NameResolver {
     private class RdsResourceWatcherImpl implements RdsResourceWatcher {
 
       @Override
-      public void onChanged(RdsUpdate update) {
-        updateRoutes(update.getVirtualHosts());
+      public void onChanged(final RdsUpdate update) {
+        syncContext.execute(new Runnable() {
+          @Override
+          public void run() {
+            if (RdsResourceWatcherImpl.this != rdsWatcher) {
+              return;
+            }
+            updateRoutes(update.getVirtualHosts());
+          }
+        });
       }
 
       @Override
-      public void onError(Status error) {
-        logger.log(
-            XdsLogLevel.WARNING,
-            "Received error from xDS client {0}: {1}", xdsClient, error.getDescription());
-        listener.onError(error);
+      public void onError(final Status error) {
+        syncContext.execute(new Runnable() {
+          @Override
+          public void run() {
+            if (RdsResourceWatcherImpl.this != rdsWatcher) {
+              return;
+            }
+            logger.log(
+                XdsLogLevel.WARNING,
+                "Received error from xDS client {0}: {1}", xdsClient, error.getDescription());
+            listener.onError(error);
+          }
+        });
       }
 
       @Override
-      public void onResourceDoesNotExist(String resourceName) {
-        logger.log(XdsLogLevel.INFO, "RDS resource {0} unavailable", resourceName);
-        listener.onResult(emptyResult);
+      public void onResourceDoesNotExist(final String resourceName) {
+        syncContext.execute(new Runnable() {
+          @Override
+          public void run() {
+            if (RdsResourceWatcherImpl.this != rdsWatcher) {
+              return;
+            }
+            logger.log(XdsLogLevel.INFO, "RDS resource {0} unavailable", resourceName);
+            listener.onResult(emptyResult);
+          }
+        });
       }
     }
   }

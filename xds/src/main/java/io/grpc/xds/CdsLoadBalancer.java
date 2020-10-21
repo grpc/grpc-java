@@ -29,6 +29,7 @@ import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status;
+import io.grpc.SynchronizationContext;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.util.ForwardingLoadBalancerHelper;
@@ -52,6 +53,7 @@ import javax.annotation.Nullable;
 final class CdsLoadBalancer extends LoadBalancer {
   private final XdsLogger logger;
   private final Helper helper;
+  private final SynchronizationContext syncContext;
   private final LoadBalancerRegistry lbRegistry;
   private final TlsContextManager tlsContextManager;
   // TODO(sanjaypujare): remove once xds security is released
@@ -71,6 +73,7 @@ final class CdsLoadBalancer extends LoadBalancer {
   CdsLoadBalancer(Helper helper, LoadBalancerRegistry lbRegistry,
       TlsContextManager tlsContextManager) {
     this.helper = checkNotNull(helper, "helper");
+    this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
     this.lbRegistry = lbRegistry;
     this.tlsContextManager = tlsContextManager;
     logger = XdsLogger.withLogId(InternalLogId.allocate("cds-lb", helper.getAuthority()));
@@ -179,6 +182,7 @@ final class CdsLoadBalancer extends LoadBalancer {
 
   private final class CdsLbState implements CdsResourceWatcher {
     private final ChannelSecurityLbHelper lbHelper = new ChannelSecurityLbHelper();
+    private boolean shutdown;
     @Nullable
     LoadBalancer edsBalancer;
 
@@ -189,37 +193,43 @@ final class CdsLoadBalancer extends LoadBalancer {
     }
 
     @Override
-    public void onChanged(CdsUpdate newUpdate) {
-      if (logger.isLoggable(XdsLogLevel.INFO)) {
-        logger.log(
-            XdsLogLevel.INFO,
-            "Received cluster update from xDS client {0}: "
-                + "cluster_name={1}, eds_service_name={2}, lb_policy={3}, report_load={4}",
-            xdsClient, newUpdate.getClusterName(), newUpdate.getEdsServiceName(),
-            newUpdate.getLbPolicy(), newUpdate.getLrsServerName() != null);
-      }
-      // FIXME(chengyuanzhang): handle error correctly to avoid being unnecessarily fragile.
-      checkArgument(
-          newUpdate.getLbPolicy().equals("round_robin"), "can only support round_robin policy");
-      LoadBalancerProvider endpointPickingPolicyProvider =
-          lbRegistry.getProvider(newUpdate.getLbPolicy());
-      LoadBalancerProvider localityPickingPolicyProvider =
-          lbRegistry.getProvider(WEIGHTED_TARGET_POLICY_NAME);  // hardcode to weighted-target
-      final EdsConfig edsConfig =
-          new EdsConfig(
-              /* clusterName = */ newUpdate.getClusterName(),
-              /* edsServiceName = */ newUpdate.getEdsServiceName(),
-              /* lrsServerName = */ newUpdate.getLrsServerName(),
-              new PolicySelection(localityPickingPolicyProvider, null /* by EDS policy */),
-              new PolicySelection(endpointPickingPolicyProvider, null));
-      if (isXdsSecurityEnabled()) {
-        updateSslContextProviderSupplier(newUpdate.getUpstreamTlsContext());
-      }
-      if (edsBalancer == null) {
-        edsBalancer = lbRegistry.getProvider(EDS_POLICY_NAME).newLoadBalancer(lbHelper);
-      }
-      edsBalancer.handleResolvedAddresses(
-          resolvedAddresses.toBuilder().setLoadBalancingPolicyConfig(edsConfig).build());
+    public void onChanged(final CdsUpdate newUpdate) {
+      syncContext.execute(new Runnable() {
+        @Override
+        public void run() {
+          if (shutdown) {
+            return;
+          }
+          if (logger.isLoggable(XdsLogLevel.INFO)) {
+            logger.log(XdsLogLevel.INFO, "Received cluster update from xDS client {0}: "
+                    + "cluster_name={1}, eds_service_name={2}, lb_policy={3}, report_load={4}",
+                xdsClient, newUpdate.getClusterName(), newUpdate.getEdsServiceName(),
+                newUpdate.getLbPolicy(), newUpdate.getLrsServerName() != null);
+          }
+          // FIXME(chengyuanzhang): handle error correctly to avoid being unnecessarily fragile.
+          checkArgument(newUpdate.getLbPolicy().equals("round_robin"),
+              "can only support round_robin policy");
+          LoadBalancerProvider endpointPickingPolicyProvider =
+              lbRegistry.getProvider(newUpdate.getLbPolicy());
+          LoadBalancerProvider localityPickingPolicyProvider =
+              lbRegistry.getProvider(WEIGHTED_TARGET_POLICY_NAME);  // hardcode to weighted-target
+          final EdsConfig edsConfig =
+              new EdsConfig(
+                  /* clusterName = */ newUpdate.getClusterName(),
+                  /* edsServiceName = */ newUpdate.getEdsServiceName(),
+                  /* lrsServerName = */ newUpdate.getLrsServerName(),
+                  new PolicySelection(localityPickingPolicyProvider, null /* by EDS policy */),
+                  new PolicySelection(endpointPickingPolicyProvider, null));
+          if (isXdsSecurityEnabled()) {
+            updateSslContextProviderSupplier(newUpdate.getUpstreamTlsContext());
+          }
+          if (edsBalancer == null) {
+            edsBalancer = lbRegistry.getProvider(EDS_POLICY_NAME).newLoadBalancer(lbHelper);
+          }
+          edsBalancer.handleResolvedAddresses(
+              resolvedAddresses.toBuilder().setLoadBalancingPolicyConfig(edsConfig).build());
+        }
+      });
     }
 
     /** For new UpstreamTlsContext value, release old SslContextProvider. */
@@ -244,32 +254,49 @@ final class CdsLoadBalancer extends LoadBalancer {
     }
 
     @Override
-    public void onResourceDoesNotExist(String resourceName) {
-      logger.log(XdsLogLevel.INFO, "Resource {0} is unavailable", resourceName);
-      if (edsBalancer != null) {
-        edsBalancer.shutdown();
-        edsBalancer = null;
-      }
-      helper.updateBalancingState(
-          TRANSIENT_FAILURE,
-          new ErrorPicker(
-              Status.UNAVAILABLE.withDescription("Resource " + resourceName + " is unavailable")));
+    public void onResourceDoesNotExist(final String resourceName) {
+      syncContext.execute(new Runnable() {
+        @Override
+        public void run() {
+          if (shutdown) {
+            return;
+          }
+          logger.log(XdsLogLevel.INFO, "Resource {0} is unavailable", resourceName);
+          if (edsBalancer != null) {
+            edsBalancer.shutdown();
+            edsBalancer = null;
+          }
+          helper.updateBalancingState(
+              TRANSIENT_FAILURE,
+              new ErrorPicker(Status.UNAVAILABLE.withDescription(
+                  "Resource " + resourceName + " is unavailable")));
+        }
+      });
     }
 
     @Override
-    public void onError(Status error) {
-      logger.log(
-          XdsLogLevel.WARNING,
-          "Received error from xDS client {0}: {1}: {2}",
-          xdsClient,
-          error.getCode(),
-          error.getDescription());
-      if (edsBalancer == null) {
-        helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
-      }
+    public void onError(final Status error) {
+      syncContext.execute(new Runnable() {
+        @Override
+        public void run() {
+          if (shutdown) {
+            return;
+          }
+          logger.log(
+              XdsLogLevel.WARNING,
+              "Received error from xDS client {0}: {1}: {2}",
+              xdsClient,
+              error.getCode(),
+              error.getDescription());
+          if (edsBalancer == null) {
+            helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
+          }
+        }
+      });
     }
 
     void shutdown() {
+      shutdown = true;
       xdsClient.cancelCdsResourceWatch(clusterName, this);
       logger.log(XdsLogLevel.INFO,
           "Cancelled watcher for cluster {0} with xDS client {1}", clusterName, xdsClient);

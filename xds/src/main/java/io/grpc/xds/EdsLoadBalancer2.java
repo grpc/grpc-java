@@ -30,6 +30,7 @@ import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status;
+import io.grpc.SynchronizationContext;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.util.ForwardingLoadBalancerHelper;
@@ -60,6 +61,7 @@ import javax.annotation.Nullable;
 
 final class EdsLoadBalancer2 extends LoadBalancer {
   private final XdsLogger logger;
+  private final SynchronizationContext syncContext;
   private final LoadBalancerRegistry lbRegistry;
   private final ThreadSafeRandom random;
   private final GracefulSwitchLoadBalancer switchingLoadBalancer;
@@ -77,7 +79,8 @@ final class EdsLoadBalancer2 extends LoadBalancer {
       LoadBalancer.Helper helper, LoadBalancerRegistry lbRegistry, ThreadSafeRandom random) {
     this.lbRegistry = checkNotNull(lbRegistry, "lbRegistry");
     this.random = checkNotNull(random, "random");
-    switchingLoadBalancer = new GracefulSwitchLoadBalancer(checkNotNull(helper, "helper"));
+    syncContext = checkNotNull(helper, "helper").getSynchronizationContext();
+    switchingLoadBalancer = new GracefulSwitchLoadBalancer(helper);
     InternalLogId logId = InternalLogId.allocate("eds-lb", helper.getAuthority());
     logger = XdsLogger.withLogId(logId);
     logger.log(XdsLogLevel.INFO, "Created");
@@ -156,6 +159,7 @@ final class EdsLoadBalancer2 extends LoadBalancer {
       private ResolvedAddresses resolvedAddresses;
       private PolicySelection localityPickingPolicy;
       private PolicySelection endpointPickingPolicy;
+      private boolean shutdown;
       @Nullable
       private LoadBalancer lb;
 
@@ -216,6 +220,7 @@ final class EdsLoadBalancer2 extends LoadBalancer {
 
       @Override
       public void shutdown() {
+        shutdown = true;
         if (lrsServerName != null) {
           xdsClient.removeClientStats(cluster, edsServiceName);
         }
@@ -234,89 +239,112 @@ final class EdsLoadBalancer2 extends LoadBalancer {
       }
 
       @Override
-      public void onChanged(EdsUpdate update) {
-        logger.log(XdsLogLevel.DEBUG,
-            "Received endpoint update from xDS client {0}: {1}", xdsClient, update);
-        if (logger.isLoggable(XdsLogLevel.INFO)) {
-          logger.log(
-              XdsLogLevel.INFO,
-              "Received endpoint update: cluster_name={0}, {1} localities, {2} drop categories",
-              update.getClusterName(), update.getLocalityLbEndpointsMap().size(),
-              update.getDropPolicies().size());
-        }
-        lbHelper.updateDropPolicies(update.getDropPolicies());
-        Map<Locality, LocalityLbEndpoints> localityLbEndpoints = update.getLocalityLbEndpointsMap();
-        endpointAddresses = new ArrayList<>();
-        prioritizedLocalityWeights = new HashMap<>();
-        for (Locality locality : localityLbEndpoints.keySet()) {
-          LocalityLbEndpoints localityLbInfo = localityLbEndpoints.get(locality);
-          int priority = localityLbInfo.getPriority();
-          boolean discard = true;
-          for (LbEndpoint endpoint : localityLbInfo.getEndpoints()) {
-            if (endpoint.isHealthy()) {
-              discard = false;
-              EquivalentAddressGroup eag =
-                  AddressFilter.setPathFilter(
-                      endpoint.getAddress(),
-                      Arrays.asList(priorityName(priority), localityName(locality)));
-              endpointAddresses.add(eag);
+      public void onChanged(final EdsUpdate update) {
+        syncContext.execute(new Runnable() {
+          @Override
+          public void run() {
+            if (shutdown) {
+              return;
+            }
+            logger.log(XdsLogLevel.DEBUG,
+                "Received endpoint update from xDS client {0}: {1}", xdsClient, update);
+            if (logger.isLoggable(XdsLogLevel.INFO)) {
+              logger.log(XdsLogLevel.INFO, "Received endpoint update: cluster_name={0}, "
+                      + "{1} localities, {2} drop categories", update.getClusterName(),
+                  update.getLocalityLbEndpointsMap().size(), update.getDropPolicies().size());
+            }
+            lbHelper.updateDropPolicies(update.getDropPolicies());
+            Map<Locality, LocalityLbEndpoints> localityLbEndpoints =
+                update.getLocalityLbEndpointsMap();
+            endpointAddresses = new ArrayList<>();
+            prioritizedLocalityWeights = new HashMap<>();
+            for (Locality locality : localityLbEndpoints.keySet()) {
+              LocalityLbEndpoints localityLbInfo = localityLbEndpoints.get(locality);
+              int priority = localityLbInfo.getPriority();
+              boolean discard = true;
+              for (LbEndpoint endpoint : localityLbInfo.getEndpoints()) {
+                if (endpoint.isHealthy()) {
+                  discard = false;
+                  EquivalentAddressGroup eag =
+                      AddressFilter.setPathFilter(
+                          endpoint.getAddress(),
+                          Arrays.asList(priorityName(priority), localityName(locality)));
+                  endpointAddresses.add(eag);
+                }
+              }
+              if (discard) {
+                logger.log(XdsLogLevel.INFO, "Discard locality {0} with 0 healthy endpoints");
+                continue;
+              }
+              if (!prioritizedLocalityWeights.containsKey(priority)) {
+                prioritizedLocalityWeights.put(priority, new HashMap<Locality, Integer>());
+              }
+              prioritizedLocalityWeights.get(priority).put(
+                  locality, localityLbInfo.getLocalityWeight());
+            }
+            if (prioritizedLocalityWeights.isEmpty()) {
+              propagateResourceError(
+                  Status.UNAVAILABLE.withDescription("No usable priority/locality/endpoint"));
+              return;
+            }
+            if (lb == null) {
+              lb = lbRegistry.getProvider(PRIORITY_POLICY_NAME).newLoadBalancer(lbHelper);
+            }
+            if (localityPickingPolicy != null && endpointPickingPolicy != null) {
+              PriorityLbConfig config = generatePriorityLbConfig(cluster, edsServiceName,
+                  lrsServerName, localityPickingPolicy, endpointPickingPolicy, lbRegistry,
+                  prioritizedLocalityWeights);
+              // TODO(chengyuanzhang): to be deleted after migrating to use XdsClient API.
+              Attributes attributes;
+              if (lrsServerName != null) {
+                attributes =
+                    resolvedAddresses.getAttributes().toBuilder()
+                        .set(XdsAttributes.ATTR_CLUSTER_SERVICE_LOAD_STATS_STORE, loadStatsStore)
+                        .build();
+              } else {
+                attributes = resolvedAddresses.getAttributes();
+              }
+              lb.handleResolvedAddresses(
+                  resolvedAddresses.toBuilder()
+                      .setAddresses(endpointAddresses)
+                      .setAttributes(attributes)
+                      .setLoadBalancingPolicyConfig(config)
+                      .build());
             }
           }
-          if (discard) {
-            logger.log(XdsLogLevel.INFO, "Discard locality {0} with 0 healthy endpoints");
-            continue;
-          }
-          if (!prioritizedLocalityWeights.containsKey(priority)) {
-            prioritizedLocalityWeights.put(priority, new HashMap<Locality, Integer>());
-          }
-          prioritizedLocalityWeights.get(priority).put(
-              locality, localityLbInfo.getLocalityWeight());
-        }
-        if (prioritizedLocalityWeights.isEmpty()) {
-          propagateResourceError(
-              Status.UNAVAILABLE.withDescription("No usable priority/locality/endpoint"));
-          return;
-        }
-        if (lb == null) {
-          lb = lbRegistry.getProvider(PRIORITY_POLICY_NAME).newLoadBalancer(lbHelper);
-        }
-        if (localityPickingPolicy != null && endpointPickingPolicy != null) {
-          PriorityLbConfig config = generatePriorityLbConfig(cluster, edsServiceName,
-              lrsServerName, localityPickingPolicy, endpointPickingPolicy, lbRegistry,
-              prioritizedLocalityWeights);
-          // TODO(chengyuanzhang): to be deleted after migrating to use XdsClient API.
-          Attributes attributes;
-          if (lrsServerName != null) {
-            attributes =
-                resolvedAddresses.getAttributes().toBuilder()
-                    .set(XdsAttributes.ATTR_CLUSTER_SERVICE_LOAD_STATS_STORE, loadStatsStore)
-                    .build();
-          } else {
-            attributes = resolvedAddresses.getAttributes();
-          }
-          lb.handleResolvedAddresses(
-              resolvedAddresses.toBuilder()
-                  .setAddresses(endpointAddresses)
-                  .setAttributes(attributes)
-                  .setLoadBalancingPolicyConfig(config)
-                  .build());
-        }
+        });
       }
 
       @Override
-      public void onResourceDoesNotExist(String resourceName) {
-        logger.log(XdsLogLevel.INFO, "Resource {0} is unavailable", resourceName);
-        propagateResourceError(
-            Status.UNAVAILABLE.withDescription("Resource " + resourceName + " is unavailable"));
+      public void onResourceDoesNotExist(final String resourceName) {
+        syncContext.execute(new Runnable() {
+          @Override
+          public void run() {
+            if (shutdown) {
+              return;
+            }
+            logger.log(XdsLogLevel.INFO, "Resource {0} is unavailable", resourceName);
+            propagateResourceError(Status.UNAVAILABLE.withDescription(
+                "Resource " + resourceName + " is unavailable"));
+          }
+        });
       }
 
       @Override
-      public void onError(Status error) {
-        logger.log(
-            XdsLogLevel.WARNING, "Received error from xDS client {0}: {1}", xdsClient, error);
-        if (lb == null) {
-          lbHelper.helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
-        }
+      public void onError(final Status error) {
+        syncContext.execute(new Runnable() {
+          @Override
+          public void run() {
+            if (shutdown) {
+              return;
+            }
+            logger.log(
+                XdsLogLevel.WARNING, "Received error from xDS client {0}: {1}", xdsClient, error);
+            if (lb == null) {
+              lbHelper.helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
+            }
+          }
+        });
       }
 
       private void propagateResourceError(Status error) {
