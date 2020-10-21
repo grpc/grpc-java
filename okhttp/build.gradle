@@ -35,8 +35,11 @@ project.sourceSets {
 
 checkstyleMain.exclude '**/io/grpc/okhttp/internal/**'
 
-javadoc.exclude 'io/grpc/okhttp/internal/**'
-javadoc.options.links 'http://square.github.io/okhttp/2.x/okhttp/'
+javadoc {
+    options.links 'http://square.github.io/okhttp/2.x/okhttp/'
+    exclude 'io/grpc/okhttp/Internal*'
+    exclude 'io/grpc/okhttp/internal/**'
+}
 
 jacocoTestReport {
     classDirectories.from = sourceSets.main.output.collect {
