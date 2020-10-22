@@ -23,6 +23,8 @@ import io.grpc.examples.helloworld.HelloRequest;
 import io.grpc.stub.StreamObserver;
 import io.grpc.xds.internal.sds.XdsServerBuilder;
 import java.io.IOException;
+import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
@@ -55,15 +57,19 @@ public class HelloWorldServerXds {
               public void run() {
                 // Use stderr here since the logger may have been reset by its JVM shutdown hook.
                 System.err.println("*** shutting down gRPC server since JVM is shutting down");
-                HelloWorldServerXds.this.stop();
+                try {
+                  HelloWorldServerXds.this.stop();
+                } catch (InterruptedException e) {
+                  logger.log(Level.SEVERE, "During stop", e);
+                }
                 System.err.println("*** server shut down");
               }
             });
   }
 
-  private void stop() {
+  private void stop() throws InterruptedException {
     if (server != null) {
-      server.shutdown();
+      server.shutdown().awaitTermination(30, TimeUnit.SECONDS);
     }
   }
 
