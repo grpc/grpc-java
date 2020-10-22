@@ -76,7 +76,8 @@ final class DynamicReloadingCertificateProvider extends CertificateProvider {
   }
 
   private SynchronizationContext createSynchronizationContext(String details) {
-    final InternalLogId logId = InternalLogId.allocate("DynamicReloadingCertificateProvider", details);
+    final InternalLogId logId =
+        InternalLogId.allocate("DynamicReloadingCertificateProvider", details);
     return new SynchronizationContext(
         new Thread.UncaughtExceptionHandler() {
           private boolean panicMode;
