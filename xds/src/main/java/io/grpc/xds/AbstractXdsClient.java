@@ -196,7 +196,7 @@ abstract class AbstractXdsClient extends XdsClient {
    * Returns the collection of resources currently subscribing to or {@code null} if not
    * subscribing to any resources for the given type.
    *
-   * <p>Note a empty collection indicates subscribing to resources of the given type with
+   * <p>Note an empty collection indicates subscribing to resources of the given type with
    * wildcard mode.
    */
   // Must be synchronized.
