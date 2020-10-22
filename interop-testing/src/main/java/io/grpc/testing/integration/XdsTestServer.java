@@ -33,6 +33,7 @@ import io.grpc.testing.integration.Messages.SimpleResponse;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -40,6 +41,8 @@ import java.util.logging.Logger;
 public final class XdsTestServer {
   static final Metadata.Key<String> HOSTNAME_KEY =
       Metadata.Key.of("hostname", Metadata.ASCII_STRING_MARSHALLER);
+  static final Metadata.Key<String> CALL_BEHAVIOR_KEY =
+      Metadata.Key.of("rpc-behavior", Metadata.ASCII_STRING_MARSHALLER);
 
   private static Logger logger = Logger.getLogger(XdsTestServer.class.getName());
 
@@ -128,11 +131,13 @@ public final class XdsTestServer {
       throw new RuntimeException(e);
     }
     health = new HealthStatusManager();
+    AtomicBoolean keepCallOpen = new AtomicBoolean();
     server =
         NettyServerBuilder.forPort(port)
             .addService(
                 ServerInterceptors.intercept(
-                    new TestServiceImpl(serverId, host), new HostnameInterceptor(host)))
+                    new TestServiceImpl(serverId, host, keepCallOpen),
+                    new TestInfoInterceptor(host, keepCallOpen)))
             .addService(new XdsUpdateHealthServiceImpl(health))
             .addService(health.getHealthService())
             .addService(ProtoReflectionService.newInstance())
@@ -157,24 +162,30 @@ public final class XdsTestServer {
   private static class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
     private final String serverId;
     private final String host;
+    private final AtomicBoolean keepOpen;
 
-    private TestServiceImpl(String serverId, String host) {
+    private TestServiceImpl(String serverId, String host, AtomicBoolean keepOpen) {
       this.serverId = serverId;
       this.host = host;
+      this.keepOpen = keepOpen;
     }
 
     @Override
     public void emptyCall(
         EmptyProtos.Empty req, StreamObserver<EmptyProtos.Empty> responseObserver) {
       responseObserver.onNext(EmptyProtos.Empty.getDefaultInstance());
-      responseObserver.onCompleted();
+      if (!keepOpen.get()) {
+        responseObserver.onCompleted();
+      }
     }
 
     @Override
     public void unaryCall(SimpleRequest req, StreamObserver<SimpleResponse> responseObserver) {
       responseObserver.onNext(
           SimpleResponse.newBuilder().setServerId(serverId).setHostname(host).build());
-      responseObserver.onCompleted();
+      if (!keepOpen.get()) {
+        responseObserver.onCompleted();
+      }
     }
   }
 
@@ -203,11 +214,13 @@ public final class XdsTestServer {
     }
   }
 
-  private static class HostnameInterceptor implements ServerInterceptor {
+  private static class TestInfoInterceptor implements ServerInterceptor {
     private final String host;
+    private final AtomicBoolean keepOpenCaptor;
 
-    private HostnameInterceptor(String host) {
+    private TestInfoInterceptor(String host, AtomicBoolean keepOpenCaptor) {
       this.host = host;
+      this.keepOpenCaptor = keepOpenCaptor;
     }
 
     @Override
@@ -215,6 +228,8 @@ public final class XdsTestServer {
         ServerCall<ReqT, RespT> call,
         final Metadata requestHeaders,
         ServerCallHandler<ReqT, RespT> next) {
+      String callBehavior = requestHeaders.get(CALL_BEHAVIOR_KEY);
+      keepOpenCaptor.set("keep-open".equals(callBehavior));
       return next.startCall(
           new SimpleForwardingServerCall<ReqT, RespT>(call) {
             @Override
