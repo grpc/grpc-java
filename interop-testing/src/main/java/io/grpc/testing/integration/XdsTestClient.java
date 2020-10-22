@@ -43,6 +43,8 @@ import io.grpc.stub.StreamObserver;
 import io.grpc.testing.integration.Messages.ClientConfigureRequest;
 import io.grpc.testing.integration.Messages.ClientConfigureRequest.RpcType;
 import io.grpc.testing.integration.Messages.ClientConfigureResponse;
+import io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsRequest;
+import io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsResponse;
 import io.grpc.testing.integration.Messages.LoadBalancerStatsRequest;
 import io.grpc.testing.integration.Messages.LoadBalancerStatsResponse;
 import io.grpc.testing.integration.Messages.SimpleRequest;
@@ -54,10 +56,13 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -70,6 +75,9 @@ public final class XdsTestClient {
   private final Set<XdsStatsWatcher> watchers = new HashSet<>();
   private final Object lock = new Object();
   private final List<ManagedChannel> channels = new ArrayList<>();
+  private final AtomicInteger rpcsStarted = new AtomicInteger();
+  private final AtomicInteger rpcsFailed = new AtomicInteger();
+  private final ConcurrentMap<String, Integer> rpcsSucceededByPeer = new ConcurrentHashMap<>();
 
   private int numChannels = 1;
   private boolean printResponse = false;
@@ -314,17 +322,18 @@ public final class XdsTestClient {
               new StreamObserver<EmptyProtos.Empty>() {
                 @Override
                 public void onCompleted() {
-                  notifyWatchers(savedWatchers, rpcType, requestId, hostnameRef.get());
+                  handleRpcCompleted(requestId, hostnameRef.get(), savedWatchers);
                 }
 
                 @Override
                 public void onError(Throwable t) {
-                  notifyWatchers(savedWatchers, rpcType, requestId, hostnameRef.get());
+                  handleRpcError(requestId, hostnameRef.get(), savedWatchers);
                 }
 
                 @Override
                 public void onNext(EmptyProtos.Empty response) {}
               });
+          rpcsStarted.getAndIncrement();
         } else if (rpcType == RpcType.UNARY_CALL) {
           SimpleRequest request = SimpleRequest.newBuilder().setFillServerId(true).build();
           stub.unaryCall(
@@ -332,7 +341,7 @@ public final class XdsTestClient {
               new StreamObserver<SimpleResponse>() {
                 @Override
                 public void onCompleted() {
-                  notifyWatchers(savedWatchers, rpcType, requestId, hostnameRef.get());
+                  handleRpcCompleted(requestId, hostnameRef.get(), savedWatchers);
                 }
 
                 @Override
@@ -340,7 +349,7 @@ public final class XdsTestClient {
                   if (printResponse) {
                     logger.log(Level.WARNING, "Rpc failed: {0}", t);
                   }
-                  notifyWatchers(savedWatchers, rpcType, requestId, hostnameRef.get());
+                  handleRpcError(requestId, hostnameRef.get(), savedWatchers);
                 }
 
                 @Override
@@ -364,7 +373,24 @@ public final class XdsTestClient {
                   }
                 }
               });
+          rpcsStarted.getAndIncrement();
         }
+      }
+
+      private void handleRpcCompleted(long requestId, String hostname,
+          Set<XdsStatsWatcher> watchers) {
+        int count = 0;
+        if (rpcsSucceededByPeer.containsKey(hostname)) {
+          count = rpcsSucceededByPeer.get(hostname);
+        }
+        rpcsSucceededByPeer.put(hostname, count + 1);
+        notifyWatchers(watchers, rpcType, requestId, hostname);
+      }
+
+      private void handleRpcError(long requestId, String hostname,
+          Set<XdsStatsWatcher> watchers) {
+        rpcsFailed.getAndIncrement();
+        notifyWatchers(watchers, rpcType, requestId, hostname);
       }
     }
 
@@ -435,6 +461,19 @@ public final class XdsTestClient {
         watchers.remove(watcher);
       }
       responseObserver.onNext(response);
+      responseObserver.onCompleted();
+    }
+
+    @Override
+    public void getClientAccumulatedStats(LoadBalancerAccumulatedStatsRequest request,
+        StreamObserver<LoadBalancerAccumulatedStatsResponse> responseObserver) {
+      LoadBalancerAccumulatedStatsResponse.Builder respBuilder =
+          LoadBalancerAccumulatedStatsResponse.newBuilder();
+      respBuilder.setNumRpcsStarted(rpcsStarted.get()).setNumRpcsFailed(rpcsFailed.get());
+      for (Map.Entry<String, Integer> succeededRpcs : rpcsSucceededByPeer.entrySet()) {
+        respBuilder.putNumRpcsSucceededByPeer(succeededRpcs.getKey(), succeededRpcs.getValue());
+      }
+      responseObserver.onNext(respBuilder.build());
       responseObserver.onCompleted();
     }
   }
