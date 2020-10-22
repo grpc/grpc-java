@@ -52,19 +52,24 @@ public class DynamicReloadingCertificateProviderProviderTest {
     MockitoAnnotations.initMocks(this);
     provider =
         new DynamicReloadingCertificateProviderProvider(
-            dynamicReloadingCertificateProviderFactory, scheduledExecutorServiceFactory, timeProvider);
+            dynamicReloadingCertificateProviderFactory,
+	    scheduledExecutorServiceFactory,
+	    timeProvider);
   }
 
   @Test
   public void providerRegisteredName() {
     CertificateProviderProvider certProviderProvider =
         CertificateProviderRegistry.getInstance()
-            .getProvider(DynamicReloadingCertificateProviderProvider.DYNAMIC_RELOADING_PROVIDER_NAME);
-    assertThat(certProviderProvider).isInstanceOf(DynamicReloadingCertificateProviderProvider.class);
+            .getProvider(
+                DynamicReloadingCertificateProviderProvider.DYNAMIC_RELOADING_PROVIDER_NAME);
+    assertThat(certProviderProvider)
+        .isInstanceOf(DynamicReloadingCertificateProviderProvider.class);
     DynamicReloadingCertificateProviderProvider dynamicReloadingCertificateProviderProvider =
         (DynamicReloadingCertificateProviderProvider) certProviderProvider;
-    assertThat(dynamicReloadingCertificateProviderProvider.dynamicReloadingCertificateProviderFactory)
-        .isSameInstanceAs(DynamicReloadingCertificateProvider.Factory.getInstance());
+    assertThat(
+            dynamicReloadingCertificateProviderProvider.dynamicReloadingCertificateProviderFactory)
+        .isSameInstanceAs(DynamicReloadingCertificateProvider.Factory.getInstance());  
   }
 
   @Test
