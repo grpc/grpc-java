@@ -462,6 +462,7 @@ abstract class AbstractXdsClient extends XdsClient {
         default:
           throw new AssertionError("Unknown resource type: " + type);
       }
+      logger.log(XdsLogLevel.INFO, "Sending {0} request for resources: {1}", type, resources);
       sendDiscoveryRequest(type, getCurrentVersion(type), resources, nonce, null);
     }
 
