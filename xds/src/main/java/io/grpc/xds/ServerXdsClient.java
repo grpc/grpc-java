@@ -59,14 +59,10 @@ final class ServerXdsClient extends AbstractXdsClient {
   @Nullable
   private ScheduledHandle ldsRespTimer;
 
-  ServerXdsClient(
-      XdsChannel channel,
-      Node node,
-      SynchronizationContext syncContext,
-      ScheduledExecutorService timeService,
-      BackoffPolicy.Provider backoffPolicyProvider,
+  ServerXdsClient(XdsChannel channel, Node node, SynchronizationContext syncContext,
+      ScheduledExecutorService timeService, BackoffPolicy.Provider backoffPolicyProvider,
       Supplier<Stopwatch> stopwatchSupplier) {
-    super(channel, node, timeService, backoffPolicyProvider, stopwatchSupplier.get());
+    super(channel, node, timeService, backoffPolicyProvider, stopwatchSupplier);
     this.syncContext = checkNotNull(syncContext, "syncContext");
   }
 

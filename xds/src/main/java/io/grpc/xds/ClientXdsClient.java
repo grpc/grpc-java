@@ -84,13 +84,9 @@ final class ClientXdsClient extends AbstractXdsClient {
   private final LoadReportClient lrsClient;
   private boolean reportingLoad;
 
-  ClientXdsClient(
-      XdsChannel channel,
-      Node node,
-      ScheduledExecutorService timeService,
-      BackoffPolicy.Provider backoffPolicyProvider,
-      Supplier<Stopwatch> stopwatchSupplier) {
-    super(channel, node, timeService, backoffPolicyProvider, stopwatchSupplier.get());
+  ClientXdsClient(XdsChannel channel, Node node, ScheduledExecutorService timeService,
+      BackoffPolicy.Provider backoffPolicyProvider, Supplier<Stopwatch> stopwatchSupplier) {
+    super(channel, node, timeService, backoffPolicyProvider, stopwatchSupplier);
     lrsClient = new LoadReportClient(loadStatsManager, channel, node, timeService,
         backoffPolicyProvider, stopwatchSupplier);
   }

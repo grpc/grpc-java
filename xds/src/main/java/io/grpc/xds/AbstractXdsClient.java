@@ -22,6 +22,7 @@ import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
+import com.google.common.base.Supplier;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.MessageOrBuilder;
@@ -101,17 +102,13 @@ abstract class AbstractXdsClient extends XdsClient {
   @Nullable
   private ScheduledFuture<?> rpcRetryTimer;
 
-  AbstractXdsClient(
-      XdsChannel channel,
-      Node node,
-      ScheduledExecutorService timeService,
-      BackoffPolicy.Provider backoffPolicyProvider,
-      Stopwatch stopwatch) {
+  AbstractXdsClient(XdsChannel channel, Node node, ScheduledExecutorService timeService,
+      BackoffPolicy.Provider backoffPolicyProvider, Supplier<Stopwatch> stopwatchSupplier) {
     this.xdsChannel = checkNotNull(channel, "channel");
     this.node = checkNotNull(node, "node");
     this.timeService = checkNotNull(timeService, "timeService");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
-    this.stopwatch = checkNotNull(stopwatch, "stopwatch");
+    stopwatch = checkNotNull(stopwatchSupplier, "stopwatchSupplier").get();
     logId = InternalLogId.allocate("xds-client", null);
     logger = XdsLogger.withLogId(logId);
     logger.log(XdsLogLevel.INFO, "Created");
