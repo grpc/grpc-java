@@ -39,7 +39,6 @@ import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.Rds;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext;
 import io.grpc.Status;
-import io.grpc.SynchronizationContext;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
@@ -48,7 +47,6 @@ import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.EnvoyProtoData.StructOrError;
 import io.grpc.xds.LoadStatsManager.LoadStatsStore;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
-import java.lang.Thread.UncaughtExceptionHandler;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -93,16 +91,7 @@ final class ClientXdsClient extends AbstractXdsClient {
       BackoffPolicy.Provider backoffPolicyProvider,
       Supplier<Stopwatch> stopwatchSupplier) {
     super(channel, node, timeService, backoffPolicyProvider, stopwatchSupplier.get());
-    // TODO(chengyuanzhang): delete me after https://github.com/grpc/grpc-java/pull/7528.
-    SynchronizationContext syncContext = new SynchronizationContext(
-        new UncaughtExceptionHandler() {
-          @Override
-          public void uncaughtException(Thread t, Throwable e) {
-            getLogger().log(XdsLogLevel.WARNING,
-                "Uncaught exception in the SynchronizationContext.");
-          }
-        });
-    lrsClient = new LoadReportClient(loadStatsManager, channel, node, syncContext, timeService,
+    lrsClient = new LoadReportClient(loadStatsManager, channel, node, timeService,
         backoffPolicyProvider, stopwatchSupplier);
   }
 
