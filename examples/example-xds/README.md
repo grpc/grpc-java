@@ -55,16 +55,16 @@ code. We will now demonstrate how the code can authorize use of xDS provided cre
 `XdsChannelCredentials` on the client side and using `XdsServerBuilder.useXdsSecurityWithPlaintextFallback()`
 on the server side. This code is enabled by providing an additional command line argument.
 
-1. On the server side, add `y` on the command line to authorize use of xDS security:
+1. On the server side, add `--secure` on the command line to authorize use of xDS security:
 ```
 $ export GRPC_XDS_BOOTSTRAP=/path/to/bootstrap.json
-$ ./build/install/example-xds/bin/hello-world-server-xds 8000 my-test-xds-server y
+$ ./build/install/example-xds/bin/hello-world-server-xds 8000 my-test-xds-server --secure
 ```
 
-2. Similarly, add `y` on the comamnd line when you run the xDS client:
+2. Similarly, add `--secure` on the comamnd line when you run the xDS client:
 ```
 $ export GRPC_XDS_BOOTSTRAP=/path/to/bootstrap.json
-$ ./build/install/example-xds/bin/xds-hello-world-client xds:///yourServersName:8000 my-test-xds-client y
+$ ./build/install/example-xds/bin/hello-world-client-xds xds:///yourServersName:8000 my-test-xds-client --secure
 ```
 
 In this case, if the xDS management server is configured to provide mTLS credentials (for example) to the client and

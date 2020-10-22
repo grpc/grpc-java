@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 The gRPC Authors
+ * Copyright 2020 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -76,22 +76,22 @@ public class HelloWorldServerXds {
 
   /** Main launches the server from the command line. */
   public static void main(String[] args) throws IOException, InterruptedException {
+    boolean useXdsCreds = false;
+    String hostName = null;
     if (args.length < 1 || args.length > 3) {
-      System.out.println("USAGE: HelloWorldServerTls port [hostname [y]]");
+      System.out.println("USAGE: HelloWorldServerTls port [hostname [--secure]]");
       System.err.println("");
       System.err.println("  port  The port to bind to.");
       System.err.println("  hostname  The name clients will see in greet responses. ");
       System.err.println("            Defaults to the machine's hostname");
       System.out.println(
-          "  'y'  'y' or 'yes' indicates using xDS credentials options; otherwise defaults to insecure credentials.");
-      System.exit(0);
+          "  '--secure'  Indicates using xDS credentials options; otherwise defaults to insecure credentials.");
+      System.exit(1);
     }
-    boolean useXdsCreds = false;
-    String hostName = null;
     if (args.length > 1) {
       hostName = args[1];
       if (args.length == 3) {
-        useXdsCreds = args[2].toLowerCase().startsWith("y");
+        useXdsCreds = args[2].toLowerCase().startsWith("--s");
       }
     }
     final HelloWorldServerXds server =

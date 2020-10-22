@@ -46,19 +46,14 @@ public class HelloWorldClientXds {
 
   /** Construct client connecting to HelloWorld server at {@code host:port}. */
   public HelloWorldClientXds(String target, boolean useXdsCreds) throws SSLException {
-    this(
+    this.channel =
         Grpc.newChannelBuilder(
                 target,
                 useXdsCreds
                     ? XdsChannelCredentials.create(InsecureChannelCredentials.create())
                     : InsecureChannelCredentials.create())
-            .build());
-  }
-
-  /** Construct client for accessing HelloWorld server using the channel passed. */
-  HelloWorldClientXds(ManagedChannel channel) {
-    this.channel = channel;
-    blockingStub = GreeterGrpc.newBlockingStub(channel);
+            .build();
+    blockingStub = GreeterGrpc.newBlockingStub(this.channel);
   }
 
   public void shutdown() throws InterruptedException {
@@ -85,19 +80,19 @@ public class HelloWorldClientXds {
    */
   public static void main(String[] args) throws Exception {
     String user = "xds-client";
+    boolean useXdsCreds = false;
     if (args.length < 1 || args.length > 3) {
-      System.out.println("USAGE: HelloWorldClientXds target [name [y]]\n");
+      System.out.println("USAGE: HelloWorldClientXds target [name [--secure]]\n");
       System.err.println("  target  The xds target to connect to using the 'xds:' target scheme.");
       System.err.println("  name    The name you wish to include in the greeting request. Defaults to " + user);
       System.err.println(
-          "  'y'     'y' or 'yes' indicates using xDS credentials otherwise defaults to insecure.");
+          "  '--secure'     Indicates using xDS credentials otherwise defaults to insecure.");
       System.exit(1);
     }
-    boolean useXdsCreds = false;
     if (args.length > 1) {
       user = args[1];
       if (args.length == 3) {
-        useXdsCreds = args[2].toLowerCase().startsWith("y");
+        useXdsCreds = args[2].toLowerCase().startsWith("--s");
       }
     }
     HelloWorldClientXds client = new HelloWorldClientXds(args[0], useXdsCreds);
