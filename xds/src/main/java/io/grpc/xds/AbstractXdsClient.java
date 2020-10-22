@@ -292,7 +292,7 @@ abstract class AbstractXdsClient extends XdsClient {
   private void startRpcStream() {
     checkState(adsStream == null, "Previous adsStream has not been cleared yet");
     if (xdsChannel.isUseProtocolV3()) {
-      adsStream = new AdsStream();
+      adsStream = new AdsStreamV3();
     } else {
       adsStream = new AdsStreamV2();
     }
@@ -552,17 +552,14 @@ abstract class AbstractXdsClient extends XdsClient {
   }
 
   private final class AdsStreamV2 extends AbstractAdsStream {
-    private final io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc
-        .AggregatedDiscoveryServiceStub stubV2;
-    private StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest> requestWriterV2;
-
-    AdsStreamV2() {
-      stubV2 = io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.newStub(
-          xdsChannel.getManagedChannel());
-    }
+    private StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest> requestWriter;
 
     @Override
     void start() {
+      io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc
+          .AggregatedDiscoveryServiceStub stub =
+          io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.newStub(
+              xdsChannel.getManagedChannel());
       StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseReaderV2 =
           new StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse>() {
             @Override
@@ -601,13 +598,13 @@ abstract class AbstractXdsClient extends XdsClient {
               });
             }
           };
-      requestWriterV2 = stubV2.withWaitForReady().streamAggregatedResources(responseReaderV2);
+      requestWriter = stub.withWaitForReady().streamAggregatedResources(responseReaderV2);
     }
 
     @Override
     void sendDiscoveryRequest(ResourceType type, String versionInfo, Collection<String> resources,
         String nonce, @Nullable String errorDetail) {
-      checkState(requestWriterV2 != null, "ADS stream has not been started");
+      checkState(requestWriter != null, "ADS stream has not been started");
       io.envoyproxy.envoy.api.v2.DiscoveryRequest.Builder builder =
           io.envoyproxy.envoy.api.v2.DiscoveryRequest.newBuilder()
               .setVersionInfo(versionInfo)
@@ -624,27 +621,23 @@ abstract class AbstractXdsClient extends XdsClient {
         builder.setErrorDetail(error);
       }
       io.envoyproxy.envoy.api.v2.DiscoveryRequest request = builder.build();
-      requestWriterV2.onNext(request);
+      requestWriter.onNext(request);
       logger.log(XdsLogLevel.DEBUG, "Sent DiscoveryRequest\n{0}", request);
     }
 
     @Override
     void sendError(Exception error) {
-      requestWriterV2.onError(error);
+      requestWriter.onError(error);
     }
   }
 
-  // AdsStream V3
-  private final class AdsStream extends AbstractAdsStream {
-    private final AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceStub stub;
+  private final class AdsStreamV3 extends AbstractAdsStream {
     private StreamObserver<DiscoveryRequest> requestWriter;
-
-    AdsStream() {
-      stub = AggregatedDiscoveryServiceGrpc.newStub(xdsChannel.getManagedChannel());
-    }
 
     @Override
     void start() {
+      AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceStub stub =
+          AggregatedDiscoveryServiceGrpc.newStub(xdsChannel.getManagedChannel());
       StreamObserver<DiscoveryResponse> responseReader = new StreamObserver<DiscoveryResponse>() {
         @Override
         public void onNext(final DiscoveryResponse response) {
