@@ -37,9 +37,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-/** Implementation of {@link CertificateProvider} for Zatar cert provider. */
-final class ZatarCertificateProvider extends CertificateProvider {
-  private static final Logger logger = Logger.getLogger(ZatarCertificateProvider.class.getName());
+/** Implementation of {@link CertificateProvider} for dynamic reloading cert provider. */
+final class DynamicReloadingCertificateProvider extends CertificateProvider {
+  private static final Logger logger =
+      Logger.getLogger(DynamicReloadingCertificateProvider.class.getName());
 
   private final SynchronizationContext syncContext;
   private final ScheduledExecutorService scheduledExecutorService;
@@ -52,7 +53,7 @@ final class ZatarCertificateProvider extends CertificateProvider {
   @VisibleForTesting SynchronizationContext.ScheduledHandle scheduledHandle;
   private Path lastModifiedTarget;
 
-  ZatarCertificateProvider(
+  DynamicReloadingCertificateProvider(
       DistributorWatcher watcher,
       boolean notifyCertUpdates,
       String directory,
@@ -75,7 +76,8 @@ final class ZatarCertificateProvider extends CertificateProvider {
   }
 
   private SynchronizationContext createSynchronizationContext(String details) {
-    final InternalLogId logId = InternalLogId.allocate("ZatarCertificateProvider", details);
+    final InternalLogId logId =
+        InternalLogId.allocate("DynamicReloadingCertificateProvider", details);
     return new SynchronizationContext(
         new Thread.UncaughtExceptionHandler() {
           private boolean panicMode;
@@ -182,7 +184,7 @@ final class ZatarCertificateProvider extends CertificateProvider {
     private static final Factory DEFAULT_INSTANCE =
         new Factory() {
           @Override
-          ZatarCertificateProvider create(
+          DynamicReloadingCertificateProvider create(
               DistributorWatcher watcher,
               boolean notifyCertUpdates,
               String directory,
@@ -192,7 +194,7 @@ final class ZatarCertificateProvider extends CertificateProvider {
               long refreshIntervalInSeconds,
               ScheduledExecutorService scheduledExecutorService,
               TimeProvider timeProvider) {
-            return new ZatarCertificateProvider(
+            return new DynamicReloadingCertificateProvider(
                 watcher,
                 notifyCertUpdates,
                 directory,
@@ -209,7 +211,7 @@ final class ZatarCertificateProvider extends CertificateProvider {
       return DEFAULT_INSTANCE;
     }
 
-    abstract ZatarCertificateProvider create(
+    abstract DynamicReloadingCertificateProvider create(
         DistributorWatcher watcher,
         boolean notifyCertUpdates,
         String directory,
