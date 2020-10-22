@@ -87,7 +87,7 @@ final class ServerXdsClient extends AbstractXdsClient {
   @Nullable
   @Override
   Collection<String> getSubscribedResources(ResourceType type) {
-    if (listenerWatcher == null) {
+    if (type != ResourceType.LDS || listenerWatcher == null) {
       return null;
     }
     return Collections.emptyList();
