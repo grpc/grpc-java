@@ -41,7 +41,7 @@ import java.util.logging.Logger;
 public final class XdsTestServer {
   static final Metadata.Key<String> HOSTNAME_KEY =
       Metadata.Key.of("hostname", Metadata.ASCII_STRING_MARSHALLER);
-  static final Metadata.Key<String> CALL_BEHAVIOR_KEY =
+  private static final Metadata.Key<String> CALL_BEHAVIOR_KEY =
       Metadata.Key.of("rpc-behavior", Metadata.ASCII_STRING_MARSHALLER);
 
   private static Logger logger = Logger.getLogger(XdsTestServer.class.getName());
