@@ -40,6 +40,9 @@ import io.grpc.Server;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.netty.NettyServerBuilder;
 import io.grpc.stub.StreamObserver;
+import io.grpc.testing.integration.Messages.ClientConfigureRequest;
+import io.grpc.testing.integration.Messages.ClientConfigureRequest.RpcType;
+import io.grpc.testing.integration.Messages.ClientConfigureResponse;
 import io.grpc.testing.integration.Messages.LoadBalancerStatsRequest;
 import io.grpc.testing.integration.Messages.LoadBalancerStatsResponse;
 import io.grpc.testing.integration.Messages.SimpleRequest;
@@ -71,23 +74,14 @@ public final class XdsTestClient {
   private int numChannels = 1;
   private boolean printResponse = false;
   private int qps = 1;
-  private List<RpcType> rpcTypes = ImmutableList.of(RpcType.UNARY_CALL);
-  private EnumMap<RpcType, Metadata> metadata = new EnumMap<>(RpcType.class);
+  private volatile List<RpcType> rpcTypes = ImmutableList.of(RpcType.UNARY_CALL);
+  private volatile EnumMap<RpcType, Metadata> metadata = new EnumMap<>(RpcType.class);
   private int rpcTimeoutSec = 20;
   private String server = "localhost:8080";
   private int statsPort = 8081;
   private Server statsServer;
   private long currentRequestId;
   private ListeningScheduledExecutorService exec;
-
-  private enum RpcType {
-    EMPTY_CALL,
-    UNARY_CALL;
-
-    public String toCamelCase() {
-      return CaseFormat.UPPER_UNDERSCORE.to(CaseFormat.UPPER_CAMEL, toString());
-    }
-  }
 
   /**
    * The main application allowing this client to be launched from the command line.
@@ -167,8 +161,10 @@ public final class XdsTestClient {
               + c.qps
               + "\n  --rpc=STR              Types of RPCs to make, ',' separated string. RPCs can "
               + "be EmptyCall or UnaryCall. Default: UnaryCall"
+              + "\n[deprecated] Use XdsUpdateClientConfigureService"
               + "\n  --metadata=STR         The metadata to send with each RPC, in the format "
               + "EmptyCall:key1:value1,UnaryCall:key2:value2."
+              + "\n[deprecated] Use XdsUpdateClientConfigureService"
               + "\n  --rpc_timeout_sec=INT  Per RPC timeout seconds. Default: "
               + c.rpcTimeoutSec
               + "\n  --server=host:port     Address of server. Default: "
@@ -220,7 +216,11 @@ public final class XdsTestClient {
   }
 
   private void run() {
-    statsServer = NettyServerBuilder.forPort(statsPort).addService(new XdsStatsImpl()).build();
+    statsServer =
+        NettyServerBuilder.forPort(statsPort)
+            .addService(new XdsStatsImpl())
+            .addService(new ConfigureUpdateServiceImpl())
+            .build();
     try {
       statsServer.start();
       for (int i = 0; i < numChannels; i++) {
@@ -400,6 +400,25 @@ public final class XdsTestClient {
     }
   }
 
+  private final class ConfigureUpdateServiceImpl extends
+      XdsUpdateClientConfigureServiceGrpc.XdsUpdateClientConfigureServiceImplBase {
+    @Override
+    public void configure(ClientConfigureRequest request,
+        StreamObserver<ClientConfigureResponse> responseObserver) {
+      EnumMap<RpcType, Metadata> newMetadata = new EnumMap<>(RpcType.class);
+      for (ClientConfigureRequest.Metadata metadata : request.getMetadataList()) {
+        Metadata md = new Metadata();
+        md.put(Metadata.Key.of(metadata.getKey(), Metadata.ASCII_STRING_MARSHALLER),
+            metadata.getValue());
+        newMetadata.put(metadata.getType(), md);
+      }
+      synchronized (lock) {
+        rpcTypes = request.getTypesList();
+        metadata = newMetadata;
+      }
+    }
+  }
+
   private class XdsStatsImpl extends LoadBalancerStatsServiceGrpc.LoadBalancerStatsServiceImplBase {
     @Override
     public void getClientStats(
@@ -484,11 +503,15 @@ public final class XdsTestClient {
           LoadBalancerStatsResponse.RpcsByPeer.Builder rpcs =
               LoadBalancerStatsResponse.RpcsByPeer.newBuilder();
           rpcs.putAllRpcsByPeer(entry.getValue());
-          builder.putRpcsByMethod(entry.getKey().toCamelCase(), rpcs.build());
+          builder.putRpcsByMethod(getRpcTypeString(entry.getKey()), rpcs.build());
         }
         builder.setNumFailures(noRemotePeer + (int) latch.getCount());
       }
       return builder.build();
+    }
+
+    private static String getRpcTypeString(RpcType rpcType) {
+      return CaseFormat.UPPER_UNDERSCORE.to(CaseFormat.UPPER_CAMEL, rpcType.name());
     }
   }
 }
