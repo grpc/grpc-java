@@ -59,11 +59,11 @@ public class DynamicReloadingCertificateProviderProviderTest {
   public void providerRegisteredName() {
     CertificateProviderProvider certProviderProvider =
         CertificateProviderRegistry.getInstance()
-            .getProvider(DynamicReloadingCertificateProviderProvider.ZATAR_PROVIDER_NAME);
+            .getProvider(DynamicReloadingCertificateProviderProvider.DYNAMIC_RELOADING_PROVIDER_NAME);
     assertThat(certProviderProvider).isInstanceOf(DynamicReloadingCertificateProviderProvider.class);
     DynamicReloadingCertificateProviderProvider dynamicReloadingCertificateProviderProvider =
         (DynamicReloadingCertificateProviderProvider) certProviderProvider;
-    assertThat(dynamicReloadingCertificateProviderProvider.zatarCertificateProviderFactory)
+    assertThat(dynamicReloadingCertificateProviderProvider.dynamicReloadingCertificateProviderFactory)
         .isSameInstanceAs(DynamicReloadingCertificateProvider.Factory.getInstance());
   }
 
@@ -72,7 +72,7 @@ public class DynamicReloadingCertificateProviderProviderTest {
     CertificateProvider.DistributorWatcher distWatcher =
         new CertificateProvider.DistributorWatcher();
     @SuppressWarnings("unchecked")
-    Map<String, ?> map = (Map<String, ?>) JsonParser.parse(MINIMAL_ZATAR_CONFIG);
+    Map<String, ?> map = (Map<String, ?>) JsonParser.parse(MINIMAL_DYNAMIC_RELOADING_CONFIG);
     ScheduledExecutorService mockService = mock(ScheduledExecutorService.class);
     when(scheduledExecutorServiceFactory.create()).thenReturn(mockService);
     provider.createCertificateProvider(map, distWatcher, true);
@@ -94,7 +94,7 @@ public class DynamicReloadingCertificateProviderProviderTest {
     CertificateProvider.DistributorWatcher distWatcher =
         new CertificateProvider.DistributorWatcher();
     @SuppressWarnings("unchecked")
-    Map<String, ?> map = (Map<String, ?>) JsonParser.parse(FULL_ZATAR_CONFIG);
+    Map<String, ?> map = (Map<String, ?>) JsonParser.parse(FULL_DYNAMIC_RELOADING_CONFIG);
     ScheduledExecutorService mockService = mock(ScheduledExecutorService.class);
     when(scheduledExecutorServiceFactory.create()).thenReturn(mockService);
     provider.createCertificateProvider(map, distWatcher, true);
@@ -167,7 +167,7 @@ public class DynamicReloadingCertificateProviderProviderTest {
     }
   }
 
-  private static final String MINIMAL_ZATAR_CONFIG =
+  private static final String MINIMAL_DYNAMIC_RELOADING_CONFIG =
       "{\n"
           + "        \"directory\": \"/var/run/gke-spiffe/certs/..data\","
           + "        \"certificate-file\": \"certificates.pem\","
@@ -175,7 +175,7 @@ public class DynamicReloadingCertificateProviderProviderTest {
           + "        \"ca-certificate-file\": \"ca_certificates.pem\""
           + "      }";
 
-  private static final String FULL_ZATAR_CONFIG =
+  private static final String FULL_DYNAMIC_RELOADING_CONFIG =
       "{\n"
           + "        \"directory\": \"/var/run/gke-spiffe/certs/..data1\","
           + "        \"certificate-file\": \"certificates2.pem\","
