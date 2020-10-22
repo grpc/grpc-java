@@ -36,35 +36,40 @@ import org.junit.runners.JUnit4;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
-/** Unit tests for {@link ZatarCertificateProviderProvider}. */
+/** Unit tests for {@link DynamicReloadingCertificateProviderProvider}. */
 @RunWith(JUnit4.class)
-public class ZatarCertificateProviderProviderTest {
+public class DynamicReloadingCertificateProviderProviderTest {
 
-  @Mock ZatarCertificateProvider.Factory zatarCertificateProviderFactory;
-  @Mock private ZatarCertificateProviderProvider.ScheduledExecutorServiceFactory
+  @Mock DynamicReloadingCertificateProvider.Factory dynamicReloadingCertificateProviderFactory;
+  @Mock private DynamicReloadingCertificateProviderProvider.ScheduledExecutorServiceFactory
       scheduledExecutorServiceFactory;
   @Mock private TimeProvider timeProvider;
 
-  private ZatarCertificateProviderProvider provider;
+  private DynamicReloadingCertificateProviderProvider provider;
 
   @Before
   public void setUp() throws IOException {
     MockitoAnnotations.initMocks(this);
     provider =
-        new ZatarCertificateProviderProvider(
-            zatarCertificateProviderFactory, scheduledExecutorServiceFactory, timeProvider);
+        new DynamicReloadingCertificateProviderProvider(
+            dynamicReloadingCertificateProviderFactory,
+            scheduledExecutorServiceFactory,
+            timeProvider);
   }
 
   @Test
   public void providerRegisteredName() {
     CertificateProviderProvider certProviderProvider =
         CertificateProviderRegistry.getInstance()
-            .getProvider(ZatarCertificateProviderProvider.ZATAR_PROVIDER_NAME);
-    assertThat(certProviderProvider).isInstanceOf(ZatarCertificateProviderProvider.class);
-    ZatarCertificateProviderProvider zatarCertificateProviderProvider =
-        (ZatarCertificateProviderProvider) certProviderProvider;
-    assertThat(zatarCertificateProviderProvider.zatarCertificateProviderFactory)
-        .isSameInstanceAs(ZatarCertificateProvider.Factory.getInstance());
+            .getProvider(
+                DynamicReloadingCertificateProviderProvider.DYNAMIC_RELOADING_PROVIDER_NAME);
+    assertThat(certProviderProvider)
+        .isInstanceOf(DynamicReloadingCertificateProviderProvider.class);
+    DynamicReloadingCertificateProviderProvider dynamicReloadingCertificateProviderProvider =
+        (DynamicReloadingCertificateProviderProvider) certProviderProvider;
+    assertThat(
+            dynamicReloadingCertificateProviderProvider.dynamicReloadingCertificateProviderFactory)
+        .isSameInstanceAs(DynamicReloadingCertificateProvider.Factory.getInstance());  
   }
 
   @Test
@@ -72,11 +77,11 @@ public class ZatarCertificateProviderProviderTest {
     CertificateProvider.DistributorWatcher distWatcher =
         new CertificateProvider.DistributorWatcher();
     @SuppressWarnings("unchecked")
-    Map<String, ?> map = (Map<String, ?>) JsonParser.parse(MINIMAL_ZATAR_CONFIG);
+    Map<String, ?> map = (Map<String, ?>) JsonParser.parse(MINIMAL_DYNAMIC_RELOADING_CONFIG);
     ScheduledExecutorService mockService = mock(ScheduledExecutorService.class);
     when(scheduledExecutorServiceFactory.create()).thenReturn(mockService);
     provider.createCertificateProvider(map, distWatcher, true);
-    verify(zatarCertificateProviderFactory, times(1))
+    verify(dynamicReloadingCertificateProviderFactory, times(1))
         .create(
             eq(distWatcher),
             eq(true),
@@ -94,11 +99,11 @@ public class ZatarCertificateProviderProviderTest {
     CertificateProvider.DistributorWatcher distWatcher =
         new CertificateProvider.DistributorWatcher();
     @SuppressWarnings("unchecked")
-    Map<String, ?> map = (Map<String, ?>) JsonParser.parse(FULL_ZATAR_CONFIG);
+    Map<String, ?> map = (Map<String, ?>) JsonParser.parse(FULL_DYNAMIC_RELOADING_CONFIG);
     ScheduledExecutorService mockService = mock(ScheduledExecutorService.class);
     when(scheduledExecutorServiceFactory.create()).thenReturn(mockService);
     provider.createCertificateProvider(map, distWatcher, true);
-    verify(zatarCertificateProviderFactory, times(1))
+    verify(dynamicReloadingCertificateProviderFactory, times(1))
         .create(
             eq(distWatcher),
             eq(true),
@@ -167,7 +172,7 @@ public class ZatarCertificateProviderProviderTest {
     }
   }
 
-  private static final String MINIMAL_ZATAR_CONFIG =
+  private static final String MINIMAL_DYNAMIC_RELOADING_CONFIG =
       "{\n"
           + "        \"directory\": \"/var/run/gke-spiffe/certs/..data\","
           + "        \"certificate-file\": \"certificates.pem\","
@@ -175,7 +180,7 @@ public class ZatarCertificateProviderProviderTest {
           + "        \"ca-certificate-file\": \"ca_certificates.pem\""
           + "      }";
 
-  private static final String FULL_ZATAR_CONFIG =
+  private static final String FULL_DYNAMIC_RELOADING_CONFIG =
       "{\n"
           + "        \"directory\": \"/var/run/gke-spiffe/certs/..data1\","
           + "        \"certificate-file\": \"certificates2.pem\","

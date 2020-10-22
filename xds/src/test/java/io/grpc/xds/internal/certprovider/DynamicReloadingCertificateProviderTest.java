@@ -58,9 +58,9 @@ import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
-/** Unit tests for {@link ZatarCertificateProvider}. */
+/** Unit tests for {@link DynamicReloadingCertificateProvider}. */
 @RunWith(JUnit4.class)
-public class ZatarCertificateProviderTest {
+public class DynamicReloadingCertificateProviderTest {
   private static final String CERT_FILE = "cert.pem";
   private static final String KEY_FILE = "key.pem";
   private static final String ROOT_FILE = "root.pem";
@@ -72,7 +72,7 @@ public class ZatarCertificateProviderTest {
   @Rule public TemporaryFolder tempFolder = new TemporaryFolder();
   private String symlink;
 
-  private ZatarCertificateProvider provider;
+  private DynamicReloadingCertificateProvider provider;
 
   @Before
   public void setUp() throws IOException {
@@ -83,7 +83,7 @@ public class ZatarCertificateProviderTest {
 
     symlink = new File(tempFolder.getRoot(), "..data").getAbsolutePath();
     provider =
-        new ZatarCertificateProvider(
+        new DynamicReloadingCertificateProvider(
             watcher,
             true,
             symlink,
