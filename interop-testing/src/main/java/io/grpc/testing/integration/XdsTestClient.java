@@ -82,8 +82,7 @@ public final class XdsTestClient {
   private int numChannels = 1;
   private boolean printResponse = false;
   private int qps = 1;
-  private volatile List<RpcType> rpcTypes = ImmutableList.of(RpcType.UNARY_CALL);
-  private volatile EnumMap<RpcType, Metadata> metadata = new EnumMap<>(RpcType.class);
+  private volatile RpcConfig rpcConfig;
   private int rpcTimeoutSec = 20;
   private String server = "localhost:8080";
   private int statsPort = 8081;
@@ -115,6 +114,8 @@ public final class XdsTestClient {
 
   private void parseArgs(String[] args) {
     boolean usage = false;
+    List<RpcType> rpcTypes = ImmutableList.of(RpcType.UNARY_CALL);
+    EnumMap<RpcType, Metadata> metadata = new EnumMap<>(RpcType.class);
     for (String arg : args) {
       if (!arg.startsWith("--")) {
         System.err.println("All arguments must start with '--': " + arg);
@@ -155,6 +156,7 @@ public final class XdsTestClient {
         break;
       }
     }
+    rpcConfig = new RpcConfig(rpcTypes, metadata);
 
     if (usage) {
       XdsTestClient c = new XdsTestClient();
@@ -261,14 +263,20 @@ public final class XdsTestClient {
   private void runQps() throws InterruptedException, ExecutionException {
     final SettableFuture<Void> failure = SettableFuture.create();
     final class PeriodicRpc implements Runnable {
-      private final RpcType rpcType;
-
-      private PeriodicRpc(RpcType rpcType) {
-        this.rpcType = rpcType;
-      }
 
       @Override
       public void run() {
+        RpcConfig config = rpcConfig;
+        for (RpcType type : config.rpcTypes) {
+          Metadata headers = config.metadata.get(type);
+          if (headers == null)  {
+            headers = new Metadata();
+          }
+          makeRpc(type, headers);
+        }
+      }
+
+      private void makeRpc(final RpcType rpcType, final Metadata headersToSend) {
         final long requestId;
         final Set<XdsStatsWatcher> savedWatchers = new HashSet<>();
         synchronized (lock) {
@@ -277,12 +285,6 @@ public final class XdsTestClient {
           savedWatchers.addAll(watchers);
         }
 
-        final Metadata headersToSend;
-        if (metadata.containsKey(rpcType)) {
-          headersToSend = metadata.get(rpcType);
-        } else {
-          headersToSend = new Metadata();
-        }
         ManagedChannel channel = channels.get((int) (requestId % channels.size()));
         TestServiceGrpc.TestServiceStub stub = TestServiceGrpc.newStub(channel);
         final AtomicReference<ClientCall<?, ?>> clientCallRef = new AtomicReference<>();
@@ -322,12 +324,12 @@ public final class XdsTestClient {
               new StreamObserver<EmptyProtos.Empty>() {
                 @Override
                 public void onCompleted() {
-                  handleRpcCompleted(requestId, hostnameRef.get(), savedWatchers);
+                  handleRpcCompleted(requestId, rpcType, hostnameRef.get(), savedWatchers);
                 }
 
                 @Override
                 public void onError(Throwable t) {
-                  handleRpcError(requestId, hostnameRef.get(), savedWatchers);
+                  handleRpcError(requestId, rpcType, hostnameRef.get(), savedWatchers);
                 }
 
                 @Override
@@ -341,7 +343,7 @@ public final class XdsTestClient {
               new StreamObserver<SimpleResponse>() {
                 @Override
                 public void onCompleted() {
-                  handleRpcCompleted(requestId, hostnameRef.get(), savedWatchers);
+                  handleRpcCompleted(requestId, rpcType, hostnameRef.get(), savedWatchers);
                 }
 
                 @Override
@@ -349,7 +351,7 @@ public final class XdsTestClient {
                   if (printResponse) {
                     logger.log(Level.WARNING, "Rpc failed: {0}", t);
                   }
-                  handleRpcError(requestId, hostnameRef.get(), savedWatchers);
+                  handleRpcError(requestId, rpcType, hostnameRef.get(), savedWatchers);
                 }
 
                 @Override
@@ -377,7 +379,7 @@ public final class XdsTestClient {
         }
       }
 
-      private void handleRpcCompleted(long requestId, String hostname,
+      private void handleRpcCompleted(long requestId, RpcType rpcType, String hostname,
           Set<XdsStatsWatcher> watchers) {
         int count = 0;
         if (rpcsSucceededByPeer.containsKey(hostname)) {
@@ -387,7 +389,7 @@ public final class XdsTestClient {
         notifyWatchers(watchers, rpcType, requestId, hostname);
       }
 
-      private void handleRpcError(long requestId, String hostname,
+      private void handleRpcError(long requestId, RpcType rpcType, String hostname,
           Set<XdsStatsWatcher> watchers) {
         rpcsFailed.getAndIncrement();
         notifyWatchers(watchers, rpcType, requestId, hostname);
@@ -395,26 +397,21 @@ public final class XdsTestClient {
     }
 
     long nanosPerQuery = TimeUnit.SECONDS.toNanos(1) / qps;
+    ListenableScheduledFuture<?> future =
+        exec.scheduleAtFixedRate(new PeriodicRpc(), 0, nanosPerQuery, TimeUnit.NANOSECONDS);
+    Futures.addCallback(
+        future,
+        new FutureCallback<Object>() {
 
-    for (RpcType rpcType : rpcTypes) {
-      ListenableScheduledFuture<?> future =
-          exec.scheduleAtFixedRate(
-              new PeriodicRpc(rpcType), 0, nanosPerQuery, TimeUnit.NANOSECONDS);
+          @Override
+          public void onFailure(Throwable t) {
+            failure.setException(t);
+          }
 
-      Futures.addCallback(
-          future,
-          new FutureCallback<Object>() {
-
-            @Override
-            public void onFailure(Throwable t) {
-              failure.setException(t);
-            }
-
-            @Override
-            public void onSuccess(Object o) {}
-          },
-          MoreExecutors.directExecutor());
-    }
+          @Override
+          public void onSuccess(Object o) {}
+        },
+        MoreExecutors.directExecutor());
 
     failure.get();
   }
@@ -438,10 +435,7 @@ public final class XdsTestClient {
             metadata.getValue());
         newMetadata.put(metadata.getType(), md);
       }
-      synchronized (lock) {
-        rpcTypes = request.getTypesList();
-        metadata = newMetadata;
-      }
+      rpcConfig = new RpcConfig(request.getTypesList(), newMetadata);
     }
   }
 
@@ -475,6 +469,17 @@ public final class XdsTestClient {
       }
       responseObserver.onNext(respBuilder.build());
       responseObserver.onCompleted();
+    }
+  }
+
+  /** RPC configurations that can be dynamically updated. */
+  private static final class RpcConfig {
+    private final List<RpcType> rpcTypes;
+    private final EnumMap<RpcType, Metadata> metadata;
+
+    private RpcConfig(List<RpcType> rpcTypes, EnumMap<RpcType, Metadata> metadata) {
+      this.rpcTypes = rpcTypes;
+      this.metadata = metadata;
     }
   }
 
