@@ -1,5 +1,9 @@
 plugins {
     id 'application' // Provide convenience executables for trying out the examples.
+    // ASSUMES GRADLE 5.6 OR HIGHER. Use plugin version 0.8.10 with earlier gradle versions
+    id 'com.google.protobuf' version '0.8.13'
+    // Generate IntelliJ IDEA's .idea & .iml project files
+    id 'idea'
     id 'java'
 }
 
@@ -19,25 +23,46 @@ targetCompatibility = 1.7
 // Feel free to delete the comment at the next line. It is just for safely
 // updating the version in our release process.
 def grpcVersion = '1.34.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+def nettyTcNativeVersion = '2.0.31.Final'
+def protocVersion = '3.12.0'
 
 dependencies {
-    // This example's client is the same as the helloworld client. We depend on the helloworld
-    // client's code here
-    implementation ':examples'
-    // The only change necessary is an extra runtime dependency on io.grpc:grpc-xds
-    runtimeOnly "io.grpc:grpc-xds:${grpcVersion}"
+    implementation "io.grpc:grpc-netty:${grpcVersion}"
+    implementation "io.grpc:grpc-protobuf:${grpcVersion}"
+    implementation "io.grpc:grpc-stub:${grpcVersion}"
+    implementation "io.grpc:grpc-xds:${grpcVersion}"
+    compileOnly "org.apache.tomcat:annotations-api:6.0.53"
+    runtimeOnly "io.netty:netty-tcnative-boringssl-static:${nettyTcNativeVersion}"
+}
+
+protobuf {
+    protoc { artifact = "com.google.protobuf:protoc:${protocVersion}" }
+    plugins {
+        grpc { artifact = "io.grpc:protoc-gen-grpc-java:${grpcVersion}" }
+    }
+    generateProtoTasks {
+        all()*.plugins { grpc {} }
+    }
 }
 
 startScripts.enabled = false
 
-task helloWorldClient(type: CreateStartScripts) {
-    mainClassName = 'io.grpc.examples.helloworld.HelloWorldClient'
-    applicationName = 'xds-hello-world-client'
+task helloWorldClientXds(type: CreateStartScripts) {
+    mainClassName = 'io.grpc.examples.helloworldxds.HelloWorldClientXds'
+    applicationName = 'hello-world-client-xds'
+    outputDir = new File(project.buildDir, 'tmp')
+    classpath = startScripts.classpath
+}
+
+task helloWorldServerXds(type: CreateStartScripts) {
+    mainClassName = 'io.grpc.examples.helloworldxds.HelloWorldServerXds'
+    applicationName = 'hello-world-server-xds'
     outputDir = new File(project.buildDir, 'tmp')
     classpath = startScripts.classpath
 }
 
 applicationDistribution.into('bin') {
-    from(helloWorldClient)
+    from(helloWorldClientXds)
+    from(helloWorldServerXds)
     fileMode = 0755
 }
