@@ -21,6 +21,7 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import io.grpc.ManagedChannel;
@@ -59,6 +60,28 @@ public class SharedXdsClientPoolProviderTest {
       return xdsClient;
     }
   };
+
+  @Test
+  public void getXdsClientPool_sharedInstance() throws XdsInitializationException {
+    ServerInfo server =
+        new ServerInfo("trafficdirector.googleapis.com",
+            Collections.singletonList(new ChannelCreds("insecure", null)),
+            Collections.<String>emptyList());
+    BootstrapInfo bootstrapInfo = new BootstrapInfo(Collections.singletonList(server), node, null);
+    Bootstrapper bootstrapper = mock(Bootstrapper.class);
+    when(bootstrapper.readBootstrap()).thenReturn(bootstrapInfo);
+    XdsChannelFactory channelFactory = mock(XdsChannelFactory.class);
+    when(channelFactory.createChannel(ArgumentMatchers.<ServerInfo>anyList())).thenReturn(channel);
+
+    SharedXdsClientPoolProvider provider =
+        new SharedXdsClientPoolProvider(bootstrapper, channelFactory);
+
+    ObjectPool<XdsClient> xdsClientPool = provider.getXdsClientPool();
+    verify(bootstrapper).readBootstrap();
+    verify(channelFactory).createChannel(Collections.singletonList(server));
+    assertThat(provider.getXdsClientPool()).isSameInstanceAs(xdsClientPool);
+    verifyNoMoreInteractions(bootstrapper, channelFactory);
+  }
 
   @SuppressWarnings("unchecked")
   @Test

@@ -18,7 +18,6 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -26,12 +25,10 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import io.grpc.CallOptions;
 import io.grpc.InternalConfigSelector;
 import io.grpc.InternalConfigSelector.Result;
-import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
@@ -47,15 +44,11 @@ import io.grpc.internal.JsonUtil;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.PickSubchannelArgsImpl;
 import io.grpc.testing.TestMethodDescriptors;
-import io.grpc.xds.Bootstrapper.BootstrapInfo;
-import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.ClusterWeight;
-import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.EnvoyProtoData.Route;
 import io.grpc.xds.EnvoyProtoData.RouteAction;
 import io.grpc.xds.EnvoyProtoData.VirtualHost;
 import io.grpc.xds.XdsClient.RdsResourceWatcher;
-import io.grpc.xds.XdsClient.XdsChannel;
 import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
 import java.io.IOException;
 import java.util.Arrays;
@@ -95,12 +88,6 @@ public class XdsNameResolverTest {
       return ConfigOrError.fromConfig(rawServiceConfig);
     }
   };
-  private final XdsChannelFactory channelFactory = new XdsChannelFactory() {
-    @Override
-    XdsChannel createChannel(List<ServerInfo> servers) throws XdsInitializationException {
-      return new XdsChannel(mock(ManagedChannel.class), false);
-    }
-  };
   private final FakeXdsClientPoolFactory xdsClientPoolFactory = new FakeXdsClientPoolFactory();
   private final String cluster1 = "cluster-foo.googleapis.com";
   private final String cluster2 = "cluster-bar.googleapis.com";
@@ -120,20 +107,8 @@ public class XdsNameResolverTest {
   @Before
   public void setUp() {
     XdsNameResolver.enableTimeout = true;
-    Bootstrapper bootstrapper = new Bootstrapper() {
-      @Override
-      public BootstrapInfo readBootstrap() {
-        return new BootstrapInfo(
-            ImmutableList.of(
-                new ServerInfo(
-                    "trafficdirector.googleapis.com",
-                    ImmutableList.<ChannelCreds>of(), ImmutableList.<String>of())),
-            Node.newBuilder().build(),
-            null);
-      }
-    };
-    resolver = new XdsNameResolver(AUTHORITY, serviceConfigParser, syncContext, bootstrapper,
-        channelFactory, xdsClientPoolFactory, mockRandom);
+    resolver = new XdsNameResolver(AUTHORITY, serviceConfigParser, syncContext,
+        xdsClientPoolFactory, mockRandom);
   }
 
   @After
@@ -147,52 +122,21 @@ public class XdsNameResolverTest {
   }
 
   @Test
-  public void resolving_failToBootstrap() {
-    Bootstrapper bootstrapper = new Bootstrapper() {
+  public void resolving_failToCreateXdsClientPool() {
+    XdsClientPoolFactory xdsClientPoolFactory = new XdsClientPoolFactory() {
       @Override
-      public BootstrapInfo readBootstrap() throws XdsInitializationException {
+      public ObjectPool<XdsClient> getXdsClientPool() throws XdsInitializationException {
         throw new XdsInitializationException("Fail to read bootstrap file");
       }
     };
-    resolver = new XdsNameResolver(AUTHORITY, serviceConfigParser, syncContext, bootstrapper,
-        channelFactory, xdsClientPoolFactory, mockRandom);
+    resolver = new XdsNameResolver(AUTHORITY, serviceConfigParser, syncContext,
+        xdsClientPoolFactory, mockRandom);
     resolver.start(mockListener);
     verify(mockListener).onError(errorCaptor.capture());
     Status error = errorCaptor.getValue();
     assertThat(error.getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(error.getDescription()).isEqualTo("Failed to initialize xDS");
     assertThat(error.getCause()).hasMessageThat().isEqualTo("Fail to read bootstrap file");
-  }
-
-  @Test
-  public void resolving_failToCreateXdsChannel() {
-    Bootstrapper bootstrapper = new Bootstrapper() {
-      @Override
-      public BootstrapInfo readBootstrap() {
-        return new BootstrapInfo(
-            ImmutableList.of(
-                new ServerInfo(
-                    "trafficdirector.googleapis.com",
-                    ImmutableList.<ChannelCreds>of(), ImmutableList.<String>of())),
-            Node.newBuilder().build(),
-            null);
-      }
-    };
-    XdsChannelFactory channelFactory = new XdsChannelFactory() {
-      @Override
-      XdsChannel createChannel(List<ServerInfo> servers) throws XdsInitializationException {
-        throw new XdsInitializationException("No server with supported channel creds found");
-      }
-    };
-    resolver = new XdsNameResolver(AUTHORITY, serviceConfigParser, syncContext, bootstrapper,
-        channelFactory, xdsClientPoolFactory, mockRandom);
-    resolver.start(mockListener);
-    verify(mockListener).onError(errorCaptor.capture());
-    Status error = errorCaptor.getValue();
-    assertThat(error.getCode()).isEqualTo(Code.UNAVAILABLE);
-    assertThat(error.getDescription()).isEqualTo("Failed to initialize xDS");
-    assertThat(error.getCause()).hasMessageThat()
-        .isEqualTo("No server with supported channel creds found");
   }
 
   @Test
@@ -740,9 +684,9 @@ public class XdsNameResolverTest {
   }
 
   private final class FakeXdsClientPoolFactory implements XdsClientPoolFactory {
+
     @Override
-    public ObjectPool<XdsClient> newXdsClientObjectPool(
-        BootstrapInfo bootstrapInfo, XdsChannel channel) {
+    public ObjectPool<XdsClient> getXdsClientPool() throws XdsInitializationException {
       return new ObjectPool<XdsClient>() {
         @Override
         public XdsClient getObject() {

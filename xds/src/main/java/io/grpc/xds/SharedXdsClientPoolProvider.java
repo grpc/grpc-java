@@ -26,13 +26,13 @@ import io.grpc.internal.SharedResourceHolder;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.XdsClient.XdsChannel;
-import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory2;
+import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
 import java.util.concurrent.ScheduledExecutorService;
 import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
 
 @ThreadSafe
-final class SharedXdsClientPoolProvider implements XdsClientPoolFactory2 {
+final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
   private final Bootstrapper bootstrapper;
   private final XdsChannelFactory channelFactory;
   private final Object lock = new Object();
