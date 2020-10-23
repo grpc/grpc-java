@@ -40,9 +40,7 @@ public abstract class InternalConfigSelector {
 
   public static final class Result {
     private final Status status;
-    @Nullable
     private final Object config;
-    @Nullable
     private final CallOptions callOptions;
     @Nullable
     private final Runnable committedCallback;
@@ -75,7 +73,6 @@ public abstract class InternalConfigSelector {
      * Returns a parsed config. Must have been returned via
      * ServiceConfigParser.parseServiceConfig().getConfig()
      */
-    @Nullable
     public Object getConfig() {
       return config;
     }
@@ -83,7 +80,6 @@ public abstract class InternalConfigSelector {
     /**
      * Returns a config-selector-modified CallOptions for the RPC.
      */
-    @Nullable
     public CallOptions getCallOptions() {
       return callOptions;
     }
@@ -108,7 +104,7 @@ public abstract class InternalConfigSelector {
       private Builder() {}
 
       /**
-       * Sets the parsed config.
+       * Sets the parsed config. This field is required.
        *
        * @return this
        */
@@ -118,7 +114,7 @@ public abstract class InternalConfigSelector {
       }
 
       /**
-       * Sets the CallOptions.
+       * Sets the CallOptions. This field is required.
        *
        * @return this
        */
@@ -128,12 +124,12 @@ public abstract class InternalConfigSelector {
       }
 
       /**
-       * Sets the interceptor.
+       * Sets the interceptor. This field is optional.
        *
        * @return this
        */
-      public Builder setCommittedCallback(@Nullable Runnable committedCallback) {
-        this.committedCallback = committedCallback;
+      public Builder setCommittedCallback(Runnable committedCallback) {
+        this.committedCallback = checkNotNull(committedCallback, "committedCallback");
         return this;
       }
 

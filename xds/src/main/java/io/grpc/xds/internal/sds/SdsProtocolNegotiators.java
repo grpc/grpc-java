@@ -19,6 +19,7 @@ package io.grpc.xds.internal.sds;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
 import io.grpc.netty.InternalNettyChannelBuilder;
 import io.grpc.netty.InternalNettyChannelBuilder.ProtocolNegotiatorFactory;
@@ -70,6 +71,17 @@ public final class SdsProtocolNegotiators {
   }
 
   /**
+   * Returns a {@link InternalProtocolNegotiator.ClientFactory} to be used on {@link
+   * NettyChannelBuilder}.
+   *
+   * @param fallbackNegotiator protocol negotiator to use as fallback.
+   */
+  public static InternalProtocolNegotiator.ClientFactory clientProtocolNegotiatorFactory(
+      @Nullable InternalProtocolNegotiator.ClientFactory fallbackNegotiator) {
+    return new ClientFactory(fallbackNegotiator);
+  }
+
+  /**
    * Creates an SDS based {@link ProtocolNegotiator} for a {@link io.grpc.netty.NettyServerBuilder}.
    * If xDS returns no DownstreamTlsContext, it will fall back to plaintext.
    *
@@ -80,6 +92,25 @@ public final class SdsProtocolNegotiators {
       @Nullable ProtocolNegotiator fallbackProtocolNegotiator) {
     return new ServerSdsProtocolNegotiator(new XdsClientWrapperForServerSds(port),
         fallbackProtocolNegotiator);
+  }
+
+  private static final class ClientFactory implements InternalProtocolNegotiator.ClientFactory {
+
+    private final InternalProtocolNegotiator.ClientFactory fallbackProtocolNegotiator;
+
+    private ClientFactory(InternalProtocolNegotiator.ClientFactory fallbackNegotiator) {
+      this.fallbackProtocolNegotiator = fallbackNegotiator;
+    }
+
+    @Override
+    public ProtocolNegotiator newNegotiator() {
+      return new ClientSdsProtocolNegotiator(fallbackProtocolNegotiator.newNegotiator());
+    }
+
+    @Override
+    public int getDefaultPort() {
+      return GrpcUtil.DEFAULT_PORT_SSL;
+    }
   }
 
   private static final class ClientSdsProtocolNegotiatorFactory

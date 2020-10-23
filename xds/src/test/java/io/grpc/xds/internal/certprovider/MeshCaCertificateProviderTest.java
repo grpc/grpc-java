@@ -101,7 +101,7 @@ public class MeshCaCertificateProviderTest {
   /**
    * Expire time of cert SERVER_0_PEM_FILE.
    */
-  private static final long CERT0_EXPIRY_TIME_MILLIS = 1899853658000L;
+  static final long CERT0_EXPIRY_TIME_MILLIS = 1899853658000L;
   /**
    * Cert validity of 12 hours for the above cert.
    */
@@ -538,7 +538,7 @@ public class MeshCaCertificateProviderTest {
     }
   }
 
-  private static class TestScheduledFuture<V> implements ScheduledFuture<V> {
+  static class TestScheduledFuture<V> implements ScheduledFuture<V> {
 
     static class Record {
       long timeout;

@@ -235,7 +235,9 @@ class XdsClientTestHelper {
     }
     if (upstreamTlsContext != null) {
       clusterBuilder.setTransportSocket(
-          TransportSocket.newBuilder().setName("tls").setTypedConfig(Any.pack(upstreamTlsContext)));
+          TransportSocket.newBuilder()
+              .setName("envoy.transport_sockets.tls")
+              .setTypedConfig(Any.pack(upstreamTlsContext)));
     }
     return clusterBuilder.build();
   }

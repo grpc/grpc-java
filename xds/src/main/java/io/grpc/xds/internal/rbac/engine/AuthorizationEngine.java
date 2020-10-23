@@ -85,7 +85,7 @@ public class AuthorizationEngine {
    */
   public AuthorizationEngine(RBAC rbacPolicy) {
     Map<String, Expr> conditions = new LinkedHashMap<>();
-    for (Map.Entry<String, Policy> policy: rbacPolicy.getPolicies().entrySet()) {
+    for (Map.Entry<String, Policy> policy: rbacPolicy.getPoliciesMap().entrySet()) {
       conditions.put(policy.getKey(), policy.getValue().getCondition());
     }
     allowEngine = (rbacPolicy.getAction() == Action.ALLOW) 
@@ -108,12 +108,12 @@ public class AuthorizationEngine {
         "Invalid RBAC list, " 
         + "must provide a RBAC with DENY action followed by a RBAC with ALLOW action. ");
     Map<String, Expr> denyConditions = new LinkedHashMap<>();
-    for (Map.Entry<String, Policy> policy: denyPolicy.getPolicies().entrySet()) {
+    for (Map.Entry<String, Policy> policy: denyPolicy.getPoliciesMap().entrySet()) {
       denyConditions.put(policy.getKey(), policy.getValue().getCondition());
     }
     denyEngine = new RbacEngine(Action.DENY, ImmutableMap.copyOf(denyConditions));
     Map<String, Expr> allowConditions = new LinkedHashMap<>();
-    for (Map.Entry<String, Policy> policy: allowPolicy.getPolicies().entrySet()) {
+    for (Map.Entry<String, Policy> policy: allowPolicy.getPoliciesMap().entrySet()) {
       allowConditions.put(policy.getKey(), policy.getValue().getCondition());
     }
     allowEngine = new RbacEngine(Action.ALLOW, ImmutableMap.copyOf(allowConditions));   

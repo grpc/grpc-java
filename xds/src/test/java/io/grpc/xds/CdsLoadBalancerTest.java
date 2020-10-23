@@ -467,6 +467,11 @@ public class CdsLoadBalancerTest {
       throw new UnsupportedOperationException("should not be called");
     }
 
+    @Override
+    public SynchronizationContext getSynchronizationContext() {
+      return syncContext;
+    }
+
     @Deprecated
     @Override
     public NameResolver.Factory getNameResolverFactory() {
