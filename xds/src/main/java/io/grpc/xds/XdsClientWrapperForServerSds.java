@@ -135,8 +135,8 @@ public final class XdsClientWrapperForServerSds {
     }
     Node node = bootstrapInfo.getNode();
     timeService = SharedResourceHolder.get(timeServiceResource);
-    XdsClientImpl2 xdsClientImpl =
-        new XdsClientImpl2(
+    XdsClient xdsClientImpl =
+        new ServerXdsClient(
             channel,
             node,
             createSynchronizationContext(),
