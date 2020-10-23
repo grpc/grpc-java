@@ -83,9 +83,10 @@ public class SharedXdsClientPoolProviderTest {
     verifyNoMoreInteractions(bootstrapper, channelFactory);
   }
 
-  @SuppressWarnings("unchecked")
+  @SuppressWarnings({"unchecked", "rawtypes"})
   @Test
-  public void getXdsClientPool_concurrent() throws InterruptedException, XdsInitializationException {
+  public void getXdsClientPool_concurrent()
+      throws InterruptedException, XdsInitializationException {
     int numThreads = 3;
     ExecutorService executor = Executors.newFixedThreadPool(numThreads);
     BootstrapInfo bootstrapInfo = new BootstrapInfo(

@@ -31,6 +31,10 @@ import java.util.concurrent.ScheduledExecutorService;
 import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
 
+/**
+ * The global factory for creating a singleton {@link XdsClient} instance to be used by all gRPC
+ * clients in the process.
+ */
 @ThreadSafe
 final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
   private final Bootstrapper bootstrapper;
@@ -73,6 +77,7 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
     private static final SharedXdsClientPoolProvider instance = new SharedXdsClientPoolProvider();
   }
 
+  @ThreadSafe
   @VisibleForTesting
   static class RefCountedXdsClientObjectPool implements ObjectPool<XdsClient> {
     private final XdsChannel channel;
@@ -122,13 +127,14 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
       }
     }
 
+    // Introduced for testing.
     @VisibleForTesting
-    static abstract class XdsClientFactory {
+    abstract static class XdsClientFactory {
       private static final XdsClientFactory INSTANCE = new XdsClientFactory() {
         @Override
         XdsClient newXdsClient(XdsChannel channel, Node node,
             ScheduledExecutorService timeService) {
-          return new XdsClientImpl3(channel, node, timeService,
+          return new ClientXdsClient(channel, node, timeService,
               new ExponentialBackoffPolicy.Provider(), GrpcUtil.STOPWATCH_SUPPLIER);
         }
       };
