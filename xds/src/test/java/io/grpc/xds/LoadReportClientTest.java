@@ -44,7 +44,6 @@ import io.grpc.Context;
 import io.grpc.Context.CancellationListener;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
-import io.grpc.SynchronizationContext;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.BackoffPolicy;
@@ -114,13 +113,6 @@ public class LoadReportClientTest {
 
   @Rule
   public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
-  private final SynchronizationContext syncContext = new SynchronizationContext(
-      new Thread.UncaughtExceptionHandler() {
-        @Override
-        public void uncaughtException(Thread t, Throwable e) {
-          throw new AssertionError(e);
-        }
-      });
   private final FakeClock fakeClock = new FakeClock();
   private final ArrayDeque<StreamObserver<LoadStatsRequest>> lrsRequestObservers =
       new ArrayDeque<>();
@@ -142,6 +134,8 @@ public class LoadReportClientTest {
   private BackoffPolicy backoffPolicy2;
   @Captor
   private ArgumentCaptor<StreamObserver<LoadStatsResponse>> lrsResponseObserverCaptor;
+  @Captor
+  private ArgumentCaptor<Throwable> errorCaptor;
 
   private LoadReportingServiceGrpc.LoadReportingServiceImplBase mockLoadReportingService;
   private ManagedChannel channel;
@@ -187,7 +181,6 @@ public class LoadReportClientTest {
             loadStatsManager,
             new XdsChannel(channel, false),
             NODE,
-            syncContext,
             fakeClock.getScheduledExecutorService(),
             backoffPolicyProvider,
             fakeClock.getStopwatchSupplier());
@@ -407,7 +400,55 @@ public class LoadReportClientTest {
   }
 
   @Test
-  public void raceBetweenLoadReportingAndLbStreamClosure() {
+  public void raceBetweenStopAndLoadReporting() {
+    verify(mockLoadReportingService).streamLoadStats(lrsResponseObserverCaptor.capture());
+    StreamObserver<LoadStatsResponse> responseObserver = lrsResponseObserverCaptor.getValue();
+    StreamObserver<LoadStatsRequest> requestObserver =
+        Iterables.getOnlyElement(lrsRequestObservers);
+    verify(requestObserver).onNext(eq(buildInitialRequest()));
+
+    responseObserver.onNext(buildLrsResponse(Collections.singletonList(CLUSTER1), 1234));
+    assertEquals(1, fakeClock.numPendingTasks(LOAD_REPORTING_TASK_FILTER));
+    FakeClock.ScheduledTask scheduledTask =
+        Iterables.getOnlyElement(fakeClock.getPendingTasks(LOAD_REPORTING_TASK_FILTER));
+    assertEquals(1234, scheduledTask.getDelay(TimeUnit.NANOSECONDS));
+
+    fakeClock.forwardNanos(1233);
+    lrsClient.stopLoadReporting();
+    verify(requestObserver).onError(errorCaptor.capture());
+    assertEquals("CANCELLED: client cancelled", errorCaptor.getValue().getMessage());
+    assertThat(scheduledTask.isCancelled()).isTrue();
+    fakeClock.forwardNanos(1);
+    assertEquals(0, fakeClock.numPendingTasks(LOAD_REPORTING_TASK_FILTER));
+    fakeClock.forwardNanos(1234);
+    verifyNoMoreInteractions(requestObserver);
+  }
+
+  @Test
+  public void raceBetweenStopAndLrsStreamRetry() {
+    verify(mockLoadReportingService).streamLoadStats(lrsResponseObserverCaptor.capture());
+    StreamObserver<LoadStatsResponse> responseObserver = lrsResponseObserverCaptor.getValue();
+    StreamObserver<LoadStatsRequest> requestObserver =
+        Iterables.getOnlyElement(lrsRequestObservers);
+    verify(requestObserver).onNext(eq(buildInitialRequest()));
+
+    responseObserver.onCompleted();
+    assertEquals(1, fakeClock.numPendingTasks(LRS_RPC_RETRY_TASK_FILTER));
+    FakeClock.ScheduledTask scheduledTask =
+        Iterables.getOnlyElement(fakeClock.getPendingTasks(LRS_RPC_RETRY_TASK_FILTER));
+    assertEquals(1, scheduledTask.getDelay(TimeUnit.SECONDS));
+
+    fakeClock.forwardTime(999, TimeUnit.MILLISECONDS);
+    lrsClient.stopLoadReporting();
+    assertThat(scheduledTask.isCancelled()).isTrue();
+    fakeClock.forwardTime(1, TimeUnit.MILLISECONDS);
+    assertEquals(0, fakeClock.numPendingTasks(LRS_RPC_RETRY_TASK_FILTER));
+    fakeClock.forwardTime(10, TimeUnit.SECONDS);
+    verifyNoMoreInteractions(requestObserver);
+  }
+
+  @Test
+  public void raceBetweenLoadReportingAndLrsStreamClosure() {
     verify(mockLoadReportingService).streamLoadStats(lrsResponseObserverCaptor.capture());
     StreamObserver<LoadStatsResponse> responseObserver = lrsResponseObserverCaptor.getValue();
     assertThat(lrsRequestObservers).hasSize(1);

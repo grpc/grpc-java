@@ -111,7 +111,6 @@ final class XdsClientImpl2 extends XdsClient {
   private final SynchronizationContext syncContext;
   private final ScheduledExecutorService timeService;
   private final BackoffPolicy.Provider backoffPolicyProvider;
-  private final Supplier<Stopwatch> stopwatchSupplier;
   private final Stopwatch adsStreamRetryStopwatch;
   // The node identifier to be included in xDS requests. Management server only requires the
   // first request to carry the node identifier on a stream. It should be identical if present
@@ -124,6 +123,7 @@ final class XdsClientImpl2 extends XdsClient {
   private final Map<String, ResourceSubscriber> edsResourceSubscribers = new HashMap<>();
 
   private final LoadStatsManager loadStatsManager = new LoadStatsManager();
+  private final LoadReportClient lrsClient;
 
   // Last successfully applied version_info for each resource type. Starts with empty string.
   // A version_info is used to update management server with client's most recent knowledge of
@@ -139,9 +139,7 @@ final class XdsClientImpl2 extends XdsClient {
   private BackoffPolicy retryBackoffPolicy;
   @Nullable
   private ScheduledHandle rpcRetryTimer;
-  @Nullable
-  private LoadReportClient lrsClient;
-  private int loadReportCount;  // number of clusters enabling load reporting
+  private boolean reportingLoad;
 
   // For server side usage.
   @Nullable
@@ -162,8 +160,9 @@ final class XdsClientImpl2 extends XdsClient {
     this.syncContext = checkNotNull(syncContext, "syncContext");
     this.timeService = checkNotNull(timeService, "timeService");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
-    this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatch");
-    adsStreamRetryStopwatch = stopwatchSupplier.get();
+    adsStreamRetryStopwatch = checkNotNull(stopwatchSupplier, "stopwatchSupplier").get();
+    lrsClient = new LoadReportClient(loadStatsManager, xdsChannel, node, timeService,
+        backoffPolicyProvider, stopwatchSupplier);
     logId = InternalLogId.allocate("xds-client", null);
     logger = XdsLogger.withLogId(logId);
     logger.log(XdsLogLevel.INFO, "Created");
@@ -177,9 +176,8 @@ final class XdsClientImpl2 extends XdsClient {
       adsStream.close(Status.CANCELLED.withDescription("shutdown").asException());
     }
     cleanUpResourceTimers();
-    if (lrsClient != null) {
+    if (reportingLoad) {
       lrsClient.stopLoadReporting();
-      lrsClient = null;
     }
     if (rpcRetryTimer != null) {
       rpcRetryTimer.cancel();
@@ -339,44 +337,19 @@ final class XdsClientImpl2 extends XdsClient {
   }
 
   @Override
-  void reportClientStats() {
-    if (lrsClient == null) {
-      logger.log(XdsLogLevel.INFO, "Turning on load reporting");
-      lrsClient =
-          new LoadReportClient(
-              loadStatsManager,
-              xdsChannel,
-              node,
-              syncContext,
-              timeService,
-              backoffPolicyProvider,
-              stopwatchSupplier);
-    }
-    if (loadReportCount == 0) {
-      lrsClient.startLoadReporting();
-    }
-    loadReportCount++;
-  }
-
-  @Override
-  void cancelClientStatsReport() {
-    checkState(loadReportCount > 0, "load reporting was never started");
-    loadReportCount--;
-    if (loadReportCount == 0) {
-      logger.log(XdsLogLevel.INFO, "Turning off load reporting");
-      lrsClient.stopLoadReporting();
-      lrsClient = null;
-    }
-  }
-
-  @Override
   LoadStatsStore addClientStats(String clusterName, @Nullable String clusterServiceName) {
-    return loadStatsManager.addLoadStats(clusterName, clusterServiceName);
+    LoadStatsStore loadStatsStore = loadStatsManager.addLoadStats(clusterName, clusterServiceName);
+    if (!reportingLoad) {
+      lrsClient.startLoadReporting();
+      reportingLoad = true;
+    }
+    return loadStatsStore;
   }
 
   @Override
   void removeClientStats(String clusterName, @Nullable String clusterServiceName) {
     loadStatsManager.removeLoadStats(clusterName, clusterServiceName);
+    // TODO(chengyuanzhang): stop load reporting if containing no stats.
   }
 
   @Override

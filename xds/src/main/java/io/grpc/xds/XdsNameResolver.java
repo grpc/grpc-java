@@ -86,7 +86,7 @@ final class XdsNameResolver extends NameResolver {
   private final ConcurrentMap<String, AtomicInteger> clusterRefs = new ConcurrentHashMap<>();
   private final ConfigSelector configSelector = new ConfigSelector();
 
-  private volatile List<Route> currentRoutes = Collections.emptyList();
+  private volatile RoutingConfig routingConfig = RoutingConfig.empty;
   private Listener2 listener;
   private ObjectPool<XdsClient> xdsClientPool;
   private XdsClient xdsClient;
@@ -326,7 +326,7 @@ final class XdsNameResolver extends NameResolver {
       String cluster = null;
       Route selectedRoute = null;
       do {
-        for (Route route : currentRoutes) {
+        for (Route route : routingConfig.routes) {
           if (route.getRouteMatch().matches(
               "/" + args.getMethodDescriptor().getFullMethodName(), asciiHeaders)) {
             selectedRoute = route;
@@ -359,8 +359,13 @@ final class XdsNameResolver extends NameResolver {
       // TODO(chengyuanzhang): avoid service config generation and parsing for each call.
       Map<String, ?> rawServiceConfig = Collections.emptyMap();
       if (enableTimeout) {
-        rawServiceConfig = generateServiceConfigWithMethodTimeoutConfig(
-            selectedRoute.getRouteAction().getTimeoutNano());
+        Long timeoutNano = selectedRoute.getRouteAction().getTimeoutNano();
+        if (timeoutNano == null) {
+          timeoutNano = routingConfig.fallbackTimeoutNano;
+        }
+        if (timeoutNano > 0) {
+          rawServiceConfig = generateServiceConfigWithMethodTimeoutConfig(timeoutNano);
+        }
       }
       ConfigOrError parsedServiceConfig = serviceConfigParser.parseServiceConfig(rawServiceConfig);
       Object config = parsedServiceConfig.getConfig();
@@ -425,44 +430,71 @@ final class XdsNameResolver extends NameResolver {
             .setServiceConfig(emptyServiceConfig)
             // let channel take action for no config selector
             .build();
+    private boolean stopped;
     private Set<String> existingClusters;
     @Nullable
     private String rdsResource;
     @Nullable
     private RdsResourceWatcher rdsWatcher;
+    private long httpMaxStreamDurationNano;
 
     @Override
-    public void onChanged(LdsUpdate update) {
-      logger.log(XdsLogLevel.INFO, "Receive LDS resource update: {0}", update);
-      List<VirtualHost> virtualHosts = update.getVirtualHosts();
-      String rdsName = update.getRdsName();
-      if (rdsName != null && rdsName.equals(rdsResource)) {
-        return;
-      }
-      cleanUpRdsWatcher();
-      if (virtualHosts != null) {
-        updateRoutes(virtualHosts);
-      } else {
-        rdsResource = rdsName;
-        rdsWatcher = new RdsResourceWatcherImpl();
-        logger.log(XdsLogLevel.INFO, "Start watching RDS resource {0}", rdsResource);
-        xdsClient.watchRdsResource(rdsResource, rdsWatcher);
-      }
+    public void onChanged(final LdsUpdate update) {
+      syncContext.execute(new Runnable() {
+        @Override
+        public void run() {
+          if (stopped) {
+            return;
+          }
+          logger.log(XdsLogLevel.INFO, "Receive LDS resource update: {0}", update);
+          httpMaxStreamDurationNano = update.getHttpMaxStreamDurationNano();
+          List<VirtualHost> virtualHosts = update.getVirtualHosts();
+          String rdsName = update.getRdsName();
+          if (rdsName != null && rdsName.equals(rdsResource)) {
+            return;
+          }
+          cleanUpRdsWatcher();
+          if (virtualHosts != null) {
+            updateRoutes(virtualHosts);
+          } else {
+            rdsResource = rdsName;
+            rdsWatcher = new RdsResourceWatcherImpl();
+            logger.log(XdsLogLevel.INFO, "Start watching RDS resource {0}", rdsResource);
+            xdsClient.watchRdsResource(rdsResource, rdsWatcher);
+          }
+        }
+      });
     }
 
     @Override
-    public void onError(Status error) {
-      logger.log(
-          XdsLogLevel.WARNING,
-          "Received error from xDS client {0}: {1}", xdsClient, error.getDescription());
-      listener.onError(error);
+    public void onError(final Status error) {
+      syncContext.execute(new Runnable() {
+        @Override
+        public void run() {
+          if (stopped) {
+            return;
+          }
+          logger.log(
+              XdsLogLevel.WARNING,
+              "Received error from xDS client {0}: {1}", xdsClient, error.getDescription());
+          listener.onError(error);
+        }
+      });
     }
 
     @Override
-    public void onResourceDoesNotExist(String resourceName) {
-      logger.log(XdsLogLevel.INFO, "LDS resource {0} unavailable", resourceName);
-      cleanUpRdsWatcher();
-      listener.onResult(emptyResult);
+    public void onResourceDoesNotExist(final String resourceName) {
+      syncContext.execute(new Runnable() {
+        @Override
+        public void run() {
+          if (stopped) {
+            return;
+          }
+          logger.log(XdsLogLevel.INFO, "LDS resource {0} unavailable", resourceName);
+          cleanUpRdsWatcher();
+          listener.onResult(emptyResult);
+        }
+      });
     }
 
     private void start() {
@@ -472,6 +504,7 @@ final class XdsNameResolver extends NameResolver {
 
     private void stop() {
       logger.log(XdsLogLevel.INFO, "Stop watching LDS resource {0}", authority);
+      stopped = true;
       cleanUpRdsWatcher();
       xdsClient.cancelLdsResourceWatch(authority, this);
     }
@@ -479,6 +512,8 @@ final class XdsNameResolver extends NameResolver {
     private void updateRoutes(List<VirtualHost> virtualHosts) {
       VirtualHost virtualHost = findVirtualHostForHostName(virtualHosts, authority);
       if (virtualHost == null) {
+        logger.log(XdsLogLevel.WARNING,
+            "Failed to find virtual host matching hostname {0}", authority);
         listener.onResult(emptyResult);
         return;
       }
@@ -515,7 +550,7 @@ final class XdsNameResolver extends NameResolver {
       }
       // Make newly added clusters selectable by config selector and deleted clusters no longer
       // selectable.
-      currentRoutes = routes;
+      routingConfig = new RoutingConfig(httpMaxStreamDurationNano, routes);
       shouldUpdateResult = false;
       for (String cluster : deletedClusters) {
         int count = clusterRefs.get(cluster).decrementAndGet();
@@ -541,23 +576,62 @@ final class XdsNameResolver extends NameResolver {
     private class RdsResourceWatcherImpl implements RdsResourceWatcher {
 
       @Override
-      public void onChanged(RdsUpdate update) {
-        updateRoutes(update.getVirtualHosts());
+      public void onChanged(final RdsUpdate update) {
+        syncContext.execute(new Runnable() {
+          @Override
+          public void run() {
+            if (RdsResourceWatcherImpl.this != rdsWatcher) {
+              return;
+            }
+            updateRoutes(update.getVirtualHosts());
+          }
+        });
       }
 
       @Override
-      public void onError(Status error) {
-        logger.log(
-            XdsLogLevel.WARNING,
-            "Received error from xDS client {0}: {1}", xdsClient, error.getDescription());
-        listener.onError(error);
+      public void onError(final Status error) {
+        syncContext.execute(new Runnable() {
+          @Override
+          public void run() {
+            if (RdsResourceWatcherImpl.this != rdsWatcher) {
+              return;
+            }
+            logger.log(
+                XdsLogLevel.WARNING,
+                "Received error from xDS client {0}: {1}", xdsClient, error.getDescription());
+            listener.onError(error);
+          }
+        });
       }
 
       @Override
-      public void onResourceDoesNotExist(String resourceName) {
-        logger.log(XdsLogLevel.INFO, "RDS resource {0} unavailable", resourceName);
-        listener.onResult(emptyResult);
+      public void onResourceDoesNotExist(final String resourceName) {
+        syncContext.execute(new Runnable() {
+          @Override
+          public void run() {
+            if (RdsResourceWatcherImpl.this != rdsWatcher) {
+              return;
+            }
+            logger.log(XdsLogLevel.INFO, "RDS resource {0} unavailable", resourceName);
+            listener.onResult(emptyResult);
+          }
+        });
       }
+    }
+  }
+
+  /**
+   * Grouping of the list of usable routes and their corresponding fallback timeout value.
+   */
+  private static class RoutingConfig {
+    private long fallbackTimeoutNano;
+    private List<Route> routes;
+
+    private static RoutingConfig empty = new RoutingConfig(0L, Collections.<Route>emptyList());
+
+    private RoutingConfig(long fallbackTimeoutNano, List<Route> routes) {
+      this.fallbackTimeoutNano = fallbackTimeoutNano;
+      this.routes = routes;
     }
   }
 }
