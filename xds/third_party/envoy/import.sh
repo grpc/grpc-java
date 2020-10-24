@@ -80,6 +80,7 @@ envoy/config/core/v3/protocol.proto
 envoy/config/core/v3/proxy_protocol.proto
 envoy/config/core/v3/socket_option.proto
 envoy/config/core/v3/substitution_format_string.proto
+envoy/config/cluster/aggregate/v2alpha/cluster.proto
 envoy/config/endpoint/v3/endpoint.proto
 envoy/config/endpoint/v3/endpoint_components.proto
 envoy/config/endpoint/v3/load_report.proto
