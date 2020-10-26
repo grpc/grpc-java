@@ -65,11 +65,11 @@ import io.grpc.internal.FakeClock;
 import io.grpc.internal.FakeClock.TaskFilter;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
+import io.grpc.xds.AbstractXdsClient.ResourceType;
 import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.XdsClient.ListenerUpdate;
 import io.grpc.xds.XdsClient.ListenerWatcher;
 import io.grpc.xds.XdsClient.XdsChannel;
-import io.grpc.xds.XdsClientImpl2.ResourceType;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import java.io.IOException;
 import java.util.ArrayDeque;
@@ -91,7 +91,7 @@ import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
 /**
- * Tests for {@link XdsClientImpl2 for server side Listeners using newServerApi}.
+ * Tests for {@link ServerXdsClient for server side Listeners using newServerApi}.
  */
 @RunWith(JUnit4.class)
 public class ServerXdsClientNewServerApiTest {
@@ -108,7 +108,7 @@ public class ServerXdsClientNewServerApiTest {
       new TaskFilter() {
         @Override
         public boolean shouldAccept(Runnable command) {
-          return command.toString().contains(XdsClientImpl2.RpcRetryTask.class.getSimpleName());
+          return command.toString().contains(AbstractXdsClient.RpcRetryTask.class.getSimpleName());
         }
       };
   private static final TaskFilter LISTENER_RESOURCE_FETCH_TIMEOUT_TASK_FILTER =
@@ -116,7 +116,7 @@ public class ServerXdsClientNewServerApiTest {
         @Override
         public boolean shouldAccept(Runnable command) {
           return command.toString()
-              .contains(XdsClientImpl2.ListenerResourceFetchTimeoutTask.class.getSimpleName());
+              .contains(ServerXdsClient.ListenerResourceFetchTimeoutTask.class.getSimpleName());
         }
       };
   private static final String LISTENER_NAME = "TRAFFICDIRECTOR_INBOUND_LISTENER";
@@ -269,7 +269,7 @@ public class ServerXdsClientNewServerApiTest {
     verify(listenerWatcher, never()).onListenerChanged(any(ListenerUpdate.class));
     verify(listenerWatcher, never()).onResourceDoesNotExist(":" + PORT);
     verify(listenerWatcher, never()).onError(any(Status.class));
-    fakeClock.forwardTime(XdsClientImpl2.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(ServerXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(listenerWatcher).onResourceDoesNotExist(":" + PORT);
     assertThat(fakeClock.getPendingTasks(LISTENER_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
@@ -489,7 +489,7 @@ public class ServerXdsClientNewServerApiTest {
     verify(listenerWatcher, never()).onListenerChanged(any(ListenerUpdate.class));
     verify(listenerWatcher, never()).onResourceDoesNotExist(":" + PORT);
     verify(listenerWatcher, never()).onError(any(Status.class));
-    fakeClock.forwardTime(XdsClientImpl2.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(ServerXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(listenerWatcher).onResourceDoesNotExist(":" + PORT);
     assertThat(fakeClock.getPendingTasks(LISTENER_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
