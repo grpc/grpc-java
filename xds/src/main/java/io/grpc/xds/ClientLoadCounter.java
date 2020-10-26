@@ -42,7 +42,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * pairs.
  *
  * <p>This class is thread-safe for recording client call stats and backend metrics.
- * 
+ *
  * <p>Calls of {@link #snapshot()} must be serialized externally.
  */
 final class ClientLoadCounter {
