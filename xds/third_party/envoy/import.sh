@@ -113,6 +113,7 @@ envoy/config/trace/v3/opencensus.proto
 envoy/config/trace/v3/service.proto
 envoy/config/trace/v3/zipkin.proto
 envoy/config/rbac/v2/rbac.proto
+envoy/extensions/clusters/aggregate/v3/cluster.proto
 envoy/extensions/filters/network/http_connection_manager/v3/http_connection_manager.proto
 envoy/extensions/transport_sockets/tls/v3/cert.proto
 envoy/extensions/transport_sockets/tls/v3/common.proto
