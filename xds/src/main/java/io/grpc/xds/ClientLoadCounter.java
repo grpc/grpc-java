@@ -35,16 +35,16 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
-import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Client side load stats recorder that provides RPC counting and metrics recording as name-value
  * pairs.
  *
- * <p>All methods except {@link #snapshot()} in this class are thread-safe.
+ * <p>This class is thread-safe for recording client call stats and backend metrics.
+ * 
+ * <p>Calls of {@link #snapshot()} must be serialized externally.
  */
-@NotThreadSafe
 final class ClientLoadCounter {
 
   private static final int THREAD_BALANCING_FACTOR = 64;
@@ -83,6 +83,8 @@ final class ClientLoadCounter {
   /**
    * Generates a snapshot for load stats recorded in this counter for the interval between calls
    * of this method.
+   *
+   * <p>Calls to this method must be serialized externally.
    */
   ClientLoadSnapshot snapshot() {
     Map<String, MetricValue> aggregatedValues = new HashMap<>();
@@ -131,11 +133,6 @@ final class ClientLoadCounter {
    * read-only copy of load stats recorded for some period of time.
    */
   static final class ClientLoadSnapshot {
-
-    @VisibleForTesting
-    @SuppressWarnings("unchecked")
-    static final ClientLoadSnapshot EMPTY_SNAPSHOT =
-        new ClientLoadSnapshot(0, 0, 0, 0, Collections.EMPTY_MAP);
     private final long callsSucceeded;
     private final long callsInProgress;
     private final long callsFailed;
