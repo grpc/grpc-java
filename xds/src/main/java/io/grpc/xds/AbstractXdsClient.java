@@ -64,13 +64,20 @@ abstract class AbstractXdsClient extends XdsClient {
       "type.googleapis.com/envoy.api.v2.RouteConfiguration";
   private static final String ADS_TYPE_URL_RDS =
       "type.googleapis.com/envoy.config.route.v3.RouteConfiguration";
-  private static final String ADS_TYPE_URL_CDS_V2 = "type.googleapis.com/envoy.api.v2.Cluster";
+  @VisibleForTesting
+  static final String ADS_TYPE_URL_CDS_V2 = "type.googleapis.com/envoy.api.v2.Cluster";
   private static final String ADS_TYPE_URL_CDS =
       "type.googleapis.com/envoy.config.cluster.v3.Cluster";
   private static final String ADS_TYPE_URL_EDS_V2 =
       "type.googleapis.com/envoy.api.v2.ClusterLoadAssignment";
   private static final String ADS_TYPE_URL_EDS =
       "type.googleapis.com/envoy.config.endpoint.v3.ClusterLoadAssignment";
+  @VisibleForTesting
+  static final String TYPE_URL_UPSTREAM_TLS_CONTEXT =
+      "type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext";
+  @VisibleForTesting
+  static final String TYPE_URL_UPSTREAM_TLS_CONTEXT_V2 =
+      "type.googleapis.com/envoy.api.v2.auth.UpstreamTlsContext";
 
   private final MessagePrinter respPrinter = new MessagePrinter();
   private final InternalLogId logId;

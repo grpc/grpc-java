@@ -371,6 +371,9 @@ final class ClientXdsClient extends AbstractXdsClient {
     if (cluster.hasTransportSocket()
         && TRANSPORT_SOCKET_NAME_TLS.equals(cluster.getTransportSocket().getName())) {
       Any any = cluster.getTransportSocket().getTypedConfig();
+      if (any.getTypeUrl().equals(TYPE_URL_UPSTREAM_TLS_CONTEXT_V2)) {
+        any = any.toBuilder().setTypeUrl(TYPE_URL_UPSTREAM_TLS_CONTEXT).build();
+      }
       return EnvoyServerProtoData.UpstreamTlsContext.fromEnvoyProtoUpstreamTlsContext(
           any.unpack(UpstreamTlsContext.class));
     }
