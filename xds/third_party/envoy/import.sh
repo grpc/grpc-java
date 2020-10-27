@@ -80,7 +80,6 @@ envoy/config/core/v3/protocol.proto
 envoy/config/core/v3/proxy_protocol.proto
 envoy/config/core/v3/socket_option.proto
 envoy/config/core/v3/substitution_format_string.proto
-envoy/config/cluster/aggregate/v2alpha/cluster.proto
 envoy/config/endpoint/v3/endpoint.proto
 envoy/config/endpoint/v3/endpoint_components.proto
 envoy/config/endpoint/v3/load_report.proto
@@ -113,6 +112,7 @@ envoy/config/trace/v3/opencensus.proto
 envoy/config/trace/v3/service.proto
 envoy/config/trace/v3/zipkin.proto
 envoy/config/rbac/v2/rbac.proto
+envoy/extensions/clusters/aggregate/v3/cluster.proto
 envoy/extensions/filters/network/http_connection_manager/v3/http_connection_manager.proto
 envoy/extensions/transport_sockets/tls/v3/cert.proto
 envoy/extensions/transport_sockets/tls/v3/common.proto
