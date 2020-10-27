@@ -56,8 +56,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
@@ -77,7 +75,7 @@ public final class XdsTestClient {
   private final List<ManagedChannel> channels = new ArrayList<>();
   private final AtomicInteger rpcsStarted = new AtomicInteger();
   private final AtomicInteger rpcsFailed = new AtomicInteger();
-  private final ConcurrentMap<String, Integer> rpcsSucceededByPeer = new ConcurrentHashMap<>();
+  private final AtomicInteger rpcsSucceeded = new AtomicInteger();
 
   private int numChannels = 1;
   private boolean printResponse = false;
@@ -381,11 +379,7 @@ public final class XdsTestClient {
 
       private void handleRpcCompleted(long requestId, RpcType rpcType, String hostname,
           Set<XdsStatsWatcher> watchers) {
-        int count = 0;
-        if (rpcsSucceededByPeer.containsKey(hostname)) {
-          count = rpcsSucceededByPeer.get(hostname);
-        }
-        rpcsSucceededByPeer.put(hostname, count + 1);
+        rpcsSucceeded.getAndIncrement();
         notifyWatchers(watchers, rpcType, requestId, hostname);
       }
 
@@ -461,13 +455,12 @@ public final class XdsTestClient {
     @Override
     public void getClientAccumulatedStats(LoadBalancerAccumulatedStatsRequest request,
         StreamObserver<LoadBalancerAccumulatedStatsResponse> responseObserver) {
-      LoadBalancerAccumulatedStatsResponse.Builder respBuilder =
-          LoadBalancerAccumulatedStatsResponse.newBuilder();
-      respBuilder.setNumRpcsStarted(rpcsStarted.get()).setNumRpcsFailed(rpcsFailed.get());
-      for (Map.Entry<String, Integer> succeededRpcs : rpcsSucceededByPeer.entrySet()) {
-        respBuilder.putNumRpcsSucceededByPeer(succeededRpcs.getKey(), succeededRpcs.getValue());
-      }
-      responseObserver.onNext(respBuilder.build());
+      responseObserver.onNext(
+          LoadBalancerAccumulatedStatsResponse.newBuilder()
+              .setNumRpcsStarted(rpcsStarted.get())
+              .setNumRpcsSucceeded(rpcsSucceeded.get())
+              .setNumRpcsFailed(rpcsFailed.get())
+              .build());
       responseObserver.onCompleted();
     }
   }
