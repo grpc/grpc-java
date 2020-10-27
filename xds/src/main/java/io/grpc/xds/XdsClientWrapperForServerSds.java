@@ -22,9 +22,7 @@ import static com.google.common.base.Preconditions.checkState;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
 import io.grpc.Internal;
-import io.grpc.InternalLogId;
 import io.grpc.Status;
-import io.grpc.SynchronizationContext;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SharedResourceHolder;
@@ -90,34 +88,6 @@ public final class XdsClientWrapperForServerSds {
     this.port = port;
   }
 
-  private SynchronizationContext createSynchronizationContext() {
-    final InternalLogId logId =
-        InternalLogId.allocate("XdsClientWrapperForServerSds", Integer.toString(port));
-    return new SynchronizationContext(
-        new Thread.UncaughtExceptionHandler() {
-          // needed by syncContext
-          private boolean panicMode;
-
-          @Override
-          public void uncaughtException(Thread t, Throwable e) {
-            logger.log(
-                Level.SEVERE,
-                "[" + logId + "] Uncaught exception in the SynchronizationContext. Panic!",
-                e);
-            panic(e);
-          }
-
-          void panic(final Throwable t) {
-            if (panicMode) {
-              // Preserve the first panic information
-              return;
-            }
-            panicMode = true;
-            shutdown();
-          }
-        });
-  }
-
   public boolean hasXdsClient() {
     return xdsClient != null;
   }
@@ -150,7 +120,6 @@ public final class XdsClientWrapperForServerSds {
         new ServerXdsClient(
             channel,
             node,
-            createSynchronizationContext(),
             timeService,
             new ExponentialBackoffPolicy.Provider(),
             GrpcUtil.STOPWATCH_SUPPLIER,

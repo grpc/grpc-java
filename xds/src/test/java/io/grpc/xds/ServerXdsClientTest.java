@@ -21,7 +21,6 @@ import static io.grpc.xds.XdsClientTestHelper.buildDiscoveryResponseV2;
 import static io.grpc.xds.XdsClientTestHelper.buildListenerV2;
 import static io.grpc.xds.XdsClientTestHelper.buildRouteConfigurationV2;
 import static io.grpc.xds.XdsClientTestHelper.buildVirtualHostV2;
-import static org.junit.Assert.fail;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -56,7 +55,6 @@ import io.grpc.Context.CancellationListener;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.Status.Code;
-import io.grpc.SynchronizationContext;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.BackoffPolicy;
@@ -127,13 +125,6 @@ public class ServerXdsClientTest {
   @Rule
   public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
 
-  private final SynchronizationContext syncContext = new SynchronizationContext(
-      new Thread.UncaughtExceptionHandler() {
-        @Override
-        public void uncaughtException(Thread t, Throwable e) {
-          throw new AssertionError(e);
-        }
-      });
   private final FakeClock fakeClock = new FakeClock();
 
   private final Queue<StreamObserver<DiscoveryResponse>> responseObservers = new ArrayDeque<>();
@@ -197,7 +188,7 @@ public class ServerXdsClientTest {
 
     xdsClient =
         new ServerXdsClient(new XdsChannel(channel, /* useProtocolV3= */ false), NODE,
-            syncContext, fakeClock.getScheduledExecutorService(), backoffPolicyProvider,
+            fakeClock.getScheduledExecutorService(), backoffPolicyProvider,
             fakeClock.getStopwatchSupplier(), false, INSTANCE_IP);
     // Only the connection to management server is established, no RPC request is sent until at
     // least one watcher is registered.
@@ -234,20 +225,6 @@ public class ServerXdsClientTest {
         .setTypeUrl(typeUrl)
         .setResponseNonce(nonce)
         .build();
-  }
-
-  /** Error when 2 ListenerWatchers registered. */
-  @Test
-  public void ldsResponse_2listenerWatchers_expectError() {
-    xdsClient.watchListenerData(PORT, listenerWatcher);
-    try {
-      xdsClient.watchListenerData(80, listenerWatcher);
-      fail("expected exception");
-    } catch (IllegalStateException expected) {
-      assertThat(expected)
-          .hasMessageThat()
-          .isEqualTo("ListenerWatcher already registered");
-    }
   }
 
   /**

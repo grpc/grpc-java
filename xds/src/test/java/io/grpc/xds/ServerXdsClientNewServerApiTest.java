@@ -57,7 +57,6 @@ import io.grpc.Context.CancellationListener;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.Status.Code;
-import io.grpc.SynchronizationContext;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.BackoffPolicy;
@@ -124,13 +123,6 @@ public class ServerXdsClientNewServerApiTest {
   @Rule
   public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
 
-  private final SynchronizationContext syncContext = new SynchronizationContext(
-      new Thread.UncaughtExceptionHandler() {
-        @Override
-        public void uncaughtException(Thread t, Throwable e) {
-          throw new AssertionError(e);
-        }
-      });
   private final FakeClock fakeClock = new FakeClock();
 
   private final Queue<StreamObserver<DiscoveryResponse>> responseObservers = new ArrayDeque<>();
@@ -194,7 +186,7 @@ public class ServerXdsClientNewServerApiTest {
 
     xdsClient =
         new ServerXdsClient(new XdsChannel(channel, /* useProtocolV3= */ true), NODE,
-            syncContext, fakeClock.getScheduledExecutorService(), backoffPolicyProvider,
+            fakeClock.getScheduledExecutorService(), backoffPolicyProvider,
             fakeClock.getStopwatchSupplier(), true, INSTANCE_IP);
     // Only the connection to management server is established, no RPC request is sent until at
     // least one watcher is registered.
