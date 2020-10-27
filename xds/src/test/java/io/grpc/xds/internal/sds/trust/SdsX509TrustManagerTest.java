@@ -32,7 +32,6 @@ import static org.mockito.Mockito.when;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.envoyproxy.envoy.type.matcher.v3.StringMatcher;
 import io.grpc.internal.testing.TestUtils;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.security.cert.CertStoreException;
 import java.security.cert.CertificateException;
@@ -54,7 +53,6 @@ import sun.security.validator.ValidatorException;
 /**
  * Unit tests for {@link SdsX509TrustManager}.
  */
-// TODO(#7166): add more tests when xds v3 is implemented.
 @RunWith(JUnit4.class)
 public class SdsX509TrustManagerTest {
 
@@ -87,7 +85,7 @@ public class SdsX509TrustManagerTest {
   }
 
   @Test
-  public void missingPeerCerts() throws CertificateException, FileNotFoundException {
+  public void missingPeerCerts() {
     StringMatcher stringMatcher = StringMatcher.newBuilder().setExact("foo.com").build();
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
@@ -101,7 +99,7 @@ public class SdsX509TrustManagerTest {
   }
 
   @Test
-  public void emptyArrayPeerCerts() throws CertificateException, FileNotFoundException {
+  public void emptyArrayPeerCerts() {
     StringMatcher stringMatcher = StringMatcher.newBuilder().setExact("foo.com").build();
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
