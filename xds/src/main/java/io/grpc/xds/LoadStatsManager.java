@@ -154,6 +154,8 @@ final class LoadStatsManager {
 
     /**
      * Records a drop decision.
+     *
+     * <p>This method must be thread-safe.
      */
     void recordDroppedRequest(String category);
   }
