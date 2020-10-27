@@ -32,7 +32,9 @@ import io.grpc.xds.EnvoyProtoData.UpstreamLocalityStats;
 import io.grpc.xds.LoadStatsManager.LoadStatsStore;
 import io.grpc.xds.LoadStatsManager.LoadStatsStoreFactory;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -82,6 +84,7 @@ final class LoadStatsStoreImpl implements LoadStatsStore {
     if (clusterServiceName != null) {
       statsBuilder.setClusterServiceName(clusterServiceName);
     }
+    Set<Locality> untrackedLocalities = new HashSet<>();
     for (Map.Entry<Locality, ReferenceCounted<ClientLoadCounter>> entry
         : localityLoadCounters.entrySet()) {
       ClientLoadSnapshot snapshot = entry.getValue().get().snapshot();
@@ -102,9 +105,10 @@ final class LoadStatsStoreImpl implements LoadStatsStore {
       }
       statsBuilder.addUpstreamLocalityStats(localityStatsBuilder.build());
       if (entry.getValue().getReferenceCount() == 0 && snapshot.getCallsInProgress() == 0) {
-        localityLoadCounters.remove(entry.getKey());
+        untrackedLocalities.add(entry.getKey());
       }
     }
+    localityLoadCounters.keySet().removeAll(untrackedLocalities);
     long totalDrops = 0;
     for (Map.Entry<String, AtomicLong> entry : dropCounters.entrySet()) {
       long drops = entry.getValue().getAndSet(0);
