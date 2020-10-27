@@ -28,9 +28,9 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 
 /**
- * Provider of {@link ZatarCertificateProvider}s.
+ * Provider of {@link DynamicReloadingCertificateProvider}s.
  */
-final class ZatarCertificateProviderProvider implements CertificateProviderProvider {
+final class DynamicReloadingCertificateProviderProvider implements CertificateProviderProvider {
 
   private static final String DIRECTORY_KEY = "directory";
   private static final String CERT_FILE_KEY = "certificate-file";
@@ -41,34 +41,34 @@ final class ZatarCertificateProviderProvider implements CertificateProviderProvi
   @VisibleForTesting static final long REFRESH_INTERVAL_DEFAULT = 600L;
 
 
-  static final String ZATAR_PROVIDER_NAME = "gke-cas-certs";
+  static final String DYNAMIC_RELOADING_PROVIDER_NAME = "gke-cas-certs";
 
   static {
     CertificateProviderRegistry.getInstance()
         .register(
-            new ZatarCertificateProviderProvider(
-                ZatarCertificateProvider.Factory.getInstance(),
+            new DynamicReloadingCertificateProviderProvider(
+                DynamicReloadingCertificateProvider.Factory.getInstance(),
                 ScheduledExecutorServiceFactory.DEFAULT_INSTANCE,
                 TimeProvider.SYSTEM_TIME_PROVIDER));
   }
 
-  final ZatarCertificateProvider.Factory zatarCertificateProviderFactory;
+  final DynamicReloadingCertificateProvider.Factory dynamicReloadingCertificateProviderFactory;
   private final ScheduledExecutorServiceFactory scheduledExecutorServiceFactory;
   private final TimeProvider timeProvider;
 
   @VisibleForTesting
-  ZatarCertificateProviderProvider(
-      ZatarCertificateProvider.Factory zatarCertificateProviderFactory,
+  DynamicReloadingCertificateProviderProvider(
+      DynamicReloadingCertificateProvider.Factory dynamicReloadingCertificateProviderFactory,
       ScheduledExecutorServiceFactory scheduledExecutorServiceFactory,
       TimeProvider timeProvider) {
-    this.zatarCertificateProviderFactory = zatarCertificateProviderFactory;
+    this.dynamicReloadingCertificateProviderFactory = dynamicReloadingCertificateProviderFactory;
     this.scheduledExecutorServiceFactory = scheduledExecutorServiceFactory;
     this.timeProvider = timeProvider;
   }
 
   @Override
   public String getName() {
-    return ZATAR_PROVIDER_NAME;
+    return DYNAMIC_RELOADING_PROVIDER_NAME;
   }
 
   @Override
@@ -76,7 +76,7 @@ final class ZatarCertificateProviderProvider implements CertificateProviderProvi
       Object config, CertificateProvider.DistributorWatcher watcher, boolean notifyCertUpdates) {
 
     Config configObj = validateAndTranslateConfig(config);
-    return zatarCertificateProviderFactory.create(
+    return dynamicReloadingCertificateProviderFactory.create(
         watcher,
         notifyCertUpdates,
         configObj.directory,
@@ -117,7 +117,7 @@ final class ZatarCertificateProviderProvider implements CertificateProviderProvi
           ScheduledExecutorService create() {
             return Executors.newSingleThreadScheduledExecutor(
                 new ThreadFactoryBuilder()
-                    .setNameFormat("zatar" + "-%d")
+                    .setNameFormat("dynamicReloading" + "-%d")
                     .setDaemon(true)
                     .build());
           }
