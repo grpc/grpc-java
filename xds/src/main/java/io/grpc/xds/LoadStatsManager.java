@@ -119,16 +119,16 @@ final class LoadStatsManager {
     return res;
   }
 
+  // Introduced for testing.
   @VisibleForTesting
   interface LoadStatsStoreFactory {
     LoadStatsStore newLoadStatsStore(String cluster, String clusterService);
   }
 
   /**
-   * Interface for client side load stats store. An {@code LoadStatsStore} maintains load stats per
-   * cluster:cluster_service exposed by traffic director from a gRPC client's perspective,
-   * including dropped calls. Load stats for endpoints are aggregated in locality granularity
-   * while the numbers of dropped calls are aggregated in cluster:cluster_service granularity.
+   * Interface for client side load stats store. A {@link LoadStatsStore} instance holds the load
+   * stats for a cluster from an gRPC client's perspective by maintaining a set of locality
+   * counters for each locality it is tracking loads for.
    */
   interface LoadStatsStore {
 
@@ -136,18 +136,18 @@ final class LoadStatsManager {
      * Generates a report based on recorded load stats (including RPC counts, backend metrics and
      * dropped calls) for the interval since the previous call of this method.
      */
-    // TODO(chengyuanzhang): do not use proto type directly.
     ClusterStats generateLoadReport();
 
     /**
-     * Track load stats for endpoints in the provided locality. Only load stats for endpoints
-     * in tracked localities will be included in generated load reports.
+     * Adds tracking for load stats sent to the given {@code locality}. Returns the counter
+     * object responsible for tracking the client load stats to the given {@code locality}.
+     * Only load stats for tracked localities will be included in generated load reports.
      */
     ClientLoadCounter addLocality(Locality locality);
 
     /**
-     * Drop tracking load stats for endpoints in the provided locality. Load stats for endpoints
-     * in removed localities will no longer be included in future generated load reports after
+     * Drops tracking for load stats sent to the given {@code locality}. Load stats for removed
+     * localities will no longer be included in future generated load reports after
      * their currently recording stats have been fully reported.
      */
     void removeLocality(Locality locality);
@@ -155,7 +155,7 @@ final class LoadStatsManager {
     /**
      * Records a drop decision.
      *
-     * <p>This method is thread-safe.
+     * <p>This method must be thread-safe.
      */
     void recordDroppedRequest(String category);
   }

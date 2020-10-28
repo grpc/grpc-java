@@ -35,16 +35,14 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
-import javax.annotation.concurrent.NotThreadSafe;
+import javax.annotation.concurrent.Immutable;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Client side load stats recorder that provides RPC counting and metrics recording as name-value
  * pairs.
- *
- * <p>All methods except {@link #snapshot()} in this class are thread-safe.
  */
-@NotThreadSafe
+@ThreadSafe
 final class ClientLoadCounter {
 
   private static final int THREAD_BALANCING_FACTOR = 64;
@@ -84,7 +82,7 @@ final class ClientLoadCounter {
    * Generates a snapshot for load stats recorded in this counter for the interval between calls
    * of this method.
    */
-  ClientLoadSnapshot snapshot() {
+  synchronized ClientLoadSnapshot snapshot() {
     Map<String, MetricValue> aggregatedValues = new HashMap<>();
     for (MetricRecorder recorder : metricRecorders) {
       Map<String, MetricValue> map = recorder.takeAll();
@@ -130,12 +128,8 @@ final class ClientLoadCounter {
    * A {@link ClientLoadSnapshot} represents a snapshot of {@link ClientLoadCounter}, which is a
    * read-only copy of load stats recorded for some period of time.
    */
+  @Immutable
   static final class ClientLoadSnapshot {
-
-    @VisibleForTesting
-    @SuppressWarnings("unchecked")
-    static final ClientLoadSnapshot EMPTY_SNAPSHOT =
-        new ClientLoadSnapshot(0, 0, 0, 0, Collections.EMPTY_MAP);
     private final long callsSucceeded;
     private final long callsInProgress;
     private final long callsFailed;
@@ -193,8 +187,8 @@ final class ClientLoadCounter {
   /**
    * Atomic unit of recording for metric data.
    */
+  @Immutable
   static final class MetricValue {
-
     private int numReports;
     private double totalValue;
 
@@ -231,8 +225,8 @@ final class ClientLoadCounter {
   /**
    * Single contention-balanced bucket for recording metric data.
    */
+  @ThreadSafe
   private static class MetricRecorder {
-
     private Map<String, MetricValue> metricValues = new HashMap<>();
 
     synchronized void addValue(String metricName, double value) {
