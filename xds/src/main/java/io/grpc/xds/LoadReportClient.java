@@ -30,6 +30,8 @@ import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsRequest;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsResponse;
 import io.grpc.InternalLogId;
 import io.grpc.Status;
+import io.grpc.SynchronizationContext;
+import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.stub.StreamObserver;
 import io.grpc.xds.EnvoyProtoData.ClusterStats;
@@ -40,7 +42,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
@@ -53,17 +54,17 @@ final class LoadReportClient {
   private final XdsLogger logger;
   private final XdsChannel xdsChannel;
   private final Node node;
+  private final SynchronizationContext syncContext;
   private final ScheduledExecutorService timerService;
   private final Stopwatch retryStopwatch;
   private final BackoffPolicy.Provider backoffPolicyProvider;
   private final LoadStatsManager loadStatsManager;
-  private final Object lock = new Object();
 
   private boolean started;
   @Nullable
   private BackoffPolicy lrsRpcRetryPolicy;
   @Nullable
-  private ScheduledFuture<?> lrsRpcRetryTimer;
+  private ScheduledHandle lrsRpcRetryTimer;
   @Nullable
   private LrsStream lrsStream;
 
@@ -71,11 +72,13 @@ final class LoadReportClient {
       LoadStatsManager loadStatsManager,
       XdsChannel xdsChannel,
       Node node,
+      SynchronizationContext syncContext,
       ScheduledExecutorService scheduledExecutorService,
       BackoffPolicy.Provider backoffPolicyProvider,
       Supplier<Stopwatch> stopwatchSupplier) {
     this.loadStatsManager = checkNotNull(loadStatsManager, "loadStatsManager");
     this.xdsChannel = checkNotNull(xdsChannel, "xdsChannel");
+    this.syncContext = checkNotNull(syncContext, "syncContext");
     this.timerService = checkNotNull(scheduledExecutorService, "timeService");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     this.retryStopwatch = checkNotNull(stopwatchSupplier, "stopwatchSupplier").get();
@@ -92,14 +95,13 @@ final class LoadReportClient {
    * no-op.
    */
   void startLoadReporting() {
-    synchronized (lock) {
-      if (started) {
-        return;
-      }
-      started = true;
-      logger.log(XdsLogLevel.INFO, "Starting load reporting RPC");
-      startLrsRpc();
+    syncContext.throwIfNotInThisSynchronizationContext();
+    if (started) {
+      return;
     }
+    started = true;
+    logger.log(XdsLogLevel.INFO, "Starting load reporting RPC");
+    startLrsRpc();
   }
 
   /**
@@ -107,24 +109,23 @@ final class LoadReportClient {
    * {@link LoadReportClient} is no-op.
    */
   void stopLoadReporting() {
-    synchronized (lock) {
-      if (!started) {
-        return;
-      }
-      started = false;
-      logger.log(XdsLogLevel.INFO, "Stopping load reporting RPC");
-      if (lrsRpcRetryTimer != null) {
-        lrsRpcRetryTimer.cancel(false);
-      }
-      if (lrsStream != null) {
-        lrsStream.close(Status.CANCELLED.withDescription("stop load reporting").asException());
-      }
-      // Do not shutdown channel as it is not owned by LrsClient.
+    syncContext.throwIfNotInThisSynchronizationContext();
+    if (!started) {
+      return;
     }
+    started = false;
+    logger.log(XdsLogLevel.INFO, "Stopping load reporting RPC");
+    if (lrsRpcRetryTimer != null && lrsRpcRetryTimer.isPending()) {
+      lrsRpcRetryTimer.cancel();
+    }
+    if (lrsStream != null) {
+      lrsStream.close(Status.CANCELLED.withDescription("stop load reporting").asException());
+    }
+    // Do not shutdown channel as it is not owned by LrsClient.
   }
 
   @VisibleForTesting
-  class LoadReportingTask implements Runnable {
+  static class LoadReportingTask implements Runnable {
     private final LrsStream stream;
 
     LoadReportingTask(LrsStream stream) {
@@ -133,9 +134,7 @@ final class LoadReportClient {
 
     @Override
     public void run() {
-      synchronized (lock) {
-        stream.sendLoadReport();
-      }
+      stream.sendLoadReport();
     }
   }
 
@@ -144,9 +143,7 @@ final class LoadReportClient {
 
     @Override
     public void run() {
-      synchronized (lock) {
-        startLrsRpc();
-      }
+      startLrsRpc();
     }
   }
 
@@ -170,7 +167,7 @@ final class LoadReportClient {
     long intervalNano = -1;
     boolean reportAllClusters;
     List<String> clusterNames;  // clusters to report loads for, if not report all.
-    ScheduledFuture<?> loadReportTimer;
+    ScheduledHandle loadReportTimer;
 
     abstract void start();
 
@@ -226,13 +223,13 @@ final class LoadReportClient {
 
     private void scheduleNextLoadReport() {
       // Cancel pending load report and reschedule with updated load reporting interval.
-      if (loadReportTimer != null && !loadReportTimer.isDone()) {
-        loadReportTimer.cancel(false);
+      if (loadReportTimer != null && loadReportTimer.isPending()) {
+        loadReportTimer.cancel();
         loadReportTimer = null;
       }
       if (intervalNano > 0) {
-        loadReportTimer = timerService.schedule(
-            new LoadReportingTask(this), intervalNano, TimeUnit.NANOSECONDS);
+        loadReportTimer = syncContext.schedule(
+            new LoadReportingTask(this), intervalNano, TimeUnit.NANOSECONDS, timerService);
       }
     }
 
@@ -266,8 +263,8 @@ final class LoadReportClient {
       if (delayNanos <= 0) {
         startLrsRpc();
       } else {
-        lrsRpcRetryTimer =
-            timerService.schedule(new LrsRpcRetryTask(), delayNanos, TimeUnit.NANOSECONDS);
+        lrsRpcRetryTimer = syncContext.schedule(
+            new LrsRpcRetryTask(), delayNanos, TimeUnit.NANOSECONDS, timerService);
       }
     }
 
@@ -281,8 +278,8 @@ final class LoadReportClient {
     }
 
     private void cleanUp() {
-      if (loadReportTimer != null) {
-        loadReportTimer.cancel(false);
+      if (loadReportTimer != null && loadReportTimer.isPending()) {
+        loadReportTimer.cancel();
         loadReportTimer = null;
       }
       if (lrsStream == this) {
@@ -301,26 +298,35 @@ final class LoadReportClient {
           new StreamObserver<io.envoyproxy.envoy.service.load_stats.v2.LoadStatsResponse>() {
             @Override
             public void onNext(
-                io.envoyproxy.envoy.service.load_stats.v2.LoadStatsResponse response) {
-              synchronized (lock) {
-                logger.log(XdsLogLevel.DEBUG, "Received LoadStatsResponse:\n{0}", response);
-                handleRpcResponse(response.getClustersList(), response.getSendAllClusters(),
-                    Durations.toNanos(response.getLoadReportingInterval()));
-              }
+                final io.envoyproxy.envoy.service.load_stats.v2.LoadStatsResponse response) {
+              syncContext.execute(new Runnable() {
+                @Override
+                public void run() {
+                  logger.log(XdsLogLevel.DEBUG, "Received LoadStatsResponse:\n{0}", response);
+                  handleRpcResponse(response.getClustersList(), response.getSendAllClusters(),
+                      Durations.toNanos(response.getLoadReportingInterval()));
+                }
+              });
             }
 
             @Override
-            public void onError(Throwable t) {
-              synchronized (lock) {
-                handleRpcError(t);
-              }
+            public void onError(final Throwable t) {
+              syncContext.execute(new Runnable() {
+                @Override
+                public void run() {
+                  handleRpcError(t);
+                }
+              });
             }
 
             @Override
             public void onCompleted() {
-              synchronized (lock) {
-                handleRpcCompleted();
-              }
+              syncContext.execute(new Runnable() {
+                @Override
+                public void run() {
+                  handleRpcCompleted();
+                }
+              });
             }
           };
       io.envoyproxy.envoy.service.load_stats.v2.LoadReportingServiceGrpc.LoadReportingServiceStub
@@ -358,26 +364,35 @@ final class LoadReportClient {
       StreamObserver<LoadStatsResponse> lrsResponseReaderV3 =
           new StreamObserver<LoadStatsResponse>() {
             @Override
-            public void onNext(LoadStatsResponse response) {
-              synchronized (lock) {
-                logger.log(XdsLogLevel.DEBUG, "Received LRS response:\n{0}", response);
-                handleRpcResponse(response.getClustersList(), response.getSendAllClusters(),
-                    Durations.toNanos(response.getLoadReportingInterval()));
-              }
+            public void onNext(final LoadStatsResponse response) {
+              syncContext.execute(new Runnable() {
+                @Override
+                public void run() {
+                  logger.log(XdsLogLevel.DEBUG, "Received LRS response:\n{0}", response);
+                  handleRpcResponse(response.getClustersList(), response.getSendAllClusters(),
+                      Durations.toNanos(response.getLoadReportingInterval()));
+                }
+              });
             }
 
             @Override
-            public void onError(Throwable t) {
-              synchronized (lock) {
-                handleRpcError(t);
-              }
+            public void onError(final Throwable t) {
+              syncContext.execute(new Runnable() {
+                @Override
+                public void run() {
+                  handleRpcError(t);
+                }
+              });
             }
 
             @Override
             public void onCompleted() {
-              synchronized (lock) {
-                handleRpcCompleted();
-              }
+              syncContext.execute(new Runnable() {
+                @Override
+                public void run() {
+                  handleRpcCompleted();
+                }
+              });
             }
           };
       LoadReportingServiceStub stubV3 =

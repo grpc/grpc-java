@@ -289,7 +289,12 @@ public class XdsClientImplTest2 {
 
   @After
   public void tearDown() {
-    xdsClient.shutdown();
+    syncContext.execute(new Runnable() {
+      @Override
+      public void run() {
+        xdsClient.shutdown();
+      }
+    });
     assertThat(adsEnded.get()).isTrue();
     assertThat(lrsEnded.get()).isTrue();
     assertThat(channel.isShutdown()).isTrue();
@@ -1506,8 +1511,13 @@ public class XdsClientImplTest2 {
    */
   @Test
   public void reportLoadStatsToServer() {
-    String clusterName = "cluster-foo.googleapis.com";
-    xdsClient.addClientStats(clusterName, null);
+    final String clusterName = "cluster-foo.googleapis.com";
+    syncContext.execute(new Runnable() {
+      @Override
+      public void run() {
+        xdsClient.addClientStats(clusterName, null);
+      }
+    });
     ArgumentCaptor<LoadStatsRequest> requestCaptor = ArgumentCaptor.forClass(null);
     RpcCall<LoadStatsRequest, LoadStatsResponse> lrsCall = loadReportCalls.poll();
     verify(lrsCall.requestObserver).onNext(requestCaptor.capture());
@@ -1524,7 +1534,12 @@ public class XdsClientImplTest2 {
     ClusterStats report = Iterables.getOnlyElement(requestCaptor.getValue().getClusterStatsList());
     assertThat(report.getClusterName()).isEqualTo(clusterName);
 
-    xdsClient.removeClientStats(clusterName, null);
+    syncContext.execute(new Runnable() {
+      @Override
+      public void run() {
+        xdsClient.removeClientStats(clusterName, null);
+      }
+    });
     fakeClock.forwardNanos(1000L);
     verify(lrsCall.requestObserver, times(3)).onNext(requestCaptor.capture());
     assertThat(requestCaptor.getValue().getClusterStatsCount())

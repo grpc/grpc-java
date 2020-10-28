@@ -90,8 +90,8 @@ final class ClientXdsClient extends AbstractXdsClient {
   ClientXdsClient(XdsChannel channel, Node node, ScheduledExecutorService timeService,
       BackoffPolicy.Provider backoffPolicyProvider, Supplier<Stopwatch> stopwatchSupplier) {
     super(channel, node, timeService, backoffPolicyProvider, stopwatchSupplier);
-    lrsClient = new LoadReportClient(loadStatsManager, channel, node, timeService,
-        backoffPolicyProvider, stopwatchSupplier);
+    lrsClient = new LoadReportClient(loadStatsManager, channel, node, getSyncContext(),
+        timeService, backoffPolicyProvider, stopwatchSupplier);
   }
 
   @Override

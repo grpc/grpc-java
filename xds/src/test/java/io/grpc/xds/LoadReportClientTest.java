@@ -44,6 +44,7 @@ import io.grpc.Context;
 import io.grpc.Context.CancellationListener;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
+import io.grpc.SynchronizationContext;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.BackoffPolicy;
@@ -113,6 +114,13 @@ public class LoadReportClientTest {
 
   @Rule
   public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
+  private final SynchronizationContext syncContext = new SynchronizationContext(
+      new Thread.UncaughtExceptionHandler() {
+        @Override
+        public void uncaughtException(Thread t, Throwable e) {
+          throw new AssertionError(e);
+        }
+      });
   private final FakeClock fakeClock = new FakeClock();
   private final ArrayDeque<StreamObserver<LoadStatsRequest>> lrsRequestObservers =
       new ArrayDeque<>();
@@ -181,15 +189,21 @@ public class LoadReportClientTest {
             loadStatsManager,
             new XdsChannel(channel, false),
             NODE,
+            syncContext,
             fakeClock.getScheduledExecutorService(),
             backoffPolicyProvider,
             fakeClock.getStopwatchSupplier());
-    lrsClient.startLoadReporting();
+    syncContext.execute(new Runnable() {
+      @Override
+      public void run() {
+        lrsClient.startLoadReporting();
+      }
+    });
   }
 
   @After
   public void tearDown() {
-    lrsClient.stopLoadReporting();
+    stopLoadReportingInSyncContext();
     assertThat(callEnded.get()).isTrue();
   }
 
@@ -414,7 +428,7 @@ public class LoadReportClientTest {
     assertEquals(1234, scheduledTask.getDelay(TimeUnit.NANOSECONDS));
 
     fakeClock.forwardNanos(1233);
-    lrsClient.stopLoadReporting();
+    stopLoadReportingInSyncContext();
     verify(requestObserver).onError(errorCaptor.capture());
     assertEquals("CANCELLED: client cancelled", errorCaptor.getValue().getMessage());
     assertThat(scheduledTask.isCancelled()).isTrue();
@@ -439,7 +453,7 @@ public class LoadReportClientTest {
     assertEquals(1, scheduledTask.getDelay(TimeUnit.SECONDS));
 
     fakeClock.forwardTime(999, TimeUnit.MILLISECONDS);
-    lrsClient.stopLoadReporting();
+    stopLoadReportingInSyncContext();
     assertThat(scheduledTask.isCancelled()).isTrue();
     fakeClock.forwardTime(1, TimeUnit.MILLISECONDS);
     assertEquals(0, fakeClock.numPendingTasks(LRS_RPC_RETRY_TASK_FILTER));
@@ -486,6 +500,15 @@ public class LoadReportClientTest {
     // No report sent. No new task scheduled
     verifyNoMoreInteractions(requestObserver);
     assertEquals(0, fakeClock.numPendingTasks(LOAD_REPORTING_TASK_FILTER));
+  }
+
+  private void stopLoadReportingInSyncContext() {
+    syncContext.execute(new Runnable() {
+      @Override
+      public void run() {
+        lrsClient.stopLoadReporting();
+      }
+    });
   }
 
   private static LoadStatsResponse buildLrsResponse(
