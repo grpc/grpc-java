@@ -32,7 +32,6 @@ import io.envoyproxy.envoy.config.listener.v3.FilterChain;
 import io.envoyproxy.envoy.config.listener.v3.FilterChainMatch;
 import io.envoyproxy.envoy.config.listener.v3.Listener;
 import io.grpc.Status;
-import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.xds.EnvoyProtoData.Node;
@@ -54,7 +53,6 @@ final class ServerXdsClient extends AbstractXdsClient {
   // Longest time to wait, since the subscription to some resource, for concluding its absence.
   @VisibleForTesting
   static final int INITIAL_RESOURCE_FETCH_TIMEOUT_SEC = 15;
-  private final SynchronizationContext syncContext;
   @Nullable
   private ListenerWatcher listenerWatcher;
   private int listenerPort = -1;
@@ -63,33 +61,37 @@ final class ServerXdsClient extends AbstractXdsClient {
   @Nullable
   private ScheduledHandle ldsRespTimer;
 
-  ServerXdsClient(XdsChannel channel, Node node, SynchronizationContext syncContext,
-      ScheduledExecutorService timeService, BackoffPolicy.Provider backoffPolicyProvider,
-      Supplier<Stopwatch> stopwatchSupplier, boolean newServerApi, String instanceIp) {
+  ServerXdsClient(XdsChannel channel, Node node, ScheduledExecutorService timeService,
+      BackoffPolicy.Provider backoffPolicyProvider, Supplier<Stopwatch> stopwatchSupplier,
+      boolean newServerApi, String instanceIp) {
     super(channel, node, timeService, backoffPolicyProvider, stopwatchSupplier);
-    this.syncContext = checkNotNull(syncContext, "syncContext");
     this.newServerApi = channel.isUseProtocolV3() && newServerApi;
     this.instanceIp = (instanceIp != null ? instanceIp : "0.0.0.0");
   }
 
   @Override
-  void watchListenerData(int port, ListenerWatcher watcher) {
+  void watchListenerData(final int port, final ListenerWatcher watcher) {
     checkState(listenerWatcher == null, "ListenerWatcher already registered");
     listenerWatcher = checkNotNull(watcher, "watcher");
     checkArgument(port > 0, "port needs to be > 0");
-    this.listenerPort = port;
-    getLogger().log(XdsLogLevel.INFO, "Started watching listener for port {0}", port);
-    if (!newServerApi) {
-      updateNodeMetadataForListenerRequest(port);
-    }
-    adjustResourceSubscription(ResourceType.LDS);
-    if (!isInBackoff()) {
-      ldsRespTimer =
-          syncContext
-              .schedule(
-                  new ListenerResourceFetchTimeoutTask(":" + port),
-                  INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS, getTimeService());
-    }
+    listenerPort = port;
+    getSyncContext().execute(new Runnable() {
+      @Override
+      public void run() {
+        getLogger().log(XdsLogLevel.INFO, "Started watching listener for port {0}", port);
+        if (!newServerApi) {
+          updateNodeMetadataForListenerRequest(port);
+        }
+        adjustResourceSubscription(ResourceType.LDS);
+        if (!isInBackoff()) {
+          ldsRespTimer =
+              getSyncContext()
+                  .schedule(
+                      new ListenerResourceFetchTimeoutTask(":" + port),
+                      INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS, getTimeService());
+        }
+      }
+    });
   }
 
   @Nullable
@@ -203,7 +205,7 @@ final class ServerXdsClient extends AbstractXdsClient {
   protected void handleStreamRestarted() {
     if (listenerWatcher != null) {
       ldsRespTimer =
-          syncContext
+          getSyncContext()
               .schedule(
                   new ListenerResourceFetchTimeoutTask(":" + listenerPort),
                   INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS, getTimeService());
@@ -213,11 +215,6 @@ final class ServerXdsClient extends AbstractXdsClient {
   @Override
   protected void handleShutdown() {
     cleanUpResourceTimer();
-  }
-
-  @Override
-  protected void runWithSynchronized(Runnable runnable) {
-    syncContext.execute(runnable);
   }
 
   private void cleanUpResourceTimer() {

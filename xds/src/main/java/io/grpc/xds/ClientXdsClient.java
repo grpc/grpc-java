@@ -39,6 +39,7 @@ import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.Rds;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext;
 import io.grpc.Status;
+import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
@@ -56,7 +57,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
@@ -79,7 +79,6 @@ final class ClientXdsClient extends AbstractXdsClient {
   private static final String TYPE_URL_UPSTREAM_TLS_CONTEXT_V2 =
       "type.googleapis.com/envoy.api.v2.auth.UpstreamTlsContext";
 
-  private final Object lock = new Object();
   private final Map<String, ResourceSubscriber> ldsResourceSubscribers = new HashMap<>();
   private final Map<String, ResourceSubscriber> rdsResourceSubscribers = new HashMap<>();
   private final Map<String, ResourceSubscriber> cdsResourceSubscribers = new HashMap<>();
@@ -545,133 +544,162 @@ final class ClientXdsClient extends AbstractXdsClient {
   }
 
   @Override
-  void watchLdsResource(String resourceName, LdsResourceWatcher watcher) {
-    synchronized (lock) {
-      ResourceSubscriber subscriber = ldsResourceSubscribers.get(resourceName);
-      if (subscriber == null) {
-        getLogger().log(XdsLogLevel.INFO, "Subscribe CDS resource {0}", resourceName);
-        subscriber = new ResourceSubscriber(ResourceType.LDS, resourceName);
-        ldsResourceSubscribers.put(resourceName, subscriber);
-        adjustResourceSubscription(ResourceType.LDS);
+  void watchLdsResource(final String resourceName, final LdsResourceWatcher watcher) {
+    getSyncContext().execute(new Runnable() {
+      @Override
+      public void run() {
+        ResourceSubscriber subscriber = ldsResourceSubscribers.get(resourceName);
+        if (subscriber == null) {
+          getLogger().log(XdsLogLevel.INFO, "Subscribe CDS resource {0}", resourceName);
+          subscriber = new ResourceSubscriber(ResourceType.LDS, resourceName);
+          ldsResourceSubscribers.put(resourceName, subscriber);
+          adjustResourceSubscription(ResourceType.LDS);
+        }
+        subscriber.addWatcher(watcher);
       }
-      subscriber.addWatcher(watcher);
-    }
+    });
   }
 
   @Override
-  void cancelLdsResourceWatch(String resourceName, LdsResourceWatcher watcher) {
-    synchronized (lock) {
-      ResourceSubscriber subscriber = ldsResourceSubscribers.get(resourceName);
-      subscriber.removeWatcher(watcher);
-      if (!subscriber.isWatched()) {
-        subscriber.stopTimer();
-        getLogger().log(XdsLogLevel.INFO, "Unsubscribe LDS resource {0}", resourceName);
-        ldsResourceSubscribers.remove(resourceName);
-        adjustResourceSubscription(ResourceType.LDS);
+  void cancelLdsResourceWatch(final String resourceName, final LdsResourceWatcher watcher) {
+    getSyncContext().execute(new Runnable() {
+      @Override
+      public void run() {
+        ResourceSubscriber subscriber = ldsResourceSubscribers.get(resourceName);
+        subscriber.removeWatcher(watcher);
+        if (!subscriber.isWatched()) {
+          subscriber.stopTimer();
+          getLogger().log(XdsLogLevel.INFO, "Unsubscribe LDS resource {0}", resourceName);
+          ldsResourceSubscribers.remove(resourceName);
+          adjustResourceSubscription(ResourceType.LDS);
+        }
       }
-    }
+    });
   }
 
   @Override
-  void watchRdsResource(String resourceName, RdsResourceWatcher watcher) {
-    synchronized (lock) {
-      ResourceSubscriber subscriber = rdsResourceSubscribers.get(resourceName);
-      if (subscriber == null) {
-        getLogger().log(XdsLogLevel.INFO, "Subscribe RDS resource {0}", resourceName);
-        subscriber = new ResourceSubscriber(ResourceType.RDS, resourceName);
-        rdsResourceSubscribers.put(resourceName, subscriber);
-        adjustResourceSubscription(ResourceType.RDS);
+  void watchRdsResource(final String resourceName, final RdsResourceWatcher watcher) {
+    getSyncContext().execute(new Runnable() {
+      @Override
+      public void run() {
+        ResourceSubscriber subscriber = rdsResourceSubscribers.get(resourceName);
+        if (subscriber == null) {
+          getLogger().log(XdsLogLevel.INFO, "Subscribe RDS resource {0}", resourceName);
+          subscriber = new ResourceSubscriber(ResourceType.RDS, resourceName);
+          rdsResourceSubscribers.put(resourceName, subscriber);
+          adjustResourceSubscription(ResourceType.RDS);
+        }
+        subscriber.addWatcher(watcher);
       }
-      subscriber.addWatcher(watcher);
-    }
+    });
   }
 
   @Override
-  void cancelRdsResourceWatch(String resourceName, RdsResourceWatcher watcher) {
-    synchronized (lock) {
-      ResourceSubscriber subscriber = rdsResourceSubscribers.get(resourceName);
-      subscriber.removeWatcher(watcher);
-      if (!subscriber.isWatched()) {
-        subscriber.stopTimer();
-        getLogger().log(XdsLogLevel.INFO, "Unsubscribe RDS resource {0}", resourceName);
-        rdsResourceSubscribers.remove(resourceName);
-        adjustResourceSubscription(ResourceType.RDS);
+  void cancelRdsResourceWatch(final String resourceName, final RdsResourceWatcher watcher) {
+    getSyncContext().execute(new Runnable() {
+      @Override
+      public void run() {
+        ResourceSubscriber subscriber = rdsResourceSubscribers.get(resourceName);
+        subscriber.removeWatcher(watcher);
+        if (!subscriber.isWatched()) {
+          subscriber.stopTimer();
+          getLogger().log(XdsLogLevel.INFO, "Unsubscribe RDS resource {0}", resourceName);
+          rdsResourceSubscribers.remove(resourceName);
+          adjustResourceSubscription(ResourceType.RDS);
+        }
       }
-    }
+    });
   }
 
   @Override
-  void watchCdsResource(String resourceName, CdsResourceWatcher watcher) {
-    synchronized (lock) {
-      ResourceSubscriber subscriber = cdsResourceSubscribers.get(resourceName);
-      if (subscriber == null) {
-        getLogger().log(XdsLogLevel.INFO, "Subscribe CDS resource {0}", resourceName);
-        subscriber = new ResourceSubscriber(ResourceType.CDS, resourceName);
-        cdsResourceSubscribers.put(resourceName, subscriber);
-        adjustResourceSubscription(ResourceType.CDS);
+  void watchCdsResource(final String resourceName, final CdsResourceWatcher watcher) {
+    getSyncContext().execute(new Runnable() {
+      @Override
+      public void run() {
+        ResourceSubscriber subscriber = cdsResourceSubscribers.get(resourceName);
+        if (subscriber == null) {
+          getLogger().log(XdsLogLevel.INFO, "Subscribe CDS resource {0}", resourceName);
+          subscriber = new ResourceSubscriber(ResourceType.CDS, resourceName);
+          cdsResourceSubscribers.put(resourceName, subscriber);
+          adjustResourceSubscription(ResourceType.CDS);
+        }
+        subscriber.addWatcher(watcher);
       }
-      subscriber.addWatcher(watcher);
-    }
+    });
   }
 
   @Override
-  void cancelCdsResourceWatch(String resourceName, CdsResourceWatcher watcher) {
-    synchronized (lock) {
-      ResourceSubscriber subscriber = cdsResourceSubscribers.get(resourceName);
-      subscriber.removeWatcher(watcher);
-      if (!subscriber.isWatched()) {
-        subscriber.stopTimer();
-        getLogger().log(XdsLogLevel.INFO, "Unsubscribe CDS resource {0}", resourceName);
-        cdsResourceSubscribers.remove(resourceName);
-        adjustResourceSubscription(ResourceType.CDS);
+  void cancelCdsResourceWatch(final String resourceName, final CdsResourceWatcher watcher) {
+    getSyncContext().execute(new Runnable() {
+      @Override
+      public void run() {
+        ResourceSubscriber subscriber = cdsResourceSubscribers.get(resourceName);
+        subscriber.removeWatcher(watcher);
+        if (!subscriber.isWatched()) {
+          subscriber.stopTimer();
+          getLogger().log(XdsLogLevel.INFO, "Unsubscribe CDS resource {0}", resourceName);
+          cdsResourceSubscribers.remove(resourceName);
+          adjustResourceSubscription(ResourceType.CDS);
+        }
       }
-    }
+    });
   }
 
   @Override
-  void watchEdsResource(String resourceName, EdsResourceWatcher watcher) {
-    synchronized (lock) {
-      ResourceSubscriber subscriber = edsResourceSubscribers.get(resourceName);
-      if (subscriber == null) {
-        getLogger().log(XdsLogLevel.INFO, "Subscribe EDS resource {0}", resourceName);
-        subscriber = new ResourceSubscriber(ResourceType.EDS, resourceName);
-        edsResourceSubscribers.put(resourceName, subscriber);
-        adjustResourceSubscription(ResourceType.EDS);
+  void watchEdsResource(final String resourceName, final EdsResourceWatcher watcher) {
+    getSyncContext().execute(new Runnable() {
+      @Override
+      public void run() {
+        ResourceSubscriber subscriber = edsResourceSubscribers.get(resourceName);
+        if (subscriber == null) {
+          getLogger().log(XdsLogLevel.INFO, "Subscribe EDS resource {0}", resourceName);
+          subscriber = new ResourceSubscriber(ResourceType.EDS, resourceName);
+          edsResourceSubscribers.put(resourceName, subscriber);
+          adjustResourceSubscription(ResourceType.EDS);
+        }
+        subscriber.addWatcher(watcher);
       }
-      subscriber.addWatcher(watcher);
-    }
+    });
   }
 
   @Override
-  void cancelEdsResourceWatch(String resourceName, EdsResourceWatcher watcher) {
-    synchronized (lock) {
-      ResourceSubscriber subscriber = edsResourceSubscribers.get(resourceName);
-      subscriber.removeWatcher(watcher);
-      if (!subscriber.isWatched()) {
-        subscriber.stopTimer();
-        getLogger().log(XdsLogLevel.INFO, "Unsubscribe EDS resource {0}", resourceName);
-        edsResourceSubscribers.remove(resourceName);
-        adjustResourceSubscription(ResourceType.EDS);
+  void cancelEdsResourceWatch(final String resourceName, final EdsResourceWatcher watcher) {
+    getSyncContext().execute(new Runnable() {
+      @Override
+      public void run() {
+        ResourceSubscriber subscriber = edsResourceSubscribers.get(resourceName);
+        subscriber.removeWatcher(watcher);
+        if (!subscriber.isWatched()) {
+          subscriber.stopTimer();
+          getLogger().log(XdsLogLevel.INFO, "Unsubscribe EDS resource {0}", resourceName);
+          edsResourceSubscribers.remove(resourceName);
+          adjustResourceSubscription(ResourceType.EDS);
+        }
       }
-    }
+    });
   }
 
   @Override
   LoadStatsStore addClientStats(String clusterName, @Nullable String clusterServiceName) {
-    synchronized (lock) {
-      LoadStatsStore loadStatsStore = loadStatsManager
-          .addLoadStats(clusterName, clusterServiceName);
-      if (!reportingLoad) {
-        lrsClient.startLoadReporting();
-        reportingLoad = true;
-      }
-      return loadStatsStore;
+    LoadStatsStore loadStatsStore;
+    synchronized (this) {
+      loadStatsStore = loadStatsManager.addLoadStats(clusterName, clusterServiceName);
     }
+    getSyncContext().execute(new Runnable() {
+      @Override
+      public void run() {
+        if (!reportingLoad) {
+          lrsClient.startLoadReporting();
+          reportingLoad = true;
+        }
+      }
+    });
+    return loadStatsStore;
   }
 
   @Override
   void removeClientStats(String clusterName, @Nullable String clusterServiceName) {
-    synchronized (lock) {
+    synchronized (this) {
       loadStatsManager.removeLoadStats(clusterName, clusterServiceName);
     }
   }
@@ -691,13 +719,6 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
   }
 
-  @Override
-  protected void runWithSynchronized(Runnable runnable) {
-    synchronized (lock) {
-      runnable.run();
-    }
-  }
-
   /**
    * Tracks a single subscribed resource.
    */
@@ -707,7 +728,7 @@ final class ClientXdsClient extends AbstractXdsClient {
     private final Set<ResourceWatcher> watchers = new HashSet<>();
     private ResourceUpdate data;
     private boolean absent;
-    private ScheduledFuture<?> respTimer;
+    private ScheduledHandle respTimer;
 
     ResourceSubscriber(ResourceType type, String resource) {
       this.type = type;
@@ -738,12 +759,10 @@ final class ClientXdsClient extends AbstractXdsClient {
       class ResourceNotFound implements Runnable {
         @Override
         public void run() {
-          synchronized (lock) {
-            getLogger().log(XdsLogLevel.INFO, "{0} resource {1} initial fetch timeout",
-                type, resource);
-            respTimer = null;
-            onAbsent();
-          }
+          getLogger().log(XdsLogLevel.INFO, "{0} resource {1} initial fetch timeout",
+              type, resource);
+          respTimer = null;
+          onAbsent();
         }
 
         @Override
@@ -752,13 +771,14 @@ final class ClientXdsClient extends AbstractXdsClient {
         }
       }
 
-      respTimer = getTimeService().schedule(
-          new ResourceNotFound(), INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+      respTimer = getSyncContext().schedule(
+          new ResourceNotFound(), INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS,
+          getTimeService());
     }
 
     void stopTimer() {
-      if (respTimer != null && !respTimer.isDone()) {
-        respTimer.cancel(false);
+      if (respTimer != null && respTimer.isPending()) {
+        respTimer.cancel();
         respTimer = null;
       }
     }
@@ -768,8 +788,8 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
 
     void onData(ResourceUpdate data) {
-      if (respTimer != null && !respTimer.isDone()) {
-        respTimer.cancel(false);
+      if (respTimer != null && respTimer.isPending()) {
+        respTimer.cancel();
         respTimer = null;
       }
       ResourceUpdate oldData = this.data;
@@ -783,7 +803,7 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
 
     void onAbsent() {
-      if (respTimer != null && !respTimer.isDone()) {  // too early to conclude absence
+      if (respTimer != null && respTimer.isPending()) {  // too early to conclude absence
         return;
       }
       getLogger().log(XdsLogLevel.INFO, "Conclude {0} resource {1} not exist", type, resource);
@@ -791,25 +811,22 @@ final class ClientXdsClient extends AbstractXdsClient {
         data = null;
         absent = true;
         for (ResourceWatcher watcher : watchers) {
-          // TODO(chengyuanzhang): should invoke callback with watcher's own executor.
           watcher.onResourceDoesNotExist(resource);
         }
       }
     }
 
     void onError(Status error) {
-      if (respTimer != null && !respTimer.isDone()) {
-        respTimer.cancel(false);
+      if (respTimer != null && respTimer.isPending()) {
+        respTimer.cancel();
         respTimer = null;
       }
       for (ResourceWatcher watcher : watchers) {
-        // TODO(chengyuanzhang): should invoke callback with watcher's own executor.
         watcher.onError(error);
       }
     }
 
     private void notifyWatcher(ResourceWatcher watcher, ResourceUpdate update) {
-      // TODO(chengyuanzhang): should invoke callbacks with watcher's own executor.
       switch (type) {
         case LDS:
           ((LdsResourceWatcher) watcher).onChanged((LdsUpdate) update);
