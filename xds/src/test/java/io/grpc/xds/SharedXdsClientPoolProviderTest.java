@@ -34,11 +34,7 @@ import io.grpc.xds.SharedXdsClientPoolProvider.RefCountedXdsClientObjectPool;
 import io.grpc.xds.SharedXdsClientPoolProvider.RefCountedXdsClientObjectPool.XdsClientFactory;
 import io.grpc.xds.XdsClient.XdsChannel;
 import java.util.Collections;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -83,59 +79,6 @@ public class SharedXdsClientPoolProviderTest {
     verifyNoMoreInteractions(bootstrapper, channelFactory);
   }
 
-  @SuppressWarnings({"unchecked", "rawtypes"})
-  @Test
-  public void getXdsClientPool_concurrent()
-      throws InterruptedException, XdsInitializationException {
-    int numThreads = 3;
-    ExecutorService executor = Executors.newFixedThreadPool(numThreads);
-    BootstrapInfo bootstrapInfo = new BootstrapInfo(
-        Collections.singletonList(
-            new ServerInfo("trafficdirector.googleapis.com",
-                Collections.singletonList(new ChannelCreds("insecure", null)),
-                Collections.<String>emptyList())),
-        node, null);
-    Bootstrapper bootstrapper = mock(Bootstrapper.class);
-    when(bootstrapper.readBootstrap()).thenReturn(bootstrapInfo);
-    XdsChannelFactory channelFactory = mock(XdsChannelFactory.class);
-    when(channelFactory.createChannel(ArgumentMatchers.<ServerInfo>anyList())).thenReturn(channel);
-
-    final SharedXdsClientPoolProvider provider =
-        new SharedXdsClientPoolProvider(bootstrapper, channelFactory);
-
-    final ObjectPool<XdsClient>[] xdsClientPools = new ObjectPool[numThreads];
-    final CountDownLatch latch = new CountDownLatch(numThreads);
-    class GetXdsClientPool implements Runnable {
-      private final int index;
-
-      private GetXdsClientPool(int index) {
-        this.index = index;
-      }
-
-      @Override
-      public void run() {
-        try {
-          xdsClientPools[index] = provider.getXdsClientPool();
-        } catch (XdsInitializationException e) {
-          throw new RuntimeException(e);
-        }
-        latch.countDown();
-      }
-    }
-
-    for (int i = 0; i < numThreads; i++) {
-      executor.execute(new GetXdsClientPool(i));
-    }
-    latch.await(1L, TimeUnit.SECONDS);
-    assertThat(xdsClientPools[0]).isNotNull();
-    for (int i = 1; i < numThreads; i++) {
-      assertThat(xdsClientPools[i]).isSameInstanceAs(xdsClientPools[0]);
-    }
-    verify(bootstrapper).readBootstrap();
-    verify(channelFactory).createChannel(ArgumentMatchers.<ServerInfo>anyList());
-    executor.shutdown();
-  }
-
   @Test
   public void refCountedXdsClientObjectPool_delayedCreation() {
     RefCountedXdsClientObjectPool xdsClientPool =
@@ -174,74 +117,5 @@ public class SharedXdsClientPoolProviderTest {
 
     XdsClient xdsClient2 = xdsClientPool.getObject();
     assertThat(xdsClient2).isNotSameInstanceAs(xdsClient1);
-  }
-
-  @Test
-  public void refCountedXdsClientObjectPool_concurrentGet() throws InterruptedException {
-    int numThreads = 3;
-    ExecutorService executor = Executors.newFixedThreadPool(numThreads);
-    final RefCountedXdsClientObjectPool xdsClientPool =
-        new RefCountedXdsClientObjectPool(channel, node, factory);
-    final XdsClient[] xdsClients = new XdsClient[numThreads];
-    final CountDownLatch latch = new CountDownLatch(numThreads);
-    class GetXdsClient implements Runnable {
-      private final int index;
-
-      private GetXdsClient(int index) {
-        this.index = index;
-      }
-
-      @Override
-      public void run() {
-        xdsClients[index] = xdsClientPool.getObject();
-        latch.countDown();
-      }
-    }
-
-    for (int i = 0; i < numThreads; i++) {
-      executor.execute(new GetXdsClient(i));
-    }
-    latch.await(1L, TimeUnit.SECONDS);
-    assertThat(xdsClientRef.get()).isNotNull();
-    for (int i = 0; i < numThreads; i++) {
-      assertThat(xdsClients[i]).isSameInstanceAs(xdsClientRef.get());
-    }
-    executor.shutdown();
-  }
-
-  @Test
-  public void refCountedXdsClientObjectPool_concurrentReturn() throws InterruptedException {
-    int numThreads = 3;
-    ExecutorService executor = Executors.newFixedThreadPool(numThreads);
-    final RefCountedXdsClientObjectPool xdsClientPool =
-        new RefCountedXdsClientObjectPool(channel, node, factory);
-    final XdsClient[] xdsClients = new XdsClient[numThreads];
-    for (int i = 0; i < numThreads; i++) {
-      xdsClients[i] = xdsClientPool.getObject();
-    }
-    final CountDownLatch latch = new CountDownLatch(numThreads);
-    class ReturnXdsClient implements Runnable {
-      private final int index;
-
-      private ReturnXdsClient(int index) {
-        this.index = index;
-      }
-
-      @Override
-      public void run() {
-        xdsClients[index] = xdsClientPool.returnObject(xdsClients[index]);
-        latch.countDown();
-      }
-    }
-
-    for (int i = 0; i < numThreads; i++) {
-      executor.execute(new ReturnXdsClient(i));
-    }
-    latch.await(1L, TimeUnit.SECONDS);
-    for (int i = 0; i < numThreads; i++) {
-      assertThat(xdsClients[i]).isNull();
-    }
-    verify(xdsClientRef.get()).shutdown();
-    executor.shutdown();
   }
 }
