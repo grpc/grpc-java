@@ -442,7 +442,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         buf.append('-');
       }
       buf.append(seconds);
-      buf.append(String.format(Locale.ROOT, ".%09d", nanos));
+      buf.append(String.format(Locale.US, ".%09d", nanos));
       buf.append("s. ");
       buf.append(insight);
       stream.cancel(DEADLINE_EXCEEDED.augmentDescription(buf.toString()));

@@ -207,7 +207,7 @@ public final class Deadline implements Comparable<Deadline> {
     }
     buf.append(seconds);
     if (nanos > 0) {
-      buf.append(String.format(Locale.ROOT, ".%09d", nanos));
+      buf.append(String.format(Locale.US, ".%09d", nanos));
     }
     buf.append("s from now");
     if (ticker != SYSTEM_TICKER) {
