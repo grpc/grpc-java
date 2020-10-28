@@ -19,22 +19,11 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.Preconditions;
-import com.google.common.base.Stopwatch;
-import com.google.common.base.Supplier;
 import io.grpc.Internal;
 import io.grpc.NameResolver.Args;
 import io.grpc.NameResolverProvider;
-import io.grpc.SynchronizationContext;
-import io.grpc.internal.BackoffPolicy;
-import io.grpc.internal.ExponentialBackoffPolicy;
-import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
-import io.grpc.xds.Bootstrapper.BootstrapInfo;
-import io.grpc.xds.XdsClient.RefCountedXdsClientObjectPool;
-import io.grpc.xds.XdsClient.XdsChannel;
-import io.grpc.xds.XdsClient.XdsClientFactory;
 import java.net.URI;
-import java.util.concurrent.ScheduledExecutorService;
 
 /**
  * A provider for {@link XdsNameResolver}.
@@ -61,13 +50,8 @@ public final class XdsNameResolverProvider extends NameResolverProvider {
           targetPath,
           targetUri);
       String name = targetPath.substring(1);
-      XdsClientPoolFactory xdsClientPoolFactory =
-          new RefCountedXdsClientPoolFactory(args.getSynchronizationContext(),
-              args.getScheduledExecutorService(), new ExponentialBackoffPolicy.Provider(),
-              GrpcUtil.STOPWATCH_SUPPLIER);
-      return new XdsNameResolver(
-          name, args.getServiceConfigParser(),
-          args.getSynchronizationContext(), xdsClientPoolFactory);
+      return new XdsNameResolver(name, args.getServiceConfigParser(),
+          args.getSynchronizationContext());
     }
     return null;
   }
@@ -89,38 +73,7 @@ public final class XdsNameResolverProvider extends NameResolverProvider {
     return 4;
   }
 
-  static class RefCountedXdsClientPoolFactory implements XdsClientPoolFactory {
-    private final SynchronizationContext syncContext;
-    private final ScheduledExecutorService timeService;
-    private final BackoffPolicy.Provider backoffPolicyProvider;
-    private final Supplier<Stopwatch> stopwatchSupplier;
-
-    RefCountedXdsClientPoolFactory(
-        SynchronizationContext syncContext,
-        ScheduledExecutorService timeService,
-        BackoffPolicy.Provider backoffPolicyProvider,
-        Supplier<Stopwatch> stopwatchSupplier) {
-      this.syncContext = checkNotNull(syncContext, "syncContext");
-      this.timeService = checkNotNull(timeService, "timeService");
-      this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
-      this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
-    }
-
-    @Override
-    public ObjectPool<XdsClient> newXdsClientObjectPool(
-        final BootstrapInfo bootstrapInfo, final XdsChannel channel) {
-      XdsClientFactory xdsClientFactory = new XdsClientFactory() {
-        @Override
-        XdsClient createXdsClient() {
-          return new XdsClientImpl2(channel, bootstrapInfo.getNode(), syncContext, timeService,
-              backoffPolicyProvider, stopwatchSupplier);
-        }
-      };
-      return new RefCountedXdsClientObjectPool(xdsClientFactory);
-    }
-  }
-
   interface XdsClientPoolFactory {
-    ObjectPool<XdsClient> newXdsClientObjectPool(BootstrapInfo bootstrapInfo, XdsChannel channel);
+    ObjectPool<XdsClient> getXdsClientPool() throws XdsInitializationException;
   }
 }

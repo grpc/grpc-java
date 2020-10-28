@@ -19,15 +19,12 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.MoreObjects.ToStringHelper;
-import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
-import io.grpc.internal.ObjectPool;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
@@ -537,7 +534,8 @@ abstract class XdsClient {
   /**
    * Shutdown this {@link XdsClient} and release resources.
    */
-  abstract void shutdown();
+  void shutdown() {
+  }
 
   /**
    * Registers a data watcher for the given LDS resource.
@@ -611,74 +609,10 @@ abstract class XdsClient {
     throw new UnsupportedOperationException();
   }
 
-  // TODO(chengyuanzhang): eliminate this factory
-  abstract static class XdsClientFactory {
-    abstract XdsClient createXdsClient();
-  }
-
-  /**
-   * An {@link ObjectPool} holding reference and ref-count of an {@link XdsClient} instance.
-   * Initially the instance is null and the ref-count is zero. {@link #getObject()} will create a
-   * new XdsClient instance if the ref-count is zero when calling the method. {@code #getObject()}
-   * increments the ref-count and {@link #returnObject(Object)} decrements it. Anytime when the
-   * ref-count gets back to zero, the XdsClient instance will be shutdown and de-referenced.
-   */
-  static final class RefCountedXdsClientObjectPool implements ObjectPool<XdsClient> {
-
-    private final XdsClientFactory xdsClientFactory;
-
-    @VisibleForTesting
-    @Nullable
-    XdsClient xdsClient;
-
-    private int refCount;
-
-    RefCountedXdsClientObjectPool(XdsClientFactory xdsClientFactory) {
-      this.xdsClientFactory = Preconditions.checkNotNull(xdsClientFactory, "xdsClientFactory");
-    }
-
-    /**
-     * See {@link RefCountedXdsClientObjectPool}.
-     */
-    @Override
-    public synchronized XdsClient getObject() {
-      if (xdsClient == null) {
-        checkState(
-            refCount == 0,
-            "Bug: refCount should be zero while xdsClient is null");
-        xdsClient = xdsClientFactory.createXdsClient();
-      }
-      refCount++;
-      return xdsClient;
-    }
-
-    /**
-     * See {@link RefCountedXdsClientObjectPool}.
-     */
-    @Override
-    public synchronized XdsClient returnObject(Object object) {
-      checkState(
-          object == xdsClient,
-          "Bug: the returned object '%s' does not match current XdsClient '%s'",
-          object,
-          xdsClient);
-
-      refCount--;
-      checkState(refCount >= 0, "Bug: refCount of XdsClient less than 0");
-      if (refCount == 0) {
-        xdsClient.shutdown();
-        xdsClient = null;
-      }
-
-      return null;
-    }
-  }
-
   static final class XdsChannel {
     private final ManagedChannel managedChannel;
     private final boolean useProtocolV3;
 
-    @VisibleForTesting
     XdsChannel(ManagedChannel managedChannel, boolean useProtocolV3) {
       this.managedChannel = managedChannel;
       this.useProtocolV3 = useProtocolV3;
