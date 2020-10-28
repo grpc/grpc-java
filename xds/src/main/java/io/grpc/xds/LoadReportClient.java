@@ -125,7 +125,7 @@ final class LoadReportClient {
   }
 
   @VisibleForTesting
-  class LoadReportingTask implements Runnable {
+  static class LoadReportingTask implements Runnable {
     private final LrsStream stream;
 
     LoadReportingTask(LrsStream stream) {
