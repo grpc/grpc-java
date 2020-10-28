@@ -71,13 +71,13 @@ final class ServerXdsClient extends AbstractXdsClient {
 
   @Override
   void watchListenerData(final int port, final ListenerWatcher watcher) {
+    checkState(listenerWatcher == null, "ListenerWatcher already registered");
+    listenerWatcher = checkNotNull(watcher, "watcher");
+    checkArgument(port > 0, "port needs to be > 0");
+    listenerPort = port;
     getSyncContext().execute(new Runnable() {
       @Override
       public void run() {
-        checkState(listenerWatcher == null, "ListenerWatcher already registered");
-        listenerWatcher = checkNotNull(watcher, "watcher");
-        checkArgument(port > 0, "port needs to be > 0");
-        listenerPort = port;
         getLogger().log(XdsLogLevel.INFO, "Started watching listener for port {0}", port);
         if (!newServerApi) {
           updateNodeMetadataForListenerRequest(port);

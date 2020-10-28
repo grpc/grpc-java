@@ -21,6 +21,7 @@ import static io.grpc.xds.XdsClientTestHelper.buildDiscoveryResponseV2;
 import static io.grpc.xds.XdsClientTestHelper.buildListenerV2;
 import static io.grpc.xds.XdsClientTestHelper.buildRouteConfigurationV2;
 import static io.grpc.xds.XdsClientTestHelper.buildVirtualHostV2;
+import static org.junit.Assert.fail;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -225,6 +226,19 @@ public class ServerXdsClientTest {
         .setTypeUrl(typeUrl)
         .setResponseNonce(nonce)
         .build();
+  }
+
+  @Test
+  public void ldsResponse_2listenerWatchers_expectError() {
+    xdsClient.watchListenerData(PORT, listenerWatcher);
+    try {
+      xdsClient.watchListenerData(80, listenerWatcher);
+      fail("expected exception");
+    } catch (IllegalStateException expected) {
+      assertThat(expected)
+          .hasMessageThat()
+          .isEqualTo("ListenerWatcher already registered");
+    }
   }
 
   /**
