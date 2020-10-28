@@ -64,7 +64,8 @@ abstract class AbstractXdsClient extends XdsClient {
       "type.googleapis.com/envoy.api.v2.RouteConfiguration";
   private static final String ADS_TYPE_URL_RDS =
       "type.googleapis.com/envoy.config.route.v3.RouteConfiguration";
-  private static final String ADS_TYPE_URL_CDS_V2 = "type.googleapis.com/envoy.api.v2.Cluster";
+  @VisibleForTesting
+  static final String ADS_TYPE_URL_CDS_V2 = "type.googleapis.com/envoy.api.v2.Cluster";
   private static final String ADS_TYPE_URL_CDS =
       "type.googleapis.com/envoy.config.cluster.v3.Cluster";
   private static final String ADS_TYPE_URL_EDS_V2 =
