@@ -815,7 +815,6 @@ final class ClientXdsClient extends AbstractXdsClient {
         respTimer = null;
       }
       for (ResourceWatcher watcher : watchers) {
-        // TODO(chengyuanzhang): should invoke callback with watcher's own executor.
         watcher.onError(error);
       }
     }
