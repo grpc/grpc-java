@@ -166,7 +166,7 @@ final class XdsClientImpl2 extends XdsClient {
     this.timeService = checkNotNull(timeService, "timeService");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     adsStreamRetryStopwatch = checkNotNull(stopwatchSupplier, "stopwatchSupplier").get();
-    lrsClient = new LoadReportClient(loadStatsManager, xdsChannel, node, timeService,
+    lrsClient = new LoadReportClient(loadStatsManager, xdsChannel, node, syncContext, timeService,
         backoffPolicyProvider, stopwatchSupplier);
     logId = InternalLogId.allocate("xds-client", null);
     logger = XdsLogger.withLogId(logId);
