@@ -74,6 +74,10 @@ final class ClientXdsClient extends AbstractXdsClient {
   private static final String TYPE_URL_HTTP_CONNECTION_MANAGER =
       "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3"
           + ".HttpConnectionManager";
+  private static final String TYPE_URL_UPSTREAM_TLS_CONTEXT =
+      "type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext";
+  private static final String TYPE_URL_UPSTREAM_TLS_CONTEXT_V2 =
+      "type.googleapis.com/envoy.api.v2.auth.UpstreamTlsContext";
 
   private final Object lock = new Object();
   private final Map<String, ResourceSubscriber> ldsResourceSubscribers = new HashMap<>();
