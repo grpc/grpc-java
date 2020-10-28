@@ -29,11 +29,11 @@ import io.grpc.ChoiceChannelCredentials;
 import io.grpc.CompositeCallCredentials;
 import io.grpc.CompositeChannelCredentials;
 import io.grpc.ExperimentalApi;
-import io.grpc.ForwardingChannelBuilder;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.Internal;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.TlsChannelCredentials;
+import io.grpc.internal.AbstractManagedChannelImplBuilder;
 import io.grpc.internal.AtomicBackoff;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.ConnectionClientTransport;
@@ -67,7 +67,8 @@ import javax.net.ssl.SSLSocketFactory;
 
 /** Convenience class for building channels with the OkHttp transport. */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1785")
-public final class OkHttpChannelBuilder extends ForwardingChannelBuilder<OkHttpChannelBuilder> {
+public final class OkHttpChannelBuilder extends
+    AbstractManagedChannelImplBuilder<OkHttpChannelBuilder> {
 
   public static final int DEFAULT_FLOW_CONTROL_WINDOW = 65535;
   private final ManagedChannelImplBuilder managedChannelImplBuilder;
