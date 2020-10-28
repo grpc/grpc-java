@@ -27,10 +27,10 @@ import static io.grpc.internal.GrpcUtil.SERVER_KEEPALIVE_TIME_NANOS_DISABLED;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import io.grpc.ExperimentalApi;
-import io.grpc.ForwardingServerBuilder;
 import io.grpc.Internal;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerStreamTracer;
+import io.grpc.internal.AbstractServerImplBuilder;
 import io.grpc.internal.FixedObjectPool;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.InternalServer;
@@ -66,7 +66,7 @@ import javax.net.ssl.SSLException;
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1784")
 @CanIgnoreReturnValue
-public final class NettyServerBuilder extends ForwardingServerBuilder<NettyServerBuilder> {
+public final class NettyServerBuilder extends AbstractServerImplBuilder<NettyServerBuilder> {
 
   // 1MiB
   public static final int DEFAULT_FLOW_CONTROL_WINDOW = 1024 * 1024;
