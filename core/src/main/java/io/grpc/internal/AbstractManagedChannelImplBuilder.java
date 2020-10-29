@@ -32,7 +32,7 @@ import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
 /**
- * Temporarily duplicates of {@link io.grpc.ForwardingChannelBuilder} to fix ABI backward
+ * Temporarily duplicates {@link io.grpc.ForwardingChannelBuilder} to fix ABI backward
  * compatibility.
  *
  * @param <T> The concrete type of this builder.

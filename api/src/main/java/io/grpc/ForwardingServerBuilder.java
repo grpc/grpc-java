@@ -30,7 +30,7 @@ import javax.annotation.Nullable;
  * @since 1.33.0
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/7393")
-public abstract class ForwardingServerBuilder<T extends ServerBuilder<T>> extends ServerBuilder<T> {
+abstract class ForwardingServerBuilder<T extends ServerBuilder<T>> extends ServerBuilder<T> {
 
   /** The default constructor. */
   protected ForwardingServerBuilder() {}
