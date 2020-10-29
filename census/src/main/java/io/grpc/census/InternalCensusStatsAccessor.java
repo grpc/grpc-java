@@ -24,6 +24,7 @@ import io.grpc.ServerStreamTracer;
 import io.opencensus.stats.StatsRecorder;
 import io.opencensus.tags.Tagger;
 import io.opencensus.tags.propagation.TagContextBinarySerializer;
+import io.opencensus.trace.Tracer;
 
 /**
  * Accessor for getting {@link ClientInterceptor} or {@link ServerStreamTracer.Factory} with
@@ -68,13 +69,14 @@ public final class InternalCensusStatsAccessor {
       TagContextBinarySerializer tagCtxSerializer,
       StatsRecorder statsRecorder,
       Supplier<Stopwatch> stopwatchSupplier,
+      Tracer censusTracer,
       boolean propagateTags,
       boolean recordStartedRpcs,
       boolean recordFinishedRpcs,
       boolean recordRealTimeMetrics) {
     CensusStatsModule censusStats =
         new CensusStatsModule(
-            tagger, tagCtxSerializer, statsRecorder, stopwatchSupplier,
+            tagger, tagCtxSerializer, statsRecorder, stopwatchSupplier, censusTracer,
             propagateTags, recordStartedRpcs, recordFinishedRpcs, recordRealTimeMetrics);
     return censusStats.getClientInterceptor();
   }
@@ -104,13 +106,14 @@ public final class InternalCensusStatsAccessor {
       TagContextBinarySerializer tagCtxSerializer,
       StatsRecorder statsRecorder,
       Supplier<Stopwatch> stopwatchSupplier,
+      Tracer censusTracer,
       boolean propagateTags,
       boolean recordStartedRpcs,
       boolean recordFinishedRpcs,
       boolean recordRealTimeMetrics) {
     CensusStatsModule censusStats =
         new CensusStatsModule(
-            tagger, tagCtxSerializer, statsRecorder, stopwatchSupplier,
+            tagger, tagCtxSerializer, statsRecorder, stopwatchSupplier, censusTracer,
             propagateTags, recordStartedRpcs, recordFinishedRpcs, recordRealTimeMetrics);
     return censusStats.getServerTracerFactory();
   }

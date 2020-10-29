@@ -213,7 +213,7 @@ public class CensusModulesTest {
     censusStats =
         new CensusStatsModule(
             tagger, tagCtxSerializer, statsRecorder, fakeClock.getStopwatchSupplier(),
-            true, true, true, false /* real-time */);
+            tracer, true, true, true, false /* real-time */);
     censusTracing = new CensusTracingModule(tracer, mockTracingPropagationHandler);
   }
 
@@ -387,7 +387,7 @@ public class CensusModulesTest {
     CensusStatsModule localCensusStats =
         new CensusStatsModule(
             tagger, tagCtxSerializer, statsRecorder, fakeClock.getStopwatchSupplier(),
-            true, recordStarts, recordFinishes, recordRealTime);
+            tracer, true, recordStarts, recordFinishes, recordRealTime);
     CensusStatsModule.ClientCallTracer callTracer =
         localCensusStats.newClientCallTracer(
             tagger.empty(), method.getFullMethodName());
@@ -678,6 +678,7 @@ public class CensusModulesTest {
             tagCtxSerializer,
             statsRecorder,
             fakeClock.getStopwatchSupplier(),
+            tracer,
             propagate, recordStats, recordStats, recordStats);
     Metadata headers = new Metadata();
     CensusStatsModule.ClientCallTracer callTracer =
@@ -923,7 +924,7 @@ public class CensusModulesTest {
     CensusStatsModule localCensusStats =
         new CensusStatsModule(
             tagger, tagCtxSerializer, statsRecorder, fakeClock.getStopwatchSupplier(),
-            true, recordStarts, recordFinishes, recordRealTime);
+            tracer, true, recordStarts, recordFinishes, recordRealTime);
     ServerStreamTracer.Factory tracerFactory = localCensusStats.getServerTracerFactory();
     ServerStreamTracer tracer =
         tracerFactory.newServerStreamTracer(method.getFullMethodName(), new Metadata());
@@ -1184,7 +1185,7 @@ public class CensusModulesTest {
 
     CensusStatsModule localCensusStats = new CensusStatsModule(
         tagger, tagCtxSerializer, localStats.getStatsRecorder(), fakeClock.getStopwatchSupplier(),
-        false, false, true, false /* real-time */);
+        tracer, false, false, true, false /* real-time */);
 
     CensusStatsModule.ClientCallTracer callTracer =
         localCensusStats.newClientCallTracer(

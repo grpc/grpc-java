@@ -70,6 +70,7 @@ import io.grpc.internal.testing.StatsTestUtils.FakeStatsRecorder;
 import io.grpc.internal.testing.StatsTestUtils.FakeTagContext;
 import io.grpc.internal.testing.StatsTestUtils.FakeTagContextBinarySerializer;
 import io.grpc.internal.testing.StatsTestUtils.FakeTagger;
+import io.grpc.internal.testing.StatsTestUtils.FakeTracer;
 import io.grpc.internal.testing.StatsTestUtils.MetricsRecord;
 import io.grpc.internal.testing.StreamRecorder;
 import io.grpc.internal.testing.TestClientStreamTracer;
@@ -156,6 +157,7 @@ public abstract class AbstractInteropTest {
   private static final FakeTagger tagger = new FakeTagger();
   private static final FakeTagContextBinarySerializer tagContextBinarySerializer =
       new FakeTagContextBinarySerializer();
+  private final FakeTracer censusTracer = new FakeTracer();
 
   private final AtomicReference<ServerCall<?, ?>> serverCallCapture =
       new AtomicReference<>();
@@ -353,14 +355,14 @@ public abstract class AbstractInteropTest {
         InternalCensusStatsAccessor
             .getClientInterceptor(
                 tagger, tagContextBinarySerializer, clientStatsRecorder,
-                GrpcUtil.STOPWATCH_SUPPLIER,
+                GrpcUtil.STOPWATCH_SUPPLIER, censusTracer,
                 true, true, true, false /* real-time metrics */);
   }
 
   protected final ServerStreamTracer.Factory createCustomCensusTracerFactory() {
     return InternalCensusStatsAccessor.getServerStreamTracerFactory(
         tagger, tagContextBinarySerializer, serverStatsRecorder,
-        GrpcUtil.STOPWATCH_SUPPLIER,
+        GrpcUtil.STOPWATCH_SUPPLIER, censusTracer,
         true, true, true, false /* real-time metrics */);
   }
 

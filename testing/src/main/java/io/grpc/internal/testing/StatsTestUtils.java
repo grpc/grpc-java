@@ -51,6 +51,7 @@ import io.opencensus.trace.SpanContext;
 import io.opencensus.trace.SpanId;
 import io.opencensus.trace.TraceId;
 import io.opencensus.trace.TraceOptions;
+import io.opencensus.trace.Tracer;
 import java.util.EnumSet;
 import java.util.Iterator;
 import java.util.List;
@@ -192,6 +193,20 @@ public class StatsTestUtils {
     @Override
     public Scope withTagContext(TagContext tags) {
       throw new UnsupportedOperationException();
+    }
+  }
+
+  public static final class FakeTracer extends Tracer {
+
+    @Override
+    public SpanBuilder spanBuilderWithExplicitParent(String spanName, @Nullable Span parent) {
+      return null;
+    }
+
+    @Override
+    public SpanBuilder spanBuilderWithRemoteParent(String spanName,
+        @Nullable SpanContext remoteParentSpanContext) {
+      return null;
     }
   }
 
