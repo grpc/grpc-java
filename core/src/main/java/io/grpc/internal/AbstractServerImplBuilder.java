@@ -14,9 +14,20 @@
  * limitations under the License.
  */
 
-package io.grpc;
+package io.grpc.internal;
 
 import com.google.common.base.MoreObjects;
+import io.grpc.BinaryLog;
+import io.grpc.BindableService;
+import io.grpc.CompressorRegistry;
+import io.grpc.DecompressorRegistry;
+import io.grpc.HandlerRegistry;
+import io.grpc.Server;
+import io.grpc.ServerBuilder;
+import io.grpc.ServerInterceptor;
+import io.grpc.ServerServiceDefinition;
+import io.grpc.ServerStreamTracer;
+import io.grpc.ServerTransportFilter;
 import java.io.File;
 import java.io.InputStream;
 import java.util.concurrent.Executor;
@@ -26,14 +37,17 @@ import javax.annotation.Nullable;
 /**
  * A {@link ServerBuilder} that delegates all its builder method to another builder by default.
  *
- * @param <T> The type of the subclass extending this abstract class.
- * @since 1.33.0
+ * <p>Temporarily duplicates io.grpc.ForwardingServerBuilder (temporarily package-private)
+ * to fix ABI backward compatibility.
+
+ * @param <T> The concrete type of this builder.
+ * @see <a href="https://github.com/grpc/grpc-java/issues/7211">grpc/grpc-java#7211</a>
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/7393")
-abstract class ForwardingServerBuilder<T extends ServerBuilder<T>> extends ServerBuilder<T> {
+public abstract class AbstractServerImplBuilder
+    <T extends AbstractServerImplBuilder<T>> extends ServerBuilder<T> {
 
   /** The default constructor. */
-  protected ForwardingServerBuilder() {}
+  protected AbstractServerImplBuilder() {}
 
   /**
    * This method serves to force sub classes to "hide" this static factory.
