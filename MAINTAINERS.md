@@ -15,6 +15,7 @@ for general contribution guidelines.
 - [jiangtaoli2016](https://github.com/jiangtaoli2016), Google LLC
 - [ran-su](https://github.com/ran-su), Google LLC
 - [sanjaypujare](https://github.com/sanjaypujare), Google LLC
+- [sergiitk](https://github.com/sergiitk), Google LLC
 - [srini100](https://github.com/srini100), Google LLC
 - [voidzcy](https://github.com/voidzcy), Google LLC
 - [zhangkun83](https://github.com/zhangkun83), Google LLC
