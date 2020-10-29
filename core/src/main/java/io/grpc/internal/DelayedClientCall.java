@@ -30,6 +30,7 @@ import io.grpc.Metadata;
 import io.grpc.Status;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -117,7 +118,7 @@ class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       buf.append("Deadline exceeded after ");
     }
     buf.append(seconds);
-    buf.append(String.format(".%09d", nanos));
+    buf.append(String.format(Locale.US, ".%09d", nanos));
     buf.append("s. ");
     /** Cancels the call if deadline exceeded prior to the real call being set. */
     class DeadlineExceededRunnable implements Runnable {
