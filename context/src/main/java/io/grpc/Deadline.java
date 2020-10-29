@@ -17,6 +17,7 @@
 package io.grpc;
 
 import java.util.Arrays;
+import java.util.Locale;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -206,7 +207,7 @@ public final class Deadline implements Comparable<Deadline> {
     }
     buf.append(seconds);
     if (nanos > 0) {
-      buf.append(String.format(".%09d", nanos));
+      buf.append(String.format(Locale.US, ".%09d", nanos));
     }
     buf.append("s from now");
     if (ticker != SYSTEM_TICKER) {

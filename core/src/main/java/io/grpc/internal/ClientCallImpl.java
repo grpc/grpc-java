@@ -54,6 +54,7 @@ import io.perfmark.PerfMark;
 import io.perfmark.Tag;
 import java.io.InputStream;
 import java.nio.charset.Charset;
+import java.util.Locale;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
@@ -441,7 +442,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         buf.append('-');
       }
       buf.append(seconds);
-      buf.append(String.format(".%09d", nanos));
+      buf.append(String.format(Locale.US, ".%09d", nanos));
       buf.append("s. ");
       buf.append(insight);
       stream.cancel(DEADLINE_EXCEEDED.augmentDescription(buf.toString()));
