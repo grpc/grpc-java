@@ -32,14 +32,12 @@ import com.google.protobuf.TypeRegistry;
 import com.google.protobuf.util.Durations;
 import com.google.protobuf.util.JsonFormat;
 import com.google.rpc.Code;
-import io.envoyproxy.envoy.config.cluster.v3.CircuitBreakers.Thresholds;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.DiscoveryType;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.EdsClusterConfig;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.LbPolicy;
 import io.envoyproxy.envoy.config.core.v3.Address;
 import io.envoyproxy.envoy.config.core.v3.HttpProtocolOptions;
-import io.envoyproxy.envoy.config.core.v3.RoutingPriority;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
 import io.envoyproxy.envoy.config.endpoint.v3.LbEndpoint;
 import io.envoyproxy.envoy.config.listener.v3.FilterChain;
@@ -723,18 +721,6 @@ final class XdsClientImpl2 extends XdsClient {
           break;
         }
         updateBuilder.setLrsServerName("");
-      }
-      if (cluster.hasCircuitBreakers()) {
-        List<Thresholds> thresholds = cluster.getCircuitBreakers().getThresholdsList();
-        for (Thresholds threshold : thresholds) {
-          if (threshold.getPriority() != RoutingPriority.DEFAULT) {
-            continue;
-          }
-          if (threshold.hasMaxRequests()) {
-            updateBuilder.setMaxConcurrentRequests(
-                threshold.getMaxRequests().getValue() & 0xFFFFFFFFL);
-          }
-        }
       }
       try {
         EnvoyServerProtoData.UpstreamTlsContext upstreamTlsContext =
