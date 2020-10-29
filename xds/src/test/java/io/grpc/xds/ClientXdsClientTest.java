@@ -28,7 +28,6 @@ import static io.grpc.xds.XdsClientTestHelper.buildLocalityLbEndpoints;
 import static io.grpc.xds.XdsClientTestHelper.buildRouteConfiguration;
 import static io.grpc.xds.XdsClientTestHelper.buildSecureCluster;
 import static io.grpc.xds.XdsClientTestHelper.buildUpstreamTlsContext;
-import static io.grpc.xds.XdsClientTestHelper.buildVirtualHost;
 import static io.grpc.xds.XdsClientTestHelper.buildVirtualHosts;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
@@ -43,15 +42,10 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Any;
-import com.google.protobuf.UInt32Value;
 import com.google.protobuf.util.Durations;
-import io.envoyproxy.envoy.config.cluster.v3.CircuitBreakers;
-import io.envoyproxy.envoy.config.cluster.v3.CircuitBreakers.Thresholds;
-import io.envoyproxy.envoy.config.cluster.v3.Cluster;
 import io.envoyproxy.envoy.config.core.v3.AggregatedConfigSource;
 import io.envoyproxy.envoy.config.core.v3.ConfigSource;
 import io.envoyproxy.envoy.config.core.v3.HealthStatus;
-import io.envoyproxy.envoy.config.core.v3.RoutingPriority;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment.Policy;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterStats;
@@ -70,7 +64,6 @@ import io.grpc.Context.CancellationListener;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.Status.Code;
-import io.grpc.SynchronizationContext;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.BackoffPolicy;
@@ -79,6 +72,7 @@ import io.grpc.internal.FakeClock.ScheduledTask;
 import io.grpc.internal.FakeClock.TaskFilter;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
+import io.grpc.xds.AbstractXdsClient.ResourceType;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.LbEndpoint;
 import io.grpc.xds.EnvoyProtoData.Locality;
@@ -94,8 +88,6 @@ import io.grpc.xds.XdsClient.RdsResourceWatcher;
 import io.grpc.xds.XdsClient.RdsUpdate;
 import io.grpc.xds.XdsClient.ResourceWatcher;
 import io.grpc.xds.XdsClient.XdsChannel;
-import io.grpc.xds.XdsClientImpl2.MessagePrinter;
-import io.grpc.xds.XdsClientImpl2.ResourceType;
 import java.io.IOException;
 import java.util.ArrayDeque;
 import java.util.Arrays;
@@ -121,10 +113,10 @@ import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
 /**
- * Tests for {@link XdsClientImpl2}.
+ * Tests for {@link ClientXdsClient}.
  */
 @RunWith(JUnit4.class)
-public class XdsClientImplTest2 {
+public class ClientXdsClientTest {
   private static final String LDS_RESOURCE = "listener.googleapis.com";
   private static final String RDS_RESOURCE = "route-configuration.googleapis.com";
   private static final String CDS_RESOURCE = "cluster.googleapis.com";
@@ -134,7 +126,7 @@ public class XdsClientImplTest2 {
       new FakeClock.TaskFilter() {
         @Override
         public boolean shouldAccept(Runnable command) {
-          return command.toString().contains(XdsClientImpl2.RpcRetryTask.class.getSimpleName());
+          return command.toString().contains(AbstractXdsClient.RpcRetryTask.class.getSimpleName());
         }
       };
 
@@ -173,13 +165,6 @@ public class XdsClientImplTest2 {
   @Rule
   public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
 
-  private final SynchronizationContext syncContext = new SynchronizationContext(
-      new Thread.UncaughtExceptionHandler() {
-        @Override
-        public void uncaughtException(Thread t, Throwable e) {
-          throw new AssertionError(e);
-        }
-      });
   private final FakeClock fakeClock = new FakeClock();
   private final Queue<RpcCall<DiscoveryRequest, DiscoveryResponse>> resourceDiscoveryCalls =
       new ArrayDeque<>();
@@ -214,7 +199,7 @@ public class XdsClientImplTest2 {
   private EdsResourceWatcher edsResourceWatcher;
 
   private ManagedChannel channel;
-  private XdsClientImpl2 xdsClient;
+  private ClientXdsClient xdsClient;
 
   @Before
   public void setUp() throws IOException {
@@ -280,10 +265,9 @@ public class XdsClientImplTest2 {
         cleanupRule.register(InProcessChannelBuilder.forName(serverName).directExecutor().build());
 
     xdsClient =
-        new XdsClientImpl2(
+        new ClientXdsClient(
             new XdsChannel(channel, /* useProtocolV3= */ true),
             EnvoyProtoData.Node.newBuilder().build(),
-            syncContext,
             fakeClock.getScheduledExecutorService(),
             backoffPolicyProvider,
             fakeClock.getStopwatchSupplier());
@@ -294,12 +278,7 @@ public class XdsClientImplTest2 {
 
   @After
   public void tearDown() {
-    syncContext.execute(new Runnable() {
-      @Override
-      public void run() {
-        xdsClient.shutdown();
-      }
-    });
+    xdsClient.shutdown();
     assertThat(adsEnded.get()).isTrue();
     assertThat(lrsEnded.get()).isTrue();
     assertThat(channel.isShutdown()).isTrue();
@@ -326,7 +305,7 @@ public class XdsClientImplTest2 {
         eq(buildDiscoveryRequest(NODE, "0", LDS_RESOURCE, ResourceType.LDS.typeUrl(), "0000")));
 
     verifyNoInteractions(ldsResourceWatcher);
-    fakeClock.forwardTime(XdsClientImpl2.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(ldsResourceWatcher).onResourceDoesNotExist(LDS_RESOURCE);
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
@@ -413,7 +392,7 @@ public class XdsClientImplTest2 {
   public void cachedLdsResource_absent() {
     RpcCall<DiscoveryRequest, DiscoveryResponse> call =
         startResourceWatcher(ResourceType.LDS, LDS_RESOURCE, ldsResourceWatcher);
-    fakeClock.forwardTime(XdsClientImpl2.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(ldsResourceWatcher).onResourceDoesNotExist(LDS_RESOURCE);
     LdsResourceWatcher watcher = mock(LdsResourceWatcher.class);
     xdsClient.watchLdsResource(LDS_RESOURCE, watcher);
@@ -506,7 +485,7 @@ public class XdsClientImplTest2 {
         argThat(new DiscoveryRequestMatcher(NODE, "", Arrays.asList(LDS_RESOURCE, ldsResource),
             ResourceType.LDS.typeUrl(), "")));
 
-    fakeClock.forwardTime(XdsClientImpl2.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(ldsResourceWatcher).onResourceDoesNotExist(LDS_RESOURCE);
     verify(watcher1).onResourceDoesNotExist(ldsResource);
     verify(watcher2).onResourceDoesNotExist(ldsResource);
@@ -548,7 +527,7 @@ public class XdsClientImplTest2 {
         eq(buildDiscoveryRequest(NODE, "0", RDS_RESOURCE, ResourceType.RDS.typeUrl(), "0000")));
 
     verifyNoInteractions(rdsResourceWatcher);
-    fakeClock.forwardTime(XdsClientImpl2.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(rdsResourceWatcher).onResourceDoesNotExist(RDS_RESOURCE);
     assertThat(fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
@@ -596,7 +575,7 @@ public class XdsClientImplTest2 {
   public void cachedRdsResource_absent() {
     RpcCall<DiscoveryRequest, DiscoveryResponse> call =
         startResourceWatcher(ResourceType.RDS, RDS_RESOURCE, rdsResourceWatcher);
-    fakeClock.forwardTime(XdsClientImpl2.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(rdsResourceWatcher).onResourceDoesNotExist(RDS_RESOURCE);
     RdsResourceWatcher watcher = mock(RdsResourceWatcher.class);
     xdsClient.watchRdsResource(RDS_RESOURCE, watcher);
@@ -688,7 +667,7 @@ public class XdsClientImplTest2 {
         argThat(new DiscoveryRequestMatcher(NODE, "", Arrays.asList(RDS_RESOURCE, rdsResource),
             ResourceType.RDS.typeUrl(), "")));
 
-    fakeClock.forwardTime(XdsClientImpl2.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(rdsResourceWatcher).onResourceDoesNotExist(RDS_RESOURCE);
     verify(watcher1).onResourceDoesNotExist(rdsResource);
     verify(watcher2).onResourceDoesNotExist(rdsResource);
@@ -733,7 +712,7 @@ public class XdsClientImplTest2 {
         eq(buildDiscoveryRequest(NODE, "0", CDS_RESOURCE, ResourceType.CDS.typeUrl(), "0000")));
     verifyNoInteractions(cdsResourceWatcher);
 
-    fakeClock.forwardTime(XdsClientImpl2.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(cdsResourceWatcher).onResourceDoesNotExist(CDS_RESOURCE);
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
@@ -756,40 +735,7 @@ public class XdsClientImplTest2 {
     assertThat(cdsUpdate.getEdsServiceName()).isNull();
     assertThat(cdsUpdate.getLbPolicy()).isEqualTo("round_robin");
     assertThat(cdsUpdate.getLrsServerName()).isNull();
-    assertThat(cdsUpdate.getMaxConcurrentRequests()).isNull();
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
-  }
-
-  @Test
-  public void cdsResponseWithCircuitBreakers() {
-    RpcCall<DiscoveryRequest, DiscoveryResponse> call =
-        startResourceWatcher(ResourceType.CDS, CDS_RESOURCE, cdsResourceWatcher);
-    Cluster cluster = buildCluster(CDS_RESOURCE, null, false);
-    cluster = cluster.toBuilder()
-        .setCircuitBreakers(
-            CircuitBreakers.newBuilder()
-                .addThresholds(
-                    Thresholds.newBuilder()
-                        .setPriority(RoutingPriority.HIGH)
-                        .setMaxRequests(UInt32Value.newBuilder().setValue(50)))
-                .addThresholds(
-                    Thresholds.newBuilder()
-                        .setPriority(RoutingPriority.DEFAULT)
-                        .setMaxRequests(UInt32Value.newBuilder().setValue(200))))
-        .build();
-    DiscoveryResponse response = buildDiscoveryResponse("0",
-        Collections.singletonList(Any.pack(cluster)), ResourceType.CDS.typeUrl(), "0000");
-    call.responseObserver.onNext(response);
-
-    verify(call.requestObserver).onNext(
-        eq(buildDiscoveryRequest(NODE, "0", CDS_RESOURCE, ResourceType.CDS.typeUrl(), "0000")));
-    verify(cdsResourceWatcher, times(1)).onChanged(cdsUpdateCaptor.capture());
-    CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
-    assertThat(cdsUpdate.getClusterName()).isEqualTo(CDS_RESOURCE);
-    assertThat(cdsUpdate.getEdsServiceName()).isNull();
-    assertThat(cdsUpdate.getLbPolicy()).isEqualTo("round_robin");
-    assertThat(cdsUpdate.getLrsServerName()).isNull();
-    assertThat(cdsUpdate.getMaxConcurrentRequests()).isEqualTo(200L);
   }
 
   /**
@@ -861,7 +807,7 @@ public class XdsClientImplTest2 {
   public void cachedCdsResource_absent() {
     RpcCall<DiscoveryRequest, DiscoveryResponse> call =
         startResourceWatcher(ResourceType.CDS, CDS_RESOURCE, cdsResourceWatcher);
-    fakeClock.forwardTime(XdsClientImpl2.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(cdsResourceWatcher).onResourceDoesNotExist(CDS_RESOURCE);
     CdsResourceWatcher watcher = mock(CdsResourceWatcher.class);
     xdsClient.watchCdsResource(CDS_RESOURCE, watcher);
@@ -946,7 +892,7 @@ public class XdsClientImplTest2 {
         argThat(new DiscoveryRequestMatcher(NODE, "", Arrays.asList(CDS_RESOURCE, cdsResource),
             ResourceType.CDS.typeUrl(), "")));
 
-    fakeClock.forwardTime(XdsClientImpl2.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(cdsResourceWatcher).onResourceDoesNotExist(CDS_RESOURCE);
     verify(watcher1).onResourceDoesNotExist(cdsResource);
     verify(watcher2).onResourceDoesNotExist(cdsResource);
@@ -988,9 +934,9 @@ public class XdsClientImplTest2 {
                 buildClusterLoadAssignment("cluster-bar.googleapis.com",
                     ImmutableList.of(
                         buildLocalityLbEndpoints("region1", "zone1", "subzone1",
-                    ImmutableList.of(
-                        buildLbEndpoint("192.168.0.1", 8080, HealthStatus.HEALTHY, 2)),
-                    1, 0)),
+                            ImmutableList.of(
+                                buildLbEndpoint("192.168.0.1", 8080, HealthStatus.HEALTHY, 2)),
+                            1, 0)),
                     ImmutableList.<ClusterLoadAssignment.Policy.DropOverload>of())));
     DiscoveryResponse response =
         buildDiscoveryResponse("0", clusterLoadAssignments, ResourceType.EDS.typeUrl(), "0000");
@@ -1001,7 +947,7 @@ public class XdsClientImplTest2 {
         eq(buildDiscoveryRequest(NODE, "0", EDS_RESOURCE, ResourceType.EDS.typeUrl(), "0000")));
     verifyNoInteractions(edsResourceWatcher);
 
-    fakeClock.forwardTime(XdsClientImpl2.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(edsResourceWatcher).onResourceDoesNotExist(EDS_RESOURCE);
     assertThat(fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
@@ -1110,7 +1056,7 @@ public class XdsClientImplTest2 {
   public void cachedEdsResource_absent() {
     RpcCall<DiscoveryRequest, DiscoveryResponse> call =
         startResourceWatcher(ResourceType.EDS, EDS_RESOURCE, edsResourceWatcher);
-    fakeClock.forwardTime(XdsClientImpl2.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(edsResourceWatcher).onResourceDoesNotExist(EDS_RESOURCE);
     EdsResourceWatcher watcher = mock(EdsResourceWatcher.class);
     xdsClient.watchEdsResource(EDS_RESOURCE, watcher);
@@ -1246,7 +1192,7 @@ public class XdsClientImplTest2 {
         argThat(new DiscoveryRequestMatcher(NODE, "", Arrays.asList(EDS_RESOURCE, edsResource),
             ResourceType.EDS.typeUrl(), "")));
 
-    fakeClock.forwardTime(XdsClientImpl2.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(edsResourceWatcher).onResourceDoesNotExist(EDS_RESOURCE);
     verify(watcher1).onResourceDoesNotExist(edsResource);
     verify(watcher2).onResourceDoesNotExist(edsResource);
@@ -1549,13 +1495,8 @@ public class XdsClientImplTest2 {
    */
   @Test
   public void reportLoadStatsToServer() {
-    final String clusterName = "cluster-foo.googleapis.com";
-    syncContext.execute(new Runnable() {
-      @Override
-      public void run() {
-        xdsClient.addClientStats(clusterName, null);
-      }
-    });
+    String clusterName = "cluster-foo.googleapis.com";
+    xdsClient.addClientStats(clusterName, null);
     ArgumentCaptor<LoadStatsRequest> requestCaptor = ArgumentCaptor.forClass(null);
     RpcCall<LoadStatsRequest, LoadStatsResponse> lrsCall = loadReportCalls.poll();
     verify(lrsCall.requestObserver).onNext(requestCaptor.capture());
@@ -1572,247 +1513,13 @@ public class XdsClientImplTest2 {
     ClusterStats report = Iterables.getOnlyElement(requestCaptor.getValue().getClusterStatsList());
     assertThat(report.getClusterName()).isEqualTo(clusterName);
 
-    syncContext.execute(new Runnable() {
-      @Override
-      public void run() {
-        xdsClient.removeClientStats(clusterName, null);
-      }
-    });
+    xdsClient.removeClientStats(clusterName, null);
     fakeClock.forwardNanos(1000L);
     verify(lrsCall.requestObserver, times(3)).onNext(requestCaptor.capture());
     assertThat(requestCaptor.getValue().getClusterStatsCount())
         .isEqualTo(0);  // no more stats reported
 
     // See more test on LoadReportClientTest.java
-  }
-
-  @Test
-  public void messagePrinter_printLdsResponse() {
-    MessagePrinter printer = new MessagePrinter();
-    List<Any> listeners = ImmutableList.of(
-        Any.pack(buildListener("foo.googleapis.com:8080",
-            Any.pack(
-                HttpConnectionManager.newBuilder()
-                    .setRouteConfig(
-                        buildRouteConfiguration("route-foo.googleapis.com",
-                            ImmutableList.of(
-                                buildVirtualHost(
-                                    ImmutableList.of("foo.googleapis.com", "bar.googleapis.com"),
-                                    "cluster.googleapis.com"))))
-                    .build()))));
-    DiscoveryResponse response =
-        buildDiscoveryResponse("0", listeners, ResourceType.LDS.typeUrl(), "0000");
-
-    String expectedString = "{\n"
-        + "  \"versionInfo\": \"0\",\n"
-        + "  \"resources\": [{\n"
-        + "    \"@type\": \"type.googleapis.com/envoy.config.listener.v3.Listener\",\n"
-        + "    \"name\": \"foo.googleapis.com:8080\",\n"
-        + "    \"address\": {\n"
-        + "    },\n"
-        + "    \"filterChains\": [{\n"
-        + "    }],\n"
-        + "    \"apiListener\": {\n"
-        + "      \"apiListener\": {\n"
-        + "        \"@type\": \"type.googleapis.com/envoy.extensions.filters.network"
-        + ".http_connection_manager.v3.HttpConnectionManager\",\n"
-        + "        \"routeConfig\": {\n"
-        + "          \"name\": \"route-foo.googleapis.com\",\n"
-        + "          \"virtualHosts\": [{\n"
-        + "            \"name\": \"virtualhost00.googleapis.com\",\n"
-        + "            \"domains\": [\"foo.googleapis.com\", \"bar.googleapis.com\"],\n"
-        + "            \"routes\": [{\n"
-        + "              \"match\": {\n"
-        + "                \"prefix\": \"\"\n"
-        + "              },\n"
-        + "              \"route\": {\n"
-        + "                \"cluster\": \"cluster.googleapis.com\"\n"
-        + "              }\n"
-        + "            }]\n"
-        + "          }]\n"
-        + "        }\n"
-        + "      }\n"
-        + "    }\n"
-        + "  }],\n"
-        + "  \"typeUrl\": \"type.googleapis.com/envoy.config.listener.v3.Listener\",\n"
-        + "  \"nonce\": \"0000\"\n"
-        + "}";
-    String res = printer.print(response);
-    assertThat(res).isEqualTo(expectedString);
-  }
-
-  @Test
-  public void messagePrinter_printRdsResponse() {
-    MessagePrinter printer = new MessagePrinter();
-    List<Any> routeConfigs =
-        ImmutableList.of(
-            Any.pack(
-                buildRouteConfiguration(
-                    "route-foo.googleapis.com",
-                    ImmutableList.of(
-                        buildVirtualHost(
-                            ImmutableList.of("foo.googleapis.com", "bar.googleapis.com"),
-                            "cluster.googleapis.com")))));
-    DiscoveryResponse response =
-        buildDiscoveryResponse("213", routeConfigs, ResourceType.RDS.typeUrl(), "0052");
-
-    String expectedString = "{\n"
-        + "  \"versionInfo\": \"213\",\n"
-        + "  \"resources\": [{\n"
-        + "    \"@type\": \"type.googleapis.com/envoy.config.route.v3.RouteConfiguration\",\n"
-        + "    \"name\": \"route-foo.googleapis.com\",\n"
-        + "    \"virtualHosts\": [{\n"
-        + "      \"name\": \"virtualhost00.googleapis.com\",\n"
-        + "      \"domains\": [\"foo.googleapis.com\", \"bar.googleapis.com\"],\n"
-        + "      \"routes\": [{\n"
-        + "        \"match\": {\n"
-        + "          \"prefix\": \"\"\n"
-        + "        },\n"
-        + "        \"route\": {\n"
-        + "          \"cluster\": \"cluster.googleapis.com\"\n"
-        + "        }\n"
-        + "      }]\n"
-        + "    }]\n"
-        + "  }],\n"
-        + "  \"typeUrl\": \"type.googleapis.com/envoy.config.route.v3.RouteConfiguration\",\n"
-        + "  \"nonce\": \"0052\"\n"
-        + "}";
-    String res = printer.print(response);
-    assertThat(res).isEqualTo(expectedString);
-  }
-
-  @Test
-  public void messagePrinter_printCdsResponse() {
-    MessagePrinter printer = new MessagePrinter();
-    List<Any> clusters = ImmutableList.of(
-        Any.pack(buildCluster("cluster-bar.googleapis.com", "service-blaze:cluster-bar", true)),
-        Any.pack(buildCluster("cluster-foo.googleapis.com", null, false)));
-    DiscoveryResponse response =
-        buildDiscoveryResponse("14", clusters, ResourceType.CDS.typeUrl(), "8");
-
-    String expectedString = "{\n"
-        + "  \"versionInfo\": \"14\",\n"
-        + "  \"resources\": [{\n"
-        + "    \"@type\": \"type.googleapis.com/envoy.config.cluster.v3.Cluster\",\n"
-        + "    \"name\": \"cluster-bar.googleapis.com\",\n"
-        + "    \"type\": \"EDS\",\n"
-        + "    \"edsClusterConfig\": {\n"
-        + "      \"edsConfig\": {\n"
-        + "        \"ads\": {\n"
-        + "        }\n"
-        + "      },\n"
-        + "      \"serviceName\": \"service-blaze:cluster-bar\"\n"
-        + "    },\n"
-        + "    \"lrsServer\": {\n"
-        + "      \"self\": {\n"
-        + "      }\n"
-        + "    }\n"
-        + "  }, {\n"
-        + "    \"@type\": \"type.googleapis.com/envoy.config.cluster.v3.Cluster\",\n"
-        + "    \"name\": \"cluster-foo.googleapis.com\",\n"
-        + "    \"type\": \"EDS\",\n"
-        + "    \"edsClusterConfig\": {\n"
-        + "      \"edsConfig\": {\n"
-        + "        \"ads\": {\n"
-        + "        }\n"
-        + "      }\n"
-        + "    }\n"
-        + "  }],\n"
-        + "  \"typeUrl\": \"type.googleapis.com/envoy.config.cluster.v3.Cluster\",\n"
-        + "  \"nonce\": \"8\"\n"
-        + "}";
-    String res = printer.print(response);
-    assertThat(res).isEqualTo(expectedString);
-  }
-
-  @Test
-  public void messagePrinter_printEdsResponse() {
-    MessagePrinter printer = new MessagePrinter();
-    List<Any> clusterLoadAssignments = ImmutableList.of(
-        Any.pack(buildClusterLoadAssignment("cluster-foo.googleapis.com",
-            ImmutableList.of(
-                buildLocalityLbEndpoints("region1", "zone1", "subzone1",
-                    ImmutableList.of(
-                        buildLbEndpoint("192.168.0.1", 8080, HealthStatus.HEALTHY, 2)),
-                    1, 0),
-                buildLocalityLbEndpoints("region3", "zone3", "subzone3",
-                    ImmutableList.of(
-                        buildLbEndpoint("192.168.142.5", 80, HealthStatus.UNHEALTHY, 5)),
-                    2, 1)),
-            ImmutableList.of(
-                buildDropOverload("lb", 200),
-                buildDropOverload("throttle", 1000)))));
-
-    DiscoveryResponse response =
-        buildDiscoveryResponse("5", clusterLoadAssignments,
-            ResourceType.EDS.typeUrl(), "004");
-
-    String expectedString = "{\n"
-        + "  \"versionInfo\": \"5\",\n"
-        + "  \"resources\": [{\n"
-        + "    \"@type\": \"type.googleapis.com/envoy.config.endpoint.v3.ClusterLoadAssignment\",\n"
-        + "    \"clusterName\": \"cluster-foo.googleapis.com\",\n"
-        + "    \"endpoints\": [{\n"
-        + "      \"locality\": {\n"
-        + "        \"region\": \"region1\",\n"
-        + "        \"zone\": \"zone1\",\n"
-        + "        \"subZone\": \"subzone1\"\n"
-        + "      },\n"
-        + "      \"lbEndpoints\": [{\n"
-        + "        \"endpoint\": {\n"
-        + "          \"address\": {\n"
-        + "            \"socketAddress\": {\n"
-        + "              \"address\": \"192.168.0.1\",\n"
-        + "              \"portValue\": 8080\n"
-        + "            }\n"
-        + "          }\n"
-        + "        },\n"
-        + "        \"healthStatus\": \"HEALTHY\",\n"
-        + "        \"loadBalancingWeight\": 2\n"
-        + "      }],\n"
-        + "      \"loadBalancingWeight\": 1\n"
-        + "    }, {\n"
-        + "      \"locality\": {\n"
-        + "        \"region\": \"region3\",\n"
-        + "        \"zone\": \"zone3\",\n"
-        + "        \"subZone\": \"subzone3\"\n"
-        + "      },\n"
-        + "      \"lbEndpoints\": [{\n"
-        + "        \"endpoint\": {\n"
-        + "          \"address\": {\n"
-        + "            \"socketAddress\": {\n"
-        + "              \"address\": \"192.168.142.5\",\n"
-        + "              \"portValue\": 80\n"
-        + "            }\n"
-        + "          }\n"
-        + "        },\n"
-        + "        \"healthStatus\": \"UNHEALTHY\",\n"
-        + "        \"loadBalancingWeight\": 5\n"
-        + "      }],\n"
-        + "      \"loadBalancingWeight\": 2,\n"
-        + "      \"priority\": 1\n"
-        + "    }],\n"
-        + "    \"policy\": {\n"
-        + "      \"dropOverloads\": [{\n"
-        + "        \"category\": \"lb\",\n"
-        + "        \"dropPercentage\": {\n"
-        + "          \"numerator\": 200,\n"
-        + "          \"denominator\": \"MILLION\"\n"
-        + "        }\n"
-        + "      }, {\n"
-        + "        \"category\": \"throttle\",\n"
-        + "        \"dropPercentage\": {\n"
-        + "          \"numerator\": 1000,\n"
-        + "          \"denominator\": \"MILLION\"\n"
-        + "        }\n"
-        + "      }]\n"
-        + "    }\n"
-        + "  }],\n"
-        + "  \"typeUrl\": \"type.googleapis.com/envoy.config.endpoint.v3.ClusterLoadAssignment\",\n"
-        + "  \"nonce\": \"004\"\n"
-        + "}";
-    String res = printer.print(response);
-    assertThat(res).isEqualTo(expectedString);
   }
 
   private RpcCall<DiscoveryRequest, DiscoveryResponse> startResourceWatcher(
@@ -1845,7 +1552,7 @@ public class XdsClientImplTest2 {
     ScheduledTask timeoutTask =
         Iterables.getOnlyElement(fakeClock.getPendingTasks(timeoutTaskFilter));
     assertThat(timeoutTask.getDelay(TimeUnit.SECONDS))
-        .isEqualTo(XdsClientImpl2.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC);
+        .isEqualTo(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC);
     return call;
   }
 

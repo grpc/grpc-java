@@ -96,13 +96,20 @@ final class XdsClientImpl2 extends XdsClient {
   private static final String TYPE_URL_HTTP_CONNECTION_MANAGER =
       "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3"
           + ".HttpConnectionManager";
-  private static final String ADS_TYPE_URL_CDS_V2 = "type.googleapis.com/envoy.api.v2.Cluster";
+  @VisibleForTesting
+  static final String ADS_TYPE_URL_CDS_V2 = "type.googleapis.com/envoy.api.v2.Cluster";
   private static final String ADS_TYPE_URL_CDS =
       "type.googleapis.com/envoy.config.cluster.v3.Cluster";
   private static final String ADS_TYPE_URL_EDS_V2 =
       "type.googleapis.com/envoy.api.v2.ClusterLoadAssignment";
   private static final String ADS_TYPE_URL_EDS =
       "type.googleapis.com/envoy.config.endpoint.v3.ClusterLoadAssignment";
+  @VisibleForTesting
+  static final String TYPE_URL_UPSTREAM_TLS_CONTEXT =
+      "type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext";
+  @VisibleForTesting
+  static final String TYPE_URL_UPSTREAM_TLS_CONTEXT_V2 =
+      "type.googleapis.com/envoy.api.v2.auth.UpstreamTlsContext";
 
   private final MessagePrinter respPrinter = new MessagePrinter();
   private final InternalLogId logId;
@@ -161,7 +168,7 @@ final class XdsClientImpl2 extends XdsClient {
     this.timeService = checkNotNull(timeService, "timeService");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     adsStreamRetryStopwatch = checkNotNull(stopwatchSupplier, "stopwatchSupplier").get();
-    lrsClient = new LoadReportClient(loadStatsManager, xdsChannel, node, timeService,
+    lrsClient = new LoadReportClient(loadStatsManager, xdsChannel, node, syncContext, timeService,
         backoffPolicyProvider, stopwatchSupplier);
     logId = InternalLogId.allocate("xds-client", null);
     logger = XdsLogger.withLogId(logId);
@@ -774,6 +781,9 @@ final class XdsClientImpl2 extends XdsClient {
     if (cluster.hasTransportSocket()
         && TRANSPORT_SOCKET_NAME_TLS.equals(cluster.getTransportSocket().getName())) {
       Any any = cluster.getTransportSocket().getTypedConfig();
+      if (any.getTypeUrl().equals(TYPE_URL_UPSTREAM_TLS_CONTEXT_V2)) {
+        any = any.toBuilder().setTypeUrl(TYPE_URL_UPSTREAM_TLS_CONTEXT).build();
+      }
       return EnvoyServerProtoData.UpstreamTlsContext.fromEnvoyProtoUpstreamTlsContext(
           any.unpack(UpstreamTlsContext.class));
     }
