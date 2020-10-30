@@ -163,10 +163,11 @@ public abstract class ServerCall<ReqT, RespT> {
    * <p>Since {@link Metadata} is not thread-safe, the caller must not access (read or write) {@code
    * trailers} after this point.
    *
-   * <p>Implementation note regarding ForwardingServerCalls: This method is called after the
-   * server completed the processing of the request, but before the response status is sent to the
-   * client, so the client is still able to cancel the request. This method won't be called for
-   * client side cancellations or errors.
+   * <p>Implementation note: This method is called after the server completed the processing of the
+   * request (service implementation), but before the response status is sent to the client, so the
+   * client is still able to cancel the request or a network error might cause it to fail.
+   * If you wish to know when the call is actually completed/closed, you have to use
+   * {@link Listener#onComplete} or {@link Listener#onCancel} instead.
    *
    * @throws IllegalStateException if call is already {@code close}d
    */
