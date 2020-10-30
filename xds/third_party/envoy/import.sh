@@ -63,6 +63,7 @@ envoy/api/v2/route/route_components.proto
 envoy/api/v2/scoped_route.proto
 envoy/api/v2/srds.proto
 envoy/config/accesslog/v3/accesslog.proto
+envoy/config/cluster/aggregate/v2alpha/cluster.proto
 envoy/config/cluster/v3/circuit_breaker.proto
 envoy/config/cluster/v3/cluster.proto
 envoy/config/cluster/v3/filter.proto
