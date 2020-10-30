@@ -16,6 +16,7 @@
 
 package io.grpc.netty;
 
+import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import io.grpc.Status;
 import io.grpc.internal.ManagedClientTransport;
 
@@ -55,13 +56,16 @@ final class ClientTransportLifecycleManager {
     listener.transportShutdown(s);
   }
 
-  public void notifyShutdown(Status s) {
+  /** Returns {@code true} if was the first shutdown. */
+  @CanIgnoreReturnValue
+  public boolean notifyShutdown(Status s) {
     notifyGracefulShutdown(s);
     if (shutdownStatus != null) {
-      return;
+      return false;
     }
     shutdownStatus = s;
     shutdownThrowable = s.asException();
+    return true;
   }
 
   public void notifyInUse(boolean inUse) {

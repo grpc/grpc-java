@@ -529,7 +529,7 @@ public class NettyClientTransportTest {
       Throwable rootCause = getRootCause(e);
       Status status = ((StatusException) rootCause).getStatus();
       assertEquals(Status.Code.INTERNAL, status.getCode());
-      assertEquals("HTTP/2 error code: PROTOCOL_ERROR\nReceived Rst Stream",
+      assertEquals("RST_STREAM closed stream. HTTP/2 error code: PROTOCOL_ERROR",
           status.getDescription());
     }
   }

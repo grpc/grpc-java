@@ -345,7 +345,11 @@ public final class GrpcUtil {
 
     Http2Error(int code, Status status) {
       this.code = code;
-      this.status = status.augmentDescription("HTTP/2 error code: " + this.name());
+      String description = "HTTP/2 error code: " + this.name();
+      if (status.getDescription() != null) {
+        description += " (" + status.getDescription() + ")";
+      }
+      this.status = status.withDescription(description);
     }
 
     /**
