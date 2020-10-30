@@ -25,10 +25,7 @@ import io.envoyproxy.envoy.config.cluster.v3.Cluster.EdsClusterConfig;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.LbPolicy;
 import io.envoyproxy.envoy.config.core.v3.Address;
 import io.envoyproxy.envoy.config.core.v3.AggregatedConfigSource;
-import io.envoyproxy.envoy.config.core.v3.ApiConfigSource;
 import io.envoyproxy.envoy.config.core.v3.ConfigSource;
-import io.envoyproxy.envoy.config.core.v3.GrpcService;
-import io.envoyproxy.envoy.config.core.v3.GrpcService.GoogleGrpc;
 import io.envoyproxy.envoy.config.core.v3.HealthStatus;
 import io.envoyproxy.envoy.config.core.v3.Locality;
 import io.envoyproxy.envoy.config.core.v3.SelfConfigSource;
@@ -48,21 +45,19 @@ import io.envoyproxy.envoy.config.route.v3.RouteAction;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
 import io.envoyproxy.envoy.config.route.v3.RouteMatch;
 import io.envoyproxy.envoy.config.route.v3.VirtualHost;
-import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
-import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.SdsSecretConfig;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse;
 import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.envoyproxy.envoy.type.v3.FractionalPercent.DenominatorType;
 import io.grpc.xds.EnvoyProtoData.Node;
-import java.util.ArrayList;
 import java.util.List;
 import javax.annotation.Nullable;
 
 /**
  * Helper methods for building protobuf messages with custom data for xDS protocols.
  */
+// TODO(chengyuanzhang, sanjaypujare): delete this class, should not dump everything here.
 class XdsClientTestHelper {
   static DiscoveryResponse buildDiscoveryResponse(String versionInfo,
       List<Any> resources, String typeUrl, String nonce) {
@@ -84,11 +79,6 @@ class XdsClientTestHelper {
             .addAllResources(resources)
             .setNonce(nonce)
             .build();
-  }
-
-  static DiscoveryRequest buildDiscoveryRequest(Node node, String versionInfo,
-      String resourceName, String typeUrl, String nonce) {
-    return buildDiscoveryRequest(node, versionInfo, ImmutableList.of(resourceName), typeUrl, nonce);
   }
 
   static DiscoveryRequest buildDiscoveryRequest(Node node, String versionInfo,
@@ -159,23 +149,6 @@ class XdsClientTestHelper {
             .setName(name)
             .addAllVirtualHosts(virtualHosts)
             .build();
-  }
-
-  static List<VirtualHost> buildVirtualHosts(int num) {
-    List<VirtualHost> virtualHosts = new ArrayList<>(num);
-    for (int i = 0; i < num; i++) {
-      VirtualHost virtualHost =
-          VirtualHost.newBuilder()
-              .setName(num + ": do not care")
-              .addDomains("do not care")
-              .addRoutes(
-                  Route.newBuilder()
-                      .setRoute(RouteAction.newBuilder().setCluster("do not care"))
-                      .setMatch(RouteMatch.newBuilder().setPrefix("do not care")))
-              .build();
-      virtualHosts.add(virtualHost);
-    }
-    return virtualHosts;
   }
 
   static VirtualHost buildVirtualHost(List<String> domains, String clusterName) {
@@ -283,22 +256,6 @@ class XdsClientTestHelper {
             .build();
   }
 
-  @SuppressWarnings("deprecation") // disableOverprovisioning is deprecated by needed for v2
-  static io.envoyproxy.envoy.api.v2.ClusterLoadAssignment buildClusterLoadAssignmentV2(
-      String clusterName,
-      List<io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints> localityLbEndpoints,
-      List<io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy.DropOverload> dropOverloads) {
-    return
-        io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.newBuilder()
-            .setClusterName(clusterName)
-            .addAllEndpoints(localityLbEndpoints)
-            .setPolicy(
-                io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy.newBuilder()
-                    .setDisableOverprovisioning(true)
-                    .addAllDropOverloads(dropOverloads))
-            .build();
-  }
-
   static DropOverload buildDropOverload(String category, int dropPerMillion) {
     return
         DropOverload.newBuilder()
@@ -383,50 +340,5 @@ class XdsClientTestHelper {
             .setHealthStatus(healthStatus)
             .setLoadBalancingWeight(UInt32Value.of(loadbalancingWeight))
             .build();
-  }
-
-  static UpstreamTlsContext buildUpstreamTlsContext(String secretName, String targetUri) {
-    GrpcService grpcService =
-        GrpcService.newBuilder()
-            .setGoogleGrpc(GoogleGrpc.newBuilder().setTargetUri(targetUri))
-            .build();
-    ConfigSource sdsConfig =
-        ConfigSource.newBuilder()
-            .setApiConfigSource(ApiConfigSource.newBuilder().addGrpcServices(grpcService))
-            .build();
-    SdsSecretConfig validationContextSdsSecretConfig =
-        SdsSecretConfig.newBuilder()
-            .setName(secretName)
-            .setSdsConfig(sdsConfig)
-            .build();
-    return UpstreamTlsContext.newBuilder()
-        .setCommonTlsContext(
-            CommonTlsContext.newBuilder()
-                .setValidationContextSdsSecretConfig(validationContextSdsSecretConfig))
-        .build();
-  }
-
-  static io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext buildUpstreamTlsContextV2(
-      String secretName, String targetUri) {
-    io.envoyproxy.envoy.api.v2.core.GrpcService grpcService =
-        io.envoyproxy.envoy.api.v2.core.GrpcService.newBuilder()
-            .setGoogleGrpc(io.envoyproxy.envoy.api.v2.core.GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri(targetUri))
-            .build();
-    io.envoyproxy.envoy.api.v2.core.ConfigSource sdsConfig =
-        io.envoyproxy.envoy.api.v2.core.ConfigSource.newBuilder()
-            .setApiConfigSource(io.envoyproxy.envoy.api.v2.core.ApiConfigSource.newBuilder()
-                .addGrpcServices(grpcService))
-            .build();
-    io.envoyproxy.envoy.api.v2.auth.SdsSecretConfig validationContextSdsSecretConfig =
-        io.envoyproxy.envoy.api.v2.auth.SdsSecretConfig.newBuilder()
-            .setName(secretName)
-            .setSdsConfig(sdsConfig)
-            .build();
-    return io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext.newBuilder()
-        .setCommonTlsContext(
-            io.envoyproxy.envoy.api.v2.auth.CommonTlsContext.newBuilder()
-                .setValidationContextSdsSecretConfig(validationContextSdsSecretConfig))
-        .build();
   }
 }
