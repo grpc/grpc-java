@@ -1463,7 +1463,7 @@ public class ClientXdsClientTest {
   }
 
   @Test
-  public void streamClosedAndRetryRestartResourceInitialFetchTimers() {
+  public void streamClosedAndRetryRestartsResourceInitialFetchTimerForUnresolvedResources() {
     xdsClient.watchLdsResource(LDS_RESOURCE, ldsResourceWatcher);
     xdsClient.watchRdsResource(RDS_RESOURCE, rdsResourceWatcher);
     xdsClient.watchCdsResource(CDS_RESOURCE, cdsResourceWatcher);
@@ -1477,15 +1477,32 @@ public class ClientXdsClientTest {
         Iterables.getOnlyElement(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER));
     ScheduledTask edsResourceTimeout =
         Iterables.getOnlyElement(fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER));
-    call.responseObserver.onError(Status.UNAVAILABLE.asException());
+
+    List<Any> listeners = ImmutableList.of(
+        Any.pack(buildListener(LDS_RESOURCE,
+            Any.pack(
+                HttpConnectionManager.newBuilder()
+                    .setRouteConfig(buildRouteConfiguration("do not care", buildVirtualHosts(2)))
+                    .build()))));
+    DiscoveryResponse response =
+        buildDiscoveryResponse("0", listeners, ResourceType.LDS.typeUrl(), "0000");
+    call.responseObserver.onNext(response);
     assertThat(ldsResourceTimeout.isCancelled()).isTrue();
+
+    List<Any> routeConfigs =
+        ImmutableList.of(Any.pack(buildRouteConfiguration(RDS_RESOURCE, buildVirtualHosts(2))));
+    response =
+        buildDiscoveryResponse("0", routeConfigs, ResourceType.RDS.typeUrl(), "0000");
+    call.responseObserver.onNext(response);
     assertThat(rdsResourceTimeout.isCancelled()).isTrue();
+
+    call.responseObserver.onError(Status.UNAVAILABLE.asException());
     assertThat(cdsResourceTimeout.isCancelled()).isTrue();
     assertThat(edsResourceTimeout.isCancelled()).isTrue();
 
     fakeClock.forwardNanos(10L);
-    assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
-    assertThat(fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
+    assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(0);
+    assertThat(fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(0);
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
     assertThat(fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
   }
