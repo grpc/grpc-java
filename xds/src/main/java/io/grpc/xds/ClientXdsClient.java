@@ -754,8 +754,10 @@ final class ClientXdsClient extends AbstractXdsClient {
       watchers.remove(watcher);
     }
 
-    // FIXME(chengyuanzhang): should only restart timer if the resource is still unresolved.
     void restartTimer() {
+      if (data != null || absent) {  // resource already resolved
+        return;
+      }
       class ResourceNotFound implements Runnable {
         @Override
         public void run() {
