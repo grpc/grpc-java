@@ -604,6 +604,11 @@ public class LoadReportClientTest {
       throw new UnsupportedOperationException("should not used");
     }
 
+    @Override
+    public void recordDroppedRequest() {
+      throw new UnsupportedOperationException("should not used");
+    }
+
     private void refresh() {
       long callsInProgress = ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
       long callsSucceeded = ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);

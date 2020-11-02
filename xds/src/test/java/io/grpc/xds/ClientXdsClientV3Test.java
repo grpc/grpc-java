@@ -28,6 +28,8 @@ import com.google.protobuf.Any;
 import com.google.protobuf.Message;
 import com.google.protobuf.UInt32Value;
 import com.google.protobuf.util.Durations;
+import io.envoyproxy.envoy.config.cluster.v3.CircuitBreakers;
+import io.envoyproxy.envoy.config.cluster.v3.CircuitBreakers.Thresholds;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.DiscoveryType;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.EdsClusterConfig;
@@ -41,6 +43,7 @@ import io.envoyproxy.envoy.config.core.v3.GrpcService.GoogleGrpc;
 import io.envoyproxy.envoy.config.core.v3.HealthStatus;
 import io.envoyproxy.envoy.config.core.v3.Locality;
 import io.envoyproxy.envoy.config.core.v3.Node;
+import io.envoyproxy.envoy.config.core.v3.RoutingPriority;
 import io.envoyproxy.envoy.config.core.v3.SelfConfigSource;
 import io.envoyproxy.envoy.config.core.v3.SocketAddress;
 import io.envoyproxy.envoy.config.core.v3.TransportSocket;
@@ -290,7 +293,8 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
 
     @Override
     protected Message buildCluster(String clusterName, @Nullable String edsServiceName,
-        boolean enableLrs, @Nullable Message upstreamTlsContext) {
+        boolean enableLrs, @Nullable Message upstreamTlsContext,
+        @Nullable Message circuitBreakers) {
       Cluster.Builder builder = Cluster.newBuilder();
       builder.setName(clusterName);
       builder.setType(DiscoveryType.EDS);
@@ -314,6 +318,9 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
                 .setName("envoy.transport_sockets.tls")
                 .setTypedConfig(Any.pack(upstreamTlsContext)));
       }
+      if (circuitBreakers != null) {
+        builder.setCircuitBreakers((CircuitBreakers) circuitBreakers);
+      }
       return builder.build();
     }
 
@@ -336,6 +343,21 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
           .setCommonTlsContext(
               CommonTlsContext.newBuilder()
                   .setValidationContextSdsSecretConfig(validationContextSdsSecretConfig))
+          .build();
+    }
+
+    @Override
+    protected Message buildCircuitBreakers(int highPriorityMaxRequests,
+        int defaultPriorityMaxRequests) {
+      return CircuitBreakers.newBuilder()
+          .addThresholds(
+              Thresholds.newBuilder()
+                  .setPriority(RoutingPriority.HIGH)
+                  .setMaxRequests(UInt32Value.newBuilder().setValue(highPriorityMaxRequests)))
+          .addThresholds(
+              Thresholds.newBuilder()
+                  .setPriority(RoutingPriority.DEFAULT)
+                  .setMaxRequests(UInt32Value.newBuilder().setValue(defaultPriorityMaxRequests)))
           .build();
     }
 

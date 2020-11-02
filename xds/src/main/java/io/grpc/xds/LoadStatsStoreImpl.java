@@ -55,25 +55,21 @@ final class LoadStatsStoreImpl implements LoadStatsStore {
   @GuardedBy("this")
   private final Map<Locality, ReferenceCounted<ClientLoadCounter>> localityLoadCounters
       = new HashMap<>();
+  private final AtomicLong uncategorizedDrops = new AtomicLong();
   // Cluster level dropped request counts for each category decision.
-  private final ConcurrentMap<String, AtomicLong> dropCounters;
+  private final ConcurrentMap<String, AtomicLong> dropCounters = new ConcurrentHashMap<>();
   private final Stopwatch stopwatch;
 
   LoadStatsStoreImpl(String clusterName, @Nullable String clusterServiceName) {
-    this(clusterName, clusterServiceName, GrpcUtil.STOPWATCH_SUPPLIER.get(),
-        new ConcurrentHashMap<String, AtomicLong>());
+    this(clusterName, clusterServiceName, GrpcUtil.STOPWATCH_SUPPLIER.get());
   }
 
   @VisibleForTesting
-  LoadStatsStoreImpl(
-      String clusterName,
-      @Nullable String clusterServiceName,
-      Stopwatch stopwatch,
-      ConcurrentMap<String, AtomicLong> dropCounters) {
+  LoadStatsStoreImpl(String clusterName, @Nullable String clusterServiceName,
+      Stopwatch stopwatch) {
     this.clusterName = checkNotNull(clusterName, "clusterName");
     this.clusterServiceName = clusterServiceName;
     this.stopwatch =  checkNotNull(stopwatch, "stopwatch");
-    this.dropCounters = checkNotNull(dropCounters, "dropCounters");
     stopwatch.reset().start();
   }
 
@@ -109,11 +105,11 @@ final class LoadStatsStoreImpl implements LoadStatsStore {
       }
     }
     localityLoadCounters.keySet().removeAll(untrackedLocalities);
-    long totalDrops = 0;
+    long totalDrops = uncategorizedDrops.getAndSet(0);
     for (Map.Entry<String, AtomicLong> entry : dropCounters.entrySet()) {
       long drops = entry.getValue().getAndSet(0);
       totalDrops += drops;
-      statsBuilder.addDroppedRequests(new DroppedRequests(entry.getKey(),drops));
+      statsBuilder.addDroppedRequests(new DroppedRequests(entry.getKey(), drops));
     }
     statsBuilder.setTotalDroppedRequests(totalDrops);
     statsBuilder.setLoadReportIntervalNanos(stopwatch.elapsed(NANOSECONDS));
@@ -148,6 +144,11 @@ final class LoadStatsStoreImpl implements LoadStatsStore {
       }
     }
     counter.getAndIncrement();
+  }
+
+  @Override
+  public void recordDroppedRequest() {
+    uncategorizedDrops.getAndIncrement();
   }
 
   static LoadStatsStoreFactory getDefaultFactory() {

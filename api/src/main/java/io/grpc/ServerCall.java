@@ -163,6 +163,13 @@ public abstract class ServerCall<ReqT, RespT> {
    * <p>Since {@link Metadata} is not thread-safe, the caller must not access (read or write) {@code
    * trailers} after this point.
    *
+   * <p>This method implies the caller completed processing the RPC, but it does not imply the RPC
+   * is complete. The call implementation will need additional time to complete the RPC and during
+   * this time the client is still able to cancel the request or a network error might cause the
+   * RPC to fail. If you wish to know when the call is actually completed/closed, you have to use
+   * {@link Listener#onComplete} or {@link Listener#onCancel} instead. This method is not
+   * necessarily invoked when Listener.onCancel() is called.
+   *
    * @throws IllegalStateException if call is already {@code close}d
    */
   public abstract void close(Status status, Metadata trailers);

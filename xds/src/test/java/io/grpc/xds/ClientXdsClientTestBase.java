@@ -534,8 +534,8 @@ public abstract class ClientXdsClientTestBase {
         startResourceWatcher(ResourceType.CDS, CDS_RESOURCE, cdsResourceWatcher);
 
     List<Any> clusters = ImmutableList.of(
-        Any.pack(mf.buildCluster("cluster-bar.googleapis.com", null, false, null)),
-        Any.pack(mf.buildCluster("cluster-baz.googleapis.com", null, false, null)));
+        Any.pack(mf.buildCluster("cluster-bar.googleapis.com", null, false, null, null)),
+        Any.pack(mf.buildCluster("cluster-baz.googleapis.com", null, false, null, null)));
     call.sendResponse("0", clusters, ResourceType.CDS, "0000");
 
     // Client sent an ACK CDS request.
@@ -553,7 +553,7 @@ public abstract class ClientXdsClientTestBase {
     DiscoveryRpcCall call =
         startResourceWatcher(ResourceType.CDS, CDS_RESOURCE, cdsResourceWatcher);
     List<Any> clusters = ImmutableList.of(
-        Any.pack(mf.buildCluster(CDS_RESOURCE, null, false, null)));
+        Any.pack(mf.buildCluster(CDS_RESOURCE, null, false, null, null)));
     call.sendResponse("0", clusters, ResourceType.CDS, "0000");
 
     // Client sent an ACK CDS request.
@@ -565,7 +565,29 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.getEdsServiceName()).isNull();
     assertThat(cdsUpdate.getLbPolicy()).isEqualTo("round_robin");
     assertThat(cdsUpdate.getLrsServerName()).isNull();
+    assertThat(cdsUpdate.getMaxConcurrentRequests()).isNull();
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
+  }
+
+  @Test
+  public void cdsResponseWithCircuitBreakers() {
+    DiscoveryRpcCall call =
+        startResourceWatcher(ResourceType.CDS, CDS_RESOURCE, cdsResourceWatcher);
+    List<Any> clusters = ImmutableList.of(
+        Any.pack(mf.buildCluster(CDS_RESOURCE, null, false, null,
+            mf.buildCircuitBreakers(50, 200))));
+    call.sendResponse("0", clusters, ResourceType.CDS, "0000");
+
+    // Client sent an ACK CDS request.
+    call.verifyRequest(NODE, "0", Collections.singletonList(CDS_RESOURCE), ResourceType.CDS,
+        "0000");
+    verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
+    CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
+    assertThat(cdsUpdate.getClusterName()).isEqualTo(CDS_RESOURCE);
+    assertThat(cdsUpdate.getEdsServiceName()).isNull();
+    assertThat(cdsUpdate.getLbPolicy()).isEqualTo("round_robin");
+    assertThat(cdsUpdate.getLrsServerName()).isNull();
+    assertThat(cdsUpdate.getMaxConcurrentRequests()).isEqualTo(200L);
   }
 
   /**
@@ -578,10 +600,10 @@ public abstract class ClientXdsClientTestBase {
 
     // Management server sends back CDS response with UpstreamTlsContext.
     List<Any> clusters = ImmutableList.of(
-        Any.pack(mf.buildCluster("cluster-bar.googleapis.com", null, false, null)),
+        Any.pack(mf.buildCluster("cluster-bar.googleapis.com", null, false, null, null)),
         Any.pack(mf.buildCluster(CDS_RESOURCE, "eds-cluster-foo.googleapis.com", true,
-            mf.buildUpstreamTlsContext("secret1", "unix:/var/uds2"))),
-        Any.pack(mf.buildCluster("cluster-baz.googleapis.com", null, false, null)));
+            mf.buildUpstreamTlsContext("secret1", "unix:/var/uds2"), null)),
+        Any.pack(mf.buildCluster("cluster-baz.googleapis.com", null, false, null, null)));
     call.sendResponse("0", clusters, ResourceType.CDS, "0000");
 
     // Client sent an ACK CDS request.
@@ -610,7 +632,7 @@ public abstract class ClientXdsClientTestBase {
     DiscoveryRpcCall call =
         startResourceWatcher(ResourceType.CDS, CDS_RESOURCE, cdsResourceWatcher);
     List<Any> clusters = ImmutableList.of(
-        Any.pack(mf.buildCluster(CDS_RESOURCE, null, false, null)));
+        Any.pack(mf.buildCluster(CDS_RESOURCE, null, false, null, null)));
     call.sendResponse("0", clusters, ResourceType.CDS, "0000");
 
     // Client sends an ACK CDS request.
@@ -645,7 +667,7 @@ public abstract class ClientXdsClientTestBase {
     DiscoveryRpcCall call =
         startResourceWatcher(ResourceType.CDS, CDS_RESOURCE, cdsResourceWatcher);
     List<Any> clusters = ImmutableList.of(
-        Any.pack(mf.buildCluster(CDS_RESOURCE, null, false, null)));
+        Any.pack(mf.buildCluster(CDS_RESOURCE, null, false, null, null)));
     call.sendResponse("0", clusters, ResourceType.CDS, "0000");
 
     // Client sends an ACK CDS request.
@@ -660,7 +682,7 @@ public abstract class ClientXdsClientTestBase {
 
     String edsService = "eds-service-bar.googleapis.com";
     clusters = ImmutableList.of(
-        Any.pack(mf.buildCluster(CDS_RESOURCE, edsService, true, null)));
+        Any.pack(mf.buildCluster(CDS_RESOURCE, edsService, true, null, null)));
     call.sendResponse("1", clusters, ResourceType.CDS, "0001");
 
     // Client sends an ACK CDS request.
@@ -679,7 +701,7 @@ public abstract class ClientXdsClientTestBase {
     DiscoveryRpcCall call =
         startResourceWatcher(ResourceType.CDS, CDS_RESOURCE, cdsResourceWatcher);
     List<Any> clusters = ImmutableList.of(
-        Any.pack(mf.buildCluster(CDS_RESOURCE, null, false, null)));
+        Any.pack(mf.buildCluster(CDS_RESOURCE, null, false, null, null)));
     call.sendResponse("0", clusters, ResourceType.CDS, "0000");
 
     // Client sends an ACK CDS request.
@@ -718,8 +740,8 @@ public abstract class ClientXdsClientTestBase {
 
     String edsService = "eds-service-bar.googleapis.com";
     List<Any> clusters = ImmutableList.of(
-        Any.pack(mf.buildCluster(CDS_RESOURCE, null, false, null)),
-        Any.pack(mf.buildCluster(cdsResource, edsService, true, null)));
+        Any.pack(mf.buildCluster(CDS_RESOURCE, null, false, null, null)),
+        Any.pack(mf.buildCluster(cdsResource, edsService, true, null, null)));
     call.sendResponse("0", clusters, ResourceType.CDS, "0000");
     verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
     CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
@@ -949,7 +971,7 @@ public abstract class ClientXdsClientTestBase {
     xdsClient.watchEdsResource(EDS_RESOURCE, edsResourceWatcher);
     DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
     List<Any> clusters = ImmutableList.of(
-        Any.pack(mf.buildCluster(CDS_RESOURCE, EDS_RESOURCE, false, null)));
+        Any.pack(mf.buildCluster(CDS_RESOURCE, EDS_RESOURCE, false, null, null)));
     call.sendResponse("0", clusters, ResourceType.CDS, "0000");
     verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
     assertThat(cdsUpdateCaptor.getValue().getClusterName()).isEqualTo(CDS_RESOURCE);
@@ -973,7 +995,7 @@ public abstract class ClientXdsClientTestBase {
     assertThat(edsUpdate.getClusterName()).isEqualTo(EDS_RESOURCE);
 
     clusters = ImmutableList.of(
-        Any.pack(mf.buildCluster(CDS_RESOURCE, null, false, null)));
+        Any.pack(mf.buildCluster(CDS_RESOURCE, null, false, null, null)));
     call.sendResponse("1", clusters, ResourceType.CDS, "0001");
     verify(cdsResourceWatcher, times(2)).onChanged(cdsUpdateCaptor.capture());
     assertThat(cdsUpdateCaptor.getValue().getClusterName()).isEqualTo(CDS_RESOURCE);
@@ -1223,7 +1245,7 @@ public abstract class ClientXdsClientTestBase {
   }
 
   @Test
-  public void streamClosedAndRetryRestartResourceInitialFetchTimers() {
+  public void streamClosedAndRetryRestartsResourceInitialFetchTimerForUnresolvedResources() {
     xdsClient.watchLdsResource(LDS_RESOURCE, ldsResourceWatcher);
     xdsClient.watchRdsResource(RDS_RESOURCE, rdsResourceWatcher);
     xdsClient.watchCdsResource(CDS_RESOURCE, cdsResourceWatcher);
@@ -1237,15 +1259,24 @@ public abstract class ClientXdsClientTestBase {
         Iterables.getOnlyElement(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER));
     ScheduledTask edsResourceTimeout =
         Iterables.getOnlyElement(fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER));
-    call.sendError(Status.UNAVAILABLE.asException());
+    List<Any> listeners = ImmutableList.of(
+        Any.pack(mf.buildListener(LDS_RESOURCE, mf.buildRouteConfiguration("do not care",
+            mf.buildOpaqueVirtualHosts(2)))));
+    call.sendResponse("0", listeners, ResourceType.LDS, "0000");
     assertThat(ldsResourceTimeout.isCancelled()).isTrue();
+
+    List<Any> routeConfigs = ImmutableList.of(
+        Any.pack(mf.buildRouteConfiguration(RDS_RESOURCE, mf.buildOpaqueVirtualHosts(2))));
+    call.sendResponse("0", routeConfigs, ResourceType.RDS, "0000");
     assertThat(rdsResourceTimeout.isCancelled()).isTrue();
+
+    call.sendError(Status.UNAVAILABLE.asException());
     assertThat(cdsResourceTimeout.isCancelled()).isTrue();
     assertThat(edsResourceTimeout.isCancelled()).isTrue();
 
     fakeClock.forwardNanos(10L);
-    assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
-    assertThat(fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
+    assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(0);
+    assertThat(fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(0);
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
     assertThat(fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
   }
@@ -1341,9 +1372,13 @@ public abstract class ClientXdsClientTestBase {
     protected abstract List<Message> buildOpaqueVirtualHosts(int num);
 
     protected abstract Message buildCluster(String clusterName, @Nullable String edsServiceName,
-        boolean enableLrs, @Nullable Message upstreamTlsContext);
+        boolean enableLrs, @Nullable Message upstreamTlsContext,
+        @Nullable Message circuitBreakers);
 
     protected abstract Message buildUpstreamTlsContext(String secretName, String targetUri);
+
+    protected abstract Message buildCircuitBreakers(int highPriorityMaxRequests,
+        int defaultPriorityMaxRequests);
 
     protected abstract Message buildClusterLoadAssignment(String cluster,
         List<Message> localityLbEndpoints, List<Message> dropOverloads);
