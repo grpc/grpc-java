@@ -42,10 +42,15 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Any;
+import com.google.protobuf.UInt32Value;
 import com.google.protobuf.util.Durations;
+import io.envoyproxy.envoy.config.cluster.v3.CircuitBreakers;
+import io.envoyproxy.envoy.config.cluster.v3.CircuitBreakers.Thresholds;
+import io.envoyproxy.envoy.config.cluster.v3.Cluster;
 import io.envoyproxy.envoy.config.core.v3.AggregatedConfigSource;
 import io.envoyproxy.envoy.config.core.v3.ConfigSource;
 import io.envoyproxy.envoy.config.core.v3.HealthStatus;
+import io.envoyproxy.envoy.config.core.v3.RoutingPriority;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment.Policy;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterStats;
@@ -735,7 +740,40 @@ public class ClientXdsClientTest {
     assertThat(cdsUpdate.getEdsServiceName()).isNull();
     assertThat(cdsUpdate.getLbPolicy()).isEqualTo("round_robin");
     assertThat(cdsUpdate.getLrsServerName()).isNull();
+    assertThat(cdsUpdate.getMaxConcurrentRequests()).isNull();
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
+  }
+
+  @Test
+  public void cdsResponseWithCircuitBreakers() {
+    RpcCall<DiscoveryRequest, DiscoveryResponse> call =
+        startResourceWatcher(ResourceType.CDS, CDS_RESOURCE, cdsResourceWatcher);
+    Cluster cluster = buildCluster(CDS_RESOURCE, null, false);
+    cluster = cluster.toBuilder()
+        .setCircuitBreakers(
+            CircuitBreakers.newBuilder()
+                .addThresholds(
+                    Thresholds.newBuilder()
+                        .setPriority(RoutingPriority.HIGH)
+                        .setMaxRequests(UInt32Value.newBuilder().setValue(50)))
+                .addThresholds(
+                    Thresholds.newBuilder()
+                        .setPriority(RoutingPriority.DEFAULT)
+                        .setMaxRequests(UInt32Value.newBuilder().setValue(200))))
+        .build();
+    DiscoveryResponse response = buildDiscoveryResponse("0",
+        Collections.singletonList(Any.pack(cluster)), ResourceType.CDS.typeUrl(), "0000");
+    call.responseObserver.onNext(response);
+
+    verify(call.requestObserver).onNext(
+        eq(buildDiscoveryRequest(NODE, "0", CDS_RESOURCE, ResourceType.CDS.typeUrl(), "0000")));
+    verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
+    CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
+    assertThat(cdsUpdate.getClusterName()).isEqualTo(CDS_RESOURCE);
+    assertThat(cdsUpdate.getEdsServiceName()).isNull();
+    assertThat(cdsUpdate.getLbPolicy()).isEqualTo("round_robin");
+    assertThat(cdsUpdate.getLrsServerName()).isNull();
+    assertThat(cdsUpdate.getMaxConcurrentRequests()).isEqualTo(200L);
   }
 
   /**

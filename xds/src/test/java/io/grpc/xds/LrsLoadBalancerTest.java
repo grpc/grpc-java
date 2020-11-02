@@ -325,5 +325,10 @@ public class LrsLoadBalancerTest {
     public void recordDroppedRequest(String category) {
       throw new UnsupportedOperationException("should not be called");
     }
+
+    @Override
+    public void recordDroppedRequest() {
+      throw new UnsupportedOperationException("should not be called");
+    }
   }
 }

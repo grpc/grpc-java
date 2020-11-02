@@ -153,10 +153,17 @@ final class LoadStatsManager {
     void removeLocality(Locality locality);
 
     /**
-     * Records a drop decision.
+     * Records a drop decision with the given category.
      *
      * <p>This method must be thread-safe.
      */
     void recordDroppedRequest(String category);
+
+    /**
+     * Records a uncategorized drop decision.
+     *
+     * <p>This method must be thread-safe.
+     */
+    void recordDroppedRequest();
   }
 }

@@ -127,7 +127,7 @@ public class CdsLoadBalancerTest {
 
   @Test
   public void receiveFirstClusterResourceInfo() {
-    xdsClient.deliverClusterInfo(null, null);
+    xdsClient.deliverClusterInfo(null, null, null);
     assertThat(childBalancers).hasSize(1);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     assertThat(childBalancer.name).isEqualTo(XdsLbPolicies.EDS_POLICY_NAME);
@@ -136,6 +136,7 @@ public class CdsLoadBalancerTest {
     assertThat(edsConfig.clusterName).isEqualTo(CLUSTER);
     assertThat(edsConfig.edsServiceName).isNull();
     assertThat(edsConfig.lrsServerName).isNull();
+    assertThat(edsConfig.maxConcurrentRequests).isNull();
     assertThat(edsConfig.localityPickingPolicy.getProvider().getPolicyName())
         .isEqualTo(XdsLbPolicies.WEIGHTED_TARGET_POLICY_NAME);  // hardcoded to weighted-target
     assertThat(edsConfig.endpointPickingPolicy.getProvider().getPolicyName())
@@ -155,7 +156,7 @@ public class CdsLoadBalancerTest {
 
   @Test
   public void clusterResourceRemoved() {
-    xdsClient.deliverClusterInfo(null, null);
+    xdsClient.deliverClusterInfo(null, null, null);
     assertThat(childBalancers).hasSize(1);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     assertThat(childBalancer.shutdown).isFalse();
@@ -171,7 +172,7 @@ public class CdsLoadBalancerTest {
 
   @Test
   public void clusterResourceUpdated() {
-    xdsClient.deliverClusterInfo(null, null);
+    xdsClient.deliverClusterInfo(null, null, null);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     EdsConfig edsConfig = (EdsConfig) childBalancer.config;
     assertThat(edsConfig.clusterName).isEqualTo(CLUSTER);
@@ -184,12 +185,14 @@ public class CdsLoadBalancerTest {
 
     String edsService = "service-bar.googleapis.com";
     String loadReportServer = "lrs-server.googleapis.com";
-    xdsClient.deliverClusterInfo(edsService, loadReportServer);
+    long maxConcurrentRequests = 50L;
+    xdsClient.deliverClusterInfo(edsService, loadReportServer, maxConcurrentRequests, null);
     assertThat(childBalancers).containsExactly(childBalancer);
     edsConfig = (EdsConfig) childBalancer.config;
     assertThat(edsConfig.clusterName).isEqualTo(CLUSTER);
     assertThat(edsConfig.edsServiceName).isEqualTo(edsService);
     assertThat(edsConfig.lrsServerName).isEqualTo(loadReportServer);
+    assertThat(edsConfig.maxConcurrentRequests).isEqualTo(maxConcurrentRequests);
     assertThat(edsConfig.localityPickingPolicy.getProvider().getPolicyName())
         .isEqualTo(XdsLbPolicies.WEIGHTED_TARGET_POLICY_NAME);  // hardcoded to weighted-target
     assertThat(edsConfig.endpointPickingPolicy.getProvider().getPolicyName())
@@ -218,7 +221,7 @@ public class CdsLoadBalancerTest {
       assertThat(supplier.getUpstreamTlsContext()).isEqualTo(upstreamTlsContext);
     }
 
-    xdsClient.deliverClusterInfo(null, null);
+    xdsClient.deliverClusterInfo(null, null, null);
     subchannel = childBalancer.helper.createSubchannel(args);
     for (EquivalentAddressGroup eag : subchannel.getAllAddresses()) {
       assertThat(eag.getAttributes().get(XdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER))
@@ -241,7 +244,7 @@ public class CdsLoadBalancerTest {
 
   @Test
   public void subchannelStatePropagateFromDownstreamToUpstream() {
-    xdsClient.deliverClusterInfo(null, null);
+    xdsClient.deliverClusterInfo(null, null, null);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     List<EquivalentAddressGroup> addresses = createEndpointAddresses(2);
     CreateSubchannelArgs args =
@@ -267,7 +270,7 @@ public class CdsLoadBalancerTest {
 
   @Test
   public void clusterDiscoveryError_afterChildPolicyInstantiated_keepUsingCurrentCluster() {
-    xdsClient.deliverClusterInfo(null, null);
+    xdsClient.deliverClusterInfo(null, null, null);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     xdsClient.deliverError(Status.UNAVAILABLE.withDescription("unreachable"));
     assertThat(currentState).isNull();
@@ -288,7 +291,7 @@ public class CdsLoadBalancerTest {
 
   @Test
   public void nameResolutionError_afterChildPolicyInstantiated_propagateToDownstream() {
-    xdsClient.deliverClusterInfo(null, null);
+    xdsClient.deliverClusterInfo(null, null, null);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     loadBalancer.handleNameResolutionError(
         Status.UNAVAILABLE.withDescription("cannot reach server"));
@@ -327,35 +330,46 @@ public class CdsLoadBalancerTest {
     }
 
     void deliverClusterInfo(
-        @Nullable final String edsServiceName, @Nullable final String lrsServerName) {
+        @Nullable final String edsServiceName, @Nullable final String lrsServerName,
+        final long maxConcurrentRequests, @Nullable final UpstreamTlsContext tlsContext) {
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
-          watcher.onChanged(
-              CdsUpdate.newBuilder()
-                  .setClusterName(CLUSTER)
-                  .setEdsServiceName(edsServiceName)
-                  .setLbPolicy("round_robin")  // only supported policy
-                  .setLrsServerName(lrsServerName)
-                  .build());
+          CdsUpdate.Builder updateBuilder = CdsUpdate.newBuilder().setClusterName(CLUSTER);
+          if (edsServiceName != null) {
+            updateBuilder.setEdsServiceName(edsServiceName);
+          }
+          if (lrsServerName != null) {
+            updateBuilder.setLrsServerName(lrsServerName);
+          }
+          if (tlsContext != null) {
+            updateBuilder.setUpstreamTlsContext(tlsContext);
+          }
+          updateBuilder.setLbPolicy("round_robin");  // only supported policy
+          updateBuilder.setMaxConcurrentRequests(maxConcurrentRequests);
+          watcher.onChanged(updateBuilder.build());
         }
       });
     }
 
     void deliverClusterInfo(
         @Nullable final String edsServiceName, @Nullable final String lrsServerName,
-        final UpstreamTlsContext tlsContext) {
+        @Nullable final UpstreamTlsContext tlsContext) {
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
-          watcher.onChanged(
-              CdsUpdate.newBuilder()
-                  .setClusterName(CLUSTER)
-                  .setEdsServiceName(edsServiceName)
-                  .setLbPolicy("round_robin")  // only supported policy
-                  .setLrsServerName(lrsServerName)
-                  .setUpstreamTlsContext(tlsContext)
-                  .build());
+          CdsUpdate.Builder updateBuilder = CdsUpdate.newBuilder().setClusterName(CLUSTER);
+          if (edsServiceName != null) {
+            updateBuilder.setEdsServiceName(edsServiceName);
+          }
+          if (lrsServerName != null) {
+            updateBuilder.setLrsServerName(lrsServerName);
+          }
+          if (tlsContext != null) {
+            updateBuilder.setUpstreamTlsContext(tlsContext);
+          }
+          updateBuilder.setLbPolicy("round_robin");  // only supported policy
+          watcher.onChanged(updateBuilder.build());
         }
       });
     }
