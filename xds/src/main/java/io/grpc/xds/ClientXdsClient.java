@@ -343,8 +343,7 @@ final class ClientXdsClient extends AbstractXdsClient {
             continue;
           }
           if (threshold.hasMaxRequests()) {
-            updateBuilder.setMaxConcurrentRequests(
-                threshold.getMaxRequests().getValue() & 0xFFFFFFFFL);
+            updateBuilder.setMaxConcurrentRequests(threshold.getMaxRequests().getValue());
           }
         }
       }
