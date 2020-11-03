@@ -16,6 +16,8 @@
 
 package io.grpc.alts.internal;
 
+import static java.util.concurrent.TimeUnit.SECONDS;
+
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Optional;
 import io.grpc.alts.internal.HandshakerServiceGrpc.HandshakerServiceStub;
@@ -32,8 +34,13 @@ class AltsHandshakerStub {
       new ArrayBlockingQueue<>(1);
   private final AtomicReference<String> exceptionMessage = new AtomicReference<>();
 
+  private static final long HANDSHAKE_RPC_DEADLINE_SECS = 20;
+
   AltsHandshakerStub(HandshakerServiceStub serviceStub) {
-    this.writer = serviceStub.doHandshake(this.reader);
+    this.writer =
+        serviceStub
+            .withDeadlineAfter(HANDSHAKE_RPC_DEADLINE_SECS, SECONDS)
+            .doHandshake(this.reader);
   }
 
   @VisibleForTesting
