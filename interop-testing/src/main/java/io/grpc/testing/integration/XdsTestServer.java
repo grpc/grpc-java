@@ -16,6 +16,8 @@
 
 package io.grpc.testing.integration;
 
+import io.grpc.Context;
+import io.grpc.Contexts;
 import io.grpc.ForwardingServerCall.SimpleForwardingServerCall;
 import io.grpc.Metadata;
 import io.grpc.Server;
@@ -40,6 +42,11 @@ import java.util.logging.Logger;
 public final class XdsTestServer {
   static final Metadata.Key<String> HOSTNAME_KEY =
       Metadata.Key.of("hostname", Metadata.ASCII_STRING_MARSHALLER);
+  private static final Metadata.Key<String> CALL_BEHAVIOR_MD_KEY =
+      Metadata.Key.of("rpc-behavior", Metadata.ASCII_STRING_MARSHALLER);
+  private static final Context.Key<String> CALL_BEHAVIOR_KEY =
+      Context.key("rpc-behavior");
+  private static final String CALL_BEHAVIOR_KEEP_OPEN_VALUE = "keep-open";
 
   private static Logger logger = Logger.getLogger(XdsTestServer.class.getName());
 
@@ -132,7 +139,7 @@ public final class XdsTestServer {
         NettyServerBuilder.forPort(port)
             .addService(
                 ServerInterceptors.intercept(
-                    new TestServiceImpl(serverId, host), new HostnameInterceptor(host)))
+                    new TestServiceImpl(serverId, host), new TestInfoInterceptor(host)))
             .addService(new XdsUpdateHealthServiceImpl(health))
             .addService(health.getHealthService())
             .addService(ProtoReflectionService.newInstance())
@@ -167,14 +174,18 @@ public final class XdsTestServer {
     public void emptyCall(
         EmptyProtos.Empty req, StreamObserver<EmptyProtos.Empty> responseObserver) {
       responseObserver.onNext(EmptyProtos.Empty.getDefaultInstance());
-      responseObserver.onCompleted();
+      if (!CALL_BEHAVIOR_KEEP_OPEN_VALUE.equals(CALL_BEHAVIOR_KEY.get())) {
+        responseObserver.onCompleted();
+      }
     }
 
     @Override
     public void unaryCall(SimpleRequest req, StreamObserver<SimpleResponse> responseObserver) {
       responseObserver.onNext(
           SimpleResponse.newBuilder().setServerId(serverId).setHostname(host).build());
-      responseObserver.onCompleted();
+      if (!CALL_BEHAVIOR_KEEP_OPEN_VALUE.equals(CALL_BEHAVIOR_KEY.get())) {
+        responseObserver.onCompleted();
+      }
     }
   }
 
@@ -203,10 +214,10 @@ public final class XdsTestServer {
     }
   }
 
-  private static class HostnameInterceptor implements ServerInterceptor {
+  private static class TestInfoInterceptor implements ServerInterceptor {
     private final String host;
 
-    private HostnameInterceptor(String host) {
+    private TestInfoInterceptor(String host) {
       this.host = host;
     }
 
@@ -215,15 +226,16 @@ public final class XdsTestServer {
         ServerCall<ReqT, RespT> call,
         final Metadata requestHeaders,
         ServerCallHandler<ReqT, RespT> next) {
-      return next.startCall(
-          new SimpleForwardingServerCall<ReqT, RespT>(call) {
-            @Override
-            public void sendHeaders(Metadata responseHeaders) {
-              responseHeaders.put(HOSTNAME_KEY, host);
-              super.sendHeaders(responseHeaders);
-            }
-          },
-          requestHeaders);
+      String callBehavior = requestHeaders.get(CALL_BEHAVIOR_MD_KEY);
+      Context newContext = Context.current().withValue(CALL_BEHAVIOR_KEY, callBehavior);
+      ServerCall<ReqT, RespT> newCall = new SimpleForwardingServerCall<ReqT, RespT>(call) {
+        @Override
+        public void sendHeaders(Metadata responseHeaders) {
+          responseHeaders.put(HOSTNAME_KEY, host);
+          super.sendHeaders(responseHeaders);
+        }
+      };
+      return Contexts.interceptCall(newContext, newCall, requestHeaders, next);
     }
   }
 }
