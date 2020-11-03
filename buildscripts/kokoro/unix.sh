@@ -30,6 +30,16 @@ ARCH="${ARCH:-x86_64}"
 
 ARCH="$ARCH" buildscripts/make_dependencies.sh
 
+# It isn't important for the Gradle wrapper to be the same version as Gradle. It
+# rarely changes.
+GRADLE_WRAPPER_VERSION=4.10.1
+(
+  curl -Ls "https://services.gradle.org/distributions/gradle-$GRADLE_WRAPPER_VERSION-wrapper.jar.sha256"
+  echo "  gradle/wrapper/gradle-wrapper.jar"
+) | sha256sum --check
+diff gradle/wrapper/gradle-wrapper.jar \
+  examples/gradle/wrapper/gradle-wrapper.jar
+
 # Set properties via flags, do not pollute gradle.properties
 GRADLE_FLAGS="${GRADLE_FLAGS:-}"
 GRADLE_FLAGS+=" -PtargetArch=$ARCH"
