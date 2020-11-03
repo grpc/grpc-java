@@ -49,6 +49,7 @@ import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
+import io.grpc.xds.EdsLoadBalancer2.CallCounterProvider;
 import io.grpc.xds.EdsLoadBalancerProvider.EdsConfig;
 import io.grpc.xds.EnvoyProtoData.ClusterStats;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
@@ -69,6 +70,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import org.junit.After;
@@ -135,9 +137,16 @@ public class EdsLoadBalancer2Test {
   public void setUp() {
     MockitoAnnotations.initMocks(this);
 
+    CallCounterProvider callCounterProvider = new CallCounterProvider() {
+      @Override
+      public AtomicLong getOrCreate(String cluster, @Nullable String edsServiceName) {
+        return new AtomicLong();
+      }
+    };
+
     registry.register(new FakeLoadBalancerProvider(PRIORITY_POLICY_NAME));
     registry.register(new FakeLoadBalancerProvider(LRS_POLICY_NAME));
-    loadBalancer = new EdsLoadBalancer2(helper, registry, mockRandom);
+    loadBalancer = new EdsLoadBalancer2(helper, registry, mockRandom, callCounterProvider);
     loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
