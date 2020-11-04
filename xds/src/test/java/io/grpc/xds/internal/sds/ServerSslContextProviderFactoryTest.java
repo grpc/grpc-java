@@ -31,6 +31,7 @@ import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.envoyproxy.envoy.type.matcher.v3.StringMatcher;
 import io.grpc.xds.Bootstrapper;
 import io.grpc.xds.CommonBootstrapperTestUtils;
+import io.grpc.xds.EnvoyServerProtoData;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.XdsInitializationException;
 import io.grpc.xds.internal.certprovider.CertProviderServerSslContextProvider;
@@ -127,6 +128,37 @@ public class ServerSslContextProviderFactoryTest {
             /* alpnProtocols= */ null,
             /* staticCertValidationContext= */ null,
             /* requireClientCert= */ true);
+
+    Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
+    when(bootstrapper.readBootstrap()).thenReturn(bootstrapInfo);
+    SslContextProvider sslContextProvider =
+        serverSslContextProviderFactory.create(downstreamTlsContext);
+    assertThat(sslContextProvider).isInstanceOf(CertProviderServerSslContextProvider.class);
+    verifyWatcher(sslContextProvider, watcherCaptor[0]);
+  }
+
+  @Test
+  public void bothPresent_expectCertProviderServerSslContextProvider()
+      throws XdsInitializationException {
+    final CertificateProvider.DistributorWatcher[] watcherCaptor =
+        new CertificateProvider.DistributorWatcher[1];
+    createAndRegisterProviderProvider(certificateProviderRegistry, watcherCaptor, "testca", 0);
+    DownstreamTlsContext downstreamTlsContext =
+        CommonTlsContextTestsUtil.buildDownstreamTlsContextForCertProviderInstance(
+            "gcp_id",
+            "cert-default",
+            "gcp_id",
+            "root-default",
+            /* alpnProtocols= */ null,
+            /* staticCertValidationContext= */ null,
+            /* requireClientCert= */ true);
+
+    CommonTlsContext.Builder builder = downstreamTlsContext.getCommonTlsContext().toBuilder();
+    builder =
+        ClientSslContextProviderFactoryTest.addFilenames(builder, "foo.pem", "foo.key", "root.pem");
+    downstreamTlsContext =
+        new EnvoyServerProtoData.DownstreamTlsContext(
+            builder.build(), downstreamTlsContext.isRequireClientCertificate());
 
     Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
     when(bootstrapper.readBootstrap()).thenReturn(bootstrapInfo);
