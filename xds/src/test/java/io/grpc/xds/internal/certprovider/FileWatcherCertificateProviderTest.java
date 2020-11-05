@@ -141,7 +141,6 @@ public class FileWatcherCertificateProviderTest {
     doReturn(scheduledFuture)
         .when(timeService)
         .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
-    provider.scheduledHandle.cancel();
     provider.checkAndReloadCertificates();
     verifyWatcherErrorUpdates(null, null, 0, 0, (String[]) null);
     verifyTimeServiceAndScheduledHandle();
@@ -150,7 +149,6 @@ public class FileWatcherCertificateProviderTest {
     doReturn(scheduledFuture)
         .when(timeService)
         .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
-    provider.scheduledHandle.cancel();
     Thread.sleep(1000L);
     populateTarget(null, null, SERVER_1_PEM_FILE, false, false, false);
     provider.checkAndReloadCertificates();
@@ -161,7 +159,6 @@ public class FileWatcherCertificateProviderTest {
     doReturn(scheduledFuture)
         .when(timeService)
         .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
-    provider.scheduledHandle.cancel();
     Thread.sleep(1000L);
     populateTarget(SERVER_0_PEM_FILE, SERVER_0_KEY_FILE, null, false, false, false);
     provider.checkAndReloadCertificates();
@@ -172,7 +169,6 @@ public class FileWatcherCertificateProviderTest {
     doReturn(scheduledFuture)
         .when(timeService)
         .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
-    provider.scheduledHandle.cancel();
     Thread.sleep(1000L);
     populateTarget(CLIENT_PEM_FILE, CLIENT_KEY_FILE, CA_PEM_FILE, false, false, false);
     provider.checkAndReloadCertificates();
@@ -237,7 +233,6 @@ public class FileWatcherCertificateProviderTest {
         .thenReturn(
             TimeUnit.MILLISECONDS.toNanos(
                 MeshCaCertificateProviderTest.CERT0_EXPIRY_TIME_MILLIS - 610_000L));
-    provider.scheduledHandle.cancel();
     provider.checkAndReloadCertificates();
     verifyWatcherErrorUpdates(Status.Code.UNKNOWN, NoSuchFileException.class, 1, 0, "root.pem");
   }
@@ -269,7 +264,6 @@ public class FileWatcherCertificateProviderTest {
         .thenReturn(
             TimeUnit.MILLISECONDS.toNanos(
                 MeshCaCertificateProviderTest.CERT0_EXPIRY_TIME_MILLIS - 610_000L));
-    provider.scheduledHandle.cancel();
     provider.checkAndReloadCertificates();
     verifyWatcherErrorUpdates(
         null, null, firstUpdateCertCount, firstUpdateRootCount, (String[]) null);
@@ -279,7 +273,6 @@ public class FileWatcherCertificateProviderTest {
         .thenReturn(
             TimeUnit.MILLISECONDS.toNanos(
                 MeshCaCertificateProviderTest.CERT0_EXPIRY_TIME_MILLIS - 590_000L));
-    provider.scheduledHandle.cancel();
     provider.checkAndReloadCertificates();
     verifyWatcherErrorUpdates(
         Status.Code.UNKNOWN,

@@ -38,6 +38,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+// TODO(sanjaypujare): abstract out common functionality into an an abstract superclass
 /** Implementation of {@link CertificateProvider} for file watching cert provider. */
 final class FileWatcherCertificateProvider extends CertificateProvider {
   private static final Logger logger =
