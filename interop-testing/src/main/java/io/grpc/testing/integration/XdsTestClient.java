@@ -430,6 +430,8 @@ public final class XdsTestClient {
         newMetadata.put(metadata.getType(), md);
       }
       rpcConfig = new RpcConfig(request.getTypesList(), newMetadata);
+      responseObserver.onNext(ClientConfigureResponse.getDefaultInstance());
+      responseObserver.onCompleted();
     }
   }
 
