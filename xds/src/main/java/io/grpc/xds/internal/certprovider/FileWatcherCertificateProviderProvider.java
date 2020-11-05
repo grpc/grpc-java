@@ -40,7 +40,7 @@ final class FileWatcherCertificateProviderProvider implements CertificateProvide
   @VisibleForTesting static final long REFRESH_INTERVAL_DEFAULT = 600L;
 
 
-  static final String FILE_WATCHER_PROVIDER_NAME = "file-watcher";
+  static final String FILE_WATCHER_PROVIDER_NAME = "file_watcher";
 
   static {
     CertificateProviderRegistry.getInstance()
