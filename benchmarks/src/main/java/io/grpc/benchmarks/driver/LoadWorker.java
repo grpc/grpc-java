@@ -104,7 +104,8 @@ public class LoadWorker {
               + "\n  --driver_port=<port>"
               + "\n    Port to expose grpc.testing.WorkerService, used by driver to initiate work."
               + "\n  --server_port=<port>"
-              + "\n    Port to start load servers on. Defaults to any available port");
+              + "\n    Port to start load servers on, if not specified by the server config"
+              + "\n    message. Defaults to any available port.");
       System.exit(1);
     }
     LoadWorker loadWorker = new LoadWorker(driverPort, serverPort);
