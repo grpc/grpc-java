@@ -119,7 +119,7 @@ public class FileWatcherCertificateProviderProviderTest {
       provider.createCertificateProvider(map, distWatcher, true);
       fail("exception expected");
     } catch (NullPointerException npe) {
-      assertThat(npe).hasMessageThat().isEqualTo("'certificate-file' is required in the config");
+      assertThat(npe).hasMessageThat().isEqualTo("'certificate_file' is required in the config");
     }
   }
 
@@ -133,7 +133,7 @@ public class FileWatcherCertificateProviderProviderTest {
       provider.createCertificateProvider(map, distWatcher, true);
       fail("exception expected");
     } catch (NullPointerException npe) {
-      assertThat(npe).hasMessageThat().isEqualTo("'private-key-file' is required in the config");
+      assertThat(npe).hasMessageThat().isEqualTo("'private_key_file' is required in the config");
     }
   }
 
@@ -147,40 +147,40 @@ public class FileWatcherCertificateProviderProviderTest {
       provider.createCertificateProvider(map, distWatcher, true);
       fail("exception expected");
     } catch (NullPointerException npe) {
-      assertThat(npe).hasMessageThat().isEqualTo("'ca-certificate-file' is required in the config");
+      assertThat(npe).hasMessageThat().isEqualTo("'ca_certificate_file' is required in the config");
     }
   }
 
   private static final String MINIMAL_FILE_WATCHER_CONFIG =
       "{\n"
-          + "        \"certificate-file\": \"/var/run/gke-spiffe/certs/certificates.pem\","
-          + "        \"private-key-file\": \"/var/run/gke-spiffe/certs/private_key.pem\","
-          + "        \"ca-certificate-file\": \"/var/run/gke-spiffe/certs/ca_certificates.pem\""
+          + "        \"certificate_file\": \"/var/run/gke-spiffe/certs/certificates.pem\","
+          + "        \"private_key_file\": \"/var/run/gke-spiffe/certs/private_key.pem\","
+          + "        \"ca_certificate_file\": \"/var/run/gke-spiffe/certs/ca_certificates.pem\""
           + "      }";
 
   private static final String FULL_FILE_WATCHER_CONFIG =
       "{\n"
-          + "        \"certificate-file\": \"/var/run/gke-spiffe/certs/certificates2.pem\","
-          + "        \"private-key-file\": \"/var/run/gke-spiffe/certs/private_key3.pem\","
-          + "        \"ca-certificate-file\": \"/var/run/gke-spiffe/certs/ca_certificates4.pem\","
-          + "        \"refresh-interval\": 7890"
+          + "        \"certificate_file\": \"/var/run/gke-spiffe/certs/certificates2.pem\","
+          + "        \"private_key_file\": \"/var/run/gke-spiffe/certs/private_key3.pem\","
+          + "        \"ca_certificate_file\": \"/var/run/gke-spiffe/certs/ca_certificates4.pem\","
+          + "        \"refresh_interval\": 7890"
           + "      }";
 
   private static final String MISSING_CERT_CONFIG =
       "{\n"
-          + "        \"private-key-file\": \"/var/run/gke-spiffe/certs/private_key.pem\","
-          + "        \"ca-certificate-file\": \"/var/run/gke-spiffe/certs/ca_certificates.pem\""
+          + "        \"private_key_file\": \"/var/run/gke-spiffe/certs/private_key.pem\","
+          + "        \"ca_certificate_file\": \"/var/run/gke-spiffe/certs/ca_certificates.pem\""
           + "      }";
 
   private static final String MISSING_KEY_CONFIG =
       "{\n"
-          + "        \"certificate-file\": \"/var/run/gke-spiffe/certs/certificates.pem\","
-          + "        \"ca-certificate-file\": \"/var/run/gke-spiffe/certs/ca_certificates.pem\""
+          + "        \"certificate_file\": \"/var/run/gke-spiffe/certs/certificates.pem\","
+          + "        \"ca_certificate_file\": \"/var/run/gke-spiffe/certs/ca_certificates.pem\""
           + "      }";
 
   private static final String MISSING_ROOT_CONFIG =
       "{\n"
-          + "        \"certificate-file\": \"/var/run/gke-spiffe/certs/certificates.pem\","
-          + "        \"private-key-file\": \"/var/run/gke-spiffe/certs/private_key.pem\""
+          + "        \"certificate_file\": \"/var/run/gke-spiffe/certs/certificates.pem\","
+          + "        \"private_key_file\": \"/var/run/gke-spiffe/certs/private_key.pem\""
           + "      }";
 }

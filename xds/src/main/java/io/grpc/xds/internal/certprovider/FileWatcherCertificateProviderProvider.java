@@ -32,10 +32,10 @@ import java.util.concurrent.ScheduledExecutorService;
  */
 final class FileWatcherCertificateProviderProvider implements CertificateProviderProvider {
 
-  private static final String CERT_FILE_KEY = "certificate-file";
-  private static final String KEY_FILE_KEY = "private-key-file";
-  private static final String ROOT_FILE_KEY = "ca-certificate-file";
-  private static final String REFRESH_INTERVAL_KEY = "refresh-interval";
+  private static final String CERT_FILE_KEY = "certificate_file";
+  private static final String KEY_FILE_KEY = "private_key_file";
+  private static final String ROOT_FILE_KEY = "ca_certificate_file";
+  private static final String REFRESH_INTERVAL_KEY = "refresh_interval";
 
   @VisibleForTesting static final long REFRESH_INTERVAL_DEFAULT = 600L;
 
