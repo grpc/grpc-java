@@ -371,7 +371,7 @@ final class EdsLoadBalancer2 extends LoadBalancer {
 
       private final class RequestLimitingLbHelper extends ForwardingLoadBalancerHelper {
         private final Helper helper;
-        private ConnectivityState currentState = ConnectivityState.IDLE;
+        private ConnectivityState currentState = ConnectivityState.CONNECTING;
         private SubchannelPicker currentPicker = BUFFER_PICKER;
         private List<DropOverload> dropPolicies = Collections.emptyList();
         private long maxConcurrentRequests = DEFAULT_PER_CLUSTER_MAX_CONCURRENT_REQUESTS;

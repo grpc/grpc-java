@@ -676,7 +676,7 @@ public class EdsLoadBalancer2Test {
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(downstreamBalancers);
     xdsClient.deliverError(Status.UNAVAILABLE.withDescription("not found"));
 
-    assertThat(currentState).isEqualTo(ConnectivityState.IDLE);
+    assertThat(currentState).isEqualTo(ConnectivityState.CONNECTING);
     PickResult result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
     assertThat(result.getStatus().isOk()).isTrue();
     assertThat(childBalancer.shutdown).isFalse();
