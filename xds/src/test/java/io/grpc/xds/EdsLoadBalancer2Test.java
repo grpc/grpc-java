@@ -441,7 +441,7 @@ public class EdsLoadBalancer2Test {
                 new EdsConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME, null,
                     weightedTargetSelection, fakeRoundRobinSelection))
             .build());
-    when(mockRandom.nextInt(anyInt())).thenReturn(499_999, 1_000_000);
+    when(mockRandom.nextInt(anyInt())).thenReturn(499_999, 999_999, 1_000_000);
     EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr-1");
     LocalityLbEndpoints localityLbEndpoints1 =
         buildLocalityLbEndpoints(1, 10, Collections.singletonMap(endpoint1, true));
@@ -463,6 +463,18 @@ public class EdsLoadBalancer2Test {
     assertThat(result.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(result.getStatus().getDescription()).isEqualTo("Dropped: throttle");
     assertThat(xdsClient.clusterStats.get(EDS_SERVICE_NAME).categorizedDrops.get("throttle"))
+        .isEqualTo(1);
+
+    //  Dynamically update drop policies.
+    xdsClient.deliverClusterLoadAssignment(
+        EDS_SERVICE_NAME,
+        Collections.singletonList(new DropOverload("lb", 1_000_000)),
+        Collections.singletonMap(locality1, localityLbEndpoints1));
+    result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
+    assertThat(result.getStatus().isOk()).isFalse();
+    assertThat(result.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat(result.getStatus().getDescription()).isEqualTo("Dropped: lb");
+    assertThat(xdsClient.clusterStats.get(EDS_SERVICE_NAME).categorizedDrops.get("lb"))
         .isEqualTo(1);
 
     result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
@@ -515,6 +527,23 @@ public class EdsLoadBalancer2Test {
     assertThat(result.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(result.getStatus().getDescription())
         .isEqualTo("Cluster max concurrent requests limit exceeded");
+    assertThat(xdsClient.clusterStats.get(EDS_SERVICE_NAME).totalDrops).isEqualTo(1L);
+
+    // Dynamically increment circuit breakers max_concurrent_requests threshold.
+    maxConcurrentRequests = 101L;
+    loadBalancer.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
+            .setAttributes(
+                Attributes.newBuilder().set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool).build())
+            .setLoadBalancingPolicyConfig(
+                new EdsConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME, maxConcurrentRequests,
+                    weightedTargetSelection, fakeRoundRobinSelection))
+            .build());
+
+    result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
+    assertThat(result.getStatus().isOk()).isTrue();
+    assertThat(result.getSubchannel()).isSameInstanceAs(subchannel);
     assertThat(xdsClient.clusterStats.get(EDS_SERVICE_NAME).totalDrops).isEqualTo(1L);
   }
 

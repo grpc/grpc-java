@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.xds.XdsLbPolicies.LRS_POLICY_NAME;
 import static io.grpc.xds.XdsLbPolicies.PRIORITY_POLICY_NAME;
+import static io.grpc.xds.XdsSubchannelPickers.BUFFER_PICKER;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Attributes;
@@ -370,6 +371,8 @@ final class EdsLoadBalancer2 extends LoadBalancer {
 
       private final class RequestLimitingLbHelper extends ForwardingLoadBalancerHelper {
         private final Helper helper;
+        private ConnectivityState currentState = ConnectivityState.CONNECTING;
+        private SubchannelPicker currentPicker = BUFFER_PICKER;
         private List<DropOverload> dropPolicies = Collections.emptyList();
         private long maxConcurrentRequests = DEFAULT_PER_CLUSTER_MAX_CONCURRENT_REQUESTS;
 
@@ -380,6 +383,8 @@ final class EdsLoadBalancer2 extends LoadBalancer {
         @Override
         public void updateBalancingState(
             ConnectivityState newState, final SubchannelPicker newPicker) {
+          currentState = newState;
+          currentPicker =  newPicker;
           SubchannelPicker picker = new RequestLimitingSubchannelPicker(
               newPicker, dropPolicies, maxConcurrentRequests);
           delegate().updateBalancingState(newState, picker);
@@ -392,10 +397,12 @@ final class EdsLoadBalancer2 extends LoadBalancer {
 
         private void updateDropPolicies(List<DropOverload> dropOverloads) {
           dropPolicies = dropOverloads;
+          updateBalancingState(currentState, currentPicker);
         }
 
         private void updateMaxConcurrentRequests(long maxConcurrentRequests) {
           this.maxConcurrentRequests = maxConcurrentRequests;
+          updateBalancingState(currentState, currentPicker);
         }
 
         private final class RequestLimitingSubchannelPicker extends SubchannelPicker {
