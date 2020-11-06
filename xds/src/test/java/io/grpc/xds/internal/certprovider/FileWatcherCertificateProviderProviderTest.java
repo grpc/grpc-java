@@ -163,7 +163,7 @@ public class FileWatcherCertificateProviderProviderTest {
           + "        \"certificate_file\": \"/var/run/gke-spiffe/certs/certificates2.pem\","
           + "        \"private_key_file\": \"/var/run/gke-spiffe/certs/private_key3.pem\","
           + "        \"ca_certificate_file\": \"/var/run/gke-spiffe/certs/ca_certificates4.pem\","
-          + "        \"refresh_interval\": 7890"
+          + "        \"refresh_interval\": \"7890s\""
           + "      }";
 
   private static final String MISSING_CERT_CONFIG =

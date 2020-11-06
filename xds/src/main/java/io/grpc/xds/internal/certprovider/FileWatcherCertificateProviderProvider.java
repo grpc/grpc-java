@@ -21,8 +21,11 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.google.protobuf.Duration;
+import com.google.protobuf.util.Durations;
 import io.grpc.internal.JsonUtil;
 import io.grpc.internal.TimeProvider;
+import java.text.ParseException;
 import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -98,7 +101,15 @@ final class FileWatcherCertificateProviderProvider implements CertificateProvide
     configObj.certFile = checkForNullAndGet(map, CERT_FILE_KEY);
     configObj.keyFile = checkForNullAndGet(map, KEY_FILE_KEY);
     configObj.rootFile = checkForNullAndGet(map, ROOT_FILE_KEY);
-    configObj.refrehInterval = JsonUtil.getNumberAsLong(map, REFRESH_INTERVAL_KEY);
+    String refreshIntervalString = JsonUtil.getString(map, REFRESH_INTERVAL_KEY);
+    if (refreshIntervalString != null) {
+      try {
+        Duration duration = Durations.parse(refreshIntervalString);
+        configObj.refrehInterval = duration.getSeconds();
+      } catch (ParseException e) {
+        throw new IllegalArgumentException(e);
+      }
+    }
     if (configObj.refrehInterval == null) {
       configObj.refrehInterval = REFRESH_INTERVAL_DEFAULT;
     }
