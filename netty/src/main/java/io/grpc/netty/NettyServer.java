@@ -261,7 +261,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
     // See #6850
     future.awaitUninterruptibly();
     if (!future.isSuccess()) {
-      throw new IOException("Failed to bind", future.cause());
+      throw new IOException(String.format("Failed to bind to address %s", address), future.cause());
     }
     channel = future.channel();
     channel.eventLoop().execute(new Runnable() {
