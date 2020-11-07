@@ -23,15 +23,15 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-/** Unit tests for {@link ManagedChannelRegistry}. */
+/** Unit tests for {@link ServerRegistry}. */
 @RunWith(JUnit4.class)
-public class ManagedChannelRegistryTest {
-  private String target = "testing123";
-  private ChannelCredentials creds = new ChannelCredentials() {};
+public class ServerRegistryTest {
+  private int port = 123;
+  private ServerCredentials creds = new ServerCredentials() {};
 
   @Test
   public void register_unavailableProviderThrows() {
-    ManagedChannelRegistry reg = new ManagedChannelRegistry();
+    ServerRegistry reg = new ServerRegistry();
     try {
       reg.register(new BaseProvider(false, 5));
       fail("Should throw");
@@ -43,10 +43,10 @@ public class ManagedChannelRegistryTest {
 
   @Test
   public void deregister() {
-    ManagedChannelRegistry reg = new ManagedChannelRegistry();
-    ManagedChannelProvider p1 = new BaseProvider(true, 5);
-    ManagedChannelProvider p2 = new BaseProvider(true, 5);
-    ManagedChannelProvider p3 = new BaseProvider(true, 5);
+    ServerRegistry reg = new ServerRegistry();
+    ServerProvider p1 = new BaseProvider(true, 5);
+    ServerProvider p2 = new BaseProvider(true, 5);
+    ServerProvider p3 = new BaseProvider(true, 5);
     reg.register(p1);
     reg.register(p2);
     reg.register(p3);
@@ -57,12 +57,12 @@ public class ManagedChannelRegistryTest {
 
   @Test
   public void provider_sorted() {
-    ManagedChannelRegistry reg = new ManagedChannelRegistry();
-    ManagedChannelProvider p1 = new BaseProvider(true, 5);
-    ManagedChannelProvider p2 = new BaseProvider(true, 3);
-    ManagedChannelProvider p3 = new BaseProvider(true, 8);
-    ManagedChannelProvider p4 = new BaseProvider(true, 3);
-    ManagedChannelProvider p5 = new BaseProvider(true, 8);
+    ServerRegistry reg = new ServerRegistry();
+    ServerProvider p1 = new BaseProvider(true, 5);
+    ServerProvider p2 = new BaseProvider(true, 3);
+    ServerProvider p3 = new BaseProvider(true, 8);
+    ServerProvider p4 = new BaseProvider(true, 3);
+    ServerProvider p5 = new BaseProvider(true, 8);
     reg.register(p1);
     reg.register(p2);
     reg.register(p3);
@@ -73,11 +73,11 @@ public class ManagedChannelRegistryTest {
 
   @Test
   public void getProvider_noProvider() {
-    assertThat(new ManagedChannelRegistry().provider()).isNull();
+    assertThat(new ServerRegistry().provider()).isNull();
   }
 
   @Test
-  public void newChannelBuilder_providerReturnsError() {
+  public void newServerBuilderForPort_providerReturnsError() {
     final String errorString = "brisking";
     class ErrorProvider extends BaseProvider {
       ErrorProvider() {
@@ -85,73 +85,73 @@ public class ManagedChannelRegistryTest {
       }
 
       @Override
-      public NewChannelBuilderResult newChannelBuilder(
-          String passedTarget, ChannelCredentials passedCreds) {
-        assertThat(passedTarget).isSameInstanceAs(target);
+      public NewServerBuilderResult newServerBuilderForPort(
+          int passedPort, ServerCredentials passedCreds) {
+        assertThat(passedPort).isEqualTo(port);
         assertThat(passedCreds).isSameInstanceAs(creds);
-        return NewChannelBuilderResult.error(errorString);
+        return NewServerBuilderResult.error(errorString);
       }
     }
 
-    ManagedChannelRegistry registry = new ManagedChannelRegistry();
+    ServerRegistry registry = new ServerRegistry();
     registry.register(new ErrorProvider());
     try {
-      registry.newChannelBuilder(target, creds);
+      registry.newServerBuilderForPort(port, creds);
       fail("expected exception");
-    } catch (ManagedChannelRegistry.ProviderNotFoundException ex) {
+    } catch (ServerRegistry.ProviderNotFoundException ex) {
       assertThat(ex).hasMessageThat().contains(errorString);
       assertThat(ex).hasMessageThat().contains(ErrorProvider.class.getName());
     }
   }
 
   @Test
-  public void newChannelBuilder_providerReturnsNonNull() {
-    ManagedChannelRegistry registry = new ManagedChannelRegistry();
+  public void newServerBuilderForPort_providerReturnsNonNull() {
+    ServerRegistry registry = new ServerRegistry();
     registry.register(new BaseProvider(true, 5) {
       @Override
-      public NewChannelBuilderResult newChannelBuilder(
-          String passedTarget, ChannelCredentials passedCreds) {
-        return NewChannelBuilderResult.error("dodging");
+      public NewServerBuilderResult newServerBuilderForPort(
+          int passedPort, ServerCredentials passedCreds) {
+        return NewServerBuilderResult.error("dodging");
       }
     });
-    class MockChannelBuilder extends ForwardingChannelBuilder<MockChannelBuilder> {
-      @Override public ManagedChannelBuilder<?> delegate() {
+    class MockServerBuilder extends ForwardingServerBuilder<MockServerBuilder> {
+      @Override public ServerBuilder<?> delegate() {
         throw new UnsupportedOperationException();
       }
     }
 
-    final ManagedChannelBuilder<?> mcb = new MockChannelBuilder();
+    final ServerBuilder<?> mcb = new MockServerBuilder();
     registry.register(new BaseProvider(true, 4) {
       @Override
-      public NewChannelBuilderResult newChannelBuilder(
-          String passedTarget, ChannelCredentials passedCreds) {
-        return NewChannelBuilderResult.channelBuilder(mcb);
+      public NewServerBuilderResult newServerBuilderForPort(
+          int passedPort, ServerCredentials passedCreds) {
+        return NewServerBuilderResult.serverBuilder(mcb);
       }
     });
     registry.register(new BaseProvider(true, 3) {
       @Override
-      public NewChannelBuilderResult newChannelBuilder(
-          String passedTarget, ChannelCredentials passedCreds) {
+      public NewServerBuilderResult newServerBuilderForPort(
+          int passedPort, ServerCredentials passedCreds) {
         fail("Should not be called");
         throw new AssertionError();
       }
     });
-    assertThat(registry.newChannelBuilder(target, creds)).isSameInstanceAs(mcb);
+    assertThat(registry.newServerBuilderForPort(port, creds)).isSameInstanceAs(mcb);
   }
 
   @Test
-  public void newChannelBuilder_noProvider() {
-    ManagedChannelRegistry registry = new ManagedChannelRegistry();
+  public void newServerBuilderForPort_noProvider() {
+    ServerRegistry registry = new ServerRegistry();
     try {
-      registry.newChannelBuilder(target, creds);
+      registry.newServerBuilderForPort(port, creds);
       fail("expected exception");
-    } catch (ManagedChannelRegistry.ProviderNotFoundException ex) {
-      assertThat(ex).hasMessageThat().contains("No functional channel service provider found");
+    } catch (ServerRegistry.ProviderNotFoundException ex) {
+      assertThat(ex).hasMessageThat().contains("No functional server found");
       assertThat(ex).hasMessageThat().contains("grpc-netty");
     }
   }
 
-  private static class BaseProvider extends ManagedChannelProvider {
+  private static class BaseProvider extends ServerProvider {
     private final boolean isAvailable;
     private final int priority;
 
@@ -171,12 +171,7 @@ public class ManagedChannelRegistryTest {
     }
 
     @Override
-    protected ManagedChannelBuilder<?> builderForAddress(String name, int port) {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    protected ManagedChannelBuilder<?> builderForTarget(String target) {
+    protected ServerBuilder<?> builderForPort(int port) {
       throw new UnsupportedOperationException();
     }
   }
