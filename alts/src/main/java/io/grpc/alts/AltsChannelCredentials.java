@@ -52,6 +52,7 @@ public final class AltsChannelCredentials {
     return new Builder();
   }
 
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/4151")
   public static final class Builder {
     private final ImmutableList.Builder<String> targetServiceAccountsBuilder =
         ImmutableList.builder();
@@ -131,7 +132,7 @@ public final class AltsChannelCredentials {
 
   private static final AsciiString SCHEME = AsciiString.of("https");
 
-  private static final class FailingProtocolNegotiator implements ProtocolNegotiator {
+  static final class FailingProtocolNegotiator implements ProtocolNegotiator {
     private final Status status;
 
     public FailingProtocolNegotiator(Status status) {
