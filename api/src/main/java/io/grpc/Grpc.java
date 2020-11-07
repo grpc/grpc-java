@@ -124,4 +124,15 @@ public final class Grpc {
       throw new IllegalArgumentException("Invalid host or port: " + host + " " + port, ex);
     }
   }
+
+  /**
+   * Static factory for creating a new ServerBuilder.
+   *
+   * @param port the port to listen on
+   * @param creds the server identity
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/7621")
+  public static ServerBuilder<?> newServerBuilderForPort(int port, ServerCredentials creds) {
+    return ServerRegistry.getDefaultRegistry().newServerBuilderForPort(port, creds);
+  }
 }

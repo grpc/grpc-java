@@ -16,9 +16,8 @@
 
 package io.grpc;
 
+import com.google.common.base.Preconditions;
 import io.grpc.ManagedChannelProvider.ProviderNotFoundException;
-import io.grpc.ServiceProviders.PriorityAccessor;
-import java.util.Collections;
 
 /**
  * Provider of servers for transport agnostic consumption.
@@ -34,28 +33,13 @@ import java.util.Collections;
  */
 @Internal
 public abstract class ServerProvider {
-  private static final ServerProvider provider = ServiceProviders.load(
-      ServerProvider.class,
-      Collections.<Class<?>>emptyList(),
-      ServerProvider.class.getClassLoader(),
-      new PriorityAccessor<ServerProvider>() {
-        @Override
-        public boolean isAvailable(ServerProvider provider) {
-          return provider.isAvailable();
-        }
-
-        @Override
-        public int getPriority(ServerProvider provider) {
-          return provider.priority();
-        }
-      });
-
   /**
    * Returns the ClassLoader-wide default server.
    *
    * @throws ProviderNotFoundException if no provider is available
    */
   public static ServerProvider provider() {
+    ServerProvider provider = ServerRegistry.getDefaultRegistry().provider();
     if (provider == null) {
       throw new ProviderNotFoundException("No functional server found. "
           + "Try adding a dependency on the grpc-netty or grpc-netty-shaded artifact");
@@ -81,4 +65,38 @@ public abstract class ServerProvider {
    * Creates a new builder with the given port.
    */
   protected abstract ServerBuilder<?> builderForPort(int port);
+
+  /**
+   * Creates a new builder with the given port and credentials. Returns an error-string result if
+   * unable to understand the credentials.
+   */
+  protected NewServerBuilderResult newServerBuilderForPort(int port, ServerCredentials creds) {
+    return NewServerBuilderResult.error("ServerCredentials are unsupported");
+  }
+
+  public static final class NewServerBuilderResult {
+    private final ServerBuilder<?> serverBuilder;
+    private final String error;
+
+    private NewServerBuilderResult(ServerBuilder<?> serverBuilder, String error) {
+      this.serverBuilder = serverBuilder;
+      this.error = error;
+    }
+
+    public static NewServerBuilderResult serverBuilder(ServerBuilder<?> builder) {
+      return new NewServerBuilderResult(Preconditions.checkNotNull(builder), null);
+    }
+
+    public static NewServerBuilderResult error(String error) {
+      return new NewServerBuilderResult(null, Preconditions.checkNotNull(error));
+    }
+
+    public ServerBuilder<?> getServerBuilder() {
+      return serverBuilder;
+    }
+
+    public String getError() {
+      return error;
+    }
+  }
 }
