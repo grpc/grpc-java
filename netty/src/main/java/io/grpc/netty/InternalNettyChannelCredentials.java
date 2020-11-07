@@ -18,8 +18,6 @@ package io.grpc.netty;
 
 import io.grpc.ChannelCredentials;
 import io.grpc.Internal;
-import io.netty.channel.ChannelHandler;
-import io.netty.util.AsciiString;
 
 /**
  * Internal {@link NettyChannelCredentials} accessor.  This is intended for usage internal to the
@@ -50,27 +48,8 @@ public final class InternalNettyChannelCredentials {
 
       @Override
       public InternalProtocolNegotiator.ProtocolNegotiator newNegotiator() {
-        final ProtocolNegotiator pn = result.negotiator.newNegotiator();
-        final class LocalProtocolNegotiator
-            implements InternalProtocolNegotiator.ProtocolNegotiator {
-
-          @Override
-          public AsciiString scheme() {
-            return pn.scheme();
-          }
-
-          @Override
-          public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
-            return pn.newHandler(grpcHandler);
-          }
-
-          @Override
-          public void close() {
-            pn.close();
-          }
-        }
-
-        return new LocalProtocolNegotiator();
+        return new InternalProtocolNegotiator.ProtocolNegotiatorAdapter(
+            result.negotiator.newNegotiator());
       }
 
       @Override

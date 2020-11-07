@@ -17,23 +17,23 @@
 package io.grpc.netty;
 
 import com.google.common.base.Preconditions;
-import io.grpc.ChannelCredentials;
 import io.grpc.ExperimentalApi;
+import io.grpc.ServerCredentials;
 import io.netty.handler.ssl.SslContext;
 
 /** A credential that performs TLS with Netty's SslContext as configuration. */
 @ExperimentalApi("There is no plan to make this API stable, given transport API instability")
-public final class NettySslContextChannelCredentials {
-  private NettySslContextChannelCredentials() {}
+public final class NettySslContextServerCredentials {
+  private NettySslContextServerCredentials() {}
 
   /**
    * Create a credential using Netty's SslContext as configuration. It must have been configured
    * with {@link GrpcSslContexts}, but options could have been overridden.
    */
-  public static ChannelCredentials create(SslContext sslContext) {
-    Preconditions.checkArgument(sslContext.isClient(),
-        "Server SSL context can not be used for client channel");
+  public static ServerCredentials create(SslContext sslContext) {
+    Preconditions.checkArgument(sslContext.isServer(),
+        "Client SSL context can not be used for server");
     GrpcSslContexts.ensureAlpnAndH2Enabled(sslContext.applicationProtocolNegotiator());
-    return NettyChannelCredentials.create(ProtocolNegotiators.tlsClientFactory(sslContext));
+    return NettyServerCredentials.create(ProtocolNegotiators.serverTlsFactory(sslContext));
   }
 }
