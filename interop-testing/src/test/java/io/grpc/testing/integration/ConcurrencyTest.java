@@ -18,19 +18,20 @@ package io.grpc.testing.integration;
 
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.MoreExecutors;
+import io.grpc.ChannelCredentials;
+import io.grpc.Grpc;
 import io.grpc.ManagedChannel;
 import io.grpc.Server;
+import io.grpc.ServerCredentials;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.GrpcSslContexts;
-import io.grpc.netty.NegotiationType;
-import io.grpc.netty.NettyChannelBuilder;
-import io.grpc.netty.NettyServerBuilder;
+import io.grpc.netty.NettySslContextChannelCredentials;
+import io.grpc.netty.NettySslContextServerCredentials;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.integration.Messages.ResponseParameters;
 import io.grpc.testing.integration.Messages.StreamingOutputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingOutputCallResponse;
 import io.netty.handler.ssl.ClientAuth;
-import io.netty.handler.ssl.SslContext;
 import java.io.File;
 import java.io.IOException;
 import java.security.cert.CertificateException;
@@ -191,14 +192,13 @@ public class ConcurrencyTest {
       TestUtils.loadX509Cert("ca.pem")
     };
 
-    SslContext sslContext =
+    ServerCredentials serverCreds = NettySslContextServerCredentials.create(
         GrpcSslContexts.forServer(serverCertChainFile, serverPrivateKeyFile)
                        .trustManager(serverTrustedCaCerts)
                        .clientAuth(ClientAuth.REQUIRE)
-                       .build();
+                       .build());
 
-    return NettyServerBuilder.forPort(0)
-        .sslContext(sslContext)
+    return Grpc.newServerBuilderForPort(0, serverCreds)
         .addService(new TestServiceImpl(serverExecutor))
         .build()
         .start();
@@ -211,16 +211,14 @@ public class ConcurrencyTest {
       TestUtils.loadX509Cert("ca.pem")
     };
 
-    SslContext sslContext =
+    ChannelCredentials channelCreds = NettySslContextChannelCredentials.create(
         GrpcSslContexts.forClient()
                        .keyManager(clientCertChainFile, clientPrivateKeyFile)
                        .trustManager(clientTrustedCaCerts)
-                       .build();
+                       .build());
 
-    return NettyChannelBuilder.forAddress("localhost", server.getPort())
+    return Grpc.newChannelBuilder("localhost:" + server.getPort(), channelCreds)
         .overrideAuthority(TestUtils.TEST_SERVER_HOST)
-        .negotiationType(NegotiationType.TLS)
-        .sslContext(sslContext)
         .build();
   }
 }

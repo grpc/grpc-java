@@ -29,6 +29,7 @@ import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
 import io.grpc.ForwardingClientCall;
 import io.grpc.ForwardingClientCallListener;
+import io.grpc.InsecureServerCredentials;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerBuilder;
@@ -85,7 +86,7 @@ public class TransportCompressionTest extends AbstractInteropTest {
 
   @Override
   protected ServerBuilder<?> getServerBuilder() {
-    NettyServerBuilder builder = NettyServerBuilder.forPort(0)
+    NettyServerBuilder builder = NettyServerBuilder.forPort(0, InsecureServerCredentials.create())
         .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
         .compressorRegistry(compressors)
         .decompressorRegistry(decompressors)

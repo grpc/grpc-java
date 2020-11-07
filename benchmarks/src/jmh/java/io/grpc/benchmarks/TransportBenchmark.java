@@ -19,10 +19,13 @@ package io.grpc.benchmarks;
 import static io.grpc.benchmarks.Utils.pickUnusedPort;
 
 import com.google.protobuf.ByteString;
+import io.grpc.InsecureChannelCredentials;
+import io.grpc.InsecureServerCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
+import io.grpc.ServerCredentials;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.benchmarks.proto.BenchmarkServiceGrpc;
@@ -80,6 +83,7 @@ public class TransportBenchmark {
 
   @Setup
   public void setUp() throws Exception {
+    ServerCredentials serverCreds = InsecureServerCredentials.create();
     ServerBuilder<?> serverBuilder;
     ManagedChannelBuilder<?> channelBuilder;
     switch (transport) {
@@ -93,7 +97,7 @@ public class TransportBenchmark {
       case NETTY:
       {
         InetSocketAddress address = new InetSocketAddress("localhost", pickUnusedPort());
-        serverBuilder = NettyServerBuilder.forAddress(address);
+        serverBuilder = NettyServerBuilder.forAddress(address, serverCreds);
         channelBuilder = NettyChannelBuilder.forAddress(address)
             .negotiationType(NegotiationType.PLAINTEXT);
         break;
@@ -103,7 +107,7 @@ public class TransportBenchmark {
         String name = "bench" + Math.random();
         LocalAddress address = new LocalAddress(name);
         EventLoopGroup group = new DefaultEventLoopGroup();
-        serverBuilder = NettyServerBuilder.forAddress(address)
+        serverBuilder = NettyServerBuilder.forAddress(address, serverCreds)
             .bossEventLoopGroup(group)
             .workerEventLoopGroup(group)
             .channelType(LocalServerChannel.class);
@@ -125,7 +129,7 @@ public class TransportBenchmark {
         Class<? extends ServerChannel> serverChannelClass =
             Class.forName("io.netty.channel.epoll.EpollServerSocketChannel")
               .asSubclass(ServerChannel.class);
-        serverBuilder = NettyServerBuilder.forAddress(address)
+        serverBuilder = NettyServerBuilder.forAddress(address, serverCreds)
             .bossEventLoopGroup(group)
             .workerEventLoopGroup(group)
             .channelType(serverChannelClass);
@@ -143,8 +147,9 @@ public class TransportBenchmark {
       {
         int port = pickUnusedPort();
         InetSocketAddress address = new InetSocketAddress("localhost", port);
-        serverBuilder = NettyServerBuilder.forAddress(address);
-        channelBuilder = OkHttpChannelBuilder.forAddress("localhost", port).usePlaintext();
+        serverBuilder = NettyServerBuilder.forAddress(address, serverCreds);
+        channelBuilder = OkHttpChannelBuilder
+            .forAddress("localhost", port, InsecureChannelCredentials.create());
         break;
       }
       default:
