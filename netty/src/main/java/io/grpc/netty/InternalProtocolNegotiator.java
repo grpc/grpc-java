@@ -16,7 +16,12 @@
 
 package io.grpc.netty;
 
+import com.google.common.base.Preconditions;
 import io.grpc.Internal;
+import io.grpc.internal.ObjectPool;
+import io.netty.channel.ChannelHandler;
+import io.netty.util.AsciiString;
+import java.util.concurrent.Executor;
 
 /**
  * Internal accessor for {@link ProtocolNegotiator}.
@@ -28,7 +33,35 @@ public final class InternalProtocolNegotiator {
 
   public interface ProtocolNegotiator extends io.grpc.netty.ProtocolNegotiator {}
 
+  static final class ProtocolNegotiatorAdapter
+      implements InternalProtocolNegotiator.ProtocolNegotiator {
+    private final io.grpc.netty.ProtocolNegotiator negotiator;
+
+    public ProtocolNegotiatorAdapter(io.grpc.netty.ProtocolNegotiator negotiator) {
+      this.negotiator = Preconditions.checkNotNull(negotiator, "negotiator");
+    }
+
+    @Override
+    public AsciiString scheme() {
+      return negotiator.scheme();
+    }
+
+    @Override
+    public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
+      return negotiator.newHandler(grpcHandler);
+    }
+
+    @Override
+    public void close() {
+      negotiator.close();
+    }
+  }
+
   public interface ClientFactory extends io.grpc.netty.ProtocolNegotiator.ClientFactory {
     @Override ProtocolNegotiator newNegotiator();
+  }
+
+  public interface ServerFactory extends io.grpc.netty.ProtocolNegotiator.ServerFactory {
+    @Override ProtocolNegotiator newNegotiator(ObjectPool<? extends Executor> offloadExecutorPool);
   }
 }

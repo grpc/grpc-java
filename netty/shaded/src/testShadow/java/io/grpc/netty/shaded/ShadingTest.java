@@ -21,9 +21,11 @@ import static com.google.common.truth.Truth.assertThat;
 import io.grpc.ChannelCredentials;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
+import io.grpc.InsecureServerCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.Server;
-import io.grpc.ServerBuilder;
+import io.grpc.ServerCredentials;
+import io.grpc.TlsServerCredentials;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.shaded.io.grpc.netty.GrpcSslContexts;
 import io.grpc.netty.shaded.io.grpc.netty.NettyChannelBuilder;
@@ -69,14 +71,15 @@ public final class ShadingTest {
 
   @Test
   public void serviceLoaderFindsNetty() throws Exception {
-    assertThat(ServerBuilder.forPort(0)).isInstanceOf(NettyServerBuilder.class);
+    assertThat(Grpc.newServerBuilderForPort(0, InsecureServerCredentials.create()))
+        .isInstanceOf(NettyServerBuilder.class);
     assertThat(Grpc.newChannelBuilder("localhost:1234", InsecureChannelCredentials.create()))
         .isInstanceOf(NettyChannelBuilder.class);
   }
 
   @Test
   public void basic() throws Exception {
-    server = ServerBuilder.forPort(0)
+    server = Grpc.newServerBuilderForPort(0, InsecureServerCredentials.create())
         .addService(new SimpleServiceImpl())
         .build().start();
     channel = Grpc.newChannelBuilder(
@@ -89,8 +92,9 @@ public final class ShadingTest {
 
   @Test
   public void tcnative() throws Exception {
-    server = NettyServerBuilder.forPort(0)
-        .useTransportSecurity(TestUtils.loadCert("server1.pem"), TestUtils.loadCert("server1.key"))
+    ServerCredentials serverCreds = TlsServerCredentials.create(
+        TestUtils.loadCert("server1.pem"), TestUtils.loadCert("server1.key"));
+    server = Grpc.newServerBuilderForPort(0, serverCreds)
         .addService(new SimpleServiceImpl())
         .build().start();
     ChannelCredentials creds = NettySslContextChannelCredentials.create(

@@ -29,6 +29,7 @@ import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import io.grpc.ExperimentalApi;
 import io.grpc.Internal;
 import io.grpc.ServerBuilder;
+import io.grpc.ServerCredentials;
 import io.grpc.ServerStreamTracer;
 import io.grpc.internal.AbstractServerImplBuilder;
 import io.grpc.internal.FixedObjectPool;
@@ -58,7 +59,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.CheckReturnValue;
-import javax.annotation.Nullable;
 import javax.net.ssl.SSLException;
 
 /**
@@ -98,8 +98,8 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
   private ObjectPool<? extends EventLoopGroup> workerEventLoopGroupPool =
       DEFAULT_WORKER_EVENT_LOOP_GROUP_POOL;
   private boolean forceHeapBuffer;
-  private SslContext sslContext;
-  private ProtocolNegotiator protocolNegotiator;
+  private ProtocolNegotiator.ServerFactory protocolNegotiatorFactory;
+  private final boolean freezeProtocolNegotiatorFactory;
   private int maxConcurrentCallsPerConnection = Integer.MAX_VALUE;
   private boolean autoFlowControl = true;
   private int flowControlWindow = DEFAULT_FLOW_CONTROL_WINDOW;
@@ -121,7 +121,18 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    */
   @CheckReturnValue
   public static NettyServerBuilder forPort(int port) {
-    return new NettyServerBuilder(port);
+    return forAddress(new InetSocketAddress(port));
+  }
+
+  /**
+   * Creates a server builder that will bind to the given port.
+   *
+   * @param port the port on which the server is to be bound.
+   * @return the server builder.
+   */
+  @CheckReturnValue
+  public static NettyServerBuilder forPort(int port, ServerCredentials creds) {
+    return forAddress(new InetSocketAddress(port), creds);
   }
 
   /**
@@ -135,6 +146,21 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
     return new NettyServerBuilder(address);
   }
 
+  /**
+   * Creates a server builder configured with the given {@link SocketAddress}.
+   *
+   * @param address the socket address on which the server is to be bound.
+   * @return the server builder
+   */
+  @CheckReturnValue
+  public static NettyServerBuilder forAddress(SocketAddress address, ServerCredentials creds) {
+    ProtocolNegotiators.FromServerCredentialsResult result = ProtocolNegotiators.from(creds);
+    if (result.error != null) {
+      throw new IllegalArgumentException(result.error);
+    }
+    return new NettyServerBuilder(address, result.negotiator);
+  }
+
   private final class NettyClientTransportServersBuilder implements ClientTransportServersBuilder {
     @Override
     public List<? extends InternalServer> buildClientTransportServers(
@@ -144,15 +170,20 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
   }
 
   @CheckReturnValue
-  private NettyServerBuilder(int port) {
-    serverImplBuilder = new ServerImplBuilder(new NettyClientTransportServersBuilder());
-    this.listenAddresses.add(new InetSocketAddress(port));
-  }
-
-  @CheckReturnValue
   private NettyServerBuilder(SocketAddress address) {
     serverImplBuilder = new ServerImplBuilder(new NettyClientTransportServersBuilder());
     this.listenAddresses.add(address);
+    this.protocolNegotiatorFactory = ProtocolNegotiators.serverPlaintextFactory();
+    this.freezeProtocolNegotiatorFactory = false;
+  }
+
+  @CheckReturnValue
+  NettyServerBuilder(
+      SocketAddress address, ProtocolNegotiator.ServerFactory negotiatorFactory) {
+    serverImplBuilder = new ServerImplBuilder(new NettyClientTransportServersBuilder());
+    this.listenAddresses.add(address);
+    this.protocolNegotiatorFactory = checkNotNull(negotiatorFactory, "negotiatorFactory");
+    this.freezeProtocolNegotiatorFactory = true;
   }
 
   @Internal
@@ -317,25 +348,28 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * have been configured with {@link GrpcSslContexts}, but options could have been overridden.
    */
   public NettyServerBuilder sslContext(SslContext sslContext) {
+    checkState(!freezeProtocolNegotiatorFactory,
+               "Cannot change security when using ServerCredentials");
     if (sslContext != null) {
       checkArgument(sslContext.isServer(),
           "Client SSL context can not be used for server");
       GrpcSslContexts.ensureAlpnAndH2Enabled(sslContext.applicationProtocolNegotiator());
+      protocolNegotiatorFactory = ProtocolNegotiators.serverTlsFactory(sslContext);
+    } else {
+      protocolNegotiatorFactory = ProtocolNegotiators.serverPlaintextFactory();
     }
-    this.sslContext = sslContext;
     return this;
   }
 
   /**
-   * Sets the {@link ProtocolNegotiator} to be used. If non-{@code null}, overrides the value
-   * specified in {@link #sslContext(SslContext)}.
-   *
-   * <p>Default: {@code null}.
+   * Sets the {@link ProtocolNegotiator} to be used. Overrides the value specified in {@link
+   * #sslContext(SslContext)}.
    */
   @Internal
-  public final NettyServerBuilder protocolNegotiator(
-          @Nullable ProtocolNegotiator protocolNegotiator) {
-    this.protocolNegotiator = protocolNegotiator;
+  public final NettyServerBuilder protocolNegotiator(ProtocolNegotiator protocolNegotiator) {
+    checkState(!freezeProtocolNegotiatorFactory,
+               "Cannot change security when using ServerCredentials");
+    this.protocolNegotiatorFactory = ProtocolNegotiators.fixedServerFactory(protocolNegotiator);
     return this;
   }
 
@@ -586,12 +620,8 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
       List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
     assertEventLoopsAndChannelType();
 
-    ProtocolNegotiator negotiator = protocolNegotiator;
-    if (negotiator == null) {
-      negotiator = sslContext != null
-          ? ProtocolNegotiators.serverTls(sslContext, this.serverImplBuilder.getExecutorPool())
-          : ProtocolNegotiators.serverPlaintext();
-    }
+    ProtocolNegotiator negotiator = protocolNegotiatorFactory.newNegotiator(
+        this.serverImplBuilder.getExecutorPool());
 
     List<NettyServer> transportServers = new ArrayList<>(listenAddresses.size());
     for (SocketAddress listenAddress : listenAddresses) {
@@ -631,23 +661,31 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
 
   @Override
   public NettyServerBuilder useTransportSecurity(File certChain, File privateKey) {
+    checkState(!freezeProtocolNegotiatorFactory,
+               "Cannot change security when using ServerCredentials");
+    SslContext sslContext;
     try {
       sslContext = GrpcSslContexts.forServer(certChain, privateKey).build();
     } catch (SSLException e) {
       // This should likely be some other, easier to catch exception.
       throw new RuntimeException(e);
     }
+    protocolNegotiatorFactory = ProtocolNegotiators.serverTlsFactory(sslContext);
     return this;
   }
 
   @Override
   public NettyServerBuilder useTransportSecurity(InputStream certChain, InputStream privateKey) {
+    checkState(!freezeProtocolNegotiatorFactory,
+               "Cannot change security when using ServerCredentials");
+    SslContext sslContext;
     try {
       sslContext = GrpcSslContexts.forServer(certChain, privateKey).build();
     } catch (SSLException e) {
       // This should likely be some other, easier to catch exception.
       throw new RuntimeException(e);
     }
+    protocolNegotiatorFactory = ProtocolNegotiators.serverTlsFactory(sslContext);
     return this;
   }
 }
