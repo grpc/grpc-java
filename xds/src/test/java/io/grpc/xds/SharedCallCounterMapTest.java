@@ -20,6 +20,7 @@ import static com.google.common.truth.Truth.assertThat;
 
 import com.google.common.testing.GcFinalization;
 import io.grpc.xds.SharedCallCounterMap.CounterReference;
+import java.lang.ref.WeakReference;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
@@ -46,9 +47,9 @@ public class SharedCallCounterMapTest {
     assertThat(counter2).isSameInstanceAs(counter1);
   }
 
-  @SuppressWarnings("unused")
   @Test
   public void autoCleanUp() {
+    @SuppressWarnings("UnusedVariable")
     AtomicLong counter = map.getOrCreate(CLUSTER, EDS_SERVICE_NAME);
     CounterReference ref = counters.get(CLUSTER).get(EDS_SERVICE_NAME);
     counter = null;
