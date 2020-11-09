@@ -43,18 +43,16 @@ final class DynamicReloadingCertificateProviderProvider implements CertificatePr
 
   static final String DYNAMIC_RELOADING_PROVIDER_NAME = "gke-cas-certs";
 
-  static {
-    CertificateProviderRegistry.getInstance()
-        .register(
-            new DynamicReloadingCertificateProviderProvider(
-                DynamicReloadingCertificateProvider.Factory.getInstance(),
-                ScheduledExecutorServiceFactory.DEFAULT_INSTANCE,
-                TimeProvider.SYSTEM_TIME_PROVIDER));
-  }
-
   final DynamicReloadingCertificateProvider.Factory dynamicReloadingCertificateProviderFactory;
   private final ScheduledExecutorServiceFactory scheduledExecutorServiceFactory;
   private final TimeProvider timeProvider;
+
+  DynamicReloadingCertificateProviderProvider() {
+    this(
+        DynamicReloadingCertificateProvider.Factory.getInstance(),
+        ScheduledExecutorServiceFactory.DEFAULT_INSTANCE,
+        TimeProvider.SYSTEM_TIME_PROVIDER);
+  }
 
   @VisibleForTesting
   DynamicReloadingCertificateProviderProvider(
