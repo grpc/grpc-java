@@ -75,24 +75,22 @@ final class MeshCaCertificateProviderProvider implements CertificateProviderProv
   private static final String AUDIENCE_PREFIX = "identitynamespace:";
   static final String MESH_CA_NAME = "meshCA";
 
-  static {
-    CertificateProviderRegistry.getInstance()
-        .register(
-            new MeshCaCertificateProviderProvider(
-                StsCredentials.Factory.getInstance(),
-                MeshCaCertificateProvider.MeshCaChannelFactory.getInstance(),
-                new ExponentialBackoffPolicy.Provider(),
-                MeshCaCertificateProvider.Factory.getInstance(),
-                ScheduledExecutorServiceFactory.DEFAULT_INSTANCE,
-                TimeProvider.SYSTEM_TIME_PROVIDER));
-  }
-
   final StsCredentials.Factory stsCredentialsFactory;
   final MeshCaCertificateProvider.MeshCaChannelFactory meshCaChannelFactory;
   final BackoffPolicy.Provider backoffPolicyProvider;
   final MeshCaCertificateProvider.Factory meshCaCertificateProviderFactory;
   final ScheduledExecutorServiceFactory scheduledExecutorServiceFactory;
   final TimeProvider timeProvider;
+
+  MeshCaCertificateProviderProvider() {
+    this(
+        StsCredentials.Factory.getInstance(),
+        MeshCaCertificateProvider.MeshCaChannelFactory.getInstance(),
+        new ExponentialBackoffPolicy.Provider(),
+        MeshCaCertificateProvider.Factory.getInstance(),
+        ScheduledExecutorServiceFactory.DEFAULT_INSTANCE,
+        TimeProvider.SYSTEM_TIME_PROVIDER);
+  }
 
   @VisibleForTesting
   MeshCaCertificateProviderProvider(

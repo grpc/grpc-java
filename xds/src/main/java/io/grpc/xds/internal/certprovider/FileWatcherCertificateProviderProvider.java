@@ -45,18 +45,16 @@ final class FileWatcherCertificateProviderProvider implements CertificateProvide
 
   static final String FILE_WATCHER_PROVIDER_NAME = "file_watcher";
 
-  static {
-    CertificateProviderRegistry.getInstance()
-        .register(
-            new FileWatcherCertificateProviderProvider(
-                FileWatcherCertificateProvider.Factory.getInstance(),
-                ScheduledExecutorServiceFactory.DEFAULT_INSTANCE,
-                TimeProvider.SYSTEM_TIME_PROVIDER));
-  }
-
   final FileWatcherCertificateProvider.Factory fileWatcherCertificateProviderFactory;
   private final ScheduledExecutorServiceFactory scheduledExecutorServiceFactory;
   private final TimeProvider timeProvider;
+
+  FileWatcherCertificateProviderProvider() {
+    this(
+        FileWatcherCertificateProvider.Factory.getInstance(),
+        ScheduledExecutorServiceFactory.DEFAULT_INSTANCE,
+        TimeProvider.SYSTEM_TIME_PROVIDER);
+  }
 
   @VisibleForTesting
   FileWatcherCertificateProviderProvider(
