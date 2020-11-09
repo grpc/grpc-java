@@ -125,8 +125,7 @@ public class FileWatcherCertificateProviderTest {
   }
 
   @Test
-  public void getCertificateAndCheckUpdates()
-      throws IOException, CertificateException, InterruptedException {
+  public void getCertificateAndCheckUpdates() throws IOException, CertificateException {
     MeshCaCertificateProviderTest.TestScheduledFuture<?> scheduledFuture =
         new MeshCaCertificateProviderTest.TestScheduledFuture<>();
     doReturn(scheduledFuture)
@@ -144,6 +143,38 @@ public class FileWatcherCertificateProviderTest {
     provider.checkAndReloadCertificates();
     verifyWatcherErrorUpdates(null, null, 0, 0, (String[]) null);
     verifyTimeServiceAndScheduledHandle();
+  }
+
+  @Test
+  public void allUpdateSecondTime() throws IOException, CertificateException, InterruptedException {
+    MeshCaCertificateProviderTest.TestScheduledFuture<?> scheduledFuture =
+        new MeshCaCertificateProviderTest.TestScheduledFuture<>();
+    doReturn(scheduledFuture)
+        .when(timeService)
+        .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
+    populateTarget(CLIENT_PEM_FILE, CLIENT_KEY_FILE, CA_PEM_FILE, false, false, false);
+    provider.checkAndReloadCertificates();
+
+    reset(mockWatcher, timeService);
+    doReturn(scheduledFuture)
+        .when(timeService)
+        .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
+    Thread.sleep(1000L);
+    populateTarget(SERVER_0_PEM_FILE, SERVER_0_KEY_FILE, SERVER_1_PEM_FILE, false, false, false);
+    provider.checkAndReloadCertificates();
+    verifyWatcherUpdates(SERVER_0_PEM_FILE, SERVER_1_PEM_FILE);
+    verifyTimeServiceAndScheduledHandle();
+  }
+
+  @Test
+  public void rootFileUpdateOnly() throws IOException, CertificateException, InterruptedException {
+    MeshCaCertificateProviderTest.TestScheduledFuture<?> scheduledFuture =
+        new MeshCaCertificateProviderTest.TestScheduledFuture<>();
+    doReturn(scheduledFuture)
+        .when(timeService)
+        .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
+    populateTarget(CLIENT_PEM_FILE, CLIENT_KEY_FILE, CA_PEM_FILE, false, false, false);
+    provider.checkAndReloadCertificates();
 
     reset(mockWatcher, timeService);
     doReturn(scheduledFuture)
@@ -154,6 +185,18 @@ public class FileWatcherCertificateProviderTest {
     provider.checkAndReloadCertificates();
     verifyWatcherUpdates(null, SERVER_1_PEM_FILE);
     verifyTimeServiceAndScheduledHandle();
+  }
+
+  @Test
+  public void certAndKeyFileUpdateOnly()
+      throws IOException, CertificateException, InterruptedException {
+    MeshCaCertificateProviderTest.TestScheduledFuture<?> scheduledFuture =
+        new MeshCaCertificateProviderTest.TestScheduledFuture<>();
+    doReturn(scheduledFuture)
+        .when(timeService)
+        .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
+    populateTarget(CLIENT_PEM_FILE, CLIENT_KEY_FILE, CA_PEM_FILE, false, false, false);
+    provider.checkAndReloadCertificates();
 
     reset(mockWatcher, timeService);
     doReturn(scheduledFuture)
@@ -163,16 +206,6 @@ public class FileWatcherCertificateProviderTest {
     populateTarget(SERVER_0_PEM_FILE, SERVER_0_KEY_FILE, null, false, false, false);
     provider.checkAndReloadCertificates();
     verifyWatcherUpdates(SERVER_0_PEM_FILE, null);
-    verifyTimeServiceAndScheduledHandle();
-
-    reset(mockWatcher, timeService);
-    doReturn(scheduledFuture)
-        .when(timeService)
-        .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
-    Thread.sleep(1000L);
-    populateTarget(CLIENT_PEM_FILE, CLIENT_KEY_FILE, CA_PEM_FILE, false, false, false);
-    provider.checkAndReloadCertificates();
-    verifyWatcherUpdates(CLIENT_PEM_FILE, CA_PEM_FILE);
     verifyTimeServiceAndScheduledHandle();
   }
 
