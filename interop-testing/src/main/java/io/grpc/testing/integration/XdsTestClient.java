@@ -477,7 +477,7 @@ public final class XdsTestClient {
         StreamObserver<LoadBalancerAccumulatedStatsResponse> responseObserver) {
       LoadBalancerAccumulatedStatsResponse.Builder responseBuilder =
           LoadBalancerAccumulatedStatsResponse.newBuilder();
-      synchronized (lock){
+      synchronized (lock) {
         responseBuilder
             .putAllNumRpcsStartedByMethod(rpcsStartedByMethod)
             .putAllNumRpcsSucceededByMethod(rpcsSucceededByMethod)
