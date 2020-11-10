@@ -280,15 +280,6 @@ public final class XdsTestClient {
           currentRequestId += 1;
           requestId = currentRequestId;
           savedWatchers.addAll(watchers);
-          if (!rpcsStartedByMethod.containsKey(rpcType.name())) {
-            rpcsStartedByMethod.put(rpcType.name(), 0);
-          }
-          if (!rpcsSucceededByMethod.containsKey(rpcType.name())) {
-            rpcsSucceededByMethod.put(rpcType.name(), 0);
-          }
-          if (!rpcsFailedByMethod.containsKey(rpcType.name())) {
-            rpcsFailedByMethod.put(rpcType.name(), 0);
-          }
         }
 
         ManagedChannel channel = channels.get((int) (requestId % channels.size()));
@@ -384,7 +375,10 @@ public final class XdsTestClient {
           throw new AssertionError("Unknown RPC type: " + rpcType);
         }
         synchronized (lock) {
-          int startedBase = rpcsStartedByMethod.get(rpcType.name());
+          Integer startedBase = rpcsStartedByMethod.get(rpcType.name());
+          if (startedBase == null) {
+            startedBase = 0;
+          }
           rpcsStartedByMethod.put(rpcType.name(), startedBase + 1);
         }
       }
@@ -392,7 +386,10 @@ public final class XdsTestClient {
       private void handleRpcCompleted(long requestId, RpcType rpcType, String hostname,
           Set<XdsStatsWatcher> watchers) {
         synchronized (lock) {
-          int succeededBase = rpcsSucceededByMethod.get(rpcType.name());
+          Integer succeededBase = rpcsSucceededByMethod.get(rpcType.name());
+          if (succeededBase == null) {
+            succeededBase = 0;
+          }
           rpcsSucceededByMethod.put(rpcType.name(), succeededBase + 1);
         }
         notifyWatchers(watchers, rpcType, requestId, hostname);
@@ -401,7 +398,10 @@ public final class XdsTestClient {
       private void handleRpcError(long requestId, RpcType rpcType, String hostname,
           Set<XdsStatsWatcher> watchers) {
         synchronized (lock) {
-          int failedBase = rpcsFailedByMethod.get(rpcType.name());
+          Integer failedBase = rpcsFailedByMethod.get(rpcType.name());
+          if (failedBase == null) {
+            failedBase = 0;
+          }
           rpcsFailedByMethod.put(rpcType.name(), failedBase + 1);
         }
         notifyWatchers(watchers, rpcType, requestId, hostname);
