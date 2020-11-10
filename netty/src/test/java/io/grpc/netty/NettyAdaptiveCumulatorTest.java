@@ -38,8 +38,10 @@ import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.CompositeByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.buffer.UnpooledByteBufAllocator;
+import io.netty.util.ReferenceCounted;
 import java.util.Collection;
 import java.util.List;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.runners.Enclosed;
@@ -245,6 +247,7 @@ public class NettyAdaptiveCumulatorTest {
     private final ByteBufAllocator alloc = new PooledByteBufAllocator();
     private CompositeByteBuf composite;
     private ByteBuf tail;
+    private ByteBuf head;
     private ByteBuf in;
 
     @Before
@@ -258,8 +261,16 @@ public class NettyAdaptiveCumulatorTest {
           .writeBytes(DATA_INITIAL.getBytes(US_ASCII))
           .readerIndex(TAIL_READER_INDEX);
       composite = alloc.compositeBuffer();
-      composite.addFlattenedComponents(true,
-          alloc.buffer().writeBytes(compositeHeadData.getBytes(US_ASCII)));
+      head = alloc.buffer().writeBytes(compositeHeadData.getBytes(US_ASCII));
+      composite.addFlattenedComponents(true, head);
+    }
+
+    @After
+    public void tearDown() {
+      NettyTestUtil.safeRelease(composite);
+      NettyTestUtil.safeRelease(in);
+      NettyTestUtil.safeRelease(tail);
+      NettyTestUtil.safeRelease(head);
     }
 
     @Test
@@ -442,6 +453,8 @@ public class NettyAdaptiveCumulatorTest {
         assertEquals(0, merged.refCnt());
         // Composite loses the tail
         assertEquals(0, composite.numComponents());
+      } finally {
+        NettyTestUtil.safeRelease(merged);
       }
     }
   }
