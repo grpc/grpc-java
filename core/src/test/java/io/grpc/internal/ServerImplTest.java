@@ -68,6 +68,7 @@ import io.grpc.ServerCall;
 import io.grpc.ServerCall.Listener;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
+import io.grpc.ServerInterceptor2;
 import io.grpc.ServerMethodDefinition;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerStreamTracer;
@@ -698,6 +699,48 @@ public class ServerImplTest {
     final Context.Key<String> key1 = Context.key("key1");
     final Context.Key<String> key2 = Context.key("key2");
     final Context.Key<String> key3 = Context.key("key3");
+    final Context.Key<String> serverInterceptor2_handlerKey =
+            Context.key("serverInterceptor2_handlerKey");
+    final Context.Key<String> serverInterceptor2_tracerKey =
+        Context.key("serverInterceptor2_tracerKey");
+
+    final TestServerStreamTracer streamTracer = new TestServerStreamTracer() {
+      @Override
+      public Context filterContext(Context context) {
+        Context newCtx = super.filterContext(context);
+        return newCtx
+            .withValue(serverInterceptor2_tracerKey, "serverInterceptor2_tracerKey");
+      }
+    };
+    final ServerStreamTracer.Factory streamTracerFactory = new ServerStreamTracer.Factory() {
+      @Override
+      public ServerStreamTracer newServerStreamTracer(String fullMethodName, Metadata headers) {
+        return streamTracer;
+      }
+    };
+    ServerInterceptor2 serverInterceptor2 = new ServerInterceptor2() {
+      @Override
+      public <ReqT, RespT> ServerMethodDefinition<ReqT, RespT>
+          interceptMethodDefinition(final ServerMethodDefinition<ReqT, RespT> method) {
+        final ServerCallHandler<ReqT, RespT> handler = method.getServerCallHandler();
+        return method.withServerCallHandler(new ServerCallHandler<ReqT, RespT>() {
+          @Override
+          public ServerCall.Listener<ReqT>
+              startCall(ServerCall<ReqT, RespT> call, Metadata headers) {
+            Context ctx =
+                Context.current().withValue(serverInterceptor2_handlerKey,
+                "serverInterceptor2_handlerKey");
+            Context origCtx = ctx.attach();
+            try {
+              capturedContexts.add(ctx);
+              return handler.startCall(call, headers);
+            } finally {
+              ctx.detach(origCtx);
+            }
+          }
+        }).addStreamTracerFactory(streamTracerFactory);
+      }
+    };
     ServerInterceptor interceptor1 = new ServerInterceptor() {
         @Override
         public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
@@ -743,6 +786,7 @@ public class ServerImplTest {
     mutableFallbackRegistry.addService(
         ServerServiceDefinition.builder(new ServiceDescriptor("Waiter", METHOD))
             .addMethod(METHOD, callHandler).build());
+    builder.intercept(serverInterceptor2);
     builder.intercept(interceptor2);
     builder.intercept(interceptor1);
     createServer();
@@ -761,19 +805,29 @@ public class ServerImplTest {
     assertEquals(1, executor.runDueTasks());
 
     Context ctx1 = capturedContexts.poll();
-    assertEquals("value1", key1.get(ctx1));
+    assertEquals("serverInterceptor2_tracerKey", serverInterceptor2_tracerKey.get(ctx1));
+    assertEquals("serverInterceptor2_handlerKey", serverInterceptor2_handlerKey.get(ctx1));
+    assertNull(key1.get(ctx1));
     assertNull(key2.get(ctx1));
     assertNull(key3.get(ctx1));
 
     Context ctx2 = capturedContexts.poll();
+    assertEquals("serverInterceptor2_handlerKey", serverInterceptor2_handlerKey.get(ctx2));
     assertEquals("value1", key1.get(ctx2));
-    assertEquals("value2", key2.get(ctx2));
+    assertNull(key2.get(ctx2));
     assertNull(key3.get(ctx2));
 
     Context ctx3 = capturedContexts.poll();
+    assertEquals("serverInterceptor2_handlerKey", serverInterceptor2_handlerKey.get(ctx3));
     assertEquals("value1", key1.get(ctx3));
     assertEquals("value2", key2.get(ctx3));
-    assertEquals("value3", key3.get(ctx3));
+    assertNull(key3.get(ctx3));
+
+    Context ctx4 = capturedContexts.poll();
+    assertEquals("serverInterceptor2_handlerKey", serverInterceptor2_handlerKey.get(ctx4));
+    assertEquals("value1", key1.get(ctx4));
+    assertEquals("value2", key2.get(ctx4));
+    assertEquals("value3", key3.get(ctx4));
 
     assertTrue(capturedContexts.isEmpty());
   }
@@ -1204,7 +1258,7 @@ public class ServerImplTest {
             Context.ROOT.withCancellation(),
             PerfMark.createTag());
     ServerStreamListener mockListener = mock(ServerStreamListener.class);
-    listener.setListener(mockListener);
+    listener.setListener(mockListener, Context.ROOT.withCancellation());
 
     TestError expectedT = new TestError();
     doThrow(expectedT).when(mockListener)
@@ -1230,7 +1284,7 @@ public class ServerImplTest {
             Context.ROOT.withCancellation(),
             PerfMark.createTag());
     ServerStreamListener mockListener = mock(ServerStreamListener.class);
-    listener.setListener(mockListener);
+    listener.setListener(mockListener, Context.ROOT.withCancellation());
 
     RuntimeException expectedT = new RuntimeException();
     doThrow(expectedT).when(mockListener)
@@ -1256,7 +1310,7 @@ public class ServerImplTest {
             Context.ROOT.withCancellation(),
             PerfMark.createTag());
     ServerStreamListener mockListener = mock(ServerStreamListener.class);
-    listener.setListener(mockListener);
+    listener.setListener(mockListener, Context.ROOT.withCancellation());
 
     TestError expectedT = new TestError();
     doThrow(expectedT).when(mockListener).halfClosed();
@@ -1280,7 +1334,7 @@ public class ServerImplTest {
             Context.ROOT.withCancellation(),
             PerfMark.createTag());
     ServerStreamListener mockListener = mock(ServerStreamListener.class);
-    listener.setListener(mockListener);
+    listener.setListener(mockListener, Context.ROOT.withCancellation());
 
     RuntimeException expectedT = new RuntimeException();
     doThrow(expectedT).when(mockListener).halfClosed();
@@ -1304,7 +1358,7 @@ public class ServerImplTest {
             Context.ROOT.withCancellation(),
             PerfMark.createTag());
     ServerStreamListener mockListener = mock(ServerStreamListener.class);
-    listener.setListener(mockListener);
+    listener.setListener(mockListener, Context.ROOT.withCancellation());
 
     TestError expectedT = new TestError();
     doThrow(expectedT).when(mockListener).onReady();
@@ -1328,7 +1382,7 @@ public class ServerImplTest {
             Context.ROOT.withCancellation(),
             PerfMark.createTag());
     ServerStreamListener mockListener = mock(ServerStreamListener.class);
-    listener.setListener(mockListener);
+    listener.setListener(mockListener, Context.ROOT.withCancellation());
 
     RuntimeException expectedT = new RuntimeException();
     doThrow(expectedT).when(mockListener).onReady();

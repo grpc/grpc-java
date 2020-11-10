@@ -25,6 +25,7 @@ import io.grpc.HandlerRegistry;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerInterceptor;
+import io.grpc.ServerInterceptor2;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerStreamTracer;
 import io.grpc.ServerTransportFilter;
@@ -87,6 +88,12 @@ public abstract class AbstractServerImplBuilder
 
   @Override
   public T intercept(ServerInterceptor interceptor) {
+    delegate().intercept(interceptor);
+    return thisT();
+  }
+
+  @Override
+  public T intercept(ServerInterceptor2 interceptor) {
     delegate().intercept(interceptor);
     return thisT();
   }

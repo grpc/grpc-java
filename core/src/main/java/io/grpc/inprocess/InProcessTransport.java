@@ -417,13 +417,47 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       @GuardedBy("this")
       private int outboundSeqNo;
 
-      InProcessServerStream(MethodDescriptor<?, ?> method, Metadata headers) {
-        statsTraceCtx = StatsTraceContext.newServerContext(
-            serverStreamTracerFactories, method.getFullMethodName(), headers);
+      private final class CallStartedListener
+          implements StatsTraceContext.ServerCallStartedListener {
+        private final ArrayList<Runnable> queuedStatsEvents = new ArrayList<Runnable>();
+        private boolean isReady;
+
+        @Override
+        public void serverCallStarted() {
+          synchronized (this) {
+            for (Runnable queuedEvent : queuedStatsEvents) {
+              queuedEvent.run();
+            }
+            queuedStatsEvents.clear();
+            isReady = true;
+          }
+        }
+
+        private void queueEvent(Runnable event) {
+          synchronized (this) {
+            if (isReady) {
+              event.run();
+            } else {
+              queuedStatsEvents.add(event);
+            }
+          }
+        }
       }
 
-      private synchronized void setListener(ClientStreamListener listener) {
-        clientStreamListener = listener;
+      private final CallStartedListener serverCallStartedListener = new CallStartedListener();
+
+      InProcessServerStream(MethodDescriptor<?, ?> method, Metadata headers) {
+        statsTraceCtx =
+            StatsTraceContext.newServerContext(
+                serverStreamTracerFactories,
+                method.getFullMethodName(),
+                headers,
+                serverCallStartedListener);
+      }
+
+      private synchronized void setListener(
+          ClientStreamListener statsTraceCtxServerCallStartedListener) {
+        clientStreamListener = statsTraceCtxServerCallStartedListener;
       }
 
       @Override
@@ -725,8 +759,21 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
         }
         statsTraceCtx.outboundMessage(outboundSeqNo);
         statsTraceCtx.outboundMessageSent(outboundSeqNo, -1, -1);
-        serverStream.statsTraceCtx.inboundMessage(outboundSeqNo);
-        serverStream.statsTraceCtx.inboundMessageRead(outboundSeqNo, -1, -1);
+        final int outboundSeqNumCopy = outboundSeqNo;
+        serverStream.serverCallStartedListener.queueEvent(
+            new Runnable() {
+              @Override
+              public void run() {
+                serverStream.statsTraceCtx.inboundMessage(outboundSeqNumCopy);
+              }
+            });
+        serverStream.serverCallStartedListener.queueEvent(
+            new Runnable() {
+              @Override
+              public void run() {
+                serverStream.statsTraceCtx.inboundMessageRead(outboundSeqNumCopy, -1, -1);
+              }
+            });
         outboundSeqNo++;
         StreamListener.MessageProducer producer = new SingleMessageProducer(message);
         if (serverRequested > 0) {

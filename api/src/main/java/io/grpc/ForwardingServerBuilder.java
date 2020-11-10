@@ -78,6 +78,12 @@ abstract class ForwardingServerBuilder<T extends ServerBuilder<T>> extends Serve
   }
 
   @Override
+  public T intercept(ServerInterceptor2 interceptor) {
+    delegate().intercept(interceptor);
+    return thisT();
+  }
+
+  @Override
   public T addTransportFilter(ServerTransportFilter filter) {
     delegate().addTransportFilter(filter);
     return thisT();
