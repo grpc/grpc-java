@@ -19,6 +19,8 @@ package io.grpc.internal;
 import static com.google.common.truth.Truth.assertThat;
 import static java.util.concurrent.TimeUnit.MINUTES;
 import static java.util.concurrent.TimeUnit.SECONDS;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -33,18 +35,25 @@ import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
+import io.grpc.Status;
 import io.grpc.internal.ManagedChannelServiceConfig.MethodInfo;
 import io.grpc.testing.TestMethodDescriptors;
 import java.util.Map;
 import javax.annotation.Nullable;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 /** Tests for {@link ConfigSelectingClientCall}. */
 @RunWith(JUnit4.class)
 public class ConfigSelectingClientCallTest {
+  @Rule
+  public MockitoRule mockitoRule = MockitoJUnit.rule();
   private final MethodDescriptor<Void, Void> method = MethodDescriptor.<Void, Void>newBuilder()
       .setType(MethodType.UNARY)
       .setFullMethodName("service/method")
@@ -52,10 +61,8 @@ public class ConfigSelectingClientCallTest {
       .setResponseMarshaller(TestMethodDescriptors.voidMarshaller())
       .build();
   private final TestChannel channel = new TestChannel();
-
   @Mock
   private ClientCall.Listener<Void> callListener;
-
   private TestCall<Void, Void> call;
 
   @Test
@@ -188,6 +195,27 @@ public class ConfigSelectingClientCallTest {
     assertThat(call.callOptions.getDeadline()).isLessThan(Deadline.after(1001, MINUTES));
   }
 
+  @Test
+  public void selectionErrorPropagatedToListener() {
+    InternalConfigSelector configSelector = new InternalConfigSelector() {
+      @Override
+      public Result selectConfig(PickSubchannelArgs args) {
+        return Result.forError(Status.FAILED_PRECONDITION);
+      }
+    };
+
+    ClientCall<Void, Void> configSelectingClientCall = new ConfigSelectingClientCall<>(
+        configSelector,
+        channel,
+        MoreExecutors.directExecutor(),
+        method,
+        CallOptions.DEFAULT);
+    configSelectingClientCall.start(callListener, new Metadata());
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
+    verify(callListener).onClose(statusCaptor.capture(), any(Metadata.class));
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Status.Code.FAILED_PRECONDITION);
+  }
+
   private final class TestChannel extends Channel {
 
     @SuppressWarnings("unchecked") // Don't care
@@ -206,7 +234,7 @@ public class ConfigSelectingClientCallTest {
   }
 
   private static final class TestCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
-    CallOptions callOptions;
+    final CallOptions callOptions;
 
     TestCall(CallOptions callOptions) {
       this.callOptions = callOptions;
