@@ -75,15 +75,14 @@ final class ConfigSelectingClientCall<ReqT, RespT> extends ForwardingClientCall<
       return;
     }
     ClientInterceptor interceptor = result.getInterceptor();
+    ManagedChannelServiceConfig config = (ManagedChannelServiceConfig) result.getConfig();
+    MethodInfo methodInfo = config.getMethodConfig(method);
+    applyMethodConfig(methodInfo);
     if (interceptor != null) {
       delegate = interceptor.interceptCall(method, callOptions, channel);
     } else {
       delegate = channel.newCall(method, callOptions);
     }
-
-    ManagedChannelServiceConfig config = (ManagedChannelServiceConfig) result.getConfig();
-    MethodInfo methodInfo = config.getMethodConfig(method);
-    applyMethodConfig(methodInfo);
     delegate.start(observer, headers);
   }
 
