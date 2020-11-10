@@ -38,7 +38,6 @@ import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.CompositeByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.buffer.UnpooledByteBufAllocator;
-import io.netty.util.ReferenceCounted;
 import java.util.Collection;
 import java.util.List;
 import org.junit.After;
@@ -319,9 +318,11 @@ public class NettyAdaptiveCumulatorTest {
       int composeOriginalComponentsNum = composite.numComponents();
       composite.readerIndex(compositeReaderIndex);
       NettyAdaptiveCumulator.mergeWithCompositeTail(alloc, composite, in);
+
       // Composite component count shouldn't change.
       assertEquals(composeOriginalComponentsNum, composite.numComponents());
       ByteBuf expandedTail = composite.component(composite.numComponents() - 1);
+
       // Expanded tail could be wrapped, so assertSame() is not safe.
       assertEquals(tail, expandedTail);
 
@@ -403,7 +404,8 @@ public class NettyAdaptiveCumulatorTest {
     @Test
     public void mergeWithCompositeTail_tailExpandable_mergedReleaseOnThrow() {
       final UnsupportedOperationException expectedError = new UnsupportedOperationException();
-      composite = new CompositeByteBuf(alloc, false, Integer.MAX_VALUE, tail) {
+      CompositeByteBuf compositeThrows = new CompositeByteBuf(alloc, false, Integer.MAX_VALUE,
+          tail) {
         @Override
         public CompositeByteBuf addFlattenedComponents(boolean increaseWriterIndex,
             ByteBuf buffer) {
@@ -412,7 +414,7 @@ public class NettyAdaptiveCumulatorTest {
       };
 
       try {
-        NettyAdaptiveCumulator.mergeWithCompositeTail(alloc, composite, in);
+        NettyAdaptiveCumulator.mergeWithCompositeTail(alloc, compositeThrows, in);
         fail("Cumulator didn't throw");
       } catch (UnsupportedOperationException actualError) {
         assertSame(expectedError, actualError);
@@ -421,14 +423,17 @@ public class NettyAdaptiveCumulatorTest {
         // Tail released
         assertEquals(0, tail.refCnt());
         // Composite loses the tail
-        assertEquals(0, composite.numComponents());
+        assertEquals(0, compositeThrows.numComponents());
+      } finally {
+        NettyTestUtil.safeRelease(compositeThrows);
       }
     }
 
     @Test
     public void mergeWithCompositeTail_tailNotExpandable_mergedReleaseOnThrow() {
       final UnsupportedOperationException expectedError = new UnsupportedOperationException();
-      composite = new CompositeByteBuf(alloc, false, Integer.MAX_VALUE, tail.asReadOnly()) {
+      CompositeByteBuf compositeRO = new CompositeByteBuf(alloc, false, Integer.MAX_VALUE,
+          tail.asReadOnly()) {
         @Override
         public CompositeByteBuf addFlattenedComponents(boolean increaseWriterIndex,
             ByteBuf buffer) {
@@ -443,7 +448,7 @@ public class NettyAdaptiveCumulatorTest {
       when(mockAlloc.buffer(anyInt())).thenReturn(merged);
 
       try {
-        NettyAdaptiveCumulator.mergeWithCompositeTail(mockAlloc, composite, in);
+        NettyAdaptiveCumulator.mergeWithCompositeTail(mockAlloc, compositeRO, in);
         fail("Cumulator didn't throw");
       } catch (UnsupportedOperationException actualError) {
         assertSame(expectedError, actualError);
@@ -452,7 +457,7 @@ public class NettyAdaptiveCumulatorTest {
         // New buffer released
         assertEquals(0, merged.refCnt());
         // Composite loses the tail
-        assertEquals(0, composite.numComponents());
+        assertEquals(0, compositeRO.numComponents());
       } finally {
         NettyTestUtil.safeRelease(merged);
       }

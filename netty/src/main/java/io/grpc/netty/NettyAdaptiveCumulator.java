@@ -143,8 +143,18 @@ class NettyAdaptiveCumulator implements io.netty.handler.codec.ByteToMessageDeco
       if (tail.refCnt() == 1 && !tail.isReadOnly() && totalBytes <= tail.maxCapacity()) {
         // Ideal case: the tail isn't shared, and can be expanded to the required capacity.
         // Take ownership of the tail.
+        // The tail should be a duplicate already, but by calling retainedDuplicate() we decouple
+        // from the implementation details of CompositeByteBuf.component().
         merged = tail.retainedDuplicate();
-        merged = merged.unwrap();
+        // Underlying buffer needed:
+        // 1. Writing to the duplicate will leave source's writer index behind
+        // 2. DuplicatedByteBuf doesn't delegate maxFastWritableBytes() to its source buffer,
+        // so cheap fastWrite() operations are replaced with more expensive reallocateInMemory().
+        ByteBuf unwrapped = tail.unwrap();
+        while (unwrapped != null) {
+          merged = unwrapped;
+          unwrapped = merged.unwrap();
+        }
         // The tail is a readable non-composite buffer, so writeBytes() handles everything for us.
         // - ensureWritable() performs a fast resize when possible (f.e. PooledByteBuf's simply
         //   updates its boundary to the end of consecutive memory run assigned to this buffer)
