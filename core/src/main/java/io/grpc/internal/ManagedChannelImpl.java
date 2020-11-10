@@ -897,6 +897,30 @@ final class ManagedChannelImpl extends ManagedChannel implements
     // same target, the new instance must have the same value.
     private final String authority;
 
+    private final Channel clientCallImplChannel = new Channel() {
+      @Override
+      public <RequestT, ResponseT> ClientCall<RequestT, ResponseT> newCall(
+          MethodDescriptor<RequestT, ResponseT> method, CallOptions callOptions) {
+        return new ClientCallImpl<>(
+            method,
+            getCallExecutor(callOptions),
+            callOptions,
+            transportProvider,
+            terminated ? null : transportFactory.getScheduledExecutorService(),
+            channelCallTracer,
+            // TODO(zdapeng): delete the last arg when migrating to interceptor based configSelector
+            configSelector.get())
+            .setFullStreamDecompression(fullStreamDecompression)
+            .setDecompressorRegistry(decompressorRegistry)
+            .setCompressorRegistry(compressorRegistry);
+      }
+
+      @Override
+      public String authority() {
+        return authority;
+      }
+    };
+
     private RealChannel(String authority) {
       this.authority =  checkNotNull(authority, "authority");
     }
@@ -1071,17 +1095,12 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
     private <ReqT, RespT> ClientCall<ReqT, RespT> newClientCall(
         MethodDescriptor<ReqT, RespT> method, CallOptions callOptions) {
-      return new ClientCallImpl<>(
-          method,
-          getCallExecutor(callOptions),
-          callOptions,
-          transportProvider,
-          terminated ? null : transportFactory.getScheduledExecutorService(),
-          channelCallTracer,
-          configSelector.get())
-          .setFullStreamDecompression(fullStreamDecompression)
-          .setDecompressorRegistry(decompressorRegistry)
-          .setCompressorRegistry(compressorRegistry);
+      InternalConfigSelector selector = configSelector.get();
+      if (selector == null) {
+        return clientCallImplChannel.newCall(method, callOptions);
+      }
+      return new ConfigSelectingClientCall<>(
+          selector, clientCallImplChannel, executor, method, callOptions);
     }
   }
 

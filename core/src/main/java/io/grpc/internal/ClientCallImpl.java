@@ -101,6 +101,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       ClientStreamProvider clientStreamProvider,
       ScheduledExecutorService deadlineCancellationExecutor,
       CallTracer channelCallsTracer,
+      // TODO(zdapeng): remove this arg when migrating to interceptor based configSelector
       @Nullable InternalConfigSelector configSelector) {
     this.method = method;
     // TODO(carl-mastrangelo): consider moving this construction to ManagedChannelImpl.
@@ -221,6 +222,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       return;
     }
 
+    // TODO(zdapeng): remove this after migration to interceptor based config selector.
     if (configSelector != null) {
       PickSubchannelArgs args = new PickSubchannelArgsImpl(method, headers, callOptions);
       InternalConfigSelector.Result result = configSelector.selectConfig(args);
@@ -229,14 +231,16 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         executeCloseObserverInContext(observer, status);
         return;
       }
-      callOptions = result.getCallOptions();
-      Runnable committedCallback = result.getCommittedCallback();
-      if (committedCallback != null) {
-        observer = new CommittedCallbackListener(observer, committedCallback);
+      if (result.getCallOptions() != null) {
+        callOptions = result.getCallOptions();
+        Runnable committedCallback = result.getCommittedCallback();
+        if (committedCallback != null) {
+          observer = new CommittedCallbackListener(observer, committedCallback);
+        }
+        ManagedChannelServiceConfig config = (ManagedChannelServiceConfig) result.getConfig();
+        MethodInfo methodInfo = config.getMethodConfig(method);
+        applyMethodConfig(methodInfo);
       }
-      ManagedChannelServiceConfig config = (ManagedChannelServiceConfig) result.getConfig();
-      MethodInfo methodInfo = config.getMethodConfig(method);
-      applyMethodConfig(methodInfo);
     }
 
     final String compressorName = callOptions.getCompressor();
