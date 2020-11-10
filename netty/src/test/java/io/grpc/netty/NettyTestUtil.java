@@ -22,7 +22,6 @@ import com.google.common.io.ByteStreams;
 import io.grpc.internal.ObjectPool;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import io.netty.util.ReferenceCounted;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.InputStream;
@@ -55,13 +54,6 @@ public class NettyTestUtil {
     buf.writeInt(data.length);
     buf.writeBytes(data);
     return buf;
-  }
-
-  // Buffer safe release: release until it's free.
-  static void safeRelease(ReferenceCounted buf) {
-    if (buf != null && buf.refCnt() > 0) {
-      buf.release(buf.refCnt());
-    }
   }
 
   // A simple implementation of ObjectPool<Executor> that could track if the resource is returned.

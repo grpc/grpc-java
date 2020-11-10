@@ -143,23 +143,19 @@ class NettyAdaptiveCumulator implements io.netty.handler.codec.ByteToMessageDeco
       if (tail.refCnt() == 1 && !tail.isReadOnly() && totalBytes <= tail.maxCapacity()) {
         // Ideal case: the tail isn't shared, and can be expanded to the required capacity.
         // Take ownership of the tail.
-        // The tail should be a duplicate already, but by calling retainedDuplicate() we decouple
-        // from the implementation details of CompositeByteBuf.component().
-        merged = tail.retainedDuplicate();
-        // Underlying buffer needed:
-        // 1. Writing to the duplicate will leave source's writer index behind
-        // 2. DuplicatedByteBuf doesn't delegate maxFastWritableBytes() to its source buffer,
-        // so cheap fastWrite() operations are replaced with more expensive reallocateInMemory().
-        ByteBuf unwrapped = tail.unwrap();
-        while (unwrapped != null) {
-          merged = unwrapped;
-          unwrapped = merged.unwrap();
-        }
-        // The tail is a readable non-composite buffer, so writeBytes() handles everything for us.
-        // - ensureWritable() performs a fast resize when possible (f.e. PooledByteBuf's simply
-        //   updates its boundary to the end of consecutive memory run assigned to this buffer)
-        // - when the required size doesn't fit into maxFastWritableBytes(), a new buffer is
-        //   allocated, and the capacity calculated with alloc.calculateNewCapacity()
+        merged = tail.retain();
+        /*
+         * The tail is a readable non-composite buffer, so writeBytes() handles everything for us.
+         *
+         * - ensureWritable() performs a fast resize when possible (f.e. PooledByteBuf simply
+         *   updates its boundary to the end of consecutive memory run assigned to this buffer)
+         * - when the required size doesn't fit into writableBytes(), a new buffer is
+         *   allocated, and the capacity calculated with alloc.calculateNewCapacity()
+         * - note that maxFastWritableBytes() would normally allow a fast expansion of PooledByteBuf
+         *   is not called because CompositeByteBuf.component() returns a duplicate, wrapped buffer.
+         *   Unwrapping buffers is unsafe, and potential benefit of fast writes may not be
+         *   as pronounced because the capacity is doubled with each reallocation.
+         */
         merged.writeBytes(in);
       } else {
         // The tail is shared, or not expandable. Replace it with a new buffer of desired capacity.

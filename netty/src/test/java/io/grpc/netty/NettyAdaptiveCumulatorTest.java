@@ -69,10 +69,12 @@ public class NettyAdaptiveCumulatorTest {
   public static class CumulateTests {
     private static final ByteBufAllocator alloc = new UnpooledByteBufAllocator(false);
     private NettyAdaptiveCumulator cumulator;
+    private NettyAdaptiveCumulator throwingCumulator;
+    private final UnsupportedOperationException throwingCumulatorError =
+        new UnsupportedOperationException();
 
     // Buffers for testing
     private ByteBuf contiguous = ByteBufUtil.writeAscii(alloc, DATA_INITIAL);
-    private CompositeByteBuf composite = alloc.compositeBuffer().addComponent(true, contiguous);
     private ByteBuf in = ByteBufUtil.writeAscii(alloc, DATA_INCOMING);
 
     @Before
@@ -84,6 +86,14 @@ public class NettyAdaptiveCumulatorTest {
           composite.addFlattenedComponents(true, in);
         }
       };
+
+      // Throws an error on adding incoming buffer.
+      throwingCumulator = new NettyAdaptiveCumulator(0) {
+        @Override
+        void addInput(ByteBufAllocator alloc, CompositeByteBuf composite, ByteBuf in) {
+          throw throwingCumulatorError;
+        }
+      };
     }
 
     @Test
@@ -93,6 +103,10 @@ public class NettyAdaptiveCumulatorTest {
       ByteBuf cumulation = cumulator.cumulate(alloc, contiguous, in);
       assertEquals(DATA_INCOMING, cumulation.toString(US_ASCII));
       assertEquals(0, contiguous.refCnt());
+      // In retained by cumulation.
+      assertEquals(1, in.refCnt());
+      assertEquals(1, cumulation.refCnt());
+      cumulation.release();
     }
 
     @Test
@@ -101,66 +115,66 @@ public class NettyAdaptiveCumulatorTest {
       assertEquals(DATA_INITIAL, cumulation.component(0).toString(US_ASCII));
       assertEquals(DATA_INCOMING, cumulation.component(1).toString(US_ASCII));
       assertEquals(DATA_CUMULATED, cumulation.toString(US_ASCII));
+      // Both in and contiguous are retained by cumulation.
+      assertEquals(1, contiguous.refCnt());
+      assertEquals(1, in.refCnt());
+      assertEquals(1, cumulation.refCnt());
+      cumulation.release();
     }
 
     @Test
     public void cumulate_compositeCumulation_inputAppendedAsANewComponent() {
+      CompositeByteBuf composite = alloc.compositeBuffer().addComponent(true, contiguous);
       assertSame(composite, cumulator.cumulate(alloc, composite, in));
       assertEquals(DATA_INITIAL, composite.component(0).toString(US_ASCII));
       assertEquals(DATA_INCOMING, composite.component(1).toString(US_ASCII));
       assertEquals(DATA_CUMULATED, composite.toString(US_ASCII));
+      // Both in and contiguous are retained by cumulation.
+      assertEquals(1, contiguous.refCnt());
+      assertEquals(1, in.refCnt());
+      assertEquals(1, composite.refCnt());
+      composite.release();
     }
 
     @Test
     public void cumulate_compositeCumulation_inputReleasedOnError() {
-      final UnsupportedOperationException expectedError = new UnsupportedOperationException();
-      composite = new CompositeByteBuf(alloc, false, Integer.MAX_VALUE, contiguous) {
-        @Override
-        public CompositeByteBuf addFlattenedComponents(boolean increaseWriterIndex,
-            ByteBuf buffer) {
-          throw expectedError;
-        }
-      };
+      CompositeByteBuf composite = alloc.compositeBuffer().addComponent(true, contiguous);
       try {
-        cumulator.cumulate(alloc, composite, in);
+        throwingCumulator.cumulate(alloc, composite, in);
         fail("Cumulator didn't throw");
       } catch (UnsupportedOperationException actualError) {
-        assertSame(expectedError, actualError);
+        assertSame(throwingCumulatorError, actualError);
         // Input must be released unless its ownership has been to the composite cumulation.
         assertEquals(0, in.refCnt());
         // Initial composite cumulation owned by the caller in this case, so it isn't released.
-        assertThat(composite.refCnt()).isAtLeast(1);
+        assertEquals(1, composite.refCnt());
+        // Contiguous still managed by the cumulation
+        assertEquals(1, contiguous.refCnt());
+      } finally {
+        composite.release();
       }
     }
 
     @Test
     public void cumulate_contiguousCumulation_inputAndNewCompositeReleasedOnError() {
-      final UnsupportedOperationException expectedError = new UnsupportedOperationException();
-      composite = new CompositeByteBuf(alloc, false, Integer.MAX_VALUE) {
-        @Override
-        @SuppressWarnings("ReferenceEquality")
-        public CompositeByteBuf addFlattenedComponents(boolean increaseWriterIndex,
-            ByteBuf buffer) {
-          if (this.numComponents() == 0) {
-            // Add the initial cumulation to a new composite cumulation.
-            return super.addFlattenedComponents(increaseWriterIndex, buffer);
-          }
-          // Emulate an error on any other attempts to add a component.
-          throw expectedError;
-        }
-      };
       // Return our instance of new composite to ensure it's released.
+      CompositeByteBuf newComposite = alloc.compositeBuffer(Integer.MAX_VALUE);
       ByteBufAllocator mockAlloc = mock(ByteBufAllocator.class);
-      when(mockAlloc.compositeBuffer(anyInt())).thenReturn(composite);
+      when(mockAlloc.compositeBuffer(anyInt())).thenReturn(newComposite);
+
       try {
-        cumulator.cumulate(mockAlloc, contiguous, in);
+        // Previous cumulation is non-composite, so cumulator will create anew composite and add
+        // both buffers to it.
+        throwingCumulator.cumulate(mockAlloc, contiguous, in);
         fail("Cumulator didn't throw");
       } catch (UnsupportedOperationException actualError) {
-        assertSame(expectedError, actualError);
+        assertSame(throwingCumulatorError, actualError);
         // Input must be released unless its ownership has been to the composite cumulation.
         assertEquals(0, in.refCnt());
         // New composite cumulation hasn't been returned to the caller, so it must be released.
-        assertEquals(0, composite.refCnt());
+        assertEquals(0, newComposite.refCnt());
+        // Previous cumulation released because it was owned by the new composite cumulation.
+        assertEquals(0, contiguous.refCnt());
       }
     }
   }
@@ -194,6 +208,12 @@ public class NettyAdaptiveCumulatorTest {
       composite = alloc.compositeBuffer(Integer.MAX_VALUE);
       // Note that addFlattenedComponents() will not add a new component when tail is not readable.
       composite.addFlattenedComponents(true, tail);
+    }
+
+    @After
+    public void tearDown() {
+      in.release();
+      composite.release();
     }
 
     @Test
@@ -231,7 +251,7 @@ public class NettyAdaptiveCumulatorTest {
      * partially read. This is needed to verify the correctness if reader and writer indexes of the
      * composite cumulation after the merge.
      */
-    @Parameters(name = "compositeHeadData=\"{0}\", compositeReaderIndex={1}")
+    @Parameters(name = "compositeHeadData=\"{0}\", cumulationReaderIndex={1}")
     public static Collection<Object[]> params() {
       List<?> compositeHeadData = ImmutableList.of("", DATA_COMPOSITE_HEAD);
       // From the start, or within of head/tail.
@@ -240,7 +260,7 @@ public class NettyAdaptiveCumulatorTest {
     }
 
     @Parameter(0) public String compositeHeadData;
-    @Parameter(1) public int compositeReaderIndex;
+    @Parameter(1) public int cumulationReaderIndex;
 
     // Use pooled allocator to have maxFastWritableBytes() behave differently than writableBytes().
     private final ByteBufAllocator alloc = new PooledByteBufAllocator();
@@ -262,14 +282,12 @@ public class NettyAdaptiveCumulatorTest {
       composite = alloc.compositeBuffer();
       head = alloc.buffer().writeBytes(compositeHeadData.getBytes(US_ASCII));
       composite.addFlattenedComponents(true, head);
+      composite.capacity();
     }
 
     @After
     public void tearDown() {
-      NettyTestUtil.safeRelease(composite);
-      NettyTestUtil.safeRelease(in);
-      NettyTestUtil.safeRelease(tail);
-      NettyTestUtil.safeRelease(head);
+      composite.release();
     }
 
     @Test
@@ -288,9 +306,14 @@ public class NettyAdaptiveCumulatorTest {
     public void mergeWithCompositeTail_tailExpandable_fastWrite() {
       // Confirm that the tail can be expanded fast to fit the incoming data.
       assertThat(in.readableBytes()).isAtMost(tail.maxFastWritableBytes());
-      int tailFastCapacity = tail.writerIndex() + tail.maxFastWritableBytes();
-      composite.addFlattenedComponents(true, tail);
 
+      // To avoid undesirable buffer unwrapping, at the moment adaptive cumulator is set not
+      // apply fastWrite technique. Even when fast write is possible, it will fall back to
+      // reallocating a larger buffer.
+      // int tailFastCapacity = tail.writerIndex() + tail.maxFastWritableBytes();
+      int tailFastCapacity = alloc.calculateNewCapacity(DATA_CUMULATED.length(), Integer.MAX_VALUE);
+
+      composite.addFlattenedComponents(true, tail);
       // Tail capacity is extended to its fast capacity.
       testTailExpansion(DATA_CUMULATED.substring(TAIL_READER_INDEX), tailFastCapacity);
     }
@@ -314,32 +337,40 @@ public class NettyAdaptiveCumulatorTest {
           expectedTailCapacity);
     }
 
-    private void testTailExpansion(String expectedReadable, int expectedNewTailCapacity) {
+    private void testTailExpansion(String expectedTailReadableData, int expectedNewTailCapacity) {
       int composeOriginalComponentsNum = composite.numComponents();
-      composite.readerIndex(compositeReaderIndex);
+
+      composite.readerIndex(cumulationReaderIndex);
       NettyAdaptiveCumulator.mergeWithCompositeTail(alloc, composite, in);
 
       // Composite component count shouldn't change.
       assertEquals(composeOriginalComponentsNum, composite.numComponents());
       ByteBuf expandedTail = composite.component(composite.numComponents() - 1);
 
-      // Expanded tail could be wrapped, so assertSame() is not safe.
-      assertEquals(tail, expandedTail);
+      // Discardable bytes (0 < discardable < readerIndex) of the tail are kept as is.
+      String expectedTailDiscardable = DATA_INITIAL.substring(0, TAIL_READER_INDEX);
+      String actualTailDiscardable = expandedTail.toString(0, expandedTail.readerIndex(), US_ASCII);
+      assertEquals(expectedTailDiscardable, actualTailDiscardable);
 
-      // Read (discardable) bytes of the tail must stay as is.
-      // Read (discardable) bytes of the input must be discarded.
-      // Readable part of the input must be appended to the tail.
-      assertEquals(compositeHeadData.concat(expectedReadable).substring(compositeReaderIndex),
-          composite.toString(US_ASCII));
-      assertEquals(DATA_INITIAL.substring(0, TAIL_READER_INDEX),
-          expandedTail.toString(0, expandedTail.readerIndex(), US_ASCII));
-      assertEquals(expectedReadable, expandedTail.toString(US_ASCII));
+      // Verify the readable part of the expanded tail:
+      // 1. Initial readable bytes of the tail are kept as is
+      // 2. Discardable bytes (0 < discardable < readerIndex) of the incoming buffer are discarded.
+      // 3. Readable bytes of the incoming buffer are fully read and appended to the tail.
+      assertEquals(0, in.readableBytes());
+      assertEquals(expectedTailReadableData, expandedTail.toString(US_ASCII));
+      // Verify expanded capacity.
       assertEquals(expectedNewTailCapacity, expandedTail.capacity());
 
-      // Only composite buf owns the tail.
-      assertEquals(1, expandedTail.refCnt());
-      // Incoming data buf must be fully read and released.
-      assertEquals(0, in.readableBytes());
+      // Reader index must stay where it was
+      assertEquals(TAIL_READER_INDEX, expandedTail.readerIndex());
+      // Writer index at the end
+      assertEquals(TAIL_READER_INDEX + expectedTailReadableData.length(),
+          expandedTail.writerIndex());
+
+      // Verify resulting cumulation.
+      verifyResultingCumulation(expandedTail, expectedTailReadableData);
+
+      // Incoming buffer is released.
       assertEquals(0, in.refCnt());
     }
 
@@ -357,6 +388,7 @@ public class NettyAdaptiveCumulatorTest {
       tail.retain();
       composite.addFlattenedComponents(true, tail);
       testTailReplaced();
+      tail.release();
     }
 
     @Test
@@ -366,39 +398,66 @@ public class NettyAdaptiveCumulatorTest {
     }
 
     private void testTailReplaced() {
-      int composeOriginalComponentsNum = composite.numComponents();
-      int initialTailRefCount = tail.refCnt();
-      composite.readerIndex(compositeReaderIndex);
-      String expectedReadable = tail.toString(US_ASCII) + in.toString(US_ASCII);
-      int expectedCapacity = alloc
-          .calculateNewCapacity(expectedReadable.length(), Integer.MAX_VALUE);
+      int cumulationOriginalComponentsNum = composite.numComponents();
+      int taiOriginalRefCount = tail.refCnt();
+      String expectedTailReadable = tail.toString(US_ASCII) + in.toString(US_ASCII);
+      int expectedReallocatedTailCapacity = alloc
+          .calculateNewCapacity(expectedTailReadable.length(), Integer.MAX_VALUE);
 
+      composite.readerIndex(cumulationReaderIndex);
       NettyAdaptiveCumulator.mergeWithCompositeTail(alloc, composite, in);
+
       // Composite component count shouldn't change.
-      assertEquals(composeOriginalComponentsNum, composite.numComponents());
+      assertEquals(cumulationOriginalComponentsNum, composite.numComponents());
       ByteBuf replacedTail = composite.component(composite.numComponents() - 1);
 
-      // Read (discardable) bytes of the tail and the input must be discarded.
-      // Readable parts of the tail and the input must be merged.
-      assertEquals(expectedReadable, replacedTail.toString(US_ASCII));
-      assertEquals(expectedCapacity, replacedTail.capacity());
-      assertEquals(0, replacedTail.readerIndex());
-      assertEquals(expectedReadable.length(), replacedTail.writerIndex());
-      // Check the composite buf
-      assertEquals(compositeHeadData.concat(expectedReadable).substring(compositeReaderIndex),
-          composite.toString(US_ASCII));
-      assertEquals(compositeHeadData.length() + expectedReadable.length(), composite.capacity());
-      assertEquals(compositeReaderIndex, composite.readerIndex());
-      assertEquals(compositeHeadData.length() + expectedReadable.length(),
-          composite.writerIndex());
-
-      // Old tail is must be released at least once
-      assertThat(tail.refCnt()).isLessThan(initialTailRefCount);
-      // Composite buf owns the new tail.
-      assertEquals(1, replacedTail.refCnt());
-      // Incoming data buf must be fully read and released.
+      // Verify the readable part of the expanded tail:
+      // 1. Discardable bytes (0 < discardable < readerIndex) of the tail are discarded.
+      // 2. Readable bytes of the tail are kept as is
+      // 3. Discardable bytes (0 < discardable < readerIndex) of the incoming buffer are discarded.
+      // 4. Readable bytes of the incoming buffer are fully read and appended to the tail.
       assertEquals(0, in.readableBytes());
+      assertEquals(expectedTailReadable, replacedTail.toString(US_ASCII));
+
+      // Since tail discardable bytes are discarded, new reader index must be reset to 0.
+      assertEquals(0, replacedTail.readerIndex());
+      // And new writer index at the new data's length.
+      assertEquals(expectedTailReadable.length(), replacedTail.writerIndex());
+      // Verify the capacity of reallocated tail.
+      assertEquals(expectedReallocatedTailCapacity, replacedTail.capacity());
+
+      // Verify resulting cumulation.
+      verifyResultingCumulation(replacedTail, expectedTailReadable);
+
+      // Incoming buffer is released.
       assertEquals(0, in.refCnt());
+      // Old tail is must be released once
+      assertThat(tail.refCnt()).isEqualTo(taiOriginalRefCount - 1);
+    }
+
+    private void verifyResultingCumulation(ByteBuf newTail, String expectedTailReadable) {
+      // Verify the readable part of the cumulation:
+      // 1. Readable composite head (initial) data
+      // 2. Readable part of the tail
+      // 3. Readable part of the incoming data
+      String expectedCumulationData = compositeHeadData.concat(expectedTailReadable)
+          .substring(cumulationReaderIndex);
+      assertEquals(expectedCumulationData, composite.toString(US_ASCII));
+
+      // Cumulation capacity includes:
+      // 1. Full composite head, including discardable bytes
+      // 2. Expanded tail readable bytes
+      int expectedCumulationCapacity = compositeHeadData.length() + expectedTailReadable.length();
+      assertEquals(expectedCumulationCapacity, composite.capacity());
+
+      // Composite Reader index must stay where it was.
+      assertEquals(cumulationReaderIndex, composite.readerIndex());
+      // Composite writer index must be at the end.
+      assertEquals(expectedCumulationCapacity, composite.writerIndex());
+
+      // Composite cumulation is retained and owns the new tail.
+      assertEquals(1, composite.refCnt());
+      assertEquals(1, newTail.refCnt());
     }
 
     @Test
@@ -422,17 +481,19 @@ public class NettyAdaptiveCumulatorTest {
         assertEquals(0, in.refCnt());
         // Tail released
         assertEquals(0, tail.refCnt());
-        // Composite loses the tail
+        // Composite cumulation is retained
+        assertEquals(1, compositeThrows.refCnt());
+        // Composite cumulation loses the tail
         assertEquals(0, compositeThrows.numComponents());
       } finally {
-        NettyTestUtil.safeRelease(compositeThrows);
+        compositeThrows.release();
       }
     }
 
     @Test
     public void mergeWithCompositeTail_tailNotExpandable_mergedReleaseOnThrow() {
       final UnsupportedOperationException expectedError = new UnsupportedOperationException();
-      CompositeByteBuf compositeRO = new CompositeByteBuf(alloc, false, Integer.MAX_VALUE,
+      CompositeByteBuf compositeRo = new CompositeByteBuf(alloc, false, Integer.MAX_VALUE,
           tail.asReadOnly()) {
         @Override
         public CompositeByteBuf addFlattenedComponents(boolean increaseWriterIndex,
@@ -448,7 +509,7 @@ public class NettyAdaptiveCumulatorTest {
       when(mockAlloc.buffer(anyInt())).thenReturn(merged);
 
       try {
-        NettyAdaptiveCumulator.mergeWithCompositeTail(mockAlloc, compositeRO, in);
+        NettyAdaptiveCumulator.mergeWithCompositeTail(mockAlloc, compositeRo, in);
         fail("Cumulator didn't throw");
       } catch (UnsupportedOperationException actualError) {
         assertSame(expectedError, actualError);
@@ -456,10 +517,12 @@ public class NettyAdaptiveCumulatorTest {
         assertEquals(0, in.refCnt());
         // New buffer released
         assertEquals(0, merged.refCnt());
-        // Composite loses the tail
-        assertEquals(0, compositeRO.numComponents());
+        // Composite cumulation is retained
+        assertEquals(1, compositeRo.refCnt());
+        // Composite cumulation loses the tail
+        assertEquals(0, compositeRo.numComponents());
       } finally {
-        NettyTestUtil.safeRelease(merged);
+        compositeRo.release();
       }
     }
   }
