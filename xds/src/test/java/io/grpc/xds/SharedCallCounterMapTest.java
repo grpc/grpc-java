@@ -28,7 +28,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 /**
- * Tests for {@link EdsLoadBalancer2}.
+ * Tests for {@link SharedCallCounterMap}.
  */
 @RunWith(JUnit4.class)
 public class SharedCallCounterMapTest {
