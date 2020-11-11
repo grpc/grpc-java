@@ -222,8 +222,9 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       return;
     }
 
+    MethodInfo methodInfo = callOptions.getOption(MethodInfo.KEY);
     // TODO(zdapeng): remove this after migration to interceptor based config selector.
-    if (configSelector != null) {
+    if (configSelector != null && methodInfo == null) {
       PickSubchannelArgs args = new PickSubchannelArgsImpl(method, headers, callOptions);
       InternalConfigSelector.Result result = configSelector.selectConfig(args);
       Status status = result.getStatus();
@@ -238,10 +239,10 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
           observer = new CommittedCallbackListener(observer, committedCallback);
         }
         ManagedChannelServiceConfig config = (ManagedChannelServiceConfig) result.getConfig();
-        MethodInfo methodInfo = config.getMethodConfig(method);
-        applyMethodConfig(methodInfo);
+        methodInfo = config.getMethodConfig(method);
       }
     }
+    applyMethodConfig(methodInfo);
 
     final String compressorName = callOptions.getCompressor();
     Compressor compressor;
