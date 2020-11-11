@@ -32,6 +32,7 @@ import io.grpc.services.HealthStatusManager;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.integration.Messages.SimpleRequest;
 import io.grpc.testing.integration.Messages.SimpleResponse;
+import io.grpc.xds.internal.sds.XdsServerBuilder;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.concurrent.TimeUnit;
@@ -51,9 +52,12 @@ public final class XdsTestServer {
   private static Logger logger = Logger.getLogger(XdsTestServer.class.getName());
 
   private int port = 8080;
+  private int testPort = 8081;
+  private boolean secureMode = false;
   private String serverId = "java_server";
   private HealthStatusManager health;
   private Server server;
+  private Server otherServer;
   private String host;
 
   /**
@@ -103,6 +107,10 @@ public final class XdsTestServer {
       String value = parts[1];
       if ("port".equals(key)) {
         port = Integer.valueOf(value);
+      } else if ("testPort".equals(key)) {
+        testPort = Integer.valueOf(value);
+      } else if ("secureMode".equals(key)) {
+        secureMode = Boolean.parseBoolean(value);
       } else if ("server_id".equals(key)) {
         serverId = value;
       } else {
@@ -117,9 +125,15 @@ public final class XdsTestServer {
       System.err.println(
           "Usage: [ARGS...]"
               + "\n"
-              + "\n  --port=INT          listening port for server."
+              + "\n  --port=INT          listening port for other servers."
               + "\n                      Default: "
               + s.port
+              + "\n  --testPort=INT      listening port for test server."
+              + "\n                      Default: "
+              + s.testPort
+              + "\n  --secureMode=BOOLEAN Use true to enable XdsCredentials."
+              + "\n                      Default: "
+              + s.secureMode
               + "\n  --server_id=STRING  server ID for response."
               + "\n                      Default: "
               + s.serverId);
@@ -135,11 +149,17 @@ public final class XdsTestServer {
       throw new RuntimeException(e);
     }
     health = new HealthStatusManager();
-    server =
-        NettyServerBuilder.forPort(port)
+    XdsServerBuilder xdsServerBuilder =
+        XdsServerBuilder.forPort(testPort)
             .addService(
                 ServerInterceptors.intercept(
-                    new TestServiceImpl(serverId, host), new TestInfoInterceptor(host)))
+                    new TestServiceImpl(serverId, host), new TestInfoInterceptor(host)));
+    if (secureMode) {
+      xdsServerBuilder = xdsServerBuilder.useXdsSecurityWithPlaintextFallback();
+    }
+    server = xdsServerBuilder.build().start();
+    otherServer =
+        NettyServerBuilder.forPort(port)
             .addService(new XdsUpdateHealthServiceImpl(health))
             .addService(health.getHealthService())
             .addService(ProtoReflectionService.newInstance())
@@ -150,14 +170,21 @@ public final class XdsTestServer {
 
   private void stop() throws Exception {
     server.shutdownNow();
+    otherServer.shutdownNow();
     if (!server.awaitTermination(5, TimeUnit.SECONDS)) {
       System.err.println("Timed out waiting for server shutdown");
+    }
+    if (!otherServer.awaitTermination(5, TimeUnit.SECONDS)) {
+      System.err.println("Timed out waiting for otherServer shutdown");
     }
   }
 
   private void blockUntilShutdown() throws InterruptedException {
     if (server != null) {
       server.awaitTermination();
+    }
+    if (otherServer != null) {
+      otherServer.awaitTermination();
     }
   }
 
