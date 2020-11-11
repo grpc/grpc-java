@@ -60,7 +60,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -73,9 +72,9 @@ public final class XdsTestClient {
   private final Set<XdsStatsWatcher> watchers = new HashSet<>();
   private final Object lock = new Object();
   private final List<ManagedChannel> channels = new ArrayList<>();
-  private final AtomicInteger rpcsStarted = new AtomicInteger();
-  private final AtomicInteger rpcsFailed = new AtomicInteger();
-  private final AtomicInteger rpcsSucceeded = new AtomicInteger();
+  private final Map<String, Integer> rpcsStartedByMethod = new HashMap<>();
+  private final Map<String, Integer> rpcsFailedByMethod = new HashMap<>();
+  private final Map<String, Integer> rpcsSucceededByMethod = new HashMap<>();
 
   private int numChannels = 1;
   private boolean printResponse = false;
@@ -333,7 +332,6 @@ public final class XdsTestClient {
                 @Override
                 public void onNext(EmptyProtos.Empty response) {}
               });
-          rpcsStarted.getAndIncrement();
         } else if (rpcType == RpcType.UNARY_CALL) {
           SimpleRequest request = SimpleRequest.newBuilder().setFillServerId(true).build();
           stub.unaryCall(
@@ -373,19 +371,39 @@ public final class XdsTestClient {
                   }
                 }
               });
-          rpcsStarted.getAndIncrement();
+        } else {
+          throw new AssertionError("Unknown RPC type: " + rpcType);
+        }
+        synchronized (lock) {
+          Integer startedBase = rpcsStartedByMethod.get(rpcType.name());
+          if (startedBase == null) {
+            startedBase = 0;
+          }
+          rpcsStartedByMethod.put(rpcType.name(), startedBase + 1);
         }
       }
 
       private void handleRpcCompleted(long requestId, RpcType rpcType, String hostname,
           Set<XdsStatsWatcher> watchers) {
-        rpcsSucceeded.getAndIncrement();
+        synchronized (lock) {
+          Integer succeededBase = rpcsSucceededByMethod.get(rpcType.name());
+          if (succeededBase == null) {
+            succeededBase = 0;
+          }
+          rpcsSucceededByMethod.put(rpcType.name(), succeededBase + 1);
+        }
         notifyWatchers(watchers, rpcType, requestId, hostname);
       }
 
       private void handleRpcError(long requestId, RpcType rpcType, String hostname,
           Set<XdsStatsWatcher> watchers) {
-        rpcsFailed.getAndIncrement();
+        synchronized (lock) {
+          Integer failedBase = rpcsFailedByMethod.get(rpcType.name());
+          if (failedBase == null) {
+            failedBase = 0;
+          }
+          rpcsFailedByMethod.put(rpcType.name(), failedBase + 1);
+        }
         notifyWatchers(watchers, rpcType, requestId, hostname);
       }
     }
@@ -457,12 +475,15 @@ public final class XdsTestClient {
     @Override
     public void getClientAccumulatedStats(LoadBalancerAccumulatedStatsRequest request,
         StreamObserver<LoadBalancerAccumulatedStatsResponse> responseObserver) {
-      responseObserver.onNext(
-          LoadBalancerAccumulatedStatsResponse.newBuilder()
-              .setNumRpcsStarted(rpcsStarted.get())
-              .setNumRpcsSucceeded(rpcsSucceeded.get())
-              .setNumRpcsFailed(rpcsFailed.get())
-              .build());
+      LoadBalancerAccumulatedStatsResponse.Builder responseBuilder =
+          LoadBalancerAccumulatedStatsResponse.newBuilder();
+      synchronized (lock) {
+        responseBuilder
+            .putAllNumRpcsStartedByMethod(rpcsStartedByMethod)
+            .putAllNumRpcsSucceededByMethod(rpcsSucceededByMethod)
+            .putAllNumRpcsFailedByMethod(rpcsFailedByMethod);
+      }
+      responseObserver.onNext(responseBuilder.build());
       responseObserver.onCompleted();
     }
   }
