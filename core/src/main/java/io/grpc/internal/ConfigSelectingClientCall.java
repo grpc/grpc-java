@@ -21,7 +21,6 @@ import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.Context;
-import io.grpc.Deadline;
 import io.grpc.ForwardingClientCall;
 import io.grpc.InternalConfigSelector;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
@@ -30,7 +29,6 @@ import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.internal.ManagedChannelServiceConfig.MethodInfo;
 import java.util.concurrent.Executor;
-import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
 /**
@@ -77,7 +75,9 @@ final class ConfigSelectingClientCall<ReqT, RespT> extends ForwardingClientCall<
     ClientInterceptor interceptor = result.getInterceptor();
     ManagedChannelServiceConfig config = (ManagedChannelServiceConfig) result.getConfig();
     MethodInfo methodInfo = config.getMethodConfig(method);
-    applyMethodConfig(methodInfo);
+    if (methodInfo != null) {
+      callOptions = callOptions.withOption(MethodInfo.KEY, methodInfo);
+    }
     if (interceptor != null) {
       delegate = interceptor.interceptCall(method, callOptions, channel);
     } else {
@@ -100,45 +100,6 @@ final class ConfigSelectingClientCall<ReqT, RespT> extends ForwardingClientCall<
     }
 
     callExecutor.execute(new CloseInContext());
-  }
-
-  private void applyMethodConfig(MethodInfo info) {
-    if (info == null) {
-      return;
-    }
-    callOptions = callOptions.withOption(MethodInfo.KEY, info);
-    if (info.timeoutNanos != null) {
-      Deadline newDeadline = Deadline.after(info.timeoutNanos, TimeUnit.NANOSECONDS);
-      Deadline existingDeadline = callOptions.getDeadline();
-      // If the new deadline is sooner than the existing deadline, swap them.
-      if (existingDeadline == null || newDeadline.compareTo(existingDeadline) < 0) {
-        callOptions = callOptions.withDeadline(newDeadline);
-      }
-    }
-    if (info.waitForReady != null) {
-      callOptions =
-          info.waitForReady ? callOptions.withWaitForReady() : callOptions.withoutWaitForReady();
-    }
-    if (info.maxInboundMessageSize != null) {
-      Integer existingLimit = callOptions.getMaxInboundMessageSize();
-      if (existingLimit != null) {
-        callOptions =
-            callOptions.withMaxInboundMessageSize(
-                Math.min(existingLimit, info.maxInboundMessageSize));
-      } else {
-        callOptions = callOptions.withMaxInboundMessageSize(info.maxInboundMessageSize);
-      }
-    }
-    if (info.maxOutboundMessageSize != null) {
-      Integer existingLimit = callOptions.getMaxOutboundMessageSize();
-      if (existingLimit != null) {
-        callOptions =
-            callOptions.withMaxOutboundMessageSize(
-                Math.min(existingLimit, info.maxOutboundMessageSize));
-      } else {
-        callOptions = callOptions.withMaxOutboundMessageSize(info.maxOutboundMessageSize);
-      }
-    }
   }
 
   @Override

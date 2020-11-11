@@ -17,8 +17,6 @@
 package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
-import static java.util.concurrent.TimeUnit.MINUTES;
-import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 
@@ -29,7 +27,6 @@ import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
-import io.grpc.Deadline;
 import io.grpc.InternalConfigSelector;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.Metadata;
@@ -120,79 +117,6 @@ public class ConfigSelectingClientCallTest {
     assertThat(call.callOptions.getAuthority()).isEqualTo("bar.authority");
     assertThat(call.callOptions.getOption(MethodInfo.KEY)).isEqualTo(methodInfo);
     assertThat(call.callOptions.getOption(callOptionsKey)).isEqualTo("fooValue");
-  }
-
-  @Test
-  public void configDeadlinePropagatedToCall() {
-    CallOptions callOptions = CallOptions.DEFAULT.withDeadline(Deadline.after(2000, SECONDS));
-    final ClientInterceptor noopInterceptor = new ClientInterceptor() {
-      @Override
-      public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
-          MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
-        return next.newCall(method, callOptions);
-      }
-    };
-
-    // Case: config Deadline expires later than CallOptions Deadline
-    InternalConfigSelector configSelector = new InternalConfigSelector() {
-      @Override
-      public Result selectConfig(PickSubchannelArgs args) {
-        Map<String, ?> rawMethodConfig = ImmutableMap.of(
-            "timeout",
-            "3000s");
-        MethodInfo methodInfo = new MethodInfo(rawMethodConfig, false, 0, 0);
-        ManagedChannelServiceConfig config = new ManagedChannelServiceConfig(
-            methodInfo,
-            ImmutableMap.<String, MethodInfo>of(),
-            ImmutableMap.<String, MethodInfo>of(),
-            null,
-            null,
-            null);
-        return Result.newBuilder()
-            .setConfig(config)
-            .setInterceptor(noopInterceptor)
-            .build();
-      }
-    };
-
-    ClientCall<Void, Void> configSelectingClientCall = new ConfigSelectingClientCall<>(
-        configSelector,
-        channel,
-        MoreExecutors.directExecutor(),
-        method,
-        callOptions);
-    configSelectingClientCall.start(callListener, new Metadata());
-    assertThat(call.callOptions.getDeadline()).isLessThan(Deadline.after(2001, SECONDS));
-
-    // Case: config Deadline expires earlier than CallOptions Deadline
-    configSelector = new InternalConfigSelector() {
-      @Override
-      public Result selectConfig(PickSubchannelArgs args) {
-        Map<String, ?> rawMethodConfig = ImmutableMap.of(
-            "timeout",
-            "1000s");
-        MethodInfo methodInfo = new MethodInfo(rawMethodConfig, false, 0, 0);
-        ManagedChannelServiceConfig config = new ManagedChannelServiceConfig(
-            methodInfo,
-            ImmutableMap.<String, MethodInfo>of(),
-            ImmutableMap.<String, MethodInfo>of(),
-            null,
-            null,
-            null);
-        return Result.newBuilder()
-            .setConfig(config)
-            .setInterceptor(noopInterceptor)
-            .build();
-      }
-    };
-    configSelectingClientCall = new ConfigSelectingClientCall<>(
-        configSelector,
-        channel,
-        MoreExecutors.directExecutor(),
-        method,
-        callOptions);
-    configSelectingClientCall.start(callListener, new Metadata());
-    assertThat(call.callOptions.getDeadline()).isLessThan(Deadline.after(1001, MINUTES));
   }
 
   @Test
