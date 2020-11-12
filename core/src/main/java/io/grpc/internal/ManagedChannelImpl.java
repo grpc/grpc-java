@@ -76,6 +76,7 @@ import io.grpc.internal.ClientCallImpl.ClientStreamProvider;
 import io.grpc.internal.ManagedChannelImplBuilder.FixedPortProvider;
 import io.grpc.internal.ManagedChannelImplBuilder.UnsupportedClientTransportFactoryBuilder;
 import io.grpc.internal.ManagedChannelServiceConfig.MethodInfo;
+import io.grpc.internal.ManagedChannelServiceConfig.ServiceConfigConvertedSelector;
 import io.grpc.internal.RetriableStream.ChannelBufferMeter;
 import io.grpc.internal.RetriableStream.Throttle;
 import java.net.URI;
@@ -1097,6 +1098,14 @@ final class ManagedChannelImpl extends ManagedChannel implements
         MethodDescriptor<ReqT, RespT> method, CallOptions callOptions) {
       InternalConfigSelector selector = configSelector.get();
       if (selector == null) {
+        return clientCallImplChannel.newCall(method, callOptions);
+      }
+      if (selector instanceof ServiceConfigConvertedSelector) {
+        MethodInfo methodInfo =
+            ((ServiceConfigConvertedSelector) selector).config.getMethodConfig(method);
+        if (methodInfo != null) {
+          callOptions = callOptions.withOption(MethodInfo.KEY, methodInfo);
+        }
         return clientCallImplChannel.newCall(method, callOptions);
       }
       return new ConfigSelectingClientCall<>(
