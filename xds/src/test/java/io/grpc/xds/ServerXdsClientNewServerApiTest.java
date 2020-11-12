@@ -187,7 +187,7 @@ public class ServerXdsClientNewServerApiTest {
     xdsClient =
         new ServerXdsClient(new XdsChannel(channel, /* useProtocolV3= */ true), NODE,
             fakeClock.getScheduledExecutorService(), backoffPolicyProvider,
-            fakeClock.getStopwatchSupplier(), true, INSTANCE_IP);
+            fakeClock.getStopwatchSupplier(), true, INSTANCE_IP, "test/value");
     // Only the connection to management server is established, no RPC request is sent until at
     // least one watcher is registered.
     assertThat(responseObservers).isEmpty();
@@ -225,7 +225,7 @@ public class ServerXdsClientNewServerApiTest {
     // Client sends an LDS request with null in lds resource name
     verify(requestObserver)
         .onNext(eq(XdsClientTestHelper.buildDiscoveryRequest(NODE, "",
-                ImmutableList.of("grpc/server?udpa.resource.listening_address=192.168.3.7:7000"),
+                ImmutableList.of("test/value?udpa.resource.listening_address=192.168.3.7:7000"),
                 ResourceType.LDS.typeUrl(), "")));
     assertThat(fakeClock.getPendingTasks(LISTENER_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
 
@@ -255,7 +255,7 @@ public class ServerXdsClientNewServerApiTest {
     // Client sends an ACK LDS request.
     verify(requestObserver)
         .onNext(eq(XdsClientTestHelper.buildDiscoveryRequest(NODE, "0",
-                ImmutableList.of("grpc/server?udpa.resource.listening_address=192.168.3.7:7000"),
+                ImmutableList.of("test/value?udpa.resource.listening_address=192.168.3.7:7000"),
                 ResourceType.LDS.typeUrl(), "0000")));
 
     verify(listenerWatcher, never()).onListenerChanged(any(ListenerUpdate.class));
@@ -281,7 +281,7 @@ public class ServerXdsClientNewServerApiTest {
                     NODE,
                     "",
                     ImmutableList.of(
-                        "grpc/server?udpa.resource.listening_address=192.168.3.7:7000"),
+                        "test/value?udpa.resource.listening_address=192.168.3.7:7000"),
                     ResourceType.LDS.typeUrl(),
                     "")));
     assertThat(fakeClock.getPendingTasks(LISTENER_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
@@ -319,7 +319,7 @@ public class ServerXdsClientNewServerApiTest {
                     NODE,
                     "0",
                     ImmutableList.of(
-                        "grpc/server?udpa.resource.listening_address=192.168.3.7:7000"),
+                        "test/value?udpa.resource.listening_address=192.168.3.7:7000"),
                     ResourceType.LDS.typeUrl(),
                     "0000")));
 
@@ -415,7 +415,7 @@ public class ServerXdsClientNewServerApiTest {
                     NODE,
                     "1",
                     ImmutableList.of(
-                        "grpc/server?udpa.resource.listening_address=192.168.3.7:7000"),
+                        "test/value?udpa.resource.listening_address=192.168.3.7:7000"),
                     ResourceType.LDS.typeUrl(),
                     "0001")));
 
@@ -540,7 +540,7 @@ public class ServerXdsClientNewServerApiTest {
     // Retry resumes requests for all wanted resources.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "0",
-                ImmutableList.of("grpc/server?udpa.resource.listening_address=192.168.3.7:7000"),
+                ImmutableList.of("test/value?udpa.resource.listening_address=192.168.3.7:7000"),
                 ResourceType.LDS.typeUrl(), "")));
 
     // Management server becomes unreachable.
@@ -560,7 +560,7 @@ public class ServerXdsClientNewServerApiTest {
     requestObserver = requestObservers.poll();
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "0",
-                ImmutableList.of("grpc/server?udpa.resource.listening_address=192.168.3.7:7000"),
+                ImmutableList.of("test/value?udpa.resource.listening_address=192.168.3.7:7000"),
                 ResourceType.LDS.typeUrl(), "")));
 
     // Management server is still not reachable.
@@ -580,7 +580,7 @@ public class ServerXdsClientNewServerApiTest {
     requestObserver = requestObservers.poll();
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "0",
-                ImmutableList.of("grpc/server?udpa.resource.listening_address=192.168.3.7:7000"),
+                ImmutableList.of("test/value?udpa.resource.listening_address=192.168.3.7:7000"),
                 ResourceType.LDS.typeUrl(), "")));
 
     // Management server sends back a LDS response.
@@ -604,7 +604,7 @@ public class ServerXdsClientNewServerApiTest {
 
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "1",
-                ImmutableList.of("grpc/server?udpa.resource.listening_address=192.168.3.7:7000"),
+                ImmutableList.of("test/value?udpa.resource.listening_address=192.168.3.7:7000"),
                 ResourceType.LDS.typeUrl(), "")));
 
     // Management server becomes unreachable again.
@@ -623,7 +623,7 @@ public class ServerXdsClientNewServerApiTest {
     requestObserver = requestObservers.poll();
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(NODE, "1",
-                ImmutableList.of("grpc/server?udpa.resource.listening_address=192.168.3.7:7000"),
+                ImmutableList.of("test/value?udpa.resource.listening_address=192.168.3.7:7000"),
                 ResourceType.LDS.typeUrl(), "")));
 
     verifyNoMoreInteractions(mockedDiscoveryService, backoffPolicyProvider, backoffPolicy1,

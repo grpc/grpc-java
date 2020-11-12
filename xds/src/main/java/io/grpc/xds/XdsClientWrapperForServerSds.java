@@ -124,7 +124,8 @@ public final class XdsClientWrapperForServerSds {
             new ExponentialBackoffPolicy.Provider(),
             GrpcUtil.STOPWATCH_SUPPLIER,
             experimentalNewServerApiEnvVar,
-            instanceIp);
+            instanceIp,
+            bootstrapInfo.getGrpcServerResourceId());
     start(xdsClientImpl);
   }
 

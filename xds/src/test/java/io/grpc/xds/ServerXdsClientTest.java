@@ -190,7 +190,7 @@ public class ServerXdsClientTest {
     xdsClient =
         new ServerXdsClient(new XdsChannel(channel, /* useProtocolV3= */ false), NODE,
             fakeClock.getScheduledExecutorService(), backoffPolicyProvider,
-            fakeClock.getStopwatchSupplier(), false, INSTANCE_IP);
+            fakeClock.getStopwatchSupplier(), false, INSTANCE_IP, "grpc/server");
     // Only the connection to management server is established, no RPC request is sent until at
     // least one watcher is registered.
     assertThat(responseObservers).isEmpty();

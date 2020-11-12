@@ -58,15 +58,18 @@ final class ServerXdsClient extends AbstractXdsClient {
   private int listenerPort = -1;
   private final boolean newServerApi;
   @Nullable private final String instanceIp;
+  private final String grpcServerResourceId;
   @Nullable
   private ScheduledHandle ldsRespTimer;
 
   ServerXdsClient(XdsChannel channel, Node node, ScheduledExecutorService timeService,
       BackoffPolicy.Provider backoffPolicyProvider, Supplier<Stopwatch> stopwatchSupplier,
-      boolean newServerApi, String instanceIp) {
+      boolean newServerApi, String instanceIp, String grpcServerResourceId) {
     super(channel, node, timeService, backoffPolicyProvider, stopwatchSupplier);
     this.newServerApi = channel.isUseProtocolV3() && newServerApi;
     this.instanceIp = (instanceIp != null ? instanceIp : "0.0.0.0");
+    this.grpcServerResourceId =
+        (grpcServerResourceId != null) ? grpcServerResourceId : "grpc/server";
   }
 
   @Override
@@ -99,7 +102,8 @@ final class ServerXdsClient extends AbstractXdsClient {
   Collection<String> getSubscribedResources(ResourceType type) {
     if (newServerApi) {
       String listeningAddress = instanceIp + ":" + listenerPort;
-      String resourceName = "grpc/server?udpa.resource.listening_address=" + listeningAddress;
+      String resourceName =
+          grpcServerResourceId + "?udpa.resource.listening_address=" + listeningAddress;
       return ImmutableList.<String>of(resourceName);
     } else {
       return Collections.emptyList();

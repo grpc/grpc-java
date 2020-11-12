@@ -189,7 +189,8 @@ public abstract class Bootstrapper {
         certProviders.put(name, certificateProviderInfo);
       }
     }
-    return new BootstrapInfo(servers, nodeBuilder.build(), certProviders);
+    String grpcServerResourceId = JsonUtil.getString(rawBootstrap, "grpc_server_resource_name_id");
+    return new BootstrapInfo(servers, nodeBuilder.build(), certProviders, grpcServerResourceId);
   }
 
   static <T> T checkForNull(T value, String fieldName) throws XdsInitializationException {
@@ -295,13 +296,18 @@ public abstract class Bootstrapper {
     private List<ServerInfo> servers;
     private final Node node;
     @Nullable private final Map<String, CertificateProviderInfo> certProviders;
+    @Nullable private final String grpcServerResourceId;
 
     @VisibleForTesting
     BootstrapInfo(
-        List<ServerInfo> servers, Node node, Map<String, CertificateProviderInfo> certProviders) {
+        List<ServerInfo> servers,
+        Node node,
+        Map<String, CertificateProviderInfo> certProviders,
+        String grpcServerResourceId) {
       this.servers = servers;
       this.node = node;
       this.certProviders = certProviders;
+      this.grpcServerResourceId = grpcServerResourceId;
     }
 
     /**
@@ -321,6 +327,11 @@ public abstract class Bootstrapper {
     /** Returns the cert-providers config map. */
     public Map<String, CertificateProviderInfo> getCertProviders() {
       return Collections.unmodifiableMap(certProviders);
+    }
+
+    @Nullable
+    public String getGrpcServerResourceId() {
+      return grpcServerResourceId;
     }
   }
 }
