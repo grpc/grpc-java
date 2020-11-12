@@ -86,7 +86,7 @@ public class ConfigSelectingClientCallTest {
         return Result.newBuilder()
             .setConfig(config)
             .setInterceptor(
-                // An interceptor that mutates CallOptions base on headers value.
+                // An interceptor that mutates CallOptions based on headers value.
                 new ClientInterceptor() {
                   String value = args.getHeaders().get(metadataKey);
                   @Override
