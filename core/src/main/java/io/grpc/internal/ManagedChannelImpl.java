@@ -909,8 +909,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
             transportProvider,
             terminated ? null : transportFactory.getScheduledExecutorService(),
             channelCallTracer,
-            // TODO(zdapeng): delete the last arg when migrating to interceptor based configSelector
-            configSelector.get())
+            null)
             .setFullStreamDecompression(fullStreamDecompression)
             .setDecompressorRegistry(decompressorRegistry)
             .setCompressorRegistry(compressorRegistry);
