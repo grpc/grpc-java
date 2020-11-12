@@ -12,8 +12,8 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.android:annotations:4.1.1.4",
     "com.google.api.grpc:proto-google-common-protos:1.17.0",
-    "com.google.auth:google-auth-library-credentials:0.20.0",
-    "com.google.auth:google-auth-library-oauth2-http:0.20.0",
+    "com.google.auth:google-auth-library-credentials:0.22.0",
+    "com.google.auth:google-auth-library-oauth2-http:0.22.0",
     "com.google.code.findbugs:jsr305:3.0.2",
     "com.google.code.gson:gson:jar:2.8.6",
     "com.google.errorprone:error_prone_annotations:2.3.4",
