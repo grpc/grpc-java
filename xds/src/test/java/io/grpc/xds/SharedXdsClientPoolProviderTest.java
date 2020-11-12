@@ -63,7 +63,8 @@ public class SharedXdsClientPoolProviderTest {
         new ServerInfo("trafficdirector.googleapis.com",
             Collections.singletonList(new ChannelCreds("insecure", null)),
             Collections.<String>emptyList());
-    BootstrapInfo bootstrapInfo = new BootstrapInfo(Collections.singletonList(server), node, null);
+    BootstrapInfo bootstrapInfo =
+        new BootstrapInfo(Collections.singletonList(server), node, null, null);
     Bootstrapper bootstrapper = mock(Bootstrapper.class);
     when(bootstrapper.readBootstrap()).thenReturn(bootstrapInfo);
     XdsChannelFactory channelFactory = mock(XdsChannelFactory.class);

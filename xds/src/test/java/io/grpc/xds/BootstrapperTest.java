@@ -511,6 +511,17 @@ public class BootstrapperTest {
     }
   }
 
+  @Test
+  public void parseBootstrap_grpcServerResourceId() throws XdsInitializationException {
+    String rawData = "{\n"
+            + "  \"xds_servers\": [],\n"
+            + "  \"grpc_server_resource_name_id\": \"grpc/serverx\"\n"
+            + "}";
+
+    BootstrapInfo info = Bootstrapper.parseConfig(rawData);
+    assertThat(info.getGrpcServerResourceId()).isEqualTo("grpc/serverx");
+  }
+
   private static Node.Builder getNodeBuilder() {
     GrpcBuildVersion buildVersion = GrpcUtil.getGrpcBuildVersion();
     return
