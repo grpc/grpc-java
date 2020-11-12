@@ -18,8 +18,6 @@ package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.verify;
 
 import com.google.common.collect.ImmutableList;
@@ -37,13 +35,11 @@ import io.grpc.Status;
 import io.grpc.internal.ManagedChannelServiceConfig.MethodInfo;
 import io.grpc.testing.TestMethodDescriptors;
 import java.util.Map;
-import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
-import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
@@ -55,18 +51,12 @@ public class ConfigSelectingClientCallTest {
   public MockitoRule mockitoRule = MockitoJUnit.rule();
   private final MethodDescriptor<Void, Void> method = TestMethodDescriptors.voidMethod();
 
-  @Mock
-  private Channel channel;
+  private TestChannel channel = new TestChannel();
+  // The underlying call directly created by the channel.
+  private TestCall<?, ?> call;
+
   @Mock
   private ClientCall.Listener<Void> callListener;
-  @Captor
-  private ArgumentCaptor<CallOptions> callOptionsCaptor;
-
-  @Before
-  public void setUp() {
-    ClientCall<Void, Void> call = new NoopClientCall<>();
-    doReturn(call).when(channel).newCall(eq(method), any(CallOptions.class));
-  }
 
   @Test
   public void configSelectorInterceptsCall() {
@@ -120,11 +110,9 @@ public class ConfigSelectingClientCallTest {
     metadata.put(metadataKey, "fooValue");
     configSelectingClientCall.start(callListener, metadata);
 
-    verify(channel).newCall(eq(method), callOptionsCaptor.capture());
-    CallOptions callOptionsReceived = callOptionsCaptor.getValue();
-    assertThat(callOptionsReceived.getAuthority()).isEqualTo("bar.authority");
-    assertThat(callOptionsReceived.getOption(MethodInfo.KEY)).isEqualTo(methodInfo);
-    assertThat(callOptionsReceived.getOption(callOptionsKey)).isEqualTo("fooValue");
+    assertThat(call.callOptions.getAuthority()).isEqualTo("bar.authority");
+    assertThat(call.callOptions.getOption(MethodInfo.KEY)).isEqualTo(methodInfo);
+    assertThat(call.callOptions.getOption(callOptionsKey)).isEqualTo("fooValue");
   }
 
   @Test
@@ -146,5 +134,30 @@ public class ConfigSelectingClientCallTest {
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
     verify(callListener).onClose(statusCaptor.capture(), any(Metadata.class));
     assertThat(statusCaptor.getValue().getCode()).isEqualTo(Status.Code.FAILED_PRECONDITION);
+  }
+
+  private final class TestChannel extends Channel {
+
+    @Override
+    public <ReqT, RespT> ClientCall<ReqT, RespT> newCall(
+        MethodDescriptor<ReqT, RespT> methodDescriptor, CallOptions callOptions) {
+      TestCall<ReqT, RespT> clientCall = new TestCall<>(callOptions);
+      call = clientCall;
+      return clientCall;
+    }
+
+    @Override
+    public String authority() {
+      return "foo.authority";
+    }
+  }
+
+  private static final class TestCall<ReqT, RespT> extends NoopClientCall<ReqT, RespT> {
+    // CallOptions actually received from the channel when the call is created.
+    final CallOptions callOptions;
+
+    TestCall(CallOptions callOptions) {
+      this.callOptions = callOptions;
+    }
   }
 }
