@@ -193,7 +193,8 @@ message LoadBalancerStatsRequest {
 message LoadBalancerStatsResponse {
   // The number of completed RPCs for each peer.
   map<string, int32> rpcs_by_peer = 1;
-  // The number of RPCs that failed to record a remote peer.
+  // The number of RPCs that failed. Either failed on the client before being
+  // sent to network or failed after reaching the server.
   int32 num_failures = 2;
   message RpcsByPeer {
     // The number of completed RPCs for each peer.
