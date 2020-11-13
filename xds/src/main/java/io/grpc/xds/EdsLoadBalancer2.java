@@ -72,6 +72,7 @@ final class EdsLoadBalancer2 extends LoadBalancer {
   private final SynchronizationContext syncContext;
   private final LoadBalancerRegistry lbRegistry;
   private final ThreadSafeRandom random;
+  private final CallCounterProvider callCounterProvider;
   private final GracefulSwitchLoadBalancer switchingLoadBalancer;
   private ObjectPool<XdsClient> xdsClientPool;
   private XdsClient xdsClient;
@@ -79,15 +80,17 @@ final class EdsLoadBalancer2 extends LoadBalancer {
   private EdsLbState edsLbState;
 
   EdsLoadBalancer2(LoadBalancer.Helper helper) {
-    this(helper, LoadBalancerRegistry.getDefaultRegistry(), ThreadSafeRandomImpl.instance);
+    this(helper, LoadBalancerRegistry.getDefaultRegistry(), ThreadSafeRandomImpl.instance,
+        SharedCallCounterMap.getInstance());
   }
 
   @VisibleForTesting
-  EdsLoadBalancer2(
-      LoadBalancer.Helper helper, LoadBalancerRegistry lbRegistry, ThreadSafeRandom random) {
+  EdsLoadBalancer2(LoadBalancer.Helper helper, LoadBalancerRegistry lbRegistry,
+      ThreadSafeRandom random, CallCounterProvider callCounterProvider) {
     this.lbRegistry = checkNotNull(lbRegistry, "lbRegistry");
     this.random = checkNotNull(random, "random");
     syncContext = checkNotNull(helper, "helper").getSynchronizationContext();
+    this.callCounterProvider = checkNotNull(callCounterProvider, "callCounterProvider");
     switchingLoadBalancer = new GracefulSwitchLoadBalancer(helper);
     InternalLogId logId = InternalLogId.allocate("eds-lb", helper.getAuthority());
     logger = XdsLogger.withLogId(logId);
@@ -160,7 +163,7 @@ final class EdsLoadBalancer2 extends LoadBalancer {
     }
 
     private final class ChildLbState extends LoadBalancer implements EdsResourceWatcher {
-      private final AtomicLong requestCount = new AtomicLong();
+      private final AtomicLong requestCount;
       @Nullable
       private final LoadStatsStore loadStatsStore;
       private final RequestLimitingLbHelper lbHelper;
@@ -175,6 +178,7 @@ final class EdsLoadBalancer2 extends LoadBalancer {
       private LoadBalancer lb;
 
       private ChildLbState(Helper helper) {
+        requestCount = callCounterProvider.getOrCreate(cluster, edsServiceName);
         if (lrsServerName != null) {
           loadStatsStore = xdsClient.addClientStats(cluster, edsServiceName);
         } else {
@@ -492,6 +496,14 @@ final class EdsLoadBalancer2 extends LoadBalancer {
         }
       };
     }
+  }
+
+  /**
+   * Provides the counter for aggregating outstanding requests per cluster:eds_service_name.
+   */
+  // Introduced for testing.
+  interface CallCounterProvider {
+    AtomicLong getOrCreate(String cluster, @Nullable String edsServiceName);
   }
 
   @VisibleForTesting
