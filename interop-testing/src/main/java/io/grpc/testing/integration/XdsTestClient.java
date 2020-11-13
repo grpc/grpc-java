@@ -326,7 +326,7 @@ public final class XdsTestClient {
 
                 @Override
                 public void onError(Throwable t) {
-                  handleRpcError(requestId, rpcType, hostnameRef.get(), savedWatchers);
+                  handleRpcError(requestId, rpcType, savedWatchers);
                 }
 
                 @Override
@@ -347,7 +347,7 @@ public final class XdsTestClient {
                   if (printResponse) {
                     logger.log(Level.WARNING, "Rpc failed: {0}", t);
                   }
-                  handleRpcError(requestId, rpcType, hostnameRef.get(), savedWatchers);
+                  handleRpcError(requestId, rpcType, savedWatchers);
                 }
 
                 @Override
@@ -395,8 +395,7 @@ public final class XdsTestClient {
         notifyWatchers(watchers, rpcType, requestId, hostname);
       }
 
-      private void handleRpcError(long requestId, RpcType rpcType, String hostname,
-          Set<XdsStatsWatcher> watchers) {
+      private void handleRpcError(long requestId, RpcType rpcType, Set<XdsStatsWatcher> watchers) {
         synchronized (lock) {
           Integer failedBase = rpcsFailedByMethod.get(rpcType.name());
           if (failedBase == null) {
@@ -404,7 +403,7 @@ public final class XdsTestClient {
           }
           rpcsFailedByMethod.put(rpcType.name(), failedBase + 1);
         }
-        notifyWatchers(watchers, rpcType, requestId, hostname);
+        notifyWatchers(watchers, rpcType, requestId, null);
       }
     }
 
@@ -508,7 +507,7 @@ public final class XdsTestClient {
     private final EnumMap<RpcType, Map<String, Integer>> rpcsByTypeAndPeer =
         new EnumMap<>(RpcType.class);
     private final Object lock = new Object();
-    private int noRemotePeer;
+    private int rpcsFailed;
 
     private XdsStatsWatcher(long startId, long endId) {
       latch = new CountDownLatch(Ints.checkedCast(endId - startId));
@@ -539,7 +538,7 @@ public final class XdsTestClient {
               rpcsByTypeAndPeer.put(rpcType, rpcMap);
             }
           } else {
-            noRemotePeer += 1;
+            rpcsFailed += 1;
           }
           latch.countDown();
         }
@@ -565,7 +564,7 @@ public final class XdsTestClient {
           rpcs.putAllRpcsByPeer(entry.getValue());
           builder.putRpcsByMethod(getRpcTypeString(entry.getKey()), rpcs.build());
         }
-        builder.setNumFailures(noRemotePeer + (int) latch.getCount());
+        builder.setNumFailures(rpcsFailed);
       }
       return builder.build();
     }
