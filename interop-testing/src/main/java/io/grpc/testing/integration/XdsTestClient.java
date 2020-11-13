@@ -564,7 +564,7 @@ public final class XdsTestClient {
           rpcs.putAllRpcsByPeer(entry.getValue());
           builder.putRpcsByMethod(getRpcTypeString(entry.getKey()), rpcs.build());
         }
-        builder.setNumFailures(rpcsFailed + (int) latch.getCount());
+        builder.setNumFailures(rpcsFailed);
       }
       return builder.build();
     }
