@@ -37,7 +37,6 @@ import io.netty.channel.epoll.Epoll;
 import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.util.concurrent.DefaultThreadFactory;
 import java.io.IOException;
-import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
@@ -110,12 +109,6 @@ public final class XdsClientWrapperForServerSds {
     }
     Node node = bootstrapInfo.getNode();
     timeService = SharedResourceHolder.get(timeServiceResource);
-    String instanceIp;
-    try {
-      instanceIp = Inet4Address.getLocalHost().getHostAddress();
-    } catch (UnknownHostException e) {
-      instanceIp = "0.0.0.0";
-    }
     XdsClient xdsClientImpl =
         new ServerXdsClient(
             channel,
@@ -124,7 +117,7 @@ public final class XdsClientWrapperForServerSds {
             new ExponentialBackoffPolicy.Provider(),
             GrpcUtil.STOPWATCH_SUPPLIER,
             experimentalNewServerApiEnvVar,
-            instanceIp,
+            "0.0.0.0",
             bootstrapInfo.getGrpcServerResourceId());
     start(xdsClientImpl);
   }
