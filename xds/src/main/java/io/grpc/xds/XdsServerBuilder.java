@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import com.google.common.annotations.VisibleForTesting;
+import io.grpc.Attributes;
 import io.grpc.BindableService;
 import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
@@ -29,6 +30,7 @@ import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerStreamTracer;
 import io.grpc.ServerTransportFilter;
 import io.grpc.Status;
+import io.grpc.netty.InternalNettyServerBuilder;
 import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.netty.NettyServerBuilder;
@@ -200,26 +202,29 @@ public final class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
 
   @Override
   public Server build() {
+    XdsClientWrapperForServerSds xdsClient = new XdsClientWrapperForServerSds(port);
+    ServerSdsProtocolNegotiator serverProtocolNegotiator = null;
     if (fallbackProtocolNegotiator != null) {
-      ServerSdsProtocolNegotiator serverProtocolNegotiator =
-          SdsProtocolNegotiators.serverProtocolNegotiator(port, fallbackProtocolNegotiator);
-      return buildServer(serverProtocolNegotiator);
-    } else {
-      return new ServerWrapperForXds(
-          delegate.build(), new XdsClientWrapperForServerSds(port), errorNotifier);
+      serverProtocolNegotiator =
+          SdsProtocolNegotiators.serverProtocolNegotiator(fallbackProtocolNegotiator);
     }
+    return buildServer(xdsClient, serverProtocolNegotiator);
   }
 
   /**
-   * Creates a Server using the given serverSdsProtocolNegotiator: gets the
-   * getXdsClientWrapperForServerSds from the serverSdsProtocolNegotiator.
+   * Creates a Server using the given xdsClient and serverSdsProtocolNegotiator.
    */
   @VisibleForTesting
-  ServerWrapperForXds buildServer(ServerSdsProtocolNegotiator serverProtocolNegotiator) {
-    delegate.protocolNegotiator(serverProtocolNegotiator);
-    return new ServerWrapperForXds(
-        delegate.build(), serverProtocolNegotiator.getXdsClientWrapperForServerSds(),
-        errorNotifier);
+  ServerWrapperForXds buildServer(
+      XdsClientWrapperForServerSds xdsClient,
+      ServerSdsProtocolNegotiator serverProtocolNegotiator) {
+    InternalNettyServerBuilder.eagAttributes(delegate, Attributes.newBuilder()
+        .set(SdsProtocolNegotiators.SERVER_XDS_CLIENT, xdsClient)
+        .build());
+    if (serverProtocolNegotiator != null) {
+      delegate.protocolNegotiator(serverProtocolNegotiator);
+    }
+    return new ServerWrapperForXds(delegate.build(), xdsClient, errorNotifier);
   }
 
   /** Watcher to receive error notifications from xDS control plane during {@code start()}. */
