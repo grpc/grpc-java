@@ -6,7 +6,7 @@ being configured with the XDS management protocol. Out-of-the-box they behave th
 as their hello-world version.
 
 __XDS support is incomplete and experimental, with limited compatibility. It
-will be very hard to produce a working enviornment just by this example. Please
+will be very hard to produce a working environment just by this example. Please
 refer to documentation specific for your XDS management server and
 environment.__
 
@@ -24,8 +24,8 @@ This creates the scripts `build/install/example-xds/bin/hello-world-client-xds` 
 ### Run the example without using XDS Credentials
 
 To use XDS, you should first deploy the XDS management server in your deployment environment
-and know its name. You need to set the `GRPC_XDS_BOOTSTRAP` environment variable to point to the
-gRPC XDS bootstrap file (see
+and know its name. You need to set the `GRPC_XDS_BOOTSTRAP` environment variable (preferred) or if that is not set then
+the `io.grpc.xds.bootstrap` java system property to point to the gRPC XDS bootstrap file (see
 [gRFC A27](https://github.com/grpc/proposal/blob/master/A27-xds-global-load-balancing.md#xdsclient-and-bootstrap-file) for the
 bootstrap format). This is needed by both `build/install/example-xds/bin/hello-world-client-xds`
 and `build/install/example-xds/bin/hello-world-server-xds`.
@@ -61,7 +61,7 @@ $ export GRPC_XDS_BOOTSTRAP=/path/to/bootstrap.json
 $ ./build/install/example-xds/bin/hello-world-server-xds 8000 my-test-xds-server --secure
 ```
 
-2. Similarly, add `--secure` on the comamnd line when you run the xDS client:
+2. Similarly, add `--secure` on the command line when you run the xDS client:
 ```
 $ export GRPC_XDS_BOOTSTRAP=/path/to/bootstrap.json
 $ ./build/install/example-xds/bin/hello-world-client-xds xds:///yourServersName:8000 my-test-xds-client --secure

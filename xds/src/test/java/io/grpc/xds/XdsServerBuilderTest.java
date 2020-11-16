@@ -236,7 +236,9 @@ public class XdsServerBuilderTest {
     } catch (IOException expected) {
       assertThat(expected)
               .hasMessageThat()
-              .contains("Environment variable GRPC_XDS_BOOTSTRAP not defined");
+              .contains(
+                      "Environment variable GRPC_XDS_BOOTSTRAP"
+                      + " or Java System Property io.grpc.xds.bootstrap not defined.");
     }
     ArgumentCaptor<Status> argCaptor = ArgumentCaptor.forClass(null);
     verify(mockErrorNotifier).onError(argCaptor.capture());
@@ -245,7 +247,9 @@ public class XdsServerBuilderTest {
     assertThat(captured.getCause()).isInstanceOf(XdsInitializationException.class);
     assertThat(captured.getCause())
             .hasMessageThat()
-            .contains("Environment variable GRPC_XDS_BOOTSTRAP not defined");
+            .contains(
+                    "Environment variable GRPC_XDS_BOOTSTRAP"
+                    + " or Java System Property io.grpc.xds.bootstrap not defined.");
   }
 
   @Test
