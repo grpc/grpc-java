@@ -55,7 +55,6 @@ import io.grpc.xds.internal.sds.SdsProtocolNegotiators;
 import io.grpc.xds.internal.sds.SslContextProviderSupplier;
 import io.grpc.xds.internal.sds.TlsContextManagerImpl;
 import io.grpc.xds.internal.sds.XdsChannelBuilder;
-import io.grpc.xds.internal.sds.XdsServerBuilder;
 import io.netty.handler.ssl.NotSslRecordException;
 import java.io.IOException;
 import java.net.Inet4Address;

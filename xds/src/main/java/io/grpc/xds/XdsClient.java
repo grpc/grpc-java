@@ -542,7 +542,7 @@ abstract class XdsClient {
   }
 
   /**
-   * Listener watcher interface. To be used by {@link io.grpc.xds.internal.sds.XdsServerBuilder}.
+   * Listener watcher interface. To be used by {@link XdsServerBuilder}.
    */
   interface ListenerWatcher extends ResourceWatcher {
 

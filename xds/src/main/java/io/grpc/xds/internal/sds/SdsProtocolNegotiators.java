@@ -32,6 +32,7 @@ import io.grpc.netty.ProtocolNegotiationEvent;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.XdsAttributes;
 import io.grpc.xds.XdsClientWrapperForServerSds;
+import io.grpc.xds.XdsServerBuilder;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerAdapter;
 import io.netty.channel.ChannelHandlerContext;
@@ -288,7 +289,7 @@ public final class SdsProtocolNegotiators {
       this.fallbackProtocolNegotiator = fallbackProtocolNegotiator;
     }
 
-    XdsClientWrapperForServerSds getXdsClientWrapperForServerSds() {
+    public XdsClientWrapperForServerSds getXdsClientWrapperForServerSds() {
       return xdsClientWrapperForServerSds;
     }
 
