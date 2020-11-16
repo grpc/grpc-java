@@ -516,6 +516,22 @@ public class CommonTlsContextTestsUtil {
     return builder;
   }
 
+  static CommonTlsContext.Builder addCertificateValidationContext(
+      CommonTlsContext.Builder builder,
+      String name,
+      String targetUri,
+      String channelType,
+      CertificateValidationContext staticCertValidationContext) {
+    SdsSecretConfig sdsSecretConfig = buildSdsSecretConfig(name, targetUri, channelType);
+
+    CombinedCertificateValidationContext combined =
+        CombinedCertificateValidationContext.newBuilder()
+            .setDefaultValidationContext(staticCertValidationContext)
+            .setValidationContextSdsSecretConfig(sdsSecretConfig)
+            .build();
+    return builder.setCombinedValidationContext(combined);
+  }
+
   /** Helper method to build UpstreamTlsContext for CertProvider tests. */
   public static EnvoyServerProtoData.UpstreamTlsContext
       buildUpstreamTlsContextForCertProviderInstance(
