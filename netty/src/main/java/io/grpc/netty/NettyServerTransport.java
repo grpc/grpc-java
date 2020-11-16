@@ -22,6 +22,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
+import io.grpc.Attributes;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalLogId;
 import io.grpc.ServerStreamTracer;
@@ -76,6 +77,7 @@ class NettyServerTransport implements ServerTransport {
   private final long maxConnectionAgeGraceInNanos;
   private final boolean permitKeepAliveWithoutCalls;
   private final long permitKeepAliveTimeInNanos;
+  private final Attributes eagAttributes;
   private final List<? extends ServerStreamTracer.Factory> streamTracerFactories;
   private final TransportTracer transportTracer;
 
@@ -96,7 +98,8 @@ class NettyServerTransport implements ServerTransport {
       long maxConnectionAgeInNanos,
       long maxConnectionAgeGraceInNanos,
       boolean permitKeepAliveWithoutCalls,
-      long permitKeepAliveTimeInNanos) {
+      long permitKeepAliveTimeInNanos,
+      Attributes eagAttributes) {
     this.channel = Preconditions.checkNotNull(channel, "channel");
     this.channelUnused = channelUnused;
     this.protocolNegotiator = Preconditions.checkNotNull(protocolNegotiator, "protocolNegotiator");
@@ -115,6 +118,7 @@ class NettyServerTransport implements ServerTransport {
     this.maxConnectionAgeGraceInNanos = maxConnectionAgeGraceInNanos;
     this.permitKeepAliveWithoutCalls = permitKeepAliveWithoutCalls;
     this.permitKeepAliveTimeInNanos = permitKeepAliveTimeInNanos;
+    this.eagAttributes = Preconditions.checkNotNull(eagAttributes, "eagAttributes");
     SocketAddress remote = channel.remoteAddress();
     this.logId = InternalLogId.allocate(getClass(), remote != null ? remote.toString() : null);
   }
@@ -272,6 +276,7 @@ class NettyServerTransport implements ServerTransport {
         maxConnectionAgeInNanos,
         maxConnectionAgeGraceInNanos,
         permitKeepAliveWithoutCalls,
-        permitKeepAliveTimeInNanos);
+        permitKeepAliveTimeInNanos,
+        eagAttributes);
   }
 }

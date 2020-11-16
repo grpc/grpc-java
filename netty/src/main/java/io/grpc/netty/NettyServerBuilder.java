@@ -26,6 +26,7 @@ import static io.grpc.internal.GrpcUtil.SERVER_KEEPALIVE_TIME_NANOS_DISABLED;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
+import io.grpc.Attributes;
 import io.grpc.ExperimentalApi;
 import io.grpc.Internal;
 import io.grpc.ServerBuilder;
@@ -112,6 +113,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
   private long maxConnectionAgeGraceInNanos = MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE;
   private boolean permitKeepAliveWithoutCalls;
   private long permitKeepAliveTimeInNanos = TimeUnit.MINUTES.toNanos(5);
+  private Attributes eagAttributes = Attributes.EMPTY;
 
   /**
    * Creates a server builder that will bind to the given port.
@@ -615,6 +617,11 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
     return this;
   }
 
+  /** Sets the EAG attributes available to protocol negotiators. Not for general use. */
+  void eagAttributes(Attributes eagAttributes) {
+    this.eagAttributes = checkNotNull(eagAttributes, "eagAttributes");
+  }
+
   @CheckReturnValue
   List<NettyServer> buildTransportServers(
       List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
@@ -633,7 +640,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
           keepAliveTimeInNanos, keepAliveTimeoutInNanos,
           maxConnectionIdleInNanos, maxConnectionAgeInNanos,
           maxConnectionAgeGraceInNanos, permitKeepAliveWithoutCalls, permitKeepAliveTimeInNanos,
-          this.serverImplBuilder.getChannelz());
+          eagAttributes, this.serverImplBuilder.getChannelz());
       transportServers.add(transportServer);
     }
     return Collections.unmodifiableList(transportServers);

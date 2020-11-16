@@ -16,6 +16,7 @@
 
 package io.grpc.netty;
 
+import io.grpc.Attributes;
 import io.grpc.Internal;
 import io.grpc.ServerStreamTracer;
 import io.grpc.internal.SharedResourcePool;
@@ -71,6 +72,11 @@ public final class InternalNettyServerBuilder {
     builder
         .workerEventLoopGroupPool(
             SharedResourcePool.forResource(Utils.NIO_WORKER_EVENT_LOOP_GROUP));
+  }
+
+  /** Sets the EAG attributes available to protocol negotiators. */
+  public static void eagAttributes(NettyServerBuilder builder, Attributes eagAttributes) {
+    builder.eagAttributes(eagAttributes);
   }
 
   private InternalNettyServerBuilder() {}
