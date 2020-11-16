@@ -19,6 +19,7 @@ package io.grpc.xds.internal.sds;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
+import io.grpc.Attributes;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
 import io.grpc.netty.InternalNettyChannelBuilder;
@@ -32,7 +33,6 @@ import io.grpc.netty.ProtocolNegotiationEvent;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.XdsAttributes;
 import io.grpc.xds.XdsClientWrapperForServerSds;
-import io.grpc.xds.XdsServerBuilder;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerAdapter;
 import io.netty.channel.ChannelHandlerContext;
@@ -59,6 +59,8 @@ public final class SdsProtocolNegotiators {
 
   private static final Logger logger = Logger.getLogger(SdsProtocolNegotiators.class.getName());
 
+  public static final Attributes.Key<XdsClientWrapperForServerSds> SERVER_XDS_CLIENT
+      = Attributes.Key.create("serverXdsClient");
   private static final AsciiString SCHEME = AsciiString.of("http");
 
   /**
@@ -86,13 +88,11 @@ public final class SdsProtocolNegotiators {
    * Creates an SDS based {@link ProtocolNegotiator} for a {@link io.grpc.netty.NettyServerBuilder}.
    * If xDS returns no DownstreamTlsContext, it will fall back to plaintext.
    *
-   * @param port the listening port passed to {@link XdsServerBuilder#forPort(int)}.
    * @param fallbackProtocolNegotiator protocol negotiator to use as fallback.
    */
-  public static ServerSdsProtocolNegotiator serverProtocolNegotiator(int port,
+  public static ServerSdsProtocolNegotiator serverProtocolNegotiator(
       @Nullable ProtocolNegotiator fallbackProtocolNegotiator) {
-    return new ServerSdsProtocolNegotiator(new XdsClientWrapperForServerSds(port),
-        fallbackProtocolNegotiator);
+    return new ServerSdsProtocolNegotiator(fallbackProtocolNegotiator);
   }
 
   private static final class ClientFactory implements InternalProtocolNegotiator.ClientFactory {
@@ -277,20 +277,12 @@ public final class SdsProtocolNegotiators {
   @VisibleForTesting
   public static final class ServerSdsProtocolNegotiator implements ProtocolNegotiator {
 
-    private final XdsClientWrapperForServerSds xdsClientWrapperForServerSds;
     @Nullable private final ProtocolNegotiator fallbackProtocolNegotiator;
 
     /** Constructor. */
     @VisibleForTesting
-    public ServerSdsProtocolNegotiator(XdsClientWrapperForServerSds xdsClientWrapperForServerSds,
-        @Nullable ProtocolNegotiator fallbackProtocolNegotiator) {
-      this.xdsClientWrapperForServerSds =
-          checkNotNull(xdsClientWrapperForServerSds, "xdsClientWrapperForServerSds");
+    public ServerSdsProtocolNegotiator(@Nullable ProtocolNegotiator fallbackProtocolNegotiator) {
       this.fallbackProtocolNegotiator = fallbackProtocolNegotiator;
-    }
-
-    public XdsClientWrapperForServerSds getXdsClientWrapperForServerSds() {
-      return xdsClientWrapperForServerSds;
     }
 
     @Override
@@ -300,6 +292,8 @@ public final class SdsProtocolNegotiators {
 
     @Override
     public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
+      XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
+          grpcHandler.getEagAttributes().get(SERVER_XDS_CLIENT);
       return new HandlerPickerHandler(grpcHandler, xdsClientWrapperForServerSds,
           fallbackProtocolNegotiator);
     }

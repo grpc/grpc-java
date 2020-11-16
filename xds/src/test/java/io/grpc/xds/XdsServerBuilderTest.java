@@ -77,9 +77,9 @@ public class XdsServerBuilderTest {
           XdsServerTestHelper.startAndGetWatcher(xdsClientWrapperForServerSds, mockXdsClient, port);
     }
     ServerSdsProtocolNegotiator serverSdsProtocolNegotiator =
-        new ServerSdsProtocolNegotiator(
-            xdsClientWrapperForServerSds, InternalProtocolNegotiators.serverPlaintext());
-    xdsServer = cleanupRule.register(builder.buildServer(serverSdsProtocolNegotiator));
+        new ServerSdsProtocolNegotiator(InternalProtocolNegotiators.serverPlaintext());
+    xdsServer = cleanupRule.register(
+        builder.buildServer(xdsClientWrapperForServerSds, serverSdsProtocolNegotiator));
   }
 
   private void verifyServer(

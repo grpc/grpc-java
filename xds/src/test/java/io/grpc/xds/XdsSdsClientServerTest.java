@@ -344,8 +344,7 @@ public class XdsSdsClientServerTest {
       DownstreamTlsContext downstreamTlsContext)
       throws IOException {
     SdsProtocolNegotiators.ServerSdsProtocolNegotiator serverSdsProtocolNegotiator =
-        new SdsProtocolNegotiators.ServerSdsProtocolNegotiator(xdsClientWrapperForServerSds,
-            fallbackProtocolNegotiator);
+        new SdsProtocolNegotiators.ServerSdsProtocolNegotiator(fallbackProtocolNegotiator);
     buildServer(
         port, serverSdsProtocolNegotiator, xdsClientWrapperForServerSds, downstreamTlsContext);
   }
@@ -362,7 +361,8 @@ public class XdsSdsClientServerTest {
         port,
             downstreamTlsContext,
         /* tlsContext2= */null);
-    cleanupRule.register(builder.buildServer(serverSdsProtocolNegotiator)).start();
+    cleanupRule.register(
+        builder.buildServer(xdsClientWrapperForServerSds, serverSdsProtocolNegotiator)).start();
   }
 
   static EnvoyServerProtoData.Listener buildListener(
