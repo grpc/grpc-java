@@ -54,6 +54,7 @@ import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedTargetConfig;
 import io.grpc.xds.XdsClient.EdsResourceWatcher;
 import io.grpc.xds.XdsClient.EdsUpdate;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
+import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -496,14 +497,6 @@ final class EdsLoadBalancer2 extends LoadBalancer {
         }
       };
     }
-  }
-
-  /**
-   * Provides the counter for aggregating outstanding requests per cluster:eds_service_name.
-   */
-  // Introduced for testing.
-  interface CallCounterProvider {
-    AtomicLong getOrCreate(String cluster, @Nullable String edsServiceName);
   }
 
   @VisibleForTesting
