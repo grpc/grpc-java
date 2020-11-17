@@ -70,7 +70,7 @@ final class EdsLoadBalancer2 extends LoadBalancer {
   static final long DEFAULT_PER_CLUSTER_MAX_CONCURRENT_REQUESTS = 1024L;
   @VisibleForTesting
   static boolean enableCircuitBreaking =
-      Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_ENABLE_CIRCUIT_BREAKING"));
+      Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_CIRCUIT_BREAKING"));
 
   private final XdsLogger logger;
   private final SynchronizationContext syncContext;
