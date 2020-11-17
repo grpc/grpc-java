@@ -21,6 +21,7 @@ final class XdsLbPolicies {
   static final String CDS_POLICY_NAME = "cds_experimental";
   static final String EDS_POLICY_NAME = "eds_experimental";
   static final String PRIORITY_POLICY_NAME = "priority_experimental";
+  static final String CLUSTER_IMPL_POLICY_NAME = "cluster_impl_experimental";
   static final String WEIGHTED_TARGET_POLICY_NAME = "weighted_target_experimental";
   static final String LRS_POLICY_NAME = "lrs_experimental";
 
