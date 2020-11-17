@@ -26,6 +26,7 @@ import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
 import io.grpc.xds.EnvoyServerProtoData;
 import io.grpc.xds.XdsClientWrapperForServerSds;
+import io.grpc.xds.XdsServerBuilder;
 import java.io.IOException;
 import java.net.SocketAddress;
 import java.util.List;
@@ -48,7 +49,8 @@ public final class ServerWrapperForXds extends Server {
   @Nullable XdsClientWrapperForServerSds.ServerWatcher serverWatcher;
   private AtomicBoolean started = new AtomicBoolean();
 
-  ServerWrapperForXds(
+  /** Creates the wrapper object using the delegate passed. */
+  public ServerWrapperForXds(
       Server delegate,
       XdsClientWrapperForServerSds xdsClientWrapperForServerSds,
       @Nullable XdsServerBuilder.ErrorNotifier errorNotifier) {

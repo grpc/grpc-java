@@ -32,7 +32,6 @@ import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import io.grpc.xds.internal.sds.SdsProtocolNegotiators.ServerSdsProtocolNegotiator;
 import io.grpc.xds.internal.sds.ServerWrapperForXds;
-import io.grpc.xds.internal.sds.XdsServerBuilder;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;

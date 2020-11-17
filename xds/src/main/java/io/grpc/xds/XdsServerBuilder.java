@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.internal.sds;
+package io.grpc.xds;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.BindableService;
@@ -32,8 +32,9 @@ import io.grpc.Status;
 import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.netty.NettyServerBuilder;
-import io.grpc.xds.XdsClientWrapperForServerSds;
+import io.grpc.xds.internal.sds.SdsProtocolNegotiators;
 import io.grpc.xds.internal.sds.SdsProtocolNegotiators.ServerSdsProtocolNegotiator;
+import io.grpc.xds.internal.sds.ServerWrapperForXds;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import java.io.File;
@@ -214,7 +215,7 @@ public final class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
    * getXdsClientWrapperForServerSds from the serverSdsProtocolNegotiator.
    */
   @VisibleForTesting
-  public ServerWrapperForXds buildServer(ServerSdsProtocolNegotiator serverProtocolNegotiator) {
+  ServerWrapperForXds buildServer(ServerSdsProtocolNegotiator serverProtocolNegotiator) {
     delegate.protocolNegotiator(serverProtocolNegotiator);
     return new ServerWrapperForXds(
         delegate.build(), serverProtocolNegotiator.getXdsClientWrapperForServerSds(),
