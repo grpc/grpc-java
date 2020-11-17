@@ -19,6 +19,7 @@ package io.grpc.xds;
 import static com.google.common.truth.Truth.assertThat;
 
 import com.google.common.testing.GcFinalization;
+import com.google.common.testing.GcFinalization.FinalizationPredicate;
 import io.grpc.xds.SharedCallCounterMap.CounterReference;
 import java.util.HashMap;
 import java.util.Map;
@@ -50,9 +51,14 @@ public class SharedCallCounterMapTest {
   public void autoCleanUp() {
     @SuppressWarnings("UnusedVariable")
     AtomicLong counter = map.getOrCreate(CLUSTER, EDS_SERVICE_NAME);
-    CounterReference ref = counters.get(CLUSTER).get(EDS_SERVICE_NAME);
+    final CounterReference ref = counters.get(CLUSTER).get(EDS_SERVICE_NAME);
     counter = null;
-    GcFinalization.awaitClear(ref);
+    GcFinalization.awaitDone(new FinalizationPredicate() {
+      @Override
+      public boolean isDone() {
+        return ref.isEnqueued();
+      }
+    });
     map.cleanQueue();
     assertThat(counters).isEmpty();
   }
