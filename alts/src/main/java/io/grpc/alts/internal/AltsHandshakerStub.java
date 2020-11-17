@@ -38,13 +38,11 @@ class AltsHandshakerStub {
   private static final long HANDSHAKE_RPC_DEADLINE_SECS = 20;
 
   AltsHandshakerStub(HandshakerServiceStub serviceStub) {
-    writer = null;
     this.serviceStub = serviceStub;
   }
 
   @VisibleForTesting
   AltsHandshakerStub() {
-    writer = null;
     serviceStub = null;
   }
 
@@ -75,7 +73,7 @@ class AltsHandshakerStub {
   }
 
   /** Create a new writer if the writer is null. */
-  private synchronized void createWriterIfNull() {
+  private void createWriterIfNull() {
     if (writer == null) {
       writer =
           serviceStub.withDeadlineAfter(HANDSHAKE_RPC_DEADLINE_SECS, SECONDS).doHandshake(reader);
