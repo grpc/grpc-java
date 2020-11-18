@@ -18,17 +18,11 @@ package io.grpc.xds;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Attributes;
-import io.grpc.BindableService;
-import io.grpc.CompressorRegistry;
-import io.grpc.DecompressorRegistry;
 import io.grpc.ExperimentalApi;
-import io.grpc.HandlerRegistry;
+import io.grpc.ForwardingServerBuilder;
+import io.grpc.Internal;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
-import io.grpc.ServerInterceptor;
-import io.grpc.ServerServiceDefinition;
-import io.grpc.ServerStreamTracer;
-import io.grpc.ServerTransportFilter;
 import io.grpc.Status;
 import io.grpc.netty.InternalNettyServerBuilder;
 import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
@@ -42,16 +36,13 @@ import io.netty.handler.ssl.SslContextBuilder;
 import java.io.File;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
-import java.util.concurrent.Executor;
-import java.util.concurrent.TimeUnit;
-import javax.annotation.Nullable;
 import javax.net.ssl.SSLException;
 
 /**
  * A version of {@link ServerBuilder} to create xDS managed servers that will use SDS to set up SSL
  * with peers. Note, this is not ready to use yet.
  */
-public final class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
+public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBuilder> {
 
   private final NettyServerBuilder delegate;
   private final int port;
@@ -64,63 +55,9 @@ public final class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
   }
 
   @Override
-  public XdsServerBuilder handshakeTimeout(long timeout, TimeUnit unit) {
-    delegate.handshakeTimeout(timeout, unit);
-    return this;
-  }
-
-  @Override
-  public XdsServerBuilder directExecutor() {
-    delegate.directExecutor();
-    return this;
-  }
-
-  @Override
-  public XdsServerBuilder addStreamTracerFactory(ServerStreamTracer.Factory factory) {
-    delegate.addStreamTracerFactory(factory);
-    return this;
-  }
-
-  @Override
-  public XdsServerBuilder addTransportFilter(ServerTransportFilter filter) {
-    delegate.addTransportFilter(filter);
-    return this;
-  }
-
-  @Override
-  public XdsServerBuilder executor(Executor executor) {
-    delegate.executor(executor);
-    return this;
-  }
-
-  @Override
-  public XdsServerBuilder addService(ServerServiceDefinition service) {
-    delegate.addService(service);
-    return this;
-  }
-
-  @Override
-  public XdsServerBuilder addService(BindableService bindableService) {
-    delegate.addService(bindableService);
-    return this;
-  }
-
-  @Override
-  public XdsServerBuilder fallbackHandlerRegistry(@Nullable HandlerRegistry fallbackRegistry) {
-    delegate.fallbackHandlerRegistry(fallbackRegistry);
-    return this;
-  }
-
-  @Override
-  public XdsServerBuilder useTransportSecurity(File certChain, File privateKey) {
-    delegate.useTransportSecurity(certChain, privateKey);
-    return this;
-  }
-
-  @Override
-  public XdsServerBuilder useTransportSecurity(InputStream certChain, InputStream privateKey) {
-    delegate.useTransportSecurity(certChain, privateKey);
-    return this;
+  @Internal
+  protected ServerBuilder<?> delegate() {
+    return delegate;
   }
 
   /**
@@ -160,24 +97,6 @@ public final class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
       InputStream certChain, InputStream privateKey) throws SSLException {
     SslContext sslContext = SslContextBuilder.forServer(certChain, privateKey).build();
     this.fallbackProtocolNegotiator = InternalProtocolNegotiators.serverTls(sslContext);
-    return this;
-  }
-
-  @Override
-  public XdsServerBuilder decompressorRegistry(@Nullable DecompressorRegistry registry) {
-    delegate.decompressorRegistry(registry);
-    return this;
-  }
-
-  @Override
-  public XdsServerBuilder compressorRegistry(@Nullable CompressorRegistry registry) {
-    delegate.compressorRegistry(registry);
-    return this;
-  }
-
-  @Override
-  public XdsServerBuilder intercept(ServerInterceptor interceptor) {
-    delegate.intercept(interceptor);
     return this;
   }
 
