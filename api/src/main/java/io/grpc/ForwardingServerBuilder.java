@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
 /**
- * A {@link ServerBuilder} that delegates all its builder method to another builder by default.
+ * A {@link ServerBuilder} that delegates all its builder methods to another builder by default.
  *
  * @param <T> The type of the subclass extending this abstract class.
  * @since 1.34.0
