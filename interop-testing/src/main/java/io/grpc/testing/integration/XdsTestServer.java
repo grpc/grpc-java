@@ -52,12 +52,12 @@ public final class XdsTestServer {
   private static Logger logger = Logger.getLogger(XdsTestServer.class.getName());
 
   private int port = 8080;
-  private int testPort = 8081;
+  private int maintenancePort = 8080;
   private boolean secureMode = false;
   private String serverId = "java_server";
   private HealthStatusManager health;
   private Server server;
-  private Server otherServer;
+  private Server maintenanceServer;
   private String host;
 
   /**
@@ -107,8 +107,8 @@ public final class XdsTestServer {
       String value = parts[1];
       if ("port".equals(key)) {
         port = Integer.valueOf(value);
-      } else if ("testPort".equals(key)) {
-        testPort = Integer.valueOf(value);
+      } else if ("maintenancePort".equals(key)) {
+        maintenancePort = Integer.valueOf(value);
       } else if ("secureMode".equals(key)) {
         secureMode = Boolean.parseBoolean(value);
       } else if ("server_id".equals(key)) {
@@ -120,18 +120,28 @@ public final class XdsTestServer {
       }
     }
 
+    if (secureMode == (port == maintenancePort)) {
+      System.err.println(
+          "port and maintenancePort should be same for insecure and different for secure mode: port="
+              + port
+              + ", maintenancePort="
+              + maintenancePort);
+      usage = true;
+    }
+
     if (usage) {
       XdsTestServer s = new XdsTestServer();
       System.err.println(
           "Usage: [ARGS...]"
               + "\n"
-              + "\n  --port=INT          listening port for other servers."
+              + "\n  --port=INT          listening port for test server."
               + "\n                      Default: "
               + s.port
-              + "\n  --testPort=INT      listening port for test server."
+              + "\n  --maintenancePort=INT      listening port for other servers."
               + "\n                      Default: "
-              + s.testPort
+              + s.maintenancePort
               + "\n  --secureMode=BOOLEAN Use true to enable XdsCredentials."
+              + " port and maintenancePort should be same for insecure and different for secure mode."
               + "\n                      Default: "
               + s.secureMode
               + "\n  --server_id=STRING  server ID for response."
@@ -149,32 +159,47 @@ public final class XdsTestServer {
       throw new RuntimeException(e);
     }
     health = new HealthStatusManager();
-    XdsServerBuilder xdsServerBuilder =
-        XdsServerBuilder.forPort(testPort)
-            .addService(
-                ServerInterceptors.intercept(
-                    new TestServiceImpl(serverId, host), new TestInfoInterceptor(host)));
     if (secureMode) {
-      xdsServerBuilder = xdsServerBuilder.useXdsSecurityWithPlaintextFallback();
+      server =
+          XdsServerBuilder.forPort(port)
+              .addService(
+                  ServerInterceptors.intercept(
+                      new TestServiceImpl(serverId, host), new TestInfoInterceptor(host)))
+              .useXdsSecurityWithPlaintextFallback()
+              .build()
+              .start();
+      maintenanceServer =
+          NettyServerBuilder.forPort(maintenancePort)
+              .addService(new XdsUpdateHealthServiceImpl(health))
+              .addService(health.getHealthService())
+              .addService(ProtoReflectionService.newInstance())
+              .build()
+              .start();
+    } else {
+      server =
+          NettyServerBuilder.forPort(port)
+              .addService(
+                  ServerInterceptors.intercept(
+                      new TestServiceImpl(serverId, host), new TestInfoInterceptor(host)))
+              .addService(new XdsUpdateHealthServiceImpl(health))
+              .addService(health.getHealthService())
+              .addService(ProtoReflectionService.newInstance())
+              .build()
+              .start();
+      maintenanceServer = null;
     }
-    server = xdsServerBuilder.build().start();
-    otherServer =
-        NettyServerBuilder.forPort(port)
-            .addService(new XdsUpdateHealthServiceImpl(health))
-            .addService(health.getHealthService())
-            .addService(ProtoReflectionService.newInstance())
-            .build()
-            .start();
     health.setStatus("", ServingStatus.SERVING);
   }
 
   private void stop() throws Exception {
     server.shutdownNow();
-    otherServer.shutdownNow();
+    if (maintenanceServer != null) {
+      maintenanceServer.shutdownNow();
+    }
     if (!server.awaitTermination(5, TimeUnit.SECONDS)) {
       System.err.println("Timed out waiting for server shutdown");
     }
-    if (!otherServer.awaitTermination(5, TimeUnit.SECONDS)) {
+    if (maintenanceServer != null && !maintenanceServer.awaitTermination(5, TimeUnit.SECONDS)) {
       System.err.println("Timed out waiting for otherServer shutdown");
     }
   }
@@ -183,8 +208,8 @@ public final class XdsTestServer {
     if (server != null) {
       server.awaitTermination();
     }
-    if (otherServer != null) {
-      otherServer.awaitTermination();
+    if (maintenanceServer != null) {
+      maintenanceServer.awaitTermination();
     }
   }
 
