@@ -43,9 +43,6 @@ import io.grpc.NameResolverRegistry;
 import io.grpc.ServerCredentials;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
-import io.grpc.netty.InternalNettyServerCredentials;
-import io.grpc.netty.InternalProtocolNegotiator;
-import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
@@ -340,26 +337,23 @@ public class XdsSdsClientServerTest {
       DownstreamTlsContext downstreamTlsContext)
       throws IOException {
     ServerCredentials xdsCredentials = XdsServerCredentials.create(fallbackCredentials);
-    InternalProtocolNegotiator.ServerFactory serverFactory =
-        InternalNettyServerCredentials.toNegotiator(xdsCredentials);
-    ProtocolNegotiator serverProtocolNegotiator = serverFactory.newNegotiator(null);
-    buildServer(port, serverProtocolNegotiator, xdsClientWrapperForServerSds, downstreamTlsContext);
+    buildServer(port, xdsCredentials, xdsClientWrapperForServerSds, downstreamTlsContext);
   }
 
   private void buildServer(
       int port,
-      ProtocolNegotiator protocolNegotiator,
+      ServerCredentials serverCredentials,
       XdsClientWrapperForServerSds xdsClientWrapperForServerSds,
       DownstreamTlsContext downstreamTlsContext)
       throws IOException {
-    XdsServerBuilder builder = XdsServerBuilder.forPort(port).addService(new SimpleServiceImpl());
+    XdsServerBuilder builder = XdsServerBuilder.forPort(port, serverCredentials)
+        .addService(new SimpleServiceImpl());
     XdsServerTestHelper.generateListenerUpdate(
         xdsClientWrapperForServerSds.getListenerWatcher(),
         port,
         downstreamTlsContext,
         /* tlsContext2= */null);
-    cleanupRule.register(
-        builder.buildServer(xdsClientWrapperForServerSds, protocolNegotiator)).start();
+    cleanupRule.register(builder.buildServer(xdsClientWrapperForServerSds, null)).start();
   }
 
   static EnvoyServerProtoData.Listener buildListener(
