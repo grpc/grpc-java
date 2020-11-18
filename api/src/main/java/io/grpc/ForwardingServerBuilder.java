@@ -27,10 +27,10 @@ import javax.annotation.Nullable;
  * A {@link ServerBuilder} that delegates all its builder method to another builder by default.
  *
  * @param <T> The type of the subclass extending this abstract class.
- * @since 1.33.0
+ * @since 1.34.0
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/7393")
-abstract class ForwardingServerBuilder<T extends ServerBuilder<T>> extends ServerBuilder<T> {
+public abstract class ForwardingServerBuilder<T extends ServerBuilder<T>> extends ServerBuilder<T> {
 
   /** The default constructor. */
   protected ForwardingServerBuilder() {}
@@ -160,7 +160,7 @@ abstract class ForwardingServerBuilder<T extends ServerBuilder<T>> extends Serve
   /**
    * Returns the correctly typed version of the builder.
    */
-  protected final T thisT() {
+  private T thisT() {
     @SuppressWarnings("unchecked")
     T thisT = (T) this;
     return thisT;
