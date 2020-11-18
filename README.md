@@ -133,7 +133,7 @@ For protobuf-based codegen integrated with the Gradle build system, you can use
 [protobuf-gradle-plugin][]:
 ```gradle
 plugins {
-    id 'com.google.protobuf' version '0.8.13'
+    id 'com.google.protobuf' version '0.8.14'
 }
 
 protobuf {
