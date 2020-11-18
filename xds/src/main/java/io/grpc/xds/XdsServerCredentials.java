@@ -24,7 +24,7 @@ import io.grpc.netty.InternalNettyServerCredentials;
 import io.grpc.netty.InternalProtocolNegotiator;
 import io.grpc.xds.internal.sds.SdsProtocolNegotiators;
 
-@ExperimentalApi("TODO")
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/7621")
 public class XdsServerCredentials {
   private XdsServerCredentials() {} // prevent instantiation
 
