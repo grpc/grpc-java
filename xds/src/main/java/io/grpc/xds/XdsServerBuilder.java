@@ -17,12 +17,14 @@
 package io.grpc.xds;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
 import io.grpc.Attributes;
 import io.grpc.ExperimentalApi;
 import io.grpc.ForwardingServerBuilder;
 import io.grpc.Internal;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
+import io.grpc.ServerCredentials;
 import io.grpc.Status;
 import io.grpc.netty.InternalNettyServerBuilder;
 import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
@@ -46,12 +48,14 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
 
   private final NettyServerBuilder delegate;
   private final int port;
+  private final boolean freezeNegotiator;
   private ProtocolNegotiator fallbackProtocolNegotiator;
   private ErrorNotifier errorNotifier;
 
-  private XdsServerBuilder(NettyServerBuilder nettyDelegate, int port) {
+  private XdsServerBuilder(NettyServerBuilder nettyDelegate, int port, boolean freezeNegotiator) {
     this.delegate = nettyDelegate;
     this.port = port;
+    this.freezeNegotiator = freezeNegotiator;
   }
 
   @Override
@@ -66,6 +70,7 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/7514")
   public XdsServerBuilder useXdsSecurityWithPlaintextFallback() {
+    Preconditions.checkState(!freezeNegotiator, "Method unavailable when using ServerCredentials");
     this.fallbackProtocolNegotiator = InternalProtocolNegotiators.serverPlaintext();
     return this;
   }
@@ -80,6 +85,7 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/7514")
   public XdsServerBuilder useXdsSecurityWithTransportSecurityFallback(
       File certChain, File privateKey) throws SSLException {
+    Preconditions.checkState(!freezeNegotiator, "Method unavailable when using ServerCredentials");
     SslContext sslContext = SslContextBuilder.forServer(certChain, privateKey).build();
     this.fallbackProtocolNegotiator = InternalProtocolNegotiators.serverTls(sslContext);
     return this;
@@ -95,6 +101,7 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/7514")
   public XdsServerBuilder useXdsSecurityWithTransportSecurityFallback(
       InputStream certChain, InputStream privateKey) throws SSLException {
+    Preconditions.checkState(!freezeNegotiator, "Method unavailable when using ServerCredentials");
     SslContext sslContext = SslContextBuilder.forServer(certChain, privateKey).build();
     this.fallbackProtocolNegotiator = InternalProtocolNegotiators.serverTls(sslContext);
     return this;
@@ -103,6 +110,7 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
   /** Set the fallback protocolNegotiator. Pass null to unset a previously set value. */
   public XdsServerBuilder fallbackProtocolNegotiator(
       ProtocolNegotiator fallbackProtocolNegotiator) {
+    Preconditions.checkState(!freezeNegotiator, "Method unavailable when using ServerCredentials");
     this.fallbackProtocolNegotiator = fallbackProtocolNegotiator;
     return this;
   }
@@ -116,7 +124,13 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
   /** Creates a gRPC server builder for the given port. */
   public static XdsServerBuilder forPort(int port) {
     NettyServerBuilder nettyDelegate = NettyServerBuilder.forAddress(new InetSocketAddress(port));
-    return new XdsServerBuilder(nettyDelegate, port);
+    return new XdsServerBuilder(nettyDelegate, port, /* freezeNegotiator= */ false);
+  }
+
+  /** Creates a gRPC server builder for the given port. */
+  public static XdsServerBuilder forPort(int port, ServerCredentials serverCredentials) {
+    NettyServerBuilder nettyDelegate = NettyServerBuilder.forPort(port, serverCredentials);
+    return new XdsServerBuilder(nettyDelegate, port, /* freezeNegotiator= */ true);
   }
 
   @Override

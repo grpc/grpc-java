@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Attributes;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.ObjectPool;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
 import io.grpc.netty.InternalNettyChannelBuilder;
 import io.grpc.netty.InternalNettyChannelBuilder.ProtocolNegotiatorFactory;
@@ -42,6 +43,7 @@ import io.netty.util.AsciiString;
 import java.security.cert.CertStoreException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Executor;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -84,6 +86,11 @@ public final class SdsProtocolNegotiators {
     return new ClientFactory(fallbackNegotiator);
   }
 
+  public static InternalProtocolNegotiator.ServerFactory serverProtocolNegotiatorFactory(
+      @Nullable InternalProtocolNegotiator.ServerFactory fallbackNegotiator) {
+    return new ServerFactory(fallbackNegotiator);
+  }
+
   /**
    * Creates an SDS based {@link ProtocolNegotiator} for a {@link io.grpc.netty.NettyServerBuilder}.
    * If xDS returns no DownstreamTlsContext, it will fall back to plaintext.
@@ -93,6 +100,21 @@ public final class SdsProtocolNegotiators {
   public static ServerSdsProtocolNegotiator serverProtocolNegotiator(
       @Nullable ProtocolNegotiator fallbackProtocolNegotiator) {
     return new ServerSdsProtocolNegotiator(fallbackProtocolNegotiator);
+  }
+
+  private static final class ServerFactory implements InternalProtocolNegotiator.ServerFactory {
+
+    private final InternalProtocolNegotiator.ServerFactory fallbackProtocolNegotiator;
+
+    private ServerFactory(InternalProtocolNegotiator.ServerFactory fallbackNegotiator) {
+      this.fallbackProtocolNegotiator = fallbackNegotiator;
+    }
+
+    @Override
+    public ProtocolNegotiator newNegotiator(ObjectPool<? extends Executor> offloadExecutorPool) {
+      return new ServerSdsProtocolNegotiator(
+          fallbackProtocolNegotiator.newNegotiator(offloadExecutorPool));
+    }
   }
 
   private static final class ClientFactory implements InternalProtocolNegotiator.ClientFactory {
