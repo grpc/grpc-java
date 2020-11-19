@@ -120,9 +120,9 @@ public final class XdsTestServer {
       }
     }
 
-    if (secureMode == (port == maintenancePort)) {
+    if (secureMode && (port == maintenancePort)) {
       System.err.println(
-          "port and maintenancePort should be same for insecure and different for secure mode: port="
+          "port and maintenancePort should be different for secure mode: port="
               + port
               + ", maintenancePort="
               + maintenancePort);
@@ -141,7 +141,7 @@ public final class XdsTestServer {
               + "\n                      Default: "
               + s.maintenancePort
               + "\n  --secureMode=BOOLEAN Use true to enable XdsCredentials."
-              + " port and maintenancePort should be same for insecure and different for secure mode."
+              + " port and maintenancePort should be different for secure mode."
               + "\n                      Default: "
               + s.secureMode
               + "\n  --server_id=STRING  server ID for response."
