@@ -56,6 +56,14 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
     return this;
   }
 
+  /**
+   * Unsupported call. Users should only use {@link #forPort(int, ServerCredentials)}.
+   */
+  public static ServerBuilder<?> forPort(int port) {
+    throw new UnsupportedOperationException(
+        "Unsupported call - use forPort(int, ServerCredentials)");
+  }
+
   /** Creates a gRPC server builder for the given port. */
   public static XdsServerBuilder forPort(int port, ServerCredentials serverCredentials) {
     NettyServerBuilder nettyDelegate = NettyServerBuilder.forPort(port, serverCredentials);
