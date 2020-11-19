@@ -275,15 +275,6 @@ subprojects {
         }
     }
 
-    // For jdk10 we must explicitly choose between html4 and html5, otherwise we get a warning
-    if (JavaVersion.current().isJava10Compatible()) {
-        allprojects {
-            tasks.withType(Javadoc) {
-                options.addBooleanOption('html4', true)
-            }
-        }
-    }
-
     jacoco { toolVersion = "0.8.2" }
 
     checkstyle {
