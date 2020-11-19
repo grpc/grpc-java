@@ -353,7 +353,7 @@ public class XdsSdsClientServerTest {
         port,
         downstreamTlsContext,
         /* tlsContext2= */null);
-    cleanupRule.register(builder.buildServer(xdsClientWrapperForServerSds, null)).start();
+    cleanupRule.register(builder.buildServer(xdsClientWrapperForServerSds)).start();
   }
 
   static EnvoyServerProtoData.Listener buildListener(
