@@ -235,7 +235,19 @@ public class ClusterImplLoadBalancerTest {
   }
 
   @Test
-  public void maxConcurrentRequests_appliedByLbConfig() {
+  public void maxConcurrentRequests_appliedByLbConfig_enableCircuitBreaking() {
+    boolean originalEnableCircuitBreaking = ClusterImplLoadBalancer.enableCircuitBreaking;
+    ClusterImplLoadBalancer.enableCircuitBreaking = true;
+    subtest_maxConcurrentRequests_appliedByLbConfig(true);
+    ClusterImplLoadBalancer.enableCircuitBreaking = originalEnableCircuitBreaking;
+  }
+
+  @Test
+  public void maxConcurrentRequests_appliedByLbConfig_circuitBreakingDisabledByDefault() {
+    subtest_maxConcurrentRequests_appliedByLbConfig(false);
+  }
+
+  private void subtest_maxConcurrentRequests_appliedByLbConfig(boolean enableCircuitBreaking) {
     long maxConcurrentRequests = 100L;
     LoadBalancerProvider weightedTargetProvider = new WeightedTargetLoadBalancerProvider();
     WeightedTargetConfig weightedTargetConfig =
@@ -272,11 +284,17 @@ public class ClusterImplLoadBalancerTest {
     assertThat(xdsClient.clusterStats.totalDrops).isEqualTo(0L);
 
     PickResult result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
-    assertThat(result.getStatus().isOk()).isFalse();
-    assertThat(result.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
-    assertThat(result.getStatus().getDescription())
-        .isEqualTo("Cluster max concurrent requests limit exceeded");
-    assertThat(xdsClient.clusterStats.totalDrops).isEqualTo(1L);
+    if (enableCircuitBreaking) {
+      assertThat(result.getStatus().isOk()).isFalse();
+      assertThat(result.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
+      assertThat(result.getStatus().getDescription())
+          .isEqualTo("Cluster max concurrent requests limit exceeded");
+      assertThat(xdsClient.clusterStats.totalDrops).isEqualTo(1L);
+    } else {
+      assertThat(result.getStatus().isOk()).isTrue();
+      assertThat(result.getSubchannel()).isSameInstanceAs(subchannel);
+      assertThat(xdsClient.clusterStats.totalDrops).isEqualTo(0L);
+    }
 
     // Config update increments circuit breakers max_concurrent_requests threshold.
     maxConcurrentRequests = 101L;
@@ -294,11 +312,28 @@ public class ClusterImplLoadBalancerTest {
     result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
     assertThat(result.getStatus().isOk()).isTrue();
     assertThat(result.getSubchannel()).isSameInstanceAs(subchannel);
-    assertThat(xdsClient.clusterStats.totalDrops).isEqualTo(1L);
+    if (enableCircuitBreaking) {
+      assertThat(xdsClient.clusterStats.totalDrops).isEqualTo(1L);
+    } else {
+      assertThat(xdsClient.clusterStats.totalDrops).isEqualTo(0L);
+    }
   }
 
   @Test
-  public void maxConcurrentRequests_appliedWithDefaultValue() {
+  public void maxConcurrentRequests_appliedWithDefaultValue_enableCircuitBreaking() {
+    boolean originalEnableCircuitBreaking = ClusterImplLoadBalancer.enableCircuitBreaking;
+    ClusterImplLoadBalancer.enableCircuitBreaking = true;
+    subtest_maxConcurrentRequests_appliedWithDefaultValue(true);
+    ClusterImplLoadBalancer.enableCircuitBreaking = originalEnableCircuitBreaking;
+  }
+
+  @Test
+  public void maxConcurrentRequests_appliedWithDefaultValue_circuitBreakingDisabledByDefault() {
+    subtest_maxConcurrentRequests_appliedWithDefaultValue(false);
+  }
+
+  private void subtest_maxConcurrentRequests_appliedWithDefaultValue(
+      boolean enableCircuitBreaking) {
     LoadBalancerProvider weightedTargetProvider = new WeightedTargetLoadBalancerProvider();
     WeightedTargetConfig weightedTargetConfig =
         buildWeightedTargetConfig(ImmutableMap.of(locality, 10));
@@ -334,11 +369,17 @@ public class ClusterImplLoadBalancerTest {
     assertThat(xdsClient.clusterStats.totalDrops).isEqualTo(0L);
 
     PickResult result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
-    assertThat(result.getStatus().isOk()).isFalse();
-    assertThat(result.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
-    assertThat(result.getStatus().getDescription())
-        .isEqualTo("Cluster max concurrent requests limit exceeded");
-    assertThat(xdsClient.clusterStats.totalDrops).isEqualTo(1L);
+    if (enableCircuitBreaking) {
+      assertThat(result.getStatus().isOk()).isFalse();
+      assertThat(result.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
+      assertThat(result.getStatus().getDescription())
+          .isEqualTo("Cluster max concurrent requests limit exceeded");
+      assertThat(xdsClient.clusterStats.totalDrops).isEqualTo(1L);
+    } else {
+      assertThat(result.getStatus().isOk()).isTrue();
+      assertThat(result.getSubchannel()).isSameInstanceAs(subchannel);
+      assertThat(xdsClient.clusterStats.totalDrops).isEqualTo(0L);
+    }
   }
 
   private WeightedTargetConfig buildWeightedTargetConfig(Map<Locality, Integer> localityWeights) {

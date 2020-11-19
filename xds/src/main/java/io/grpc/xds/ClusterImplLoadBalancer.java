@@ -52,6 +52,10 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
 
   @VisibleForTesting
   static final long DEFAULT_PER_CLUSTER_MAX_CONCURRENT_REQUESTS = 1024L;
+  @VisibleForTesting
+  static boolean enableCircuitBreaking =
+      Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_CIRCUIT_BREAKING"));
+
   private final XdsLogger logger;
   private final Helper helper;
   private final ThreadSafeRandom random;
@@ -215,17 +219,19 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
           }
         }
         PickResult result = delegate.pickSubchannel(args);
-        if (result.getStatus().isOk() && result.getSubchannel() != null) {
-          if (requestCount.get() >= maxConcurrentRequests) {
-            if (loadStatsStore != null) {
-              loadStatsStore.recordDroppedRequest();
+        if (enableCircuitBreaking) {
+          if (result.getStatus().isOk() && result.getSubchannel() != null) {
+            if (requestCount.get() >= maxConcurrentRequests) {
+              if (loadStatsStore != null) {
+                loadStatsStore.recordDroppedRequest();
+              }
+              return PickResult.withDrop(Status.UNAVAILABLE.withDescription(
+                  "Cluster max concurrent requests limit exceeded"));
+            } else {
+              ClientStreamTracer.Factory tracerFactory = new RequestCountingStreamTracerFactory(
+                  result.getStreamTracerFactory(), requestCount);
+              return PickResult.withSubchannel(result.getSubchannel(), tracerFactory);
             }
-            return PickResult.withDrop(Status.UNAVAILABLE.withDescription(
-                "Cluster max concurrent requests limit exceeded"));
-          } else {
-            ClientStreamTracer.Factory tracerFactory = new RequestCountingStreamTracerFactory(
-                result.getStreamTracerFactory(), requestCount);
-            return PickResult.withSubchannel(result.getSubchannel(), tracerFactory);
           }
         }
         return result;
