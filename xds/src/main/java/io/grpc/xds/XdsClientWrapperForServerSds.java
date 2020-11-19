@@ -56,7 +56,7 @@ import javax.annotation.Nullable;
 
 /**
  * Serves as a wrapper for {@link XdsClient} used on the server side by {@link
- * io.grpc.xds.internal.sds.XdsServerBuilder}.
+ * XdsServerBuilder}.
  */
 @Internal
 public final class XdsClientWrapperForServerSds {

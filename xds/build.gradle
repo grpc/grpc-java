@@ -81,10 +81,18 @@ jar {
 }
 
 javadoc {
+    exclude 'com/github/udpa/**'
+    exclude 'com/google/security/**'
+    exclude 'io/envoyproxy/**'
+    // Need to clean up the class structure to reduce how much is exposed
+    exclude 'io/grpc/xds/*LoadBalancer*'
+    exclude 'io/grpc/xds/Bootstrapper.java'
+    exclude 'io/grpc/xds/Envoy*'
+    exclude 'io/grpc/xds/XdsAttributes.java'
+    exclude 'io/grpc/xds/XdsClientWrapperForServerSds.java'
+    exclude 'io/grpc/xds/XdsInitializationException.java'
+    exclude 'io/grpc/xds/XdsNameResolverProvider.java'
     exclude 'io/grpc/xds/internal/**'
-    // At the moment there is no public API. Should probably clean up the class structure to reduce
-    // how much is exposed
-    exclude 'io/grpc/xds/**'
 }
 
 shadowJar {

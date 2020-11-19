@@ -25,6 +25,7 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
+import io.grpc.Attributes;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalInstrumented;
@@ -89,6 +90,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
   private final long maxConnectionAgeGraceInNanos;
   private final boolean permitKeepAliveWithoutCalls;
   private final long permitKeepAliveTimeInNanos;
+  private final Attributes eagAttributes;
   private final ReferenceCounted sharedResourceReferenceCounter =
       new SharedResourceReferenceCounter();
   private final List<? extends ServerStreamTracer.Factory> streamTracerFactories;
@@ -113,7 +115,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
       long maxConnectionIdleInNanos,
       long maxConnectionAgeInNanos, long maxConnectionAgeGraceInNanos,
       boolean permitKeepAliveWithoutCalls, long permitKeepAliveTimeInNanos,
-      InternalChannelz channelz) {
+      Attributes eagAttributes, InternalChannelz channelz) {
     this.address = address;
     this.channelFactory = checkNotNull(channelFactory, "channelFactory");
     checkNotNull(channelOptions, "channelOptions");
@@ -140,6 +142,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
     this.maxConnectionAgeGraceInNanos = maxConnectionAgeGraceInNanos;
     this.permitKeepAliveWithoutCalls = permitKeepAliveWithoutCalls;
     this.permitKeepAliveTimeInNanos = permitKeepAliveTimeInNanos;
+    this.eagAttributes = checkNotNull(eagAttributes, "eagAttributes");
     this.channelz = Preconditions.checkNotNull(channelz);
     this.logId =
         InternalLogId.allocate(getClass(), address != null ? address.toString() : "No address");
@@ -218,7 +221,8 @@ class NettyServer implements InternalServer, InternalWithLogId {
                 maxConnectionAgeInNanos,
                 maxConnectionAgeGraceInNanos,
                 permitKeepAliveWithoutCalls,
-                permitKeepAliveTimeInNanos);
+                permitKeepAliveTimeInNanos,
+                eagAttributes);
         ServerTransportListener transportListener;
         // This is to order callbacks on the listener, not to guard access to channel.
         synchronized (NettyServer.this) {

@@ -20,7 +20,6 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 
 import com.google.common.base.Strings;
-import io.grpc.xds.internal.sds.XdsServerBuilder;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.util.ArrayList;

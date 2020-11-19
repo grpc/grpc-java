@@ -49,9 +49,9 @@ public final class InternalNettyServerCredentials {
    * @throws IllegalArgumentException if unable to convert
    */
   public static InternalProtocolNegotiator.ServerFactory toNegotiator(
-      ServerCredentials channelCredentials) {
+      ServerCredentials serverCredentials) {
     final ProtocolNegotiators.FromServerCredentialsResult result =
-        ProtocolNegotiators.from(channelCredentials);
+        ProtocolNegotiators.from(serverCredentials);
     if (result.error != null) {
       throw new IllegalArgumentException(result.error);
     }

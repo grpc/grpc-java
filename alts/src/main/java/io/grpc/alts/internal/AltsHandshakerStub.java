@@ -29,7 +29,8 @@ import java.util.concurrent.atomic.AtomicReference;
 /** An interface to the ALTS handshaker service. */
 class AltsHandshakerStub {
   private final StreamObserver<HandshakerResp> reader = new Reader();
-  private final StreamObserver<HandshakerReq> writer;
+  private StreamObserver<HandshakerReq> writer;
+  private final HandshakerServiceStub serviceStub;
   private final ArrayBlockingQueue<Optional<HandshakerResp>> responseQueue =
       new ArrayBlockingQueue<>(1);
   private final AtomicReference<String> exceptionMessage = new AtomicReference<>();
@@ -37,20 +38,18 @@ class AltsHandshakerStub {
   private static final long HANDSHAKE_RPC_DEADLINE_SECS = 20;
 
   AltsHandshakerStub(HandshakerServiceStub serviceStub) {
-    this.writer =
-        serviceStub
-            .withDeadlineAfter(HANDSHAKE_RPC_DEADLINE_SECS, SECONDS)
-            .doHandshake(this.reader);
+    this.serviceStub = serviceStub;
   }
 
   @VisibleForTesting
   AltsHandshakerStub() {
-    writer = null;
+    serviceStub = null;
   }
 
   @VisibleForTesting
   AltsHandshakerStub(StreamObserver<HandshakerReq> writer) {
     this.writer = writer;
+    serviceStub = null;
   }
 
   @VisibleForTesting
@@ -60,6 +59,7 @@ class AltsHandshakerStub {
 
   /** Send a handshaker request and return the handshaker response. */
   public HandshakerResp send(HandshakerReq req) throws InterruptedException, IOException {
+    createWriterIfNull();
     maybeThrowIoException();
     if (!responseQueue.isEmpty()) {
       throw new IOException("Received an unexpected response.");
@@ -72,6 +72,14 @@ class AltsHandshakerStub {
     return result.get();
   }
 
+  /** Create a new writer if the writer is null. */
+  private void createWriterIfNull() {
+    if (writer == null) {
+      writer =
+          serviceStub.withDeadlineAfter(HANDSHAKE_RPC_DEADLINE_SECS, SECONDS).doHandshake(reader);
+    }
+  }
+
   /** Throw exception if there is an outstanding exception. */
   private void maybeThrowIoException() throws IOException {
     if (exceptionMessage.get() != null) {
@@ -81,7 +89,9 @@ class AltsHandshakerStub {
 
   /** Close the connection. */
   public void close() {
-    writer.onCompleted();
+    if (writer != null) {
+      writer.onCompleted();
+    }
   }
 
   private class Reader implements StreamObserver<HandshakerResp> {
