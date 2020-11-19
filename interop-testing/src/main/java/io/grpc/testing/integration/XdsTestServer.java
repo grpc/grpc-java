@@ -137,7 +137,7 @@ public final class XdsTestServer {
               + "\n  --port=INT          listening port for test server."
               + "\n                      Default: "
               + s.port
-              + "\n  --maintenancePort=INT      listening port for other servers."
+              + "\n  --maintenance_port=INT      listening port for other servers."
               + "\n                      Default: "
               + s.maintenancePort
               + "\n  --secureMode=BOOLEAN Use true to enable XdsCredentials."
@@ -200,7 +200,7 @@ public final class XdsTestServer {
       System.err.println("Timed out waiting for server shutdown");
     }
     if (maintenanceServer != null && !maintenanceServer.awaitTermination(5, TimeUnit.SECONDS)) {
-      System.err.println("Timed out waiting for otherServer shutdown");
+      System.err.println("Timed out waiting for maintenanceServer shutdown");
     }
   }
 

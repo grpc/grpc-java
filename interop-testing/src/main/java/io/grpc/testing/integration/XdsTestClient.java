@@ -83,7 +83,7 @@ public final class XdsTestClient {
   private volatile RpcConfig rpcConfig;
   private int rpcTimeoutSec = 20;
   private boolean secureMode = false;
-  private String server = "localhost:8081";
+  private String server = "localhost:8080";
   private int statsPort = 8081;
   private Server statsServer;
   private long currentRequestId;
