@@ -141,10 +141,9 @@ public abstract class ClientCall<ReqT, RespT> {
      * An additional block of trailer metadata may be received at the end of the call from the
      * server. An empty {@link Metadata} object is passed if no trailers are received.
      *
-     * <p>If uncaught exception is thrown in `onClose`, gRPC will fail to notify the application
-     * that RPC is closed. This will cause hanging problem on the client side, and the problem is
-     * unresolvable due to the nature of gRPC. Do not call any method that could potentially throw
-     * in `onClose`.
+     * <p>This method should not throw. If this method throws, there is no way to be notified of the 
+     * exception. Implementations should therefore be careful of exceptions which can accidentally leak 
+     * resources.
      *
      * @param status the result of the remote call.
      * @param trailers metadata provided at call completion.
