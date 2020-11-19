@@ -19,7 +19,7 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
-import io.grpc.xds.EdsLoadBalancer2.CallCounterProvider;
+import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
 import java.lang.ref.ReferenceQueue;
 import java.lang.ref.WeakReference;
 import java.util.HashMap;

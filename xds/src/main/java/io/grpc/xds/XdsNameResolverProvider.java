@@ -24,6 +24,8 @@ import io.grpc.NameResolver.Args;
 import io.grpc.NameResolverProvider;
 import io.grpc.internal.ObjectPool;
 import java.net.URI;
+import java.util.concurrent.atomic.AtomicLong;
+import javax.annotation.Nullable;
 
 /**
  * A provider for {@link XdsNameResolver}.
@@ -75,5 +77,12 @@ public final class XdsNameResolverProvider extends NameResolverProvider {
 
   interface XdsClientPoolFactory {
     ObjectPool<XdsClient> getXdsClientPool() throws XdsInitializationException;
+  }
+
+  /**
+   * Provides the counter for aggregating outstanding requests per cluster:eds_service_name.
+   */
+  interface CallCounterProvider {
+    AtomicLong getOrCreate(String cluster, @Nullable String edsServiceName);
   }
 }

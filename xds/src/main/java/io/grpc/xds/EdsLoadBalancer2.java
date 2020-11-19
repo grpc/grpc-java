@@ -54,6 +54,7 @@ import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedTargetConfig;
 import io.grpc.xds.XdsClient.EdsResourceWatcher;
 import io.grpc.xds.XdsClient.EdsUpdate;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
+import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -76,25 +77,26 @@ final class EdsLoadBalancer2 extends LoadBalancer {
   private final SynchronizationContext syncContext;
   private final LoadBalancerRegistry lbRegistry;
   private final ThreadSafeRandom random;
-  private final CallCounterProvider callCounterProvider;
   private final GracefulSwitchLoadBalancer switchingLoadBalancer;
+
+  // Following fields are effectively final.
   private ObjectPool<XdsClient> xdsClientPool;
   private XdsClient xdsClient;
+  private CallCounterProvider callCounterProvider;
   private String cluster;
+
   private EdsLbState edsLbState;
 
   EdsLoadBalancer2(LoadBalancer.Helper helper) {
-    this(helper, LoadBalancerRegistry.getDefaultRegistry(), ThreadSafeRandomImpl.instance,
-        SharedCallCounterMap.getInstance());
+    this(helper, LoadBalancerRegistry.getDefaultRegistry(), ThreadSafeRandomImpl.instance);
   }
 
   @VisibleForTesting
   EdsLoadBalancer2(LoadBalancer.Helper helper, LoadBalancerRegistry lbRegistry,
-      ThreadSafeRandom random, CallCounterProvider callCounterProvider) {
+      ThreadSafeRandom random) {
     this.lbRegistry = checkNotNull(lbRegistry, "lbRegistry");
     this.random = checkNotNull(random, "random");
     syncContext = checkNotNull(helper, "helper").getSynchronizationContext();
-    this.callCounterProvider = checkNotNull(callCounterProvider, "callCounterProvider");
     switchingLoadBalancer = new GracefulSwitchLoadBalancer(helper);
     InternalLogId logId = InternalLogId.allocate("eds-lb", helper.getAuthority());
     logger = XdsLogger.withLogId(logId);
@@ -107,6 +109,10 @@ final class EdsLoadBalancer2 extends LoadBalancer {
     if (xdsClientPool == null) {
       xdsClientPool = resolvedAddresses.getAttributes().get(XdsAttributes.XDS_CLIENT_POOL);
       xdsClient = xdsClientPool.getObject();
+    }
+    if (callCounterProvider == null) {
+      callCounterProvider =
+          resolvedAddresses.getAttributes().get(XdsAttributes.CALL_COUNTER_PROVIDER);
     }
     EdsConfig config = (EdsConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
     if (logger.isLoggable(XdsLogLevel.INFO)) {
@@ -502,14 +508,6 @@ final class EdsLoadBalancer2 extends LoadBalancer {
         }
       };
     }
-  }
-
-  /**
-   * Provides the counter for aggregating outstanding requests per cluster:eds_service_name.
-   */
-  // Introduced for testing.
-  interface CallCounterProvider {
-    AtomicLong getOrCreate(String cluster, @Nullable String edsServiceName);
   }
 
   @VisibleForTesting

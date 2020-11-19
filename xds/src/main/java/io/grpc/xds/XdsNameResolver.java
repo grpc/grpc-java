@@ -43,6 +43,7 @@ import io.grpc.xds.XdsClient.LdsUpdate;
 import io.grpc.xds.XdsClient.RdsResourceWatcher;
 import io.grpc.xds.XdsClient.RdsUpdate;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
+import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
 import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
 import java.util.Collection;
 import java.util.Collections;
@@ -86,6 +87,7 @@ final class XdsNameResolver extends NameResolver {
   private Listener2 listener;
   private ObjectPool<XdsClient> xdsClientPool;
   private XdsClient xdsClient;
+  private CallCounterProvider callCounterProvider;
   private ResolveState resolveState;
 
   XdsNameResolver(String name, ServiceConfigParser serviceConfigParser,
@@ -123,6 +125,7 @@ final class XdsNameResolver extends NameResolver {
       return;
     }
     xdsClient = xdsClientPool.getObject();
+    callCounterProvider = SharedCallCounterMap.getInstance();
     resolveState = new ResolveState();
     resolveState.start();
   }
@@ -182,6 +185,7 @@ final class XdsNameResolver extends NameResolver {
     Attributes attrs =
         Attributes.newBuilder()
             .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
+            .set(XdsAttributes.CALL_COUNTER_PROVIDER, callCounterProvider)
             .set(InternalConfigSelector.KEY, configSelector)
             .build();
     ResolutionResult result =
