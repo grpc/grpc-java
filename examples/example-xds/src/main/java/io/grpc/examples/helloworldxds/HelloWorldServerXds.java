@@ -16,12 +16,15 @@
 
 package io.grpc.examples.helloworldxds;
 
+import io.grpc.InsecureServerCredentials;
 import io.grpc.Server;
+import io.grpc.ServerCredentials;
 import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
 import io.grpc.examples.helloworld.HelloRequest;
 import io.grpc.stub.StreamObserver;
 import io.grpc.xds.XdsServerBuilder;
+import io.grpc.xds.XdsServerCredentials;
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
@@ -44,10 +47,11 @@ public class HelloWorldServerXds {
   }
 
   private void start() throws IOException {
-    XdsServerBuilder builder = XdsServerBuilder.forPort(port).addService(new HostnameGreeter(hostName));
-    if (useXdsCreds) {
-      builder = builder.useXdsSecurityWithPlaintextFallback();
-    }
+    ServerCredentials insecure = InsecureServerCredentials.create();
+    XdsServerBuilder builder =
+        XdsServerBuilder.forPort(
+                port, useXdsCreds ? XdsServerCredentials.create(insecure) : insecure)
+            .addService(new HostnameGreeter(hostName));
     server = builder.build().start();
     logger.info("Server started, listening on " + port);
     Runtime.getRuntime()
