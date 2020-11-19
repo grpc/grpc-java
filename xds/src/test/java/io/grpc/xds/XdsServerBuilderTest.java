@@ -26,11 +26,10 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import com.google.common.util.concurrent.SettableFuture;
+import io.grpc.InsecureServerCredentials;
 import io.grpc.Status;
-import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
-import io.grpc.xds.internal.sds.SdsProtocolNegotiators.ServerSdsProtocolNegotiator;
 import io.grpc.xds.internal.sds.ServerWrapperForXds;
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -66,7 +65,9 @@ public class XdsServerBuilderTest {
       XdsServerBuilder.ErrorNotifier errorNotifier, boolean injectMockXdsClient)
       throws IOException {
     port = XdsServerTestHelper.findFreePort();
-    XdsServerBuilder builder = XdsServerBuilder.forPort(port);
+    XdsServerBuilder builder =
+        XdsServerBuilder.forPort(
+            port, XdsServerCredentials.create(InsecureServerCredentials.create()));
     if (errorNotifier != null) {
       builder = builder.errorNotifier(errorNotifier);
     }
@@ -76,10 +77,7 @@ public class XdsServerBuilderTest {
       listenerWatcher =
           XdsServerTestHelper.startAndGetWatcher(xdsClientWrapperForServerSds, mockXdsClient, port);
     }
-    ServerSdsProtocolNegotiator serverSdsProtocolNegotiator =
-        new ServerSdsProtocolNegotiator(InternalProtocolNegotiators.serverPlaintext());
-    xdsServer = cleanupRule.register(
-        builder.buildServer(xdsClientWrapperForServerSds, serverSdsProtocolNegotiator));
+    xdsServer = cleanupRule.register(builder.buildServer(xdsClientWrapperForServerSds));
   }
 
   private void verifyServer(
