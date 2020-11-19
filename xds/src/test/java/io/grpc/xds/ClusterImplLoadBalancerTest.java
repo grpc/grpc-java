@@ -51,7 +51,6 @@ import io.grpc.xds.LoadStatsManager.LoadStatsStore;
 import io.grpc.xds.LrsLoadBalancerProvider.LrsConfig;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedPolicySelection;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedTargetConfig;
-import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
 import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -59,7 +58,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import org.junit.After;
@@ -109,14 +107,7 @@ public class ClusterImplLoadBalancerTest {
   @Before
   public void setUp() {
     MockitoAnnotations.initMocks(this);
-
-    CallCounterProvider callCounterProvider = new CallCounterProvider() {
-      @Override
-      public AtomicLong getOrCreate(String cluster, @Nullable String edsServiceName) {
-        return new AtomicLong();
-      }
-    };
-    loadBalancer = new ClusterImplLoadBalancer(helper, mockRandom, callCounterProvider);
+    loadBalancer = new ClusterImplLoadBalancer(helper, mockRandom);
   }
 
   @After

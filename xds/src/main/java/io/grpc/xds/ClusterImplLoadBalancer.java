@@ -55,27 +55,24 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
   private final XdsLogger logger;
   private final Helper helper;
   private final ThreadSafeRandom random;
-  private final CallCounterProvider callCounterProvider;
   // The following fields are effectively final.
   private String cluster;
   @Nullable
   private String edsServiceName;
   private ObjectPool<XdsClient> xdsClientPool;
   private XdsClient xdsClient;
+  private CallCounterProvider callCounterProvider;
   private LoadStatsStore loadStatsStore;
   private RequestLimitingLbHelper childLbHelper;
   private LoadBalancer childLb;
 
   ClusterImplLoadBalancer(Helper helper) {
-    // TODO(chengyuanzhang): obtain CallCounterProvider from attributes.
-    this(helper, ThreadSafeRandomImpl.instance, SharedCallCounterMap.getInstance());
+    this(helper, ThreadSafeRandomImpl.instance);
   }
 
-  ClusterImplLoadBalancer(Helper helper, ThreadSafeRandom random,
-      CallCounterProvider callCounterProvider) {
+  ClusterImplLoadBalancer(Helper helper, ThreadSafeRandom random) {
     this.helper = checkNotNull(helper, "helper");
     this.random = checkNotNull(random, "random");
-    this.callCounterProvider = checkNotNull(callCounterProvider, "callCounterProvider");
     InternalLogId logId = InternalLogId.allocate("cluster-impl-lb", helper.getAuthority());
     logger = XdsLogger.withLogId(logId);
     logger.log(XdsLogLevel.INFO, "Created");
@@ -87,6 +84,10 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     if (xdsClientPool == null) {
       xdsClientPool = resolvedAddresses.getAttributes().get(XdsAttributes.XDS_CLIENT_POOL);
       xdsClient = xdsClientPool.getObject();
+    }
+    // TODO(chengyuanzhang): obtain from attributes.
+    if (callCounterProvider == null) {
+      callCounterProvider = SharedCallCounterMap.getInstance();
     }
     ClusterImplConfig config =
         (ClusterImplConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
