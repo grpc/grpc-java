@@ -141,6 +141,10 @@ public abstract class ClientCall<ReqT, RespT> {
      * An additional block of trailer metadata may be received at the end of the call from the
      * server. An empty {@link Metadata} object is passed if no trailers are received.
      *
+     * <p>This method should not throw. If this method throws, there is no way to be notified of the
+     * exception. Implementations should therefore be careful of exceptions which can accidentally 
+     * leak resources.
+     *
      * @param status the result of the remote call.
      * @param trailers metadata provided at call completion.
      */
