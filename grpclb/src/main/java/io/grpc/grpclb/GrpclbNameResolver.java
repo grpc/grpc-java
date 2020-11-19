@@ -113,7 +113,7 @@ final class GrpclbNameResolver extends DnsNameResolver {
     if (srvRecordsException != null) {
       logger.log(Level.FINE, "SRV lookup failure", srvRecordsException);
     } else if (balancerAddressesException != null && balancerAddresses.isEmpty()) {
-      logger.log(Level.FINE, "Balancer resolution failure", balancerAddressesException);
+      logger.log(Level.FINE, "SRV-provided hostname lookup failure", balancerAddressesException);
     }
     return Collections.unmodifiableList(balancerAddresses);
   }
