@@ -19,6 +19,7 @@ package io.grpc.testing.integration;
 import io.grpc.Context;
 import io.grpc.Contexts;
 import io.grpc.ForwardingServerCall.SimpleForwardingServerCall;
+import io.grpc.InsecureServerCredentials;
 import io.grpc.Metadata;
 import io.grpc.Server;
 import io.grpc.ServerCall;
@@ -33,6 +34,7 @@ import io.grpc.stub.StreamObserver;
 import io.grpc.testing.integration.Messages.SimpleRequest;
 import io.grpc.testing.integration.Messages.SimpleResponse;
 import io.grpc.xds.XdsServerBuilder;
+import io.grpc.xds.XdsServerCredentials;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.concurrent.TimeUnit;
@@ -161,11 +163,11 @@ public final class XdsTestServer {
     health = new HealthStatusManager();
     if (secureMode) {
       server =
-          XdsServerBuilder.forPort(port)
+          XdsServerBuilder.forPort(
+                  port, XdsServerCredentials.create(InsecureServerCredentials.create()))
               .addService(
                   ServerInterceptors.intercept(
                       new TestServiceImpl(serverId, host), new TestInfoInterceptor(host)))
-              .useXdsSecurityWithPlaintextFallback()
               .build()
               .start();
       maintenanceServer =
