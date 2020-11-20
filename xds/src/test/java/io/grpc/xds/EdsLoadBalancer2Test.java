@@ -49,7 +49,6 @@ import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
-import io.grpc.xds.EdsLoadBalancer2.CallCounterProvider;
 import io.grpc.xds.EdsLoadBalancerProvider.EdsConfig;
 import io.grpc.xds.EnvoyProtoData.ClusterStats;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
@@ -61,6 +60,7 @@ import io.grpc.xds.LrsLoadBalancerProvider.LrsConfig;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedPolicySelection;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedTargetConfig;
+import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
 import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -146,12 +146,15 @@ public class EdsLoadBalancer2Test {
 
     registry.register(new FakeLoadBalancerProvider(PRIORITY_POLICY_NAME));
     registry.register(new FakeLoadBalancerProvider(LRS_POLICY_NAME));
-    loadBalancer = new EdsLoadBalancer2(helper, registry, mockRandom, callCounterProvider);
+    loadBalancer = new EdsLoadBalancer2(helper, registry, mockRandom);
     loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
             .setAttributes(
-                Attributes.newBuilder().set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool).build())
+                Attributes.newBuilder()
+                    .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
+                    .set(XdsAttributes.CALL_COUNTER_PROVIDER, callCounterProvider)
+                    .build())
             .setLoadBalancingPolicyConfig(
                 new EdsConfig(
                     CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME, null, weightedTarget, roundRobin))
