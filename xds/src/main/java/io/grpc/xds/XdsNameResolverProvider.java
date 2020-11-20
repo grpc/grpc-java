@@ -82,9 +82,6 @@ public final class XdsNameResolverProvider extends NameResolverProvider {
   /**
    * Provides the counter for aggregating outstanding requests per cluster:eds_service_name.
    */
-  // TODO(chengyuanzhang): obtain a reference to the singleton instance in resolver and pass down
-  //  to LB policies in attributes.
-  // Introduced for testing.
   interface CallCounterProvider {
     AtomicLong getOrCreate(String cluster, @Nullable String edsServiceName);
   }

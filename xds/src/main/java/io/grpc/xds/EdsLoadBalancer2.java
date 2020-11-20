@@ -73,6 +73,8 @@ final class EdsLoadBalancer2 extends LoadBalancer {
   private final SynchronizationContext syncContext;
   private final LoadBalancerRegistry lbRegistry;
   private final GracefulSwitchLoadBalancer switchingLoadBalancer;
+
+  // Following fields are effectively final.
   private ObjectPool<XdsClient> xdsClientPool;
   private XdsClient xdsClient;
   private String cluster;
