@@ -40,6 +40,7 @@ import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.util.ForwardingClientStreamTracer;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.GracefulSwitchLoadBalancer;
+import io.grpc.xds.ClusterImplLoadBalancerProvider.ClusterImplConfig;
 import io.grpc.xds.EdsLoadBalancerProvider.EdsConfig;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.LbEndpoint;
@@ -67,17 +68,10 @@ import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nullable;
 
 final class EdsLoadBalancer2 extends LoadBalancer {
-  @VisibleForTesting
-  static final long DEFAULT_PER_CLUSTER_MAX_CONCURRENT_REQUESTS = 1024L;
-  @VisibleForTesting
-  static boolean enableCircuitBreaking =
-      Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_CIRCUIT_BREAKING"));
 
   private final XdsLogger logger;
   private final SynchronizationContext syncContext;
   private final LoadBalancerRegistry lbRegistry;
-  private final ThreadSafeRandom random;
-  private final CallCounterProvider callCounterProvider;
   private final GracefulSwitchLoadBalancer switchingLoadBalancer;
   private ObjectPool<XdsClient> xdsClientPool;
   private XdsClient xdsClient;
@@ -85,17 +79,13 @@ final class EdsLoadBalancer2 extends LoadBalancer {
   private EdsLbState edsLbState;
 
   EdsLoadBalancer2(LoadBalancer.Helper helper) {
-    this(helper, LoadBalancerRegistry.getDefaultRegistry(), ThreadSafeRandomImpl.instance,
-        SharedCallCounterMap.getInstance());
+    this(helper, LoadBalancerRegistry.getDefaultRegistry());
   }
 
   @VisibleForTesting
-  EdsLoadBalancer2(LoadBalancer.Helper helper, LoadBalancerRegistry lbRegistry,
-      ThreadSafeRandom random, CallCounterProvider callCounterProvider) {
+  EdsLoadBalancer2(LoadBalancer.Helper helper, LoadBalancerRegistry lbRegistry) {
     this.lbRegistry = checkNotNull(lbRegistry, "lbRegistry");
-    this.random = checkNotNull(random, "random");
     syncContext = checkNotNull(helper, "helper").getSynchronizationContext();
-    this.callCounterProvider = checkNotNull(callCounterProvider, "callCounterProvider");
     switchingLoadBalancer = new GracefulSwitchLoadBalancer(helper);
     InternalLogId logId = InternalLogId.allocate("eds-lb", helper.getAuthority());
     logger = XdsLogger.withLogId(logId);
@@ -168,28 +158,18 @@ final class EdsLoadBalancer2 extends LoadBalancer {
     }
 
     private final class ChildLbState extends LoadBalancer implements EdsResourceWatcher {
-      private final AtomicLong requestCount;
-      @Nullable
-      private final LoadStatsStore loadStatsStore;
-      private final RequestLimitingLbHelper lbHelper;
-      private List<EquivalentAddressGroup> endpointAddresses = Collections.emptyList();
-      private Map<Integer, Map<Locality, Integer>> prioritizedLocalityWeights
-          = Collections.emptyMap();
+      private final Helper lbHelper;
       private ResolvedAddresses resolvedAddresses;
-      private PolicySelection localityPickingPolicy;
-      private PolicySelection endpointPickingPolicy;
       private boolean shutdown;
-      @Nullable
+
+      // Updated by endpoint discovery.
       private LoadBalancer lb;
+      private List<EquivalentAddressGroup> endpointAddresses;
+      private Map<Integer, Map<Locality, Integer>> prioritizedLocalityWeights;
+      private List<DropOverload> dropOverloads;
 
       private ChildLbState(Helper helper) {
-        requestCount = callCounterProvider.getOrCreate(cluster, edsServiceName);
-        if (lrsServerName != null) {
-          loadStatsStore = xdsClient.addClientStats(cluster, edsServiceName);
-        } else {
-          loadStatsStore = null;
-        }
-        lbHelper = new RequestLimitingLbHelper(helper);
+        lbHelper = helper;
         logger.log(
             XdsLogLevel.INFO,
             "Start endpoint watcher on {0} with xDS client {1}", resourceName, xdsClient);
@@ -198,38 +178,26 @@ final class EdsLoadBalancer2 extends LoadBalancer {
 
       @Override
       public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+        if (lb != null && shouldUpdateDownstreamLbConfig(resolvedAddresses)) {
+          maybeHandleResourceUpdate();
+        }
         this.resolvedAddresses = resolvedAddresses;
-        EdsConfig config = (EdsConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
-        if (config.maxConcurrentRequests != null) {
-          lbHelper.updateMaxConcurrentRequests(config.maxConcurrentRequests);
+      }
+
+      private boolean shouldUpdateDownstreamLbConfig(ResolvedAddresses newResolvedAddresses) {
+        if (resolvedAddresses == null) {
+          return true;
         }
-        if (lb != null) {
-          if (!config.localityPickingPolicy.equals(localityPickingPolicy)
-              || !config.endpointPickingPolicy.equals(endpointPickingPolicy)) {
-            PriorityLbConfig childConfig =
-                generatePriorityLbConfig(cluster, edsServiceName, lrsServerName,
-                    config.localityPickingPolicy, config.endpointPickingPolicy, lbRegistry,
-                    prioritizedLocalityWeights);
-            // TODO(chengyuanzhang): to be deleted after migrating to use XdsClient API.
-            Attributes attributes;
-            if (lrsServerName != null) {
-              attributes =
-                  resolvedAddresses.getAttributes().toBuilder()
-                      .set(XdsAttributes.ATTR_CLUSTER_SERVICE_LOAD_STATS_STORE, loadStatsStore)
-                      .build();
-            } else {
-              attributes = resolvedAddresses.getAttributes();
-            }
-            lb.handleResolvedAddresses(
-                resolvedAddresses.toBuilder()
-                    .setAddresses(endpointAddresses)
-                    .setAttributes(attributes)
-                    .setLoadBalancingPolicyConfig(childConfig)
-                    .build());
-          }
+        EdsConfig newConfig = (EdsConfig) newResolvedAddresses.getLoadBalancingPolicyConfig();
+        EdsConfig currentConfig = (EdsConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
+        if (!currentConfig.localityPickingPolicy.equals(newConfig.localityPickingPolicy)) {
+          return true;
         }
-        localityPickingPolicy = config.localityPickingPolicy;
-        endpointPickingPolicy = config.endpointPickingPolicy;
+        if (!currentConfig.endpointPickingPolicy.equals(newConfig.endpointPickingPolicy)) {
+          return true;
+        }
+        return !Objects.equals(currentConfig.maxConcurrentRequests,
+            newConfig.maxConcurrentRequests);
       }
 
       @Override
@@ -237,7 +205,7 @@ final class EdsLoadBalancer2 extends LoadBalancer {
         if (lb != null) {
           lb.handleNameResolutionError(error);
         } else {
-          lbHelper.helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
+          lbHelper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
         }
       }
 
@@ -276,7 +244,7 @@ final class EdsLoadBalancer2 extends LoadBalancer {
                       + "{1} localities, {2} drop categories", update.getClusterName(),
                   update.getLocalityLbEndpointsMap().size(), update.getDropPolicies().size());
             }
-            lbHelper.updateDropPolicies(update.getDropPolicies());
+            dropOverloads = update.getDropPolicies();
             Map<Locality, LocalityLbEndpoints> localityLbEndpoints =
                 update.getLocalityLbEndpointsMap();
             endpointAddresses = new ArrayList<>();
@@ -313,27 +281,7 @@ final class EdsLoadBalancer2 extends LoadBalancer {
             if (lb == null) {
               lb = lbRegistry.getProvider(PRIORITY_POLICY_NAME).newLoadBalancer(lbHelper);
             }
-            if (localityPickingPolicy != null && endpointPickingPolicy != null) {
-              PriorityLbConfig config = generatePriorityLbConfig(cluster, edsServiceName,
-                  lrsServerName, localityPickingPolicy, endpointPickingPolicy, lbRegistry,
-                  prioritizedLocalityWeights);
-              // TODO(chengyuanzhang): to be deleted after migrating to use XdsClient API.
-              Attributes attributes;
-              if (lrsServerName != null) {
-                attributes =
-                    resolvedAddresses.getAttributes().toBuilder()
-                        .set(XdsAttributes.ATTR_CLUSTER_SERVICE_LOAD_STATS_STORE, loadStatsStore)
-                        .build();
-              } else {
-                attributes = resolvedAddresses.getAttributes();
-              }
-              lb.handleResolvedAddresses(
-                  resolvedAddresses.toBuilder()
-                      .setAddresses(endpointAddresses)
-                      .setAttributes(attributes)
-                      .setLoadBalancingPolicyConfig(config)
-                      .build());
-            }
+            maybeHandleResourceUpdate();
           }
         });
       }
@@ -364,10 +312,50 @@ final class EdsLoadBalancer2 extends LoadBalancer {
             logger.log(
                 XdsLogLevel.WARNING, "Received error from xDS client {0}: {1}", xdsClient, error);
             if (lb == null) {
-              lbHelper.helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
+              lbHelper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
             }
           }
         });
+      }
+
+      private void maybeHandleResourceUpdate() {
+        if (lb == null) {  // no endpoints have been discovered
+          return;
+        }
+        // Populate configurations used by downstream LB policies from the freshest result.
+        EdsConfig config = (EdsConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
+        PolicySelection localityPickingPolicy = config.localityPickingPolicy;
+        PolicySelection endpointPickingPolicy = config.endpointPickingPolicy;
+        Long maxConcurrentRequests = config.maxConcurrentRequests;
+        // Load balancing policy for each priority.
+        Map<String, PolicySelection> priorityChildPolicies = new HashMap<>();
+        List<String> priorities = new ArrayList<>();
+        for (Integer priority : prioritizedLocalityWeights.keySet()) {
+          WeightedTargetConfig weightedTargetConfig =
+              generateWeightedTargetLbConfig(cluster, edsServiceName, lrsServerName,
+                  endpointPickingPolicy, lbRegistry, prioritizedLocalityWeights.get(priority));
+          PolicySelection localityPicking =
+              new PolicySelection(localityPickingPolicy.getProvider(), weightedTargetConfig);
+          ClusterImplConfig clusterImplConfig =
+              new ClusterImplConfig(cluster, edsServiceName, lrsServerName, maxConcurrentRequests,
+                  dropOverloads, localityPicking);
+          LoadBalancerProvider clusterImplLbProvider =
+              lbRegistry.getProvider(XdsLbPolicies.CLUSTER_IMPL_POLICY_NAME);
+          PolicySelection clusterImplPolicy =
+              new PolicySelection(clusterImplLbProvider, clusterImplConfig);
+          String priorityName = priorityName(priority);
+          priorityChildPolicies.put(priorityName, clusterImplPolicy);
+          priorities.add(priorityName);
+        }
+        Collections.sort(priorities);
+        PriorityLbConfig priorityLbConfig =
+            new PriorityLbConfig(Collections.unmodifiableMap(priorityChildPolicies),
+                Collections.unmodifiableList(priorities));
+        lb.handleResolvedAddresses(
+            resolvedAddresses.toBuilder()
+                .setAddresses(endpointAddresses)
+                .setLoadBalancingPolicyConfig(priorityLbConfig)
+                .build());
       }
 
       private void propagateResourceError(Status error) {
@@ -375,162 +363,14 @@ final class EdsLoadBalancer2 extends LoadBalancer {
           lb.shutdown();
           lb = null;
         }
-        lbHelper.helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
-      }
-
-      private final class RequestLimitingLbHelper extends ForwardingLoadBalancerHelper {
-        private final Helper helper;
-        private ConnectivityState currentState = ConnectivityState.CONNECTING;
-        private SubchannelPicker currentPicker = BUFFER_PICKER;
-        private List<DropOverload> dropPolicies = Collections.emptyList();
-        private long maxConcurrentRequests = DEFAULT_PER_CLUSTER_MAX_CONCURRENT_REQUESTS;
-
-        private RequestLimitingLbHelper(Helper helper) {
-          this.helper = helper;
-        }
-
-        @Override
-        public void updateBalancingState(
-            ConnectivityState newState, final SubchannelPicker newPicker) {
-          currentState = newState;
-          currentPicker =  newPicker;
-          SubchannelPicker picker = new RequestLimitingSubchannelPicker(
-              newPicker, dropPolicies, maxConcurrentRequests);
-          delegate().updateBalancingState(newState, picker);
-        }
-
-        @Override
-        protected Helper delegate() {
-          return helper;
-        }
-
-        private void updateDropPolicies(List<DropOverload> dropOverloads) {
-          dropPolicies = dropOverloads;
-          updateBalancingState(currentState, currentPicker);
-        }
-
-        private void updateMaxConcurrentRequests(long maxConcurrentRequests) {
-          this.maxConcurrentRequests = maxConcurrentRequests;
-          updateBalancingState(currentState, currentPicker);
-        }
-
-        private final class RequestLimitingSubchannelPicker extends SubchannelPicker {
-          private final SubchannelPicker delegate;
-          private final List<DropOverload> dropPolicies;
-          private final long maxConcurrentRequests;
-
-          private RequestLimitingSubchannelPicker(SubchannelPicker delegate,
-              List<DropOverload> dropPolicies, long maxConcurrentRequests) {
-            this.delegate = delegate;
-            this.dropPolicies = dropPolicies;
-            this.maxConcurrentRequests = maxConcurrentRequests;
-          }
-
-          @Override
-          public PickResult pickSubchannel(PickSubchannelArgs args) {
-            for (DropOverload dropOverload : dropPolicies) {
-              int rand = random.nextInt(1_000_000);
-              if (rand < dropOverload.getDropsPerMillion()) {
-                logger.log(XdsLogLevel.INFO, "Drop request with category: {0}",
-                    dropOverload.getCategory());
-                if (loadStatsStore != null) {
-                  loadStatsStore.recordDroppedRequest(dropOverload.getCategory());
-                }
-                return PickResult.withDrop(
-                    Status.UNAVAILABLE.withDescription("Dropped: " + dropOverload.getCategory()));
-              }
-            }
-            PickResult result = delegate.pickSubchannel(args);
-            if (enableCircuitBreaking) {
-              if (result.getStatus().isOk() && result.getSubchannel() != null) {
-                if (requestCount.get() >= maxConcurrentRequests) {
-                  if (loadStatsStore != null) {
-                    loadStatsStore.recordDroppedRequest();
-                  }
-                  return PickResult.withDrop(Status.UNAVAILABLE.withDescription(
-                      "Cluster max concurrent requests limit exceeded"));
-                } else {
-                  ClientStreamTracer.Factory tracerFactory = new RequestCountingStreamTracerFactory(
-                      result.getStreamTracerFactory(), requestCount);
-                  return PickResult.withSubchannel(result.getSubchannel(), tracerFactory);
-                }
-              }
-            }
-            return result;
-          }
-        }
+        lbHelper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
       }
     }
-  }
-
-  /**
-   * Counts the number of outstanding requests.
-   */
-  private static final class RequestCountingStreamTracerFactory
-      extends ClientStreamTracer.Factory {
-    @Nullable
-    private final ClientStreamTracer.Factory delegate;
-    private final AtomicLong counter;
-
-    private RequestCountingStreamTracerFactory(@Nullable ClientStreamTracer.Factory delegate,
-        AtomicLong counter) {
-      this.delegate = delegate;
-      this.counter = counter;
-    }
-
-    @Override
-    public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
-      counter.incrementAndGet();
-      if (delegate == null) {
-        return new ClientStreamTracer() {
-          @Override
-          public void streamClosed(Status status) {
-            counter.decrementAndGet();
-          }
-        };
-      }
-      final ClientStreamTracer delegatedTracer = delegate.newClientStreamTracer(info, headers);
-      return new ForwardingClientStreamTracer() {
-        @Override
-        protected ClientStreamTracer delegate() {
-          return delegatedTracer;
-        }
-
-        @Override
-        public void streamClosed(Status status) {
-          counter.decrementAndGet();
-          delegate().streamClosed(status);
-        }
-      };
-    }
-  }
-
-  @VisibleForTesting
-  static PriorityLbConfig generatePriorityLbConfig(
-      String cluster, String edsServiceName, String lrsServerName,
-      PolicySelection localityPickingPolicy, PolicySelection endpointPickingPolicy,
-      LoadBalancerRegistry lbRegistry,
-      Map<Integer, Map<Locality, Integer>> prioritizedLocalityWeights) {
-    Map<String, PolicySelection> childPolicies = new HashMap<>();
-    List<String> priorities = new ArrayList<>();
-    for (Integer priority : prioritizedLocalityWeights.keySet()) {
-      WeightedTargetConfig childConfig =
-          generateWeightedTargetLbConfig(cluster, edsServiceName, lrsServerName,
-              endpointPickingPolicy, lbRegistry, prioritizedLocalityWeights.get(priority));
-      PolicySelection childPolicySelection =
-          new PolicySelection(localityPickingPolicy.getProvider(), childConfig);
-      String childName = priorityName(priority);
-      childPolicies.put(childName, childPolicySelection);
-      priorities.add(childName);
-    }
-    Collections.sort(priorities);
-    return new PriorityLbConfig(
-        Collections.unmodifiableMap(childPolicies), Collections.unmodifiableList(priorities));
   }
 
   @VisibleForTesting
   static WeightedTargetConfig generateWeightedTargetLbConfig(
-      String cluster, String edsServiceName, String lrsServerName,
+      String cluster, @Nullable String edsServiceName, @Nullable String lrsServerName,
       PolicySelection endpointPickingPolicy, LoadBalancerRegistry lbRegistry,
       Map<Locality, Integer> localityWeights) {
     Map<String, WeightedPolicySelection> targets = new HashMap<>();
