@@ -32,7 +32,7 @@ import io.grpc.services.HealthStatusManager;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.integration.Messages.SimpleRequest;
 import io.grpc.testing.integration.Messages.SimpleResponse;
-import io.grpc.xds.internal.sds.XdsServerBuilder;
+import io.grpc.xds.XdsServerBuilder;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.concurrent.TimeUnit;
@@ -107,9 +107,9 @@ public final class XdsTestServer {
       String value = parts[1];
       if ("port".equals(key)) {
         port = Integer.valueOf(value);
-      } else if ("maintenancePort".equals(key)) {
+      } else if ("maintenance_port".equals(key)) {
         maintenancePort = Integer.valueOf(value);
-      } else if ("secureMode".equals(key)) {
+      } else if ("secure_mode".equals(key)) {
         secureMode = Boolean.parseBoolean(value);
       } else if ("server_id".equals(key)) {
         serverId = value;
@@ -122,9 +122,9 @@ public final class XdsTestServer {
 
     if (secureMode && (port == maintenancePort)) {
       System.err.println(
-          "port and maintenancePort should be different for secure mode: port="
+          "port and maintenance_port should be different for secure mode: port="
               + port
-              + ", maintenancePort="
+              + ", maintenance_port="
               + maintenancePort);
       usage = true;
     }
@@ -140,8 +140,8 @@ public final class XdsTestServer {
               + "\n  --maintenance_port=INT      listening port for other servers."
               + "\n                      Default: "
               + s.maintenancePort
-              + "\n  --secureMode=BOOLEAN Use true to enable XdsCredentials."
-              + " port and maintenancePort should be different for secure mode."
+              + "\n  --secure_mode=BOOLEAN Use true to enable XdsCredentials."
+              + " port and maintenance_port should be different for secure mode."
               + "\n                      Default: "
               + s.secureMode
               + "\n  --server_id=STRING  server ID for response."
