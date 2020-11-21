@@ -26,6 +26,7 @@ dependencies {
             project(':grpc-services'),
             project(':grpc-stub'),
             project(':grpc-testing'),
+            project(path: ':grpc-xds', configuration: 'shadow'),
             libraries.google_auth_oauth2_http,
             libraries.junit,
             libraries.truth
@@ -33,8 +34,7 @@ dependencies {
     compileOnly libraries.javax_annotation
     runtimeOnly libraries.opencensus_impl,
             libraries.netty_tcnative,
-            project(':grpc-grpclb'),
-            project(path: ':grpc-xds', configuration: 'shadow')
+            project(':grpc-grpclb')
     testImplementation project(':grpc-context').sourceSets.test.output,
             libraries.mockito
     alpnagent libraries.jetty_alpn_agent
