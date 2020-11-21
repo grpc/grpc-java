@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.xds.XdsLbPolicies.CLUSTER_IMPL_POLICY_NAME;
 import static io.grpc.xds.XdsLbPolicies.LRS_POLICY_NAME;
 import static io.grpc.xds.XdsLbPolicies.PRIORITY_POLICY_NAME;
 import static io.grpc.xds.XdsLbPolicies.WEIGHTED_TARGET_POLICY_NAME;
@@ -45,13 +46,12 @@ import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
+import io.grpc.xds.ClusterImplLoadBalancerProvider.ClusterImplConfig;
 import io.grpc.xds.EdsLoadBalancerProvider.EdsConfig;
-import io.grpc.xds.EnvoyProtoData.ClusterStats;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.LbEndpoint;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
-import io.grpc.xds.LoadStatsManager.LoadStatsStore;
 import io.grpc.xds.LrsLoadBalancerProvider.LrsConfig;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedPolicySelection;
@@ -66,7 +66,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ScheduledExecutorService;
 import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -103,7 +102,7 @@ public class EdsLoadBalancer2Test {
       new PolicySelection(new FakeLoadBalancerProvider("round_robin"), null);
   private final PolicySelection weightedTarget =
       new PolicySelection(new FakeLoadBalancerProvider(WEIGHTED_TARGET_POLICY_NAME), null);
-  private final List<FakeLoadBalancer> downstreamBalancers = new ArrayList<>();
+  private final List<FakeLoadBalancer> childBalancers = new ArrayList<>(); // direct child LBs
   private final FakeXdsClient xdsClient = new FakeXdsClient();
   private final ObjectPool<XdsClient> xdsClientPool = new ObjectPool<XdsClient>() {
     @Override
@@ -129,6 +128,7 @@ public class EdsLoadBalancer2Test {
     MockitoAnnotations.initMocks(this);
 
     registry.register(new FakeLoadBalancerProvider(PRIORITY_POLICY_NAME));
+    registry.register(new FakeLoadBalancerProvider(CLUSTER_IMPL_POLICY_NAME));
     registry.register(new FakeLoadBalancerProvider(LRS_POLICY_NAME));
     loadBalancer = new EdsLoadBalancer2(helper, registry);
     loadBalancer.handleResolvedAddresses(
@@ -146,9 +146,8 @@ public class EdsLoadBalancer2Test {
   public void tearDown() {
     loadBalancer.shutdown();
     assertThat(xdsClient.watchers).isEmpty();
-    assertThat(xdsClient.clusterStats).isEmpty();
     assertThat(xdsClientRefs).isEqualTo(0);
-    assertThat(downstreamBalancers).isEmpty();
+    assertThat(childBalancers).isEmpty();
   }
 
   @Test
@@ -169,31 +168,47 @@ public class EdsLoadBalancer2Test {
             locality1, localityLbEndpoints1,
             locality2, localityLbEndpoints2,
             locality3, localityLbEndpoints3));
-    assertThat(downstreamBalancers).hasSize(1);
-    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(downstreamBalancers);
+    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
+    // Downstream LB hierarchy: priorityLb -> clusterImplLb (one for each priority)
+    // -> weightedTargetLb -> lrsLB (one for each locality) -> roundRobinLb
     assertThat(childBalancer.name).isEqualTo(PRIORITY_POLICY_NAME);
     PriorityLbConfig config = (PriorityLbConfig) childBalancer.config;
     assertThat(config.priorities).containsExactly("priority1", "priority2");
-    PolicySelection child1 = config.childConfigs.get("priority1");
-    assertThat(child1.getProvider().getPolicyName()).isEqualTo(WEIGHTED_TARGET_POLICY_NAME);
-    WeightedTargetConfig childConfig1 = (WeightedTargetConfig) child1.getConfig();
-    assertThat(childConfig1.targets).hasSize(2);
-    WeightedPolicySelection target1 = childConfig1.targets.get(locality1.toString());
+    PolicySelection priorityChild1 = config.childConfigs.get("priority1");
+    assertThat(priorityChild1.getProvider().getPolicyName()).isEqualTo(CLUSTER_IMPL_POLICY_NAME);
+    ClusterImplConfig clusterImplConfig1 = (ClusterImplConfig) priorityChild1.getConfig();
+    assertClusterImplConfig(clusterImplConfig1, CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME,
+        null, Collections.<DropOverload>emptyList(), WEIGHTED_TARGET_POLICY_NAME);
+    PolicySelection weightedTargetPolicy1 = clusterImplConfig1.childPolicy;
+    assertThat(weightedTargetPolicy1.getProvider().getPolicyName())
+        .isEqualTo(WEIGHTED_TARGET_POLICY_NAME);
+    WeightedTargetConfig weightedTargetConfig1 =
+        (WeightedTargetConfig) weightedTargetPolicy1.getConfig();
+    assertThat(weightedTargetConfig1.targets.keySet())
+        .containsExactly(locality1.toString(), locality2.toString());
+    WeightedPolicySelection target1 = weightedTargetConfig1.targets.get(locality1.toString());
     assertThat(target1.weight).isEqualTo(70);
     assertThat(target1.policySelection.getProvider().getPolicyName()).isEqualTo(LRS_POLICY_NAME);
     assertLrsConfig((LrsConfig) target1.policySelection.getConfig(), CLUSTER, EDS_SERVICE_NAME,
         LRS_SERVER_NAME, locality1, "round_robin");
-    WeightedPolicySelection target2 = childConfig1.targets.get(locality2.toString());
+    WeightedPolicySelection target2 = weightedTargetConfig1.targets.get(locality2.toString());
     assertThat(target2.weight).isEqualTo(10);
     assertThat(target2.policySelection.getProvider().getPolicyName()).isEqualTo(LRS_POLICY_NAME);
     assertLrsConfig((LrsConfig) target2.policySelection.getConfig(), CLUSTER, EDS_SERVICE_NAME,
         LRS_SERVER_NAME, locality2, "round_robin");
 
-    PolicySelection child2 = config.childConfigs.get("priority2");
-    assertThat(child2.getProvider().getPolicyName()).isEqualTo(WEIGHTED_TARGET_POLICY_NAME);
-    WeightedTargetConfig childConfig2 = (WeightedTargetConfig) child2.getConfig();
-    assertThat(childConfig2.targets).hasSize(1);
-    WeightedPolicySelection target3 = childConfig2.targets.get(locality3.toString());
+    PolicySelection priorityChild2 = config.childConfigs.get("priority2");
+    assertThat(priorityChild2.getProvider().getPolicyName()).isEqualTo(CLUSTER_IMPL_POLICY_NAME);
+    ClusterImplConfig clusterImplConfig2 = (ClusterImplConfig) priorityChild2.getConfig();
+    assertClusterImplConfig(clusterImplConfig2, CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME,
+        null, Collections.<DropOverload>emptyList(), WEIGHTED_TARGET_POLICY_NAME);
+    PolicySelection weightedTargetPolicy2 = clusterImplConfig2.childPolicy;
+    assertThat(weightedTargetPolicy2.getProvider().getPolicyName())
+        .isEqualTo(WEIGHTED_TARGET_POLICY_NAME);
+    WeightedTargetConfig weightedTargetConfig2 =
+        (WeightedTargetConfig) weightedTargetPolicy2.getConfig();
+    assertThat(weightedTargetConfig2.targets.keySet()).containsExactly(locality3.toString());
+    WeightedPolicySelection target3 = weightedTargetConfig2.targets.get(locality3.toString());
     assertThat(target3.weight).isEqualTo(20);
     assertThat(target3.policySelection.getProvider().getPolicyName()).isEqualTo(LRS_POLICY_NAME);
     assertLrsConfig((LrsConfig) target3.policySelection.getConfig(), CLUSTER, EDS_SERVICE_NAME,
@@ -228,16 +243,21 @@ public class EdsLoadBalancer2Test {
         buildLocalityLbEndpoints(1, 10, Collections.singletonMap(endpoint1, true));
     xdsClient.deliverClusterLoadAssignment(
         EDS_SERVICE_NAME, ImmutableMap.of(locality1, localityLbEndpoints1));
-    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(downstreamBalancers);
+    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
 
     assertThat(childBalancer.name).isEqualTo(PRIORITY_POLICY_NAME);
     PriorityLbConfig config = (PriorityLbConfig) childBalancer.config;
     assertThat(config.priorities).containsExactly("priority1");
-    PolicySelection child = config.childConfigs.get("priority1");
-    assertThat(child.getProvider().getPolicyName()).isEqualTo(WEIGHTED_TARGET_POLICY_NAME);
-    WeightedTargetConfig childConfig = (WeightedTargetConfig) child.getConfig();
-    assertThat(childConfig.targets).hasSize(1);
-    WeightedPolicySelection target = childConfig.targets.get(locality1.toString());
+    PolicySelection priorityChild = config.childConfigs.get("priority1");
+    assertThat(priorityChild.getProvider().getPolicyName()).isEqualTo(CLUSTER_IMPL_POLICY_NAME);
+    ClusterImplConfig clusterImplConfig = (ClusterImplConfig) priorityChild.getConfig();
+    PolicySelection weightedTargetPolicy = clusterImplConfig.childPolicy;
+    assertThat(weightedTargetPolicy.getProvider().getPolicyName())
+        .isEqualTo(WEIGHTED_TARGET_POLICY_NAME);
+    WeightedTargetConfig weightedTargetConfig =
+        (WeightedTargetConfig) weightedTargetPolicy.getConfig();
+    assertThat(weightedTargetConfig.targets).hasSize(1);
+    WeightedPolicySelection target = weightedTargetConfig.targets.get(locality1.toString());
     assertThat(target.weight).isEqualTo(10);
     assertThat(target.policySelection.getProvider().getPolicyName()).isEqualTo(LRS_POLICY_NAME);
     assertLrsConfig((LrsConfig) target.policySelection.getConfig(), CLUSTER, EDS_SERVICE_NAME,
@@ -259,11 +279,15 @@ public class EdsLoadBalancer2Test {
 
     config = (PriorityLbConfig) childBalancer.config;
     assertThat(config.priorities).containsExactly("priority1");
-    child = config.childConfigs.get("priority1");
-    assertThat(child.getProvider().getPolicyName()).isEqualTo(WEIGHTED_TARGET_POLICY_NAME);
-    childConfig = (WeightedTargetConfig) child.getConfig();
-    assertThat(childConfig.targets).hasSize(1);
-    target = childConfig.targets.get(locality2.toString());
+    priorityChild = config.childConfigs.get("priority1");
+    assertThat(priorityChild.getProvider().getPolicyName()).isEqualTo(CLUSTER_IMPL_POLICY_NAME);
+    clusterImplConfig = (ClusterImplConfig) priorityChild.getConfig();
+    weightedTargetPolicy = clusterImplConfig.childPolicy;
+    assertThat(weightedTargetPolicy.getProvider().getPolicyName())
+        .isEqualTo(WEIGHTED_TARGET_POLICY_NAME);
+    weightedTargetConfig = (WeightedTargetConfig) weightedTargetPolicy.getConfig();
+    assertThat(weightedTargetConfig.targets).hasSize(1);
+    target = weightedTargetConfig.targets.get(locality2.toString());
     assertThat(target.weight).isEqualTo(30);
     assertThat(target.policySelection.getProvider().getPolicyName()).isEqualTo(LRS_POLICY_NAME);
     assertLrsConfig((LrsConfig) target.policySelection.getConfig(), CLUSTER, EDS_SERVICE_NAME,
@@ -290,7 +314,7 @@ public class EdsLoadBalancer2Test {
   @Test
   public void endpointResourceRemoved() {
     deliverSimpleClusterLoadAssignment(EDS_SERVICE_NAME);
-    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(downstreamBalancers);
+    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     assertThat(childBalancer.shutdown).isFalse();
 
     xdsClient.deliverResourceNotFound(EDS_SERVICE_NAME);
@@ -311,12 +335,7 @@ public class EdsLoadBalancer2Test {
     xdsClient.deliverClusterLoadAssignment(
         EDS_SERVICE_NAME, Collections.singletonMap(locality1, localityLbEndpoints));
 
-    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(downstreamBalancers);
-    PriorityLbConfig config = (PriorityLbConfig) childBalancer.config;
-    PolicySelection child = config.childConfigs.get("priority1");
-    WeightedTargetConfig childConfig = (WeightedTargetConfig) child.getConfig();
-    assertThat(childConfig.targets.keySet()).containsExactly(locality1.toString());
-
+    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     List<EquivalentAddressGroup> priorityAddr =
         AddressFilter.filter(childBalancer.addresses, "priority1");
     assertThat(priorityAddr).hasSize(1);
@@ -338,11 +357,13 @@ public class EdsLoadBalancer2Test {
         EDS_SERVICE_NAME,
         ImmutableMap.of(locality1, localityLbEndpoints1, locality2, localityLbEndpoints2));
 
-    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(downstreamBalancers);
+    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     PriorityLbConfig config = (PriorityLbConfig) childBalancer.config;
-    PolicySelection child = config.childConfigs.get("priority1");
-    WeightedTargetConfig childConfig = (WeightedTargetConfig) child.getConfig();
-    assertThat(childConfig.targets.keySet()).containsExactly(locality2.toString());
+    PolicySelection priorityChildPolicy = config.childConfigs.get("priority1");
+    ClusterImplConfig clusterImplConfig = (ClusterImplConfig) priorityChildPolicy.getConfig();
+    WeightedTargetConfig weightedTargetConfig =
+        (WeightedTargetConfig) clusterImplConfig.childPolicy.getConfig();
+    assertThat(weightedTargetConfig.targets.keySet()).containsExactly(locality2.toString());
 
     List<EquivalentAddressGroup> priorityAddr =
         AddressFilter.filter(childBalancer.addresses, "priority1");
@@ -365,7 +386,7 @@ public class EdsLoadBalancer2Test {
         EDS_SERVICE_NAME,
         ImmutableMap.of(locality1, localityLbEndpoints1, locality2, localityLbEndpoints2));
 
-    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(downstreamBalancers);
+    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     PriorityLbConfig config = (PriorityLbConfig) childBalancer.config;
     assertThat(config.priorities).containsExactly("priority2");
 
@@ -390,7 +411,7 @@ public class EdsLoadBalancer2Test {
         EDS_SERVICE_NAME,
         ImmutableMap.of(locality1, localityLbEndpoints1, locality2, localityLbEndpoints2));
 
-    assertThat(downstreamBalancers).isEmpty();
+    assertThat(childBalancers).isEmpty();
     assertThat(currentState).isEqualTo(ConnectivityState.TRANSIENT_FAILURE);
     PickResult result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
     assertThat(result.getStatus().isOk()).isFalse();
@@ -402,7 +423,7 @@ public class EdsLoadBalancer2Test {
   @Test
   public void handleEndpointResource_shutDownExistingChildLbPoliciesIfNoUsableEndpoints() {
     deliverSimpleClusterLoadAssignment(EDS_SERVICE_NAME);
-    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(downstreamBalancers);
+    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     assertThat(childBalancer.shutdown).isFalse();
 
     EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr-1");
@@ -422,8 +443,8 @@ public class EdsLoadBalancer2Test {
 
   @Test
   public void configUpdate_changeEdsServiceName_afterChildPolicyReady_switchGracefully() {
-    deliverSimpleClusterLoadAssignment(EDS_SERVICE_NAME);  // downstream LB polices instantiated
-    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(downstreamBalancers);
+    deliverSimpleClusterLoadAssignment(EDS_SERVICE_NAME);
+    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     Subchannel subchannel1 = mock(Subchannel.class);
     childBalancer.deliverSubchannelState(subchannel1, ConnectivityState.READY);
     assertThat(currentState).isEqualTo(ConnectivityState.READY);
@@ -441,8 +462,8 @@ public class EdsLoadBalancer2Test {
                     roundRobin))
             .build());
     deliverSimpleClusterLoadAssignment(newEdsServiceName);  // instantiate the new subtree
-    assertThat(downstreamBalancers).hasSize(2);
-    FakeLoadBalancer newChildBalancer = downstreamBalancers.get(1);
+    assertThat(childBalancers).hasSize(2);
+    FakeLoadBalancer newChildBalancer = childBalancers.get(1);
     assertThat(currentState).isEqualTo(ConnectivityState.READY);
     result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
     assertThat(result.getSubchannel()).isSameInstanceAs(subchannel1);
@@ -455,9 +476,6 @@ public class EdsLoadBalancer2Test {
 
   @Test
   public void configUpdate_changeEndpointPickingPolicy() {
-    FakeLoadBalancerProvider fakeRoundRobinProvider = new FakeLoadBalancerProvider("round_robin");
-    PolicySelection fakeRoundRobinSelection = new PolicySelection(fakeRoundRobinProvider, null);
-    PolicySelection weightedTargetSelection = prepareRealDownstreamLbPolicies();
     loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
@@ -465,11 +483,13 @@ public class EdsLoadBalancer2Test {
                 Attributes.newBuilder().set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool).build())
             .setLoadBalancingPolicyConfig(
                 new EdsConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME, null,
-                    weightedTargetSelection, fakeRoundRobinSelection))
+                    weightedTarget, roundRobin))
             .build());
-    deliverSimpleClusterLoadAssignment(EDS_SERVICE_NAME);  // downstream LB policies instantiated
-    FakeLoadBalancer leafBalancer = Iterables.getOnlyElement(downstreamBalancers);
-    assertThat(leafBalancer.name).isEqualTo("round_robin");
+    deliverSimpleClusterLoadAssignment(EDS_SERVICE_NAME);
+    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
+    PriorityLbConfig config = (PriorityLbConfig) childBalancer.config;
+    PolicySelection leafPolicy = populateLeafLbPolicy(config, "priority1", locality1);
+    assertThat(leafPolicy.getProvider().getPolicyName()).isEqualTo("round_robin");
     FakeLoadBalancerProvider fakePickFirstProvider = new FakeLoadBalancerProvider("pick_first");
     PolicySelection fakePickFirstSelection =
         new PolicySelection(fakePickFirstProvider, null);
@@ -481,9 +501,21 @@ public class EdsLoadBalancer2Test {
             new EdsConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME, null, weightedTarget,
                 fakePickFirstSelection))
         .build());
-    assertThat(leafBalancer.shutdown).isTrue();
-    leafBalancer = Iterables.getOnlyElement(downstreamBalancers);
-    assertThat(leafBalancer.name).isEqualTo("pick_first");
+    config = (PriorityLbConfig) childBalancer.config;
+    leafPolicy = populateLeafLbPolicy(config, "priority1", locality1);
+    assertThat(leafPolicy.getProvider().getPolicyName()).isEqualTo("round_robin");
+  }
+
+  private PolicySelection populateLeafLbPolicy(PriorityLbConfig config, String priority,
+      Locality locality) {
+    PolicySelection priorityChildConfig = config.childConfigs.get(priority);
+    ClusterImplConfig clusterImplConfig = (ClusterImplConfig) priorityChildConfig.getConfig();
+    WeightedTargetConfig weightedTargetConfig =
+        (WeightedTargetConfig) clusterImplConfig.childPolicy.getConfig();
+    LrsConfig lrsConfig =
+        (LrsConfig) weightedTargetConfig.targets.get(locality.toString())
+            .policySelection.getConfig();
+    return lrsConfig.childPolicy;
   }
 
   @Test
@@ -499,7 +531,7 @@ public class EdsLoadBalancer2Test {
   @Test
   public void endpointDiscoveryError_afterChildPolicyInstantiated_keepUsingCurrentEndpoints() {
     deliverSimpleClusterLoadAssignment(EDS_SERVICE_NAME);
-    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(downstreamBalancers);
+    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     xdsClient.deliverError(Status.UNAVAILABLE.withDescription("not found"));
 
     assertThat(currentState).isEqualTo(ConnectivityState.CONNECTING);
@@ -521,7 +553,7 @@ public class EdsLoadBalancer2Test {
   @Test
   public void nameResolutionError_afterChildPolicyInstantiated_propagateToDownstream() {
     deliverSimpleClusterLoadAssignment(EDS_SERVICE_NAME);
-    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(downstreamBalancers);
+    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
 
     loadBalancer.handleNameResolutionError(
         Status.UNAVAILABLE.withDescription("cannot reach server"));
@@ -575,16 +607,15 @@ public class EdsLoadBalancer2Test {
         Collections.singletonMap(locality1, localityLbEndpoints1));
   }
 
-  /**
-   * Prepare the LB registry with real LB policy implementations for downstream LB policies.
-   */
-  private PolicySelection prepareRealDownstreamLbPolicies() {
-    registry.deregister(registry.getProvider(PRIORITY_POLICY_NAME));
-    registry.register(new PriorityLoadBalancerProvider());
-    registry.deregister(registry.getProvider(LRS_POLICY_NAME));
-    registry.register(new LrsLoadBalancerProvider());
-    // weighted_target LB policy is not required to be in the registry
-    return new PolicySelection(new WeightedTargetLoadBalancerProvider(), null);
+  private static void assertClusterImplConfig(ClusterImplConfig config, String cluster,
+      String edsServiceName, String lrsServerName, Long maxConcurrentRequests,
+      List<DropOverload> dropOverloads, String childPolicy) {
+    assertThat(config.cluster).isEqualTo(cluster);
+    assertThat(config.edsServiceName).isEqualTo(edsServiceName);
+    assertThat(config.lrsServerName).isEqualTo(lrsServerName);
+    assertThat(config.maxConcurrentRequests).isEqualTo(maxConcurrentRequests);
+    assertThat(config.dropCategories).isEqualTo(dropOverloads);
+    assertThat(config.childPolicy.getProvider().getPolicyName()).isEqualTo(childPolicy);
   }
 
   private static void assertLrsConfig(
@@ -611,7 +642,7 @@ public class EdsLoadBalancer2Test {
     List<LbEndpoint> endpoints = new ArrayList<>();
     for (EquivalentAddressGroup addr : managedEndpoints.keySet()) {
       boolean status = managedEndpoints.get(addr);
-      endpoints.add(new LbEndpoint(addr, 100 /* used */, status));
+      endpoints.add(new LbEndpoint(addr, 100 /* unused */, status));
     }
     return new LocalityLbEndpoints(endpoints, localityWeight, priority);
   }
@@ -652,12 +683,6 @@ public class EdsLoadBalancer2Test {
 
   private final class FakeXdsClient extends XdsClient {
     private final Map<String, EdsResourceWatcher> watchers = new HashMap<>();
-    private final Map<String, FakeLoadStatsStore> clusterStats = new HashMap<>();
-
-    @Override
-    void shutdown() {
-      // no-op
-    }
 
     @Override
     void watchEdsResource(String resourceName, EdsResourceWatcher watcher) {
@@ -667,18 +692,6 @@ public class EdsLoadBalancer2Test {
     @Override
     void cancelEdsResourceWatch(String resourceName, EdsResourceWatcher watcher) {
       watchers.remove(resourceName);
-    }
-
-    @Override
-    LoadStatsStore addClientStats(String clusterName, @Nullable String clusterServiceName) {
-      FakeLoadStatsStore stats = new FakeLoadStatsStore();
-      clusterStats.put(clusterServiceName, stats);
-      return stats;
-    }
-
-    @Override
-    void removeClientStats(String clusterName, @Nullable String clusterServiceName) {
-      clusterStats.remove(clusterServiceName);
     }
 
     void deliverClusterLoadAssignment(
@@ -730,41 +743,6 @@ public class EdsLoadBalancer2Test {
     }
   }
 
-  private static final class FakeLoadStatsStore implements LoadStatsStore {
-    private final Map<String, Long> categorizedDrops = new HashMap<>();
-    private int totalDrops;
-
-    @Override
-    public ClusterStats generateLoadReport() {
-      throw new UnsupportedOperationException("should not be called");
-    }
-
-    @Override
-    public ClientLoadCounter addLocality(Locality locality) {
-      return new ClientLoadCounter();
-    }
-
-    @Override
-    public void removeLocality(Locality locality) {
-      // no-op
-    }
-
-    @Override
-    public void recordDroppedRequest(String category) {
-      if (!categorizedDrops.containsKey(category)) {
-        categorizedDrops.put(category, 1L);
-      } else {
-        categorizedDrops.put(category, categorizedDrops.get(category) + 1L);
-      }
-      totalDrops++;
-    }
-
-    @Override
-    public void recordDroppedRequest() {
-      totalDrops++;
-    }
-  }
-
   private final class FakeLoadBalancerProvider extends LoadBalancerProvider {
     private final String policyName;
 
@@ -775,7 +753,7 @@ public class EdsLoadBalancer2Test {
     @Override
     public LoadBalancer newLoadBalancer(Helper helper) {
       FakeLoadBalancer balancer = new FakeLoadBalancer(policyName, helper);
-      downstreamBalancers.add(balancer);
+      childBalancers.add(balancer);
       return balancer;
     }
 
@@ -822,7 +800,7 @@ public class EdsLoadBalancer2Test {
     @Override
     public void shutdown() {
       shutdown = true;
-      downstreamBalancers.remove(this);
+      childBalancers.remove(this);
     }
 
     void deliverSubchannelState(final Subchannel subchannel, ConnectivityState state) {

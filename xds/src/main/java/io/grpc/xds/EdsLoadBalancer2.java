@@ -20,25 +20,17 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.xds.XdsLbPolicies.LRS_POLICY_NAME;
 import static io.grpc.xds.XdsLbPolicies.PRIORITY_POLICY_NAME;
-import static io.grpc.xds.XdsSubchannelPickers.BUFFER_PICKER;
 
 import com.google.common.annotations.VisibleForTesting;
-import io.grpc.Attributes;
-import io.grpc.ClientStreamTracer;
-import io.grpc.ClientStreamTracer.StreamInfo;
-import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
-import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
-import io.grpc.util.ForwardingClientStreamTracer;
-import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.ClusterImplLoadBalancerProvider.ClusterImplConfig;
 import io.grpc.xds.EdsLoadBalancerProvider.EdsConfig;
@@ -46,16 +38,13 @@ import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.LbEndpoint;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
-import io.grpc.xds.LoadStatsManager.LoadStatsStore;
 import io.grpc.xds.LrsLoadBalancerProvider.LrsConfig;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig;
-import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedPolicySelection;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedTargetConfig;
 import io.grpc.xds.XdsClient.EdsResourceWatcher;
 import io.grpc.xds.XdsClient.EdsUpdate;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
-import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -64,7 +53,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nullable;
 
 final class EdsLoadBalancer2 extends LoadBalancer {
@@ -214,9 +202,6 @@ final class EdsLoadBalancer2 extends LoadBalancer {
       @Override
       public void shutdown() {
         shutdown = true;
-        if (lrsServerName != null) {
-          xdsClient.removeClientStats(cluster, edsServiceName);
-        }
         xdsClient.cancelEdsResourceWatch(resourceName, this);
         logger.log(
             XdsLogLevel.INFO,

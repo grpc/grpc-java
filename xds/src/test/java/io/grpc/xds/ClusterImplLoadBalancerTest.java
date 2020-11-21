@@ -51,6 +51,7 @@ import io.grpc.xds.LoadStatsManager.LoadStatsStore;
 import io.grpc.xds.LrsLoadBalancerProvider.LrsConfig;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedPolicySelection;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedTargetConfig;
+import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
 import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -58,6 +59,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import org.junit.After;
@@ -96,6 +98,12 @@ public class ClusterImplLoadBalancerTest {
       return null;
     }
   };
+  private final CallCounterProvider callCounterProvider = new CallCounterProvider() {
+    @Override
+    public AtomicLong getOrCreate(String cluster, @Nullable String edsServiceName) {
+      return new AtomicLong();
+    }
+  };
   private final Helper helper = new FakeLbHelper();
   @Mock
   private ThreadSafeRandom mockRandom;
@@ -127,13 +135,7 @@ public class ClusterImplLoadBalancerTest {
         null, Collections.<DropOverload>emptyList(),
         new PolicySelection(weightedTargetProvider, weightedTargetConfig));
     EquivalentAddressGroup endpoint = makeAddress("endpoint-addr", locality);
-    loadBalancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder()
-            .setAddresses(Collections.singletonList(endpoint))
-            .setAttributes(
-                Attributes.newBuilder().set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool).build())
-            .setLoadBalancingPolicyConfig(config)
-            .build());
+    deliverAddressesAndConfig(Collections.singletonList(endpoint), config);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(downstreamBalancers);
     assertThat(Iterables.getOnlyElement(childBalancer.addresses)).isEqualTo(endpoint);
     assertThat(childBalancer.config).isSameInstanceAs(weightedTargetConfig);
@@ -162,13 +164,7 @@ public class ClusterImplLoadBalancerTest {
         null, Collections.<DropOverload>emptyList(),
         new PolicySelection(weightedTargetProvider, weightedTargetConfig));
     EquivalentAddressGroup endpoint = makeAddress("endpoint-addr", locality);
-    loadBalancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder()
-            .setAddresses(Collections.singletonList(endpoint))
-            .setAttributes(
-                Attributes.newBuilder().set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool).build())
-            .setLoadBalancingPolicyConfig(config)
-            .build());
+    deliverAddressesAndConfig(Collections.singletonList(endpoint), config);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(downstreamBalancers);
 
     loadBalancer.handleNameResolutionError(
@@ -187,13 +183,7 @@ public class ClusterImplLoadBalancerTest {
         null, Collections.singletonList(new DropOverload("throttle", 500_000)),
         new PolicySelection(weightedTargetProvider, weightedTargetConfig));
     EquivalentAddressGroup endpoint = makeAddress("endpoint-addr", locality);
-    loadBalancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder()
-            .setAddresses(Collections.singletonList(endpoint))
-            .setAttributes(
-                Attributes.newBuilder().set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool).build())
-            .setLoadBalancingPolicyConfig(config)
-            .build());
+    deliverAddressesAndConfig(Collections.singletonList(endpoint), config);
     when(mockRandom.nextInt(anyInt())).thenReturn(499_999, 999_999, 1_000_000);
     assertThat(downstreamBalancers).hasSize(1);  // one leaf balancer
     FakeLoadBalancer leafBalancer = Iterables.getOnlyElement(downstreamBalancers);
@@ -256,13 +246,7 @@ public class ClusterImplLoadBalancerTest {
         maxConcurrentRequests, Collections.<DropOverload>emptyList(),
         new PolicySelection(weightedTargetProvider, weightedTargetConfig));
     EquivalentAddressGroup endpoint = makeAddress("endpoint-addr", locality);
-    loadBalancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder()
-            .setAddresses(Collections.singletonList(endpoint))
-            .setAttributes(
-                Attributes.newBuilder().set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool).build())
-            .setLoadBalancingPolicyConfig(config)
-            .build());
+    deliverAddressesAndConfig(Collections.singletonList(endpoint), config);
     assertThat(downstreamBalancers).hasSize(1);  // one leaf balancer
     FakeLoadBalancer leafBalancer = Iterables.getOnlyElement(downstreamBalancers);
     assertThat(leafBalancer.name).isEqualTo("round_robin");
@@ -301,13 +285,7 @@ public class ClusterImplLoadBalancerTest {
     config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME,
         maxConcurrentRequests, Collections.<DropOverload>emptyList(),
         new PolicySelection(weightedTargetProvider, weightedTargetConfig));
-    loadBalancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder()
-            .setAddresses(Collections.singletonList(endpoint))
-            .setAttributes(
-                Attributes.newBuilder().set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool).build())
-            .setLoadBalancingPolicyConfig(config)
-            .build());
+    deliverAddressesAndConfig(Collections.singletonList(endpoint), config);
 
     result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
     assertThat(result.getStatus().isOk()).isTrue();
@@ -341,13 +319,7 @@ public class ClusterImplLoadBalancerTest {
         null, Collections.<DropOverload>emptyList(),
         new PolicySelection(weightedTargetProvider, weightedTargetConfig));
     EquivalentAddressGroup endpoint = makeAddress("endpoint-addr", locality);
-    loadBalancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder()
-            .setAddresses(Collections.singletonList(endpoint))
-            .setAttributes(
-                Attributes.newBuilder().set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool).build())
-            .setLoadBalancingPolicyConfig(config)
-            .build());
+    deliverAddressesAndConfig(Collections.singletonList(endpoint), config);
     assertThat(downstreamBalancers).hasSize(1);  // one leaf balancer
     FakeLoadBalancer leafBalancer = Iterables.getOnlyElement(downstreamBalancers);
     assertThat(leafBalancer.name).isEqualTo("round_robin");
@@ -380,6 +352,20 @@ public class ClusterImplLoadBalancerTest {
       assertThat(result.getSubchannel()).isSameInstanceAs(subchannel);
       assertThat(xdsClient.clusterStats.totalDrops).isEqualTo(0L);
     }
+  }
+
+  private void deliverAddressesAndConfig(List<EquivalentAddressGroup> addresses,
+      ClusterImplConfig config) {
+    loadBalancer.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(addresses)
+            .setAttributes(
+                Attributes.newBuilder()
+                    .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
+                    .set(XdsAttributes.CALL_COUNTER_PROVIDER, callCounterProvider)
+                    .build())
+            .setLoadBalancingPolicyConfig(config)
+            .build());
   }
 
   private WeightedTargetConfig buildWeightedTargetConfig(Map<Locality, Integer> localityWeights) {

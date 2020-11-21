@@ -85,13 +85,13 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
   @Override
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
+    Attributes attributes = resolvedAddresses.getAttributes();
     if (xdsClientPool == null) {
-      xdsClientPool = resolvedAddresses.getAttributes().get(XdsAttributes.XDS_CLIENT_POOL);
+      xdsClientPool = attributes.get(XdsAttributes.XDS_CLIENT_POOL);
       xdsClient = xdsClientPool.getObject();
     }
-    // TODO(chengyuanzhang): obtain from attributes.
     if (callCounterProvider == null) {
-      callCounterProvider = SharedCallCounterMap.getInstance();
+      callCounterProvider = attributes.get(XdsAttributes.CALL_COUNTER_PROVIDER);
     }
     ClusterImplConfig config =
         (ClusterImplConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
@@ -101,6 +101,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
       childLbHelper = new RequestLimitingLbHelper(
           callCounterProvider.getOrCreate(config.cluster, config.edsServiceName));
       childLb = config.childPolicy.getProvider().newLoadBalancer(childLbHelper);
+      // Assume load report server does not change throughout cluster lifetime.
       if (config.lrsServerName != null) {
         if (config.lrsServerName.isEmpty()) {
           loadStatsStore = xdsClient.addClientStats(cluster, edsServiceName);
@@ -113,7 +114,6 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     if (config.maxConcurrentRequests != null) {
       childLbHelper.updateMaxConcurrentRequests(config.maxConcurrentRequests);
     }
-    Attributes attributes = resolvedAddresses.getAttributes();
     if (loadStatsStore != null) {
       attributes = attributes.toBuilder()
           .set(XdsAttributes.ATTR_CLUSTER_SERVICE_LOAD_STATS_STORE, loadStatsStore).build();
@@ -179,7 +179,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     }
 
     private void updateDropPolicies(List<DropOverload> dropOverloads) {
-      if (dropPolicies != dropOverloads) {
+      if (!dropPolicies.equals(dropOverloads)) {
         dropPolicies = dropOverloads;
         updateBalancingState(currentState, currentPicker);
       }
