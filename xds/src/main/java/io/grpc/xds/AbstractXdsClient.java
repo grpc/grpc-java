@@ -709,7 +709,7 @@ abstract class AbstractXdsClient extends XdsClient {
       }
       DiscoveryRequest request = builder.build();
       requestWriter.onNext(request);
-      logger.log(XdsLogLevel.DEBUG, "Sent DiscoveryRequest\n{0}", respPrinter);
+      logger.log(XdsLogLevel.DEBUG, "Sent DiscoveryRequest\n{0}", request);
     }
 
     @Override
