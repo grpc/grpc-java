@@ -1,7 +1,7 @@
 plugins {
     id 'application' // Provide convenience executables for trying out the examples.
     // ASSUMES GRADLE 5.6 OR HIGHER. Use plugin version 0.8.10 with earlier gradle versions
-    id 'com.google.protobuf' version '0.8.13'
+    id 'com.google.protobuf' version '0.8.14'
     // Generate IntelliJ IDEA's .idea & .iml project files
     id 'idea'
     id 'java'
