@@ -26,6 +26,18 @@ jar {
     classifier = 'original'
 }
 
+task readFile(){
+    doLast{
+        File file = file('native-image.properties')
+        println file.text
+        println ""
+        file.readLines().each{
+            println it
+        }
+
+    }
+}
+
 shadowJar {
     classifier = null
     dependencies {

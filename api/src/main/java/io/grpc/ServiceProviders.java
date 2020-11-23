@@ -25,9 +25,6 @@ import java.util.ServiceConfigurationError;
 import java.util.ServiceLoader;
 
 final class ServiceProviders {
-  private ServiceProviders() {
-    // do not instantiate
-  }
 
   /**
    * If this is not Android, returns the highest priority implementation of the class via
