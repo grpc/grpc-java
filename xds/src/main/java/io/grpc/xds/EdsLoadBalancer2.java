@@ -169,15 +169,12 @@ final class EdsLoadBalancer2 extends LoadBalancer {
       @Override
       public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
         if (lb != null && shouldUpdateDownstreamLbConfig(resolvedAddresses)) {
-          maybeHandleResourceUpdate();
+          handleResourceUpdate();
         }
         this.resolvedAddresses = resolvedAddresses;
       }
 
       private boolean shouldUpdateDownstreamLbConfig(ResolvedAddresses newResolvedAddresses) {
-        if (resolvedAddresses == null) {
-          return true;
-        }
         EdsConfig newConfig = (EdsConfig) newResolvedAddresses.getLoadBalancingPolicyConfig();
         EdsConfig currentConfig = (EdsConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
         if (!currentConfig.localityPickingPolicy.equals(newConfig.localityPickingPolicy)) {
@@ -268,7 +265,7 @@ final class EdsLoadBalancer2 extends LoadBalancer {
             if (lb == null) {
               lb = lbRegistry.getProvider(PRIORITY_POLICY_NAME).newLoadBalancer(lbHelper);
             }
-            maybeHandleResourceUpdate();
+            handleResourceUpdate();
           }
         });
       }
@@ -305,10 +302,7 @@ final class EdsLoadBalancer2 extends LoadBalancer {
         });
       }
 
-      private void maybeHandleResourceUpdate() {
-        if (lb == null) {  // no endpoints have been discovered
-          return;
-        }
+      private void handleResourceUpdate() {
         // Populate configurations used by downstream LB policies from the freshest result.
         EdsConfig config = (EdsConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
         PolicySelection localityPickingPolicy = config.localityPickingPolicy;
