@@ -16,21 +16,14 @@
 
 package io.grpc.examples.helloworldxds;
 
-import io.grpc.ChannelCredentials;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 import io.grpc.StatusRuntimeException;
 import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
 import io.grpc.examples.helloworld.HelloRequest;
-import io.grpc.netty.GrpcSslContexts;
-import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.xds.XdsChannelCredentials;
-import io.netty.handler.ssl.SslContext;
-import io.netty.handler.ssl.SslContextBuilder;
-import java.io.File;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -79,23 +72,26 @@ public class HelloWorldClientXds {
    * greeting.
    */
   public static void main(String[] args) throws Exception {
-    String user = "xds-client";
+    String user;
     boolean useXdsCreds = false;
-    if (args.length < 1 || args.length > 3) {
-      System.out.println("USAGE: HelloWorldClientXds target [name [--secure]]\n");
+    if (args.length < 2 || args.length > 3) {
+      System.out.println("USAGE: HelloWorldClientXds name target [--secure]\n");
+      System.err.println("  name    The name you wish to include in the greeting request.");
       System.err.println("  target  The xds target to connect to using the 'xds:' target scheme.");
-      System.err.println("  name    The name you wish to include in the greeting request. Defaults to " + user);
       System.err.println(
           "  '--secure'     Indicates using xDS credentials otherwise defaults to insecure.");
       System.exit(1);
     }
-    if (args.length > 1) {
-      user = args[1];
-      if (args.length == 3) {
-        useXdsCreds = args[2].toLowerCase().startsWith("--s");
+    user = args[0];
+
+    if (args.length == 3) {
+      if ("--secure".startsWith(args[2])) {
+        useXdsCreds = true;
+      } else {
+        System.out.println("Ignored: " + args[2]);
       }
     }
-    HelloWorldClientXds client = new HelloWorldClientXds(args[0], useXdsCreds);
+    HelloWorldClientXds client = new HelloWorldClientXds(args[1], useXdsCreds);
     try {
       client.greet(user);
     } finally {
