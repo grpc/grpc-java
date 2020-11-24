@@ -48,22 +48,22 @@ protobuf {
 
 startScripts.enabled = false
 
-task helloWorldClientXds(type: CreateStartScripts) {
-    mainClassName = 'io.grpc.examples.helloworldxds.HelloWorldClientXds'
+task xdsHelloWorldClient(type: CreateStartScripts) {
+    mainClassName = 'io.grpc.examples.helloworldxds.XdsHelloWorldClient'
     applicationName = 'xds-hello-world-client'
     outputDir = new File(project.buildDir, 'tmp')
     classpath = startScripts.classpath
 }
 
-task helloWorldServerXds(type: CreateStartScripts) {
-    mainClassName = 'io.grpc.examples.helloworldxds.HelloWorldServerXds'
+task xdsHelloWorldServer(type: CreateStartScripts) {
+    mainClassName = 'io.grpc.examples.helloworldxds.XdsHelloWorldServer'
     applicationName = 'xds-hello-world-server'
     outputDir = new File(project.buildDir, 'tmp')
     classpath = startScripts.classpath
 }
 
 applicationDistribution.into('bin') {
-    from(helloWorldClientXds)
-    from(helloWorldServerXds)
+    from(xdsHelloWorldClient)
+    from(xdsHelloWorldServer)
     fileMode = 0755
 }
