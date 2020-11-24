@@ -24,16 +24,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.protobuf.Any;
-import com.google.protobuf.InvalidProtocolBufferException;
-import com.google.protobuf.MessageOrBuilder;
-import com.google.protobuf.TypeRegistry;
-import com.google.protobuf.util.JsonFormat;
 import com.google.rpc.Code;
-import io.envoyproxy.envoy.config.cluster.v3.Cluster;
-import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
-import io.envoyproxy.envoy.config.listener.v3.Listener;
-import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
-import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
 import io.envoyproxy.envoy.service.discovery.v3.AggregatedDiscoveryServiceGrpc;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse;
@@ -715,46 +706,6 @@ abstract class AbstractXdsClient extends XdsClient {
     @Override
     void sendError(Exception error) {
       requestWriter.onError(error);
-    }
-  }
-
-  /**
-   * Convert protobuf message to human readable String format. Useful for protobuf messages
-   * containing {@link com.google.protobuf.Any} fields.
-   */
-  @VisibleForTesting
-  static final class MessagePrinter {
-    private final JsonFormat.Printer printer;
-
-    @VisibleForTesting
-    MessagePrinter() {
-      TypeRegistry registry =
-          TypeRegistry.newBuilder()
-              .add(Listener.getDescriptor())
-              .add(io.envoyproxy.envoy.api.v2.Listener.getDescriptor())
-              .add(HttpConnectionManager.getDescriptor())
-              .add(
-                  io.envoyproxy.envoy.config.filter.network.http_connection_manager.v2
-                      .HttpConnectionManager.getDescriptor())
-              .add(RouteConfiguration.getDescriptor())
-              .add(io.envoyproxy.envoy.api.v2.RouteConfiguration.getDescriptor())
-              .add(Cluster.getDescriptor())
-              .add(io.envoyproxy.envoy.api.v2.Cluster.getDescriptor())
-              .add(ClusterLoadAssignment.getDescriptor())
-              .add(io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.getDescriptor())
-              .build();
-      printer = JsonFormat.printer().usingTypeRegistry(registry);
-    }
-
-    @VisibleForTesting
-    String print(MessageOrBuilder message) {
-      String res;
-      try {
-        res = printer.print(message);
-      } catch (InvalidProtocolBufferException e) {
-        res = message + " (failed to pretty-print: " + e + ")";
-      }
-      return res;
     }
   }
 }
