@@ -131,15 +131,9 @@ public class EdsLoadBalancer2Test {
     registry.register(new FakeLoadBalancerProvider(CLUSTER_IMPL_POLICY_NAME));
     registry.register(new FakeLoadBalancerProvider(LRS_POLICY_NAME));
     loadBalancer = new EdsLoadBalancer2(helper, registry);
-    loadBalancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder()
-            .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
-            .setAttributes(
-                Attributes.newBuilder().set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool).build())
-            .setLoadBalancingPolicyConfig(
-                new EdsConfig(
-                    CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME, null, weightedTarget, roundRobin))
-            .build());
+    EdsConfig config = new EdsConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME, null,
+        weightedTarget, roundRobin);
+    deliverConfig( config);
   }
 
   @After
@@ -452,16 +446,10 @@ public class EdsLoadBalancer2Test {
     assertThat(result.getSubchannel()).isSameInstanceAs(subchannel1);
 
     String newEdsServiceName = "service-foo.googleapis.com";
-    loadBalancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder()
-            .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
-            .setAttributes(
-                Attributes.newBuilder().set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool).build())
-            .setLoadBalancingPolicyConfig(
-                new EdsConfig(CLUSTER, newEdsServiceName, LRS_SERVER_NAME, null, weightedTarget,
-                    roundRobin))
-            .build());
-    deliverSimpleClusterLoadAssignment(newEdsServiceName);  // instantiate the new subtree
+    EdsConfig config = new EdsConfig(CLUSTER, newEdsServiceName, LRS_SERVER_NAME, null,
+        weightedTarget, roundRobin);
+    deliverConfig(config);
+    deliverSimpleClusterLoadAssignment(newEdsServiceName);
     assertThat(childBalancers).hasSize(2);
     FakeLoadBalancer newChildBalancer = childBalancers.get(1);
     assertThat(currentState).isEqualTo(ConnectivityState.READY);
@@ -475,35 +463,34 @@ public class EdsLoadBalancer2Test {
   }
 
   @Test
-  public void configUpdate_changeEndpointPickingPolicy() {
-    loadBalancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder()
-            .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
-            .setAttributes(
-                Attributes.newBuilder().set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool).build())
-            .setLoadBalancingPolicyConfig(
-                new EdsConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME, null,
-                    weightedTarget, roundRobin))
-            .build());
+  public void configUpdate_changeEndpointPickingPolicyAndMaxConcurrentRequests() {
     deliverSimpleClusterLoadAssignment(EDS_SERVICE_NAME);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
-    PriorityLbConfig config = (PriorityLbConfig) childBalancer.config;
-    PolicySelection leafPolicy = populateLeafLbPolicy(config, "priority1", locality1);
+    PriorityLbConfig childLbConfig = (PriorityLbConfig) childBalancer.config;
+    Long maxConcurrentRequestsInChildLbConfig =
+        populateMaxConcurrentRequests(childLbConfig, "priority1");
+    assertThat(maxConcurrentRequestsInChildLbConfig).isNull();
+    PolicySelection leafPolicy = populateLeafLbPolicy(childLbConfig, "priority1", locality1);
     assertThat(leafPolicy.getProvider().getPolicyName()).isEqualTo("round_robin");
+
     FakeLoadBalancerProvider fakePickFirstProvider = new FakeLoadBalancerProvider("pick_first");
     PolicySelection fakePickFirstSelection =
         new PolicySelection(fakePickFirstProvider, null);
-    loadBalancer.handleResolvedAddresses(ResolvedAddresses.newBuilder()
-        .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
-        .setAttributes(
-            Attributes.newBuilder().set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool).build())
-        .setLoadBalancingPolicyConfig(
-            new EdsConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME, null, weightedTarget,
-                fakePickFirstSelection))
-        .build());
-    config = (PriorityLbConfig) childBalancer.config;
-    leafPolicy = populateLeafLbPolicy(config, "priority1", locality1);
-    assertThat(leafPolicy.getProvider().getPolicyName()).isEqualTo("round_robin");
+    EdsConfig config = new EdsConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME, 100L,
+        weightedTarget, fakePickFirstSelection);
+    deliverConfig(config);
+    childLbConfig = (PriorityLbConfig) childBalancer.config;
+    maxConcurrentRequestsInChildLbConfig =
+        populateMaxConcurrentRequests(childLbConfig, "priority1");
+    assertThat(maxConcurrentRequestsInChildLbConfig).isEqualTo(100L);
+    leafPolicy = populateLeafLbPolicy(childLbConfig, "priority1", locality1);
+    assertThat(leafPolicy.getProvider().getPolicyName()).isEqualTo("pick_first");
+  }
+
+  private Long populateMaxConcurrentRequests(PriorityLbConfig config, String priority) {
+    PolicySelection priorityChildConfig = config.childConfigs.get(priority);
+    ClusterImplConfig clusterImplConfig = (ClusterImplConfig) priorityChildConfig.getConfig();
+    return clusterImplConfig.maxConcurrentRequests;
   }
 
   private PolicySelection populateLeafLbPolicy(PriorityLbConfig config, String priority,
@@ -596,6 +583,15 @@ public class EdsLoadBalancer2Test {
     WeightedPolicySelection target2 = config.targets.get(locality2.toString());
     assertThat(target2.weight).isEqualTo(40);
     assertThat(target2.policySelection.getProvider().getPolicyName()).isEqualTo("round_robin");
+  }
+
+  private void deliverConfig(EdsConfig config) {
+    loadBalancer.handleResolvedAddresses(ResolvedAddresses.newBuilder()
+        .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
+        .setAttributes(
+            Attributes.newBuilder().set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool).build())
+        .setLoadBalancingPolicyConfig(config)
+        .build());
   }
 
   private void deliverSimpleClusterLoadAssignment(String resourceName) {

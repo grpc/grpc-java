@@ -168,13 +168,17 @@ final class EdsLoadBalancer2 extends LoadBalancer {
 
       @Override
       public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-        if (lb != null && shouldUpdateDownstreamLbConfig(resolvedAddresses)) {
+        boolean configUpdated = shouldUpdateDownstreamLbConfig(resolvedAddresses);
+        this.resolvedAddresses = resolvedAddresses;
+        if (lb != null && configUpdated) {
           handleResourceUpdate();
         }
-        this.resolvedAddresses = resolvedAddresses;
       }
 
       private boolean shouldUpdateDownstreamLbConfig(ResolvedAddresses newResolvedAddresses) {
+        if (resolvedAddresses == null) {  // first update
+          return true;
+        }
         EdsConfig newConfig = (EdsConfig) newResolvedAddresses.getLoadBalancingPolicyConfig();
         EdsConfig currentConfig = (EdsConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
         if (!currentConfig.localityPickingPolicy.equals(newConfig.localityPickingPolicy)) {
