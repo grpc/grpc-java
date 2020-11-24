@@ -33,15 +33,15 @@ import java.util.logging.Logger;
 
 /**
  * A simple xDS client that requests a greeting from {@code HelloWorldServer} or {@link
- * HelloWorldServerXds}.
+ * XdsHelloWorldServer}.
  */
-public class HelloWorldClientXds {
-  private static final Logger logger = Logger.getLogger(HelloWorldClientXds.class.getName());
+public class XdsHelloWorldClient {
+  private static final Logger logger = Logger.getLogger(XdsHelloWorldClient.class.getName());
 
   private final GreeterGrpc.GreeterBlockingStub blockingStub;
 
   /** Construct client for accessing HelloWorld server using the existing channel. */
-  public HelloWorldClientXds(Channel channel) {
+  public XdsHelloWorldClient(Channel channel) {
     blockingStub = GreeterGrpc.newBlockingStub(channel);
   }
 
@@ -98,7 +98,7 @@ public class HelloWorldClientXds {
     ManagedChannel channel = Grpc.newChannelBuilder(target, credentials)
         .build();
     try {
-      HelloWorldClientXds client = new HelloWorldClientXds(channel);
+      XdsHelloWorldClient client = new XdsHelloWorldClient(channel);
       client.greet(user);
     } finally {
       channel.shutdownNow().awaitTermination(5, TimeUnit.SECONDS);
