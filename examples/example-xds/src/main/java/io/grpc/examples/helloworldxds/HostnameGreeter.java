@@ -33,7 +33,7 @@ public final class HostnameGreeter extends GreeterGrpc.GreeterImplBase {
   private final String serverName;
 
   public HostnameGreeter(String serverName) {
-    if (serverName == null || serverName.isEmpty()) {
+    if (serverName == null) {
       serverName = determineHostname();
     }
     this.serverName = serverName;

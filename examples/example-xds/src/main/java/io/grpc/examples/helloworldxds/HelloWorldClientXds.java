@@ -16,6 +16,8 @@
 
 package io.grpc.examples.helloworldxds;
 
+import io.grpc.Channel;
+import io.grpc.ChannelCredentials;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
@@ -24,33 +26,23 @@ import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
 import io.grpc.examples.helloworld.HelloRequest;
 import io.grpc.xds.XdsChannelCredentials;
+import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.net.ssl.SSLException;
 
 /**
- * A simple xDS client that requests a greeting from the {@link HelloWorldServerXds}.
+ * A simple xDS client that requests a greeting from {@code HelloWorldServer} or {@link
+ * HelloWorldServerXds}.
  */
 public class HelloWorldClientXds {
   private static final Logger logger = Logger.getLogger(HelloWorldClientXds.class.getName());
-  private final ManagedChannel channel;
+
   private final GreeterGrpc.GreeterBlockingStub blockingStub;
 
-  /** Construct client connecting to HelloWorld server at {@code host:port}. */
-  public HelloWorldClientXds(String target, boolean useXdsCreds) throws SSLException {
-    this.channel =
-        Grpc.newChannelBuilder(
-                target,
-                useXdsCreds
-                    ? XdsChannelCredentials.create(InsecureChannelCredentials.create())
-                    : InsecureChannelCredentials.create())
-            .build();
-    blockingStub = GreeterGrpc.newBlockingStub(this.channel);
-  }
-
-  public void shutdown() throws InterruptedException {
-    channel.shutdown().awaitTermination(5, TimeUnit.SECONDS);
+  /** Construct client for accessing HelloWorld server using the existing channel. */
+  public HelloWorldClientXds(Channel channel) {
+    blockingStub = GreeterGrpc.newBlockingStub(channel);
   }
 
   /** Say hello to server. */
@@ -68,34 +60,48 @@ public class HelloWorldClientXds {
   }
 
   /**
-   * Greet server. If provided, the second element of {@code args} is the name to use in the
-   * greeting.
+   * Greet server. If provided, the first element of {@code args} is the name to use in the
+   * greeting. The second argument is the target server. A {@code --secure} flag is also accepted.
    */
   public static void main(String[] args) throws Exception {
-    String user;
-    boolean useXdsCreds = false;
-    if (args.length < 2 || args.length > 3) {
-      System.out.println("USAGE: HelloWorldClientXds name target [--secure]\n");
-      System.err.println("  name    The name you wish to include in the greeting request.");
-      System.err.println("  target  The xds target to connect to using the 'xds:' target scheme.");
-      System.err.println(
-          "  '--secure'     Indicates using xDS credentials otherwise defaults to insecure.");
-      System.exit(1);
-    }
-    user = args[0];
-
-    if (args.length == 3) {
-      if ("--secure".startsWith(args[2])) {
-        useXdsCreds = true;
-      } else {
-        System.out.println("Ignored: " + args[2]);
+    String user = "xds world";
+    // The example defaults to the same behavior as the hello world example. To enable xDS, pass an
+    // "xds:"-prefixed string as the target.
+    String target = "localhost:50051";
+    ChannelCredentials credentials = InsecureChannelCredentials.create();
+    if (args.length > 0) {
+      if ("--help".equals(args[0])) {
+        System.out.println("Usage: [--secure] [NAME [TARGET]]\n");
+        System.err.println("  --secure  Use credentials provided by xDS. Defaults to insecure");
+        System.err.println("  NAME      The name you wish to be greeted by. Defaults to " + user);
+        System.err.println("  TARGET    The server to connect to. Defaults to " + target);
+        System.exit(1);
+      } else if ("--secure".equals(args[0])) {
+        // The xDS credentials use the security configured by the xDS server when available. When
+        // xDS is not used or when xDS does not provide security configuration, the xDS credentials
+        // fall back to other credentials (in this case, InsecureChannelCredentials).
+        credentials = XdsChannelCredentials.create(InsecureChannelCredentials.create());
+        args = Arrays.copyOfRange(args, 1, args.length);
       }
     }
-    HelloWorldClientXds client = new HelloWorldClientXds(args[1], useXdsCreds);
+    if (args.length > 0) {
+      user = args[0];
+    }
+    if (args.length > 1) {
+      target = args[1];
+    }
+
+    // This uses the new ChannelCredentials API. Grpc.newChannelBuilder() is the same as
+    // ManagedChannelBuilder.forTarget(), except that it is passed credentials. When using this API,
+    // you don't use methods like `managedChannelBuilder.usePlaintext()`, as that configuration is
+    // provided by the ChannelCredentials.
+    ManagedChannel channel = Grpc.newChannelBuilder(target, credentials)
+        .build();
     try {
+      HelloWorldClientXds client = new HelloWorldClientXds(channel);
       client.greet(user);
     } finally {
-      client.shutdown();
+      channel.shutdownNow().awaitTermination(5, TimeUnit.SECONDS);
     }
   }
 }

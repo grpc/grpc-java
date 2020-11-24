@@ -19,98 +19,91 @@ package io.grpc.examples.helloworldxds;
 import io.grpc.InsecureServerCredentials;
 import io.grpc.Server;
 import io.grpc.ServerCredentials;
-import io.grpc.examples.helloworld.GreeterGrpc;
-import io.grpc.examples.helloworld.HelloReply;
-import io.grpc.examples.helloworld.HelloRequest;
-import io.grpc.stub.StreamObserver;
+import io.grpc.health.v1.HealthCheckResponse.ServingStatus;
+import io.grpc.protobuf.services.ProtoReflectionService;
+import io.grpc.services.HealthStatusManager;
 import io.grpc.xds.XdsServerBuilder;
 import io.grpc.xds.XdsServerCredentials;
+import java.util.Arrays;
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 /**
  * An xDS-managed Server for the {@code Greeter} service.
  */
 public class HelloWorldServerXds {
-  private static final Logger logger = Logger.getLogger(HelloWorldServerXds.class.getName());
-  private final int port;
-  private final boolean useXdsCreds;
-  private final String hostName;
-  private Server server;
-
-  public HelloWorldServerXds(int port, String hostName, boolean useXdsCreds) {
-    this.port = port;
-    this.hostName = hostName;
-    this.useXdsCreds = useXdsCreds;
-  }
-
-  private void start() throws IOException {
-    ServerCredentials insecure = InsecureServerCredentials.create();
-    XdsServerBuilder builder =
-        XdsServerBuilder.forPort(
-                port, useXdsCreds ? XdsServerCredentials.create(insecure) : insecure)
-            .addService(new HostnameGreeter(hostName));
-    server = builder.build().start();
-    logger.info("Server started, listening on " + port);
-    Runtime.getRuntime()
-        .addShutdownHook(
-            new Thread() {
-              @Override
-              public void run() {
-                // Use stderr here since the logger may have been reset by its JVM shutdown hook.
-                System.err.println("*** shutting down gRPC server since JVM is shutting down");
-                try {
-                  HelloWorldServerXds.this.stop();
-                } catch (InterruptedException e) {
-                  logger.log(Level.SEVERE, "During stop", e);
-                }
-                System.err.println("*** server shut down");
-              }
-            });
-  }
-
-  private void stop() throws InterruptedException {
-    if (server != null) {
-      server.shutdown().awaitTermination(30, TimeUnit.SECONDS);
-    }
-  }
-
-  /** Await termination on the main thread since the grpc library uses daemon threads. */
-  private void blockUntilShutdown() throws InterruptedException {
-    if (server != null) {
-      server.awaitTermination();
-    }
-  }
-
-  /** Main launches the server from the command line. */
   public static void main(String[] args) throws IOException, InterruptedException {
-    boolean useXdsCreds = false;
-    String hostName = null;
-    if (args.length < 1 || args.length > 3) {
-      System.out.println("USAGE: HelloWorldServerTls port [hostname [--secure]]");
-      System.err.println("");
-      System.err.println("  port  The port to bind to.");
-      System.err.println("  hostname  The name clients will see in greet responses. ");
-      System.err.println("            Defaults to the machine's hostname");
-      System.out.println(
-          "  '--secure'  Indicates using xDS credentials options; otherwise defaults to insecure credentials.");
-      System.exit(1);
+    int port = 50051;
+    String hostname = null;
+    ServerCredentials credentials = InsecureServerCredentials.create();
+    if (args.length >= 1 && "--secure".equals(args[0])) {
+      // The xDS credentials use the security configured by the xDS server when available. When xDS
+      // is not used or when xDS does not provide security configuration, the xDS credentials fall
+      // back to other credentials (in this case, InsecureServerCredentials).
+      credentials = XdsServerCredentials.create(InsecureServerCredentials.create());
+      args = Arrays.copyOfRange(args, 1, args.length);
     }
-    if (args.length > 1) {
-      hostName = args[1];
-      if (args.length == 3) {
-        if ("--secure".startsWith(args[2])) {
-          useXdsCreds = true;
-        } else {
-          System.out.println("Ignored: " + args[2]);
-        }
+    if (args.length >= 1) {
+      try {
+        port = Integer.parseInt(args[0]);
+      } catch (NumberFormatException ex) {
+        System.err.println("Usage: [--secure] [PORT [HOSTNAME]]");
+        System.err.println("");
+        System.err.println("  --secure  Use credentials provided by xDS. Defaults to insecure");
+        System.err.println("  PORT      The listen port. Defaults to " + port);
+        System.err.println("  HOSTNAME  The name clients will see in greet responses. ");
+        System.err.println("            Defaults to the machine's hostname");
+        System.exit(1);
       }
     }
-    final HelloWorldServerXds server =
-        new HelloWorldServerXds(Integer.parseInt(args[0]), hostName, useXdsCreds);
-    server.start();
-    server.blockUntilShutdown();
+    if (args.length >= 2) {
+      hostname = args[1];
+    }
+    // Since the main server may be using TLS, we start a second server just for plaintext health
+    // checks
+    int healthPort = port + 1;
+    final HealthStatusManager health = new HealthStatusManager();
+    final Server server = XdsServerBuilder.forPort(port, credentials)
+        .addService(new HostnameGreeter(hostname))
+        .addService(ProtoReflectionService.newInstance()) // convenient for command line tools
+        .addService(health.getHealthService()) // allow management servers to monitor health
+        .build()
+        .start();
+    final Server healthServer =
+        XdsServerBuilder.forPort(healthPort, InsecureServerCredentials.create())
+        .addService(health.getHealthService()) // allow management servers to monitor health
+        .build()
+        .start();
+    System.out.println("Listening on port " + port);
+    System.out.println("Plaintext health service listening on port " + healthPort);
+    Runtime.getRuntime().addShutdownHook(new Thread() {
+      @Override
+      public void run() {
+        health.setStatus("", ServingStatus.NOT_SERVING);
+        // Start graceful shutdown
+        server.shutdown();
+        try {
+          // Wait for RPCs to complete processing
+          if (!server.awaitTermination(30, TimeUnit.SECONDS)) {
+            // That was plenty of time. Let's cancel the remaining RPCs
+            server.shutdownNow();
+            // shutdownNow isn't instantaneous, so give a bit of time to clean resources up
+            // gracefully. Normally this will be well under a second.
+            server.awaitTermination(5, TimeUnit.SECONDS);
+          }
+          healthServer.shutdownNow();
+          healthServer.awaitTermination(5, TimeUnit.SECONDS);
+        } catch (InterruptedException ex) {
+          server.shutdownNow();
+          healthServer.shutdownNow();
+        }
+      }
+    });
+    // This would normally be tied to the service's dependencies. For example, if HostnameGreeter
+    // used a Channel to contact a required service, then when 'channel.getState() ==
+    // TRANSIENT_FAILURE' we'd want to set NOT_SERVING. But HostnameGreeter has no dependencies, so
+    // hard-coding SERVING is appropriate.
+    health.setStatus("", ServingStatus.SERVING);
+    server.awaitTermination();
   }
 }
