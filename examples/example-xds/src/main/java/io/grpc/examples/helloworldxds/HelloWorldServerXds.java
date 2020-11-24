@@ -101,7 +101,11 @@ public class HelloWorldServerXds {
     if (args.length > 1) {
       hostName = args[1];
       if (args.length == 3) {
-        useXdsCreds = args[2].toLowerCase().startsWith("--s");
+        if ("--secure".startsWith(args[2])) {
+          useXdsCreds = true;
+        } else {
+          System.out.println("Ignored: " + args[2]);
+        }
       }
     }
     final HelloWorldServerXds server =

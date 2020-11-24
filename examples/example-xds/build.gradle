@@ -27,12 +27,11 @@ def nettyTcNativeVersion = '2.0.31.Final'
 def protocVersion = '3.12.0'
 
 dependencies {
-    implementation "io.grpc:grpc-netty:${grpcVersion}"
+    implementation "io.grpc:grpc-netty-shaded:${grpcVersion}"
     implementation "io.grpc:grpc-protobuf:${grpcVersion}"
     implementation "io.grpc:grpc-stub:${grpcVersion}"
     implementation "io.grpc:grpc-xds:${grpcVersion}"
     compileOnly "org.apache.tomcat:annotations-api:6.0.53"
-    runtimeOnly "io.netty:netty-tcnative-boringssl-static:${nettyTcNativeVersion}"
 }
 
 protobuf {
@@ -49,14 +48,14 @@ startScripts.enabled = false
 
 task helloWorldClientXds(type: CreateStartScripts) {
     mainClassName = 'io.grpc.examples.helloworldxds.HelloWorldClientXds'
-    applicationName = 'hello-world-client-xds'
+    applicationName = 'xds-hello-world-client'
     outputDir = new File(project.buildDir, 'tmp')
     classpath = startScripts.classpath
 }
 
 task helloWorldServerXds(type: CreateStartScripts) {
     mainClassName = 'io.grpc.examples.helloworldxds.HelloWorldServerXds'
-    applicationName = 'hello-world-server-xds'
+    applicationName = 'xds-hello-world-server'
     outputDir = new File(project.buildDir, 'tmp')
     classpath = startScripts.classpath
 }
