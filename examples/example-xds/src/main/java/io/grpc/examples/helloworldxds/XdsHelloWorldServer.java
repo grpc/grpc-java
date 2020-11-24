@@ -31,7 +31,7 @@ import java.util.concurrent.TimeUnit;
 /**
  * An xDS-managed Server for the {@code Greeter} service.
  */
-public class HelloWorldServerXds {
+public class XdsHelloWorldServer {
   public static void main(String[] args) throws IOException, InterruptedException {
     int port = 50051;
     String hostname = null;
