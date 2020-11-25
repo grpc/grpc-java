@@ -71,12 +71,14 @@ public class XdsHelloWorldClient {
     ChannelCredentials credentials = InsecureChannelCredentials.create();
     if (args.length > 0) {
       if ("--help".equals(args[0])) {
-        System.out.println("Usage: [--secure] [NAME [TARGET]]\n");
-        System.err.println("  --secure  Use credentials provided by xDS. Defaults to insecure");
-        System.err.println("  NAME      The name you wish to be greeted by. Defaults to " + user);
-        System.err.println("  TARGET    The server to connect to. Defaults to " + target);
+        System.out.println("Usage: [--xds-creds] [NAME [TARGET]]");
+        System.out.println("");
+        System.err.println("  --xds-creds  Use credentials provided by xDS. Defaults to insecure");
+        System.out.println("");
+        System.err.println("  NAME    The name you wish to be greeted by. Defaults to " + user);
+        System.err.println("  TARGET  The server to connect to. Defaults to " + target);
         System.exit(1);
-      } else if ("--secure".equals(args[0])) {
+      } else if ("--xds-creds".equals(args[0])) {
         // The xDS credentials use the security configured by the xDS server when available. When
         // xDS is not used or when xDS does not provide security configuration, the xDS credentials
         // fall back to other credentials (in this case, InsecureChannelCredentials).
