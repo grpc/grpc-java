@@ -36,7 +36,7 @@ public class XdsHelloWorldServer {
     int port = 50051;
     String hostname = null;
     ServerCredentials credentials = InsecureServerCredentials.create();
-    if (args.length >= 1 && "--secure".equals(args[0])) {
+    if (args.length >= 1 && "--xds-creds".equals(args[0])) {
       // The xDS credentials use the security configured by the xDS server when available. When xDS
       // is not used or when xDS does not provide security configuration, the xDS credentials fall
       // back to other credentials (in this case, InsecureServerCredentials).
@@ -47,9 +47,10 @@ public class XdsHelloWorldServer {
       try {
         port = Integer.parseInt(args[0]);
       } catch (NumberFormatException ex) {
-        System.err.println("Usage: [--secure] [PORT [HOSTNAME]]");
+        System.err.println("Usage: [--xds-creds] [PORT [HOSTNAME]]");
         System.err.println("");
-        System.err.println("  --secure  Use credentials provided by xDS. Defaults to insecure");
+        System.err.println("  --xds-creds  Use credentials provided by xDS. Defaults to insecure");
+        System.err.println("");
         System.err.println("  PORT      The listen port. Defaults to " + port);
         System.err.println("  HOSTNAME  The name clients will see in greet responses. ");
         System.err.println("            Defaults to the machine's hostname");
