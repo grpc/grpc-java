@@ -103,6 +103,6 @@ public final class AltsAuthContext {
    * @return the context's peer attributes.
    */
   public Map<String, String> getPeerAttributes() {
-    return context.getPeerAttributes();
+    return context.getPeerAttributesMap();
   }
 }
