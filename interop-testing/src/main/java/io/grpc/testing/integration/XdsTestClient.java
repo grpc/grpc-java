@@ -149,7 +149,7 @@ public final class XdsTestClient {
         server = value;
       } else if ("stats_port".equals(key)) {
         statsPort = Integer.valueOf(value);
-      } else if ("secureMode".equals(key)) {
+      } else if ("secure_mode".equals(key)) {
         secureMode = Boolean.valueOf(value);
       } else {
         System.err.println("Unknown argument: " + key);
@@ -180,7 +180,7 @@ public final class XdsTestClient {
               + c.rpcTimeoutSec
               + "\n  --server=host:port     Address of server. Default: "
               + c.server
-              + "\n  --secureMode=BOOLEAN   Use true to enable XdsCredentials. Default: "
+              + "\n  --secure_mode=BOOLEAN  Use true to enable XdsCredentials. Default: "
               + c.secureMode
               + "\n  --stats_port=INT       Port to expose peer distribution stats service. "
               + "Default: "
