@@ -58,7 +58,7 @@ final class ServerXdsClient extends AbstractXdsClient {
   private int listenerPort = -1;
   private final boolean newServerApi;
   @Nullable private final String instanceIp;
-  private final String grpcServerResourceId;
+  private String grpcServerResourceId;
   @Nullable
   private ScheduledHandle ldsRespTimer;
 
@@ -78,6 +78,13 @@ final class ServerXdsClient extends AbstractXdsClient {
     listenerWatcher = checkNotNull(watcher, "watcher");
     checkArgument(port > 0, "port needs to be > 0");
     listenerPort = port;
+    if (newServerApi) {
+      String listeningAddress = instanceIp + ":" + listenerPort;
+      grpcServerResourceId =
+          grpcServerResourceId + "?udpa.resource.listening_address=" + listeningAddress;
+    } else {
+      grpcServerResourceId = ":" + listenerPort;
+    }
     getSyncContext().execute(new Runnable() {
       @Override
       public void run() {
@@ -90,7 +97,7 @@ final class ServerXdsClient extends AbstractXdsClient {
           ldsRespTimer =
               getSyncContext()
                   .schedule(
-                      new ListenerResourceFetchTimeoutTask(":" + port),
+                      new ListenerResourceFetchTimeoutTask(grpcServerResourceId),
                       INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS, getTimeService());
         }
       }
@@ -101,10 +108,7 @@ final class ServerXdsClient extends AbstractXdsClient {
   @Override
   Collection<String> getSubscribedResources(ResourceType type) {
     if (newServerApi) {
-      String listeningAddress = instanceIp + ":" + listenerPort;
-      String resourceName =
-          grpcServerResourceId + "?udpa.resource.listening_address=" + listeningAddress;
-      return ImmutableList.<String>of(resourceName);
+      return ImmutableList.<String>of(grpcServerResourceId);
     } else {
       return Collections.emptyList();
     }
@@ -161,7 +165,7 @@ final class ServerXdsClient extends AbstractXdsClient {
       }
     } else {
       if (ldsRespTimer == null) {
-        listenerWatcher.onResourceDoesNotExist(":" + listenerPort);
+        listenerWatcher.onResourceDoesNotExist(grpcServerResourceId);
       }
     }
     ackResponse(ResourceType.LDS, versionInfo, nonce);
@@ -172,17 +176,16 @@ final class ServerXdsClient extends AbstractXdsClient {
 
   private boolean isRequestedListener(Listener listener) {
     if (newServerApi) {
-      return "TRAFFICDIRECTOR_INBOUND_LISTENER".equals(listener.getName())
+      return grpcServerResourceId.equals(listener.getName())
               && listener.getTrafficDirection().equals(TrafficDirection.INBOUND)
-              && hasMatchingFilter(listener.getFilterChainsList());
+              && isAddressMatching(listener.getAddress(), listenerPort);
     }
-    return isAddressMatching(listener.getAddress())
+    return isAddressMatching(listener.getAddress(), 15001)
         && hasMatchingFilter(listener.getFilterChainsList());
   }
 
-  private boolean isAddressMatching(Address address) {
-    return newServerApi || (address.hasSocketAddress()
-            && (address.getSocketAddress().getPortValue() == 15001));
+  private boolean isAddressMatching(Address address, int portToMatch) {
+    return address.hasSocketAddress() && (address.getSocketAddress().getPortValue() == portToMatch);
   }
 
   private boolean hasMatchingFilter(List<FilterChain> filterChainsList) {
@@ -211,7 +214,7 @@ final class ServerXdsClient extends AbstractXdsClient {
       ldsRespTimer =
           getSyncContext()
               .schedule(
-                  new ListenerResourceFetchTimeoutTask(":" + listenerPort),
+                  new ListenerResourceFetchTimeoutTask(grpcServerResourceId),
                   INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS, getTimeService());
     }
   }
