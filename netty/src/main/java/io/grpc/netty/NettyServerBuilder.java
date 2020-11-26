@@ -630,20 +630,17 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
     ProtocolNegotiator negotiator = protocolNegotiatorFactory.newNegotiator(
         this.serverImplBuilder.getExecutorPool());
 
-    List<NettyServer> transportServers = new ArrayList<>(listenAddresses.size());
-    for (SocketAddress listenAddress : listenAddresses) {
-      NettyServer transportServer = new NettyServer(
-          listenAddress, channelFactory, channelOptions, childChannelOptions,
-          bossEventLoopGroupPool, workerEventLoopGroupPool, forceHeapBuffer, negotiator,
-          streamTracerFactories, transportTracerFactory, maxConcurrentCallsPerConnection,
-          autoFlowControl, flowControlWindow, maxMessageSize, maxHeaderListSize,
-          keepAliveTimeInNanos, keepAliveTimeoutInNanos,
-          maxConnectionIdleInNanos, maxConnectionAgeInNanos,
-          maxConnectionAgeGraceInNanos, permitKeepAliveWithoutCalls, permitKeepAliveTimeInNanos,
-          eagAttributes, this.serverImplBuilder.getChannelz());
-      transportServers.add(transportServer);
-    }
-    return Collections.unmodifiableList(transportServers);
+    NettyServer transportServer = new NettyServer(
+        listenAddresses, channelFactory, channelOptions, childChannelOptions,
+        bossEventLoopGroupPool, workerEventLoopGroupPool, forceHeapBuffer, negotiator,
+        streamTracerFactories, transportTracerFactory, maxConcurrentCallsPerConnection,
+        autoFlowControl, flowControlWindow, maxMessageSize, maxHeaderListSize,
+        keepAliveTimeInNanos, keepAliveTimeoutInNanos,
+        maxConnectionIdleInNanos, maxConnectionAgeInNanos,
+        maxConnectionAgeGraceInNanos, permitKeepAliveWithoutCalls, permitKeepAliveTimeInNanos,
+        eagAttributes, this.serverImplBuilder.getChannelz());
+
+    return Collections.singletonList(transportServer);
   }
 
   @VisibleForTesting

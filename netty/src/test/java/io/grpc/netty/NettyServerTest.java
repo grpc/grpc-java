@@ -47,8 +47,11 @@ import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.util.AsciiString;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.net.SocketAddress;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -90,7 +93,7 @@ public class NettyServerTest {
 
     NoHandlerProtocolNegotiator protocolNegotiator = new NoHandlerProtocolNegotiator();
     NettyServer ns = new NettyServer(
-        addr,
+        Arrays.asList(addr),
         new ReflectiveChannelFactory<>(NioServerSocketChannel.class),
         new HashMap<ChannelOption<?>, Object>(),
         new HashMap<ChannelOption<?>, Object>(),
@@ -135,10 +138,145 @@ public class NettyServerTest {
   }
 
   @Test
-  public void getPort_notStarted() {
-    InetSocketAddress addr = new InetSocketAddress(0);
+  public void multiPortStartStopGet() throws Exception {
+    InetSocketAddress addr1 = new InetSocketAddress(0);
+    InetSocketAddress addr2 = new InetSocketAddress(0);
+
     NettyServer ns = new NettyServer(
-        addr,
+        Arrays.asList(addr1, addr2),
+        new ReflectiveChannelFactory<>(NioServerSocketChannel.class),
+        new HashMap<ChannelOption<?>, Object>(),
+        new HashMap<ChannelOption<?>, Object>(),
+        new FixedObjectPool<>(eventLoop),
+        new FixedObjectPool<>(eventLoop),
+        false,
+        ProtocolNegotiators.plaintext(),
+        Collections.<ServerStreamTracer.Factory>emptyList(),
+        TransportTracer.getDefaultFactory(),
+        1, // ignore
+        false, // ignore
+        1, // ignore
+        1, // ignore
+        1, // ignore
+        1, // ignore
+        1, 1, // ignore
+        1, 1, // ignore
+        true, 0, // ignore
+        Attributes.EMPTY,
+        channelz);
+    final SettableFuture<Void> shutdownCompleted = SettableFuture.create();
+    ns.start(new ServerListener() {
+      @Override
+      public ServerTransportListener transportCreated(ServerTransport transport) {
+        return new NoopServerTransportListener();
+      }
+
+      @Override
+      public void serverShutdown() {
+        shutdownCompleted.set(null);
+      }
+    });
+
+    // SocketStats won't be available until the event loop task of adding SocketStats created by
+    // ns.start() complete. So submit a noop task and await until it's drained.
+    eventLoop.submit(new Runnable() {
+      @Override
+      public void run() {}
+    }).await(5, TimeUnit.SECONDS);
+
+    assertEquals(2, ns.getListenSocketAddresses().size());
+    for (SocketAddress address: ns.getListenSocketAddresses()) {
+      assertThat(((InetSocketAddress) address).getPort()).isGreaterThan(0);
+    }
+
+    List<InternalInstrumented<SocketStats>> stats = ns.getListenSocketStatsList();
+    assertEquals(2, ns.getListenSocketStatsList().size());
+    for (InternalInstrumented<SocketStats> listenSocket : stats) {
+      assertSame(listenSocket, channelz.getSocket(id(listenSocket)));
+      // very basic sanity check of the contents
+      SocketStats socketStats = listenSocket.getStats().get();
+      assertThat(ns.getListenSocketAddresses()).contains(socketStats.local);
+      assertNull(socketStats.remote);
+    }
+
+    // Cleanup
+    ns.shutdown();
+    shutdownCompleted.get();
+
+    // listen socket is removed
+    for (InternalInstrumented<SocketStats> listenSocket : stats) {
+      assertNull(channelz.getSocket(id(listenSocket)));
+    }
+  }
+
+  @Test(timeout = 60000)
+  public void multiPortConnections() throws Exception {
+    InetSocketAddress addr1 = new InetSocketAddress(1);
+    InetSocketAddress addr2 = new InetSocketAddress(2);
+    final CountDownLatch allPortsConnectedCountDown = new CountDownLatch(2);
+
+    NettyServer ns = new NettyServer(
+        Arrays.asList(addr1, addr2),
+        new ReflectiveChannelFactory<>(NioServerSocketChannel.class),
+        new HashMap<ChannelOption<?>, Object>(),
+        new HashMap<ChannelOption<?>, Object>(),
+        new FixedObjectPool<>(eventLoop),
+        new FixedObjectPool<>(eventLoop),
+        false,
+        ProtocolNegotiators.plaintext(),
+        Collections.<ServerStreamTracer.Factory>emptyList(),
+        TransportTracer.getDefaultFactory(),
+        1, // ignore
+        false, // ignore
+        1, // ignore
+        1, // ignore
+        1, // ignore
+        1, // ignore
+        1, 1, // ignore
+        1, 1, // ignore
+        true, 0, // ignore
+        Attributes.EMPTY,
+        channelz);
+    final SettableFuture<Void> shutdownCompleted = SettableFuture.create();
+    ns.start(new ServerListener() {
+      @Override
+      public ServerTransportListener transportCreated(ServerTransport transport) {
+        allPortsConnectedCountDown.countDown();
+        return new NoopServerTransportListener();
+      }
+
+      @Override
+      public void serverShutdown() {
+        shutdownCompleted.set(null);
+      }
+    });
+
+    // SocketStats won't be available until the event loop task of adding SocketStats created by
+    // ns.start() complete. So submit a noop task and await until it's drained.
+    eventLoop.submit(new Runnable() {
+      @Override
+      public void run() {}
+    }).await(5, TimeUnit.SECONDS);
+
+    List<SocketAddress> serverSockets = ns.getListenSocketAddresses();
+    assertEquals(2, serverSockets.size());
+
+    for (int i = 0; i < 2; i++) {
+      Socket socket = new Socket();
+      socket.connect(serverSockets.get(i), /* timeout= */ 8000);
+      socket.close();
+    }
+    allPortsConnectedCountDown.await();
+    // Cleanup
+    ns.shutdown();
+    shutdownCompleted.get();
+  }
+
+  @Test
+  public void getPort_notStarted() {
+    SocketAddress addr = new InetSocketAddress(0);
+    NettyServer ns = new NettyServer(
+        Arrays.asList(addr),
         new ReflectiveChannelFactory<>(NioServerSocketChannel.class),
         new HashMap<ChannelOption<?>, Object>(),
         new HashMap<ChannelOption<?>, Object>(),
@@ -211,7 +349,7 @@ public class NettyServerTest {
     TestProtocolNegotiator protocolNegotiator = new TestProtocolNegotiator();
     InetSocketAddress addr = new InetSocketAddress(0);
     NettyServer ns = new NettyServer(
-        addr,
+        Arrays.asList(addr),
         new ReflectiveChannelFactory<>(NioServerSocketChannel.class),
         new HashMap<ChannelOption<?>, Object>(),
         childChannelOptions,
@@ -258,7 +396,7 @@ public class NettyServerTest {
   public void channelzListenSocket() throws Exception {
     InetSocketAddress addr = new InetSocketAddress(0);
     NettyServer ns = new NettyServer(
-        addr,
+        Arrays.asList(addr),
         new ReflectiveChannelFactory<>(NioServerSocketChannel.class),
         new HashMap<ChannelOption<?>, Object>(),
         new HashMap<ChannelOption<?>, Object>(),

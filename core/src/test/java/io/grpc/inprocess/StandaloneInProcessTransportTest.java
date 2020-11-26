@@ -31,6 +31,7 @@ import io.grpc.internal.ServerTransportListener;
 import io.grpc.internal.SharedResourcePool;
 import java.io.IOException;
 import java.net.SocketAddress;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import javax.annotation.Nullable;
@@ -127,8 +128,19 @@ public final class StandaloneInProcessTransportTest extends AbstractTransportTes
     }
 
     @Override
+    public List<SocketAddress> getListenSocketAddresses() {
+      return Collections.singletonList(getListenSocketAddress());
+    }
+
+    @Override
     @Nullable
     public InternalInstrumented<SocketStats> getListenSocketStats() {
+      return null;
+    }
+
+    @Override
+    @Nullable
+    public List<InternalInstrumented<SocketStats>> getListenSocketStatsList() {
       return null;
     }
   }

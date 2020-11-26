@@ -90,7 +90,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
@@ -225,40 +224,29 @@ public class ServerImplTest {
     assertEquals(0, timer.numPendingTasks());
   }
 
-  @Test
+  @Test(expected = IllegalArgumentException.class)
   public void multiport() throws Exception {
-    final CountDownLatch starts = new CountDownLatch(2);
-    final CountDownLatch shutdowns = new CountDownLatch(2);
-
-    final class Serv extends SimpleServer {
-      @Override
-      public void start(ServerListener listener) throws IOException {
-        super.start(listener);
-        starts.countDown();
-      }
-
-      @Override
-      public void shutdown() {
-        super.shutdown();
-        shutdowns.countDown();
-      }
-    }
-
-    SimpleServer transportServer1 = new Serv();
-    SimpleServer transportServer2 = new Serv();
-    assertNull(server);
-    builder.fallbackHandlerRegistry(fallbackRegistry);
-    builder.executorPool = executorPool;
+    SimpleServer transportServer1 = new SimpleServer();
+    SimpleServer transportServer2 = new SimpleServer();
     server = new ServerImpl(
-        builder, ImmutableList.of(transportServer1, transportServer2), SERVER_CONTEXT);
+       builder, ImmutableList.of(transportServer1, transportServer2), SERVER_CONTEXT);
+    verifyNoMoreInteractions(server);
+  }
 
-    server.start();
-    assertTrue(starts.await(1, TimeUnit.SECONDS));
-    assertEquals(2, shutdowns.getCount());
-
-    server.shutdown();
-    assertTrue(shutdowns.await(1, TimeUnit.SECONDS));
-    assertTrue(server.awaitTermination(1, TimeUnit.SECONDS));
+  @Test
+  public void getListenSockets() throws Exception {
+    int port = 800;
+    final List<InetSocketAddress> addresses =
+        Collections.singletonList(new InetSocketAddress(800));
+    transportServer = new SimpleServer() {
+      @Override
+      public List<InetSocketAddress> getListenSocketAddresses() {
+        return addresses;
+      }
+    };
+    createAndStartServer();
+    assertEquals(port, server.getPort());
+    assertThat(server.getListenSockets()).isEqualTo(addresses);
   }
 
   @Test
@@ -1131,15 +1119,22 @@ public class ServerImplTest {
   @Test
   public void getPort() throws Exception {
     final InetSocketAddress addr = new InetSocketAddress(65535);
+    final List<InetSocketAddress> addrs = Collections.singletonList(addr);
     transportServer = new SimpleServer() {
       @Override
-      public SocketAddress getListenSocketAddress() {
+      public InetSocketAddress getListenSocketAddress() {
         return addr;
+      }
+
+      @Override
+      public List<InetSocketAddress> getListenSocketAddresses() {
+        return addrs;
       }
     };
     createAndStartServer();
 
     assertThat(server.getPort()).isEqualTo(addr.getPort());
+    assertThat(server.getListenSockets()).isEqualTo(addrs);
   }
 
   @Test
@@ -1470,7 +1465,17 @@ public class ServerImplTest {
     }
 
     @Override
+    public List<InetSocketAddress> getListenSocketAddresses() {
+      return Collections.singletonList(new InetSocketAddress(12345));
+    }
+
+    @Override
     public InternalInstrumented<SocketStats> getListenSocketStats() {
+      return null;
+    }
+
+    @Override
+    public List<InternalInstrumented<SocketStats>> getListenSocketStatsList() {
       return null;
     }
 

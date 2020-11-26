@@ -46,12 +46,12 @@ public class NettyServerBuilderTest {
   private NettyServerBuilder builder = NettyServerBuilder.forPort(8080);
 
   @Test
-  public void createMultipleServers() {
+  public void addMultipleListenAddresses() {
     builder.addListenAddress(new InetSocketAddress(8081));
     List<NettyServer> servers =
         builder.buildTransportServers(ImmutableList.<ServerStreamTracer.Factory>of());
 
-    Truth.assertThat(servers).hasSize(2);
+    Truth.assertThat(servers).hasSize(1);
   }
 
   @Test
