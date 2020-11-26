@@ -1,0 +1,23 @@
+steps:
+- name: 'gcr.io/cloud-builders/docker'
+  args:
+    - 'build'
+    - '--tag=${_IMAGE_NAME}:${_SERVER_IMAGE_TAG}'
+    - '--file=test-server.Dockerfile'
+    - '.'
+
+- name: 'gcr.io/cloud-builders/docker'
+  args:
+    - 'build'
+    - '--tag=${_IMAGE_NAME}:${_CLIENT_IMAGE_TAG}'
+    - '--file=test-client.Dockerfile'
+    - '.'
+
+substitutions:
+  _IMAGE_NAME: gcr.io/grpc-testing/xds-k8s-test-java
+  _SERVER_IMAGE_TAG: server-dev
+  _CLIENT_IMAGE_TAG: client-dev
+
+images:
+  - '${_IMAGE_NAME}:${_SERVER_IMAGE_TAG}'
+  - '${_IMAGE_NAME}:${_CLIENT_IMAGE_TAG}'

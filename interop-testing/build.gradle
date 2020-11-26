@@ -32,6 +32,13 @@ dependencies {
     censusGrpcMetricDependency 'implementation'
     googleOauth2Dependency 'implementation'
     compileOnly libraries.javax_annotation
+    // TODO(sergiitk): replace with com.google.cloud:google-cloud-logging
+    // Used instead of google-cloud-logging because it's failing
+    // due to a circular dependency on grpc.
+    // https://cloud.google.com/logging/docs/setup/java#the_javautillogging_handler
+    // Error example: "java.util.logging.ErrorManager: 1"
+    // Latest failing version com.google.cloud:google-cloud-logging:2.1.2
+    runtimeOnly group: 'io.github.devatherock', name: 'jul-jsonformatter', version: '1.1.0'
     runtimeOnly libraries.opencensus_impl,
             libraries.netty_tcnative,
             project(':grpc-grpclb')
