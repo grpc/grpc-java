@@ -53,13 +53,11 @@ public interface InternalServer {
    * Returns the first listening socket address.  May change after {@link start(ServerListener)} is
    * called.
    */
-  @Deprecated
   SocketAddress getListenSocketAddress();
 
   /**
    * Returns the first listen socket stats of this server. May return {@code null}.
    */
-  @Deprecated
   @Nullable InternalInstrumented<SocketStats> getListenSocketStats();
 
   /**

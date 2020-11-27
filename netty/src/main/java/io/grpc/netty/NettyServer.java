@@ -45,6 +45,7 @@ import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.ChannelPromise;
+import io.netty.channel.EventLoop;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.ServerChannel;
 import io.netty.channel.group.ChannelGroup;
@@ -63,6 +64,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Callable;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -107,6 +109,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
   private volatile List<InternalInstrumented<SocketStats>> listenSocketStatsList =
       new ArrayList<>();
   private volatile boolean terminated;
+  private final EventLoop bossExecutor;
 
   NettyServer(
       List<? extends SocketAddress> addresses,
@@ -156,6 +159,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
     this.channelz = Preconditions.checkNotNull(channelz);
     this.logId = InternalLogId.allocate(getClass(), addresses.isEmpty() ? "No address" :
         String.valueOf(addresses));
+    this.bossExecutor = bossGroup.next();
   }
 
   @Override
@@ -195,7 +199,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
     final ServerBootstrap b = new ServerBootstrap();
     b.option(ALLOCATOR, Utils.getByteBufAllocator(forceHeapBuffer));
     b.childOption(ALLOCATOR, Utils.getByteBufAllocator(forceHeapBuffer));
-    b.group(bossGroup, workerGroup);
+    b.group(bossExecutor, workerGroup);
     b.channelFactory(channelFactory);
     // For non-socket based channel, the option will be ignored.
     b.childOption(SO_KEEPALIVE, true);
@@ -285,19 +289,37 @@ class NettyServer implements InternalServer, InternalWithLogId {
       }
     });
 
-    final Map<ChannelFuture, SocketAddress> channelFutures = new HashMap<>();
-    for (SocketAddress address: addresses) {
-      ChannelFuture future = b.bind(address);
-      channelFutures.put(future, address);
+    Future<Map<ChannelFuture, SocketAddress>> bindCallFuture =
+        bossExecutor.submit(new Callable<Map<ChannelFuture, SocketAddress>>() {
+          @Override
+          public Map<ChannelFuture, SocketAddress> call() {
+            Map<ChannelFuture, SocketAddress> map = new HashMap<>();
+            for (SocketAddress address: addresses) {
+                ChannelFuture future = b.bind(address);
+                map.put(future, address);
+            }
+            return map;
+          }
+        }
+    );
+    Map<ChannelFuture, SocketAddress> channelFutures;
+    try {
+      Future<Map<ChannelFuture, SocketAddress>> bindCallResult =
+          bindCallFuture.awaitUninterruptibly();
+      if (!bindCallResult.isSuccess()) {
+        throw new IllegalStateException(bindCallResult.cause());
+      }
+      channelFutures = bindCallResult.get();
+    } catch (Exception ex) {
+      throw new IOException(String.format("Failed to bind to addresses %s",
+          addresses), ex.getCause());
     }
-    for (Map.Entry<ChannelFuture, SocketAddress> channelFutureEntry: channelFutures.entrySet()) {
 
+    for (Map.Entry<ChannelFuture, SocketAddress> channelFutureEntry: channelFutures.entrySet()) {
       // We'd love to observe interruption, but if interrupted we will need to close the channel,
       // which itself would need an await() to guarantee the port is not used when the method
       // returns. See #6850
-      ChannelFuture future = channelFutureEntry.getKey();
-      future.awaitUninterruptibly();
-
+      ChannelFuture future  = channelFutureEntry.getKey().awaitUninterruptibly();
       if (!future.isSuccess()) {
         throw new IOException(String.format("Failed to bind to address %s",
             channelFutureEntry.getValue()), future.cause());

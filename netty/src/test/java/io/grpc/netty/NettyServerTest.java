@@ -21,6 +21,8 @@ import static io.grpc.InternalChannelz.id;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
@@ -36,15 +38,20 @@ import io.grpc.internal.ServerTransport;
 import io.grpc.internal.ServerTransportListener;
 import io.grpc.internal.TransportTracer;
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerAdapter;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOption;
+import io.netty.channel.EventLoop;
+import io.netty.channel.EventLoopGroup;
 import io.netty.channel.ReflectiveChannelFactory;
 import io.netty.channel.WriteBufferWaterMark;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.util.AsciiString;
+import io.netty.util.concurrent.Future;
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketAddress;
@@ -53,17 +60,37 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.mockito.ArgumentMatchers;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
 
 @RunWith(JUnit4.class)
 public class NettyServerTest {
   private final InternalChannelz channelz = new InternalChannelz();
   private final NioEventLoopGroup eventLoop = new NioEventLoopGroup(1);
+
+  @Mock
+  EventLoopGroup mockEventLoopGroup;
+  @Mock
+  EventLoop mockEventLoop;
+  @Mock
+  Future<Map<ChannelFuture, SocketAddress>> bindFuture;
+
+  @Before
+  public void setup() throws Exception {
+    MockitoAnnotations.initMocks(this);
+    when(mockEventLoopGroup.next()).thenReturn(mockEventLoop);
+    when(mockEventLoop.submit(ArgumentMatchers.<Callable<Map<ChannelFuture, SocketAddress>>>any()))
+        .thenReturn(bindFuture);
+  }
 
   @After
   public void tearDown() throws Exception {
@@ -456,6 +483,65 @@ public class NettyServerTest {
 
     // listen socket is removed
     assertNull(channelz.getSocket(id(listenSocket)));
+  }
+
+  @Test(expected = IOException.class)
+  @SuppressWarnings("unchecked")
+  public void testBindCallFailAwait() throws Exception {
+    when(bindFuture.awaitUninterruptibly()).thenThrow(new RuntimeException("Failed silent await"));
+    verifyServerNotStart(mockEventLoopGroup);
+  }
+
+  @Test(expected = IOException.class)
+  @SuppressWarnings("unchecked")
+  public void testBindCallFailGet() throws Exception {
+    when(bindFuture.awaitUninterruptibly()).thenReturn(bindFuture);
+    when(bindFuture.get()).thenThrow(new InterruptedException());
+    verifyServerNotStart(mockEventLoopGroup);
+  }
+
+  @Test(expected = IOException.class)
+  @SuppressWarnings("unchecked")
+  public void testBindUnSuccessful() throws Exception {
+    when(bindFuture.awaitUninterruptibly()).thenReturn(bindFuture);
+    when(bindFuture.isSuccess()).thenReturn(false);
+    verifyServerNotStart(mockEventLoopGroup);
+  }
+
+  private void verifyServerNotStart(EventLoopGroup parentGroup) throws Exception {
+    InetSocketAddress addr = new InetSocketAddress(0);
+    NettyServer ns = new NettyServer(
+        Arrays.asList(addr),
+        new ReflectiveChannelFactory<>(NioServerSocketChannel.class),
+        new HashMap<ChannelOption<?>, Object>(),
+        new HashMap<ChannelOption<?>, Object>(),
+        new FixedObjectPool<>(parentGroup),
+        new FixedObjectPool<>(eventLoop),
+        false,
+        ProtocolNegotiators.plaintext(),
+        Collections.<ServerStreamTracer.Factory>emptyList(),
+        TransportTracer.getDefaultFactory(),
+        1, // ignore
+        false, // ignore
+        1, // ignore
+        1, // ignore
+        1, // ignore
+        1, // ignore
+        1, 1, // ignore
+        1, 1, // ignore
+        true, 0, // ignore
+        Attributes.EMPTY,
+        channelz);
+    ns.start(new ServerListener() {
+      @Override
+      public ServerTransportListener transportCreated(ServerTransport transport) {
+        return new NoopServerTransportListener();
+      }
+
+      @Override
+      public void serverShutdown() {}
+    });
+    verifyNoInteractions(ns);
   }
 
   private static class NoopServerTransportListener implements ServerTransportListener {
