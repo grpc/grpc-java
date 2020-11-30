@@ -45,6 +45,7 @@ import io.grpc.Context;
 import io.grpc.DecompressorRegistry;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.ForwardingChannelBuilder;
+import io.grpc.ForwardingClientCall;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalChannelz.ChannelStats;
 import io.grpc.InternalChannelz.ChannelTrace;
@@ -1109,6 +1110,86 @@ final class ManagedChannelImpl extends ManagedChannel implements
       }
       return new ConfigSelectingClientCall<>(
           selector, clientCallImplChannel, executor, method, callOptions);
+    }
+  }
+
+  /**
+   * A client call for a given channel that applies a given config selector when it starts.
+   */
+  static final class ConfigSelectingClientCall<ReqT, RespT>
+      extends ForwardingClientCall<ReqT, RespT> {
+
+    private final InternalConfigSelector configSelector;
+    private final Channel channel;
+    private final Executor callExecutor;
+    private final MethodDescriptor<ReqT, RespT> method;
+    private final Context context;
+    private CallOptions callOptions;
+
+    private ClientCall<ReqT, RespT> delegate;
+
+    ConfigSelectingClientCall(
+        InternalConfigSelector configSelector, Channel channel, Executor channelExecutor,
+        MethodDescriptor<ReqT, RespT> method,
+        CallOptions callOptions) {
+      this.configSelector = configSelector;
+      this.channel = channel;
+      this.method = method;
+      this.callOptions = callOptions;
+      this.callExecutor =
+          callOptions.getExecutor() == null ? channelExecutor : callOptions.getExecutor();
+      this.context = Context.current();
+    }
+
+    @Override
+    protected ClientCall<ReqT, RespT> delegate() {
+      return delegate;
+    }
+
+    @Override
+    public void start(Listener<RespT> observer, Metadata headers) {
+      PickSubchannelArgs args = new PickSubchannelArgsImpl(method, headers, callOptions);
+      InternalConfigSelector.Result result = configSelector.selectConfig(args);
+      Status status = result.getStatus();
+      if (!status.isOk()) {
+        executeCloseObserverInContext(observer, status);
+        return;
+      }
+      ClientInterceptor interceptor = result.getInterceptor();
+      ManagedChannelServiceConfig config = (ManagedChannelServiceConfig) result.getConfig();
+      MethodInfo methodInfo = config.getMethodConfig(method);
+      if (methodInfo != null) {
+        callOptions = callOptions.withOption(MethodInfo.KEY, methodInfo);
+      }
+      if (interceptor != null) {
+        delegate = interceptor.interceptCall(method, callOptions, channel);
+      } else {
+        delegate = channel.newCall(method, callOptions);
+      }
+      delegate.start(observer, headers);
+    }
+
+    private void executeCloseObserverInContext(
+        final Listener<RespT> observer, final Status status) {
+      class CloseInContext extends ContextRunnable {
+        CloseInContext() {
+          super(context);
+        }
+
+        @Override
+        public void runInContext() {
+          observer.onClose(status, new Metadata());
+        }
+      }
+
+      callExecutor.execute(new CloseInContext());
+    }
+
+    @Override
+    public void cancel(@Nullable String message, @Nullable Throwable cause) {
+      if (delegate != null) {
+        delegate.cancel(message, cause);
+      }
     }
   }
 
