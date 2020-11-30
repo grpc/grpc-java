@@ -54,16 +54,16 @@ code. We will now demonstrate how the code can authorize use of xDS provided cre
 `XdsChannelCredentials` on the client side and using `XdsServerCredentials` on the server side.
 This code is enabled by providing an additional command line argument.
 
-1. On the server side, add `--secure` on the command line to authorize use of xDS security:
+1. On the server side, add `--xds-creds` on the command line to authorize use of xDS security:
 ```
 $ export GRPC_XDS_BOOTSTRAP=/path/to/bootstrap.json
-$ ./build/install/example-xds/bin/xds-hello-world-server --secure
+$ ./build/install/example-xds/bin/xds-hello-world-server --xds-creds
 ```
 
-2. Similarly, add `--secure` on the command line when you run the xDS client:
+2. Similarly, add `--xds-creds` on the command line when you run the xDS client:
 ```
 $ export GRPC_XDS_BOOTSTRAP=/path/to/bootstrap.json
-$ ./build/install/example-xds/bin/xds-hello-world-client --secure "xds world" xds:///yourServersName
+$ ./build/install/example-xds/bin/xds-hello-world-client --xds-creds "xds world" xds:///yourServersName
 ```
 
 In this case, if the xDS management server is configured to provide mTLS credentials (for example) to the client and
