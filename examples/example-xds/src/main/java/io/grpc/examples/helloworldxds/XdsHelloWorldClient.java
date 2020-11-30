@@ -61,7 +61,7 @@ public class XdsHelloWorldClient {
 
   /**
    * Greet server. If provided, the first element of {@code args} is the name to use in the
-   * greeting. The second argument is the target server. A {@code --secure} flag is also accepted.
+   * greeting. The second argument is the target server. A {@code --xds-creds} flag is also accepted.
    */
   public static void main(String[] args) throws Exception {
     String user = "xds world";
