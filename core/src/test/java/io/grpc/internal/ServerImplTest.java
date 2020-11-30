@@ -90,6 +90,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
@@ -224,13 +225,47 @@ public class ServerImplTest {
     assertEquals(0, timer.numPendingTasks());
   }
 
-  @Test(expected = IllegalArgumentException.class)
-  public void multiport() throws Exception {
+  @Test
+  public void multiPortStart() throws Exception {
+    final CountDownLatch startCount = new CountDownLatch(2);
+    class CountStartSimpleServer extends SimpleServer {
+
+      @Override
+      public void start(ServerListener listener) throws IOException {
+        super.start(listener);
+        startCount.countDown();
+      }
+    }
+
+    SimpleServer transportServer1 = new CountStartSimpleServer();
+    SimpleServer transportServer2 = new CountStartSimpleServer();
+    server = new ServerImpl(
+       builder, ImmutableList.of(transportServer1, transportServer2), SERVER_CONTEXT);
+    server.start();
+    assertEquals(1, startCount.getCount());
+  }
+
+  @Test
+  public void multiPortShutdown() throws Exception {
+    final CountDownLatch shutdownCount = new CountDownLatch(2);
+    class CountShutdownSimpleServerTransport extends SimpleServerTransport {
+
+      @Override
+      public void shutdown() {
+        super.shutdown();
+        shutdownCount.countDown();
+      }
+    }
+
     SimpleServer transportServer1 = new SimpleServer();
     SimpleServer transportServer2 = new SimpleServer();
     server = new ServerImpl(
-       builder, ImmutableList.of(transportServer1, transportServer2), SERVER_CONTEXT);
-    verifyNoMoreInteractions(server);
+        builder, ImmutableList.of(transportServer1, transportServer2), SERVER_CONTEXT);
+    server.start();
+    transportServer1.registerNewServerTransport(new CountShutdownSimpleServerTransport());
+    transportServer1.registerNewServerTransport(new CountShutdownSimpleServerTransport());
+    server.shutdown();
+    assertEquals(0, shutdownCount.getCount());
   }
 
   @Test

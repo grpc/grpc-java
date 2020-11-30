@@ -179,6 +179,10 @@ class NettyServer implements InternalServer, InternalWithLogId {
     for (Channel c: channelGroup) {
       listenSocketAddresses.add(c.localAddress());
     }
+    // server is not listening/bound yet, just return the original ports.
+    if (listenSocketAddresses.isEmpty())  {
+      listenSocketAddresses.addAll(addresses);
+    }
     return listenSocketAddresses;
   }
 
@@ -257,7 +261,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
         // This is to order callbacks on the listener, not to guard access to channel.
         synchronized (NettyServer.this) {
           if (terminated) {
-            // Server already shutdown.
+            // Server already terminated.
             ch.close();
             return;
           }
@@ -307,12 +311,12 @@ class NettyServer implements InternalServer, InternalWithLogId {
       Future<Map<ChannelFuture, SocketAddress>> bindCallResult =
           bindCallFuture.awaitUninterruptibly();
       if (!bindCallResult.isSuccess()) {
-        throw new IllegalStateException(bindCallResult.cause());
+        throw bindCallResult.cause();
       }
       channelFutures = bindCallResult.get();
-    } catch (Exception ex) {
+    } catch (Throwable ex) {
       throw new IOException(String.format("Failed to bind to addresses %s",
-          addresses), ex.getCause());
+          addresses), ex);
     }
 
     for (Map.Entry<ChannelFuture, SocketAddress> channelFutureEntry: channelFutures.entrySet()) {
@@ -340,7 +344,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
   @Override
   public void shutdown() {
     if (terminated) {
-      // Already shutdown. Not thread safe but we are not making it worse for now.
+      // Already closed. Not thread safe but we are not making it worse for now.
       return;
     }
 

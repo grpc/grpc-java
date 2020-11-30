@@ -142,8 +142,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
     this.fallbackRegistry =
         Preconditions.checkNotNull(builder.fallbackRegistry, "fallbackRegistry");
     Preconditions.checkNotNull(transportServers, "transportServers");
-    // Supporting multiple listening socket address function is moved to a single transport server.
-    Preconditions.checkArgument(transportServers.size() == 1, "One and only one server");
+    Preconditions.checkArgument(!transportServers.isEmpty(), "no servers provided");
     this.transportServer = transportServers.get(0);
     this.logId =
         InternalLogId.allocate("Server", String.valueOf(getListenSocketsIgnoringLifecycle()));
@@ -378,7 +377,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
       ArrayList<ServerTransport> copiedTransports;
       Status shutdownNowStatusCopy;
       synchronized (lock) {
-        if (transportServersTerminated) {
+        if (serverShutdownCallbackInvoked) {
           return;
         }
 

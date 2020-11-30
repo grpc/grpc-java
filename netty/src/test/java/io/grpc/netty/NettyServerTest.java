@@ -238,8 +238,8 @@ public class NettyServerTest {
 
   @Test(timeout = 60000)
   public void multiPortConnections() throws Exception {
-    InetSocketAddress addr1 = new InetSocketAddress(1);
-    InetSocketAddress addr2 = new InetSocketAddress(2);
+    InetSocketAddress addr1 = new InetSocketAddress(0);
+    InetSocketAddress addr2 = new InetSocketAddress(0);
     final CountDownLatch allPortsConnectedCountDown = new CountDownLatch(2);
 
     NettyServer ns = new NettyServer(
@@ -301,9 +301,10 @@ public class NettyServerTest {
 
   @Test
   public void getPort_notStarted() {
-    SocketAddress addr = new InetSocketAddress(0);
+    InetSocketAddress addr = new InetSocketAddress(0);
+    List<InetSocketAddress> addresses = Collections.singletonList(addr);
     NettyServer ns = new NettyServer(
-        Arrays.asList(addr),
+        addresses,
         new ReflectiveChannelFactory<>(NioServerSocketChannel.class),
         new HashMap<ChannelOption<?>, Object>(),
         new HashMap<ChannelOption<?>, Object>(),
@@ -326,6 +327,7 @@ public class NettyServerTest {
         channelz);
 
     assertThat(ns.getListenSocketAddress()).isEqualTo(addr);
+    assertThat(ns.getListenSocketAddresses()).isEqualTo(addresses);
   }
 
   @Test(timeout = 60000)
