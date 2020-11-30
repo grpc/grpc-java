@@ -607,6 +607,81 @@ public class ManagedChannelImplTest {
   }
 
   @Test
+  public void newCallWithConfigSelector_interceptorBased() {
+    FakeNameResolverFactory nameResolverFactory =
+        new FakeNameResolverFactory.Builder(expectedUri)
+            .setServers(ImmutableList.of(addressGroup)).build();
+    channelBuilder.nameResolverFactory(nameResolverFactory);
+    channel = new ManagedChannelImpl(
+        channelBuilder, mockTransportFactory, new FakeBackoffPolicyProvider(),
+        balancerRpcExecutorPool, timer.getStopwatchSupplier(),
+        Collections.<ClientInterceptor>emptyList(), timer.getTimeProvider());
+    nameResolverFactory.nextConfigOrError.set(
+        ConfigOrError.fromConfig(ManagedChannelServiceConfig.empty()));
+    final Metadata.Key<String> metadataKey =
+        Metadata.Key.of("test", Metadata.ASCII_STRING_MARSHALLER);
+    final CallOptions.Key<String> callOptionsKey = CallOptions.Key.create("test");
+    InternalConfigSelector configSelector = new InternalConfigSelector() {
+      @Override
+      public Result selectConfig(final PickSubchannelArgs args) {
+        return Result.newBuilder()
+            .setConfig(ManagedChannelServiceConfig.empty())
+            .setInterceptor(
+                // An interceptor that mutates CallOptions based on headers value.
+                new ClientInterceptor() {
+                  String value = args.getHeaders().get(metadataKey);
+                  @Override
+                  public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+                      MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+                    callOptions = callOptions.withOption(callOptionsKey, value);
+                    return next.newCall(method, callOptions);
+                  }
+                })
+            .build();
+      }
+    };
+    nameResolverFactory.nextAttributes.set(
+        Attributes.newBuilder().set(InternalConfigSelector.KEY, configSelector).build());
+    channel.getState(true);
+    Metadata headers = new Metadata();
+    headers.put(metadataKey, "fooValue");
+    ClientStream mockStream = mock(ClientStream.class);
+    ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
+    call.start(mockCallListener, headers);
+
+    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(null);
+    verify(mockLoadBalancerProvider).newLoadBalancer(helperCaptor.capture());
+    helper = helperCaptor.getValue();
+    // Make the transport available
+    Subchannel subchannel =
+        createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
+    requestConnectionSafely(helper, subchannel);
+    verify(mockTransportFactory)
+        .newClientTransport(
+            any(SocketAddress.class), any(ClientTransportOptions.class), any(ChannelLogger.class));
+    MockClientTransportInfo transportInfo = transports.poll();
+    ConnectionClientTransport mockTransport = transportInfo.transport;
+    ManagedClientTransport.Listener transportListener = transportInfo.listener;
+    when(mockTransport.newStream(same(method), same(headers), any(CallOptions.class)))
+        .thenReturn(mockStream);
+    transportListener.transportReady();
+    when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class)))
+        .thenReturn(PickResult.withSubchannel(subchannel));
+    updateBalancingStateSafely(helper, READY, mockPicker);
+    executor.runDueTasks();
+
+    ArgumentCaptor<CallOptions> callOptionsCaptor = ArgumentCaptor.forClass(null);
+    verify(mockTransport).newStream(same(method), same(headers), callOptionsCaptor.capture());
+    assertThat(callOptionsCaptor.getValue().getOption(callOptionsKey)).isEqualTo("fooValue");
+    verify(mockStream).start(streamListenerCaptor.capture());
+
+    // Clean up as much as possible to allow the channel to terminate.
+    shutdownSafely(helper, subchannel);
+    timer.forwardNanos(
+        TimeUnit.SECONDS.toNanos(ManagedChannelImpl.SUBCHANNEL_SHUTDOWN_DELAY_SECONDS));
+  }
+
+  @Test
   public void shutdownWithNoTransportsEverCreated() {
     channelBuilder.nameResolverFactory(
         new FakeNameResolverFactory.Builder(expectedUri)
