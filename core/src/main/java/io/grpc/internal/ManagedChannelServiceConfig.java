@@ -180,15 +180,7 @@ final class ManagedChannelServiceConfig {
     if (serviceMap.isEmpty() && serviceMethodMap.isEmpty() && defaultMethodConfig == null) {
       return null;
     }
-    return new InternalConfigSelector() {
-      @Override
-      public Result selectConfig(PickSubchannelArgs args) {
-        return Result.newBuilder()
-            .setConfig(ManagedChannelServiceConfig.this)
-            .setCallOptions(args.getCallOptions())
-            .build();
-      }
-    };
+    return new ServiceConfigConvertedSelector(this);
   }
 
   @VisibleForTesting
@@ -384,6 +376,24 @@ final class ManagedChannelServiceConfig {
       return new HedgingPolicy(
           maxAttempts, hedgingDelayNanos,
           ServiceConfigUtil.getNonFatalStatusCodesFromHedgingPolicy(hedgingPolicy));
+    }
+  }
+
+  static final class ServiceConfigConvertedSelector extends InternalConfigSelector {
+
+    final ManagedChannelServiceConfig config;
+
+    /** Converts the service config to config selector. */
+    private ServiceConfigConvertedSelector(ManagedChannelServiceConfig config) {
+      this.config = config;
+    }
+
+    @Override
+    public Result selectConfig(PickSubchannelArgs args) {
+      return Result.newBuilder()
+          .setConfig(config)
+          .setCallOptions(args.getCallOptions())
+          .build();
     }
   }
 }

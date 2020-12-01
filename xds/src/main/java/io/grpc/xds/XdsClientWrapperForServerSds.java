@@ -76,6 +76,7 @@ public final class XdsClientWrapperForServerSds {
   private final int port;
   private ScheduledExecutorService timeService;
   private XdsClient.ListenerWatcher listenerWatcher;
+  private boolean newServerApi;
   @VisibleForTesting final Set<ServerWatcher> serverWatchers = new HashSet<>();
 
   /**
@@ -109,6 +110,7 @@ public final class XdsClientWrapperForServerSds {
     }
     Node node = bootstrapInfo.getNode();
     timeService = SharedResourceHolder.get(timeServiceResource);
+    newServerApi = channel.isUseProtocolV3() && experimentalNewServerApiEnvVar;
     XdsClient xdsClientImpl =
         new ServerXdsClient(
             channel,
@@ -180,7 +182,8 @@ public final class XdsClientWrapperForServerSds {
       FilterChainComparator comparator = new FilterChainComparator(localInetAddr);
       FilterChain bestMatch =
           filterChains.isEmpty() ? null : Collections.max(filterChains, comparator);
-      if (bestMatch != null && comparator.isMatching(bestMatch.getFilterChainMatch())) {
+      if (bestMatch != null
+          && (newServerApi || comparator.isMatching(bestMatch.getFilterChainMatch()))) {
         return bestMatch.getDownstreamTlsContext();
       }
     }

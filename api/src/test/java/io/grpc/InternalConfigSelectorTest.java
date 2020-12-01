@@ -17,6 +17,7 @@
 package io.grpc;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.mockito.Mockito.mock;
 
 import io.grpc.InternalConfigSelector.Result;
 import io.grpc.Status.Code;
@@ -53,6 +54,18 @@ public class InternalConfigSelectorTest {
     assertThat(result.getConfig()).isEqualTo(config);
     assertThat(result.getCallOptions()).isEqualTo(callOptions);
     assertThat(result.getCommittedCallback()).isSameInstanceAs(committedCallback);
+  }
+
+  @Test
+  public void resultBuilder_interceptorBased() {
+    Object config = "fake_config";
+    InternalConfigSelector.Result.Builder builder = InternalConfigSelector.Result.newBuilder();
+    ClientInterceptor interceptor = mock(ClientInterceptor.class);
+    InternalConfigSelector.Result result =
+        builder.setConfig(config).setInterceptor(interceptor).build();
+    assertThat(result.getStatus().isOk()).isTrue();
+    assertThat(result.getConfig()).isEqualTo(config);
+    assertThat(result.getInterceptor()).isSameInstanceAs(interceptor);
   }
 
   @Test
