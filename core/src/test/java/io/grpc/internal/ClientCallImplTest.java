@@ -18,6 +18,7 @@ package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.internal.GrpcUtil.ACCEPT_ENCODING_SPLITTER;
+import static java.util.concurrent.TimeUnit.MINUTES;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -38,6 +39,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.util.concurrent.MoreExecutors;
@@ -52,6 +54,7 @@ import io.grpc.Deadline;
 import io.grpc.Decompressor;
 import io.grpc.DecompressorRegistry;
 import io.grpc.InternalConfigSelector;
+import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
@@ -389,14 +392,100 @@ public class ClientCallImplTest {
   }
 
   @Test
-  public void methodInfoDeadlinePropagatedToStream() {
+  public void configSelectorCallOptionsPropagatedToStream() {
+    ArgumentCaptor<CallOptions> callOptionsCaptor = ArgumentCaptor.forClass(null);
+    configSelector = new InternalConfigSelector() {
+      @Override
+      public Result selectConfig(PickSubchannelArgs args) {
+        return Result.newBuilder()
+            .setConfig(ManagedChannelServiceConfig.empty())
+            .setCallOptions(args.getCallOptions().withAuthority("dummy_value"))
+            .build();
+      }
+    };
+    ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
+        method,
+        MoreExecutors.directExecutor(),
+        baseCallOptions,
+        clientStreamProvider,
+        deadlineCancellationExecutor,
+        channelCallTracer, configSelector)
+        .setDecompressorRegistry(decompressorRegistry);
+    call.start(callListener, new Metadata());
+    verify(clientStreamProvider).newStream(
+        same(method), callOptionsCaptor.capture(), any(Metadata.class), any(Context.class));
+    assertThat(callOptionsCaptor.getValue().getAuthority()).isEqualTo("dummy_value");
+  }
+
+  @Test
+  public void methodConfigPropagatedToStream() {
+    Map<String, ?> rawMethodConfig = ImmutableMap.of(
+        "retryPolicy",
+        ImmutableMap.of(
+            "maxAttempts", 3.0D,
+            "initialBackoff", "1s",
+            "maxBackoff", "10s",
+            "backoffMultiplier", 1.5D,
+            "retryableStatusCodes", ImmutableList.of("UNAVAILABLE")
+        ));
+    final MethodInfo methodInfo = new MethodInfo(rawMethodConfig, true, 4, 4);
+    configSelector = new InternalConfigSelector() {
+      @Override
+      public Result selectConfig(PickSubchannelArgs args) {
+        ManagedChannelServiceConfig config = new ManagedChannelServiceConfig(
+            methodInfo,
+            ImmutableMap.<String, MethodInfo>of(),
+            ImmutableMap.<String, MethodInfo>of(),
+            null,
+            null,
+            null);
+        return Result.newBuilder()
+            .setConfig(config)
+            .setCallOptions(args.getCallOptions())
+            .build();
+      }
+    };
+    ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
+        method,
+        MoreExecutors.directExecutor(),
+        baseCallOptions,
+        clientStreamProvider,
+        deadlineCancellationExecutor,
+        channelCallTracer, configSelector)
+        .setDecompressorRegistry(decompressorRegistry);
+    call.start(callListener, new Metadata());
+    ArgumentCaptor<CallOptions> callOptionsCaptor = ArgumentCaptor.forClass(null);
+    verify(clientStreamProvider).newStream(
+        same(method), callOptionsCaptor.capture(), any(Metadata.class), any(Context.class));
+    assertThat(callOptionsCaptor.getValue().getOption(MethodInfo.KEY)).isEqualTo(methodInfo);
+  }
+
+  @Test
+  public void configDeadlinePropagatedToStream() {
     ArgumentCaptor<CallOptions> callOptionsCaptor = ArgumentCaptor.forClass(null);
     CallOptions callOptions = baseCallOptions.withDeadline(Deadline.after(2000, SECONDS));
 
     // Case: config Deadline expires later than CallOptions Deadline
-    Map<String, ?> rawMethodConfig = ImmutableMap.of("timeout", "3000s");
-    MethodInfo methodInfo = new MethodInfo(rawMethodConfig, false, 0, 0);
-    callOptions = callOptions.withOption(MethodInfo.KEY, methodInfo);
+    configSelector = new InternalConfigSelector() {
+      @Override
+      public Result selectConfig(PickSubchannelArgs args) {
+        Map<String, ?> rawMethodConfig = ImmutableMap.of(
+            "timeout",
+            "3000s");
+        MethodInfo methodInfo = new MethodInfo(rawMethodConfig, false, 0, 0);
+        ManagedChannelServiceConfig config = new ManagedChannelServiceConfig(
+            methodInfo,
+            ImmutableMap.<String, MethodInfo>of(),
+            ImmutableMap.<String, MethodInfo>of(),
+            null,
+            null,
+            null);
+        return Result.newBuilder()
+            .setConfig(config)
+            .setCallOptions(args.getCallOptions())
+            .build();
+      }
+    };
     ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
         method,
         MoreExecutors.directExecutor(),
@@ -412,9 +501,26 @@ public class ClientCallImplTest {
     assertThat(actualDeadline).isLessThan(Deadline.after(2001, SECONDS));
 
     // Case: config Deadline expires earlier than CallOptions Deadline
-    rawMethodConfig = ImmutableMap.of("timeout", "1000s");
-    methodInfo = new MethodInfo(rawMethodConfig, false, 0, 0);
-    callOptions = callOptions.withOption(MethodInfo.KEY, methodInfo);
+    configSelector = new InternalConfigSelector() {
+      @Override
+      public Result selectConfig(PickSubchannelArgs args) {
+        Map<String, ?> rawMethodConfig = ImmutableMap.of(
+            "timeout",
+            "1000s");
+        MethodInfo methodInfo = new MethodInfo(rawMethodConfig, false, 0, 0);
+        ManagedChannelServiceConfig config = new ManagedChannelServiceConfig(
+            methodInfo,
+            ImmutableMap.<String, MethodInfo>of(),
+            ImmutableMap.<String, MethodInfo>of(),
+            null,
+            null,
+            null);
+        return Result.newBuilder()
+            .setConfig(config)
+            .setCallOptions(args.getCallOptions())
+            .build();
+      }
+    };
     call = new ClientCallImpl<>(
         method,
         MoreExecutors.directExecutor(),
@@ -427,7 +533,7 @@ public class ClientCallImplTest {
     verify(clientStreamProvider, times(2)).newStream(
         same(method), callOptionsCaptor.capture(), any(Metadata.class), any(Context.class));
     actualDeadline = callOptionsCaptor.getValue().getDeadline();
-    assertThat(actualDeadline).isLessThan(Deadline.after(1001, SECONDS));
+    assertThat(actualDeadline).isLessThan(Deadline.after(1001, MINUTES));
   }
 
   @Test

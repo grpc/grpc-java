@@ -44,10 +44,6 @@ public abstract class InternalConfigSelector {
     private final CallOptions callOptions;
     @Nullable
     private final Runnable committedCallback;
-    // TODO(zdapeng): delete callOptions and committedCallback fields, and migrate to use
-    //  interceptor only.
-    @Nullable
-    public ClientInterceptor interceptor;
 
     private Result(
         Status status, Object config, CallOptions callOptions, Runnable committedCallback) {
@@ -55,16 +51,6 @@ public abstract class InternalConfigSelector {
       this.config = config;
       this.callOptions = callOptions;
       this.committedCallback = committedCallback;
-      this.interceptor = null;
-    }
-
-    private Result(
-        Status status, Object config, ClientInterceptor interceptor) {
-      this.status = checkNotNull(status, "status");
-      this.config = config;
-      this.callOptions = null;
-      this.committedCallback = null;
-      this.interceptor = interceptor;
     }
 
     /**
@@ -106,14 +92,6 @@ public abstract class InternalConfigSelector {
       return committedCallback;
     }
 
-    /**
-     * Returns an interceptor that will be applies to calls.
-     */
-    @Nullable
-    public ClientInterceptor getInterceptor() {
-      return interceptor;
-    }
-
     public static Builder newBuilder() {
       return new Builder();
     }
@@ -122,7 +100,6 @@ public abstract class InternalConfigSelector {
       private Object config;
       private CallOptions callOptions;
       private Runnable committedCallback;
-      private ClientInterceptor interceptor;
 
       private Builder() {}
 
@@ -147,7 +124,7 @@ public abstract class InternalConfigSelector {
       }
 
       /**
-       * Sets the committed callback. This field is optional.
+       * Sets the interceptor. This field is optional.
        *
        * @return this
        */
@@ -157,26 +134,12 @@ public abstract class InternalConfigSelector {
       }
 
       /**
-       * Sets the interceptor. This field is optional.
-       *
-       * @return this
-       */
-      public Builder setInterceptor(ClientInterceptor interceptor) {
-        this.interceptor = checkNotNull(interceptor, "interceptor");
-        return this;
-      }
-
-      /**
        * Build this {@link Result}.
        */
       public Result build() {
         checkState(config != null, "config is not set");
-        if (interceptor == null) {
-          checkState(callOptions != null, "callOptions is not set");
-          return new Result(Status.OK, config, callOptions, committedCallback);
-        } else {
-          return new Result(Status.OK, config, interceptor);
-        }
+        checkState(callOptions != null, "callOptions is not set");
+        return new Result(Status.OK, config, callOptions, committedCallback);
       }
     }
   }
