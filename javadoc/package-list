@@ -12,3 +12,4 @@ io.grpc.stub
 io.grpc.stub.annotations
 io.grpc.testing
 io.grpc.util
+io.grpc.xds
