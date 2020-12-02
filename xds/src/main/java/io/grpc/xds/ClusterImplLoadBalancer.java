@@ -40,13 +40,16 @@ import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nullable;
 
 /**
  * Load balancer for cluster_impl_experimental LB policy. This LB policy is the child LB policy of
  * the priority_experimental LB policy and the parent LB policy of the weighted_target_experimental
- * LB policy in the xDS load balancing hierarchy.
+ * LB policy in the xDS load balancing hierarchy. This LB policy applies cluster-level
+ * configurations to requests sent to the corresponding cluster, such as drop policies, circuit
+ * breakers.
  */
 final class ClusterImplLoadBalancer extends LoadBalancer {
 
@@ -111,9 +114,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
       }
     }
     childLbHelper.updateDropPolicies(config.dropCategories);
-    if (config.maxConcurrentRequests != null) {
-      childLbHelper.updateMaxConcurrentRequests(config.maxConcurrentRequests);
-    }
+    childLbHelper.updateMaxConcurrentRequests(config.maxConcurrentRequests);
     if (loadStatsStore != null) {
       attributes = attributes.toBuilder()
           .set(XdsAttributes.ATTR_CLUSTER_SERVICE_LOAD_STATS_STORE, loadStatsStore).build();
@@ -185,11 +186,15 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
       }
     }
 
-    private void updateMaxConcurrentRequests(long maxConcurrentRequests) {
-      if (this.maxConcurrentRequests != maxConcurrentRequests) {
-        this.maxConcurrentRequests = maxConcurrentRequests;
-        updateBalancingState(currentState, currentPicker);
+    private void updateMaxConcurrentRequests(@Nullable Long maxConcurrentRequests) {
+      if (Objects.equals(this.maxConcurrentRequests, maxConcurrentRequests)) {
+        return;
       }
+      this.maxConcurrentRequests =
+          maxConcurrentRequests != null
+              ? maxConcurrentRequests
+              : DEFAULT_PER_CLUSTER_MAX_CONCURRENT_REQUESTS;
+      updateBalancingState(currentState, currentPicker);
     }
 
     private class RequestLimitingSubchannelPicker extends SubchannelPicker {
