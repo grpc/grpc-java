@@ -61,6 +61,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -466,7 +467,7 @@ public class XdsNameResolverTest {
   @SuppressWarnings("unchecked")
   private Result assertCallSelectResult(
       CallInfo call, InternalConfigSelector configSelector, String expectedCluster,
-      Double expectedTimeoutSec) {
+      @Nullable Double expectedTimeoutSec) {
     Result result = configSelector.selectConfig(
         new PickSubchannelArgsImpl(call.methodDescriptor, new Metadata(), CallOptions.DEFAULT));
     assertThat(result.getStatus().isOk()).isTrue();
