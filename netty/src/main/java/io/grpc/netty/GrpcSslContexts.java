@@ -39,6 +39,9 @@ import java.util.Collections;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import com.amazon.corretto.crypto.provider.AmazonCorrettoCryptoProvider;
+import com.amazon.corretto.crypto.provider.SelfTestResult;
+import com.amazon.corretto.crypto.provider.SelfTestStatus;
 
 /**
  * Utility for configuring SslContext for gRPC.
@@ -235,6 +238,13 @@ public class GrpcSslContexts {
    * Returns OpenSSL if available, otherwise returns the JDK provider.
    */
   private static SslProvider defaultSslProvider() {
+    /* Use Amazon Corretto Crypto Provider if available  */
+    AmazonCorrettoCryptoProvider.install();
+    if (AmazonCorrettoCryptoProvider.INSTANCE.getLoadingError() == null &&
+        AmazonCorrettoCryptoProvider.INSTANCE.runSelfTests().equals(SelfTestStatus.PASSED)) {
+      logger.log(Level.FINE, "Selecting AmazonCorrettoCryptoPrivider");
+      return SslProvider.JDK;
+    }
     if (OpenSsl.isAvailable()) {
       logger.log(Level.FINE, "Selecting OPENSSL");
       return SslProvider.OPENSSL;
@@ -257,6 +267,9 @@ public class GrpcSslContexts {
   }
 
   private static Provider findJdkProvider() {
+    Provider providerA = Security.getProvider(AMAZON_PROVIDER_NAME);
+    if (providerA != null )
+      return providerA;
     for (Provider provider : Security.getProviders("SSLContext.TLS")) {
       if (AMAZON_PROVIDER_NAME.equals(provider.getName())) {
         if (JettyTlsUtil.isJettyAlpnConfigured()
