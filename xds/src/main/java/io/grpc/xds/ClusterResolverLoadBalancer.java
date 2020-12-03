@@ -17,9 +17,11 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.xds.XdsLbPolicies.LRS_POLICY_NAME;
 import static io.grpc.xds.XdsLbPolicies.PRIORITY_POLICY_NAME;
+import static io.grpc.xds.XdsSubchannelPickers.BUFFER_PICKER;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.EquivalentAddressGroup;
@@ -66,7 +68,11 @@ import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
 /**
- * Load balancer for cluster_resolver_experimental LB policy.
+ * Load balancer for cluster_resolver_experimental LB policy. This LB policy is the child LB policy
+ * of the cds_experimental LB policy and the parent LB policy of the priority_experimental LB
+ * policy in the xDS load balancing hierarchy. This policy resolves endpoints of non-aggregate
+ * clusters (e.g., EDS or Logical DNS) and groups endpoints in priorities and localities to be
+ * used in the downstream LB policies for ine-grained load balancing purposes.
  */
 final class ClusterResolverLoadBalancer extends LoadBalancer {
 
@@ -210,9 +216,14 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
     private void handleEndpointResourceUpdate() {
       List<EquivalentAddressGroup> addresses = new ArrayList<>();
       Map<String, PolicySelection> priorityLbPolicies = new HashMap<>();
-      List<String> priorities = new ArrayList<>();
+      List<String> priorities = new ArrayList<>();  // totally ordered priority list
+      boolean allResolved = true;
       for (String cluster : clusters) {
         ClusterState state = clusterStates.get(cluster);
+        if (!state.resolved) {
+          allResolved = false;
+          continue;
+        }
         if (state.result != null) {
           addresses.addAll(state.result.addresses);
           priorityLbPolicies.putAll(state.result.priorityLbPolicies);
@@ -224,8 +235,12 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
           childLb.shutdown();
           childLb = null;
         }
-        Status unavailable = Status.UNAVAILABLE.withDescription("No endpoint available");
-        helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(unavailable));
+        if (allResolved) {
+          Status unavailable = Status.UNAVAILABLE.withDescription("No endpoint available");
+          helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(unavailable));
+        } else {
+          helper.updateBalancingState(CONNECTING, BUFFER_PICKER);
+        }
         return;
       }
       PriorityLbConfig childConfig =
@@ -241,9 +256,21 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
               .build());
     }
 
-    private void handleEndpointResolutionError(Status error) {
-      if (childLb == null) {
-        helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
+    private void handleEndpointResolutionError() {
+      boolean allInError = true;
+      for (ClusterState state :  clusterStates.values()) {
+        if (state.status.isOk()) {
+          allInError = false;
+        }
+      }
+      if (allInError) {
+        // Propagate the error status of the last cluster. This is the best we can do.
+        Status error = clusterStates.get(clusters.get(clusters.size() - 1)).status;
+        if (childLb != null) {
+          childLb.handleNameResolutionError(error);
+        } else {
+          helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
+        }
       }
     }
 
@@ -261,7 +288,12 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       protected String lrsServerName;
       @Nullable
       protected Long maxConcurrentRequests;
-      // Most recently resolved addresses and config, or null if resolution has not completed.
+      // Resolution status, may contain most recent error encountered.
+      protected Status status = Status.OK;
+      // True if has received resolution result.
+      protected boolean resolved;
+      // Most recently resolved addresses and config, or null if resource not exists.
+      @Nullable
       protected ClusterResolutionResult result;
       protected boolean shutdown;
 
@@ -290,7 +322,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
 
       @Override
       public void onChanged(final EdsUpdate update) {
-        final class EndpointsUpdated implements Runnable {
+        class EndpointsUpdated implements Runnable {
           @Override
           public void run() {
             if (shutdown) {
@@ -334,6 +366,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
                   locality, localityLbInfo.getLocalityWeight());
             }
             if (prioritizedLocalityWeights.isEmpty()) {
+              // Transient state, neither as a result or an error.
               logger.log(XdsLogLevel.INFO,
                   "Cluster {0} has no usable priority/locality/endpoint", update.getClusterName());
               return;
@@ -344,6 +377,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
                 generateClusterPriorityLbPolicies(name, edsServiceName, lrsServerName,
                     maxConcurrentRequests, localityPickingPolicy, endpointPickingPolicy,
                     lbRegistry, prioritizedLocalityWeights, dropOverloads);
+            status = Status.OK;
+            resolved = true;
             result = new ClusterResolutionResult(addresses, priorityLbPolicies, priorities);
             handleEndpointResourceUpdate();
           }
@@ -361,7 +396,9 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
               return;
             }
             logger.log(XdsLogLevel.INFO, "Resource {0} unavailable", resourceName);
-            result = null;
+            status = Status.OK;
+            resolved = true;
+            result = null;  // resource revoked
             handleEndpointResourceUpdate();
           }
         });
@@ -375,8 +412,9 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
             if (shutdown) {
               return;
             }
+            status = error;
             logger.log(XdsLogLevel.WARNING, "Received EDS error: {0}", error);
-            handleEndpointResolutionError(error);
+            handleEndpointResolutionError();
           }
         });
       }
@@ -458,6 +496,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
                   generateClusterPriorityLbPolicy(name, edsServiceName, lrsServerName,
                       maxConcurrentRequests, endpointPickingPolicy, lbRegistry,
                       logicalDnsClusterLocality, Collections.<DropOverload>emptyList());
+              status = Status.OK;
+              resolved = true;
               result = new ClusterResolutionResult(addresses, priorityName, priorityLbPolicy);
               handleEndpointResourceUpdate();
             }
@@ -474,7 +514,11 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
               if (shutdown) {
                 return;
               }
-              handleEndpointResolutionError(error);
+              status = error;
+              // NameResolver.Listener API cannot distinguish transient errors, we should avoid
+              // waiting for DNS addresses indefinitely.
+              resolved = true;
+              handleEndpointResolutionError();
               if (scheduledRefresh != null && scheduledRefresh.isPending()) {
                 return;
               }
