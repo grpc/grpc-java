@@ -759,6 +759,15 @@ public class ServerXdsClientTest {
         backoffPolicy2);
   }
 
+  @Test
+  public void getSubscribedResources() {
+    xdsClient.watchListenerData(PORT, listenerWatcher);
+    assertThat(xdsClient.getSubscribedResources(ResourceType.LDS)).isEmpty();
+    assertThat(xdsClient.getSubscribedResources(ResourceType.CDS)).isEmpty();
+    assertThat(xdsClient.getSubscribedResources(ResourceType.EDS)).isEmpty();
+    assertThat(xdsClient.getSubscribedResources(ResourceType.RDS)).isEmpty();
+  }
+
   static Listener buildListenerWithFilterChain(String name, int portValue, String address,
       FilterChain... filterChains) {
     io.envoyproxy.envoy.api.v2.core.Address listenerAddress =

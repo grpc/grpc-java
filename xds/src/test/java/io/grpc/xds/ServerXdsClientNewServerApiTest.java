@@ -141,7 +141,7 @@ public class ServerXdsClientNewServerApiTest {
   private ListenerWatcher listenerWatcher;
 
   private ManagedChannel channel;
-  private XdsClient xdsClient;
+  private ServerXdsClient xdsClient;
 
   @Before
   public void setUp() throws IOException {
@@ -617,6 +617,16 @@ public class ServerXdsClientNewServerApiTest {
 
     verifyNoMoreInteractions(mockedDiscoveryService, backoffPolicyProvider, backoffPolicy1,
         backoffPolicy2);
+  }
+
+  @Test
+  public void getSubscribedResources() {
+    xdsClient.watchListenerData(PORT, listenerWatcher);
+    assertThat(xdsClient.getSubscribedResources(ResourceType.LDS))
+        .containsExactly("test/value?udpa.resource.listening_address=192.168.3.7:7000");
+    assertThat(xdsClient.getSubscribedResources(ResourceType.CDS)).isEmpty();
+    assertThat(xdsClient.getSubscribedResources(ResourceType.EDS)).isEmpty();
+    assertThat(xdsClient.getSubscribedResources(ResourceType.RDS)).isEmpty();
   }
 
   static Listener buildListenerWithFilterChain(String name, int portValue, String address,
