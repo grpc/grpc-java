@@ -32,6 +32,7 @@ dependencies {
             libraries.netty_epoll
     signature "org.codehaus.mojo.signature:java17:1.0@signature"
     alpnagent libraries.jetty_alpn_agent
+    implementation 'software.amazon.cryptools:AmazonCorrettoCryptoProvider:1.+:linux-x86_64'
 }
 
 import net.ltgt.gradle.errorprone.CheckSeverity
