@@ -767,7 +767,6 @@ class NettyClientHandler extends AbstractNettyHandler {
 
   private void forcefulClose(final ChannelHandlerContext ctx, final ForcefulCloseCommand msg,
       ChannelPromise promise) throws Exception {
-    ctx.close();
     connection().forEachActiveStream(new Http2StreamVisitor() {
       @Override
       public boolean visit(Http2Stream stream) throws Http2Exception {
@@ -787,7 +786,7 @@ class NettyClientHandler extends AbstractNettyHandler {
         }
       }
     });
-    promise.setSuccess();
+    close(ctx, promise);
   }
 
   /**
