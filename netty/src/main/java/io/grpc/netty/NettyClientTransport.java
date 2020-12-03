@@ -346,9 +346,6 @@ class NettyClientTransport implements ConnectionClientTransport {
         @Override
         public void run() {
           lifecycleManager.notifyShutdown(reason);
-          // Call close() directly since negotiation may not have completed, such that a write would
-          // be queued.
-          channel.close();
           channel.write(new ForcefulCloseCommand(reason));
         }
       }, true);
