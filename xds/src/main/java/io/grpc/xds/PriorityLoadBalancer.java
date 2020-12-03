@@ -153,7 +153,9 @@ final class PriorityLoadBalancer extends LoadBalancer {
     }
     // TODO(zdapeng): Include error details of each priority.
     logger.log(XdsLogLevel.DEBUG, "All priority failed");
-    updateOverallState(TRANSIENT_FAILURE, new ErrorPicker(Status.UNAVAILABLE));
+    String lastPriority = priorityNames.get(priorityNames.size() - 1);
+    SubchannelPicker errorPicker = children.get(lastPriority).picker;
+    updateOverallState(TRANSIENT_FAILURE, errorPicker);
   }
 
   private void updateOverallState(ConnectivityState state, SubchannelPicker picker) {
@@ -190,6 +192,8 @@ final class PriorityLoadBalancer extends LoadBalancer {
             // The child is deactivated.
             return;
           }
+          picker = new ErrorPicker(
+              Status.UNAVAILABLE.withDescription("Connection timeout for priority " + priority));
           logger.log(XdsLogLevel.DEBUG, "Priority {0} failed over to next", priority);
           tryNextPriority(true);
         }
