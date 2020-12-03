@@ -256,11 +256,7 @@ public class XdsNameResolverTest {
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
     InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
-    Result selectResult = configSelector.selectConfig(
-        new PickSubchannelArgsImpl(call1.methodDescriptor, new Metadata(), CallOptions.DEFAULT));
-    assertThat(selectResult.getStatus().isOk()).isTrue();
     assertCallSelectResult(call1, configSelector, cluster1, null);
-    assertThat((Map<String, ?>) selectResult.getConfig()).isEmpty();
   }
 
   @Test
@@ -450,10 +446,8 @@ public class XdsNameResolverTest {
         Arrays.asList(cluster1, cluster2), (Map<String, ?>) result.getServiceConfig().getConfig());
     assertThat(result.getAttributes().get(XdsAttributes.XDS_CLIENT_POOL)).isNotNull();
     InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
-    Result selectResult = assertCallSelectResult(call1, configSelector, cluster2, null);
-    assertServiceConfigForMethodConfig(20.0, (Map<String, ?>) selectResult.getConfig());
-    selectResult = assertCallSelectResult(call1, configSelector, cluster1, null);
-    assertServiceConfigForMethodConfig(20.0, (Map<String, ?>) selectResult.getConfig());
+    assertCallSelectResult(call1, configSelector, cluster2, 20.0);
+    assertCallSelectResult(call1, configSelector, cluster1, 20.0);
   }
 
   @SuppressWarnings("unchecked")
@@ -464,8 +458,7 @@ public class XdsNameResolverTest {
     assertThat((Map<String, ?>) result.getServiceConfig().getConfig()).isEmpty();
   }
 
-  @SuppressWarnings("unchecked")
-  private Result assertCallSelectResult(
+  private void assertCallSelectResult(
       CallInfo call, InternalConfigSelector configSelector, String expectedCluster,
       @Nullable Double expectedTimeoutSec) {
     Result result = configSelector.selectConfig(
@@ -477,10 +470,20 @@ public class XdsNameResolverTest {
     clientCall.start(new NoopClientCallListener<Void>(), new Metadata());
     assertThat(testCall.callOptions.getOption(XdsNameResolver.CLUSTER_SELECTION_KEY))
         .isEqualTo(expectedCluster);
+    @SuppressWarnings("unchecked")
+    Map<String, ?> config = (Map<String, ?>) result.getConfig();
     if (expectedTimeoutSec != null) {
-      assertServiceConfigForMethodConfig(expectedTimeoutSec, (Map<String, ?>) result.getConfig());
+      // Verify the raw service config contains a single method config for method with the
+      // specified timeout.
+      List<Map<String, ?>> rawMethodConfigs =
+          JsonUtil.getListOfObjects(config, "methodConfig");
+      Map<String, ?> methodConfig = Iterables.getOnlyElement(rawMethodConfigs);
+      List<Map<String, ?>> methods = JsonUtil.getListOfObjects(methodConfig, "name");
+      assertThat(Iterables.getOnlyElement(methods)).isEmpty();
+      assertThat(JsonUtil.getString(methodConfig, "timeout")).isEqualTo(expectedTimeoutSec + "s");
+    } else {
+      assertThat(config).isEmpty();
     }
-    return result;
   }
 
   @SuppressWarnings("unchecked")
@@ -504,20 +507,6 @@ public class XdsNameResolverTest {
     assertThat(result.getAttributes().get(XdsAttributes.XDS_CLIENT_POOL)).isNotNull();
     assertThat(result.getAttributes().get(XdsAttributes.CALL_COUNTER_PROVIDER)).isNotNull();
     return result.getAttributes().get(InternalConfigSelector.KEY);
-  }
-
-  /**
-   * Verifies the raw service config contains a single method config for method with the
-   * specified timeout.
-   */
-  private static void assertServiceConfigForMethodConfig(
-      double timeoutSec, Map<String, ?> actualServiceConfig) {
-    List<Map<String, ?>> rawMethodConfigs =
-        JsonUtil.getListOfObjects(actualServiceConfig, "methodConfig");
-    Map<String, ?> methodConfig = Iterables.getOnlyElement(rawMethodConfigs);
-    List<Map<String, ?>> methods = JsonUtil.getListOfObjects(methodConfig, "name");
-    assertThat(Iterables.getOnlyElement(methods)).isEmpty();
-    assertThat(JsonUtil.getString(methodConfig, "timeout")).isEqualTo(timeoutSec + "s");
   }
 
   /**
