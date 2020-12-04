@@ -557,67 +557,6 @@ public class ManagedChannelImplTest {
         Collections.<ClientInterceptor>emptyList(), timer.getTimeProvider());
     nameResolverFactory.nextConfigOrError.set(
         ConfigOrError.fromConfig(ManagedChannelServiceConfig.empty()));
-    InternalConfigSelector configSelector = new InternalConfigSelector() {
-      @Override
-      public Result selectConfig(PickSubchannelArgs args) {
-        return Result.newBuilder()
-            .setConfig(ManagedChannelServiceConfig.empty())
-            .setCallOptions(args.getCallOptions().withAuthority("fake_override_authority"))
-            .build();
-      }
-    };
-    nameResolverFactory.nextAttributes.set(
-        Attributes.newBuilder().set(InternalConfigSelector.KEY, configSelector).build());
-    channel.getState(true);
-    Metadata headers = new Metadata();
-    ClientStream mockStream = mock(ClientStream.class);
-    ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
-    call.start(mockCallListener, headers);
-
-    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(null);
-    verify(mockLoadBalancerProvider).newLoadBalancer(helperCaptor.capture());
-    helper = helperCaptor.getValue();
-    // Make the transport available
-    Subchannel subchannel =
-        createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
-    requestConnectionSafely(helper, subchannel);
-    verify(mockTransportFactory)
-        .newClientTransport(
-            any(SocketAddress.class), any(ClientTransportOptions.class), any(ChannelLogger.class));
-    MockClientTransportInfo transportInfo = transports.poll();
-    ConnectionClientTransport mockTransport = transportInfo.transport;
-    ManagedClientTransport.Listener transportListener = transportInfo.listener;
-    when(mockTransport.newStream(same(method), same(headers), any(CallOptions.class)))
-        .thenReturn(mockStream);
-    transportListener.transportReady();
-    when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class)))
-        .thenReturn(PickResult.withSubchannel(subchannel));
-    updateBalancingStateSafely(helper, READY, mockPicker);
-    executor.runDueTasks();
-
-    ArgumentCaptor<CallOptions> callOptionsCaptor = ArgumentCaptor.forClass(null);
-    verify(mockTransport).newStream(same(method), same(headers), callOptionsCaptor.capture());
-    assertThat(callOptionsCaptor.getValue().getAuthority()).isEqualTo("fake_override_authority");
-    verify(mockStream).start(streamListenerCaptor.capture());
-
-    // Clean up as much as possible to allow the channel to terminate.
-    shutdownSafely(helper, subchannel);
-    timer.forwardNanos(
-        TimeUnit.SECONDS.toNanos(ManagedChannelImpl.SUBCHANNEL_SHUTDOWN_DELAY_SECONDS));
-  }
-
-  @Test
-  public void newCallWithConfigSelector_interceptorBased() {
-    FakeNameResolverFactory nameResolverFactory =
-        new FakeNameResolverFactory.Builder(expectedUri)
-            .setServers(ImmutableList.of(addressGroup)).build();
-    channelBuilder.nameResolverFactory(nameResolverFactory);
-    channel = new ManagedChannelImpl(
-        channelBuilder, mockTransportFactory, new FakeBackoffPolicyProvider(),
-        balancerRpcExecutorPool, timer.getStopwatchSupplier(),
-        Collections.<ClientInterceptor>emptyList(), timer.getTimeProvider());
-    nameResolverFactory.nextConfigOrError.set(
-        ConfigOrError.fromConfig(ManagedChannelServiceConfig.empty()));
     final Metadata.Key<String> metadataKey =
         Metadata.Key.of("test", Metadata.ASCII_STRING_MARSHALLER);
     final CallOptions.Key<String> callOptionsKey = CallOptions.Key.create("test");
