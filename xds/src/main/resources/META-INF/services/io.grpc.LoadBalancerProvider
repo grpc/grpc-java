@@ -4,3 +4,4 @@ io.grpc.xds.PriorityLoadBalancerProvider
 io.grpc.xds.WeightedTargetLoadBalancerProvider
 io.grpc.xds.LrsLoadBalancerProvider
 io.grpc.xds.ClusterManagerLoadBalancerProvider
+io.grpc.xds.ClusterImplLoadBalancerProvider
