@@ -107,7 +107,10 @@ final class ServerXdsClient extends AbstractXdsClient {
   @Nullable
   @Override
   Collection<String> getSubscribedResources(ResourceType type) {
-    if (newServerApi && (type == ResourceType.LDS)) {
+    if (type != ResourceType.LDS) {
+      return null;
+    }
+    if (newServerApi) {
       return ImmutableList.<String>of(grpcServerResourceId);
     } else {
       return Collections.emptyList();

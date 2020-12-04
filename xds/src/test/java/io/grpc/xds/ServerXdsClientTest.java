@@ -763,9 +763,9 @@ public class ServerXdsClientTest {
   public void getSubscribedResources() {
     xdsClient.watchListenerData(PORT, listenerWatcher);
     assertThat(xdsClient.getSubscribedResources(ResourceType.LDS)).isEmpty();
-    assertThat(xdsClient.getSubscribedResources(ResourceType.CDS)).isEmpty();
-    assertThat(xdsClient.getSubscribedResources(ResourceType.EDS)).isEmpty();
-    assertThat(xdsClient.getSubscribedResources(ResourceType.RDS)).isEmpty();
+    assertThat(xdsClient.getSubscribedResources(ResourceType.CDS)).isNull();
+    assertThat(xdsClient.getSubscribedResources(ResourceType.EDS)).isNull();
+    assertThat(xdsClient.getSubscribedResources(ResourceType.RDS)).isNull();
   }
 
   static Listener buildListenerWithFilterChain(String name, int portValue, String address,
