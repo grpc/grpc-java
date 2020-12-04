@@ -4,7 +4,7 @@ How to Create a Release of GRPC Java (for Maintainers Only)
 Build Environments
 ------------------
 We deploy GRPC to Maven Central under the following systems:
-- Ubuntu 14.04 with Docker 13.03.0 that runs CentOS 6.9
+- Ubuntu 14.04 with Docker 13.03.0 that runs CentOS 7
 - Windows 7 64-bit with Visual Studio
 - Mac OS X 10.14.6
 
