@@ -39,6 +39,7 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Server;
 import io.grpc.netty.NettyServerBuilder;
+import io.grpc.protobuf.services.ProtoReflectionService;
 import io.grpc.services.ChannelzService;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.integration.Messages.ClientConfigureRequest;
@@ -234,6 +235,7 @@ public final class XdsTestClient {
         NettyServerBuilder.forPort(statsPort)
             .addService(new XdsStatsImpl())
             .addService(new ConfigureUpdateServiceImpl())
+            .addService(ProtoReflectionService.newInstance())
             .addService(ChannelzService.newInstance(100))
             .build();
     try {
