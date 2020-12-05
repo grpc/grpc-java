@@ -46,8 +46,13 @@ import io.grpc.xds.EnvoyProtoData.LbEndpoint;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyProtoData.Node;
+import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.XdsClient.CdsResourceWatcher;
 import io.grpc.xds.XdsClient.CdsUpdate;
+import io.grpc.xds.XdsClient.CdsUpdate.AggregateClusterConfig;
+import io.grpc.xds.XdsClient.CdsUpdate.ClusterType;
+import io.grpc.xds.XdsClient.CdsUpdate.EdsClusterConfig;
+import io.grpc.xds.XdsClient.CdsUpdate.LogicalDnsClusterConfig;
 import io.grpc.xds.XdsClient.EdsResourceWatcher;
 import io.grpc.xds.XdsClient.EdsUpdate;
 import io.grpc.xds.XdsClient.LdsResourceWatcher;
@@ -534,8 +539,8 @@ public abstract class ClientXdsClientTestBase {
         startResourceWatcher(ResourceType.CDS, CDS_RESOURCE, cdsResourceWatcher);
 
     List<Any> clusters = ImmutableList.of(
-        Any.pack(mf.buildCluster("cluster-bar.googleapis.com", null, false, null, null)),
-        Any.pack(mf.buildCluster("cluster-baz.googleapis.com", null, false, null, null)));
+        Any.pack(mf.buildEdsCluster("cluster-bar.googleapis.com", null, false, null, null)),
+        Any.pack(mf.buildEdsCluster("cluster-baz.googleapis.com", null, false, null, null)));
     call.sendResponse("0", clusters, ResourceType.CDS, "0000");
 
     // Client sent an ACK CDS request.
@@ -553,7 +558,7 @@ public abstract class ClientXdsClientTestBase {
     DiscoveryRpcCall call =
         startResourceWatcher(ResourceType.CDS, CDS_RESOURCE, cdsResourceWatcher);
     List<Any> clusters = ImmutableList.of(
-        Any.pack(mf.buildCluster(CDS_RESOURCE, null, false, null, null)));
+        Any.pack(mf.buildEdsCluster(CDS_RESOURCE, null, false, null, null)));
     call.sendResponse("0", clusters, ResourceType.CDS, "0000");
 
     // Client sent an ACK CDS request.
@@ -561,12 +566,38 @@ public abstract class ClientXdsClientTestBase {
         "0000");
     verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
     CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
-    assertThat(cdsUpdate.getClusterName()).isEqualTo(CDS_RESOURCE);
-    assertThat(cdsUpdate.getEdsServiceName()).isNull();
-    assertThat(cdsUpdate.getLbPolicy()).isEqualTo("round_robin");
-    assertThat(cdsUpdate.getLrsServerName()).isNull();
-    assertThat(cdsUpdate.getMaxConcurrentRequests()).isNull();
+    assertThat(cdsUpdate.clusterName).isEqualTo(CDS_RESOURCE);
+    assertThat(cdsUpdate.clusterType).isEqualTo(ClusterType.EDS);
+    EdsClusterConfig clusterConfig = (EdsClusterConfig) cdsUpdate.clusterConfig;
+    assertThat(clusterConfig.edsServiceName).isNull();
+    assertThat(clusterConfig.lbPolicy).isEqualTo("round_robin");
+    assertThat(clusterConfig.lrsServerName).isNull();
+    assertThat(clusterConfig.maxConcurrentRequests).isNull();
+    assertThat(clusterConfig.upstreamTlsContext).isNull();
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
+  }
+
+  @Test
+  public void cdsResponseWithAggregateCluster() {
+    DiscoveryRpcCall call =
+        startResourceWatcher(ResourceType.CDS, CDS_RESOURCE, cdsResourceWatcher);
+    List<String> candidates = Arrays.asList(
+        "cluster1.googleapis.com", "cluster2.googleapis.com", "cluster3.googleapis.com");
+    List<Any> clusters = ImmutableList.of(
+        Any.pack(mf.buildAggregateCluster(CDS_RESOURCE, candidates)));
+    call.sendResponse("0", clusters, ResourceType.CDS, "0000");
+
+    // Client sent an ACK CDS request.
+    call.verifyRequest(NODE, "0", Collections.singletonList(CDS_RESOURCE), ResourceType.CDS,
+        "0000");
+    verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
+    CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
+    assertThat(cdsUpdate.clusterName).isEqualTo(CDS_RESOURCE);
+    assertThat(cdsUpdate.clusterType).isEqualTo(ClusterType.AGGREGATE);
+    AggregateClusterConfig clusterConfig = (AggregateClusterConfig) cdsUpdate.clusterConfig;
+    assertThat(clusterConfig.lbPolicy).isEqualTo("round_robin");
+    assertThat(clusterConfig.prioritizedClusterNames)
+        .containsExactlyElementsIn(candidates).inOrder();
   }
 
   @Test
@@ -574,7 +605,7 @@ public abstract class ClientXdsClientTestBase {
     DiscoveryRpcCall call =
         startResourceWatcher(ResourceType.CDS, CDS_RESOURCE, cdsResourceWatcher);
     List<Any> clusters = ImmutableList.of(
-        Any.pack(mf.buildCluster(CDS_RESOURCE, null, false, null,
+        Any.pack(mf.buildEdsCluster(CDS_RESOURCE, null, false, null,
             mf.buildCircuitBreakers(50, 200))));
     call.sendResponse("0", clusters, ResourceType.CDS, "0000");
 
@@ -583,11 +614,14 @@ public abstract class ClientXdsClientTestBase {
         "0000");
     verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
     CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
-    assertThat(cdsUpdate.getClusterName()).isEqualTo(CDS_RESOURCE);
-    assertThat(cdsUpdate.getEdsServiceName()).isNull();
-    assertThat(cdsUpdate.getLbPolicy()).isEqualTo("round_robin");
-    assertThat(cdsUpdate.getLrsServerName()).isNull();
-    assertThat(cdsUpdate.getMaxConcurrentRequests()).isEqualTo(200L);
+    assertThat(cdsUpdate.clusterName).isEqualTo(CDS_RESOURCE);
+    assertThat(cdsUpdate.clusterType).isEqualTo(ClusterType.EDS);
+    EdsClusterConfig clusterConfig = (EdsClusterConfig) cdsUpdate.clusterConfig;
+    assertThat(clusterConfig.edsServiceName).isNull();
+    assertThat(clusterConfig.lbPolicy).isEqualTo("round_robin");
+    assertThat(clusterConfig.lrsServerName).isNull();
+    assertThat(clusterConfig.maxConcurrentRequests).isEqualTo(200L);
+    assertThat(clusterConfig.upstreamTlsContext).isNull();
   }
 
   /**
@@ -600,10 +634,10 @@ public abstract class ClientXdsClientTestBase {
 
     // Management server sends back CDS response with UpstreamTlsContext.
     List<Any> clusters = ImmutableList.of(
-        Any.pack(mf.buildCluster("cluster-bar.googleapis.com", null, false, null, null)),
-        Any.pack(mf.buildCluster(CDS_RESOURCE, "eds-cluster-foo.googleapis.com", true,
+        Any.pack(mf.buildLogicalDnsCluster("cluster-bar.googleapis.com", false, null, null)),
+        Any.pack(mf.buildEdsCluster(CDS_RESOURCE, "eds-cluster-foo.googleapis.com", true,
             mf.buildUpstreamTlsContext("secret1", "unix:/var/uds2"), null)),
-        Any.pack(mf.buildCluster("cluster-baz.googleapis.com", null, false, null, null)));
+        Any.pack(mf.buildEdsCluster("cluster-baz.googleapis.com", null, false, null, null)));
     call.sendResponse("0", clusters, ResourceType.CDS, "0000");
 
     // Client sent an ACK CDS request.
@@ -611,8 +645,8 @@ public abstract class ClientXdsClientTestBase {
         "0000");
     verify(cdsResourceWatcher, times(1)).onChanged(cdsUpdateCaptor.capture());
     CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
-    EnvoyServerProtoData.UpstreamTlsContext upstreamTlsContext = cdsUpdate
-        .getUpstreamTlsContext();
+    UpstreamTlsContext upstreamTlsContext =
+        ((EdsClusterConfig) cdsUpdate.clusterConfig).upstreamTlsContext;
     SdsSecretConfig validationContextSdsSecretConfig = upstreamTlsContext.getCommonTlsContext()
         .getValidationContextSdsSecretConfig();
     assertThat(validationContextSdsSecretConfig.getName()).isEqualTo("secret1");
@@ -632,7 +666,7 @@ public abstract class ClientXdsClientTestBase {
     DiscoveryRpcCall call =
         startResourceWatcher(ResourceType.CDS, CDS_RESOURCE, cdsResourceWatcher);
     List<Any> clusters = ImmutableList.of(
-        Any.pack(mf.buildCluster(CDS_RESOURCE, null, false, null, null)));
+        Any.pack(mf.buildEdsCluster(CDS_RESOURCE, null, false, null, null)));
     call.sendResponse("0", clusters, ResourceType.CDS, "0000");
 
     // Client sends an ACK CDS request.
@@ -643,10 +677,14 @@ public abstract class ClientXdsClientTestBase {
     xdsClient.watchCdsResource(CDS_RESOURCE, watcher);
     verify(watcher).onChanged(cdsUpdateCaptor.capture());
     CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
-    assertThat(cdsUpdate.getClusterName()).isEqualTo(CDS_RESOURCE);
-    assertThat(cdsUpdate.getEdsServiceName()).isNull();
-    assertThat(cdsUpdate.getLbPolicy()).isEqualTo("round_robin");
-    assertThat(cdsUpdate.getLrsServerName()).isNull();
+    assertThat(cdsUpdate.clusterName).isEqualTo(CDS_RESOURCE);
+    assertThat(cdsUpdate.clusterType).isEqualTo(ClusterType.EDS);
+    EdsClusterConfig clusterConfig = (EdsClusterConfig) cdsUpdate.clusterConfig;
+    assertThat(clusterConfig.edsServiceName).isNull();
+    assertThat(clusterConfig.lbPolicy).isEqualTo("round_robin");
+    assertThat(clusterConfig.lrsServerName).isNull();
+    assertThat(clusterConfig.maxConcurrentRequests).isNull();
+    assertThat(clusterConfig.upstreamTlsContext).isNull();
     call.verifyNoMoreRequest();
   }
 
@@ -667,7 +705,7 @@ public abstract class ClientXdsClientTestBase {
     DiscoveryRpcCall call =
         startResourceWatcher(ResourceType.CDS, CDS_RESOURCE, cdsResourceWatcher);
     List<Any> clusters = ImmutableList.of(
-        Any.pack(mf.buildCluster(CDS_RESOURCE, null, false, null, null)));
+        Any.pack(mf.buildLogicalDnsCluster(CDS_RESOURCE, false, null, null)));
     call.sendResponse("0", clusters, ResourceType.CDS, "0000");
 
     // Client sends an ACK CDS request.
@@ -675,14 +713,17 @@ public abstract class ClientXdsClientTestBase {
         "0000");
     verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
     CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
-    assertThat(cdsUpdate.getClusterName()).isEqualTo(CDS_RESOURCE);
-    assertThat(cdsUpdate.getEdsServiceName()).isNull();
-    assertThat(cdsUpdate.getLbPolicy()).isEqualTo("round_robin");
-    assertThat(cdsUpdate.getLrsServerName()).isNull();
+    assertThat(cdsUpdate.clusterName).isEqualTo(CDS_RESOURCE);
+    assertThat(cdsUpdate.clusterType).isEqualTo(ClusterType.LOGICAL_DNS);
+    LogicalDnsClusterConfig dnsConfig = (LogicalDnsClusterConfig) cdsUpdate.clusterConfig;
+    assertThat(dnsConfig.lbPolicy).isEqualTo("round_robin");
+    assertThat(dnsConfig.lrsServerName).isNull();
+    assertThat(dnsConfig.maxConcurrentRequests).isNull();
+    assertThat(dnsConfig.upstreamTlsContext).isNull();
 
     String edsService = "eds-service-bar.googleapis.com";
     clusters = ImmutableList.of(
-        Any.pack(mf.buildCluster(CDS_RESOURCE, edsService, true, null, null)));
+        Any.pack(mf.buildEdsCluster(CDS_RESOURCE, edsService, true, null, null)));
     call.sendResponse("1", clusters, ResourceType.CDS, "0001");
 
     // Client sends an ACK CDS request.
@@ -690,10 +731,14 @@ public abstract class ClientXdsClientTestBase {
         "0001");
     verify(cdsResourceWatcher, times(2)).onChanged(cdsUpdateCaptor.capture());
     cdsUpdate = cdsUpdateCaptor.getValue();
-    assertThat(cdsUpdate.getClusterName()).isEqualTo(CDS_RESOURCE);
-    assertThat(cdsUpdate.getEdsServiceName()).isEqualTo(edsService);
-    assertThat(cdsUpdate.getLbPolicy()).isEqualTo("round_robin");
-    assertThat(cdsUpdate.getLrsServerName()).isEqualTo("");
+    assertThat(cdsUpdate.clusterName).isEqualTo(CDS_RESOURCE);
+    assertThat(cdsUpdate.clusterType).isEqualTo(ClusterType.EDS);
+    EdsClusterConfig edsConfig = (EdsClusterConfig) cdsUpdate.clusterConfig;
+    assertThat(edsConfig.edsServiceName).isEqualTo(edsService);
+    assertThat(edsConfig.lbPolicy).isEqualTo("round_robin");
+    assertThat(edsConfig.lrsServerName).isEqualTo("");
+    assertThat(edsConfig.maxConcurrentRequests).isNull();
+    assertThat(edsConfig.upstreamTlsContext).isNull();
   }
 
   @Test
@@ -701,7 +746,7 @@ public abstract class ClientXdsClientTestBase {
     DiscoveryRpcCall call =
         startResourceWatcher(ResourceType.CDS, CDS_RESOURCE, cdsResourceWatcher);
     List<Any> clusters = ImmutableList.of(
-        Any.pack(mf.buildCluster(CDS_RESOURCE, null, false, null, null)));
+        Any.pack(mf.buildEdsCluster(CDS_RESOURCE, null, false, null, null)));
     call.sendResponse("0", clusters, ResourceType.CDS, "0000");
 
     // Client sends an ACK CDS request.
@@ -709,10 +754,14 @@ public abstract class ClientXdsClientTestBase {
         "0000");
     verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
     CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
-    assertThat(cdsUpdate.getClusterName()).isEqualTo(CDS_RESOURCE);
-    assertThat(cdsUpdate.getEdsServiceName()).isNull();
-    assertThat(cdsUpdate.getLbPolicy()).isEqualTo("round_robin");
-    assertThat(cdsUpdate.getLrsServerName()).isNull();
+    assertThat(cdsUpdate.clusterName).isEqualTo(CDS_RESOURCE);
+    assertThat(cdsUpdate.clusterType).isEqualTo(ClusterType.EDS);
+    EdsClusterConfig clusterConfig = (EdsClusterConfig) cdsUpdate.clusterConfig;
+    assertThat(clusterConfig.edsServiceName).isNull();
+    assertThat(clusterConfig.lbPolicy).isEqualTo("round_robin");
+    assertThat(clusterConfig.lrsServerName).isNull();
+    assertThat(clusterConfig.maxConcurrentRequests).isNull();
+    assertThat(clusterConfig.upstreamTlsContext).isNull();
 
     call.sendResponse("1", Collections.<Any>emptyList(), ResourceType.CDS, "0001");
 
@@ -740,27 +789,38 @@ public abstract class ClientXdsClientTestBase {
 
     String edsService = "eds-service-bar.googleapis.com";
     List<Any> clusters = ImmutableList.of(
-        Any.pack(mf.buildCluster(CDS_RESOURCE, null, false, null, null)),
-        Any.pack(mf.buildCluster(cdsResource, edsService, true, null, null)));
+        Any.pack(mf.buildLogicalDnsCluster(CDS_RESOURCE, false, null, null)),
+        Any.pack(mf.buildEdsCluster(cdsResource, edsService, true, null, null)));
     call.sendResponse("0", clusters, ResourceType.CDS, "0000");
     verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
     CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
-    assertThat(cdsUpdate.getClusterName()).isEqualTo(CDS_RESOURCE);
-    assertThat(cdsUpdate.getEdsServiceName()).isNull();
-    assertThat(cdsUpdate.getLbPolicy()).isEqualTo("round_robin");
-    assertThat(cdsUpdate.getLrsServerName()).isNull();
+    assertThat(cdsUpdate.clusterName).isEqualTo(CDS_RESOURCE);
+    assertThat(cdsUpdate.clusterType).isEqualTo(ClusterType.LOGICAL_DNS);
+    LogicalDnsClusterConfig dnsConfig = (LogicalDnsClusterConfig) cdsUpdate.clusterConfig;
+    assertThat(dnsConfig.lbPolicy).isEqualTo("round_robin");
+    assertThat(dnsConfig.lrsServerName).isNull();
+    assertThat(dnsConfig.maxConcurrentRequests).isNull();
+    assertThat(dnsConfig.upstreamTlsContext).isNull();
     verify(watcher1).onChanged(cdsUpdateCaptor.capture());
     cdsUpdate = cdsUpdateCaptor.getValue();
-    assertThat(cdsUpdate.getClusterName()).isEqualTo(cdsResource);
-    assertThat(cdsUpdate.getEdsServiceName()).isEqualTo(edsService);
-    assertThat(cdsUpdate.getLbPolicy()).isEqualTo("round_robin");
-    assertThat(cdsUpdate.getLrsServerName()).isEqualTo("");
+    assertThat(cdsUpdate.clusterName).isEqualTo(cdsResource);
+    assertThat(cdsUpdate.clusterType).isEqualTo(ClusterType.EDS);
+    EdsClusterConfig edsConfig = (EdsClusterConfig) cdsUpdate.clusterConfig;
+    assertThat(edsConfig.edsServiceName).isEqualTo(edsService);
+    assertThat(edsConfig.lbPolicy).isEqualTo("round_robin");
+    assertThat(edsConfig.lrsServerName).isEqualTo("");
+    assertThat(edsConfig.maxConcurrentRequests).isNull();
+    assertThat(edsConfig.upstreamTlsContext).isNull();
     verify(watcher2).onChanged(cdsUpdateCaptor.capture());
     cdsUpdate = cdsUpdateCaptor.getValue();
-    assertThat(cdsUpdate.getClusterName()).isEqualTo(cdsResource);
-    assertThat(cdsUpdate.getEdsServiceName()).isEqualTo(edsService);
-    assertThat(cdsUpdate.getLbPolicy()).isEqualTo("round_robin");
-    assertThat(cdsUpdate.getLrsServerName()).isEqualTo("");
+    assertThat(cdsUpdate.clusterName).isEqualTo(cdsResource);
+    assertThat(cdsUpdate.clusterType).isEqualTo(ClusterType.EDS);
+    edsConfig = (EdsClusterConfig) cdsUpdate.clusterConfig;
+    assertThat(edsConfig.edsServiceName).isEqualTo(edsService);
+    assertThat(edsConfig.lbPolicy).isEqualTo("round_robin");
+    assertThat(edsConfig.lrsServerName).isEqualTo("");
+    assertThat(edsConfig.maxConcurrentRequests).isNull();
+    assertThat(edsConfig.upstreamTlsContext).isNull();
   }
 
   @Test
@@ -971,11 +1031,11 @@ public abstract class ClientXdsClientTestBase {
     xdsClient.watchEdsResource(EDS_RESOURCE, edsResourceWatcher);
     DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
     List<Any> clusters = ImmutableList.of(
-        Any.pack(mf.buildCluster(CDS_RESOURCE, EDS_RESOURCE, false, null, null)));
+        Any.pack(mf.buildEdsCluster(CDS_RESOURCE, EDS_RESOURCE, false, null, null)));
     call.sendResponse("0", clusters, ResourceType.CDS, "0000");
     verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
-    assertThat(cdsUpdateCaptor.getValue().getClusterName()).isEqualTo(CDS_RESOURCE);
-    assertThat(cdsUpdateCaptor.getValue().getEdsServiceName()).isEqualTo(EDS_RESOURCE);
+    EdsClusterConfig clusterConfig = (EdsClusterConfig) cdsUpdateCaptor.getValue().clusterConfig;
+    assertThat(clusterConfig.edsServiceName).isEqualTo(EDS_RESOURCE);
 
     List<Any> clusterLoadAssignments =
         ImmutableList.of(
@@ -995,11 +1055,11 @@ public abstract class ClientXdsClientTestBase {
     assertThat(edsUpdate.getClusterName()).isEqualTo(EDS_RESOURCE);
 
     clusters = ImmutableList.of(
-        Any.pack(mf.buildCluster(CDS_RESOURCE, null, false, null, null)));
+        Any.pack(mf.buildEdsCluster(CDS_RESOURCE, null, false, null, null)));
     call.sendResponse("1", clusters, ResourceType.CDS, "0001");
     verify(cdsResourceWatcher, times(2)).onChanged(cdsUpdateCaptor.capture());
-    assertThat(cdsUpdateCaptor.getValue().getClusterName()).isEqualTo(CDS_RESOURCE);
-    assertThat(cdsUpdateCaptor.getValue().getEdsServiceName()).isNull();
+    clusterConfig = (EdsClusterConfig) cdsUpdateCaptor.getValue().clusterConfig;
+    assertThat(clusterConfig.edsServiceName).isNull();
     verify(edsResourceWatcher).onResourceDoesNotExist(EDS_RESOURCE);
   }
 
@@ -1371,9 +1431,14 @@ public abstract class ClientXdsClientTestBase {
 
     protected abstract List<Message> buildOpaqueVirtualHosts(int num);
 
-    protected abstract Message buildCluster(String clusterName, @Nullable String edsServiceName,
+    protected abstract Message buildEdsCluster(String clusterName, @Nullable String edsServiceName,
         boolean enableLrs, @Nullable Message upstreamTlsContext,
         @Nullable Message circuitBreakers);
+
+    protected abstract Message buildLogicalDnsCluster(String clusterName, boolean enableLrs,
+        @Nullable Message upstreamTlsContext, @Nullable Message circuitBreakers);
+
+    protected abstract Message buildAggregateCluster(String clusterName, List<String> clusters);
 
     protected abstract Message buildUpstreamTlsContext(String secretName, String targetUri);
 
