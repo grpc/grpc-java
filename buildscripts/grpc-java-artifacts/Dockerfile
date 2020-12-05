@@ -1,17 +1,17 @@
 FROM centos:7.9.2009
 
 RUN yum install -y \
-	    glibc-devel \
-	    glibc-devel.i686 \
-	    libstdc++-static \
-	    libstdc++-static.i686 \
             autoconf \
             automake \
             gcc-c++ \
             gcc-c++.i686 \
+            glibc-devel \
+            glibc-devel.i686 \
             java-1.8.0-openjdk-devel \
             libstdc++-devel \
             libstdc++-devel.i686 \
+            libstdc++-static \
+            libstdc++-static.i686 \
             libtool \
             make \
             tar \
