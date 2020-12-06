@@ -126,7 +126,7 @@ public class RetryingHelloWorldClient {
   }
 
   public static void main(String[] args) throws Exception {
-    boolean enableRetries = !Boolean.parseBoolean(System.getenv(ENV_DISABLE_RETRYING));
+    boolean enableRetries = !Boolean.parseBoolean(System.getProperty(ENV_DISABLE_RETRYING));
     final RetryingHelloWorldClient client = new RetryingHelloWorldClient("localhost", 50051, enableRetries);
     ForkJoinPool executor = new ForkJoinPool();
 

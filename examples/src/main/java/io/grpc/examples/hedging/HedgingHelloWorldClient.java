@@ -165,7 +165,7 @@ public class HedgingHelloWorldClient {
   }
 
   public static void main(String[] args) throws Exception {
-    boolean hedging = !Boolean.parseBoolean(System.getenv(ENV_DISABLE_HEDGING));
+    boolean hedging = !Boolean.parseBoolean(System.getProperty(ENV_DISABLE_HEDGING));
     final HedgingHelloWorldClient client = new HedgingHelloWorldClient("localhost", 50051, hedging);
     ForkJoinPool executor = new ForkJoinPool();
 
