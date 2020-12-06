@@ -34,6 +34,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashSet;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -282,6 +283,9 @@ final class DelayedClientTransport implements ManagedClientTransport {
     ArrayList<PendingStream> toRemove = new ArrayList<>();
 
     for (final PendingStream stream : toProcess) {
+      if (stream.isRealStreamSet()) {
+        continue;
+      }
       PickResult pickResult = picker.pickSubchannel(stream.args);
       CallOptions callOptions = stream.args.getCallOptions();
       final ClientTransport transport = GrpcUtil.getTransportFromPickResult(pickResult,
@@ -300,8 +304,14 @@ final class DelayedClientTransport implements ManagedClientTransport {
               stream.createRealStream(transport);
             }
           });
-        toRemove.add(stream);
+
       }  // else: stay pending
+    }
+
+    for (final PendingStream stream : toProcess) {
+      if (stream.isRealStreamStarted()) {
+        toRemove.add(stream);
+      }
     }
 
     synchronized (lock) {

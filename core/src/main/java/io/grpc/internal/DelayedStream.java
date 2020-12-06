@@ -59,6 +59,7 @@ class DelayedStream implements ClientStream {
   private long startTimeNanos;
   @GuardedBy("this")
   private long streamSetTimeNanos;
+  private volatile boolean realStreamStarted;
 
   @Override
   public void setMaxInboundMessageSize(final int maxSize) {
@@ -130,6 +131,18 @@ class DelayedStream implements ClientStream {
     }
 
     drainPendingCalls();
+  }
+
+  protected boolean isRealStreamSet() {
+    synchronized (this) {
+      return realStream != null;
+    }
+  }
+
+  protected boolean isRealStreamStarted() {
+    synchronized (this) {
+      return realStreamStarted;
+    }
   }
 
   /**
@@ -221,12 +234,14 @@ class DelayedStream implements ClientStream {
 
     if (savedPassThrough) {
       realStream.start(listener);
+      realStreamStarted = true;
     } else {
       final ClientStreamListener finalListener = listener;
       delayOrExecute(new Runnable() {
         @Override
         public void run() {
           realStream.start(finalListener);
+          realStreamStarted = true;
         }
       });
     }
@@ -282,7 +297,7 @@ class DelayedStream implements ClientStream {
     ClientStreamListener listenerToClose = null;
     synchronized (this) {
       // If realStream != null, then either setStream() or cancel() has been called
-      if (realStream == null) {
+      if (!realStreamStarted) {
         setRealStream(NoopClientStream.INSTANCE);
         delegateToRealStream = false;
         // If listener == null, then start() will later call listener with 'error'
