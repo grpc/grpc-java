@@ -61,6 +61,8 @@ cd ../routeguide
 ../../gradlew build
 cd ../helloworld
 ../../gradlew build
+cd ../strictmode
+../../gradlew build
 
 # Skip APK size and dex count comparisons for non-PR builds
 
