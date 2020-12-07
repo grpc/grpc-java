@@ -81,6 +81,7 @@ jar {
 }
 
 javadoc {
+    // Exclusions here should generally also be relocated
     exclude 'com/github/udpa/**'
     exclude 'com/google/security/**'
     exclude 'io/envoyproxy/**'
@@ -100,21 +101,27 @@ shadowJar {
     dependencies {
         include(project(':grpc-xds'))
     }
-    relocate 'com.google.api.expr', 'io.grpc.xds.shaded.com.google.api.expr'
+    // Relocated packages commonly need exclusions in jacocoTestReport and javadoc
     relocate 'com.github.udpa', 'io.grpc.xds.shaded.com.github.udpa'
+    relocate 'com.google.api.expr', 'io.grpc.xds.shaded.com.google.api.expr'
+    relocate 'com.google.security', 'io.grpc.xds.shaded.com.google.security'
+    // TODO: missing java_package option in .proto
+    relocate 'envoy.annotations', 'io.grpc.xds.shaded.envoy.annotations'
     relocate 'io.envoyproxy', 'io.grpc.xds.shaded.io.envoyproxy'
     relocate 'io.grpc.netty', 'io.grpc.netty.shaded.io.grpc.netty'
     relocate 'io.netty', 'io.grpc.netty.shaded.io.netty'
-    relocate 'com.google.security', 'io.grpc.xds.shaded.com.google.security'
+    // TODO: missing java_package option in .proto
+    relocate 'udpa.annotations', 'io.grpc.xds.shaded.udpa.annotations'
     exclude "**/*.proto"
 }
 
 jacocoTestReport {
     classDirectories.from = sourceSets.main.output.collect {
         fileTree(dir: it,
-        exclude: [
-                '**/com/google/api/**',
-                '**/com/github/**',
+        exclude: [ // Exclusions here should generally also be relocated
+                '**/com/github/udpa/**',
+                '**/com/google/api/expr/**',
+                '**/com/google/security/**',
                 '**/envoy/annotations/**',
                 '**/io/envoyproxy/**',
                 '**/udpa/annotations/**',
