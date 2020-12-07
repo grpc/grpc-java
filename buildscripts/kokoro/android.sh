@@ -27,25 +27,11 @@ echo y | ${ANDROID_HOME}/tools/bin/sdkmanager "build-tools;28.0.3"
 # Proto deps
 buildscripts/make_dependencies.sh
 
-# Build grpc-cronet
-
-pushd cronet
-../gradlew build
-popd
-
-# Build grpc-android
-
-pushd android
-../gradlew build
-popd
-
-# Build android-interop-testing
-pushd android-interop-testing
-../gradlew build
-popd
-
-# Examples pull dependencies from maven local
-./gradlew publishToMavenLocal
+./gradlew \
+    :grpc-android-interop-testing:build \
+    :grpc-android:build \
+    :grpc-cronet:build \
+    publishToMavenLocal
 
 if [[ ! -z $(git status --porcelain) ]]; then
   git status
