@@ -47,6 +47,12 @@ popd
 # Examples pull dependencies from maven local
 ./gradlew publishToMavenLocal
 
+if [[ ! -z $(git status --porcelain) ]]; then
+  git status
+  echo "Error Working directory is not clean. Forget to commit generated files?"
+  exit 1
+fi
+
 # Build examples
 
 cd ./examples/android/clientcache
