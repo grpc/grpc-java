@@ -66,7 +66,7 @@ if [[ -z "${SKIP_TESTS:-}" ]]; then
   popd
   pushd examples/example-hostname
   ../gradlew build $GRADLE_FLAGS
-  mvn verify --batch-mode
+  mvn clean verify --batch-mode
   popd
   pushd examples/example-tls
   ../gradlew build $GRADLE_FLAGS
