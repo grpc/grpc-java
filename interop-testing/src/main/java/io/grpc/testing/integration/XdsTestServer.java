@@ -188,6 +188,7 @@ public final class XdsTestServer {
               .addService(new XdsUpdateHealthServiceImpl(health))
               .addService(health.getHealthService())
               .addService(ProtoReflectionService.newInstance())
+              .addService(ChannelzService.newInstance(100))
               .build()
               .start();
       maintenanceServer = null;
