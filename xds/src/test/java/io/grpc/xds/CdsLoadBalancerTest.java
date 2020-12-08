@@ -18,7 +18,6 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 import com.google.common.collect.Iterables;
 import io.grpc.Attributes;
@@ -42,12 +41,8 @@ import io.grpc.SynchronizationContext;
 import io.grpc.internal.ObjectPool;
 import io.grpc.xds.CdsLoadBalancerProvider.CdsConfig;
 import io.grpc.xds.EdsLoadBalancerProvider.EdsConfig;
-import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
-import io.grpc.xds.internal.sds.SslContextProvider;
-import io.grpc.xds.internal.sds.SslContextProviderSupplier;
-import io.grpc.xds.internal.sds.TlsContextManager;
 import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -77,7 +72,6 @@ public class CdsLoadBalancerTest {
       });
   private final List<FakeLoadBalancer> childBalancers = new ArrayList<>();
   private final FakeXdsClient xdsClient = new FakeXdsClient();
-  private final TlsContextManager tlsContextManager = new FakeTlsContextManager();
   private LoadBalancer.Helper helper = new FakeLbHelper();
   private int xdsClientRefs;
   private ConnectivityState currentState;
@@ -106,7 +100,7 @@ public class CdsLoadBalancerTest {
         return null;
       }
     };
-    loadBalancer = new CdsLoadBalancer(helper, registry, tlsContextManager);
+    loadBalancer = new CdsLoadBalancer(helper, registry);
     loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
@@ -137,6 +131,7 @@ public class CdsLoadBalancerTest {
     assertThat(edsConfig.edsServiceName).isNull();
     assertThat(edsConfig.lrsServerName).isNull();
     assertThat(edsConfig.maxConcurrentRequests).isNull();
+    assertThat(edsConfig.tlsContext).isNull();
     assertThat(edsConfig.localityPickingPolicy.getProvider().getPolicyName())
         .isEqualTo(XdsLbPolicies.WEIGHTED_TARGET_POLICY_NAME);  // hardcoded to weighted-target
     assertThat(edsConfig.endpointPickingPolicy.getProvider().getPolicyName())
@@ -178,6 +173,8 @@ public class CdsLoadBalancerTest {
     assertThat(edsConfig.clusterName).isEqualTo(CLUSTER);
     assertThat(edsConfig.edsServiceName).isNull();
     assertThat(edsConfig.lrsServerName).isNull();
+    assertThat(edsConfig.maxConcurrentRequests).isNull();
+    assertThat(edsConfig.tlsContext).isNull();
     assertThat(edsConfig.localityPickingPolicy.getProvider().getPolicyName())
         .isEqualTo(XdsLbPolicies.WEIGHTED_TARGET_POLICY_NAME);  // hardcoded to weighted-target
     assertThat(edsConfig.endpointPickingPolicy.getProvider().getPolicyName())
@@ -186,60 +183,24 @@ public class CdsLoadBalancerTest {
     String edsService = "service-bar.googleapis.com";
     String loadReportServer = "lrs-server.googleapis.com";
     long maxConcurrentRequests = 50L;
-    xdsClient.deliverClusterInfo(edsService, loadReportServer, maxConcurrentRequests, null);
+    UpstreamTlsContext upstreamTlsContext =
+        CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
+            CommonTlsContextTestsUtil.CLIENT_KEY_FILE,
+            CommonTlsContextTestsUtil.CLIENT_PEM_FILE,
+            CommonTlsContextTestsUtil.CA_PEM_FILE);
+    xdsClient.deliverClusterInfo(edsService, loadReportServer, maxConcurrentRequests,
+        upstreamTlsContext);
     assertThat(childBalancers).containsExactly(childBalancer);
     edsConfig = (EdsConfig) childBalancer.config;
     assertThat(edsConfig.clusterName).isEqualTo(CLUSTER);
     assertThat(edsConfig.edsServiceName).isEqualTo(edsService);
     assertThat(edsConfig.lrsServerName).isEqualTo(loadReportServer);
     assertThat(edsConfig.maxConcurrentRequests).isEqualTo(maxConcurrentRequests);
+    assertThat(edsConfig.tlsContext).isEqualTo(upstreamTlsContext);
     assertThat(edsConfig.localityPickingPolicy.getProvider().getPolicyName())
         .isEqualTo(XdsLbPolicies.WEIGHTED_TARGET_POLICY_NAME);  // hardcoded to weighted-target
     assertThat(edsConfig.endpointPickingPolicy.getProvider().getPolicyName())
         .isEqualTo("round_robin");
-  }
-
-  @Test
-  public void receiveClusterResourceInfoWithUpstreamTlsContext() {
-    loadBalancer.setXdsSecurity(true);
-    UpstreamTlsContext upstreamTlsContext =
-        CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
-            CommonTlsContextTestsUtil.CLIENT_KEY_FILE,
-            CommonTlsContextTestsUtil.CLIENT_PEM_FILE,
-            CommonTlsContextTestsUtil.CA_PEM_FILE);
-    xdsClient.deliverClusterInfo(null, null, upstreamTlsContext);
-    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
-    List<EquivalentAddressGroup> addresses = createEndpointAddresses(2);
-    CreateSubchannelArgs args =
-        CreateSubchannelArgs.newBuilder()
-            .setAddresses(addresses)
-            .build();
-    Subchannel subchannel = childBalancer.helper.createSubchannel(args);
-    for (EquivalentAddressGroup eag : subchannel.getAllAddresses()) {
-      SslContextProviderSupplier supplier =
-          eag.getAttributes().get(XdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER);
-      assertThat(supplier.getUpstreamTlsContext()).isEqualTo(upstreamTlsContext);
-    }
-
-    xdsClient.deliverClusterInfo(null, null, null);
-    subchannel = childBalancer.helper.createSubchannel(args);
-    for (EquivalentAddressGroup eag : subchannel.getAllAddresses()) {
-      assertThat(eag.getAttributes().get(XdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER))
-          .isNull();
-    }
-
-    upstreamTlsContext =
-        CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
-            CommonTlsContextTestsUtil.BAD_CLIENT_KEY_FILE,
-            CommonTlsContextTestsUtil.BAD_CLIENT_PEM_FILE,
-            CommonTlsContextTestsUtil.CA_PEM_FILE);
-    xdsClient.deliverClusterInfo(null, null, upstreamTlsContext);
-    subchannel = childBalancer.helper.createSubchannel(args);
-    for (EquivalentAddressGroup eag : subchannel.getAllAddresses()) {
-      SslContextProviderSupplier supplier =
-          eag.getAttributes().get(XdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER);
-      assertThat(supplier.getUpstreamTlsContext()).isEqualTo(upstreamTlsContext);
-    }
   }
 
   @Test
@@ -521,36 +482,6 @@ public class CdsLoadBalancerTest {
     @Override
     public Attributes getAttributes() {
       return Attributes.EMPTY;
-    }
-  }
-
-  private static final class FakeTlsContextManager implements TlsContextManager {
-
-    @Override
-    public SslContextProvider findOrCreateClientSslContextProvider(
-        UpstreamTlsContext upstreamTlsContext) {
-      SslContextProvider sslContextProvider = mock(SslContextProvider.class);
-      when(sslContextProvider.getUpstreamTlsContext()).thenReturn(upstreamTlsContext);
-      return sslContextProvider;
-    }
-
-    @Override
-    public SslContextProvider releaseClientSslContextProvider(
-        SslContextProvider sslContextProvider) {
-      // no-op
-      return null;
-    }
-
-    @Override
-    public SslContextProvider findOrCreateServerSslContextProvider(
-        DownstreamTlsContext downstreamTlsContext) {
-      throw new UnsupportedOperationException("should not be called");
-    }
-
-    @Override
-    public SslContextProvider releaseServerSslContextProvider(
-        SslContextProvider sslContextProvider) {
-      throw new UnsupportedOperationException("should not be called");
     }
   }
 }
