@@ -47,13 +47,20 @@ import io.grpc.xds.ClusterImplLoadBalancerProvider.ClusterImplConfig;
 import io.grpc.xds.EnvoyProtoData.ClusterStats;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
+import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
+import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.LoadStatsManager.LoadStatsStore;
 import io.grpc.xds.LrsLoadBalancerProvider.LrsConfig;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedPolicySelection;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedTargetConfig;
 import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
+import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
+import io.grpc.xds.internal.sds.SslContextProvider;
+import io.grpc.xds.internal.sds.SslContextProviderSupplier;
+import io.grpc.xds.internal.sds.TlsContextManager;
 import java.net.SocketAddress;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -84,6 +91,7 @@ public class ClusterImplLoadBalancerTest {
   private final PolicySelection roundRobin =
       new PolicySelection(new FakeLoadBalancerProvider("round_robin"), null);
   private final List<FakeLoadBalancer> downstreamBalancers = new ArrayList<>();
+  private final FakeTlsContextManager tlsContextManager = new FakeTlsContextManager();
   private final FakeXdsClient xdsClient = new FakeXdsClient();
   private final ObjectPool<XdsClient> xdsClientPool = new ObjectPool<XdsClient>() {
     @Override
@@ -115,7 +123,7 @@ public class ClusterImplLoadBalancerTest {
   @Before
   public void setUp() {
     MockitoAnnotations.initMocks(this);
-    loadBalancer = new ClusterImplLoadBalancer(helper, mockRandom);
+    loadBalancer = new ClusterImplLoadBalancer(helper, mockRandom, tlsContextManager);
   }
 
   @After
@@ -133,7 +141,7 @@ public class ClusterImplLoadBalancerTest {
     Object weightedTargetConfig = new Object();
     ClusterImplConfig config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME,
         null, Collections.<DropOverload>emptyList(),
-        new PolicySelection(weightedTargetProvider, weightedTargetConfig));
+        new PolicySelection(weightedTargetProvider, weightedTargetConfig), null);
     EquivalentAddressGroup endpoint = makeAddress("endpoint-addr", locality);
     deliverAddressesAndConfig(Collections.singletonList(endpoint), config);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(downstreamBalancers);
@@ -162,7 +170,7 @@ public class ClusterImplLoadBalancerTest {
     Object weightedTargetConfig = new Object();
     ClusterImplConfig config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME,
         null, Collections.<DropOverload>emptyList(),
-        new PolicySelection(weightedTargetProvider, weightedTargetConfig));
+        new PolicySelection(weightedTargetProvider, weightedTargetConfig), null);
     EquivalentAddressGroup endpoint = makeAddress("endpoint-addr", locality);
     deliverAddressesAndConfig(Collections.singletonList(endpoint), config);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(downstreamBalancers);
@@ -181,7 +189,7 @@ public class ClusterImplLoadBalancerTest {
         buildWeightedTargetConfig(ImmutableMap.of(locality, 10));
     ClusterImplConfig config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME,
         null, Collections.singletonList(new DropOverload("throttle", 500_000)),
-        new PolicySelection(weightedTargetProvider, weightedTargetConfig));
+        new PolicySelection(weightedTargetProvider, weightedTargetConfig), null);
     EquivalentAddressGroup endpoint = makeAddress("endpoint-addr", locality);
     deliverAddressesAndConfig(Collections.singletonList(endpoint), config);
     when(mockRandom.nextInt(anyInt())).thenReturn(499_999, 999_999, 1_000_000);
@@ -204,7 +212,7 @@ public class ClusterImplLoadBalancerTest {
     //  Config update updates drop policies.
     config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME, null,
         Collections.singletonList(new DropOverload("lb", 1_000_000)),
-        new PolicySelection(weightedTargetProvider, weightedTargetConfig));
+        new PolicySelection(weightedTargetProvider, weightedTargetConfig), null);
     loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(Collections.singletonList(endpoint))
@@ -244,7 +252,7 @@ public class ClusterImplLoadBalancerTest {
         buildWeightedTargetConfig(ImmutableMap.of(locality, 10));
     ClusterImplConfig config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME,
         maxConcurrentRequests, Collections.<DropOverload>emptyList(),
-        new PolicySelection(weightedTargetProvider, weightedTargetConfig));
+        new PolicySelection(weightedTargetProvider, weightedTargetConfig), null);
     EquivalentAddressGroup endpoint = makeAddress("endpoint-addr", locality);
     deliverAddressesAndConfig(Collections.singletonList(endpoint), config);
     assertThat(downstreamBalancers).hasSize(1);  // one leaf balancer
@@ -284,7 +292,7 @@ public class ClusterImplLoadBalancerTest {
     maxConcurrentRequests = 101L;
     config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME,
         maxConcurrentRequests, Collections.<DropOverload>emptyList(),
-        new PolicySelection(weightedTargetProvider, weightedTargetConfig));
+        new PolicySelection(weightedTargetProvider, weightedTargetConfig), null);
     deliverAddressesAndConfig(Collections.singletonList(endpoint), config);
 
     result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
@@ -317,7 +325,7 @@ public class ClusterImplLoadBalancerTest {
         buildWeightedTargetConfig(ImmutableMap.of(locality, 10));
     ClusterImplConfig config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME,
         null, Collections.<DropOverload>emptyList(),
-        new PolicySelection(weightedTargetProvider, weightedTargetConfig));
+        new PolicySelection(weightedTargetProvider, weightedTargetConfig), null);
     EquivalentAddressGroup endpoint = makeAddress("endpoint-addr", locality);
     deliverAddressesAndConfig(Collections.singletonList(endpoint), config);
     assertThat(downstreamBalancers).hasSize(1);  // one leaf balancer
@@ -351,6 +359,89 @@ public class ClusterImplLoadBalancerTest {
       assertThat(result.getStatus().isOk()).isTrue();
       assertThat(result.getSubchannel()).isSameInstanceAs(subchannel);
       assertThat(xdsClient.clusterStats.totalDrops).isEqualTo(0L);
+    }
+  }
+
+  @Test
+  public void endpointConnectionWithTls_enableSecurity() {
+    boolean originalEnableSecurity = ClusterImplLoadBalancer.enableSecurity;
+    ClusterImplLoadBalancer.enableSecurity = true;
+    subtest_endpointConnectionWithTls(true);
+    ClusterImplLoadBalancer.enableSecurity = originalEnableSecurity;
+  }
+
+  @Test
+  public void endpointConnectionWithTls_securityDisabledByDefault() {
+    subtest_endpointConnectionWithTls(false);
+  }
+
+  private void subtest_endpointConnectionWithTls(boolean enableSecurity) {
+    UpstreamTlsContext upstreamTlsContext =
+        CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
+            CommonTlsContextTestsUtil.CLIENT_KEY_FILE,
+            CommonTlsContextTestsUtil.CLIENT_PEM_FILE,
+            CommonTlsContextTestsUtil.CA_PEM_FILE);
+    LoadBalancerProvider weightedTargetProvider = new WeightedTargetLoadBalancerProvider();
+    WeightedTargetConfig weightedTargetConfig =
+        buildWeightedTargetConfig(ImmutableMap.of(locality, 10));
+    ClusterImplConfig config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME,
+        null, Collections.<DropOverload>emptyList(),
+        new PolicySelection(weightedTargetProvider, weightedTargetConfig), upstreamTlsContext);
+    // One locality with two endpoints.
+    EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr1", locality);
+    EquivalentAddressGroup endpoint2 = makeAddress("endpoint-addr2", locality);
+    deliverAddressesAndConfig(Arrays.asList(endpoint1, endpoint2), config);
+    assertThat(downstreamBalancers).hasSize(1);  // one leaf balancer
+    FakeLoadBalancer leafBalancer = Iterables.getOnlyElement(downstreamBalancers);
+    assertThat(leafBalancer.name).isEqualTo("round_robin");
+    // Simulates leaf load balancer creating subchannels.
+    CreateSubchannelArgs args =
+        CreateSubchannelArgs.newBuilder()
+            .setAddresses(leafBalancer.addresses)
+            .build();
+    Subchannel subchannel = leafBalancer.helper.createSubchannel(args);
+    for (EquivalentAddressGroup eag : subchannel.getAllAddresses()) {
+      SslContextProviderSupplier supplier =
+          eag.getAttributes().get(XdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER);
+      if (enableSecurity) {
+        assertThat(supplier.getUpstreamTlsContext()).isEqualTo(upstreamTlsContext);
+      } else {
+        assertThat(supplier).isNull();
+      }
+    }
+
+    // Removes UpstreamTlsContext from the config.
+    config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME,
+        null, Collections.<DropOverload>emptyList(),
+        new PolicySelection(weightedTargetProvider, weightedTargetConfig), null);
+    deliverAddressesAndConfig(Arrays.asList(endpoint1, endpoint2), config);
+    assertThat(Iterables.getOnlyElement(downstreamBalancers)).isSameInstanceAs(leafBalancer);
+    subchannel = leafBalancer.helper.createSubchannel(args);  // creates new connections
+    for (EquivalentAddressGroup eag : subchannel.getAllAddresses()) {
+      assertThat(eag.getAttributes().get(XdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER))
+          .isNull();
+    }
+
+    // Config with a new UpstreamTlsContext.
+    upstreamTlsContext =
+        CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
+            CommonTlsContextTestsUtil.BAD_CLIENT_KEY_FILE,
+            CommonTlsContextTestsUtil.BAD_CLIENT_PEM_FILE,
+            CommonTlsContextTestsUtil.CA_PEM_FILE);
+    config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME,
+        null, Collections.<DropOverload>emptyList(),
+        new PolicySelection(weightedTargetProvider, weightedTargetConfig), upstreamTlsContext);
+    deliverAddressesAndConfig(Arrays.asList(endpoint1, endpoint2), config);
+    assertThat(Iterables.getOnlyElement(downstreamBalancers)).isSameInstanceAs(leafBalancer);
+    subchannel = leafBalancer.helper.createSubchannel(args);  // creates new connections
+    for (EquivalentAddressGroup eag : subchannel.getAllAddresses()) {
+      SslContextProviderSupplier supplier =
+          eag.getAttributes().get(XdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER);
+      if (enableSecurity) {
+        assertThat(supplier.getUpstreamTlsContext()).isEqualTo(upstreamTlsContext);
+      } else {
+        assertThat(supplier).isNull();
+      }
     }
   }
 
@@ -501,7 +592,7 @@ public class ClusterImplLoadBalancerTest {
 
     @Override
     public Subchannel createSubchannel(CreateSubchannelArgs args) {
-      return mock(Subchannel.class);
+      return new FakeSubchannel(args.getAddresses());
     }
 
     @Override
@@ -518,6 +609,32 @@ public class ClusterImplLoadBalancerTest {
     @Override
     public String getAuthority() {
       return AUTHORITY;
+    }
+  }
+
+  private static final class FakeSubchannel extends Subchannel {
+    private final List<EquivalentAddressGroup> eags;
+
+    private FakeSubchannel(List<EquivalentAddressGroup> eags) {
+      this.eags = eags;
+    }
+
+    @Override
+    public void shutdown() {
+    }
+
+    @Override
+    public void requestConnection() {
+    }
+
+    @Override
+    public List<EquivalentAddressGroup> getAllAddresses() {
+      return eags;
+    }
+
+    @Override
+    public Attributes getAttributes() {
+      return Attributes.EMPTY;
     }
   }
 
@@ -570,6 +687,35 @@ public class ClusterImplLoadBalancerTest {
     @Override
     public void recordDroppedRequest() {
       totalDrops++;
+    }
+  }
+
+  private static final class FakeTlsContextManager implements TlsContextManager {
+    @Override
+    public SslContextProvider findOrCreateClientSslContextProvider(
+        UpstreamTlsContext upstreamTlsContext) {
+      SslContextProvider sslContextProvider = mock(SslContextProvider.class);
+      when(sslContextProvider.getUpstreamTlsContext()).thenReturn(upstreamTlsContext);
+      return sslContextProvider;
+    }
+
+    @Override
+    public SslContextProvider releaseClientSslContextProvider(
+        SslContextProvider sslContextProvider) {
+      // no-op
+      return null;
+    }
+
+    @Override
+    public SslContextProvider findOrCreateServerSslContextProvider(
+        DownstreamTlsContext downstreamTlsContext) {
+      throw new UnsupportedOperationException("should not be called");
+    }
+
+    @Override
+    public SslContextProvider releaseServerSslContextProvider(
+        SslContextProvider sslContextProvider) {
+      throw new UnsupportedOperationException("should not be called");
     }
   }
 }

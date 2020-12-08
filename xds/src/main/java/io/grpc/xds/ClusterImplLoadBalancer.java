@@ -24,6 +24,7 @@ import io.grpc.Attributes;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.ConnectivityState;
+import io.grpc.EquivalentAddressGroup;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
 import io.grpc.Metadata;
@@ -33,11 +34,16 @@ import io.grpc.util.ForwardingClientStreamTracer;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.xds.ClusterImplLoadBalancerProvider.ClusterImplConfig;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
+import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.LoadStatsManager.LoadStatsStore;
 import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
+import io.grpc.xds.internal.sds.SslContextProviderSupplier;
+import io.grpc.xds.internal.sds.TlsContextManager;
+import io.grpc.xds.internal.sds.TlsContextManagerImpl;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
@@ -58,10 +64,14 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
   @VisibleForTesting
   static boolean enableCircuitBreaking =
       Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_CIRCUIT_BREAKING"));
+  @VisibleForTesting
+  static boolean enableSecurity =
+      Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_SECURITY_SUPPORT"));
 
   private final XdsLogger logger;
   private final Helper helper;
   private final ThreadSafeRandom random;
+  private final TlsContextManager tlsContextManager;
   // The following fields are effectively final.
   private String cluster;
   @Nullable
@@ -70,16 +80,18 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
   private XdsClient xdsClient;
   private CallCounterProvider callCounterProvider;
   private LoadStatsStore loadStatsStore;
-  private RequestLimitingLbHelper childLbHelper;
+  private ClusterImplLbHelper childLbHelper;
   private LoadBalancer childLb;
 
   ClusterImplLoadBalancer(Helper helper) {
-    this(helper, ThreadSafeRandomImpl.instance);
+    this(helper, ThreadSafeRandomImpl.instance, TlsContextManagerImpl.getInstance());
   }
 
-  ClusterImplLoadBalancer(Helper helper, ThreadSafeRandom random) {
+  ClusterImplLoadBalancer(Helper helper, ThreadSafeRandom random,
+      TlsContextManager tlsContextManager) {
     this.helper = checkNotNull(helper, "helper");
     this.random = checkNotNull(random, "random");
+    this.tlsContextManager = checkNotNull(tlsContextManager, "tlsContextManager");
     InternalLogId logId = InternalLogId.allocate("cluster-impl-lb", helper.getAuthority());
     logger = XdsLogger.withLogId(logId);
     logger.log(XdsLogLevel.INFO, "Created");
@@ -101,7 +113,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     if (cluster == null) {
       cluster = config.cluster;
       edsServiceName = config.edsServiceName;
-      childLbHelper = new RequestLimitingLbHelper(
+      childLbHelper = new ClusterImplLbHelper(
           callCounterProvider.getOrCreate(config.cluster, config.edsServiceName));
       childLb = config.childPolicy.getProvider().newLoadBalancer(childLbHelper);
       // Assume load report server does not change throughout cluster lifetime.
@@ -115,6 +127,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     }
     childLbHelper.updateDropPolicies(config.dropCategories);
     childLbHelper.updateMaxConcurrentRequests(config.maxConcurrentRequests);
+    childLbHelper.updateSslContextProviderSupplier(config.tlsContext);
     if (loadStatsStore != null) {
       attributes = attributes.toBuilder()
           .set(XdsAttributes.ATTR_CLUSTER_SERVICE_LOAD_STATS_STORE, loadStatsStore).build();
@@ -154,14 +167,20 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     return true;
   }
 
-  private final class RequestLimitingLbHelper extends ForwardingLoadBalancerHelper {
+  /**
+   * A decorated {@link LoadBalancer.Helper} that applies configurations for connections
+   * or requests to endpoints in the cluster.
+   */
+  private final class ClusterImplLbHelper extends ForwardingLoadBalancerHelper {
     private final AtomicLong requestCount;
     private ConnectivityState currentState = ConnectivityState.IDLE;
     private SubchannelPicker currentPicker = BUFFER_PICKER;
     private List<DropOverload> dropPolicies = Collections.emptyList();
     private long maxConcurrentRequests = DEFAULT_PER_CLUSTER_MAX_CONCURRENT_REQUESTS;
+    @Nullable
+    private SslContextProviderSupplier sslContextProviderSupplier;
 
-    private RequestLimitingLbHelper(AtomicLong requestCount) {
+    private ClusterImplLbHelper(AtomicLong requestCount) {
       this.requestCount = requestCount;
     }
 
@@ -172,6 +191,23 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
       SubchannelPicker picker =
           new RequestLimitingSubchannelPicker(newPicker, dropPolicies, maxConcurrentRequests);
       delegate().updateBalancingState(newState, picker);
+    }
+
+    @Override
+    public Subchannel createSubchannel(CreateSubchannelArgs args) {
+      if (enableSecurity && sslContextProviderSupplier != null) {
+        List<EquivalentAddressGroup> addresses = new ArrayList<>();
+        for (EquivalentAddressGroup eag : args.getAddresses()) {
+          Attributes attributes =
+              eag.getAttributes().toBuilder()
+                  .set(XdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
+                      sslContextProviderSupplier)
+                  .build();
+          addresses.add(new EquivalentAddressGroup(eag.getAddresses(), attributes));
+        }
+        args = args.toBuilder().setAddresses(addresses).build();
+      }
+      return delegate().createSubchannel(args);
     }
 
     @Override
@@ -195,6 +231,23 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
               ? maxConcurrentRequests
               : DEFAULT_PER_CLUSTER_MAX_CONCURRENT_REQUESTS;
       updateBalancingState(currentState, currentPicker);
+    }
+
+    private void updateSslContextProviderSupplier(@Nullable UpstreamTlsContext tlsContext) {
+      UpstreamTlsContext currentTlsContext =
+          sslContextProviderSupplier != null
+              ? sslContextProviderSupplier.getUpstreamTlsContext()
+              : null;
+      if (Objects.equals(currentTlsContext,  tlsContext)) {
+        return;
+      }
+      if (sslContextProviderSupplier != null) {
+        sslContextProviderSupplier.close();
+      }
+      sslContextProviderSupplier =
+          tlsContext != null
+              ? new SslContextProviderSupplier(tlsContext, tlsContextManager)
+              : null;
     }
 
     private class RequestLimitingSubchannelPicker extends SubchannelPicker {
