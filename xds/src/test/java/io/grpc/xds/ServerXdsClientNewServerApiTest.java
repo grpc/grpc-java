@@ -376,8 +376,6 @@ public class ServerXdsClientNewServerApiTest {
     ArgumentCaptor<ListenerUpdate> listenerUpdateCaptor = ArgumentCaptor.forClass(null);
     verify(listenerWatcher, times(1)).onListenerChanged(listenerUpdateCaptor.capture());
 
-    // expect only 2 requests: original req and ACK: no other req for no other resource
-    verify(requestObserver, times(2)).onNext(any(DiscoveryRequest.class));
     reset(requestObserver);
     // Management server sends another LDS response with updates for Listener.
     final FilterChain filterChainNewInbound =
@@ -430,9 +428,6 @@ public class ServerXdsClientNewServerApiTest {
                 .getValidationContextSdsSecretConfig()
                 .getName())
         .isEqualTo("ROOTCA2");
-
-    // expect only 1 ACK request: no other req for no other resource
-    verify(requestObserver, times(1)).onNext(any(DiscoveryRequest.class));
   }
 
   /** Client receives LDS response containing non-matching port. */
@@ -536,6 +531,8 @@ public class ServerXdsClientNewServerApiTest {
         .onNext(eq(buildDiscoveryRequest(NODE, "0",
                 ImmutableList.of("test/value?udpa.resource.listening_address=192.168.3.7:7000"),
                 ResourceType.LDS.typeUrl(), "")));
+    // expect only 1 request: for LDS
+    verify(requestObserver, times(1)).onNext(any(DiscoveryRequest.class));
 
     // Management server becomes unreachable.
     responseObserver.onError(Status.UNAVAILABLE.asException());
@@ -556,6 +553,8 @@ public class ServerXdsClientNewServerApiTest {
         .onNext(eq(buildDiscoveryRequest(NODE, "0",
                 ImmutableList.of("test/value?udpa.resource.listening_address=192.168.3.7:7000"),
                 ResourceType.LDS.typeUrl(), "")));
+    // expect only 1 request: for LDS
+    verify(requestObserver, times(1)).onNext(any(DiscoveryRequest.class));
 
     // Management server is still not reachable.
     responseObserver.onError(Status.UNAVAILABLE.asException());
@@ -576,6 +575,8 @@ public class ServerXdsClientNewServerApiTest {
         .onNext(eq(buildDiscoveryRequest(NODE, "0",
                 ImmutableList.of("test/value?udpa.resource.listening_address=192.168.3.7:7000"),
                 ResourceType.LDS.typeUrl(), "")));
+    // expect only 1 request: for LDS
+    verify(requestObserver, times(1)).onNext(any(DiscoveryRequest.class));
 
     // Management server sends back a LDS response.
     response = buildDiscoveryResponse("1", listeners,
@@ -600,6 +601,8 @@ public class ServerXdsClientNewServerApiTest {
         .onNext(eq(buildDiscoveryRequest(NODE, "1",
                 ImmutableList.of("test/value?udpa.resource.listening_address=192.168.3.7:7000"),
                 ResourceType.LDS.typeUrl(), "")));
+    // expect only 1 request: for LDS
+    verify(requestObserver, times(1)).onNext(any(DiscoveryRequest.class));
 
     // Management server becomes unreachable again.
     responseObserver.onError(Status.UNAVAILABLE.asException());
@@ -619,19 +622,11 @@ public class ServerXdsClientNewServerApiTest {
         .onNext(eq(buildDiscoveryRequest(NODE, "1",
                 ImmutableList.of("test/value?udpa.resource.listening_address=192.168.3.7:7000"),
                 ResourceType.LDS.typeUrl(), "")));
+    // expect only 1 request: for LDS
+    verify(requestObserver, times(1)).onNext(any(DiscoveryRequest.class));
 
     verifyNoMoreInteractions(mockedDiscoveryService, backoffPolicyProvider, backoffPolicy1,
         backoffPolicy2);
-  }
-
-  @Test
-  public void getSubscribedResources() {
-    xdsClient.watchListenerData(PORT, listenerWatcher);
-    assertThat(xdsClient.getSubscribedResources(ResourceType.LDS))
-        .containsExactly("test/value?udpa.resource.listening_address=192.168.3.7:7000");
-    assertThat(xdsClient.getSubscribedResources(ResourceType.CDS)).isNull();
-    assertThat(xdsClient.getSubscribedResources(ResourceType.EDS)).isNull();
-    assertThat(xdsClient.getSubscribedResources(ResourceType.RDS)).isNull();
   }
 
   static Listener buildListenerWithFilterChain(String name, int portValue, String address,

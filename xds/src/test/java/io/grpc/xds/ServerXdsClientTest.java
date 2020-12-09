@@ -509,9 +509,6 @@ public class ServerXdsClientTest {
             .getValidationContextSdsSecretConfig()
             .getName())
         .isEqualTo("ROOTCA2");
-
-    // expect only 3 requests: 1 orig req and 2 ACKS & no other req for no other resource
-    verify(requestObserver, times(3)).onNext(any(DiscoveryRequest.class));
   }
 
   /**
@@ -639,6 +636,8 @@ public class ServerXdsClientTest {
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "",
             ResourceType.LDS.typeUrlV2(), "")));
+    // expect only 1 request: for LDS
+    verify(requestObserver, times(1)).onNext(any(DiscoveryRequest.class));
 
     final FilterChain filterChainOutbound = buildFilterChain(buildFilterChainMatch(8000), null);
     final FilterChain filterChainInbound = buildFilterChain(buildFilterChainMatch(PORT,
@@ -678,6 +677,8 @@ public class ServerXdsClientTest {
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "0",
             ResourceType.LDS.typeUrlV2(), "")));
+    // expect only 1 request: for LDS
+    verify(requestObserver, times(1)).onNext(any(DiscoveryRequest.class));
 
     // Management server becomes unreachable.
     responseObserver.onError(Status.UNAVAILABLE.asException());
@@ -697,6 +698,8 @@ public class ServerXdsClientTest {
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "0",
             ResourceType.LDS.typeUrlV2(), "")));
+    // expect only 1 request: for LDS
+    verify(requestObserver, times(1)).onNext(any(DiscoveryRequest.class));
 
     // Management server is still not reachable.
     responseObserver.onError(Status.UNAVAILABLE.asException());
@@ -716,6 +719,8 @@ public class ServerXdsClientTest {
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "0",
             ResourceType.LDS.typeUrlV2(), "")));
+    // expect only 1 request: for LDS
+    verify(requestObserver, times(1)).onNext(any(DiscoveryRequest.class));
 
     // Management server sends back a LDS response.
     response = buildDiscoveryResponseV2("1", listeners,
@@ -739,6 +744,8 @@ public class ServerXdsClientTest {
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "1",
             ResourceType.LDS.typeUrlV2(), "")));
+    // expect only 1 request: for LDS
+    verify(requestObserver, times(1)).onNext(any(DiscoveryRequest.class));
 
     // Management server becomes unreachable again.
     responseObserver.onError(Status.UNAVAILABLE.asException());
@@ -757,18 +764,11 @@ public class ServerXdsClientTest {
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "1",
             ResourceType.LDS.typeUrlV2(), "")));
+    // expect only 1 request: for LDS
+    verify(requestObserver, times(1)).onNext(any(DiscoveryRequest.class));
 
     verifyNoMoreInteractions(mockedDiscoveryService, backoffPolicyProvider, backoffPolicy1,
         backoffPolicy2);
-  }
-
-  @Test
-  public void getSubscribedResources() {
-    xdsClient.watchListenerData(PORT, listenerWatcher);
-    assertThat(xdsClient.getSubscribedResources(ResourceType.LDS)).isEmpty();
-    assertThat(xdsClient.getSubscribedResources(ResourceType.CDS)).isNull();
-    assertThat(xdsClient.getSubscribedResources(ResourceType.EDS)).isNull();
-    assertThat(xdsClient.getSubscribedResources(ResourceType.RDS)).isNull();
   }
 
   static Listener buildListenerWithFilterChain(String name, int portValue, String address,
