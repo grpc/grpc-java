@@ -41,7 +41,7 @@ import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.ClusterImplLoadBalancerProvider.ClusterImplConfig;
 import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig;
-import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig.DiscoveryMechanism;
+import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig.ResolutionMechanism;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.LbEndpoint;
 import io.grpc.xds.EnvoyProtoData.Locality;
@@ -177,14 +177,14 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       this.resolvedAddresses = resolvedAddresses;
       ClusterResolverConfig config =
           (ClusterResolverConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
-      for (DiscoveryMechanism instance : config.discoveryMechanisms) {
+      for (ResolutionMechanism instance : config.resolutionMechanisms) {
         clusters.add(instance.cluster);
-        if (instance.type == DiscoveryMechanism.Type.EDS) {
+        if (instance.type == ResolutionMechanism.Type.EDS) {
           ClusterState state =
               new EdsClusterState(instance.cluster, instance.edsServiceName,
                   instance.lrsServerName, instance.maxConcurrentRequests);
           clusterStates.put(instance.cluster, state);
-        } else if (instance.type == DiscoveryMechanism.Type.LOGICAL_DNS) {
+        } else if (instance.type == ResolutionMechanism.Type.LOGICAL_DNS) {
           ClusterState state = new LogicalDnsClusterState(instance.cluster, instance.lrsServerName,
               instance.maxConcurrentRequests);
           clusterStates.put(instance.cluster, state);

@@ -64,21 +64,21 @@ public final class ClusterResolverLoadBalancerProvider extends LoadBalancerProvi
   }
 
   static final class ClusterResolverConfig {
-    // Ordered list of clusters to be discovered.
-    final List<DiscoveryMechanism> discoveryMechanisms;
+    // Ordered list of clusters to be resolved.
+    final List<ResolutionMechanism> resolutionMechanisms;
     final PolicySelection localityPickingPolicy;
     final PolicySelection endpointPickingPolicy;
 
-    ClusterResolverConfig(List<DiscoveryMechanism> discoveryMechanisms,
+    ClusterResolverConfig(List<ResolutionMechanism> resolutionMechanisms,
         PolicySelection localityPickingPolicy, PolicySelection endpointPickingPolicy) {
-      this.discoveryMechanisms = checkNotNull(discoveryMechanisms, "discoveryMechanisms");
+      this.resolutionMechanisms = checkNotNull(resolutionMechanisms, "resolutionMechanisms");
       this.localityPickingPolicy = checkNotNull(localityPickingPolicy, "localityPickingPolicy");
       this.endpointPickingPolicy = checkNotNull(endpointPickingPolicy, "endpointPickingPolicy");
     }
 
     @Override
     public int hashCode() {
-      return Objects.hash(discoveryMechanisms, localityPickingPolicy, endpointPickingPolicy);
+      return Objects.hash(resolutionMechanisms, localityPickingPolicy, endpointPickingPolicy);
     }
 
     @Override
@@ -90,7 +90,7 @@ public final class ClusterResolverLoadBalancerProvider extends LoadBalancerProvi
         return false;
       }
       ClusterResolverConfig that = (ClusterResolverConfig) o;
-      return discoveryMechanisms.equals(that.discoveryMechanisms)
+      return resolutionMechanisms.equals(that.resolutionMechanisms)
           && localityPickingPolicy.equals(that.localityPickingPolicy)
           && endpointPickingPolicy.equals(that.endpointPickingPolicy);
     }
@@ -98,17 +98,17 @@ public final class ClusterResolverLoadBalancerProvider extends LoadBalancerProvi
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(this)
-          .add("discoveryMechanisms", discoveryMechanisms)
+          .add("resolutionMechanisms", resolutionMechanisms)
           .add("localityPickingPolicy", localityPickingPolicy)
           .add("endpointPickingPolicy", endpointPickingPolicy)
           .toString();
     }
 
-    // Describes a discovery mechanism for a specific cluster.
-    static final class DiscoveryMechanism {
-      // Name of the cluster to discover.
+    // Describes a resolution mechanism for a specific cluster.
+    static final class ResolutionMechanism {
+      // Name of the cluster to resolve.
       final String cluster;
-      // Type of the discovery mechanism.
+      // Type of the resolution mechanism.
       final Type type;
       // Load reporting server name. Null if not enabled.
       @Nullable
@@ -116,7 +116,7 @@ public final class ClusterResolverLoadBalancerProvider extends LoadBalancerProvi
       // Cluster-level max concurrent request threshold. Null if not specified.
       @Nullable
       final Long maxConcurrentRequests;
-      // Resource name for discovering endpoints via EDS. Only valid for EDS clusters.
+      // Resource name for resolving endpoints via EDS. Only valid for EDS clusters.
       @Nullable
       final String edsServiceName;
 
@@ -125,7 +125,7 @@ public final class ClusterResolverLoadBalancerProvider extends LoadBalancerProvi
         LOGICAL_DNS,
       }
 
-      private DiscoveryMechanism(String cluster, Type type, @Nullable String edsServiceName,
+      private ResolutionMechanism(String cluster, Type type, @Nullable String edsServiceName,
           @Nullable String lrsServerName, @Nullable Long maxConcurrentRequests) {
         this.cluster = checkNotNull(cluster, "cluster");
         this.type = checkNotNull(type, "type");
@@ -134,15 +134,15 @@ public final class ClusterResolverLoadBalancerProvider extends LoadBalancerProvi
         this.maxConcurrentRequests = maxConcurrentRequests;
       }
 
-      static DiscoveryMechanism forEds(String cluster, @Nullable String edsServiceName,
+      static ResolutionMechanism forEds(String cluster, @Nullable String edsServiceName,
           @Nullable String lrsServerName, @Nullable Long maxConcurrentRequests) {
-        return new DiscoveryMechanism(cluster, Type.EDS, edsServiceName, lrsServerName,
+        return new ResolutionMechanism(cluster, Type.EDS, edsServiceName, lrsServerName,
             maxConcurrentRequests);
       }
 
-      static DiscoveryMechanism forLogicalDns(String cluster, @Nullable String lrsServerName,
+      static ResolutionMechanism forLogicalDns(String cluster, @Nullable String lrsServerName,
           @Nullable Long maxConcurrentRequests) {
-        return new DiscoveryMechanism(cluster, Type.LOGICAL_DNS, null, lrsServerName,
+        return new ResolutionMechanism(cluster, Type.LOGICAL_DNS, null, lrsServerName,
             maxConcurrentRequests);
       }
 
@@ -159,7 +159,7 @@ public final class ClusterResolverLoadBalancerProvider extends LoadBalancerProvi
         if (o == null || getClass() != o.getClass()) {
           return false;
         }
-        DiscoveryMechanism that = (DiscoveryMechanism) o;
+        ResolutionMechanism that = (ResolutionMechanism) o;
         return cluster.equals(that.cluster)
             && type == that.type
             && Objects.equals(edsServiceName, that.edsServiceName)
