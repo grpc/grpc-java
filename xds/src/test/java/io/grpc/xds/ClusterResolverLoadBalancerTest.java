@@ -58,7 +58,7 @@ import io.grpc.internal.ObjectPool;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.xds.ClusterImplLoadBalancerProvider.ClusterImplConfig;
 import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig;
-import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig.ResolutionMechanism;
+import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig.DiscoveryMechanism;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.LbEndpoint;
 import io.grpc.xds.EnvoyProtoData.Locality;
@@ -325,10 +325,10 @@ public class ClusterResolverLoadBalancerTest {
   }
 
   private void deliverConfigWithEdsClusters() {
-    ResolutionMechanism instance1 =
-        ResolutionMechanism.forEds(CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_NAME, 100L);
-    ResolutionMechanism instance2 =
-        ResolutionMechanism.forEds(CLUSTER2, EDS_SERVICE_NAME2, LRS_SERVER_NAME, 200L);
+    DiscoveryMechanism instance1 =
+        DiscoveryMechanism.forEds(CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_NAME, 100L);
+    DiscoveryMechanism instance2 =
+        DiscoveryMechanism.forEds(CLUSTER2, EDS_SERVICE_NAME2, LRS_SERVER_NAME, 200L);
     ClusterResolverConfig config =
         new ClusterResolverConfig(Arrays.asList(instance1, instance2), weightedTarget, roundRobin);
     deliverLbConfig(config);
@@ -393,8 +393,8 @@ public class ClusterResolverLoadBalancerTest {
   }
 
   private void deliverConfigWithSingleEdsCluster() {
-    ResolutionMechanism instance =
-        ResolutionMechanism.forEds(CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_NAME, 100L);
+    DiscoveryMechanism instance =
+        DiscoveryMechanism.forEds(CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_NAME, 100L);
     ClusterResolverConfig config =
         new ClusterResolverConfig(Collections.singletonList(instance), weightedTarget, roundRobin);
     deliverLbConfig(config);
@@ -472,8 +472,8 @@ public class ClusterResolverLoadBalancerTest {
   }
 
   private void deliverConfigWithSingleLogicalDnsCluster() {
-    ResolutionMechanism instance =
-        ResolutionMechanism.forLogicalDns(CLUSTER_DNS, LRS_SERVER_NAME, 100L);
+    DiscoveryMechanism instance =
+        DiscoveryMechanism.forLogicalDns(CLUSTER_DNS, LRS_SERVER_NAME, 100L);
     ClusterResolverConfig config =
         new ClusterResolverConfig(Collections.singletonList(instance), weightedTarget, roundRobin);
     deliverLbConfig(config);
@@ -601,10 +601,10 @@ public class ClusterResolverLoadBalancerTest {
   }
 
   private void deliverConfigWithEdsAndLogicalDnsClusters() {
-    ResolutionMechanism instance1 =
-        ResolutionMechanism.forEds(CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_NAME, 100L);
-    ResolutionMechanism instance2 =
-        ResolutionMechanism.forLogicalDns(CLUSTER_DNS, LRS_SERVER_NAME, 200L);
+    DiscoveryMechanism instance1 =
+        DiscoveryMechanism.forEds(CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_NAME, 100L);
+    DiscoveryMechanism instance2 =
+        DiscoveryMechanism.forLogicalDns(CLUSTER_DNS, LRS_SERVER_NAME, 200L);
     ClusterResolverConfig config =
         new ClusterResolverConfig(Arrays.asList(instance1, instance2), weightedTarget, roundRobin);
     deliverLbConfig(config);
