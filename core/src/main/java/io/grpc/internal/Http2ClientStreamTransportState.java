@@ -147,8 +147,13 @@ public abstract class Http2ClientStreamTransportState extends AbstractClientStre
       inboundDataReceived(frame);
       if (endOfStream) {
         // This is a protocol violation as we expect to receive trailers.
-        transportError =
-            Status.INTERNAL.withDescription("Received unexpected EOS on DATA frame from server.");
+        if (frame.readableBytes() > 0) {
+          transportError = Status.INTERNAL
+              .withDescription("Received unexpected EOS on non-empty DATA frame from server");
+        } else {
+          transportError = Status.INTERNAL
+              .withDescription("Received unexpected EOS on empty DATA frame from server");
+        }
         transportErrorMetadata = new Metadata();
         transportReportStatus(transportError, false, transportErrorMetadata);
       }
