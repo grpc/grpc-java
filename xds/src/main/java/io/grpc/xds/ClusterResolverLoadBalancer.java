@@ -179,16 +179,18 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
           (ClusterResolverConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
       for (ResolutionMechanism instance : config.resolutionMechanisms) {
         clusters.add(instance.cluster);
+        ClusterState state;
         if (instance.type == ResolutionMechanism.Type.EDS) {
-          ClusterState state =
+          state =
               new EdsClusterState(instance.cluster, instance.edsServiceName,
                   instance.lrsServerName, instance.maxConcurrentRequests);
           clusterStates.put(instance.cluster, state);
         } else {  // logical DNS
-          ClusterState state = new LogicalDnsClusterState(instance.cluster, instance.lrsServerName,
+          state = new LogicalDnsClusterState(instance.cluster, instance.lrsServerName,
               instance.maxConcurrentRequests);
           clusterStates.put(instance.cluster, state);
         }
+        state.start();
         localityPickingPolicy = config.localityPickingPolicy;
         endpointPickingPolicy = config.endpointPickingPolicy;
       }
@@ -305,6 +307,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
         this.maxConcurrentRequests = maxConcurrentRequests;
       }
 
+      abstract void start();
+
       void shutdown() {
         shutdown = true;
       }
@@ -315,9 +319,21 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       private EdsClusterState(String name, @Nullable String edsServiceName,
           @Nullable String lrsServerName, @Nullable Long maxConcurrentRequests) {
         super(name, edsServiceName, lrsServerName, maxConcurrentRequests);
+      }
+
+      @Override
+      void start() {
         String resourceName = edsServiceName != null ? edsServiceName : name;
         logger.log(XdsLogLevel.INFO, "Start watching EDS resource {0}", resourceName);
         xdsClient.watchEdsResource(resourceName, this);
+      }
+
+      @Override
+      protected void shutdown() {
+        super.shutdown();
+        String resourceName = edsServiceName != null ? edsServiceName : name;
+        logger.log(XdsLogLevel.INFO, "Stop watching EDS resource {0}", resourceName);
+        xdsClient.cancelEdsResourceWatch(resourceName, this);
       }
 
       @Override
@@ -418,14 +434,6 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
           }
         });
       }
-
-      @Override
-      protected void shutdown() {
-        super.shutdown();
-        String resourceName = edsServiceName != null ? edsServiceName : name;
-        logger.log(XdsLogLevel.INFO, "Stop watching EDS resource {0}", resourceName);
-        xdsClient.cancelEdsResourceWatch(resourceName, this);
-      }
     }
 
     private class LogicalDnsClusterState extends ClusterState {
@@ -439,7 +447,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
           @Nullable Long maxConcurrentRequests) {
         super(name, null, lrsServerName, maxConcurrentRequests);
         NameResolver.Args args = helper.getNameResolverArgs();
-        URI uri = null;
+        URI uri;
         try {
           uri = new URI(authority);
         } catch (URISyntaxException e) {
@@ -447,6 +455,10 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
           throw new AssertionError("Bug, invalid authority: " + authority, e);
         }
         resolver = helper.getNameResolverRegistry().asFactory().newNameResolver(uri, args);
+      }
+
+      @Override
+      void start() {
         resolver.start(new NameResolverListener());
       }
 
