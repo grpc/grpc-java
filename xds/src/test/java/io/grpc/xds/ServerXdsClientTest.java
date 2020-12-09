@@ -509,6 +509,9 @@ public class ServerXdsClientTest {
             .getValidationContextSdsSecretConfig()
             .getName())
         .isEqualTo("ROOTCA2");
+
+    // expect only 3 requests: 1 orig req and 2 ACKS & no other req for no other resource
+    verify(requestObserver, times(3)).onNext(any(DiscoveryRequest.class));
   }
 
   /**

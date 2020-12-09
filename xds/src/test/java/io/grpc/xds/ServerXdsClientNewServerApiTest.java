@@ -376,6 +376,8 @@ public class ServerXdsClientNewServerApiTest {
     ArgumentCaptor<ListenerUpdate> listenerUpdateCaptor = ArgumentCaptor.forClass(null);
     verify(listenerWatcher, times(1)).onListenerChanged(listenerUpdateCaptor.capture());
 
+    // expect only 2 requests: original req and ACK: no other req for no other resource
+    verify(requestObserver, times(2)).onNext(any(DiscoveryRequest.class));
     reset(requestObserver);
     // Management server sends another LDS response with updates for Listener.
     final FilterChain filterChainNewInbound =
@@ -428,6 +430,9 @@ public class ServerXdsClientNewServerApiTest {
                 .getValidationContextSdsSecretConfig()
                 .getName())
         .isEqualTo("ROOTCA2");
+
+    // expect only 1 ACK request: no other req for no other resource
+    verify(requestObserver, times(1)).onNext(any(DiscoveryRequest.class));
   }
 
   /** Client receives LDS response containing non-matching port. */
