@@ -353,6 +353,7 @@ public class ManagedChannelImplTest {
     // would ignore any time-sensitive tasks, e.g., back-off and the idle timer.
     assertTrue(timer.getDueTasks() + " should be empty", timer.getDueTasks().isEmpty());
     assertEquals(executor.getPendingTasks() + " should be empty", 0, executor.numPendingTasks());
+    assertFalse(Thread.interrupted());
     if (channel != null) {
       if (!panicExpected) {
         assertFalse(channel.isInPanicMode());
@@ -874,6 +875,7 @@ public class ManagedChannelImplTest {
       when(picker2.pickSubchannel(new PickSubchannelArgsImpl(method, headers, CallOptions.DEFAULT)))
           .thenReturn(PickResult.withSubchannel(subchannel));
       updateBalancingStateSafely(helper, READY, picker2);
+      assertTrue(Thread.interrupted());
       executor.runDueTasks();
       verify(mockTransport).newStream(same(method), same(headers), same(CallOptions.DEFAULT));
       verify(mockStream).start(any(ClientStreamListener.class));
@@ -1132,6 +1134,7 @@ public class ManagedChannelImplTest {
     when(picker.pickSubchannel(any(PickSubchannelArgs.class)))
         .thenReturn(PickResult.withDrop(status));
     updateBalancingStateSafely(helper, READY, picker);
+    assertTrue(Thread.interrupted());
     executor.runDueTasks();
     verify(mockCallListener).onClose(same(status), any(Metadata.class));
 
