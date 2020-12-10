@@ -144,10 +144,11 @@ public abstract class Http2ClientStreamTransportState extends AbstractClientStre
             new Metadata());
         return;
       }
+      int frameSize = frame.readableBytes();
       inboundDataReceived(frame);
       if (endOfStream) {
         // This is a protocol violation as we expect to receive trailers.
-        if (frame.readableBytes() > 0) {
+        if (frameSize > 0) {
           transportError = Status.INTERNAL
               .withDescription("Received unexpected EOS on non-empty DATA frame from server");
         } else {
