@@ -56,20 +56,25 @@ final class ServerXdsClient extends AbstractXdsClient {
   @Nullable
   private ListenerWatcher listenerWatcher;
   private int listenerPort = -1;
-  private final boolean newServerApi;
+  private final boolean useNewApiForListenerQuery;
   @Nullable private final String instanceIp;
   private String grpcServerResourceId;
   @Nullable
   private ScheduledHandle ldsRespTimer;
 
-  ServerXdsClient(XdsChannel channel, Node node, ScheduledExecutorService timeService,
-      BackoffPolicy.Provider backoffPolicyProvider, Supplier<Stopwatch> stopwatchSupplier,
-      boolean newServerApi, String instanceIp, String grpcServerResourceId) {
+  ServerXdsClient(
+      XdsChannel channel,
+      Node node,
+      ScheduledExecutorService timeService,
+      BackoffPolicy.Provider backoffPolicyProvider,
+      Supplier<Stopwatch> stopwatchSupplier,
+      boolean useNewApiForListenerQuery,
+      String instanceIp,
+      String grpcServerResourceId) {
     super(channel, node, timeService, backoffPolicyProvider, stopwatchSupplier);
-    this.newServerApi = channel.isUseProtocolV3() && newServerApi;
+    this.useNewApiForListenerQuery = channel.isUseProtocolV3() && useNewApiForListenerQuery;
     this.instanceIp = (instanceIp != null ? instanceIp : "0.0.0.0");
-    this.grpcServerResourceId =
-        (grpcServerResourceId != null) ? grpcServerResourceId : "grpc/server";
+    this.grpcServerResourceId = grpcServerResourceId != null ? grpcServerResourceId : "grpc/server";
   }
 
   @Override
@@ -78,7 +83,7 @@ final class ServerXdsClient extends AbstractXdsClient {
     listenerWatcher = checkNotNull(watcher, "watcher");
     checkArgument(port > 0, "port needs to be > 0");
     listenerPort = port;
-    if (newServerApi) {
+    if (useNewApiForListenerQuery) {
       String listeningAddress = instanceIp + ":" + listenerPort;
       grpcServerResourceId =
           grpcServerResourceId + "?udpa.resource.listening_address=" + listeningAddress;
@@ -89,7 +94,7 @@ final class ServerXdsClient extends AbstractXdsClient {
       @Override
       public void run() {
         getLogger().log(XdsLogLevel.INFO, "Started watching listener for port {0}", port);
-        if (!newServerApi) {
+        if (!useNewApiForListenerQuery) {
           updateNodeMetadataForListenerRequest(port);
         }
         adjustResourceSubscription(ResourceType.LDS);
@@ -107,7 +112,10 @@ final class ServerXdsClient extends AbstractXdsClient {
   @Nullable
   @Override
   Collection<String> getSubscribedResources(ResourceType type) {
-    if (newServerApi) {
+    if (type != ResourceType.LDS) {
+      return null;
+    }
+    if (useNewApiForListenerQuery) {
       return ImmutableList.<String>of(grpcServerResourceId);
     } else {
       return Collections.emptyList();
@@ -175,17 +183,17 @@ final class ServerXdsClient extends AbstractXdsClient {
   }
 
   private boolean isRequestedListener(Listener listener) {
-    if (newServerApi) {
+    if (useNewApiForListenerQuery) {
       return grpcServerResourceId.equals(listener.getName())
-              && listener.getTrafficDirection().equals(TrafficDirection.INBOUND)
-              && isAddressMatching(listener.getAddress(), listenerPort);
+          && listener.getTrafficDirection().equals(TrafficDirection.INBOUND)
+          && isAddressMatching(listener.getAddress(), listenerPort);
     }
     return isAddressMatching(listener.getAddress(), 15001)
         && hasMatchingFilter(listener.getFilterChainsList());
   }
 
   private boolean isAddressMatching(Address address, int portToMatch) {
-    return address.hasSocketAddress() && (address.getSocketAddress().getPortValue() == portToMatch);
+    return address.hasSocketAddress() && address.getSocketAddress().getPortValue() == portToMatch;
   }
 
   private boolean hasMatchingFilter(List<FilterChain> filterChainsList) {
