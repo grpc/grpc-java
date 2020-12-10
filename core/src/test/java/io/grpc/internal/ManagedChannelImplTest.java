@@ -1745,7 +1745,7 @@ public class ManagedChannelImplTest {
   }
 
   @Test
-  public void oobchannelsHaveNoChannelCallCredentials() {
+  public void oobChannelHasNoChannelCallCredentials() {
     Metadata.Key<String> metadataKey =
         Metadata.Key.of("token", Metadata.ASCII_STRING_MARSHALLER);
     String channelCredValue = "channel-provided call cred";
