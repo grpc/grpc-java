@@ -712,11 +712,13 @@ public class ClusterResolverLoadBalancerTest {
 
     @Override
     void watchEdsResource(String resourceName, EdsResourceWatcher watcher) {
+      assertThat(watchers).doesNotContainKey(resourceName);
       watchers.put(resourceName, watcher);
     }
 
     @Override
     void cancelEdsResourceWatch(String resourceName, EdsResourceWatcher watcher) {
+      assertThat(watchers).containsKey(resourceName);
       watchers.remove(resourceName);
     }
 
