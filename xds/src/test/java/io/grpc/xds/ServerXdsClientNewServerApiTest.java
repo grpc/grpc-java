@@ -141,7 +141,7 @@ public class ServerXdsClientNewServerApiTest {
   private ListenerWatcher listenerWatcher;
 
   private ManagedChannel channel;
-  private XdsClient xdsClient;
+  private ServerXdsClient xdsClient;
 
   @Before
   public void setUp() throws IOException {
@@ -531,6 +531,7 @@ public class ServerXdsClientNewServerApiTest {
         .onNext(eq(buildDiscoveryRequest(NODE, "0",
                 ImmutableList.of("test/value?udpa.resource.listening_address=192.168.3.7:7000"),
                 ResourceType.LDS.typeUrl(), "")));
+    verifyNoMoreInteractions(requestObserver);
 
     // Management server becomes unreachable.
     responseObserver.onError(Status.UNAVAILABLE.asException());
@@ -551,6 +552,7 @@ public class ServerXdsClientNewServerApiTest {
         .onNext(eq(buildDiscoveryRequest(NODE, "0",
                 ImmutableList.of("test/value?udpa.resource.listening_address=192.168.3.7:7000"),
                 ResourceType.LDS.typeUrl(), "")));
+    verifyNoMoreInteractions(requestObserver);
 
     // Management server is still not reachable.
     responseObserver.onError(Status.UNAVAILABLE.asException());
@@ -571,6 +573,7 @@ public class ServerXdsClientNewServerApiTest {
         .onNext(eq(buildDiscoveryRequest(NODE, "0",
                 ImmutableList.of("test/value?udpa.resource.listening_address=192.168.3.7:7000"),
                 ResourceType.LDS.typeUrl(), "")));
+    verifyNoMoreInteractions(requestObserver);
 
     // Management server sends back a LDS response.
     response = buildDiscoveryResponse("1", listeners,
@@ -595,6 +598,7 @@ public class ServerXdsClientNewServerApiTest {
         .onNext(eq(buildDiscoveryRequest(NODE, "1",
                 ImmutableList.of("test/value?udpa.resource.listening_address=192.168.3.7:7000"),
                 ResourceType.LDS.typeUrl(), "")));
+    verifyNoMoreInteractions(requestObserver);
 
     // Management server becomes unreachable again.
     responseObserver.onError(Status.UNAVAILABLE.asException());
@@ -616,7 +620,7 @@ public class ServerXdsClientNewServerApiTest {
                 ResourceType.LDS.typeUrl(), "")));
 
     verifyNoMoreInteractions(mockedDiscoveryService, backoffPolicyProvider, backoffPolicy1,
-        backoffPolicy2);
+        backoffPolicy2, requestObserver);
   }
 
   static Listener buildListenerWithFilterChain(String name, int portValue, String address,
