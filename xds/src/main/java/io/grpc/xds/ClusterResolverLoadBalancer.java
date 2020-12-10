@@ -76,10 +76,8 @@ import javax.annotation.Nullable;
  */
 final class ClusterResolverLoadBalancer extends LoadBalancer {
 
-  @VisibleForTesting
-  static final String LOGICAL_DNS_CLUSTER_ENDPOINT_PICKING_POLICY_OVERRIDE = "pick_first";
-  @VisibleForTesting
-  static final Locality logicalDnsClusterLocality = new Locality("", "", "");
+  private static final String LOGICAL_DNS_CLUSTER_ENDPOINT_PICKING_POLICY_OVERRIDE = "pick_first";
+  private static final Locality logicalDnsClusterLocality = new Locality("", "", "");
   private final XdsLogger logger;
   private final String authority;
   private final SynchronizationContext syncContext;

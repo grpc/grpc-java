@@ -423,8 +423,7 @@ public class ClusterResolverLoadBalancerTest {
         Collections.<DropOverload>emptyList(), LRS_POLICY_NAME);
     LrsConfig lrsConfig = (LrsConfig) clusterImplConfig.childPolicy.getConfig();
     assertLrsConfig(lrsConfig, CLUSTER_DNS, null, LRS_SERVER_NAME,
-        ClusterResolverLoadBalancer.logicalDnsClusterLocality,
-        ClusterResolverLoadBalancer.LOGICAL_DNS_CLUSTER_ENDPOINT_PICKING_POLICY_OVERRIDE);
+        new Locality("", "", ""), "pick_first");  // hardcoded override
     assertAddressesEqual(Arrays.asList(endpoint1, endpoint2), childBalancer.addresses);
   }
 
