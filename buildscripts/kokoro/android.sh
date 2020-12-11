@@ -27,25 +27,17 @@ echo y | ${ANDROID_HOME}/tools/bin/sdkmanager "build-tools;28.0.3"
 # Proto deps
 buildscripts/make_dependencies.sh
 
-# Build grpc-cronet
+./gradlew \
+    :grpc-android-interop-testing:build \
+    :grpc-android:build \
+    :grpc-cronet:build \
+    publishToMavenLocal
 
-pushd cronet
-../gradlew build
-popd
-
-# Build grpc-android
-
-pushd android
-../gradlew build
-popd
-
-# Build android-interop-testing
-pushd android-interop-testing
-../gradlew build
-popd
-
-# Examples pull dependencies from maven local
-./gradlew publishToMavenLocal
+if [[ ! -z $(git status --porcelain) ]]; then
+  git status
+  echo "Error Working directory is not clean. Forget to commit generated files?"
+  exit 1
+fi
 
 # Build examples
 
@@ -54,6 +46,8 @@ cd ./examples/android/clientcache
 cd ../routeguide
 ../../gradlew build
 cd ../helloworld
+../../gradlew build
+cd ../strictmode
 ../../gradlew build
 
 # Skip APK size and dex count comparisons for non-PR builds

@@ -31,34 +31,6 @@ public class InternalConfigSelectorTest {
   @Test
   public void resultBuilder() {
     Object config = "fake_config";
-    CallOptions callOptions = CallOptions.DEFAULT.withAuthority("fake authority");
-    Runnable committedCallback = new Runnable() {
-      @Override
-      public void run() {}
-    };
-    InternalConfigSelector.Result.Builder builder = InternalConfigSelector.Result.newBuilder();
-
-    InternalConfigSelector.Result result =
-        builder.setConfig(config).setCallOptions(callOptions).build();
-    assertThat(result.getStatus().isOk()).isTrue();
-    assertThat(result.getConfig()).isEqualTo(config);
-    assertThat(result.getCallOptions()).isEqualTo(callOptions);
-    assertThat(result.getCommittedCallback()).isNull();
-
-    result = builder
-        .setConfig(config)
-        .setCallOptions(callOptions)
-        .setCommittedCallback(committedCallback)
-        .build();
-    assertThat(result.getStatus().isOk()).isTrue();
-    assertThat(result.getConfig()).isEqualTo(config);
-    assertThat(result.getCallOptions()).isEqualTo(callOptions);
-    assertThat(result.getCommittedCallback()).isSameInstanceAs(committedCallback);
-  }
-
-  @Test
-  public void resultBuilder_interceptorBased() {
-    Object config = "fake_config";
     InternalConfigSelector.Result.Builder builder = InternalConfigSelector.Result.newBuilder();
     ClientInterceptor interceptor = mock(ClientInterceptor.class);
     InternalConfigSelector.Result result =

@@ -312,22 +312,4 @@ public class CallCredentialsApplyingTest {
     assertEquals(creds2Value, origHeaders.get(creds2Key));
     assertEquals(ORIG_HEADER_VALUE, origHeaders.get(ORIG_HEADER_KEY));
   }
-
-  private abstract static class BaseCallCredentials extends CallCredentials {
-    @Override public void thisUsesUnstableApi() {}
-  }
-
-  private static class FakeCallCredentials extends BaseCallCredentials {
-    private final Metadata headers;
-
-    public <T> FakeCallCredentials(Metadata.Key<T> key, T value) {
-      headers = new Metadata();
-      headers.put(key, value);
-    }
-
-    @Override public void applyRequestMetadata(
-        RequestInfo requestInfo, Executor appExecutor, CallCredentials.MetadataApplier applier) {
-      applier.apply(headers);
-    }
-  }
 }

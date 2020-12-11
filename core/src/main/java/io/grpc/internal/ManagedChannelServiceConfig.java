@@ -392,7 +392,6 @@ final class ManagedChannelServiceConfig {
     public Result selectConfig(PickSubchannelArgs args) {
       return Result.newBuilder()
           .setConfig(config)
-          .setCallOptions(args.getCallOptions())
           .build();
     }
   }

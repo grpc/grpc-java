@@ -77,7 +77,7 @@ abstract class AbstractXdsClient extends XdsClient {
           throw new AssertionError(e);
         }
       });
-  private final MessagePrinter respPrinter = new MessagePrinter();
+  private final MessagePrinter msgPrinter = new MessagePrinter();
   private final InternalLogId logId;
   private final XdsLogger logger;
   private final XdsChannel xdsChannel;
@@ -571,7 +571,7 @@ abstract class AbstractXdsClient extends XdsClient {
                   ResourceType type = ResourceType.fromTypeUrl(response.getTypeUrl());
                   if (logger.isLoggable(XdsLogLevel.DEBUG)) {
                     logger.log(XdsLogLevel.DEBUG, "Received {0} response:\n{1}",
-                        type, respPrinter.print(response));
+                        type, msgPrinter.print(response));
                   }
                   handleRpcResponse(type, response.getVersionInfo(), response.getResourcesList(),
                       response.getNonce());
@@ -623,7 +623,7 @@ abstract class AbstractXdsClient extends XdsClient {
       }
       io.envoyproxy.envoy.api.v2.DiscoveryRequest request = builder.build();
       requestWriter.onNext(request);
-      logger.log(XdsLogLevel.DEBUG, "Sent DiscoveryRequest\n{0}", request);
+      logger.log(XdsLogLevel.DEBUG, "Sent DiscoveryRequest\n{0}", msgPrinter.print(request));
     }
 
     @Override
@@ -648,7 +648,7 @@ abstract class AbstractXdsClient extends XdsClient {
               ResourceType type = ResourceType.fromTypeUrl(response.getTypeUrl());
               if (logger.isLoggable(XdsLogLevel.DEBUG)) {
                 logger.log(XdsLogLevel.DEBUG, "Received {0} response:\n{1}",
-                    type, respPrinter.print(response));
+                    type, msgPrinter.print(response));
               }
               handleRpcResponse(type, response.getVersionInfo(), response.getResourcesList(),
                   response.getNonce());
@@ -700,7 +700,7 @@ abstract class AbstractXdsClient extends XdsClient {
       }
       DiscoveryRequest request = builder.build();
       requestWriter.onNext(request);
-      logger.log(XdsLogLevel.DEBUG, "Sent DiscoveryRequest\n{0}", request);
+      logger.log(XdsLogLevel.DEBUG, "Sent DiscoveryRequest\n{0}", msgPrinter.print(request));
     }
 
     @Override

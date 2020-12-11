@@ -1,8 +1,5 @@
 #!/bin/bash
 set -eu -o pipefail
 
-readonly proto_dir="$(mktemp -d --tmpdir protobuf.XXXXXX)"
-wget -O - https://github.com/google/protobuf/archive/v3.12.0.tar.gz | tar xz -C "$proto_dir"
-
-docker build -t protoc-artifacts "$proto_dir"/protobuf-3.12.0/protoc-artifacts
-rm -r "$proto_dir"
+readonly buildscripts_dir="$(dirname "$(readlink -f "$0")")"
+docker build -t grpc-java-artifacts "$buildscripts_dir"/grpc-java-artifacts
