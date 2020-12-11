@@ -22,6 +22,7 @@ import static com.google.common.base.Preconditions.checkState;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Converter;
 import com.google.common.base.MoreObjects;
+import com.google.common.base.MoreObjects.ToStringHelper;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -399,11 +400,17 @@ final class CachingRlsLbClient {
 
     @Override
     public String toString() {
-      return MoreObjects.toStringHelper(this)
-          .add("dataCacheEntry", dataCacheEntry)
-          .add("pendingCacheEntry", pendingCacheEntry)
-          .add("backoffCacheEntry", backoffCacheEntry)
-          .toString();
+      ToStringHelper toStringHelper = MoreObjects.toStringHelper(this);
+      if (dataCacheEntry != null) {
+        toStringHelper.add("dataCacheEntry", dataCacheEntry);
+      }
+      if (pendingCacheEntry != null) {
+        toStringHelper.add("pendingCacheEntry", pendingCacheEntry);
+      }
+      if (backoffCacheEntry != null) {
+        toStringHelper.add("backoffCacheEntry", backoffCacheEntry);
+      }
+      return toStringHelper.toString();
     }
   }
 
@@ -475,8 +482,6 @@ final class CachingRlsLbClient {
     public String toString() {
       return MoreObjects.toStringHelper(this)
           .add("request", request)
-          .add("pendingCall", pendingCall)
-          .add("backoffPolicy", backoffPolicy)
           .toString();
     }
   }
@@ -718,8 +723,6 @@ final class CachingRlsLbClient {
       return MoreObjects.toStringHelper(this)
           .add("request", request)
           .add("status", status)
-          .add("backoffPolicy", backoffPolicy)
-          .add("scheduledFuture", scheduledHandle)
           .toString();
     }
   }
@@ -856,12 +859,6 @@ final class CachingRlsLbClient {
       // eldest entry should be evicted if size limit exceeded
       return true;
     }
-
-    @Override
-    public String toString() {
-      return MoreObjects.toStringHelper(this)
-          .toString();
-    }
   }
 
   /**
@@ -905,12 +902,12 @@ final class CachingRlsLbClient {
     @Override
     public PickResult pickSubchannel(PickSubchannelArgs args) {
       String[] methodName = args.getMethodDescriptor().getFullMethodName().split("/", 2);
-      logger.log(ChannelLogLevel.DEBUG,
-          "Creating lookup request for service={0}, method={1}, headers={2}",
-          new Object[]{methodName[0], methodName[1], args.getHeaders()});
       RouteLookupRequest request =
           requestFactory.create(methodName[0], methodName[1], args.getHeaders());
       final CachedRouteLookupResponse response = CachingRlsLbClient.this.get(request);
+      logger.log(ChannelLogLevel.DEBUG,
+          "Got route lookup cache entry for service={0}, method={1}, headers={2}:\n {3}",
+          new Object[]{methodName[0], methodName[1], args.getHeaders(), response});
 
       if (response.getHeaderData() != null && !response.getHeaderData().isEmpty()) {
         Metadata headers = args.getHeaders();
@@ -958,6 +955,7 @@ final class CachingRlsLbClient {
 
     private void startFallbackChildPolicy() {
       String defaultTarget = lbPolicyConfig.getRouteLookupConfig().getDefaultTarget();
+      logger.log(ChannelLogLevel.DEBUG, "starting fallback to {0}", defaultTarget);
       synchronized (lock) {
         if (fallbackChildPolicyWrapper != null) {
           return;
