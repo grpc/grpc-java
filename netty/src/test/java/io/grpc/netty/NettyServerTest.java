@@ -19,11 +19,17 @@ package io.grpc.netty;
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.InternalChannelz.id;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
 import io.grpc.InternalChannelz;
@@ -38,6 +44,7 @@ import io.grpc.internal.ServerTransport;
 import io.grpc.internal.ServerTransportListener;
 import io.grpc.internal.TransportTracer;
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelFactory;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerAdapter;
@@ -76,6 +83,8 @@ import org.mockito.MockitoAnnotations;
 public class NettyServerTest {
   private final InternalChannelz channelz = new InternalChannelz();
   private final NioEventLoopGroup eventLoop = new NioEventLoopGroup(1);
+  private final ChannelFactory<NioServerSocketChannel> channelFactory =
+      new ReflectiveChannelFactory<>(NioServerSocketChannel.class);
 
   @Mock
   EventLoopGroup mockEventLoopGroup;
@@ -88,7 +97,8 @@ public class NettyServerTest {
   public void setup() throws Exception {
     MockitoAnnotations.initMocks(this);
     when(mockEventLoopGroup.next()).thenReturn(mockEventLoop);
-    when(mockEventLoop.submit(ArgumentMatchers.<Callable<Map<ChannelFuture, SocketAddress>>>any()))
+    when(mockEventLoop
+        .submit(ArgumentMatchers.<Callable<Map<ChannelFuture, SocketAddress>>>any()))
         .thenReturn(bindFuture);
   }
 
@@ -487,38 +497,114 @@ public class NettyServerTest {
     assertNull(channelz.getSocket(id(listenSocket)));
   }
 
-  @Test(expected = IOException.class)
-  @SuppressWarnings("unchecked")
-  public void testBindCallFailAwait() throws Exception {
-    when(bindFuture.awaitUninterruptibly()).thenThrow(new RuntimeException("Failed silent await"));
-    verifyServerNotStart(mockEventLoopGroup);
-  }
-
-  @Test(expected = IOException.class)
-  @SuppressWarnings("unchecked")
-  public void testBindCallFailGet() throws Exception {
+  @Test
+  public void testBindScheduleFailure() throws Exception {
     when(bindFuture.awaitUninterruptibly()).thenReturn(bindFuture);
-    when(bindFuture.get()).thenThrow(new InterruptedException());
-    verifyServerNotStart(mockEventLoopGroup);
+    when(bindFuture.getNow()).thenReturn(null);
+    SocketAddress addr = new InetSocketAddress(0);
+    verifyServerNotStart(Collections.singletonList(addr),
+        IOException.class, "Failed to bind to addresses " + Arrays.asList(addr),
+        null, false);
   }
 
-  @Test(expected = IOException.class)
-  @SuppressWarnings("unchecked")
-  public void testBindUnSuccessful() throws Exception {
+  @Test
+  public void testBindFailure() throws Exception {
     when(bindFuture.awaitUninterruptibly()).thenReturn(bindFuture);
-    when(bindFuture.isSuccess()).thenReturn(false);
-    verifyServerNotStart(mockEventLoopGroup);
+    ChannelFuture future = mock(ChannelFuture.class);
+    when(future.awaitUninterruptibly()).thenReturn(future);
+    when(future.isSuccess()).thenReturn(false);
+    Throwable mockCause = mock(Throwable.class);
+    when(future.cause()).thenReturn(mockCause);
+    SocketAddress addr = new InetSocketAddress(0);
+    Map<ChannelFuture, SocketAddress> map = ImmutableMap.of(future, addr);
+    when(bindFuture.getNow()).thenReturn(map);
+    verifyServerNotStart(Collections.singletonList(addr),
+        IOException.class, "Failed to bind to addresses " + Arrays.asList(addr),
+        mockCause, false);
   }
 
-  private void verifyServerNotStart(EventLoopGroup parentGroup) throws Exception {
-    InetSocketAddress addr = new InetSocketAddress(0);
-    NettyServer ns = new NettyServer(
-        Arrays.asList(addr),
+  @Test
+  public void testBindPartialFailure() throws Exception {
+    ChannelFuture good = mock(ChannelFuture.class);
+    when(good.awaitUninterruptibly()).thenReturn(good);
+    when(good.isSuccess()).thenReturn(true);
+    Channel channel1 = channelFactory.newChannel();
+    eventLoop.register(channel1);
+    when(good.channel()).thenReturn(channel1);
+
+    ChannelFuture bad = mock(ChannelFuture.class);
+    when(bad.awaitUninterruptibly()).thenReturn(bad);
+    when(bad.isSuccess()).thenReturn(false);
+    Throwable mockCause = mock(Throwable.class);
+    when(bad.cause()).thenReturn(mockCause);
+    Channel channel2 = mock(Channel.class);
+    when(bad.channel()).thenReturn(channel2);
+
+    SocketAddress bindSuccessAdd = new InetSocketAddress(1);
+    SocketAddress bindFailAdd = new InetSocketAddress(2);
+    Map<ChannelFuture, SocketAddress> map = ImmutableMap.of(
+        good, bindSuccessAdd, bad, bindFailAdd
+    );
+    when(bindFuture.awaitUninterruptibly()).thenReturn(bindFuture);
+    when(bindFuture.getNow()).thenReturn(map);
+    when(mockEventLoopGroup.next())
+        .thenReturn(eventLoop.next()) //for channel group
+        .thenReturn(mockEventLoop); //for bind
+    verifyServerNotStart(ImmutableList.of(bindSuccessAdd, bindFailAdd),
+        IOException.class, "Failed to bind to addresses " + Arrays.asList(bindFailAdd),
+        mockCause, true);
+    assertFalse(channel1.isOpen());
+    verifyNoInteractions(channel2);
+  }
+
+  private void verifyServerNotStart(List<SocketAddress> addr,
+      Class<?> expectedException, String expectedMessage, Throwable expectedCause,
+      boolean expectedShutdown) throws Exception {
+    NettyServer ns = getServer(addr);
+    final CountDownLatch latch = new CountDownLatch(1);
+    try {
+      ns.start(new ServerListener() {
+        @Override
+        public ServerTransportListener transportCreated(ServerTransport transport) {
+          return new NoopServerTransportListener();
+        }
+
+        @Override
+        public void serverShutdown() {
+          latch.countDown();
+        }
+      });
+    } catch (Exception ex) {
+      assertTrue(expectedException.isInstance(ex));
+      assertThat(ex.getMessage()).isEqualTo(expectedMessage);
+      assertThat(ex.getCause()).isEqualTo(expectedCause);
+      assertFalse(ns.isStarted());
+      assertFalse(ns.isTerminated());
+      assertFalse(addr.isEmpty());
+      assertThat(ns.getListenSocketAddress()).isEqualTo(addr.get(0));
+      assertThat(ns.getListenSocketAddresses()).isEqualTo(addr);
+      // Wait for channelGroup close listener to run.
+      latch.await(5, TimeUnit.SECONDS);
+      if (expectedShutdown) {
+        assertNull(ns.getListenSocketStatsList());
+      } else {
+        assertTrue(ns.getListenSocketStatsList().isEmpty());
+      }
+      assertNull(ns.getListenSocketStats());
+      assertEquals(1, latch.getCount());
+      return;
+    }
+    fail();
+  }
+
+  private NettyServer getServer(List<SocketAddress> addr) {
+    return new NettyServer(
+        addr,
         new ReflectiveChannelFactory<>(NioServerSocketChannel.class),
         new HashMap<ChannelOption<?>, Object>(),
         new HashMap<ChannelOption<?>, Object>(),
-        new FixedObjectPool<>(parentGroup),
-        new FixedObjectPool<>(eventLoop),
+        new FixedObjectPool<>(mockEventLoopGroup),
+        new FixedObjectPool<>(mockEventLoop),
         false,
         ProtocolNegotiators.plaintext(),
         Collections.<ServerStreamTracer.Factory>emptyList(),
@@ -534,16 +620,6 @@ public class NettyServerTest {
         true, 0, // ignore
         Attributes.EMPTY,
         channelz);
-    ns.start(new ServerListener() {
-      @Override
-      public ServerTransportListener transportCreated(ServerTransport transport) {
-        return new NoopServerTransportListener();
-      }
-
-      @Override
-      public void serverShutdown() {}
-    });
-    verifyNoInteractions(ns);
   }
 
   private static class NoopServerTransportListener implements ServerTransportListener {
