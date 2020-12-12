@@ -125,7 +125,7 @@ public class EdsLoadBalancerProvider extends LoadBalancerProvider {
           .add("edsServiceName", edsServiceName)
           .add("lrsServerName", lrsServerName)
           .add("maxConcurrentRequests", maxConcurrentRequests)
-          .add("tlsContext", tlsContext)
+          // Exclude tlsContext as its string representation is cumbersome.
           .add("localityPickingPolicy", localityPickingPolicy)
           .add("endpointPickingPolicy", endpointPickingPolicy)
           .toString();

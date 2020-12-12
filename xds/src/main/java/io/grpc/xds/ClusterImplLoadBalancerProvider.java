@@ -108,7 +108,7 @@ public final class ClusterImplLoadBalancerProvider extends LoadBalancerProvider 
           .add("edsServiceName", edsServiceName)
           .add("lrsServerName", lrsServerName)
           .add("maxConcurrentRequests", maxConcurrentRequests)
-          .add("tlsContext", tlsContext)
+          // Exclude tlsContext as its string representation is cumbersome.
           .add("dropCategories", dropCategories)
           .add("childPolicy", childPolicy)
           .toString();

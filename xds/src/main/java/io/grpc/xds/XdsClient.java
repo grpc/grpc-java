@@ -270,7 +270,7 @@ abstract class XdsClient {
               .add("clusterName", clusterName)
               .add("edsServiceName", edsServiceName)
               .add("lbPolicy", lbPolicy)
-              .add("lrsServerName", lrsServerName)
+              // Exclude upstreamTlsContext as its string representation is cumbersome.
               .add("maxConcurrentRequests", maxConcurrentRequests)
               .add("upstreamTlsContext", upstreamTlsContext)
               .toString();
