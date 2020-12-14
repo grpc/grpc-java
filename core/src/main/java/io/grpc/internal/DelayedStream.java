@@ -62,6 +62,7 @@ class DelayedStream implements ClientStream {
   @GuardedBy("this")
   private long streamSetTimeNanos;
   private final CountDownLatch realStreamStarted = new CountDownLatch(1);
+  private volatile boolean started;
 
   @Override
   public void setMaxInboundMessageSize(final int maxSize) {
@@ -136,7 +137,7 @@ class DelayedStream implements ClientStream {
   }
 
   protected boolean isStreamTransferCompleted() {
-    return realStreamStarted.getCount() == 0;
+    return started;
   }
 
   protected void awaitStreamTransferCompletion() {
@@ -243,6 +244,7 @@ class DelayedStream implements ClientStream {
     if (savedPassThrough) {
       realStream.start(listener);
       realStreamStarted.countDown();
+      started = true;
     } else {
       final ClientStreamListener finalListener = listener;
       delayOrExecute(new Runnable() {
@@ -250,6 +252,7 @@ class DelayedStream implements ClientStream {
         public void run() {
           realStream.start(finalListener);
           realStreamStarted.countDown();
+          started = true;
         }
       });
     }
@@ -325,9 +328,8 @@ class DelayedStream implements ClientStream {
         listenerToClose.closed(reason, new Metadata());
       }
       drainPendingCalls();
-      if (!isStreamTransferCompleted()) {
-        realStreamStarted.countDown();
-      }
+      realStreamStarted.countDown();
+      started = true;
     }
     awaitStreamTransferCompletion();
   }

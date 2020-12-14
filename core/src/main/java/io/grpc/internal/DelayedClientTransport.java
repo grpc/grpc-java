@@ -68,12 +68,12 @@ final class DelayedClientTransport implements ManagedClientTransport {
   private Collection<PendingStream> pendingStreams = new LinkedHashSet<>();
   @GuardedBy("lock")
   private Collection<PendingStream> toCheckCompletionStreams = new LinkedHashSet<>();
-  private Runnable pollForStreamTransferCompletion = new Runnable() {
+  private final Runnable pollForStreamTransferCompletion = new Runnable() {
     @Override
     public void run() {
-      ArrayList<PendingStream> savedToCheckCompletionStreams;
+      Collection<PendingStream> savedToCheckCompletionStreams;
       synchronized (lock) {
-        savedToCheckCompletionStreams = new ArrayList<>(toCheckCompletionStreams);
+        savedToCheckCompletionStreams = toCheckCompletionStreams;
         if (!toCheckCompletionStreams.isEmpty()) {
           toCheckCompletionStreams = Collections.emptyList();
         }
@@ -291,7 +291,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
   }
 
   @VisibleForTesting
-  final int getUncommittedStreamsCount() {
+  final int getToCheckCompletionStreamsCount() {
     synchronized (lock) {
       return toCheckCompletionStreams.size();
     }
@@ -319,8 +319,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
       toCreateRealStream = new ArrayList<>(pendingStreams);
       toCheckCompletion = new ArrayList<>(toCheckCompletionStreams);
     }
-    ArrayList<PendingStream> newlyCreated = new ArrayList<>();
-
+    final ArrayList<PendingStream> newlyCreated = new ArrayList<>();
 
     if (picker != null) {
       for (final PendingStream stream : toCreateRealStream) {
@@ -347,7 +346,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
       }
     }
     toCheckCompletion.addAll(newlyCreated);
-    ArrayList<PendingStream> completed = new ArrayList<>();
+    final ArrayList<PendingStream> completed = new ArrayList<>();
     for (final PendingStream stream : toCheckCompletion) {
       if (stream.isStreamTransferCompleted()) {
         completed.add(stream);
@@ -364,9 +363,12 @@ final class DelayedClientTransport implements ManagedClientTransport {
       toCheckCompletionStreams.addAll(newlyCreated);
       toCheckCompletionStreams.removeAll(completed);
       // Because delayed transport is long-lived, we take this opportunity to down-size the
-      // hashmap.
+      // hashmaps.
       if (pendingStreams.isEmpty()) {
         pendingStreams = new LinkedHashSet<>();
+      }
+      if (toCheckCompletionStreams.isEmpty()) {
+        toCheckCompletionStreams = new LinkedHashSet<>();
       }
       if (!hasPendingStreams()) {
         // There may be a brief gap between delayed transport clearing in-use state, and first real
