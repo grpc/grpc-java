@@ -720,8 +720,6 @@ public class DelayedClientTransportTest {
       }
     };
     processThread.start();
-    assertEquals(1, delayedTransport.getPendingStreamsCount());//stream2
-    assertEquals(1, delayedTransport.getUncommittedStreamsCount());//stream1
     barrierSignal.await(5, TimeUnit.SECONDS);
     assertEquals(1, barrier.getNumberWaiting());
     delayedTransport.shutdownNow(SHUTDOWN_STATUS);
@@ -729,6 +727,7 @@ public class DelayedClientTransportTest {
     assertFalse(delayedTransport.hasUncommittedStreams());
     assertFalse(Thread.interrupted());
     barrier.await(5, TimeUnit.SECONDS);
+    processThread.join(5000);
     assertSame(mockRealStream, stream1.getRealStream());
     assertTrue(stream2.getRealStream() instanceof NoopClientStream);
     verify(mockRealStream).start(any(ClientStreamListener.class));
