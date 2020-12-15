@@ -39,6 +39,8 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Server;
 import io.grpc.netty.NettyServerBuilder;
+import io.grpc.protobuf.services.ProtoReflectionService;
+import io.grpc.services.ChannelzService;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.integration.Messages.ClientConfigureRequest;
 import io.grpc.testing.integration.Messages.ClientConfigureRequest.RpcType;
@@ -76,6 +78,7 @@ public final class XdsTestClient {
   private final Map<String, Integer> rpcsStartedByMethod = new HashMap<>();
   private final Map<String, Integer> rpcsFailedByMethod = new HashMap<>();
   private final Map<String, Integer> rpcsSucceededByMethod = new HashMap<>();
+  private static final int CHANNELZ_MAX_PAGE_SIZE = 100;
 
   private int numChannels = 1;
   private boolean printResponse = false;
@@ -233,6 +236,8 @@ public final class XdsTestClient {
         NettyServerBuilder.forPort(statsPort)
             .addService(new XdsStatsImpl())
             .addService(new ConfigureUpdateServiceImpl())
+            .addService(ProtoReflectionService.newInstance())
+            .addService(ChannelzService.newInstance(CHANNELZ_MAX_PAGE_SIZE))
             .build();
     try {
       statsServer.start();

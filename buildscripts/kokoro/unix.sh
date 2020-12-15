@@ -62,14 +62,19 @@ if [[ -z "${SKIP_TESTS:-}" ]]; then
   ./gradlew clean $GRADLE_FLAGS
   ./gradlew build $GRADLE_FLAGS
   # --batch-mode reduces log spam
-  mvn clean verify --batch-mode
+  mvn verify --batch-mode
   popd
   pushd examples/example-hostname
   ../gradlew build $GRADLE_FLAGS
   mvn verify --batch-mode
   popd
   pushd examples/example-tls
-  mvn clean verify --batch-mode
+  ../gradlew build $GRADLE_FLAGS
+  mvn verify --batch-mode
+  popd
+  pushd examples/example-jwt-auth
+  ../gradlew build $GRADLE_FLAGS
+  mvn verify --batch-mode
   popd
   pushd examples/example-xds
   ../gradlew build $GRADLE_FLAGS

@@ -25,7 +25,9 @@ import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
+import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import java.util.Map;
+import java.util.Objects;
 import javax.annotation.Nullable;
 
 /**
@@ -70,6 +72,8 @@ public class EdsLoadBalancerProvider extends LoadBalancerProvider {
     final String lrsServerName;
     @Nullable
     final Long maxConcurrentRequests;
+    @Nullable
+    final UpstreamTlsContext tlsContext;
     final PolicySelection localityPickingPolicy;
     final PolicySelection endpointPickingPolicy;
 
@@ -78,14 +82,40 @@ public class EdsLoadBalancerProvider extends LoadBalancerProvider {
         @Nullable String edsServiceName,
         @Nullable String lrsServerName,
         @Nullable Long maxConcurrentRequests,
+        @Nullable UpstreamTlsContext tlsContext,
         PolicySelection localityPickingPolicy,
         PolicySelection endpointPickingPolicy) {
       this.clusterName = checkNotNull(clusterName, "clusterName");
       this.edsServiceName = edsServiceName;
       this.lrsServerName = lrsServerName;
       this.maxConcurrentRequests = maxConcurrentRequests;
+      this.tlsContext = tlsContext;
       this.localityPickingPolicy = checkNotNull(localityPickingPolicy, "localityPickingPolicy");
       this.endpointPickingPolicy = checkNotNull(endpointPickingPolicy, "endpointPickingPolicy");
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(clusterName, edsServiceName, lrsServerName, maxConcurrentRequests,
+          tlsContext, localityPickingPolicy, endpointPickingPolicy);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      EdsConfig that = (EdsConfig) o;
+      return Objects.equals(clusterName, that.clusterName)
+          && Objects.equals(edsServiceName, that.edsServiceName)
+          && Objects.equals(lrsServerName, that.lrsServerName)
+          && Objects.equals(maxConcurrentRequests, that.maxConcurrentRequests)
+          && Objects.equals(tlsContext, that.tlsContext)
+          && Objects.equals(localityPickingPolicy, that.localityPickingPolicy)
+          && Objects.equals(endpointPickingPolicy, that.endpointPickingPolicy);
     }
 
     @Override
@@ -95,6 +125,7 @@ public class EdsLoadBalancerProvider extends LoadBalancerProvider {
           .add("edsServiceName", edsServiceName)
           .add("lrsServerName", lrsServerName)
           .add("maxConcurrentRequests", maxConcurrentRequests)
+          // Exclude tlsContext as its string representation is cumbersome.
           .add("localityPickingPolicy", localityPickingPolicy)
           .add("endpointPickingPolicy", endpointPickingPolicy)
           .toString();
