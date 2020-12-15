@@ -45,6 +45,7 @@ import io.grpc.Context;
 import io.grpc.DecompressorRegistry;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.ForwardingChannelBuilder;
+import io.grpc.ForwardingClientCall;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalChannelz.ChannelStats;
 import io.grpc.InternalChannelz.ChannelTrace;
@@ -151,7 +152,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private final NameResolver.Factory nameResolverFactory;
   private final NameResolver.Args nameResolverArgs;
   private final AutoConfiguredLoadBalancerFactory loadBalancerFactory;
+  private final ClientTransportFactory originalTransportFactory;
   private final ClientTransportFactory transportFactory;
+  private final ClientTransportFactory oobTransportFactory;
   private final RestrictedScheduledExecutor scheduledExecutor;
   private final Executor executor;
   private final ObjectPool<? extends Executor> executorPool;
@@ -590,8 +593,11 @@ final class ManagedChannelImpl extends ManagedChannel implements
     this.timeProvider = checkNotNull(timeProvider, "timeProvider");
     this.executorPool = checkNotNull(builder.executorPool, "executorPool");
     this.executor = checkNotNull(executorPool.getObject(), "executor");
+    this.originalTransportFactory = clientTransportFactory;
     this.transportFactory = new CallCredentialsApplyingTransportFactory(
         clientTransportFactory, builder.callCredentials, this.executor);
+    this.oobTransportFactory = new CallCredentialsApplyingTransportFactory(
+        clientTransportFactory, null, this.executor);
     this.scheduledExecutor =
         new RestrictedScheduledExecutor(transportFactory.getScheduledExecutorService());
     maxTraceEvents = builder.maxTraceEvents;
@@ -1113,6 +1119,86 @@ final class ManagedChannelImpl extends ManagedChannel implements
   }
 
   /**
+   * A client call for a given channel that applies a given config selector when it starts.
+   */
+  static final class ConfigSelectingClientCall<ReqT, RespT>
+      extends ForwardingClientCall<ReqT, RespT> {
+
+    private final InternalConfigSelector configSelector;
+    private final Channel channel;
+    private final Executor callExecutor;
+    private final MethodDescriptor<ReqT, RespT> method;
+    private final Context context;
+    private CallOptions callOptions;
+
+    private ClientCall<ReqT, RespT> delegate;
+
+    ConfigSelectingClientCall(
+        InternalConfigSelector configSelector, Channel channel, Executor channelExecutor,
+        MethodDescriptor<ReqT, RespT> method,
+        CallOptions callOptions) {
+      this.configSelector = configSelector;
+      this.channel = channel;
+      this.method = method;
+      this.callOptions = callOptions;
+      this.callExecutor =
+          callOptions.getExecutor() == null ? channelExecutor : callOptions.getExecutor();
+      this.context = Context.current();
+    }
+
+    @Override
+    protected ClientCall<ReqT, RespT> delegate() {
+      return delegate;
+    }
+
+    @Override
+    public void start(Listener<RespT> observer, Metadata headers) {
+      PickSubchannelArgs args = new PickSubchannelArgsImpl(method, headers, callOptions);
+      InternalConfigSelector.Result result = configSelector.selectConfig(args);
+      Status status = result.getStatus();
+      if (!status.isOk()) {
+        executeCloseObserverInContext(observer, status);
+        return;
+      }
+      ClientInterceptor interceptor = result.getInterceptor();
+      ManagedChannelServiceConfig config = (ManagedChannelServiceConfig) result.getConfig();
+      MethodInfo methodInfo = config.getMethodConfig(method);
+      if (methodInfo != null) {
+        callOptions = callOptions.withOption(MethodInfo.KEY, methodInfo);
+      }
+      if (interceptor != null) {
+        delegate = interceptor.interceptCall(method, callOptions, channel);
+      } else {
+        delegate = channel.newCall(method, callOptions);
+      }
+      delegate.start(observer, headers);
+    }
+
+    private void executeCloseObserverInContext(
+        final Listener<RespT> observer, final Status status) {
+      class CloseInContext extends ContextRunnable {
+        CloseInContext() {
+          super(context);
+        }
+
+        @Override
+        public void runInContext() {
+          observer.onClose(status, new Metadata());
+        }
+      }
+
+      callExecutor.execute(new CloseInContext());
+    }
+
+    @Override
+    public void cancel(@Nullable String message, @Nullable Throwable cause) {
+      if (delegate != null) {
+        delegate.cancel(message, cause);
+      }
+    }
+  }
+
+  /**
    * Terminate the channel if termination conditions are met.
    */
   // Must be run from syncContext
@@ -1406,7 +1492,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
               oobLogId, maxTraceEvents, oobChannelCreationTime,
               "OobChannel for " + addressGroup);
       final OobChannel oobChannel = new OobChannel(
-          authority, balancerRpcExecutorPool, transportFactory.getScheduledExecutorService(),
+          authority, balancerRpcExecutorPool, oobTransportFactory.getScheduledExecutorService(),
           syncContext, callTracerFactory.create(), oobChannelTracer, channelz, timeProvider);
       channelTracer.reportEvent(new ChannelTrace.Event.Builder()
           .setDescription("Child OobChannel created")
@@ -1436,8 +1522,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
       final InternalSubchannel internalSubchannel = new InternalSubchannel(
           Collections.singletonList(addressGroup),
-          authority, userAgent, backoffPolicyProvider, transportFactory,
-          transportFactory.getScheduledExecutorService(), stopwatchSupplier, syncContext,
+          authority, userAgent, backoffPolicyProvider, oobTransportFactory,
+          oobTransportFactory.getScheduledExecutorService(), stopwatchSupplier, syncContext,
           // All callback methods are run from syncContext
           new ManagedOobChannelCallback(),
           channelz,
@@ -1496,7 +1582,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
           // TODO(creamsoup) prevent main channel to shutdown if oob channel is not terminated
           return new ManagedChannelImpl(
                   managedChannelImplBuilder,
-                  transportFactory,
+                  originalTransportFactory,
                   backoffPolicyProvider,
                   balancerRpcExecutorPool,
                   stopwatchSupplier,

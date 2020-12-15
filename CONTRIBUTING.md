@@ -10,7 +10,8 @@ If you are new to github, please start by reading [Pull Request howto](https://h
 ## Legal requirements
 
 In order to protect both you and ourselves, you will need to sign the
-[Contributor License Agreement](https://identity.linuxfoundation.org/projects/cncf).
+[Contributor License Agreement](https://easycla.lfx.linuxfoundation.org/). When
+you make a PR, a CLA bot will provide a link for the process.
 
 ## Compiling
 

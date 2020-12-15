@@ -27,6 +27,9 @@ import static org.mockito.Mockito.when;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Iterables;
 import io.grpc.CallOptions;
+import io.grpc.Channel;
+import io.grpc.ClientCall;
+import io.grpc.ClientInterceptor;
 import io.grpc.InternalConfigSelector;
 import io.grpc.InternalConfigSelector.Result;
 import io.grpc.Metadata;
@@ -41,6 +44,8 @@ import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.JsonUtil;
+import io.grpc.internal.NoopClientCall;
+import io.grpc.internal.NoopClientCall.NoopClientCallListener;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.PickSubchannelArgsImpl;
 import io.grpc.testing.TestMethodDescriptors;
@@ -56,6 +61,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -93,6 +99,7 @@ public class XdsNameResolverTest {
   private final String cluster2 = "cluster-bar.googleapis.com";
   private final CallInfo call1 = new CallInfo("HelloService", "hi");
   private final CallInfo call2 = new CallInfo("GreetService", "bye");
+  private final TestChannel channel = new TestChannel();
 
   @Mock
   private ThreadSafeRandom mockRandom;
@@ -103,6 +110,7 @@ public class XdsNameResolverTest {
   @Captor
   ArgumentCaptor<Status> errorCaptor;
   private XdsNameResolver resolver;
+  private TestCall<?, ?> testCall;
 
   @Before
   public void setUp() {
@@ -248,12 +256,7 @@ public class XdsNameResolverTest {
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
     InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
-    Result selectResult = configSelector.selectConfig(
-        new PickSubchannelArgsImpl(call1.methodDescriptor, new Metadata(), CallOptions.DEFAULT));
-    assertThat(selectResult.getStatus().isOk()).isTrue();
-    assertThat(selectResult.getCallOptions().getOption(XdsNameResolver.CLUSTER_SELECTION_KEY))
-        .isEqualTo(cluster1);
-    assertThat((Map<String, ?>) selectResult.getConfig()).isEmpty();
+    assertCallSelectResult(call1, configSelector, cluster1, null);
   }
 
   @Test
@@ -275,8 +278,8 @@ public class XdsNameResolverTest {
   @Test
   public void resolved_simpleCallSucceeds() {
     InternalConfigSelector configSelector = resolveToClusters();
-    Result selectResult = assertCallSelectResult(call1, configSelector, cluster1, 15.0);
-    selectResult.getCommittedCallback().run();
+    assertCallSelectResult(call1, configSelector, cluster1, 15.0);
+    testCall.deliverResponseHeaders();
     verifyNoMoreInteractions(mockListener);
   }
 
@@ -297,7 +300,8 @@ public class XdsNameResolverTest {
   @Test
   public void resolved_resourceUpdateAfterCallStarted() {
     InternalConfigSelector configSelector = resolveToClusters();
-    Result selectResult = assertCallSelectResult(call1, configSelector, cluster1, 15.0);
+    assertCallSelectResult(call1, configSelector, cluster1, 15.0);
+    TestCall<?, ?> firstCall = testCall;
 
     reset(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
@@ -321,7 +325,7 @@ public class XdsNameResolverTest {
         .isSameInstanceAs(configSelector);
     assertCallSelectResult(call1, configSelector, "another-cluster", 20.0);
 
-    selectResult.getCommittedCallback().run();  // completes previous call
+    firstCall.deliverErrorStatus();  // completes previous call
     verify(mockListener, times(2)).onResult(resolutionResultCaptor.capture());
     result = resolutionResultCaptor.getValue();
     assertServiceConfigForLoadBalancingConfig(
@@ -399,7 +403,7 @@ public class XdsNameResolverTest {
   @Test
   public void resolved_raceBetweenClusterReleasedAndResourceUpdateAddBackAgain() {
     InternalConfigSelector configSelector = resolveToClusters();
-    Result result = assertCallSelectResult(call1, configSelector, cluster1, 15.0);
+    assertCallSelectResult(call1, configSelector, cluster1, 15.0);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsUpdate(
         AUTHORITY,
@@ -416,7 +420,7 @@ public class XdsNameResolverTest {
             new Route(
                 RouteMatch.withPathExactOnly(call2.getFullMethodNameForPath()),
                 new RouteAction(TimeUnit.SECONDS.toNanos(15L), cluster2, null))));
-    result.getCommittedCallback().run();
+    testCall.deliverErrorStatus();
     verifyNoMoreInteractions(mockListener);
   }
 
@@ -442,19 +446,8 @@ public class XdsNameResolverTest {
         Arrays.asList(cluster1, cluster2), (Map<String, ?>) result.getServiceConfig().getConfig());
     assertThat(result.getAttributes().get(XdsAttributes.XDS_CLIENT_POOL)).isNotNull();
     InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
-    Result selectResult = configSelector.selectConfig(
-        new PickSubchannelArgsImpl(call1.methodDescriptor, new Metadata(), CallOptions.DEFAULT));
-    assertThat(selectResult.getStatus().isOk()).isTrue();
-    assertThat(selectResult.getCallOptions().getOption(XdsNameResolver.CLUSTER_SELECTION_KEY))
-        .isEqualTo(cluster2);
-    assertServiceConfigForMethodConfig(20.0, (Map<String, ?>) selectResult.getConfig());
-
-    selectResult = configSelector.selectConfig(
-        new PickSubchannelArgsImpl(call1.methodDescriptor, new Metadata(), CallOptions.DEFAULT));
-    assertThat(selectResult.getStatus().isOk()).isTrue();
-    assertThat(selectResult.getCallOptions().getOption(XdsNameResolver.CLUSTER_SELECTION_KEY))
-        .isEqualTo(cluster1);
-    assertServiceConfigForMethodConfig(20.0, (Map<String, ?>) selectResult.getConfig());
+    assertCallSelectResult(call1, configSelector, cluster2, 20.0);
+    assertCallSelectResult(call1, configSelector, cluster1, 20.0);
   }
 
   @SuppressWarnings("unchecked")
@@ -465,17 +458,32 @@ public class XdsNameResolverTest {
     assertThat((Map<String, ?>) result.getServiceConfig().getConfig()).isEmpty();
   }
 
-  @SuppressWarnings("unchecked")
-  private static Result assertCallSelectResult(
+  private void assertCallSelectResult(
       CallInfo call, InternalConfigSelector configSelector, String expectedCluster,
-      double expectedTimeoutSec) {
+      @Nullable Double expectedTimeoutSec) {
     Result result = configSelector.selectConfig(
         new PickSubchannelArgsImpl(call.methodDescriptor, new Metadata(), CallOptions.DEFAULT));
     assertThat(result.getStatus().isOk()).isTrue();
-    assertThat(result.getCallOptions().getOption(XdsNameResolver.CLUSTER_SELECTION_KEY))
+    ClientInterceptor interceptor = result.getInterceptor();
+    ClientCall<Void, Void> clientCall = interceptor.interceptCall(
+        call.methodDescriptor, CallOptions.DEFAULT, channel);
+    clientCall.start(new NoopClientCallListener<Void>(), new Metadata());
+    assertThat(testCall.callOptions.getOption(XdsNameResolver.CLUSTER_SELECTION_KEY))
         .isEqualTo(expectedCluster);
-    assertServiceConfigForMethodConfig(expectedTimeoutSec, (Map<String, ?>) result.getConfig());
-    return result;
+    @SuppressWarnings("unchecked")
+    Map<String, ?> config = (Map<String, ?>) result.getConfig();
+    if (expectedTimeoutSec != null) {
+      // Verify the raw service config contains a single method config for method with the
+      // specified timeout.
+      List<Map<String, ?>> rawMethodConfigs =
+          JsonUtil.getListOfObjects(config, "methodConfig");
+      Map<String, ?> methodConfig = Iterables.getOnlyElement(rawMethodConfigs);
+      List<Map<String, ?>> methods = JsonUtil.getListOfObjects(methodConfig, "name");
+      assertThat(Iterables.getOnlyElement(methods)).isEmpty();
+      assertThat(JsonUtil.getString(methodConfig, "timeout")).isEqualTo(expectedTimeoutSec + "s");
+    } else {
+      assertThat(config).isEmpty();
+    }
   }
 
   @SuppressWarnings("unchecked")
@@ -499,20 +507,6 @@ public class XdsNameResolverTest {
     assertThat(result.getAttributes().get(XdsAttributes.XDS_CLIENT_POOL)).isNotNull();
     assertThat(result.getAttributes().get(XdsAttributes.CALL_COUNTER_PROVIDER)).isNotNull();
     return result.getAttributes().get(InternalConfigSelector.KEY);
-  }
-
-  /**
-   * Verifies the raw service config contains a single method config for method with the
-   * specified timeout.
-   */
-  private static void assertServiceConfigForMethodConfig(
-      double timeoutSec, Map<String, ?> actualServiceConfig) {
-    List<Map<String, ?>> rawMethodConfigs =
-        JsonUtil.getListOfObjects(actualServiceConfig, "methodConfig");
-    Map<String, ?> methodConfig = Iterables.getOnlyElement(rawMethodConfigs);
-    List<Map<String, ?>> methods = JsonUtil.getListOfObjects(methodConfig, "name");
-    assertThat(Iterables.getOnlyElement(methods)).isEmpty();
-    assertThat(JsonUtil.getString(methodConfig, "timeout")).isEqualTo(timeoutSec + "s");
   }
 
   /**
@@ -856,6 +850,45 @@ public class XdsNameResolverTest {
 
     private String getFullMethodNameForPath() {
       return "/" + service + "/" + method;
+    }
+  }
+
+  private final class TestChannel extends Channel {
+
+    @Override
+    public <ReqT, RespT> ClientCall<ReqT, RespT> newCall(
+        MethodDescriptor<ReqT, RespT> methodDescriptor, CallOptions callOptions) {
+      TestCall<ReqT, RespT> call = new TestCall<>(callOptions);
+      testCall = call;
+      return call;
+    }
+
+    @Override
+    public String authority() {
+      return "foo.authority";
+    }
+  }
+
+  private static final class TestCall<ReqT, RespT> extends NoopClientCall<ReqT, RespT> {
+    // CallOptions actually received from the channel when the call is created.
+    final CallOptions callOptions;
+    ClientCall.Listener<RespT> listener;
+
+    TestCall(CallOptions callOptions) {
+      this.callOptions = callOptions;
+    }
+
+    @Override
+    public void start(ClientCall.Listener<RespT> listener, Metadata headers) {
+      this.listener = listener;
+    }
+
+    void deliverResponseHeaders() {
+      listener.onHeaders(new Metadata());
+    }
+
+    void deliverErrorStatus() {
+      listener.onClose(Status.UNAVAILABLE, new Metadata());
     }
   }
 }

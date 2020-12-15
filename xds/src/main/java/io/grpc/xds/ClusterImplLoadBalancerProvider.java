@@ -27,6 +27,7 @@ import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
+import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -78,6 +79,9 @@ public final class ClusterImplLoadBalancerProvider extends LoadBalancerProvider 
     // Cluster-level max concurrent request threshold. Null if not specified.
     @Nullable
     final Long maxConcurrentRequests;
+    // TLS context for connections to endpoints.
+    @Nullable
+    final UpstreamTlsContext tlsContext;
     // Drop configurations.
     final List<DropOverload> dropCategories;
     // Provides the direct child policy and its config.
@@ -85,11 +89,13 @@ public final class ClusterImplLoadBalancerProvider extends LoadBalancerProvider 
 
     ClusterImplConfig(String cluster, @Nullable String edsServiceName,
         @Nullable String lrsServerName, @Nullable Long maxConcurrentRequests,
-        List<DropOverload> dropCategories, PolicySelection childPolicy) {
+        List<DropOverload> dropCategories, PolicySelection childPolicy,
+        @Nullable UpstreamTlsContext tlsContext) {
       this.cluster = checkNotNull(cluster, "cluster");
       this.edsServiceName = edsServiceName;
       this.lrsServerName = lrsServerName;
       this.maxConcurrentRequests = maxConcurrentRequests;
+      this.tlsContext = tlsContext;
       this.dropCategories = Collections.unmodifiableList(
           new ArrayList<>(checkNotNull(dropCategories, "dropCategories")));
       this.childPolicy = checkNotNull(childPolicy, "childPolicy");
@@ -102,6 +108,7 @@ public final class ClusterImplLoadBalancerProvider extends LoadBalancerProvider 
           .add("edsServiceName", edsServiceName)
           .add("lrsServerName", lrsServerName)
           .add("maxConcurrentRequests", maxConcurrentRequests)
+          // Exclude tlsContext as its string representation is cumbersome.
           .add("dropCategories", dropCategories)
           .add("childPolicy", childPolicy)
           .toString();

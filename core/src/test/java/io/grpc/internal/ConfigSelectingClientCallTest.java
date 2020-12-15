@@ -32,6 +32,7 @@ import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
+import io.grpc.internal.ManagedChannelImpl.ConfigSelectingClientCall;
 import io.grpc.internal.ManagedChannelServiceConfig.MethodInfo;
 import io.grpc.testing.TestMethodDescriptors;
 import java.util.Map;
@@ -44,7 +45,7 @@ import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
-/** Tests for {@link ConfigSelectingClientCall}. */
+/** Tests for {@link ManagedChannelImpl.ConfigSelectingClientCall}. */
 @RunWith(JUnit4.class)
 public class ConfigSelectingClientCallTest {
   @Rule
