@@ -51,7 +51,7 @@ public class OkHttpTransportTest extends AbstractTransportTest {
   }
 
   @Override
-  protected List<? extends InternalServer> newServer(
+  protected InternalServer newServer(
       List<ServerStreamTracer.Factory> streamTracerFactories) {
     NettyServerBuilder builder = NettyServerBuilder
         .forPort(0)
@@ -61,7 +61,7 @@ public class OkHttpTransportTest extends AbstractTransportTest {
   }
 
   @Override
-  protected List<? extends InternalServer> newServer(
+  protected InternalServer newServer(
       int port, List<ServerStreamTracer.Factory> streamTracerFactories) {
     NettyServerBuilder builder = NettyServerBuilder
         .forAddress(new InetSocketAddress(port))

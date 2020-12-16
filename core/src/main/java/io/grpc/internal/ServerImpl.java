@@ -130,20 +130,18 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
    * Construct a server.
    *
    * @param builder builder with configuration for server
-   * @param transportServers transport servers that will create new incoming transports
+   * @param transportServer transport servers that will create new incoming transports
    * @param rootContext context that callbacks for new RPCs should be derived from
    */
   ServerImpl(
       ServerImplBuilder builder,
-      List<? extends InternalServer> transportServers,
+      InternalServer transportServer,
       Context rootContext) {
     this.executorPool = Preconditions.checkNotNull(builder.executorPool, "executorPool");
     this.registry = Preconditions.checkNotNull(builder.registryBuilder.build(), "registryBuilder");
     this.fallbackRegistry =
         Preconditions.checkNotNull(builder.fallbackRegistry, "fallbackRegistry");
-    Preconditions.checkNotNull(transportServers, "transportServers");
-    Preconditions.checkArgument(!transportServers.isEmpty(), "no servers provided");
-    this.transportServer = transportServers.get(0);
+    this.transportServer = Preconditions.checkNotNull(transportServer, "transportServer");
     this.logId =
         InternalLogId.allocate("Server", String.valueOf(getListenSocketsIgnoringLifecycle()));
     // Fork from the passed in context so that it does not propagate cancellation, it only

@@ -63,7 +63,7 @@ public class NettyTransportTest extends AbstractTransportTest {
   }
 
   @Override
-  protected List<? extends InternalServer> newServer(
+  protected InternalServer newServer(
       List<ServerStreamTracer.Factory> streamTracerFactories) {
     return NettyServerBuilder
         .forAddress(new InetSocketAddress("localhost", 0))
@@ -73,7 +73,7 @@ public class NettyTransportTest extends AbstractTransportTest {
   }
 
   @Override
-  protected List<? extends InternalServer> newServer(
+  protected InternalServer newServer(
       int port, List<ServerStreamTracer.Factory> streamTracerFactories) {
     return NettyServerBuilder
         .forAddress(new InetSocketAddress("localhost", port))

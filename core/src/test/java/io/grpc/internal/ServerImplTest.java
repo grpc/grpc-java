@@ -44,7 +44,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
@@ -90,7 +89,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
@@ -205,7 +203,7 @@ public class ServerImplTest {
     builder = new ServerImplBuilder(
         new ClientTransportServersBuilder() {
           @Override
-          public List<? extends InternalServer> buildClientTransportServers(
+          public InternalServer buildClientTransportServers(
               List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
             throw new UnsupportedOperationException();
           }
@@ -223,49 +221,6 @@ public class ServerImplTest {
   public void noPendingTasks() {
     assertEquals(0, executor.numPendingTasks());
     assertEquals(0, timer.numPendingTasks());
-  }
-
-  @Test
-  public void multiPortStart() throws Exception {
-    final CountDownLatch startCount = new CountDownLatch(2);
-    class CountStartSimpleServer extends SimpleServer {
-
-      @Override
-      public void start(ServerListener listener) throws IOException {
-        super.start(listener);
-        startCount.countDown();
-      }
-    }
-
-    SimpleServer transportServer1 = new CountStartSimpleServer();
-    SimpleServer transportServer2 = new CountStartSimpleServer();
-    server = new ServerImpl(
-       builder, ImmutableList.of(transportServer1, transportServer2), SERVER_CONTEXT);
-    server.start();
-    assertEquals(1, startCount.getCount());
-  }
-
-  @Test
-  public void multiPortShutdown() throws Exception {
-    final CountDownLatch shutdownCount = new CountDownLatch(2);
-    class CountShutdownSimpleServerTransport extends SimpleServerTransport {
-
-      @Override
-      public void shutdown() {
-        super.shutdown();
-        shutdownCount.countDown();
-      }
-    }
-
-    SimpleServer transportServer1 = new SimpleServer();
-    SimpleServer transportServer2 = new SimpleServer();
-    server = new ServerImpl(
-        builder, ImmutableList.of(transportServer1, transportServer2), SERVER_CONTEXT);
-    server.start();
-    transportServer1.registerNewServerTransport(new CountShutdownSimpleServerTransport());
-    transportServer1.registerNewServerTransport(new CountShutdownSimpleServerTransport());
-    server.shutdown();
-    assertEquals(0, shutdownCount.getCount());
   }
 
   @Test
@@ -1461,7 +1416,7 @@ public class ServerImplTest {
 
     builder.fallbackHandlerRegistry(fallbackRegistry);
     builder.executorPool = executorPool;
-    server = new ServerImpl(builder, Collections.singletonList(transportServer), SERVER_CONTEXT);
+    server = new ServerImpl(builder, transportServer, SERVER_CONTEXT);
   }
 
   private void verifyExecutorsAcquired() {

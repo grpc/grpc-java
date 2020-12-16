@@ -19,7 +19,6 @@ package io.grpc.inprocess;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
-import com.google.common.collect.ImmutableList;
 import io.grpc.CallOptions;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
@@ -55,16 +54,16 @@ public class InProcessTransportTest extends AbstractTransportTest {
   public final GrpcCleanupRule grpcCleanupRule = new GrpcCleanupRule();
 
   @Override
-  protected List<? extends InternalServer> newServer(
+  protected InternalServer newServer(
       List<ServerStreamTracer.Factory> streamTracerFactories) {
     InProcessServerBuilder builder = InProcessServerBuilder
         .forName(TRANSPORT_NAME)
         .maxInboundMetadataSize(GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE);
-    return ImmutableList.of(new InProcessServer(builder, streamTracerFactories));
+    return new InProcessServer(builder, streamTracerFactories);
   }
 
   @Override
-  protected List<? extends InternalServer> newServer(
+  protected InternalServer newServer(
       int port, List<ServerStreamTracer.Factory> streamTracerFactories) {
     return newServer(streamTracerFactories);
   }

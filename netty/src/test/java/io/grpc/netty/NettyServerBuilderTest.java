@@ -26,7 +26,6 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.local.LocalServerChannel;
 import io.netty.handler.ssl.SslContext;
 import java.net.InetSocketAddress;
-import java.util.List;
 import java.util.concurrent.TimeUnit;
 import org.junit.Rule;
 import org.junit.Test;
@@ -48,10 +47,10 @@ public class NettyServerBuilderTest {
   @Test
   public void addMultipleListenAddresses() {
     builder.addListenAddress(new InetSocketAddress(8081));
-    List<NettyServer> servers =
+    NettyServer server =
         builder.buildTransportServers(ImmutableList.<ServerStreamTracer.Factory>of());
 
-    Truth.assertThat(servers).hasSize(1);
+    Truth.assertThat(server.getListenSocketAddresses()).hasSize(2);
   }
 
   @Test

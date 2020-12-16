@@ -54,7 +54,6 @@ import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -165,7 +164,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
 
   private final class NettyClientTransportServersBuilder implements ClientTransportServersBuilder {
     @Override
-    public List<? extends InternalServer> buildClientTransportServers(
+    public InternalServer buildClientTransportServers(
         List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
       return buildTransportServers(streamTracerFactories);
     }
@@ -623,14 +622,14 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
   }
 
   @CheckReturnValue
-  List<NettyServer> buildTransportServers(
+  NettyServer buildTransportServers(
       List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
     assertEventLoopsAndChannelType();
 
     ProtocolNegotiator negotiator = protocolNegotiatorFactory.newNegotiator(
         this.serverImplBuilder.getExecutorPool());
 
-    NettyServer transportServer = new NettyServer(
+    return new NettyServer(
         listenAddresses, channelFactory, channelOptions, childChannelOptions,
         bossEventLoopGroupPool, workerEventLoopGroupPool, forceHeapBuffer, negotiator,
         streamTracerFactories, transportTracerFactory, maxConcurrentCallsPerConnection,
@@ -639,8 +638,6 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
         maxConnectionIdleInNanos, maxConnectionAgeInNanos,
         maxConnectionAgeGraceInNanos, permitKeepAliveWithoutCalls, permitKeepAliveTimeInNanos,
         eagAttributes, this.serverImplBuilder.getChannelz());
-
-    return Collections.singletonList(transportServer);
   }
 
   @VisibleForTesting

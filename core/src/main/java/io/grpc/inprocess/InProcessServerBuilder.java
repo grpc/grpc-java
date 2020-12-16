@@ -33,7 +33,6 @@ import io.grpc.internal.ServerImplBuilder;
 import io.grpc.internal.ServerImplBuilder.ClientTransportServersBuilder;
 import io.grpc.internal.SharedResourcePool;
 import java.io.File;
-import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ScheduledExecutorService;
@@ -109,7 +108,7 @@ public final class InProcessServerBuilder extends
 
     final class InProcessClientTransportServersBuilder implements ClientTransportServersBuilder {
       @Override
-      public List<? extends InternalServer> buildClientTransportServers(
+      public InternalServer buildClientTransportServers(
           List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
         return buildTransportServers(streamTracerFactories);
       }
@@ -187,9 +186,9 @@ public final class InProcessServerBuilder extends
     return this;
   }
 
-  List<InProcessServer> buildTransportServers(
+  InProcessServer buildTransportServers(
       List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
-    return Collections.singletonList(new InProcessServer(this, streamTracerFactories));
+    return new InProcessServer(this, streamTracerFactories);
   }
 
   @Override

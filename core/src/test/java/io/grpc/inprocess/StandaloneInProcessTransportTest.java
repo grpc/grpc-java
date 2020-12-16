@@ -16,7 +16,6 @@
 
 package io.grpc.inprocess;
 
-import com.google.common.collect.ImmutableList;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalInstrumented;
 import io.grpc.ServerStreamTracer;
@@ -53,13 +52,13 @@ public final class StandaloneInProcessTransportTest extends AbstractTransportTes
   private TestServer currentServer;
 
   @Override
-  protected List<? extends InternalServer> newServer(
+  protected InternalServer newServer(
       List<ServerStreamTracer.Factory> streamTracerFactories) {
-    return ImmutableList.of(new TestServer(streamTracerFactories));
+    return new TestServer(streamTracerFactories);
   }
 
   @Override
-  protected List<? extends InternalServer> newServer(
+  protected InternalServer newServer(
       int port, List<ServerStreamTracer.Factory> streamTracerFactories) {
     return newServer(streamTracerFactories);
   }
