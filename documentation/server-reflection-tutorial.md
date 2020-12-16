@@ -52,6 +52,25 @@ need to make the following changes:
 In the following examples, we assume you have made these changes to
 enable reflection in `HelloWorldServer.java`.
 
+
+## Enable Server Reflection in springboot using application.properties 
+This solution is helpfull when someone create controller using `@GRpcService` annontaion like
+
+```
+ @GRpcService
+ public class DocumentServiceController extends DocumentServiceImplBase {
+  .......
+  .......
+ }
+```
+In this case just edit you `application.properties` file and add following line
+
+```
+ grpc.enableReflection=true
+```
+
+
+
 ## gRPC CLI
 
 After enabling server reflection in a server application, you can use gRPC
