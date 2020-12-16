@@ -52,10 +52,12 @@ import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.LbEndpoint;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
+import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.LrsLoadBalancerProvider.LrsConfig;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedPolicySelection;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedTargetConfig;
+import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -131,7 +133,7 @@ public class EdsLoadBalancer2Test {
     registry.register(new FakeLoadBalancerProvider(CLUSTER_IMPL_POLICY_NAME));
     registry.register(new FakeLoadBalancerProvider(LRS_POLICY_NAME));
     loadBalancer = new EdsLoadBalancer2(helper, registry);
-    EdsConfig config = new EdsConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME, null,
+    EdsConfig config = new EdsConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME, null, null,
         weightedTarget, roundRobin);
     deliverConfig( config);
   }
@@ -446,7 +448,7 @@ public class EdsLoadBalancer2Test {
     assertThat(result.getSubchannel()).isSameInstanceAs(subchannel1);
 
     String newEdsServiceName = "service-foo.googleapis.com";
-    EdsConfig config = new EdsConfig(CLUSTER, newEdsServiceName, LRS_SERVER_NAME, null,
+    EdsConfig config = new EdsConfig(CLUSTER, newEdsServiceName, LRS_SERVER_NAME, null, null,
         weightedTarget, roundRobin);
     deliverConfig(config);
     deliverSimpleClusterLoadAssignment(newEdsServiceName);
@@ -463,28 +465,22 @@ public class EdsLoadBalancer2Test {
   }
 
   @Test
-  public void configUpdate_changeEndpointPickingPolicyAndMaxConcurrentRequests() {
+  public void configUpdate_changeMaxConcurrentRequests_propagateToChildLb() {
     deliverSimpleClusterLoadAssignment(EDS_SERVICE_NAME);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     PriorityLbConfig childLbConfig = (PriorityLbConfig) childBalancer.config;
     Long maxConcurrentRequestsInChildLbConfig =
         populateMaxConcurrentRequests(childLbConfig, "priority1");
     assertThat(maxConcurrentRequestsInChildLbConfig).isNull();
-    PolicySelection leafPolicy = populateLeafLbPolicy(childLbConfig, "priority1", locality1);
-    assertThat(leafPolicy.getProvider().getPolicyName()).isEqualTo("round_robin");
 
-    FakeLoadBalancerProvider fakePickFirstProvider = new FakeLoadBalancerProvider("pick_first");
-    PolicySelection fakePickFirstSelection =
-        new PolicySelection(fakePickFirstProvider, null);
-    EdsConfig config = new EdsConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME, 100L,
-        weightedTarget, fakePickFirstSelection);
+    EdsConfig config = new EdsConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME, 100L, null,
+        weightedTarget, roundRobin);
     deliverConfig(config);
+    assertThat(Iterables.getOnlyElement(childBalancers)).isSameInstanceAs(childBalancer);
     childLbConfig = (PriorityLbConfig) childBalancer.config;
     maxConcurrentRequestsInChildLbConfig =
         populateMaxConcurrentRequests(childLbConfig, "priority1");
     assertThat(maxConcurrentRequestsInChildLbConfig).isEqualTo(100L);
-    leafPolicy = populateLeafLbPolicy(childLbConfig, "priority1", locality1);
-    assertThat(leafPolicy.getProvider().getPolicyName()).isEqualTo("pick_first");
   }
 
   private Long populateMaxConcurrentRequests(PriorityLbConfig config, String priority) {
@@ -493,16 +489,30 @@ public class EdsLoadBalancer2Test {
     return clusterImplConfig.maxConcurrentRequests;
   }
 
-  private PolicySelection populateLeafLbPolicy(PriorityLbConfig config, String priority,
-      Locality locality) {
+  @Test
+  public void configUpdate_changeTlsContext_propagateToChildLb() {
+    deliverSimpleClusterLoadAssignment(EDS_SERVICE_NAME);
+    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
+    PriorityLbConfig childLbConfig = (PriorityLbConfig) childBalancer.config;
+    assertThat(populateTlsContext(childLbConfig, "priority1")).isNull();
+
+    UpstreamTlsContext upstreamTlsContext =
+        CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
+            CommonTlsContextTestsUtil.CLIENT_KEY_FILE,
+            CommonTlsContextTestsUtil.CLIENT_PEM_FILE,
+            CommonTlsContextTestsUtil.CA_PEM_FILE);
+    EdsConfig config = new EdsConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME, 100L,
+        upstreamTlsContext, weightedTarget, roundRobin);
+    deliverConfig(config);
+    assertThat(Iterables.getOnlyElement(childBalancers)).isSameInstanceAs(childBalancer);
+    childLbConfig = (PriorityLbConfig) childBalancer.config;
+    assertThat(populateTlsContext(childLbConfig, "priority1")).isEqualTo(upstreamTlsContext);
+  }
+
+  private UpstreamTlsContext populateTlsContext(PriorityLbConfig config, String priority) {
     PolicySelection priorityChildConfig = config.childConfigs.get(priority);
     ClusterImplConfig clusterImplConfig = (ClusterImplConfig) priorityChildConfig.getConfig();
-    WeightedTargetConfig weightedTargetConfig =
-        (WeightedTargetConfig) clusterImplConfig.childPolicy.getConfig();
-    LrsConfig lrsConfig =
-        (LrsConfig) weightedTargetConfig.targets.get(locality.toString())
-            .policySelection.getConfig();
-    return lrsConfig.childPolicy;
+    return clusterImplConfig.tlsContext;
   }
 
   @Test

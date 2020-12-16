@@ -168,27 +168,11 @@ final class EdsLoadBalancer2 extends LoadBalancer {
 
       @Override
       public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-        boolean configUpdated = shouldUpdateDownstreamLbConfig(resolvedAddresses);
+        boolean updated = !Objects.equals(this.resolvedAddresses, resolvedAddresses);
         this.resolvedAddresses = resolvedAddresses;
-        if (lb != null && configUpdated) {
+        if (lb != null && updated) {
           handleResourceUpdate();
         }
-      }
-
-      private boolean shouldUpdateDownstreamLbConfig(ResolvedAddresses newResolvedAddresses) {
-        if (resolvedAddresses == null) {  // first update
-          return true;
-        }
-        EdsConfig newConfig = (EdsConfig) newResolvedAddresses.getLoadBalancingPolicyConfig();
-        EdsConfig currentConfig = (EdsConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
-        if (!currentConfig.localityPickingPolicy.equals(newConfig.localityPickingPolicy)) {
-          return true;
-        }
-        if (!currentConfig.endpointPickingPolicy.equals(newConfig.endpointPickingPolicy)) {
-          return true;
-        }
-        return !Objects.equals(currentConfig.maxConcurrentRequests,
-            newConfig.maxConcurrentRequests);
       }
 
       @Override
@@ -309,21 +293,20 @@ final class EdsLoadBalancer2 extends LoadBalancer {
       private void handleResourceUpdate() {
         // Populate configurations used by downstream LB policies from the freshest result.
         EdsConfig config = (EdsConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
-        PolicySelection localityPickingPolicy = config.localityPickingPolicy;
-        PolicySelection endpointPickingPolicy = config.endpointPickingPolicy;
-        Long maxConcurrentRequests = config.maxConcurrentRequests;
         // Load balancing policy for each priority.
         Map<String, PolicySelection> priorityChildPolicies = new HashMap<>();
         List<String> priorities = new ArrayList<>();
         for (Integer priority : prioritizedLocalityWeights.keySet()) {
           WeightedTargetConfig weightedTargetConfig =
               generateWeightedTargetLbConfig(cluster, edsServiceName, lrsServerName,
-                  endpointPickingPolicy, lbRegistry, prioritizedLocalityWeights.get(priority));
+                  config.endpointPickingPolicy, lbRegistry,
+                  prioritizedLocalityWeights.get(priority));
           PolicySelection localityPicking =
-              new PolicySelection(localityPickingPolicy.getProvider(), weightedTargetConfig);
+              new PolicySelection(config.localityPickingPolicy.getProvider(),
+                  weightedTargetConfig);
           ClusterImplConfig clusterImplConfig =
-              new ClusterImplConfig(cluster, edsServiceName, lrsServerName, maxConcurrentRequests,
-                  dropOverloads, localityPicking);
+              new ClusterImplConfig(cluster, edsServiceName, lrsServerName,
+                  config.maxConcurrentRequests, dropOverloads, localityPicking, config.tlsContext);
           LoadBalancerProvider clusterImplLbProvider =
               lbRegistry.getProvider(XdsLbPolicies.CLUSTER_IMPL_POLICY_NAME);
           PolicySelection clusterImplPolicy =
