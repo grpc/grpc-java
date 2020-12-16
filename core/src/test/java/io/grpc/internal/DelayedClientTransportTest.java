@@ -258,18 +258,18 @@ public class DelayedClientTransportTest {
         .thenReturn(PickResult.withSubchannel(mockSubchannel));
 
     assertEquals(3, delayedTransport.getPendingStreamsCount());
-    assertEquals(0, delayedTransport.getToCheckCompletionStreamsCount());
+    assertEquals(0, delayedTransport.getUncommittedStreamsCount());
     delayedTransport.reprocess(mockPicker);
     fakeExecutor.runDueTasks();
     assertEquals(1, delayedTransport.getPendingStreamsCount());
-    assertEquals(2, delayedTransport.getToCheckCompletionStreamsCount());
+    assertEquals(2, delayedTransport.getUncommittedStreamsCount());
 
     delayedTransport.shutdown(SHUTDOWN_STATUS);
     verify(transportListener).transportShutdown(same(SHUTDOWN_STATUS));
     verify(transportListener, never()).transportTerminated();
     stream2.cancel(Status.CANCELLED);
     assertEquals(0, delayedTransport.getPendingStreamsCount());
-    assertEquals(0, delayedTransport.getToCheckCompletionStreamsCount());
+    assertEquals(0, delayedTransport.getUncommittedStreamsCount());
     assertFalse(Thread.interrupted());
     verify(mockRealStream, times(2)).start(any(ClientStreamListener.class));
     verify(mockRealStream, never()).cancel(any(Status.class));//substituted
@@ -431,7 +431,7 @@ public class DelayedClientTransportTest {
     delayedTransport.reprocess(picker);
 
     assertEquals(5, delayedTransport.getPendingStreamsCount());
-    assertEquals(3, delayedTransport.getToCheckCompletionStreamsCount());
+    assertEquals(3, delayedTransport.getUncommittedStreamsCount());
     inOrder.verify(picker).pickSubchannel(ff1args);
     inOrder.verify(picker).pickSubchannel(ff2args);
     inOrder.verify(picker).pickSubchannel(ff3args);
@@ -478,7 +478,7 @@ public class DelayedClientTransportTest {
 
     delayedTransport.reprocess(picker);
     assertEquals(0, delayedTransport.getPendingStreamsCount());
-    assertEquals(7, delayedTransport.getToCheckCompletionStreamsCount());//+5(new) - 1(completed)
+    assertEquals(7, delayedTransport.getUncommittedStreamsCount());//+5(new) - 1(completed)
     verify(transportListener).transportInUse(false);
     inOrder.verify(picker).pickSubchannel(ff3args);  // ff3
     inOrder.verify(picker).pickSubchannel(ff4args);  // ff4
@@ -488,7 +488,7 @@ public class DelayedClientTransportTest {
     inOrder.verifyNoMoreInteractions();
     fakeExecutor.runDueTasks();
     assertEquals(0, fakeExecutor.numPendingTasks());
-    assertEquals(7, delayedTransport.getToCheckCompletionStreamsCount());
+    assertEquals(7, delayedTransport.getUncommittedStreamsCount());
     assertSame(mockRealStream, ff3.getRealStream());
     assertSame(mockRealStream2, ff4.getRealStream());
     assertSame(mockRealStream2, wfr2.getRealStream());
@@ -498,7 +498,7 @@ public class DelayedClientTransportTest {
     ff4.start(streamListener);
     wfr2.start(streamListener);
     delayedTransport.reprocess(picker);
-    assertEquals(4, delayedTransport.getToCheckCompletionStreamsCount());//+0(new) - 3(completed)
+    assertEquals(4, delayedTransport.getUncommittedStreamsCount());//+0(new) - 3(completed)
 
     // If there is an executor in the CallOptions, it will be used to create the real stream.
     assertNull(wfr3.getRealStream());
@@ -513,7 +513,7 @@ public class DelayedClientTransportTest {
         new PickSubchannelArgsImpl(method, headers, waitForReadyCallOptions));
     inOrder.verifyNoMoreInteractions();
     assertEquals(1, delayedTransport.getPendingStreamsCount());
-    assertEquals(4, delayedTransport.getToCheckCompletionStreamsCount());
+    assertEquals(4, delayedTransport.getUncommittedStreamsCount());
 
     // wfr5 will stop delayed transport from terminating
     delayedTransport.shutdown(SHUTDOWN_STATUS);
@@ -531,7 +531,7 @@ public class DelayedClientTransportTest {
     fakeExecutor.runDueTasks();
     assertSame(mockRealStream, wfr5.getRealStream());
     assertEquals(0, delayedTransport.getPendingStreamsCount());
-    assertEquals(0, delayedTransport.getToCheckCompletionStreamsCount());
+    assertEquals(0, delayedTransport.getUncommittedStreamsCount());
     verify(transportListener).transportTerminated();
     assertTrue(Thread.interrupted());
   }
@@ -686,7 +686,7 @@ public class DelayedClientTransportTest {
     DelayedStream stream2 =
         (DelayedStream)delayedTransport.newStream(method2, headers2, callOptions2);
     assertEquals(2, delayedTransport.getPendingStreamsCount());
-    assertEquals(0, delayedTransport.getToCheckCompletionStreamsCount());
+    assertEquals(0, delayedTransport.getUncommittedStreamsCount());
     when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class)))
         .thenReturn(PickResult.withSubchannel(mockSubchannel))
         .thenReturn(PickResult.withNoResult())
@@ -695,7 +695,7 @@ public class DelayedClientTransportTest {
     delayedTransport.reprocess(mockPicker);
     fakeExecutor.runDueTasks();
     assertEquals(1, delayedTransport.getPendingStreamsCount());//stream2
-    assertEquals(1, delayedTransport.getToCheckCompletionStreamsCount());//stream1
+    assertEquals(1, delayedTransport.getUncommittedStreamsCount());//stream1
 
     doAnswer(new Answer<PickResult>() {
       @Override
@@ -741,16 +741,16 @@ public class DelayedClientTransportTest {
     assertTrue(stream instanceof DelayedStream);
     stream.start(streamListener);
     assertEquals(1, delayedTransport.getPendingStreamsCount());
-    assertEquals(0, delayedTransport.getToCheckCompletionStreamsCount());
+    assertEquals(0, delayedTransport.getUncommittedStreamsCount());
     delayedTransport.reprocess(mockPicker);
     assertEquals(0, delayedTransport.getPendingStreamsCount());
-    assertEquals(1, delayedTransport.getToCheckCompletionStreamsCount());
+    assertEquals(1, delayedTransport.getUncommittedStreamsCount());
     assertFalse(((DelayedStream) stream).isStreamTransferCompleted());
     fakeExecutor.runDueTasks();
     assertTrue(((DelayedStream) stream).isStreamTransferCompleted());
 
     delayedTransport.reprocess(mockPicker);
-    assertEquals(0, delayedTransport.getToCheckCompletionStreamsCount());
+    assertEquals(0, delayedTransport.getUncommittedStreamsCount());
 
     delayedTransport.shutdownNow(SHUTDOWN_STATUS);
     verify(transportListener).transportShutdown(same(SHUTDOWN_STATUS));
@@ -768,21 +768,21 @@ public class DelayedClientTransportTest {
     DelayedStream stream = (DelayedStream) delayedTransport.newStream(method, headers, callOptions);
     stream.start(streamListener);
     assertEquals(1, delayedTransport.getPendingStreamsCount());
-    assertEquals(0, delayedTransport.getToCheckCompletionStreamsCount());
+    assertEquals(0, delayedTransport.getUncommittedStreamsCount());
     delayedTransport.reprocess(mockPicker);
     assertEquals(0, delayedTransport.getPendingStreamsCount());
-    assertEquals(1, delayedTransport.getToCheckCompletionStreamsCount());
+    assertEquals(1, delayedTransport.getUncommittedStreamsCount());
     assertFalse(stream.isStreamTransferCompleted());
     fakeExecutor.runDueTasks();
     assertTrue(stream.isStreamTransferCompleted());
-    assertEquals(1, delayedTransport.getToCheckCompletionStreamsCount());
+    assertEquals(1, delayedTransport.getUncommittedStreamsCount());
 
     delayedTransport.shutdown(SHUTDOWN_STATUS);
     verify(transportListener).transportShutdown(same(SHUTDOWN_STATUS));
     verify(transportListener, never()).transportTerminated();
     delayedTransport.reprocess(null);
 
-    assertEquals(0, delayedTransport.getToCheckCompletionStreamsCount());
+    assertEquals(0, delayedTransport.getUncommittedStreamsCount());
     assertFalse(Thread.interrupted());
     verify(mockRealStream).start(listenerCaptor.capture());
     verifyNoMoreInteractions(streamListener);
