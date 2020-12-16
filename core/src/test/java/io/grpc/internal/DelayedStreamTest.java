@@ -223,7 +223,6 @@ public class DelayedStreamTest {
   public void setStreamThenCancelled() {
     stream.setStream(realStream);
     stream.cancel(Status.CANCELLED);
-    assertTrue(Thread.interrupted());
     verify(realStream).cancel(same(Status.CANCELLED));
   }
 
@@ -378,37 +377,5 @@ public class DelayedStreamTest {
     stream.appendTimeoutInsight(insight);
     assertThat(insight.toString())
         .matches("\\[buffered_nanos=[0-9]+, remote_addr=127\\.0\\.0\\.1:443\\]");
-  }
-
-  @Test
-  public void transferCompletion_realStreamStartThenSetThenCancel() {
-    assertFalse(stream.isStreamTransferCompleted());
-    stream.start(listener);
-    assertFalse(stream.isStreamTransferCompleted());
-    stream.setStream(realStream);
-    assertTrue(stream.isStreamTransferCompleted());
-    stream.awaitStreamTransferCompletion();
-    assertFalse(Thread.interrupted());
-    stream.cancel(Status.CANCELLED);
-    verify(realStream).start(any(ClientStreamListener.class));
-    verify(realStream).cancel(eq(Status.CANCELLED));
-    verifyNoMoreInteractions(realStream);
-  }
-
-  @Test
-  public void transferCompletion_realStreamSetThenStartThenCancel() {
-    assertFalse(stream.isStreamTransferCompleted());
-    stream.setStream(realStream);
-    assertFalse(stream.isStreamTransferCompleted());
-    stream.awaitStreamTransferCompletion();
-    assertTrue(Thread.interrupted());
-    stream.start(listener);
-    assertTrue(stream.isStreamTransferCompleted());
-    stream.awaitStreamTransferCompletion();
-    assertFalse(Thread.interrupted());
-    stream.cancel(Status.CANCELLED);
-    verify(realStream).start(same(listener));
-    verify(realStream).cancel(eq(Status.CANCELLED));
-    verifyNoMoreInteractions(realStream);
   }
 }

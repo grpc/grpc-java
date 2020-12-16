@@ -66,23 +66,6 @@ final class DelayedClientTransport implements ManagedClientTransport {
   @Nonnull
   @GuardedBy("lock")
   private Collection<PendingStream> pendingStreams = new LinkedHashSet<>();
-  @GuardedBy("lock")
-  private Collection<PendingStream> toCheckCompletionStreams = new LinkedHashSet<>();
-  private Runnable pollForStreamTransferComplete = new Runnable() {
-    @Override
-    public void run() {
-      ArrayList<PendingStream> savedToCheckCompletionStreams;
-      synchronized (lock) {
-        savedToCheckCompletionStreams = new ArrayList<>(toCheckCompletionStreams);
-        if (!toCheckCompletionStreams.isEmpty()) {
-          toCheckCompletionStreams = Collections.emptyList();
-        }
-      }
-      for (final PendingStream stream : savedToCheckCompletionStreams) {
-        stream.awaitStreamTransferCompletion();
-      }
-    }
-  };
 
   /**
    * When {@code shutdownStatus != null && !hasPendingStreams()}, then the transport is considered
@@ -228,7 +211,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
             listener.transportShutdown(status);
           }
         });
-      if (!hasPendingStreams() && !hasUncommittedStreams() && reportTransportTerminated != null) {
+      if (!hasPendingStreams() && reportTransportTerminated != null) {
         syncContext.executeLater(reportTransportTerminated);
         reportTransportTerminated = null;
       }
@@ -244,26 +227,18 @@ final class DelayedClientTransport implements ManagedClientTransport {
   public final void shutdownNow(Status status) {
     shutdown(status);
     Collection<PendingStream> savedPendingStreams;
-    Collection<PendingStream> savedToCheckCompletionStreams;
     Runnable savedReportTransportTerminated;
     synchronized (lock) {
       savedPendingStreams = pendingStreams;
-      savedToCheckCompletionStreams = toCheckCompletionStreams;
       savedReportTransportTerminated = reportTransportTerminated;
       reportTransportTerminated = null;
       if (!pendingStreams.isEmpty()) {
         pendingStreams = Collections.emptyList();
       }
-      if (!toCheckCompletionStreams.isEmpty()) {
-        toCheckCompletionStreams = Collections.emptyList();
-      }
     }
     if (savedReportTransportTerminated != null) {
       for (PendingStream stream : savedPendingStreams) {
         stream.cancel(status);
-      }
-      for (PendingStream stream : savedToCheckCompletionStreams) {
-        stream.awaitStreamTransferCompletion();
       }
       syncContext.execute(savedReportTransportTerminated);
     }
@@ -277,23 +252,10 @@ final class DelayedClientTransport implements ManagedClientTransport {
     }
   }
 
-  public final boolean hasUncommittedStreams() {
-    synchronized (lock) {
-      return !toCheckCompletionStreams.isEmpty();
-    }
-  }
-
   @VisibleForTesting
   final int getPendingStreamsCount() {
     synchronized (lock) {
       return pendingStreams.size();
-    }
-  }
-
-  @VisibleForTesting
-  final int getUncommittedStreamCount() {
-    synchronized (lock) {
-      return toCheckCompletionStreams.size();
     }
   }
 
@@ -308,61 +270,48 @@ final class DelayedClientTransport implements ManagedClientTransport {
    * <p>This method <strong>must not</strong> be called concurrently with itself.
    */
   final void reprocess(@Nullable SubchannelPicker picker) {
-    ArrayList<PendingStream> toCreateRealStream;
-    ArrayList<PendingStream> toCheckCompletion;
+    ArrayList<PendingStream> toProcess;
     synchronized (lock) {
       lastPicker = picker;
       lastPickerVersion++;
-      if ((picker == null || !hasPendingStreams()) && !hasUncommittedStreams()) {
+      if (picker == null || !hasPendingStreams()) {
         return;
       }
-      toCreateRealStream = new ArrayList<>(pendingStreams);
-      toCheckCompletion = new ArrayList<>(toCheckCompletionStreams);
+      toProcess = new ArrayList<>(pendingStreams);
     }
-    ArrayList<PendingStream> newlyCreated = new ArrayList<>();
+    ArrayList<PendingStream> toRemove = new ArrayList<>();
 
-
-    if (picker != null) {
-      for (final PendingStream stream : toCreateRealStream) {
-        PickResult pickResult = picker.pickSubchannel(stream.args);
-        CallOptions callOptions = stream.args.getCallOptions();
-        final ClientTransport transport = GrpcUtil.getTransportFromPickResult(pickResult,
-            callOptions.isWaitForReady());
-        if (transport != null) {
-          Executor executor = defaultAppExecutor;
-          // createRealStream may be expensive. It will start real streams on the transport. If
-          // there are pending requests, they will be serialized too, which may be expensive. Since
-          // we are now on transport thread, we need to offload the work to an executor.
-          if (callOptions.getExecutor() != null) {
-            executor = callOptions.getExecutor();
-          }
-          executor.execute(new Runnable() {
+    for (final PendingStream stream : toProcess) {
+      PickResult pickResult = picker.pickSubchannel(stream.args);
+      CallOptions callOptions = stream.args.getCallOptions();
+      final ClientTransport transport = GrpcUtil.getTransportFromPickResult(pickResult,
+          callOptions.isWaitForReady());
+      if (transport != null) {
+        Executor executor = defaultAppExecutor;
+        // createRealStream may be expensive. It will start real streams on the transport. If
+        // there are pending requests, they will be serialized too, which may be expensive. Since
+        // we are now on transport thread, we need to offload the work to an executor.
+        if (callOptions.getExecutor() != null) {
+          executor = callOptions.getExecutor();
+        }
+        executor.execute(new Runnable() {
             @Override
             public void run() {
               stream.createRealStream(transport);
             }
           });
-          newlyCreated.add(stream);
-        }  // else: stay pending
-      }
+        toRemove.add(stream);
+      }  // else: stay pending
     }
-    toCheckCompletion.addAll(newlyCreated);
-    ArrayList<PendingStream> completed = new ArrayList<>();
-    for (final PendingStream stream : toCheckCompletion) {
-      if (stream.isStreamTransferCompleted()) {
-        completed.add(stream);
-      }
-    }
+
     synchronized (lock) {
       // Between this synchronized and the previous one:
       //   - Streams may have been cancelled, which may turn pendingStreams into emptiness.
-      //   - shutdownNow() may be called, which may turn pendingStreams into emptiness.
-      if (!hasPendingStreams() && !hasUncommittedStreams()) {
+      //   - shutdown() may be called, which may turn pendingStreams into null.
+      if (!hasPendingStreams()) {
         return;
       }
-      pendingStreams.removeAll(newlyCreated);
-      toCheckCompletionStreams.addAll(newlyCreated);
-      toCheckCompletionStreams.removeAll(completed);
+      pendingStreams.removeAll(toRemove);
       // Because delayed transport is long-lived, we take this opportunity to down-size the
       // hashmap.
       if (pendingStreams.isEmpty()) {
@@ -376,7 +325,6 @@ final class DelayedClientTransport implements ManagedClientTransport {
         // than IDLE_MODE_DEFAULT_TIMEOUT_MILLIS (1 second).
         syncContext.executeLater(reportTransportNotInUse);
         if (shutdownStatus != null && reportTransportTerminated != null) {
-          syncContext.executeLater(pollForStreamTransferComplete);
           syncContext.executeLater(reportTransportTerminated);
           reportTransportTerminated = null;
         }
@@ -419,7 +367,6 @@ final class DelayedClientTransport implements ManagedClientTransport {
           if (!hasPendingStreams() && justRemovedAnElement) {
             syncContext.executeLater(reportTransportNotInUse);
             if (shutdownStatus != null) {
-              syncContext.executeLater(pollForStreamTransferComplete);
               syncContext.executeLater(reportTransportTerminated);
               reportTransportTerminated = null;
             }

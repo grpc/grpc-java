@@ -29,8 +29,6 @@ import io.grpc.Status;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 import javax.annotation.concurrent.GuardedBy;
 
 /**
@@ -61,7 +59,6 @@ class DelayedStream implements ClientStream {
   private long startTimeNanos;
   @GuardedBy("this")
   private long streamSetTimeNanos;
-  private final CountDownLatch realStreamStarted = new CountDownLatch(1);
 
   @Override
   public void setMaxInboundMessageSize(final int maxSize) {
@@ -133,24 +130,6 @@ class DelayedStream implements ClientStream {
     }
 
     drainPendingCalls();
-  }
-
-  protected boolean isStreamTransferCompleted() {
-    return realStreamStarted.getCount() == 0;
-  }
-
-  protected void awaitStreamTransferCompletion() {
-    // Wait until accepted RPCs transfer to the real stream and so that we can properly cancel or
-    // shutdown. Not waiting transfer completed may cause pending calls orphaned.
-    boolean delegationComplete;
-    try {
-      delegationComplete = realStreamStarted.await(5, TimeUnit.SECONDS);
-    } catch (InterruptedException ex) {
-      delegationComplete = false;
-    }
-    if (!delegationComplete) {
-      Thread.currentThread().interrupt();
-    }
   }
 
   /**
@@ -242,14 +221,12 @@ class DelayedStream implements ClientStream {
 
     if (savedPassThrough) {
       realStream.start(listener);
-      realStreamStarted.countDown();
     } else {
       final ClientStreamListener finalListener = listener;
       delayOrExecute(new Runnable() {
         @Override
         public void run() {
           realStream.start(finalListener);
-          realStreamStarted.countDown();
         }
       });
     }
@@ -325,11 +302,7 @@ class DelayedStream implements ClientStream {
         listenerToClose.closed(reason, new Metadata());
       }
       drainPendingCalls();
-      if (!isStreamTransferCompleted()) {
-        realStreamStarted.countDown();
-      }
     }
-    awaitStreamTransferCompletion();
   }
 
   @GuardedBy("this")
