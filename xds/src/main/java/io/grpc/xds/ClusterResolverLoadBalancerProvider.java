@@ -25,6 +25,7 @@ import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
+import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -116,6 +117,9 @@ public final class ClusterResolverLoadBalancerProvider extends LoadBalancerProvi
       // Cluster-level max concurrent request threshold. Null if not specified.
       @Nullable
       final Long maxConcurrentRequests;
+      // TLS context for connections to endpoints in the cluster.
+      @Nullable
+      final UpstreamTlsContext tlsContext;
       // Resource name for resolving endpoints via EDS. Only valid for EDS clusters.
       @Nullable
       final String edsServiceName;
@@ -126,29 +130,33 @@ public final class ClusterResolverLoadBalancerProvider extends LoadBalancerProvi
       }
 
       private DiscoveryMechanism(String cluster, Type type, @Nullable String edsServiceName,
-          @Nullable String lrsServerName, @Nullable Long maxConcurrentRequests) {
+          @Nullable String lrsServerName, @Nullable Long maxConcurrentRequests,
+          @Nullable UpstreamTlsContext tlsContext) {
         this.cluster = checkNotNull(cluster, "cluster");
         this.type = checkNotNull(type, "type");
         this.edsServiceName = edsServiceName;
         this.lrsServerName = lrsServerName;
         this.maxConcurrentRequests = maxConcurrentRequests;
+        this.tlsContext = tlsContext;
       }
 
       static DiscoveryMechanism forEds(String cluster, @Nullable String edsServiceName,
-          @Nullable String lrsServerName, @Nullable Long maxConcurrentRequests) {
+          @Nullable String lrsServerName, @Nullable Long maxConcurrentRequests,
+          @Nullable UpstreamTlsContext tlsContext) {
         return new DiscoveryMechanism(cluster, Type.EDS, edsServiceName, lrsServerName,
-            maxConcurrentRequests);
+            maxConcurrentRequests, tlsContext);
       }
 
       static DiscoveryMechanism forLogicalDns(String cluster, @Nullable String lrsServerName,
-          @Nullable Long maxConcurrentRequests) {
+          @Nullable Long maxConcurrentRequests, @Nullable UpstreamTlsContext tlsContext) {
         return new DiscoveryMechanism(cluster, Type.LOGICAL_DNS, null, lrsServerName,
-            maxConcurrentRequests);
+            maxConcurrentRequests, tlsContext);
       }
 
       @Override
       public int hashCode() {
-        return Objects.hash(cluster, type, edsServiceName, lrsServerName, maxConcurrentRequests);
+        return Objects.hash(cluster, type, lrsServerName, maxConcurrentRequests, tlsContext,
+            edsServiceName);
       }
 
       @Override
@@ -164,7 +172,8 @@ public final class ClusterResolverLoadBalancerProvider extends LoadBalancerProvi
             && type == that.type
             && Objects.equals(edsServiceName, that.edsServiceName)
             && Objects.equals(lrsServerName, that.lrsServerName)
-            && Objects.equals(maxConcurrentRequests, that.maxConcurrentRequests);
+            && Objects.equals(maxConcurrentRequests, that.maxConcurrentRequests)
+            && Objects.equals(tlsContext, that.tlsContext);
       }
 
       @Override
@@ -174,6 +183,7 @@ public final class ClusterResolverLoadBalancerProvider extends LoadBalancerProvi
                 .add("cluster", cluster)
                 .add("type", type)
                 .add("lrsServerName", lrsServerName)
+                // Exclude tlsContext as its string representation is cumbersome.
                 .add("maxConcurrentRequests", maxConcurrentRequests);
         if (type == Type.EDS) {
           toStringHelper.add("edsServiceName", edsServiceName);

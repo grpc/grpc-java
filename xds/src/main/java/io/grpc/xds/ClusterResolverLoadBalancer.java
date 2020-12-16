@@ -46,6 +46,7 @@ import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.LbEndpoint;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
+import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.LrsLoadBalancerProvider.LrsConfig;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedPolicySelection;
@@ -181,11 +182,11 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
         if (instance.type == DiscoveryMechanism.Type.EDS) {
           state =
               new EdsClusterState(instance.cluster, instance.edsServiceName,
-                  instance.lrsServerName, instance.maxConcurrentRequests);
+                  instance.lrsServerName, instance.maxConcurrentRequests, instance.tlsContext);
           clusterStates.put(instance.cluster, state);
         } else {  // logical DNS
           state = new LogicalDnsClusterState(instance.cluster, instance.lrsServerName,
-              instance.maxConcurrentRequests);
+              instance.maxConcurrentRequests, instance.tlsContext);
           clusterStates.put(instance.cluster, state);
         }
         state.start();
@@ -283,11 +284,13 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       // The resource name to be used for resolving endpoints via EDS.
       // Always null if the cluster is a logical DNS cluster.
       @Nullable
-      protected String edsServiceName;
+      protected final String edsServiceName;
       @Nullable
-      protected String lrsServerName;
+      protected final String lrsServerName;
       @Nullable
-      protected Long maxConcurrentRequests;
+      protected final Long maxConcurrentRequests;
+      @Nullable
+      protected final UpstreamTlsContext tlsContext;
       // Resolution status, may contain most recent error encountered.
       protected Status status = Status.OK;
       // True if has received resolution result.
@@ -298,11 +301,13 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       protected boolean shutdown;
 
       private ClusterState(String name, @Nullable String edsServiceName,
-          @Nullable String lrsServerName, @Nullable Long maxConcurrentRequests) {
+          @Nullable String lrsServerName, @Nullable Long maxConcurrentRequests,
+          @Nullable UpstreamTlsContext tlsContext) {
         this.name = name;
         this.edsServiceName = edsServiceName;
         this.lrsServerName = lrsServerName;
         this.maxConcurrentRequests = maxConcurrentRequests;
+        this.tlsContext = tlsContext;
       }
 
       abstract void start();
@@ -315,8 +320,9 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
     private class EdsClusterState extends ClusterState implements EdsResourceWatcher {
 
       private EdsClusterState(String name, @Nullable String edsServiceName,
-          @Nullable String lrsServerName, @Nullable Long maxConcurrentRequests) {
-        super(name, edsServiceName, lrsServerName, maxConcurrentRequests);
+          @Nullable String lrsServerName, @Nullable Long maxConcurrentRequests,
+          @Nullable UpstreamTlsContext tlsContext) {
+        super(name, edsServiceName, lrsServerName, maxConcurrentRequests, tlsContext);
       }
 
       @Override
@@ -389,8 +395,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
             Collections.sort(priorities);
             Map<String, PolicySelection> priorityLbPolicies =
                 generateClusterPriorityLbPolicies(name, edsServiceName, lrsServerName,
-                    maxConcurrentRequests, localityPickingPolicy, endpointPickingPolicy,
-                    lbRegistry, prioritizedLocalityWeights, dropOverloads);
+                    maxConcurrentRequests, tlsContext, localityPickingPolicy,
+                    endpointPickingPolicy, lbRegistry, prioritizedLocalityWeights, dropOverloads);
             status = Status.OK;
             resolved = true;
             result = new ClusterResolutionResult(addresses, priorityLbPolicies, priorities);
@@ -442,8 +448,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       private ScheduledHandle scheduledRefresh;
 
       private LogicalDnsClusterState(String name, @Nullable String lrsServerName,
-          @Nullable Long maxConcurrentRequests) {
-        super(name, null, lrsServerName, maxConcurrentRequests);
+          @Nullable Long maxConcurrentRequests, @Nullable UpstreamTlsContext tlsContext) {
+        super(name, null, lrsServerName, maxConcurrentRequests, tlsContext);
         NameResolver.Args args = helper.getNameResolverArgs();
         URI uri;
         try {
@@ -504,7 +510,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
                   new PolicySelection(endpointPickingLbProvider, null);
               PolicySelection priorityLbPolicy =
                   generateClusterPriorityLbPolicy(name, edsServiceName, lrsServerName,
-                      maxConcurrentRequests, endpointPickingPolicy, lbRegistry,
+                      maxConcurrentRequests, tlsContext, endpointPickingPolicy, lbRegistry,
                       logicalDnsClusterLocality, Collections.<DropOverload>emptyList());
               status = Status.OK;
               resolved = true;
@@ -578,14 +584,15 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
    */
   private PolicySelection generateClusterPriorityLbPolicy(
       String cluster, @Nullable String edsServiceName, @Nullable String lrsServerName,
-      @Nullable Long maxConcurrentRequests, PolicySelection endpointPickingPolicy,
-      LoadBalancerRegistry lbRegistry, Locality locality, List<DropOverload> dropOverloads) {
+      @Nullable Long maxConcurrentRequests, @Nullable UpstreamTlsContext tlsContext,
+      PolicySelection endpointPickingPolicy, LoadBalancerRegistry lbRegistry,
+      Locality locality, List<DropOverload> dropOverloads) {
     PolicySelection localityLbPolicy =
         generateLocalityLbConfig(locality, cluster, edsServiceName, lrsServerName,
             endpointPickingPolicy, lbRegistry);
     ClusterImplConfig clusterImplConfig =
         new ClusterImplConfig(cluster, edsServiceName, lrsServerName, maxConcurrentRequests,
-            dropOverloads, localityLbPolicy);
+            dropOverloads, localityLbPolicy, tlsContext);
     LoadBalancerProvider clusterImplLbProvider =
         lbRegistry.getProvider(XdsLbPolicies.CLUSTER_IMPL_POLICY_NAME);
     return new PolicySelection(clusterImplLbProvider, clusterImplConfig);
@@ -599,8 +606,9 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
    */
   private static Map<String, PolicySelection> generateClusterPriorityLbPolicies(
       String cluster, @Nullable String edsServiceName, @Nullable String lrsServerName,
-      @Nullable Long maxConcurrentRequests, PolicySelection localityPickingPolicy,
-      PolicySelection endpointPickingPolicy, LoadBalancerRegistry lbRegistry,
+      @Nullable Long maxConcurrentRequests, @Nullable UpstreamTlsContext tlsContext,
+      PolicySelection localityPickingPolicy, PolicySelection endpointPickingPolicy,
+      LoadBalancerRegistry lbRegistry,
       Map<String, Map<Locality, Integer>> prioritizedLocalityWeights,
       List<DropOverload> dropOverloads) {
     Map<String, PolicySelection> policies = new HashMap<>();
@@ -612,7 +620,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
           new PolicySelection(localityPickingPolicy.getProvider(), localityPickingLbConfig);
       ClusterImplConfig clusterImplConfig =
           new ClusterImplConfig(cluster, edsServiceName, lrsServerName, maxConcurrentRequests,
-              dropOverloads, localityPicking);
+              dropOverloads, localityPicking, tlsContext);
       LoadBalancerProvider clusterImplLbProvider =
           lbRegistry.getProvider(XdsLbPolicies.CLUSTER_IMPL_POLICY_NAME);
       PolicySelection clusterImplPolicy =

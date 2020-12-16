@@ -63,10 +63,12 @@ import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.LbEndpoint;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
+import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.LrsLoadBalancerProvider.LrsConfig;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedPolicySelection;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedTargetConfig;
+import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -107,6 +109,11 @@ public class ClusterResolverLoadBalancerTest {
       new Locality("test-region-2", "test-zone-2", "test-subzone-2");
   private final Locality locality3 =
       new Locality("test-region-3", "test-zone-3", "test-subzone-3");
+  private final UpstreamTlsContext tlsContext =
+      CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
+          CommonTlsContextTestsUtil.CLIENT_KEY_FILE,
+          CommonTlsContextTestsUtil.CLIENT_PEM_FILE,
+          CommonTlsContextTestsUtil.CA_PEM_FILE);
 
   private final SynchronizationContext syncContext = new SynchronizationContext(
       new Thread.UncaughtExceptionHandler() {
@@ -222,7 +229,7 @@ public class ClusterResolverLoadBalancerTest {
         .isEqualTo(CLUSTER_IMPL_POLICY_NAME);
     ClusterImplConfig clusterImplConfig = (ClusterImplConfig) priorityChildPolicy.getConfig();
     assertClusterImplConfig(clusterImplConfig, CLUSTER2, EDS_SERVICE_NAME2, LRS_SERVER_NAME, 200L,
-        Collections.<DropOverload>emptyList(), WEIGHTED_TARGET_POLICY_NAME);
+        tlsContext, Collections.<DropOverload>emptyList(), WEIGHTED_TARGET_POLICY_NAME);
     WeightedTargetConfig weightedTargetConfig =
         (WeightedTargetConfig) clusterImplConfig.childPolicy.getConfig();
     assertThat(weightedTargetConfig.targets.keySet()).containsExactly(locality1.toString());
@@ -237,7 +244,7 @@ public class ClusterResolverLoadBalancerTest {
         .isEqualTo(CLUSTER_IMPL_POLICY_NAME);
     clusterImplConfig = (ClusterImplConfig) priorityChildPolicy.getConfig();
     assertClusterImplConfig(clusterImplConfig, CLUSTER2, EDS_SERVICE_NAME2, LRS_SERVER_NAME, 200L,
-        Collections.<DropOverload>emptyList(), WEIGHTED_TARGET_POLICY_NAME);
+        tlsContext, Collections.<DropOverload>emptyList(), WEIGHTED_TARGET_POLICY_NAME);
     weightedTargetConfig = (WeightedTargetConfig) clusterImplConfig.childPolicy.getConfig();
     assertThat(weightedTargetConfig.targets.keySet()).containsExactly(locality3.toString());
     target = weightedTargetConfig.targets.get(locality3.toString());
@@ -266,7 +273,7 @@ public class ClusterResolverLoadBalancerTest {
         .isEqualTo(CLUSTER_IMPL_POLICY_NAME);
     clusterImplConfig = (ClusterImplConfig) priorityChildPolicy.getConfig();
     assertClusterImplConfig(clusterImplConfig, CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_NAME, 100L,
-        Collections.<DropOverload>emptyList(), WEIGHTED_TARGET_POLICY_NAME);
+        tlsContext, Collections.<DropOverload>emptyList(), WEIGHTED_TARGET_POLICY_NAME);
     weightedTargetConfig = (WeightedTargetConfig) clusterImplConfig.childPolicy.getConfig();
     assertThat(weightedTargetConfig.targets.keySet()).containsExactly(locality2.toString());
     target = weightedTargetConfig.targets.get(locality2.toString());
@@ -299,7 +306,7 @@ public class ClusterResolverLoadBalancerTest {
 
   @Test
   public void onlyEdsClusters_allEndpointResourceRevoked_shutDownChildLbPolicy() {
-    deliverConfigWithEdsClusters();
+    deliverConfigWithEdsClusters();  // CLUSTER1 and CLUSTER2
     reset(helper);
     EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr-1");
     EquivalentAddressGroup endpoint2 = makeAddress("endpoint-addr-2");
@@ -326,9 +333,9 @@ public class ClusterResolverLoadBalancerTest {
 
   private void deliverConfigWithEdsClusters() {
     DiscoveryMechanism instance1 =
-        DiscoveryMechanism.forEds(CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_NAME, 100L);
+        DiscoveryMechanism.forEds(CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_NAME, 100L, tlsContext);
     DiscoveryMechanism instance2 =
-        DiscoveryMechanism.forEds(CLUSTER2, EDS_SERVICE_NAME2, LRS_SERVER_NAME, 200L);
+        DiscoveryMechanism.forEds(CLUSTER2, EDS_SERVICE_NAME2, LRS_SERVER_NAME, 200L, tlsContext);
     ClusterResolverConfig config =
         new ClusterResolverConfig(Arrays.asList(instance1, instance2), weightedTarget, roundRobin);
     deliverLbConfig(config);
@@ -338,7 +345,7 @@ public class ClusterResolverLoadBalancerTest {
 
   @Test
   public void handleEdsEndpointResource_ignoreUnhealthyEndpoints() {
-    deliverConfigWithSingleEdsCluster();
+    deliverConfigWithSingleEdsCluster();  // CLUSTER1
     EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr-1");
     EquivalentAddressGroup endpoint2 = makeAddress("endpoint-addr-2");
     LocalityLbEndpoints localityLbEndpoints =
@@ -352,7 +359,7 @@ public class ClusterResolverLoadBalancerTest {
 
   @Test
   public void handleEdsEndpointResource_ignoreLocalitiesWithNoHealthyEndpoints() {
-    deliverConfigWithSingleEdsCluster();
+    deliverConfigWithSingleEdsCluster();  // CLUSTER1
     EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr-1");
     EquivalentAddressGroup endpoint2 = makeAddress("endpoint-addr-2");
     LocalityLbEndpoints localityLbEndpoints1 =
@@ -375,7 +382,7 @@ public class ClusterResolverLoadBalancerTest {
 
   @Test
   public void handleEdsEndpointResource_ignorePrioritiesWithNoHealthyEndpoints() {
-    deliverConfigWithSingleEdsCluster();
+    deliverConfigWithSingleEdsCluster();   // CLUSTER1
     EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr-1");
     EquivalentAddressGroup endpoint2 = makeAddress("endpoint-addr-2");
     LocalityLbEndpoints localityLbEndpoints1 =
@@ -394,7 +401,7 @@ public class ClusterResolverLoadBalancerTest {
 
   private void deliverConfigWithSingleEdsCluster() {
     DiscoveryMechanism instance =
-        DiscoveryMechanism.forEds(CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_NAME, 100L);
+        DiscoveryMechanism.forEds(CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_NAME, 100L, null);
     ClusterResolverConfig config =
         new ClusterResolverConfig(Collections.singletonList(instance), weightedTarget, roundRobin);
     deliverLbConfig(config);
@@ -419,7 +426,7 @@ public class ClusterResolverLoadBalancerTest {
     assertThat(priorityChildPolicy.getProvider().getPolicyName())
         .isEqualTo(CLUSTER_IMPL_POLICY_NAME);
     ClusterImplConfig clusterImplConfig = (ClusterImplConfig) priorityChildPolicy.getConfig();
-    assertClusterImplConfig(clusterImplConfig, CLUSTER_DNS, null, LRS_SERVER_NAME, 100L,
+    assertClusterImplConfig(clusterImplConfig, CLUSTER_DNS, null, LRS_SERVER_NAME, 100L, null,
         Collections.<DropOverload>emptyList(), LRS_POLICY_NAME);
     LrsConfig lrsConfig = (LrsConfig) clusterImplConfig.childPolicy.getConfig();
     assertLrsConfig(lrsConfig, CLUSTER_DNS, null, LRS_SERVER_NAME,
@@ -472,7 +479,7 @@ public class ClusterResolverLoadBalancerTest {
 
   private void deliverConfigWithSingleLogicalDnsCluster() {
     DiscoveryMechanism instance =
-        DiscoveryMechanism.forLogicalDns(CLUSTER_DNS, LRS_SERVER_NAME, 100L);
+        DiscoveryMechanism.forLogicalDns(CLUSTER_DNS, LRS_SERVER_NAME, 100L, null);
     ClusterResolverConfig config =
         new ClusterResolverConfig(Collections.singletonList(instance), weightedTarget, roundRobin);
     deliverLbConfig(config);
@@ -603,9 +610,9 @@ public class ClusterResolverLoadBalancerTest {
 
   private void deliverConfigWithEdsAndLogicalDnsClusters() {
     DiscoveryMechanism instance1 =
-        DiscoveryMechanism.forEds(CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_NAME, 100L);
+        DiscoveryMechanism.forEds(CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_NAME, 100L, null);
     DiscoveryMechanism instance2 =
-        DiscoveryMechanism.forLogicalDns(CLUSTER_DNS, LRS_SERVER_NAME, 200L);
+        DiscoveryMechanism.forLogicalDns(CLUSTER_DNS, LRS_SERVER_NAME, 200L, null);
     ClusterResolverConfig config =
         new ClusterResolverConfig(Arrays.asList(instance1, instance2), weightedTarget, roundRobin);
     deliverLbConfig(config);
@@ -637,18 +644,21 @@ public class ClusterResolverLoadBalancerTest {
   }
 
   private static void assertClusterImplConfig(ClusterImplConfig config, String cluster,
-      String edsServiceName, String lrsServerName, Long maxConcurrentRequests,
-      List<DropOverload> dropCategories, String childPolicy) {
+      @Nullable String edsServiceName, String lrsServerName, Long maxConcurrentRequests,
+      @Nullable UpstreamTlsContext tlsContext, List<DropOverload> dropCategories,
+      String childPolicy) {
     assertThat(config.cluster).isEqualTo(cluster);
     assertThat(config.edsServiceName).isEqualTo(edsServiceName);
     assertThat(config.lrsServerName).isEqualTo(lrsServerName);
     assertThat(config.maxConcurrentRequests).isEqualTo(maxConcurrentRequests);
+    assertThat(config.tlsContext).isEqualTo(tlsContext);
     assertThat(config.dropCategories).isEqualTo(dropCategories);
     assertThat(config.childPolicy.getProvider().getPolicyName()).isEqualTo(childPolicy);
   }
 
-  private static void assertLrsConfig(LrsConfig config, String cluster, String edsServiceName,
-      String lrsServerName, Locality locality, String childPolicy) {
+  private static void assertLrsConfig(LrsConfig config, String cluster,
+      @Nullable String edsServiceName, String lrsServerName, Locality locality,
+      String childPolicy) {
     assertThat(config.clusterName).isEqualTo(cluster);
     assertThat(config.edsServiceName).isEqualTo(edsServiceName);
     assertThat(config.lrsServerName).isEqualTo(lrsServerName);
