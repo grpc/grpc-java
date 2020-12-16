@@ -141,7 +141,7 @@ class DelayedStream implements ClientStream {
 
   protected void awaitStreamTransferCompletion() {
     // Wait until accepted RPCs transfer to the real stream so that we can properly cancel or
-    // shutdown. Not waiting for transfer completion may cause pending calls orphaned. #6283.
+    // shutdown. Not waiting for transfer completion may cause pending calls orphaned. #636.
     boolean delegationComplete;
     try {
       delegationComplete = realStreamStarted.await(5, TimeUnit.SECONDS);
