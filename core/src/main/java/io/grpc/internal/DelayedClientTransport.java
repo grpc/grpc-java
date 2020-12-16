@@ -68,7 +68,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
   private Collection<PendingStream> pendingStreams = new LinkedHashSet<>();
   @GuardedBy("lock")
   private Collection<PendingStream> toCheckCompletionStreams = new LinkedHashSet<>();
-  private Runnable pollForStreamTransferCompletion = new Runnable() {
+  private Runnable pollForStreamTransferComplete = new Runnable() {
     @Override
     public void run() {
       ArrayList<PendingStream> savedToCheckCompletionStreams;
@@ -291,7 +291,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
   }
 
   @VisibleForTesting
-  final int getUncommittedStreamsCount() {
+  final int getUncommittedStreamCount() {
     synchronized (lock) {
       return toCheckCompletionStreams.size();
     }
@@ -373,10 +373,10 @@ final class DelayedClientTransport implements ManagedClientTransport {
         // transport starting streams and setting in-use state.  During the gap the whole channel's
         // in-use state may be false. However, it shouldn't cause spurious switching to idleness
         // (which would shutdown the transports and LoadBalancer) because the gap should be shorter
-        // than IDLE_MODE_DEFAULT_TIMEOUT_MILLIS (30 millis).
+        // than IDLE_MODE_DEFAULT_TIMEOUT_MILLIS (1 second).
         syncContext.executeLater(reportTransportNotInUse);
         if (shutdownStatus != null && reportTransportTerminated != null) {
-          syncContext.executeLater(pollForStreamTransferCompletion);
+          syncContext.executeLater(pollForStreamTransferComplete);
           syncContext.executeLater(reportTransportTerminated);
           reportTransportTerminated = null;
         }
@@ -419,7 +419,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
           if (!hasPendingStreams() && justRemovedAnElement) {
             syncContext.executeLater(reportTransportNotInUse);
             if (shutdownStatus != null) {
-              syncContext.executeLater(pollForStreamTransferCompletion);
+              syncContext.executeLater(pollForStreamTransferComplete);
               syncContext.executeLater(reportTransportTerminated);
               reportTransportTerminated = null;
             }
