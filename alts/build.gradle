@@ -83,8 +83,6 @@ shadowJar {
 publishing {
     publications {
         maven(MavenPublication) {
-            // use shadowJar and remove the original Jar
-            artifact shadowJar
             def originalJar = artifacts.find { dep -> dep.classifier == 'original'}
             artifacts.remove(originalJar)
 

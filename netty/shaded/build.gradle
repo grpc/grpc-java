@@ -45,7 +45,6 @@ publishing {
     publications {
         maven(MavenPublication) {
             // Ideally swap to project.shadow.component(it) when it isn't broken for project deps
-            artifact shadowJar
             // Empty jars are not published via withJavadocJar() and withSourcesJar()
             artifact javadocJar
             artifact sourcesJar
