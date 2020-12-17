@@ -339,7 +339,8 @@ final class DelayedClientTransport implements ManagedClientTransport {
   private class PendingStream extends DelayedStream {
     private final PickSubchannelArgs args;
     private final Context context = Context.current();
-    private volatile boolean transferCompleted;
+    @GuardedBy("lock")
+    private boolean transferCompleted;
 
     private PendingStream(PickSubchannelArgs args) {
       this.args = args;
@@ -371,11 +372,11 @@ final class DelayedClientTransport implements ManagedClientTransport {
 
     @Override
     public void onTransferComplete() {
-      if (transferCompleted) {
-        return;
-      }
-      transferCompleted = true;
       synchronized (lock) {
+        if (transferCompleted) {
+          return;
+        }
+        transferCompleted = true;
         pendingCompleteStreams--;
         if (shutdownStatus != null && pendingCompleteStreams == 0) {
           syncContext.executeLater(reportTransportTerminated);
