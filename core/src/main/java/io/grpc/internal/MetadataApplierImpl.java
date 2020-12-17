@@ -113,7 +113,7 @@ final class MetadataApplierImpl extends MetadataApplier {
     }
   }
 
-  private static final class ApplierDelayedStream extends DelayedStream {
+  private static class ApplierDelayedStream extends DelayedStream {
     @Override
     void onTransferComplete() {}
   }
