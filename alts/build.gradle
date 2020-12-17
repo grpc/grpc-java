@@ -83,6 +83,7 @@ shadowJar {
 publishing {
     publications {
         maven(MavenPublication) {
+            // We want this to throw an exception if it isn't working
             def originalJar = artifacts.find { dep -> dep.classifier == 'original'}
             artifacts.remove(originalJar)
 
