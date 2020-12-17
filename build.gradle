@@ -131,8 +131,11 @@ subprojects {
             }
 
             tasks.withType(JavaCompile) {
-                it.options.errorprone.excludedPaths = ".*/src/generated/[^/]+/java/.*" +
-                        "|.*/build/generated/source/proto/[^/]+/java/.*"
+                appendToProperty(
+                    it.options.errorprone.excludedPaths,
+                    ".*/src/generated/[^/]+/java/.*" +
+                        "|.*/build/generated/source/proto/[^/]+/java/.*",
+                    "|")
             }
         }
 
@@ -243,6 +246,14 @@ subprojects {
                 exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
             }
             dependencies.runtimeOnly libraries.errorprone
+        }
+
+        appendToProperty = { Property<String> property, String value, String separator ->
+            if (property.present) {
+                property.set(property.get() + separator + value)
+            } else {
+                property.set(value)
+            }
         }
     }
 
