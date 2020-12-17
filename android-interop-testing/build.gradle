@@ -93,6 +93,7 @@ tasks.withType(JavaCompile) {
     options.compilerArgs += [
             "-Xlint:-cast"
     ]
+    appendToProperty(it.options.errorprone.excludedPaths, ".*/R.java", "|")
     // Reuses source code from grpc-interop-testing, which targets Java 7 (no method references)
     options.errorprone.check("UnnecessaryAnonymousClass", CheckSeverity.OFF)
 }
