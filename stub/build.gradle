@@ -17,6 +17,5 @@ dependencies {
 }
 
 javadoc {
-    options.links "https://google.github.io/guava/releases/${guavaVersion}/api/docs/"
     exclude 'io/grpc/stub/Internal*'
 }
