@@ -77,7 +77,6 @@ import javax.annotation.Nullable;
  */
 final class ClusterResolverLoadBalancer extends LoadBalancer {
 
-  private static final String LOGICAL_DNS_CLUSTER_ENDPOINT_PICKING_POLICY_OVERRIDE = "pick_first";
   private static final Locality logicalDnsClusterLocality = new Locality("", "", "");
   private final XdsLogger logger;
   private final String authority;
@@ -505,7 +504,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
                 addresses.add(annotatedAddr);
               }
               LoadBalancerProvider endpointPickingLbProvider =
-                  lbRegistry.getProvider(LOGICAL_DNS_CLUSTER_ENDPOINT_PICKING_POLICY_OVERRIDE);
+                  lbRegistry.getProvider("pick_first");
               PolicySelection endpointPickingPolicy =
                   new PolicySelection(endpointPickingLbProvider, null);
               PolicySelection priorityLbPolicy =
