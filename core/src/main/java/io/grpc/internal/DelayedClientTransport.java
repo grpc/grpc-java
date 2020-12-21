@@ -66,8 +66,6 @@ final class DelayedClientTransport implements ManagedClientTransport {
   @Nonnull
   @GuardedBy("lock")
   private Collection<PendingStream> pendingStreams = new LinkedHashSet<>();
-  @GuardedBy("lock")
-  private int pendingCompleteStreams;
 
   /**
    * When {@code shutdownStatus != null && !hasPendingStreams()}, then the transport is considered
@@ -177,7 +175,6 @@ final class DelayedClientTransport implements ManagedClientTransport {
   private PendingStream createPendingStream(PickSubchannelArgs args) {
     PendingStream pendingStream = new PendingStream(args);
     pendingStreams.add(pendingStream);
-    pendingCompleteStreams++;
     if (getPendingStreamsCount() == 1) {
       syncContext.executeLater(reportTransportInUse);
     }
@@ -214,7 +211,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
             listener.transportShutdown(status);
           }
         });
-      if (pendingCompleteStreams == 0 && reportTransportTerminated != null) {
+      if (!hasPendingStreams() && reportTransportTerminated != null) {
         syncContext.executeLater(reportTransportTerminated);
         reportTransportTerminated = null;
       }
@@ -230,15 +227,23 @@ final class DelayedClientTransport implements ManagedClientTransport {
   public final void shutdownNow(Status status) {
     shutdown(status);
     Collection<PendingStream> savedPendingStreams;
+    Runnable savedReportTransportTerminated;
     synchronized (lock) {
       savedPendingStreams = pendingStreams;
+      savedReportTransportTerminated = reportTransportTerminated;
+      reportTransportTerminated = null;
       if (!pendingStreams.isEmpty()) {
         pendingStreams = Collections.emptyList();
       }
     }
-    for (PendingStream stream : savedPendingStreams) {
-      stream.cancel(status);
+    if (savedReportTransportTerminated != null) {
+      for (PendingStream stream : savedPendingStreams) {
+        stream.cancel(status);
+      }
+      syncContext.execute(savedReportTransportTerminated);
     }
+    // If savedReportTransportTerminated == null, transportTerminated() has already been called in
+    // shutdown().
   }
 
   public final boolean hasPendingStreams() {
@@ -251,13 +256,6 @@ final class DelayedClientTransport implements ManagedClientTransport {
   final int getPendingStreamsCount() {
     synchronized (lock) {
       return pendingStreams.size();
-    }
-  }
-
-  @VisibleForTesting
-  final int getPendingCompleteStreamsCount() {
-    synchronized (lock) {
-      return pendingCompleteStreams;
     }
   }
 
@@ -326,6 +324,10 @@ final class DelayedClientTransport implements ManagedClientTransport {
         // (which would shutdown the transports and LoadBalancer) because the gap should be shorter
         // than IDLE_MODE_DEFAULT_TIMEOUT_MILLIS (1 second).
         syncContext.executeLater(reportTransportNotInUse);
+        if (shutdownStatus != null && reportTransportTerminated != null) {
+          syncContext.executeLater(reportTransportTerminated);
+          reportTransportTerminated = null;
+        }
       }
     }
     syncContext.drain();
@@ -339,8 +341,6 @@ final class DelayedClientTransport implements ManagedClientTransport {
   private class PendingStream extends DelayedStream {
     private final PickSubchannelArgs args;
     private final Context context = Context.current();
-    @GuardedBy("lock")
-    private boolean transferCompleted;
 
     private PendingStream(PickSubchannelArgs args) {
       this.args = args;
@@ -362,25 +362,15 @@ final class DelayedClientTransport implements ManagedClientTransport {
     public void cancel(Status reason) {
       super.cancel(reason);
       synchronized (lock) {
-        boolean justRemovedAnElement = pendingStreams.remove(this);
-        if (!hasPendingStreams() && justRemovedAnElement && reportTransportTerminated != null) {
-          syncContext.executeLater(reportTransportNotInUse);
-        }
-      }
-      syncContext.drain();
-    }
-
-    @Override
-    public void onTransferComplete() {
-      synchronized (lock) {
-        if (transferCompleted) {
-          return;
-        }
-        transferCompleted = true;
-        pendingCompleteStreams--;
-        if (shutdownStatus != null && pendingCompleteStreams == 0) {
-          syncContext.executeLater(reportTransportTerminated);
-          reportTransportTerminated = null;
+        if (reportTransportTerminated != null) {
+          boolean justRemovedAnElement = pendingStreams.remove(this);
+          if (!hasPendingStreams() && justRemovedAnElement) {
+            syncContext.executeLater(reportTransportNotInUse);
+            if (shutdownStatus != null) {
+              syncContext.executeLater(reportTransportTerminated);
+              reportTransportTerminated = null;
+            }
+          }
         }
       }
       syncContext.drain();

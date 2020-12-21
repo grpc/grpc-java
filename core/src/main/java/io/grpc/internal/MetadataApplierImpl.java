@@ -47,7 +47,7 @@ final class MetadataApplierImpl extends MetadataApplier {
   boolean finalized;
 
   // not null if returnStream() was called before apply()
-  ApplierDelayedStream delayedStream;
+  DelayedStream delayedStream;
 
   MetadataApplierImpl(
       ClientTransport transport, MethodDescriptor<?, ?> method, Metadata origHeaders,
@@ -105,16 +105,11 @@ final class MetadataApplierImpl extends MetadataApplier {
     synchronized (lock) {
       if (returnedStream == null) {
         // apply() has not been called, needs to buffer the requests.
-        delayedStream = new ApplierDelayedStream();
+        delayedStream = new DelayedStream();
         return returnedStream = delayedStream;
       } else {
         return returnedStream;
       }
     }
-  }
-
-  private static class ApplierDelayedStream extends DelayedStream {
-    @Override
-    void onTransferComplete() {}
   }
 }
