@@ -3,7 +3,7 @@
 set -eo pipefail
 
 # Constants
-readonly PYTHON_BIN="python3.6"
+readonly PYTHON_VERSION="3.6"
 # Test driver
 readonly TEST_DRIVER_REPO_NAME="grpc"
 readonly TEST_DRIVER_REPO_URL="https://github.com/grpc/grpc.git"
@@ -11,34 +11,91 @@ readonly TEST_DRIVER_BRANCH="${TEST_DRIVER_BRANCH:-master}"
 readonly TEST_DRIVER_PATH="tools/run_tests/xds_k8s_test_driver"
 readonly TEST_DRIVER_PROTOS_PATH="src/proto/grpc/testing"
 
-run_safe() {
-  # Run command end report its exit code.
-  # Don't terminate the script if the code is negative.
+#######################################
+# Run command end report its exit code. Doesn't exit on non-zero exit code.
+# Globals:
+#   None
+# Arguments:
+#   Command to execute
+# Outputs:
+#   Writes the output of given command to stdout, stderr
+#######################################
+run_ignore_exit_code() {
   local exit_code=-1
   "$@" || exit_code=$?
   echo "Exit code: ${exit_code}"
 }
 
+#######################################
+# Parses information about git repository at given path to global variables.
+# Globals:
+#   GIT_ORIGIN_URL: Populated with the origin URL of git repo used for the build
+#   GIT_COMMIT_SHORT: Populated with the short SHA-1 of git commit being built
+# Arguments:
+#   Git source dir
+#######################################
 parse_src_repo_git_info() {
   local src_dir="${SRC_DIR:?SRC_DIR must be set}"
   readonly GIT_ORIGIN_URL=$(git -C "${src_dir}" remote get-url origin)
   readonly GIT_COMMIT_SHORT=$(git -C "${src_dir}" rev-parse --short HEAD)
 }
 
-gcloud_gcr_list_matching_tags() {
+#######################################
+# List GCR image tags matching given tag name.
+# Arguments:
+#   Image name
+#   Tag name
+# Outputs:
+#   Writes the table with the list of found tags to stdout.
+#   If no tags found, the output is an empty string.
+#######################################
+gcloud_gcr_list_image_tags() {
   gcloud container images list-tags --format="table[box](tags,digest,timestamp.date())" --filter="tags:$2" "$1"
 }
 
+#######################################
+# A helper to execute `gcloud -q components update`.
+# Arguments:
+#   None
+# Outputs:
+#   Writes the output of `gcloud` command to stdout, stderr
+#######################################
 gcloud_update() {
   echo "Update gcloud components:"
   gcloud -q components update
 }
 
+#######################################
+# Create kube context authenticated with GKE cluster, saves context name.
+# to KUBE_CONTEXT
+# Globals:
+#   GKE_CLUSTER_NAME
+#   GKE_CLUSTER_ZONE
+#   KUBE_CONTEXT: Populated with name of kubectl context with GKE cluster access
+# Arguments:
+#   None
+# Outputs:
+#   Writes the output of `gcloud` command to stdout, stderr
+#   Writes authorization info $HOME/.kube/config
+#######################################
 gcloud_get_cluster_credentials() {
   gcloud container clusters get-credentials "${GKE_CLUSTER_NAME}" --zone "${GKE_CLUSTER_ZONE}"
   readonly KUBE_CONTEXT="$(kubectl config current-context)"
 }
 
+#######################################
+# Clone the source code of the test driver to $TEST_DRIVER_REPO_DIR, unless
+# given folder exists.
+# Globals:
+#   TEST_DRIVER_REPO_DIR
+#   TEST_DRIVER_REPO_URL
+#   TEST_DRIVER_BRANCH
+# Arguments:
+#   None
+# Outputs:
+#   Writes the output of `git` command to stdout, stderr
+#   Writes driver source code to $TEST_DRIVER_REPO_DIR
+#######################################
 test_driver_get_source() {
   if [[ -d "${TEST_DRIVER_REPO_DIR}" ]]; then
     echo "Found driver directory: ${TEST_DRIVER_REPO_DIR}"
@@ -48,6 +105,18 @@ test_driver_get_source() {
   fi
 }
 
+#######################################
+# Install Python modules from required in $TEST_DRIVER_FULL_DIR/requirements.txt
+# to Python virtual environment. Creates and activates Python venv if necessary.
+# Globals:
+#   TEST_DRIVER_FULL_DIR
+#   PYTHON_VERSION
+# Arguments:
+#   None
+# Outputs:
+#   Writes the output of `python`, `pip` commands to stdout, stderr
+#   Writes the list of installed modules to stdout
+#######################################
 test_driver_pip_install() {
   echo "Install python dependencies"
   cd "${TEST_DRIVER_FULL_DIR}"
@@ -59,8 +128,10 @@ test_driver_pip_install() {
       echo "Found python virtual environment directory: ${venv_dir}"
     else
       echo "Creating python virtual environment: ${venv_dir}"
-      "${PYTHON_BIN} -m venv ${venv_dir}"
+      "python${PYTHON_VERSION} -m venv ${venv_dir}"
     fi
+    # Intentional: No need to check python venv activate script.
+    # shellcheck source=/dev/null
     source "${venv_dir}/bin/activate"
   fi
 
@@ -69,6 +140,20 @@ test_driver_pip_install() {
   pip list
 }
 
+#######################################
+# Compile proto-files needed for the test driver
+# Globals:
+#   TEST_DRIVER_REPO_DIR
+#   TEST_DRIVER_FULL_DIR
+#   TEST_DRIVER_PROTOS_PATH
+# Arguments:
+#   None
+# Outputs:
+#   Writes the output of `python -m grpc_tools.protoc` to stdout, stderr
+#   Writes the list if compiled python code to stdout
+#   Writes compiled python code with proto messages and grpc services to
+#   $TEST_DRIVER_FULL_DIR/src/proto
+#######################################
 test_driver_compile_protos() {
   declare -a protos
   protos=(
@@ -78,7 +163,7 @@ test_driver_compile_protos() {
   )
   echo "Generate python code from grpc.testing protos: ${protos[*]}"
   cd "${TEST_DRIVER_REPO_DIR}"
-  python3 -m grpc_tools.protoc \
+  python -m grpc_tools.protoc \
     --proto_path=. \
     --python_out="${TEST_DRIVER_FULL_DIR}" \
     --grpc_python_out="${TEST_DRIVER_FULL_DIR}" \
@@ -88,24 +173,53 @@ test_driver_compile_protos() {
   ls -Fl "${protos_out_dir}"
 }
 
+#######################################
+# Installs the test driver and it's requirements.
+# https://github.com/grpc/grpc/tree/master/tools/run_tests/xds_k8s_test_driver#installation
+# Globals:
+#   TEST_DRIVER_REPO_DIR: Populated with the path to the repo containing
+#                         the test driver
+#   TEST_DRIVER_FULL_DIR: Populated with the path to the test driver source code
+# Arguments:
+#   The directory for test driver's source code
+# Outputs:
+#   Writes the output to stdout, stderr
+#######################################
 test_driver_install() {
-  readonly TEST_DRIVER_REPO_DIR="${1:?Usage kokoro_init TEST_DRIVER_REPO_DIR}"
+  readonly TEST_DRIVER_REPO_DIR="${1:?Usage test_driver_install TEST_DRIVER_REPO_DIR}"
   readonly TEST_DRIVER_FULL_DIR="${TEST_DRIVER_REPO_DIR}/${TEST_DRIVER_PATH}"
-  # Test driver installation:
-  # https://github.com/grpc/grpc/tree/master/tools/run_tests/xds_k8s_test_driver#installation
   test_driver_get_source
   test_driver_pip_install
   test_driver_compile_protos
 }
 
+#######################################
+# Outputs Kokoro image version and Ubuntu's lsb_release
+# Arguments:
+#   None
+# Outputs:
+#   Writes the output to stdout
+#######################################
 kokoro_print_version() {
   echo "Kokoro VM version:"
   if [[ -f /VERSION ]]; then
     cat /VERSION
   fi
-  run_safe lsb_release -a
+  run_ignore_exit_code lsb_release -a
 }
 
+#######################################
+# Report extra information about the job via sponge properties.
+# Globals:
+#   KOKORO_ARTIFACTS_DIR
+#   GIT_ORIGIN_URL
+#   GIT_COMMIT_SHORT
+# Arguments:
+#   None
+# Outputs:
+#   Writes the output to stdout
+#   Writes job properties to $KOKORO_ARTIFACTS_DIR/custom_sponge_config.csv
+#######################################
 kokoro_write_sponge_properties() {
   # CSV format: "property_name","property_value"
   # Bump TESTS_FORMAT_VERSION when reported test name changed enough to when it
@@ -122,24 +236,62 @@ EOF
   cat "${KOKORO_ARTIFACTS_DIR}/custom_sponge_config.csv"
 }
 
+#######################################
+# Export Keystore secrets assigned to the Kokoro build.
+# Globals:
+#   KOKORO_KEYSTORE_DIR
+#   PRIVATE_API_KEY: Exported. Populated with name GCP project secret key.
+#                    Used by the test driver to access private APIs
+# Arguments:
+#   None
+#######################################
 kokoro_export_secrets() {
   readonly PRIVATE_API_KEY=$(cat "${KOKORO_KEYSTORE_DIR}/73836_grpc_xds_interop_tests_gcp_alpha_apis_key")
   export PRIVATE_API_KEY
 }
 
+#######################################
+# Configure Python virtual environment on Kokoro VM.
+# Arguments:
+#   None
+# Outputs:
+#   Writes the output of `pyenv` commands to stdout
+#######################################
 kokoro_setup_python_virtual_environment() {
   # Kokoro provides pyenv, so use it instead `python -m venv`
   echo "Setup pyenv environment"
   eval "$(pyenv init -)"
   eval "$(pyenv virtualenv-init -)"
-  echo "Activating python virtual environment"
-  pyenv virtualenv 3.6.1 k8s_xds_test_runner
+  py_latest_patch="$(pyenv versions --bare --skip-aliases | grep -E "^${PYTHON_VERSION}\.[0-9]{1,2}$" | sort --version-sort | tail -n 1)"
+  echo "Activating python ${py_latest_patch} virtual environment"
+  pyenv virtualenv "${py_latest_patch}" k8s_xds_test_runner
   pyenv local k8s_xds_test_runner
   pyenv activate k8s_xds_test_runner
 }
 
-kokoro_init() {
-  local src_repository_name="${1:?Usage kokoro_init GITHUB_REPOSITORY_NAME}"
+#######################################
+# Installs and configures the test driver on Kokoro VM.
+# Globals:
+#   KOKORO_ARTIFACTS_DIR
+#   TEST_DRIVER_REPO_NAME
+#   SRC_DIR: Populated with absolute path to the source repo on Kokoro VM
+#   TEST_DRIVER_REPO_DIR: Populated with the path to the repo containing
+#                         the test driver
+#   TEST_DRIVER_FULL_DIR: Populated with the path to the test driver source code
+#   TEST_DRIVER_FLAGFILE: Populated with relative path to test driver flagfile
+#   TEST_XML_OUTPUT_DIR: Populated with the path to test xUnit XML report
+#   KUBE_CONTEXT: Populated with name of kubectl context with GKE cluster access
+#   PRIVATE_API_KEY: Populated with name GCP project secret key. Used by the
+#                    test driver to access private APIs
+#   GIT_ORIGIN_URL: Populated with the origin URL of git repo used for the build
+#   GIT_COMMIT_SHORT: Populated with the short SHA-1 of git commit being built
+# Arguments:
+#   The name of github repository being built
+# Outputs:
+#   Writes the output to stdout, stderr, files
+#######################################
+kokoro_setup_test_driver() {
+  local src_repository_name="${1:?Usage kokoro_setup_test_driver GITHUB_REPOSITORY_NAME}"
   # Capture Kokoro VM version info in the log.
   kokoro_print_version
 
@@ -148,7 +300,6 @@ kokoro_init() {
   readonly SRC_DIR="${github_root}/${src_repository_name}"
   local test_driver_repo_dir="${github_root}/${TEST_DRIVER_REPO_NAME}"
   parse_src_repo_git_info SRC_DIR
-  # Report extra information about the job via sponge properties
   kokoro_write_sponge_properties
 
   # Turn off command trace print before exporting secrets.
@@ -166,23 +317,45 @@ kokoro_init() {
   gcloud_update
   gcloud_get_cluster_credentials
   test_driver_install "${test_driver_repo_dir}"
-  readonly TEST_DRIVER_CONFIG="config/grpc-testing.cfg"
+  # shellcheck disable=SC2034  # Used in the main script
+  readonly TEST_DRIVER_FLAGFILE="config/grpc-testing.cfg"
   # Test artifacts dir: xml reports, logs, etc.
   local artifacts_dir="${KOKORO_ARTIFACTS_DIR}/artifacts"
-  # Folders after $ARTIFACTS_DIR reported as target name
+  # Folders after $artifacts_dir reported as target name
   readonly TEST_XML_OUTPUT_DIR="${artifacts_dir}/${KOKORO_JOB_NAME}"
   mkdir -p "${artifacts_dir}" "${TEST_XML_OUTPUT_DIR}"
 }
 
-local_init() {
-  local script_dir="${1:?Usage: local_init SCRIPT_DIR}"
+#######################################
+# Installs and configures the test driver for testing build script locally.
+# Globals:
+#   TEST_DRIVER_REPO_NAME
+#   TEST_DRIVER_REPO_DIR: Unless provided, populated with a temporary dir with
+#                         the path to the test driver repo
+#   SRC_DIR: Populated with absolute path to the source repo
+#   TEST_DRIVER_FULL_DIR: Populated with the path to the test driver source code
+#   TEST_DRIVER_FLAGFILE: Populated with relative path to test driver flagfile
+#   TEST_XML_OUTPUT_DIR: Populated with the path to test xUnit XML report
+#   GIT_ORIGIN_URL: Populated with the origin URL of git repo used for the build
+#   GIT_COMMIT_SHORT: Populated with the short SHA-1 of git commit being built
+#   KUBE_CONTEXT: Populated with name of kubectl context with GKE cluster access
+#   PRIVATE_API_KEY: Exported. Populated with name GCP project secret key.
+#                    Used by the test driver to access private APIs
+# Arguments:
+#   The path to the folder containing the build script
+# Outputs:
+#   Writes the output to stdout, stderr, files
+#######################################
+local_setup_test_driver() {
+  local script_dir="${1:?Usage: local_setup_test_driver SCRIPT_DIR}"
   readonly SRC_DIR="$(git -C "${script_dir}" rev-parse --show-toplevel)"
   parse_src_repo_git_info SRC_DIR
   readonly KUBE_CONTEXT="${KUBE_CONTEXT:-$(kubectl config current-context)}"
   local test_driver_repo_dir
   test_driver_repo_dir="${TEST_DRIVER_REPO_DIR:-$(mktemp -d)/${TEST_DRIVER_REPO_NAME}}"
   test_driver_install "${test_driver_repo_dir}"
-  readonly TEST_DRIVER_CONFIG="config/local-dev.cfg"
+  # shellcheck disable=SC2034  # Used in the main script
+  readonly TEST_DRIVER_FLAGFILE="config/local-dev.cfg"
   # Test out
   readonly TEST_XML_OUTPUT_DIR="${TEST_DRIVER_FULL_DIR}/out"
   mkdir -p "${TEST_XML_OUTPUT_DIR}"
