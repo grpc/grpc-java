@@ -175,6 +175,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       this.resolvedAddresses = resolvedAddresses;
       ClusterResolverConfig config =
           (ClusterResolverConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
+      localityPickingPolicy = config.localityPickingPolicy;
+      endpointPickingPolicy = config.endpointPickingPolicy;
       for (DiscoveryMechanism instance : config.discoveryMechanisms) {
         clusters.add(instance.cluster);
         ClusterState state;
@@ -189,8 +191,6 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
           clusterStates.put(instance.cluster, state);
         }
         state.start();
-        localityPickingPolicy = config.localityPickingPolicy;
-        endpointPickingPolicy = config.endpointPickingPolicy;
       }
     }
 
