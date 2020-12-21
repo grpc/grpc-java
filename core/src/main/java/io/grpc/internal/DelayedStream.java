@@ -39,7 +39,7 @@ import javax.annotation.concurrent.GuardedBy;
  * DelayedStream} may be internally altered by different threads, thus internal synchronization is
  * necessary.
  */
-class DelayedStream implements ClientStream {
+abstract class DelayedStream implements ClientStream {
   /** {@code true} once realStream is valid and all pending calls have been drained. */
   private volatile boolean passThrough;
   /**
@@ -221,12 +221,14 @@ class DelayedStream implements ClientStream {
 
     if (savedPassThrough) {
       realStream.start(listener);
+      onTransferComplete();
     } else {
       final ClientStreamListener finalListener = listener;
       delayOrExecute(new Runnable() {
         @Override
         public void run() {
           realStream.start(finalListener);
+          onTransferComplete();
         }
       });
     }
@@ -302,6 +304,7 @@ class DelayedStream implements ClientStream {
         listenerToClose.closed(reason, new Metadata());
       }
       drainPendingCalls();
+      onTransferComplete();
     }
   }
 
@@ -406,6 +409,12 @@ class DelayedStream implements ClientStream {
   ClientStream getRealStream() {
     return realStream;
   }
+
+  /**
+   * Provides the place to define actions at the point when transfer is done.
+   * Call this method to trigger those transfer completion activities.
+   */
+  abstract void onTransferComplete();
 
   private static class DelayedStreamListener implements ClientStreamListener {
     private final ClientStreamListener realListener;

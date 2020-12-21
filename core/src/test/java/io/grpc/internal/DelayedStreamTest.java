@@ -65,7 +65,7 @@ public class DelayedStreamTest {
   @Mock private ClientStreamListener listener;
   @Mock private ClientStream realStream;
   @Captor private ArgumentCaptor<ClientStreamListener> listenerCaptor;
-  private DelayedStream stream = new DelayedStream();
+  private DelayedStream stream = new SimpleDelayedStream();
 
   @Test
   public void setStream_setAuthority() {
@@ -377,5 +377,11 @@ public class DelayedStreamTest {
     stream.appendTimeoutInsight(insight);
     assertThat(insight.toString())
         .matches("\\[buffered_nanos=[0-9]+, remote_addr=127\\.0\\.0\\.1:443\\]");
+  }
+
+  private static class SimpleDelayedStream extends DelayedStream {
+    @Override
+    void onTransferComplete() {
+    }
   }
 }
