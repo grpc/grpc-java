@@ -63,6 +63,18 @@ class DelayedStream implements ClientStream {
   // No need to synchronize; start() synchronization provides a happens-before
   private List<Runnable> preStartPendingCalls = new ArrayList<>();
 
+  @VisibleForTesting
+  int getPreStartPendingCallsCount() {
+    return preStartPendingCalls == null ? 0 : preStartPendingCalls.size();
+  }
+
+  @VisibleForTesting
+  int getPendingCallsCount() {
+    synchronized (this) {
+      return pendingCalls == null ? 0 : pendingCalls.size();
+    }
+  }
+
   @Override
   public void setMaxInboundMessageSize(final int maxSize) {
     checkState(listener == null, "May only be called before start");
