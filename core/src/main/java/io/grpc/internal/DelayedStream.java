@@ -65,30 +65,24 @@ class DelayedStream implements ClientStream {
 
   @Override
   public void setMaxInboundMessageSize(final int maxSize) {
-    if (passThrough) {
-      realStream.setMaxInboundMessageSize(maxSize);
-    } else {
-      delayOrExecute(new Runnable() {
-        @Override
-        public void run() {
-          realStream.setMaxInboundMessageSize(maxSize);
-        }
-      });
-    }
+    checkState(listener == null, "May only be called before start");
+    preStartPendingCalls.add(new Runnable() {
+      @Override
+      public void run() {
+        realStream.setMaxInboundMessageSize(maxSize);
+      }
+    });
   }
 
   @Override
   public void setMaxOutboundMessageSize(final int maxSize) {
-    if (passThrough) {
-      realStream.setMaxOutboundMessageSize(maxSize);
-    } else {
-      delayOrExecute(new Runnable() {
-        @Override
-        public void run() {
-          realStream.setMaxOutboundMessageSize(maxSize);
-        }
-      });
-    }
+    checkState(listener == null, "May only be called before start");
+    preStartPendingCalls.add(new Runnable() {
+      @Override
+      public void run() {
+        realStream.setMaxOutboundMessageSize(maxSize);
+      }
+    });
   }
 
   @Override
@@ -137,17 +131,23 @@ class DelayedStream implements ClientStream {
       }
       setRealStream(checkNotNull(stream, "stream"));
       savedListener = listener;
-    }
-    if (savedListener != null) {
-      internalStart(savedListener);
-    }
-
-    return new Runnable() {
-      @Override
-      public void run() {
-        drainPendingCalls();
+      if (savedListener == null) {
+        assert pendingCalls.isEmpty();
+        pendingCalls = null;
+        passThrough = true;
       }
-    };
+    }
+    if (savedListener == null) {
+      return null;
+    } else {
+      internalStart(savedListener);
+      return new Runnable() {
+        @Override
+        public void run() {
+          drainPendingCalls();
+        }
+      };
+    }
   }
 
   /**
@@ -195,6 +195,7 @@ class DelayedStream implements ClientStream {
    * only if {@code runnable} is thread-safe.
    */
   private void delayOrExecute(Runnable runnable) {
+    checkState(listener != null, "May only be called after start");
     synchronized (this) {
       if (!passThrough) {
         pendingCalls.add(runnable);
@@ -270,6 +271,7 @@ class DelayedStream implements ClientStream {
 
   @Override
   public void writeMessage(final InputStream message) {
+    checkState(listener != null, "May only be called after start");
     checkNotNull(message, "message");
     if (passThrough) {
       realStream.writeMessage(message);
@@ -285,6 +287,7 @@ class DelayedStream implements ClientStream {
 
   @Override
   public void flush() {
+    checkState(listener != null, "May only be called after start");
     if (passThrough) {
       realStream.flush();
     } else {
@@ -300,6 +303,7 @@ class DelayedStream implements ClientStream {
   // When this method returns, passThrough is guaranteed to be true
   @Override
   public void cancel(final Status reason) {
+    checkState(listener != null, "May only be called after start");
     checkNotNull(reason, "reason");
     boolean delegateToRealStream = true;
     ClientStreamListener listenerToClose = null;
@@ -338,6 +342,7 @@ class DelayedStream implements ClientStream {
 
   @Override
   public void halfClose() {
+    checkState(listener != null, "May only be called after start");
     delayOrExecute(new Runnable() {
       @Override
       public void run() {
@@ -348,6 +353,7 @@ class DelayedStream implements ClientStream {
 
   @Override
   public void request(final int numMessages) {
+    checkState(listener != null, "May only be called after start");
     if (passThrough) {
       realStream.request(numMessages);
     } else {
@@ -418,6 +424,7 @@ class DelayedStream implements ClientStream {
 
   @Override
   public void setMessageCompression(final boolean enable) {
+    checkState(listener != null, "May only be called after start");
     if (passThrough) {
       realStream.setMessageCompression(enable);
     } else {
