@@ -73,7 +73,7 @@ import javax.annotation.Nullable;
  * of the cds_experimental LB policy and the parent LB policy of the priority_experimental LB
  * policy in the xDS load balancing hierarchy. This policy resolves endpoints of non-aggregate
  * clusters (e.g., EDS or Logical DNS) and groups endpoints in priorities and localities to be
- * used in the downstream LB policies for ine-grained load balancing purposes.
+ * used in the downstream LB policies for fine-grained load balancing purposes.
  */
 final class ClusterResolverLoadBalancer extends LoadBalancer {
 
@@ -665,17 +665,16 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
   }
 
   /**
-   * Generate a string that represents the priority in the LB policy config. The string is unique
-   * across priorities in all clusters. The string is alphabetically comparable with predicate
-   * priorityName(c, p1) < priorityName(c, p2) iff p1 < p2. The ordering is undefined for
-   * priorities in different clusters.
+   * Generates a string that represents the priority in the LB policy config. The string is unique
+   * across priorities in all clusters and priorityName(c, p1) < priorityName(c, p2) iff p1 < p2.
+   * The ordering is undefined for priorities in different clusters.
    */
   private static String priorityName(String cluster, int priority) {
     return cluster + "[priority" + priority + "]";
   }
 
   /**
-   * Generate a string that represents the locality in the LB policy config. The string is unique
+   * Generates a string that represents the locality in the LB policy config. The string is unique
    * across all localities in all clusters.
    */
   private static String localityName(Locality locality) {

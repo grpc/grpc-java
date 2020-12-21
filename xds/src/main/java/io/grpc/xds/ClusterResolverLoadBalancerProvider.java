@@ -32,7 +32,7 @@ import java.util.Objects;
 import javax.annotation.Nullable;
 
 /**
- * The provider for the cluster_impl load balancing policy. This class should not be directly
+ * The provider for the cluster_resolver load balancing policy. This class should not be directly
  * referenced in code.  The policy should be accessed through
  * {@link io.grpc.LoadBalancerRegistry#getProvider} with the name "cluster_resolver_experimental".
  */
