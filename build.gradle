@@ -239,6 +239,17 @@ subprojects {
             guavaDependency 'runtimeOnly'
         }
 
+        googleOauth2Dependency = { configurationName ->
+            dependencies."$configurationName"(libraries.google_auth_oauth2_http) {
+                exclude group: 'com.google.guava', module: 'guava'
+                exclude group: 'io.grpc', module: 'grpc-context'
+                exclude group: 'io.opencensus', module: 'opencensus-api'
+            }
+            dependencies.runtimeOnly project(':grpc-context')
+            censusApiDependency 'runtimeOnly'
+            guavaDependency 'runtimeOnly'
+        }
+
         // A util function to config perfmark dependency with transitive
         // dependencies properly resolved for the failOnVersionConflict strategy.
         perfmarkDependency = { configurationName ->
