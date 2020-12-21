@@ -27,10 +27,10 @@ dependencies {
             project(':grpc-stub'),
             project(':grpc-testing'),
             project(path: ':grpc-xds', configuration: 'shadow'),
-            libraries.google_auth_oauth2_http,
             libraries.junit,
             libraries.truth
     censusGrpcMetricDependency 'implementation'
+    googleOauth2Dependency 'implementation'
     compileOnly libraries.javax_annotation
     runtimeOnly libraries.opencensus_impl,
             libraries.netty_tcnative,

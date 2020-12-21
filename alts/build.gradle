@@ -22,12 +22,7 @@ dependencies {
             libraries.protobuf,
             libraries.conscrypt
     def nettyDependency = implementation project(':grpc-netty')
-    implementation (libraries.google_auth_oauth2_http) {
-        // prefer our own versions instead of google-auth-oauth2-http's dependency
-        exclude group: 'com.google.guava', module: 'guava'
-        // we'll always be more up-to-date
-        exclude group: 'io.grpc', module: 'grpc-context'
-    }
+    googleOauth2Dependency 'implementation'
     guavaDependency 'implementation'
     compileOnly libraries.javax_annotation
 
