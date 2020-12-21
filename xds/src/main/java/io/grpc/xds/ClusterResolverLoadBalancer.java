@@ -120,9 +120,9 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
     if (!Objects.equals(this.config, config)) {
       logger.log(XdsLogLevel.DEBUG, "Config: {0}", config);
       delegate.switchTo(new ClusterResolverLbStateFactory());
+      this.config = config;
+      delegate.handleResolvedAddresses(resolvedAddresses);
     }
-    this.config = config;
-    delegate.handleResolvedAddresses(resolvedAddresses);
   }
 
   @Override
