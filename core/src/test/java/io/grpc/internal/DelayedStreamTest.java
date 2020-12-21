@@ -19,6 +19,7 @@ package io.grpc.internal;
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -29,17 +30,21 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import io.grpc.Attributes;
 import io.grpc.Codec;
+import io.grpc.Compressor;
+import io.grpc.Deadline;
 import io.grpc.DecompressorRegistry;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.testing.SingleMessageProducer;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.util.concurrent.TimeUnit;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -66,6 +71,7 @@ public class DelayedStreamTest {
   @Mock private ClientStream realStream;
   @Captor private ArgumentCaptor<ClientStreamListener> listenerCaptor;
   private DelayedStream stream = new DelayedStream();
+  private final FakeClock fakeExecutor = new FakeClock();
 
   @Test
   public void setStream_setAuthority() {
@@ -88,6 +94,27 @@ public class DelayedStreamTest {
   public void start_afterStart() {
     stream.start(listener);
     stream.start(mock(ClientStreamListener.class));
+  }
+
+  @Test(expected = IllegalStateException.class)
+  public void writeMessage_beforeStart() {
+    InputStream message = new ByteArrayInputStream(new byte[]{'a'});
+    stream.writeMessage(message);
+  }
+
+  @Test(expected = IllegalStateException.class)
+  public void flush_beforeStart() {
+    stream.flush();
+  }
+
+  @Test(expected = IllegalStateException.class)
+  public void request_beforeStart() {
+    stream.request(1);
+  }
+
+  @Test(expected = IllegalStateException.class)
+  public void halfClose_beforeStart() {
+    stream.halfClose();
   }
 
   @Test
@@ -152,6 +179,82 @@ public class DelayedStreamTest {
 
     stream.request(3);
     verify(realStream).request(3);
+  }
+
+  @Test
+  public void setStreamThenStart() {
+    stream.optimizeForDirectExecutor();
+    stream.setCompressor(mock(Compressor.class));
+    stream.setFullStreamDecompression(false);
+    stream.setDecompressorRegistry(DecompressorRegistry.emptyInstance());
+    stream.setDeadline(Deadline.after(1, TimeUnit.MINUTES));
+    stream.setAuthority("auth");
+    stream.setMaxInboundMessageSize(10);
+    stream.setMaxOutboundMessageSize(10);
+
+    // not started yet, nothing to drain
+    assertNull(stream.setStream(realStream));
+    verifyNoInteractions(realStream);
+    assertEquals(8, stream.getPreStartPendingCallsCount());
+    assertEquals(0, stream.getPendingCallsCount());
+
+    stream.start(listener);
+    stream.request(1);
+    assertEquals(0, stream.getPreStartPendingCallsCount());
+    verify(realStream).request(1);
+    verify(realStream).start(same(listener));
+  }
+
+  @Test
+  public void startThenSetRealStream() {
+    stream.optimizeForDirectExecutor();
+    stream.start(listener);
+    stream.request(2);
+    stream.request(1);
+    final InputStream message = mock(InputStream.class);
+    stream.writeMessage(message);
+
+    fakeExecutor.getScheduledExecutorService().execute(stream.setStream(realStream));
+    final InOrder inOrder = inOrder(realStream);
+    assertEquals(3, stream.getPendingCallsCount());
+    assertEquals(0, stream.getPreStartPendingCallsCount());
+    // keep pending as executor not drained and passthrough
+    stream.request(3);
+    assertEquals(4, stream.getPendingCallsCount());
+    inOrder.verify(realStream).optimizeForDirectExecutor();
+    inOrder.verify(realStream).start(listenerCaptor.capture());
+    ClientStreamListener delayedListener = listenerCaptor.getValue();
+    delayedListener.onReady();
+    verifyNoMoreInteractions(realStream);
+
+    fakeExecutor.runDueTasks();
+    inOrder.verify(realStream).request(2);
+    inOrder.verify(realStream).request(1);
+    inOrder.verify(realStream).writeMessage(same(message));
+    stream.request(4);
+    delayedListener.onReady();
+    verify(realStream).request(4);
+    verify(listener, times(2)).onReady();
+  }
+
+  @Test
+  public void drainPendingCallRacesCancel() {
+    stream.start(listener);
+    final InputStream message = mock(InputStream.class);
+    stream.writeMessage(message);
+    stream.flush();
+
+    fakeExecutor.getScheduledExecutorService().execute(stream.setStream(realStream));
+    stream.cancel(Status.CANCELLED);
+    assertEquals(3, stream.getPendingCallsCount());
+
+    fakeExecutor.runDueTasks();
+    final InOrder inOrder = inOrder(realStream);
+    inOrder.verify(realStream).start(any(ClientStreamListener.class));
+    inOrder.verify(realStream).writeMessage(same(message));
+    inOrder.verify(realStream).flush();
+    inOrder.verify(realStream).cancel(Status.CANCELLED);
+    verifyNoMoreInteractions(realStream);
   }
 
   @Test
