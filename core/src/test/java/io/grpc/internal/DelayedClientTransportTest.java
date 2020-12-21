@@ -160,7 +160,7 @@ public class DelayedClientTransportTest {
     delayedTransport.shutdown(SHUTDOWN_STATUS);
     verify(transportListener).transportShutdown(same(SHUTDOWN_STATUS));
     verify(transportListener).transportTerminated();
-    assertEquals(1, fakeExecutor.runDueTasks());
+    assertEquals(0, fakeExecutor.runDueTasks());
     verify(mockRealTransport).newStream(same(method), same(headers), same(callOptions));
     stream.start(streamListener);
     verify(mockRealStream).start(same(streamListener));
@@ -196,15 +196,6 @@ public class DelayedClientTransportTest {
     assertTrue(stream instanceof FailingClientStream);
     verify(mockRealTransport, never()).newStream(
         any(MethodDescriptor.class), any(Metadata.class), any(CallOptions.class));
-  }
-
-  @Test public void cancelStreamWithoutSetTransport() {
-    ClientStream stream = delayedTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
-    assertEquals(1, delayedTransport.getPendingStreamsCount());
-    stream.cancel(Status.CANCELLED);
-    assertEquals(0, delayedTransport.getPendingStreamsCount());
-    verifyNoMoreInteractions(mockRealTransport);
-    verifyNoMoreInteractions(mockRealStream);
   }
 
   @Test public void startThenCancelStreamWithoutSetTransport() {
@@ -257,6 +248,7 @@ public class DelayedClientTransportTest {
     verify(transportListener).transportShutdown(same(SHUTDOWN_STATUS));
     verify(transportListener, times(0)).transportTerminated();
     assertEquals(1, delayedTransport.getPendingStreamsCount());
+    stream.start(streamListener);
     stream.cancel(Status.CANCELLED);
     verify(transportListener).transportTerminated();
     assertEquals(0, delayedTransport.getPendingStreamsCount());
@@ -347,6 +339,7 @@ public class DelayedClientTransportTest {
         wfr3Executor.getScheduledExecutorService());
     DelayedStream wfr3 = (DelayedStream) delayedTransport.newStream(
         method, headers, wfr3callOptions);
+    wfr3.start(mock(ClientStreamListener.class));
     wfr3.halfClose();
     PickSubchannelArgsImpl wfr3args = new PickSubchannelArgsImpl(method, headers,
         wfr3callOptions);

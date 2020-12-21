@@ -220,13 +220,6 @@ public class DelayedStreamTest {
   }
 
   @Test
-  public void setStreamThenCancelled() {
-    callMeMaybe(stream.setStream(realStream));
-    stream.cancel(Status.CANCELLED);
-    verify(realStream).cancel(same(Status.CANCELLED));
-  }
-
-  @Test
   public void setStreamTwice() {
     stream.start(listener);
     callMeMaybe(stream.setStream(realStream));
@@ -238,26 +231,17 @@ public class DelayedStreamTest {
 
   @Test
   public void cancelThenSetStream() {
+    stream.start(listener);
     stream.cancel(Status.CANCELLED);
     callMeMaybe(stream.setStream(realStream));
-    stream.start(listener);
     stream.isReady();
     verifyNoMoreInteractions(realStream);
   }
 
-  @Test
+  @Test(expected = IllegalStateException.class)
   public void cancel_beforeStart() {
     Status status = Status.CANCELLED.withDescription("that was quick");
     stream.cancel(status);
-    stream.start(listener);
-    verify(listener).closed(same(status), any(Metadata.class));
-  }
-
-  @Test
-  public void cancelledThenStart() {
-    stream.cancel(Status.CANCELLED);
-    stream.start(listener);
-    verify(listener).closed(eq(Status.CANCELLED), any(Metadata.class));
   }
 
   @Test
