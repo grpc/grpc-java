@@ -288,16 +288,7 @@ kokoro_setup_test_driver() {
   local test_driver_repo_dir="${github_root}/${TEST_DRIVER_REPO_NAME}"
   parse_src_repo_git_info SRC_DIR
   kokoro_write_sponge_properties
-
-  # Turn off command trace print before exporting secrets.
-  local debug_on=0
-  if [[ $- =~ x ]]; then
-    debug_on=1
-    set +x
-  fi
   kokoro_setup_python_virtual_environment
-  # Re-enable debug output after secrets exported and noisy pyenv activated
-  ((debug_on == 0)) || set -x
 
   # gcloud requires python, so this should be executed after pyenv setup
   gcloud_update
