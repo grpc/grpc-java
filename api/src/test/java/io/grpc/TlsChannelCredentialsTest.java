@@ -16,17 +16,18 @@
 
 package io.grpc;
 
-/** No client identity, authentication, or encryption is to be used. */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/7479")
-public final class InsecureChannelCredentials extends ChannelCredentials {
-  public static ChannelCredentials create() {
-    return new InsecureChannelCredentials();
-  }
+import static com.google.common.truth.Truth.assertThat;
 
-  private InsecureChannelCredentials() {}
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.JUnit4;
 
-  @Override
-  public ChannelCredentials withoutBearerTokens() {
-    return this;
+/** Tests for {@link TlsChannelCredentials}. */
+@RunWith(JUnit4.class)
+public class TlsChannelCredentialsTest {
+  @Test
+  public void withoutBearTokenGivesItself() {
+    ChannelCredentials tlsCreds = TlsChannelCredentials.create();
+    assertThat(tlsCreds.withoutBearerTokens()).isEqualTo(tlsCreds);
   }
 }
