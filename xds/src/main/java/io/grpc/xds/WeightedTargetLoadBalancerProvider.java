@@ -163,7 +163,6 @@ public final class WeightedTargetLoadBalancerProvider extends LoadBalancerProvid
 
     final Map<String, WeightedPolicySelection> targets;
 
-    @VisibleForTesting
     WeightedTargetConfig(Map<String, WeightedPolicySelection> targets) {
       this.targets = targets;
     }
