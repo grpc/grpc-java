@@ -10,9 +10,7 @@ readonly GKE_CLUSTER_ZONE="us-central1-a"
 readonly SERVER_IMAGE_NAME="gcr.io/grpc-testing/xds-interop/java-server"
 readonly CLIENT_IMAGE_NAME="gcr.io/grpc-testing/xds-interop/java-client"
 readonly IMAGE_BUILD_SKIP="${IMAGE_BUILD_SKIP:-1}"
-# Build paths
-readonly BUILD_INSTALL_PATH="interop-testing/build/install"
-readonly BUILD_APP_PATH="${BUILD_INSTALL_PATH}/grpc-interop-testing"
+readonly BUILD_APP_PATH="interop-testing/build/install/grpc-interop-testing"
 
 #######################################
 # Builds the test app using gradle and smoke-checks its binaries
@@ -38,7 +36,7 @@ build_java_test_app() {
 #######################################
 # Builds test app Docker images and pushes them to GCR
 # Globals:
-#   BUILD_INSTALL_PATH
+#   BUILD_APP_PATH
 #   SERVER_IMAGE_NAME: Test server Docker image name
 #   CLIENT_IMAGE_NAME: Test client Docker image name
 #   GIT_COMMIT: SHA-1 of git commit being built
@@ -48,16 +46,19 @@ build_java_test_app() {
 #   Writes the output of `gcloud builds submit` to stdout, stderr
 #######################################
 build_test_app_docker_images() {
+  echo "Building Java xDS interop test app Docker images"
   local docker_dir="${SRC_DIR}/buildscripts/xds-k8s"
-  echo "Building Java test app Docker Images"
-  # Copy Docker files and log properties to the build dir
-  cp -rv "${docker_dir}/"*.Dockerfile "${SRC_DIR}/${BUILD_INSTALL_PATH}"
-  cp -rv "${docker_dir}/"*.properties "${SRC_DIR}/${BUILD_INSTALL_PATH}"
-  # TODO(sergiitk): extra "cosmetic" tags for versioned branches
+  local build_dir
+  build_dir="$(mktemp -d)"
+  # Copy Docker files, log properties, and the test app to the build dir
+  cp -v "${docker_dir}/"*.Dockerfile "${build_dir}"
+  cp -v "${docker_dir}/"*.properties "${build_dir}"
+  cp -rv "${SRC_DIR}/${BUILD_APP_PATH}" "${build_dir}"
   # Run Google Cloud Build
-  gcloud builds submit "${SRC_DIR}/${BUILD_INSTALL_PATH}" \
+  gcloud builds submit "${build_dir}" \
     --config "${docker_dir}/cloudbuild.yaml" \
     --substitutions "_SERVER_IMAGE_NAME=${SERVER_IMAGE_NAME},_CLIENT_IMAGE_NAME=${CLIENT_IMAGE_NAME},COMMIT_SHA=${GIT_COMMIT}"
+  # TODO(sergiitk): extra "cosmetic" tags for versioned branches
 }
 
 #######################################
