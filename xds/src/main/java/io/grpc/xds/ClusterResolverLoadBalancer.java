@@ -236,7 +236,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
           childLb = null;
         }
         if (allResolved) {
-          Status unavailable = Status.UNAVAILABLE.withDescription("No endpoint available");
+          Status unavailable = Status.UNAVAILABLE.withDescription("No usable endpoint");
           helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(unavailable));
         } else {
           helper.updateBalancingState(CONNECTING, BUFFER_PICKER);
@@ -385,10 +385,9 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
                   locality, localityLbInfo.getLocalityWeight());
             }
             if (prioritizedLocalityWeights.isEmpty()) {
-              // Transient state, neither as a result or an error.
+              // Will still update the result, as if the cluster resource is revoked.
               logger.log(XdsLogLevel.INFO,
                   "Cluster {0} has no usable priority/locality/endpoint", update.getClusterName());
-              return;
             }
             List<String> priorities = new ArrayList<>(prioritizedLocalityWeights.keySet());
             Collections.sort(priorities);

@@ -223,7 +223,7 @@ public class ClusterResolverLoadBalancerTest {
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     assertThat(childBalancer.name).isEqualTo(PRIORITY_POLICY_NAME);
     PriorityLbConfig priorityLbConfig = (PriorityLbConfig) childBalancer.config;
-    assertThat(priorityLbConfig.priorities).containsExactly(priority1, priority2);
+    assertThat(priorityLbConfig.priorities).containsExactly(priority1, priority2).inOrder();
     PolicySelection priorityChildPolicy = priorityLbConfig.childConfigs.get(priority1);
     assertThat(priorityChildPolicy.getProvider().getPolicyName())
         .isEqualTo(CLUSTER_IMPL_POLICY_NAME);
@@ -266,7 +266,8 @@ public class ClusterResolverLoadBalancerTest {
         EDS_SERVICE_NAME1, Collections.singletonMap(locality2, localityLbEndpoints2));
 
     priorityLbConfig = (PriorityLbConfig) childBalancer.config;
-    assertThat(priorityLbConfig.priorities).containsExactly(priority3, priority1, priority2);
+    assertThat(priorityLbConfig.priorities)
+        .containsExactly(priority3, priority1, priority2).inOrder();
 
     priorityChildPolicy = priorityLbConfig.childConfigs.get(priority3);
     assertThat(priorityChildPolicy.getProvider().getPolicyName())
@@ -288,7 +289,7 @@ public class ClusterResolverLoadBalancerTest {
   }
 
   @Test
-  public void onlyEdsClusters_endpointResourceNeverExist_returnErrorPicker() {
+  public void onlyEdsClusters_resourceNeverExist_returnErrorPicker() {
     deliverConfigWithEdsClusters();  // CLUSTER1 and CLUSTER2
     reset(helper);
     xdsClient.deliverResourceNotFound(EDS_SERVICE_NAME1);
@@ -300,12 +301,12 @@ public class ClusterResolverLoadBalancerTest {
     xdsClient.deliverResourceNotFound(EDS_SERVICE_NAME2);
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
-    Status expectedError = Status.UNAVAILABLE.withDescription("No endpoint available");
+    Status expectedError = Status.UNAVAILABLE.withDescription("No usable endpoint");
     assertPicker(pickerCaptor.getValue(), expectedError, null);
   }
 
   @Test
-  public void onlyEdsClusters_allEndpointResourceRevoked_shutDownChildLbPolicy() {
+  public void onlyEdsClusters_allResourcesRevoked_shutDownChildLbPolicy() {
     deliverConfigWithEdsClusters();  // CLUSTER1 and CLUSTER2
     reset(helper);
     EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr-1");
@@ -327,7 +328,7 @@ public class ClusterResolverLoadBalancerTest {
     xdsClient.deliverResourceNotFound(EDS_SERVICE_NAME1);
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
-    Status expectedError = Status.UNAVAILABLE.withDescription("No endpoint available");
+    Status expectedError = Status.UNAVAILABLE.withDescription("No usable endpoint");
     assertPicker(pickerCaptor.getValue(), expectedError, null);
   }
 
@@ -344,7 +345,7 @@ public class ClusterResolverLoadBalancerTest {
   }
 
   @Test
-  public void handleEdsEndpointResource_ignoreUnhealthyEndpoints() {
+  public void handleEdsResource_ignoreUnhealthyEndpoints() {
     deliverConfigWithSingleEdsCluster();  // CLUSTER1
     EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr-1");
     EquivalentAddressGroup endpoint2 = makeAddress("endpoint-addr-2");
@@ -358,7 +359,7 @@ public class ClusterResolverLoadBalancerTest {
   }
 
   @Test
-  public void handleEdsEndpointResource_ignoreLocalitiesWithNoHealthyEndpoints() {
+  public void handleEdsResource_ignoreLocalitiesWithNoHealthyEndpoints() {
     deliverConfigWithSingleEdsCluster();  // CLUSTER1
     EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr-1");
     EquivalentAddressGroup endpoint2 = makeAddress("endpoint-addr-2");
@@ -381,7 +382,7 @@ public class ClusterResolverLoadBalancerTest {
   }
 
   @Test
-  public void handleEdsEndpointResource_ignorePrioritiesWithNoHealthyEndpoints() {
+  public void handleEdsResource_ignorePrioritiesWithNoHealthyEndpoints() {
     deliverConfigWithSingleEdsCluster();   // CLUSTER1
     EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr-1");
     EquivalentAddressGroup endpoint2 = makeAddress("endpoint-addr-2");
@@ -397,6 +398,22 @@ public class ClusterResolverLoadBalancerTest {
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     PriorityLbConfig config = (PriorityLbConfig) childBalancer.config;
     assertThat(config.priorities).containsExactly(priority2);
+  }
+
+  @Test
+  public void handleEdsResource_noHealthyEndpoint() {
+    deliverConfigWithSingleEdsCluster();   // CLUSTER1
+    EquivalentAddressGroup endpoint = makeAddress("endpoint-addr-1");
+    LocalityLbEndpoints localityLbEndpoints =
+        buildLocalityLbEndpoints(1, 10, Collections.singletonMap(endpoint, false));
+    xdsClient.deliverClusterLoadAssignment(EDS_SERVICE_NAME1,
+        Collections.singletonMap(locality1, localityLbEndpoints));  // single endpoint, unhealthy
+
+    assertThat(childBalancers).isEmpty();
+    verify(helper).updateBalancingState(
+        eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
+    assertPicker(pickerCaptor.getValue(),
+        Status.UNAVAILABLE.withDescription("No usable endpoint"), null);
   }
 
   private void deliverConfigWithSingleEdsCluster() {
@@ -488,7 +505,35 @@ public class ClusterResolverLoadBalancerTest {
   }
 
   @Test
-  public void noEdsEndpointExists_useDnsResolutionResults() {
+  public void edsClustersAndLogicalDnsCluster_receivedEndpoints() {
+    deliverConfigWithEdsAndLogicalDnsClusters();  // CLUSTER1 and CLUSTER_DNS
+    EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr-1");  // DNS endpoint
+    EquivalentAddressGroup endpoint2 = makeAddress("endpoint-addr-2");  // DNS endpoint
+    EquivalentAddressGroup endpoint3 = makeAddress("endpoint-addr-3");  // EDS endpoint
+    FakeNameResolver resolver = Iterables.getOnlyElement(resolvers);
+    resolver.deliverEndpointAddresses(Arrays.asList(endpoint1, endpoint2));
+    LocalityLbEndpoints localityLbEndpoints =
+        buildLocalityLbEndpoints(1, 10, Collections.singletonMap(endpoint3, true));
+    xdsClient.deliverClusterLoadAssignment(
+        EDS_SERVICE_NAME1, Collections.singletonMap(locality1, localityLbEndpoints));
+
+    assertThat(childBalancers).hasSize(1);
+    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
+    assertThat(((PriorityLbConfig) childBalancer.config).priorities)
+        .containsExactly(CLUSTER1 + "[priority1]", CLUSTER_DNS + "[priority0]").inOrder();
+    assertAddressesEqual(Arrays.asList(endpoint3, endpoint1, endpoint2),
+        childBalancer.addresses);  // ordered by cluster then addresses
+    assertAddressesEqual(AddressFilter.filter(AddressFilter.filter(
+        childBalancer.addresses, CLUSTER1 + "[priority1]"), locality1.toString()),
+        Collections.singletonList(endpoint3));
+    assertAddressesEqual(AddressFilter.filter(AddressFilter.filter(
+        childBalancer.addresses, CLUSTER_DNS + "[priority0]"),
+        new Locality("", "", "").toString()),
+        Arrays.asList(endpoint1, endpoint2));
+  }
+
+  @Test
+  public void noEdsResourceExists_useDnsResolutionResults() {
     deliverConfigWithEdsAndLogicalDnsClusters();
     reset(helper);
     xdsClient.deliverResourceNotFound(EDS_SERVICE_NAME1);
@@ -510,7 +555,7 @@ public class ClusterResolverLoadBalancerTest {
   }
 
   @Test
-  public void noEdsEndpointExists_dnsResolutionError_shutDownChildLbPolicyAndReturnErrorPicker() {
+  public void edsResourceRevoked_dnsResolutionError_shutDownChildLbPolicyAndReturnErrorPicker() {
     deliverConfigWithEdsAndLogicalDnsClusters();
     reset(helper);
     EquivalentAddressGroup endpoint = makeAddress("endpoint-addr-1");
@@ -531,7 +576,7 @@ public class ClusterResolverLoadBalancerTest {
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
     assertPicker(pickerCaptor.getValue(),
-        Status.UNAVAILABLE.withDescription("No endpoint available"), null);
+        Status.UNAVAILABLE.withDescription("No usable endpoint"), null);
   }
 
   @Test
