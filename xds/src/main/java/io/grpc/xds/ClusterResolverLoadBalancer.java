@@ -181,9 +181,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
         clusters.add(instance.cluster);
         ClusterState state;
         if (instance.type == DiscoveryMechanism.Type.EDS) {
-          state =
-              new EdsClusterState(instance.cluster, instance.edsServiceName,
-                  instance.lrsServerName, instance.maxConcurrentRequests, instance.tlsContext);
+          state = new EdsClusterState(instance.cluster, instance.edsServiceName,
+              instance.lrsServerName, instance.maxConcurrentRequests, instance.tlsContext);
           clusterStates.put(instance.cluster, state);
         } else {  // logical DNS
           state = new LogicalDnsClusterState(instance.cluster, instance.lrsServerName,
