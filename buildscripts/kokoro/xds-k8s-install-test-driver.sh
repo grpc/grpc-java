@@ -240,20 +240,6 @@ EOF
 }
 
 #######################################
-# Export Keystore secrets assigned to the Kokoro build.
-# Globals:
-#   KOKORO_KEYSTORE_DIR
-#   PRIVATE_API_KEY: Exported. Populated with name GCP project secret key.
-#                    Used by the test driver to access private APIs
-# Arguments:
-#   None
-#######################################
-kokoro_export_secrets() {
-  readonly PRIVATE_API_KEY=$(cat "${KOKORO_KEYSTORE_DIR}/73836_grpc_xds_interop_tests_gcp_alpha_apis_key")
-  export PRIVATE_API_KEY
-}
-
-#######################################
 # Configure Python virtual environment on Kokoro VM.
 # Arguments:
 #   None
@@ -284,8 +270,6 @@ kokoro_setup_python_virtual_environment() {
 #   TEST_DRIVER_FLAGFILE: Populated with relative path to test driver flagfile
 #   TEST_XML_OUTPUT_DIR: Populated with the path to test xUnit XML report
 #   KUBE_CONTEXT: Populated with name of kubectl context with GKE cluster access
-#   PRIVATE_API_KEY: Populated with name GCP project secret key. Used by the
-#                    test driver to access private APIs
 #   GIT_ORIGIN_URL: Populated with the origin URL of git repo used for the build
 #   GIT_COMMIT_SHORT: Populated with the short SHA-1 of git commit being built
 # Arguments:
@@ -311,7 +295,6 @@ kokoro_setup_test_driver() {
     debug_on=1
     set +x
   fi
-  kokoro_export_secrets
   kokoro_setup_python_virtual_environment
   # Re-enable debug output after secrets exported and noisy pyenv activated
   ((debug_on == 0)) || set -x
@@ -342,8 +325,6 @@ kokoro_setup_test_driver() {
 #   GIT_ORIGIN_URL: Populated with the origin URL of git repo used for the build
 #   GIT_COMMIT_SHORT: Populated with the short SHA-1 of git commit being built
 #   KUBE_CONTEXT: Populated with name of kubectl context with GKE cluster access
-#   PRIVATE_API_KEY: Exported. Populated with name GCP project secret key.
-#                    Used by the test driver to access private APIs
 # Arguments:
 #   The path to the folder containing the build script
 # Outputs:

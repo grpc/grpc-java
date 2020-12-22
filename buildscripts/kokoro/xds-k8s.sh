@@ -136,8 +136,6 @@ run_test() {
 #   GIT_ORIGIN_URL: Populated with the origin URL of git repo used for the build
 #   GIT_COMMIT_SHORT: Populated with the short SHA-1 of git commit being built
 #   KUBE_CONTEXT: Populated with name of kubectl context with GKE cluster access
-#   PRIVATE_API_KEY: Exported. Populated with name GCP project secret key.
-#                    Used by the test driver to access private APIs
 # Arguments:
 #   None
 # Outputs:
