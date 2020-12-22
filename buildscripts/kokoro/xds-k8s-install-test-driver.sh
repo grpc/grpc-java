@@ -30,6 +30,7 @@ run_ignore_exit_code() {
 # Parses information about git repository at given path to global variables.
 # Globals:
 #   GIT_ORIGIN_URL: Populated with the origin URL of git repo used for the build
+#   GIT_COMMIT: Populated with the SHA-1 of git commit being built
 #   GIT_COMMIT_SHORT: Populated with the short SHA-1 of git commit being built
 # Arguments:
 #   Git source dir
@@ -37,6 +38,7 @@ run_ignore_exit_code() {
 parse_src_repo_git_info() {
   local src_dir="${SRC_DIR:?SRC_DIR must be set}"
   readonly GIT_ORIGIN_URL=$(git -C "${src_dir}" remote get-url origin)
+  readonly GIT_COMMIT=$(git -C "${src_dir}" rev-parse HEAD)
   readonly GIT_COMMIT_SHORT=$(git -C "${src_dir}" rev-parse --short HEAD)
 }
 
@@ -271,6 +273,7 @@ kokoro_setup_python_virtual_environment() {
 #   TEST_XML_OUTPUT_DIR: Populated with the path to test xUnit XML report
 #   KUBE_CONTEXT: Populated with name of kubectl context with GKE cluster access
 #   GIT_ORIGIN_URL: Populated with the origin URL of git repo used for the build
+#   GIT_COMMIT: Populated with the SHA-1 of git commit being built
 #   GIT_COMMIT_SHORT: Populated with the short SHA-1 of git commit being built
 # Arguments:
 #   The name of github repository being built
@@ -314,6 +317,7 @@ kokoro_setup_test_driver() {
 #   TEST_DRIVER_FLAGFILE: Populated with relative path to test driver flagfile
 #   TEST_XML_OUTPUT_DIR: Populated with the path to test xUnit XML report
 #   GIT_ORIGIN_URL: Populated with the origin URL of git repo used for the build
+#   GIT_COMMIT: Populated with the SHA-1 of git commit being built
 #   GIT_COMMIT_SHORT: Populated with the short SHA-1 of git commit being built
 #   KUBE_CONTEXT: Populated with name of kubectl context with GKE cluster access
 # Arguments:

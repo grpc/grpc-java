@@ -7,7 +7,8 @@ readonly GITHUB_REPOSITORY_NAME="grpc-java"
 readonly GKE_CLUSTER_NAME="interop-test-psm-sec1-us-central1"
 readonly GKE_CLUSTER_ZONE="us-central1-a"
 ## xDS test server/client Docker images
-readonly IMAGE_NAME="gcr.io/grpc-testing/xds-k8s-test-java"
+readonly SERVER_IMAGE_NAME="gcr.io/grpc-testing/xds-interop/java-server"
+readonly CLIENT_IMAGE_NAME="gcr.io/grpc-testing/xds-interop/java-client"
 readonly IMAGE_BUILD_SKIP="${IMAGE_BUILD_SKIP:-1}"
 # Build paths
 readonly BUILD_INSTALL_PATH="interop-testing/build/install"
@@ -38,9 +39,9 @@ build_java_test_app() {
 # Builds test app Docker images and pushes them to GCR
 # Globals:
 #   BUILD_INSTALL_PATH
-#   IMAGE_NAME
-#   SERVER_IMAGE_TAG
-#   CLIENT_IMAGE_TAG
+#   SERVER_IMAGE_NAME: Test server Docker image name
+#   CLIENT_IMAGE_NAME: Test client Docker image name
+#   GIT_COMMIT: SHA-1 of git commit being built
 # Arguments:
 #   None
 # Outputs:
@@ -56,15 +57,15 @@ build_test_app_docker_images() {
   # Run Google Cloud Build
   gcloud builds submit "${SRC_DIR}/${BUILD_INSTALL_PATH}" \
     --config "${docker_dir}/cloudbuild.yaml" \
-    --substitutions "_IMAGE_NAME=${IMAGE_NAME},_SERVER_IMAGE_TAG=${SERVER_IMAGE_TAG},_CLIENT_IMAGE_TAG=${CLIENT_IMAGE_TAG}"
+    --substitutions "_SERVER_IMAGE_NAME=${SERVER_IMAGE_NAME},_CLIENT_IMAGE_NAME=${CLIENT_IMAGE_NAME},COMMIT_SHA=${GIT_COMMIT}"
 }
 
 #######################################
 # Builds test app and its docker images unless they already exist
 # Globals:
-#   IMAGE_NAME
-#   SERVER_IMAGE_TAG
-#   CLIENT_IMAGE_TAG
+#   SERVER_IMAGE_NAME: Test server Docker image name
+#   CLIENT_IMAGE_NAME: Test client Docker image name
+#   GIT_COMMIT: SHA-1 of git commit being built
 #   IMAGE_BUILD_SKIP
 # Arguments:
 #   None
@@ -73,12 +74,12 @@ build_test_app_docker_images() {
 #######################################
 build_docker_images_if_needed() {
   # Check if images already exist
-  server_tags="$(gcloud_gcr_list_image_tags "${IMAGE_NAME}" "${SERVER_IMAGE_TAG}")"
-  printf "Server image: %s:%s\n" "${IMAGE_NAME}" "${SERVER_IMAGE_TAG}"
+  server_tags="$(gcloud_gcr_list_image_tags "${SERVER_IMAGE_NAME}" "${GIT_COMMIT}")"
+  printf "Server image: %s:%s\n" "${SERVER_IMAGE_NAME}" "${GIT_COMMIT}"
   echo "${server_tags:-Server image not found}"
 
-  client_tags="$(gcloud_gcr_list_image_tags "${IMAGE_NAME}" "${CLIENT_IMAGE_TAG}")"
-  printf "Client image: %s:%s\n" "${IMAGE_NAME}" "${CLIENT_IMAGE_TAG}"
+  client_tags="$(gcloud_gcr_list_image_tags "${CLIENT_IMAGE_NAME}" "${GIT_COMMIT}")"
+  printf "Client image: %s:%s\n" "${CLIENT_IMAGE_NAME}" "${GIT_COMMIT}"
   echo "${client_tags:-Client image not found}"
 
   # Build if one of images is missing or IMAGE_BUILD_SKIP=0
@@ -96,9 +97,9 @@ build_docker_images_if_needed() {
 #   TEST_DRIVER_FLAGFILE: Relative path to test driver flagfile
 #   KUBE_CONTEXT: The name of kubectl context with GKE cluster access
 #   TEST_XML_OUTPUT_DIR: Output directory for the test xUnit XML report
-#   IMAGE_NAME: The name of GCR image with the test app
-#   SERVER_IMAGE_TAG: Test server image tag used in this build
-#   CLIENT_IMAGE_TAG: Test client image tag used in this build
+#   SERVER_IMAGE_NAME: Test server Docker image name
+#   CLIENT_IMAGE_NAME: Test client Docker image name
+#   GIT_COMMIT: SHA-1 of git commit being built
 # Arguments:
 #   Test case name
 # Outputs:
@@ -113,8 +114,8 @@ run_test() {
   python -m "tests.${test_name}" \
     --flagfile="${TEST_DRIVER_FLAGFILE}" \
     --kube_context="${KUBE_CONTEXT}" \
-    --server_image="${IMAGE_NAME}:${SERVER_IMAGE_TAG}" \
-    --client_image="${IMAGE_NAME}:${CLIENT_IMAGE_TAG}" \
+    --server_image="${SERVER_IMAGE_NAME}:${GIT_COMMIT}" \
+    --client_image="${CLIENT_IMAGE_NAME}:${GIT_COMMIT}" \
     --xml_output_file="${TEST_XML_OUTPUT_DIR}/${test_name}/sponge_log.xml" \
     --force_cleanup
   set +x
@@ -125,8 +126,6 @@ run_test() {
 # Globals:
 #   KOKORO_ARTIFACTS_DIR
 #   GITHUB_REPOSITORY_NAME
-#   SERVER_IMAGE_TAG: Populated with test server image tag used in this build
-#   CLIENT_IMAGE_TAG: Populated with test client image tag used in this build
 #   SRC_DIR: Populated with absolute path to the source repo
 #   TEST_DRIVER_REPO_DIR: Populated with the path to the repo containing
 #                         the test driver
@@ -134,6 +133,7 @@ run_test() {
 #   TEST_DRIVER_FLAGFILE: Populated with relative path to test driver flagfile
 #   TEST_XML_OUTPUT_DIR: Populated with the path to test xUnit XML report
 #   GIT_ORIGIN_URL: Populated with the origin URL of git repo used for the build
+#   GIT_COMMIT: Populated with the SHA-1 of git commit being built
 #   GIT_COMMIT_SHORT: Populated with the short SHA-1 of git commit being built
 #   KUBE_CONTEXT: Populated with name of kubectl context with GKE cluster access
 # Arguments:
@@ -152,8 +152,6 @@ main() {
   else
     local_setup_test_driver "${script_dir}"
   fi
-  readonly SERVER_IMAGE_TAG="server-${GIT_COMMIT_SHORT}"
-  readonly CLIENT_IMAGE_TAG="client-${GIT_COMMIT_SHORT}"
   build_docker_images_if_needed
   # Run tests
   cd "${TEST_DRIVER_FULL_DIR}"
