@@ -77,7 +77,7 @@ import javax.annotation.Nullable;
  */
 final class ClusterResolverLoadBalancer extends LoadBalancer {
 
-  private static final Locality logicalDnsClusterLocality = new Locality("", "", "");
+  private static final Locality LOGICAL_DNS_CLUSTER_LOCALITY = new Locality("", "", "");
   private final XdsLogger logger;
   private final String authority;
   private final SynchronizationContext syncContext;
@@ -499,7 +499,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
                 EquivalentAddressGroup annotatedAddr =
                     AddressFilter.setPathFilter(
                         eag, Arrays.asList(
-                            priorityName, logicalDnsClusterLocality.toString()));
+                            priorityName, LOGICAL_DNS_CLUSTER_LOCALITY.toString()));
                 addresses.add(annotatedAddr);
               }
               LoadBalancerProvider endpointPickingLbProvider =
@@ -509,7 +509,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
               PolicySelection priorityLbPolicy =
                   generateClusterPriorityLbPolicy(name, edsServiceName, lrsServerName,
                       maxConcurrentRequests, tlsContext, endpointPickingPolicy, lbRegistry,
-                      logicalDnsClusterLocality, Collections.<DropOverload>emptyList());
+                      LOGICAL_DNS_CLUSTER_LOCALITY, Collections.<DropOverload>emptyList());
               status = Status.OK;
               resolved = true;
               result = new ClusterResolutionResult(addresses, priorityName, priorityLbPolicy);
