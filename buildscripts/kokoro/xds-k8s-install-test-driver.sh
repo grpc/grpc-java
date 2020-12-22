@@ -219,6 +219,7 @@ kokoro_print_version() {
 #   KOKORO_ARTIFACTS_DIR
 #   GIT_ORIGIN_URL
 #   GIT_COMMIT_SHORT
+#   TESTGRID_EXCLUDE
 # Arguments:
 #   None
 # Outputs:

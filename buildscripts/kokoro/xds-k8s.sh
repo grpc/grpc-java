@@ -9,7 +9,7 @@ readonly GKE_CLUSTER_ZONE="us-central1-a"
 ## xDS test server/client Docker images
 readonly SERVER_IMAGE_NAME="gcr.io/grpc-testing/xds-interop/java-server"
 readonly CLIENT_IMAGE_NAME="gcr.io/grpc-testing/xds-interop/java-client"
-readonly IMAGE_BUILD_SKIP="${IMAGE_BUILD_SKIP:-1}"
+readonly FORCE_IMAGE_BUILD="${FORCE_IMAGE_BUILD:-0}"
 readonly BUILD_APP_PATH="interop-testing/build/install/grpc-interop-testing"
 
 #######################################
@@ -67,7 +67,7 @@ build_test_app_docker_images() {
 #   SERVER_IMAGE_NAME: Test server Docker image name
 #   CLIENT_IMAGE_NAME: Test client Docker image name
 #   GIT_COMMIT: SHA-1 of git commit being built
-#   IMAGE_BUILD_SKIP
+#   FORCE_IMAGE_BUILD
 # Arguments:
 #   None
 # Outputs:
@@ -83,8 +83,8 @@ build_docker_images_if_needed() {
   printf "Client image: %s:%s\n" "${CLIENT_IMAGE_NAME}" "${GIT_COMMIT}"
   echo "${client_tags:-Client image not found}"
 
-  # Build if one of images is missing or IMAGE_BUILD_SKIP=0
-  if [[ "${IMAGE_BUILD_SKIP}" == "0" || -z "${server_tags}" && -z "${client_tags}" ]]; then
+  # Build if any of the images are missing, or FORCE_IMAGE_BUILD=1
+  if [[ "${FORCE_IMAGE_BUILD}" == "1" || -z "${server_tags}" || -z "${client_tags}" ]]; then
     build_java_test_app
     build_test_app_docker_images
   else
