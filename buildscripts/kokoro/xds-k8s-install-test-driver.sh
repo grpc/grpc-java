@@ -98,7 +98,9 @@ gcloud_get_cluster_credentials() {
 #######################################
 test_driver_get_source() {
   if [[ -d "${TEST_DRIVER_REPO_DIR}" ]]; then
-    echo "Found driver directory: ${TEST_DRIVER_REPO_DIR}"
+    echo "Found driver directory: ${TEST_DRIVER_REPO_DIR}. Updating to latest ${TEST_DRIVER_BRANCH}"
+    git -C "${TEST_DRIVER_REPO_DIR}" checkout "${TEST_DRIVER_BRANCH}"
+    git -C "${TEST_DRIVER_REPO_DIR}" pull origin "${TEST_DRIVER_BRANCH}"
   else
     echo "Cloning driver to ${TEST_DRIVER_REPO_URL} branch ${TEST_DRIVER_BRANCH} to ${TEST_DRIVER_REPO_DIR}"
     git clone -b "${TEST_DRIVER_BRANCH}" --depth=1 "${TEST_DRIVER_REPO_URL}" "${TEST_DRIVER_REPO_DIR}"
@@ -121,7 +123,7 @@ test_driver_pip_install() {
   echo "Install python dependencies"
   cd "${TEST_DRIVER_FULL_DIR}"
 
-  # Create and activate virtual environment already using one
+  # Create and activate virtual environment unless already using one
   if [[ -z "${VIRTUAL_ENV}" ]]; then
     local venv_dir="${TEST_DRIVER_FULL_DIR}/venv"
     if [[ -d "${venv_dir}" ]]; then
@@ -258,7 +260,7 @@ kokoro_export_secrets() {
 #   Writes the output of `pyenv` commands to stdout
 #######################################
 kokoro_setup_python_virtual_environment() {
-  # Kokoro provides pyenv, so use it instead `python -m venv`
+  # Kokoro provides pyenv, so use it instead of `python -m venv`
   echo "Setup pyenv environment"
   eval "$(pyenv init -)"
   eval "$(pyenv virtualenv-init -)"
