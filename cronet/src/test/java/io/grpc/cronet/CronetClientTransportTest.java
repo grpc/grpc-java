@@ -24,6 +24,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import android.os.Build;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.Metadata;
@@ -46,8 +47,10 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.robolectric.RobolectricTestRunner;
+import org.robolectric.annotation.Config;
 
 @RunWith(RobolectricTestRunner.class)
+@Config(sdk = Build.VERSION_CODES.P)
 public final class CronetClientTransportTest {
 
   private static final String AUTHORITY = "test.example.com";
