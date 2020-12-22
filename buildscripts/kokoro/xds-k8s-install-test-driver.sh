@@ -87,9 +87,12 @@ gcloud_get_cluster_credentials() {
 # Clone the source code of the test driver to $TEST_DRIVER_REPO_DIR, unless
 # given folder exists.
 # Globals:
-#   TEST_DRIVER_REPO_DIR
 #   TEST_DRIVER_REPO_URL
 #   TEST_DRIVER_BRANCH
+#   TEST_DRIVER_REPO_DIR: path to the repo containing the test driver
+#   TEST_DRIVER_REPO_DIR_USE_EXISTING: set non-empty value to use exiting
+#      clone of the driver repo located at $TEST_DRIVER_REPO_DIR.
+#      Useful for debugging the build script locally.
 # Arguments:
 #   None
 # Outputs:
@@ -97,10 +100,8 @@ gcloud_get_cluster_credentials() {
 #   Writes driver source code to $TEST_DRIVER_REPO_DIR
 #######################################
 test_driver_get_source() {
-  if [[ -d "${TEST_DRIVER_REPO_DIR}" ]]; then
-    echo "Found driver directory: ${TEST_DRIVER_REPO_DIR}. Updating to latest ${TEST_DRIVER_BRANCH}"
-    git -C "${TEST_DRIVER_REPO_DIR}" checkout "${TEST_DRIVER_BRANCH}"
-    git -C "${TEST_DRIVER_REPO_DIR}" pull origin "${TEST_DRIVER_BRANCH}"
+  if [[ -n "${TEST_DRIVER_REPO_DIR_USE_EXISTING}" && -d "${TEST_DRIVER_REPO_DIR}" ]]; then
+    echo "Using exiting driver directory: ${TEST_DRIVER_REPO_DIR}."
   else
     echo "Cloning driver to ${TEST_DRIVER_REPO_URL} branch ${TEST_DRIVER_BRANCH} to ${TEST_DRIVER_REPO_DIR}"
     git clone -b "${TEST_DRIVER_BRANCH}" --depth=1 "${TEST_DRIVER_REPO_URL}" "${TEST_DRIVER_REPO_DIR}"
