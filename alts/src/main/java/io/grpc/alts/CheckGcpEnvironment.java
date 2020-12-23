@@ -64,14 +64,13 @@ final class CheckGcpEnvironment {
     return false;
   }
   
-  private static final String OS = System.getProperty("os.name").toLowerCase(Locale.ENGLISH);
-
   private static boolean isRunningOnGcp() {
+    String osName = System.getProperty("os.name").toLowerCase(Locale.ENGLISH);
     try {
-      if (OS.indexOf("linux") >= 0) {
+      if (osName.indexOf("linux") >= 0) {
         // Checks GCE residency on Linux platform.
         return checkProductNameOnLinux(Files.newBufferedReader(Paths.get(DMI_PRODUCT_NAME), UTF_8));
-      } else if (OS.indexOf("win") >= 0) {
+      } else if (osName.indexOf("win") >= 0) {
         // Checks GCE residency on Windows platform.
         Process p =
             new ProcessBuilder()
