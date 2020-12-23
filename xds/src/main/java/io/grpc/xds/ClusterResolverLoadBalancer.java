@@ -38,6 +38,7 @@ import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
+import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.ClusterImplLoadBalancerProvider.ClusterImplConfig;
 import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig;
@@ -166,7 +167,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
     private LoadBalancer childLb;
 
     ClusterResolverLbState(Helper helper) {
-      this.helper = checkNotNull(helper, "helper");
+      this.helper = new RefreshableHelper(checkNotNull(helper, "helper"));
       logger.log(XdsLogLevel.DEBUG, "New ClusterResolverLbState");
     }
 
@@ -270,6 +271,31 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
         } else {
           helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
         }
+      }
+    }
+
+    /**
+     * Wires re-resolution requests from downstream LB policies with DNS resolver.
+     */
+    private final class RefreshableHelper extends ForwardingLoadBalancerHelper {
+      private final Helper delegate;
+
+      private RefreshableHelper(Helper delegate) {
+        this.delegate = checkNotNull(delegate, "delegate");
+      }
+
+      @Override
+      public void refreshNameResolution() {
+        for (ClusterState state : clusterStates.values()) {
+          if (state instanceof LogicalDnsClusterState) {
+            ((LogicalDnsClusterState) state).refresh();
+          }
+        }
+      }
+
+      @Override
+      protected Helper delegate() {
+        return delegate;
       }
     }
 
@@ -463,12 +489,23 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
         resolver.start(new NameResolverListener());
       }
 
+      void refresh() {
+        cancelBackoff();
+        resolver.refresh();
+      }
+
       @Override
       void shutdown() {
         super.shutdown();
         resolver.shutdown();
+        cancelBackoff();
+      }
+
+      private void cancelBackoff() {
         if (scheduledRefresh != null) {
           scheduledRefresh.cancel();
+          scheduledRefresh = null;
+          backoffPolicy = null;
         }
       }
 
