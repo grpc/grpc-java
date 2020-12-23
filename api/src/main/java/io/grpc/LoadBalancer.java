@@ -1181,7 +1181,7 @@ public abstract class LoadBalancer {
      * @since 1.35.0
      */
     public ChannelCredentials getChannelCredentials() {
-      throw new UnsupportedOperationException();
+      return getUnsafeChannelCredentials().withoutBearerTokens();
     }
 
     /**
