@@ -1,19 +1,6 @@
 package io.grpc.lookup.v1;
 
 import static io.grpc.MethodDescriptor.generateFullMethodName;
-import static io.grpc.stub.ClientCalls.asyncBidiStreamingCall;
-import static io.grpc.stub.ClientCalls.asyncClientStreamingCall;
-import static io.grpc.stub.ClientCalls.asyncServerStreamingCall;
-import static io.grpc.stub.ClientCalls.asyncUnaryCall;
-import static io.grpc.stub.ClientCalls.blockingServerStreamingCall;
-import static io.grpc.stub.ClientCalls.blockingUnaryCall;
-import static io.grpc.stub.ClientCalls.futureUnaryCall;
-import static io.grpc.stub.ServerCalls.asyncBidiStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncClientStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncServerStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncUnaryCall;
-import static io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall;
 
 /**
  */
@@ -113,14 +100,14 @@ public final class RouteLookupServiceGrpc {
      */
     public void routeLookup(io.grpc.lookup.v1.RouteLookupRequest request,
         io.grpc.stub.StreamObserver<io.grpc.lookup.v1.RouteLookupResponse> responseObserver) {
-      asyncUnimplementedUnaryCall(getRouteLookupMethod(), responseObserver);
+      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getRouteLookupMethod(), responseObserver);
     }
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
       return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
           .addMethod(
             getRouteLookupMethod(),
-            asyncUnaryCall(
+            io.grpc.stub.ServerCalls.asyncUnaryCall(
               new MethodHandlers<
                 io.grpc.lookup.v1.RouteLookupRequest,
                 io.grpc.lookup.v1.RouteLookupResponse>(
@@ -150,7 +137,7 @@ public final class RouteLookupServiceGrpc {
      */
     public void routeLookup(io.grpc.lookup.v1.RouteLookupRequest request,
         io.grpc.stub.StreamObserver<io.grpc.lookup.v1.RouteLookupResponse> responseObserver) {
-      asyncUnaryCall(
+      io.grpc.stub.ClientCalls.asyncUnaryCall(
           getChannel().newCall(getRouteLookupMethod(), getCallOptions()), request, responseObserver);
     }
   }
@@ -175,7 +162,7 @@ public final class RouteLookupServiceGrpc {
      * </pre>
      */
     public io.grpc.lookup.v1.RouteLookupResponse routeLookup(io.grpc.lookup.v1.RouteLookupRequest request) {
-      return blockingUnaryCall(
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getRouteLookupMethod(), getCallOptions(), request);
     }
   }
@@ -201,7 +188,7 @@ public final class RouteLookupServiceGrpc {
      */
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.lookup.v1.RouteLookupResponse> routeLookup(
         io.grpc.lookup.v1.RouteLookupRequest request) {
-      return futureUnaryCall(
+      return io.grpc.stub.ClientCalls.futureUnaryCall(
           getChannel().newCall(getRouteLookupMethod(), getCallOptions()), request);
     }
   }

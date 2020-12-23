@@ -1,19 +1,6 @@
 package io.grpc.testing.compiler;
 
 import static io.grpc.MethodDescriptor.generateFullMethodName;
-import static io.grpc.stub.ClientCalls.asyncBidiStreamingCall;
-import static io.grpc.stub.ClientCalls.asyncClientStreamingCall;
-import static io.grpc.stub.ClientCalls.asyncServerStreamingCall;
-import static io.grpc.stub.ClientCalls.asyncUnaryCall;
-import static io.grpc.stub.ClientCalls.blockingServerStreamingCall;
-import static io.grpc.stub.ClientCalls.blockingUnaryCall;
-import static io.grpc.stub.ClientCalls.futureUnaryCall;
-import static io.grpc.stub.ServerCalls.asyncBidiStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncClientStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncServerStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncUnaryCall;
-import static io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall;
 
 /**
  * <pre>
@@ -122,14 +109,14 @@ public final class TestDeprecatedServiceGrpc {
     @java.lang.Deprecated
     public void deprecatedMethod(io.grpc.testing.compiler.Test.SimpleRequest request,
         io.grpc.stub.StreamObserver<io.grpc.testing.compiler.Test.SimpleResponse> responseObserver) {
-      asyncUnimplementedUnaryCall(getDeprecatedMethodMethod(), responseObserver);
+      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getDeprecatedMethodMethod(), responseObserver);
     }
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
       return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
           .addMethod(
             getDeprecatedMethodMethod(),
-            asyncUnaryCall(
+            io.grpc.stub.ServerCalls.asyncUnaryCall(
               new MethodHandlers<
                 io.grpc.testing.compiler.Test.SimpleRequest,
                 io.grpc.testing.compiler.Test.SimpleResponse>(
@@ -164,7 +151,7 @@ public final class TestDeprecatedServiceGrpc {
     @java.lang.Deprecated
     public void deprecatedMethod(io.grpc.testing.compiler.Test.SimpleRequest request,
         io.grpc.stub.StreamObserver<io.grpc.testing.compiler.Test.SimpleResponse> responseObserver) {
-      asyncUnaryCall(
+      io.grpc.stub.ClientCalls.asyncUnaryCall(
           getChannel().newCall(getDeprecatedMethodMethod(), getCallOptions()), request, responseObserver);
     }
   }
@@ -194,7 +181,7 @@ public final class TestDeprecatedServiceGrpc {
      */
     @java.lang.Deprecated
     public io.grpc.testing.compiler.Test.SimpleResponse deprecatedMethod(io.grpc.testing.compiler.Test.SimpleRequest request) {
-      return blockingUnaryCall(
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getDeprecatedMethodMethod(), getCallOptions(), request);
     }
   }
@@ -225,7 +212,7 @@ public final class TestDeprecatedServiceGrpc {
     @java.lang.Deprecated
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.testing.compiler.Test.SimpleResponse> deprecatedMethod(
         io.grpc.testing.compiler.Test.SimpleRequest request) {
-      return futureUnaryCall(
+      return io.grpc.stub.ClientCalls.futureUnaryCall(
           getChannel().newCall(getDeprecatedMethodMethod(), getCallOptions()), request);
     }
   }
