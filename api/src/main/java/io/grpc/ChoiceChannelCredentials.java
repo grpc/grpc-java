@@ -16,9 +16,10 @@
 
 package io.grpc;
 
+import static java.util.Collections.unmodifiableList;
+
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 
 /**
@@ -36,22 +37,31 @@ public final class ChoiceChannelCredentials extends ChannelCredentials {
     if (creds.length == 0) {
       throw new IllegalArgumentException("At least one credential is required");
     }
-    return new ChoiceChannelCredentials(creds);
-  }
-
-  private final List<ChannelCredentials> creds;
-
-  private ChoiceChannelCredentials(ChannelCredentials... creds) {
     for (ChannelCredentials cred : creds) {
       if (cred == null) {
         throw new NullPointerException();
       }
     }
-    this.creds = Collections.unmodifiableList(new ArrayList<>(Arrays.asList(creds)));
+    return new ChoiceChannelCredentials(unmodifiableList(new ArrayList<>(Arrays.asList(creds))));
+  }
+
+  private final List<ChannelCredentials> creds;
+
+  private ChoiceChannelCredentials(List<ChannelCredentials> creds) {
+    this.creds = creds;
   }
 
   /** Non-empty list of credentials, in preference order. */
   public List<ChannelCredentials> getCredentialsList() {
     return creds;
+  }
+
+  @Override
+  public ChannelCredentials withoutBearerTokens() {
+    List<ChannelCredentials> credsWithoutTokens = new ArrayList<>();
+    for (ChannelCredentials cred : creds) {
+      credsWithoutTokens.add(cred.withoutBearerTokens());
+    }
+    return new ChoiceChannelCredentials(unmodifiableList(credsWithoutTokens));
   }
 }

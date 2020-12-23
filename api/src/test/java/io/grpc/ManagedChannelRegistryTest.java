@@ -27,7 +27,12 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class ManagedChannelRegistryTest {
   private String target = "testing123";
-  private ChannelCredentials creds = new ChannelCredentials() {};
+  private ChannelCredentials creds = new ChannelCredentials() {
+    @Override
+    public ChannelCredentials withoutBearerTokens() {
+      throw new UnsupportedOperationException();
+    }
+  };
 
   @Test
   public void register_unavailableProviderThrows() {

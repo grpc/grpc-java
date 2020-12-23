@@ -81,6 +81,11 @@ public final class TlsChannelCredentials extends ChannelCredentials {
     }
   }
 
+  @Override
+  public ChannelCredentials withoutBearerTokens() {
+    return this;
+  }
+
   /**
    * Features to understand TLS configuration. Additional enum values may be added in the future.
    */
