@@ -67,10 +67,10 @@ final class CheckGcpEnvironment {
   private static boolean isRunningOnGcp() {
     String osName = System.getProperty("os.name").toLowerCase(Locale.ENGLISH);
     try {
-      if (osName.indexOf("linux") >= 0) {
+      if (osName.startsWith("linux")) {
         // Checks GCE residency on Linux platform.
         return checkProductNameOnLinux(Files.newBufferedReader(Paths.get(DMI_PRODUCT_NAME), UTF_8));
-      } else if (osName.indexOf("win") >= 0) {
+      } else if (osName.startsWith("windows")) {
         // Checks GCE residency on Windows platform.
         Process p =
             new ProcessBuilder()
