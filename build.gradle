@@ -164,7 +164,6 @@ subprojects {
             protobuf: "com.google.protobuf:protobuf-java:${protobufVersion}",
             protobuf_lite: "com.google.protobuf:protobuf-javalite:${protobufVersion}",
             protobuf_util: "com.google.protobuf:protobuf-java-util:${protobufVersion}",
-            lang: "org.apache.commons:commons-lang3:3.11",
 
             netty: "io.netty:netty-codec-http2:[${nettyVersion}]",
             netty_epoll: "io.netty:netty-transport-native-epoll:${nettyVersion}:linux-x86_64",

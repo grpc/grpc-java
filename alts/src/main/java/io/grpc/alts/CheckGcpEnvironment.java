@@ -26,7 +26,6 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import org.apache.commons.lang3.SystemUtils;
 
 /** Class for checking if the system is running on Google Cloud Platform (GCP). */
 final class CheckGcpEnvironment {
@@ -63,13 +62,15 @@ final class CheckGcpEnvironment {
     }
     return false;
   }
+  
+  private static final String OS = System.getProperty("os.name").toLowerCase(Locale.ENGLISH);
 
   private static boolean isRunningOnGcp() {
     try {
-      if (SystemUtils.IS_OS_LINUX) {
+      if (OS.indexOf("linux") >= 0) {
         // Checks GCE residency on Linux platform.
         return checkProductNameOnLinux(Files.newBufferedReader(Paths.get(DMI_PRODUCT_NAME), UTF_8));
-      } else if (SystemUtils.IS_OS_WINDOWS) {
+      } else if (OS.indexOf("win") >= 0) {
         // Checks GCE residency on Windows platform.
         Process p =
             new ProcessBuilder()
