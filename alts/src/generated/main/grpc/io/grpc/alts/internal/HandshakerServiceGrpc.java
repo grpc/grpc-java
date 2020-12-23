@@ -1,19 +1,6 @@
 package io.grpc.alts.internal;
 
 import static io.grpc.MethodDescriptor.generateFullMethodName;
-import static io.grpc.stub.ClientCalls.asyncBidiStreamingCall;
-import static io.grpc.stub.ClientCalls.asyncClientStreamingCall;
-import static io.grpc.stub.ClientCalls.asyncServerStreamingCall;
-import static io.grpc.stub.ClientCalls.asyncUnaryCall;
-import static io.grpc.stub.ClientCalls.blockingServerStreamingCall;
-import static io.grpc.stub.ClientCalls.blockingUnaryCall;
-import static io.grpc.stub.ClientCalls.futureUnaryCall;
-import static io.grpc.stub.ServerCalls.asyncBidiStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncClientStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncServerStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncUnaryCall;
-import static io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall;
 
 /**
  */
@@ -118,14 +105,14 @@ public final class HandshakerServiceGrpc {
      */
     public io.grpc.stub.StreamObserver<io.grpc.alts.internal.HandshakerReq> doHandshake(
         io.grpc.stub.StreamObserver<io.grpc.alts.internal.HandshakerResp> responseObserver) {
-      return asyncUnimplementedStreamingCall(getDoHandshakeMethod(), responseObserver);
+      return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getDoHandshakeMethod(), responseObserver);
     }
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
       return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
           .addMethod(
             getDoHandshakeMethod(),
-            asyncBidiStreamingCall(
+            io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
               new MethodHandlers<
                 io.grpc.alts.internal.HandshakerReq,
                 io.grpc.alts.internal.HandshakerResp>(
@@ -160,7 +147,7 @@ public final class HandshakerServiceGrpc {
      */
     public io.grpc.stub.StreamObserver<io.grpc.alts.internal.HandshakerReq> doHandshake(
         io.grpc.stub.StreamObserver<io.grpc.alts.internal.HandshakerResp> responseObserver) {
-      return asyncBidiStreamingCall(
+      return io.grpc.stub.ClientCalls.asyncBidiStreamingCall(
           getChannel().newCall(getDoHandshakeMethod(), getCallOptions()), responseObserver);
     }
   }

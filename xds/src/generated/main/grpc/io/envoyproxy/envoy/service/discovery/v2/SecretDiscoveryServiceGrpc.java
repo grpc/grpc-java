@@ -1,19 +1,6 @@
 package io.envoyproxy.envoy.service.discovery.v2;
 
 import static io.grpc.MethodDescriptor.generateFullMethodName;
-import static io.grpc.stub.ClientCalls.asyncBidiStreamingCall;
-import static io.grpc.stub.ClientCalls.asyncClientStreamingCall;
-import static io.grpc.stub.ClientCalls.asyncServerStreamingCall;
-import static io.grpc.stub.ClientCalls.asyncUnaryCall;
-import static io.grpc.stub.ClientCalls.blockingServerStreamingCall;
-import static io.grpc.stub.ClientCalls.blockingUnaryCall;
-import static io.grpc.stub.ClientCalls.futureUnaryCall;
-import static io.grpc.stub.ServerCalls.asyncBidiStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncClientStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncServerStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncUnaryCall;
-import static io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall;
 
 /**
  */
@@ -172,42 +159,42 @@ public final class SecretDiscoveryServiceGrpc {
      */
     public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest> deltaSecrets(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse> responseObserver) {
-      return asyncUnimplementedStreamingCall(getDeltaSecretsMethod(), responseObserver);
+      return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getDeltaSecretsMethod(), responseObserver);
     }
 
     /**
      */
     public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest> streamSecrets(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
-      return asyncUnimplementedStreamingCall(getStreamSecretsMethod(), responseObserver);
+      return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getStreamSecretsMethod(), responseObserver);
     }
 
     /**
      */
     public void fetchSecrets(io.envoyproxy.envoy.api.v2.DiscoveryRequest request,
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
-      asyncUnimplementedUnaryCall(getFetchSecretsMethod(), responseObserver);
+      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getFetchSecretsMethod(), responseObserver);
     }
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
       return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
           .addMethod(
             getDeltaSecretsMethod(),
-            asyncBidiStreamingCall(
+            io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
               new MethodHandlers<
                 io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest,
                 io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse>(
                   this, METHODID_DELTA_SECRETS)))
           .addMethod(
             getStreamSecretsMethod(),
-            asyncBidiStreamingCall(
+            io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
               new MethodHandlers<
                 io.envoyproxy.envoy.api.v2.DiscoveryRequest,
                 io.envoyproxy.envoy.api.v2.DiscoveryResponse>(
                   this, METHODID_STREAM_SECRETS)))
           .addMethod(
             getFetchSecretsMethod(),
-            asyncUnaryCall(
+            io.grpc.stub.ServerCalls.asyncUnaryCall(
               new MethodHandlers<
                 io.envoyproxy.envoy.api.v2.DiscoveryRequest,
                 io.envoyproxy.envoy.api.v2.DiscoveryResponse>(
@@ -234,7 +221,7 @@ public final class SecretDiscoveryServiceGrpc {
      */
     public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest> deltaSecrets(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse> responseObserver) {
-      return asyncBidiStreamingCall(
+      return io.grpc.stub.ClientCalls.asyncBidiStreamingCall(
           getChannel().newCall(getDeltaSecretsMethod(), getCallOptions()), responseObserver);
     }
 
@@ -242,7 +229,7 @@ public final class SecretDiscoveryServiceGrpc {
      */
     public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest> streamSecrets(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
-      return asyncBidiStreamingCall(
+      return io.grpc.stub.ClientCalls.asyncBidiStreamingCall(
           getChannel().newCall(getStreamSecretsMethod(), getCallOptions()), responseObserver);
     }
 
@@ -250,7 +237,7 @@ public final class SecretDiscoveryServiceGrpc {
      */
     public void fetchSecrets(io.envoyproxy.envoy.api.v2.DiscoveryRequest request,
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
-      asyncUnaryCall(
+      io.grpc.stub.ClientCalls.asyncUnaryCall(
           getChannel().newCall(getFetchSecretsMethod(), getCallOptions()), request, responseObserver);
     }
   }
@@ -272,7 +259,7 @@ public final class SecretDiscoveryServiceGrpc {
     /**
      */
     public io.envoyproxy.envoy.api.v2.DiscoveryResponse fetchSecrets(io.envoyproxy.envoy.api.v2.DiscoveryRequest request) {
-      return blockingUnaryCall(
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getFetchSecretsMethod(), getCallOptions(), request);
     }
   }
@@ -295,7 +282,7 @@ public final class SecretDiscoveryServiceGrpc {
      */
     public com.google.common.util.concurrent.ListenableFuture<io.envoyproxy.envoy.api.v2.DiscoveryResponse> fetchSecrets(
         io.envoyproxy.envoy.api.v2.DiscoveryRequest request) {
-      return futureUnaryCall(
+      return io.grpc.stub.ClientCalls.futureUnaryCall(
           getChannel().newCall(getFetchSecretsMethod(), getCallOptions()), request);
     }
   }
