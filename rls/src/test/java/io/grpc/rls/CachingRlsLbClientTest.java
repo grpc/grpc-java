@@ -19,12 +19,12 @@ package io.grpc.rls;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.rls.CachingRlsLbClient.RLS_DATA_KEY;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.CALLS_REAL_METHODS;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
@@ -33,21 +33,28 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
+import io.grpc.CallOptions;
+import io.grpc.ChannelLogger;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.ForwardingChannelBuilder;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
+import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
-import io.grpc.NameResolver.Factory;
+import io.grpc.Metadata;
+import io.grpc.NameResolver;
+import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
+import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.BackoffPolicy;
+import io.grpc.internal.PickSubchannelArgsImpl;
 import io.grpc.lookup.v1.RouteLookupServiceGrpc;
 import io.grpc.rls.CachingRlsLbClient.CacheEntry;
 import io.grpc.rls.CachingRlsLbClient.CachedRouteLookupResponse;
@@ -66,6 +73,7 @@ import io.grpc.rls.RlsProtoData.RouteLookupRequest;
 import io.grpc.rls.RlsProtoData.RouteLookupResponse;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
+import io.grpc.testing.TestMethodDescriptors;
 import java.io.IOException;
 import java.lang.Thread.UncaughtExceptionHandler;
 import java.net.SocketAddress;
@@ -96,6 +104,7 @@ public class CachingRlsLbClientTest {
 
   private static final RouteLookupConfig ROUTE_LOOKUP_CONFIG = getRouteLookupConfig();
   private static final int SERVER_LATENCY_MILLIS = 10;
+  private static final String DEFAULT_TARGET = "fallback.cloudbigtable.googleapis.com";
 
   @Rule
   public final MockitoRule mocks = MockitoJUnit.rule();
@@ -268,11 +277,13 @@ public class CachingRlsLbClientTest {
   public void get_updatesLbState() throws Exception {
     InOrder inOrder = inOrder(helper);
     RouteLookupRequest routeLookupRequest =
-        new RouteLookupRequest("server", "/foo/bar", "grpc", ImmutableMap.<String, String>of());
+        new RouteLookupRequest("service1", "/foo/bar", "grpc", ImmutableMap.<String, String>of());
     rlsServerImpl.setLookupTable(
         ImmutableMap.of(
             routeLookupRequest,
-            new RouteLookupResponse(ImmutableList.of("target"), "header")));
+            new RouteLookupResponse(
+                ImmutableList.of("primary.cloudbigtable.googleapis.com"),
+                "header-rls-data-value")));
 
     // valid channel
     CachedRouteLookupResponse resp = getInSyncContext(routeLookupRequest);
@@ -291,14 +302,22 @@ public class CachingRlsLbClientTest {
     assertThat(new HashSet<>(pickerCaptor.getAllValues())).hasSize(1);
     assertThat(stateCaptor.getAllValues())
         .containsExactly(ConnectivityState.CONNECTING, ConnectivityState.READY);
-    assertThat(pickerCaptor.getValue()).isInstanceOf(RlsPicker.class);
+    Metadata headers = new Metadata();
+    PickResult pickResult = pickerCaptor.getValue().pickSubchannel(
+        new PickSubchannelArgsImpl(
+            TestMethodDescriptors.voidMethod().toBuilder().setFullMethodName("foo/bar").build(),
+            headers,
+            CallOptions.DEFAULT));
+    assertThat(pickResult.getStatus().isOk()).isTrue();
+    assertThat(pickResult.getSubchannel()).isNotNull();
+    assertThat(headers.get(RLS_DATA_KEY)).isEqualTo("header-rls-data-value");
 
     // move backoff further back to only test error behavior
     fakeBackoffProvider.nextPolicy = createBackoffPolicy(100, TimeUnit.MILLISECONDS);
     // try to get invalid
     RouteLookupRequest invalidRouteLookupRequest =
         new RouteLookupRequest(
-            "unknown_server", "/doesn/exists", "grpc", ImmutableMap.<String, String>of());
+            "service1", "/doesn/exists", "grpc", ImmutableMap.<String, String>of());
     CachedRouteLookupResponse errorResp = getInSyncContext(invalidRouteLookupRequest);
     assertThat(errorResp.isPending()).isTrue();
     fakeTimeProvider.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
@@ -306,8 +325,19 @@ public class CachingRlsLbClientTest {
     errorResp = getInSyncContext(invalidRouteLookupRequest);
     assertThat(errorResp.hasError()).isTrue();
 
-    inOrder.verify(helper, never())
-        .updateBalancingState(any(ConnectivityState.class), any(SubchannelPicker.class));
+    // Channel is still READY because the subchannel for method /foo/bar is still READY.
+    // Method /doesn/exists will use fallback child balancer and fail immediately.
+    inOrder.verify(helper)
+        .updateBalancingState(eq(ConnectivityState.READY), pickerCaptor.capture());
+    pickResult = pickerCaptor.getValue().pickSubchannel(
+        new PickSubchannelArgsImpl(
+            TestMethodDescriptors.voidMethod().toBuilder()
+                .setFullMethodName("doesn/exists")
+                .build(),
+            headers,
+            CallOptions.DEFAULT));
+    assertThat(pickResult.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat(pickResult.getStatus().getDescription()).isEqualTo("fallback not available");
   }
 
   @Test
@@ -356,9 +386,9 @@ public class CachingRlsLbClientTest {
         /* lookupServiceTimeoutInMillis= */ TimeUnit.SECONDS.toMillis(2),
         /* maxAgeInMillis= */ TimeUnit.SECONDS.toMillis(300),
         /* staleAgeInMillis= */ TimeUnit.SECONDS.toMillis(240),
-        /* cacheSize= */ 1000,
+        /* cacheSizeBytes= */ 1000,
         /* validTargets= */ ImmutableList.of("a valid target"),
-        /* defaultTarget= */ "us_east_1.cloudbigtable.googleapis.com");
+        DEFAULT_TARGET);
   }
 
   private static BackoffPolicy createBackoffPolicy(final long delay, final TimeUnit unit) {
@@ -383,6 +413,10 @@ public class CachingRlsLbClientTest {
     }
   }
 
+  /**
+   * A load balancer that immediately goes to READY when using the rls response target and
+   * immediately fails when using the fallback target.
+   */
   private static final class TestLoadBalancerProvider extends LoadBalancerProvider {
 
     @Override
@@ -401,13 +435,38 @@ public class CachingRlsLbClientTest {
     }
 
     @Override
+    public ConfigOrError parseLoadBalancingPolicyConfig(
+        Map<String, ?> rawLoadBalancingPolicyConfig) {
+      return ConfigOrError.fromConfig(rawLoadBalancingPolicyConfig);
+    }
+
+    @Override
     public LoadBalancer newLoadBalancer(final Helper helper) {
       return new LoadBalancer() {
 
         @Override
         public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-          // TODO: make the picker accessible
-          helper.updateBalancingState(ConnectivityState.READY, mock(SubchannelPicker.class));
+          Map<?, ?> config = (Map<?, ?>) resolvedAddresses.getLoadBalancingPolicyConfig();
+          if (DEFAULT_TARGET.equals(config.get("target"))) {
+            helper.updateBalancingState(
+                ConnectivityState.TRANSIENT_FAILURE,
+                new SubchannelPicker() {
+                  @Override
+                  public PickResult pickSubchannel(PickSubchannelArgs args) {
+                    return PickResult.withError(
+                        Status.UNAVAILABLE.withDescription("fallback not available"));
+                  }
+                });
+          } else {
+            helper.updateBalancingState(
+                ConnectivityState.READY,
+                new SubchannelPicker() {
+                  @Override
+                  public PickResult pickSubchannel(PickSubchannelArgs args) {
+                    return PickResult.withSubchannel(mock(Subchannel.class));
+                  }
+                });
+          }
         }
 
         @Override
@@ -521,7 +580,7 @@ public class CachingRlsLbClientTest {
 
     @Override
     @Deprecated
-    public Factory getNameResolverFactory() {
+    public NameResolver.Factory getNameResolverFactory() {
       throw new UnsupportedOperationException();
     }
 
@@ -538,6 +597,11 @@ public class CachingRlsLbClientTest {
     @Override
     public SynchronizationContext getSynchronizationContext() {
       return syncContext;
+    }
+
+    @Override
+    public ChannelLogger getChannelLogger() {
+      return mock(ChannelLogger.class);
     }
   }
 

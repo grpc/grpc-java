@@ -16,8 +16,10 @@
 
 package io.grpc.testing.integration;
 
-import io.grpc.ManagedChannel;
-import io.grpc.internal.AbstractServerImplBuilder;
+import io.grpc.InsecureServerCredentials;
+import io.grpc.ServerBuilder;
+import io.grpc.netty.InternalNettyChannelBuilder;
+import io.grpc.netty.InternalNettyServerBuilder;
 import io.grpc.netty.NegotiationType;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.netty.NettyServerBuilder;
@@ -28,19 +30,22 @@ import org.junit.runners.JUnit4;
 public class AutoWindowSizingOnTest extends AbstractInteropTest {
 
   @Override
-  protected AbstractServerImplBuilder<?> getServerBuilder() {
-    return NettyServerBuilder.forPort(0)
+  protected ServerBuilder<?> getServerBuilder() {
+    NettyServerBuilder builder = NettyServerBuilder.forPort(0, InsecureServerCredentials.create())
         .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE);
+    // Disable the default census stats tracer, use testing tracer instead.
+    InternalNettyServerBuilder.setStatsEnabled(builder, false);
+    return builder.addStreamTracerFactory(createCustomCensusTracerFactory());
   }
 
   @Override
-  protected ManagedChannel createChannel() {
+  protected NettyChannelBuilder createChannelBuilder() {
     NettyChannelBuilder builder = NettyChannelBuilder.forAddress(getListenAddress())
         .negotiationType(NegotiationType.PLAINTEXT)
         .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
         .initialFlowControlWindow(NettyChannelBuilder.DEFAULT_FLOW_CONTROL_WINDOW);
     // Disable the default census stats interceptor, use testing interceptor instead.
-    io.grpc.internal.TestingAccessor.setStatsEnabled(builder, false);
-    return builder.intercept(createCensusStatsClientInterceptor()).build();
+    InternalNettyChannelBuilder.setStatsEnabled(builder, false);
+    return builder.intercept(createCensusStatsClientInterceptor());
   }
 }

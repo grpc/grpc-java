@@ -21,23 +21,49 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.grpc.xds.Bootstrapper;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
-import io.grpc.xds.internal.sds.ReferenceCountingSslContextProviderMap.SslContextProviderFactory;
-import java.io.IOException;
+import io.grpc.xds.XdsInitializationException;
+import io.grpc.xds.internal.certprovider.CertProviderServerSslContextProvider;
+import io.grpc.xds.internal.sds.ReferenceCountingMap.ValueFactory;
 import java.util.concurrent.Executors;
 
 /** Factory to create server-side SslContextProvider from DownstreamTlsContext. */
 final class ServerSslContextProviderFactory
-    implements SslContextProviderFactory<DownstreamTlsContext> {
+    implements ValueFactory<DownstreamTlsContext, SslContextProvider> {
+
+  private final Bootstrapper bootstrapper;
+  private final CertProviderServerSslContextProvider.Factory
+      certProviderServerSslContextProviderFactory;
+
+  ServerSslContextProviderFactory(Bootstrapper bootstrapper) {
+    this(bootstrapper, CertProviderServerSslContextProvider.Factory.getInstance());
+  }
+
+  ServerSslContextProviderFactory(
+      Bootstrapper bootstrapper, CertProviderServerSslContextProvider.Factory factory) {
+    this.bootstrapper = bootstrapper;
+    this.certProviderServerSslContextProviderFactory = factory;
+  }
 
   /** Creates a SslContextProvider from the given DownstreamTlsContext. */
   @Override
-  public SslContextProvider createSslContextProvider(
+  public SslContextProvider create(
       DownstreamTlsContext downstreamTlsContext) {
     checkNotNull(downstreamTlsContext, "downstreamTlsContext");
     checkNotNull(
         downstreamTlsContext.getCommonTlsContext(),
         "downstreamTlsContext should have CommonTlsContext");
-    if (CommonTlsContextUtil.hasAllSecretsUsingFilename(
+    if (CommonTlsContextUtil.hasCertProviderInstance(
+            downstreamTlsContext.getCommonTlsContext())) {
+      try {
+        Bootstrapper.BootstrapInfo bootstrapInfo = bootstrapper.readBootstrap();
+        return certProviderServerSslContextProviderFactory.getProvider(
+                downstreamTlsContext,
+                bootstrapInfo.getNode().toEnvoyProtoNode(),
+                bootstrapInfo.getCertProviders());
+      } catch (XdsInitializationException e) {
+        throw new RuntimeException(e);
+      }
+    } else if (CommonTlsContextUtil.hasAllSecretsUsingFilename(
         downstreamTlsContext.getCommonTlsContext())) {
       return SecretVolumeServerSslContextProvider.getProvider(downstreamTlsContext);
     } else if (CommonTlsContextUtil.hasAllSecretsUsingSds(
@@ -45,17 +71,16 @@ final class ServerSslContextProviderFactory
       try {
         return SdsServerSslContextProvider.getProvider(
             downstreamTlsContext,
-            Bootstrapper.getInstance().readBootstrap().getNode(),
+            bootstrapper.readBootstrap().getNode().toEnvoyProtoNodeV2(),
             Executors.newSingleThreadExecutor(new ThreadFactoryBuilder()
                 .setNameFormat("server-sds-sslcontext-provider-%d")
                 .setDaemon(true)
                 .build()),
             /* channelExecutor= */ null);
-      } catch (IOException ioe) {
-        throw new RuntimeException(ioe);
+      } catch (XdsInitializationException e) {
+        throw new RuntimeException(e);
       }
     }
-    throw new UnsupportedOperationException(
-        "DownstreamTlsContext to have all filenames or all SdsConfig");
+    throw new UnsupportedOperationException("Unsupported configurations in DownstreamTlsContext!");
   }
 }

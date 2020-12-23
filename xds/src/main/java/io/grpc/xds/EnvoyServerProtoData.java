@@ -16,10 +16,14 @@
 
 package io.grpc.xds;
 
+import static io.grpc.xds.EnvoyProtoData.TRANSPORT_SOCKET_NAME_TLS;
+
 import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
-import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
+import io.envoyproxy.envoy.config.core.v3.Address;
+import io.envoyproxy.envoy.config.core.v3.SocketAddress;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.grpc.Internal;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -70,12 +74,13 @@ public final class EnvoyServerProtoData {
   public static final class UpstreamTlsContext extends BaseTlsContext {
 
     @VisibleForTesting
-    UpstreamTlsContext(CommonTlsContext commonTlsContext) {
+    public UpstreamTlsContext(CommonTlsContext commonTlsContext) {
       super(commonTlsContext);
     }
 
     public static UpstreamTlsContext fromEnvoyProtoUpstreamTlsContext(
-            io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext upstreamTlsContext) {
+        io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+            upstreamTlsContext) {
       return new UpstreamTlsContext(upstreamTlsContext.getCommonTlsContext());
     }
 
@@ -90,13 +95,15 @@ public final class EnvoyServerProtoData {
     private final boolean requireClientCertificate;
 
     @VisibleForTesting
-    DownstreamTlsContext(CommonTlsContext commonTlsContext, boolean requireClientCertificate) {
+    public DownstreamTlsContext(
+        CommonTlsContext commonTlsContext, boolean requireClientCertificate) {
       super(commonTlsContext);
       this.requireClientCertificate = requireClientCertificate;
     }
 
     public static DownstreamTlsContext fromEnvoyProtoDownstreamTlsContext(
-        io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext downstreamTlsContext) {
+        io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
+            downstreamTlsContext) {
       return new DownstreamTlsContext(downstreamTlsContext.getCommonTlsContext(),
         downstreamTlsContext.hasRequireClientCertificate());
     }
@@ -147,7 +154,7 @@ public final class EnvoyServerProtoData {
     }
 
     static CidrRange fromEnvoyProtoCidrRange(
-        io.envoyproxy.envoy.api.v2.core.CidrRange proto) {
+        io.envoyproxy.envoy.config.core.v3.CidrRange proto) {
       return new CidrRange(proto.getAddressPrefix(), proto.getPrefixLen().getValue());
     }
 
@@ -204,9 +211,9 @@ public final class EnvoyServerProtoData {
     }
 
     static FilterChainMatch fromEnvoyProtoFilterChainMatch(
-        io.envoyproxy.envoy.api.v2.listener.FilterChainMatch proto) {
+        io.envoyproxy.envoy.config.listener.v3.FilterChainMatch proto) {
       List<CidrRange> prefixRanges = new ArrayList<>();
-      for (io.envoyproxy.envoy.api.v2.core.CidrRange range : proto.getPrefixRangesList()) {
+      for (io.envoyproxy.envoy.config.core.v3.CidrRange range : proto.getPrefixRangesList()) {
         prefixRanges.add(CidrRange.fromEnvoyProtoCidrRange(range));
       }
       List<String> applicationProtocols = new ArrayList<>();
@@ -266,16 +273,18 @@ public final class EnvoyServerProtoData {
   static final class FilterChain {
     // TODO(sanjaypujare): flatten structure by moving FilterChainMatch class members here.
     private final FilterChainMatch filterChainMatch;
+    @Nullable
     private final DownstreamTlsContext downstreamTlsContext;
 
     @VisibleForTesting
-    FilterChain(FilterChainMatch filterChainMatch, DownstreamTlsContext downstreamTlsContext) {
+    FilterChain(
+        FilterChainMatch filterChainMatch, @Nullable DownstreamTlsContext downstreamTlsContext) {
       this.filterChainMatch = filterChainMatch;
       this.downstreamTlsContext = downstreamTlsContext;
     }
 
     static FilterChain fromEnvoyProtoFilterChain(
-        io.envoyproxy.envoy.api.v2.listener.FilterChain proto)
+        io.envoyproxy.envoy.config.listener.v3.FilterChain proto)
         throws InvalidProtocolBufferException {
       return new FilterChain(
           FilterChainMatch.fromEnvoyProtoFilterChainMatch(proto.getFilterChainMatch()),
@@ -283,23 +292,25 @@ public final class EnvoyServerProtoData {
       );
     }
 
+    @Nullable
     private static DownstreamTlsContext getTlsContextFromFilterChain(
-        io.envoyproxy.envoy.api.v2.listener.FilterChain filterChain)
+        io.envoyproxy.envoy.config.listener.v3.FilterChain filterChain)
         throws InvalidProtocolBufferException {
       if (filterChain.hasTransportSocket()
-          && "tls".equals(filterChain.getTransportSocket().getName())) {
+          && TRANSPORT_SOCKET_NAME_TLS.equals(filterChain.getTransportSocket().getName())) {
         Any any = filterChain.getTransportSocket().getTypedConfig();
         return DownstreamTlsContext.fromEnvoyProtoDownstreamTlsContext(
-            io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext.parseFrom(any.getValue()));
+            io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext.parseFrom(
+                any.getValue()));
       }
-      // TODO(sanjaypujare): remove when we move to envoy protos v3
-      return DownstreamTlsContext.fromEnvoyProtoDownstreamTlsContext(filterChain.getTlsContext());
+      return null;
     }
 
     public FilterChainMatch getFilterChainMatch() {
       return filterChainMatch;
     }
 
+    @Nullable
     public DownstreamTlsContext getDownstreamTlsContext() {
       return downstreamTlsContext;
     }
@@ -349,10 +360,9 @@ public final class EnvoyServerProtoData {
       this.filterChains = Collections.unmodifiableList(filterChains);
     }
 
-    private static String convertEnvoyAddressToString(
-        io.envoyproxy.envoy.api.v2.core.Address proto) {
+    private static String convertEnvoyAddressToString(Address proto) {
       if (proto.hasSocketAddress()) {
-        io.envoyproxy.envoy.api.v2.core.SocketAddress socketAddress = proto.getSocketAddress();
+        SocketAddress socketAddress = proto.getSocketAddress();
         String address = socketAddress.getAddress();
         switch (socketAddress.getPortSpecifierCase()) {
           case NAMED_PORT:
@@ -366,10 +376,10 @@ public final class EnvoyServerProtoData {
       return null;
     }
 
-    static Listener fromEnvoyProtoListener(io.envoyproxy.envoy.api.v2.Listener proto)
+    static Listener fromEnvoyProtoListener(io.envoyproxy.envoy.config.listener.v3.Listener proto)
         throws InvalidProtocolBufferException {
       List<FilterChain> filterChains = new ArrayList<>(proto.getFilterChainsCount());
-      for (io.envoyproxy.envoy.api.v2.listener.FilterChain filterChain :
+      for (io.envoyproxy.envoy.config.listener.v3.FilterChain filterChain :
           proto.getFilterChainsList()) {
         filterChains.add(FilterChain.fromEnvoyProtoFilterChain(filterChain));
       }

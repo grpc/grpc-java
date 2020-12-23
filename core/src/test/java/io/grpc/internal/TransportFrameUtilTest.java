@@ -31,7 +31,6 @@ import com.google.common.io.BaseEncoding;
 import io.grpc.InternalMetadata;
 import io.grpc.Metadata;
 import io.grpc.Metadata.BinaryMarshaller;
-import io.grpc.Metadata.Key;
 import java.util.Arrays;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -58,11 +57,14 @@ public class TransportFrameUtilTest {
     }
   };
 
-  private static final Key<String> PLAIN_STRING = Key.of("plainstring", ASCII_STRING_MARSHALLER);
-  private static final Key<String> BINARY_STRING = Key.of("string-bin", UTF8_STRING_MARSHALLER);
-  private static final Key<String> BINARY_STRING_WITHOUT_SUFFIX =
-      Key.of("string", ASCII_STRING_MARSHALLER);
-  private static final Key<byte[]> BINARY_BYTES = Key.of("bytes-bin", BINARY_BYTE_MARSHALLER);
+  private static final Metadata.Key<String> PLAIN_STRING =
+      Metadata.Key.of("plainstring", ASCII_STRING_MARSHALLER);
+  private static final Metadata.Key<String> BINARY_STRING =
+      Metadata.Key.of("string-bin", UTF8_STRING_MARSHALLER);
+  private static final Metadata.Key<String> BINARY_STRING_WITHOUT_SUFFIX =
+      Metadata.Key.of("string", ASCII_STRING_MARSHALLER);
+  private static final Metadata.Key<byte[]> BINARY_BYTES =
+      Metadata.Key.of("bytes-bin", BINARY_BYTE_MARSHALLER);
 
   @Test
   public void testToHttp2Headers() {
@@ -86,7 +88,7 @@ public class TransportFrameUtilTest {
 
   @Test(expected = IllegalArgumentException.class)
   public void binaryHeaderWithoutSuffix() {
-    Key.of("plainstring", UTF8_STRING_MARSHALLER);
+    Metadata.Key.of("plainstring", UTF8_STRING_MARSHALLER);
   }
 
   @Test

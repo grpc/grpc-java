@@ -23,6 +23,9 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.base.Strings;
+import io.grpc.CallOptions;
+import io.grpc.InternalConfigSelector;
+import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.MethodDescriptor;
 import io.grpc.internal.RetriableStream.Throttle;
 import java.util.Collections;
@@ -162,28 +165,22 @@ final class ManagedChannelServiceConfig {
             healthCheckingConfig);
   }
 
-  /**
-   * Returns the per-service configuration for the channel.
-   */
-  Map<String, MethodInfo> getServiceMap() {
-    return serviceMap;
-  }
-
   @Nullable
   Map<String, ?> getHealthCheckingConfig() {
     return healthCheckingConfig;
   }
 
   /**
-   * Returns the per-method configuration for the channel.
+   * Used as a fallback per-RPC config supplier when the attributes value of {@link
+   * InternalConfigSelector#KEY} is not available. Returns {@code null} if there is no method
+   * config in this service config.
    */
-  Map<String, MethodInfo> getServiceMethodMap() {
-    return serviceMethodMap;
-  }
-
   @Nullable
-  MethodInfo getDefaultMethodConfig() {
-    return defaultMethodConfig;
+  InternalConfigSelector getDefaultConfigSelector() {
+    if (serviceMap.isEmpty() && serviceMethodMap.isEmpty() && defaultMethodConfig == null) {
+      return null;
+    }
+    return new ServiceConfigConvertedSelector(this);
   }
 
   @VisibleForTesting
@@ -195,6 +192,19 @@ final class ManagedChannelServiceConfig {
   @Nullable
   Throttle getRetryThrottling() {
     return retryThrottling;
+  }
+
+  @Nullable
+  MethodInfo getMethodConfig(MethodDescriptor<?, ?> method) {
+    MethodInfo methodInfo = serviceMethodMap.get(method.getFullMethodName());
+    if (methodInfo == null) {
+      String serviceName = method.getServiceName();
+      methodInfo = serviceMap.get(serviceName);
+    }
+    if (methodInfo == null) {
+      methodInfo = defaultMethodConfig;
+    }
+    return methodInfo;
   }
 
   @Override
@@ -231,6 +241,9 @@ final class ManagedChannelServiceConfig {
    * Equivalent of MethodConfig from a ServiceConfig with restrictions from Channel setting.
    */
   static final class MethodInfo {
+    static final CallOptions.Key<MethodInfo> KEY =
+        CallOptions.Key.create("io.grpc.internal.ManagedChannelServiceConfig.MethodInfo");
+
     // TODO(carl-mastrangelo): add getters for these fields and make them private.
     final Long timeoutNanos;
     final Boolean waitForReady;
@@ -267,12 +280,12 @@ final class ManagedChannelServiceConfig {
       Map<String, ?> retryPolicyMap =
           retryEnabled ? ServiceConfigUtil.getRetryPolicyFromMethodConfig(methodConfig) : null;
       retryPolicy = retryPolicyMap == null
-          ? RetryPolicy.DEFAULT : retryPolicy(retryPolicyMap, maxRetryAttemptsLimit);
+          ? null : retryPolicy(retryPolicyMap, maxRetryAttemptsLimit);
 
       Map<String, ?> hedgingPolicyMap =
           retryEnabled ? ServiceConfigUtil.getHedgingPolicyFromMethodConfig(methodConfig) : null;
       hedgingPolicy = hedgingPolicyMap == null
-          ? HedgingPolicy.DEFAULT : hedgingPolicy(hedgingPolicyMap, maxHedgedAttemptsLimit);
+          ? null : hedgingPolicy(hedgingPolicyMap, maxHedgedAttemptsLimit);
     }
 
     @Override
@@ -363,6 +376,23 @@ final class ManagedChannelServiceConfig {
       return new HedgingPolicy(
           maxAttempts, hedgingDelayNanos,
           ServiceConfigUtil.getNonFatalStatusCodesFromHedgingPolicy(hedgingPolicy));
+    }
+  }
+
+  static final class ServiceConfigConvertedSelector extends InternalConfigSelector {
+
+    final ManagedChannelServiceConfig config;
+
+    /** Converts the service config to config selector. */
+    private ServiceConfigConvertedSelector(ManagedChannelServiceConfig config) {
+      this.config = config;
+    }
+
+    @Override
+    public Result selectConfig(PickSubchannelArgs args) {
+      return Result.newBuilder()
+          .setConfig(config)
+          .build();
     }
   }
 }

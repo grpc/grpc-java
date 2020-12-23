@@ -20,7 +20,7 @@ import io.netty.handler.codec.Headers;
 import io.netty.handler.codec.http2.Http2Headers;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map.Entry;
+import java.util.Map;
 import java.util.Set;
 
 abstract class AbstractHttp2Headers implements Http2Headers {
@@ -496,7 +496,7 @@ abstract class AbstractHttp2Headers implements Http2Headers {
   }
 
   @Override
-  public Iterator<Entry<CharSequence, CharSequence>> iterator() {
+  public Iterator<Map.Entry<CharSequence, CharSequence>> iterator() {
     throw new UnsupportedOperationException();
   }
 

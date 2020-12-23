@@ -28,8 +28,8 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableListMultimap;
@@ -160,7 +160,7 @@ public class NettyServerStreamTest extends NettyStreamTestBase<NettyServerStream
     assertThat(ImmutableListMultimap.copyOf(sendHeaders.headers()))
         .containsExactlyEntriesIn(expectedHeaders);
     assertThat(sendHeaders.endOfStream()).isTrue();
-    verifyZeroInteractions(serverListener);
+    verifyNoInteractions(serverListener);
 
     // Sending complete. Listener gets closed()
     stream().transportState().complete();
@@ -188,7 +188,7 @@ public class NettyServerStreamTest extends NettyStreamTestBase<NettyServerStream
     assertThat(ImmutableListMultimap.copyOf(sendHeaders.headers()))
         .containsExactlyEntriesIn(expectedHeaders);
     assertThat(sendHeaders.endOfStream()).isTrue();
-    verifyZeroInteractions(serverListener);
+    verifyNoInteractions(serverListener);
 
     // Sending complete. Listener gets closed()
     stream().transportState().complete();

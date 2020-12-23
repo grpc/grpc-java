@@ -30,9 +30,13 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import io.envoyproxy.envoy.config.core.v3.DataSource;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.SdsSecretConfig;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
-import io.grpc.xds.internal.sds.ReferenceCountingSslContextProviderMap.SslContextProviderFactory;
+import io.grpc.xds.internal.sds.ReferenceCountingMap.ValueFactory;
 import java.lang.reflect.Field;
 import org.junit.Before;
 import org.junit.Rule;
@@ -49,9 +53,9 @@ public class TlsContextManagerTest {
 
   @Rule public final MockitoRule mockitoRule = MockitoJUnit.rule();
 
-  @Mock SslContextProviderFactory<UpstreamTlsContext> mockClientFactory;
+  @Mock ValueFactory<UpstreamTlsContext, SslContextProvider> mockClientFactory;
 
-  @Mock SslContextProviderFactory<DownstreamTlsContext> mockServerFactory;
+  @Mock ValueFactory<DownstreamTlsContext, SslContextProvider> mockServerFactory;
 
   @Before
   public void clearInstance() throws NoSuchFieldException, IllegalAccessException {
@@ -139,9 +143,9 @@ public class TlsContextManagerTest {
             SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, /* trustCa= */ null);
 
     TlsContextManagerImpl tlsContextManagerImpl =
-        new TlsContextManagerImpl(mockClientFactory, mockServerFactory);
+        new TlsContextManagerImpl(mockClientFactory, mockServerFactory, false);
     SslContextProvider mockProvider = mock(SslContextProvider.class);
-    when(mockServerFactory.createSslContextProvider(downstreamTlsContext)).thenReturn(mockProvider);
+    when(mockServerFactory.create(downstreamTlsContext)).thenReturn(mockProvider);
     SslContextProvider serverSecretProvider =
         tlsContextManagerImpl.findOrCreateServerSslContextProvider(downstreamTlsContext);
     assertThat(serverSecretProvider).isSameInstanceAs(mockProvider);
@@ -158,9 +162,9 @@ public class TlsContextManagerTest {
             CLIENT_KEY_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
 
     TlsContextManagerImpl tlsContextManagerImpl =
-        new TlsContextManagerImpl(mockClientFactory, mockServerFactory);
+        new TlsContextManagerImpl(mockClientFactory, mockServerFactory, false);
     SslContextProvider mockProvider = mock(SslContextProvider.class);
-    when(mockClientFactory.createSslContextProvider(upstreamTlsContext)).thenReturn(mockProvider);
+    when(mockClientFactory.create(upstreamTlsContext)).thenReturn(mockProvider);
     SslContextProvider clientSecretProvider =
         tlsContextManagerImpl.findOrCreateClientSslContextProvider(upstreamTlsContext);
     assertThat(clientSecretProvider).isSameInstanceAs(mockProvider);
@@ -168,5 +172,72 @@ public class TlsContextManagerTest {
     when(mockProvider.getUpstreamTlsContext()).thenReturn(upstreamTlsContext);
     tlsContextManagerImpl.releaseClientSslContextProvider(mockProvider);
     verify(mockProvider, times(1)).close();
+  }
+
+  @Test
+  public void certInstanceOverrideForTlsCert() {
+    TlsContextManagerImpl tlsContextManagerImpl =
+        new TlsContextManagerImpl(mockClientFactory, mockServerFactory, true);
+    CommonTlsContext commonTlsContext =
+        CommonTlsContextTestsUtil.buildCommonTlsContextFromSdsConfigForTlsCertificate(
+            /* name= */ "name", /* targetUri= */ "unix:/tmp/sds/path", CA_PEM_FILE);
+    CommonTlsContext.Builder origBuilder = commonTlsContext.toBuilder();
+    CommonTlsContext.Builder modBuilder =
+        tlsContextManagerImpl.performCertInstanceOverride(origBuilder);
+    assertThat(modBuilder.hasValidationContextCertificateProviderInstance()).isFalse();
+    assertThat(modBuilder.hasCombinedValidationContext()).isFalse();
+    assertThat(modBuilder.hasTlsCertificateCertificateProviderInstance()).isTrue();
+    CommonTlsContext.CertificateProviderInstance instance =
+        modBuilder.getTlsCertificateCertificateProviderInstance();
+    assertThat(instance.getInstanceName()).isEqualTo("google_cloud_private_spiffe");
+  }
+
+  @Test
+  public void certInstanceOverrideForValidationContext() {
+    TlsContextManagerImpl tlsContextManagerImpl =
+        new TlsContextManagerImpl(mockClientFactory, mockServerFactory, true);
+    CommonTlsContext commonTlsContext =
+        CommonTlsContextTestsUtil.buildCommonTlsContextFromSdsConfigForValidationContext(
+            /* name= */ "name",
+            /* targetUri= */ "unix:/tmp/sds/path",
+            CLIENT_KEY_FILE,
+            CLIENT_PEM_FILE);
+    CommonTlsContext.Builder origBuilder = commonTlsContext.toBuilder();
+    CommonTlsContext.Builder modBuilder =
+        tlsContextManagerImpl.performCertInstanceOverride(origBuilder);
+    assertThat(modBuilder.hasTlsCertificateCertificateProviderInstance()).isFalse();
+    assertThat(modBuilder.hasCombinedValidationContext()).isFalse();
+    assertThat(modBuilder.hasValidationContextCertificateProviderInstance()).isTrue();
+    CommonTlsContext.CertificateProviderInstance instance =
+        modBuilder.getValidationContextCertificateProviderInstance();
+    assertThat(instance.getInstanceName()).isEqualTo("google_cloud_private_spiffe");
+  }
+
+  @Test
+  public void certInstanceOverrideForCombinedValidationContext() {
+    TlsContextManagerImpl tlsContextManagerImpl =
+        new TlsContextManagerImpl(mockClientFactory, mockServerFactory, true);
+
+    CertificateValidationContext staticCertContext =
+        CertificateValidationContext.newBuilder()
+            .setTrustedCa(DataSource.newBuilder().setFilename("/tmp/a.pem"))
+            .build();
+
+    CommonTlsContext.Builder builder = CommonTlsContext.newBuilder();
+    builder =
+        CommonTlsContextTestsUtil.addCertificateValidationContext(
+            builder, "name", /* targetUri= */ "unix:/tmp/sds/path", "uds", staticCertContext);
+    CommonTlsContext.Builder modBuilder =
+        tlsContextManagerImpl.performCertInstanceOverride(builder);
+    assertThat(modBuilder.hasTlsCertificateCertificateProviderInstance()).isFalse();
+    assertThat(modBuilder.hasCombinedValidationContext()).isTrue();
+    assertThat(modBuilder.hasValidationContextCertificateProviderInstance()).isFalse();
+    CommonTlsContext.CombinedCertificateValidationContext combined =
+        modBuilder.getCombinedValidationContext();
+    CommonTlsContext.CertificateProviderInstance instance =
+        combined.getValidationContextCertificateProviderInstance();
+    assertThat(instance.getInstanceName()).isEqualTo("google_cloud_private_spiffe");
+    SdsSecretConfig validationContextSdsConfig = combined.getValidationContextSdsSecretConfig();
+    assertThat(validationContextSdsConfig.getName()).isEqualTo("name");
   }
 }

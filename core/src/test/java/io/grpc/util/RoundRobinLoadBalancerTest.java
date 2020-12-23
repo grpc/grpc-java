@@ -381,13 +381,12 @@ public class RoundRobinLoadBalancerTest {
     loadBalancer.handleNameResolutionError(Status.NOT_FOUND.withDescription("nameResolutionError"));
 
     verify(mockHelper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
-    verify(mockHelper, times(3))
+    verify(mockHelper, times(2))
         .updateBalancingState(stateCaptor.capture(), pickerCaptor.capture());
 
     Iterator<ConnectivityState> stateIterator = stateCaptor.getAllValues().iterator();
     assertEquals(CONNECTING, stateIterator.next());
     assertEquals(READY, stateIterator.next());
-    assertEquals(TRANSIENT_FAILURE, stateIterator.next());
 
     LoadBalancer.PickResult pickResult = pickerCaptor.getValue().pickSubchannel(mockArgs);
     assertEquals(readySubchannel, pickResult.getSubchannel());

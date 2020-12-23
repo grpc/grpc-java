@@ -46,7 +46,10 @@ public abstract class ServerCall<ReqT, RespT> {
    * close, which is guaranteed before completion.
    *
    * <p>Implementations are free to block for extended periods of time. Implementations are not
-   * required to be thread-safe.
+   * required to be thread-safe, but they must not be thread-hostile. The caller is free to call
+   * an instance from multiple threads, but only one call simultaneously. A single thread may
+   * interleave calls to multiple instances, so implementations using ThreadLocals must be careful
+   * to avoid leaking inappropriate state (e.g., clearing the ThreadLocal before returning).
    */
   // TODO(ejona86): We need to decide what to do in the case of server closing with non-cancellation
   // before client half closes. It may be that we treat such a case as an error. If we permit such
@@ -159,6 +162,13 @@ public abstract class ServerCall<ReqT, RespT> {
    *
    * <p>Since {@link Metadata} is not thread-safe, the caller must not access (read or write) {@code
    * trailers} after this point.
+   *
+   * <p>This method implies the caller completed processing the RPC, but it does not imply the RPC
+   * is complete. The call implementation will need additional time to complete the RPC and during
+   * this time the client is still able to cancel the request or a network error might cause the
+   * RPC to fail. If you wish to know when the call is actually completed/closed, you have to use
+   * {@link Listener#onComplete} or {@link Listener#onCancel} instead. This method is not
+   * necessarily invoked when Listener.onCancel() is called.
    *
    * @throws IllegalStateException if call is already {@code close}d
    */

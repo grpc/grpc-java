@@ -25,7 +25,7 @@ public interface BackoffPolicy {
   }
 
   /**
-   * @return The number of nanoseconds to wait.
+   * Returns the number of nanoseconds to wait.
    */
   long nextBackoffNanos();
 }

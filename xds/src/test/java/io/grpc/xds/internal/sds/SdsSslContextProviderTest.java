@@ -22,16 +22,19 @@ import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_KEY_FILE
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_PEM_FILE;
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_KEY_FILE;
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_PEM_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.doChecksOnSslContext;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.getValueThruCallback;
 import static io.grpc.xds.internal.sds.SdsClientTest.getOneCertificateValidationContextSecret;
 import static io.grpc.xds.internal.sds.SdsClientTest.getOneTlsCertSecret;
-import static io.grpc.xds.internal.sds.SecretVolumeSslContextProviderTest.doChecksOnSslContext;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.google.common.util.concurrent.MoreExecutors;
-import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
 import io.envoyproxy.envoy.api.v2.core.Node;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
+import io.envoyproxy.envoy.type.matcher.v3.StringMatcher;
 import io.grpc.Status.Code;
+import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.TestCallback;
 import java.io.IOException;
 import java.util.Arrays;
 import org.junit.After;
@@ -66,7 +69,7 @@ public class SdsSslContextProviderTest {
   private SdsClientSslContextProvider getSdsClientSslContextProvider(
       String certName,
       String validationContextName,
-      Iterable<String> verifySubjectAltNames,
+      Iterable<StringMatcher> matchSubjectAltNames,
       Iterable<String> alpnProtocols)
       throws IOException {
 
@@ -76,7 +79,7 @@ public class SdsSslContextProviderTest {
             /* certTargetUri= */ "inproc",
             validationContextName,
             /* validationContextTargetUri= */ "inproc",
-            verifySubjectAltNames,
+            matchSubjectAltNames,
             alpnProtocols,
             /* channelType= */ "inproc");
 
@@ -91,7 +94,7 @@ public class SdsSslContextProviderTest {
   private SdsServerSslContextProvider getSdsServerSslContextProvider(
       String certName,
       String validationContextName,
-      Iterable<String> verifySubjectAltNames,
+      Iterable<StringMatcher> matchSubjectAltNames,
       Iterable<String> alpnProtocols)
       throws IOException {
 
@@ -101,7 +104,7 @@ public class SdsSslContextProviderTest {
             /* certTargetUri= */ "inproc",
             validationContextName,
             /* validationContextTargetUri= */ "inproc",
-            verifySubjectAltNames,
+            matchSubjectAltNames,
             alpnProtocols,
             /* channelType= */ "inproc");
 
@@ -122,8 +125,7 @@ public class SdsSslContextProviderTest {
 
     SdsServerSslContextProvider provider =
         getSdsServerSslContextProvider("cert1", "valid1", null, null);
-    SecretVolumeSslContextProviderTest.TestCallback testCallback =
-        SecretVolumeSslContextProviderTest.getValueThruCallback(provider);
+    TestCallback testCallback = getValueThruCallback(provider);
 
     doChecksOnSslContext(true, testCallback.updatedSslContext, /* expectedApnProtos= */ null);
   }
@@ -139,10 +141,9 @@ public class SdsSslContextProviderTest {
         getSdsClientSslContextProvider(
             /* certName= */ "cert1",
             /* validationContextName= */ "valid1",
-            /* verifySubjectAltNames= */ null,
+            /* matchSubjectAltNames= */ null,
             /* alpnProtocols= */ null);
-    SecretVolumeSslContextProviderTest.TestCallback testCallback =
-        SecretVolumeSslContextProviderTest.getValueThruCallback(provider);
+    TestCallback testCallback = getValueThruCallback(provider);
 
     doChecksOnSslContext(false, testCallback.updatedSslContext, /* expectedApnProtos= */ null);
   }
@@ -156,10 +157,9 @@ public class SdsSslContextProviderTest {
         getSdsServerSslContextProvider(
             /* certName= */ "cert1",
             /* validationContextName= */ null,
-            /* verifySubjectAltNames= */ null,
+            /* matchSubjectAltNames= */ null,
             /* alpnProtocols= */ null);
-    SecretVolumeSslContextProviderTest.TestCallback testCallback =
-        SecretVolumeSslContextProviderTest.getValueThruCallback(provider);
+    TestCallback testCallback = getValueThruCallback(provider);
 
     doChecksOnSslContext(true, testCallback.updatedSslContext, /* expectedApnProtos= */ null);
   }
@@ -173,10 +173,9 @@ public class SdsSslContextProviderTest {
         getSdsClientSslContextProvider(
             /* certName= */ null,
             /* validationContextName= */ "valid1",
-            /* verifySubjectAltNames= */ null,
+            /* matchSubjectAltNames= */ null,
             null);
-    SecretVolumeSslContextProviderTest.TestCallback testCallback =
-        SecretVolumeSslContextProviderTest.getValueThruCallback(provider);
+    TestCallback testCallback = getValueThruCallback(provider);
 
     doChecksOnSslContext(false, testCallback.updatedSslContext, /* expectedApnProtos= */ null);
   }
@@ -190,10 +189,9 @@ public class SdsSslContextProviderTest {
         getSdsServerSslContextProvider(
             /* certName= */ null,
             /* validationContextName= */ "valid1",
-            /* verifySubjectAltNames= */ null,
+            /* matchSubjectAltNames= */ null,
             /* alpnProtocols= */ null);
-    SecretVolumeSslContextProviderTest.TestCallback testCallback =
-        SecretVolumeSslContextProviderTest.getValueThruCallback(provider);
+    TestCallback testCallback = getValueThruCallback(provider);
 
     assertThat(server.lastNack).isNotNull();
     assertThat(server.lastNack.getVersionInfo()).isEmpty();
@@ -215,11 +213,13 @@ public class SdsSslContextProviderTest {
         getSdsClientSslContextProvider(
             /* certName= */ "cert1",
             /* validationContextName= */ "valid1",
-            Arrays.asList("spiffe://grpc-sds-testing.svc.id.goog/ns/default/sa/bob"),
+            Arrays.asList(
+                StringMatcher.newBuilder()
+                    .setExact("spiffe://grpc-sds-testing.svc.id.goog/ns/default/sa/bob")
+                    .build()),
             /* alpnProtocols= */ null);
 
-    SecretVolumeSslContextProviderTest.TestCallback testCallback =
-        SecretVolumeSslContextProviderTest.getValueThruCallback(provider);
+    TestCallback testCallback = getValueThruCallback(provider);
     doChecksOnSslContext(false, testCallback.updatedSslContext, /* expectedApnProtos= */ null);
   }
 
@@ -234,10 +234,9 @@ public class SdsSslContextProviderTest {
         getSdsClientSslContextProvider(
             /* certName= */ "cert1",
             /* validationContextName= */ "valid1",
-            /* verifySubjectAltNames= */ null,
+            /* matchSubjectAltNames= */ null,
             /* alpnProtocols= */ Arrays.asList("managed-mtls", "h2"));
-    SecretVolumeSslContextProviderTest.TestCallback testCallback =
-        SecretVolumeSslContextProviderTest.getValueThruCallback(provider);
+    TestCallback testCallback = getValueThruCallback(provider);
 
     doChecksOnSslContext(
         false, testCallback.updatedSslContext, Arrays.asList("managed-mtls", "h2"));
@@ -254,10 +253,9 @@ public class SdsSslContextProviderTest {
         getSdsServerSslContextProvider(
             /* certName= */ "cert1",
             /* validationContextName= */ "valid1",
-            /* verifySubjectAltNames= */ null,
+            /* matchSubjectAltNames= */ null,
             /* alpnProtocols= */ Arrays.asList("managed-mtls", "h2"));
-    SecretVolumeSslContextProviderTest.TestCallback testCallback =
-        SecretVolumeSslContextProviderTest.getValueThruCallback(provider);
+    TestCallback testCallback = getValueThruCallback(provider);
 
     doChecksOnSslContext(
         true, testCallback.updatedSslContext, Arrays.asList("managed-mtls", "h2"));

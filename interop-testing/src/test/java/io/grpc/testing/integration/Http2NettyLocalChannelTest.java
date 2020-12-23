@@ -16,8 +16,9 @@
 
 package io.grpc.testing.integration;
 
-import io.grpc.ManagedChannel;
-import io.grpc.internal.AbstractServerImplBuilder;
+import io.grpc.ServerBuilder;
+import io.grpc.netty.InternalNettyChannelBuilder;
+import io.grpc.netty.InternalNettyServerBuilder;
 import io.grpc.netty.NegotiationType;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.netty.NettyServerBuilder;
@@ -38,28 +39,31 @@ public class Http2NettyLocalChannelTest extends AbstractInteropTest {
   private DefaultEventLoopGroup eventLoopGroup = new DefaultEventLoopGroup();
 
   @Override
-  protected AbstractServerImplBuilder<?> getServerBuilder() {
-    return NettyServerBuilder
+  protected ServerBuilder<?> getServerBuilder() {
+    NettyServerBuilder builder = NettyServerBuilder
         .forAddress(new LocalAddress("in-process-1"))
-        .flowControlWindow(65 * 1024)
+        .flowControlWindow(AbstractInteropTest.TEST_FLOW_CONTROL_WINDOW)
         .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
         .channelType(LocalServerChannel.class)
         .workerEventLoopGroup(eventLoopGroup)
         .bossEventLoopGroup(eventLoopGroup);
+    // Disable the default census stats tracer, use testing tracer instead.
+    InternalNettyServerBuilder.setStatsEnabled(builder, false);
+    return builder.addStreamTracerFactory(createCustomCensusTracerFactory());
   }
 
   @Override
-  protected ManagedChannel createChannel() {
+  protected NettyChannelBuilder createChannelBuilder() {
     NettyChannelBuilder builder = NettyChannelBuilder
         .forAddress(new LocalAddress("in-process-1"))
         .negotiationType(NegotiationType.PLAINTEXT)
         .channelType(LocalChannel.class)
         .eventLoopGroup(eventLoopGroup)
-        .flowControlWindow(65 * 1024)
+        .flowControlWindow(AbstractInteropTest.TEST_FLOW_CONTROL_WINDOW)
         .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE);
     // Disable the default census stats interceptor, use testing interceptor instead.
-    io.grpc.internal.TestingAccessor.setStatsEnabled(builder, false);
-    return builder.intercept(createCensusStatsClientInterceptor()).build();
+    InternalNettyChannelBuilder.setStatsEnabled(builder, false);
+    return builder.intercept(createCensusStatsClientInterceptor());
   }
 
   @Override

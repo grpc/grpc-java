@@ -17,263 +17,878 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
-import static io.grpc.xds.XdsLbPolicies.CDS_POLICY_NAME;
-import static io.grpc.xds.XdsLbPolicies.WEIGHTED_TARGET_POLICY_NAME;
-import static io.grpc.xds.XdsLbPolicies.XDS_ROUTING_POLICY_NAME;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 
-import com.google.common.collect.ImmutableMap;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Iterables;
-import com.google.re2j.Pattern;
+import io.grpc.CallOptions;
+import io.grpc.Channel;
+import io.grpc.ClientCall;
+import io.grpc.ClientInterceptor;
+import io.grpc.InternalConfigSelector;
+import io.grpc.InternalConfigSelector.Result;
+import io.grpc.Metadata;
+import io.grpc.MethodDescriptor;
+import io.grpc.MethodDescriptor.MethodType;
+import io.grpc.NameResolver;
+import io.grpc.NameResolver.ConfigOrError;
+import io.grpc.NameResolver.ResolutionResult;
+import io.grpc.NameResolver.ServiceConfigParser;
+import io.grpc.Status;
+import io.grpc.Status.Code;
+import io.grpc.SynchronizationContext;
 import io.grpc.internal.JsonParser;
+import io.grpc.internal.JsonUtil;
+import io.grpc.internal.NoopClientCall;
+import io.grpc.internal.NoopClientCall.NoopClientCallListener;
+import io.grpc.internal.ObjectPool;
+import io.grpc.internal.PickSubchannelArgsImpl;
+import io.grpc.testing.TestMethodDescriptors;
 import io.grpc.xds.EnvoyProtoData.ClusterWeight;
 import io.grpc.xds.EnvoyProtoData.Route;
 import io.grpc.xds.EnvoyProtoData.RouteAction;
-import io.grpc.xds.RouteMatch.FractionMatcher;
-import io.grpc.xds.RouteMatch.HeaderMatcher;
-import io.grpc.xds.RouteMatch.PathMatcher;
+import io.grpc.xds.EnvoyProtoData.VirtualHost;
+import io.grpc.xds.XdsClient.RdsResourceWatcher;
+import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
+import javax.annotation.Nullable;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Captor;
+import org.mockito.Mock;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 /** Unit tests for {@link XdsNameResolver}. */
+// TODO(chengyuanzhang): should do tests with ManagedChannelImpl.
 @RunWith(JUnit4.class)
 public class XdsNameResolverTest {
+  private static final String AUTHORITY = "foo.googleapis.com:80";
+  @Rule
+  public final MockitoRule mocks = MockitoJUnit.rule();
+  private final SynchronizationContext syncContext = new SynchronizationContext(
+      new Thread.UncaughtExceptionHandler() {
+        @Override
+        public void uncaughtException(Thread t, Throwable e) {
+          throw new AssertionError(e);
+        }
+      });
+  private final ServiceConfigParser serviceConfigParser = new ServiceConfigParser() {
+    @Override
+    public ConfigOrError parseServiceConfig(Map<String, ?> rawServiceConfig) {
+      return ConfigOrError.fromConfig(rawServiceConfig);
+    }
+  };
+  private final FakeXdsClientPoolFactory xdsClientPoolFactory = new FakeXdsClientPoolFactory();
+  private final String cluster1 = "cluster-foo.googleapis.com";
+  private final String cluster2 = "cluster-bar.googleapis.com";
+  private final CallInfo call1 = new CallInfo("HelloService", "hi");
+  private final CallInfo call2 = new CallInfo("GreetService", "bye");
+  private final TestChannel channel = new TestChannel();
+
+  @Mock
+  private ThreadSafeRandom mockRandom;
+  @Mock
+  private NameResolver.Listener2 mockListener;
+  @Captor
+  private ArgumentCaptor<ResolutionResult> resolutionResultCaptor;
+  @Captor
+  ArgumentCaptor<Status> errorCaptor;
+  private XdsNameResolver resolver;
+  private TestCall<?, ?> testCall;
+
+  @Before
+  public void setUp() {
+    XdsNameResolver.enableTimeout = true;
+    resolver = new XdsNameResolver(AUTHORITY, serviceConfigParser, syncContext,
+        xdsClientPoolFactory, mockRandom);
+  }
+
+  @After
+  public void tearDown() {
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    resolver.shutdown();
+    if (xdsClient != null) {
+      assertThat(xdsClient.ldsWatcher).isNull();
+      assertThat(xdsClient.rdsWatcher).isNull();
+    }
+  }
 
   @Test
-  public void generateWeightedTargetRawConfig() throws IOException {
-    List<ClusterWeight> clusterWeights =
+  public void resolving_failToCreateXdsClientPool() {
+    XdsClientPoolFactory xdsClientPoolFactory = new XdsClientPoolFactory() {
+      @Override
+      public ObjectPool<XdsClient> getXdsClientPool() throws XdsInitializationException {
+        throw new XdsInitializationException("Fail to read bootstrap file");
+      }
+    };
+    resolver = new XdsNameResolver(AUTHORITY, serviceConfigParser, syncContext,
+        xdsClientPoolFactory, mockRandom);
+    resolver.start(mockListener);
+    verify(mockListener).onError(errorCaptor.capture());
+    Status error = errorCaptor.getValue();
+    assertThat(error.getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat(error.getDescription()).isEqualTo("Failed to initialize xDS");
+    assertThat(error.getCause()).hasMessageThat().isEqualTo("Fail to read bootstrap file");
+  }
+
+  @Test
+  public void resolving_ldsResourceNotFound() {
+    resolver.start(mockListener);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    assertThat(xdsClient.ldsResource).isEqualTo(AUTHORITY);
+    assertThat(xdsClient.ldsWatcher).isNotNull();
+    xdsClient.deliverLdsResourceNotFound(AUTHORITY);
+    assertEmptyResolutionResult();
+  }
+
+  @Test
+  public void resolving_ldsResourceUpdateRdsName() {
+    String rdsResource = "route-configuration-foo.googleapis.com";
+    resolver.start(mockListener);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    xdsClient.deliverRdsName(AUTHORITY, rdsResource);
+    RdsResourceWatcher rdsWatcher = xdsClient.rdsWatcher;
+    assertThat(rdsWatcher).isNotNull();
+    assertThat(xdsClient.rdsResource).isEqualTo(rdsResource);
+    rdsResource = "route-configuration-bar.googleapis.com";
+    xdsClient.deliverRdsName(AUTHORITY, rdsResource);
+    assertThat(xdsClient.rdsResource).isEqualTo(rdsResource);
+    assertThat(xdsClient.rdsWatcher).isNotSameInstanceAs(rdsWatcher);
+  }
+
+  @Test
+  public void resolving_rdsResourceNotFound() {
+    String rdsResource = "route-configuration.googleapis.com";
+    resolver.start(mockListener);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    assertThat(xdsClient.ldsResource).isEqualTo(AUTHORITY);
+    assertThat(xdsClient.ldsWatcher).isNotNull();
+    xdsClient.deliverRdsName(AUTHORITY, rdsResource);
+    assertThat(xdsClient.rdsResource).isEqualTo(rdsResource);
+    assertThat(xdsClient.rdsWatcher).isNotNull();
+    xdsClient.deliverRdsResourceNotFound(rdsResource);
+    assertEmptyResolutionResult();
+  }
+
+  @Test
+  public void resolving_encounterErrorLdsWatcherOnly() {
+    resolver.start(mockListener);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    xdsClient.deliverError(Status.UNAVAILABLE.withDescription("server unreachable"));
+    verify(mockListener).onError(errorCaptor.capture());
+    Status error = errorCaptor.getValue();
+    assertThat(error.getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat(error.getDescription()).isEqualTo("server unreachable");
+  }
+
+  @Test
+  public void resolving_encounterErrorLdsAndRdsWatchers() {
+    String rdsResource = "route-configuration.googleapis.com";
+    resolver.start(mockListener);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    xdsClient.deliverRdsName(AUTHORITY, rdsResource);
+    assertThat(xdsClient.rdsWatcher).isNotNull();
+    xdsClient.deliverError(Status.UNAVAILABLE.withDescription("server unreachable"));
+    verify(mockListener, times(2)).onError(errorCaptor.capture());
+    for (Status error : errorCaptor.getAllValues()) {
+      assertThat(error.getCode()).isEqualTo(Code.UNAVAILABLE);
+      assertThat(error.getDescription()).isEqualTo("server unreachable");
+    }
+  }
+
+  @Test
+  public void resolving_matchingVirtualHostNotFoundInLdsResource() {
+    resolver.start(mockListener);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    xdsClient.deliverLdsUpdate(AUTHORITY, 0L, buildUnmatchedVirtualHosts());
+    assertEmptyResolutionResult();
+  }
+
+  @Test
+  public void resolving_matchingVirtualHostNotFoundInRdsResource() {
+    String rdsResource = "route-configuration.googleapis.com";
+    resolver.start(mockListener);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    xdsClient.deliverRdsName(AUTHORITY, rdsResource);
+    assertThat(xdsClient.rdsWatcher).isNotNull();
+    xdsClient.deliverRdsUpdate(rdsResource, buildUnmatchedVirtualHosts());
+    assertEmptyResolutionResult();
+  }
+
+  private List<VirtualHost> buildUnmatchedVirtualHosts() {
+    Route route1 = new Route(RouteMatch.withPathExactOnly(call2.getFullMethodNameForPath()),
+        new RouteAction(TimeUnit.SECONDS.toNanos(15L), cluster2, null));
+    Route route2 = new Route(RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
+        new RouteAction(TimeUnit.SECONDS.toNanos(15L), cluster1, null));
+    return Arrays.asList(
+        new VirtualHost("virtualhost-foo", Collections.singletonList("hello.googleapis.com"),
+            Collections.singletonList(route1)),
+        new VirtualHost("virtualhost-bar", Collections.singletonList("hi.googleapis.com"),
+            Collections.singletonList(route2)));
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test
+  public void resolved_noTimeout() {
+    resolver.start(mockListener);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    Route route = new Route(RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
+        new RouteAction(null, cluster1, null));  // per-route timeout unset
+    VirtualHost virtualHost = new VirtualHost("does not matter",
+        Collections.singletonList(AUTHORITY), Collections.singletonList(route));
+    xdsClient.deliverLdsUpdate(AUTHORITY, 0L, Collections.singletonList(virtualHost));
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    ResolutionResult result = resolutionResultCaptor.getValue();
+    InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
+    assertCallSelectResult(call1, configSelector, cluster1, null);
+  }
+
+  @Test
+  public void resolved_fallbackToHttpMaxStreamDurationAsTimeout() {
+    resolver.start(mockListener);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    Route route = new Route(RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
+        new RouteAction(null, cluster1, null));  // per-route timeout unset
+    VirtualHost virtualHost = new VirtualHost("does not matter",
+        Collections.singletonList(AUTHORITY), Collections.singletonList(route));
+    xdsClient.deliverLdsUpdate(AUTHORITY, TimeUnit.SECONDS.toNanos(5L),
+        Collections.singletonList(virtualHost));
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    ResolutionResult result = resolutionResultCaptor.getValue();
+    InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
+    assertCallSelectResult(call1, configSelector, cluster1, 5.0);
+  }
+
+  @Test
+  public void resolved_simpleCallSucceeds() {
+    InternalConfigSelector configSelector = resolveToClusters();
+    assertCallSelectResult(call1, configSelector, cluster1, 15.0);
+    testCall.deliverResponseHeaders();
+    verifyNoMoreInteractions(mockListener);
+  }
+
+  @Test
+  public void resolved_simpleCallFailedToRoute() {
+    InternalConfigSelector configSelector = resolveToClusters();
+    CallInfo call = new CallInfo("FooService", "barMethod");
+    Result selectResult = configSelector.selectConfig(
+        new PickSubchannelArgsImpl(call.methodDescriptor, new Metadata(), CallOptions.DEFAULT));
+    Status status = selectResult.getStatus();
+    assertThat(status.isOk()).isFalse();
+    assertThat(status.getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat(status.getDescription()).isEqualTo("Could not find xDS route matching RPC");
+    verifyNoMoreInteractions(mockListener);
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test
+  public void resolved_resourceUpdateAfterCallStarted() {
+    InternalConfigSelector configSelector = resolveToClusters();
+    assertCallSelectResult(call1, configSelector, cluster1, 15.0);
+    TestCall<?, ?> firstCall = testCall;
+
+    reset(mockListener);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    xdsClient.deliverLdsUpdate(
+        AUTHORITY,
         Arrays.asList(
-            new ClusterWeight("cluster-foo", 30), new ClusterWeight("cluster-bar", 50));
-    Map<String, ?> config = XdsNameResolver.generateWeightedTargetRawConfig(clusterWeights);
-    String expectedJson = "{\n"
-        + "  \"weighted_target_experimental\": {\n"
-        + "    \"targets\": {\n"
-        + "      \"cluster-foo\": {\n"
-        + "        \"weight\": 30,\n"
-        + "        \"childPolicy\": [{\n"
-        + "          \"cds_experimental\": {\n"
-        + "            \"cluster\": \"cluster-foo\"\n"
-        + "          }\n"
-        + "        }]\n"
-        + "      },\n"
-        + "      \"cluster-bar\": {\n"
-        + "        \"weight\": 50,\n"
-        + "        \"childPolicy\": [{\n"
-        + "          \"cds_experimental\": {\n"
-        + "            \"cluster\": \"cluster-bar\"\n"
-        + "          }\n"
-        + "        }]\n"
+            new Route(
+                RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
+                new RouteAction(TimeUnit.SECONDS.toNanos(20L), "another-cluster", null)),
+            new Route(
+                RouteMatch.withPathExactOnly(call2.getFullMethodNameForPath()),
+                new RouteAction(TimeUnit.SECONDS.toNanos(15L), cluster2, null))));
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    ResolutionResult result = resolutionResultCaptor.getValue();
+    // Updated service config still contains cluster1 while it is removed resource. New calls no
+    // longer routed to cluster1.
+    assertServiceConfigForLoadBalancingConfig(
+        Arrays.asList(cluster1, cluster2, "another-cluster"),
+        (Map<String, ?>) result.getServiceConfig().getConfig());
+    assertThat(result.getAttributes().get(InternalConfigSelector.KEY))
+        .isSameInstanceAs(configSelector);
+    assertCallSelectResult(call1, configSelector, "another-cluster", 20.0);
+
+    firstCall.deliverErrorStatus();  // completes previous call
+    verify(mockListener, times(2)).onResult(resolutionResultCaptor.capture());
+    result = resolutionResultCaptor.getValue();
+    assertServiceConfigForLoadBalancingConfig(
+        Arrays.asList(cluster2, "another-cluster"),
+        (Map<String, ?>) result.getServiceConfig().getConfig());
+    verifyNoMoreInteractions(mockListener);
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test
+  public void resolved_resourceUpdatedBeforeCallStarted() {
+    InternalConfigSelector configSelector = resolveToClusters();
+    reset(mockListener);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    xdsClient.deliverLdsUpdate(
+        AUTHORITY,
+        Arrays.asList(
+            new Route(
+                RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
+                new RouteAction(TimeUnit.SECONDS.toNanos(20L), "another-cluster", null)),
+            new Route(
+                RouteMatch.withPathExactOnly(call2.getFullMethodNameForPath()),
+                new RouteAction(TimeUnit.SECONDS.toNanos(15L), cluster2, null))));
+    // Two consecutive service config updates: one for removing clcuster1,
+    // one for adding "another=cluster".
+    verify(mockListener, times(2)).onResult(resolutionResultCaptor.capture());
+    ResolutionResult result = resolutionResultCaptor.getValue();
+    assertServiceConfigForLoadBalancingConfig(
+        Arrays.asList(cluster2, "another-cluster"),
+        (Map<String, ?>) result.getServiceConfig().getConfig());
+    assertThat(result.getAttributes().get(InternalConfigSelector.KEY))
+        .isSameInstanceAs(configSelector);
+    assertCallSelectResult(call1, configSelector, "another-cluster", 20.0);
+
+    verifyNoMoreInteractions(mockListener);
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test
+  public void resolved_raceBetweenCallAndRepeatedResourceUpdate() {
+    InternalConfigSelector configSelector = resolveToClusters();
+    assertCallSelectResult(call1, configSelector, cluster1, 15.0);
+
+    reset(mockListener);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    xdsClient.deliverLdsUpdate(
+        AUTHORITY,
+        Arrays.asList(
+            new Route(
+                RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
+                new RouteAction(TimeUnit.SECONDS.toNanos(20L), "another-cluster", null)),
+            new Route(
+                RouteMatch.withPathExactOnly(call2.getFullMethodNameForPath()),
+                new RouteAction(TimeUnit.SECONDS.toNanos(15L), cluster2, null))));
+
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    ResolutionResult result = resolutionResultCaptor.getValue();
+    assertServiceConfigForLoadBalancingConfig(
+        Arrays.asList(cluster1, cluster2, "another-cluster"),
+        (Map<String, ?>) result.getServiceConfig().getConfig());
+
+    xdsClient.deliverLdsUpdate(
+        AUTHORITY,
+        Arrays.asList(
+            new Route(
+                RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
+                new RouteAction(TimeUnit.SECONDS.toNanos(15L), "another-cluster", null)),
+            new Route(
+                RouteMatch.withPathExactOnly(call2.getFullMethodNameForPath()),
+                new RouteAction(TimeUnit.SECONDS.toNanos(15L), cluster2, null))));
+    verifyNoMoreInteractions(mockListener);  // no cluster added/deleted
+    assertCallSelectResult(call1, configSelector, "another-cluster", 15.0);
+  }
+
+  @Test
+  public void resolved_raceBetweenClusterReleasedAndResourceUpdateAddBackAgain() {
+    InternalConfigSelector configSelector = resolveToClusters();
+    assertCallSelectResult(call1, configSelector, cluster1, 15.0);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    xdsClient.deliverLdsUpdate(
+        AUTHORITY,
+        Collections.singletonList(
+            new Route(
+                RouteMatch.withPathExactOnly(call2.getFullMethodNameForPath()),
+                new RouteAction(TimeUnit.SECONDS.toNanos(15L), cluster2, null))));
+    xdsClient.deliverLdsUpdate(
+        AUTHORITY,
+        Arrays.asList(
+            new Route(
+                RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
+                new RouteAction(TimeUnit.SECONDS.toNanos(15L), cluster1, null)),
+            new Route(
+                RouteMatch.withPathExactOnly(call2.getFullMethodNameForPath()),
+                new RouteAction(TimeUnit.SECONDS.toNanos(15L), cluster2, null))));
+    testCall.deliverErrorStatus();
+    verifyNoMoreInteractions(mockListener);
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test
+  public void resolved_simpleCallSucceeds_routeToWeightedCluster() {
+    when(mockRandom.nextInt(anyInt())).thenReturn(90, 10);
+    resolver.start(mockListener);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    xdsClient.deliverLdsUpdate(
+        AUTHORITY,
+        Arrays.asList(
+            new Route(
+                RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
+                new RouteAction(
+                    TimeUnit.SECONDS.toNanos(20L), null,
+                    Arrays.asList(
+                        new ClusterWeight(cluster1, 20), new ClusterWeight(cluster2, 80))))));
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    ResolutionResult result = resolutionResultCaptor.getValue();
+    assertThat(result.getAddresses()).isEmpty();
+    assertServiceConfigForLoadBalancingConfig(
+        Arrays.asList(cluster1, cluster2), (Map<String, ?>) result.getServiceConfig().getConfig());
+    assertThat(result.getAttributes().get(XdsAttributes.XDS_CLIENT_POOL)).isNotNull();
+    InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
+    assertCallSelectResult(call1, configSelector, cluster2, 20.0);
+    assertCallSelectResult(call1, configSelector, cluster1, 20.0);
+  }
+
+  @SuppressWarnings("unchecked")
+  private void assertEmptyResolutionResult() {
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    ResolutionResult result = resolutionResultCaptor.getValue();
+    assertThat(result.getAddresses()).isEmpty();
+    assertThat((Map<String, ?>) result.getServiceConfig().getConfig()).isEmpty();
+  }
+
+  private void assertCallSelectResult(
+      CallInfo call, InternalConfigSelector configSelector, String expectedCluster,
+      @Nullable Double expectedTimeoutSec) {
+    Result result = configSelector.selectConfig(
+        new PickSubchannelArgsImpl(call.methodDescriptor, new Metadata(), CallOptions.DEFAULT));
+    assertThat(result.getStatus().isOk()).isTrue();
+    ClientInterceptor interceptor = result.getInterceptor();
+    ClientCall<Void, Void> clientCall = interceptor.interceptCall(
+        call.methodDescriptor, CallOptions.DEFAULT, channel);
+    clientCall.start(new NoopClientCallListener<Void>(), new Metadata());
+    assertThat(testCall.callOptions.getOption(XdsNameResolver.CLUSTER_SELECTION_KEY))
+        .isEqualTo(expectedCluster);
+    @SuppressWarnings("unchecked")
+    Map<String, ?> config = (Map<String, ?>) result.getConfig();
+    if (expectedTimeoutSec != null) {
+      // Verify the raw service config contains a single method config for method with the
+      // specified timeout.
+      List<Map<String, ?>> rawMethodConfigs =
+          JsonUtil.getListOfObjects(config, "methodConfig");
+      Map<String, ?> methodConfig = Iterables.getOnlyElement(rawMethodConfigs);
+      List<Map<String, ?>> methods = JsonUtil.getListOfObjects(methodConfig, "name");
+      assertThat(Iterables.getOnlyElement(methods)).isEmpty();
+      assertThat(JsonUtil.getString(methodConfig, "timeout")).isEqualTo(expectedTimeoutSec + "s");
+    } else {
+      assertThat(config).isEmpty();
+    }
+  }
+
+  @SuppressWarnings("unchecked")
+  private InternalConfigSelector resolveToClusters() {
+    resolver.start(mockListener);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    xdsClient.deliverLdsUpdate(
+        AUTHORITY,
+        Arrays.asList(
+            new Route(
+                RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
+                new RouteAction(TimeUnit.SECONDS.toNanos(15L), cluster1, null)),
+            new Route(
+                RouteMatch.withPathExactOnly(call2.getFullMethodNameForPath()),
+                new RouteAction(TimeUnit.SECONDS.toNanos(15L), cluster2, null))));
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    ResolutionResult result = resolutionResultCaptor.getValue();
+    assertThat(result.getAddresses()).isEmpty();
+    assertServiceConfigForLoadBalancingConfig(
+        Arrays.asList(cluster1, cluster2), (Map<String, ?>) result.getServiceConfig().getConfig());
+    assertThat(result.getAttributes().get(XdsAttributes.XDS_CLIENT_POOL)).isNotNull();
+    assertThat(result.getAttributes().get(XdsAttributes.CALL_COUNTER_PROVIDER)).isNotNull();
+    return result.getAttributes().get(InternalConfigSelector.KEY);
+  }
+
+  /**
+   * Verifies the raw service config contains an xDS load balancing config for the given clusters.
+   */
+  private static void assertServiceConfigForLoadBalancingConfig(
+      List<String> clusters, Map<String, ?> actualServiceConfig) {
+    List<Map<String, ?>> rawLbConfigs =
+        JsonUtil.getListOfObjects(actualServiceConfig, "loadBalancingConfig");
+    Map<String, ?> lbConfig = Iterables.getOnlyElement(rawLbConfigs);
+    assertThat(lbConfig.keySet()).containsExactly("cluster_manager_experimental");
+    Map<String, ?> clusterManagerLbConfig =
+        JsonUtil.getObject(lbConfig, "cluster_manager_experimental");
+    Map<String, ?> clusterManagerChildLbPolicies =
+        JsonUtil.getObject(clusterManagerLbConfig, "childPolicy");
+    assertThat(clusterManagerChildLbPolicies.keySet()).containsExactlyElementsIn(clusters);
+    for (String cluster : clusters) {
+      Map<String, ?> childLbConfig = JsonUtil.getObject(clusterManagerChildLbPolicies, cluster);
+      assertThat(childLbConfig.keySet()).containsExactly("lbPolicy");
+      List<Map<String, ?>> childLbConfigValues =
+          JsonUtil.getListOfObjects(childLbConfig, "lbPolicy");
+      Map<String, ?> cdsLbPolicy = Iterables.getOnlyElement(childLbConfigValues);
+      assertThat(cdsLbPolicy.keySet()).containsExactly("cds_experimental");
+      assertThat(JsonUtil.getObject(cdsLbPolicy, "cds_experimental"))
+          .containsExactly("cluster", cluster);
+    }
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test
+  public void generateServiceConfig_forLoadBalancingConfig() throws IOException {
+    List<String> clusters = Arrays.asList("cluster-foo", "cluster-bar", "cluster-baz");
+    String expectedServiceConfigJson = "{\n"
+        + "  \"loadBalancingConfig\": [{\n"
+        + "    \"cluster_manager_experimental\": {\n"
+        + "      \"childPolicy\": {\n"
+        + "        \"cluster-foo\": {\n"
+        + "          \"lbPolicy\": [{\n"
+        + "            \"cds_experimental\": {\n"
+        + "              \"cluster\": \"cluster-foo\"\n"
+        + "            }\n"
+        + "          }]\n"
+        + "        },\n"
+        + "        \"cluster-bar\": {\n"
+        + "          \"lbPolicy\": [{\n"
+        + "            \"cds_experimental\": {\n"
+        + "              \"cluster\": \"cluster-bar\"\n"
+        + "            }\n"
+        + "          }]\n"
+        + "        },\n"
+        + "        \"cluster-baz\": {\n"
+        + "          \"lbPolicy\": [{\n"
+        + "            \"cds_experimental\": {\n"
+        + "              \"cluster\": \"cluster-baz\"\n"
+        + "            }\n"
+        + "          }]\n"
+        + "        }\n"
         + "      }\n"
         + "    }\n"
-        + "  }\n"
+        + "  }]\n"
         + "}";
-    assertThat(config).isEqualTo(JsonParser.parse(expectedJson));
+    Map<String, ?> expectedServiceConfig =
+        (Map<String, ?>) JsonParser.parse(expectedServiceConfigJson);
+    assertThat(XdsNameResolver.generateServiceConfigWithLoadBalancingConfig(clusters))
+        .isEqualTo(expectedServiceConfig);
   }
 
   @SuppressWarnings("unchecked")
   @Test
-  public void generateXdsRoutingRawConfig() {
-    Route r1 =
-        new Route(
-            new RouteMatch(
-                new PathMatcher(null, "", null), Collections.<HeaderMatcher>emptyList(),
-                new FractionMatcher(10, 20)),
-            new RouteAction("cluster-foo", null));
-    Route r2 =
-        new Route(
-            new RouteMatch(
-                new PathMatcher("/service/method", null, null),
-                Arrays.asList(
-                    new HeaderMatcher(":scheme", "https", null, null, null, null, null, false)),
-                null),
-            new RouteAction(
-                null,
-                Arrays.asList(
-                    new ClusterWeight("cluster-foo", 20),
-                    new ClusterWeight("cluster-bar", 20))));
-
-    Map<String, ?> config =
-        XdsNameResolver.generateXdsRoutingRawConfig(Arrays.asList(r1, r2));
-    assertThat(config.keySet()).containsExactly("xds_routing_experimental");
-    Map<String, ?> content = (Map<String, ?>) config.get(XDS_ROUTING_POLICY_NAME);
-    assertThat(content.keySet()).containsExactly("action", "route");
-    Map<String, Map<String, ?>> actions = (Map<String, Map<String, ?>>) content.get("action");
-    List<Map<String, ?>> routes = (List<Map<String, ?>>) content.get("route");
-    assertThat(actions).hasSize(2);
-    assertThat(routes).hasSize(2);
-
-    Map<String, ?> route0 = routes.get(0);
-    assertThat(route0.keySet()).containsExactly("prefix", "matchFraction", "action");
-    assertThat((String) route0.get("prefix")).isEqualTo("");
-    assertThat((Map<String, ?>) route0.get("matchFraction"))
-        .containsExactly("numerator", 10, "denominator", 20);
-    assertCdsPolicy(actions.get(route0.get("action")), "cluster-foo");
-
-    Map<String, ?> route1 = routes.get(1);
-    assertThat(route1.keySet()).containsExactly("path", "headers", "action");
-    assertThat((String) route1.get("path")).isEqualTo("/service/method");
-    Map<String, ?> header = Iterables.getOnlyElement((List<Map<String, ?>>) route1.get("headers"));
-    assertThat(header)
-        .containsExactly("name", ":scheme", "exactMatch", "https", "invertMatch", false);
-    assertWeightedTargetPolicy(
-        actions.get(route1.get("action")),
-        ImmutableMap.of(
-            "cluster-foo", 20,  "cluster-bar", 20));
-  }
-
-  @SuppressWarnings("unchecked")
-  @Test
-  public void generateXdsRoutingRawConfig_allowDuplicateMatchers() {
-    Route route =
-        new Route(
-            new RouteMatch(
-                new PathMatcher("/service/method", null, null),
-                Collections.<HeaderMatcher>emptyList(), null),
-            new RouteAction("cluster-foo", null));
-
-    Map<String, ?> config =
-        XdsNameResolver.generateXdsRoutingRawConfig(Arrays.asList(route, route));
-    assertThat(config.keySet()).containsExactly(XDS_ROUTING_POLICY_NAME);
-    Map<String, ?> content = (Map<String, ?>) config.get(XDS_ROUTING_POLICY_NAME);
-    assertThat(content.keySet()).containsExactly("action", "route");
-    Map<String, ?> actions = (Map<String, ?>) content.get("action");
-    List<?> routes = (List<?>) content.get("route");
-    assertThat(actions).hasSize(1);
-    assertThat(routes).hasSize(2);
-    assertThat(routes.get(0)).isEqualTo(routes.get(1));
-  }
-
-  @SuppressWarnings("unchecked")
-  @Test
-  public void convertToRawRoute() throws IOException {
-    RouteMatch routeMatch1 =
-        new RouteMatch(
-            new PathMatcher("/service/method", null, null),
-            Collections.<HeaderMatcher>emptyList(), null);
-    String expectedJson1 = "{\n"
-        + "  \"path\": \"/service/method\",\n"
-        + "  \"action\": \"action_foo\""
+  public void generateServiceConfig_forMethodTimeoutConfig() throws IOException {
+    long timeoutNano = TimeUnit.SECONDS.toNanos(1L) + 1L; // 1.0000000001s
+    String expectedServiceConfigJson = "{\n"
+        + "  \"methodConfig\": [{\n"
+        + "    \"name\": [ {} ],\n"
+        + "    \"timeout\": \"1.000000001s\"\n"
+        + "  }]\n"
         + "}";
-    assertThat(XdsNameResolver.convertToRawRoute(routeMatch1, "action_foo"))
-        .isEqualTo(JsonParser.parse(expectedJson1));
-
-    RouteMatch routeMatch2 =
-        new RouteMatch(
-            new PathMatcher(null, "/", null), Collections.<HeaderMatcher>emptyList(),
-            new FractionMatcher(10, 100));
-    Map<String, ?> rawRoute2 = XdsNameResolver.convertToRawRoute(routeMatch2, "action_foo");
-    Map<String, ?> rawMatchFraction = (Map<String, ?>) rawRoute2.get("matchFraction");
-    assertThat(rawMatchFraction).containsExactly("numerator", 10, "denominator", 100);
-
-    RouteMatch routeMatch3 =
-        new RouteMatch(
-            new PathMatcher(null, "/", null),
-            Arrays.asList(
-                new HeaderMatcher("timeout", null, null, new HeaderMatcher.Range(0L, 10L),
-                    null, null, null, false)),
-            null);
-    Map<String, ?> rawRoute3 = XdsNameResolver.convertToRawRoute(routeMatch3, "action_foo");
-    Map<String, ?> header =
-        (Map<String, ?>) Iterables.getOnlyElement((List<?>) rawRoute3.get("headers"));
-    assertThat((Map<String, ?>) header.get("rangeMatch")).containsExactly("start", 0L, "end", 10L);
-
-    RouteMatch routeMatch4 =
-        new RouteMatch(
-            new PathMatcher(null, "/", null),
-            Arrays.asList(
-                new HeaderMatcher(":scheme", "https", null, null, null, null, null, false),
-                new HeaderMatcher(
-                    ":path", null, Pattern.compile("google.*"), null, null, null, null, true),
-                new HeaderMatcher("timeout", null, null, null, true, null, null, false),
-                new HeaderMatcher(":authority", null, null, null, null, "google", null, false),
-                new HeaderMatcher(":authority", null, null, null, null, null, "grpc.io", false)),
-            null);
-
-    String expectedJson4 = "{\n"
-        + "  \"prefix\": \"/\",\n"
-        + "  \"headers\": [\n"
-        + "    {\n"
-        + "      \"name\": \":scheme\",\n"
-        + "      \"exactMatch\": \"https\",\n"
-        + "      \"invertMatch\": false\n"
-        + "    },\n"
-        + "    {\n"
-        + "      \"name\": \":path\",\n"
-        + "      \"regexMatch\": \"google.*\",\n"
-        + "      \"invertMatch\": true\n"
-        + "    },\n"
-        + "    {\n"
-        + "      \"name\": \"timeout\",\n"
-        + "      \"presentMatch\": true,\n"
-        + "      \"invertMatch\": false\n"
-        + "    },\n"
-        + "    {\n"
-        + "      \"name\": \":authority\",\n"
-        + "      \"prefixMatch\": \"google\",\n"
-        + "      \"invertMatch\": false\n"
-        + "    },\n"
-        + "    {\n"
-        + "      \"name\": \":authority\",\n"
-        + "      \"suffixMatch\": \"grpc.io\",\n"
-        + "      \"invertMatch\": false\n"
-        + "    }\n"
-        + "  ],\n"
-        + "  \"action\": \"action_foo\""
-        + "}";
-    assertThat(XdsNameResolver.convertToRawRoute(routeMatch4, "action_foo"))
-        .isEqualTo(JsonParser.parse(expectedJson4));
+    Map<String, ?> expectedServiceConfig =
+        (Map<String, ?>) JsonParser.parse(expectedServiceConfigJson);
+    assertThat(XdsNameResolver.generateServiceConfigWithMethodTimeoutConfig(timeoutNano))
+        .isEqualTo(expectedServiceConfig);
   }
 
-  /** Asserts that the given action contains a single CDS policy with the given cluster name. */
-  @SuppressWarnings("unchecked")
-  static void assertCdsPolicy(Map<String, ?> action, String clusterName) {
-    assertThat(action.keySet()).containsExactly("childPolicy");
-    Map<String, ?> lbConfig =
-        Iterables.getOnlyElement((List<Map<String, ?>>) action.get("childPolicy"));
-    assertThat(lbConfig.keySet()).containsExactly(CDS_POLICY_NAME);
-    Map<String, ?> rawConfigValues = (Map<String, ?>) lbConfig.get(CDS_POLICY_NAME);
-    assertThat(rawConfigValues).containsExactly("cluster", clusterName);
+  @Test
+  public void matchHostName_exactlyMatch() {
+    String pattern = "foo.googleapis.com";
+    assertThat(XdsNameResolver.matchHostName("bar.googleapis.com", pattern)).isFalse();
+    assertThat(XdsNameResolver.matchHostName("fo.googleapis.com", pattern)).isFalse();
+    assertThat(XdsNameResolver.matchHostName("oo.googleapis.com", pattern)).isFalse();
+    assertThat(XdsNameResolver.matchHostName("googleapis.com", pattern)).isFalse();
+    assertThat(XdsNameResolver.matchHostName("foo.googleapis", pattern)).isFalse();
+    assertThat(XdsNameResolver.matchHostName("foo.googleapis.com", pattern)).isTrue();
   }
 
-  /**
-   * Asserts that the given action contains a single weighted-target policy with the given cluster
-   * to weight mapping.
-   */
-  @SuppressWarnings("unchecked")
-  static void assertWeightedTargetPolicy(
-      Map<String, ?> action, Map<String, Integer> clusterWeights) {
-    assertThat(action.keySet()).containsExactly("childPolicy");
-    Map<String, ?> lbConfig =
-        Iterables.getOnlyElement((List<Map<String, ?>>) action.get("childPolicy"));
-    assertThat(lbConfig.keySet()).containsExactly(WEIGHTED_TARGET_POLICY_NAME);
-    Map<String, ?> rawConfigValues = (Map<String, ?>) lbConfig.get(WEIGHTED_TARGET_POLICY_NAME);
-    assertWeightedTargetConfigClusterWeights(rawConfigValues, clusterWeights);
+  @Test
+  public void matchHostName_prefixWildcard() {
+    String pattern = "*.foo.googleapis.com";
+    assertThat(XdsNameResolver.matchHostName("foo.googleapis.com", pattern)).isFalse();
+    assertThat(XdsNameResolver.matchHostName("bar-baz.foo.googleapis", pattern)).isFalse();
+    assertThat(XdsNameResolver.matchHostName("bar.foo.googleapis.com", pattern)).isTrue();
+    pattern = "*-bar.foo.googleapis.com";
+    assertThat(XdsNameResolver.matchHostName("bar.foo.googleapis.com", pattern)).isFalse();
+    assertThat(XdsNameResolver.matchHostName("baz-bar.foo.googleapis", pattern)).isFalse();
+    assertThat(XdsNameResolver.matchHostName("-bar.foo.googleapis.com", pattern)).isFalse();
+    assertThat(XdsNameResolver.matchHostName("baz-bar.foo.googleapis.com", pattern))
+        .isTrue();
   }
 
-  /**
-   * Asserts that the given raw config is a weighted-target config with the given cluster to weight
-   * mapping.
-   */
-  @SuppressWarnings("unchecked")
-  static void assertWeightedTargetConfigClusterWeights(
-      Map<String, ?> rawConfigValues, Map<String, Integer> clusterWeight) {
-    assertThat(rawConfigValues.keySet()).containsExactly("targets");
-    Map<String, ?> targets = (Map<String, ?>) rawConfigValues.get("targets");
-    assertThat(targets.keySet()).isEqualTo(clusterWeight.keySet());
-    for (String targetName : targets.keySet()) {
-      Map<String, ?> target = (Map<String, ?>) targets.get(targetName);
-      assertThat(target.keySet()).containsExactly("childPolicy", "weight");
-      Map<String, ?> lbConfig =
-          Iterables.getOnlyElement((List<Map<String, ?>>) target.get("childPolicy"));
-      assertThat(lbConfig.keySet()).containsExactly(CDS_POLICY_NAME);
-      Map<String, ?> rawClusterConfigValues = (Map<String, ?>) lbConfig.get(CDS_POLICY_NAME);
-      assertThat(rawClusterConfigValues).containsExactly("cluster", targetName);
-      assertThat(target.get("weight")).isEqualTo(clusterWeight.get(targetName));
+  @Test
+  public void matchHostName_postfixWildCard() {
+    String pattern = "foo.*";
+    assertThat(XdsNameResolver.matchHostName("bar.googleapis.com", pattern)).isFalse();
+    assertThat(XdsNameResolver.matchHostName("bar.foo.googleapis.com", pattern)).isFalse();
+    assertThat(XdsNameResolver.matchHostName("foo.googleapis.com", pattern)).isTrue();
+    assertThat(XdsNameResolver.matchHostName("foo.com", pattern)).isTrue();
+    pattern = "foo-*";
+    assertThat(XdsNameResolver.matchHostName("bar-.googleapis.com", pattern)).isFalse();
+    assertThat(XdsNameResolver.matchHostName("foo.googleapis.com", pattern)).isFalse();
+    assertThat(XdsNameResolver.matchHostName("foo.googleapis.com", pattern)).isFalse();
+    assertThat(XdsNameResolver.matchHostName("foo-", pattern)).isFalse();
+    assertThat(XdsNameResolver.matchHostName("foo-bar.com", pattern)).isTrue();
+    assertThat(XdsNameResolver.matchHostName("foo-.com", pattern)).isTrue();
+    assertThat(XdsNameResolver.matchHostName("foo-bar", pattern)).isTrue();
+  }
+
+  @Test
+  public void findVirtualHostForHostName_exactMatchFirst() {
+    String hostname = "a.googleapis.com";
+    List<Route> routes = Collections.emptyList();
+    VirtualHost vHost1 = new VirtualHost("virtualhost01.googleapis.com",
+        Arrays.asList("a.googleapis.com", "b.googleapis.com"), routes);
+    VirtualHost vHost2 = new VirtualHost("virtualhost02.googleapis.com",
+        Collections.singletonList("*.googleapis.com"), routes);
+    VirtualHost vHost3 =
+        new VirtualHost("virtualhost03.googleapis.com", Collections.singletonList("*"), routes);
+    List<VirtualHost> virtualHosts = Arrays.asList(vHost1, vHost2, vHost3);
+    assertThat(XdsNameResolver.findVirtualHostForHostName(virtualHosts, hostname))
+        .isEqualTo(vHost1);
+  }
+
+  @Test
+  public void findVirtualHostForHostName_preferSuffixDomainOverPrefixDomain() {
+    String hostname = "a.googleapis.com";
+    List<Route> routes = Collections.emptyList();
+    VirtualHost vHost1 =
+        new VirtualHost("virtualhost01.googleapis.com",
+            Arrays.asList("*.googleapis.com", "b.googleapis.com"), routes);
+    VirtualHost vHost2 =
+        new VirtualHost("virtualhost02.googleapis.com",
+            Collections.singletonList("a.googleapis.*"), routes);
+    VirtualHost vHost3 =
+        new VirtualHost("virtualhost03.googleapis.com", Collections.singletonList("*"), routes);
+    List<VirtualHost> virtualHosts = Arrays.asList(vHost1, vHost2, vHost3);
+    assertThat(XdsNameResolver.findVirtualHostForHostName(virtualHosts, hostname))
+        .isEqualTo(vHost1);
+  }
+
+  @Test
+  public void findVirtualHostForHostName_asteriskMatchAnyDomain() {
+    String hostname = "a.googleapis.com";
+    List<Route> routes = Collections.emptyList();
+    VirtualHost vHost1 =
+        new VirtualHost("virtualhost01.googleapis.com", Collections.singletonList("*"), routes);
+    VirtualHost vHost2 =
+        new VirtualHost("virtualhost02.googleapis.com",
+            Collections.singletonList("b.googleapis.com"), routes);
+    List<VirtualHost> virtualHosts = Arrays.asList(vHost1, vHost2);
+    assertThat(XdsNameResolver.findVirtualHostForHostName(virtualHosts, hostname))
+        .isEqualTo(vHost1);;
+  }
+
+  private final class FakeXdsClientPoolFactory implements XdsClientPoolFactory {
+
+    @Override
+    public ObjectPool<XdsClient> getXdsClientPool() throws XdsInitializationException {
+      return new ObjectPool<XdsClient>() {
+        @Override
+        public XdsClient getObject() {
+          return new FakeXdsClient();
+        }
+
+        @Override
+        public XdsClient returnObject(Object object) {
+          return null;
+        }
+      };
+    }
+  }
+
+  private class FakeXdsClient extends XdsClient {
+    private String ldsResource;
+    private String rdsResource;
+    private LdsResourceWatcher ldsWatcher;
+    private RdsResourceWatcher rdsWatcher;
+
+    @Override
+    void watchLdsResource(String resourceName, LdsResourceWatcher watcher) {
+      Preconditions.checkArgument(ldsResource == null && ldsWatcher == null, "already watched");
+      ldsResource = resourceName;
+      ldsWatcher = watcher;
+    }
+
+    @Override
+    void cancelLdsResourceWatch(String resourceName, LdsResourceWatcher watcher) {
+      Preconditions.checkArgument(resourceName.equals(ldsResource), "unknown resource");
+      Preconditions.checkArgument(watcher.equals(ldsWatcher), "unknown watcher");
+      ldsResource = null;
+      ldsWatcher = null;
+    }
+
+    @Override
+    void watchRdsResource(String resourceName, RdsResourceWatcher watcher) {
+      Preconditions.checkArgument(rdsResource == null && rdsWatcher == null, "already watched");
+      rdsResource = resourceName;
+      rdsWatcher = watcher;
+    }
+
+    @Override
+    void cancelRdsResourceWatch(String resourceName, RdsResourceWatcher watcher) {
+      Preconditions.checkArgument(resourceName.equals(rdsResource), "unknown resource");
+      Preconditions.checkArgument(watcher.equals(rdsWatcher), "unknown watcher");
+      rdsResource = null;
+      rdsWatcher = null;
+    }
+
+    @Override
+    void shutdown() {
+      // no-op
+    }
+
+    void deliverLdsUpdate(final String resourceName, final long httpMaxStreamDurationNano,
+        final List<VirtualHost> virtualHosts) {
+      syncContext.execute(new Runnable() {
+        @Override
+        public void run() {
+          if (!resourceName.equals(ldsResource)) {
+            return;
+          }
+          LdsUpdate.Builder updateBuilder = LdsUpdate.newBuilder();
+          updateBuilder.setHttpMaxStreamDurationNano(httpMaxStreamDurationNano);
+          for (VirtualHost virtualHost : virtualHosts) {
+            updateBuilder.addVirtualHost(virtualHost);
+          }
+          ldsWatcher.onChanged(updateBuilder.build());
+        }
+      });
+    }
+
+    void deliverLdsUpdate(final String resourceName, final List<Route> routes) {
+      syncContext.execute(new Runnable() {
+        @Override
+        public void run() {
+          if (!resourceName.equals(ldsResource)) {
+            return;
+          }
+          VirtualHost virtualHost =
+              new VirtualHost("virtual-host", Collections.singletonList(AUTHORITY), routes);
+          ldsWatcher.onChanged(LdsUpdate.newBuilder().addVirtualHost(virtualHost).build());
+        }
+      });
+    }
+
+    void deliverRdsName(final String resourceName, final String rdsName) {
+      syncContext.execute(new Runnable() {
+        @Override
+        public void run() {
+          if (!resourceName.equals(ldsResource)) {
+            return;
+          }
+          ldsWatcher.onChanged(LdsUpdate.newBuilder().setRdsName(rdsName).build());
+        }
+      });
+    }
+
+    void deliverLdsResourceNotFound(final String resourceName) {
+      syncContext.execute(new Runnable() {
+        @Override
+        public void run() {
+          if (!resourceName.equals(ldsResource)) {
+            return;
+          }
+          ldsWatcher.onResourceDoesNotExist(ldsResource);
+        }
+      });
+    }
+
+    void deliverRdsUpdate(final String resourceName, final List<VirtualHost> virtualHosts) {
+      syncContext.execute(new Runnable() {
+        @Override
+        public void run() {
+          if (!resourceName.equals(rdsResource)) {
+            return;
+          }
+          rdsWatcher.onChanged(RdsUpdate.fromVirtualHosts(virtualHosts));
+        }
+      });
+    }
+
+    void deliverRdsResourceNotFound(final String resourceName) {
+      syncContext.execute(new Runnable() {
+        @Override
+        public void run() {
+          if (!resourceName.equals(rdsResource)) {
+            return;
+          }
+          rdsWatcher.onResourceDoesNotExist(rdsResource);
+        }
+      });
+    }
+
+    void deliverError(final Status error) {
+      syncContext.execute(new Runnable() {
+        @Override
+        public void run() {
+          if (ldsWatcher != null) {
+            ldsWatcher.onError(error);
+          }
+          if (rdsWatcher != null) {
+            rdsWatcher.onError(error);
+          }
+        }
+      });
+    }
+  }
+
+  private static final class CallInfo {
+    private final String service;
+    private final String method;
+    private final MethodDescriptor<Void, Void> methodDescriptor;
+
+    private CallInfo(String service, String method) {
+      this.service = service;
+      this.method = method;
+      methodDescriptor =
+          MethodDescriptor.<Void, Void>newBuilder()
+              .setType(MethodType.UNARY).setFullMethodName(service + "/" + method)
+              .setRequestMarshaller(TestMethodDescriptors.voidMarshaller())
+              .setResponseMarshaller(TestMethodDescriptors.voidMarshaller())
+              .build();
+    }
+
+    private String getFullMethodNameForPath() {
+      return "/" + service + "/" + method;
+    }
+  }
+
+  private final class TestChannel extends Channel {
+
+    @Override
+    public <ReqT, RespT> ClientCall<ReqT, RespT> newCall(
+        MethodDescriptor<ReqT, RespT> methodDescriptor, CallOptions callOptions) {
+      TestCall<ReqT, RespT> call = new TestCall<>(callOptions);
+      testCall = call;
+      return call;
+    }
+
+    @Override
+    public String authority() {
+      return "foo.authority";
+    }
+  }
+
+  private static final class TestCall<ReqT, RespT> extends NoopClientCall<ReqT, RespT> {
+    // CallOptions actually received from the channel when the call is created.
+    final CallOptions callOptions;
+    ClientCall.Listener<RespT> listener;
+
+    TestCall(CallOptions callOptions) {
+      this.callOptions = callOptions;
+    }
+
+    @Override
+    public void start(ClientCall.Listener<RespT> listener, Metadata headers) {
+      this.listener = listener;
+    }
+
+    void deliverResponseHeaders() {
+      listener.onHeaders(new Metadata());
+    }
+
+    void deliverErrorStatus() {
+      listener.onClose(Status.UNAVAILABLE, new Metadata());
     }
   }
 }

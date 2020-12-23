@@ -75,6 +75,7 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.URI;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -188,7 +189,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   private int maxConcurrentStreams = 0;
   @SuppressWarnings("JdkObsolete") // Usage is bursty; want low memory usage when empty
   @GuardedBy("lock")
-  private final LinkedList<OkHttpClientStream> pendingStreams = new LinkedList<>();
+  private final Deque<OkHttpClientStream> pendingStreams = new LinkedList<>();
   private final ConnectionSpec connectionSpec;
   private FrameWriter testFrameWriter;
   private ScheduledExecutorService scheduler;
@@ -1132,7 +1133,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     public void data(boolean inFinished, int streamId, BufferedSource in, int length)
         throws IOException {
       logger.logData(OkHttpFrameLogger.Direction.INBOUND,
-          streamId, in.buffer(), length, inFinished);
+          streamId, in.getBuffer(), length, inFinished);
       OkHttpClientStream stream = getStream(streamId);
       if (stream == null) {
         if (mayHaveCreatedStream(streamId)) {
@@ -1149,7 +1150,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         in.require(length);
 
         Buffer buf = new Buffer();
-        buf.write(in.buffer(), length);
+        buf.write(in.getBuffer(), length);
         PerfMark.event("OkHttpClientTransport$ClientFrameHandler.data",
             stream.transportState().tag());
         synchronized (lock) {

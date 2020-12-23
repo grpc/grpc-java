@@ -37,8 +37,8 @@ import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
@@ -84,7 +84,6 @@ import io.opencensus.tags.TagValue;
 import io.opencensus.trace.BlankSpan;
 import io.opencensus.trace.EndSpanOptions;
 import io.opencensus.trace.MessageEvent;
-import io.opencensus.trace.MessageEvent.Type;
 import io.opencensus.trace.Span;
 import io.opencensus.trace.SpanBuilder;
 import io.opencensus.trace.SpanContext;
@@ -200,7 +199,6 @@ public class CensusModulesTest {
   private CensusTracingModule censusTracing;
 
   @Before
-  @SuppressWarnings("unchecked")
   public void setUp() throws Exception {
     when(spyClientSpanBuilder.startSpan()).thenReturn(spyClientSpan);
     when(tracer.spanBuilderWithExplicitParent(anyString(), ArgumentMatchers.<Span>any()))
@@ -542,11 +540,13 @@ public class CensusModulesTest {
     inOrder.verify(spyClientSpan, times(3)).addMessageEvent(messageEventCaptor.capture());
     List<MessageEvent> events = messageEventCaptor.getAllValues();
     assertEquals(
-        MessageEvent.builder(Type.SENT, 0).setCompressedMessageSize(882).build(), events.get(0));
+        MessageEvent.builder(MessageEvent.Type.SENT, 0).setCompressedMessageSize(882).build(),
+        events.get(0));
     assertEquals(
-        MessageEvent.builder(Type.SENT, 1).setUncompressedMessageSize(27).build(), events.get(1));
+        MessageEvent.builder(MessageEvent.Type.SENT, 1).setUncompressedMessageSize(27).build(),
+        events.get(1));
     assertEquals(
-        MessageEvent.builder(Type.RECEIVED, 0)
+        MessageEvent.builder(MessageEvent.Type.RECEIVED, 0)
             .setCompressedMessageSize(255)
             .setUncompressedMessageSize(90)
             .build(),
@@ -1039,7 +1039,7 @@ public class CensusModulesTest {
     ServerStreamTracer.Factory tracerFactory = censusTracing.getServerTracerFactory();
     ServerStreamTracer serverStreamTracer =
         tracerFactory.newServerStreamTracer(method.getFullMethodName(), new Metadata());
-    verifyZeroInteractions(mockTracingPropagationHandler);
+    verifyNoInteractions(mockTracingPropagationHandler);
     verify(tracer).spanBuilderWithRemoteParent(
         eq("Recv.package1.service2.method3"), ArgumentMatchers.<SpanContext>isNull());
     verify(spyServerSpanBuilder).setRecordEvents(eq(true));
@@ -1065,11 +1065,13 @@ public class CensusModulesTest {
     inOrder.verify(spyServerSpan, times(3)).addMessageEvent(messageEventCaptor.capture());
     List<MessageEvent> events = messageEventCaptor.getAllValues();
     assertEquals(
-        MessageEvent.builder(Type.SENT, 0).setCompressedMessageSize(882).build(), events.get(0));
+        MessageEvent.builder(MessageEvent.Type.SENT, 0).setCompressedMessageSize(882).build(),
+        events.get(0));
     assertEquals(
-        MessageEvent.builder(Type.SENT, 1).setUncompressedMessageSize(27).build(), events.get(1));
+        MessageEvent.builder(MessageEvent.Type.SENT, 1).setUncompressedMessageSize(27).build(),
+        events.get(1));
     assertEquals(
-        MessageEvent.builder(Type.RECEIVED, 0)
+        MessageEvent.builder(MessageEvent.Type.RECEIVED, 0)
             .setCompressedMessageSize(255)
             .setUncompressedMessageSize(90)
             .build(),

@@ -27,6 +27,7 @@ import io.grpc.internal.JndiResourceResolverFactory.JndiResourceResolver;
 import io.grpc.internal.JndiResourceResolverFactory.RecordFetcher;
 import java.util.Arrays;
 import java.util.List;
+import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;
 import org.junit.Assume;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -49,6 +50,7 @@ public class JndiResourceResolverTest {
     assertEquals("blah\\blah", JndiResourceResolver.unquote("\"blah\\\\blah\""));
   }
 
+  @IgnoreJRERequirement
   @Test
   public void jndiResolverWorks() throws Exception {
     Assume.assumeNoException(new JndiResourceResolverFactory().unavailabilityCause());

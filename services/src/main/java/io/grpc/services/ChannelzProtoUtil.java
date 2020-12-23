@@ -72,7 +72,7 @@ import java.security.cert.CertificateEncodingException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map.Entry;
+import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -332,7 +332,7 @@ final class ChannelzProtoUtil {
     if (options.tcpInfo != null) {
       ret.add(toSocketOptionTcpInfo(options.tcpInfo));
     }
-    for (Entry<String, String> entry : options.others.entrySet()) {
+    for (Map.Entry<String, String> entry : options.others.entrySet()) {
       ret.add(toSocketOptionAdditional(entry.getKey(), entry.getValue()));
     }
     return ret;

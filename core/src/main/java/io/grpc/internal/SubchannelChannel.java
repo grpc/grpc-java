@@ -23,15 +23,15 @@ import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.Context;
-import io.grpc.LoadBalancer.PickSubchannelArgs;
+import io.grpc.InternalConfigSelector;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
-import io.grpc.internal.ClientCallImpl.ClientTransportProvider;
+import io.grpc.internal.ClientCallImpl.ClientStreamProvider;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
-import io.grpc.internal.GrpcUtil;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.atomic.AtomicReference;
 
 final class SubchannelChannel extends Channel {
   @VisibleForTesting
@@ -47,33 +47,35 @@ final class SubchannelChannel extends Channel {
   private final Executor executor;
   private final ScheduledExecutorService deadlineCancellationExecutor;
   private final CallTracer callsTracer;
+  private final AtomicReference<InternalConfigSelector> configSelector;
 
-  private final ClientTransportProvider transportProvider = new ClientTransportProvider() {
+  private final ClientStreamProvider transportProvider = new ClientStreamProvider() {
       @Override
-      public ClientTransport get(PickSubchannelArgs args) {
+      public ClientStream newStream(MethodDescriptor<?, ?> method,
+          CallOptions callOptions, Metadata headers, Context context) {
         ClientTransport transport = subchannel.getTransport();
         if (transport == null) {
-          return notReadyTransport;
-        } else {
-          return transport;
+          transport = notReadyTransport;
         }
-      }
-
-      @Override
-      public <ReqT> ClientStream newRetriableStream(MethodDescriptor<ReqT, ?> method,
-          CallOptions callOptions, Metadata headers, Context context) {
-        throw new UnsupportedOperationException("OobChannel should not create retriable streams");
+        Context origContext = context.attach();
+        try {
+          return transport.newStream(method, headers, callOptions);
+        } finally {
+          context.detach(origContext);
+        }
       }
     };
 
   SubchannelChannel(
       InternalSubchannel subchannel, Executor executor,
-      ScheduledExecutorService deadlineCancellationExecutor, CallTracer callsTracer) {
+      ScheduledExecutorService deadlineCancellationExecutor, CallTracer callsTracer,
+      AtomicReference<InternalConfigSelector> configSelector) {
     this.subchannel = checkNotNull(subchannel, "subchannel");
     this.executor = checkNotNull(executor, "executor");
     this.deadlineCancellationExecutor =
         checkNotNull(deadlineCancellationExecutor, "deadlineCancellationExecutor");
     this.callsTracer = checkNotNull(callsTracer, "callsTracer");
+    this.configSelector = checkNotNull(configSelector, "configSelector");
   }
 
   @Override
@@ -109,7 +111,7 @@ final class SubchannelChannel extends Channel {
     return new ClientCallImpl<>(methodDescriptor,
         effectiveExecutor,
         callOptions.withOption(GrpcUtil.CALL_OPTIONS_RPC_OWNED_BY_BALANCER, Boolean.TRUE),
-        transportProvider, deadlineCancellationExecutor, callsTracer, false /* retryEnabled */);
+        transportProvider, deadlineCancellationExecutor, callsTracer, configSelector.get());
   }
 
   @Override

@@ -16,20 +16,44 @@
 
 package io.grpc.xds.internal.sds;
 
+import static com.google.common.truth.Truth.assertThat;
+import static java.nio.charset.StandardCharsets.UTF_8;
+
 import com.google.common.base.Strings;
+import com.google.common.io.CharStreams;
+import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.BoolValue;
-import io.envoyproxy.envoy.api.v2.auth.CertificateValidationContext;
-import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
-import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext.CombinedCertificateValidationContext;
-import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
-import io.envoyproxy.envoy.api.v2.auth.SdsSecretConfig;
-import io.envoyproxy.envoy.api.v2.auth.TlsCertificate;
-import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
-import io.envoyproxy.envoy.api.v2.core.DataSource;
+import com.google.protobuf.Struct;
+import com.google.protobuf.Value;
+import io.envoyproxy.envoy.api.v2.core.ApiConfigSource.ApiType;
+import io.envoyproxy.envoy.api.v2.core.GrpcService.GoogleGrpc;
+import io.envoyproxy.envoy.config.core.v3.ApiConfigSource;
+import io.envoyproxy.envoy.config.core.v3.ConfigSource;
+import io.envoyproxy.envoy.config.core.v3.DataSource;
+import io.envoyproxy.envoy.config.core.v3.GrpcService;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext.CertificateProviderInstance;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext.CombinedCertificateValidationContext;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.SdsSecretConfig;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.TlsCertificate;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext;
+import io.envoyproxy.envoy.type.matcher.v3.StringMatcher;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.xds.EnvoyServerProtoData;
+import io.grpc.xds.internal.sds.trust.CertificateUtils;
+import io.netty.handler.ssl.SslContext;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Reader;
+import java.security.cert.CertificateException;
+import java.security.cert.X509Certificate;
 import java.util.Arrays;
+import java.util.List;
+import java.util.concurrent.Executor;
 import javax.annotation.Nullable;
 
 /** Utility class for client and server ssl provider tests. */
@@ -48,16 +72,77 @@ public class CommonTlsContextTestsUtil {
   public static final String BAD_CLIENT_PEM_FILE = "badclient.pem";
   public static final String BAD_CLIENT_KEY_FILE = "badclient.key";
 
-  static SdsSecretConfig buildSdsSecretConfig(String name, String targetUri, String channelType) {
+  static io.envoyproxy.envoy.api.v2.auth.SdsSecretConfig buildSdsSecretConfigV2(
+      String name, String targetUri, String channelType) {
+    io.envoyproxy.envoy.api.v2.auth.SdsSecretConfig sdsSecretConfig = null;
+    if (!Strings.isNullOrEmpty(name) && !Strings.isNullOrEmpty(targetUri)) {
+      sdsSecretConfig =
+          io.envoyproxy.envoy.api.v2.auth.SdsSecretConfig.newBuilder()
+              .setName(name)
+              .setSdsConfig(buildConfigSourceV2(targetUri, channelType))
+              .build();
+    }
+    return sdsSecretConfig;
+  }
+
+  private static SdsSecretConfig
+      buildSdsSecretConfig(String name, String targetUri, String channelType) {
     SdsSecretConfig sdsSecretConfig = null;
     if (!Strings.isNullOrEmpty(name) && !Strings.isNullOrEmpty(targetUri)) {
       sdsSecretConfig =
           SdsSecretConfig.newBuilder()
               .setName(name)
-              .setSdsConfig(SdsClientTest.buildConfigSource(targetUri, channelType))
+              .setSdsConfig(buildConfigSource(targetUri, channelType))
               .build();
     }
     return sdsSecretConfig;
+  }
+
+  /**
+   * Builds a {@link io.envoyproxy.envoy.api.v2.core.ConfigSource} for the given targetUri.
+   *
+   * @param channelType specifying "inproc" creates an Inprocess channel for testing.
+   */
+  private static io.envoyproxy.envoy.api.v2.core.ConfigSource buildConfigSourceV2(
+      String targetUri, String channelType) {
+    GoogleGrpc.Builder googleGrpcBuilder = GoogleGrpc.newBuilder().setTargetUri(targetUri);
+    if (channelType != null) {
+      Struct.Builder structBuilder = Struct.newBuilder()
+          .putFields("channelType", Value.newBuilder().setStringValue(channelType).build());
+      googleGrpcBuilder.setConfig(structBuilder.build());
+    }
+    return io.envoyproxy.envoy.api.v2.core.ConfigSource.newBuilder()
+        .setApiConfigSource(
+            io.envoyproxy.envoy.api.v2.core.ApiConfigSource.newBuilder()
+                .setApiType(ApiType.GRPC)
+                .addGrpcServices(
+                    io.envoyproxy.envoy.api.v2.core.GrpcService.newBuilder()
+                        .setGoogleGrpc(googleGrpcBuilder.build())
+                        .build())
+                .build())
+        .build();
+  }
+
+  /**
+   * Builds a {@link ConfigSource} for the given targetUri.
+   *
+   * @param channelType specifying "inproc" creates an Inprocess channel for testing.
+   */
+  private static ConfigSource buildConfigSource(String targetUri, String channelType) {
+    GrpcService.GoogleGrpc.Builder googleGrpcBuilder =
+        GrpcService.GoogleGrpc.newBuilder().setTargetUri(targetUri);
+    if (channelType != null) {
+      Struct.Builder structBuilder = Struct.newBuilder()
+          .putFields("channelType", Value.newBuilder().setStringValue(channelType).build());
+      googleGrpcBuilder.setConfig(structBuilder.build());
+    }
+    return ConfigSource.newBuilder()
+        .setApiConfigSource(
+            ApiConfigSource.newBuilder()
+                .setApiType(ApiConfigSource.ApiType.GRPC)
+                .addGrpcServices(GrpcService.newBuilder().setGoogleGrpc(googleGrpcBuilder))
+                .build())
+        .build();
   }
 
   static CommonTlsContext buildCommonTlsContextFromSdsConfigForValidationContext(
@@ -97,12 +182,58 @@ public class CommonTlsContextTestsUtil {
 
   /** takes additional values and creates CombinedCertificateValidationContext as needed. */
   @SuppressWarnings("deprecation")
+  static io.envoyproxy.envoy.api.v2.auth.CommonTlsContext
+      buildCommonTlsContextWithAdditionalValuesV2(
+          String certName,
+          String certTargetUri,
+          String validationContextName,
+          String validationContextTargetUri,
+          Iterable<String> verifySubjectAltNames,
+          Iterable<String> alpnNames,
+          String channelType) {
+
+    io.envoyproxy.envoy.api.v2.auth.CommonTlsContext.Builder builder =
+        io.envoyproxy.envoy.api.v2.auth.CommonTlsContext.newBuilder();
+
+    io.envoyproxy.envoy.api.v2.auth.SdsSecretConfig sdsSecretConfig =
+        buildSdsSecretConfigV2(certName, certTargetUri, channelType);
+    if (sdsSecretConfig != null) {
+      builder.addTlsCertificateSdsSecretConfigs(sdsSecretConfig);
+    }
+    sdsSecretConfig =
+        buildSdsSecretConfigV2(validationContextName, validationContextTargetUri, channelType);
+    io.envoyproxy.envoy.api.v2.auth.CertificateValidationContext certValidationContext =
+        verifySubjectAltNames == null ? null
+            : io.envoyproxy.envoy.api.v2.auth.CertificateValidationContext.newBuilder()
+                .addAllVerifySubjectAltName(verifySubjectAltNames).build();
+
+    if (sdsSecretConfig != null && certValidationContext != null) {
+      io.envoyproxy.envoy.api.v2.auth.CommonTlsContext.CombinedCertificateValidationContext
+          combined =
+              io.envoyproxy.envoy.api.v2.auth.CommonTlsContext.CombinedCertificateValidationContext
+                  .newBuilder()
+                  .setDefaultValidationContext(certValidationContext)
+                  .setValidationContextSdsSecretConfig(sdsSecretConfig)
+                  .build();
+      builder.setCombinedValidationContext(combined);
+    } else if (sdsSecretConfig != null) {
+      builder.setValidationContextSdsSecretConfig(sdsSecretConfig);
+    } else if (certValidationContext != null) {
+      builder.setValidationContext(certValidationContext);
+    }
+    if (alpnNames != null) {
+      builder.addAllAlpnProtocols(alpnNames);
+    }
+    return builder.build();
+  }
+
+  /** takes additional values and creates CombinedCertificateValidationContext as needed. */
   static CommonTlsContext buildCommonTlsContextWithAdditionalValues(
       String certName,
       String certTargetUri,
       String validationContextName,
       String validationContextTargetUri,
-      Iterable<String> verifySubjectAltNames,
+      Iterable<StringMatcher> matchSubjectAltNames,
       Iterable<String> alpnNames,
       String channelType) {
 
@@ -115,10 +246,11 @@ public class CommonTlsContextTestsUtil {
     sdsSecretConfig =
         buildSdsSecretConfig(validationContextName, validationContextTargetUri, channelType);
     CertificateValidationContext certValidationContext =
-        verifySubjectAltNames == null ? null
+        matchSubjectAltNames == null
+            ? null
             : CertificateValidationContext.newBuilder()
-                .addAllVerifySubjectAltName(verifySubjectAltNames).build();
-
+                .addAllMatchSubjectAltNames(matchSubjectAltNames)
+                .build();
     if (sdsSecretConfig != null && certValidationContext != null) {
       CombinedCertificateValidationContext.Builder combinedBuilder =
           CombinedCertificateValidationContext.newBuilder()
@@ -134,6 +266,18 @@ public class CommonTlsContextTestsUtil {
       builder.addAllAlpnProtocols(alpnNames);
     }
     return builder.build();
+  }
+
+  /** Helper method to build DownstreamTlsContext for multiple test classes. */
+  static io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext buildDownstreamTlsContextV2(
+      io.envoyproxy.envoy.api.v2.auth.CommonTlsContext commonTlsContext,
+      boolean requireClientCert) {
+    io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext downstreamTlsContext =
+        io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext.newBuilder()
+            .setCommonTlsContext(commonTlsContext)
+            .setRequireClientCertificate(BoolValue.of(requireClientCert))
+            .build();
+    return downstreamTlsContext;
   }
 
   /** Helper method to build DownstreamTlsContext for multiple test classes. */
@@ -154,9 +298,19 @@ public class CommonTlsContextTestsUtil {
         buildDownstreamTlsContext(commonTlsContext, requireClientCert));
   }
 
-  /** Helper method for creating DownstreamTlsContext values for tests. */
-  public static DownstreamTlsContext buildTestDownstreamTlsContext() {
-    return buildTestDownstreamTlsContext("google-sds-config-default", "ROOTCA");
+  /** Helper method for creating DownstreamTlsContext values with names. */
+  public static io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext
+      buildTestDownstreamTlsContextV2(String certName, String validationContextName) {
+    return buildDownstreamTlsContextV2(
+        buildCommonTlsContextWithAdditionalValuesV2(
+            certName,
+            "unix:/var/run/sds/uds_path",
+            validationContextName,
+            "unix:/var/run/sds/uds_path",
+            Arrays.asList("spiffe://grpc-sds-testing.svc.id.goog/ns/default/sa/bob"),
+            Arrays.asList("managed-tls"),
+            null),
+        /* requireClientCert= */ false);
   }
 
   /** Helper method for creating DownstreamTlsContext values with names. */
@@ -168,7 +322,10 @@ public class CommonTlsContextTestsUtil {
             "unix:/var/run/sds/uds_path",
             validationContextName,
             "unix:/var/run/sds/uds_path",
-            Arrays.asList("spiffe://grpc-sds-testing.svc.id.goog/ns/default/sa/bob"),
+            Arrays.asList(
+                StringMatcher.newBuilder()
+                    .setExact("spiffe://grpc-sds-testing.svc.id.goog/ns/default/sa/bob")
+                    .build()),
             Arrays.asList("managed-tls"),
             null),
         /* requireClientCert= */ false);
@@ -180,7 +337,7 @@ public class CommonTlsContextTestsUtil {
         buildTestDownstreamTlsContext(certName, validationContextName));
   }
 
-  static String getTempFileNameForResourcesFile(String resFile) throws IOException {
+  public static String getTempFileNameForResourcesFile(String resFile) throws IOException {
     return TestUtils.loadCert(resFile).getAbsolutePath();
   }
 
@@ -290,5 +447,180 @@ public class CommonTlsContextTestsUtil {
         UpstreamTlsContext.newBuilder().setCommonTlsContext(commonTlsContext).build();
     return EnvoyServerProtoData.UpstreamTlsContext.fromEnvoyProtoUpstreamTlsContext(
         upstreamTlsContext);
+  }
+
+  /** Gets a cert from contents of a resource. */
+  public static X509Certificate getCertFromResourceName(String resourceName)
+      throws IOException, CertificateException {
+    try (ByteArrayInputStream bais =
+        new ByteArrayInputStream(getResourceContents(resourceName).getBytes(UTF_8))) {
+      return CertificateUtils.toX509Certificate(bais);
+    }
+  }
+
+  /** Gets contents of a resource from TestUtils.class loader. */
+  public static String getResourceContents(String resourceName) throws IOException {
+    InputStream inputStream = TestUtils.class.getResourceAsStream("/certs/" + resourceName);
+    String text = null;
+    try (Reader reader = new InputStreamReader(inputStream, UTF_8)) {
+      text = CharStreams.toString(reader);
+    }
+    return text;
+  }
+
+  private static CommonTlsContext buildCommonTlsContextForCertProviderInstance(
+      String certInstanceName,
+      String certName,
+      String rootInstanceName,
+      String rootCertName,
+      Iterable<String> alpnProtocols,
+      CertificateValidationContext staticCertValidationContext) {
+    CommonTlsContext.Builder builder = CommonTlsContext.newBuilder();
+    if (certInstanceName != null) {
+      builder =
+          builder.setTlsCertificateCertificateProviderInstance(
+              CommonTlsContext.CertificateProviderInstance.newBuilder()
+                  .setInstanceName(certInstanceName)
+                  .setCertificateName(certName));
+    }
+    builder =
+        addCertificateValidationContext(
+            builder, rootInstanceName, rootCertName, staticCertValidationContext);
+    if (alpnProtocols != null) {
+      builder.addAllAlpnProtocols(alpnProtocols);
+    }
+    return builder.build();
+  }
+
+  private static CommonTlsContext.Builder addCertificateValidationContext(
+      CommonTlsContext.Builder builder,
+      String rootInstanceName,
+      String rootCertName,
+      CertificateValidationContext staticCertValidationContext) {
+    if (rootInstanceName != null) {
+      CertificateProviderInstance providerInstance =
+          CertificateProviderInstance.newBuilder()
+              .setInstanceName(rootInstanceName)
+              .setCertificateName(rootCertName)
+              .build();
+      if (staticCertValidationContext != null) {
+        CombinedCertificateValidationContext combined =
+            CombinedCertificateValidationContext.newBuilder()
+                .setDefaultValidationContext(staticCertValidationContext)
+                .setValidationContextCertificateProviderInstance(providerInstance)
+                .build();
+        return builder.setCombinedValidationContext(combined);
+      }
+      builder = builder.setValidationContextCertificateProviderInstance(providerInstance);
+    }
+    return builder;
+  }
+
+  static CommonTlsContext.Builder addCertificateValidationContext(
+      CommonTlsContext.Builder builder,
+      String name,
+      String targetUri,
+      String channelType,
+      CertificateValidationContext staticCertValidationContext) {
+    SdsSecretConfig sdsSecretConfig = buildSdsSecretConfig(name, targetUri, channelType);
+
+    CombinedCertificateValidationContext combined =
+        CombinedCertificateValidationContext.newBuilder()
+            .setDefaultValidationContext(staticCertValidationContext)
+            .setValidationContextSdsSecretConfig(sdsSecretConfig)
+            .build();
+    return builder.setCombinedValidationContext(combined);
+  }
+
+  /** Helper method to build UpstreamTlsContext for CertProvider tests. */
+  public static EnvoyServerProtoData.UpstreamTlsContext
+      buildUpstreamTlsContextForCertProviderInstance(
+          @Nullable String certInstanceName,
+          @Nullable String certName,
+          @Nullable String rootInstanceName,
+          @Nullable String rootCertName,
+          Iterable<String> alpnProtocols,
+          CertificateValidationContext staticCertValidationContext) {
+    return buildUpstreamTlsContext(
+        buildCommonTlsContextForCertProviderInstance(
+            certInstanceName,
+            certName,
+            rootInstanceName,
+            rootCertName,
+            alpnProtocols,
+            staticCertValidationContext));
+  }
+
+  /** Helper method to build DownstreamTlsContext for CertProvider tests. */
+  public static EnvoyServerProtoData.DownstreamTlsContext
+      buildDownstreamTlsContextForCertProviderInstance(
+          @Nullable String certInstanceName,
+          @Nullable String certName,
+          @Nullable String rootInstanceName,
+          @Nullable String rootCertName,
+          Iterable<String> alpnProtocols,
+          CertificateValidationContext staticCertValidationContext,
+          boolean requireClientCert) {
+    return buildInternalDownstreamTlsContext(
+            buildCommonTlsContextForCertProviderInstance(
+                    certInstanceName,
+                    certName,
+                    rootInstanceName,
+                    rootCertName,
+                    alpnProtocols,
+                    staticCertValidationContext), requireClientCert);
+  }
+
+
+  /** Perform some simple checks on sslContext. */
+  public static void doChecksOnSslContext(boolean server, SslContext sslContext,
+      List<String> expectedApnProtos) {
+    if (server) {
+      assertThat(sslContext.isServer()).isTrue();
+    } else {
+      assertThat(sslContext.isClient()).isTrue();
+    }
+    List<String> apnProtos = sslContext.applicationProtocolNegotiator().protocols();
+    assertThat(apnProtos).isNotNull();
+    if (expectedApnProtos != null) {
+      assertThat(apnProtos).isEqualTo(expectedApnProtos);
+    } else {
+      assertThat(apnProtos).contains("h2");
+    }
+  }
+
+  /**
+   * Helper method to get the value thru directExecutor callback. Because of directExecutor this is
+   * a synchronous callback - so need to provide a listener.
+   */
+  public static TestCallback getValueThruCallback(SslContextProvider provider) {
+    return getValueThruCallback(provider, MoreExecutors.directExecutor());
+  }
+
+  /** Helper method to get the value thru callback with a user passed executor. */
+  public static TestCallback getValueThruCallback(SslContextProvider provider, Executor executor) {
+    TestCallback testCallback = new TestCallback(executor);
+    provider.addCallback(testCallback);
+    return testCallback;
+  }
+
+  public static class TestCallback extends SslContextProvider.Callback {
+
+    public SslContext updatedSslContext;
+    public Throwable updatedThrowable;
+
+    public TestCallback(Executor executor) {
+      super(executor);
+    }
+
+    @Override
+    public void updateSecret(SslContext sslContext) {
+      updatedSslContext = sslContext;
+    }
+
+    @Override
+    public void onException(Throwable throwable) {
+      updatedThrowable = throwable;
+    }
   }
 }

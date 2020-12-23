@@ -17,64 +17,75 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static com.google.common.base.Preconditions.checkState;
+import static java.util.concurrent.TimeUnit.NANOSECONDS;
 
 import com.google.common.annotations.VisibleForTesting;
-import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
-import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats.DroppedRequests;
-import io.envoyproxy.envoy.api.v2.endpoint.EndpointLoadMetricStats;
-import io.envoyproxy.envoy.api.v2.endpoint.UpstreamLocalityStats;
+import com.google.common.base.Stopwatch;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.xds.ClientLoadCounter.ClientLoadSnapshot;
 import io.grpc.xds.ClientLoadCounter.MetricValue;
+import io.grpc.xds.EnvoyProtoData.ClusterStats;
+import io.grpc.xds.EnvoyProtoData.ClusterStats.DroppedRequests;
+import io.grpc.xds.EnvoyProtoData.EndpointLoadMetricStats;
 import io.grpc.xds.EnvoyProtoData.Locality;
+import io.grpc.xds.EnvoyProtoData.UpstreamLocalityStats;
+import io.grpc.xds.LoadStatsManager.LoadStatsStore;
+import io.grpc.xds.LoadStatsManager.LoadStatsStoreFactory;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.NotThreadSafe;
+import javax.annotation.concurrent.GuardedBy;
+import javax.annotation.concurrent.ThreadSafe;
 
 /**
- * An {@link LoadStatsStoreImpl} instance holds the load stats for a cluster from an gRPC
- * client's perspective by maintaining a set of locality counters for each locality it is tracking
- * loads for.
+ * A {@link LoadStatsStoreImpl} maintains load stats per cluster:cluster_service. Load stats for
+ * endpoints are aggregated in locality granularity while the numbers of dropped calls are
+ * aggregated in cluster:cluster_service granularity.
  */
-@NotThreadSafe
+@ThreadSafe
 final class LoadStatsStoreImpl implements LoadStatsStore {
   private final String clusterName;
   @Nullable
-  @SuppressWarnings("unused")
   private final String clusterServiceName;
-  private final ConcurrentMap<Locality, ClientLoadCounter> localityLoadCounters;
-  // Cluster level dropped request counts for each category decision made by xDS load balancer.
-  private final ConcurrentMap<String, AtomicLong> dropCounters;
+  @GuardedBy("this")
+  private final Map<Locality, ReferenceCounted<ClientLoadCounter>> localityLoadCounters
+      = new HashMap<>();
+  private final AtomicLong uncategorizedDrops = new AtomicLong();
+  // Cluster level dropped request counts for each category decision.
+  private final ConcurrentMap<String, AtomicLong> dropCounters = new ConcurrentHashMap<>();
+  private final Stopwatch stopwatch;
 
   LoadStatsStoreImpl(String clusterName, @Nullable String clusterServiceName) {
-    this(clusterName, clusterServiceName, new ConcurrentHashMap<Locality, ClientLoadCounter>(),
-        new ConcurrentHashMap<String, AtomicLong>());
+    this(clusterName, clusterServiceName, GrpcUtil.STOPWATCH_SUPPLIER.get());
   }
 
   @VisibleForTesting
-  LoadStatsStoreImpl(
-      String clusterName,
-      @Nullable String clusterServiceName,
-      ConcurrentMap<Locality, ClientLoadCounter> localityLoadCounters,
-      ConcurrentMap<String, AtomicLong> dropCounters) {
+  LoadStatsStoreImpl(String clusterName, @Nullable String clusterServiceName,
+      Stopwatch stopwatch) {
     this.clusterName = checkNotNull(clusterName, "clusterName");
     this.clusterServiceName = clusterServiceName;
-    this.localityLoadCounters = checkNotNull(localityLoadCounters, "localityLoadCounters");
-    this.dropCounters = checkNotNull(dropCounters, "dropCounters");
+    this.stopwatch =  checkNotNull(stopwatch, "stopwatch");
+    stopwatch.reset().start();
   }
 
   @Override
-  public ClusterStats generateLoadReport() {
+  public synchronized ClusterStats generateLoadReport() {
     ClusterStats.Builder statsBuilder = ClusterStats.newBuilder();
     statsBuilder.setClusterName(clusterName);
-    // TODO(chengyuangzhang): also set cluster_service_name if provided.
-    for (Map.Entry<Locality, ClientLoadCounter> entry : localityLoadCounters.entrySet()) {
-      ClientLoadSnapshot snapshot = entry.getValue().snapshot();
+    if (clusterServiceName != null) {
+      statsBuilder.setClusterServiceName(clusterServiceName);
+    }
+    Set<Locality> untrackedLocalities = new HashSet<>();
+    for (Map.Entry<Locality, ReferenceCounted<ClientLoadCounter>> entry
+        : localityLoadCounters.entrySet()) {
+      ClientLoadSnapshot snapshot = entry.getValue().get().snapshot();
       UpstreamLocalityStats.Builder localityStatsBuilder =
-          UpstreamLocalityStats.newBuilder().setLocality(entry.getKey().toEnvoyProtoLocality());
+          UpstreamLocalityStats.newBuilder().setLocality(entry.getKey());
       localityStatsBuilder
           .setTotalSuccessfulRequests(snapshot.getCallsSucceeded())
           .setTotalErrorRequests(snapshot.getCallsFailed())
@@ -85,50 +96,42 @@ final class LoadStatsStoreImpl implements LoadStatsStore {
             EndpointLoadMetricStats.newBuilder()
                 .setMetricName(metric.getKey())
                 .setNumRequestsFinishedWithMetric(metric.getValue().getNumReports())
-                .setTotalMetricValue(metric.getValue().getTotalValue()));
+                .setTotalMetricValue(metric.getValue().getTotalValue())
+                .build());
       }
-      statsBuilder.addUpstreamLocalityStats(localityStatsBuilder);
-      // Discard counters for localities that are no longer exposed by the remote balancer and
-      // no RPCs ongoing.
-      if (!entry.getValue().isActive() && snapshot.getCallsInProgress() == 0) {
-        localityLoadCounters.remove(entry.getKey());
+      statsBuilder.addUpstreamLocalityStats(localityStatsBuilder.build());
+      if (entry.getValue().getReferenceCount() == 0 && snapshot.getCallsInProgress() == 0) {
+        untrackedLocalities.add(entry.getKey());
       }
     }
-    long totalDrops = 0;
+    localityLoadCounters.keySet().removeAll(untrackedLocalities);
+    long totalDrops = uncategorizedDrops.getAndSet(0);
     for (Map.Entry<String, AtomicLong> entry : dropCounters.entrySet()) {
       long drops = entry.getValue().getAndSet(0);
       totalDrops += drops;
-      statsBuilder.addDroppedRequests(DroppedRequests.newBuilder()
-          .setCategory(entry.getKey())
-          .setDroppedCount(drops));
+      statsBuilder.addDroppedRequests(new DroppedRequests(entry.getKey(), drops));
     }
     statsBuilder.setTotalDroppedRequests(totalDrops);
+    statsBuilder.setLoadReportIntervalNanos(stopwatch.elapsed(NANOSECONDS));
+    stopwatch.reset().start();
     return statsBuilder.build();
   }
 
   @Override
-  public void addLocality(final Locality locality) {
-    ClientLoadCounter counter = localityLoadCounters.get(locality);
-    checkState(counter == null || !counter.isActive(),
-        "An active counter for locality %s already exists", locality);
+  public synchronized ClientLoadCounter addLocality(final Locality locality) {
+    ReferenceCounted<ClientLoadCounter> counter = localityLoadCounters.get(locality);
     if (counter == null) {
-      localityLoadCounters.put(locality, new ClientLoadCounter());
-    } else {
-      counter.setActive(true);
+      counter = ReferenceCounted.wrap(new ClientLoadCounter());
+      localityLoadCounters.put(locality, counter);
     }
+    counter.retain();
+    return counter.get();
   }
 
   @Override
-  public void removeLocality(final Locality locality) {
-    ClientLoadCounter counter = localityLoadCounters.get(locality);
-    checkState(counter != null && counter.isActive(),
-        "No active counter for locality %s exists", locality);
-    counter.setActive(false);
-  }
-
-  @Override
-  public ClientLoadCounter getLocalityCounter(final Locality locality) {
-    return localityLoadCounters.get(locality);
+  public synchronized void removeLocality(final Locality locality) {
+    ReferenceCounted<ClientLoadCounter> counter = localityLoadCounters.get(locality);
+    counter.release();
   }
 
   @Override
@@ -141,5 +144,19 @@ final class LoadStatsStoreImpl implements LoadStatsStore {
       }
     }
     counter.getAndIncrement();
+  }
+
+  @Override
+  public void recordDroppedRequest() {
+    uncategorizedDrops.getAndIncrement();
+  }
+
+  static LoadStatsStoreFactory getDefaultFactory() {
+    return new LoadStatsStoreFactory() {
+      @Override
+      public LoadStatsStore newLoadStatsStore(String cluster, String clusterService) {
+        return new LoadStatsStoreImpl(cluster, clusterService);
+      }
+    };
   }
 }

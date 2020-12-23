@@ -16,6 +16,7 @@
 
 package io.grpc.okhttp;
 
+import io.grpc.ChannelCredentials;
 import io.grpc.Internal;
 import io.grpc.InternalServiceProviders;
 import io.grpc.ManagedChannelProvider;
@@ -44,5 +45,16 @@ public final class OkHttpChannelProvider extends ManagedChannelProvider {
   @Override
   public OkHttpChannelBuilder builderForTarget(String target) {
     return OkHttpChannelBuilder.forTarget(target);
+  }
+
+  @Override
+  public NewChannelBuilderResult newChannelBuilder(String target, ChannelCredentials creds) {
+    OkHttpChannelBuilder.SslSocketFactoryResult result =
+        OkHttpChannelBuilder.sslSocketFactoryFrom(creds);
+    if (result.error != null) {
+      return NewChannelBuilderResult.error(result.error);
+    }
+    return NewChannelBuilderResult.channelBuilder(new OkHttpChannelBuilder(
+        target, result.factory, result.callCredentials));
   }
 }

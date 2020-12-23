@@ -34,13 +34,14 @@ import org.junit.runners.JUnit4;
 /** Tests for {@link PriorityLoadBalancerProvider}. */
 @RunWith(JUnit4.class)
 public class PriorityLoadBalancerProviderTest {
+  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
   @Rule public final ExpectedException thrown = ExpectedException.none();
 
   @SuppressWarnings("ExpectedExceptionChecker")
   @Test
   public void priorityLbConfig_emptyPriorities() {
     Map<String, PolicySelection> childConfigs =
-        ImmutableMap.of("p0", new PolicySelection(mock(LoadBalancerProvider.class), null, null));
+        ImmutableMap.of("p0", new PolicySelection(mock(LoadBalancerProvider.class), null));
     List<String> priorities = ImmutableList.of();
 
     thrown.expect(IllegalArgumentException.class);
@@ -51,7 +52,7 @@ public class PriorityLoadBalancerProviderTest {
   @Test
   public void priorityLbConfig_missingChildConfig() {
     Map<String, PolicySelection> childConfigs =
-        ImmutableMap.of("p1", new PolicySelection(mock(LoadBalancerProvider.class), null, null));
+        ImmutableMap.of("p1", new PolicySelection(mock(LoadBalancerProvider.class), null));
     List<String> priorities = ImmutableList.of("p0", "p1");
 
     thrown.expect(IllegalArgumentException.class);

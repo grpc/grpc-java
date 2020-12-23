@@ -22,10 +22,13 @@ import static com.google.common.base.Preconditions.checkState;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Converter;
 import com.google.common.base.MoreObjects;
+import com.google.common.base.MoreObjects.ToStringHelper;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
+import io.grpc.ChannelLogger;
+import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ConnectivityState;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
@@ -43,7 +46,6 @@ import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.ExponentialBackoffPolicy;
-import io.grpc.internal.PickSubchannelArgsImpl;
 import io.grpc.internal.TimeProvider;
 import io.grpc.lookup.v1.RouteLookupServiceGrpc;
 import io.grpc.lookup.v1.RouteLookupServiceGrpc.RouteLookupServiceStub;
@@ -60,6 +62,7 @@ import io.grpc.rls.RlsProtoData.RouteLookupRequest;
 import io.grpc.rls.RlsProtoData.RouteLookupResponse;
 import io.grpc.rls.Throttler.ThrottledException;
 import io.grpc.stub.StreamObserver;
+import io.grpc.util.ForwardingLoadBalancerHelper;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
@@ -87,7 +90,7 @@ final class CachingRlsLbClient {
       "io.grpc.rls.CachingRlsLbClient.enable_oobchannel_directpath";
   @VisibleForTesting
   static boolean enableOobChannelDirectPath =
-      Boolean.parseBoolean(System.getProperty(RLS_ENABLE_OOB_CHANNEL_DIRECTPATH_PROPERTY, "true"));
+      Boolean.parseBoolean(System.getProperty(RLS_ENABLE_OOB_CHANNEL_DIRECTPATH_PROPERTY, "false"));
 
   // All cache status changes (pending, backoff, success) must be under this lock
   private final Object lock = new Object();
@@ -109,15 +112,16 @@ final class CachingRlsLbClient {
   private final long staleAgeNanos;
   private final long callTimeoutNanos;
 
-  private final Helper helper;
+  private final RlsLbHelper helper;
   private final ManagedChannel rlsChannel;
   private final RouteLookupServiceStub rlsStub;
   private final RlsPicker rlsPicker;
   private final ResolvedAddressFactory childLbResolvedAddressFactory;
   private final RefCountedChildPolicyWrapperFactory refCountedChildPolicyWrapperFactory;
+  private final ChannelLogger logger;
 
   private CachingRlsLbClient(Builder builder) {
-    helper = checkNotNull(builder.helper, "helper");
+    helper = new RlsLbHelper(checkNotNull(builder.helper, "helper"));
     scheduledExecutorService = helper.getScheduledExecutorService();
     synchronizationContext = helper.getSynchronizationContext();
     lbPolicyConfig = checkNotNull(builder.lbPolicyConfig, "lbPolicyConfig");
@@ -137,7 +141,12 @@ final class CachingRlsLbClient {
     rlsPicker = new RlsPicker(requestFactory);
     ManagedChannelBuilder<?> rlsChannelBuilder =
         helper.createResolvingOobChannelBuilder(rlsConfig.getLookupService());
+    logger = helper.getChannelLogger();
     if (enableOobChannelDirectPath) {
+      logger.log(
+          ChannelLogLevel.DEBUG,
+          "RLS channel direct path enabled. RLS channel service config: {0}",
+          getDirectpathServiceConfig());
       rlsChannelBuilder.defaultServiceConfig(getDirectpathServiceConfig());
       rlsChannelBuilder.disableServiceConfigLookUp();
     }
@@ -152,6 +161,7 @@ final class CachingRlsLbClient {
     refCountedChildPolicyWrapperFactory =
         new RefCountedChildPolicyWrapperFactory(
             childLbHelperProvider, new BackoffRefreshListener());
+    logger.log(ChannelLogLevel.DEBUG, "CachingRlsLbClient created");
   }
 
   private static ImmutableMap<String, Object> getDirectpathServiceConfig() {
@@ -171,22 +181,28 @@ final class CachingRlsLbClient {
   private ListenableFuture<RouteLookupResponse> asyncRlsCall(RouteLookupRequest request) {
     final SettableFuture<RouteLookupResponse> response = SettableFuture.create();
     if (throttler.shouldThrottle()) {
+      logger.log(ChannelLogLevel.DEBUG, "Request is throttled");
       response.setException(new ThrottledException());
       return response;
     }
+    io.grpc.lookup.v1.RouteLookupRequest routeLookupRequest = REQUEST_CONVERTER.convert(request);
+    logger.log(ChannelLogLevel.DEBUG, "Sending RouteLookupRequest: {0}", routeLookupRequest);
     rlsStub.withDeadlineAfter(callTimeoutNanos, TimeUnit.NANOSECONDS)
         .routeLookup(
-            REQUEST_CONVERTER.convert(request),
+            routeLookupRequest,
             new StreamObserver<io.grpc.lookup.v1.RouteLookupResponse>() {
               @Override
               public void onNext(io.grpc.lookup.v1.RouteLookupResponse value) {
+                logger.log(ChannelLogLevel.DEBUG, "Received RouteLookupResponse: {0}", value);
                 response.set(RESPONSE_CONVERTER.reverse().convert(value));
               }
 
               @Override
               public void onError(Throwable t) {
+                logger.log(ChannelLogLevel.DEBUG, "Error looking up route:", t);
                 response.setException(t);
                 throttler.registerBackendResponse(false);
+                helper.propagateRlsError();
               }
 
               @Override
@@ -204,7 +220,6 @@ final class CachingRlsLbClient {
    */
   @CheckReturnValue
   final CachedRouteLookupResponse get(final RouteLookupRequest request) {
-    synchronizationContext.throwIfNotInThisSynchronizationContext();
     synchronized (lock) {
       final CacheEntry cacheEntry;
       cacheEntry = linkedHashLruCache.read(request);
@@ -214,6 +229,7 @@ final class CachingRlsLbClient {
 
       if (cacheEntry instanceof DataCacheEntry) {
         // cache hit, initiate async-refresh if entry is staled
+        logger.log(ChannelLogLevel.DEBUG, "Cache hit for the request");
         DataCacheEntry dataEntry = ((DataCacheEntry) cacheEntry);
         if (dataEntry.isStaled(timeProvider.currentTimeNanos())) {
           dataEntry.maybeRefresh();
@@ -226,6 +242,7 @@ final class CachingRlsLbClient {
 
   /** Performs any pending maintenance operations needed by the cache. */
   void close() {
+    logger.log(ChannelLogLevel.DEBUG, "CachingRlsLbClient closed");
     synchronized (lock) {
       // all childPolicyWrapper will be returned via AutoCleaningEvictionListener
       linkedHashLruCache.close();
@@ -274,12 +291,45 @@ final class CachingRlsLbClient {
     rlsChannel.getState(true);
   }
 
+  private static final class RlsLbHelper extends ForwardingLoadBalancerHelper {
+
+    final Helper helper;
+    private ConnectivityState state;
+    private SubchannelPicker picker;
+
+    RlsLbHelper(Helper helper) {
+      this.helper = helper;
+    }
+
+    @Override
+    protected Helper delegate() {
+      return helper;
+    }
+
+    @Override
+    public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
+      state = newState;
+      picker = newPicker;
+      super.updateBalancingState(newState, newPicker);
+    }
+
+    void propagateRlsError() {
+      getSynchronizationContext().execute(new Runnable() {
+        @Override
+        public void run() {
+          if (picker != null) {
+            // Refresh the channel state and let pending RPCs reprocess the picker.
+            updateBalancingState(state, picker);
+          }
+        }
+      });
+    }
+  }
+
   /**
    * Viewer class for cached {@link RouteLookupResponse} and associated {@link ChildPolicyWrapper}.
    */
   static final class CachedRouteLookupResponse {
-    private final RouteLookupRequest request;
-
     // Should only have 1 of following 3 cache entries
     @Nullable
     private final DataCacheEntry dataCacheEntry;
@@ -289,11 +339,9 @@ final class CachingRlsLbClient {
     private final BackoffCacheEntry backoffCacheEntry;
 
     CachedRouteLookupResponse(
-        RouteLookupRequest request,
         DataCacheEntry dataCacheEntry,
         PendingCacheEntry pendingCacheEntry,
         BackoffCacheEntry backoffCacheEntry) {
-      this.request = checkNotNull(request, "request");
       this.dataCacheEntry = dataCacheEntry;
       this.pendingCacheEntry = pendingCacheEntry;
       this.backoffCacheEntry = backoffCacheEntry;
@@ -303,15 +351,15 @@ final class CachingRlsLbClient {
     }
 
     static CachedRouteLookupResponse pendingResponse(PendingCacheEntry pendingEntry) {
-      return new CachedRouteLookupResponse(pendingEntry.request, null, pendingEntry, null);
+      return new CachedRouteLookupResponse(null, pendingEntry, null);
     }
 
     static CachedRouteLookupResponse backoffEntry(BackoffCacheEntry backoffEntry) {
-      return new CachedRouteLookupResponse(backoffEntry.request, null, null, backoffEntry);
+      return new CachedRouteLookupResponse(null, null, backoffEntry);
     }
 
     static CachedRouteLookupResponse dataEntry(DataCacheEntry dataEntry) {
-      return new CachedRouteLookupResponse(dataEntry.request, dataEntry, null, null);
+      return new CachedRouteLookupResponse(dataEntry, null, null);
     }
 
     boolean hasData() {
@@ -352,12 +400,17 @@ final class CachingRlsLbClient {
 
     @Override
     public String toString() {
-      return MoreObjects.toStringHelper(this)
-          .add("request", request)
-          .add("dataCacheEntry", dataCacheEntry)
-          .add("pendingCacheEntry", pendingCacheEntry)
-          .add("backoffCacheEntry", backoffCacheEntry)
-          .toString();
+      ToStringHelper toStringHelper = MoreObjects.toStringHelper(this);
+      if (dataCacheEntry != null) {
+        toStringHelper.add("dataCacheEntry", dataCacheEntry);
+      }
+      if (pendingCacheEntry != null) {
+        toStringHelper.add("pendingCacheEntry", pendingCacheEntry);
+      }
+      if (backoffCacheEntry != null) {
+        toStringHelper.add("backoffCacheEntry", backoffCacheEntry);
+      }
+      return toStringHelper.toString();
     }
   }
 
@@ -410,12 +463,17 @@ final class CachingRlsLbClient {
 
     private void transitionToDataEntry(RouteLookupResponse routeLookupResponse) {
       synchronized (lock) {
+        logger.log(
+            ChannelLogLevel.DEBUG,
+            "Transition to data cache: routeLookupResponse={0}",
+            routeLookupResponse);
         linkedHashLruCache.cache(request, new DataCacheEntry(request, routeLookupResponse));
       }
     }
 
     private void transitionToBackOff(Status status) {
       synchronized (lock) {
+        logger.log(ChannelLogLevel.DEBUG, "Transition to back off: status={0}", status);
         linkedHashLruCache.cache(request, new BackoffCacheEntry(request, status, backoffPolicy));
       }
     }
@@ -424,8 +482,6 @@ final class CachingRlsLbClient {
     public String toString() {
       return MoreObjects.toStringHelper(this)
           .add("request", request)
-          .add("pendingCall", pendingCall)
-          .add("backoffPolicy", backoffPolicy)
           .toString();
     }
   }
@@ -455,7 +511,7 @@ final class CachingRlsLbClient {
     private final RouteLookupResponse response;
     private final long expireTime;
     private final long staleTime;
-    private ChildPolicyWrapper childPolicyWrapper;
+    private final ChildPolicyWrapper childPolicyWrapper;
 
     DataCacheEntry(RouteLookupRequest request, final RouteLookupResponse response) {
       super(request);
@@ -469,19 +525,10 @@ final class CachingRlsLbClient {
       staleTime = now + staleAgeNanos;
 
       if (childPolicyWrapper.getPicker() != null) {
-        // using cached childPolicyWrapper
-        updateLbState();
+        childPolicyWrapper.refreshState();
       } else {
         createChildLbPolicy();
       }
-    }
-
-    private void updateLbState() {
-      childPolicyWrapper
-          .getHelper()
-          .updateBalancingState(
-              childPolicyWrapper.getConnectivityStateInfo().getState(),
-              childPolicyWrapper.getPicker());
     }
 
     private void createChildLbPolicy() {
@@ -493,6 +540,10 @@ final class CachingRlsLbClient {
                   childPolicy.getEffectiveChildPolicy(childPolicyWrapper.getTarget()));
 
       LoadBalancer lb = lbProvider.newLoadBalancer(childPolicyWrapper.getHelper());
+      logger.log(
+          ChannelLogLevel.DEBUG,
+          "RLS child lb created. config: {0}",
+          lbConfig.getConfig());
       lb.handleResolvedAddresses(childLbResolvedAddressFactory.create(lbConfig.getConfig()));
       lb.requestConnection();
     }
@@ -672,8 +723,6 @@ final class CachingRlsLbClient {
       return MoreObjects.toStringHelper(this)
           .add("request", request)
           .add("status", status)
-          .add("backoffPolicy", backoffPolicy)
-          .add("scheduledFuture", scheduledHandle)
           .toString();
     }
   }
@@ -810,12 +859,6 @@ final class CachingRlsLbClient {
       // eldest entry should be evicted if size limit exceeded
       return true;
     }
-
-    @Override
-    public String toString() {
-      return MoreObjects.toStringHelper(this)
-          .toString();
-    }
   }
 
   /**
@@ -844,6 +887,7 @@ final class CachingRlsLbClient {
   }
 
   /** A header will be added when RLS server respond with additional header data. */
+  @VisibleForTesting
   static final Metadata.Key<String> RLS_DATA_KEY =
       Metadata.Key.of("X-Google-RLS-Data", Metadata.ASCII_STRING_MARSHALLER);
 
@@ -861,78 +905,63 @@ final class CachingRlsLbClient {
       RouteLookupRequest request =
           requestFactory.create(methodName[0], methodName[1], args.getHeaders());
       final CachedRouteLookupResponse response = CachingRlsLbClient.this.get(request);
+      logger.log(ChannelLogLevel.DEBUG,
+          "Got route lookup cache entry for service={0}, method={1}, headers={2}:\n {3}",
+          new Object[]{methodName[0], methodName[1], args.getHeaders(), response});
 
-      PickSubchannelArgs rlsAppliedArgs = getApplyRlsHeader(args, response);
+      if (response.getHeaderData() != null && !response.getHeaderData().isEmpty()) {
+        Metadata headers = args.getHeaders();
+        headers.discardAll(RLS_DATA_KEY);
+        headers.put(RLS_DATA_KEY, response.getHeaderData());
+      }
+      String defaultTarget = lbPolicyConfig.getRouteLookupConfig().getDefaultTarget();
+      boolean hasFallback = defaultTarget != null && !defaultTarget.isEmpty();
       if (response.hasData()) {
         ChildPolicyWrapper childPolicyWrapper = response.getChildPolicyWrapper();
-        ConnectivityState connectivityState =
-            childPolicyWrapper.getConnectivityStateInfo().getState();
-        switch (connectivityState) {
-          case IDLE:
-          case CONNECTING:
-            return PickResult.withNoResult();
-          case READY:
-            return childPolicyWrapper.getPicker().pickSubchannel(rlsAppliedArgs);
-          case TRANSIENT_FAILURE:
-          case SHUTDOWN:
-          default:
-            return useFallback(rlsAppliedArgs);
+        SubchannelPicker picker = childPolicyWrapper.getPicker();
+        if (picker == null) {
+          return PickResult.withNoResult();
         }
+        PickResult result = picker.pickSubchannel(args);
+        if (result.getStatus().isOk()) {
+          return result;
+        }
+        if (hasFallback) {
+          return useFallback(args);
+        }
+        return PickResult.withError(result.getStatus());
       } else if (response.hasError()) {
-        return useFallback(rlsAppliedArgs);
+        if (hasFallback) {
+          return useFallback(args);
+        }
+        return PickResult.withError(response.getStatus());
       } else {
         return PickResult.withNoResult();
       }
-    }
-
-    private PickSubchannelArgs getApplyRlsHeader(
-        PickSubchannelArgs args, CachedRouteLookupResponse response) {
-      if (response.getHeaderData() == null || response.getHeaderData().isEmpty()) {
-        return args;
-      }
-
-      Metadata headers = new Metadata();
-      headers.merge(args.getHeaders());
-      headers.put(RLS_DATA_KEY, response.getHeaderData());
-      return new PickSubchannelArgsImpl(args.getMethodDescriptor(), headers, args.getCallOptions());
     }
 
     private ChildPolicyWrapper fallbackChildPolicyWrapper;
 
     /** Uses Subchannel connected to default target. */
     private PickResult useFallback(PickSubchannelArgs args) {
-      String defaultTarget = lbPolicyConfig.getRouteLookupConfig().getDefaultTarget();
-      if (fallbackChildPolicyWrapper == null
-          || !fallbackChildPolicyWrapper.getTarget().equals(defaultTarget)) {
-        // TODO(creamsoup) wait until lb is ready
-        startFallbackChildPolicy();
+      // TODO(creamsoup) wait until lb is ready
+      startFallbackChildPolicy();
+      SubchannelPicker picker = fallbackChildPolicyWrapper.getPicker();
+      if (picker == null) {
+        return PickResult.withNoResult();
       }
-      switch (fallbackChildPolicyWrapper.getConnectivityStateInfo().getState()) {
-        case IDLE:
-          // fall through
-        case CONNECTING:
-          return PickResult.withNoResult();
-        case TRANSIENT_FAILURE:
-          // fall through
-        case SHUTDOWN:
-          return
-              PickResult
-                  .withError(fallbackChildPolicyWrapper.getConnectivityStateInfo().getStatus());
-        case READY:
-          SubchannelPicker picker = fallbackChildPolicyWrapper.getPicker();
-          if (picker == null) {
-            return PickResult.withNoResult();
-          }
-          return picker.pickSubchannel(args);
-        default:
-          throw new AssertionError();
-      }
+      return picker.pickSubchannel(args);
     }
 
     private void startFallbackChildPolicy() {
       String defaultTarget = lbPolicyConfig.getRouteLookupConfig().getDefaultTarget();
-      fallbackChildPolicyWrapper = refCountedChildPolicyWrapperFactory.createOrGet(defaultTarget);
-
+      logger.log(ChannelLogLevel.DEBUG, "starting fallback to {0}", defaultTarget);
+      synchronized (lock) {
+        if (fallbackChildPolicyWrapper != null) {
+          return;
+        }
+        fallbackChildPolicyWrapper = refCountedChildPolicyWrapperFactory.createOrGet(defaultTarget);
+      }
       LoadBalancerProvider lbProvider =
           lbPolicyConfig.getLoadBalancingPolicy().getEffectiveLbProvider();
       final LoadBalancer lb =

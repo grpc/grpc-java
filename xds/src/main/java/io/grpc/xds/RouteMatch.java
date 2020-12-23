@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Joiner;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.MoreObjects.ToStringHelper;
 import com.google.re2j.Pattern;
@@ -25,7 +26,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import javax.annotation.Nullable;
 
 /**
@@ -45,9 +45,8 @@ final class RouteMatch {
     this.headerMatchers = headerMatchers;
   }
 
-  RouteMatch(@Nullable String pathPrefixMatch, @Nullable String pathExactMatch) {
-    this(
-        new PathMatcher(pathExactMatch, pathPrefixMatch, null),
+  static RouteMatch withPathExactOnly(String pathExact) {
+    return new RouteMatch(PathMatcher.fromPath(pathExact, true),
         Collections.<HeaderMatcher>emptyList(), null);
   }
 
@@ -60,29 +59,25 @@ final class RouteMatch {
    *
    * <p>Match is not deterministic if a runtime fraction match rule presents in this RouteMatch.
    */
-  boolean matches(String path, Map<String, Set<String>> headers) {
+  boolean matches(String path, Map<String, Iterable<String>> headers) {
     if (!pathMatch.matches(path)) {
       return false;
     }
     for (HeaderMatcher headerMatcher : headerMatchers) {
-      if (!headerMatcher.matchesValue(headers.get(headerMatcher.getName()))) {
+      Iterable<String> headerValues = headers.get(headerMatcher.getName());
+      // Special cases for hiding headers: "grpc-previous-rpc-attempts".
+      if (headerMatcher.getName().equals("grpc-previous-rpc-attempts")) {
+        headerValues = null;
+      }
+      // Special case for exposing headers: "content-type".
+      if (headerMatcher.getName().equals("content-type")) {
+        headerValues = Collections.singletonList("application/grpc");
+      }
+      if (!headerMatcher.matchesValue(headerValues)) {
         return false;
       }
     }
     return fractionMatch == null || fractionMatch.matches();
-  }
-
-  PathMatcher getPathMatch() {
-    return pathMatch;
-  }
-
-  List<HeaderMatcher> getHeaderMatchers() {
-    return Collections.unmodifiableList(headerMatchers);
-  }
-
-  @Nullable
-  FractionMatcher getFractionMatch() {
-    return fractionMatch;
   }
 
   @Override
@@ -122,35 +117,37 @@ final class RouteMatch {
     private final String prefix;
     @Nullable
     private final Pattern regEx;
+    private final boolean caseSensitive;
 
-    PathMatcher(@Nullable String path, @Nullable String prefix, @Nullable Pattern regEx) {
+    private PathMatcher(@Nullable String path, @Nullable String prefix, @Nullable Pattern regEx,
+        boolean caseSensitive) {
       this.path = path;
       this.prefix = prefix;
       this.regEx = regEx;
+      this.caseSensitive = caseSensitive;
     }
 
-    private boolean matches(String fullMethodName) {
+    static PathMatcher fromPath(String path, boolean caseSensitive) {
+      return new PathMatcher(path, null, null, caseSensitive);
+    }
+
+    static PathMatcher fromPrefix(String prefix, boolean caseSensitive) {
+      return new PathMatcher(null, prefix, null, caseSensitive);
+    }
+
+    static PathMatcher fromRegEx(Pattern regEx) {
+      return new PathMatcher(null, null, regEx, false /* doesn't matter */);
+    }
+
+    boolean matches(String fullMethodName) {
       if (path != null) {
-        return path.equals(fullMethodName);
+        return caseSensitive ? path.equals(fullMethodName) : path.equalsIgnoreCase(fullMethodName);
       } else if (prefix != null) {
-        return fullMethodName.startsWith(prefix);
+        return caseSensitive
+            ? fullMethodName.startsWith(prefix)
+            : fullMethodName.toLowerCase().startsWith(prefix.toLowerCase());
       }
       return regEx.matches(fullMethodName);
-    }
-
-    @Nullable
-    String getPath() {
-      return path;
-    }
-
-    @Nullable
-    String getPrefix() {
-      return prefix;
-    }
-
-    @Nullable
-    Pattern getRegEx() {
-      return regEx;
     }
 
     @Override
@@ -164,6 +161,7 @@ final class RouteMatch {
       PathMatcher that = (PathMatcher) o;
       return Objects.equals(path, that.path)
           && Objects.equals(prefix, that.prefix)
+          && Objects.equals(caseSensitive, that.caseSensitive)
           && Objects.equals(
               regEx == null ? null : regEx.pattern(),
               that.regEx == null ? null : that.regEx.pattern());
@@ -171,7 +169,7 @@ final class RouteMatch {
 
     @Override
     public int hashCode() {
-      return Objects.hash(path, prefix, regEx == null ? null : regEx.pattern());
+      return Objects.hash(path, prefix, caseSensitive, regEx == null ? null : regEx.pattern());
     }
 
     @Override
@@ -179,10 +177,10 @@ final class RouteMatch {
       ToStringHelper toStringHelper =
           MoreObjects.toStringHelper(this);
       if (path != null) {
-        toStringHelper.add("path", path);
+        toStringHelper.add("path", path).add("caseSensitive", caseSensitive);
       }
       if (prefix != null) {
-        toStringHelper.add("prefix", prefix);
+        toStringHelper.add("prefix", prefix).add("caseSensitive", caseSensitive);
       }
       if (regEx != null) {
         toStringHelper.add("regEx", regEx.pattern());
@@ -229,35 +227,31 @@ final class RouteMatch {
       this.isInvertedMatch = isInvertedMatch;
     }
 
-    private boolean matchesValue(@Nullable Set<String> values) {
+    private boolean matchesValue(@Nullable Iterable<String> values) {
       if (presentMatch != null) {
         return (values == null) == presentMatch.equals(isInvertedMatch);
       }
       if (values == null) {
         return false;
       }
-      boolean baseMatch = false;
-      for (String value : values) {
-        if (exactMatch != null) {
-          baseMatch = exactMatch.equals(value);
-        } else if (safeRegExMatch != null) {
-          baseMatch = safeRegExMatch.matches(value);
-        } else if (rangeMatch != null) {
-          long numValue;
-          try {
-            numValue = Long.parseLong(value);
-          } catch (NumberFormatException ignored) {
-            continue;
-          }
+      String valueStr = Joiner.on(",").join(values);
+      boolean baseMatch;
+      if (exactMatch != null) {
+        baseMatch = exactMatch.equals(valueStr);
+      } else if (safeRegExMatch != null) {
+        baseMatch = safeRegExMatch.matches(valueStr);
+      } else if (rangeMatch != null) {
+        long numValue;
+        try {
+          numValue = Long.parseLong(valueStr);
           baseMatch = rangeMatch.contains(numValue);
-        } else if (prefixMatch != null) {
-          baseMatch = value.startsWith(prefixMatch);
-        } else {
-          baseMatch = value.endsWith(suffixMatch);
+        } catch (NumberFormatException ignored) {
+          baseMatch = false;
         }
-        if (baseMatch) {
-          break;
-        }
+      } else if (prefixMatch != null) {
+        baseMatch = valueStr.startsWith(prefixMatch);
+      } else {
+        baseMatch = valueStr.endsWith(suffixMatch);
       }
       return baseMatch != isInvertedMatch;
     }

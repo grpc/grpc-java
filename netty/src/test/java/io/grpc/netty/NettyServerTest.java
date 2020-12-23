@@ -37,6 +37,8 @@ import io.grpc.internal.ServerTransportListener;
 import io.grpc.internal.TransportTracer;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandler;
+import io.netty.channel.ChannelHandlerAdapter;
+import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.ReflectiveChannelFactory;
 import io.netty.channel.WriteBufferWaterMark;
@@ -50,7 +52,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -71,7 +72,7 @@ public class NettyServerTest {
   public void startStop() throws Exception {
     InetSocketAddress addr = new InetSocketAddress(0);
 
-    class TestProtocolNegotiator implements ProtocolNegotiator {
+    class NoHandlerProtocolNegotiator implements ProtocolNegotiator {
       boolean closed;
 
       @Override public ChannelHandler newHandler(GrpcHttp2ConnectionHandler handler) {
@@ -87,7 +88,7 @@ public class NettyServerTest {
       }
     }
 
-    TestProtocolNegotiator protocolNegotiator = new TestProtocolNegotiator();
+    NoHandlerProtocolNegotiator protocolNegotiator = new NoHandlerProtocolNegotiator();
     NettyServer ns = new NettyServer(
         addr,
         new ReflectiveChannelFactory<>(NioServerSocketChannel.class),
@@ -108,6 +109,7 @@ public class NettyServerTest {
         1, 1, // ignore
         1, 1, // ignore
         true, 0, // ignore
+        Attributes.EMPTY,
         channelz);
     final SettableFuture<Void> serverShutdownCalled = SettableFuture.create();
     ns.start(new ServerListener() {
@@ -155,26 +157,58 @@ public class NettyServerTest {
         1, 1, // ignore
         1, 1, // ignore
         true, 0, // ignore
+        Attributes.EMPTY,
         channelz);
 
     assertThat(ns.getListenSocketAddress()).isEqualTo(addr);
   }
 
   @Test(timeout = 60000)
-  public void childChannelOptions() throws Exception {
+  public void connectionSettingsPropagated() throws Exception {
     final int originalLowWaterMark = 2097169;
     final int originalHighWaterMark = 2097211;
 
     Map<ChannelOption<?>, Object> childChannelOptions = new HashMap<>();
-
     childChannelOptions.put(ChannelOption.WRITE_BUFFER_WATER_MARK,
         new WriteBufferWaterMark(originalLowWaterMark, originalHighWaterMark));
 
-    final AtomicInteger lowWaterMark = new AtomicInteger(0);
-    final AtomicInteger highWaterMark = new AtomicInteger(0);
+    class TestChannelHandler extends ChannelHandlerAdapter {
+      CountDownLatch countDownLatch = new CountDownLatch(1);
+      int lowWaterMark;
+      int highWaterMark;
 
-    final CountDownLatch countDownLatch = new CountDownLatch(1);
+      @Override public void handlerAdded(ChannelHandlerContext ctx) {
+        Channel channel = ctx.channel();
+        WriteBufferWaterMark writeBufferWaterMark = channel.config()
+            .getOption(ChannelOption.WRITE_BUFFER_WATER_MARK);
+        lowWaterMark = writeBufferWaterMark.low();
+        highWaterMark = writeBufferWaterMark.high();
 
+        countDownLatch.countDown();
+      }
+    }
+
+    final TestChannelHandler channelHandler = new TestChannelHandler();
+
+    class TestProtocolNegotiator implements ProtocolNegotiator {
+      Attributes eagAttributes;
+
+      @Override public ChannelHandler newHandler(GrpcHttp2ConnectionHandler handler) {
+        eagAttributes = handler.getEagAttributes();
+        return channelHandler;
+      }
+
+      @Override public void close() {}
+
+      @Override public AsciiString scheme() {
+        return Utils.HTTP;
+      }
+    }
+
+    Attributes eagAttributes = Attributes.newBuilder()
+        .set(Attributes.Key.create("foo"), "bar")
+        .build();
+    TestProtocolNegotiator protocolNegotiator = new TestProtocolNegotiator();
     InetSocketAddress addr = new InetSocketAddress(0);
     NettyServer ns = new NettyServer(
         addr,
@@ -184,7 +218,7 @@ public class NettyServerTest {
         new FixedObjectPool<>(eventLoop),
         new FixedObjectPool<>(eventLoop),
         false,
-        ProtocolNegotiators.plaintext(),
+        protocolNegotiator,
         Collections.<ServerStreamTracer.Factory>emptyList(),
         TransportTracer.getDefaultFactory(),
         1, // ignore
@@ -196,18 +230,11 @@ public class NettyServerTest {
         1, 1, // ignore
         1, 1, // ignore
         true, 0, // ignore
+        eagAttributes,
         channelz);
     ns.start(new ServerListener() {
       @Override
       public ServerTransportListener transportCreated(ServerTransport transport) {
-        Channel channel = ((NettyServerTransport)transport).channel();
-        WriteBufferWaterMark writeBufferWaterMark = channel.config()
-            .getOption(ChannelOption.WRITE_BUFFER_WATER_MARK);
-        lowWaterMark.set(writeBufferWaterMark.low());
-        highWaterMark.set(writeBufferWaterMark.high());
-
-        countDownLatch.countDown();
-
         return new NoopServerTransportListener();
       }
 
@@ -217,11 +244,12 @@ public class NettyServerTest {
 
     Socket socket = new Socket();
     socket.connect(ns.getListenSocketAddress(), /* timeout= */ 8000);
-    countDownLatch.await();
+    channelHandler.countDownLatch.await();
     socket.close();
 
-    assertThat(lowWaterMark.get()).isEqualTo(originalLowWaterMark);
-    assertThat(highWaterMark.get()).isEqualTo(originalHighWaterMark);
+    assertThat(protocolNegotiator.eagAttributes).isSameInstanceAs(eagAttributes);
+    assertThat(channelHandler.lowWaterMark).isEqualTo(originalLowWaterMark);
+    assertThat(channelHandler.highWaterMark).isEqualTo(originalHighWaterMark);
 
     ns.shutdown();
   }
@@ -249,6 +277,7 @@ public class NettyServerTest {
         1, 1, // ignore
         1, 1, // ignore
         true, 0, // ignore
+        Attributes.EMPTY,
         channelz);
     final SettableFuture<Void> shutdownCompleted = SettableFuture.create();
     ns.start(new ServerListener() {

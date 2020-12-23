@@ -19,22 +19,15 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.MoreObjects;
-import com.google.common.base.Objects;
-import com.google.common.collect.ImmutableMap;
 import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancerProvider;
-import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver.ConfigOrError;
-import io.grpc.Status;
-import io.grpc.internal.JsonUtil;
-import io.grpc.internal.ServiceConfigUtil;
-import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
-import java.util.Collections;
-import java.util.List;
+import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import java.util.Map;
+import java.util.Objects;
 import javax.annotation.Nullable;
 
 /**
@@ -62,67 +55,67 @@ public class EdsLoadBalancerProvider extends LoadBalancerProvider {
 
   @Override
   public LoadBalancer newLoadBalancer(Helper helper) {
-    return new EdsLoadBalancer(helper);
+    return new EdsLoadBalancer2(helper);
   }
 
   @Override
   public ConfigOrError parseLoadBalancingPolicyConfig(
       Map<String, ?> rawLoadBalancingPolicyConfig) {
-    LoadBalancerRegistry registry = LoadBalancerRegistry.getDefaultRegistry();
-    try {
-      String cluster = JsonUtil.getString(rawLoadBalancingPolicyConfig, "cluster");
-      if (cluster == null) {
-        return ConfigOrError.fromError(Status.INTERNAL.withDescription("Cluster name required"));
-      }
-      String edsServiceName = JsonUtil.getString(rawLoadBalancingPolicyConfig, "edsServiceName");
-      String lrsServerName =
-          JsonUtil.getString(rawLoadBalancingPolicyConfig, "lrsLoadReportingServerName");
-
-      // TODO(chengyuanzhang): figure out locality_picking_policy parsing and its default value.
-
-      LbConfig roundRobinConfig = new LbConfig("round_robin", ImmutableMap.<String, Object>of());
-      List<LbConfig> endpointPickingPolicy =
-          ServiceConfigUtil
-              .unwrapLoadBalancingConfigList(
-                  JsonUtil.getListOfObjects(
-                      rawLoadBalancingPolicyConfig, "endpointPickingPolicy"));
-      if (endpointPickingPolicy == null || endpointPickingPolicy.isEmpty()) {
-        endpointPickingPolicy = Collections.singletonList(roundRobinConfig);
-      }
-      ConfigOrError endpointPickingConfigOrError =
-          ServiceConfigUtil.selectLbPolicyFromList(endpointPickingPolicy, registry);
-      if (endpointPickingConfigOrError.getError() != null) {
-        return endpointPickingConfigOrError;
-      }
-      PolicySelection endpointPickingSelection =
-          (PolicySelection) endpointPickingConfigOrError.getConfig();
-      return ConfigOrError.fromConfig(
-          new EdsConfig(cluster, edsServiceName, lrsServerName, endpointPickingSelection));
-    } catch (RuntimeException e) {
-      return ConfigOrError.fromError(
-          Status.fromThrowable(e).withDescription(
-              "Failed to parse EDS LB config: " + rawLoadBalancingPolicyConfig));
-    }
+    throw new UnsupportedOperationException("not supported as top-level LB policy");
   }
 
   static final class EdsConfig {
-
     final String clusterName;
     @Nullable
     final String edsServiceName;
     @Nullable
     final String lrsServerName;
+    @Nullable
+    final Long maxConcurrentRequests;
+    @Nullable
+    final UpstreamTlsContext tlsContext;
+    final PolicySelection localityPickingPolicy;
     final PolicySelection endpointPickingPolicy;
 
     EdsConfig(
         String clusterName,
         @Nullable String edsServiceName,
         @Nullable String lrsServerName,
+        @Nullable Long maxConcurrentRequests,
+        @Nullable UpstreamTlsContext tlsContext,
+        PolicySelection localityPickingPolicy,
         PolicySelection endpointPickingPolicy) {
       this.clusterName = checkNotNull(clusterName, "clusterName");
       this.edsServiceName = edsServiceName;
       this.lrsServerName = lrsServerName;
+      this.maxConcurrentRequests = maxConcurrentRequests;
+      this.tlsContext = tlsContext;
+      this.localityPickingPolicy = checkNotNull(localityPickingPolicy, "localityPickingPolicy");
       this.endpointPickingPolicy = checkNotNull(endpointPickingPolicy, "endpointPickingPolicy");
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(clusterName, edsServiceName, lrsServerName, maxConcurrentRequests,
+          tlsContext, localityPickingPolicy, endpointPickingPolicy);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      EdsConfig that = (EdsConfig) o;
+      return Objects.equals(clusterName, that.clusterName)
+          && Objects.equals(edsServiceName, that.edsServiceName)
+          && Objects.equals(lrsServerName, that.lrsServerName)
+          && Objects.equals(maxConcurrentRequests, that.maxConcurrentRequests)
+          && Objects.equals(tlsContext, that.tlsContext)
+          && Objects.equals(localityPickingPolicy, that.localityPickingPolicy)
+          && Objects.equals(endpointPickingPolicy, that.endpointPickingPolicy);
     }
 
     @Override
@@ -131,30 +124,11 @@ public class EdsLoadBalancerProvider extends LoadBalancerProvider {
           .add("clusterName", clusterName)
           .add("edsServiceName", edsServiceName)
           .add("lrsServerName", lrsServerName)
+          .add("maxConcurrentRequests", maxConcurrentRequests)
+          // Exclude tlsContext as its string representation is cumbersome.
+          .add("localityPickingPolicy", localityPickingPolicy)
           .add("endpointPickingPolicy", endpointPickingPolicy)
           .toString();
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-      if (!(obj instanceof EdsConfig)) {
-        return false;
-      }
-      EdsConfig that = (EdsConfig) obj;
-      return Objects.equal(this.clusterName, that.clusterName)
-          && Objects.equal(this.edsServiceName, that.edsServiceName)
-          && Objects.equal(this.lrsServerName, that.lrsServerName)
-          && Objects.equal(this.endpointPickingPolicy, that.endpointPickingPolicy);
-    }
-
-    @Override
-    public int hashCode() {
-      return
-          Objects.hashCode(
-              clusterName,
-              edsServiceName,
-              lrsServerName,
-              endpointPickingPolicy);
     }
   }
 }

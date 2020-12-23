@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 The gRPC Authors
+ * Copyright 2020 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,315 +16,167 @@
 
 package io.grpc.internal;
 
-import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.base.Preconditions.checkNotNull;
-
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.util.concurrent.MoreExecutors;
+import com.google.common.base.MoreObjects;
 import io.grpc.BinaryLog;
 import io.grpc.BindableService;
 import io.grpc.CompressorRegistry;
-import io.grpc.Context;
-import io.grpc.Deadline;
 import io.grpc.DecompressorRegistry;
 import io.grpc.HandlerRegistry;
-import io.grpc.InternalChannelz;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerInterceptor;
-import io.grpc.ServerMethodDefinition;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerStreamTracer;
 import io.grpc.ServerTransportFilter;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.io.File;
+import java.io.InputStream;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
- * The base class for server builders.
+ * A {@link ServerBuilder} that delegates all its builder method to another builder by default.
  *
- * @param <T> The concrete type for this builder.
+ * <p>Temporarily duplicates io.grpc.ForwardingServerBuilder (temporarily package-private)
+ * to fix ABI backward compatibility.
+
+ * @param <T> The concrete type of this builder.
+ * @see <a href="https://github.com/grpc/grpc-java/issues/7211">grpc/grpc-java#7211</a>
  */
-public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuilder<T>>
-        extends ServerBuilder<T> {
+public abstract class AbstractServerImplBuilder
+    <T extends AbstractServerImplBuilder<T>> extends ServerBuilder<T> {
 
-  private static final Logger log = Logger.getLogger(AbstractServerImplBuilder.class.getName());
+  /** The default constructor. */
+  protected AbstractServerImplBuilder() {}
 
+  /**
+   * This method serves to force sub classes to "hide" this static factory.
+   */
   public static ServerBuilder<?> forPort(int port) {
     throw new UnsupportedOperationException("Subclass failed to hide static factory");
   }
 
-  // defaults
-  private static final ObjectPool<? extends Executor> DEFAULT_EXECUTOR_POOL =
-      SharedResourcePool.forResource(GrpcUtil.SHARED_CHANNEL_EXECUTOR);
-  private static final HandlerRegistry DEFAULT_FALLBACK_REGISTRY = new DefaultFallbackRegistry();
-  private static final DecompressorRegistry DEFAULT_DECOMPRESSOR_REGISTRY =
-      DecompressorRegistry.getDefaultInstance();
-  private static final CompressorRegistry DEFAULT_COMPRESSOR_REGISTRY =
-      CompressorRegistry.getDefaultInstance();
-  private static final long DEFAULT_HANDSHAKE_TIMEOUT_MILLIS = TimeUnit.SECONDS.toMillis(120);
-
-  // mutable state
-  final InternalHandlerRegistry.Builder registryBuilder =
-      new InternalHandlerRegistry.Builder();
-  final List<ServerTransportFilter> transportFilters = new ArrayList<>();
-  final List<ServerInterceptor> interceptors = new ArrayList<>();
-  private final List<ServerStreamTracer.Factory> streamTracerFactories = new ArrayList<>();
-  HandlerRegistry fallbackRegistry = DEFAULT_FALLBACK_REGISTRY;
-  ObjectPool<? extends Executor> executorPool = DEFAULT_EXECUTOR_POOL;
-  DecompressorRegistry decompressorRegistry = DEFAULT_DECOMPRESSOR_REGISTRY;
-  CompressorRegistry compressorRegistry = DEFAULT_COMPRESSOR_REGISTRY;
-  long handshakeTimeoutMillis = DEFAULT_HANDSHAKE_TIMEOUT_MILLIS;
-  Deadline.Ticker ticker = Deadline.getSystemTicker();
-  private boolean statsEnabled = true;
-  private boolean recordStartedRpcs = true;
-  private boolean recordFinishedRpcs = true;
-  private boolean recordRealTimeMetrics = false;
-  private boolean tracingEnabled = true;
-  @Nullable BinaryLog binlog;
-  TransportTracer.Factory transportTracerFactory = TransportTracer.getDefaultFactory();
-  InternalChannelz channelz = InternalChannelz.instance();
-  CallTracer.Factory callTracerFactory = CallTracer.getDefaultFactory();
+  /**
+   * Returns the delegated {@code ServerBuilder}.
+   */
+  protected abstract ServerBuilder<?> delegate();
 
   @Override
-  public final T directExecutor() {
-    return executor(MoreExecutors.directExecutor());
-  }
-
-  @Override
-  public final T executor(@Nullable Executor executor) {
-    this.executorPool = executor != null ? new FixedObjectPool<>(executor) : DEFAULT_EXECUTOR_POOL;
+  public T directExecutor() {
+    delegate().directExecutor();
     return thisT();
   }
 
   @Override
-  public final T addService(ServerServiceDefinition service) {
-    registryBuilder.addService(checkNotNull(service, "service"));
+  public T executor(@Nullable Executor executor) {
+    delegate().executor(executor);
     return thisT();
   }
 
   @Override
-  public final T addService(BindableService bindableService) {
-    return addService(checkNotNull(bindableService, "bindableService").bindService());
-  }
-
-  @Override
-  public final T addTransportFilter(ServerTransportFilter filter) {
-    transportFilters.add(checkNotNull(filter, "filter"));
+  public T addService(ServerServiceDefinition service) {
+    delegate().addService(service);
     return thisT();
   }
 
   @Override
-  public final T intercept(ServerInterceptor interceptor) {
-    interceptors.add(checkNotNull(interceptor, "interceptor"));
+  public T addService(BindableService bindableService) {
+    delegate().addService(bindableService);
     return thisT();
   }
 
   @Override
-  public final T addStreamTracerFactory(ServerStreamTracer.Factory factory) {
-    streamTracerFactories.add(checkNotNull(factory, "factory"));
+  public T intercept(ServerInterceptor interceptor) {
+    delegate().intercept(interceptor);
     return thisT();
   }
 
   @Override
-  public final T fallbackHandlerRegistry(@Nullable HandlerRegistry registry) {
-    this.fallbackRegistry = registry != null ? registry : DEFAULT_FALLBACK_REGISTRY;
+  public T addTransportFilter(ServerTransportFilter filter) {
+    delegate().addTransportFilter(filter);
     return thisT();
   }
 
   @Override
-  public final T decompressorRegistry(@Nullable DecompressorRegistry registry) {
-    this.decompressorRegistry = registry != null ? registry : DEFAULT_DECOMPRESSOR_REGISTRY;
+  public T addStreamTracerFactory(ServerStreamTracer.Factory factory) {
+    delegate().addStreamTracerFactory(factory);
     return thisT();
   }
 
   @Override
-  public final T compressorRegistry(@Nullable CompressorRegistry registry) {
-    this.compressorRegistry = registry != null ? registry : DEFAULT_COMPRESSOR_REGISTRY;
+  public T fallbackHandlerRegistry(@Nullable HandlerRegistry fallbackRegistry) {
+    delegate().fallbackHandlerRegistry(fallbackRegistry);
     return thisT();
   }
 
   @Override
-  public final T handshakeTimeout(long timeout, TimeUnit unit) {
-    checkArgument(timeout > 0, "handshake timeout is %s, but must be positive", timeout);
-    this.handshakeTimeoutMillis = checkNotNull(unit, "unit").toMillis(timeout);
+  public T useTransportSecurity(File certChain, File privateKey) {
+    delegate().useTransportSecurity(certChain, privateKey);
     return thisT();
   }
 
   @Override
-  public final T setBinaryLog(@Nullable BinaryLog binaryLog) {
-    this.binlog = binaryLog;
+  public T useTransportSecurity(InputStream certChain, InputStream privateKey) {
+    delegate().useTransportSecurity(certChain, privateKey);
     return thisT();
   }
 
-  @VisibleForTesting
-  public final T setTransportTracerFactory(TransportTracer.Factory transportTracerFactory) {
-    this.transportTracerFactory = transportTracerFactory;
+  @Override
+  public T decompressorRegistry(@Nullable DecompressorRegistry registry) {
+    delegate().decompressorRegistry(registry);
+    return thisT();
+  }
+
+  @Override
+  public T compressorRegistry(@Nullable CompressorRegistry registry) {
+    delegate().compressorRegistry(registry);
+    return thisT();
+  }
+
+  @Override
+  public T handshakeTimeout(long timeout, TimeUnit unit) {
+    delegate().handshakeTimeout(timeout, unit);
+    return thisT();
+  }
+
+  @Override
+  public T maxInboundMessageSize(int bytes) {
+    delegate().maxInboundMessageSize(bytes);
+    return thisT();
+  }
+
+  @Override
+  public T maxInboundMetadataSize(int bytes) {
+    delegate().maxInboundMetadataSize(bytes);
+    return thisT();
+  }
+
+  @Override
+  public T setBinaryLog(BinaryLog binaryLog) {
+    delegate().setBinaryLog(binaryLog);
     return thisT();
   }
 
   /**
-   * Disable or enable stats features.  Enabled by default.
+   * Returns the {@link Server} built by the delegate by default. Overriding method can return
+   * different value.
    */
-  protected void setStatsEnabled(boolean value) {
-    this.statsEnabled = value;
-  }
-
-  /**
-   * Disable or enable stats recording for RPC upstarts.  Effective only if {@link
-   * #setStatsEnabled} is set to true.  Enabled by default.
-   */
-  protected void setStatsRecordStartedRpcs(boolean value) {
-    recordStartedRpcs = value;
-  }
-
-  /**
-   * Disable or enable stats recording for RPC completions.  Effective only if {@link
-   * #setStatsEnabled} is set to true.  Enabled by default.
-   */
-  protected void setStatsRecordFinishedRpcs(boolean value) {
-    recordFinishedRpcs = value;
-  }
-
-  /**
-   * Disable or enable real-time metrics recording.  Effective only if {@link #setStatsEnabled} is
-   * set to true.  Disabled by default.
-   */
-  protected void setStatsRecordRealTimeMetrics(boolean value) {
-    recordRealTimeMetrics = value;
-  }
-
-  /**
-   * Disable or enable tracing features.  Enabled by default.
-   */
-  protected void setTracingEnabled(boolean value) {
-    tracingEnabled = value;
-  }
-
-  /**
-   * Sets a custom deadline ticker.  This should only be called from InProcessServerBuilder.
-   */
-  protected void setDeadlineTicker(Deadline.Ticker ticker) {
-    this.ticker = checkNotNull(ticker, "ticker");
+  @Override
+  public Server build() {
+    return delegate().build();
   }
 
   @Override
-  public final Server build() {
-    return new ServerImpl(this, buildTransportServers(getTracerFactories()), Context.ROOT);
-  }
-
-  @VisibleForTesting
-  final List<? extends ServerStreamTracer.Factory> getTracerFactories() {
-    ArrayList<ServerStreamTracer.Factory> tracerFactories = new ArrayList<>();
-    if (statsEnabled) {
-      ServerStreamTracer.Factory censusStatsTracerFactory = null;
-      try {
-        Class<?> censusStatsAccessor =
-            Class.forName("io.grpc.census.InternalCensusStatsAccessor");
-        Method getServerStreamTracerFactoryMethod =
-            censusStatsAccessor.getDeclaredMethod(
-                "getServerStreamTracerFactory",
-                boolean.class,
-                boolean.class,
-                boolean.class);
-        censusStatsTracerFactory =
-            (ServerStreamTracer.Factory) getServerStreamTracerFactoryMethod
-                .invoke(
-                    null,
-                    recordStartedRpcs,
-                    recordFinishedRpcs,
-                    recordRealTimeMetrics);
-      } catch (ClassNotFoundException e) {
-        // Replace these separate catch statements with multicatch when Android min-API >= 19
-        log.log(Level.FINE, "Unable to apply census stats", e);
-      } catch (NoSuchMethodException e) {
-        log.log(Level.FINE, "Unable to apply census stats", e);
-      } catch (IllegalAccessException e) {
-        log.log(Level.FINE, "Unable to apply census stats", e);
-      } catch (InvocationTargetException e) {
-        log.log(Level.FINE, "Unable to apply census stats", e);
-      }
-      if (censusStatsTracerFactory != null) {
-        tracerFactories.add(censusStatsTracerFactory);
-      }
-    }
-    if (tracingEnabled) {
-      ServerStreamTracer.Factory tracingStreamTracerFactory = null;
-      try {
-        Class<?> censusTracingAccessor =
-            Class.forName("io.grpc.census.InternalCensusTracingAccessor");
-        Method getServerStreamTracerFactoryMethod =
-            censusTracingAccessor.getDeclaredMethod("getServerStreamTracerFactory");
-        tracingStreamTracerFactory =
-            (ServerStreamTracer.Factory) getServerStreamTracerFactoryMethod.invoke(null);
-      } catch (ClassNotFoundException e) {
-        // Replace these separate catch statements with multicatch when Android min-API >= 19
-        log.log(Level.FINE, "Unable to apply census stats", e);
-      } catch (NoSuchMethodException e) {
-        log.log(Level.FINE, "Unable to apply census stats", e);
-      } catch (IllegalAccessException e) {
-        log.log(Level.FINE, "Unable to apply census stats", e);
-      } catch (InvocationTargetException e) {
-        log.log(Level.FINE, "Unable to apply census stats", e);
-      }
-      if (tracingStreamTracerFactory != null) {
-        tracerFactories.add(tracingStreamTracerFactory);
-      }
-    }
-    tracerFactories.addAll(streamTracerFactories);
-    tracerFactories.trimToSize();
-    return Collections.unmodifiableList(tracerFactories);
-  }
-
-  protected final InternalChannelz getChannelz() {
-    return channelz;
-  }
-
-  protected final TransportTracer.Factory getTransportTracerFactory() {
-    return transportTracerFactory;
+  public String toString() {
+    return MoreObjects.toStringHelper(this).add("delegate", delegate()).toString();
   }
 
   /**
-   * Children of AbstractServerBuilder should override this method to provide transport specific
-   * information for the server.  This method is mean for Transport implementors and should not be
-   * used by normal users.
-   *
-   * @param streamTracerFactories an immutable list of stream tracer factories
+   * Returns the correctly typed version of the builder.
    */
-  protected abstract List<? extends io.grpc.internal.InternalServer> buildTransportServers(
-      List<? extends ServerStreamTracer.Factory> streamTracerFactories);
-
-  private T thisT() {
+  protected final T thisT() {
     @SuppressWarnings("unchecked")
     T thisT = (T) this;
     return thisT;
-  }
-
-  private static final class DefaultFallbackRegistry extends HandlerRegistry {
-    @Override
-    public List<ServerServiceDefinition> getServices() {
-      return Collections.emptyList();
-    }
-
-    @Nullable
-    @Override
-    public ServerMethodDefinition<?, ?> lookupMethod(
-        String methodName, @Nullable String authority) {
-      return null;
-    }
-  }
-
-  /**
-   * Returns the internal ExecutorPool for offloading tasks.
-   */
-  protected ObjectPool<? extends Executor> getExecutorPool() {
-    return this.executorPool;
   }
 }

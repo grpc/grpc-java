@@ -23,8 +23,8 @@ import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.verifyZeroInteractions;
 
 import io.grpc.Codec;
 import io.grpc.StreamTracer;
@@ -177,7 +177,7 @@ public class MessageFramerTest {
   @Test
   public void emptyUnknownLengthPayloadYieldsFrame() {
     writeUnknownLength(framer, new byte[0]);
-    verifyZeroInteractions(sink);
+    verifyNoInteractions(sink);
     framer.flush();
     verify(sink).deliverFrame(toWriteBuffer(new byte[] {0, 0, 0, 0, 0}), false, true, 1);
     // One alloc for the header

@@ -21,7 +21,7 @@ import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.truth.Truth;
-import io.grpc.ServerStreamTracer.Factory;
+import io.grpc.ServerStreamTracer;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.local.LocalServerChannel;
 import io.netty.handler.ssl.SslContext;
@@ -40,6 +40,7 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class NettyServerBuilderTest {
 
+  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
   @Rule public final ExpectedException thrown = ExpectedException.none();
 
   private NettyServerBuilder builder = NettyServerBuilder.forPort(8080);
@@ -47,7 +48,8 @@ public class NettyServerBuilderTest {
   @Test
   public void createMultipleServers() {
     builder.addListenAddress(new InetSocketAddress(8081));
-    List<NettyServer> servers = builder.buildTransportServers(ImmutableList.<Factory>of());
+    List<NettyServer> servers =
+        builder.buildTransportServers(ImmutableList.<ServerStreamTracer.Factory>of());
 
     Truth.assertThat(servers).hasSize(2);
   }

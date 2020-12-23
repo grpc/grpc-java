@@ -45,7 +45,7 @@ public final class GrpclbConstants {
   /**
    * Attribute key for gRPC LB server addresses.
    */
-  static final Attributes.Key<List<EquivalentAddressGroup>> ATTR_LB_ADDRS =
+  public static final Attributes.Key<List<EquivalentAddressGroup>> ATTR_LB_ADDRS =
       Attributes.Key.create("io.grpc.grpclb.lbAddrs");
 
   /**

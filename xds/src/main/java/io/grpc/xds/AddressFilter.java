@@ -82,5 +82,10 @@ final class AddressFilter {
     PathChain(String name) {
       this.name = checkNotNull(name, "name");
     }
+
+    @Override
+    public String toString() {
+      return name + (next == null ? "" : ", " + next);
+    }
   }
 }

@@ -16,13 +16,16 @@
 
 package io.grpc.okhttp;
 
+import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-import io.grpc.InternalManagedChannelProvider;
 import io.grpc.InternalServiceProviders;
 import io.grpc.ManagedChannelProvider;
+import io.grpc.ManagedChannelProvider.NewChannelBuilderResult;
+import io.grpc.ManagedChannelRegistryAccessor;
+import io.grpc.TlsChannelCredentials;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -46,9 +49,8 @@ public class OkHttpChannelProviderTest {
 
   @Test
   public void providedHardCoded() {
-    for (ManagedChannelProvider current : InternalServiceProviders.getCandidatesViaHardCoded(
-        ManagedChannelProvider.class, InternalManagedChannelProvider.HARDCODED_CLASSES)) {
-      if (current instanceof OkHttpChannelProvider) {
+    for (Class<?> current : ManagedChannelRegistryAccessor.getHardCodedClasses()) {
+      if (current == OkHttpChannelProvider.class) {
         return;
       }
     }
@@ -63,5 +65,24 @@ public class OkHttpChannelProviderTest {
   @Test
   public void builderIsAOkHttpBuilder() {
     assertSame(OkHttpChannelBuilder.class, provider.builderForAddress("localhost", 443).getClass());
+  }
+
+  @Test
+  public void builderForTarget() {
+    assertThat(provider.builderForTarget("localhost:443")).isInstanceOf(OkHttpChannelBuilder.class);
+  }
+
+  @Test
+  public void newChannelBuilder_success() {
+    NewChannelBuilderResult result =
+        provider.newChannelBuilder("localhost:443", TlsChannelCredentials.create());
+    assertThat(result.getChannelBuilder()).isInstanceOf(OkHttpChannelBuilder.class);
+  }
+
+  @Test
+  public void newChannelBuilder_fail() {
+    NewChannelBuilderResult result = provider.newChannelBuilder("localhost:443",
+        TlsChannelCredentials.newBuilder().requireFakeFeature().build());
+    assertThat(result.getError()).contains("FAKE");
   }
 }

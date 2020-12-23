@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
 /**
- * A {@link ManagedChannelBuilder} that delegates all its builder method to another builder by
+ * A {@link ManagedChannelBuilder} that delegates all its builder methods to another builder by
  * default.
  *
  * @param <T> The type of the subclass extending this abstract class.
@@ -77,13 +77,6 @@ public abstract class ForwardingChannelBuilder<T extends ForwardingChannelBuilde
     return thisT();
   }
 
-  @Deprecated
-  @Override
-  public T blockingExecutor(Executor executor) {
-    delegate().blockingExecutor(executor);
-    return thisT();
-  }
-
   @Override
   public T intercept(List<ClientInterceptor> interceptors) {
     delegate().intercept(interceptors);
@@ -120,6 +113,7 @@ public abstract class ForwardingChannelBuilder<T extends ForwardingChannelBuilde
     return thisT();
   }
 
+  @Deprecated
   @Override
   public T nameResolverFactory(NameResolver.Factory resolverFactory) {
     delegate().nameResolverFactory(resolverFactory);

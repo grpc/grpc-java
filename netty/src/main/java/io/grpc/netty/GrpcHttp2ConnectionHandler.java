@@ -35,7 +35,7 @@ public abstract class GrpcHttp2ConnectionHandler extends Http2ConnectionHandler 
   @Nullable
   protected final ChannelPromise channelUnused;
 
-  public GrpcHttp2ConnectionHandler(
+  protected GrpcHttp2ConnectionHandler(
       ChannelPromise channelUnused,
       Http2ConnectionDecoder decoder,
       Http2ConnectionEncoder encoder,

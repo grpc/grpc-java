@@ -32,6 +32,11 @@ import javax.annotation.concurrent.ThreadSafe;
  * <p>Providing authentication credentials is better served by {@link
  * CallCredentials}. But a {@code ClientInterceptor} could set the {@code
  * CallCredentials} within the {@link CallOptions}.
+ *
+ * <p>The interceptor may be called for multiple {@link ClientCall calls} by one or more threads
+ * without completing the previous ones first. Refer to the
+ * {@link io.grpc.ClientCall.Listener ClientCall.Listener} docs for more details regarding thread
+ * safety of the returned listener.
  */
 @ThreadSafe
 public interface ClientInterceptor {

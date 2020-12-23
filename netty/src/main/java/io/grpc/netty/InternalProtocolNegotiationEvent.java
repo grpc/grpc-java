@@ -17,12 +17,14 @@
 package io.grpc.netty;
 
 import io.grpc.Attributes;
+import io.grpc.Internal;
 import io.grpc.InternalChannelz.Security;
 import javax.annotation.Nullable;
 
 /**
  * Internal accessor for {@link ProtocolNegotiationEvent}.
  */
+@Internal
 public final class InternalProtocolNegotiationEvent {
   private InternalProtocolNegotiationEvent() {}
 

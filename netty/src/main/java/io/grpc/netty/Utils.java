@@ -56,7 +56,6 @@ import java.lang.reflect.Constructor;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.UnresolvedAddressException;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
@@ -455,7 +454,7 @@ class Utils {
       b.setSocketOptionTimeoutMillis(timeoutMillis);
     }
 
-    for (Entry<ChannelOption<?>, Object> opt : config.getOptions().entrySet()) {
+    for (Map.Entry<ChannelOption<?>, Object> opt : config.getOptions().entrySet()) {
       ChannelOption<?> key = opt.getKey();
       // Constants are pooled, so there should only be one instance of each constant
       if (key.equals(SO_LINGER) || key.equals(SO_TIMEOUT)) {
@@ -470,7 +469,7 @@ class Utils {
         = NettySocketSupport.getNativeSocketOptions(channel);
     if (nativeOptions != null) {
       b.setTcpInfo(nativeOptions.tcpInfo); // may be null
-      for (Entry<String, String> entry : nativeOptions.otherInfo.entrySet()) {
+      for (Map.Entry<String, String> entry : nativeOptions.otherInfo.entrySet()) {
         b.addOption(entry.getKey(), entry.getValue());
       }
     }

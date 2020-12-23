@@ -46,7 +46,6 @@ import io.grpc.StringMarshaller;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
 import java.util.concurrent.CyclicBarrier;
-import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.After;
@@ -81,7 +80,6 @@ public class DelayedClientTransportTest {
   @Mock private ClientStream mockRealStream;
   @Mock private ClientStream mockRealStream2;
   @Mock private ClientStreamListener streamListener;
-  @Mock private Executor mockExecutor;
   @Captor private ArgumentCaptor<Status> statusCaptor;
   @Captor private ArgumentCaptor<ClientStreamListener> listenerCaptor;
 

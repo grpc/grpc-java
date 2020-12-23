@@ -17,6 +17,7 @@
 package io.grpc.benchmarks.driver;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import io.grpc.InsecureServerCredentials;
 import io.grpc.Server;
 import io.grpc.Status;
 import io.grpc.benchmarks.proto.Control;
@@ -49,7 +50,7 @@ public class LoadWorker {
             .setDaemon(true)
             .setNameFormat("load-worker-%d")
             .build());
-    this.driverServer = NettyServerBuilder.forPort(driverPort)
+    this.driverServer = NettyServerBuilder.forPort(driverPort, InsecureServerCredentials.create())
         .directExecutor()
         .channelType(NioServerSocketChannel.class)
         .workerEventLoopGroup(singleThreadGroup)
@@ -104,7 +105,8 @@ public class LoadWorker {
               + "\n  --driver_port=<port>"
               + "\n    Port to expose grpc.testing.WorkerService, used by driver to initiate work."
               + "\n  --server_port=<port>"
-              + "\n    Port to start load servers on. Defaults to any available port");
+              + "\n    Port to start load servers on, if not specified by the server config"
+              + "\n    message. Defaults to any available port.");
       System.exit(1);
     }
     LoadWorker loadWorker = new LoadWorker(driverPort, serverPort);

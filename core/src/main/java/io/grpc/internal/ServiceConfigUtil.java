@@ -352,8 +352,8 @@ public final class ServiceConfigUtil {
         if (parsedLbPolicyConfig.getError() != null) {
           return parsedLbPolicyConfig;
         }
-        return ConfigOrError.fromConfig(new PolicySelection(
-            provider, lbConfig.rawConfigValue, parsedLbPolicyConfig.getConfig()));
+        return ConfigOrError.fromConfig(
+            new PolicySelection(provider, parsedLbPolicyConfig.getConfig()));
       }
     }
     return ConfigOrError.fromError(
@@ -408,20 +408,14 @@ public final class ServiceConfigUtil {
 
   public static final class PolicySelection {
     final LoadBalancerProvider provider;
-    @Deprecated
-    @Nullable
-    final Map<String, ?> rawConfig;
     @Nullable
     final Object config;
 
-    /** Constructs a PolicySelection with selected LB provider, a copy of raw config and the deeply
-     * parsed LB config. */
+    /** Constructs a PolicySelection with selected LB provider and the deeply parsed LB config. */
     public PolicySelection(
         LoadBalancerProvider provider,
-        @Nullable Map<String, ?> rawConfig,
         @Nullable Object config) {
       this.provider = checkNotNull(provider, "provider");
-      this.rawConfig = rawConfig;
       this.config = config;
     }
 
@@ -444,20 +438,18 @@ public final class ServiceConfigUtil {
       }
       PolicySelection that = (PolicySelection) o;
       return Objects.equal(provider, that.provider)
-          && Objects.equal(rawConfig, that.rawConfig)
           && Objects.equal(config, that.config);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hashCode(provider, rawConfig, config);
+      return Objects.hashCode(provider, config);
     }
 
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(this)
           .add("provider", provider)
-          .add("rawConfig", rawConfig)
           .add("config", config)
           .toString();
     }

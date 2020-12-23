@@ -76,12 +76,12 @@ import io.grpc.ServiceDescriptor;
 import io.grpc.Status;
 import io.grpc.StringMarshaller;
 import io.grpc.internal.ServerImpl.JumpToApplicationThreadServerStreamListener;
+import io.grpc.internal.ServerImplBuilder.ClientTransportServersBuilder;
 import io.grpc.internal.testing.SingleMessageProducer;
 import io.grpc.internal.testing.TestServerStreamTracer;
 import io.grpc.util.MutableHandlerRegistry;
 import io.perfmark.PerfMark;
 import java.io.ByteArrayInputStream;
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
@@ -139,6 +139,7 @@ public class ServerImplTest {
       };
   private static final String AUTHORITY = "some_authority";
 
+  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
   @Rule public final ExpectedException thrown = ExpectedException.none();
 
   @BeforeClass
@@ -164,7 +165,7 @@ public class ServerImplTest {
     };
   @Mock
   private ObjectPool<Executor> executorPool;
-  private Builder builder = new Builder();
+  private ServerImplBuilder builder;
   private MutableHandlerRegistry mutableFallbackRegistry = new MutableHandlerRegistry();
   private HandlerRegistry fallbackRegistry = mock(
       HandlerRegistry.class,
@@ -201,6 +202,14 @@ public class ServerImplTest {
   @Before
   public void startUp() throws IOException {
     MockitoAnnotations.initMocks(this);
+    builder = new ServerImplBuilder(
+        new ClientTransportServersBuilder() {
+          @Override
+          public List<? extends InternalServer> buildClientTransportServers(
+              List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
+            throw new UnsupportedOperationException();
+          }
+        });
     builder.channelz = channelz;
     builder.ticker = timer.getDeadlineTicker();
     streamTracerFactories = Arrays.asList(streamTracerFactory);
@@ -1504,17 +1513,6 @@ public class ServerImplTest {
       SettableFuture<SocketStats> ret = SettableFuture.create();
       ret.set(null);
       return ret;
-    }
-  }
-
-  private static class Builder extends AbstractServerImplBuilder<Builder> {
-    @Override protected List<InternalServer> buildTransportServers(
-        List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override public Builder useTransportSecurity(File f1, File f2)  {
-      throw new UnsupportedOperationException();
     }
   }
 

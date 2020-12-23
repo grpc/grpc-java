@@ -16,14 +16,16 @@
 
 package io.grpc.xds;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import com.google.common.base.Preconditions;
 import io.grpc.Internal;
 import io.grpc.NameResolver.Args;
 import io.grpc.NameResolverProvider;
-import io.grpc.internal.ExponentialBackoffPolicy;
-import io.grpc.internal.GrpcUtil;
-import io.grpc.xds.XdsClient.XdsChannelFactory;
+import io.grpc.internal.ObjectPool;
 import java.net.URI;
+import java.util.concurrent.atomic.AtomicLong;
+import javax.annotation.Nullable;
 
 /**
  * A provider for {@link XdsNameResolver}.
@@ -43,21 +45,15 @@ public final class XdsNameResolverProvider extends NameResolverProvider {
   @Override
   public XdsNameResolver newNameResolver(URI targetUri, Args args) {
     if (SCHEME.equals(targetUri.getScheme())) {
-      String targetPath = Preconditions.checkNotNull(targetUri.getPath(), "targetPath");
+      String targetPath = checkNotNull(targetUri.getPath(), "targetPath");
       Preconditions.checkArgument(
           targetPath.startsWith("/"),
           "the path component (%s) of the target (%s) must start with '/'",
           targetPath,
           targetUri);
       String name = targetPath.substring(1);
-      return
-          new XdsNameResolver(
-              name,
-              args,
-              new ExponentialBackoffPolicy.Provider(),
-              GrpcUtil.STOPWATCH_SUPPLIER,
-              XdsChannelFactory.getInstance(),
-              Bootstrapper.getInstance());
+      return new XdsNameResolver(name, args.getServiceConfigParser(),
+          args.getSynchronizationContext());
     }
     return null;
   }
@@ -77,5 +73,16 @@ public final class XdsNameResolverProvider extends NameResolverProvider {
     // Set priority value to be < 5 as we still want DNS resolver to be the primary default
     // resolver.
     return 4;
+  }
+
+  interface XdsClientPoolFactory {
+    ObjectPool<XdsClient> getXdsClientPool() throws XdsInitializationException;
+  }
+
+  /**
+   * Provides the counter for aggregating outstanding requests per cluster:eds_service_name.
+   */
+  interface CallCounterProvider {
+    AtomicLong getOrCreate(String cluster, @Nullable String edsServiceName);
   }
 }

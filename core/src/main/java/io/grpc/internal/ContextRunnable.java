@@ -26,7 +26,7 @@ abstract class ContextRunnable implements Runnable {
 
   private final Context context;
 
-  public ContextRunnable(Context context) {
+  protected ContextRunnable(Context context) {
     this.context = context;
   }
 

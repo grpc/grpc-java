@@ -16,8 +16,10 @@
 
 package io.grpc.netty;
 
+import io.grpc.internal.ObjectPool;
 import io.netty.channel.ChannelHandler;
 import io.netty.util.AsciiString;
+import java.util.concurrent.Executor;
 
 /**
  * An class that provides a Netty handler to control protocol negotiation.
@@ -40,8 +42,25 @@ interface ProtocolNegotiator {
   /**
    * Releases resources held by this negotiator. Called when the Channel transitions to terminated
    * or when InternalServer is shutdown (depending on client or server). That means handlers
-   * returned by {@link #newHandler()} can outlive their parent negotiator on server-side, but not
+   * returned by {@link #newHandler} can outlive their parent negotiator on server-side, but not
    * on client-side.
    */
   void close();
+
+  interface ClientFactory {
+    /** Creates a new negotiator. */
+    ProtocolNegotiator newNegotiator();
+
+    /** Returns the implicit port to use if no port was specified explicitly by the user. */
+    int getDefaultPort();
+  }
+
+  interface ServerFactory {
+    /**
+     * Creates a new negotiator.
+     *
+     * @param offloadExecutorPool an executor pool for time-consuming tasks
+     */
+    ProtocolNegotiator newNegotiator(ObjectPool<? extends Executor> offloadExecutorPool);
+  }
 }

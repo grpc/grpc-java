@@ -33,7 +33,6 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import io.grpc.Attributes;
-import io.grpc.Attributes.Key;
 import io.grpc.Codec;
 import io.grpc.DecompressorRegistry;
 import io.grpc.Metadata;
@@ -184,7 +183,7 @@ public class DelayedStreamTest {
   @Test
   public void setStream_getAttributes() {
     Attributes attributes =
-        Attributes.newBuilder().set(Key.<String>create("fakeKey"), "fakeValue").build();
+        Attributes.newBuilder().set(Attributes.Key.<String>create("fakeKey"), "fakeValue").build();
     when(realStream.getAttributes()).thenReturn(attributes);
 
     stream.start(listener);

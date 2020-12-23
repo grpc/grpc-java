@@ -47,7 +47,7 @@ public class NettyTransportTest extends AbstractTransportTest {
   private final ClientTransportFactory clientFactory = NettyChannelBuilder
       // Although specified here, address is ignored because we never call build.
       .forAddress("localhost", 0)
-      .flowControlWindow(65 * 1024)
+      .flowControlWindow(AbstractTransportTest.TEST_FLOW_CONTROL_WINDOW)
       .negotiationType(NegotiationType.PLAINTEXT)
       .setTransportTracerFactory(fakeClockTransportTracer)
       .buildTransportFactory();
@@ -67,7 +67,7 @@ public class NettyTransportTest extends AbstractTransportTest {
       List<ServerStreamTracer.Factory> streamTracerFactories) {
     return NettyServerBuilder
         .forAddress(new InetSocketAddress("localhost", 0))
-        .flowControlWindow(65 * 1024)
+        .flowControlWindow(AbstractTransportTest.TEST_FLOW_CONTROL_WINDOW)
         .setTransportTracerFactory(fakeClockTransportTracer)
         .buildTransportServers(streamTracerFactories);
   }
@@ -77,7 +77,7 @@ public class NettyTransportTest extends AbstractTransportTest {
       int port, List<ServerStreamTracer.Factory> streamTracerFactories) {
     return NettyServerBuilder
         .forAddress(new InetSocketAddress("localhost", port))
-        .flowControlWindow(65 * 1024)
+        .flowControlWindow(AbstractTransportTest.TEST_FLOW_CONTROL_WINDOW)
         .setTransportTracerFactory(fakeClockTransportTracer)
         .buildTransportServers(streamTracerFactories);
   }

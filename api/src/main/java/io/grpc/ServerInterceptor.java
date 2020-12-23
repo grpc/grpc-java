@@ -29,6 +29,11 @@ import javax.annotation.concurrent.ThreadSafe;
  * <li>Logging and monitoring call behavior</li>
  * <li>Delegating calls to other servers</li>
  * </ul>
+ *
+ * <p>The interceptor may be called for multiple {@link ServerCall calls} by one or more threads
+ * without completing the previous ones first. Refer to the
+ * {@link io.grpc.ServerCall.Listener ServerCall.Listener} docs for more details regarding thread
+ * safety of the returned listener.
  */
 @ThreadSafe
 public interface ServerInterceptor {

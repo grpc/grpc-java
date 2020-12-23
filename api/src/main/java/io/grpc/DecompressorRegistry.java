@@ -25,7 +25,6 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Set;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
@@ -116,7 +115,7 @@ public final class DecompressorRegistry {
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1704")
   public Set<String> getAdvertisedMessageEncodings() {
     Set<String> advertisedDecompressors = new HashSet<>(decompressors.size());
-    for (Entry<String, DecompressorInfo> entry : decompressors.entrySet()) {
+    for (Map.Entry<String, DecompressorInfo> entry : decompressors.entrySet()) {
       if (entry.getValue().advertised) {
         advertisedDecompressors.add(entry.getKey());
       }
