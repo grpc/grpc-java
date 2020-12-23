@@ -384,7 +384,6 @@ public final class SdsProtocolNegotiators {
     private final GrpcHttp2ConnectionHandler grpcHandler;
     private final DownstreamTlsContext downstreamTlsContext;
     @Nullable private final ProtocolNegotiator fallbackProtocolNegotiator;
-    private boolean handlerRemoved = false;
 
     ServerSdsHandler(
             GrpcHttp2ConnectionHandler grpcHandler,
@@ -404,11 +403,6 @@ public final class SdsProtocolNegotiators {
       this.grpcHandler = grpcHandler;
       this.downstreamTlsContext = downstreamTlsContext;
       this.fallbackProtocolNegotiator = fallbackProtocolNegotiator;
-    }
-
-    @Override
-    public void handlerRemoved(ChannelHandlerContext ctx) throws Exception {
-      handlerRemoved = true;
     }
 
     @Override
@@ -442,7 +436,7 @@ public final class SdsProtocolNegotiators {
                   InternalProtocolNegotiators.serverTls(sslContext).newHandler(grpcHandler);
 
               // Delegate rest of handshake to TLS handler
-              if (!handlerRemoved) {
+              if (!ctx.isRemoved()) {
                 ctx.pipeline().addAfter(ctx.name(), null, handler);
                 fireProtocolNegotiationEvent(ctx);
                 ctx.pipeline().remove(bufferReads);
