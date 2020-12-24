@@ -21,9 +21,9 @@ import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_AGE_NANOS_DISABLED
 import static io.netty.channel.ChannelOption.ALLOCATOR;
 import static io.netty.channel.ChannelOption.SO_KEEPALIVE;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
@@ -87,7 +87,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
   private EventLoopGroup bossGroup;
   private EventLoopGroup workerGroup;
   private ServerListener listener;
-  private final ChannelGroup channelGroup;
+  private volatile ChannelGroup channelGroup;
   private final boolean autoFlowControl;
   private final int flowControlWindow;
   private final int maxMessageSize;
@@ -109,7 +109,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
   private volatile List<InternalInstrumented<SocketStats>> listenSocketStatsList =
       new ArrayList<>();
   private volatile boolean terminated;
-  private volatile boolean started;
+  private final EventLoop bossExecutor;
 
   NettyServer(
       List<? extends SocketAddress> addresses,
@@ -139,7 +139,8 @@ class NettyServer implements InternalServer, InternalWithLogId {
     this.workerGroupPool = checkNotNull(workerGroupPool, "workerGroupPool");
     this.forceHeapBuffer = forceHeapBuffer;
     this.bossGroup = bossGroupPool.getObject();
-    this.channelGroup = new DefaultChannelGroup(bossGroup.next());
+    this.bossExecutor = bossGroup.next();
+    this.channelGroup = new DefaultChannelGroup(this.bossExecutor);
     this.workerGroup = workerGroupPool.getObject();
     this.protocolNegotiator = checkNotNull(protocolNegotiator, "protocolNegotiator");
     this.streamTracerFactories = checkNotNull(streamTracerFactories, "streamTracerFactories");
@@ -205,7 +206,6 @@ class NettyServer implements InternalServer, InternalWithLogId {
     listener = checkNotNull(serverListener, "serverListener");
 
     final ServerBootstrap b = new ServerBootstrap();
-    final EventLoop bossExecutor = bossGroup.next();;
     b.option(ALLOCATOR, Utils.getByteBufAllocator(forceHeapBuffer));
     b.childOption(ALLOCATOR, Utils.getByteBufAllocator(forceHeapBuffer));
     b.group(bossExecutor, workerGroup);
@@ -297,123 +297,68 @@ class NettyServer implements InternalServer, InternalWithLogId {
         ch.closeFuture().addListener(loopReleaser);
       }
     });
-
-    Future<Map<ChannelFuture, SocketAddress>> bindCallFuture =
-        bossExecutor.submit(new Callable<Map<ChannelFuture, SocketAddress>>() {
+    Future<Map<SocketAddress, Map<ChannelFuture,ChannelFutureListener>>> bindCallFuture =
+        bossExecutor.submit(
+            new Callable<Map<SocketAddress, Map<ChannelFuture, ChannelFutureListener>>>() {
           @Override
-          public Map<ChannelFuture, SocketAddress> call() {
-            Map<ChannelFuture, SocketAddress> map = new HashMap<>();
+          public Map<SocketAddress, Map<ChannelFuture, ChannelFutureListener>> call() {
+            Map<SocketAddress, Map<ChannelFuture, ChannelFutureListener>> bindFutures =
+                new HashMap<>();
             for (SocketAddress address: addresses) {
                 ChannelFuture future = b.bind(address);
-                map.put(future, address);
+                channelGroup.add(future.channel());
+                final InternalInstrumented<SocketStats> listenSocketStats =
+                    new ListenSocket(future.channel());
+                future.addListener(new ChannelFutureListener() {
+                  @Override
+                  public void operationComplete(ChannelFuture future) throws Exception {
+                    channelz.addListenSocket(listenSocketStats);
+                    listenSocketStatsList.add(listenSocketStats);
+                  }
+                });
+                ChannelFutureListener closeListener = new ChannelFutureListener() {
+                  @Override
+                  public void operationComplete(ChannelFuture future) throws Exception {
+                    if (!future.isSuccess()) {
+                      log.log(Level.WARNING, "Error closing server channel", future.cause());
+                    }
+                    channelz.removeListenSocket(listenSocketStats);
+                    listenSocketStatsList.remove(listenSocketStats);
+                  }
+                };
+                future.channel().closeFuture().addListener(closeListener);
+                bindFutures.put(address, ImmutableMap.of(future, closeListener));
             }
-            return map;
+            return bindFutures;
           }
         }
     );
-    Map<ChannelFuture, SocketAddress> channelFutures =
+    Map<SocketAddress, Map<ChannelFuture, ChannelFutureListener>> channelFutures =
         bindCallFuture.awaitUninterruptibly().getNow();
-    if (channelFutures == null) {
+
+    if (!bindCallFuture.isSuccess()) {
+      channelGroup.close().awaitUninterruptibly();
       throw new IOException(String.format("Failed to bind to addresses %s",
           addresses), bindCallFuture.cause());
     }
-    BindResult bindResult = new BindResult();
-    for (Map.Entry<ChannelFuture, SocketAddress> entry: channelFutures.entrySet()) {
+    for (Map.Entry<SocketAddress, Map<ChannelFuture, ChannelFutureListener>> entry:
+        channelFutures.entrySet()) {
       // We'd love to observe interruption, but if interrupted we will need to close the channel,
       // which itself would need an await() to guarantee the port is not used when the method
       // returns. See #6850
-      ChannelFuture future = entry.getKey().awaitUninterruptibly();
-      if (!future.isSuccess()) {
-        bindResult.failAddress(entry.getValue()).causedBy(future.cause());
-      } else {
-        final Channel channel = future.channel();
-        channel.eventLoop().execute(new Runnable() {
-          @Override
-          public void run() {
-            InternalInstrumented<SocketStats> listenSocketStats = new ListenSocket(channel);
-            channelz.addListenSocket(listenSocketStats);
-            listenSocketStatsList.add(listenSocketStats);
-          }
-        });
-        channelGroup.add(channel);
+      for (ChannelFuture future: entry.getValue().keySet()) {
+        if (!future.awaitUninterruptibly().isSuccess()) {
+          channelGroup.close().awaitUninterruptibly();
+          throw new IOException(String.format("Failed to bind to address %s",
+              entry.getKey()), future.cause());
+        }
       }
     }
-
-    if (!bindResult.isSuccess()) {
-      if (!channelGroup.isEmpty()) {
-        closeChannelGroup().awaitUninterruptibly();
-      }
-      throw new IOException(String.format("Failed to bind to addresses %s",
-          bindResult.getFailedAddresses()), bindResult.cause());
-    }
-    started = true;
-  }
-
-  @VisibleForTesting
-  boolean isStarted() {
-    return started;
-  }
-
-  @VisibleForTesting
-  boolean isTerminated() {
-    return terminated;
-  }
-
-  private static final class BindResult {
-    private final List<SocketAddress> failedAddresses = new ArrayList<>();
-    private Throwable cause;
-
-    public BindResult failAddress(SocketAddress address) {
-      failedAddresses.add(address);
-      return this;
-    }
-
-    public void causedBy(Throwable cause) {
-      if (this.cause == null) {
-        this.cause = cause;
+    for (Map<ChannelFuture, ChannelFutureListener> channelListener: channelFutures.values()) {
+      for (Map.Entry<ChannelFuture, ChannelFutureListener> entry: channelListener.entrySet()) {
+        entry.getKey().channel().closeFuture().removeListener(entry.getValue());
       }
     }
-
-    public Throwable cause() {
-      return cause;
-    }
-
-    public boolean isSuccess() {
-      return failedAddresses.isEmpty();
-    }
-
-    public List<SocketAddress> getFailedAddresses() {
-      return failedAddresses;
-    }
-  }
-
-  private ChannelGroupFuture closeChannelGroup() {
-    return channelGroup.close()
-        .addListener(new ChannelGroupFutureListener() {
-          @Override
-          public void operationComplete(ChannelGroupFuture future) throws Exception {
-            if (!future.isSuccess()) {
-              log.log(Level.WARNING, "Error closing server channel group", future.cause());
-            }
-            List<InternalInstrumented<SocketStats>> stats = listenSocketStatsList;
-            listenSocketStatsList = null;
-            if (stats != null && !stats.isEmpty()) {
-              for (InternalInstrumented<SocketStats> stat: stats) {
-                if (stat != null) {
-                  channelz.removeListenSocket(stat);
-                }
-              }
-            }
-            sharedResourceReferenceCounter.release();
-            protocolNegotiator.close();
-            if (started) {
-              synchronized (NettyServer.this) {
-                listener.serverShutdown();
-                terminated = true;
-              }
-            }
-          }
-        });
   }
 
   @Override
@@ -421,8 +366,32 @@ class NettyServer implements InternalServer, InternalWithLogId {
     if (terminated) {
       return;
     }
+    ChannelGroupFuture groupFuture = channelGroup.close()
+        .addListener(new ChannelGroupFutureListener() {
+            @Override
+            public void operationComplete(ChannelGroupFuture future) throws Exception {
+              if (!future.isSuccess()) {
+                log.log(Level.WARNING, "Error closing server channel group", future.cause());
+              }
+              List<InternalInstrumented<SocketStats>> stats = listenSocketStatsList;
+              listenSocketStatsList = null;
+              if (stats != null && !stats.isEmpty()) {
+                for (InternalInstrumented<SocketStats> stat: stats) {
+                  if (stat != null) {
+                    channelz.removeListenSocket(stat);
+                  }
+                }
+              }
+              sharedResourceReferenceCounter.release();
+              protocolNegotiator.close();
+              synchronized (NettyServer.this) {
+                listener.serverShutdown();
+                terminated = true;
+              }
+            }
+        });
     try {
-      closeChannelGroup().await();
+      groupFuture.await();
     } catch (InterruptedException e) {
       log.log(Level.FINE, "Interrupted while shutting down", e);
       Thread.currentThread().interrupt();

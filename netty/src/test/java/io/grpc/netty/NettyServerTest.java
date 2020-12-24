@@ -24,8 +24,9 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
@@ -46,6 +47,7 @@ import io.grpc.internal.TransportTracer;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFactory;
 import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerAdapter;
 import io.netty.channel.ChannelHandlerContext;
@@ -59,6 +61,7 @@ import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.util.AsciiString;
 import io.netty.util.concurrent.Future;
 import java.io.IOException;
+import java.net.BindException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketAddress;
@@ -91,14 +94,15 @@ public class NettyServerTest {
   @Mock
   EventLoop mockEventLoop;
   @Mock
-  Future<Map<ChannelFuture, SocketAddress>> bindFuture;
+  Future<Map<SocketAddress, Map<ChannelFuture, ChannelFutureListener>>> bindFuture;
 
   @Before
   public void setup() throws Exception {
     MockitoAnnotations.initMocks(this);
     when(mockEventLoopGroup.next()).thenReturn(mockEventLoop);
     when(mockEventLoop
-        .submit(ArgumentMatchers.<Callable<Map<ChannelFuture, SocketAddress>>>any()))
+        .submit(ArgumentMatchers.<Callable<
+            Map<SocketAddress, Map<ChannelFuture, ChannelFutureListener>>>>any()))
         .thenReturn(bindFuture);
   }
 
@@ -498,70 +502,63 @@ public class NettyServerTest {
   }
 
   @Test
+  @SuppressWarnings("unchecked")
   public void testBindScheduleFailure() throws Exception {
     when(bindFuture.awaitUninterruptibly()).thenReturn(bindFuture);
+    when(bindFuture.isSuccess()).thenReturn(false);
     when(bindFuture.getNow()).thenReturn(null);
+    Throwable mockCause = mock(Throwable.class);
+    when(bindFuture.cause()).thenReturn(mockCause);
+
+    Future<Void> mockFuture = (Future<Void>) mock(Future.class);
+    doReturn(mockFuture).when(mockEventLoopGroup).submit(any(Runnable.class));
     SocketAddress addr = new InetSocketAddress(0);
-    verifyServerNotStart(Collections.singletonList(addr),
+    verifyServerNotStart(Collections.singletonList(addr), mockEventLoopGroup,
         IOException.class, "Failed to bind to addresses " + Arrays.asList(addr),
-        null, false);
+        mockCause);
   }
 
   @Test
+  @SuppressWarnings("unchecked")
   public void testBindFailure() throws Exception {
     when(bindFuture.awaitUninterruptibly()).thenReturn(bindFuture);
     ChannelFuture future = mock(ChannelFuture.class);
     when(future.awaitUninterruptibly()).thenReturn(future);
     when(future.isSuccess()).thenReturn(false);
+    Channel channel = channelFactory.newChannel();
+    eventLoop.register(channel);
+    when(future.channel()).thenReturn(channel);
     Throwable mockCause = mock(Throwable.class);
     when(future.cause()).thenReturn(mockCause);
     SocketAddress addr = new InetSocketAddress(0);
-    Map<ChannelFuture, SocketAddress> map = ImmutableMap.of(future, addr);
-    when(bindFuture.getNow()).thenReturn(map);
-    verifyServerNotStart(Collections.singletonList(addr),
-        IOException.class, "Failed to bind to addresses " + Arrays.asList(addr),
-        mockCause, false);
+    ChannelFutureListener mockListener = mock(ChannelFutureListener.class);
+    Map<ChannelFuture, ChannelFutureListener> listener = ImmutableMap.of(future, mockListener);
+    Map<SocketAddress, Map<ChannelFuture, ChannelFutureListener>> list =
+        ImmutableMap.of(addr, listener);
+    when(bindFuture.getNow()).thenReturn(list);
+    when(bindFuture.isSuccess()).thenReturn(true);
+    Future<Void> mockFuture = (Future<Void>) mock(Future.class);
+
+    doReturn(mockFuture).when(mockEventLoopGroup).submit(any(Runnable.class));
+
+    verifyServerNotStart(Collections.singletonList(addr), mockEventLoopGroup,
+        IOException.class, "Failed to bind to address " + addr, mockCause);
   }
 
   @Test
   public void testBindPartialFailure() throws Exception {
-    ChannelFuture good = mock(ChannelFuture.class);
-    when(good.awaitUninterruptibly()).thenReturn(good);
-    when(good.isSuccess()).thenReturn(true);
-    Channel channel1 = channelFactory.newChannel();
-    eventLoop.register(channel1);
-    when(good.channel()).thenReturn(channel1);
-
-    ChannelFuture bad = mock(ChannelFuture.class);
-    when(bad.awaitUninterruptibly()).thenReturn(bad);
-    when(bad.isSuccess()).thenReturn(false);
-    Throwable mockCause = mock(Throwable.class);
-    when(bad.cause()).thenReturn(mockCause);
-    Channel channel2 = mock(Channel.class);
-    when(bad.channel()).thenReturn(channel2);
-
-    SocketAddress bindSuccessAdd = new InetSocketAddress(1);
-    SocketAddress bindFailAdd = new InetSocketAddress(2);
-    Map<ChannelFuture, SocketAddress> map = ImmutableMap.of(
-        good, bindSuccessAdd, bad, bindFailAdd
-    );
-    when(bindFuture.awaitUninterruptibly()).thenReturn(bindFuture);
-    when(bindFuture.getNow()).thenReturn(map);
-    when(mockEventLoopGroup.next())
-        .thenReturn(eventLoop.next()) //for channel group
-        .thenReturn(mockEventLoop); //for bind
-    verifyServerNotStart(ImmutableList.of(bindSuccessAdd, bindFailAdd),
-        IOException.class, "Failed to bind to addresses " + Arrays.asList(bindFailAdd),
-        mockCause, true);
-    assertFalse(channel1.isOpen());
-    verifyNoInteractions(channel2);
+    SocketAddress add1 = new InetSocketAddress(0);
+    SocketAddress add2 = new InetSocketAddress(2);
+    SocketAddress add3 = new InetSocketAddress(2);
+    verifyServerNotStart(ImmutableList.of(add1, add2, add3), eventLoop,
+        IOException.class, "Failed to bind to address " + add3,
+        new BindException("Address already in use"));
   }
 
-  private void verifyServerNotStart(List<SocketAddress> addr,
-      Class<?> expectedException, String expectedMessage, Throwable expectedCause,
-      boolean expectedShutdown) throws Exception {
-    NettyServer ns = getServer(addr);
-    final CountDownLatch latch = new CountDownLatch(1);
+  private void verifyServerNotStart(List<SocketAddress> addr, EventLoopGroup ev,
+      Class<?> expectedException, String expectedMessage, Throwable expectedCause)
+      throws Exception {
+    NettyServer ns = getServer(addr, ev);
     try {
       ns.start(new ServerListener() {
         @Override
@@ -571,40 +568,36 @@ public class NettyServerTest {
 
         @Override
         public void serverShutdown() {
-          latch.countDown();
         }
       });
     } catch (Exception ex) {
       assertTrue(expectedException.isInstance(ex));
       assertThat(ex.getMessage()).isEqualTo(expectedMessage);
-      assertThat(ex.getCause()).isEqualTo(expectedCause);
-      assertFalse(ns.isStarted());
-      assertFalse(ns.isTerminated());
+      assertThat(ex.getCause().getClass()).isEqualTo(expectedCause.getClass());
+      assertThat(ex.getCause().getMessage()).isEqualTo(expectedCause.getMessage());
       assertFalse(addr.isEmpty());
+      // Listener tasks are executed on the event loop, so await until noop task is drained.
+      ev.submit(new Runnable() {
+        @Override
+        public void run() {}
+      }).await(5, TimeUnit.SECONDS);
       assertThat(ns.getListenSocketAddress()).isEqualTo(addr.get(0));
       assertThat(ns.getListenSocketAddresses()).isEqualTo(addr);
-      // Wait for channelGroup close listener to run.
-      latch.await(5, TimeUnit.SECONDS);
-      if (expectedShutdown) {
-        assertNull(ns.getListenSocketStatsList());
-      } else {
-        assertTrue(ns.getListenSocketStatsList().isEmpty());
-      }
+      assertTrue(ns.getListenSocketStatsList().isEmpty());
       assertNull(ns.getListenSocketStats());
-      assertEquals(1, latch.getCount());
       return;
     }
     fail();
   }
 
-  private NettyServer getServer(List<SocketAddress> addr) {
+  private NettyServer getServer(List<SocketAddress> addr, EventLoopGroup ev) {
     return new NettyServer(
         addr,
         new ReflectiveChannelFactory<>(NioServerSocketChannel.class),
         new HashMap<ChannelOption<?>, Object>(),
         new HashMap<ChannelOption<?>, Object>(),
-        new FixedObjectPool<>(mockEventLoopGroup),
-        new FixedObjectPool<>(mockEventLoop),
+        new FixedObjectPool<>(ev),
+        new FixedObjectPool<>(ev),
         false,
         ProtocolNegotiators.plaintext(),
         Collections.<ServerStreamTracer.Factory>emptyList(),
