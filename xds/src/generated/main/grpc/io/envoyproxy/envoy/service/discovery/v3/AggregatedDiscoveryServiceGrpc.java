@@ -1,6 +1,19 @@
 package io.envoyproxy.envoy.service.discovery.v3;
 
 import static io.grpc.MethodDescriptor.generateFullMethodName;
+import static io.grpc.stub.ClientCalls.asyncBidiStreamingCall;
+import static io.grpc.stub.ClientCalls.asyncClientStreamingCall;
+import static io.grpc.stub.ClientCalls.asyncServerStreamingCall;
+import static io.grpc.stub.ClientCalls.asyncUnaryCall;
+import static io.grpc.stub.ClientCalls.blockingServerStreamingCall;
+import static io.grpc.stub.ClientCalls.blockingUnaryCall;
+import static io.grpc.stub.ClientCalls.futureUnaryCall;
+import static io.grpc.stub.ServerCalls.asyncBidiStreamingCall;
+import static io.grpc.stub.ServerCalls.asyncClientStreamingCall;
+import static io.grpc.stub.ServerCalls.asyncServerStreamingCall;
+import static io.grpc.stub.ServerCalls.asyncUnaryCall;
+import static io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall;
+import static io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall;
 
 /**
  * <pre>
@@ -147,28 +160,28 @@ public final class AggregatedDiscoveryServiceGrpc {
      */
     public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest> streamAggregatedResources(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse> responseObserver) {
-      return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getStreamAggregatedResourcesMethod(), responseObserver);
+      return asyncUnimplementedStreamingCall(getStreamAggregatedResourcesMethod(), responseObserver);
     }
 
     /**
      */
     public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.service.discovery.v3.DeltaDiscoveryRequest> deltaAggregatedResources(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.service.discovery.v3.DeltaDiscoveryResponse> responseObserver) {
-      return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getDeltaAggregatedResourcesMethod(), responseObserver);
+      return asyncUnimplementedStreamingCall(getDeltaAggregatedResourcesMethod(), responseObserver);
     }
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
       return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
           .addMethod(
             getStreamAggregatedResourcesMethod(),
-            io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
+            asyncBidiStreamingCall(
               new MethodHandlers<
                 io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest,
                 io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse>(
                   this, METHODID_STREAM_AGGREGATED_RESOURCES)))
           .addMethod(
             getDeltaAggregatedResourcesMethod(),
-            io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
+            asyncBidiStreamingCall(
               new MethodHandlers<
                 io.envoyproxy.envoy.service.discovery.v3.DeltaDiscoveryRequest,
                 io.envoyproxy.envoy.service.discovery.v3.DeltaDiscoveryResponse>(
@@ -206,7 +219,7 @@ public final class AggregatedDiscoveryServiceGrpc {
      */
     public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest> streamAggregatedResources(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse> responseObserver) {
-      return io.grpc.stub.ClientCalls.asyncBidiStreamingCall(
+      return asyncBidiStreamingCall(
           getChannel().newCall(getStreamAggregatedResourcesMethod(), getCallOptions()), responseObserver);
     }
 
@@ -214,7 +227,7 @@ public final class AggregatedDiscoveryServiceGrpc {
      */
     public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.service.discovery.v3.DeltaDiscoveryRequest> deltaAggregatedResources(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.service.discovery.v3.DeltaDiscoveryResponse> responseObserver) {
-      return io.grpc.stub.ClientCalls.asyncBidiStreamingCall(
+      return asyncBidiStreamingCall(
           getChannel().newCall(getDeltaAggregatedResourcesMethod(), getCallOptions()), responseObserver);
     }
   }

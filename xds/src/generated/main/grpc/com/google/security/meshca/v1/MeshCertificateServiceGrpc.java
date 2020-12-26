@@ -1,6 +1,19 @@
 package com.google.security.meshca.v1;
 
 import static io.grpc.MethodDescriptor.generateFullMethodName;
+import static io.grpc.stub.ClientCalls.asyncBidiStreamingCall;
+import static io.grpc.stub.ClientCalls.asyncClientStreamingCall;
+import static io.grpc.stub.ClientCalls.asyncServerStreamingCall;
+import static io.grpc.stub.ClientCalls.asyncUnaryCall;
+import static io.grpc.stub.ClientCalls.blockingServerStreamingCall;
+import static io.grpc.stub.ClientCalls.blockingUnaryCall;
+import static io.grpc.stub.ClientCalls.futureUnaryCall;
+import static io.grpc.stub.ServerCalls.asyncBidiStreamingCall;
+import static io.grpc.stub.ServerCalls.asyncClientStreamingCall;
+import static io.grpc.stub.ServerCalls.asyncServerStreamingCall;
+import static io.grpc.stub.ServerCalls.asyncUnaryCall;
+import static io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall;
+import static io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall;
 
 /**
  * <pre>
@@ -107,14 +120,14 @@ public final class MeshCertificateServiceGrpc {
      */
     public void createCertificate(com.google.security.meshca.v1.MeshCertificateRequest request,
         io.grpc.stub.StreamObserver<com.google.security.meshca.v1.MeshCertificateResponse> responseObserver) {
-      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getCreateCertificateMethod(), responseObserver);
+      asyncUnimplementedUnaryCall(getCreateCertificateMethod(), responseObserver);
     }
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
       return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
           .addMethod(
             getCreateCertificateMethod(),
-            io.grpc.stub.ServerCalls.asyncUnaryCall(
+            asyncUnaryCall(
               new MethodHandlers<
                 com.google.security.meshca.v1.MeshCertificateRequest,
                 com.google.security.meshca.v1.MeshCertificateResponse>(
@@ -148,7 +161,7 @@ public final class MeshCertificateServiceGrpc {
      */
     public void createCertificate(com.google.security.meshca.v1.MeshCertificateRequest request,
         io.grpc.stub.StreamObserver<com.google.security.meshca.v1.MeshCertificateResponse> responseObserver) {
-      io.grpc.stub.ClientCalls.asyncUnaryCall(
+      asyncUnaryCall(
           getChannel().newCall(getCreateCertificateMethod(), getCallOptions()), request, responseObserver);
     }
   }
@@ -177,7 +190,7 @@ public final class MeshCertificateServiceGrpc {
      * </pre>
      */
     public com.google.security.meshca.v1.MeshCertificateResponse createCertificate(com.google.security.meshca.v1.MeshCertificateRequest request) {
-      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+      return blockingUnaryCall(
           getChannel(), getCreateCertificateMethod(), getCallOptions(), request);
     }
   }
@@ -207,7 +220,7 @@ public final class MeshCertificateServiceGrpc {
      */
     public com.google.common.util.concurrent.ListenableFuture<com.google.security.meshca.v1.MeshCertificateResponse> createCertificate(
         com.google.security.meshca.v1.MeshCertificateRequest request) {
-      return io.grpc.stub.ClientCalls.futureUnaryCall(
+      return futureUnaryCall(
           getChannel().newCall(getCreateCertificateMethod(), getCallOptions()), request);
     }
   }
