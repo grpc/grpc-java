@@ -563,7 +563,7 @@ final class ClientXdsClient extends AbstractXdsClient {
       public void run() {
         ResourceSubscriber subscriber = ldsResourceSubscribers.get(resourceName);
         if (subscriber == null) {
-          getLogger().log(XdsLogLevel.INFO, "Subscribe CDS resource {0}", resourceName);
+          getLogger().log(XdsLogLevel.INFO, "Subscribe LDS resource {0}", resourceName);
           subscriber = new ResourceSubscriber(ResourceType.LDS, resourceName);
           ldsResourceSubscribers.put(resourceName, subscriber);
           adjustResourceSubscription(ResourceType.LDS);
