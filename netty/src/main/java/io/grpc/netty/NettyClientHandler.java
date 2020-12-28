@@ -149,7 +149,7 @@ class NettyClientHandler extends AbstractNettyHandler {
     Http2FrameWriter frameWriter = new DefaultHttp2FrameWriter();
     Http2Connection connection = new DefaultHttp2Connection(false);
     WeightedFairQueueByteDistributor dist = new WeightedFairQueueByteDistributor(connection);
-    dist.allocationQuantum(16 * 1024); // Make benchmarks fast again.
+    dist.allocationQuantum(getDistributorAllocationQuantum()); // Make benchmarks fast again.
     DefaultHttp2RemoteFlowController controller =
         new DefaultHttp2RemoteFlowController(connection, dist);
     connection.remote().flowController(controller);

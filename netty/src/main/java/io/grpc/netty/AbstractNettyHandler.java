@@ -99,6 +99,21 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
     return ctx;
   }
 
+  protected static int getDistributorAllocationQuantum() {
+    int quantum = 16 * 1024;
+    try {
+      quantum = Integer.parseInt(
+          System.getProperty("io.grpc.netty.distributorAllocationQuantum",
+              Integer.toString(quantum)));
+    } catch (NumberFormatException e) {
+      throw new IllegalArgumentException(
+          "io.grpc.netty.distributorAllocationQuantum must be integer");
+    }
+    Preconditions
+        .checkArgument(quantum > 0, "io.grpc.netty.distributorAllocationQuantum must be positive");
+    return quantum;
+  }
+
   /**
    * Sends initial connection window to the remote endpoint if necessary.
    */

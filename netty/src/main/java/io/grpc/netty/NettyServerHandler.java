@@ -212,7 +212,7 @@ class NettyServerHandler extends AbstractNettyHandler {
 
     final Http2Connection connection = new DefaultHttp2Connection(true);
     WeightedFairQueueByteDistributor dist = new WeightedFairQueueByteDistributor(connection);
-    dist.allocationQuantum(16 * 1024); // Make benchmarks fast again.
+    dist.allocationQuantum(getDistributorAllocationQuantum()); // Make benchmarks fast again.
     DefaultHttp2RemoteFlowController controller =
         new DefaultHttp2RemoteFlowController(connection, dist);
     connection.remote().flowController(controller);
