@@ -188,11 +188,8 @@ class NettyServer implements InternalServer, InternalWithLogId {
 
   @Override
   public InternalInstrumented<SocketStats> getListenSocketStats() {
-    if (listenSocketStatsList == null || listenSocketStatsList.isEmpty()) {
-      return null;
-    } else {
-      return listenSocketStatsList.get(0);
-    }
+    List<InternalInstrumented<SocketStats>> savedListenSocketStatsList = listenSocketStatsList;
+    return savedListenSocketStatsList.isEmpty() ? null : savedListenSocketStatsList.get(0);
   }
 
   @Override
@@ -317,10 +314,8 @@ class NettyServer implements InternalServer, InternalWithLogId {
                 ChannelFutureListener closeListener = new ChannelFutureListener() {
                   @Override
                   public void operationComplete(ChannelFuture future) throws Exception {
-                    if (listenSocketStatsList != null) {
-                      channelz.removeListenSocket(listenSocketStats);
-                      listenSocketStatsList.remove(listenSocketStats);
-                    }
+                    channelz.removeListenSocket(listenSocketStats);
+                    listenSocketStatsList.remove(listenSocketStats);
                   }
                 };
                 future.channel().closeFuture().addListener(closeListener);
@@ -362,15 +357,6 @@ class NettyServer implements InternalServer, InternalWithLogId {
             public void operationComplete(ChannelGroupFuture future) throws Exception {
               if (!future.isSuccess()) {
                 log.log(Level.WARNING, "Error closing server channel group", future.cause());
-              }
-              List<InternalInstrumented<SocketStats>> stats = listenSocketStatsList;
-              listenSocketStatsList = null;
-              if (stats != null && !stats.isEmpty()) {
-                for (InternalInstrumented<SocketStats> stat: stats) {
-                  if (stat != null) {
-                    channelz.removeListenSocket(stat);
-                  }
-                }
               }
               sharedResourceReferenceCounter.release();
               protocolNegotiator.close();
