@@ -317,8 +317,10 @@ class NettyServer implements InternalServer, InternalWithLogId {
                 ChannelFutureListener closeListener = new ChannelFutureListener() {
                   @Override
                   public void operationComplete(ChannelFuture future) throws Exception {
+                    if (listenSocketStatsList != null) {
                       channelz.removeListenSocket(listenSocketStats);
                       listenSocketStatsList.remove(listenSocketStats);
+                    }
                   }
                 };
                 future.channel().closeFuture().addListener(closeListener);
