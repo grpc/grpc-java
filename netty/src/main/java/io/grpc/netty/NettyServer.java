@@ -23,7 +23,6 @@ import static io.netty.channel.ChannelOption.SO_KEEPALIVE;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
@@ -87,7 +86,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
   private EventLoopGroup bossGroup;
   private EventLoopGroup workerGroup;
   private ServerListener listener;
-  private volatile ChannelGroup channelGroup;
+  private final ChannelGroup channelGroup;
   private final boolean autoFlowControl;
   private final int flowControlWindow;
   private final int maxMessageSize;
@@ -297,13 +296,12 @@ class NettyServer implements InternalServer, InternalWithLogId {
         ch.closeFuture().addListener(loopReleaser);
       }
     });
-    Future<Map<SocketAddress, Map<ChannelFuture,ChannelFutureListener>>> bindCallFuture =
+    Future<Map<SocketAddress, ChannelFuture>> bindCallFuture =
         bossExecutor.submit(
-            new Callable<Map<SocketAddress, Map<ChannelFuture, ChannelFutureListener>>>() {
+            new Callable<Map<SocketAddress, ChannelFuture>>() {
           @Override
-          public Map<SocketAddress, Map<ChannelFuture, ChannelFutureListener>> call() {
-            Map<SocketAddress, Map<ChannelFuture, ChannelFutureListener>> bindFutures =
-                new HashMap<>();
+          public Map<SocketAddress, ChannelFuture> call() {
+            Map<SocketAddress, ChannelFuture> bindFutures = new HashMap<>();
             for (SocketAddress address: addresses) {
                 ChannelFuture future = b.bind(address);
                 channelGroup.add(future.channel());
@@ -319,21 +317,18 @@ class NettyServer implements InternalServer, InternalWithLogId {
                 ChannelFutureListener closeListener = new ChannelFutureListener() {
                   @Override
                   public void operationComplete(ChannelFuture future) throws Exception {
-                    if (!future.isSuccess()) {
-                      log.log(Level.WARNING, "Error closing server channel", future.cause());
-                    }
-                    channelz.removeListenSocket(listenSocketStats);
-                    listenSocketStatsList.remove(listenSocketStats);
+                      channelz.removeListenSocket(listenSocketStats);
+                      listenSocketStatsList.remove(listenSocketStats);
                   }
                 };
                 future.channel().closeFuture().addListener(closeListener);
-                bindFutures.put(address, ImmutableMap.of(future, closeListener));
+                bindFutures.put(address, future);
             }
             return bindFutures;
           }
         }
     );
-    Map<SocketAddress, Map<ChannelFuture, ChannelFutureListener>> channelFutures =
+    Map<SocketAddress, ChannelFuture> channelFutures =
         bindCallFuture.awaitUninterruptibly().getNow();
 
     if (!bindCallFuture.isSuccess()) {
@@ -341,22 +336,15 @@ class NettyServer implements InternalServer, InternalWithLogId {
       throw new IOException(String.format("Failed to bind to addresses %s",
           addresses), bindCallFuture.cause());
     }
-    for (Map.Entry<SocketAddress, Map<ChannelFuture, ChannelFutureListener>> entry:
-        channelFutures.entrySet()) {
+    for (Map.Entry<SocketAddress, ChannelFuture> entry: channelFutures.entrySet()) {
       // We'd love to observe interruption, but if interrupted we will need to close the channel,
       // which itself would need an await() to guarantee the port is not used when the method
       // returns. See #6850
-      for (ChannelFuture future: entry.getValue().keySet()) {
-        if (!future.awaitUninterruptibly().isSuccess()) {
-          channelGroup.close().awaitUninterruptibly();
-          throw new IOException(String.format("Failed to bind to address %s",
-              entry.getKey()), future.cause());
-        }
-      }
-    }
-    for (Map<ChannelFuture, ChannelFutureListener> channelListener: channelFutures.values()) {
-      for (Map.Entry<ChannelFuture, ChannelFutureListener> entry: channelListener.entrySet()) {
-        entry.getKey().channel().closeFuture().removeListener(entry.getValue());
+      ChannelFuture future = entry.getValue();
+      if (!future.awaitUninterruptibly().isSuccess()) {
+        channelGroup.close().awaitUninterruptibly();
+        throw new IOException(String.format("Failed to bind to address %s",
+            entry.getKey()), future.cause());
       }
     }
   }

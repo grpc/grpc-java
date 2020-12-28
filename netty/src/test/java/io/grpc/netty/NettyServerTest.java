@@ -47,7 +47,6 @@ import io.grpc.internal.TransportTracer;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFactory;
 import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerAdapter;
 import io.netty.channel.ChannelHandlerContext;
@@ -61,7 +60,6 @@ import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.util.AsciiString;
 import io.netty.util.concurrent.Future;
 import java.io.IOException;
-import java.net.BindException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketAddress;
@@ -94,15 +92,14 @@ public class NettyServerTest {
   @Mock
   EventLoop mockEventLoop;
   @Mock
-  Future<Map<SocketAddress, Map<ChannelFuture, ChannelFutureListener>>> bindFuture;
+  Future<Map<SocketAddress, ChannelFuture>> bindFuture;
 
   @Before
   public void setup() throws Exception {
     MockitoAnnotations.initMocks(this);
     when(mockEventLoopGroup.next()).thenReturn(mockEventLoop);
     when(mockEventLoop
-        .submit(ArgumentMatchers.<Callable<
-            Map<SocketAddress, Map<ChannelFuture, ChannelFutureListener>>>>any()))
+        .submit(ArgumentMatchers.<Callable<Map<SocketAddress, ChannelFuture>>>any()))
         .thenReturn(bindFuture);
   }
 
@@ -509,13 +506,11 @@ public class NettyServerTest {
     when(bindFuture.getNow()).thenReturn(null);
     Throwable mockCause = mock(Throwable.class);
     when(bindFuture.cause()).thenReturn(mockCause);
-
     Future<Void> mockFuture = (Future<Void>) mock(Future.class);
     doReturn(mockFuture).when(mockEventLoopGroup).submit(any(Runnable.class));
     SocketAddress addr = new InetSocketAddress(0);
     verifyServerNotStart(Collections.singletonList(addr), mockEventLoopGroup,
-        IOException.class, "Failed to bind to addresses " + Arrays.asList(addr),
-        mockCause);
+        IOException.class, "Failed to bind to addresses " + Arrays.asList(addr));
   }
 
   @Test
@@ -531,18 +526,13 @@ public class NettyServerTest {
     Throwable mockCause = mock(Throwable.class);
     when(future.cause()).thenReturn(mockCause);
     SocketAddress addr = new InetSocketAddress(0);
-    ChannelFutureListener mockListener = mock(ChannelFutureListener.class);
-    Map<ChannelFuture, ChannelFutureListener> listener = ImmutableMap.of(future, mockListener);
-    Map<SocketAddress, Map<ChannelFuture, ChannelFutureListener>> list =
-        ImmutableMap.of(addr, listener);
-    when(bindFuture.getNow()).thenReturn(list);
+    Map<SocketAddress, ChannelFuture> map = ImmutableMap.of(addr, future);
+    when(bindFuture.getNow()).thenReturn(map);
     when(bindFuture.isSuccess()).thenReturn(true);
     Future<Void> mockFuture = (Future<Void>) mock(Future.class);
-
     doReturn(mockFuture).when(mockEventLoopGroup).submit(any(Runnable.class));
-
     verifyServerNotStart(Collections.singletonList(addr), mockEventLoopGroup,
-        IOException.class, "Failed to bind to address " + addr, mockCause);
+        IOException.class, "Failed to bind to address " + addr);
   }
 
   @Test
@@ -551,12 +541,11 @@ public class NettyServerTest {
     SocketAddress add2 = new InetSocketAddress(2);
     SocketAddress add3 = new InetSocketAddress(2);
     verifyServerNotStart(ImmutableList.of(add1, add2, add3), eventLoop,
-        IOException.class, "Failed to bind to address " + add3,
-        new BindException("Address already in use"));
+        IOException.class, "Failed to bind to address " + add3);
   }
 
   private void verifyServerNotStart(List<SocketAddress> addr, EventLoopGroup ev,
-      Class<?> expectedException, String expectedMessage, Throwable expectedCause)
+      Class<?> expectedException, String expectedMessage)
       throws Exception {
     NettyServer ns = getServer(addr, ev);
     try {
@@ -573,8 +562,6 @@ public class NettyServerTest {
     } catch (Exception ex) {
       assertTrue(expectedException.isInstance(ex));
       assertThat(ex.getMessage()).isEqualTo(expectedMessage);
-      assertThat(ex.getCause().getClass()).isEqualTo(expectedCause.getClass());
-      assertThat(ex.getCause().getMessage()).isEqualTo(expectedCause.getMessage());
       assertFalse(addr.isEmpty());
       // Listener tasks are executed on the event loop, so await until noop task is drained.
       ev.submit(new Runnable() {
