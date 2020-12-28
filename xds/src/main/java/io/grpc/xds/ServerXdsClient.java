@@ -31,6 +31,7 @@ import io.envoyproxy.envoy.config.core.v3.TrafficDirection;
 import io.envoyproxy.envoy.config.listener.v3.FilterChain;
 import io.envoyproxy.envoy.config.listener.v3.FilterChainMatch;
 import io.envoyproxy.envoy.config.listener.v3.Listener;
+import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
@@ -63,7 +64,8 @@ final class ServerXdsClient extends AbstractXdsClient {
   private ScheduledHandle ldsRespTimer;
 
   ServerXdsClient(
-      XdsChannel channel,
+      ManagedChannel channel,
+      boolean useProtocolV3,
       Node node,
       ScheduledExecutorService timeService,
       BackoffPolicy.Provider backoffPolicyProvider,
@@ -71,8 +73,8 @@ final class ServerXdsClient extends AbstractXdsClient {
       boolean useNewApiForListenerQuery,
       String instanceIp,
       String grpcServerResourceId) {
-    super(channel, node, timeService, backoffPolicyProvider, stopwatchSupplier);
-    this.useNewApiForListenerQuery = channel.isUseProtocolV3() && useNewApiForListenerQuery;
+    super(channel, useProtocolV3, node, timeService, backoffPolicyProvider, stopwatchSupplier);
+    this.useNewApiForListenerQuery = useProtocolV3 && useNewApiForListenerQuery;
     this.instanceIp = (instanceIp != null ? instanceIp : "0.0.0.0");
     this.grpcServerResourceId = grpcServerResourceId != null ? grpcServerResourceId : "grpc/server";
   }

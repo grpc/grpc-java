@@ -23,7 +23,6 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.MoreObjects.ToStringHelper;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
@@ -559,6 +558,13 @@ abstract class XdsClient {
   }
 
   /**
+   * Returns {@code true} if {@link #shutdown()} has been called.
+   */
+  boolean isShutDown() {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
    * Registers a data watcher for the given LDS resource.
    */
   void watchLdsResource(String resourceName, LdsResourceWatcher watcher) {
@@ -628,23 +634,5 @@ abstract class XdsClient {
    */
   void removeClientStats(String clusterName, @Nullable String clusterServiceName) {
     throw new UnsupportedOperationException();
-  }
-
-  static final class XdsChannel {
-    private final ManagedChannel managedChannel;
-    private final boolean useProtocolV3;
-
-    XdsChannel(ManagedChannel managedChannel, boolean useProtocolV3) {
-      this.managedChannel = managedChannel;
-      this.useProtocolV3 = useProtocolV3;
-    }
-
-    ManagedChannel getManagedChannel() {
-      return managedChannel;
-    }
-
-    boolean isUseProtocolV3() {
-      return useProtocolV3;
-    }
   }
 }
