@@ -21,6 +21,7 @@ import static org.junit.Assert.fail;
 
 import com.google.common.base.Throwables;
 import com.google.common.util.concurrent.MoreExecutors;
+import io.grpc.ConnectivityState;
 import io.grpc.ManagedChannel;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
@@ -114,10 +115,6 @@ public class TlsTest {
           // Java 9+
         } catch (ClassNotFoundException ignored) {
           // Before Java 9
-          // TODO(ejona): remove this assume once we upgrade to Netty 4.1.50.Final. GrpcSslContexts
-          // detects the Java 9 ALPN API in Java 8 u252, but Netty does not support it in our
-          // current version
-          Assume.assumeTrue("Jetty ALPN not found", JettyTlsUtil.isJettyAlpnConfigured());
           try {
             GrpcSslContexts.configure(SslContextBuilder.forClient(), jdkProvider);
           } catch (IllegalArgumentException ex) {
@@ -230,6 +227,7 @@ public class TlsTest {
           Throwables.getStackTraceAsString(e),
           Status.Code.UNAVAILABLE, e.getStatus().getCode());
     }
+    assertEquals(ConnectivityState.TRANSIENT_FAILURE, channel.getState(false));
   }
 
 
@@ -271,6 +269,7 @@ public class TlsTest {
           Throwables.getStackTraceAsString(e),
           Status.Code.UNAVAILABLE, e.getStatus().getCode());
     }
+    assertEquals(ConnectivityState.TRANSIENT_FAILURE, channel.getState(false));
   }
 
 
@@ -316,6 +315,7 @@ public class TlsTest {
           Throwables.getStackTraceAsString(e),
           Status.Code.UNAVAILABLE, e.getStatus().getCode());
     }
+    assertEquals(ConnectivityState.TRANSIENT_FAILURE, channel.getState(false));
   }
 
 
