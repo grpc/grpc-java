@@ -21,10 +21,11 @@ import static org.junit.Assert.fail;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
+import io.grpc.InsecureChannelCredentials;
+import io.grpc.TlsChannelCredentials;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.GrpcUtil.GrpcBuildVersion;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
-import io.grpc.xds.Bootstrapper.ChannelCreds;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.Node;
@@ -40,11 +41,13 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class BootstrapperTest {
 
+  private static final String SERVER_URI = "trafficdirector.googleapis.com:443";
   @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
-  @Rule public ExpectedException thrown = ExpectedException.none();
+  @Rule
+  public final ExpectedException thrown = ExpectedException.none();
 
   @Test
-  public void parseBootstrap_validData_singleXdsServer() throws XdsInitializationException {
+  public void parseBootstrap_singleXdsServer() throws XdsInitializationException {
     String rawData = "{\n"
         + "  \"node\": {\n"
         + "    \"id\": \"ENVOY_NODE_ID\",\n"
@@ -61,9 +64,9 @@ public class BootstrapperTest {
         + "  },\n"
         + "  \"xds_servers\": [\n"
         + "    {\n"
-        + "      \"server_uri\": \"trafficdirector.googleapis.com:443\",\n"
+        + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
         + "      \"channel_creds\": [\n"
-        + "        {\"type\": \"tls\"}, {\"type\": \"loas\"}, {\"type\": \"google_default\"}\n"
+        + "        {\"type\": \"insecure\"}\n"
         + "      ]\n"
         + "    }\n"
         + "  ]\n"
@@ -72,14 +75,8 @@ public class BootstrapperTest {
     BootstrapInfo info = Bootstrapper.parseConfig(rawData);
     assertThat(info.getServers()).hasSize(1);
     ServerInfo serverInfo = Iterables.getOnlyElement(info.getServers());
-    assertThat(serverInfo.getServerUri()).isEqualTo("trafficdirector.googleapis.com:443");
-    assertThat(serverInfo.getChannelCredentials()).hasSize(3);
-    assertThat(serverInfo.getChannelCredentials().get(0).getType()).isEqualTo("tls");
-    assertThat(serverInfo.getChannelCredentials().get(0).getConfig()).isNull();
-    assertThat(serverInfo.getChannelCredentials().get(1).getType()).isEqualTo("loas");
-    assertThat(serverInfo.getChannelCredentials().get(1).getConfig()).isNull();
-    assertThat(serverInfo.getChannelCredentials().get(2).getType()).isEqualTo("google_default");
-    assertThat(serverInfo.getChannelCredentials().get(2).getConfig()).isNull();
+    assertThat(serverInfo.getTarget()).isEqualTo(SERVER_URI);
+    assertThat(serverInfo.getChannelCredentials()).isInstanceOf(InsecureChannelCredentials.class);
     assertThat(info.getNode()).isEqualTo(
         getNodeBuilder()
             .setId("ENVOY_NODE_ID")
@@ -95,7 +92,7 @@ public class BootstrapperTest {
   }
 
   @Test
-  public void parseBootstrap_validData_multipleXdsServers() throws XdsInitializationException {
+  public void parseBootstrap_multipleXdsServers() throws XdsInitializationException {
     String rawData = "{\n"
         + "  \"node\": {\n"
         + "    \"id\": \"ENVOY_NODE_ID\",\n"
@@ -114,10 +111,7 @@ public class BootstrapperTest {
         + "    {\n"
         + "      \"server_uri\": \"trafficdirector-foo.googleapis.com:443\",\n"
         + "      \"channel_creds\": [\n"
-        + "        {\"type\": \"tls\"}, {\"type\": \"loas\"}, {\"type\": \"google_default\"}\n"
-        + "      ],\n"
-        + "      \"server_features\": [\n"
-        + "        \"xds_v3\", \"foo\", \"bar\"\n"
+        + "        {\"type\": \"tls\"}\n"
         + "      ]\n"
         + "    },\n"
         + "    {\n"
@@ -132,22 +126,14 @@ public class BootstrapperTest {
     BootstrapInfo info = Bootstrapper.parseConfig(rawData);
     assertThat(info.getServers()).hasSize(2);
     List<ServerInfo> serverInfoList = info.getServers();
-    assertThat(serverInfoList.get(0).getServerUri())
+    assertThat(serverInfoList.get(0).getTarget())
         .isEqualTo("trafficdirector-foo.googleapis.com:443");
-    assertThat(serverInfoList.get(0).getChannelCredentials()).hasSize(3);
-    assertThat(serverInfoList.get(0).getChannelCredentials().get(0).getType()).isEqualTo("tls");
-    assertThat(serverInfoList.get(0).getChannelCredentials().get(0).getConfig()).isNull();
-    assertThat(serverInfoList.get(0).getChannelCredentials().get(1).getType()).isEqualTo("loas");
-    assertThat(serverInfoList.get(0).getChannelCredentials().get(1).getConfig()).isNull();
-    assertThat(serverInfoList.get(0).getChannelCredentials().get(2).getType())
-        .isEqualTo("google_default");
-    assertThat(serverInfoList.get(0).getChannelCredentials().get(2).getConfig()).isNull();
-    assertThat(serverInfoList.get(0).getServerFeatures()).contains("xds_v3");
-    assertThat(serverInfoList.get(1).getServerUri())
+    assertThat(serverInfoList.get(0).getChannelCredentials())
+        .isInstanceOf(TlsChannelCredentials.class);
+    assertThat(serverInfoList.get(1).getTarget())
         .isEqualTo("trafficdirector-bar.googleapis.com:443");
-    assertThat(serverInfoList.get(1).getChannelCredentials().get(0).getType())
-        .isEqualTo("insecure");
-    assertThat(serverInfoList.get(0).getChannelCredentials().get(0).getConfig()).isNull();
+    assertThat(serverInfoList.get(1).getChannelCredentials())
+        .isInstanceOf(InsecureChannelCredentials.class);
     assertThat(info.getNode()).isEqualTo(
         getNodeBuilder()
             .setId("ENVOY_NODE_ID")
@@ -180,10 +166,10 @@ public class BootstrapperTest {
         + "  },\n"
         + "  \"xds_servers\": [\n"
         + "    {\n"
-        + "      \"server_uri\": \"trafficdirector.googleapis.com:443\",\n"
+        + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
         + "      \"ignore\": \"something irrelevant\","
         + "      \"channel_creds\": [\n"
-        + "        {\"type\": \"tls\"}, {\"type\": \"loas\"}, {\"type\": \"google_default\"}\n"
+        + "        {\"type\": \"insecure\"}\n"
         + "      ]\n"
         + "    }\n"
         + "  ],\n"
@@ -193,14 +179,8 @@ public class BootstrapperTest {
     BootstrapInfo info = Bootstrapper.parseConfig(rawData);
     assertThat(info.getServers()).hasSize(1);
     ServerInfo serverInfo = Iterables.getOnlyElement(info.getServers());
-    assertThat(serverInfo.getServerUri()).isEqualTo("trafficdirector.googleapis.com:443");
-    assertThat(serverInfo.getChannelCredentials()).hasSize(3);
-    assertThat(serverInfo.getChannelCredentials().get(0).getType()).isEqualTo("tls");
-    assertThat(serverInfo.getChannelCredentials().get(0).getConfig()).isNull();
-    assertThat(serverInfo.getChannelCredentials().get(1).getType()).isEqualTo("loas");
-    assertThat(serverInfo.getChannelCredentials().get(1).getConfig()).isNull();
-    assertThat(serverInfo.getChannelCredentials().get(2).getType()).isEqualTo("google_default");
-    assertThat(serverInfo.getChannelCredentials().get(2).getConfig()).isNull();
+    assertThat(serverInfo.getTarget()).isEqualTo(SERVER_URI);
+    assertThat(serverInfo.getChannelCredentials()).isInstanceOf(InsecureChannelCredentials.class);
     assertThat(info.getNode()).isEqualTo(
         getNodeBuilder()
             .setId("ENVOY_NODE_ID")
@@ -216,32 +196,47 @@ public class BootstrapperTest {
   }
 
   @Test
-  public void parseBootstrap_emptyData() throws XdsInitializationException {
-    String rawData = "";
+  public void parseBootstrap_missingServerChannelCreds() throws XdsInitializationException {
+    String rawData = "{\n"
+        + "  \"xds_servers\": [\n"
+        + "    {\n"
+        + "      \"server_uri\": \"" + SERVER_URI + "\"\n"
+        + "    }\n"
+        + "  ]\n"
+        + "}";
 
     thrown.expect(XdsInitializationException.class);
+    thrown.expectMessage("Invalid bootstrap: server " + SERVER_URI + " 'channel_creds' required");
     Bootstrapper.parseConfig(rawData);
   }
 
   @Test
-  public void parseBootstrap_minimumRequiredFields() throws XdsInitializationException {
-    String rawData = "{\n"
-        + "  \"xds_servers\": []\n"
-        + "}";
-
-    BootstrapInfo info = Bootstrapper.parseConfig(rawData);
-    assertThat(info.getServers()).isEmpty();
-    assertThat(info.getNode()).isEqualTo(getNodeBuilder().build());
-  }
-
-  @Test
-  public void parseBootstrap_minimalUsableData() throws XdsInitializationException {
+  public void parseBootstrap_unsupportedServerChannelCreds() throws XdsInitializationException {
     String rawData = "{\n"
         + "  \"xds_servers\": [\n"
         + "    {\n"
-        + "      \"server_uri\": \"trafficdirector.googleapis.com:443\",\n"
+        + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
         + "      \"channel_creds\": [\n"
-        + "        {\"type\": \"insecure\"}\n"
+        + "        {\"type\": \"unsupported\"}\n"
+        + "      ]\n"
+        + "    }\n"
+        + "  ]\n"
+        + "}";
+
+    thrown.expect(XdsInitializationException.class);
+    thrown.expectMessage("Server " + SERVER_URI + ": no supported channel credentials found");
+    Bootstrapper.parseConfig(rawData);
+  }
+
+  @Test
+  public void parseBootstrap_useFirstSupportedChannelCredentials()
+      throws XdsInitializationException {
+    String rawData = "{\n"
+        + "  \"xds_servers\": [\n"
+        + "    {\n"
+        + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+        + "      \"channel_creds\": [\n"
+        + "        {\"type\": \"unsupported\"}, {\"type\": \"insecure\"}, {\"type\": \"tls\"}\n"
         + "      ]\n"
         + "    }\n"
         + "  ]\n"
@@ -250,11 +245,8 @@ public class BootstrapperTest {
     BootstrapInfo info = Bootstrapper.parseConfig(rawData);
     assertThat(info.getServers()).hasSize(1);
     ServerInfo serverInfo = Iterables.getOnlyElement(info.getServers());
-    assertThat(serverInfo.getServerUri()).isEqualTo("trafficdirector.googleapis.com:443");
-    assertThat(serverInfo.getChannelCredentials()).hasSize(1);
-    ChannelCreds creds = Iterables.getOnlyElement(serverInfo.getChannelCredentials());
-    assertThat(creds.getType()).isEqualTo("insecure");
-    assertThat(creds.getConfig()).isNull();
+    assertThat(serverInfo.getTarget()).isEqualTo(SERVER_URI);
+    assertThat(serverInfo.getChannelCredentials()).isInstanceOf(InsecureChannelCredentials.class);
     assertThat(info.getNode()).isEqualTo(getNodeBuilder().build());
   }
 
@@ -307,12 +299,12 @@ public class BootstrapperTest {
         + "}";
 
     thrown.expect(XdsInitializationException.class);
-    thrown.expectMessage("Invalid bootstrap: missing 'xds_servers'");
+    thrown.expectMessage("Invalid bootstrap: missing 'server_uri'");
     Bootstrapper.parseConfig(rawData);
   }
 
   @Test
-  public void parseBootstrap_validData_certProviderInstances() throws XdsInitializationException {
+  public void parseBootstrap_certProviderInstances() throws XdsInitializationException {
     String rawData =
         "{\n"
             + "  \"xds_servers\": [],\n"
@@ -520,6 +512,63 @@ public class BootstrapperTest {
 
     BootstrapInfo info = Bootstrapper.parseConfig(rawData);
     assertThat(info.getGrpcServerResourceId()).isEqualTo("grpc/serverx");
+  }
+
+  @Test
+  public void useV2ProtocolByDefault() throws XdsInitializationException {
+    String rawData = "{\n"
+        + "  \"xds_servers\": [\n"
+        + "    {\n"
+        + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+        + "      \"channel_creds\": [\n"
+        + "        {\"type\": \"insecure\"}\n"
+        + "      ],\n"
+        + "      \"server_features\": [\"xds_v3\"]\n"
+        + "    }\n"
+        + "  ]\n"
+        + "}";
+    BootstrapInfo info = Bootstrapper.parseConfig(rawData);
+    ServerInfo serverInfo = Iterables.getOnlyElement(info.getServers());
+    assertThat(serverInfo.getTarget()).isEqualTo(SERVER_URI);
+    assertThat(serverInfo.getChannelCredentials()).isInstanceOf(InsecureChannelCredentials.class);
+    assertThat(serverInfo.isUseProtocolV3()).isFalse();
+  }
+
+  @Test
+  public void supportV3Protocol_disabledByDefault() throws XdsInitializationException {
+    subtestSupportV3Protocol(false);
+  }
+
+  @Test
+  public void supportV3Protocol_enabled() throws XdsInitializationException {
+    boolean originalEnableV3Protocol = Bootstrapper.enableV3Protocol;
+    Bootstrapper.enableV3Protocol = true;
+    subtestSupportV3Protocol(true);
+    Bootstrapper.enableV3Protocol = originalEnableV3Protocol;
+  }
+
+  private void subtestSupportV3Protocol(boolean enabled) throws XdsInitializationException {
+    String rawData = "{\n"
+        + "  \"xds_servers\": [\n"
+        + "    {\n"
+        + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+        + "      \"channel_creds\": [\n"
+        + "        {\"type\": \"insecure\"}\n"
+        + "      ],\n"
+        + "      \"server_features\": [\"xds_v3\"]\n"
+        + "    }\n"
+        + "  ]\n"
+        + "}";
+
+    BootstrapInfo info = Bootstrapper.parseConfig(rawData);
+    ServerInfo serverInfo = Iterables.getOnlyElement(info.getServers());
+    assertThat(serverInfo.getTarget()).isEqualTo(SERVER_URI);
+    assertThat(serverInfo.getChannelCredentials()).isInstanceOf(InsecureChannelCredentials.class);
+    if (enabled) {
+      assertThat(serverInfo.isUseProtocolV3()).isTrue();
+    } else {
+      assertThat(serverInfo.isUseProtocolV3()).isFalse();
+    }
   }
 
   private static Node.Builder getNodeBuilder() {

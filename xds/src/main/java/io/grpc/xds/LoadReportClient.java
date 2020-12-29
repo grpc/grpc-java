@@ -29,6 +29,7 @@ import io.envoyproxy.envoy.service.load_stats.v3.LoadReportingServiceGrpc.LoadRe
 import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsRequest;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsResponse;
 import io.grpc.InternalLogId;
+import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
@@ -36,7 +37,6 @@ import io.grpc.internal.BackoffPolicy;
 import io.grpc.stub.StreamObserver;
 import io.grpc.xds.EnvoyProtoData.ClusterStats;
 import io.grpc.xds.EnvoyProtoData.Node;
-import io.grpc.xds.XdsClient.XdsChannel;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -52,7 +52,8 @@ import javax.annotation.Nullable;
 final class LoadReportClient {
   private final InternalLogId logId;
   private final XdsLogger logger;
-  private final XdsChannel xdsChannel;
+  private final ManagedChannel channel;
+  private final boolean useProtocolV3;
   private final Node node;
   private final SynchronizationContext syncContext;
   private final ScheduledExecutorService timerService;
@@ -70,14 +71,16 @@ final class LoadReportClient {
 
   LoadReportClient(
       LoadStatsManager loadStatsManager,
-      XdsChannel xdsChannel,
+      ManagedChannel channel,
+      boolean useProtocolV3,
       Node node,
       SynchronizationContext syncContext,
       ScheduledExecutorService scheduledExecutorService,
       BackoffPolicy.Provider backoffPolicyProvider,
       Supplier<Stopwatch> stopwatchSupplier) {
     this.loadStatsManager = checkNotNull(loadStatsManager, "loadStatsManager");
-    this.xdsChannel = checkNotNull(xdsChannel, "xdsChannel");
+    this.channel = checkNotNull(channel, "xdsChannel");
+    this.useProtocolV3 = useProtocolV3;
     this.syncContext = checkNotNull(syncContext, "syncContext");
     this.timerService = checkNotNull(scheduledExecutorService, "timeService");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
@@ -152,7 +155,7 @@ final class LoadReportClient {
       return;
     }
     checkState(lrsStream == null, "previous lbStream has not been cleared yet");
-    if (xdsChannel.isUseProtocolV3()) {
+    if (useProtocolV3) {
       lrsStream = new LrsStreamV3();
     } else {
       lrsStream = new LrsStreamV2();
@@ -331,7 +334,7 @@ final class LoadReportClient {
           };
       io.envoyproxy.envoy.service.load_stats.v2.LoadReportingServiceGrpc.LoadReportingServiceStub
           stubV2 = io.envoyproxy.envoy.service.load_stats.v2.LoadReportingServiceGrpc.newStub(
-              xdsChannel.getManagedChannel());
+              channel);
       lrsRequestWriterV2 = stubV2.withWaitForReady().streamLoadStats(lrsResponseReaderV2);
       logger.log(XdsLogLevel.DEBUG, "Sending initial LRS request");
       sendLoadStatsRequest(Collections.<ClusterStats>emptyList());
@@ -396,7 +399,7 @@ final class LoadReportClient {
             }
           };
       LoadReportingServiceStub stubV3 =
-          LoadReportingServiceGrpc.newStub(xdsChannel.getManagedChannel());
+          LoadReportingServiceGrpc.newStub(channel);
       lrsRequestWriterV3 = stubV3.withWaitForReady().streamLoadStats(lrsResponseReaderV3);
       logger.log(XdsLogLevel.DEBUG, "Sending initial LRS request");
       sendLoadStatsRequest(Collections.<ClusterStats>emptyList());

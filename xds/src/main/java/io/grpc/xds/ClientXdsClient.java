@@ -40,6 +40,7 @@ import io.envoyproxy.envoy.config.route.v3.VirtualHost;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.Rds;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext;
+import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
@@ -89,11 +90,12 @@ final class ClientXdsClient extends AbstractXdsClient {
   private final LoadReportClient lrsClient;
   private boolean reportingLoad;
 
-  ClientXdsClient(XdsChannel channel, Node node, ScheduledExecutorService timeService,
-      BackoffPolicy.Provider backoffPolicyProvider, Supplier<Stopwatch> stopwatchSupplier) {
-    super(channel, node, timeService, backoffPolicyProvider, stopwatchSupplier);
-    lrsClient = new LoadReportClient(loadStatsManager, channel, node, getSyncContext(),
-        timeService, backoffPolicyProvider, stopwatchSupplier);
+  ClientXdsClient(ManagedChannel channel, boolean useProtocolV3, Node node,
+      ScheduledExecutorService timeService, BackoffPolicy.Provider backoffPolicyProvider,
+      Supplier<Stopwatch> stopwatchSupplier) {
+    super(channel, useProtocolV3, node, timeService, backoffPolicyProvider, stopwatchSupplier);
+    lrsClient = new LoadReportClient(loadStatsManager, channel, useProtocolV3, node,
+        getSyncContext(), timeService, backoffPolicyProvider, stopwatchSupplier);
   }
 
   @Override
