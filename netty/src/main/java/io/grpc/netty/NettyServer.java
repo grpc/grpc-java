@@ -105,7 +105,6 @@ class NettyServer implements InternalServer, InternalWithLogId {
   private final List<? extends ServerStreamTracer.Factory> streamTracerFactories;
   private final TransportTracer.Factory transportTracerFactory;
   private final InternalChannelz channelz;
-  // Not thread safe. Only modified in event loop.
   private volatile List<InternalInstrumented<SocketStats>> listenSocketStatsList =
       new ArrayList<>();
   private volatile boolean terminated;
@@ -309,14 +308,18 @@ class NettyServer implements InternalServer, InternalWithLogId {
                   @Override
                   public void operationComplete(ChannelFuture future) throws Exception {
                     channelz.addListenSocket(listenSocketStats);
-                    listenSocketStatsList.add(listenSocketStats);
+                    synchronized (NettyServer.this) {
+                      listenSocketStatsList.add(listenSocketStats);
+                    }
                   }
                 });
                 ChannelFutureListener closeListener = new ChannelFutureListener() {
                   @Override
                   public void operationComplete(ChannelFuture future) throws Exception {
                     channelz.removeListenSocket(listenSocketStats);
-                    listenSocketStatsList.remove(listenSocketStats);
+                    synchronized (NettyServer.this) {
+                      listenSocketStatsList.remove(listenSocketStats);
+                    }
                   }
                 };
                 future.channel().closeFuture().addListener(closeListener);
