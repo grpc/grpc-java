@@ -59,6 +59,7 @@ import io.netty.util.concurrent.GenericFutureListener;
 import java.io.IOException;
 import java.net.SocketAddress;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -104,7 +105,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
   private final List<? extends ServerStreamTracer.Factory> streamTracerFactories;
   private final TransportTracer.Factory transportTracerFactory;
   private final InternalChannelz channelz;
-  // Only modified in event loop but safe to read any time.
+  // Not thread safe. Only modified in event loop.
   private volatile List<InternalInstrumented<SocketStats>> listenSocketStatsList =
       new ArrayList<>();
   private volatile boolean terminated;
@@ -194,7 +195,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
 
   @Override
   public List<InternalInstrumented<SocketStats>> getListenSocketStatsList() {
-    return listenSocketStatsList;
+    return Collections.unmodifiableList(listenSocketStatsList);
   }
 
   @Override
