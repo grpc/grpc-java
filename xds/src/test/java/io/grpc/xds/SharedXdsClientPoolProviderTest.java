@@ -85,8 +85,9 @@ public class SharedXdsClientPoolProviderTest {
         SERVER_URI, InsecureChannelCredentials.create(), false, node);
     assertThat(xdsClientPool.getXdsClientForTest()).isNull();
     assertThat(xdsClientPool.getChannelForTest()).isNull();
-    xdsClientPool.getObject();
+    XdsClient xdsClient = xdsClientPool.getObject();
     assertThat(xdsClientPool.getXdsClientForTest()).isNotNull();
+    xdsClientPool.returnObject(xdsClient);
   }
 
   @Test
@@ -120,5 +121,6 @@ public class SharedXdsClientPoolProviderTest {
     XdsClient xdsClient2 = xdsClientPool.getObject();
     assertThat(xdsClient2).isNotSameInstanceAs(xdsClient1);
     assertThat(xdsClientPool.getChannelForTest()).isNotSameInstanceAs(channel1);
+    xdsClientPool.returnObject(xdsClient2);
   }
 }
