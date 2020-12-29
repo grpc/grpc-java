@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package udpa.core.v1;
+package xds.core.v3;
 
 import "udpa/annotations/status.proto";
 
@@ -8,11 +8,11 @@ import "validate/validate.proto";
 
 option java_outer_classname = "AuthorityProto";
 option java_multiple_files = true;
-option java_package = "com.github.udpa.udpa.core.v1";
+option java_package = "com.github.udpa.xds.core.v3";
 
 option (udpa.annotations.file_status).work_in_progress = true;
 
-// UDPA authority information.
+// xDS authority information.
 message Authority {
   string name = 1 [(validate.rules).string = {min_len: 1}];
 

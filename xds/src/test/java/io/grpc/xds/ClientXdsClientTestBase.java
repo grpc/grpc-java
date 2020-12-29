@@ -60,7 +60,6 @@ import io.grpc.xds.XdsClient.LdsUpdate;
 import io.grpc.xds.XdsClient.RdsResourceWatcher;
 import io.grpc.xds.XdsClient.RdsUpdate;
 import io.grpc.xds.XdsClient.ResourceWatcher;
-import io.grpc.xds.XdsClient.XdsChannel;
 import java.io.IOException;
 import java.util.ArrayDeque;
 import java.util.Arrays;
@@ -192,7 +191,8 @@ public abstract class ClientXdsClientTestBase {
 
     xdsClient =
         new ClientXdsClient(
-            new XdsChannel(channel, useProtocolV3()),
+            channel,
+            useProtocolV3(),
             EnvoyProtoData.Node.newBuilder().build(),
             fakeClock.getScheduledExecutorService(),
             backoffPolicyProvider,
@@ -205,9 +205,9 @@ public abstract class ClientXdsClientTestBase {
   @After
   public void tearDown() {
     xdsClient.shutdown();
+    channel.shutdown();  // channel not owned by XdsClient
     assertThat(adsEnded.get()).isTrue();
     assertThat(lrsEnded.get()).isTrue();
-    assertThat(channel.isShutdown()).isTrue();
     assertThat(fakeClock.getPendingTasks()).isEmpty();
   }
 

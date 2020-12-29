@@ -46,6 +46,8 @@ export LDFLAGS=-L/tmp/protobuf/lib
 export CXXFLAGS="-I/tmp/protobuf/include"
 
 ./gradlew clean $GRADLE_FLAGS
+# Ensure dependency convergence
+./gradlew :grpc-all:dependencies $GRADLE_FLAGS
 
 if [[ -z "${SKIP_TESTS:-}" ]]; then
   # Ensure all *.proto changes include *.java generated code

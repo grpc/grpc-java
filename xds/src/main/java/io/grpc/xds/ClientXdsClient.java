@@ -39,6 +39,7 @@ import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
 import io.envoyproxy.envoy.config.route.v3.VirtualHost;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.Rds;
+import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
@@ -99,11 +100,12 @@ final class ClientXdsClient extends AbstractXdsClient {
   private final LoadReportClient lrsClient;
   private boolean reportingLoad;
 
-  ClientXdsClient(XdsChannel channel, Node node, ScheduledExecutorService timeService,
-      BackoffPolicy.Provider backoffPolicyProvider, Supplier<Stopwatch> stopwatchSupplier) {
-    super(channel, node, timeService, backoffPolicyProvider, stopwatchSupplier);
-    lrsClient = new LoadReportClient(loadStatsManager, channel, node, getSyncContext(),
-        timeService, backoffPolicyProvider, stopwatchSupplier);
+  ClientXdsClient(ManagedChannel channel, boolean useProtocolV3, Node node,
+      ScheduledExecutorService timeService, BackoffPolicy.Provider backoffPolicyProvider,
+      Supplier<Stopwatch> stopwatchSupplier) {
+    super(channel, useProtocolV3, node, timeService, backoffPolicyProvider, stopwatchSupplier);
+    lrsClient = new LoadReportClient(loadStatsManager, channel, useProtocolV3, node,
+        getSyncContext(), timeService, backoffPolicyProvider, stopwatchSupplier);
   }
 
   @Override
@@ -620,7 +622,7 @@ final class ClientXdsClient extends AbstractXdsClient {
       public void run() {
         ResourceSubscriber subscriber = ldsResourceSubscribers.get(resourceName);
         if (subscriber == null) {
-          getLogger().log(XdsLogLevel.INFO, "Subscribe CDS resource {0}", resourceName);
+          getLogger().log(XdsLogLevel.INFO, "Subscribe LDS resource {0}", resourceName);
           subscriber = new ResourceSubscriber(ResourceType.LDS, resourceName);
           ldsResourceSubscribers.put(resourceName, subscriber);
           adjustResourceSubscription(ResourceType.LDS);

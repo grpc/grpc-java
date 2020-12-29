@@ -11,18 +11,18 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 # )
 IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.android:annotations:4.1.1.4",
-    "com.google.api.grpc:proto-google-common-protos:1.17.0",
+    "com.google.api.grpc:proto-google-common-protos:2.0.1",
     "com.google.auth:google-auth-library-credentials:0.22.0",
     "com.google.auth:google-auth-library-oauth2-http:0.22.0",
     "com.google.code.findbugs:jsr305:3.0.2",
     "com.google.code.gson:gson:jar:2.8.6",
-    "com.google.errorprone:error_prone_annotations:2.3.4",
+    "com.google.errorprone:error_prone_annotations:2.4.0",
     "com.google.guava:failureaccess:1.0.1",
     "com.google.guava:guava:29.0-android",
     "com.google.j2objc:j2objc-annotations:1.3",
     "com.google.truth:truth:1.0.1",
     "com.squareup.okhttp:okhttp:2.7.4",
-    "com.squareup.okio:okio:1.13.0",
+    "com.squareup.okio:okio:1.17.5",
     "io.netty:netty-buffer:4.1.51.Final",
     "io.netty:netty-codec-http2:4.1.51.Final",
     "io.netty:netty-codec-http:4.1.51.Final",
@@ -37,11 +37,11 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "io.netty:netty-transport:4.1.51.Final",
     "io.opencensus:opencensus-api:0.24.0",
     "io.opencensus:opencensus-contrib-grpc-metrics:0.24.0",
-    "io.perfmark:perfmark-api:0.19.0",
+    "io.perfmark:perfmark-api:0.23.0",
     "junit:junit:4.12",
-    "org.apache.commons:commons-lang3:3.5",
+    "org.apache.commons:commons-lang3:3.11",
     "org.apache.tomcat:annotations-api:6.0.53",
-    "org.codehaus.mojo:animal-sniffer-annotations:1.18",
+    "org.codehaus.mojo:animal-sniffer-annotations:1.19",
 ]
 
 # For use with maven_install's override_targets.

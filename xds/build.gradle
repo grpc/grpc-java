@@ -132,8 +132,9 @@ jacocoTestReport {
 publishing {
     publications {
         maven(MavenPublication) {
-            artifact shadowJar
-            artifacts.removeAll { it.classifier == 'original' }
+            // We want this to throw an exception if it isn't working
+            def originalJar = artifacts.find { dep -> dep.classifier == 'original'}
+            artifacts.remove(originalJar)
 
             pom.withXml {
                 def dependenciesNode = new Node(null, 'dependencies')

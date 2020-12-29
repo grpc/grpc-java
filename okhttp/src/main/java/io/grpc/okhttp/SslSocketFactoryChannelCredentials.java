@@ -40,5 +40,10 @@ public final class SslSocketFactoryChannelCredentials {
     public SSLSocketFactory getFactory() {
       return factory;
     }
+
+    @Override
+    public io.grpc.ChannelCredentials withoutBearerTokens() {
+      return this;
+    }
   }
 }

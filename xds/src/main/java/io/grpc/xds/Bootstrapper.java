@@ -19,7 +19,11 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
+import io.grpc.ChannelCredentials;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.Internal;
+import io.grpc.TlsChannelCredentials;
+import io.grpc.alts.GoogleDefaultChannelCredentials;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.GrpcUtil.GrpcBuildVersion;
 import io.grpc.internal.JsonParser;
@@ -48,13 +52,17 @@ public abstract class Bootstrapper {
   private static final String LOG_PREFIX = "xds-bootstrap";
   private static final String BOOTSTRAP_PATH_SYS_ENV_VAR = "GRPC_XDS_BOOTSTRAP";
   private static final String BOOTSTRAP_PATH_SYS_PROPERTY_VAR = "io.grpc.xds.bootstrap";
+  private static final String XDS_V3_SERVER_FEATURE = "xds_v3";
+  @VisibleForTesting
+  static boolean enableV3Protocol = Boolean.parseBoolean(
+      System.getenv("GRPC_XDS_EXPERIMENTAL_V3_SUPPORT"));
   @VisibleForTesting
   static final String CLIENT_FEATURE_DISABLE_OVERPROVISIONING =
       "envoy.lb.does_not_support_overprovisioning";
 
   private static final Bootstrapper DEFAULT_INSTANCE = new Bootstrapper() {
     @Override
-    public BootstrapInfo readBootstrap() throws XdsInitializationException {
+    public BootstrapInfo bootstrap() throws XdsInitializationException {
       String filePathSource = BOOTSTRAP_PATH_SYS_ENV_VAR;
       String filePath = System.getenv(filePathSource);
       if (filePath == null) {
@@ -86,7 +94,7 @@ public abstract class Bootstrapper {
   /**
    * Returns configurations from bootstrap.
    */
-  public abstract BootstrapInfo readBootstrap() throws XdsInitializationException;
+  public abstract BootstrapInfo bootstrap() throws XdsInitializationException;
 
   /** Parses a raw string into {@link BootstrapInfo}. */
   @VisibleForTesting
@@ -108,36 +116,35 @@ public abstract class Bootstrapper {
       throw new XdsInitializationException("Invalid bootstrap: 'xds_servers' does not exist.");
     }
     logger.log(XdsLogLevel.INFO, "Configured with {0} xDS servers", rawServerConfigs.size());
+    // TODO(chengyuanzhang): require at least one server URI.
     List<Map<String, ?>> serverConfigList = JsonUtil.checkObjectList(rawServerConfigs);
     for (Map<String, ?> serverConfig : serverConfigList) {
       String serverUri = JsonUtil.getString(serverConfig, "server_uri");
       if (serverUri == null) {
-        throw new XdsInitializationException(
-            "Invalid bootstrap: missing 'xds_servers'");
+        throw new XdsInitializationException("Invalid bootstrap: missing 'server_uri'");
       }
       logger.log(XdsLogLevel.INFO, "xDS server URI: {0}", serverUri);
-      List<ChannelCreds> channelCredsOptions = new ArrayList<>();
+
       List<?> rawChannelCredsList = JsonUtil.getList(serverConfig, "channel_creds");
       if (rawChannelCredsList == null || rawChannelCredsList.isEmpty()) {
         throw new XdsInitializationException(
             "Invalid bootstrap: server " + serverUri + " 'channel_creds' required");
       }
-      List<Map<String, ?>> channelCredsList = JsonUtil.checkObjectList(rawChannelCredsList);
-      for (Map<String, ?> channelCreds : channelCredsList) {
-        String type = JsonUtil.getString(channelCreds, "type");
-        if (type == null) {
-          throw new XdsInitializationException(
-              "Invalid bootstrap: server " + serverUri + " with 'channel_creds' type unspecified");
-        }
-        logger.log(XdsLogLevel.INFO, "Channel credentials option: {0}", type);
-        ChannelCreds creds = new ChannelCreds(type, JsonUtil.getObject(channelCreds, "config"));
-        channelCredsOptions.add(creds);
+      ChannelCredentials channelCredentials =
+          parseChannelCredentials(JsonUtil.checkObjectList(rawChannelCredsList), serverUri);
+      if (channelCredentials == null) {
+        throw new XdsInitializationException(
+            "Server " + serverUri + ": no supported channel credentials found");
       }
+
+      boolean useProtocolV3 = false;
       List<String> serverFeatures = JsonUtil.getListOfStrings(serverConfig, "server_features");
       if (serverFeatures != null) {
         logger.log(XdsLogLevel.INFO, "Server features: {0}", serverFeatures);
+        useProtocolV3 = enableV3Protocol
+            && serverFeatures.contains(XDS_V3_SERVER_FEATURE);
       }
-      servers.add(new ServerInfo(serverUri, channelCredsOptions, serverFeatures));
+      servers.add(new ServerInfo(serverUri, channelCredentials, useProtocolV3));
     }
 
     Node.Builder nodeBuilder = Node.newBuilder();
@@ -208,65 +215,55 @@ public abstract class Bootstrapper {
     return value;
   }
 
-  /**
-   * Data class containing channel credentials configurations for xDS protocol communication.
-   */
-  // TODO(chengyuanzhang): May need more complex structure for channel creds config representation.
-  @Immutable
-  static class ChannelCreds {
-    private final String type;
-    @Nullable
-    private final Map<String, ?> config;
-
-    @VisibleForTesting
-    ChannelCreds(String type, @Nullable Map<String, ?> config) {
-      this.type = type;
-      this.config = config;
-    }
-
-    String getType() {
-      return type;
-    }
-
-    @Nullable
-    Map<String, ?> getConfig() {
-      if (config != null) {
-        return Collections.unmodifiableMap(config);
+  @Nullable
+  private static ChannelCredentials parseChannelCredentials(List<Map<String, ?>> jsonList,
+      String serverUri) throws XdsInitializationException {
+    for (Map<String, ?> channelCreds : jsonList) {
+      String type = JsonUtil.getString(channelCreds, "type");
+      if (type == null) {
+        throw new XdsInitializationException(
+            "Invalid bootstrap: server " + serverUri + " with 'channel_creds' type unspecified");
       }
-      return null;
+      switch (type) {
+        case "google_default":
+          return GoogleDefaultChannelCredentials.create();
+        case "insecure":
+          return InsecureChannelCredentials.create();
+        case "tls":
+          return TlsChannelCredentials.create();
+        default:
+      }
     }
+    return null;
   }
 
   /**
-   * Data class containing xDS server information, such as server URI and channel credential
-   * options to be used for communication.
+   * Data class containing xDS server information, such as server URI and channel credentials
+   * to be used for communication.
    */
   @Immutable
   static class ServerInfo {
-    private final String serverUri;
-    private final List<ChannelCreds> channelCredsList;
-    @Nullable
-    private final List<String> serverFeatures;
+    private final String target;
+    private final ChannelCredentials channelCredentials;
+    private final boolean useProtocolV3;
 
     @VisibleForTesting
-    ServerInfo(String serverUri, List<ChannelCreds> channelCredsList, List<String> serverFeatures) {
-      this.serverUri = serverUri;
-      this.channelCredsList = channelCredsList;
-      this.serverFeatures = serverFeatures;
+    ServerInfo(String target, ChannelCredentials channelCredentials, boolean useProtocolV3) {
+      this.target = checkNotNull(target, "target");
+      this.channelCredentials = checkNotNull(channelCredentials, "channelCredentials");
+      this.useProtocolV3 = useProtocolV3;
     }
 
-    String getServerUri() {
-      return serverUri;
+    String getTarget() {
+      return target;
     }
 
-    List<ChannelCreds> getChannelCredentials() {
-      return Collections.unmodifiableList(channelCredsList);
+    ChannelCredentials getChannelCredentials() {
+      return channelCredentials;
     }
 
-    List<String> getServerFeatures() {
-      return serverFeatures == null
-          ? Collections.<String>emptyList()
-          : Collections.unmodifiableList(serverFeatures);
+    boolean isUseProtocolV3() {
+      return useProtocolV3;
     }
   }
 
