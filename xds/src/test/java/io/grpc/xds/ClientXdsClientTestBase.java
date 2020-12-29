@@ -200,7 +200,7 @@ public abstract class ClientXdsClientTestBase {
   @After
   public void tearDown() {
     xdsClient.shutdown();
-    channel.shutdownNow();  // channel not owned by XdsClient
+    channel.shutdown();  // channel not owned by XdsClient
     assertThat(adsEnded.get()).isTrue();
     assertThat(lrsEnded.get()).isTrue();
     assertThat(fakeClock.getPendingTasks()).isEmpty();

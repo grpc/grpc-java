@@ -134,7 +134,7 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
         if (refCount == 0) {
           xdsClient.shutdown();
           xdsClient = null;
-          channel.shutdownNow();
+          channel.shutdown();
           scheduler = SharedResourceHolder.release(GrpcUtil.TIMER_SERVICE, scheduler);
         }
         return null;

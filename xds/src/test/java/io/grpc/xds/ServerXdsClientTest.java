@@ -199,7 +199,7 @@ public class ServerXdsClientTest {
   @After
   public void tearDown() {
     xdsClient.shutdown();
-    channel.shutdownNow();
+    channel.shutdown();
     assertThat(callEnded.get()).isTrue();
     assertThat(fakeClock.getPendingTasks()).isEmpty();
   }
