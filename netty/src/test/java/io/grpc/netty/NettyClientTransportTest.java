@@ -332,7 +332,7 @@ public class NettyClientTransportTest {
       } else {
         // Client cert verification is after handshake in TLSv1.3
         assertThat(sre).hasCauseThat().hasCauseThat().isInstanceOf(SSLException.class);
-        assertThat(sre).hasCauseThat().hasMessageThat().contains("TLSV1_CERTIFICATE_REQUIRED");
+        assertThat(sre).hasCauseThat().hasMessageThat().contains("CERTIFICATE_REQUIRED");
       }
     }
   }
