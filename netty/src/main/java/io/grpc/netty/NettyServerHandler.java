@@ -532,7 +532,8 @@ class NettyServerHandler extends AbstractNettyHandler {
   @Override
   protected void onStreamError(ChannelHandlerContext ctx, boolean outbound, Throwable cause,
       StreamException http2Ex) {
-    logger.log(Level.WARNING, "Stream Error", cause);
+    Level level = http2Ex.error() == Http2Error.STREAM_CLOSED ? Level.FINE : Level.WARNING;
+    logger.log(level, "Stream Error", cause);
     NettyServerStream.TransportState serverStream = serverStream(
         connection().stream(Http2Exception.streamId(http2Ex)));
     Tag tag = serverStream != null ? serverStream.tag() : PerfMark.createTag();
