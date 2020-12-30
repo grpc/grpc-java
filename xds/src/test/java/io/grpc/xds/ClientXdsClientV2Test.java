@@ -298,7 +298,7 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
         boolean enableLrs, @Nullable Message upstreamTlsContext,
         @Nullable Message circuitBreakers) {
       Cluster.Builder builder =
-          initCluster(clusterName, enableLrs, upstreamTlsContext, circuitBreakers);
+          initClusterBuilder(clusterName, enableLrs, upstreamTlsContext, circuitBreakers);
       builder.setType(DiscoveryType.EDS);
       EdsClusterConfig.Builder edsClusterConfigBuilder = EdsClusterConfig.newBuilder();
       edsClusterConfigBuilder.setEdsConfig(
@@ -314,7 +314,7 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
     protected Message buildLogicalDnsCluster(String clusterName, boolean enableLrs,
         @Nullable Message upstreamTlsContext, @Nullable Message circuitBreakers) {
       Cluster.Builder builder =
-          initCluster(clusterName, enableLrs, upstreamTlsContext, circuitBreakers);
+          initClusterBuilder(clusterName, enableLrs, upstreamTlsContext, circuitBreakers);
       builder.setType(DiscoveryType.LOGICAL_DNS);
       return builder.build();
     }
@@ -334,7 +334,7 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
           .build();
     }
 
-    private Cluster.Builder initCluster(String clusterName, boolean enableLrs,
+    private Cluster.Builder initClusterBuilder(String clusterName, boolean enableLrs,
         @Nullable Message upstreamTlsContext, @Nullable Message circuitBreakers) {
       Cluster.Builder builder = Cluster.newBuilder();
       builder.setName(clusterName);
