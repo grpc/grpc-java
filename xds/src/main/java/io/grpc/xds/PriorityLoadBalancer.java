@@ -251,27 +251,20 @@ final class PriorityLoadBalancer extends LoadBalancer {
      * already exists.
      */
     void updateResolvedAddresses() {
-      final ResolvedAddresses addresses = resolvedAddresses;
-      syncContext.execute(
-          new Runnable() {
-            @Override
-            public void run() {
-              PriorityLbConfig config = (PriorityLbConfig) addresses.getLoadBalancingPolicyConfig();
-              PolicySelection childPolicySelection = config.childConfigs.get(priority);
-              LoadBalancerProvider lbProvider = childPolicySelection.getProvider();
-              String newPolicy = lbProvider.getPolicyName();
-              if (!newPolicy.equals(policy)) {
-                policy = newPolicy;
-                lb.switchTo(lbProvider);
-              }
-              lb.handleResolvedAddresses(
-                  addresses
-                      .toBuilder()
-                      .setAddresses(AddressFilter.filter(addresses.getAddresses(), priority))
-                      .setLoadBalancingPolicyConfig(childPolicySelection.getConfig())
-                      .build());
-            }
-          });
+      PriorityLbConfig config =
+          (PriorityLbConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
+      PolicySelection childPolicySelection = config.childConfigs.get(priority);
+      LoadBalancerProvider lbProvider = childPolicySelection.getProvider();
+      String newPolicy = lbProvider.getPolicyName();
+      if (!newPolicy.equals(policy)) {
+        policy = newPolicy;
+        lb.switchTo(lbProvider);
+      }
+      lb.handleResolvedAddresses(
+          resolvedAddresses.toBuilder()
+              .setAddresses(AddressFilter.filter(resolvedAddresses.getAddresses(), priority))
+              .setLoadBalancingPolicyConfig(childPolicySelection.getConfig())
+              .build());
     }
 
     final class ChildHelper extends ForwardingLoadBalancerHelper {
@@ -287,7 +280,12 @@ final class PriorityLoadBalancer extends LoadBalancer {
             failOverTimer.cancel();
           }
         }
-        tryNextPriority(true);
+        syncContext.execute(new Runnable() {
+          @Override
+          public void run() {
+            tryNextPriority(true);
+          }
+        });
       }
 
       @Override
