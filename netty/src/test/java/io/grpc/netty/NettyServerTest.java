@@ -92,14 +92,14 @@ public class NettyServerTest {
   @Mock
   EventLoop mockEventLoop;
   @Mock
-  Future<Map<SocketAddress, ChannelFuture>> bindFuture;
+  Future<Map<ChannelFuture, SocketAddress>> bindFuture;
 
   @Before
   public void setup() throws Exception {
     MockitoAnnotations.initMocks(this);
     when(mockEventLoopGroup.next()).thenReturn(mockEventLoop);
     when(mockEventLoop
-        .submit(ArgumentMatchers.<Callable<Map<SocketAddress, ChannelFuture>>>any()))
+        .submit(ArgumentMatchers.<Callable<Map<ChannelFuture, SocketAddress>>>any()))
         .thenReturn(bindFuture);
   }
 
@@ -526,7 +526,7 @@ public class NettyServerTest {
     Throwable mockCause = mock(Throwable.class);
     when(future.cause()).thenReturn(mockCause);
     SocketAddress addr = new InetSocketAddress(0);
-    Map<SocketAddress, ChannelFuture> map = ImmutableMap.of(addr, future);
+    Map<ChannelFuture, SocketAddress> map = ImmutableMap.of(future, addr);
     when(bindFuture.getNow()).thenReturn(map);
     when(bindFuture.isSuccess()).thenReturn(true);
     Future<Void> mockFuture = (Future<Void>) mock(Future.class);

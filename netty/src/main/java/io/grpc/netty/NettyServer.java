@@ -189,11 +189,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
   @Override
   public InternalInstrumented<SocketStats> getListenSocketStats() {
     List<InternalInstrumented<SocketStats>> savedListenSocketStatsList = listenSocketStatsList;
-    if (savedListenSocketStatsList == null || savedListenSocketStatsList.isEmpty()) {
-      return null;
-    } else {
-      return savedListenSocketStatsList.get(0);
-    }
+    return savedListenSocketStatsList.isEmpty() ? null : savedListenSocketStatsList.get(0);
   }
 
   @Override
@@ -297,40 +293,22 @@ class NettyServer implements InternalServer, InternalWithLogId {
         ch.closeFuture().addListener(loopReleaser);
       }
     });
-    final List<InternalInstrumented<SocketStats>> socketStats = new ArrayList<>();
-    Future<Map<SocketAddress, ChannelFuture>> bindCallFuture =
+    Future<Map<ChannelFuture, SocketAddress>> bindCallFuture =
         bossExecutor.submit(
-            new Callable<Map<SocketAddress, ChannelFuture>>() {
+            new Callable<Map<ChannelFuture, SocketAddress>>() {
           @Override
-          public Map<SocketAddress, ChannelFuture> call() {
-            Map<SocketAddress, ChannelFuture> bindFutures = new HashMap<>();
+          public Map<ChannelFuture, SocketAddress> call() {
+            Map<ChannelFuture, SocketAddress> bindFutures = new HashMap<>();
             for (SocketAddress address: addresses) {
                 ChannelFuture future = b.bind(address);
                 channelGroup.add(future.channel());
-                final InternalInstrumented<SocketStats> listenSocketStats =
-                    new ListenSocket(future.channel());
-                future.addListener(new ChannelFutureListener() {
-                  @Override
-                  public void operationComplete(ChannelFuture future) throws Exception {
-                    channelz.addListenSocket(listenSocketStats);
-                    synchronized (NettyServer.this) {
-                      socketStats.add(listenSocketStats);
-                    }
-                  }
-                });
-                future.channel().closeFuture().addListener(new ChannelFutureListener() {
-                  @Override
-                  public void operationComplete(ChannelFuture future) throws Exception {
-                    channelz.removeListenSocket(listenSocketStats);
-                  }
-                });
-                bindFutures.put(address, future);
+                bindFutures.put(future, address);
             }
             return bindFutures;
           }
         }
     );
-    Map<SocketAddress, ChannelFuture> channelFutures =
+    Map<ChannelFuture, SocketAddress> channelFutures =
         bindCallFuture.awaitUninterruptibly().getNow();
 
     if (!bindCallFuture.isSuccess()) {
@@ -338,20 +316,29 @@ class NettyServer implements InternalServer, InternalWithLogId {
       throw new IOException(String.format("Failed to bind to addresses %s",
           addresses), bindCallFuture.cause());
     }
-    for (Map.Entry<SocketAddress, ChannelFuture> entry: channelFutures.entrySet()) {
+    final List<InternalInstrumented<SocketStats>> socketStats = new ArrayList<>();
+    for (Map.Entry<ChannelFuture, SocketAddress> entry: channelFutures.entrySet()) {
       // We'd love to observe interruption, but if interrupted we will need to close the channel,
       // which itself would need an await() to guarantee the port is not used when the method
       // returns. See #6850
-      ChannelFuture future = entry.getValue();
+      final ChannelFuture future = entry.getKey();
       if (!future.awaitUninterruptibly().isSuccess()) {
         channelGroup.close().awaitUninterruptibly();
         throw new IOException(String.format("Failed to bind to address %s",
-            entry.getKey()), future.cause());
+            entry.getValue()), future.cause());
       }
+      final InternalInstrumented<SocketStats> listenSocketStats =
+          new ListenSocket(future.channel());
+      channelz.addListenSocket(listenSocketStats);
+      socketStats.add(listenSocketStats);
+      future.channel().closeFuture().addListener(new ChannelFutureListener() {
+        @Override
+        public void operationComplete(ChannelFuture future) throws Exception {
+          channelz.removeListenSocket(listenSocketStats);
+        }
+      });
     }
-    synchronized (NettyServer.this) {
-      listenSocketStatsList = Collections.unmodifiableList(socketStats);
-    }
+    listenSocketStatsList = Collections.unmodifiableList(socketStats);
   }
 
   @Override
@@ -368,7 +355,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
               }
               sharedResourceReferenceCounter.release();
               protocolNegotiator.close();
-              listenSocketStatsList = null;
+              listenSocketStatsList = Collections.emptyList();
               synchronized (NettyServer.this) {
                 listener.serverShutdown();
                 terminated = true;
