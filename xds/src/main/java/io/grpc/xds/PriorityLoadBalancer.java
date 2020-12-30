@@ -46,7 +46,8 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
-/** Load balancer for priority policy. A <em>priority</em> represents a logical entity within a
+/**
+ * Load balancer for priority policy. A <em>priority</em> represents a logical entity within a
  * cluster for load balancing purposes.
  */
 final class PriorityLoadBalancer extends LoadBalancer {
