@@ -192,93 +192,19 @@ abstract class XdsClient {
   }
 
   static final class CdsUpdate implements ResourceUpdate {
-    private final String clusterName;
-    @Nullable
-    private final String edsServiceName;
-    private final String lbPolicy;
-    @Nullable
-    private final String lrsServerName;
-    @Nullable
-    private final Long maxConcurrentRequests;
-    private final UpstreamTlsContext upstreamTlsContext;
+    final String clusterName;
+    final ClusterType clusterType;
+    final ClusterConfig clusterConfig;
 
-    private CdsUpdate(
-        String clusterName,
-        @Nullable String edsServiceName,
-        String lbPolicy,
-        @Nullable String lrsServerName,
-        @Nullable Long maxConcurrentRequests,
-        @Nullable UpstreamTlsContext upstreamTlsContext) {
-      this.clusterName = clusterName;
-      this.edsServiceName = edsServiceName;
-      this.lbPolicy = lbPolicy;
-      this.lrsServerName = lrsServerName;
-      this.maxConcurrentRequests = maxConcurrentRequests;
-      this.upstreamTlsContext = upstreamTlsContext;
-    }
-
-    String getClusterName() {
-      return clusterName;
-    }
-
-    /**
-     * Returns the resource name for EDS requests.
-     */
-    @Nullable
-    String getEdsServiceName() {
-      return edsServiceName;
-    }
-
-    /**
-     * Returns the policy of balancing loads to endpoints. Only "round_robin" is supported
-     * as of now.
-     */
-    String getLbPolicy() {
-      return lbPolicy;
-    }
-
-    /**
-     * Returns the server name to send client load reports to if LRS is enabled. {@code null} if
-     * load reporting is disabled for this cluster.
-     */
-    @Nullable
-    String getLrsServerName() {
-      return lrsServerName;
-    }
-
-    /**
-     * Returns the maximum number of outstanding requests can be made to the upstream cluster, or
-     * {@code null} if not configured.
-     */
-    @Nullable
-    Long getMaxConcurrentRequests() {
-      return maxConcurrentRequests;
-    }
-
-    /** Returns the {@link UpstreamTlsContext} for this cluster if present, else null. */
-    @Nullable
-    UpstreamTlsContext getUpstreamTlsContext() {
-      return upstreamTlsContext;
-    }
-
-    @Override
-    public String toString() {
-      return
-          MoreObjects
-              .toStringHelper(this)
-              .add("clusterName", clusterName)
-              .add("edsServiceName", edsServiceName)
-              .add("lbPolicy", lbPolicy)
-              // Exclude upstreamTlsContext as its string representation is cumbersome.
-              .add("maxConcurrentRequests", maxConcurrentRequests)
-              .add("upstreamTlsContext", upstreamTlsContext)
-              .toString();
+    CdsUpdate(String clusterName, ClusterType clusterType, ClusterConfig clusterConfig) {
+      this.clusterName = checkNotNull(clusterName, "clusterName");
+      this.clusterType = checkNotNull(clusterType, "clusterType");
+      this.clusterConfig = checkNotNull(clusterConfig, "clusterConfig");
     }
 
     @Override
     public int hashCode() {
-      return Objects.hash(clusterName, edsServiceName, lbPolicy, lrsServerName,
-          maxConcurrentRequests, upstreamTlsContext);
+      return Objects.hash(clusterName, clusterType, clusterConfig);
     }
 
     @Override
@@ -291,68 +217,170 @@ abstract class XdsClient {
       }
       CdsUpdate that = (CdsUpdate) o;
       return Objects.equals(clusterName, that.clusterName)
-          && Objects.equals(edsServiceName, that.edsServiceName)
-          && Objects.equals(lbPolicy, that.lbPolicy)
-          && Objects.equals(lrsServerName, that.lrsServerName)
-          && Objects.equals(maxConcurrentRequests, that.maxConcurrentRequests)
-          && Objects.equals(upstreamTlsContext, that.upstreamTlsContext);
+          && Objects.equals(clusterType, that.clusterType)
+          && Objects.equals(clusterConfig, that.clusterConfig);
     }
 
-    static Builder newBuilder() {
-      return new Builder();
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(this)
+          .add("clusterName", clusterName)
+          .add("clusterType", clusterType)
+          .add("clusterConfig", clusterConfig)
+          .toString();
     }
 
-    static final class Builder {
-      private String clusterName;
-      @Nullable
-      private String edsServiceName;
-      private String lbPolicy;
-      @Nullable
-      private String lrsServerName;
-      @Nullable
-      private Long maxConcurrentRequests;
-      @Nullable
-      private UpstreamTlsContext upstreamTlsContext;
+    enum ClusterType {
+      EDS, LOGICAL_DNS, AGGREGATE
+    }
 
-      private Builder() {
+    abstract static class ClusterConfig {
+      // Endpoint level load balancing policy.
+      final String lbPolicy;
+
+      private ClusterConfig(String lbPolicy) {
+        this.lbPolicy = checkNotNull(lbPolicy, "lbPolicy");
+      }
+    }
+
+    static final class AggregateClusterConfig extends ClusterConfig {
+      // List of underlying clusters making of this aggregate cluster.
+      final List<String> prioritizedClusterNames;
+
+      AggregateClusterConfig(String lbPolicy, List<String> prioritizedClusterNames) {
+        super(lbPolicy);
+        this.prioritizedClusterNames =
+            Collections.unmodifiableList(new ArrayList<>(prioritizedClusterNames));
       }
 
-      Builder setClusterName(String clusterName) {
-        this.clusterName = clusterName;
-        return this;
+      @Override
+      public int hashCode() {
+        return Objects.hash(lbPolicy, prioritizedClusterNames);
       }
 
-      Builder setEdsServiceName(String edsServiceName) {
-        this.edsServiceName = edsServiceName;
-        return this;
+      @Override
+      public boolean equals(Object o) {
+        if (this == o) {
+          return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+          return false;
+        }
+        AggregateClusterConfig that = (AggregateClusterConfig) o;
+        return Objects.equals(lbPolicy, that.lbPolicy)
+            && Objects.equals(prioritizedClusterNames, that.prioritizedClusterNames);
       }
 
-      Builder setLbPolicy(String lbPolicy) {
-        this.lbPolicy = lbPolicy;
-        return this;
+      @Override
+      public String toString() {
+        return MoreObjects.toStringHelper(this)
+            .add("lbPolicy", lbPolicy)
+            .add("prioritizedClusterNames", prioritizedClusterNames)
+            .toString();
       }
+    }
 
-      Builder setLrsServerName(String lrsServerName) {
+    private abstract static class NonAggregateClusterConfig extends ClusterConfig {
+      // Load report server name for reporting loads via LRS.
+      @Nullable
+      final String lrsServerName;
+      // Max number of concurrent requests can be sent to this cluster.
+      // FIXME(chengyuanzhang): protobuf uint32 is int in Java, so this field can be Integer.
+      @Nullable
+      final Long maxConcurrentRequests;
+      // TLS context used to connect to connect to this cluster.
+      @Nullable
+      final UpstreamTlsContext upstreamTlsContext;
+
+      private NonAggregateClusterConfig(String lbPolicy, @Nullable String lrsServerName,
+          @Nullable Long maxConcurrentRequests, @Nullable UpstreamTlsContext upstreamTlsContext) {
+        super(lbPolicy);
         this.lrsServerName = lrsServerName;
-        return this;
-      }
-
-      Builder setMaxConcurrentRequests(long maxConcurrentRequests) {
         this.maxConcurrentRequests = maxConcurrentRequests;
-        return this;
-      }
-
-      Builder setUpstreamTlsContext(UpstreamTlsContext upstreamTlsContext) {
         this.upstreamTlsContext = upstreamTlsContext;
-        return this;
+      }
+    }
+
+    static final class EdsClusterConfig extends NonAggregateClusterConfig {
+      // Alternative resource name to be used in EDS requests.
+      @Nullable
+      final String edsServiceName;
+
+      EdsClusterConfig(String lbPolicy, @Nullable String edsServiceName,
+          @Nullable String lrsServerName, @Nullable Long maxConcurrentRequests,
+          @Nullable UpstreamTlsContext upstreamTlsContext) {
+        super(lbPolicy, lrsServerName, maxConcurrentRequests, upstreamTlsContext);
+        this.edsServiceName = edsServiceName;
       }
 
-      CdsUpdate build() {
-        checkState(clusterName != null, "clusterName is not set");
-        checkState(lbPolicy != null, "lbPolicy is not set");
+      @Override
+      public int hashCode() {
+        return Objects.hash(lbPolicy, edsServiceName, lrsServerName, maxConcurrentRequests,
+            upstreamTlsContext);
+      }
 
-        return new CdsUpdate(clusterName, edsServiceName, lbPolicy, lrsServerName,
-            maxConcurrentRequests, upstreamTlsContext);
+      @Override
+      public boolean equals(Object o) {
+        if (this == o) {
+          return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+          return false;
+        }
+        EdsClusterConfig that = (EdsClusterConfig) o;
+        return Objects.equals(lbPolicy, that.lbPolicy)
+            && Objects.equals(edsServiceName, that.edsServiceName)
+            && Objects.equals(lrsServerName, that.lrsServerName)
+            && Objects.equals(maxConcurrentRequests, that.maxConcurrentRequests)
+            && Objects.equals(upstreamTlsContext, that.upstreamTlsContext);
+      }
+
+      @Override
+      public String toString() {
+        return MoreObjects.toStringHelper(this)
+            .add("lbPolicy", lbPolicy)
+            .add("edsServiceName", edsServiceName)
+            .add("lrsServerName", lrsServerName)
+            .add("maxConcurrentRequests", maxConcurrentRequests)
+            // Exclude upstreamTlsContext as its string representation is cumbersome.
+            .toString();
+      }
+    }
+
+    static final class LogicalDnsClusterConfig extends NonAggregateClusterConfig {
+      LogicalDnsClusterConfig(String lbPolicy, @Nullable String lrsServerName,
+          @Nullable Long maxConcurrentRequests, @Nullable UpstreamTlsContext upstreamTlsContext) {
+        super(lbPolicy, lrsServerName, maxConcurrentRequests, upstreamTlsContext);
+      }
+
+      @Override
+      public int hashCode() {
+        return Objects.hash(lbPolicy, lrsServerName, maxConcurrentRequests, upstreamTlsContext);
+      }
+
+      @Override
+      public boolean equals(Object o) {
+        if (this == o) {
+          return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+          return false;
+        }
+        LogicalDnsClusterConfig that = (LogicalDnsClusterConfig) o;
+        return Objects.equals(lbPolicy, that.lbPolicy)
+            && Objects.equals(lrsServerName, that.lrsServerName)
+            && Objects.equals(maxConcurrentRequests, that.maxConcurrentRequests)
+            && Objects.equals(upstreamTlsContext, that.upstreamTlsContext);
+      }
+
+      @Override
+      public String toString() {
+        return MoreObjects.toStringHelper(this)
+            .add("lbPolicy", lbPolicy)
+            .add("lrsServerName", lrsServerName)
+            .add("maxConcurrentRequests", maxConcurrentRequests)
+            // Exclude upstreamTlsContext as its string representation is cumbersome.
+            .toString();
       }
     }
   }

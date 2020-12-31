@@ -27,8 +27,8 @@ import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.config.cluster.v3.CircuitBreakers.Thresholds;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
+import io.envoyproxy.envoy.config.cluster.v3.Cluster.CustomClusterType;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.DiscoveryType;
-import io.envoyproxy.envoy.config.cluster.v3.Cluster.EdsClusterConfig;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.LbPolicy;
 import io.envoyproxy.envoy.config.core.v3.HttpProtocolOptions;
 import io.envoyproxy.envoy.config.core.v3.RoutingPriority;
@@ -39,7 +39,6 @@ import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
 import io.envoyproxy.envoy.config.route.v3.VirtualHost;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.Rds;
-import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext.ScheduledHandle;
@@ -49,7 +48,12 @@ import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.EnvoyProtoData.StructOrError;
+import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.LoadStatsManager.LoadStatsStore;
+import io.grpc.xds.XdsClient.CdsUpdate.AggregateClusterConfig;
+import io.grpc.xds.XdsClient.CdsUpdate.ClusterType;
+import io.grpc.xds.XdsClient.CdsUpdate.EdsClusterConfig;
+import io.grpc.xds.XdsClient.CdsUpdate.LogicalDnsClusterConfig;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -71,6 +75,8 @@ final class ClientXdsClient extends AbstractXdsClient {
   // Longest time to wait, since the subscription to some resource, for concluding its absence.
   @VisibleForTesting
   static final int INITIAL_RESOURCE_FETCH_TIMEOUT_SEC = 15;
+  @VisibleForTesting
+  static final String AGGREGATE_CLUSTER_TYPE_NAME = "envoy.clusters.aggregate";
   private static final String TYPE_URL_HTTP_CONNECTION_MANAGER_V2 =
       "type.googleapis.com/envoy.config.filter.network.http_connection_manager.v2"
           + ".HttpConnectionManager";
@@ -81,6 +87,10 @@ final class ClientXdsClient extends AbstractXdsClient {
       "type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext";
   private static final String TYPE_URL_UPSTREAM_TLS_CONTEXT_V2 =
       "type.googleapis.com/envoy.api.v2.auth.UpstreamTlsContext";
+  private static final String TYPE_URL_CLUSTER_CONFIG_V2 =
+      "type.googleapis.com/envoy.config.cluster.aggregate.v2alpha.ClusterConfig";
+  private static final String TYPE_URL_CLUSTER_CONFIG =
+      "type.googleapis.com/envoy.extensions.clusters.aggregate.v3.ClusterConfig";
 
   private final Map<String, ResourceSubscriber> ldsResourceSubscribers = new HashMap<>();
   private final Map<String, ResourceSubscriber> rdsResourceSubscribers = new HashMap<>();
@@ -282,88 +292,42 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
     getLogger().log(XdsLogLevel.INFO, "Received CDS response for resources: {0}", clusterNames);
 
-    String errorMessage = null;
-    // Cluster information update for requested clusters received in this CDS response.
     Map<String, CdsUpdate> cdsUpdates = new HashMap<>();
-    // CDS responses represents the state of the world, EDS services not referenced by
-    // Clusters are those no longer exist.
-    Set<String> edsServices = new HashSet<>();
+    // CDS responses represents the state of the world, EDS resources not referenced in CDS
+    // resources should be deleted.
+    Set<String> edsResources = new HashSet<>();  // retained EDS resources
     for (Cluster cluster : clusters) {
       String clusterName = cluster.getName();
-      // Skip information for clusters not requested.
       // Management server is required to always send newly requested resources, even if they
       // may have been sent previously (proactively). Thus, client does not need to cache
       // unrequested resources.
       if (!cdsResourceSubscribers.containsKey(clusterName)) {
         continue;
       }
-      CdsUpdate.Builder updateBuilder = CdsUpdate.newBuilder();
-      updateBuilder.setClusterName(clusterName);
-      // The type field must be set to EDS.
-      if (!cluster.getType().equals(DiscoveryType.EDS)) {
-        errorMessage = "Cluster " + clusterName + " : only EDS discovery type is supported "
-            + "in gRPC.";
-        break;
-      }
-      // In the eds_cluster_config field, the eds_config field must be set to indicate to
-      // use EDS (must be set to use ADS).
-      EdsClusterConfig edsClusterConfig = cluster.getEdsClusterConfig();
-      if (!edsClusterConfig.getEdsConfig().hasAds()) {
-        errorMessage = "Cluster " + clusterName + " : field eds_cluster_config must be set to "
-            + "indicate to use EDS over ADS.";
-        break;
-      }
-      // If the service_name field is set, that value will be used for the EDS request.
-      if (!edsClusterConfig.getServiceName().isEmpty()) {
-        updateBuilder.setEdsServiceName(edsClusterConfig.getServiceName());
-        edsServices.add(edsClusterConfig.getServiceName());
-      } else {
-        edsServices.add(clusterName);
-      }
       // The lb_policy field must be set to ROUND_ROBIN.
       if (!cluster.getLbPolicy().equals(LbPolicy.ROUND_ROBIN)) {
-        errorMessage = "Cluster " + clusterName + " : only round robin load balancing policy is "
-            + "supported in gRPC.";
-        break;
+        nackResponse(ResourceType.CDS, nonce,
+            "Cluster " + clusterName + ": unsupported Lb policy: " + cluster.getLbPolicy());
+        return;
       }
-      updateBuilder.setLbPolicy("round_robin");
-      // If the lrs_server field is set, it must have its self field set, in which case the
-      // client should use LRS for load reporting. Otherwise (the lrs_server field is not set),
-      // LRS load reporting will be disabled.
-      if (cluster.hasLrsServer()) {
-        if (!cluster.getLrsServer().hasSelf()) {
-          errorMessage = "Cluster " + clusterName + " : only support enabling LRS for the same "
-              + "management server.";
+      String lbPolicy = "round_robin";
+      CdsUpdate update = null;
+      switch (cluster.getClusterDiscoveryTypeCase()) {
+        case TYPE:
+          update = parseNonAggregateCluster(cluster, nonce, lbPolicy, edsResources);
           break;
-        }
-        updateBuilder.setLrsServerName("");
+        case CLUSTER_TYPE:
+          update = parseAggregateCluster(cluster, nonce, lbPolicy);
+          break;
+        case CLUSTERDISCOVERYTYPE_NOT_SET:
+        default:
+          nackResponse(ResourceType.CDS, nonce,
+              "Cluster " + clusterName + ": cluster discovery type unspecified");
       }
-      if (cluster.hasCircuitBreakers()) {
-        List<Thresholds> thresholds = cluster.getCircuitBreakers().getThresholdsList();
-        for (Thresholds threshold : thresholds) {
-          if (threshold.getPriority() != RoutingPriority.DEFAULT) {
-            continue;
-          }
-          if (threshold.hasMaxRequests()) {
-            updateBuilder.setMaxConcurrentRequests(threshold.getMaxRequests().getValue());
-          }
-        }
+      if (update == null) {
+        return;
       }
-      try {
-        EnvoyServerProtoData.UpstreamTlsContext upstreamTlsContext =
-            getTlsContextFromCluster(cluster);
-        if (upstreamTlsContext != null && upstreamTlsContext.getCommonTlsContext() != null) {
-          updateBuilder.setUpstreamTlsContext(upstreamTlsContext);
-        }
-      } catch (InvalidProtocolBufferException e) {
-        errorMessage = "Cluster " + clusterName + " : " + e.getMessage();
-        break;
-      }
-      cdsUpdates.put(clusterName, updateBuilder.build());
-    }
-    if (errorMessage != null) {
-      nackResponse(ResourceType.CDS, nonce, errorMessage);
-      return;
+      cdsUpdates.put(clusterName, update);
     }
     ackResponse(ResourceType.CDS, versionInfo, nonce);
 
@@ -377,24 +341,117 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
     for (String resource : edsResourceSubscribers.keySet()) {
       ResourceSubscriber subscriber = edsResourceSubscribers.get(resource);
-      if (!edsServices.contains(resource)) {
+      if (!edsResources.contains(resource)) {
         subscriber.onAbsent();
       }
     }
   }
 
-  @Nullable
-  private static EnvoyServerProtoData.UpstreamTlsContext getTlsContextFromCluster(Cluster cluster)
-      throws InvalidProtocolBufferException {
+  /**
+   * Parses CDS resource for an aggregate cluster into {@link io.grpc.xds.XdsClient.CdsUpdate}.
+   * Returns {@code null} and nack the response with the given nonce if the resource is invalid.
+   */
+  private CdsUpdate parseAggregateCluster(Cluster cluster, String nonce, String lbPolicy) {
+    String clusterName = cluster.getName();
+    CustomClusterType customType = cluster.getClusterType();
+    String typeName = customType.getName();
+    if (!typeName.equals(AGGREGATE_CLUSTER_TYPE_NAME)) {
+      nackResponse(ResourceType.CDS, nonce,
+          "Cluster " + clusterName + ": unsupported custom cluster type: " + typeName);
+      return null;
+    }
+    io.envoyproxy.envoy.extensions.clusters.aggregate.v3.ClusterConfig clusterConfig;
+    Any unpackedClusterConfig = customType.getTypedConfig();
+    if (unpackedClusterConfig.getTypeUrl().equals(TYPE_URL_CLUSTER_CONFIG_V2)) {
+      unpackedClusterConfig =
+          unpackedClusterConfig.toBuilder().setTypeUrl(TYPE_URL_CLUSTER_CONFIG).build();
+    }
+    try {
+      clusterConfig = unpackedClusterConfig.unpack(
+          io.envoyproxy.envoy.extensions.clusters.aggregate.v3.ClusterConfig.class);
+    } catch (InvalidProtocolBufferException e) {
+      nackResponse(ResourceType.CDS, nonce,
+          "Cluster " + clusterName + ": invalid cluster config: " + e);
+      return null;
+    }
+    AggregateClusterConfig config =
+        new AggregateClusterConfig(lbPolicy, clusterConfig.getClustersList());
+    return new CdsUpdate(clusterName, ClusterType.AGGREGATE, config);
+  }
+
+  /**
+   * Parses CDS resource for a non-aggregate cluster (EDS or Logical DNS) into {@link
+   * io.grpc.xds.XdsClient.CdsUpdate}. Returns {@code null} and nack the response with the given
+   * nonce if the resource is invalid.
+   */
+  private CdsUpdate parseNonAggregateCluster(Cluster cluster, String nonce, String lbPolicy,
+      Set<String> edsResources) {
+    String clusterName = cluster.getName();
+    String lrsServerName = null;
+    Long maxConcurrentRequests = null;
+    UpstreamTlsContext upstreamTlsContext = null;
+    if (cluster.hasLrsServer()) {
+      if (!cluster.getLrsServer().hasSelf()) {
+        nackResponse(ResourceType.CDS, nonce,
+            "Cluster " + clusterName + ": only support LRS for the same management server");
+        return null;
+      }
+      lrsServerName = "";
+    }
+    if (cluster.hasCircuitBreakers()) {
+      List<Thresholds> thresholds = cluster.getCircuitBreakers().getThresholdsList();
+      for (Thresholds threshold : thresholds) {
+        if (threshold.getPriority() != RoutingPriority.DEFAULT) {
+          continue;
+        }
+        if (threshold.hasMaxRequests()) {
+          maxConcurrentRequests = (long) threshold.getMaxRequests().getValue();
+        }
+      }
+    }
     if (cluster.hasTransportSocket()
         && TRANSPORT_SOCKET_NAME_TLS.equals(cluster.getTransportSocket().getName())) {
       Any any = cluster.getTransportSocket().getTypedConfig();
       if (any.getTypeUrl().equals(TYPE_URL_UPSTREAM_TLS_CONTEXT_V2)) {
         any = any.toBuilder().setTypeUrl(TYPE_URL_UPSTREAM_TLS_CONTEXT).build();
       }
-      return EnvoyServerProtoData.UpstreamTlsContext.fromEnvoyProtoUpstreamTlsContext(
-          any.unpack(UpstreamTlsContext.class));
+      io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext unpacked;
+      try {
+        unpacked = any.unpack(
+            io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext.class);
+      } catch (InvalidProtocolBufferException e) {
+        nackResponse(ResourceType.CDS, nonce,
+            "Cluster " + clusterName + ": invalid upstream TLS context: " + e);
+        return null;
+      }
+      upstreamTlsContext = UpstreamTlsContext.fromEnvoyProtoUpstreamTlsContext(unpacked);
     }
+
+    DiscoveryType type = cluster.getType();
+    if (type == DiscoveryType.EDS) {
+      String edsServiceName = null;
+      io.envoyproxy.envoy.config.cluster.v3.Cluster.EdsClusterConfig edsClusterConfig =
+          cluster.getEdsClusterConfig();
+      if (!edsClusterConfig.getEdsConfig().hasAds()) {
+        nackResponse(ResourceType.CDS, nonce, "Cluster " + clusterName + ": "
+            + "field eds_cluster_config must be set to indicate to use EDS over ADS.");
+        return null;
+      }
+      // If the service_name field is set, that value will be used for the EDS request.
+      if (!edsClusterConfig.getServiceName().isEmpty()) {
+        edsServiceName = edsClusterConfig.getServiceName();
+        edsResources.add(edsServiceName);
+      }
+      EdsClusterConfig config = new EdsClusterConfig(lbPolicy, edsServiceName,
+          lrsServerName, maxConcurrentRequests, upstreamTlsContext);
+      return new CdsUpdate(clusterName, ClusterType.EDS, config);
+    } else if (type.equals(DiscoveryType.LOGICAL_DNS)) {
+      LogicalDnsClusterConfig config = new LogicalDnsClusterConfig(lbPolicy, lrsServerName,
+          maxConcurrentRequests, upstreamTlsContext);
+      return new CdsUpdate(clusterName, ClusterType.LOGICAL_DNS, config);
+    }
+    nackResponse(ResourceType.CDS, nonce,
+        "Cluster " + clusterName + ": unsupported built-in discovery type: " + type);
     return null;
   }
 

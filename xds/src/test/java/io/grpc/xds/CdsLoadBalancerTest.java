@@ -42,6 +42,8 @@ import io.grpc.internal.ObjectPool;
 import io.grpc.xds.CdsLoadBalancerProvider.CdsConfig;
 import io.grpc.xds.EdsLoadBalancerProvider.EdsConfig;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
+import io.grpc.xds.XdsClient.CdsUpdate.ClusterType;
+import io.grpc.xds.XdsClient.CdsUpdate.EdsClusterConfig;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import java.net.SocketAddress;
 import java.util.ArrayList;
@@ -296,19 +298,10 @@ public class CdsLoadBalancerTest {
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
-          CdsUpdate.Builder updateBuilder = CdsUpdate.newBuilder().setClusterName(CLUSTER);
-          if (edsServiceName != null) {
-            updateBuilder.setEdsServiceName(edsServiceName);
-          }
-          if (lrsServerName != null) {
-            updateBuilder.setLrsServerName(lrsServerName);
-          }
-          if (tlsContext != null) {
-            updateBuilder.setUpstreamTlsContext(tlsContext);
-          }
-          updateBuilder.setLbPolicy("round_robin");  // only supported policy
-          updateBuilder.setMaxConcurrentRequests(maxConcurrentRequests);
-          watcher.onChanged(updateBuilder.build());
+          EdsClusterConfig clusterConfig = new EdsClusterConfig("round_robin", edsServiceName,
+              lrsServerName, maxConcurrentRequests, tlsContext);
+          CdsUpdate update = new CdsUpdate(CLUSTER, ClusterType.EDS, clusterConfig);
+          watcher.onChanged(update);
         }
       });
     }
@@ -319,18 +312,10 @@ public class CdsLoadBalancerTest {
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
-          CdsUpdate.Builder updateBuilder = CdsUpdate.newBuilder().setClusterName(CLUSTER);
-          if (edsServiceName != null) {
-            updateBuilder.setEdsServiceName(edsServiceName);
-          }
-          if (lrsServerName != null) {
-            updateBuilder.setLrsServerName(lrsServerName);
-          }
-          if (tlsContext != null) {
-            updateBuilder.setUpstreamTlsContext(tlsContext);
-          }
-          updateBuilder.setLbPolicy("round_robin");  // only supported policy
-          watcher.onChanged(updateBuilder.build());
+          EdsClusterConfig clusterConfig = new EdsClusterConfig("round_robin", edsServiceName,
+              lrsServerName, null, tlsContext);
+          CdsUpdate update = new CdsUpdate(CLUSTER, ClusterType.EDS, clusterConfig);
+          watcher.onChanged(update);
         }
       });
     }
