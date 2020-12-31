@@ -48,7 +48,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
-import jdk.internal.jline.internal.Nullable;
+import javax.annotation.Nullable;
 
 /**
  * Load balancer for cds_experimental LB policy. One instance per top-level cluster.
