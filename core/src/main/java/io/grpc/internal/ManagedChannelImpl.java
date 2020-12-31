@@ -152,7 +152,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private final NameResolver.Factory nameResolverFactory;
   private final NameResolver.Args nameResolverArgs;
   private final AutoConfiguredLoadBalancerFactory loadBalancerFactory;
+  private final ClientTransportFactory originalTransportFactory;
   private final ClientTransportFactory transportFactory;
+  private final ClientTransportFactory oobTransportFactory;
   private final RestrictedScheduledExecutor scheduledExecutor;
   private final Executor executor;
   private final ObjectPool<? extends Executor> executorPool;
@@ -591,8 +593,11 @@ final class ManagedChannelImpl extends ManagedChannel implements
     this.timeProvider = checkNotNull(timeProvider, "timeProvider");
     this.executorPool = checkNotNull(builder.executorPool, "executorPool");
     this.executor = checkNotNull(executorPool.getObject(), "executor");
+    this.originalTransportFactory = clientTransportFactory;
     this.transportFactory = new CallCredentialsApplyingTransportFactory(
         clientTransportFactory, builder.callCredentials, this.executor);
+    this.oobTransportFactory = new CallCredentialsApplyingTransportFactory(
+        clientTransportFactory, null, this.executor);
     this.scheduledExecutor =
         new RestrictedScheduledExecutor(transportFactory.getScheduledExecutorService());
     maxTraceEvents = builder.maxTraceEvents;
@@ -1487,7 +1492,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
               oobLogId, maxTraceEvents, oobChannelCreationTime,
               "OobChannel for " + addressGroup);
       final OobChannel oobChannel = new OobChannel(
-          authority, balancerRpcExecutorPool, transportFactory.getScheduledExecutorService(),
+          authority, balancerRpcExecutorPool, oobTransportFactory.getScheduledExecutorService(),
           syncContext, callTracerFactory.create(), oobChannelTracer, channelz, timeProvider);
       channelTracer.reportEvent(new ChannelTrace.Event.Builder()
           .setDescription("Child OobChannel created")
@@ -1517,8 +1522,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
       final InternalSubchannel internalSubchannel = new InternalSubchannel(
           Collections.singletonList(addressGroup),
-          authority, userAgent, backoffPolicyProvider, transportFactory,
-          transportFactory.getScheduledExecutorService(), stopwatchSupplier, syncContext,
+          authority, userAgent, backoffPolicyProvider, oobTransportFactory,
+          oobTransportFactory.getScheduledExecutorService(), stopwatchSupplier, syncContext,
           // All callback methods are run from syncContext
           new ManagedOobChannelCallback(),
           channelz,
@@ -1577,7 +1582,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
           // TODO(creamsoup) prevent main channel to shutdown if oob channel is not terminated
           return new ManagedChannelImpl(
                   managedChannelImplBuilder,
-                  transportFactory,
+                  originalTransportFactory,
                   backoffPolicyProvider,
                   balancerRpcExecutorPool,
                   stopwatchSupplier,

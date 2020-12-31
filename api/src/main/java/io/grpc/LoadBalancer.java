@@ -1061,6 +1061,24 @@ public abstract class LoadBalancer {
     }
 
     /**
+     * Creates an out-of-band channel builder for LoadBalancer's own RPC needs, e.g., talking to an
+     * external load-balancer service, that is specified by a target string and credentials.  See
+     * the documentation on {@link Grpc#newChannelBuilder} for the format of a target string.
+     *
+     * <p>The target string will be resolved by a {@link NameResolver} created according to the
+     * target string.
+     *
+     * <p>The LoadBalancer is responsible for closing unused OOB channels, and closing all OOB
+     * channels within {@link #shutdown}.
+     *
+     * @since 1.35.0
+     */
+    public ManagedChannelBuilder<?> createResolvingOobChannelBuilder(
+        String target, ChannelCredentials creds) {
+      throw new UnsupportedOperationException();
+    }
+
+    /**
      * Set a new state with a new picker to the channel.
      *
      * <p>When a new picker is provided via {@code updateBalancingState()}, the channel will apply
@@ -1156,6 +1174,26 @@ public abstract class LoadBalancer {
      * @since 1.2.0
      */
     public abstract String getAuthority();
+
+    /**
+     * Returns the ChannelCredentials used to construct the channel, without bearer tokens.
+     *
+     * @since 1.35.0
+     */
+    public ChannelCredentials getChannelCredentials() {
+      return getUnsafeChannelCredentials().withoutBearerTokens();
+    }
+
+    /**
+     * Returns the authority string of the channel, which is derived from the DNS-style target name.
+     * If overridden by a load balancer, {@link #getUnsafeChannelCredentials} must also be
+     * overridden to call {@link #getChannelCredentials} or provide appropriate credentials.
+     *
+     * @since 1.35.0
+     */
+    public ChannelCredentials getUnsafeChannelCredentials() {
+      throw new UnsupportedOperationException();
+    }
 
     /**
      * Returns the {@link ChannelLogger} for the Channel served by this LoadBalancer.

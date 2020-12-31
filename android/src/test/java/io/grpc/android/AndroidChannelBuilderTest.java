@@ -27,7 +27,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.net.ConnectivityManager;
 import android.net.Network;
-import android.net.NetworkInfo;
 import androidx.test.core.app.ApplicationProvider;
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
@@ -53,34 +52,34 @@ import org.robolectric.shadows.ShadowNetworkInfo;
 @Config(shadows = {AndroidChannelBuilderTest.ShadowDefaultNetworkListenerConnectivityManager.class})
 @SuppressWarnings("deprecation")
 public final class AndroidChannelBuilderTest {
-  private final NetworkInfo WIFI_CONNECTED =
+  private final android.net.NetworkInfo WIFI_CONNECTED =
       ShadowNetworkInfo.newInstance(
-          NetworkInfo.DetailedState.CONNECTED,
+          android.net.NetworkInfo.DetailedState.CONNECTED,
           ConnectivityManager.TYPE_WIFI,
           0,
           true,
-          NetworkInfo.State.CONNECTED);
-  private final NetworkInfo WIFI_DISCONNECTED =
+          android.net.NetworkInfo.State.CONNECTED);
+  private final android.net.NetworkInfo WIFI_DISCONNECTED =
       ShadowNetworkInfo.newInstance(
-          NetworkInfo.DetailedState.DISCONNECTED,
+          android.net.NetworkInfo.DetailedState.DISCONNECTED,
           ConnectivityManager.TYPE_WIFI,
           0,
           true,
-          NetworkInfo.State.DISCONNECTED);
-  private final NetworkInfo MOBILE_CONNECTED =
+          android.net.NetworkInfo.State.DISCONNECTED);
+  private final android.net.NetworkInfo MOBILE_CONNECTED =
       ShadowNetworkInfo.newInstance(
-          NetworkInfo.DetailedState.CONNECTED,
+          android.net.NetworkInfo.DetailedState.CONNECTED,
           ConnectivityManager.TYPE_MOBILE,
           ConnectivityManager.TYPE_MOBILE_MMS,
           true,
-          NetworkInfo.State.CONNECTED);
-  private final NetworkInfo MOBILE_DISCONNECTED =
+          android.net.NetworkInfo.State.CONNECTED);
+  private final android.net.NetworkInfo MOBILE_DISCONNECTED =
       ShadowNetworkInfo.newInstance(
-          NetworkInfo.DetailedState.DISCONNECTED,
+          android.net.NetworkInfo.DetailedState.DISCONNECTED,
           ConnectivityManager.TYPE_MOBILE,
           ConnectivityManager.TYPE_MOBILE_MMS,
           true,
-          NetworkInfo.State.DISCONNECTED);
+          android.net.NetworkInfo.State.DISCONNECTED);
 
   private ConnectivityManager connectivityManager;
 
@@ -280,9 +279,9 @@ public final class AndroidChannelBuilderTest {
     }
 
     @Override
-    public void setActiveNetworkInfo(NetworkInfo activeNetworkInfo) {
+    public void setActiveNetworkInfo(android.net.NetworkInfo activeNetworkInfo) {
       if (getApiLevel() >= N) {
-        NetworkInfo previousNetworkInfo = getActiveNetworkInfo();
+        android.net.NetworkInfo previousNetworkInfo = getActiveNetworkInfo();
         if (activeNetworkInfo != null && activeNetworkInfo.isConnected()) {
           notifyDefaultNetworkCallbacksOnAvailable(
               ShadowNetwork.newInstance(activeNetworkInfo.getType() /* use type as network ID */));

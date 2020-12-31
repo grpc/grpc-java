@@ -1,19 +1,6 @@
 package com.github.udpa.udpa.service.orca.v1;
 
 import static io.grpc.MethodDescriptor.generateFullMethodName;
-import static io.grpc.stub.ClientCalls.asyncBidiStreamingCall;
-import static io.grpc.stub.ClientCalls.asyncClientStreamingCall;
-import static io.grpc.stub.ClientCalls.asyncServerStreamingCall;
-import static io.grpc.stub.ClientCalls.asyncUnaryCall;
-import static io.grpc.stub.ClientCalls.blockingServerStreamingCall;
-import static io.grpc.stub.ClientCalls.blockingUnaryCall;
-import static io.grpc.stub.ClientCalls.futureUnaryCall;
-import static io.grpc.stub.ServerCalls.asyncBidiStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncClientStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncServerStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncUnaryCall;
-import static io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall;
 
 /**
  * <pre>
@@ -130,14 +117,14 @@ public final class OpenRcaServiceGrpc {
      */
     public void streamCoreMetrics(com.github.udpa.udpa.service.orca.v1.OrcaLoadReportRequest request,
         io.grpc.stub.StreamObserver<com.github.udpa.udpa.data.orca.v1.OrcaLoadReport> responseObserver) {
-      asyncUnimplementedUnaryCall(getStreamCoreMetricsMethod(), responseObserver);
+      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getStreamCoreMetricsMethod(), responseObserver);
     }
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
       return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
           .addMethod(
             getStreamCoreMetricsMethod(),
-            asyncServerStreamingCall(
+            io.grpc.stub.ServerCalls.asyncServerStreamingCall(
               new MethodHandlers<
                 com.github.udpa.udpa.service.orca.v1.OrcaLoadReportRequest,
                 com.github.udpa.udpa.data.orca.v1.OrcaLoadReport>(
@@ -174,7 +161,7 @@ public final class OpenRcaServiceGrpc {
      */
     public void streamCoreMetrics(com.github.udpa.udpa.service.orca.v1.OrcaLoadReportRequest request,
         io.grpc.stub.StreamObserver<com.github.udpa.udpa.data.orca.v1.OrcaLoadReport> responseObserver) {
-      asyncServerStreamingCall(
+      io.grpc.stub.ClientCalls.asyncServerStreamingCall(
           getChannel().newCall(getStreamCoreMetricsMethod(), getCallOptions()), request, responseObserver);
     }
   }
@@ -207,7 +194,7 @@ public final class OpenRcaServiceGrpc {
      */
     public java.util.Iterator<com.github.udpa.udpa.data.orca.v1.OrcaLoadReport> streamCoreMetrics(
         com.github.udpa.udpa.service.orca.v1.OrcaLoadReportRequest request) {
-      return blockingServerStreamingCall(
+      return io.grpc.stub.ClientCalls.blockingServerStreamingCall(
           getChannel(), getStreamCoreMetricsMethod(), getCallOptions(), request);
     }
   }

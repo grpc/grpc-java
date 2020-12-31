@@ -1,19 +1,6 @@
 package io.envoyproxy.envoy.api.v2;
 
 import static io.grpc.MethodDescriptor.generateFullMethodName;
-import static io.grpc.stub.ClientCalls.asyncBidiStreamingCall;
-import static io.grpc.stub.ClientCalls.asyncClientStreamingCall;
-import static io.grpc.stub.ClientCalls.asyncServerStreamingCall;
-import static io.grpc.stub.ClientCalls.asyncUnaryCall;
-import static io.grpc.stub.ClientCalls.blockingServerStreamingCall;
-import static io.grpc.stub.ClientCalls.blockingUnaryCall;
-import static io.grpc.stub.ClientCalls.futureUnaryCall;
-import static io.grpc.stub.ServerCalls.asyncBidiStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncClientStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncServerStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncUnaryCall;
-import static io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall;
 
 /**
  */
@@ -176,42 +163,42 @@ public final class EndpointDiscoveryServiceGrpc {
      */
     public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest> streamEndpoints(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
-      return asyncUnimplementedStreamingCall(getStreamEndpointsMethod(), responseObserver);
+      return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getStreamEndpointsMethod(), responseObserver);
     }
 
     /**
      */
     public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest> deltaEndpoints(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse> responseObserver) {
-      return asyncUnimplementedStreamingCall(getDeltaEndpointsMethod(), responseObserver);
+      return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getDeltaEndpointsMethod(), responseObserver);
     }
 
     /**
      */
     public void fetchEndpoints(io.envoyproxy.envoy.api.v2.DiscoveryRequest request,
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
-      asyncUnimplementedUnaryCall(getFetchEndpointsMethod(), responseObserver);
+      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getFetchEndpointsMethod(), responseObserver);
     }
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
       return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
           .addMethod(
             getStreamEndpointsMethod(),
-            asyncBidiStreamingCall(
+            io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
               new MethodHandlers<
                 io.envoyproxy.envoy.api.v2.DiscoveryRequest,
                 io.envoyproxy.envoy.api.v2.DiscoveryResponse>(
                   this, METHODID_STREAM_ENDPOINTS)))
           .addMethod(
             getDeltaEndpointsMethod(),
-            asyncBidiStreamingCall(
+            io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
               new MethodHandlers<
                 io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest,
                 io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse>(
                   this, METHODID_DELTA_ENDPOINTS)))
           .addMethod(
             getFetchEndpointsMethod(),
-            asyncUnaryCall(
+            io.grpc.stub.ServerCalls.asyncUnaryCall(
               new MethodHandlers<
                 io.envoyproxy.envoy.api.v2.DiscoveryRequest,
                 io.envoyproxy.envoy.api.v2.DiscoveryResponse>(
@@ -242,7 +229,7 @@ public final class EndpointDiscoveryServiceGrpc {
      */
     public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest> streamEndpoints(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
-      return asyncBidiStreamingCall(
+      return io.grpc.stub.ClientCalls.asyncBidiStreamingCall(
           getChannel().newCall(getStreamEndpointsMethod(), getCallOptions()), responseObserver);
     }
 
@@ -250,7 +237,7 @@ public final class EndpointDiscoveryServiceGrpc {
      */
     public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest> deltaEndpoints(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse> responseObserver) {
-      return asyncBidiStreamingCall(
+      return io.grpc.stub.ClientCalls.asyncBidiStreamingCall(
           getChannel().newCall(getDeltaEndpointsMethod(), getCallOptions()), responseObserver);
     }
 
@@ -258,7 +245,7 @@ public final class EndpointDiscoveryServiceGrpc {
      */
     public void fetchEndpoints(io.envoyproxy.envoy.api.v2.DiscoveryRequest request,
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
-      asyncUnaryCall(
+      io.grpc.stub.ClientCalls.asyncUnaryCall(
           getChannel().newCall(getFetchEndpointsMethod(), getCallOptions()), request, responseObserver);
     }
   }
@@ -280,7 +267,7 @@ public final class EndpointDiscoveryServiceGrpc {
     /**
      */
     public io.envoyproxy.envoy.api.v2.DiscoveryResponse fetchEndpoints(io.envoyproxy.envoy.api.v2.DiscoveryRequest request) {
-      return blockingUnaryCall(
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getFetchEndpointsMethod(), getCallOptions(), request);
     }
   }
@@ -303,7 +290,7 @@ public final class EndpointDiscoveryServiceGrpc {
      */
     public com.google.common.util.concurrent.ListenableFuture<io.envoyproxy.envoy.api.v2.DiscoveryResponse> fetchEndpoints(
         io.envoyproxy.envoy.api.v2.DiscoveryRequest request) {
-      return futureUnaryCall(
+      return io.grpc.stub.ClientCalls.futureUnaryCall(
           getChannel().newCall(getFetchEndpointsMethod(), getCallOptions()), request);
     }
   }

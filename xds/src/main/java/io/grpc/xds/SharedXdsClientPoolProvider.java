@@ -19,15 +19,20 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
+import io.grpc.ChannelCredentials;
+import io.grpc.Grpc;
+import io.grpc.ManagedChannel;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SharedResourceHolder;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
+import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.Node;
-import io.grpc.xds.XdsClient.XdsChannel;
 import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
 
@@ -37,20 +42,18 @@ import javax.annotation.concurrent.ThreadSafe;
  */
 @ThreadSafe
 final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
+
   private final Bootstrapper bootstrapper;
-  private final XdsChannelFactory channelFactory;
   private final Object lock = new Object();
   private volatile ObjectPool<XdsClient> xdsClientPool;
 
   private SharedXdsClientPoolProvider() {
-    this(Bootstrapper.getInstance(), XdsChannelFactory.getInstance());
+    this(Bootstrapper.getInstance());
   }
 
   @VisibleForTesting
-  SharedXdsClientPoolProvider(
-      Bootstrapper bootstrapper, XdsChannelFactory channelFactory) {
+  SharedXdsClientPoolProvider(Bootstrapper bootstrapper) {
     this.bootstrapper = checkNotNull(bootstrapper, "bootstrapper");
-    this.channelFactory = checkNotNull(channelFactory, "channelFactory");
   }
 
   static SharedXdsClientPoolProvider getDefaultProvider() {
@@ -64,9 +67,14 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
       synchronized (lock) {
         ref = xdsClientPool;
         if (ref == null) {
-          BootstrapInfo bootstrapInfo = bootstrapper.readBootstrap();
-          XdsChannel channel = channelFactory.createChannel(bootstrapInfo.getServers());
-          ref = xdsClientPool = new RefCountedXdsClientObjectPool(channel, bootstrapInfo.getNode());
+          BootstrapInfo bootstrapInfo = bootstrapper.bootstrap();
+          if (bootstrapInfo.getServers().isEmpty()) {
+            throw new XdsInitializationException("No xDS server provided");
+          }
+          ServerInfo serverInfo = bootstrapInfo.getServers().get(0);  // use first server
+          ref = xdsClientPool = new RefCountedXdsClientObjectPool(serverInfo.getTarget(),
+              serverInfo.getChannelCredentials(), serverInfo.isUseProtocolV3(),
+              bootstrapInfo.getNode());
         }
       }
     }
@@ -80,34 +88,39 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
   @ThreadSafe
   @VisibleForTesting
   static class RefCountedXdsClientObjectPool implements ObjectPool<XdsClient> {
-    private final XdsChannel channel;
+    private final String target;
+    private final ChannelCredentials channelCredentials;
     private final Node node;
-    private final XdsClientFactory factory;
+    private final boolean useProtocolV3;
     private final Object lock = new Object();
     @GuardedBy("lock")
     private ScheduledExecutorService scheduler;
+    @GuardedBy("lock")
+    private ManagedChannel channel;
     @GuardedBy("lock")
     private XdsClient xdsClient;
     @GuardedBy("lock")
     private int refCount;
 
-    RefCountedXdsClientObjectPool(XdsChannel channel, Node node) {
-      this(channel, node, XdsClientFactory.INSTANCE);
-    }
-
     @VisibleForTesting
-    RefCountedXdsClientObjectPool(XdsChannel channel, Node node, XdsClientFactory factory) {
-      this.channel = checkNotNull(channel, "channel");
+    RefCountedXdsClientObjectPool(String target, ChannelCredentials channelCredentials,
+        boolean useProtocolV3, Node node) {
+      this.target = checkNotNull(target, "target");
+      this.channelCredentials = checkNotNull(channelCredentials, "channelCredentials");
+      this.useProtocolV3 = useProtocolV3;
       this.node = checkNotNull(node, "node");
-      this.factory = checkNotNull(factory, "factory");
     }
 
     @Override
     public XdsClient getObject() {
       synchronized (lock) {
-        if (xdsClient == null) {
+        if (refCount == 0) {
+          channel = Grpc.newChannelBuilder(target, channelCredentials)
+              .keepAliveTime(5, TimeUnit.MINUTES)
+              .build();
           scheduler = SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE);
-          xdsClient = factory.newXdsClient(channel, node, scheduler);
+          xdsClient = new ClientXdsClient(channel, useProtocolV3, node, scheduler,
+              new ExponentialBackoffPolicy.Provider(), GrpcUtil.STOPWATCH_SUPPLIER);
         }
         refCount++;
         return xdsClient;
@@ -121,26 +134,27 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
         if (refCount == 0) {
           xdsClient.shutdown();
           xdsClient = null;
+          channel.shutdown();
           scheduler = SharedResourceHolder.release(GrpcUtil.TIMER_SERVICE, scheduler);
         }
         return null;
       }
     }
 
-    // Introduced for testing.
     @VisibleForTesting
-    abstract static class XdsClientFactory {
-      private static final XdsClientFactory INSTANCE = new XdsClientFactory() {
-        @Override
-        XdsClient newXdsClient(XdsChannel channel, Node node,
-            ScheduledExecutorService timeService) {
-          return new ClientXdsClient(channel, node, timeService,
-              new ExponentialBackoffPolicy.Provider(), GrpcUtil.STOPWATCH_SUPPLIER);
-        }
-      };
+    @Nullable
+    ManagedChannel getChannelForTest() {
+      synchronized (lock) {
+        return channel;
+      }
+    }
 
-      abstract XdsClient newXdsClient(XdsChannel channel, Node node,
-          ScheduledExecutorService timeService);
+    @VisibleForTesting
+    @Nullable
+    XdsClient getXdsClientForTest() {
+      synchronized (lock) {
+        return xdsClient;
+      }
     }
   }
 }

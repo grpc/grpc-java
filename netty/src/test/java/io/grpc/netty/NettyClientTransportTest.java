@@ -101,6 +101,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import javax.annotation.Nullable;
+import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLHandshakeException;
 import org.junit.After;
 import org.junit.Before;
@@ -325,8 +326,14 @@ public class NettyClientTransportTest {
     } catch (ExecutionException ex) {
       StatusException sre = (StatusException) ex.getCause();
       assertEquals(Status.Code.UNAVAILABLE, sre.getStatus().getCode());
-      assertThat(sre.getCause()).isInstanceOf(SSLHandshakeException.class);
-      assertThat(sre.getCause().getMessage()).contains("SSLV3_ALERT_HANDSHAKE_FAILURE");
+      if (sre.getCause() instanceof SSLHandshakeException) {
+        assertThat(sre).hasCauseThat().isInstanceOf(SSLHandshakeException.class);
+        assertThat(sre).hasCauseThat().hasMessageThat().contains("SSLV3_ALERT_HANDSHAKE_FAILURE");
+      } else {
+        // Client cert verification is after handshake in TLSv1.3
+        assertThat(sre).hasCauseThat().hasCauseThat().isInstanceOf(SSLException.class);
+        assertThat(sre).hasCauseThat().hasMessageThat().contains("CERTIFICATE_REQUIRED");
+      }
     }
   }
 

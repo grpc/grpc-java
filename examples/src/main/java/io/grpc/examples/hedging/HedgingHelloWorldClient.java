@@ -51,21 +51,21 @@ public class HedgingHelloWorldClient {
 
   /** Construct client connecting to HelloWorld server at {@code host:port}. */
   public HedgingHelloWorldClient(String host, int port, boolean hedging) {
-    Map<String, ?> hedgingServiceConfig =
-      new Gson()
-          .fromJson(
-              new JsonReader(
-                  new InputStreamReader(
-                      HedgingHelloWorldClient.class.getResourceAsStream(
-                          "hedging_service_config.json"),
-                      UTF_8)),
-              Map.class);
 
     ManagedChannelBuilder<?> channelBuilder = ManagedChannelBuilder.forAddress(host, port)
         // Channels are secure by default (via SSL/TLS). For the example we disable TLS to avoid
         // needing certificates.
         .usePlaintext();
     if (hedging) {
+      Map<String, ?> hedgingServiceConfig =
+          new Gson()
+              .fromJson(
+                  new JsonReader(
+                      new InputStreamReader(
+                          HedgingHelloWorldClient.class.getResourceAsStream(
+                              "hedging_service_config.json"),
+                          UTF_8)),
+                  Map.class);
       channelBuilder.defaultServiceConfig(hedgingServiceConfig).enableRetry();
     }
     channel = channelBuilder.build();

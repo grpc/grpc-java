@@ -134,7 +134,7 @@ public class ClientSslContextProviderFactoryTest {
             /* staticCertValidationContext= */ null);
 
     Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
-    when(bootstrapper.readBootstrap()).thenReturn(bootstrapInfo);
+    when(bootstrapper.bootstrap()).thenReturn(bootstrapInfo);
     SslContextProvider sslContextProvider =
         clientSslContextProviderFactory.create(upstreamTlsContext);
     assertThat(sslContextProvider).isInstanceOf(CertProviderClientSslContextProvider.class);
@@ -161,7 +161,7 @@ public class ClientSslContextProviderFactoryTest {
     upstreamTlsContext = new UpstreamTlsContext(builder.build());
 
     Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
-    when(bootstrapper.readBootstrap()).thenReturn(bootstrapInfo);
+    when(bootstrapper.bootstrap()).thenReturn(bootstrapInfo);
     SslContextProvider sslContextProvider =
         clientSslContextProviderFactory.create(upstreamTlsContext);
     assertThat(sslContextProvider).isInstanceOf(CertProviderClientSslContextProvider.class);
@@ -184,7 +184,7 @@ public class ClientSslContextProviderFactoryTest {
                     /* staticCertValidationContext= */ null);
 
     Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
-    when(bootstrapper.readBootstrap()).thenReturn(bootstrapInfo);
+    when(bootstrapper.bootstrap()).thenReturn(bootstrapInfo);
     SslContextProvider sslContextProvider =
             clientSslContextProviderFactory.create(upstreamTlsContext);
     assertThat(sslContextProvider).isInstanceOf(CertProviderClientSslContextProvider.class);
@@ -214,7 +214,7 @@ public class ClientSslContextProviderFactoryTest {
                     staticCertValidationContext);
 
     Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
-    when(bootstrapper.readBootstrap()).thenReturn(bootstrapInfo);
+    when(bootstrapper.bootstrap()).thenReturn(bootstrapInfo);
     SslContextProvider sslContextProvider =
             clientSslContextProviderFactory.create(upstreamTlsContext);
     assertThat(sslContextProvider).isInstanceOf(CertProviderClientSslContextProvider.class);
@@ -241,7 +241,7 @@ public class ClientSslContextProviderFactoryTest {
             /* staticCertValidationContext= */ null);
 
     Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
-    when(bootstrapper.readBootstrap()).thenReturn(bootstrapInfo);
+    when(bootstrapper.bootstrap()).thenReturn(bootstrapInfo);
     SslContextProvider sslContextProvider =
         clientSslContextProviderFactory.create(upstreamTlsContext);
     assertThat(sslContextProvider).isInstanceOf(CertProviderClientSslContextProvider.class);
@@ -260,7 +260,7 @@ public class ClientSslContextProviderFactoryTest {
             "root-default",
             /* alpnProtocols= */ null,
             /* staticCertValidationContext= */ null);
-    when(bootstrapper.readBootstrap())
+    when(bootstrapper.bootstrap())
         .thenThrow(new XdsInitializationException("test exception"));
     try {
       clientSslContextProviderFactory.create(upstreamTlsContext);

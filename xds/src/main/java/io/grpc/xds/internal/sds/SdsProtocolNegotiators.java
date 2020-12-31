@@ -436,9 +436,11 @@ public final class SdsProtocolNegotiators {
                   InternalProtocolNegotiators.serverTls(sslContext).newHandler(grpcHandler);
 
               // Delegate rest of handshake to TLS handler
-              ctx.pipeline().addAfter(ctx.name(), null, handler);
-              fireProtocolNegotiationEvent(ctx);
-              ctx.pipeline().remove(bufferReads);
+              if (!ctx.isRemoved()) {
+                ctx.pipeline().addAfter(ctx.name(), null, handler);
+                fireProtocolNegotiationEvent(ctx);
+                ctx.pipeline().remove(bufferReads);
+              }
               TlsContextManagerImpl.getInstance()
                   .releaseServerSslContextProvider(sslContextProvider);
             }

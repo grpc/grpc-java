@@ -16,14 +16,12 @@
 
 package io.grpc.xds;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.xds.XdsLbPolicies.EDS_POLICY_NAME;
 import static io.grpc.xds.XdsLbPolicies.WEIGHTED_TARGET_POLICY_NAME;
 
 import com.google.common.annotations.VisibleForTesting;
-import io.grpc.EquivalentAddressGroup;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
@@ -32,19 +30,14 @@ import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
-import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.xds.CdsLoadBalancerProvider.CdsConfig;
 import io.grpc.xds.EdsLoadBalancerProvider.EdsConfig;
-import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.XdsClient.CdsResourceWatcher;
 import io.grpc.xds.XdsClient.CdsUpdate;
+import io.grpc.xds.XdsClient.CdsUpdate.ClusterType;
+import io.grpc.xds.XdsClient.CdsUpdate.EdsClusterConfig;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
-import io.grpc.xds.internal.sds.SslContextProviderSupplier;
-import io.grpc.xds.internal.sds.TlsContextManager;
-import io.grpc.xds.internal.sds.TlsContextManagerImpl;
-import java.util.ArrayList;
-import java.util.List;
 import javax.annotation.Nullable;
 
 /**
@@ -55,10 +48,6 @@ final class CdsLoadBalancer extends LoadBalancer {
   private final Helper helper;
   private final SynchronizationContext syncContext;
   private final LoadBalancerRegistry lbRegistry;
-  private final TlsContextManager tlsContextManager;
-  // TODO(sanjaypujare): remove once xds security is released
-  private boolean enableXdsSecurity;
-  private static final String XDS_SECURITY_ENV_VAR = "GRPC_XDS_EXPERIMENTAL_SECURITY_SUPPORT";
   private String clusterName;
   private ObjectPool<XdsClient> xdsClientPool;
   private XdsClient xdsClient;
@@ -66,16 +55,14 @@ final class CdsLoadBalancer extends LoadBalancer {
   private ResolvedAddresses resolvedAddresses;
 
   CdsLoadBalancer(Helper helper) {
-    this(helper, LoadBalancerRegistry.getDefaultRegistry(), TlsContextManagerImpl.getInstance());
+    this(helper, LoadBalancerRegistry.getDefaultRegistry());
   }
 
   @VisibleForTesting
-  CdsLoadBalancer(Helper helper, LoadBalancerRegistry lbRegistry,
-      TlsContextManager tlsContextManager) {
+  CdsLoadBalancer(Helper helper, LoadBalancerRegistry lbRegistry) {
     this.helper = checkNotNull(helper, "helper");
     this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
     this.lbRegistry = lbRegistry;
-    this.tlsContextManager = tlsContextManager;
     logger = XdsLogger.withLogId(InternalLogId.allocate("cds-lb", helper.getAuthority()));
     logger.log(XdsLogLevel.INFO, "Created");
   }
@@ -126,62 +113,7 @@ final class CdsLoadBalancer extends LoadBalancer {
     }
   }
 
-  // TODO(sanjaypujare): remove once xDS security is released
-  private boolean isXdsSecurityEnabled() {
-    return enableXdsSecurity || Boolean.valueOf(System.getenv(XDS_SECURITY_ENV_VAR));
-  }
-
-  // TODO(sanjaypujare): remove once xDS security is released
-  @VisibleForTesting
-  void setXdsSecurity(boolean enable) {
-    enableXdsSecurity = enable;
-  }
-
-  private final class ChannelSecurityLbHelper extends ForwardingLoadBalancerHelper {
-    @Nullable
-    private SslContextProviderSupplier sslContextProviderSupplier;
-
-    @Override
-    public Subchannel createSubchannel(CreateSubchannelArgs createSubchannelArgs) {
-      if (sslContextProviderSupplier != null) {
-        createSubchannelArgs =
-            createSubchannelArgs
-                .toBuilder()
-                .setAddresses(
-                    addSslContextProviderSupplier(createSubchannelArgs.getAddresses(),
-                        sslContextProviderSupplier))
-                .build();
-      }
-      return delegate().createSubchannel(createSubchannelArgs);
-    }
-
-    private List<EquivalentAddressGroup> addSslContextProviderSupplier(
-        List<EquivalentAddressGroup> addresses,
-        SslContextProviderSupplier supplier) {
-      if (supplier == null || addresses == null) {
-        return addresses;
-      }
-      ArrayList<EquivalentAddressGroup> copyList = new ArrayList<>(addresses.size());
-      for (EquivalentAddressGroup eag : addresses) {
-        EquivalentAddressGroup eagCopy =
-            new EquivalentAddressGroup(eag.getAddresses(),
-                eag.getAttributes()
-                    .toBuilder()
-                    .set(XdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER, supplier)
-                    .build());
-        copyList.add(eagCopy);
-      }
-      return copyList;
-    }
-
-    @Override
-    protected Helper delegate() {
-      return helper;
-    }
-  }
-
   private final class CdsLbState implements CdsResourceWatcher {
-    private final ChannelSecurityLbHelper lbHelper = new ChannelSecurityLbHelper();
     private boolean shutdown;
     @Nullable
     LoadBalancer edsBalancer;
@@ -193,65 +125,43 @@ final class CdsLoadBalancer extends LoadBalancer {
     }
 
     @Override
-    public void onChanged(final CdsUpdate newUpdate) {
+    public void onChanged(final CdsUpdate update) {
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
           if (shutdown) {
             return;
           }
-          if (logger.isLoggable(XdsLogLevel.INFO)) {
-            logger.log(XdsLogLevel.INFO, "Received cluster update from xDS client {0}: "
-                    + "cluster_name={1}, eds_service_name={2}, lb_policy={3}, report_load={4}",
-                xdsClient, newUpdate.getClusterName(), newUpdate.getEdsServiceName(),
-                newUpdate.getLbPolicy(), newUpdate.getLrsServerName() != null);
+          // TODO(chengyuanzhang): implementations for logical DNS and aggregate clusters.
+          if (update.clusterType != ClusterType.EDS) {
+            logger.log(XdsLogLevel.WARNING, "Unsupported cluster type: {0}", update.clusterType);
+            return;
           }
-          // FIXME(chengyuanzhang): handle error correctly to avoid being unnecessarily fragile.
-          checkArgument(newUpdate.getLbPolicy().equals("round_robin"),
-              "can only support round_robin policy");
+          EdsClusterConfig clusterConfig = (EdsClusterConfig) update.clusterConfig;
+          logger.log(XdsLogLevel.INFO, "EDS cluster {0}, edsServiceName: {1}",
+              update.clusterName, clusterConfig.edsServiceName);
+          logger.log(XdsLogLevel.DEBUG, "Cluster config: {0}", clusterConfig);
+
           LoadBalancerProvider endpointPickingPolicyProvider =
-              lbRegistry.getProvider(newUpdate.getLbPolicy());
+              lbRegistry.getProvider(clusterConfig.lbPolicy);
           LoadBalancerProvider localityPickingPolicyProvider =
               lbRegistry.getProvider(WEIGHTED_TARGET_POLICY_NAME);  // hardcode to weighted-target
           final EdsConfig edsConfig =
               new EdsConfig(
-                  /* clusterName = */ newUpdate.getClusterName(),
-                  /* edsServiceName = */ newUpdate.getEdsServiceName(),
-                  /* lrsServerName = */ newUpdate.getLrsServerName(),
-                  /* maxConcurrentRequests = */ newUpdate.getMaxConcurrentRequests(),
+                  /* clusterName = */ update.clusterName,
+                  /* edsServiceName = */ clusterConfig.edsServiceName,
+                  /* lrsServerName = */ clusterConfig.lrsServerName,
+                  /* maxConcurrentRequests = */ clusterConfig.maxConcurrentRequests,
+                  /* tlsContext = */ clusterConfig.upstreamTlsContext,
                   new PolicySelection(localityPickingPolicyProvider, null /* by EDS policy */),
                   new PolicySelection(endpointPickingPolicyProvider, null));
-          if (isXdsSecurityEnabled()) {
-            updateSslContextProviderSupplier(newUpdate.getUpstreamTlsContext());
-          }
           if (edsBalancer == null) {
-            edsBalancer = lbRegistry.getProvider(EDS_POLICY_NAME).newLoadBalancer(lbHelper);
+            edsBalancer = lbRegistry.getProvider(EDS_POLICY_NAME).newLoadBalancer(helper);
           }
           edsBalancer.handleResolvedAddresses(
               resolvedAddresses.toBuilder().setLoadBalancingPolicyConfig(edsConfig).build());
         }
       });
-    }
-
-    /** For new UpstreamTlsContext value, release old SslContextProvider. */
-    private void updateSslContextProviderSupplier(UpstreamTlsContext newUpstreamTlsContext) {
-      SslContextProviderSupplier oldSslContextProviderSupplier =
-          lbHelper.sslContextProviderSupplier;
-      if (oldSslContextProviderSupplier != null) {
-        UpstreamTlsContext oldUpstreamTlsContext =
-            oldSslContextProviderSupplier.getUpstreamTlsContext();
-
-        if (oldUpstreamTlsContext.equals(newUpstreamTlsContext)) {
-          return;
-        }
-        oldSslContextProviderSupplier.close();
-      }
-      if (newUpstreamTlsContext != null) {
-        lbHelper.sslContextProviderSupplier =
-            new SslContextProviderSupplier(newUpstreamTlsContext, tlsContextManager);
-      } else {
-        lbHelper.sslContextProviderSupplier = null;
-      }
     }
 
     @Override

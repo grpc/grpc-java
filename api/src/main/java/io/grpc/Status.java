@@ -26,6 +26,7 @@ import com.google.common.base.Objects;
 import io.grpc.Metadata.TrustedAsciiMarshaller;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.TreeMap;
@@ -616,10 +617,7 @@ public final class Status {
         }
         escapedBytes[wi++] = b;
       }
-      byte[] dest = new byte[wi];
-      System.arraycopy(escapedBytes, 0, dest, 0, wi);
-
-      return dest;
+      return Arrays.copyOf(escapedBytes, wi);
     }
 
     @SuppressWarnings("deprecation") // Use fast but deprecated String ctor

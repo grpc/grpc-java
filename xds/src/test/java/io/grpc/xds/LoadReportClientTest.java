@@ -57,7 +57,6 @@ import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.UpstreamLocalityStats;
 import io.grpc.xds.LoadStatsManager.LoadStatsStore;
 import io.grpc.xds.LoadStatsManager.LoadStatsStoreFactory;
-import io.grpc.xds.XdsClient.XdsChannel;
 import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.Collection;
@@ -184,15 +183,9 @@ public class LoadReportClientTest {
         .thenReturn(TimeUnit.SECONDS.toNanos(1L), TimeUnit.SECONDS.toNanos(10L));
     when(backoffPolicy2.nextBackoffNanos())
         .thenReturn(TimeUnit.SECONDS.toNanos(2L), TimeUnit.SECONDS.toNanos(20L));
-    lrsClient =
-        new LoadReportClient(
-            loadStatsManager,
-            new XdsChannel(channel, false),
-            NODE,
-            syncContext,
-            fakeClock.getScheduledExecutorService(),
-            backoffPolicyProvider,
-            fakeClock.getStopwatchSupplier());
+    lrsClient = new LoadReportClient(loadStatsManager, channel, false, NODE, syncContext,
+        fakeClock.getScheduledExecutorService(), backoffPolicyProvider,
+        fakeClock.getStopwatchSupplier());
     syncContext.execute(new Runnable() {
       @Override
       public void run() {

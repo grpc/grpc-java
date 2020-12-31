@@ -1,19 +1,6 @@
 package io.envoyproxy.envoy.api.v2;
 
 import static io.grpc.MethodDescriptor.generateFullMethodName;
-import static io.grpc.stub.ClientCalls.asyncBidiStreamingCall;
-import static io.grpc.stub.ClientCalls.asyncClientStreamingCall;
-import static io.grpc.stub.ClientCalls.asyncServerStreamingCall;
-import static io.grpc.stub.ClientCalls.asyncUnaryCall;
-import static io.grpc.stub.ClientCalls.blockingServerStreamingCall;
-import static io.grpc.stub.ClientCalls.blockingUnaryCall;
-import static io.grpc.stub.ClientCalls.futureUnaryCall;
-import static io.grpc.stub.ServerCalls.asyncBidiStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncClientStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncServerStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncUnaryCall;
-import static io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall;
 
 /**
  * <pre>
@@ -190,42 +177,42 @@ public final class ScopedRoutesDiscoveryServiceGrpc {
      */
     public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest> streamScopedRoutes(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
-      return asyncUnimplementedStreamingCall(getStreamScopedRoutesMethod(), responseObserver);
+      return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getStreamScopedRoutesMethod(), responseObserver);
     }
 
     /**
      */
     public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest> deltaScopedRoutes(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse> responseObserver) {
-      return asyncUnimplementedStreamingCall(getDeltaScopedRoutesMethod(), responseObserver);
+      return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getDeltaScopedRoutesMethod(), responseObserver);
     }
 
     /**
      */
     public void fetchScopedRoutes(io.envoyproxy.envoy.api.v2.DiscoveryRequest request,
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
-      asyncUnimplementedUnaryCall(getFetchScopedRoutesMethod(), responseObserver);
+      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getFetchScopedRoutesMethod(), responseObserver);
     }
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
       return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
           .addMethod(
             getStreamScopedRoutesMethod(),
-            asyncBidiStreamingCall(
+            io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
               new MethodHandlers<
                 io.envoyproxy.envoy.api.v2.DiscoveryRequest,
                 io.envoyproxy.envoy.api.v2.DiscoveryResponse>(
                   this, METHODID_STREAM_SCOPED_ROUTES)))
           .addMethod(
             getDeltaScopedRoutesMethod(),
-            asyncBidiStreamingCall(
+            io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
               new MethodHandlers<
                 io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest,
                 io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse>(
                   this, METHODID_DELTA_SCOPED_ROUTES)))
           .addMethod(
             getFetchScopedRoutesMethod(),
-            asyncUnaryCall(
+            io.grpc.stub.ServerCalls.asyncUnaryCall(
               new MethodHandlers<
                 io.envoyproxy.envoy.api.v2.DiscoveryRequest,
                 io.envoyproxy.envoy.api.v2.DiscoveryResponse>(
@@ -261,7 +248,7 @@ public final class ScopedRoutesDiscoveryServiceGrpc {
      */
     public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest> streamScopedRoutes(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
-      return asyncBidiStreamingCall(
+      return io.grpc.stub.ClientCalls.asyncBidiStreamingCall(
           getChannel().newCall(getStreamScopedRoutesMethod(), getCallOptions()), responseObserver);
     }
 
@@ -269,7 +256,7 @@ public final class ScopedRoutesDiscoveryServiceGrpc {
      */
     public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest> deltaScopedRoutes(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse> responseObserver) {
-      return asyncBidiStreamingCall(
+      return io.grpc.stub.ClientCalls.asyncBidiStreamingCall(
           getChannel().newCall(getDeltaScopedRoutesMethod(), getCallOptions()), responseObserver);
     }
 
@@ -277,7 +264,7 @@ public final class ScopedRoutesDiscoveryServiceGrpc {
      */
     public void fetchScopedRoutes(io.envoyproxy.envoy.api.v2.DiscoveryRequest request,
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
-      asyncUnaryCall(
+      io.grpc.stub.ClientCalls.asyncUnaryCall(
           getChannel().newCall(getFetchScopedRoutesMethod(), getCallOptions()), request, responseObserver);
     }
   }
@@ -308,7 +295,7 @@ public final class ScopedRoutesDiscoveryServiceGrpc {
     /**
      */
     public io.envoyproxy.envoy.api.v2.DiscoveryResponse fetchScopedRoutes(io.envoyproxy.envoy.api.v2.DiscoveryRequest request) {
-      return blockingUnaryCall(
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getFetchScopedRoutesMethod(), getCallOptions(), request);
     }
   }
@@ -340,7 +327,7 @@ public final class ScopedRoutesDiscoveryServiceGrpc {
      */
     public com.google.common.util.concurrent.ListenableFuture<io.envoyproxy.envoy.api.v2.DiscoveryResponse> fetchScopedRoutes(
         io.envoyproxy.envoy.api.v2.DiscoveryRequest request) {
-      return futureUnaryCall(
+      return io.grpc.stub.ClientCalls.futureUnaryCall(
           getChannel().newCall(getFetchScopedRoutesMethod(), getCallOptions()), request);
     }
   }

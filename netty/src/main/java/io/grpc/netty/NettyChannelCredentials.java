@@ -34,4 +34,9 @@ final class NettyChannelCredentials extends ChannelCredentials {
   public ProtocolNegotiator.ClientFactory getNegotiator() {
     return negotiator;
   }
+
+  @Override
+  public ChannelCredentials withoutBearerTokens() {
+    return this;
+  }
 }
