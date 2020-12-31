@@ -312,7 +312,8 @@ final class CdsLoadBalancer2 extends LoadBalancer {
               logger.log(XdsLogLevel.DEBUG, "Cluster config: {0}", clusterConfig);
             } else {  // logical DNS
               isLeaf = true;
-              LogicalDnsClusterConfig clusterConfig = (LogicalDnsClusterConfig) update.clusterConfig;
+              LogicalDnsClusterConfig clusterConfig =
+                  (LogicalDnsClusterConfig) update.clusterConfig;
               logger.log(XdsLogLevel.INFO, "Logical DNS cluster {0}", update.clusterName);
               logger.log(XdsLogLevel.DEBUG, "Cluster config: {0}", clusterConfig);
             }

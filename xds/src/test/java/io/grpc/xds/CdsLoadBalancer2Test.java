@@ -117,7 +117,7 @@ public class CdsLoadBalancer2Test {
   private CdsLoadBalancer2  loadBalancer;
 
   @Before
-  public void setUp(){
+  public void setUp() {
     MockitoAnnotations.initMocks(this);
 
     when(helper.getSynchronizationContext()).thenReturn(syncContext);
@@ -212,8 +212,8 @@ public class CdsLoadBalancer2Test {
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     ClusterResolverConfig childLbConfig = (ClusterResolverConfig) childBalancer.config;
     DiscoveryMechanism instance = Iterables.getOnlyElement(childLbConfig.discoveryMechanisms);
-    assertDiscoveryMechanism(instance, CLUSTER, DiscoveryMechanism.Type.LOGICAL_DNS, null, null, 100L,
-        upstreamTlsContext);
+    assertDiscoveryMechanism(instance, CLUSTER, DiscoveryMechanism.Type.LOGICAL_DNS, null, null,
+        100L, upstreamTlsContext);
 
     xdsClient.deliverResourceNotExist(CLUSTER);
     assertThat(childBalancer.shutdown).isTrue();
@@ -287,7 +287,8 @@ public class CdsLoadBalancer2Test {
     xdsClient.deliverAggregateCluster(CLUSTER, Arrays.asList(cluster1, cluster2));
     assertThat(xdsClient.watchers.keySet()).containsExactly(CLUSTER, cluster1, cluster2);
     xdsClient.deliverLogicalDnsCluster(cluster2, LRS_SERVER_NAME, 100L, null);
-    xdsClient.deliverEdsCluster(cluster1, EDS_SERVICE_NAME, LRS_SERVER_NAME, 200L, upstreamTlsContext);
+    xdsClient.deliverEdsCluster(cluster1, EDS_SERVICE_NAME, LRS_SERVER_NAME, 200L,
+        upstreamTlsContext);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     ClusterResolverConfig childLbConfig = (ClusterResolverConfig) childBalancer.config;
     assertThat(childLbConfig.discoveryMechanisms).hasSize(2);
@@ -324,7 +325,8 @@ public class CdsLoadBalancer2Test {
     xdsClient.deliverAggregateCluster(CLUSTER, Arrays.asList(cluster1, cluster2));
     assertThat(xdsClient.watchers.keySet()).containsExactly(CLUSTER, cluster1, cluster2);
     xdsClient.deliverLogicalDnsCluster(cluster2, LRS_SERVER_NAME, 100L, null);
-    xdsClient.deliverEdsCluster(cluster1, EDS_SERVICE_NAME, LRS_SERVER_NAME, 200L, upstreamTlsContext);
+    xdsClient.deliverEdsCluster(cluster1, EDS_SERVICE_NAME, LRS_SERVER_NAME, 200L,
+        upstreamTlsContext);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     ClusterResolverConfig childLbConfig = (ClusterResolverConfig) childBalancer.config;
     assertThat(childLbConfig.discoveryMechanisms).hasSize(2);
@@ -360,7 +362,8 @@ public class CdsLoadBalancer2Test {
     String cluster3 = "cluster-03.googleapis.com";
     xdsClient.deliverAggregateCluster(cluster2, Collections.singletonList(cluster3));
     assertThat(xdsClient.watchers.keySet()).containsExactly(CLUSTER, cluster2, cluster3);
-    xdsClient.deliverEdsCluster(cluster3, EDS_SERVICE_NAME, LRS_SERVER_NAME, 100L, upstreamTlsContext);
+    xdsClient.deliverEdsCluster(cluster3, EDS_SERVICE_NAME, LRS_SERVER_NAME, 100L,
+        upstreamTlsContext);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     ClusterResolverConfig childLbConfig = (ClusterResolverConfig) childBalancer.config;
     assertThat(childLbConfig.discoveryMechanisms).hasSize(1);
