@@ -41,10 +41,10 @@ import io.grpc.xds.XdsClient.CdsUpdate.EdsClusterConfig;
 import io.grpc.xds.XdsClient.CdsUpdate.LogicalDnsClusterConfig;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
@@ -139,7 +139,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       List<DiscoveryMechanism> instances = new ArrayList<>();
       // Level-order traversal.
       // Collect configurations for all non-aggregate (leaf) clusters.
-      Queue<ClusterState> queue = new LinkedList<>();
+      Queue<ClusterState> queue = new ArrayDeque<>();
       queue.add(root);
       while (!queue.isEmpty()) {
         int size = queue.size();
