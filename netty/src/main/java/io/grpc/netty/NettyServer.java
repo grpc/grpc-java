@@ -268,13 +268,27 @@ class NettyServer implements InternalServer, InternalWithLogId {
       throw new IOException(String.format("Failed to bind to address %s", address), future.cause());
     }
     channel = future.channel();
-    channel.eventLoop().execute(new Runnable() {
-      @Override
-      public void run() {
-        listenSocketStats = new ListenSocket(channel);
-        channelz.addListenSocket(listenSocketStats);
+
+    // We should never throw any Exception below while the channel is open to abide by the contract
+    // of ServerListener.serverShutdown() method.
+
+    try {
+      channel.eventLoop().execute(new Runnable() {
+        @Override
+        public void run() {
+          listenSocketStats = new ListenSocket(channel);
+          channelz.addListenSocket(listenSocketStats);
+        }
+      });
+    } catch (RuntimeException e) {
+      try {
+        channel.close();
+      } catch (RuntimeException closeError) {
+        e.addSuppressed(closeError);
       }
-    });
+      channel = null;
+      throw e;
+    }
   }
 
   @Override
