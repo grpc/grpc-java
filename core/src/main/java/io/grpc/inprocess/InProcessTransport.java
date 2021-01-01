@@ -97,7 +97,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
   @GuardedBy("this")
   private Status shutdownStatus;
   @GuardedBy("this")
-  private Set<InProcessStream> streams = Collections.newSetFromMap(
+  private final Set<InProcessStream> streams = Collections.newSetFromMap(
           new IdentityHashMap<InProcessStream, Boolean>());
   @GuardedBy("this")
   private List<ServerStreamTracer.Factory> serverStreamTracerFactories;

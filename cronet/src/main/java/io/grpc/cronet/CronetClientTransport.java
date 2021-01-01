@@ -53,8 +53,8 @@ class CronetClientTransport implements ConnectionClientTransport {
   private Listener listener;
   private final Object lock = new Object();
   @GuardedBy("lock")
-  private final Set<CronetClientStream> streams =
-      new HashSet<CronetClientStream>();
+  private final Set<CronetClientStream> streams = Collections.newSetFromMap(
+          new IdentityHashMap<CronetClientStream, Boolean>());
   private final Executor executor;
   private final int maxMessageSize;
   private final boolean alwaysUsePut;
