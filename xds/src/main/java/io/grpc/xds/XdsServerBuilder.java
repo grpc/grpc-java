@@ -16,8 +16,11 @@
 
 package io.grpc.xds;
 
+import static com.google.common.base.Preconditions.checkState;
+
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Attributes;
+import io.grpc.ExperimentalApi;
 import io.grpc.ForwardingServerBuilder;
 import io.grpc.Internal;
 import io.grpc.Server;
@@ -28,6 +31,7 @@ import io.grpc.netty.InternalNettyServerBuilder;
 import io.grpc.netty.NettyServerBuilder;
 import io.grpc.xds.internal.sds.SdsProtocolNegotiators;
 import io.grpc.xds.internal.sds.ServerWrapperForXds;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * A version of {@link ServerBuilder} to create xDS managed servers that will use SDS to set up SSL
@@ -38,6 +42,7 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
   private final NettyServerBuilder delegate;
   private final int port;
   private ErrorNotifier errorNotifier;
+  private AtomicBoolean isServerBuilt = new AtomicBoolean(false);
 
   private XdsServerBuilder(NettyServerBuilder nettyDelegate, int port) {
     this.delegate = nettyDelegate;
@@ -81,10 +86,16 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
   @VisibleForTesting
   ServerWrapperForXds buildServer(
       XdsClientWrapperForServerSds xdsClient) {
+    checkState(isServerBuilt.compareAndSet(false, true), "Server already built!");
     InternalNettyServerBuilder.eagAttributes(delegate, Attributes.newBuilder()
         .set(SdsProtocolNegotiators.SERVER_XDS_CLIENT, xdsClient)
         .build());
     return new ServerWrapperForXds(delegate.build(), xdsClient, errorNotifier);
+  }
+
+  @ExperimentalApi("TODO")
+  public ServerBuilder<?> transportBuilder() {
+    return delegate;
   }
 
   /** Watcher to receive error notifications from xDS control plane during {@code start()}. */
