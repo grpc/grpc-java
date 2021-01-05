@@ -19,11 +19,13 @@ package io.grpc.internal;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import io.grpc.Attributes;
+import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
 import io.grpc.HttpConnectProxiedSocketAddress;
 import java.io.Closeable;
 import java.net.SocketAddress;
 import java.util.concurrent.ScheduledExecutorService;
+import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
 
 /** Pre-configured factory for creating {@link ConnectionClientTransport} instances. */
@@ -52,6 +54,15 @@ public interface ClientTransportFactory extends Closeable {
    * usage.
    */
   ScheduledExecutorService getScheduledExecutorService();
+
+  /**
+   * Swaps to a new ChannelCredentials with all other settings unchanged. Returns null if the
+   * ChannelCredentials is not supported by the current ClientTransportFactory settings, indicating
+   * a fallback to using the default ManagedChannelRegistry.
+   */
+  @CheckReturnValue
+  @Nullable
+  ClientTransportFactory withNewChannelCredential(ChannelCredentials channelCreds);
 
   /**
    * Releases any resources.

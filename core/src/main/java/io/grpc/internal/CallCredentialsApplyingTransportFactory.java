@@ -23,6 +23,7 @@ import io.grpc.Attributes;
 import io.grpc.CallCredentials.RequestInfo;
 import io.grpc.CallCredentials;
 import io.grpc.CallOptions;
+import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
 import io.grpc.CompositeCallCredentials;
 import io.grpc.Metadata;
@@ -56,6 +57,12 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
   @Override
   public ScheduledExecutorService getScheduledExecutorService() {
     return delegate.getScheduledExecutorService();
+  }
+
+  @Override
+  public ClientTransportFactory withNewChannelCredential(ChannelCredentials channelCreds) {
+    return new CallCredentialsApplyingTransportFactory(
+        delegate.withNewChannelCredential(channelCreds), channelCallCredentials, appExecutor);
   }
 
   @Override

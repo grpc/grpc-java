@@ -30,14 +30,18 @@ import com.google.common.base.Supplier;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
+import io.grpc.CallCredentials;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
+import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
+import io.grpc.ChoiceChannelCredentials;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
 import io.grpc.ClientStreamTracer;
+import io.grpc.CompositeChannelCredentials;
 import io.grpc.CompressorRegistry;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
@@ -46,6 +50,7 @@ import io.grpc.DecompressorRegistry;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.ForwardingChannelBuilder;
 import io.grpc.ForwardingClientCall;
+import io.grpc.Grpc;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalChannelz.ChannelStats;
 import io.grpc.InternalChannelz.ChannelTrace;
@@ -153,6 +158,10 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private final NameResolver.Args nameResolverArgs;
   private final AutoConfiguredLoadBalancerFactory loadBalancerFactory;
   private final ClientTransportFactory originalTransportFactory;
+  @Nullable
+  private final ChannelCredentials originalChannelCreds;
+  @Nullable
+  private final CallCredentials originalCallCreds;
   private final ClientTransportFactory transportFactory;
   private final ClientTransportFactory oobTransportFactory;
   private final RestrictedScheduledExecutor scheduledExecutor;
@@ -593,6 +602,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
     this.timeProvider = checkNotNull(timeProvider, "timeProvider");
     this.executorPool = checkNotNull(builder.executorPool, "executorPool");
     this.executor = checkNotNull(executorPool.getObject(), "executor");
+    this.originalChannelCreds = builder.channelCredentials;
+    this.originalCallCreds = builder.callCredentials;
     this.originalTransportFactory = clientTransportFactory;
     this.transportFactory = new CallCredentialsApplyingTransportFactory(
         clientTransportFactory, builder.callCredentials, this.executor);
@@ -1560,29 +1571,87 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
     @Override
     public ManagedChannelBuilder<?> createResolvingOobChannelBuilder(String target) {
+      return createBuilder(target, null);
+    }
+
+    @Override
+    public ManagedChannelBuilder<?> createResolvingOobChannelBuilder(
+        String target, ChannelCredentials creds) {
+      return createBuilder(target, creds);
+    }
+
+    private ManagedChannelBuilder<?> createBuilder(
+        String target, @Nullable ChannelCredentials creds) {
       final class ResolvingOobChannelBuilder
           extends ForwardingChannelBuilder<ResolvingOobChannelBuilder> {
-        private final ManagedChannelImplBuilder managedChannelImplBuilder;
+        @Nullable final ManagedChannelImplBuilder managedChannelImplBuilder;
+        final ManagedChannelBuilder<?> delegate;
+        @Nullable ClientTransportFactory transportFactory;
+        @Nullable CallCredentials callCredentials;
 
-        ResolvingOobChannelBuilder(String target) {
-          managedChannelImplBuilder = new ManagedChannelImplBuilder(target,
+        ResolvingOobChannelBuilder(String target, @Nullable ChannelCredentials creds) {
+          if (creds == null) {
+            transportFactory = originalTransportFactory;
+          } else {
+            createTransportFactory(creds);
+            if (transportFactory == null) {
+              this.delegate = Grpc.newChannelBuilder(target, creds);
+              managedChannelImplBuilder = null;
+              return;
+            }
+          }
+          managedChannelImplBuilder = new ManagedChannelImplBuilder(
+              target,
+              creds,
+              callCredentials,
               new UnsupportedClientTransportFactoryBuilder(),
               new FixedPortProvider(nameResolverArgs.getDefaultPort()));
           managedChannelImplBuilder.executorPool = executorPool;
           managedChannelImplBuilder.offloadExecutorPool = offloadExecutorHolder.pool;
+          ManagedChannelBuilder<?> delegate = managedChannelImplBuilder;
+          this.delegate = delegate;
+        }
+
+        /**
+         * Tries to create a transport factory with the given channel creds based on the {@code
+         * originalTransportFactory}'s settings. The {@code
+         * transportFactory} may still be null if the channel creds does not suit the {@code
+         * originalTransportFactory}'s settings.
+         */
+        void createTransportFactory(ChannelCredentials creds) {
+          if (creds instanceof ChoiceChannelCredentials) {
+            for (ChannelCredentials c : ((ChoiceChannelCredentials) creds).getCredentialsList()) {
+              createTransportFactory(c);
+              if (transportFactory != null) {
+                return;
+              }
+            }
+          } else if (creds instanceof CompositeChannelCredentials) {
+            creds = ((CompositeChannelCredentials) creds).getChannelCredentials();
+            createTransportFactory(creds);
+            if (transportFactory != null) {
+              callCredentials = ((CompositeChannelCredentials) creds).getCallCredentials();
+            }
+          } else {
+            transportFactory = originalTransportFactory.withNewChannelCredential(creds);
+          }
         }
 
         @Override
         protected ManagedChannelBuilder<?> delegate() {
-          return managedChannelImplBuilder;
+          return delegate;
         }
 
         @Override
         public ManagedChannel build() {
           // TODO(creamsoup) prevent main channel to shutdown if oob channel is not terminated
+          // TODO(zdapeng) register the channel as a subchannel of the parent channel in channelz.
+          if (managedChannelImplBuilder == null) {
+            return delegate.build();
+          }
           return new ManagedChannelImpl(
                   managedChannelImplBuilder,
-                  originalTransportFactory,
+                  transportFactory,
                   backoffPolicyProvider,
                   balancerRpcExecutorPool,
                   stopwatchSupplier,
@@ -1594,14 +1663,25 @@ final class ManagedChannelImpl extends ManagedChannel implements
       checkState(!terminated, "Channel is terminated");
 
       @SuppressWarnings("deprecation")
-      ResolvingOobChannelBuilder builder = new ResolvingOobChannelBuilder(target)
+      ResolvingOobChannelBuilder builder = new ResolvingOobChannelBuilder(target, creds)
           .nameResolverFactory(nameResolverFactory);
 
       return builder
-          .overrideAuthority(getAuthority())
+          .overrideAuthority(ManagedChannelImpl.this.authority())
           .maxTraceEvents(maxTraceEvents)
           .proxyDetector(nameResolverArgs.getProxyDetector())
           .userAgent(userAgent);
+    }
+
+    @Override
+    public ChannelCredentials getUnsafeChannelCredentials() {
+      if (originalChannelCreds == null) {
+        return null;
+      }
+      if (originalCallCreds == null) {
+        return originalChannelCreds;
+      }
+      return CompositeChannelCredentials.create(originalChannelCreds, originalCallCreds);
     }
 
     @Override

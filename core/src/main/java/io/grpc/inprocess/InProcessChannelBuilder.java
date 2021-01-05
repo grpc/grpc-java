@@ -19,8 +19,12 @@ package io.grpc.inprocess;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
+import io.grpc.ChoiceChannelCredentials;
+import io.grpc.CompositeChannelCredentials;
 import io.grpc.ExperimentalApi;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.Internal;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.internal.AbstractManagedChannelImplBuilder;
@@ -244,6 +248,30 @@ public final class InProcessChannelBuilder extends
     @Override
     public ScheduledExecutorService getScheduledExecutorService() {
       return timerService;
+    }
+
+    @Override
+    public ClientTransportFactory withNewChannelCredential(ChannelCredentials channelCreds) {
+      checkNotNull(channelCreds, "channelCreds");
+      // InProcessChannel does not do any channel authentication, so it only supports insecure
+      // creds, otherwise return null to indicate fallback.
+      if (channelCreds instanceof InsecureChannelCredentials) {
+        return this;
+      }
+      if (channelCreds instanceof ChoiceChannelCredentials) {
+        ChoiceChannelCredentials ccc = (ChoiceChannelCredentials) channelCreds;
+        for(ChannelCredentials cc : ccc.getCredentialsList()) {
+          ClientTransportFactory factory = withNewChannelCredential(cc);
+          if (factory != null) {
+            return factory;
+          }
+        }
+      }
+      if (channelCreds instanceof CompositeChannelCredentials) {
+        CompositeChannelCredentials ccc = (CompositeChannelCredentials) channelCreds;
+        return withNewChannelCredential(ccc.getChannelCredentials());
+      }
+      return null;
     }
 
     @Override

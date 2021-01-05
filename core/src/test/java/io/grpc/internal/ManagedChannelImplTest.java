@@ -72,6 +72,7 @@ import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.Context;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.IntegerMarshaller;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalChannelz.ChannelStats;
@@ -1749,7 +1750,8 @@ public class ManagedChannelImplTest {
     Metadata.Key<String> metadataKey =
         Metadata.Key.of("token", Metadata.ASCII_STRING_MARSHALLER);
     String channelCredValue = "channel-provided call cred";
-    channelBuilder = new ManagedChannelImplBuilder(TARGET,
+    channelBuilder = new ManagedChannelImplBuilder(
+        TARGET, InsecureChannelCredentials.create(),
         new FakeCallCredentials(metadataKey, channelCredValue),
         new UnsupportedClientTransportFactoryBuilder(), new FixedPortProvider(DEFAULT_PORT));
     configureBuilder(channelBuilder);

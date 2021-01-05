@@ -46,6 +46,7 @@ import io.grpc.internal.ManagedChannelImplBuilder.ClientTransportFactoryBuilder;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SharedResourcePool;
 import io.grpc.internal.TransportTracer;
+import io.grpc.netty.ProtocolNegotiators.FromChannelCredentialsResult;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFactory;
 import io.netty.channel.ChannelOption;
@@ -187,11 +188,11 @@ public final class NettyChannelBuilder extends
     this.freezeProtocolNegotiatorFactory = false;
   }
 
-  @CheckReturnValue
   NettyChannelBuilder(
       String target, ProtocolNegotiator.ClientFactory negotiator,
       @Nullable CallCredentials callCreds) {
-    managedChannelImplBuilder = new ManagedChannelImplBuilder(target, callCreds,
+    managedChannelImplBuilder = new ManagedChannelImplBuilder(
+        target, NettyChannelCredentials.create(negotiator), callCreds,
         new NettyChannelTransportFactoryBuilder(),
         new NettyChannelDefaultPortProvider());
     this.protocolNegotiatorFactory = checkNotNull(negotiator, "negotiator");
@@ -497,9 +498,8 @@ public final class NettyChannelBuilder extends
   ClientTransportFactory buildTransportFactory() {
     assertEventLoopAndChannelType();
 
-    ProtocolNegotiator negotiator = protocolNegotiatorFactory.newNegotiator();
     return new NettyTransportFactory(
-        negotiator, channelFactory, channelOptions,
+        protocolNegotiatorFactory, channelFactory, channelOptions,
         eventLoopGroupPool, autoFlowControl, flowControlWindow, maxInboundMessageSize,
         maxHeaderListSize, keepAliveTimeNanos, keepAliveTimeoutNanos, keepAliveWithoutCalls,
         transportTracerFactory, localSocketPicker, useGetForSafeMethods);
@@ -628,7 +628,8 @@ public final class NettyChannelBuilder extends
     private final int flowControlWindow;
     private final int maxMessageSize;
     private final int maxHeaderListSize;
-    private final AtomicBackoff keepAliveTimeNanos;
+    private final long keepAliveTimeNanos;
+    private final AtomicBackoff keepAliveBackoff;
     private final long keepAliveTimeoutNanos;
     private final boolean keepAliveWithoutCalls;
     private final TransportTracer.Factory transportTracerFactory;
@@ -637,14 +638,16 @@ public final class NettyChannelBuilder extends
 
     private boolean closed;
 
-    NettyTransportFactory(ProtocolNegotiator protocolNegotiator,
+    NettyTransportFactory(
+        ProtocolNegotiator.ClientFactory protocolNegotiator,
         ChannelFactory<? extends Channel> channelFactory,
         Map<ChannelOption<?>, ?> channelOptions, ObjectPool<? extends EventLoopGroup> groupPool,
         boolean autoFlowControl, int flowControlWindow, int maxMessageSize, int maxHeaderListSize,
         long keepAliveTimeNanos, long keepAliveTimeoutNanos, boolean keepAliveWithoutCalls,
         TransportTracer.Factory transportTracerFactory, LocalSocketPicker localSocketPicker,
         boolean useGetForSafeMethods) {
-      this.protocolNegotiator = checkNotNull(protocolNegotiator, "protocolNegotiator");
+      this.protocolNegotiator =
+          checkNotNull(protocolNegotiator, "protocolNegotiator").newNegotiator();
       this.channelFactory = channelFactory;
       this.channelOptions = new HashMap<ChannelOption<?>, Object>(channelOptions);
       this.groupPool = groupPool;
@@ -653,7 +656,8 @@ public final class NettyChannelBuilder extends
       this.flowControlWindow = flowControlWindow;
       this.maxMessageSize = maxMessageSize;
       this.maxHeaderListSize = maxHeaderListSize;
-      this.keepAliveTimeNanos = new AtomicBackoff("keepalive time nanos", keepAliveTimeNanos);
+      this.keepAliveTimeNanos = keepAliveTimeNanos;
+      this.keepAliveBackoff = new AtomicBackoff("keepalive time nanos", keepAliveTimeNanos);
       this.keepAliveTimeoutNanos = keepAliveTimeoutNanos;
       this.keepAliveWithoutCalls = keepAliveWithoutCalls;
       this.transportTracerFactory = transportTracerFactory;
@@ -678,7 +682,7 @@ public final class NettyChannelBuilder extends
             protocolNegotiator);
       }
 
-      final AtomicBackoff.State keepAliveTimeNanosState = keepAliveTimeNanos.getState();
+      final AtomicBackoff.State keepAliveTimeNanosState = keepAliveBackoff.getState();
       Runnable tooManyPingsRunnable = new Runnable() {
         @Override
         public void run() {
@@ -700,6 +704,20 @@ public final class NettyChannelBuilder extends
     @Override
     public ScheduledExecutorService getScheduledExecutorService() {
       return group;
+    }
+
+    @Override
+    public ClientTransportFactory withNewChannelCredential(ChannelCredentials channelCreds) {
+      checkNotNull(channelCreds, "channelCreds");
+      FromChannelCredentialsResult result = ProtocolNegotiators.from(channelCreds);
+      if (result.error != null) {
+        return null;
+      }
+      return new NettyTransportFactory(
+          result.negotiator, channelFactory, channelOptions, groupPool,
+          autoFlowControl, flowControlWindow, maxMessageSize, maxHeaderListSize, keepAliveTimeNanos,
+          keepAliveTimeoutNanos, keepAliveWithoutCalls, transportTracerFactory,  localSocketPicker,
+          useGetForSafeMethods);
     }
 
     @Override
