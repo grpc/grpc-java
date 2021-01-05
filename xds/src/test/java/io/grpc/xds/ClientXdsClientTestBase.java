@@ -1027,15 +1027,26 @@ public abstract class ClientXdsClientTestBase {
 
   @Test
   public void edsResourceDeletedByCds() {
+    String resource = "backend-service.googleapis.com";
+    CdsResourceWatcher cdsWatcher = mock(CdsResourceWatcher.class);
+    EdsResourceWatcher edsWatcher = mock(EdsResourceWatcher.class);
+    xdsClient.watchCdsResource(resource, cdsWatcher);
+    xdsClient.watchEdsResource(resource, edsWatcher);
     xdsClient.watchCdsResource(CDS_RESOURCE, cdsResourceWatcher);
     xdsClient.watchEdsResource(EDS_RESOURCE, edsResourceWatcher);
     DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
     List<Any> clusters = ImmutableList.of(
+        Any.pack(mf.buildEdsCluster(resource, null, true, null, null)),
         Any.pack(mf.buildEdsCluster(CDS_RESOURCE, EDS_RESOURCE, false, null, null)));
     call.sendResponse("0", clusters, ResourceType.CDS, "0000");
-    verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
+    verify(cdsWatcher).onChanged(cdsUpdateCaptor.capture());
     EdsClusterConfig clusterConfig = (EdsClusterConfig) cdsUpdateCaptor.getValue().clusterConfig;
+    assertThat(clusterConfig.edsServiceName).isEqualTo(null);
+    assertThat(clusterConfig.lrsServerName).isEqualTo("");
+    verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
+    clusterConfig = (EdsClusterConfig) cdsUpdateCaptor.getValue().clusterConfig;
     assertThat(clusterConfig.edsServiceName).isEqualTo(EDS_RESOURCE);
+    assertThat(clusterConfig.lrsServerName).isNull();
 
     List<Any> clusterLoadAssignments =
         ImmutableList.of(
@@ -1048,19 +1059,31 @@ public abstract class ClientXdsClientTestBase {
                             1, 0)),
                     ImmutableList.of(
                         mf.buildDropOverload("lb", 200),
-                        mf.buildDropOverload("throttle", 1000)))));
+                        mf.buildDropOverload("throttle", 1000)))),
+            Any.pack(
+                mf.buildClusterLoadAssignment(resource,
+                    ImmutableList.of(
+                        mf.buildLocalityLbEndpoints("region2", "zone2", "subzone2",
+                            ImmutableList.of(
+                                mf.buildLbEndpoint("192.168.0.2", 9090, "healthy", 3)),
+                            1, 0)),
+                    ImmutableList.of(
+                        mf.buildDropOverload("lb", 100)))));
     call.sendResponse("0", clusterLoadAssignments, ResourceType.EDS, "0000");
+    verify(edsWatcher).onChanged(edsUpdateCaptor.capture());
+    assertThat(edsUpdateCaptor.getValue().getClusterName()).isEqualTo(resource);
     verify(edsResourceWatcher).onChanged(edsUpdateCaptor.capture());
-    EdsUpdate edsUpdate = edsUpdateCaptor.getValue();
-    assertThat(edsUpdate.getClusterName()).isEqualTo(EDS_RESOURCE);
+    assertThat(edsUpdateCaptor.getValue().getClusterName()).isEqualTo(EDS_RESOURCE);
 
     clusters = ImmutableList.of(
+        Any.pack(mf.buildEdsCluster(resource, null, true, null, null)),  // no change
         Any.pack(mf.buildEdsCluster(CDS_RESOURCE, null, false, null, null)));
     call.sendResponse("1", clusters, ResourceType.CDS, "0001");
     verify(cdsResourceWatcher, times(2)).onChanged(cdsUpdateCaptor.capture());
     clusterConfig = (EdsClusterConfig) cdsUpdateCaptor.getValue().clusterConfig;
     assertThat(clusterConfig.edsServiceName).isNull();
     verify(edsResourceWatcher).onResourceDoesNotExist(EDS_RESOURCE);
+    verifyNoMoreInteractions(cdsWatcher, edsWatcher);
   }
 
   @Test

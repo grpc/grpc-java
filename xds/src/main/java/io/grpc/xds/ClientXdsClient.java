@@ -441,6 +441,8 @@ final class ClientXdsClient extends AbstractXdsClient {
       if (!edsClusterConfig.getServiceName().isEmpty()) {
         edsServiceName = edsClusterConfig.getServiceName();
         edsResources.add(edsServiceName);
+      } else {
+        edsResources.add(clusterName);
       }
       EdsClusterConfig config = new EdsClusterConfig(lbPolicy, edsServiceName,
           lrsServerName, maxConcurrentRequests, upstreamTlsContext);
