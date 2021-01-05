@@ -1170,6 +1170,8 @@ public abstract class LoadBalancer {
 
     /**
      * Returns the authority string of the channel, which is derived from the DNS-style target name.
+     * If overridden by a load balancer, {@link #getUnsafeChannelCredentials} must also be
+     * overridden to call {@link #getChannelCredentials} or provide appropriate credentials.
      *
      * @since 1.2.0
      */
@@ -1185,9 +1187,12 @@ public abstract class LoadBalancer {
     }
 
     /**
-     * Returns the authority string of the channel, which is derived from the DNS-style target name.
-     * If overridden by a load balancer, {@link #getUnsafeChannelCredentials} must also be
-     * overridden to call {@link #getChannelCredentials} or provide appropriate credentials.
+     * Returns the UNSAFE ChannelCredentials used to construct the channel,
+     * including bearer tokens. Load balancers should generally have no use for
+     * these credentials and use of them is heavily discouraged. These must be used
+     * <em>very</em> carefully to avoid sending bearer tokens to untrusted servers
+     * as the server could then impersonate the client. Generally it is only safe
+     * to use these credentials when communicating with the backend.
      *
      * @since 1.35.0
      */
