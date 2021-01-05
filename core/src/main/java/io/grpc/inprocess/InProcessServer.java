@@ -83,7 +83,17 @@ final class InProcessServer implements InternalServer {
   }
 
   @Override
+  public List<? extends SocketAddress> getListenSocketAddresses() {
+    return Collections.singletonList(getListenSocketAddress());
+  }
+
+  @Override
   public InternalInstrumented<SocketStats> getListenSocketStats() {
+    return null;
+  }
+
+  @Override
+  public List<InternalInstrumented<SocketStats>> getListenSocketStatsList() {
     return null;
   }
 
