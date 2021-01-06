@@ -25,15 +25,15 @@ android {
             }
         }
     }
-    compileSdkVersion 29
+    compileSdkVersion 26
 
     defaultConfig {
         applicationId "io.grpc.android.integrationtest"
         minSdkVersion 16
-        targetSdkVersion 29
+        targetSdkVersion 26
         versionCode 1
         versionName "1.0"
-        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
         multiDexEnabled true
     }
     buildTypes {
@@ -47,10 +47,10 @@ android {
 }
 
 dependencies {
-    implementation 'androidx.appcompat:appcompat:1.2.0'
-    implementation 'androidx.multidex:multidex:2.0.1'
-    implementation 'androidx.annotation:annotation:1.1.0'
-    implementation 'com.google.android.gms:play-services-base:17.5.0'
+    implementation 'com.android.support:appcompat-v7:26.1.0'
+    implementation 'com.android.support:multidex:1.0.3'
+    implementation 'com.android.support:support-annotations:26.1.0'
+    implementation 'com.google.android.gms:play-services-base:16.1.0'
 
     implementation project(':grpc-auth'),
             project(':grpc-census'),
