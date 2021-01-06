@@ -28,6 +28,7 @@ import io.grpc.InternalChannelz.OtherSecurity;
 import io.grpc.InternalChannelz.Security;
 import io.grpc.SecurityLevel;
 import io.grpc.Status;
+import io.grpc.alts.InternalGoogleDefaultConstants;
 import io.grpc.alts.internal.RpcProtocolVersionsUtil.RpcVersionsCheckResult;
 import io.grpc.grpclb.GrpclbConstants;
 import io.grpc.internal.ObjectPool;
@@ -239,8 +240,10 @@ public final class AltsProtocolNegotiator {
       ChannelHandler gnh = InternalProtocolNegotiators.grpcNegotiationHandler(grpcHandler);
       ChannelHandler securityHandler;
       if (grpcHandler.getEagAttributes().get(GrpclbConstants.ATTR_LB_ADDR_AUTHORITY) != null
-          || grpcHandler.getEagAttributes().get(
-              GrpclbConstants.ATTR_LB_PROVIDED_BACKEND) != null) {
+          || grpcHandler.getEagAttributes().get(GrpclbConstants.ATTR_LB_PROVIDED_BACKEND) != null
+          || InternalGoogleDefaultConstants.GOOGLE_CFE_CLUSTER_NAME.equals(
+              grpcHandler.getEagAttributes().get(
+                  InternalGoogleDefaultConstants.ATTR_XDS_CLUSTER_NAME))) {
         TsiHandshaker handshaker = handshakerFactory.newHandshaker(grpcHandler.getAuthority());
         NettyTsiHandshaker nettyHandshaker = new NettyTsiHandshaker(handshaker);
         securityHandler =
