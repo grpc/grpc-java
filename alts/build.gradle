@@ -18,7 +18,6 @@ dependencies {
             project(':grpc-grpclb'),
             project(':grpc-protobuf'),
             project(':grpc-stub'),
-            libraries.lang,
             libraries.protobuf,
             libraries.conscrypt
     def nettyDependency = implementation project(':grpc-netty')
