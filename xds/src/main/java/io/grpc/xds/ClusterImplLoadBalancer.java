@@ -29,6 +29,7 @@ import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
 import io.grpc.Metadata;
 import io.grpc.Status;
+import io.grpc.alts.InternalGoogleDefaultConstants;
 import io.grpc.internal.ObjectPool;
 import io.grpc.util.ForwardingClientStreamTracer;
 import io.grpc.util.ForwardingLoadBalancerHelper;
@@ -195,18 +196,17 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
 
     @Override
     public Subchannel createSubchannel(CreateSubchannelArgs args) {
-      if (enableSecurity && sslContextProviderSupplier != null) {
-        List<EquivalentAddressGroup> addresses = new ArrayList<>();
-        for (EquivalentAddressGroup eag : args.getAddresses()) {
-          Attributes attributes =
-              eag.getAttributes().toBuilder()
-                  .set(XdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
-                      sslContextProviderSupplier)
-                  .build();
-          addresses.add(new EquivalentAddressGroup(eag.getAddresses(), attributes));
+      List<EquivalentAddressGroup> addresses = new ArrayList<>();
+      for (EquivalentAddressGroup eag : args.getAddresses()) {
+        Attributes.Builder attrBuilder = eag.getAttributes().toBuilder().set(
+            InternalGoogleDefaultConstants.ATTR_XDS_CLUSTER_NAME, cluster);
+        if (enableSecurity && sslContextProviderSupplier != null) {
+          attrBuilder.set(
+              XdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER, sslContextProviderSupplier);
         }
-        args = args.toBuilder().setAddresses(addresses).build();
+        addresses.add(new EquivalentAddressGroup(eag.getAddresses(), attrBuilder.build()));
       }
+      args = args.toBuilder().setAddresses(addresses).build();
       return delegate().createSubchannel(args);
     }
 
