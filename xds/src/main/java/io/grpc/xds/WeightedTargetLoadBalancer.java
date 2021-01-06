@@ -180,12 +180,13 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
     SubchannelPicker currentPicker = BUFFER_PICKER;
 
     @Override
-    public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
-      currentState = newState;
-      currentPicker = newPicker;
+    public void updateBalancingState(final ConnectivityState newState,
+        final SubchannelPicker newPicker) {
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
+          currentState = newState;
+          currentPicker = newPicker;
           updateOverallBalancingState();
         }
       });

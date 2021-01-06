@@ -269,20 +269,21 @@ final class PriorityLoadBalancer extends LoadBalancer {
 
     final class ChildHelper extends ForwardingLoadBalancerHelper {
       @Override
-      public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
-        connectivityState = newState;
-        picker = newPicker;
-        if (deletionTimer != null && deletionTimer.isPending()) {
-          return;
-        }
-        if (failOverTimer.isPending()) {
-          if (newState.equals(READY) || newState.equals(TRANSIENT_FAILURE)) {
-            failOverTimer.cancel();
-          }
-        }
+      public void updateBalancingState(final ConnectivityState newState,
+          final SubchannelPicker newPicker) {
         syncContext.execute(new Runnable() {
           @Override
           public void run() {
+            connectivityState = newState;
+            picker = newPicker;
+            if (deletionTimer != null && deletionTimer.isPending()) {
+              return;
+            }
+            if (failOverTimer.isPending()) {
+              if (newState.equals(READY) || newState.equals(TRANSIENT_FAILURE)) {
+                failOverTimer.cancel();
+              }
+            }
             tryNextPriority(true);
           }
         });

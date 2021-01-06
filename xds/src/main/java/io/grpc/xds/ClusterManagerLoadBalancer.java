@@ -242,19 +242,20 @@ class ClusterManagerLoadBalancer extends LoadBalancer {
     private final class ChildLbStateHelper extends ForwardingLoadBalancerHelper {
 
       @Override
-      public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
-        currentState = newState;
-        currentPicker = newPicker;
-        // Subchannel picker and state are saved, but will only be propagated to the channel
-        // when the child instance exits deactivated state.
-        if (!deactivated) {
-          syncContext.execute(new Runnable() {
-            @Override
-            public void run() {
+      public void updateBalancingState(final ConnectivityState newState,
+          final SubchannelPicker newPicker) {
+        syncContext.execute(new Runnable() {
+          @Override
+          public void run() {
+            currentState = newState;
+            currentPicker = newPicker;
+            // Subchannel picker and state are saved, but will only be propagated to the channel
+            // when the child instance exits deactivated state.
+            if (!deactivated) {
               updateOverallBalancingState();
             }
-          });
-        }
+          }
+        });
       }
 
       @Override
