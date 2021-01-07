@@ -59,6 +59,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -151,49 +152,46 @@ final class ClientXdsClient extends AbstractXdsClient {
 
     Map<String, LdsUpdate> ldsUpdates = new HashMap<>();
     Set<String> rdsNames = new HashSet<>();
-    String errorMessage = null;
     for (Map.Entry<String, HttpConnectionManager> entry : httpConnectionManagers.entrySet()) {
+      LdsUpdate update;
       String listenerName = entry.getKey();
       HttpConnectionManager hcm = entry.getValue();
-      LdsUpdate.Builder updateBuilder = LdsUpdate.newBuilder();
+      long maxStreamDuration = 0;
+      if (hcm.hasCommonHttpProtocolOptions()) {
+        HttpProtocolOptions options = hcm.getCommonHttpProtocolOptions();
+        if (options.hasMaxStreamDuration()) {
+          maxStreamDuration = Durations.toNanos(options.getMaxStreamDuration());
+        }
+      }
       if (hcm.hasRouteConfig()) {
+        List<EnvoyProtoData.VirtualHost> virtualHosts = new ArrayList<>();
         for (VirtualHost virtualHostProto : hcm.getRouteConfig().getVirtualHostsList()) {
           StructOrError<EnvoyProtoData.VirtualHost> virtualHost =
               EnvoyProtoData.VirtualHost.fromEnvoyProtoVirtualHost(virtualHostProto);
           if (virtualHost.getErrorDetail() != null) {
-            errorMessage = "Listener " + listenerName + " contains invalid virtual host: "
-                + virtualHost.getErrorDetail();
-            break;
-          } else {
-            updateBuilder.addVirtualHost(virtualHost.getStruct());
+            nackResponse(ResourceType.LDS, nonce,
+                "Listener " + listenerName + " contains invalid virtual host: "
+                    + virtualHost.getErrorDetail());
+            return;
           }
+          virtualHosts.add(virtualHost.getStruct());
         }
+        update = new LdsUpdate(maxStreamDuration, virtualHosts);
       } else if (hcm.hasRds()) {
         Rds rds = hcm.getRds();
         if (!rds.getConfigSource().hasAds()) {
-          errorMessage = "Listener " + listenerName + " with RDS config_source not set to ADS";
-        } else {
-          updateBuilder.setRdsName(rds.getRouteConfigName());
-          rdsNames.add(rds.getRouteConfigName());
+          nackResponse(ResourceType.LDS, nonce,
+              "Listener " + listenerName + " with RDS config_source not set to ADS");
+          return;
         }
+        update = new LdsUpdate(maxStreamDuration, rds.getRouteConfigName());
+        rdsNames.add(rds.getRouteConfigName());
       } else {
-        errorMessage = "Listener " + listenerName + " without inline RouteConfiguration or RDS";
+        nackResponse(ResourceType.LDS, nonce,
+            "Listener " + listenerName + " without inline RouteConfiguration or RDS");
+        return;
       }
-      if (errorMessage != null) {
-        break;
-      }
-      if (hcm.hasCommonHttpProtocolOptions()) {
-        HttpProtocolOptions options = hcm.getCommonHttpProtocolOptions();
-        if (options.hasMaxStreamDuration()) {
-          updateBuilder.setHttpMaxStreamDurationNano(
-              Durations.toNanos(options.getMaxStreamDuration()));
-        }
-      }
-      ldsUpdates.put(listenerName, updateBuilder.build());
-    }
-    if (errorMessage != null) {
-      nackResponse(ResourceType.LDS, nonce, errorMessage);
-      return;
+      ldsUpdates.put(listenerName, update);
     }
     ackResponse(ResourceType.LDS, versionInfo, nonce);
 
@@ -235,7 +233,6 @@ final class ClientXdsClient extends AbstractXdsClient {
         XdsLogLevel.INFO, "Received RDS response for resources: {0}", routeConfigs.keySet());
 
     Map<String, RdsUpdate> rdsUpdates = new HashMap<>();
-    String errorMessage = null;
     for (Map.Entry<String, RouteConfiguration> entry : routeConfigs.entrySet()) {
       String routeConfigName = entry.getKey();
       RouteConfiguration routeConfig = entry.getValue();
@@ -245,21 +242,13 @@ final class ClientXdsClient extends AbstractXdsClient {
         StructOrError<EnvoyProtoData.VirtualHost> virtualHost =
             EnvoyProtoData.VirtualHost.fromEnvoyProtoVirtualHost(virtualHostProto);
         if (virtualHost.getErrorDetail() != null) {
-          errorMessage = "RouteConfiguration " + routeConfigName
-              + " contains invalid virtual host: " + virtualHost.getErrorDetail();
-          break;
-        } else {
-          virtualHosts.add(virtualHost.getStruct());
+          nackResponse(ResourceType.RDS, nonce, "RouteConfiguration " + routeConfigName
+              + " contains invalid virtual host: " + virtualHost.getErrorDetail());
+          return;
         }
+        virtualHosts.add(virtualHost.getStruct());
       }
-      if (errorMessage != null) {
-        break;
-      }
-      rdsUpdates.put(routeConfigName, RdsUpdate.fromVirtualHosts(virtualHosts));
-    }
-    if (errorMessage != null) {
-      nackResponse(ResourceType.RDS, nonce, errorMessage);
-      return;
+      rdsUpdates.put(routeConfigName, new RdsUpdate(virtualHosts));
     }
     ackResponse(ResourceType.RDS, versionInfo, nonce);
 
@@ -479,11 +468,7 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
     getLogger().log(XdsLogLevel.INFO, "Received EDS response for resources: {0}", claNames);
 
-    String errorMessage = null;
-    // Endpoint information updates for requested clusters received in this EDS response.
     Map<String, EdsUpdate> edsUpdates = new HashMap<>();
-    // Walk through each ClusterLoadAssignment message. If any of them for requested clusters
-    // contain invalid information for gRPC's load balancing usage, the whole response is rejected.
     for (ClusterLoadAssignment assignment : clusterLoadAssignments) {
       String clusterName = assignment.getClusterName();
       // Skip information for clusters not requested.
@@ -493,9 +478,9 @@ final class ClientXdsClient extends AbstractXdsClient {
       if (!edsResourceSubscribers.containsKey(clusterName)) {
         continue;
       }
-      EdsUpdate.Builder updateBuilder = EdsUpdate.newBuilder();
-      updateBuilder.setClusterName(clusterName);
       Set<Integer> priorities = new HashSet<>();
+      Map<Locality, LocalityLbEndpoints> localityLbEndpointsMap = new LinkedHashMap<>();
+      List<DropOverload> dropOverloads = new ArrayList<>();
       int maxPriority = -1;
       for (io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints localityLbEndpoints
           : assignment.getEndpointsList()) {
@@ -506,9 +491,9 @@ final class ClientXdsClient extends AbstractXdsClient {
         }
         int localityPriority = localityLbEndpoints.getPriority();
         if (localityPriority < 0) {
-          errorMessage =
-              "ClusterLoadAssignment " + clusterName + " : locality with negative priority.";
-          break;
+          nackResponse(ResourceType.EDS, nonce,
+              "ClusterLoadAssignment " + clusterName + " : locality with negative priority.");
+          return;
         }
         maxPriority = Math.max(maxPriority, localityPriority);
         priorities.add(localityPriority);
@@ -516,37 +501,29 @@ final class ClientXdsClient extends AbstractXdsClient {
         // Inside of it: the address field must be set.
         for (LbEndpoint lbEndpoint : localityLbEndpoints.getLbEndpointsList()) {
           if (!lbEndpoint.getEndpoint().hasAddress()) {
-            errorMessage = "ClusterLoadAssignment " + clusterName + " : endpoint with no address.";
-            break;
+            nackResponse(ResourceType.EDS, nonce,
+                "ClusterLoadAssignment " + clusterName + " : endpoint with no address.");
+            return;
           }
-        }
-        if (errorMessage != null) {
-          break;
         }
         // Note endpoints with health status other than UNHEALTHY and UNKNOWN are still
         // handed over to watching parties. It is watching parties' responsibility to
         // filter out unhealthy endpoints. See EnvoyProtoData.LbEndpoint#isHealthy().
-        updateBuilder.addLocalityLbEndpoints(
+        localityLbEndpointsMap.put(
             Locality.fromEnvoyProtoLocality(localityLbEndpoints.getLocality()),
             LocalityLbEndpoints.fromEnvoyProtoLocalityLbEndpoints(localityLbEndpoints));
       }
-      if (errorMessage != null) {
-        break;
-      }
       if (priorities.size() != maxPriority + 1) {
-        errorMessage = "ClusterLoadAssignment " + clusterName + " : sparse priorities.";
-        break;
+        nackResponse(ResourceType.EDS, nonce,
+            "ClusterLoadAssignment " + clusterName + " : sparse priorities.");
+        return;
       }
       for (ClusterLoadAssignment.Policy.DropOverload dropOverload
           : assignment.getPolicy().getDropOverloadsList()) {
-        updateBuilder.addDropPolicy(DropOverload.fromEnvoyProtoDropOverload(dropOverload));
+        dropOverloads.add(DropOverload.fromEnvoyProtoDropOverload(dropOverload));
       }
-      EdsUpdate update = updateBuilder.build();
+      EdsUpdate update = new EdsUpdate(clusterName, localityLbEndpointsMap, dropOverloads);
       edsUpdates.put(clusterName, update);
-    }
-    if (errorMessage != null) {
-      nackResponse(ResourceType.EDS, nonce, errorMessage);
-      return;
     }
     ackResponse(ResourceType.EDS, versionInfo, nonce);
 

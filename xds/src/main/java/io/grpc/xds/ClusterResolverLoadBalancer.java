@@ -349,12 +349,12 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
             logger.log(XdsLogLevel.DEBUG, "Received endpoint update {0}", update);
             if (logger.isLoggable(XdsLogLevel.INFO)) {
               logger.log(XdsLogLevel.INFO, "Cluster {0}: {1} localities, {2} drop categories",
-                  update.getClusterName(), update.getLocalityLbEndpointsMap().size(),
-                  update.getDropPolicies().size());
+                  update.clusterName, update.localityLbEndpointsMap.size(),
+                  update.dropPolicies.size());
             }
             Map<Locality, LocalityLbEndpoints> localityLbEndpoints =
-                update.getLocalityLbEndpointsMap();
-            List<DropOverload> dropOverloads = update.getDropPolicies();
+                update.localityLbEndpointsMap;
+            List<DropOverload> dropOverloads = update.dropPolicies;
             List<EquivalentAddressGroup> addresses = new ArrayList<>();
             Map<String, Map<Locality, Integer>> prioritizedLocalityWeights = new HashMap<>();
             for (Locality locality : localityLbEndpoints.keySet()) {
@@ -386,7 +386,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
             if (prioritizedLocalityWeights.isEmpty()) {
               // Will still update the result, as if the cluster resource is revoked.
               logger.log(XdsLogLevel.INFO,
-                  "Cluster {0} has no usable priority/locality/endpoint", update.getClusterName());
+                  "Cluster {0} has no usable priority/locality/endpoint", update.clusterName);
             }
             List<String> priorities = new ArrayList<>(prioritizedLocalityWeights.keySet());
             Collections.sort(priorities);
