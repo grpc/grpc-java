@@ -27,6 +27,7 @@ pluginManagement {
 
 rootProject.name = "grpc"
 include ":grpc-api"
+include ":grpc-binder"
 include ":grpc-core"
 include ":grpc-context"
 include ":grpc-stub"
@@ -51,6 +52,7 @@ include ":grpc-bom"
 include ":grpc-rls"
 
 project(':grpc-api').projectDir = "$rootDir/api" as File
+project(':grpc-binder').projectDir = "$rootDir/binder" as File
 project(':grpc-core').projectDir = "$rootDir/core" as File
 project(':grpc-context').projectDir = "$rootDir/context" as File
 project(':grpc-stub').projectDir = "$rootDir/stub" as File
