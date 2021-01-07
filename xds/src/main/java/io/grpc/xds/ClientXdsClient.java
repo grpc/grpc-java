@@ -59,6 +59,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -467,11 +468,7 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
     getLogger().log(XdsLogLevel.INFO, "Received EDS response for resources: {0}", claNames);
 
-    String errorMessage = null;
-    // Endpoint information updates for requested clusters received in this EDS response.
     Map<String, EdsUpdate> edsUpdates = new HashMap<>();
-    // Walk through each ClusterLoadAssignment message. If any of them for requested clusters
-    // contain invalid information for gRPC's load balancing usage, the whole response is rejected.
     for (ClusterLoadAssignment assignment : clusterLoadAssignments) {
       String clusterName = assignment.getClusterName();
       // Skip information for clusters not requested.
@@ -481,9 +478,9 @@ final class ClientXdsClient extends AbstractXdsClient {
       if (!edsResourceSubscribers.containsKey(clusterName)) {
         continue;
       }
-      EdsUpdate.Builder updateBuilder = EdsUpdate.newBuilder();
-      updateBuilder.setClusterName(clusterName);
       Set<Integer> priorities = new HashSet<>();
+      Map<Locality, LocalityLbEndpoints> localityLbEndpointsMap = new LinkedHashMap<>();
+      List<DropOverload> dropOverloads = new ArrayList<>();
       int maxPriority = -1;
       for (io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints localityLbEndpoints
           : assignment.getEndpointsList()) {
@@ -494,9 +491,9 @@ final class ClientXdsClient extends AbstractXdsClient {
         }
         int localityPriority = localityLbEndpoints.getPriority();
         if (localityPriority < 0) {
-          errorMessage =
-              "ClusterLoadAssignment " + clusterName + " : locality with negative priority.";
-          break;
+          nackResponse(ResourceType.EDS, nonce,
+              "ClusterLoadAssignment " + clusterName + " : locality with negative priority.");
+          return;
         }
         maxPriority = Math.max(maxPriority, localityPriority);
         priorities.add(localityPriority);
@@ -504,37 +501,29 @@ final class ClientXdsClient extends AbstractXdsClient {
         // Inside of it: the address field must be set.
         for (LbEndpoint lbEndpoint : localityLbEndpoints.getLbEndpointsList()) {
           if (!lbEndpoint.getEndpoint().hasAddress()) {
-            errorMessage = "ClusterLoadAssignment " + clusterName + " : endpoint with no address.";
-            break;
+            nackResponse(ResourceType.EDS, nonce,
+                "ClusterLoadAssignment " + clusterName + " : endpoint with no address.");
+            return;
           }
-        }
-        if (errorMessage != null) {
-          break;
         }
         // Note endpoints with health status other than UNHEALTHY and UNKNOWN are still
         // handed over to watching parties. It is watching parties' responsibility to
         // filter out unhealthy endpoints. See EnvoyProtoData.LbEndpoint#isHealthy().
-        updateBuilder.addLocalityLbEndpoints(
+        localityLbEndpointsMap.put(
             Locality.fromEnvoyProtoLocality(localityLbEndpoints.getLocality()),
             LocalityLbEndpoints.fromEnvoyProtoLocalityLbEndpoints(localityLbEndpoints));
       }
-      if (errorMessage != null) {
-        break;
-      }
       if (priorities.size() != maxPriority + 1) {
-        errorMessage = "ClusterLoadAssignment " + clusterName + " : sparse priorities.";
-        break;
+        nackResponse(ResourceType.EDS, nonce,
+            "ClusterLoadAssignment " + clusterName + " : sparse priorities.");
+        return;
       }
       for (ClusterLoadAssignment.Policy.DropOverload dropOverload
           : assignment.getPolicy().getDropOverloadsList()) {
-        updateBuilder.addDropPolicy(DropOverload.fromEnvoyProtoDropOverload(dropOverload));
+        dropOverloads.add(DropOverload.fromEnvoyProtoDropOverload(dropOverload));
       }
-      EdsUpdate update = updateBuilder.build();
+      EdsUpdate update = new EdsUpdate(clusterName, localityLbEndpointsMap, dropOverloads);
       edsUpdates.put(clusterName, update);
-    }
-    if (errorMessage != null) {
-      nackResponse(ResourceType.EDS, nonce, errorMessage);
-      return;
     }
     ackResponse(ResourceType.EDS, versionInfo, nonce);
 

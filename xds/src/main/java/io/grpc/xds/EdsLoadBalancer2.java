@@ -213,12 +213,12 @@ final class EdsLoadBalancer2 extends LoadBalancer {
                 "Received endpoint update from xDS client {0}: {1}", xdsClient, update);
             if (logger.isLoggable(XdsLogLevel.INFO)) {
               logger.log(XdsLogLevel.INFO, "Received endpoint update: cluster_name={0}, "
-                      + "{1} localities, {2} drop categories", update.getClusterName(),
-                  update.getLocalityLbEndpointsMap().size(), update.getDropPolicies().size());
+                      + "{1} localities, {2} drop categories", update.clusterName,
+                  update.localityLbEndpointsMap.size(), update.dropPolicies.size());
             }
-            dropOverloads = update.getDropPolicies();
+            dropOverloads = update.dropPolicies;
             Map<Locality, LocalityLbEndpoints> localityLbEndpoints =
-                update.getLocalityLbEndpointsMap();
+                update.localityLbEndpointsMap;
             endpointAddresses = new ArrayList<>();
             prioritizedLocalityWeights = new HashMap<>();
             for (Locality locality : localityLbEndpoints.keySet()) {

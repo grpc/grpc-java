@@ -713,14 +713,8 @@ public class EdsLoadBalancer2Test {
         @Override
         public void run() {
           if (watchers.containsKey(resource)) {
-            EdsUpdate.Builder builder  = EdsUpdate.newBuilder().setClusterName(resource);
-            for (DropOverload dropOverload : dropOverloads) {
-              builder.addDropPolicy(dropOverload);
-            }
-            for (Locality locality : localityLbEndpointsMap.keySet()) {
-              builder.addLocalityLbEndpoints(locality, localityLbEndpointsMap.get(locality));
-            }
-            watchers.get(resource).onChanged(builder.build());
+            watchers.get(resource).onChanged(
+                new EdsUpdate(resource, localityLbEndpointsMap, dropOverloads));
           }
         }
       });

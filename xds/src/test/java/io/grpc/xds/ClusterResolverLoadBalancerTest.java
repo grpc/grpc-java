@@ -788,14 +788,8 @@ public class ClusterResolverLoadBalancerTest {
     void deliverClusterLoadAssignment(String resource, List<DropOverload> dropOverloads,
         Map<Locality, LocalityLbEndpoints> localityLbEndpointsMap) {
       if (watchers.containsKey(resource)) {
-        EdsUpdate.Builder builder  = EdsUpdate.newBuilder().setClusterName(resource);
-        for (DropOverload dropOverload : dropOverloads) {
-          builder.addDropPolicy(dropOverload);
-        }
-        for (Locality locality : localityLbEndpointsMap.keySet()) {
-          builder.addLocalityLbEndpoints(locality, localityLbEndpointsMap.get(locality));
-        }
-        watchers.get(resource).onChanged(builder.build());
+        watchers.get(resource).onChanged(
+            new EdsUpdate(resource, localityLbEndpointsMap, dropOverloads));
       }
     }
 

@@ -879,12 +879,12 @@ public abstract class ClientXdsClientTestBase {
         "0000");
     verify(edsResourceWatcher).onChanged(edsUpdateCaptor.capture());
     EdsUpdate edsUpdate = edsUpdateCaptor.getValue();
-    assertThat(edsUpdate.getClusterName()).isEqualTo(EDS_RESOURCE);
-    assertThat(edsUpdate.getDropPolicies())
+    assertThat(edsUpdate.clusterName).isEqualTo(EDS_RESOURCE);
+    assertThat(edsUpdate.dropPolicies)
         .containsExactly(
             new DropOverload("lb", 200),
             new DropOverload("throttle", 1000));
-    assertThat(edsUpdate.getLocalityLbEndpointsMap())
+    assertThat(edsUpdate.localityLbEndpointsMap)
         .containsExactly(
             new Locality("region1", "zone1", "subzone1"),
             new LocalityLbEndpoints(
@@ -928,12 +928,12 @@ public abstract class ClientXdsClientTestBase {
     xdsClient.watchEdsResource(EDS_RESOURCE, watcher);
     verify(watcher).onChanged(edsUpdateCaptor.capture());
     EdsUpdate edsUpdate = edsUpdateCaptor.getValue();
-    assertThat(edsUpdate.getClusterName()).isEqualTo(EDS_RESOURCE);
-    assertThat(edsUpdate.getDropPolicies())
+    assertThat(edsUpdate.clusterName).isEqualTo(EDS_RESOURCE);
+    assertThat(edsUpdate.dropPolicies)
         .containsExactly(
             new DropOverload("lb", 200),
             new DropOverload("throttle", 1000));
-    assertThat(edsUpdate.getLocalityLbEndpointsMap())
+    assertThat(edsUpdate.localityLbEndpointsMap)
         .containsExactly(
             new Locality("region1", "zone1", "subzone1"),
             new LocalityLbEndpoints(
@@ -987,12 +987,12 @@ public abstract class ClientXdsClientTestBase {
         "0000");
     verify(edsResourceWatcher).onChanged(edsUpdateCaptor.capture());
     EdsUpdate edsUpdate = edsUpdateCaptor.getValue();
-    assertThat(edsUpdate.getClusterName()).isEqualTo(EDS_RESOURCE);
-    assertThat(edsUpdate.getDropPolicies())
+    assertThat(edsUpdate.clusterName).isEqualTo(EDS_RESOURCE);
+    assertThat(edsUpdate.dropPolicies)
         .containsExactly(
             new DropOverload("lb", 200),
             new DropOverload("throttle", 1000));
-    assertThat(edsUpdate.getLocalityLbEndpointsMap())
+    assertThat(edsUpdate.localityLbEndpointsMap)
         .containsExactly(
             new Locality("region1", "zone1", "subzone1"),
             new LocalityLbEndpoints(
@@ -1015,9 +1015,9 @@ public abstract class ClientXdsClientTestBase {
 
     verify(edsResourceWatcher, times(2)).onChanged(edsUpdateCaptor.capture());
     edsUpdate = edsUpdateCaptor.getValue();
-    assertThat(edsUpdate.getClusterName()).isEqualTo(EDS_RESOURCE);
-    assertThat(edsUpdate.getDropPolicies()).isEmpty();
-    assertThat(edsUpdate.getLocalityLbEndpointsMap())
+    assertThat(edsUpdate.clusterName).isEqualTo(EDS_RESOURCE);
+    assertThat(edsUpdate.dropPolicies).isEmpty();
+    assertThat(edsUpdate.localityLbEndpointsMap)
         .containsExactly(
             new Locality("region2", "zone2", "subzone2"),
             new LocalityLbEndpoints(
@@ -1071,9 +1071,9 @@ public abstract class ClientXdsClientTestBase {
                         mf.buildDropOverload("lb", 100)))));
     call.sendResponse("0", clusterLoadAssignments, ResourceType.EDS, "0000");
     verify(edsWatcher).onChanged(edsUpdateCaptor.capture());
-    assertThat(edsUpdateCaptor.getValue().getClusterName()).isEqualTo(resource);
+    assertThat(edsUpdateCaptor.getValue().clusterName).isEqualTo(resource);
     verify(edsResourceWatcher).onChanged(edsUpdateCaptor.capture());
-    assertThat(edsUpdateCaptor.getValue().getClusterName()).isEqualTo(EDS_RESOURCE);
+    assertThat(edsUpdateCaptor.getValue().clusterName).isEqualTo(EDS_RESOURCE);
 
     clusters = ImmutableList.of(
         Any.pack(mf.buildEdsCluster(resource, null, true, null, null)),  // no change
@@ -1124,12 +1124,12 @@ public abstract class ClientXdsClientTestBase {
     call.sendResponse("0", clusterLoadAssignments, ResourceType.EDS, "0000");
     verify(edsResourceWatcher).onChanged(edsUpdateCaptor.capture());
     EdsUpdate edsUpdate = edsUpdateCaptor.getValue();
-    assertThat(edsUpdate.getClusterName()).isEqualTo(EDS_RESOURCE);
-    assertThat(edsUpdate.getDropPolicies())
+    assertThat(edsUpdate.clusterName).isEqualTo(EDS_RESOURCE);
+    assertThat(edsUpdate.dropPolicies)
         .containsExactly(
             new DropOverload("lb", 200),
             new DropOverload("throttle", 1000));
-    assertThat(edsUpdate.getLocalityLbEndpointsMap())
+    assertThat(edsUpdate.localityLbEndpointsMap)
         .containsExactly(
             new Locality("region1", "zone1", "subzone1"),
             new LocalityLbEndpoints(
@@ -1153,9 +1153,9 @@ public abstract class ClientXdsClientTestBase {
 
     verify(watcher1).onChanged(edsUpdateCaptor.capture());
     edsUpdate = edsUpdateCaptor.getValue();
-    assertThat(edsUpdate.getClusterName()).isEqualTo(edsResource);
-    assertThat(edsUpdate.getDropPolicies()).isEmpty();
-    assertThat(edsUpdate.getLocalityLbEndpointsMap())
+    assertThat(edsUpdate.clusterName).isEqualTo(edsResource);
+    assertThat(edsUpdate.dropPolicies).isEmpty();
+    assertThat(edsUpdate.localityLbEndpointsMap)
         .containsExactly(
             new Locality("region2", "zone2", "subzone2"),
             new LocalityLbEndpoints(
@@ -1163,9 +1163,9 @@ public abstract class ClientXdsClientTestBase {
                     new LbEndpoint("172.44.2.2", 8000, 3, true)), 2, 0));
     verify(watcher2).onChanged(edsUpdateCaptor.capture());
     edsUpdate = edsUpdateCaptor.getValue();
-    assertThat(edsUpdate.getClusterName()).isEqualTo(edsResource);
-    assertThat(edsUpdate.getDropPolicies()).isEmpty();
-    assertThat(edsUpdate.getLocalityLbEndpointsMap())
+    assertThat(edsUpdate.clusterName).isEqualTo(edsResource);
+    assertThat(edsUpdate.dropPolicies).isEmpty();
+    assertThat(edsUpdate.localityLbEndpointsMap)
         .containsExactly(
             new Locality("region2", "zone2", "subzone2"),
             new LocalityLbEndpoints(

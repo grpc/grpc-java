@@ -21,8 +21,6 @@ import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.MoreObjects.ToStringHelper;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import io.grpc.Status;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
@@ -334,39 +332,17 @@ abstract class XdsClient {
   }
 
   static final class EdsUpdate implements ResourceUpdate {
-    private final String clusterName;
-    private final Map<Locality, LocalityLbEndpoints> localityLbEndpointsMap;
-    private final List<DropOverload> dropPolicies;
+    final String clusterName;
+    final Map<Locality, LocalityLbEndpoints> localityLbEndpointsMap;
+    final List<DropOverload> dropPolicies;
 
-    private EdsUpdate(
-        String clusterName,
-        Map<Locality, LocalityLbEndpoints> localityLbEndpoints,
+    EdsUpdate(String clusterName, Map<Locality, LocalityLbEndpoints> localityLbEndpoints,
         List<DropOverload> dropPolicies) {
-      this.clusterName = clusterName;
-      this.localityLbEndpointsMap = localityLbEndpoints;
-      this.dropPolicies = dropPolicies;
-    }
-
-    static Builder newBuilder() {
-      return new Builder();
-    }
-
-    String getClusterName() {
-      return clusterName;
-    }
-
-    /**
-     * Returns a map of localities with endpoints load balancing information in each locality.
-     */
-    Map<Locality, LocalityLbEndpoints> getLocalityLbEndpointsMap() {
-      return Collections.unmodifiableMap(localityLbEndpointsMap);
-    }
-
-    /**
-     * Returns a list of drop policies to be applied to outgoing requests.
-     */
-    List<DropOverload> getDropPolicies() {
-      return Collections.unmodifiableList(dropPolicies);
+      this.clusterName = checkNotNull(clusterName, "clusterName");
+      this.localityLbEndpointsMap = Collections.unmodifiableMap(
+          new LinkedHashMap<>(checkNotNull(localityLbEndpoints, "localityLbEndpoints")));
+      this.dropPolicies = Collections.unmodifiableList(
+          new ArrayList<>(checkNotNull(dropPolicies, "dropPolicies")));
     }
 
     @Override
@@ -397,39 +373,6 @@ abstract class XdsClient {
               .add("localityLbEndpointsMap", localityLbEndpointsMap)
               .add("dropPolicies", dropPolicies)
               .toString();
-    }
-
-    static final class Builder {
-      private String clusterName;
-      private Map<Locality, LocalityLbEndpoints> localityLbEndpointsMap = new LinkedHashMap<>();
-      private List<DropOverload> dropPolicies = new ArrayList<>();
-
-      private Builder() {
-      }
-
-      Builder setClusterName(String clusterName) {
-        this.clusterName = clusterName;
-        return this;
-      }
-
-      Builder addLocalityLbEndpoints(Locality locality, LocalityLbEndpoints info) {
-        localityLbEndpointsMap.put(locality, info);
-        return this;
-      }
-
-      Builder addDropPolicy(DropOverload policy) {
-        dropPolicies.add(policy);
-        return this;
-      }
-
-      EdsUpdate build() {
-        checkState(clusterName != null, "clusterName is not set");
-        return
-            new EdsUpdate(
-                clusterName,
-                ImmutableMap.copyOf(localityLbEndpointsMap),
-                ImmutableList.copyOf(dropPolicies));
-      }
     }
   }
 
