@@ -107,19 +107,11 @@ abstract class XdsClient {
 
   static final class RdsUpdate implements ResourceUpdate {
     // The list virtual hosts that make up the route table.
-    private final List<VirtualHost> virtualHosts;
+    final List<VirtualHost> virtualHosts;
 
-    private RdsUpdate(List<VirtualHost> virtualHosts) {
+    RdsUpdate(List<VirtualHost> virtualHosts) {
       this.virtualHosts = Collections.unmodifiableList(
           new ArrayList<>(checkNotNull(virtualHosts, "virtualHosts")));
-    }
-
-    static RdsUpdate fromVirtualHosts(List<VirtualHost> virtualHosts) {
-      return new RdsUpdate(virtualHosts);
-    }
-
-    List<VirtualHost> getVirtualHosts() {
-      return virtualHosts;
     }
 
     @Override

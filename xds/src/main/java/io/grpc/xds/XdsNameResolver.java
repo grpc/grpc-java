@@ -603,7 +603,7 @@ final class XdsNameResolver extends NameResolver {
             if (RdsResourceWatcherImpl.this != rdsWatcher) {
               return;
             }
-            updateRoutes(update.getVirtualHosts());
+            updateRoutes(update.virtualHosts);
           }
         });
       }

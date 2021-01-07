@@ -795,7 +795,7 @@ public class XdsNameResolverTest {
           if (!resourceName.equals(rdsResource)) {
             return;
           }
-          rdsWatcher.onChanged(RdsUpdate.fromVirtualHosts(virtualHosts));
+          rdsWatcher.onChanged(new RdsUpdate(virtualHosts));
         }
       });
     }

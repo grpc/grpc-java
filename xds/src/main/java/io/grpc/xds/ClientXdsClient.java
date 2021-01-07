@@ -232,7 +232,6 @@ final class ClientXdsClient extends AbstractXdsClient {
         XdsLogLevel.INFO, "Received RDS response for resources: {0}", routeConfigs.keySet());
 
     Map<String, RdsUpdate> rdsUpdates = new HashMap<>();
-    String errorMessage = null;
     for (Map.Entry<String, RouteConfiguration> entry : routeConfigs.entrySet()) {
       String routeConfigName = entry.getKey();
       RouteConfiguration routeConfig = entry.getValue();
@@ -242,21 +241,13 @@ final class ClientXdsClient extends AbstractXdsClient {
         StructOrError<EnvoyProtoData.VirtualHost> virtualHost =
             EnvoyProtoData.VirtualHost.fromEnvoyProtoVirtualHost(virtualHostProto);
         if (virtualHost.getErrorDetail() != null) {
-          errorMessage = "RouteConfiguration " + routeConfigName
-              + " contains invalid virtual host: " + virtualHost.getErrorDetail();
-          break;
-        } else {
-          virtualHosts.add(virtualHost.getStruct());
+          nackResponse(ResourceType.RDS, nonce, "RouteConfiguration " + routeConfigName
+              + " contains invalid virtual host: " + virtualHost.getErrorDetail());
+          return;
         }
+        virtualHosts.add(virtualHost.getStruct());
       }
-      if (errorMessage != null) {
-        break;
-      }
-      rdsUpdates.put(routeConfigName, RdsUpdate.fromVirtualHosts(virtualHosts));
-    }
-    if (errorMessage != null) {
-      nackResponse(ResourceType.RDS, nonce, errorMessage);
-      return;
+      rdsUpdates.put(routeConfigName, new RdsUpdate(virtualHosts));
     }
     ackResponse(ResourceType.RDS, versionInfo, nonce);
 
