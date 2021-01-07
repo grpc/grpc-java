@@ -41,6 +41,7 @@ import io.grpc.Metadata;
 import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.Status.Code;
+import io.grpc.SynchronizationContext;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.xds.ClusterImplLoadBalancerProvider.ClusterImplConfig;
@@ -86,6 +87,13 @@ public class ClusterImplLoadBalancerTest {
   private static final String CLUSTER = "cluster-foo.googleapis.com";
   private static final String EDS_SERVICE_NAME = "service.googleapis.com";
   private static final String LRS_SERVER_NAME = "";
+  private final SynchronizationContext syncContext = new SynchronizationContext(
+      new Thread.UncaughtExceptionHandler() {
+        @Override
+        public void uncaughtException(Thread t, Throwable e) {
+          throw new AssertionError(e);
+        }
+      });
   private final Locality locality =
       new Locality("test-region", "test-zone", "test-subzone");
   private final PolicySelection roundRobin =
@@ -583,6 +591,12 @@ public class ClusterImplLoadBalancerTest {
   }
 
   private final class FakeLbHelper extends LoadBalancer.Helper {
+
+    @Override
+    public SynchronizationContext getSynchronizationContext() {
+      return syncContext;
+    }
+
     @Override
     public void updateBalancingState(
         @Nonnull ConnectivityState newState, @Nonnull SubchannelPicker newPicker) {

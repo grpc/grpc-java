@@ -23,18 +23,18 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.xds.XdsSubchannelPickers.BUFFER_PICKER;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.atLeastOnce;
-import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import io.grpc.Attributes;
-import io.grpc.ChannelLogger;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
@@ -45,6 +45,7 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status;
+import io.grpc.SynchronizationContext;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.xds.WeightedRandomPicker.WeightedChildPicker;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedPolicySelection;
@@ -68,6 +69,13 @@ import org.mockito.MockitoAnnotations;
 @RunWith(JUnit4.class)
 public class WeightedTargetLoadBalancerTest {
 
+  private final SynchronizationContext syncContext = new SynchronizationContext(
+      new Thread.UncaughtExceptionHandler() {
+        @Override
+        public void uncaughtException(Thread t, Throwable e) {
+          throw new AssertionError(e);
+        }
+      });
   private final LoadBalancerRegistry lbRegistry = new LoadBalancerRegistry();
   private final List<LoadBalancer> childBalancers = new ArrayList<>();
   private final List<Helper> childHelpers = new ArrayList<>();
@@ -143,8 +151,6 @@ public class WeightedTargetLoadBalancerTest {
 
   @Mock
   private Helper helper;
-  @Mock
-  private ChannelLogger channelLogger;
 
   private LoadBalancer weightedTargetLb;
   private int fooLbCreated;
@@ -153,8 +159,7 @@ public class WeightedTargetLoadBalancerTest {
   @Before
   public void setUp() {
     MockitoAnnotations.initMocks(this);
-
-    doReturn(channelLogger).when(helper).getChannelLogger();
+    when(helper.getSynchronizationContext()).thenReturn(syncContext);
     lbRegistry.register(fooLbProvider);
     lbRegistry.register(barLbProvider);
 
@@ -198,7 +203,7 @@ public class WeightedTargetLoadBalancerTest {
             .setAttributes(Attributes.newBuilder().set(fakeKey, fakeValue).build())
             .setLoadBalancingPolicyConfig(new WeightedTargetConfig(targets))
             .build());
-
+    verify(helper).updateBalancingState(eq(CONNECTING), eq(BUFFER_PICKER));
     assertThat(childBalancers).hasSize(4);
     assertThat(childHelpers).hasSize(4);
     assertThat(fooLbCreated).isEqualTo(2);
@@ -235,7 +240,7 @@ public class WeightedTargetLoadBalancerTest {
             .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
             .setLoadBalancingPolicyConfig(new WeightedTargetConfig(newTargets))
             .build());
-
+    verify(helper, atLeast(2)).updateBalancingState(eq(CONNECTING), eq(BUFFER_PICKER));
     assertThat(childBalancers).hasSize(5);
     assertThat(childHelpers).hasSize(5);
     assertThat(fooLbCreated).isEqualTo(3); // One more foo LB created for target4
@@ -277,6 +282,7 @@ public class WeightedTargetLoadBalancerTest {
             .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
             .setLoadBalancingPolicyConfig(new WeightedTargetConfig(targets))
             .build());
+    verify(helper).updateBalancingState(eq(CONNECTING), eq(BUFFER_PICKER));
 
     // Error after child balancers created.
     weightedTargetLb.handleNameResolutionError(Status.ABORTED);
@@ -303,6 +309,7 @@ public class WeightedTargetLoadBalancerTest {
             .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
             .setLoadBalancingPolicyConfig(new WeightedTargetConfig(targets))
             .build());
+    verify(helper).updateBalancingState(eq(CONNECTING), eq(BUFFER_PICKER));
 
     // Subchannels to be created for each child balancer.
     final SubchannelPicker[] subchannelPickers = new SubchannelPicker[]{
@@ -316,7 +323,7 @@ public class WeightedTargetLoadBalancerTest {
     childHelpers.get(1).updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(Status.ABORTED));
     verify(helper, never()).updateBalancingState(
         eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
-    verify(helper).updateBalancingState(eq(CONNECTING), eq(BUFFER_PICKER));
+    verify(helper, times(2)).updateBalancingState(eq(CONNECTING), eq(BUFFER_PICKER));
 
     // Another child balancer goes to READY.
     childHelpers.get(2).updateBalancingState(READY, subchannelPickers[2]);
