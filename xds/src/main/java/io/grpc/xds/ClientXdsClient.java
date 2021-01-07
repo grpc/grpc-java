@@ -151,49 +151,46 @@ final class ClientXdsClient extends AbstractXdsClient {
 
     Map<String, LdsUpdate> ldsUpdates = new HashMap<>();
     Set<String> rdsNames = new HashSet<>();
-    String errorMessage = null;
     for (Map.Entry<String, HttpConnectionManager> entry : httpConnectionManagers.entrySet()) {
+      LdsUpdate update;
       String listenerName = entry.getKey();
       HttpConnectionManager hcm = entry.getValue();
-      LdsUpdate.Builder updateBuilder = LdsUpdate.newBuilder();
+      long maxStreamDuration = 0;
+      if (hcm.hasCommonHttpProtocolOptions()) {
+        HttpProtocolOptions options = hcm.getCommonHttpProtocolOptions();
+        if (options.hasMaxStreamDuration()) {
+          maxStreamDuration = Durations.toNanos(options.getMaxStreamDuration());
+        }
+      }
       if (hcm.hasRouteConfig()) {
+        List<EnvoyProtoData.VirtualHost> virtualHosts = new ArrayList<>();
         for (VirtualHost virtualHostProto : hcm.getRouteConfig().getVirtualHostsList()) {
           StructOrError<EnvoyProtoData.VirtualHost> virtualHost =
               EnvoyProtoData.VirtualHost.fromEnvoyProtoVirtualHost(virtualHostProto);
           if (virtualHost.getErrorDetail() != null) {
-            errorMessage = "Listener " + listenerName + " contains invalid virtual host: "
-                + virtualHost.getErrorDetail();
-            break;
-          } else {
-            updateBuilder.addVirtualHost(virtualHost.getStruct());
+            nackResponse(ResourceType.LDS, nonce,
+                "Listener " + listenerName + " contains invalid virtual host: "
+                    + virtualHost.getErrorDetail());
+            return;
           }
+          virtualHosts.add(virtualHost.getStruct());
         }
+        update = new LdsUpdate(maxStreamDuration, virtualHosts);
       } else if (hcm.hasRds()) {
         Rds rds = hcm.getRds();
         if (!rds.getConfigSource().hasAds()) {
-          errorMessage = "Listener " + listenerName + " with RDS config_source not set to ADS";
-        } else {
-          updateBuilder.setRdsName(rds.getRouteConfigName());
-          rdsNames.add(rds.getRouteConfigName());
+          nackResponse(ResourceType.LDS, nonce,
+              "Listener " + listenerName + " with RDS config_source not set to ADS");
+          return;
         }
+        update = new LdsUpdate(maxStreamDuration, rds.getRouteConfigName());
+        rdsNames.add(rds.getRouteConfigName());
       } else {
-        errorMessage = "Listener " + listenerName + " without inline RouteConfiguration or RDS";
+        nackResponse(ResourceType.LDS, nonce,
+            "Listener " + listenerName + " without inline RouteConfiguration or RDS");
+        return;
       }
-      if (errorMessage != null) {
-        break;
-      }
-      if (hcm.hasCommonHttpProtocolOptions()) {
-        HttpProtocolOptions options = hcm.getCommonHttpProtocolOptions();
-        if (options.hasMaxStreamDuration()) {
-          updateBuilder.setHttpMaxStreamDurationNano(
-              Durations.toNanos(options.getMaxStreamDuration()));
-        }
-      }
-      ldsUpdates.put(listenerName, updateBuilder.build());
-    }
-    if (errorMessage != null) {
-      nackResponse(ResourceType.LDS, nonce, errorMessage);
-      return;
+      ldsUpdates.put(listenerName, update);
     }
     ackResponse(ResourceType.LDS, versionInfo, nonce);
 

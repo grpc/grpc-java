@@ -49,13 +49,21 @@ abstract class XdsClient {
 
   static final class LdsUpdate implements ResourceUpdate {
     // Total number of nanoseconds to keep alive an HTTP request/response stream.
-    private final long httpMaxStreamDurationNano;
+    final long httpMaxStreamDurationNano;
     // The name of the route configuration to be used for RDS resource discovery.
     @Nullable
-    private final String rdsName;
+    final String rdsName;
     // The list virtual hosts that make up the route table.
     @Nullable
-    private final List<VirtualHost> virtualHosts;
+    final List<VirtualHost> virtualHosts;
+
+    LdsUpdate(long httpMaxStreamDurationNano, String rdsName) {
+      this(httpMaxStreamDurationNano, rdsName, null);
+    }
+
+    LdsUpdate(long httpMaxStreamDurationNano, List<VirtualHost> virtualHosts) {
+      this(httpMaxStreamDurationNano, null, virtualHosts);
+    }
 
     private LdsUpdate(long httpMaxStreamDurationNano, @Nullable String rdsName,
         @Nullable List<VirtualHost> virtualHosts) {
@@ -63,20 +71,6 @@ abstract class XdsClient {
       this.rdsName = rdsName;
       this.virtualHosts = virtualHosts == null
           ? null : Collections.unmodifiableList(new ArrayList<>(virtualHosts));
-    }
-
-    long getHttpMaxStreamDurationNano() {
-      return httpMaxStreamDurationNano;
-    }
-
-    @Nullable
-    String getRdsName() {
-      return rdsName;
-    }
-
-    @Nullable
-    List<VirtualHost> getVirtualHosts() {
-      return virtualHosts;
     }
 
     @Override
@@ -108,44 +102,6 @@ abstract class XdsClient {
         toStringHelper.add("virtualHosts", virtualHosts);
       }
       return toStringHelper.toString();
-    }
-
-    static Builder newBuilder() {
-      return new Builder();
-    }
-
-    static class Builder {
-      private long httpMaxStreamDurationNano;
-      @Nullable
-      private String rdsName;
-      @Nullable
-      private List<VirtualHost> virtualHosts;
-
-      private Builder() {
-      }
-
-      Builder setHttpMaxStreamDurationNano(long httpMaxStreamDurationNano) {
-        this.httpMaxStreamDurationNano = httpMaxStreamDurationNano;
-        return this;
-      }
-
-      Builder setRdsName(String rdsName) {
-        this.rdsName = rdsName;
-        return this;
-      }
-
-      Builder addVirtualHost(VirtualHost virtualHost) {
-        if (virtualHosts == null) {
-          virtualHosts = new ArrayList<>();
-        }
-        virtualHosts.add(virtualHost);
-        return this;
-      }
-
-      LdsUpdate build() {
-        checkState((rdsName == null) != (virtualHosts == null), "one of rdsName and virtualHosts");
-        return new LdsUpdate(httpMaxStreamDurationNano, rdsName, virtualHosts);
-      }
     }
   }
 
