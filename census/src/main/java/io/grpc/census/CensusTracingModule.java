@@ -38,6 +38,7 @@ import io.opencensus.trace.Span;
 import io.opencensus.trace.SpanContext;
 import io.opencensus.trace.Status;
 import io.opencensus.trace.Tracer;
+import io.opencensus.trace.Tracing;
 import io.opencensus.trace.propagation.BinaryFormat;
 import io.opencensus.trace.unsafe.ContextUtils;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
@@ -378,11 +379,8 @@ final class CensusTracingModule {
     public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
         MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
       // New RPCs on client-side inherit the tracing context from the current Context.
-      // Safe usage of the unsafe trace API because CONTEXT_SPAN_KEY.get() returns the same value
-      // as Tracer.getCurrentSpan() except when no value available when the return value is null
-      // for the direct access and BlankSpan when Tracer API is used.
       final ClientCallTracer tracerFactory =
-          newClientCallTracer(ContextUtils.getValue(Context.current()), method);
+          newClientCallTracer(Tracing.getTracer().getCurrentSpan(), method);
       ClientCall<ReqT, RespT> call =
           next.newCall(
               method,
