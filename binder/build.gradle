@@ -1,0 +1,45 @@
+plugins {
+//    id "java-library"
+    id "com.android.library"
+    id "ru.vyarus.animalsniffer"
+}
+
+description = 'gRPC BinderChannel'
+
+android {
+    compileSdkVersion 29
+    defaultConfig {
+        consumerProguardFiles "proguard-rules.txt"
+        minSdkVersion 16
+        targetSdkVersion 28
+        versionCode 1
+        versionName "1.0"
+        testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
+    }
+    lintOptions { abortOnError false }
+}
+
+repositories {
+    google()
+    jcenter()
+}
+
+dependencies {
+    api project(':grpc-core')
+    guavaDependency 'implementation'
+    implementation libraries.androidx_annotation
+    testImplementation libraries.androidx_core
+    testImplementation libraries.androidx_test
+    testImplementation libraries.junit
+    testImplementation libraries.mockito
+    testImplementation (libraries.robolectric) {
+        // Unreleased change: https://github.com/robolectric/robolectric/pull/5432
+        exclude group: 'com.google.auto.service', module: 'auto-service'
+    }
+    testImplementation libraries.truth
+}
+
+/*javadoc {
+    // We want io.grpc.Internal, but not io.grpc.Internal*
+    exclude 'io/grpc/Internal?*.java'
+}*/
