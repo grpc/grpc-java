@@ -14,15 +14,11 @@
  * limitations under the License.
  */
 
-package io.grpc.alts;
-
-import io.grpc.Attributes;
-import io.grpc.EquivalentAddressGroup;
-import io.grpc.Internal;
+package io.grpc;
 
 /**
- * Internal constants used with {@link GoogleDefaultChannelCredentials}. This is intended for
- * usage internal to the gRPC team. If you *really* think you need to use this, contact the
+ * Internal constants used with GoogleDefaultChannelCredentials. This is intended for usage
+ * internal to the gRPC team. If you *really* think you need to use this, contact the
  * gRPC team first.
  */
 @Internal
@@ -31,6 +27,7 @@ public class InternalGoogleDefaultConstants {
   /**
    * Name of the cluster (in xDS concept) that provides this EquivalentAddressGroup.
    */
+  @Internal
   @EquivalentAddressGroup.Attr
   public static final Attributes.Key<String> ATTR_XDS_CLUSTER_NAME =
       Attributes.Key.create("io.grpc.alts.xdsClusterName");
@@ -38,6 +35,7 @@ public class InternalGoogleDefaultConstants {
   /**
    * Cluster name (in xDS concept) representing a Google CFE.
    */
+  @Internal
   public static final String GOOGLE_CFE_CLUSTER_NAME = "google_cfe";
 
   private InternalGoogleDefaultConstants() {}

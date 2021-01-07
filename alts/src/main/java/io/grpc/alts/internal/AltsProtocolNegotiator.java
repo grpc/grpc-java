@@ -28,7 +28,7 @@ import io.grpc.InternalChannelz.OtherSecurity;
 import io.grpc.InternalChannelz.Security;
 import io.grpc.SecurityLevel;
 import io.grpc.Status;
-import io.grpc.alts.InternalGoogleDefaultConstants;
+import io.grpc.InternalGoogleDefaultConstants;
 import io.grpc.alts.internal.RpcProtocolVersionsUtil.RpcVersionsCheckResult;
 import io.grpc.grpclb.GrpclbConstants;
 import io.grpc.internal.ObjectPool;
