@@ -46,7 +46,7 @@ public class ServerImplBuilderTest {
     builder = new ServerImplBuilder(
         new ClientTransportServersBuilder() {
           @Override
-          public List<? extends InternalServer> buildClientTransportServers(
+          public InternalServer buildClientTransportServers(
               List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
             throw new UnsupportedOperationException();
           }

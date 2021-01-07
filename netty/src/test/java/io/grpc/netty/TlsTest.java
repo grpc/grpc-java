@@ -16,11 +16,13 @@
 
 package io.grpc.netty;
 
+import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
 import com.google.common.base.Throwables;
 import com.google.common.util.concurrent.MoreExecutors;
+import io.grpc.ConnectivityState;
 import io.grpc.ManagedChannel;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
@@ -114,10 +116,6 @@ public class TlsTest {
           // Java 9+
         } catch (ClassNotFoundException ignored) {
           // Before Java 9
-          // TODO(ejona): remove this assume once we upgrade to Netty 4.1.50.Final. GrpcSslContexts
-          // detects the Java 9 ALPN API in Java 8 u252, but Netty does not support it in our
-          // current version
-          Assume.assumeTrue("Jetty ALPN not found", JettyTlsUtil.isJettyAlpnConfigured());
           try {
             GrpcSslContexts.configure(SslContextBuilder.forClient(), jdkProvider);
           } catch (IllegalArgumentException ex) {
@@ -230,6 +228,12 @@ public class TlsTest {
           Throwables.getStackTraceAsString(e),
           Status.Code.UNAVAILABLE, e.getStatus().getCode());
     }
+    // We really want to see TRANSIENT_FAILURE here, but if the test runs slowly the 1s backoff
+    // may be exceeded by the time the failure happens (since it counts from the start of the
+    // attempt). Even so, CONNECTING is a strong indicator that the handshake failed; otherwise we'd
+    // expect READY or IDLE.
+    assertThat(channel.getState(false))
+        .isAnyOf(ConnectivityState.TRANSIENT_FAILURE, ConnectivityState.CONNECTING);
   }
 
 
@@ -271,6 +275,11 @@ public class TlsTest {
           Throwables.getStackTraceAsString(e),
           Status.Code.UNAVAILABLE, e.getStatus().getCode());
     }
+    // We really want to see TRANSIENT_FAILURE here, but if the test runs slowly the 1s backoff
+    // may be exceeded by the time the failure happens (since it counts from the start of the
+    // attempt). Even so, CONNECTING is a strong indicator that the handshake failed; otherwise we'd
+    assertThat(channel.getState(false))
+        .isAnyOf(ConnectivityState.TRANSIENT_FAILURE, ConnectivityState.CONNECTING);
   }
 
 
@@ -316,6 +325,11 @@ public class TlsTest {
           Throwables.getStackTraceAsString(e),
           Status.Code.UNAVAILABLE, e.getStatus().getCode());
     }
+    // We really want to see TRANSIENT_FAILURE here, but if the test runs slowly the 1s backoff
+    // may be exceeded by the time the failure happens (since it counts from the start of the
+    // attempt). Even so, CONNECTING is a strong indicator that the handshake failed; otherwise we'd
+    assertThat(channel.getState(false))
+        .isAnyOf(ConnectivityState.TRANSIENT_FAILURE, ConnectivityState.CONNECTING);
   }
 
 

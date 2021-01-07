@@ -1,19 +1,6 @@
 package io.grpc.testing.integration;
 
 import static io.grpc.MethodDescriptor.generateFullMethodName;
-import static io.grpc.stub.ClientCalls.asyncBidiStreamingCall;
-import static io.grpc.stub.ClientCalls.asyncClientStreamingCall;
-import static io.grpc.stub.ClientCalls.asyncServerStreamingCall;
-import static io.grpc.stub.ClientCalls.asyncUnaryCall;
-import static io.grpc.stub.ClientCalls.blockingServerStreamingCall;
-import static io.grpc.stub.ClientCalls.blockingUnaryCall;
-import static io.grpc.stub.ClientCalls.futureUnaryCall;
-import static io.grpc.stub.ServerCalls.asyncBidiStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncClientStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncServerStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncUnaryCall;
-import static io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall;
 
 /**
  * <pre>
@@ -118,14 +105,14 @@ public final class XdsUpdateClientConfigureServiceGrpc {
      */
     public void configure(io.grpc.testing.integration.Messages.ClientConfigureRequest request,
         io.grpc.stub.StreamObserver<io.grpc.testing.integration.Messages.ClientConfigureResponse> responseObserver) {
-      asyncUnimplementedUnaryCall(getConfigureMethod(), responseObserver);
+      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getConfigureMethod(), responseObserver);
     }
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
       return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
           .addMethod(
             getConfigureMethod(),
-            asyncUnaryCall(
+            io.grpc.stub.ServerCalls.asyncUnaryCall(
               new MethodHandlers<
                 io.grpc.testing.integration.Messages.ClientConfigureRequest,
                 io.grpc.testing.integration.Messages.ClientConfigureResponse>(
@@ -158,7 +145,7 @@ public final class XdsUpdateClientConfigureServiceGrpc {
      */
     public void configure(io.grpc.testing.integration.Messages.ClientConfigureRequest request,
         io.grpc.stub.StreamObserver<io.grpc.testing.integration.Messages.ClientConfigureResponse> responseObserver) {
-      asyncUnaryCall(
+      io.grpc.stub.ClientCalls.asyncUnaryCall(
           getChannel().newCall(getConfigureMethod(), getCallOptions()), request, responseObserver);
     }
   }
@@ -186,7 +173,7 @@ public final class XdsUpdateClientConfigureServiceGrpc {
      * </pre>
      */
     public io.grpc.testing.integration.Messages.ClientConfigureResponse configure(io.grpc.testing.integration.Messages.ClientConfigureRequest request) {
-      return blockingUnaryCall(
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getConfigureMethod(), getCallOptions(), request);
     }
   }
@@ -215,7 +202,7 @@ public final class XdsUpdateClientConfigureServiceGrpc {
      */
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.testing.integration.Messages.ClientConfigureResponse> configure(
         io.grpc.testing.integration.Messages.ClientConfigureRequest request) {
-      return futureUnaryCall(
+      return io.grpc.stub.ClientCalls.futureUnaryCall(
           getChannel().newCall(getConfigureMethod(), getCallOptions()), request);
     }
   }

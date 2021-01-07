@@ -46,4 +46,9 @@ public final class CompositeChannelCredentials extends ChannelCredentials {
   public CallCredentials getCallCredentials() {
     return callCredentials;
   }
+
+  @Override
+  public ChannelCredentials withoutBearerTokens() {
+    return channelCredentials.withoutBearerTokens();
+  }
 }

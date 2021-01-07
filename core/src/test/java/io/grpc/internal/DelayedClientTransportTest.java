@@ -16,6 +16,7 @@
 
 package io.grpc.internal;
 
+import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -598,6 +599,17 @@ public class DelayedClientTransportTest {
     stream.start(streamListener);
     assertTrue(delayedTransport.hasPendingStreams());
     verify(transportListener).transportInUse(true);
+  }
+
+  @Test
+  public void pendingStream_appendTimeoutInsight_waitForReady() {
+    ClientStream stream = delayedTransport.newStream(
+        method, headers, callOptions.withWaitForReady());
+    stream.start(streamListener);
+    InsightBuilder insight = new InsightBuilder();
+    stream.appendTimeoutInsight(insight);
+    assertThat(insight.toString())
+        .matches("\\[wait_for_ready, buffered_nanos=[0-9]+\\, waiting_for_connection]");
   }
 
   private static TransportProvider newTransportProvider(final ClientTransport transport) {

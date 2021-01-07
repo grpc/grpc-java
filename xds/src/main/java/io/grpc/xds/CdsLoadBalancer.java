@@ -16,7 +16,6 @@
 
 package io.grpc.xds;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.xds.XdsLbPolicies.EDS_POLICY_NAME;
@@ -35,6 +34,8 @@ import io.grpc.xds.CdsLoadBalancerProvider.CdsConfig;
 import io.grpc.xds.EdsLoadBalancerProvider.EdsConfig;
 import io.grpc.xds.XdsClient.CdsResourceWatcher;
 import io.grpc.xds.XdsClient.CdsUpdate;
+import io.grpc.xds.XdsClient.CdsUpdate.ClusterType;
+import io.grpc.xds.XdsClient.CdsUpdate.EdsClusterConfig;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import javax.annotation.Nullable;
@@ -124,33 +125,34 @@ final class CdsLoadBalancer extends LoadBalancer {
     }
 
     @Override
-    public void onChanged(final CdsUpdate newUpdate) {
+    public void onChanged(final CdsUpdate update) {
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
           if (shutdown) {
             return;
           }
-          if (logger.isLoggable(XdsLogLevel.INFO)) {
-            logger.log(XdsLogLevel.INFO, "Received cluster update from xDS client {0}: "
-                    + "cluster_name={1}, eds_service_name={2}, lb_policy={3}, report_load={4}",
-                xdsClient, newUpdate.getClusterName(), newUpdate.getEdsServiceName(),
-                newUpdate.getLbPolicy(), newUpdate.getLrsServerName() != null);
+          // TODO(chengyuanzhang): implementations for logical DNS and aggregate clusters.
+          if (update.clusterType != ClusterType.EDS) {
+            logger.log(XdsLogLevel.WARNING, "Unsupported cluster type: {0}", update.clusterType);
+            return;
           }
-          // FIXME(chengyuanzhang): handle error correctly to avoid being unnecessarily fragile.
-          checkArgument(newUpdate.getLbPolicy().equals("round_robin"),
-              "can only support round_robin policy");
+          EdsClusterConfig clusterConfig = (EdsClusterConfig) update.clusterConfig;
+          logger.log(XdsLogLevel.INFO, "EDS cluster {0}, edsServiceName: {1}",
+              update.clusterName, clusterConfig.edsServiceName);
+          logger.log(XdsLogLevel.DEBUG, "Cluster config: {0}", clusterConfig);
+
           LoadBalancerProvider endpointPickingPolicyProvider =
-              lbRegistry.getProvider(newUpdate.getLbPolicy());
+              lbRegistry.getProvider(clusterConfig.lbPolicy);
           LoadBalancerProvider localityPickingPolicyProvider =
               lbRegistry.getProvider(WEIGHTED_TARGET_POLICY_NAME);  // hardcode to weighted-target
           final EdsConfig edsConfig =
               new EdsConfig(
-                  /* clusterName = */ newUpdate.getClusterName(),
-                  /* edsServiceName = */ newUpdate.getEdsServiceName(),
-                  /* lrsServerName = */ newUpdate.getLrsServerName(),
-                  /* maxConcurrentRequests = */ newUpdate.getMaxConcurrentRequests(),
-                  /* tlsContext = */ newUpdate.getUpstreamTlsContext(),
+                  /* clusterName = */ update.clusterName,
+                  /* edsServiceName = */ clusterConfig.edsServiceName,
+                  /* lrsServerName = */ clusterConfig.lrsServerName,
+                  /* maxConcurrentRequests = */ clusterConfig.maxConcurrentRequests,
+                  /* tlsContext = */ clusterConfig.upstreamTlsContext,
                   new PolicySelection(localityPickingPolicyProvider, null /* by EDS policy */),
                   new PolicySelection(endpointPickingPolicyProvider, null));
           if (edsBalancer == null) {

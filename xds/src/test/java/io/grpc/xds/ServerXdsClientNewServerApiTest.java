@@ -68,7 +68,6 @@ import io.grpc.xds.AbstractXdsClient.ResourceType;
 import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.XdsClient.ListenerUpdate;
 import io.grpc.xds.XdsClient.ListenerWatcher;
-import io.grpc.xds.XdsClient.XdsChannel;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import java.io.IOException;
 import java.util.ArrayDeque;
@@ -185,7 +184,7 @@ public class ServerXdsClientNewServerApiTest {
         cleanupRule.register(InProcessChannelBuilder.forName(serverName).directExecutor().build());
 
     xdsClient =
-        new ServerXdsClient(new XdsChannel(channel, /* useProtocolV3= */ true), NODE,
+        new ServerXdsClient(channel, true, NODE,
             fakeClock.getScheduledExecutorService(), backoffPolicyProvider,
             fakeClock.getStopwatchSupplier(), true, INSTANCE_IP, "test/value");
     // Only the connection to management server is established, no RPC request is sent until at
@@ -197,8 +196,8 @@ public class ServerXdsClientNewServerApiTest {
   @After
   public void tearDown() {
     xdsClient.shutdown();
+    channel.shutdownNow();
     assertThat(callEnded.get()).isTrue();
-    assertThat(channel.isShutdown()).isTrue();
     assertThat(fakeClock.getPendingTasks()).isEmpty();
   }
 

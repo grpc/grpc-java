@@ -184,7 +184,12 @@ public class ProtocolNegotiatorsTest {
   @Test
   public void fromClient_unknown() {
     ProtocolNegotiators.FromChannelCredentialsResult result =
-        ProtocolNegotiators.from(new ChannelCredentials() {});
+        ProtocolNegotiators.from(new ChannelCredentials() {
+          @Override
+          public ChannelCredentials withoutBearerTokens() {
+            throw new UnsupportedOperationException();
+          }
+        });
     assertThat(result.error).isNotNull();
     assertThat(result.callCredentials).isNull();
     assertThat(result.negotiator).isNull();
@@ -252,7 +257,12 @@ public class ProtocolNegotiatorsTest {
   public void fromClient_choice() {
     ProtocolNegotiators.FromChannelCredentialsResult result =
         ProtocolNegotiators.from(ChoiceChannelCredentials.create(
-          new ChannelCredentials() {},
+          new ChannelCredentials() {
+            @Override
+            public ChannelCredentials withoutBearerTokens() {
+              throw new UnsupportedOperationException();
+            }
+          },
           TlsChannelCredentials.create(),
           InsecureChannelCredentials.create()));
     assertThat(result.error).isNull();
@@ -262,7 +272,12 @@ public class ProtocolNegotiatorsTest {
 
     result = ProtocolNegotiators.from(ChoiceChannelCredentials.create(
           InsecureChannelCredentials.create(),
-          new ChannelCredentials() {},
+          new ChannelCredentials() {
+            @Override
+            public ChannelCredentials withoutBearerTokens() {
+              throw new UnsupportedOperationException();
+            }
+          },
           TlsChannelCredentials.create()));
     assertThat(result.error).isNull();
     assertThat(result.callCredentials).isNull();
@@ -274,7 +289,12 @@ public class ProtocolNegotiatorsTest {
   public void fromClient_choice_unknown() {
     ProtocolNegotiators.FromChannelCredentialsResult result =
         ProtocolNegotiators.from(ChoiceChannelCredentials.create(
-          new ChannelCredentials() {}));
+          new ChannelCredentials() {
+            @Override
+            public ChannelCredentials withoutBearerTokens() {
+              throw new UnsupportedOperationException();
+            }
+          }));
     assertThat(result.error).isNotNull();
     assertThat(result.callCredentials).isNull();
     assertThat(result.negotiator).isNull();

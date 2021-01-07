@@ -46,6 +46,7 @@ import io.netty.channel.ServerChannel;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
+import io.netty.handler.codec.DecoderException;
 import io.netty.handler.codec.http2.Http2Exception;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.util.AsciiString;
@@ -62,6 +63,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
+import javax.net.ssl.SSLException;
 
 /**
  * Common utility methods.
@@ -165,7 +167,6 @@ class Utils {
         preferDirect ? PooledByteBufAllocator.defaultNumDirectArena() : 0,
         PooledByteBufAllocator.defaultPageSize(),
         maxOrder,
-        PooledByteBufAllocator.defaultTinyCacheSize(),
         PooledByteBufAllocator.defaultSmallCacheSize(),
         PooledByteBufAllocator.defaultNormalCacheSize(),
         PooledByteBufAllocator.defaultUseCacheForAllThreads());
@@ -266,6 +267,9 @@ class Utils {
       ClosedChannelException extraT = new ClosedChannelException();
       extraT.initCause(t);
       return Status.UNKNOWN.withDescription("channel closed").withCause(extraT);
+    }
+    if (t instanceof DecoderException && t.getCause() instanceof SSLException) {
+      return Status.UNAVAILABLE.withDescription("ssl exception").withCause(t);
     }
     if (t instanceof IOException) {
       return Status.UNAVAILABLE.withDescription("io exception").withCause(t);
