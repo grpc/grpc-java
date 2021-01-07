@@ -37,6 +37,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * A version of {@link ServerBuilder} to create xDS managed servers that will use SDS to set up SSL
  * with peers. Note, this is not ready to use yet.
  */
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/7514")
 public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBuilder> {
 
   private final NettyServerBuilder delegate;
@@ -93,7 +94,6 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
     return new ServerWrapperForXds(delegate.build(), xdsClient, errorNotifier);
   }
 
-  @ExperimentalApi("TODO")
   public ServerBuilder<?> transportBuilder() {
     return delegate;
   }
