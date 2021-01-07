@@ -114,6 +114,12 @@ public final class XdsClientWrapperForServerSds {
             .keepAliveTime(5, TimeUnit.MINUTES).build();
     timeService = SharedResourceHolder.get(timeServiceResource);
     newServerApi = serverInfo.isUseProtocolV3() && experimentalNewServerApiEnvVar;
+    String grpcServerResourceId = bootstrapInfo.getGrpcServerResourceId();
+    if (newServerApi && grpcServerResourceId == null) {
+      reportError(
+          Status.INVALID_ARGUMENT.withDescription("missing grpc_server_resource_name_id value"));
+      throw new IOException("missing grpc_server_resource_name_id value");
+    }
     XdsClient xdsClientImpl =
         new ServerXdsClient(
             channel,
@@ -124,7 +130,7 @@ public final class XdsClientWrapperForServerSds {
             GrpcUtil.STOPWATCH_SUPPLIER,
             experimentalNewServerApiEnvVar,
             "0.0.0.0",
-            bootstrapInfo.getGrpcServerResourceId());
+            grpcServerResourceId);
     start(xdsClientImpl);
   }
 

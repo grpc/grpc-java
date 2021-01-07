@@ -251,43 +251,42 @@ final class PriorityLoadBalancer extends LoadBalancer {
      * already exists.
      */
     void updateResolvedAddresses() {
-      final ResolvedAddresses addresses = resolvedAddresses;
-      syncContext.execute(
-          new Runnable() {
-            @Override
-            public void run() {
-              PriorityLbConfig config = (PriorityLbConfig) addresses.getLoadBalancingPolicyConfig();
-              PolicySelection childPolicySelection = config.childConfigs.get(priority);
-              LoadBalancerProvider lbProvider = childPolicySelection.getProvider();
-              String newPolicy = lbProvider.getPolicyName();
-              if (!newPolicy.equals(policy)) {
-                policy = newPolicy;
-                lb.switchTo(lbProvider);
-              }
-              lb.handleResolvedAddresses(
-                  addresses
-                      .toBuilder()
-                      .setAddresses(AddressFilter.filter(addresses.getAddresses(), priority))
-                      .setLoadBalancingPolicyConfig(childPolicySelection.getConfig())
-                      .build());
-            }
-          });
+      PriorityLbConfig config =
+          (PriorityLbConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
+      PolicySelection childPolicySelection = config.childConfigs.get(priority);
+      LoadBalancerProvider lbProvider = childPolicySelection.getProvider();
+      String newPolicy = lbProvider.getPolicyName();
+      if (!newPolicy.equals(policy)) {
+        policy = newPolicy;
+        lb.switchTo(lbProvider);
+      }
+      lb.handleResolvedAddresses(
+          resolvedAddresses.toBuilder()
+              .setAddresses(AddressFilter.filter(resolvedAddresses.getAddresses(), priority))
+              .setLoadBalancingPolicyConfig(childPolicySelection.getConfig())
+              .build());
     }
 
     final class ChildHelper extends ForwardingLoadBalancerHelper {
       @Override
-      public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
-        connectivityState = newState;
-        picker = newPicker;
-        if (deletionTimer != null && deletionTimer.isPending()) {
-          return;
-        }
-        if (failOverTimer.isPending()) {
-          if (newState.equals(READY) || newState.equals(TRANSIENT_FAILURE)) {
-            failOverTimer.cancel();
+      public void updateBalancingState(final ConnectivityState newState,
+          final SubchannelPicker newPicker) {
+        syncContext.execute(new Runnable() {
+          @Override
+          public void run() {
+            connectivityState = newState;
+            picker = newPicker;
+            if (deletionTimer != null && deletionTimer.isPending()) {
+              return;
+            }
+            if (failOverTimer.isPending()) {
+              if (newState.equals(READY) || newState.equals(TRANSIENT_FAILURE)) {
+                failOverTimer.cancel();
+              }
+            }
+            tryNextPriority(true);
           }
-        }
-        tryNextPriority(true);
+        });
       }
 
       @Override

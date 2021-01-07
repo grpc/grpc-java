@@ -84,21 +84,18 @@ class ClusterManagerLoadBalancer extends LoadBalancer {
       } else {
         childLbStates.get(name).reactivate(childPolicyProvider);
       }
-      final LoadBalancer childLb = childLbStates.get(name).lb;
-      final ResolvedAddresses childAddresses =
+      LoadBalancer childLb = childLbStates.get(name).lb;
+      ResolvedAddresses childAddresses =
           resolvedAddresses.toBuilder().setLoadBalancingPolicyConfig(childConfig).build();
-      syncContext.execute(new Runnable() {
-        @Override
-        public void run() {
-          childLb.handleResolvedAddresses(childAddresses);
-        }
-      });
+      childLb.handleResolvedAddresses(childAddresses);
     }
     for (String name : childLbStates.keySet()) {
       if (!newChildPolicies.containsKey(name)) {
         childLbStates.get(name).deactivate();
       }
     }
+    // Must update channel picker before return so that new RPCs will not be routed to deleted
+    // clusters and resolver can remove them in service config.
     updateOverallBalancingState();
   }
 
@@ -245,12 +242,20 @@ class ClusterManagerLoadBalancer extends LoadBalancer {
     private final class ChildLbStateHelper extends ForwardingLoadBalancerHelper {
 
       @Override
-      public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
-        currentState = newState;
-        currentPicker = newPicker;
-        if (!deactivated) {
-          updateOverallBalancingState();
-        }
+      public void updateBalancingState(final ConnectivityState newState,
+          final SubchannelPicker newPicker) {
+        syncContext.execute(new Runnable() {
+          @Override
+          public void run() {
+            currentState = newState;
+            currentPicker = newPicker;
+            // Subchannel picker and state are saved, but will only be propagated to the channel
+            // when the child instance exits deactivated state.
+            if (!deactivated) {
+              updateOverallBalancingState();
+            }
+          }
+        });
       }
 
       @Override
