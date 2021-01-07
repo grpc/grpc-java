@@ -306,14 +306,11 @@ class DelayedStream implements ClientStream {
     checkState(listener != null, "May only be called after start");
     checkNotNull(reason, "reason");
     boolean delegateToRealStream = true;
-    ClientStreamListener listenerToClose = null;
     synchronized (this) {
       // If realStream != null, then either setStream() or cancel() has been called
       if (realStream == null) {
         setRealStream(NoopClientStream.INSTANCE);
         delegateToRealStream = false;
-        // If listener == null, then start() will later call listener with 'error'
-        listenerToClose = listener;
         error = reason;
       }
     }
@@ -326,10 +323,8 @@ class DelayedStream implements ClientStream {
       });
     } else {
       drainPendingCalls();
-      if (listenerToClose != null) {
-        // Note that listenerToClose is a DelayedStreamListener
-        listenerToClose.closed(reason, new Metadata());
-      }
+      // Note that listener is a DelayedStreamListener
+      listener.closed(reason, new Metadata());
     }
   }
 
