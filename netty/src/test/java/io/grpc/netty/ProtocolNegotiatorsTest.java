@@ -94,17 +94,20 @@ import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.ssl.SslHandshakeCompletionEvent;
+import io.netty.handler.ssl.SslMasterKeyHandler;
 import io.netty.handler.ssl.SupportedCipherSuiteFilter;
 import io.netty.handler.ssl.util.SelfSignedCertificate;
 import java.io.File;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Filter;
+import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
@@ -1208,6 +1211,55 @@ public class ProtocolNegotiatorsTest {
     public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
       ctx.pipeline().replace(ctx.name(), null, next);
       ctx.pipeline().fireUserEventTriggered(ProtocolNegotiationEvent.DEFAULT);
+    }
+  }
+
+  @Test
+  public void clientTlsHandler_serverTlsHandler_sslMasterKeyLog() throws Exception {
+    final List<LogRecord> logs = new ArrayList<>();
+    Handler handler = new Handler() {
+      @Override public void publish(LogRecord record) {
+        logs.add(record);
+      }
+
+      @Override public void flush() {}
+
+      @Override public void close() {}
+    };
+
+    Logger logger = Logger.getLogger("io.netty.wireshark");
+    logger.addHandler(handler);
+
+    String oldPropValue = System.getProperty(SslMasterKeyHandler.SYSTEM_PROP_KEY);
+    try {
+      // The master key log feature should be disabled
+      // when the "io.netty.ssl.masterKeyHandler" property is missing.
+      System.clearProperty(SslMasterKeyHandler.SYSTEM_PROP_KEY);
+      clientTlsHandler_firesNegotiation();
+      assertThat(logs).isEmpty();
+
+      // The master key log feature should be disabled
+      // when the value of "io.netty.ssl.masterKeyHandler" property is not "true".
+      System.setProperty(SslMasterKeyHandler.SYSTEM_PROP_KEY, "false");
+      clientTlsHandler_firesNegotiation();
+      assertThat(logs).isEmpty();
+
+      // The master key log feature should be enabled
+      // when the value of "io.netty.ssl.masterKeyHandler" property is "true".
+      System.setProperty(SslMasterKeyHandler.SYSTEM_PROP_KEY, "true");
+      clientTlsHandler_firesNegotiation();
+
+      // writing key twice because both client and server will enable key log feature
+      assertThat(logs.size()).isEqualTo(2);
+      assertThat(logs.get(0).getMessage()).containsMatch("^RSA Session-ID:.+ Master-Key:");
+      assertThat(logs.get(1).getMessage()).containsMatch("^RSA Session-ID:.+ Master-Key:");
+    } finally {
+      logger.removeHandler(handler);
+      if (oldPropValue != null) {
+        System.setProperty(SslMasterKeyHandler.SYSTEM_PROP_KEY, oldPropValue);
+      } else {
+        System.clearProperty(SslMasterKeyHandler.SYSTEM_PROP_KEY);
+      }
     }
   }
 }
