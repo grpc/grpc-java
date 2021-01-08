@@ -16,7 +16,6 @@
 
 package io.grpc.inprocess;
 
-import com.google.common.collect.ImmutableList;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalInstrumented;
 import io.grpc.ServerStreamTracer;
@@ -31,6 +30,7 @@ import io.grpc.internal.ServerTransportListener;
 import io.grpc.internal.SharedResourcePool;
 import java.io.IOException;
 import java.net.SocketAddress;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import javax.annotation.Nullable;
@@ -52,13 +52,13 @@ public final class StandaloneInProcessTransportTest extends AbstractTransportTes
   private TestServer currentServer;
 
   @Override
-  protected List<? extends InternalServer> newServer(
+  protected InternalServer newServer(
       List<ServerStreamTracer.Factory> streamTracerFactories) {
-    return ImmutableList.of(new TestServer(streamTracerFactories));
+    return new TestServer(streamTracerFactories);
   }
 
   @Override
-  protected List<? extends InternalServer> newServer(
+  protected InternalServer newServer(
       int port, List<ServerStreamTracer.Factory> streamTracerFactories) {
     return newServer(streamTracerFactories);
   }
@@ -127,8 +127,19 @@ public final class StandaloneInProcessTransportTest extends AbstractTransportTes
     }
 
     @Override
+    public List<SocketAddress> getListenSocketAddresses() {
+      return Collections.singletonList(getListenSocketAddress());
+    }
+
+    @Override
     @Nullable
     public InternalInstrumented<SocketStats> getListenSocketStats() {
+      return null;
+    }
+
+    @Override
+    @Nullable
+    public List<InternalInstrumented<SocketStats>> getListenSocketStatsList() {
       return null;
     }
   }

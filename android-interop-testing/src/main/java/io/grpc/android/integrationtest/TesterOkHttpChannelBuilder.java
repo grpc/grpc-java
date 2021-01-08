@@ -16,7 +16,7 @@
 
 package io.grpc.android.integrationtest;
 
-import androidx.annotation.Nullable;
+import android.support.annotation.Nullable;
 import io.grpc.ChannelCredentials;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;

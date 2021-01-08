@@ -39,7 +39,6 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "io.opencensus:opencensus-contrib-grpc-metrics:0.24.0",
     "io.perfmark:perfmark-api:0.23.0",
     "junit:junit:4.12",
-    "org.apache.commons:commons-lang3:3.11",
     "org.apache.tomcat:annotations-api:6.0.53",
     "org.codehaus.mojo:animal-sniffer-annotations:1.19",
 ]

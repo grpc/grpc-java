@@ -78,6 +78,24 @@ public class TestUtils {
   }
 
   /**
+   * Creates a new list of {@link InetSocketAddress} on localhost that overrides the host with
+   * {@link #TEST_SERVER_HOST}.
+   */
+  public static List<InetSocketAddress> testServerAddresses(InetSocketAddress... originalSockAddr) {
+    try {
+      InetAddress inetAddress = InetAddress.getByName("localhost");
+      inetAddress = InetAddress.getByAddress(TEST_SERVER_HOST, inetAddress.getAddress());
+      List<InetSocketAddress> addresses = new ArrayList<>();
+      for (InetSocketAddress orig: originalSockAddr) {
+        addresses.add(new InetSocketAddress(inetAddress, orig.getPort()));
+      }
+      return addresses;
+    } catch (UnknownHostException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  /**
    * Returns the ciphers preferred to use during tests. They may be chosen because they are widely
    * available or because they are fast. There is no requirement that they provide confidentiality
    * or integrity.
