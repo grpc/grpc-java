@@ -1425,8 +1425,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
 
     private SubchannelImpl createSubchannelInternal(CreateSubchannelArgs args) {
-      // TODO(ejona): can we be even stricter? Like loadBalancer == null?
-      checkState(!terminated, "Channel is terminated");
+      // No new subchannel should be created after delayedTransport has been shutdown.
+      checkState(!terminating, "Channel is being terminated");
       return new SubchannelImpl(args, this);
     }
 
