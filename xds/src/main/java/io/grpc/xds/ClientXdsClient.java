@@ -27,8 +27,8 @@ import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.config.cluster.v3.CircuitBreakers.Thresholds;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
+import io.envoyproxy.envoy.config.cluster.v3.Cluster.CustomClusterType;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.DiscoveryType;
-import io.envoyproxy.envoy.config.cluster.v3.Cluster.EdsClusterConfig;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.LbPolicy;
 import io.envoyproxy.envoy.config.core.v3.HttpProtocolOptions;
 import io.envoyproxy.envoy.config.core.v3.RoutingPriority;
@@ -39,7 +39,7 @@ import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
 import io.envoyproxy.envoy.config.route.v3.VirtualHost;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.Rds;
-import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext;
+import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
@@ -48,12 +48,18 @@ import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.EnvoyProtoData.StructOrError;
+import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.LoadStatsManager.LoadStatsStore;
+import io.grpc.xds.XdsClient.CdsUpdate.AggregateClusterConfig;
+import io.grpc.xds.XdsClient.CdsUpdate.ClusterType;
+import io.grpc.xds.XdsClient.CdsUpdate.EdsClusterConfig;
+import io.grpc.xds.XdsClient.CdsUpdate.LogicalDnsClusterConfig;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -70,6 +76,8 @@ final class ClientXdsClient extends AbstractXdsClient {
   // Longest time to wait, since the subscription to some resource, for concluding its absence.
   @VisibleForTesting
   static final int INITIAL_RESOURCE_FETCH_TIMEOUT_SEC = 15;
+  @VisibleForTesting
+  static final String AGGREGATE_CLUSTER_TYPE_NAME = "envoy.clusters.aggregate";
   private static final String TYPE_URL_HTTP_CONNECTION_MANAGER_V2 =
       "type.googleapis.com/envoy.config.filter.network.http_connection_manager.v2"
           + ".HttpConnectionManager";
@@ -80,6 +88,10 @@ final class ClientXdsClient extends AbstractXdsClient {
       "type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext";
   private static final String TYPE_URL_UPSTREAM_TLS_CONTEXT_V2 =
       "type.googleapis.com/envoy.api.v2.auth.UpstreamTlsContext";
+  private static final String TYPE_URL_CLUSTER_CONFIG_V2 =
+      "type.googleapis.com/envoy.config.cluster.aggregate.v2alpha.ClusterConfig";
+  private static final String TYPE_URL_CLUSTER_CONFIG =
+      "type.googleapis.com/envoy.extensions.clusters.aggregate.v3.ClusterConfig";
 
   private final Map<String, ResourceSubscriber> ldsResourceSubscribers = new HashMap<>();
   private final Map<String, ResourceSubscriber> rdsResourceSubscribers = new HashMap<>();
@@ -89,11 +101,12 @@ final class ClientXdsClient extends AbstractXdsClient {
   private final LoadReportClient lrsClient;
   private boolean reportingLoad;
 
-  ClientXdsClient(XdsChannel channel, Node node, ScheduledExecutorService timeService,
-      BackoffPolicy.Provider backoffPolicyProvider, Supplier<Stopwatch> stopwatchSupplier) {
-    super(channel, node, timeService, backoffPolicyProvider, stopwatchSupplier);
-    lrsClient = new LoadReportClient(loadStatsManager, channel, node, getSyncContext(),
-        timeService, backoffPolicyProvider, stopwatchSupplier);
+  ClientXdsClient(ManagedChannel channel, boolean useProtocolV3, Node node,
+      ScheduledExecutorService timeService, BackoffPolicy.Provider backoffPolicyProvider,
+      Supplier<Stopwatch> stopwatchSupplier) {
+    super(channel, useProtocolV3, node, timeService, backoffPolicyProvider, stopwatchSupplier);
+    lrsClient = new LoadReportClient(loadStatsManager, channel, useProtocolV3, node,
+        getSyncContext(), timeService, backoffPolicyProvider, stopwatchSupplier);
   }
 
   @Override
@@ -139,49 +152,46 @@ final class ClientXdsClient extends AbstractXdsClient {
 
     Map<String, LdsUpdate> ldsUpdates = new HashMap<>();
     Set<String> rdsNames = new HashSet<>();
-    String errorMessage = null;
     for (Map.Entry<String, HttpConnectionManager> entry : httpConnectionManagers.entrySet()) {
+      LdsUpdate update;
       String listenerName = entry.getKey();
       HttpConnectionManager hcm = entry.getValue();
-      LdsUpdate.Builder updateBuilder = LdsUpdate.newBuilder();
+      long maxStreamDuration = 0;
+      if (hcm.hasCommonHttpProtocolOptions()) {
+        HttpProtocolOptions options = hcm.getCommonHttpProtocolOptions();
+        if (options.hasMaxStreamDuration()) {
+          maxStreamDuration = Durations.toNanos(options.getMaxStreamDuration());
+        }
+      }
       if (hcm.hasRouteConfig()) {
+        List<EnvoyProtoData.VirtualHost> virtualHosts = new ArrayList<>();
         for (VirtualHost virtualHostProto : hcm.getRouteConfig().getVirtualHostsList()) {
           StructOrError<EnvoyProtoData.VirtualHost> virtualHost =
               EnvoyProtoData.VirtualHost.fromEnvoyProtoVirtualHost(virtualHostProto);
           if (virtualHost.getErrorDetail() != null) {
-            errorMessage = "Listener " + listenerName + " contains invalid virtual host: "
-                + virtualHost.getErrorDetail();
-            break;
-          } else {
-            updateBuilder.addVirtualHost(virtualHost.getStruct());
+            nackResponse(ResourceType.LDS, nonce,
+                "Listener " + listenerName + " contains invalid virtual host: "
+                    + virtualHost.getErrorDetail());
+            return;
           }
+          virtualHosts.add(virtualHost.getStruct());
         }
+        update = new LdsUpdate(maxStreamDuration, virtualHosts);
       } else if (hcm.hasRds()) {
         Rds rds = hcm.getRds();
         if (!rds.getConfigSource().hasAds()) {
-          errorMessage = "Listener " + listenerName + " with RDS config_source not set to ADS";
-        } else {
-          updateBuilder.setRdsName(rds.getRouteConfigName());
-          rdsNames.add(rds.getRouteConfigName());
+          nackResponse(ResourceType.LDS, nonce,
+              "Listener " + listenerName + " with RDS config_source not set to ADS");
+          return;
         }
+        update = new LdsUpdate(maxStreamDuration, rds.getRouteConfigName());
+        rdsNames.add(rds.getRouteConfigName());
       } else {
-        errorMessage = "Listener " + listenerName + " without inline RouteConfiguration or RDS";
+        nackResponse(ResourceType.LDS, nonce,
+            "Listener " + listenerName + " without inline RouteConfiguration or RDS");
+        return;
       }
-      if (errorMessage != null) {
-        break;
-      }
-      if (hcm.hasCommonHttpProtocolOptions()) {
-        HttpProtocolOptions options = hcm.getCommonHttpProtocolOptions();
-        if (options.hasMaxStreamDuration()) {
-          updateBuilder.setHttpMaxStreamDurationNano(
-              Durations.toNanos(options.getMaxStreamDuration()));
-        }
-      }
-      ldsUpdates.put(listenerName, updateBuilder.build());
-    }
-    if (errorMessage != null) {
-      nackResponse(ResourceType.LDS, nonce, errorMessage);
-      return;
+      ldsUpdates.put(listenerName, update);
     }
     ackResponse(ResourceType.LDS, versionInfo, nonce);
 
@@ -223,7 +233,6 @@ final class ClientXdsClient extends AbstractXdsClient {
         XdsLogLevel.INFO, "Received RDS response for resources: {0}", routeConfigs.keySet());
 
     Map<String, RdsUpdate> rdsUpdates = new HashMap<>();
-    String errorMessage = null;
     for (Map.Entry<String, RouteConfiguration> entry : routeConfigs.entrySet()) {
       String routeConfigName = entry.getKey();
       RouteConfiguration routeConfig = entry.getValue();
@@ -233,21 +242,13 @@ final class ClientXdsClient extends AbstractXdsClient {
         StructOrError<EnvoyProtoData.VirtualHost> virtualHost =
             EnvoyProtoData.VirtualHost.fromEnvoyProtoVirtualHost(virtualHostProto);
         if (virtualHost.getErrorDetail() != null) {
-          errorMessage = "RouteConfiguration " + routeConfigName
-              + " contains invalid virtual host: " + virtualHost.getErrorDetail();
-          break;
-        } else {
-          virtualHosts.add(virtualHost.getStruct());
+          nackResponse(ResourceType.RDS, nonce, "RouteConfiguration " + routeConfigName
+              + " contains invalid virtual host: " + virtualHost.getErrorDetail());
+          return;
         }
+        virtualHosts.add(virtualHost.getStruct());
       }
-      if (errorMessage != null) {
-        break;
-      }
-      rdsUpdates.put(routeConfigName, RdsUpdate.fromVirtualHosts(virtualHosts));
-    }
-    if (errorMessage != null) {
-      nackResponse(ResourceType.RDS, nonce, errorMessage);
-      return;
+      rdsUpdates.put(routeConfigName, new RdsUpdate(virtualHosts));
     }
     ackResponse(ResourceType.RDS, versionInfo, nonce);
 
@@ -280,88 +281,42 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
     getLogger().log(XdsLogLevel.INFO, "Received CDS response for resources: {0}", clusterNames);
 
-    String errorMessage = null;
-    // Cluster information update for requested clusters received in this CDS response.
     Map<String, CdsUpdate> cdsUpdates = new HashMap<>();
-    // CDS responses represents the state of the world, EDS services not referenced by
-    // Clusters are those no longer exist.
-    Set<String> edsServices = new HashSet<>();
+    // CDS responses represents the state of the world, EDS resources not referenced in CDS
+    // resources should be deleted.
+    Set<String> edsResources = new HashSet<>();  // retained EDS resources
     for (Cluster cluster : clusters) {
       String clusterName = cluster.getName();
-      // Skip information for clusters not requested.
       // Management server is required to always send newly requested resources, even if they
       // may have been sent previously (proactively). Thus, client does not need to cache
       // unrequested resources.
       if (!cdsResourceSubscribers.containsKey(clusterName)) {
         continue;
       }
-      CdsUpdate.Builder updateBuilder = CdsUpdate.newBuilder();
-      updateBuilder.setClusterName(clusterName);
-      // The type field must be set to EDS.
-      if (!cluster.getType().equals(DiscoveryType.EDS)) {
-        errorMessage = "Cluster " + clusterName + " : only EDS discovery type is supported "
-            + "in gRPC.";
-        break;
-      }
-      // In the eds_cluster_config field, the eds_config field must be set to indicate to
-      // use EDS (must be set to use ADS).
-      EdsClusterConfig edsClusterConfig = cluster.getEdsClusterConfig();
-      if (!edsClusterConfig.getEdsConfig().hasAds()) {
-        errorMessage = "Cluster " + clusterName + " : field eds_cluster_config must be set to "
-            + "indicate to use EDS over ADS.";
-        break;
-      }
-      // If the service_name field is set, that value will be used for the EDS request.
-      if (!edsClusterConfig.getServiceName().isEmpty()) {
-        updateBuilder.setEdsServiceName(edsClusterConfig.getServiceName());
-        edsServices.add(edsClusterConfig.getServiceName());
-      } else {
-        edsServices.add(clusterName);
-      }
       // The lb_policy field must be set to ROUND_ROBIN.
       if (!cluster.getLbPolicy().equals(LbPolicy.ROUND_ROBIN)) {
-        errorMessage = "Cluster " + clusterName + " : only round robin load balancing policy is "
-            + "supported in gRPC.";
-        break;
+        nackResponse(ResourceType.CDS, nonce,
+            "Cluster " + clusterName + ": unsupported Lb policy: " + cluster.getLbPolicy());
+        return;
       }
-      updateBuilder.setLbPolicy("round_robin");
-      // If the lrs_server field is set, it must have its self field set, in which case the
-      // client should use LRS for load reporting. Otherwise (the lrs_server field is not set),
-      // LRS load reporting will be disabled.
-      if (cluster.hasLrsServer()) {
-        if (!cluster.getLrsServer().hasSelf()) {
-          errorMessage = "Cluster " + clusterName + " : only support enabling LRS for the same "
-              + "management server.";
+      String lbPolicy = "round_robin";
+      CdsUpdate update = null;
+      switch (cluster.getClusterDiscoveryTypeCase()) {
+        case TYPE:
+          update = parseNonAggregateCluster(cluster, nonce, lbPolicy, edsResources);
           break;
-        }
-        updateBuilder.setLrsServerName("");
+        case CLUSTER_TYPE:
+          update = parseAggregateCluster(cluster, nonce, lbPolicy);
+          break;
+        case CLUSTERDISCOVERYTYPE_NOT_SET:
+        default:
+          nackResponse(ResourceType.CDS, nonce,
+              "Cluster " + clusterName + ": cluster discovery type unspecified");
       }
-      if (cluster.hasCircuitBreakers()) {
-        List<Thresholds> thresholds = cluster.getCircuitBreakers().getThresholdsList();
-        for (Thresholds threshold : thresholds) {
-          if (threshold.getPriority() != RoutingPriority.DEFAULT) {
-            continue;
-          }
-          if (threshold.hasMaxRequests()) {
-            updateBuilder.setMaxConcurrentRequests(threshold.getMaxRequests().getValue());
-          }
-        }
+      if (update == null) {
+        return;
       }
-      try {
-        EnvoyServerProtoData.UpstreamTlsContext upstreamTlsContext =
-            getTlsContextFromCluster(cluster);
-        if (upstreamTlsContext != null && upstreamTlsContext.getCommonTlsContext() != null) {
-          updateBuilder.setUpstreamTlsContext(upstreamTlsContext);
-        }
-      } catch (InvalidProtocolBufferException e) {
-        errorMessage = "Cluster " + clusterName + " : " + e.getMessage();
-        break;
-      }
-      cdsUpdates.put(clusterName, updateBuilder.build());
-    }
-    if (errorMessage != null) {
-      nackResponse(ResourceType.CDS, nonce, errorMessage);
-      return;
+      cdsUpdates.put(clusterName, update);
     }
     ackResponse(ResourceType.CDS, versionInfo, nonce);
 
@@ -375,24 +330,119 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
     for (String resource : edsResourceSubscribers.keySet()) {
       ResourceSubscriber subscriber = edsResourceSubscribers.get(resource);
-      if (!edsServices.contains(resource)) {
+      if (!edsResources.contains(resource)) {
         subscriber.onAbsent();
       }
     }
   }
 
-  @Nullable
-  private static EnvoyServerProtoData.UpstreamTlsContext getTlsContextFromCluster(Cluster cluster)
-      throws InvalidProtocolBufferException {
+  /**
+   * Parses CDS resource for an aggregate cluster into {@link io.grpc.xds.XdsClient.CdsUpdate}.
+   * Returns {@code null} and nack the response with the given nonce if the resource is invalid.
+   */
+  private CdsUpdate parseAggregateCluster(Cluster cluster, String nonce, String lbPolicy) {
+    String clusterName = cluster.getName();
+    CustomClusterType customType = cluster.getClusterType();
+    String typeName = customType.getName();
+    if (!typeName.equals(AGGREGATE_CLUSTER_TYPE_NAME)) {
+      nackResponse(ResourceType.CDS, nonce,
+          "Cluster " + clusterName + ": unsupported custom cluster type: " + typeName);
+      return null;
+    }
+    io.envoyproxy.envoy.extensions.clusters.aggregate.v3.ClusterConfig clusterConfig;
+    Any unpackedClusterConfig = customType.getTypedConfig();
+    if (unpackedClusterConfig.getTypeUrl().equals(TYPE_URL_CLUSTER_CONFIG_V2)) {
+      unpackedClusterConfig =
+          unpackedClusterConfig.toBuilder().setTypeUrl(TYPE_URL_CLUSTER_CONFIG).build();
+    }
+    try {
+      clusterConfig = unpackedClusterConfig.unpack(
+          io.envoyproxy.envoy.extensions.clusters.aggregate.v3.ClusterConfig.class);
+    } catch (InvalidProtocolBufferException e) {
+      nackResponse(ResourceType.CDS, nonce,
+          "Cluster " + clusterName + ": invalid cluster config: " + e);
+      return null;
+    }
+    AggregateClusterConfig config =
+        new AggregateClusterConfig(lbPolicy, clusterConfig.getClustersList());
+    return new CdsUpdate(clusterName, ClusterType.AGGREGATE, config);
+  }
+
+  /**
+   * Parses CDS resource for a non-aggregate cluster (EDS or Logical DNS) into {@link
+   * io.grpc.xds.XdsClient.CdsUpdate}. Returns {@code null} and nack the response with the given
+   * nonce if the resource is invalid.
+   */
+  private CdsUpdate parseNonAggregateCluster(Cluster cluster, String nonce, String lbPolicy,
+      Set<String> edsResources) {
+    String clusterName = cluster.getName();
+    String lrsServerName = null;
+    Long maxConcurrentRequests = null;
+    UpstreamTlsContext upstreamTlsContext = null;
+    if (cluster.hasLrsServer()) {
+      if (!cluster.getLrsServer().hasSelf()) {
+        nackResponse(ResourceType.CDS, nonce,
+            "Cluster " + clusterName + ": only support LRS for the same management server");
+        return null;
+      }
+      lrsServerName = "";
+    }
+    if (cluster.hasCircuitBreakers()) {
+      List<Thresholds> thresholds = cluster.getCircuitBreakers().getThresholdsList();
+      for (Thresholds threshold : thresholds) {
+        if (threshold.getPriority() != RoutingPriority.DEFAULT) {
+          continue;
+        }
+        if (threshold.hasMaxRequests()) {
+          maxConcurrentRequests = (long) threshold.getMaxRequests().getValue();
+        }
+      }
+    }
     if (cluster.hasTransportSocket()
         && TRANSPORT_SOCKET_NAME_TLS.equals(cluster.getTransportSocket().getName())) {
       Any any = cluster.getTransportSocket().getTypedConfig();
       if (any.getTypeUrl().equals(TYPE_URL_UPSTREAM_TLS_CONTEXT_V2)) {
         any = any.toBuilder().setTypeUrl(TYPE_URL_UPSTREAM_TLS_CONTEXT).build();
       }
-      return EnvoyServerProtoData.UpstreamTlsContext.fromEnvoyProtoUpstreamTlsContext(
-          any.unpack(UpstreamTlsContext.class));
+      io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext unpacked;
+      try {
+        unpacked = any.unpack(
+            io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext.class);
+      } catch (InvalidProtocolBufferException e) {
+        nackResponse(ResourceType.CDS, nonce,
+            "Cluster " + clusterName + ": invalid upstream TLS context: " + e);
+        return null;
+      }
+      upstreamTlsContext = UpstreamTlsContext.fromEnvoyProtoUpstreamTlsContext(unpacked);
     }
+
+    DiscoveryType type = cluster.getType();
+    if (type == DiscoveryType.EDS) {
+      String edsServiceName = null;
+      io.envoyproxy.envoy.config.cluster.v3.Cluster.EdsClusterConfig edsClusterConfig =
+          cluster.getEdsClusterConfig();
+      if (!edsClusterConfig.getEdsConfig().hasAds()) {
+        nackResponse(ResourceType.CDS, nonce, "Cluster " + clusterName + ": "
+            + "field eds_cluster_config must be set to indicate to use EDS over ADS.");
+        return null;
+      }
+      // If the service_name field is set, that value will be used for the EDS request.
+      if (!edsClusterConfig.getServiceName().isEmpty()) {
+        edsServiceName = edsClusterConfig.getServiceName();
+        edsResources.add(edsServiceName);
+      } else {
+        edsResources.add(clusterName);
+      }
+      EdsClusterConfig config = new EdsClusterConfig(lbPolicy, edsServiceName,
+          lrsServerName, maxConcurrentRequests, upstreamTlsContext);
+      return new CdsUpdate(clusterName, ClusterType.EDS, config);
+    } else if (type.equals(DiscoveryType.LOGICAL_DNS)) {
+      LogicalDnsClusterConfig config = new LogicalDnsClusterConfig(lbPolicy, lrsServerName,
+          maxConcurrentRequests, upstreamTlsContext);
+      return new CdsUpdate(clusterName, ClusterType.LOGICAL_DNS, config);
+    }
+    nackResponse(ResourceType.CDS, nonce,
+        "Cluster " + clusterName + ": unsupported built-in discovery type: " + type);
     return null;
   }
 
@@ -418,11 +468,7 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
     getLogger().log(XdsLogLevel.INFO, "Received EDS response for resources: {0}", claNames);
 
-    String errorMessage = null;
-    // Endpoint information updates for requested clusters received in this EDS response.
     Map<String, EdsUpdate> edsUpdates = new HashMap<>();
-    // Walk through each ClusterLoadAssignment message. If any of them for requested clusters
-    // contain invalid information for gRPC's load balancing usage, the whole response is rejected.
     for (ClusterLoadAssignment assignment : clusterLoadAssignments) {
       String clusterName = assignment.getClusterName();
       // Skip information for clusters not requested.
@@ -432,9 +478,9 @@ final class ClientXdsClient extends AbstractXdsClient {
       if (!edsResourceSubscribers.containsKey(clusterName)) {
         continue;
       }
-      EdsUpdate.Builder updateBuilder = EdsUpdate.newBuilder();
-      updateBuilder.setClusterName(clusterName);
       Set<Integer> priorities = new HashSet<>();
+      Map<Locality, LocalityLbEndpoints> localityLbEndpointsMap = new LinkedHashMap<>();
+      List<DropOverload> dropOverloads = new ArrayList<>();
       int maxPriority = -1;
       for (io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints localityLbEndpoints
           : assignment.getEndpointsList()) {
@@ -445,9 +491,9 @@ final class ClientXdsClient extends AbstractXdsClient {
         }
         int localityPriority = localityLbEndpoints.getPriority();
         if (localityPriority < 0) {
-          errorMessage =
-              "ClusterLoadAssignment " + clusterName + " : locality with negative priority.";
-          break;
+          nackResponse(ResourceType.EDS, nonce,
+              "ClusterLoadAssignment " + clusterName + " : locality with negative priority.");
+          return;
         }
         maxPriority = Math.max(maxPriority, localityPriority);
         priorities.add(localityPriority);
@@ -455,37 +501,29 @@ final class ClientXdsClient extends AbstractXdsClient {
         // Inside of it: the address field must be set.
         for (LbEndpoint lbEndpoint : localityLbEndpoints.getLbEndpointsList()) {
           if (!lbEndpoint.getEndpoint().hasAddress()) {
-            errorMessage = "ClusterLoadAssignment " + clusterName + " : endpoint with no address.";
-            break;
+            nackResponse(ResourceType.EDS, nonce,
+                "ClusterLoadAssignment " + clusterName + " : endpoint with no address.");
+            return;
           }
-        }
-        if (errorMessage != null) {
-          break;
         }
         // Note endpoints with health status other than UNHEALTHY and UNKNOWN are still
         // handed over to watching parties. It is watching parties' responsibility to
         // filter out unhealthy endpoints. See EnvoyProtoData.LbEndpoint#isHealthy().
-        updateBuilder.addLocalityLbEndpoints(
+        localityLbEndpointsMap.put(
             Locality.fromEnvoyProtoLocality(localityLbEndpoints.getLocality()),
             LocalityLbEndpoints.fromEnvoyProtoLocalityLbEndpoints(localityLbEndpoints));
       }
-      if (errorMessage != null) {
-        break;
-      }
       if (priorities.size() != maxPriority + 1) {
-        errorMessage = "ClusterLoadAssignment " + clusterName + " : sparse priorities.";
-        break;
+        nackResponse(ResourceType.EDS, nonce,
+            "ClusterLoadAssignment " + clusterName + " : sparse priorities.");
+        return;
       }
       for (ClusterLoadAssignment.Policy.DropOverload dropOverload
           : assignment.getPolicy().getDropOverloadsList()) {
-        updateBuilder.addDropPolicy(DropOverload.fromEnvoyProtoDropOverload(dropOverload));
+        dropOverloads.add(DropOverload.fromEnvoyProtoDropOverload(dropOverload));
       }
-      EdsUpdate update = updateBuilder.build();
+      EdsUpdate update = new EdsUpdate(clusterName, localityLbEndpointsMap, dropOverloads);
       edsUpdates.put(clusterName, update);
-    }
-    if (errorMessage != null) {
-      nackResponse(ResourceType.EDS, nonce, errorMessage);
-      return;
     }
     ackResponse(ResourceType.EDS, versionInfo, nonce);
 
@@ -563,7 +601,7 @@ final class ClientXdsClient extends AbstractXdsClient {
       public void run() {
         ResourceSubscriber subscriber = ldsResourceSubscribers.get(resourceName);
         if (subscriber == null) {
-          getLogger().log(XdsLogLevel.INFO, "Subscribe CDS resource {0}", resourceName);
+          getLogger().log(XdsLogLevel.INFO, "Subscribe LDS resource {0}", resourceName);
           subscriber = new ResourceSubscriber(ResourceType.LDS, resourceName);
           ldsResourceSubscribers.put(resourceName, subscriber);
           adjustResourceSubscription(ResourceType.LDS);

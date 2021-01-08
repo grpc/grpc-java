@@ -23,7 +23,6 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.net.ConnectivityManager;
 import android.net.Network;
-import android.net.NetworkInfo;
 import android.os.Build;
 import android.util.Log;
 import com.google.common.annotations.VisibleForTesting;
@@ -300,11 +299,12 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
     private class NetworkReceiver extends BroadcastReceiver {
       private boolean isConnected = false;
 
+      @SuppressWarnings("deprecation")
       @Override
       public void onReceive(Context context, Intent intent) {
         ConnectivityManager conn =
             (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
-        NetworkInfo networkInfo = conn.getActiveNetworkInfo();
+        android.net.NetworkInfo networkInfo = conn.getActiveNetworkInfo();
         boolean wasConnected = isConnected;
         isConnected = networkInfo != null && networkInfo.isConnected();
         if (isConnected && !wasConnected) {

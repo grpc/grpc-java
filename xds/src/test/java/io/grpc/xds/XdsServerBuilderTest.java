@@ -61,7 +61,7 @@ public class XdsServerBuilderTest {
   private int port;
   private XdsClientWrapperForServerSds xdsClientWrapperForServerSds;
 
-  private void buildServer(
+  private XdsServerBuilder buildServer(
       XdsServerBuilder.ErrorNotifier errorNotifier, boolean injectMockXdsClient)
       throws IOException {
     port = XdsServerTestHelper.findFreePort();
@@ -78,6 +78,7 @@ public class XdsServerBuilderTest {
           XdsServerTestHelper.startAndGetWatcher(xdsClientWrapperForServerSds, mockXdsClient, port);
     }
     xdsServer = cleanupRule.register(builder.buildServer(xdsClientWrapperForServerSds));
+    return builder;
   }
 
   private void verifyServer(
@@ -273,4 +274,15 @@ public class XdsServerBuilderTest {
     verifyShutdown();
   }
 
+  @Test
+  public void xdsServer_2ndBuild_expectException() throws IOException {
+    XdsServerBuilder.ErrorNotifier mockErrorNotifier = mock(XdsServerBuilder.ErrorNotifier.class);
+    XdsServerBuilder builder = buildServer(mockErrorNotifier, true);
+    try {
+      builder.build();
+      fail("exception expected");
+    } catch (IllegalStateException expected) {
+      assertThat(expected).hasMessageThat().contains("Server already built!");
+    }
+  }
 }

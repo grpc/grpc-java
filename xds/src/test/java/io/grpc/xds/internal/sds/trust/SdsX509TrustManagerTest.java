@@ -48,7 +48,6 @@ import org.junit.runners.JUnit4;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
-import sun.security.validator.ValidatorException;
 
 /**
  * Unit tests for {@link SdsX509TrustManager}.
@@ -283,7 +282,7 @@ public class SdsX509TrustManagerTest {
     try {
       trustManager.checkServerTrusted(badServerCert, "ECDHE_ECDSA", sslEngine);
       fail("exception expected");
-    } catch (ValidatorException expected) {
+    } catch (CertificateException expected) {
       assertThat(expected).hasMessageThat()
           .endsWith("unable to find valid certification path to requested target");
     }
@@ -310,7 +309,7 @@ public class SdsX509TrustManagerTest {
     try {
       trustManager.checkServerTrusted(badServerCert, "ECDHE_ECDSA", sslSocket);
       fail("exception expected");
-    } catch (ValidatorException expected) {
+    } catch (CertificateException expected) {
       assertThat(expected).hasMessageThat()
           .endsWith("unable to find valid certification path to requested target");
     }

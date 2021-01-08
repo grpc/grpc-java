@@ -64,6 +64,7 @@ import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.ssl.SslHandshakeCompletionEvent;
+import io.netty.handler.ssl.SslMasterKeyHandler;
 import io.netty.handler.ssl.SslProvider;
 import io.netty.util.AsciiString;
 import io.netty.util.Attribute;
@@ -396,6 +397,14 @@ final class ProtocolNegotiators {
       ctx.pipeline().addBefore(ctx.name(), /* name= */ null, this.executor != null
           ? new SslHandler(sslEngine, false, this.executor)
           : new SslHandler(sslEngine, false));
+
+      // Support exporting the key and session identifier to the log named
+      // "io.netty.wireshark" when the system property named "io.netty.ssl.masterKeyHandler"
+      // is "true". This feature is used to analyze gRPC traffic with Wireshark.
+      if (Boolean.getBoolean(SslMasterKeyHandler.SYSTEM_PROP_KEY)) {
+        ctx.pipeline().addBefore(ctx.name(), null,
+            SslMasterKeyHandler.newWireSharkSslMasterKeyHandler());
+      }
     }
 
     @Override
@@ -572,6 +581,14 @@ final class ProtocolNegotiators {
       ctx.pipeline().addBefore(ctx.name(), /* name= */ null, this.executor != null
           ? new SslHandler(sslEngine, false, this.executor)
           : new SslHandler(sslEngine, false));
+
+      // Support exporting the key and session identifier to the log named
+      // "io.netty.wireshark" when the system property named "io.netty.ssl.masterKeyHandler"
+      // is "true". This feature is used to analyze gRPC traffic with Wireshark.
+      if (Boolean.getBoolean(SslMasterKeyHandler.SYSTEM_PROP_KEY)) {
+        ctx.pipeline().addBefore(ctx.name(), null,
+            SslMasterKeyHandler.newWireSharkSslMasterKeyHandler());
+      }
     }
 
     @Override

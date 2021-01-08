@@ -40,6 +40,7 @@ import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
 import io.grpc.xds.LrsLoadBalancerProvider.LrsConfig;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig;
+import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedPolicySelection;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedTargetConfig;
 import io.grpc.xds.XdsClient.EdsResourceWatcher;
@@ -213,12 +214,12 @@ final class EdsLoadBalancer2 extends LoadBalancer {
                 "Received endpoint update from xDS client {0}: {1}", xdsClient, update);
             if (logger.isLoggable(XdsLogLevel.INFO)) {
               logger.log(XdsLogLevel.INFO, "Received endpoint update: cluster_name={0}, "
-                      + "{1} localities, {2} drop categories", update.getClusterName(),
-                  update.getLocalityLbEndpointsMap().size(), update.getDropPolicies().size());
+                      + "{1} localities, {2} drop categories", update.clusterName,
+                  update.localityLbEndpointsMap.size(), update.dropPolicies.size());
             }
-            dropOverloads = update.getDropPolicies();
+            dropOverloads = update.dropPolicies;
             Map<Locality, LocalityLbEndpoints> localityLbEndpoints =
-                update.getLocalityLbEndpointsMap();
+                update.localityLbEndpointsMap;
             endpointAddresses = new ArrayList<>();
             prioritizedLocalityWeights = new HashMap<>();
             for (Locality locality : localityLbEndpoints.keySet()) {
@@ -293,8 +294,8 @@ final class EdsLoadBalancer2 extends LoadBalancer {
       private void handleResourceUpdate() {
         // Populate configurations used by downstream LB policies from the freshest result.
         EdsConfig config = (EdsConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
-        // Load balancing policy for each priority.
-        Map<String, PolicySelection> priorityChildPolicies = new HashMap<>();
+        // Config for each priority.
+        Map<String, PriorityChildConfig> priorityChildConfigs = new HashMap<>();
         List<String> priorities = new ArrayList<>();
         for (Integer priority : prioritizedLocalityWeights.keySet()) {
           WeightedTargetConfig weightedTargetConfig =
@@ -312,12 +313,12 @@ final class EdsLoadBalancer2 extends LoadBalancer {
           PolicySelection clusterImplPolicy =
               new PolicySelection(clusterImplLbProvider, clusterImplConfig);
           String priorityName = priorityName(priority);
-          priorityChildPolicies.put(priorityName, clusterImplPolicy);
+          priorityChildConfigs.put(priorityName, new PriorityChildConfig(clusterImplPolicy, true));
           priorities.add(priorityName);
         }
         Collections.sort(priorities);
         PriorityLbConfig priorityLbConfig =
-            new PriorityLbConfig(Collections.unmodifiableMap(priorityChildPolicies),
+            new PriorityLbConfig(Collections.unmodifiableMap(priorityChildConfigs),
                 Collections.unmodifiableList(priorities));
         lb.handleResolvedAddresses(
             resolvedAddresses.toBuilder()
