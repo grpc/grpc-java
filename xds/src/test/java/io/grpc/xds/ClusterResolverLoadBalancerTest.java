@@ -53,6 +53,7 @@ import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
+import io.grpc.internal.FakeClock.ScheduledTask;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
@@ -66,6 +67,7 @@ import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.LrsLoadBalancerProvider.LrsConfig;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig;
+import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedPolicySelection;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedTargetConfig;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
@@ -151,7 +153,9 @@ public class ClusterResolverLoadBalancerTest {
   @Mock
   private BackoffPolicy.Provider backoffPolicyProvider;
   @Mock
-  private BackoffPolicy backoffPolicy;
+  private BackoffPolicy backoffPolicy1;
+  @Mock
+  private BackoffPolicy backoffPolicy2;
   @Captor
   private ArgumentCaptor<SubchannelPicker> pickerCaptor;
   private int xdsClientRefs;
@@ -181,9 +185,11 @@ public class ClusterResolverLoadBalancerTest {
     when(helper.getSynchronizationContext()).thenReturn(syncContext);
     when(helper.getScheduledExecutorService()).thenReturn(fakeClock.getScheduledExecutorService());
     when(helper.getAuthority()).thenReturn(AUTHORITY);
-    when(backoffPolicyProvider.get()).thenReturn(backoffPolicy);
-    when(backoffPolicy.nextBackoffNanos())
+    when(backoffPolicyProvider.get()).thenReturn(backoffPolicy1, backoffPolicy2);
+    when(backoffPolicy1.nextBackoffNanos())
         .thenReturn(TimeUnit.SECONDS.toNanos(1L), TimeUnit.SECONDS.toNanos(10L));
+    when(backoffPolicy2.nextBackoffNanos())
+        .thenReturn(TimeUnit.SECONDS.toNanos(5L), TimeUnit.SECONDS.toNanos(50L));
     loadBalancer = new ClusterResolverLoadBalancer(helper, lbRegistry, backoffPolicyProvider);
   }
 
@@ -193,6 +199,7 @@ public class ClusterResolverLoadBalancerTest {
     assertThat(resolvers).isEmpty();
     assertThat(xdsClient.watchers).isEmpty();
     assertThat(xdsClientRefs).isEqualTo(0);
+    assertThat(fakeClock.getPendingTasks()).isEmpty();
   }
 
   @Test
@@ -224,10 +231,12 @@ public class ClusterResolverLoadBalancerTest {
     assertThat(childBalancer.name).isEqualTo(PRIORITY_POLICY_NAME);
     PriorityLbConfig priorityLbConfig = (PriorityLbConfig) childBalancer.config;
     assertThat(priorityLbConfig.priorities).containsExactly(priority1, priority2).inOrder();
-    PolicySelection priorityChildPolicy = priorityLbConfig.childConfigs.get(priority1);
-    assertThat(priorityChildPolicy.getProvider().getPolicyName())
+    PriorityChildConfig priorityChildConfig = priorityLbConfig.childConfigs.get(priority1);
+    assertThat(priorityChildConfig.ignoreReresolution).isTrue();
+    assertThat(priorityChildConfig.policySelection.getProvider().getPolicyName())
         .isEqualTo(CLUSTER_IMPL_POLICY_NAME);
-    ClusterImplConfig clusterImplConfig = (ClusterImplConfig) priorityChildPolicy.getConfig();
+    ClusterImplConfig clusterImplConfig =
+        (ClusterImplConfig) priorityChildConfig.policySelection.getConfig();
     assertClusterImplConfig(clusterImplConfig, CLUSTER2, EDS_SERVICE_NAME2, LRS_SERVER_NAME, 200L,
         tlsContext, Collections.<DropOverload>emptyList(), WEIGHTED_TARGET_POLICY_NAME);
     WeightedTargetConfig weightedTargetConfig =
@@ -239,10 +248,11 @@ public class ClusterResolverLoadBalancerTest {
     assertLrsConfig((LrsConfig) target.policySelection.getConfig(), CLUSTER2, EDS_SERVICE_NAME2,
         LRS_SERVER_NAME, locality1, "round_robin");
 
-    priorityChildPolicy = priorityLbConfig.childConfigs.get(priority2);
-    assertThat(priorityChildPolicy.getProvider().getPolicyName())
+    priorityChildConfig = priorityLbConfig.childConfigs.get(priority2);
+    assertThat(priorityChildConfig.ignoreReresolution).isTrue();
+    assertThat(priorityChildConfig.policySelection.getProvider().getPolicyName())
         .isEqualTo(CLUSTER_IMPL_POLICY_NAME);
-    clusterImplConfig = (ClusterImplConfig) priorityChildPolicy.getConfig();
+    clusterImplConfig = (ClusterImplConfig) priorityChildConfig.policySelection.getConfig();
     assertClusterImplConfig(clusterImplConfig, CLUSTER2, EDS_SERVICE_NAME2, LRS_SERVER_NAME, 200L,
         tlsContext, Collections.<DropOverload>emptyList(), WEIGHTED_TARGET_POLICY_NAME);
     weightedTargetConfig = (WeightedTargetConfig) clusterImplConfig.childPolicy.getConfig();
@@ -269,10 +279,11 @@ public class ClusterResolverLoadBalancerTest {
     assertThat(priorityLbConfig.priorities)
         .containsExactly(priority3, priority1, priority2).inOrder();
 
-    priorityChildPolicy = priorityLbConfig.childConfigs.get(priority3);
-    assertThat(priorityChildPolicy.getProvider().getPolicyName())
+    priorityChildConfig = priorityLbConfig.childConfigs.get(priority3);
+    assertThat(priorityChildConfig.ignoreReresolution).isTrue();
+    assertThat(priorityChildConfig.policySelection.getProvider().getPolicyName())
         .isEqualTo(CLUSTER_IMPL_POLICY_NAME);
-    clusterImplConfig = (ClusterImplConfig) priorityChildPolicy.getConfig();
+    clusterImplConfig = (ClusterImplConfig) priorityChildConfig.policySelection.getConfig();
     assertClusterImplConfig(clusterImplConfig, CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_NAME, 100L,
         tlsContext, Collections.<DropOverload>emptyList(), WEIGHTED_TARGET_POLICY_NAME);
     weightedTargetConfig = (WeightedTargetConfig) clusterImplConfig.childPolicy.getConfig();
@@ -374,8 +385,9 @@ public class ClusterResolverLoadBalancerTest {
 
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     PriorityLbConfig priorityLbConfig = (PriorityLbConfig) childBalancer.config;
-    PolicySelection priorityChildPolicy = priorityLbConfig.childConfigs.get(priority);
-    ClusterImplConfig clusterImplConfig = (ClusterImplConfig) priorityChildPolicy.getConfig();
+    PriorityChildConfig priorityChildConfig = priorityLbConfig.childConfigs.get(priority);
+    ClusterImplConfig clusterImplConfig =
+        (ClusterImplConfig) priorityChildConfig.policySelection.getConfig();
     WeightedTargetConfig weightedTargetConfig =
         (WeightedTargetConfig) clusterImplConfig.childPolicy.getConfig();
     assertThat(weightedTargetConfig.targets.keySet()).containsExactly(locality2.toString());
@@ -439,10 +451,12 @@ public class ClusterResolverLoadBalancerTest {
     assertThat(childBalancer.name).isEqualTo(PRIORITY_POLICY_NAME);
     PriorityLbConfig priorityLbConfig = (PriorityLbConfig) childBalancer.config;
     String priority = Iterables.getOnlyElement(priorityLbConfig.priorities);
-    PolicySelection priorityChildPolicy = priorityLbConfig.childConfigs.get(priority);
-    assertThat(priorityChildPolicy.getProvider().getPolicyName())
+    PriorityChildConfig priorityChildConfig = priorityLbConfig.childConfigs.get(priority);
+    assertThat(priorityChildConfig.ignoreReresolution).isFalse();
+    assertThat(priorityChildConfig.policySelection.getProvider().getPolicyName())
         .isEqualTo(CLUSTER_IMPL_POLICY_NAME);
-    ClusterImplConfig clusterImplConfig = (ClusterImplConfig) priorityChildPolicy.getConfig();
+    ClusterImplConfig clusterImplConfig =
+        (ClusterImplConfig) priorityChildConfig.policySelection.getConfig();
     assertClusterImplConfig(clusterImplConfig, CLUSTER_DNS, null, LRS_SERVER_NAME, 100L, null,
         Collections.<DropOverload>emptyList(), LRS_POLICY_NAME);
     LrsConfig lrsConfig = (LrsConfig) clusterImplConfig.childPolicy.getConfig();
@@ -452,8 +466,22 @@ public class ClusterResolverLoadBalancerTest {
   }
 
   @Test
+  public void onlyLogicalDnsCluster_handleRefreshNameResolution() {
+    deliverConfigWithSingleLogicalDnsCluster();
+    EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr-1");
+    EquivalentAddressGroup endpoint2 = makeAddress("endpoint-addr-2");
+    FakeNameResolver resolver = Iterables.getOnlyElement(resolvers);
+    resolver.deliverEndpointAddresses(Arrays.asList(endpoint1, endpoint2));
+    assertThat(resolver.refreshCount).isEqualTo(0);
+    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
+    childBalancer.helper.refreshNameResolution();
+    assertThat(resolver.refreshCount).isEqualTo(1);
+  }
+
+  @Test
   public void onlyLogicalDnsCluster_resolutionError_backoffAndRefresh() {
-    InOrder inOrder = Mockito.inOrder(helper, backoffPolicyProvider, backoffPolicy);
+    InOrder inOrder = Mockito.inOrder(helper, backoffPolicyProvider,
+        backoffPolicy1, backoffPolicy2);
     deliverConfigWithSingleLogicalDnsCluster();
     FakeNameResolver resolver = Iterables.getOnlyElement(resolvers);
     Status error = Status.UNAVAILABLE.withDescription("cannot reach DNS server");
@@ -463,7 +491,7 @@ public class ClusterResolverLoadBalancerTest {
     assertPicker(pickerCaptor.getValue(), error, null);
     assertThat(resolver.refreshCount).isEqualTo(0);
     inOrder.verify(backoffPolicyProvider).get();
-    inOrder.verify(backoffPolicy).nextBackoffNanos();
+    inOrder.verify(backoffPolicy1).nextBackoffNanos();
     assertThat(fakeClock.getPendingTasks()).hasSize(1);
     assertThat(Iterables.getOnlyElement(fakeClock.getPendingTasks()).getDelay(TimeUnit.SECONDS))
         .isEqualTo(1L);
@@ -474,7 +502,7 @@ public class ClusterResolverLoadBalancerTest {
     resolver.deliverError(error);
     inOrder.verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
-    inOrder.verify(backoffPolicy).nextBackoffNanos();
+    inOrder.verify(backoffPolicy1).nextBackoffNanos();
     assertPicker(pickerCaptor.getValue(), error, null);
     assertThat(fakeClock.getPendingTasks()).hasSize(1);
     assertThat(Iterables.getOnlyElement(fakeClock.getPendingTasks()).getDelay(TimeUnit.SECONDS))
@@ -491,6 +519,42 @@ public class ClusterResolverLoadBalancerTest {
         Iterables.getOnlyElement(childBalancers).addresses);
 
     assertThat(fakeClock.getPendingTasks()).isEmpty();
+    inOrder.verifyNoMoreInteractions();
+  }
+
+  @Test
+  public void onlyLogicalDnsCluster_refreshNameResolutionRaceWithResolutionError() {
+    InOrder inOrder = Mockito.inOrder(backoffPolicyProvider, backoffPolicy1, backoffPolicy2);
+    deliverConfigWithSingleLogicalDnsCluster();
+    EquivalentAddressGroup endpoint = makeAddress("endpoint-addr");
+    FakeNameResolver resolver = Iterables.getOnlyElement(resolvers);
+    resolver.deliverEndpointAddresses(Collections.singletonList(endpoint));
+    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
+    assertAddressesEqual(Collections.singletonList(endpoint), childBalancer.addresses);
+    assertThat(resolver.refreshCount).isEqualTo(0);
+
+    childBalancer.helper.refreshNameResolution();
+    assertThat(resolver.refreshCount).isEqualTo(1);
+    resolver.deliverError(Status.UNAVAILABLE.withDescription("I am lost"));
+    inOrder.verify(backoffPolicyProvider).get();
+    inOrder.verify(backoffPolicy1).nextBackoffNanos();
+    assertThat(fakeClock.getPendingTasks()).hasSize(1);
+    ScheduledTask task = Iterables.getOnlyElement(fakeClock.getPendingTasks());
+    assertThat(task.getDelay(TimeUnit.SECONDS)).isEqualTo(1L);
+
+    fakeClock.forwardTime( 100L, TimeUnit.MILLISECONDS);
+    childBalancer.helper.refreshNameResolution();
+    assertThat(resolver.refreshCount).isEqualTo(2);
+    assertThat(task.isCancelled()).isTrue();
+    assertThat(fakeClock.getPendingTasks()).isEmpty();
+    resolver.deliverError(Status.UNAVAILABLE.withDescription("I am still lost"));
+    inOrder.verify(backoffPolicyProvider).get();  // active refresh resets backoff sequence
+    inOrder.verify(backoffPolicy2).nextBackoffNanos();
+    task = Iterables.getOnlyElement(fakeClock.getPendingTasks());
+    assertThat(task.getDelay(TimeUnit.SECONDS)).isEqualTo(5L);
+
+    fakeClock.forwardTime(5L, TimeUnit.SECONDS);
+    assertThat(resolver.refreshCount).isEqualTo(3);
     inOrder.verifyNoMoreInteractions();
   }
 

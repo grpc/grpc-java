@@ -34,17 +34,22 @@ import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig;
+import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
-import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
-/** Load balancer for priority policy. */
+/**
+ * Load balancer for priority policy. A <em>priority</em> represents a logical entity within a
+ * cluster for load balancing purposes.
+ */
 final class PriorityLoadBalancer extends LoadBalancer {
   private final Helper helper;
   private final SynchronizationContext syncContext;
@@ -57,8 +62,10 @@ final class PriorityLoadBalancer extends LoadBalancer {
 
   // Following fields are only null initially.
   private ResolvedAddresses resolvedAddresses;
+  // List of priority names in order.
   private List<String> priorityNames;
-  private Map<String, Integer> priorityNameToIndex;
+  // Config for each priority.
+  private Map<String, PriorityChildConfig> priorityConfigs;
   private ConnectivityState currentConnectivityState;
   private SubchannelPicker currentPicker;
 
@@ -78,13 +85,10 @@ final class PriorityLoadBalancer extends LoadBalancer {
     PriorityLbConfig config = (PriorityLbConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
     checkNotNull(config, "missing priority lb config");
     priorityNames = config.priorities;
-    Map<String, Integer> pToI = new HashMap<>();
-    for (int i = 0; i < priorityNames.size(); i++) {
-      pToI.put(priorityNames.get(i), i);
-    }
-    priorityNameToIndex = Collections.unmodifiableMap(pToI);
+    priorityConfigs = config.childConfigs;
+    Set<String> prioritySet = new HashSet<>(config.priorities);
     for (String priority : children.keySet()) {
-      if (!priorityNameToIndex.containsKey(priority)) {
+      if (!prioritySet.contains(priority)) {
         children.get(priority).deactivate();
       }
     }
@@ -125,7 +129,8 @@ final class PriorityLoadBalancer extends LoadBalancer {
     for (int i = 0; i < priorityNames.size(); i++) {
       String priority = priorityNames.get(i);
       if (!children.containsKey(priority)) {
-        ChildLbState child = new ChildLbState(priority);
+        ChildLbState child =
+            new ChildLbState(priority, priorityConfigs.get(priority).ignoreReresolution);
         children.put(priority, child);
         child.updateResolvedAddresses();
         updateOverallState(CONNECTING, BUFFER_PICKER);
@@ -180,9 +185,9 @@ final class PriorityLoadBalancer extends LoadBalancer {
     ConnectivityState connectivityState = CONNECTING;
     SubchannelPicker picker = BUFFER_PICKER;
 
-    ChildLbState(final String priority) {
+    ChildLbState(final String priority, boolean ignoreReresolution) {
       this.priority = priority;
-      childHelper = new ChildHelper();
+      childHelper = new ChildHelper(ignoreReresolution);
       lb = new GracefulSwitchLoadBalancer(childHelper);
 
       class FailOverTask implements Runnable {
@@ -253,7 +258,7 @@ final class PriorityLoadBalancer extends LoadBalancer {
     void updateResolvedAddresses() {
       PriorityLbConfig config =
           (PriorityLbConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
-      PolicySelection childPolicySelection = config.childConfigs.get(priority);
+      PolicySelection childPolicySelection = config.childConfigs.get(priority).policySelection;
       LoadBalancerProvider lbProvider = childPolicySelection.getProvider();
       String newPolicy = lbProvider.getPolicyName();
       if (!newPolicy.equals(policy)) {
@@ -268,6 +273,19 @@ final class PriorityLoadBalancer extends LoadBalancer {
     }
 
     final class ChildHelper extends ForwardingLoadBalancerHelper {
+      private final boolean ignoreReresolution;
+
+      ChildHelper(boolean ignoreReresolution) {
+        this.ignoreReresolution = ignoreReresolution;
+      }
+
+      @Override
+      public void refreshNameResolution() {
+        if (!ignoreReresolution) {
+          delegate().refreshNameResolution();
+        }
+      }
+
       @Override
       public void updateBalancingState(final ConnectivityState newState,
           final SubchannelPicker newPicker) {
