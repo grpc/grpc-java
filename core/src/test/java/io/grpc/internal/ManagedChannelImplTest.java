@@ -134,10 +134,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.logging.Handler;
-import java.util.logging.Level;
-import java.util.logging.LogRecord;
-import java.util.logging.Logger;
 import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Assert;
@@ -365,89 +361,6 @@ public class ManagedChannelImplTest {
   @After
   public void cleanUp() {
     LoadBalancerRegistry.getDefaultRegistry().deregister(mockLoadBalancerProvider);
-  }
-
-  @Deprecated
-  @Test
-  public void createSubchannel_old_outsideSynchronizationContextShouldLogWarning() {
-    createChannel();
-    final AtomicReference<LogRecord> logRef = new AtomicReference<>();
-    Handler handler = new Handler() {
-      @Override
-      public void publish(LogRecord record) {
-        logRef.set(record);
-      }
-
-      @Override
-      public void flush() {
-      }
-
-      @Override
-      public void close() throws SecurityException {
-      }
-    };
-    Logger logger = Logger.getLogger(ManagedChannelImpl.class.getName());
-    try {
-      logger.addHandler(handler);
-      helper.createSubchannel(addressGroup, Attributes.EMPTY);
-      LogRecord record = logRef.get();
-      assertThat(record.getLevel()).isEqualTo(Level.WARNING);
-      assertThat(record.getMessage()).contains(
-          "createSubchannel() should be called from SynchronizationContext");
-      assertThat(record.getThrown()).isInstanceOf(IllegalStateException.class);
-    } finally {
-      logger.removeHandler(handler);
-    }
-  }
-
-  @Deprecated
-  @Test
-  public void createSubchannel_old_insideSyncContextFollowedByRequestConnectionShouldSucceed() {
-    createChannel();
-    final AtomicReference<Throwable> error = new AtomicReference<>();
-    helper.getSynchronizationContext().execute(new Runnable() {
-        @Override
-        public void run() {
-          try {
-            Subchannel subchannel = helper.createSubchannel(addressGroup, Attributes.EMPTY);
-            subchannel.requestConnection();
-          } catch (Throwable e) {
-            error.set(e);
-          }
-        }
-      });
-    assertThat(error.get()).isNull();
-  }
-
-  @Deprecated
-  @Test
-  @SuppressWarnings("deprecation")
-  public void createSubchannel_old_propagateSubchannelStatesToOldApi() {
-    createChannel();
-
-    Subchannel subchannel = helper.createSubchannel(addressGroup, Attributes.EMPTY);
-    subchannel.requestConnection();
-
-    verify(mockTransportFactory)
-        .newClientTransport(
-            any(SocketAddress.class), any(ClientTransportOptions.class), any(ChannelLogger.class));
-    verify(mockLoadBalancer).handleSubchannelState(
-        same(subchannel), eq(ConnectivityStateInfo.forNonError(CONNECTING)));
-
-    MockClientTransportInfo transportInfo = transports.poll();
-    transportInfo.listener.transportReady();
-
-    verify(mockLoadBalancer).handleSubchannelState(
-        same(subchannel), eq(ConnectivityStateInfo.forNonError(READY)));
-
-    channel.shutdown();
-    verify(mockLoadBalancer).shutdown();
-    subchannel.shutdown();
-
-    verify(mockLoadBalancer, atLeast(0)).canHandleEmptyAddressListFromNameResolution();
-    verify(mockLoadBalancer, atLeast(0)).handleNameResolutionError(any(Status.class));
-    // handleSubchannelState() should not be called after shutdown()
-    verifyNoMoreInteractions(mockLoadBalancer);
   }
 
   @Test

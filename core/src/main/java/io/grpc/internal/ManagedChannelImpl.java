@@ -1388,36 +1388,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private class LbHelperImpl extends LoadBalancer.Helper {
     AutoConfiguredLoadBalancer lb;
 
-    @Deprecated
-    @Override
-    public AbstractSubchannel createSubchannel(
-        List<EquivalentAddressGroup> addressGroups, Attributes attrs) {
-      logWarningIfNotInSyncContext("createSubchannel()");
-      // TODO(ejona): can we be even stricter? Like loadBalancer == null?
-      checkNotNull(addressGroups, "addressGroups");
-      checkNotNull(attrs, "attrs");
-      final SubchannelImpl subchannel = createSubchannelInternal(
-          CreateSubchannelArgs.newBuilder()
-              .setAddresses(addressGroups)
-              .setAttributes(attrs)
-              .build());
-
-      final SubchannelStateListener listener =
-          new LoadBalancer.SubchannelStateListener() {
-            @Override
-            public void onSubchannelState(ConnectivityStateInfo newState) {
-              // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
-              if (LbHelperImpl.this != ManagedChannelImpl.this.lbHelper) {
-                return;
-              }
-              lb.handleSubchannelState(subchannel, newState);
-            }
-          };
-
-      subchannel.internalStart(listener);
-      return subchannel;
-    }
-
     @Override
     public AbstractSubchannel createSubchannel(CreateSubchannelArgs args) {
       syncContext.throwIfNotInThisSynchronizationContext();
@@ -1467,16 +1437,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
       }
 
       syncContext.execute(new LoadBalancerRefreshNameResolution());
-    }
-
-    @Deprecated
-    @Override
-    public void updateSubchannelAddresses(
-        LoadBalancer.Subchannel subchannel, List<EquivalentAddressGroup> addrs) {
-      checkArgument(subchannel instanceof SubchannelImpl,
-          "subchannel must have been returned from createSubchannel");
-      logWarningIfNotInSyncContext("updateSubchannelAddresses()");
-      ((InternalSubchannel) subchannel.getInternalSubchannel()).updateAddresses(addrs);
     }
 
     @Override
@@ -1614,12 +1574,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
     @Override
     public String getAuthority() {
       return ManagedChannelImpl.this.authority();
-    }
-
-    @Deprecated
-    @Override
-    public NameResolver.Factory getNameResolverFactory() {
-      return nameResolverFactory;
     }
 
     @Override

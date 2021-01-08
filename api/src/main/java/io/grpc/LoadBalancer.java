@@ -905,45 +905,6 @@ public abstract class LoadBalancer {
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
   public abstract static class Helper {
     /**
-     * Equivalent to {@link #createSubchannel(List, Attributes)} with the given single {@code
-     * EquivalentAddressGroup}.
-     *
-     * @since 1.2.0
-     * @deprecated Use {@link #createSubchannel(io.grpc.LoadBalancer.CreateSubchannelArgs)}
-     *             instead. Note the new API must be called from {@link #getSynchronizationContext
-     *             the Synchronization Context}.
-     */
-    @Deprecated
-    public final Subchannel createSubchannel(EquivalentAddressGroup addrs, Attributes attrs) {
-      checkNotNull(addrs, "addrs");
-      return createSubchannel(Collections.singletonList(addrs), attrs);
-    }
-
-    /**
-     * Creates a Subchannel, which is a logical connection to the given group of addresses which are
-     * considered equivalent.  The {@code attrs} are custom attributes associated with this
-     * Subchannel, and can be accessed later through {@link Subchannel#getAttributes
-     * Subchannel.getAttributes()}.
-     *
-     * <p>It is recommended you call this method from the Synchronization Context, otherwise your
-     * logic around the creation may race with {@link #handleSubchannelState}.  See
-     * <a href="https://github.com/grpc/grpc-java/issues/5015">#5015</a> for more discussions.
-     *
-     * <p>The LoadBalancer is responsible for closing unused Subchannels, and closing all
-     * Subchannels within {@link #shutdown}.
-     *
-     * @throws IllegalArgumentException if {@code addrs} is empty
-     * @since 1.14.0
-     * @deprecated Use {@link #createSubchannel(io.grpc.LoadBalancer.CreateSubchannelArgs)}
-     *             instead. Note the new API must be called from {@link #getSynchronizationContext
-     *             the Synchronization Context}.
-     */
-    @Deprecated
-    public Subchannel createSubchannel(List<EquivalentAddressGroup> addrs, Attributes attrs) {
-      throw new UnsupportedOperationException();
-    }
-
-    /**
      * Creates a Subchannel, which is a logical connection to the given group of addresses which are
      * considered equivalent.  The {@code attrs} are custom attributes associated with this
      * Subchannel, and can be accessed later through {@link Subchannel#getAttributes
@@ -957,44 +918,6 @@ public abstract class LoadBalancer {
      * @since 1.22.0
      */
     public Subchannel createSubchannel(CreateSubchannelArgs args) {
-      throw new UnsupportedOperationException();
-    }
-
-    /**
-     * Equivalent to {@link #updateSubchannelAddresses(io.grpc.LoadBalancer.Subchannel, List)} with
-     * the given single {@code EquivalentAddressGroup}.
-     *
-     * <p>It should be called from the Synchronization Context.  Currently will log a warning if
-     * violated.  It will become an exception eventually.  See <a
-     * href="https://github.com/grpc/grpc-java/issues/5015">#5015</a> for the background.
-     *
-     * @since 1.4.0
-     * @deprecated use {@link Subchannel#updateAddresses} instead
-     */
-    @Deprecated
-    public final void updateSubchannelAddresses(
-        Subchannel subchannel, EquivalentAddressGroup addrs) {
-      checkNotNull(addrs, "addrs");
-      updateSubchannelAddresses(subchannel, Collections.singletonList(addrs));
-    }
-
-    /**
-     * Replaces the existing addresses used with {@code subchannel}. This method is superior to
-     * {@link #createSubchannel} when the new and old addresses overlap, since the subchannel can
-     * continue using an existing connection.
-     *
-     * <p>It should be called from the Synchronization Context.  Currently will log a warning if
-     * violated.  It will become an exception eventually.  See <a
-     * href="https://github.com/grpc/grpc-java/issues/5015">#5015</a> for the background.
-     *
-     * @throws IllegalArgumentException if {@code subchannel} was not returned from {@link
-     *     #createSubchannel} or {@code addrs} is empty
-     * @since 1.14.0
-     * @deprecated use {@link Subchannel#updateAddresses} instead
-     */
-    @Deprecated
-    public void updateSubchannelAddresses(
-        Subchannel subchannel, List<EquivalentAddressGroup> addrs) {
       throw new UnsupportedOperationException();
     }
 
@@ -1116,18 +1039,6 @@ public abstract class LoadBalancer {
     }
 
     /**
-     * Schedule a task to be run in the Synchronization Context, which serializes the task with the
-     * callback methods on the {@link LoadBalancer} interface.
-     *
-     * @since 1.2.0
-     * @deprecated use/implement {@code getSynchronizationContext()} instead
-     */
-    @Deprecated
-    public void runSerialized(Runnable task) {
-      getSynchronizationContext().execute(task);
-    }
-
-    /**
      * Returns a {@link SynchronizationContext} that runs tasks in the same Synchronization Context
      * as that the callback methods on the {@link LoadBalancer} interface are run in.
      *
@@ -1156,17 +1067,6 @@ public abstract class LoadBalancer {
     public ScheduledExecutorService getScheduledExecutorService() {
       throw new UnsupportedOperationException();
     }
-
-    /**
-     * Returns the NameResolver of the channel.
-     *
-     * @since 1.2.0
-     *
-     * @deprecated this method will be deleted in a future release.  If you think it shouldn't be
-     *     deleted, please file an issue on <a href="https://github.com/grpc/grpc-java">github</a>.
-     */
-    @Deprecated
-    public abstract NameResolver.Factory getNameResolverFactory();
 
     /**
      * Returns the authority string of the channel, which is derived from the DNS-style target name.
