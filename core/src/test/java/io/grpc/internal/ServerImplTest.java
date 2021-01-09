@@ -738,7 +738,7 @@ public class ServerImplTest {
               ctx.detach(origCtx);
             }
           }
-        }).addStreamTracerFactory(streamTracerFactory);
+        }).withStreamTracerFactories(Arrays.asList(streamTracerFactory));
       }
     };
     ServerInterceptor interceptor1 = new ServerInterceptor() {
