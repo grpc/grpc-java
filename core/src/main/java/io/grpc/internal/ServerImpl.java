@@ -553,6 +553,9 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
               context.cancel(null);
               return;
             }
+            // TODO(ericgribkoff): ServerInterceptor2 allows non-trivial ahead-of-time processing
+            // of the method. We should probably pre-apply the interceptor to the method for all
+            // but the fallbackRegistry.
             ServerMethodDefinition<?, ?> interceptedDef = getInterceptedMethodDef(method);
             listenerContext =
                 statsTraceCtx.setServerInterceptorTracersAndFilterContext(
