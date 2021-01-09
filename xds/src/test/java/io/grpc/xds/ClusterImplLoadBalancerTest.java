@@ -38,7 +38,6 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
-import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
@@ -611,12 +610,6 @@ public class ClusterImplLoadBalancerTest {
 
     @Override
     public ManagedChannel createOobChannel(EquivalentAddressGroup eag, String authority) {
-      throw new UnsupportedOperationException("should not be called");
-    }
-
-    @Deprecated
-    @Override
-    public NameResolver.Factory getNameResolverFactory() {
       throw new UnsupportedOperationException("should not be called");
     }
 
