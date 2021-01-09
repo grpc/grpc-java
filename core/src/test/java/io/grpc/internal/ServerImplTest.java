@@ -806,27 +806,30 @@ public class ServerImplTest {
 
     Context ctx1 = capturedContexts.poll();
     assertEquals("serverInterceptor2_tracerKey", serverInterceptor2_tracerKey.get(ctx1));
-    assertEquals("serverInterceptor2_handlerKey", serverInterceptor2_handlerKey.get(ctx1));
-    assertNull(key1.get(ctx1));
+    assertEquals("value1", key1.get(ctx1));
     assertNull(key2.get(ctx1));
+    assertNull(serverInterceptor2_handlerKey.get(ctx1));
     assertNull(key3.get(ctx1));
 
     Context ctx2 = capturedContexts.poll();
-    assertEquals("serverInterceptor2_handlerKey", serverInterceptor2_handlerKey.get(ctx2));
+    assertEquals("serverInterceptor2_tracerKey", serverInterceptor2_tracerKey.get(ctx2));
     assertEquals("value1", key1.get(ctx2));
-    assertNull(key2.get(ctx2));
+    assertEquals("value2", key2.get(ctx2));
+    assertNull(serverInterceptor2_handlerKey.get(ctx2));
     assertNull(key3.get(ctx2));
 
     Context ctx3 = capturedContexts.poll();
-    assertEquals("serverInterceptor2_handlerKey", serverInterceptor2_handlerKey.get(ctx3));
+    assertEquals("serverInterceptor2_tracerKey", serverInterceptor2_tracerKey.get(ctx3));
     assertEquals("value1", key1.get(ctx3));
     assertEquals("value2", key2.get(ctx3));
+    assertEquals("serverInterceptor2_handlerKey", serverInterceptor2_handlerKey.get(ctx3));
     assertNull(key3.get(ctx3));
 
     Context ctx4 = capturedContexts.poll();
-    assertEquals("serverInterceptor2_handlerKey", serverInterceptor2_handlerKey.get(ctx4));
+    assertEquals("serverInterceptor2_tracerKey", serverInterceptor2_tracerKey.get(ctx4));
     assertEquals("value1", key1.get(ctx4));
     assertEquals("value2", key2.get(ctx4));
+    assertEquals("serverInterceptor2_handlerKey", serverInterceptor2_handlerKey.get(ctx4));
     assertEquals("value3", key3.get(ctx4));
 
     assertTrue(capturedContexts.isEmpty());

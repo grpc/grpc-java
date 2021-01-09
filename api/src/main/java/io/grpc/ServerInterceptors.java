@@ -303,4 +303,31 @@ public final class ServerInterceptors {
       }
     };
   }
+
+  /** Wrapper to convert ServerInterceptor to ServerInterceptor2. */
+  private static final class ServerInterceptorConverter implements ServerInterceptor2 {
+    private final ServerInterceptor wrappedInterceptor;
+
+    ServerInterceptorConverter(ServerInterceptor interceptor) {
+      wrappedInterceptor = interceptor;
+    }
+
+    @Override
+    public <ReqT, RespT> ServerMethodDefinition<ReqT, RespT> interceptMethodDefinition(
+        ServerMethodDefinition<ReqT, RespT> method) {
+      return method.withServerCallHandler(
+          InternalServerInterceptors.interceptCallHandler(
+              wrappedInterceptor, method.getServerCallHandler()));
+    }
+  }
+
+  /**
+   * Returns a {@link ServerInterceptor2} instance that wraps the given {@code ServerInterceptor}.
+   *
+   * @since 1.36.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/????")
+  public static ServerInterceptor2 serverInterceptorConverter(ServerInterceptor interceptor) {
+    return new ServerInterceptorConverter(interceptor);
+  }
 }

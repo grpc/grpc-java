@@ -43,10 +43,8 @@ import io.grpc.InternalChannelz.ServerStats;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalInstrumented;
 import io.grpc.InternalLogId;
-import io.grpc.InternalServerInterceptors;
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
-import io.grpc.ServerInterceptor;
 import io.grpc.ServerInterceptor2;
 import io.grpc.ServerMethodDefinition;
 import io.grpc.ServerServiceDefinition;
@@ -100,8 +98,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
   private final List<ServerTransportFilter> transportFilters;
   // This is iterated on a per-call basis.  Use an array instead of a Collection to avoid iterator
   // creations.
-  private final ServerInterceptor[] interceptors;
-  private final ServerInterceptor2[] interceptors2;
+  private final ServerInterceptor2[] interceptors;
   private final long handshakeTimeoutMillis;
   @GuardedBy("lock") private boolean started;
   @GuardedBy("lock") private boolean shutdown;
@@ -156,9 +153,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
     this.transportFilters = Collections.unmodifiableList(
         new ArrayList<>(builder.transportFilters));
     this.interceptors =
-        builder.interceptors.toArray(new ServerInterceptor[builder.interceptors.size()]);
-    this.interceptors2 =
-        builder.interceptors2.toArray(new ServerInterceptor2[builder.interceptors2.size()]);
+        builder.interceptors.toArray(new ServerInterceptor2[builder.interceptors.size()]);
     this.handshakeTimeoutMillis = builder.handshakeTimeoutMillis;
     this.binlog = builder.binlog;
     this.channelz = builder.channelz;
@@ -627,11 +622,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
 
     private <ReqT, RespT> ServerMethodDefinition<ReqT, RespT> getInterceptedMethodDef(
         ServerMethodDefinition<ReqT, RespT> methodDef) {
-      for (ServerInterceptor interceptor : interceptors) {
-        methodDef =
-            new ServerInterceptorConverter(interceptor).interceptMethodDefinition(methodDef);
-      }
-      for (ServerInterceptor2 interceptor : interceptors2) {
+      for (ServerInterceptor2 interceptor : interceptors) {
         methodDef = interceptor.interceptMethodDefinition(methodDef);
       }
       return methodDef;
@@ -682,23 +673,6 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
             "startCall() returned a null listener for method " + fullMethodName);
       }
       return call.newServerStreamListener(listener);
-    }
-  }
-
-  /** Wrapper to convert ServerInterceptor to ServerInterceptor2. */
-  private static final class ServerInterceptorConverter implements ServerInterceptor2 {
-    private final ServerInterceptor wrappedInterceptor;
-
-    ServerInterceptorConverter(ServerInterceptor interceptor) {
-      wrappedInterceptor = interceptor;
-    }
-
-    @Override
-    public <ReqT, RespT> ServerMethodDefinition<ReqT, RespT>
-        interceptMethodDefinition(ServerMethodDefinition<ReqT, RespT> method) {
-      return method.withServerCallHandler(
-              InternalServerInterceptors.interceptCallHandler(
-                      wrappedInterceptor, method.getServerCallHandler()));
     }
   }
 

@@ -33,6 +33,7 @@ import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerInterceptor;
 import io.grpc.ServerInterceptor2;
+import io.grpc.ServerInterceptors;
 import io.grpc.ServerMethodDefinition;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerStreamTracer;
@@ -75,8 +76,7 @@ public final class ServerImplBuilder extends ServerBuilder<ServerImplBuilder> {
   final InternalHandlerRegistry.Builder registryBuilder =
       new InternalHandlerRegistry.Builder();
   final List<ServerTransportFilter> transportFilters = new ArrayList<>();
-  final List<ServerInterceptor> interceptors = new ArrayList<>();
-  final List<ServerInterceptor2> interceptors2 = new ArrayList<>();
+  final List<ServerInterceptor2> interceptors = new ArrayList<>();
   private final List<ServerStreamTracer.Factory> streamTracerFactories = new ArrayList<>();
   private final ClientTransportServersBuilder clientTransportServersBuilder;
   HandlerRegistry fallbackRegistry = DEFAULT_FALLBACK_REGISTRY;
@@ -141,13 +141,14 @@ public final class ServerImplBuilder extends ServerBuilder<ServerImplBuilder> {
 
   @Override
   public ServerImplBuilder intercept(ServerInterceptor interceptor) {
-    interceptors.add(checkNotNull(interceptor, "interceptor"));
+    interceptors.add(
+        ServerInterceptors.serverInterceptorConverter(checkNotNull(interceptor, "interceptor")));
     return this;
   }
 
   @Override
   public ServerImplBuilder intercept(ServerInterceptor2 interceptor) {
-    interceptors2.add(checkNotNull(interceptor, "interceptor"));
+    interceptors.add(checkNotNull(interceptor, "interceptor"));
     return this;
   }
 
