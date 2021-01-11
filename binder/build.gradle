@@ -1,5 +1,4 @@
 plugins {
-//    id "java-library"
     id "com.android.library"
     id "ru.vyarus.animalsniffer"
 }
@@ -38,8 +37,3 @@ dependencies {
     }
     testImplementation libraries.truth
 }
-
-/*javadoc {
-    // We want io.grpc.Internal, but not io.grpc.Internal*
-    exclude 'io/grpc/Internal?*.java'
-}*/
