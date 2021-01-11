@@ -65,7 +65,6 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
-import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
@@ -2648,12 +2647,6 @@ public class GrpclbLoadBalancerTest {
     public void updateBalancingState(
         @Nonnull ConnectivityState newState, @Nonnull SubchannelPicker newPicker) {
       currentPicker = newPicker;
-    }
-
-    @Override
-    @SuppressWarnings("deprecation")
-    public NameResolver.Factory getNameResolverFactory() {
-      return mock(NameResolver.Factory.class);
     }
 
     @Override

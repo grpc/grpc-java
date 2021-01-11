@@ -46,7 +46,6 @@ import io.grpc.LoadBalancerProvider;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
-import io.grpc.NameResolver;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.Status.Code;
@@ -576,12 +575,6 @@ public class CachingRlsLbClientTest {
     public void updateBalancingState(
         @Nonnull ConnectivityState newState, @Nonnull SubchannelPicker newPicker) {
       // no-op
-    }
-
-    @Override
-    @Deprecated
-    public NameResolver.Factory getNameResolverFactory() {
-      throw new UnsupportedOperationException();
     }
 
     @Override
