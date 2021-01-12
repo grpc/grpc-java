@@ -61,10 +61,10 @@ public final class PriorityLoadBalancerProvider extends LoadBalancerProvider {
   }
 
   static final class PriorityLbConfig {
-    final Map<String, PolicySelection> childConfigs;
+    final Map<String, PriorityChildConfig> childConfigs;
     final List<String> priorities;
 
-    PriorityLbConfig(Map<String, PolicySelection> childConfigs, List<String> priorities) {
+    PriorityLbConfig(Map<String, PriorityChildConfig> childConfigs, List<String> priorities) {
       this.childConfigs = Collections.unmodifiableMap(checkNotNull(childConfigs, "childConfigs"));
       this.priorities = Collections.unmodifiableList(checkNotNull(priorities, "priorities"));
       checkArgument(!priorities.isEmpty(), "priority list is empty");
@@ -85,6 +85,16 @@ public final class PriorityLoadBalancerProvider extends LoadBalancerProvider {
           .add("childConfigs", childConfigs)
           .add("priorities", priorities)
           .toString();
+    }
+
+    static final class PriorityChildConfig {
+      final PolicySelection policySelection;
+      final boolean ignoreReresolution;
+
+      PriorityChildConfig(PolicySelection policySelection, boolean ignoreReresolution) {
+        this.policySelection = checkNotNull(policySelection, "policySelection");
+        this.ignoreReresolution = ignoreReresolution;
+      }
     }
   }
 }

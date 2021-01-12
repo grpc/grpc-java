@@ -39,7 +39,6 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
-import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
@@ -55,6 +54,7 @@ import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.LrsLoadBalancerProvider.LrsConfig;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig;
+import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedPolicySelection;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedTargetConfig;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
@@ -170,9 +170,12 @@ public class EdsLoadBalancer2Test {
     assertThat(childBalancer.name).isEqualTo(PRIORITY_POLICY_NAME);
     PriorityLbConfig config = (PriorityLbConfig) childBalancer.config;
     assertThat(config.priorities).containsExactly("priority1", "priority2");
-    PolicySelection priorityChild1 = config.childConfigs.get("priority1");
-    assertThat(priorityChild1.getProvider().getPolicyName()).isEqualTo(CLUSTER_IMPL_POLICY_NAME);
-    ClusterImplConfig clusterImplConfig1 = (ClusterImplConfig) priorityChild1.getConfig();
+    PriorityChildConfig priorityChild1 = config.childConfigs.get("priority1");
+    assertThat(priorityChild1.ignoreReresolution).isTrue();
+    assertThat(priorityChild1.policySelection.getProvider().getPolicyName())
+        .isEqualTo(CLUSTER_IMPL_POLICY_NAME);
+    ClusterImplConfig clusterImplConfig1 =
+        (ClusterImplConfig) priorityChild1.policySelection.getConfig();
     assertClusterImplConfig(clusterImplConfig1, CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME,
         null, Collections.<DropOverload>emptyList(), WEIGHTED_TARGET_POLICY_NAME);
     PolicySelection weightedTargetPolicy1 = clusterImplConfig1.childPolicy;
@@ -193,9 +196,12 @@ public class EdsLoadBalancer2Test {
     assertLrsConfig((LrsConfig) target2.policySelection.getConfig(), CLUSTER, EDS_SERVICE_NAME,
         LRS_SERVER_NAME, locality2, "round_robin");
 
-    PolicySelection priorityChild2 = config.childConfigs.get("priority2");
-    assertThat(priorityChild2.getProvider().getPolicyName()).isEqualTo(CLUSTER_IMPL_POLICY_NAME);
-    ClusterImplConfig clusterImplConfig2 = (ClusterImplConfig) priorityChild2.getConfig();
+    PriorityChildConfig priorityChild2 = config.childConfigs.get("priority2");
+    assertThat(priorityChild2.ignoreReresolution).isTrue();
+    assertThat(priorityChild2.policySelection.getProvider().getPolicyName())
+        .isEqualTo(CLUSTER_IMPL_POLICY_NAME);
+    ClusterImplConfig clusterImplConfig2 =
+        (ClusterImplConfig) priorityChild2.policySelection.getConfig();
     assertClusterImplConfig(clusterImplConfig2, CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME,
         null, Collections.<DropOverload>emptyList(), WEIGHTED_TARGET_POLICY_NAME);
     PolicySelection weightedTargetPolicy2 = clusterImplConfig2.childPolicy;
@@ -244,9 +250,12 @@ public class EdsLoadBalancer2Test {
     assertThat(childBalancer.name).isEqualTo(PRIORITY_POLICY_NAME);
     PriorityLbConfig config = (PriorityLbConfig) childBalancer.config;
     assertThat(config.priorities).containsExactly("priority1");
-    PolicySelection priorityChild = config.childConfigs.get("priority1");
-    assertThat(priorityChild.getProvider().getPolicyName()).isEqualTo(CLUSTER_IMPL_POLICY_NAME);
-    ClusterImplConfig clusterImplConfig = (ClusterImplConfig) priorityChild.getConfig();
+    PriorityChildConfig priorityChild = config.childConfigs.get("priority1");
+    assertThat(priorityChild.ignoreReresolution).isTrue();
+    assertThat(priorityChild.policySelection.getProvider().getPolicyName())
+        .isEqualTo(CLUSTER_IMPL_POLICY_NAME);
+    ClusterImplConfig clusterImplConfig =
+        (ClusterImplConfig) priorityChild.policySelection.getConfig();
     PolicySelection weightedTargetPolicy = clusterImplConfig.childPolicy;
     assertThat(weightedTargetPolicy.getProvider().getPolicyName())
         .isEqualTo(WEIGHTED_TARGET_POLICY_NAME);
@@ -276,8 +285,10 @@ public class EdsLoadBalancer2Test {
     config = (PriorityLbConfig) childBalancer.config;
     assertThat(config.priorities).containsExactly("priority1");
     priorityChild = config.childConfigs.get("priority1");
-    assertThat(priorityChild.getProvider().getPolicyName()).isEqualTo(CLUSTER_IMPL_POLICY_NAME);
-    clusterImplConfig = (ClusterImplConfig) priorityChild.getConfig();
+    assertThat(priorityChild.ignoreReresolution).isTrue();
+    assertThat(priorityChild.policySelection.getProvider().getPolicyName())
+        .isEqualTo(CLUSTER_IMPL_POLICY_NAME);
+    clusterImplConfig = (ClusterImplConfig) priorityChild.policySelection.getConfig();
     weightedTargetPolicy = clusterImplConfig.childPolicy;
     assertThat(weightedTargetPolicy.getProvider().getPolicyName())
         .isEqualTo(WEIGHTED_TARGET_POLICY_NAME);
@@ -355,8 +366,9 @@ public class EdsLoadBalancer2Test {
 
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     PriorityLbConfig config = (PriorityLbConfig) childBalancer.config;
-    PolicySelection priorityChildPolicy = config.childConfigs.get("priority1");
-    ClusterImplConfig clusterImplConfig = (ClusterImplConfig) priorityChildPolicy.getConfig();
+    PriorityChildConfig priorityChildConfig = config.childConfigs.get("priority1");
+    ClusterImplConfig clusterImplConfig =
+        (ClusterImplConfig) priorityChildConfig.policySelection.getConfig();
     WeightedTargetConfig weightedTargetConfig =
         (WeightedTargetConfig) clusterImplConfig.childPolicy.getConfig();
     assertThat(weightedTargetConfig.targets.keySet()).containsExactly(locality2.toString());
@@ -484,7 +496,7 @@ public class EdsLoadBalancer2Test {
   }
 
   private Long populateMaxConcurrentRequests(PriorityLbConfig config, String priority) {
-    PolicySelection priorityChildConfig = config.childConfigs.get(priority);
+    PolicySelection priorityChildConfig = config.childConfigs.get(priority).policySelection;
     ClusterImplConfig clusterImplConfig = (ClusterImplConfig) priorityChildConfig.getConfig();
     return clusterImplConfig.maxConcurrentRequests;
   }
@@ -510,7 +522,7 @@ public class EdsLoadBalancer2Test {
   }
 
   private UpstreamTlsContext populateTlsContext(PriorityLbConfig config, String priority) {
-    PolicySelection priorityChildConfig = config.childConfigs.get(priority);
+    PolicySelection priorityChildConfig = config.childConfigs.get(priority).policySelection;
     ClusterImplConfig clusterImplConfig = (ClusterImplConfig) priorityChildConfig.getConfig();
     return clusterImplConfig.tlsContext;
   }
@@ -840,12 +852,6 @@ public class EdsLoadBalancer2Test {
 
     @Override
     public ManagedChannel createOobChannel(EquivalentAddressGroup eag, String authority) {
-      throw new UnsupportedOperationException("should not be called");
-    }
-
-    @Deprecated
-    @Override
-    public NameResolver.Factory getNameResolverFactory() {
       throw new UnsupportedOperationException("should not be called");
     }
 

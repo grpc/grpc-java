@@ -34,7 +34,6 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
-import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
@@ -430,12 +429,6 @@ public class CdsLoadBalancerTest {
     @Override
     public SynchronizationContext getSynchronizationContext() {
       return syncContext;
-    }
-
-    @Deprecated
-    @Override
-    public NameResolver.Factory getNameResolverFactory() {
-      throw new UnsupportedOperationException("should not be called");
     }
 
     @Override

@@ -55,7 +55,6 @@ import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.ManagedChannel;
-import io.grpc.NameResolver;
 import io.grpc.Server;
 import io.grpc.Status;
 import io.grpc.Status.Code;
@@ -1261,12 +1260,6 @@ public class HealthCheckingLoadBalancerFactoryTest {
     @Override
     public ScheduledExecutorService getScheduledExecutorService() {
       return clock.getScheduledExecutorService();
-    }
-
-    @Deprecated
-    @Override
-    public NameResolver.Factory getNameResolverFactory() {
-      throw new AssertionError("Should not be called");
     }
 
     @Override
