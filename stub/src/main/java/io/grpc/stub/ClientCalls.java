@@ -628,7 +628,7 @@ public final class ClientCalls {
               // Now wait for onClose() to be called, so interceptors can clean up
             }
           }
-          if (next == this) {
+          if (next == this || next instanceof StatusRuntimeException) {
             threadless.shutdown();
           }
           return next;
@@ -717,9 +717,10 @@ public final class ClientCalls {
       implements Executor {
     private static final Logger log = Logger.getLogger(ThreadlessExecutor.class.getName());
 
-    private static final Thread SHUTDOWN = new Thread(); // sentinel
+    private static final Object SHUTDOWN = new Object(); // sentinel
 
-    private volatile Thread waiter;
+    // Set to the calling thread while it's parked, SHUTDOWN on RPC completion
+    private volatile Object waiter;
 
     // Non private to avoid synthetic class
     ThreadlessExecutor() {}
@@ -775,9 +776,9 @@ public final class ClientCalls {
     @Override
     public void execute(Runnable runnable) {
       add(runnable);
-      Thread waiter = this.waiter;
+      Object waiter = this.waiter;
       if (waiter != SHUTDOWN) {
-        LockSupport.unpark(waiter); // no-op if null
+        LockSupport.unpark((Thread) waiter); // no-op if null
       } else if (remove(runnable)) {
         throw new RejectedExecutionException();
       }
