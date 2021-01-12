@@ -1391,11 +1391,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     @Override
     public AbstractSubchannel createSubchannel(CreateSubchannelArgs args) {
       syncContext.throwIfNotInThisSynchronizationContext();
-      return createSubchannelInternal(args);
-    }
-
-    private SubchannelImpl createSubchannelInternal(CreateSubchannelArgs args) {
-      // No new subchannel should be created after delayedTransport has been shutdown.
+      // No new subchannel should be created after load balancer has been shutdown.
       checkState(!terminating, "Channel is being terminated");
       return new SubchannelImpl(args, this);
     }
