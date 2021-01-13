@@ -98,8 +98,8 @@ public class TestServiceServer {
       String value = parts[1];
       if ("port".equals(key)) {
         port.clear();
-        for (String v : Splitter.onPattern("\\s+|,").split(value)) {
-          port.add(Integer.parseInt(v));
+        for (String v : Splitter.on(',').split(value)) {
+          port.add(Integer.parseInt(v.trim()));
         }
         if (port.isEmpty()) {
           System.err.println("Unknown server port");
