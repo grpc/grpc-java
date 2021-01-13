@@ -1819,18 +1819,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
     private void internalStart(final SubchannelStateListener listener) {
       checkState(!started, "already started");
       checkState(!shutdown, "already shutdown");
+      checkState(!terminating, "Channel is being terminated");
       started = true;
-      // TODO(zhangkun): possibly remove the volatile of terminating when this whole method is
-      // required to be called from syncContext
-      if (terminating) {
-        syncContext.execute(new Runnable() {
-            @Override
-            public void run() {
-              listener.onSubchannelState(ConnectivityStateInfo.forNonError(SHUTDOWN));
-            }
-          });
-        return;
-      }
       final class ManagedInternalSubchannelCallback extends InternalSubchannel.Callback {
         // All callbacks are run in syncContext
         @Override
