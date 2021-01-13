@@ -28,6 +28,7 @@ import io.grpc.ConnectivityState;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
 import io.grpc.Status;
+import io.grpc.SynchronizationContext;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.WeightedRandomPicker.WeightedChildPicker;
@@ -48,11 +49,13 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
   private final Map<String, GracefulSwitchLoadBalancer> childBalancers = new HashMap<>();
   private final Map<String, ChildHelper> childHelpers = new HashMap<>();
   private final Helper helper;
+  private final SynchronizationContext syncContext;
 
   private Map<String, WeightedPolicySelection> targets = ImmutableMap.of();
 
   WeightedTargetLoadBalancer(Helper helper) {
-    this.helper = helper;
+    this.helper = checkNotNull(helper, "helper");
+    this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
     logger = XdsLogger.withLogId(
         InternalLogId.allocate("weighted-target-lb", helper.getAuthority()));
     logger.log(XdsLogLevel.INFO, "Created");
@@ -63,10 +66,8 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     Object lbConfig = resolvedAddresses.getLoadBalancingPolicyConfig();
     checkNotNull(lbConfig, "missing weighted_target lb config");
-
     WeightedTargetConfig weightedTargetConfig = (WeightedTargetConfig) lbConfig;
     Map<String, WeightedPolicySelection> newTargets = weightedTargetConfig.targets;
-
     for (String targetName : newTargets.keySet()) {
       WeightedPolicySelection weightedChildLbConfig = newTargets.get(targetName);
       if (!targets.containsKey(targetName)) {
@@ -81,9 +82,7 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
             .switchTo(weightedChildLbConfig.policySelection.getProvider());
       }
     }
-
     targets = newTargets;
-
     for (String targetName : targets.keySet()) {
       childBalancers.get(targetName).handleResolvedAddresses(
           resolvedAddresses.toBuilder()
@@ -101,6 +100,7 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
     }
     childBalancers.keySet().retainAll(targets.keySet());
     childHelpers.keySet().retainAll(targets.keySet());
+    updateOverallBalancingState();
   }
 
   @Override
@@ -180,10 +180,16 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
     SubchannelPicker currentPicker = BUFFER_PICKER;
 
     @Override
-    public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
-      currentState = newState;
-      currentPicker = newPicker;
-      updateOverallBalancingState();
+    public void updateBalancingState(final ConnectivityState newState,
+        final SubchannelPicker newPicker) {
+      syncContext.execute(new Runnable() {
+        @Override
+        public void run() {
+          currentState = newState;
+          currentPicker = newPicker;
+          updateOverallBalancingState();
+        }
+      });
     }
 
     @Override

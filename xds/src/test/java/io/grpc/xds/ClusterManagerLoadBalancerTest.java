@@ -28,7 +28,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Iterables;
 import io.grpc.CallOptions;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
@@ -147,6 +146,7 @@ public class ClusterManagerLoadBalancerTest {
     assertThat(childBalancer3.name).isEqualTo("policy_c");
     assertThat(childBalancer3.config).isEqualTo(lbConfigInventory.get("childC"));
 
+    // delayed policy_b deletion
     fakeClock.forwardTime(
         ClusterManagerLoadBalancer.DELAYED_CHILD_DELETION_TIME_MINUTES, TimeUnit.MINUTES);
     assertThat(childBalancer2.shutdown).isTrue();
@@ -176,36 +176,41 @@ public class ClusterManagerLoadBalancerTest {
   }
 
   @Test
-  public void updateBalancingStateFromDeactivatedChildBalancer() {
-    FakeLoadBalancer balancer = deliverAddressesAndUpdateToRemoveChildPolicy("childA", "policy_a");
+  public void ignoreBalancingStateUpdateForDeactivatedChildLbs() {
+    deliverResolvedAddresses(ImmutableMap.of("childA", "policy_a", "childB", "policy_b"));
+    deliverResolvedAddresses(ImmutableMap.of("childB", "policy_b"));
+    FakeLoadBalancer childBalancer1 = childBalancers.get(0);  // policy_a (deactivated)
     Subchannel subchannel = mock(Subchannel.class);
-    balancer.deliverSubchannelState(subchannel, ConnectivityState.READY);
+    childBalancer1.deliverSubchannelState(subchannel, ConnectivityState.READY);
     verify(helper, never()).updateBalancingState(
         eq(ConnectivityState.READY), any(SubchannelPicker.class));
 
-    deliverResolvedAddresses(ImmutableMap.of("childA", "policy_a"));
+    // reactivate policy_a
+    deliverResolvedAddresses(ImmutableMap.of("childA", "policy_a", "childB", "policy_b"));
     verify(helper).updateBalancingState(eq(ConnectivityState.READY), pickerCaptor.capture());
     assertThat(pickSubchannel(pickerCaptor.getValue(), "childA").getSubchannel())
         .isEqualTo(subchannel);
   }
 
   @Test
-  public void errorPropagation() {
-    Status error = Status.UNAVAILABLE.withDescription("resolver error");
-    clusterManagerLoadBalancer.handleNameResolutionError(error);
+  public void handleNameResolutionError_beforeChildLbsInstantiated_returnErrorPicker() {
+    clusterManagerLoadBalancer.handleNameResolutionError(
+        Status.UNAVAILABLE.withDescription("resolver error"));
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
     PickResult result = pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class));
     assertThat(result.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(result.getStatus().getDescription()).isEqualTo("resolver error");
+  }
 
+  @Test
+  public void handleNameResolutionError_afterChildLbsInstantiated_propagateToChildLbs() {
     deliverResolvedAddresses(ImmutableMap.of("childA", "policy_a", "childB", "policy_b"));
-
     assertThat(childBalancers).hasSize(2);
     FakeLoadBalancer childBalancer1 = childBalancers.get(0);
     FakeLoadBalancer childBalancer2 = childBalancers.get(1);
-
-    clusterManagerLoadBalancer.handleNameResolutionError(error);
+    clusterManagerLoadBalancer.handleNameResolutionError(
+        Status.UNAVAILABLE.withDescription("resolver error"));
     assertThat(childBalancer1.upstreamError.getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(childBalancer1.upstreamError.getDescription()).isEqualTo("resolver error");
     assertThat(childBalancer2.upstreamError.getCode()).isEqualTo(Code.UNAVAILABLE);
@@ -213,44 +218,24 @@ public class ClusterManagerLoadBalancerTest {
   }
 
   @Test
-  public void errorPropagationToDeactivatedChildBalancer() {
-    FakeLoadBalancer balancer = deliverAddressesAndUpdateToRemoveChildPolicy("childA", "policy_a");
+  public void handleNameResolutionError_notPropagateToDeactivatedChildLbs() {
+    deliverResolvedAddresses(ImmutableMap.of("childA", "policy_a", "childB", "policy_b"));
+    deliverResolvedAddresses(ImmutableMap.of("childB", "policy_b"));
+    FakeLoadBalancer childBalancer1 = childBalancers.get(0);  // policy_a (deactivated)
+    FakeLoadBalancer childBalancer2 = childBalancers.get(1);  // policy_b
     clusterManagerLoadBalancer.handleNameResolutionError(
         Status.UNKNOWN.withDescription("unknown error"));
-    assertThat(balancer.upstreamError).isNull();
-  }
-
-  private FakeLoadBalancer deliverAddressesAndUpdateToRemoveChildPolicy(
-      String childName, String childPolicyName) {
-    lbConfigInventory.put("childFoo", null);
-    deliverResolvedAddresses(
-        ImmutableMap.of(childName, childPolicyName, "childFoo", "policy_foo"));
-
-    verify(helper, atLeastOnce()).updateBalancingState(
-        eq(ConnectivityState.CONNECTING), any(SubchannelPicker.class));
-    assertThat(childBalancers).hasSize(2);
-    FakeLoadBalancer balancer = childBalancers.get(0);
-
-    deliverResolvedAddresses(ImmutableMap.of("childFoo", "policy_foo"));
-    verify(helper, atLeast(2)).updateBalancingState(
-        eq(ConnectivityState.CONNECTING), any(SubchannelPicker.class));
-    assertThat(Iterables.getOnlyElement(fakeClock.getPendingTasks()).getDelay(TimeUnit.MINUTES))
-        .isEqualTo(ClusterManagerLoadBalancer.DELAYED_CHILD_DELETION_TIME_MINUTES);
-    return balancer;
+    assertThat(childBalancer1.upstreamError).isNull();
+    assertThat(childBalancer2.upstreamError.getCode()).isEqualTo(Code.UNKNOWN);
+    assertThat(childBalancer2.upstreamError.getDescription()).isEqualTo("unknown error");
   }
 
   private void deliverResolvedAddresses(final Map<String, String> childPolicies) {
-    syncContext.execute(new Runnable() {
-      @Override
-      public void run() {
-        clusterManagerLoadBalancer
-            .handleResolvedAddresses(
-                ResolvedAddresses.newBuilder()
-                    .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
-                    .setLoadBalancingPolicyConfig(buildConfig(childPolicies))
-                    .build());
-      }
-    });
+    clusterManagerLoadBalancer.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
+            .setLoadBalancingPolicyConfig(buildConfig(childPolicies))
+            .build());
   }
 
   private ClusterManagerConfig buildConfig(Map<String, String> childPolicies) {
@@ -265,7 +250,7 @@ public class ClusterManagerLoadBalancerTest {
     return new ClusterManagerConfig(childPolicySelections);
   }
 
-  private static PickResult pickSubchannel(SubchannelPicker picker, String name) {
+  private static PickResult pickSubchannel(SubchannelPicker picker, String clusterName) {
     PickSubchannelArgs args =
         new PickSubchannelArgsImpl(
             MethodDescriptor.<Void, Void>newBuilder()
@@ -276,7 +261,7 @@ public class ClusterManagerLoadBalancerTest {
                 .build(),
             new Metadata(),
             CallOptions.DEFAULT.withOption(
-                XdsNameResolver.CLUSTER_SELECTION_KEY, name));
+                XdsNameResolver.CLUSTER_SELECTION_KEY, clusterName));
     return picker.pickSubchannel(args);
   }
 

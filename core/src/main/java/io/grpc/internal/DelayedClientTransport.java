@@ -375,5 +375,13 @@ final class DelayedClientTransport implements ManagedClientTransport {
       }
       syncContext.drain();
     }
+
+    @Override
+    public void appendTimeoutInsight(InsightBuilder insight) {
+      if (args.getCallOptions().isWaitForReady()) {
+        insight.append("wait_for_ready");
+      }
+      super.appendTimeoutInsight(insight);
+    }
   }
 }

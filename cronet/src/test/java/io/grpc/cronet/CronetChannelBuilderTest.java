@@ -22,6 +22,7 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 
+import android.os.Build;
 import io.grpc.CallOptions;
 import io.grpc.ChannelLogger;
 import io.grpc.Metadata;
@@ -40,8 +41,10 @@ import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.robolectric.RobolectricTestRunner;
+import org.robolectric.annotation.Config;
 
 @RunWith(RobolectricTestRunner.class)
+@Config(sdk = Build.VERSION_CODES.P)
 public final class CronetChannelBuilderTest {
 
   @Mock private ExperimentalCronetEngine mockEngine;

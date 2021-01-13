@@ -29,6 +29,7 @@ import io.envoyproxy.envoy.service.discovery.v3.AggregatedDiscoveryServiceGrpc;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse;
 import io.grpc.InternalLogId;
+import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
@@ -80,7 +81,8 @@ abstract class AbstractXdsClient extends XdsClient {
   private final MessagePrinter msgPrinter = new MessagePrinter();
   private final InternalLogId logId;
   private final XdsLogger logger;
-  private final XdsChannel xdsChannel;
+  private final ManagedChannel channel;
+  private final boolean useProtocolV3;
   private final ScheduledExecutorService timeService;
   private final BackoffPolicy.Provider backoffPolicyProvider;
   private final Stopwatch stopwatch;
@@ -107,9 +109,11 @@ abstract class AbstractXdsClient extends XdsClient {
   @Nullable
   private ScheduledHandle rpcRetryTimer;
 
-  AbstractXdsClient(XdsChannel channel, Node node, ScheduledExecutorService timeService,
-      BackoffPolicy.Provider backoffPolicyProvider, Supplier<Stopwatch> stopwatchSupplier) {
-    this.xdsChannel = checkNotNull(channel, "channel");
+  AbstractXdsClient(ManagedChannel channel, boolean useProtocolV3, Node node,
+      ScheduledExecutorService timeService, BackoffPolicy.Provider backoffPolicyProvider,
+      Supplier<Stopwatch> stopwatchSupplier) {
+    this.channel = checkNotNull(channel, "channel");
+    this.useProtocolV3 = useProtocolV3;
     this.node = checkNotNull(node, "node");
     this.timeService = checkNotNull(timeService, "timeService");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
@@ -175,7 +179,6 @@ abstract class AbstractXdsClient extends XdsClient {
       public void run() {
         shutdown = true;
         logger.log(XdsLogLevel.INFO, "Shutting down");
-        xdsChannel.getManagedChannel().shutdown();
         if (adsStream != null) {
           adsStream.close(Status.CANCELLED.withDescription("shutdown").asException());
         }
@@ -185,6 +188,11 @@ abstract class AbstractXdsClient extends XdsClient {
         handleShutdown();
       }
     });
+  }
+
+  @Override
+  boolean isShutDown() {
+    return shutdown;
   }
 
   @Override
@@ -295,7 +303,7 @@ abstract class AbstractXdsClient extends XdsClient {
   // Must be synchronized.
   private void startRpcStream() {
     checkState(adsStream == null, "Previous adsStream has not been cleared yet");
-    if (xdsChannel.isUseProtocolV3()) {
+    if (useProtocolV3) {
       adsStream = new AdsStreamV3();
     } else {
       adsStream = new AdsStreamV2();
@@ -559,8 +567,7 @@ abstract class AbstractXdsClient extends XdsClient {
     void start() {
       io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc
           .AggregatedDiscoveryServiceStub stub =
-          io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.newStub(
-              xdsChannel.getManagedChannel());
+          io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.newStub(channel);
       StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseReaderV2 =
           new StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse>() {
             @Override
@@ -638,7 +645,7 @@ abstract class AbstractXdsClient extends XdsClient {
     @Override
     void start() {
       AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceStub stub =
-          AggregatedDiscoveryServiceGrpc.newStub(xdsChannel.getManagedChannel());
+          AggregatedDiscoveryServiceGrpc.newStub(channel);
       StreamObserver<DiscoveryResponse> responseReader = new StreamObserver<DiscoveryResponse>() {
         @Override
         public void onNext(final DiscoveryResponse response) {

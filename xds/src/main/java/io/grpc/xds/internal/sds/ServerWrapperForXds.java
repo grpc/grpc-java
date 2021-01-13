@@ -113,15 +113,15 @@ public final class ServerWrapperForXds extends Server {
 
   @Override
   public Server shutdown() {
-    xdsClientWrapperForServerSds.shutdown();
     delegate.shutdown();
+    xdsClientWrapperForServerSds.shutdown();
     return this;
   }
 
   @Override
   public Server shutdownNow() {
-    xdsClientWrapperForServerSds.shutdown();
     delegate.shutdownNow();
+    xdsClientWrapperForServerSds.shutdown();
     return this;
   }
 

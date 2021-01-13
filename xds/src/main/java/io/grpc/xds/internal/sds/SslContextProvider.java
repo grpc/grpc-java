@@ -32,8 +32,6 @@ import java.io.IOException;
 import java.security.cert.CertStoreException;
 import java.security.cert.CertificateException;
 import java.util.concurrent.Executor;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 /**
  * A SslContextProvider is a "container" or provider of SslContext. This is used by gRPC-xds to
@@ -42,8 +40,6 @@ import java.util.logging.Logger;
  * secret(s) that are dynamic.
  */
 public abstract class SslContextProvider implements Closeable {
-
-  private static final Logger logger = Logger.getLogger(SslContextProvider.class.getName());
 
   protected final BaseTlsContext tlsContext;
 
@@ -122,13 +118,8 @@ public abstract class SslContextProvider implements Closeable {
           public void run() {
             try {
               SslContext sslContext = sslContextGetter.get();
-              try {
-                callback.updateSecret(sslContext);
-              } catch (Throwable t) {
-                logger.log(Level.SEVERE, "Exception from callback.updateSecret", t);
-              }
+              callback.updateSecret(sslContext);
             } catch (Throwable e) {
-              logger.log(Level.SEVERE, "Exception from sslContextGetter.get()", e);
               callback.onException(e);
             }
           }

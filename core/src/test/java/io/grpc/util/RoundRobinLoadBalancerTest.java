@@ -71,7 +71,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
-import org.mockito.ArgumentMatchers;
 import org.mockito.Captor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
@@ -141,11 +140,8 @@ public class RoundRobinLoadBalancerTest {
   }
 
   @After
-  @SuppressWarnings("deprecation")
   public void tearDown() throws Exception {
     verifyNoMoreInteractions(mockArgs);
-    verify(mockHelper, never()).createSubchannel(
-        ArgumentMatchers.<List<EquivalentAddressGroup>>any(), any(Attributes.class));
   }
 
   @Test

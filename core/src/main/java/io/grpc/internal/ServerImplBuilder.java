@@ -97,7 +97,7 @@ public final class ServerImplBuilder extends ServerBuilder<ServerImplBuilder> {
    * is meant for Transport implementors and should not be used by normal users.
    */
   public interface ClientTransportServersBuilder {
-    List<? extends InternalServer> buildClientTransportServers(
+    InternalServer buildClientTransportServers(
         List<? extends ServerStreamTracer.Factory> streamTracerFactories);
   }
 

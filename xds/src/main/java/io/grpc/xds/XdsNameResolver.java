@@ -467,9 +467,9 @@ final class XdsNameResolver extends NameResolver {
             return;
           }
           logger.log(XdsLogLevel.INFO, "Receive LDS resource update: {0}", update);
-          httpMaxStreamDurationNano = update.getHttpMaxStreamDurationNano();
-          List<VirtualHost> virtualHosts = update.getVirtualHosts();
-          String rdsName = update.getRdsName();
+          httpMaxStreamDurationNano = update.httpMaxStreamDurationNano;
+          List<VirtualHost> virtualHosts = update.virtualHosts;
+          String rdsName = update.rdsName;
           if (rdsName != null && rdsName.equals(rdsResource)) {
             return;
           }
@@ -603,7 +603,7 @@ final class XdsNameResolver extends NameResolver {
             if (RdsResourceWatcherImpl.this != rdsWatcher) {
               return;
             }
-            updateRoutes(update.getVirtualHosts());
+            updateRoutes(update.virtualHosts);
           }
         });
       }
