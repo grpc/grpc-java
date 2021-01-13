@@ -17,8 +17,8 @@
 package io.grpc.testing.integration;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Splitter;
 import com.google.common.util.concurrent.MoreExecutors;
+import io.grpc.Grpc;
 import io.grpc.InsecureServerCredentials;
 import io.grpc.Server;
 import io.grpc.ServerCredentials;
@@ -26,10 +26,6 @@ import io.grpc.ServerInterceptors;
 import io.grpc.TlsServerCredentials;
 import io.grpc.alts.AltsServerCredentials;
 import io.grpc.internal.testing.TestUtils;
-import io.grpc.netty.NettyServerBuilder;
-import java.net.InetSocketAddress;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -68,7 +64,7 @@ public class TestServiceServer {
     server.blockUntilShutdown();
   }
 
-  private final ArrayList<Integer> port = new ArrayList<>(Collections.singletonList(8080));
+  private int port = 8080;
   private boolean useTls = true;
   private boolean useAlts = false;
 
@@ -97,15 +93,7 @@ public class TestServiceServer {
       }
       String value = parts[1];
       if ("port".equals(key)) {
-        port.clear();
-        for (String v : Splitter.on(',').split(value)) {
-          port.add(Integer.parseInt(v.trim()));
-        }
-        if (port.isEmpty()) {
-          System.err.println("Unknown server port");
-          usage = true;
-          break;
-        }
+        port = Integer.parseInt(value);
       } else if ("use_tls".equals(key)) {
         useTls = Boolean.parseBoolean(value);
       } else if ("use_alts".equals(key)) {
@@ -130,7 +118,7 @@ public class TestServiceServer {
       System.out.println(
           "Usage: [ARGS...]"
               + "\n"
-              + "\n  --port=<port_1>,<port_2>...<port_N>  Port to connect to. Default " + s.port
+              + "\n  --port=PORT           Port to connect to. Default " + s.port
               + "\n  --use_tls=true|false  Whether to use TLS. Default " + s.useTls
               + "\n  --use_alts=true|false Whether to use ALTS. Enable ALTS will disable TLS."
               + "\n                        Default " + s.useAlts
@@ -151,11 +139,8 @@ public class TestServiceServer {
     } else {
       serverCreds = InsecureServerCredentials.create();
     }
-    NettyServerBuilder serverBuilder = NettyServerBuilder.forPort(port.get(0), serverCreds);
-    for (int i = 1; i < port.size(); i++) {
-      serverBuilder.addListenAddress(new InetSocketAddress(port.get(i)));
-    }
-    server = serverBuilder.maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
+    server = Grpc.newServerBuilderForPort(port, serverCreds)
+        .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
         .addService(
             ServerInterceptors.intercept(
                 new TestServiceImpl(executor), TestServiceImpl.interceptors()))
