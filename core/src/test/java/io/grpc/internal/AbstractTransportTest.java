@@ -401,6 +401,36 @@ public abstract class AbstractTransportTest {
   }
 
   @Test
+  public void serverStartInterrupted() throws Exception {
+    client = null;
+
+    // Just get free port
+    server.start(serverListener);
+    int port = -1;
+    SocketAddress addr = server.getListenSocketAddress();
+    if (addr instanceof InetSocketAddress) {
+      port = ((InetSocketAddress) addr).getPort();
+    }
+    assumeTrue("transport is not using InetSocketAddress", port != -1);
+    server.shutdown();
+
+    server = Iterables.getOnlyElement(newServer(port, Arrays.asList(serverStreamTracerFactory)));
+    boolean success;
+    Thread.currentThread().interrupt();
+    try {
+      server.start(serverListener);
+      success = true;
+    } catch (Exception ex) {
+      success = false;
+    } finally {
+      Thread.interrupted(); // clear interruption
+    }
+    assumeTrue("apparently start is not impacted by interruption, so nothing to test", !success);
+    // second time should not throw, as the first time should not have bound to the port
+    server.start(serverListener);
+  }
+
+  @Test
   public void openStreamPreventsTermination() throws Exception {
     server.start(serverListener);
     int port = -1;

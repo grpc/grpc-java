@@ -30,6 +30,7 @@ import io.envoyproxy.envoy.api.v2.core.DataSource;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
 import io.grpc.netty.InternalProtocolNegotiationEvent;
+import io.grpc.netty.InternalProtocolNegotiator;
 import io.grpc.xds.internal.sds.SdsProtocolNegotiators.ClientSdsHandler;
 import io.grpc.xds.internal.sds.SdsProtocolNegotiators.ClientSdsProtocolNegotiator;
 import io.netty.channel.ChannelHandler;
@@ -189,24 +190,47 @@ public class SdsProtocolNegotiatorsTest {
     DownstreamTlsContext downstreamTlsContext =
         buildDownstreamTlsContextFromFilenames(SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, CA_PEM_FILE);
 
-    SdsProtocolNegotiators.ServerSdsHandler serverSdsHandler =
-        new SdsProtocolNegotiators.ServerSdsHandler(grpcHandler, downstreamTlsContext);
-    pipeline.addLast(serverSdsHandler);
-    channelHandlerCtx = pipeline.context(serverSdsHandler);
-    assertNotNull(channelHandlerCtx); // serverSdsHandler ctx is non-null since we just added it
+    SdsProtocolNegotiators.HandlerPickerHandler handlerPickerHandler =
+        new SdsProtocolNegotiators.HandlerPickerHandler(grpcHandler, downstreamTlsContext, null);
+    pipeline.addLast(handlerPickerHandler);
+    channelHandlerCtx = pipeline.context(handlerPickerHandler);
+    assertThat(channelHandlerCtx).isNotNull(); // should find HandlerPickerHandler
 
-    // kick off protocol negotiation
+    // kick off protocol negotiation: should replace HandlerPickerHandler with ServerSdsHandler
     pipeline.fireUserEventTriggered(InternalProtocolNegotiationEvent.getDefault());
+    channelHandlerCtx = pipeline.context(handlerPickerHandler);
+    assertThat(channelHandlerCtx).isNull();
+    channelHandlerCtx = pipeline.context(SdsProtocolNegotiators.ServerSdsHandler.class);
+    assertThat(channelHandlerCtx).isNotNull();
     channel.runPendingTasks(); // need this for tasks to execute on eventLoop
-    channelHandlerCtx = pipeline.context(serverSdsHandler);
+    channelHandlerCtx = pipeline.context(SdsProtocolNegotiators.ServerSdsHandler.class);
     assertThat(channelHandlerCtx).isNull();
 
-    // pipeline should have SslHandler and ServerTlsHandler
+    // pipeline should only have SslHandler and ServerTlsHandler
     Iterator<Map.Entry<String, ChannelHandler>> iterator = pipeline.iterator();
     assertThat(iterator.next().getValue()).isInstanceOf(SslHandler.class);
     // ProtocolNegotiators.ServerTlsHandler.class is not accessible, get canonical name
     assertThat(iterator.next().getValue().getClass().getCanonicalName())
         .contains("ProtocolNegotiators.ServerTlsHandler");
+  }
+
+  @Test
+  public void serverSdsHandler_nullTlsContext_expectPlaintext() throws IOException {
+    SdsProtocolNegotiators.HandlerPickerHandler handlerPickerHandler =
+            new SdsProtocolNegotiators.HandlerPickerHandler(grpcHandler, null, null);
+    pipeline.addLast(handlerPickerHandler);
+    channelHandlerCtx = pipeline.context(handlerPickerHandler);
+    assertThat(channelHandlerCtx).isNotNull(); // should find HandlerPickerHandler
+
+    // kick off protocol negotiation
+    pipeline.fireUserEventTriggered(InternalProtocolNegotiationEvent.getDefault());
+    channelHandlerCtx = pipeline.context(handlerPickerHandler);
+    assertThat(channelHandlerCtx).isNull();
+    channel.runPendingTasks(); // need this for tasks to execute on eventLoop
+    Iterator<Map.Entry<String, ChannelHandler>> iterator = pipeline.iterator();
+    assertThat(iterator.next().getValue()).isInstanceOf(FakeGrpcHttp2ConnectionHandler.class);
+    // no more handlers in the pipeline
+    assertThat(iterator.hasNext()).isFalse();
   }
 
   @Test
@@ -232,6 +256,14 @@ public class SdsProtocolNegotiatorsTest {
     pipeline.fireUserEventTriggered(sslEvent);
     channel.runPendingTasks(); // need this for tasks to execute on eventLoop
     assertTrue(channel.isOpen());
+  }
+
+  @Test
+  public void serverSdsProtocolNegotiator_passNulls_expectPlaintext() {
+    InternalProtocolNegotiator.ProtocolNegotiator protocolNegotiator =
+        SdsProtocolNegotiators.serverProtocolNegotiator(null, 7000,
+            null);
+    assertThat(protocolNegotiator.scheme().toString()).isEqualTo("http");
   }
 
   private static final class FakeGrpcHttp2ConnectionHandler extends GrpcHttp2ConnectionHandler {

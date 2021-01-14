@@ -242,12 +242,10 @@ class NettyServer implements InternalServer, InternalWithLogId {
     });
     // Bind and start to accept incoming connections.
     ChannelFuture future = b.bind(address);
-    try {
-      future.await();
-    } catch (InterruptedException ex) {
-      Thread.currentThread().interrupt();
-      throw new RuntimeException("Interrupted waiting for bind");
-    }
+    // We'd love to observe interruption, but if interrupted we will need to close the channel,
+    // which itself would need an await() to guarantee the port is not used when the method returns.
+    // See #6850
+    future.awaitUninterruptibly();
     if (!future.isSuccess()) {
       throw new IOException("Failed to bind", future.cause());
     }

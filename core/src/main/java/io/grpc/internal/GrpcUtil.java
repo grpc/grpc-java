@@ -62,6 +62,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
+import javax.annotation.concurrent.Immutable;
 
 /**
  * Common utilities for GRPC.
@@ -195,7 +196,7 @@ public final class GrpcUtil {
 
   public static final Splitter ACCEPT_ENCODING_SPLITTER = Splitter.on(',').trimResults();
 
-  private static final String IMPLEMENTATION_VERSION = "1.28.0-SNAPSHOT"; // CURRENT_GRPC_VERSION
+  private static final String IMPLEMENTATION_VERSION = "1.29.0-SNAPSHOT"; // CURRENT_GRPC_VERSION
 
   /**
    * The default timeout in nanos for a keepalive ping request.
@@ -443,11 +444,36 @@ public final class GrpcUtil {
     return builder.toString();
   }
 
+  @Immutable
+  public static final class GrpcBuildVersion {
+    private final String userAgent;
+    private final String implementationVersion;
+
+    private GrpcBuildVersion(String userAgent, String implementationVersion) {
+      this.userAgent = Preconditions.checkNotNull(userAgent, "userAgentName");
+      this.implementationVersion =
+          Preconditions.checkNotNull(implementationVersion, "implementationVersion");
+    }
+
+    public String getUserAgent() {
+      return userAgent;
+    }
+
+    public String getImplementationVersion() {
+      return implementationVersion;
+    }
+
+    @Override
+    public String toString() {
+      return userAgent + " " + implementationVersion;
+    }
+  }
+
   /**
    * Returns the build version of gRPC.
    */
-  public static String getGrpcBuildVersion() {
-    return "gRPC Java " + IMPLEMENTATION_VERSION;
+  public static GrpcBuildVersion getGrpcBuildVersion() {
+    return new GrpcBuildVersion("gRPC Java", IMPLEMENTATION_VERSION);
   }
 
   /**

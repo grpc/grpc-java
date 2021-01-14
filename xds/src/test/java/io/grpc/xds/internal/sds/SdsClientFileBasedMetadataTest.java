@@ -68,6 +68,7 @@ public class SdsClientFileBasedMetadataTest {
   private SdsSecretConfig sdsSecretConfig;
   private File tempTokenFile;
 
+  @SuppressWarnings("deprecation")
   static ConfigSource buildConfigSourceWithCreds(
       String targetUri,
       String channelType,

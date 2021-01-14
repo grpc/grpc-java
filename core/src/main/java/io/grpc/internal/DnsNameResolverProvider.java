@@ -16,6 +16,13 @@
 
 package io.grpc.internal;
 
+import com.google.common.base.Preconditions;
+import com.google.common.base.Stopwatch;
+import io.grpc.InternalServiceProviders;
+import io.grpc.NameResolver;
+import io.grpc.NameResolverProvider;
+import java.net.URI;
+
 /**
  * A provider for {@link DnsNameResolver}.
  *
@@ -31,14 +38,37 @@ package io.grpc.internal;
  *   <li>{@code "dns:///foo.googleapis.com"} (without port)</li>
  * </ul>
  */
-public final class DnsNameResolverProvider extends BaseDnsNameResolverProvider {
+public final class DnsNameResolverProvider extends NameResolverProvider {
 
-  private static final boolean SRV_ENABLED =
-      Boolean.parseBoolean(System.getProperty(ENABLE_GRPCLB_PROPERTY_NAME, "false"));
+  private static final String SCHEME = "dns";
 
   @Override
-  protected boolean isSrvEnabled() {
-    return SRV_ENABLED;
+  public DnsNameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
+    if (SCHEME.equals(targetUri.getScheme())) {
+      String targetPath = Preconditions.checkNotNull(targetUri.getPath(), "targetPath");
+      Preconditions.checkArgument(targetPath.startsWith("/"),
+          "the path component (%s) of the target (%s) must start with '/'", targetPath, targetUri);
+      String name = targetPath.substring(1);
+      return new DnsNameResolver(
+          targetUri.getAuthority(),
+          name,
+          args,
+          GrpcUtil.SHARED_CHANNEL_EXECUTOR,
+          Stopwatch.createUnstarted(),
+          InternalServiceProviders.isAndroid(getClass().getClassLoader()));
+    } else {
+      return null;
+    }
+  }
+
+  @Override
+  public String getDefaultScheme() {
+    return SCHEME;
+  }
+
+  @Override
+  protected boolean isAvailable() {
+    return true;
   }
 
   @Override

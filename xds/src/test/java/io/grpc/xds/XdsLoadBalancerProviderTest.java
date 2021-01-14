@@ -17,7 +17,6 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
-import static org.junit.Assert.assertEquals;
 
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
@@ -26,9 +25,11 @@ import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.ServiceConfigUtil;
-import io.grpc.internal.ServiceConfigUtil.LbConfig;
+import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.xds.XdsLoadBalancerProvider.XdsConfig;
+import java.util.HashMap;
 import java.util.Map;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -51,8 +52,8 @@ public class XdsLoadBalancerProviderTest {
   @Mock
   private LoadBalancer fakeBalancer1;
 
-  private final LoadBalancerRegistry lbRegistry = new LoadBalancerRegistry();
-
+  private final LoadBalancerRegistry lbRegistry = LoadBalancerRegistry.getDefaultRegistry();
+  private final Object lbConfig1 = new Object();
   private final LoadBalancerProvider lbProvider1 = new LoadBalancerProvider() {
     @Override
     public boolean isAvailable() {
@@ -73,92 +74,32 @@ public class XdsLoadBalancerProviderTest {
     public LoadBalancer newLoadBalancer(Helper helper) {
       return fakeBalancer1;
     }
-  };
-
-  private final LoadBalancerProvider roundRobin = new LoadBalancerProvider() {
-    @Override
-    public boolean isAvailable() {
-      return true;
-    }
 
     @Override
-    public int getPriority() {
-      return 5;
-    }
-
-    @Override
-    public String getPolicyName() {
-      return "round_robin";
-    }
-
-    @Override
-    public LoadBalancer newLoadBalancer(Helper helper) {
-      return null;
+    public ConfigOrError parseLoadBalancingPolicyConfig(
+        Map<String, ?> rawLoadBalancingPolicyConfig) {
+      return ConfigOrError.fromConfig(lbConfig1);
     }
   };
 
   @Before
-  public void setUp() throws Exception {
+  public void setUp() {
     MockitoAnnotations.initMocks(this);
     lbRegistry.register(lbProvider1);
-    lbRegistry.register(roundRobin);
   }
 
-  @Test
-  public void selectChildPolicy() throws Exception {
-    String rawLbConfig = "{"
-        + "\"childPolicy\" : [{\"unsupported_1\" : {}}, {\"supported_1\" : {\"key\" : \"val\"}},"
-        + "{\"supported_2\" : {\"key\" : \"val\"}}],"
-        + "\"fallbackPolicy\" : [{\"lbPolicy3\" : {\"key\" : \"val\"}}, {\"lbPolicy4\" : {}}]"
-        + "}";
-    LbConfig expectedChildPolicy =
-        ServiceConfigUtil.unwrapLoadBalancingConfig(
-            checkObject(JsonParser.parse("{\"supported_1\" : {\"key\" : \"val\"}}")));
-
-    LbConfig childPolicy =
-        XdsLoadBalancerProvider.selectChildPolicy(checkObject(JsonParser.parse(rawLbConfig)),
-            lbRegistry);
-
-    assertEquals(expectedChildPolicy, childPolicy);
-  }
-
-  @Test
-  public void selectFallBackPolicy() throws Exception {
-    String rawLbConfig = "{"
-        + "\"childPolicy\" : [{\"lbPolicy3\" : {\"key\" : \"val\"}}, {\"lbPolicy4\" : {}}],"
-        + "\"fallbackPolicy\" : [{\"unsupported\" : {}}, {\"supported_1\" : {\"key\" : \"val\"}},"
-        + "{\"supported_2\" : {\"key\" : \"val\"}}]"
-        + "}";
-    LbConfig expectedFallbackPolicy = ServiceConfigUtil.unwrapLoadBalancingConfig(
-        checkObject(JsonParser.parse("{\"supported_1\" : {\"key\" : \"val\"}}")));
-
-    LbConfig fallbackPolicy = XdsLoadBalancerProvider.selectFallbackPolicy(
-        checkObject(JsonParser.parse(rawLbConfig)), lbRegistry);
-
-    assertEquals(expectedFallbackPolicy, fallbackPolicy);
-  }
-
-  @Test
-  public void selectFallBackPolicy_roundRobinIsDefault() throws Exception {
-    String rawLbConfig = "{"
-        + "\"childPolicy\" : [{\"lbPolicy3\" : {\"key\" : \"val\"}}, {\"lbPolicy4\" : {}}]"
-        + "}";
-    LbConfig expectedFallbackPolicy = ServiceConfigUtil.unwrapLoadBalancingConfig(
-        checkObject(JsonParser.parse("{\"round_robin\" : {}}")));
-
-    LbConfig fallbackPolicy = XdsLoadBalancerProvider.selectFallbackPolicy(
-        checkObject(JsonParser.parse(rawLbConfig)), lbRegistry);
-
-    assertEquals(expectedFallbackPolicy, fallbackPolicy);
+  @After
+  public void tearDown() {
+    lbRegistry.deregister(lbProvider1);
   }
 
   @Test
   public void parseLoadBalancingConfigPolicy() throws Exception {
     String rawLbConfig = "{"
         + "\"cluster\" : \"foo.googleapis.com\","
-        + "\"childPolicy\" : [{\"lbPolicy3\" : {\"key\" : \"val\"}}, {\"supported_1\" : {}}],"
-        + "\"fallbackPolicy\" : [{\"unsupported\" : {}}, {\"round_robin\" : {\"key\" : \"val\"}},"
-        + "{\"supported_2\" : {\"key\" : \"val\"}}],"
+        + "\"endpointPickingPolicy\" : "
+        + "    [{\"lbPolicy3\" : {\"key\" : \"val\"}}, {\"supported_1\" : {}}],"
+        + "\"fallbackPolicy\" : [],"
         + "\"edsServiceName\" : \"dns:///eds.service.com:8080\","
         + "\"lrsLoadReportingServerName\" : \"dns:///lrs.service.com:8080\""
         + "}";
@@ -171,10 +112,14 @@ public class XdsLoadBalancerProviderTest {
     assertThat(configOrError.getConfig()).isEqualTo(
         new XdsConfig(
             "foo.googleapis.com",
-            ServiceConfigUtil.unwrapLoadBalancingConfig(
-                checkObject(JsonParser.parse("{\"supported_1\" : {}}"))),
-            ServiceConfigUtil.unwrapLoadBalancingConfig(
-                checkObject(JsonParser.parse("{\"round_robin\" : {\"key\" : \"val\"}}"))),
+            new PolicySelection(lbProvider1,
+                ServiceConfigUtil.unwrapLoadBalancingConfig(
+                    checkObject(JsonParser.parse("{\"supported_1\" : {}}"))).getRawConfigValue(),
+                lbConfig1),
+            new PolicySelection(
+                lbRegistry.getProvider("round_robin"),
+                new HashMap<String, Object>(),
+                "no service config"),
             "dns:///eds.service.com:8080",
             "dns:///lrs.service.com:8080")
     );
