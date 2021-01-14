@@ -94,6 +94,22 @@ public class MethodDescriptorTest {
   }
 
   @Test
+  public void safeImpliesIdempotent() {
+    MethodDescriptor<String, String> descriptor = MethodDescriptor.<String, String>newBuilder()
+        .setType(MethodType.UNARY)
+        .setFullMethodName("package.service/method")
+        .setRequestMarshaller(new StringMarshaller())
+        .setResponseMarshaller(new StringMarshaller())
+        .setSafe(true)
+        .build();
+    assertTrue(descriptor.isSafe());
+    assertTrue(descriptor.isIdempotent());
+    descriptor = descriptor.toBuilder().setIdempotent(false).build();
+    assertFalse(descriptor.isSafe());
+    assertFalse(descriptor.isIdempotent());
+  }
+
+  @Test
   public void safeAndNonUnary() {
     MethodDescriptor<String, String> descriptor = MethodDescriptor.<String, String>newBuilder()
         .setType(MethodType.SERVER_STREAMING)
@@ -102,8 +118,9 @@ public class MethodDescriptorTest {
         .setResponseMarshaller(new StringMarshaller())
         .build();
 
-    thrown.expect(IllegalArgumentException.class);
-    MethodDescriptor<String, String> unused = descriptor.toBuilder().setSafe(true).build();
+    // Verify it does not throw
+    MethodDescriptor<String, String> newDescriptor = descriptor.toBuilder().setSafe(true).build();
+    assertTrue(newDescriptor.isSafe());
   }
 
   @Test

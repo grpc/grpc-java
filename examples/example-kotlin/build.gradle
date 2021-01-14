@@ -25,7 +25,7 @@ repositories {
 
 // Feel free to delete the comment at the next line. It is just for safely
 // updating the version in our release process.
-def grpcVersion = '1.24.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+def grpcVersion = '1.25.0-SNAPSHOT' // CURRENT_GRPC_VERSION
 
 dependencies {
     def kotlinVersion = plugins.findPlugin("org.jetbrains.kotlin.jvm").kotlinPluginVersion
@@ -41,7 +41,7 @@ dependencies {
 }
 
 protobuf {
-    protoc { artifact = 'com.google.protobuf:protoc:3.9.0' }
+    protoc { artifact = 'com.google.protobuf:protoc:3.10.0' }
     plugins {
         grpc { artifact = "io.grpc:protoc-gen-grpc-java:${grpcVersion}" }
     }

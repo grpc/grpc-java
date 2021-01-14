@@ -16,6 +16,7 @@
 
 package io.grpc;
 
+import java.util.Arrays;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -55,6 +56,9 @@ public final class Deadline implements Comparable<Deadline> {
    * Create a deadline that will expire at the specified offset based on the {@link #getSystemTicker
    * system ticker}.
    *
+   * <p>If the given offset is extraordinarily long, say 100 years, the actual deadline created
+   * might saturate.
+   *
    * @param duration A non-negative duration.
    * @param units The time unit for the duration.
    * @return A new deadline.
@@ -65,6 +69,9 @@ public final class Deadline implements Comparable<Deadline> {
 
   /**
    * Create a deadline that will expire at the specified offset based on the given {@link Ticker}.
+   *
+   * <p>If the given offset is extraordinarily long, say 100 years, the actual deadline created
+   * might saturate.
    *
    * <p><strong>CAUTION</strong>: Only deadlines created with the same {@link Ticker} instance can
    * be compared by methods like {@link #minimum}, {@link #isBefore} and {@link #compareTo}.  Custom
@@ -141,6 +148,9 @@ public final class Deadline implements Comparable<Deadline> {
 
   /**
    * Create a new deadline that is offset from {@code this}.
+   *
+   * <p>If the given offset is extraordinarily long, say 100 years, the actual deadline created
+   * might saturate.
    */
   // TODO(ejona): This method can cause deadlines to grow too far apart. For example:
   // Deadline.after(100 * 365, DAYS).offset(100 * 365, DAYS) would be less than
@@ -220,6 +230,30 @@ public final class Deadline implements Comparable<Deadline> {
       return 1;
     }
     return 0;
+  }
+
+  @Override
+  public int hashCode() {
+    return Arrays.asList(this.ticker, this.deadlineNanos).hashCode();
+  }
+
+  @Override
+  public boolean equals(final Object o) {
+    if (o == this) {
+      return true;
+    }
+    if (!(o instanceof Deadline)) {
+      return false;
+    }
+
+    final Deadline other = (Deadline) o;
+    if (this.ticker == null ? other.ticker != null : this.ticker != other.ticker) {
+      return false;
+    }
+    if (this.deadlineNanos != other.deadlineNanos) {
+      return false;
+    }
+    return true;
   }
 
   /**

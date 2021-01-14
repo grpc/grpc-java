@@ -1,4 +1,14 @@
+plugins {
+    id "java"
+    id "maven-publish"
+
+    id "me.champeau.gradle.japicmp"
+    id "ru.vyarus.animalsniffer"
+}
+
 description = "gRPC: OkHttp"
+
+evaluationDependsOn(project(':grpc-core').path)
 
 dependencies {
     compile project(':grpc-core'),

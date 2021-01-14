@@ -37,7 +37,7 @@ interface LoadReportClient {
    * no-op.
    *
    * <p>This method is not thread-safe and should be called from the same synchronized context
-   * returned by {@link XdsLoadBalancer.Helper#getSynchronizationContext}.
+   * returned by {@link XdsLoadBalancer2.Helper#getSynchronizationContext}.
    *
    * @param callback containing methods to be invoked for passing information received from load
    *                 reporting responses to xDS load balancer.
@@ -49,7 +49,7 @@ interface LoadReportClient {
    * {@link LoadReportClient} is no-op.
    *
    * <p>This method is not thread-safe and should be called from the same synchronized context
-   * returned by {@link XdsLoadBalancer.Helper#getSynchronizationContext}.
+   * returned by {@link XdsLoadBalancer2.Helper#getSynchronizationContext}.
    */
   void stopLoadReporting();
 

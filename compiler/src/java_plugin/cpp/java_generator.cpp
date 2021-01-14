@@ -1,3 +1,19 @@
+/*
+ * Copyright 2019 The gRPC Authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "java_generator.h"
 
 #include <algorithm>
@@ -410,7 +426,22 @@ static void PrintMethodFields(
         "        $service_class_name$.$method_new_field_name$ = $method_new_field_name$ =\n"
         "            $MethodDescriptor$.<$input_type$, $output_type$>newBuilder()\n"
         "            .setType($MethodType$.$method_type$)\n"
-        "            .setFullMethodName(generateFullMethodName(SERVICE_NAME, \"$method_name$\"))\n"
+        "            .setFullMethodName(generateFullMethodName(SERVICE_NAME, \"$method_name$\"))\n");
+        
+    bool safe = method->options().idempotency_level()
+        == google::protobuf::MethodOptions_IdempotencyLevel_NO_SIDE_EFFECTS;
+    if (safe) {
+      p->Print(*vars, "            .setSafe(true)\n");
+    } else {
+      bool idempotent = method->options().idempotency_level()
+          == google::protobuf::MethodOptions_IdempotencyLevel_IDEMPOTENT;
+      if (idempotent) {
+        p->Print(*vars, "            .setIdempotent(true)\n");
+      }
+    }
+        
+    p->Print(
+        *vars,
         "            .setSampledToLocalTracing(true)\n"
         "            .setRequestMarshaller($ProtoUtils$.marshaller(\n"
         "                $input_type$.getDefaultInstance()))\n"

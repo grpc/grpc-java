@@ -231,10 +231,13 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
       address = proxiedAddr.getTargetAddress();
     }
 
+    Attributes currentEagAttributes = addressIndex.getCurrentEagAttributes();
+    String eagChannelAuthority = currentEagAttributes
+            .get(EquivalentAddressGroup.ATTR_AUTHORITY_OVERRIDE);
     ClientTransportFactory.ClientTransportOptions options =
         new ClientTransportFactory.ClientTransportOptions()
-          .setAuthority(authority)
-          .setEagAttributes(addressIndex.getCurrentEagAttributes())
+          .setAuthority(eagChannelAuthority != null ? eagChannelAuthority : authority)
+          .setEagAttributes(currentEagAttributes)
           .setUserAgent(userAgent)
           .setHttpConnectProxiedSocketAddress(proxiedAddr);
     TransportLogger transportLogger = new TransportLogger();

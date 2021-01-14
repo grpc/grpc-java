@@ -56,7 +56,18 @@ public class HelloWorldClientTest {
   public final GrpcCleanupRule grpcCleanup = new GrpcCleanupRule();
 
   private final GreeterGrpc.GreeterImplBase serviceImpl =
-      mock(GreeterGrpc.GreeterImplBase.class, delegatesTo(new GreeterGrpc.GreeterImplBase() {}));
+      mock(GreeterGrpc.GreeterImplBase.class, delegatesTo(
+          new GreeterGrpc.GreeterImplBase() {
+          // By default the client will receive Status.UNIMPLEMENTED for all RPCs.
+          // You might need to implement necessary behaviors for your test here, like this:
+          //
+          // @Override
+          // public void sayHello(HelloRequest request, StreamObserver<HelloReply> respObserver) {
+          //   respObserver.onNext(HelloReply.getDefaultInstance());
+          //   respObserver.onCompleted();
+          // }
+          }));
+
   private HelloWorldClient client;
 
   @Before

@@ -104,6 +104,24 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   public abstract T executor(Executor executor);
 
   /**
+   * Provides a custom executor that will be used for operations that block.
+   *
+   * <p>It's an optional parameter. If the user has not provided an executor when the channel is
+   * built, the builder will use a static cached thread pool.
+   *
+   * <p>The channel won't take ownership of the given executor. It's caller's responsibility to shut
+   * down the executor when it's desired.
+   *
+   * @return this
+   * @throws UnsupportedOperationException if unsupported
+   * @since 1.25.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6279")
+  public T blockingExecutor(Executor executor) {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
    * Adds interceptors that will be called before the channel performs its real work. This is
    * functionally equivalent to using {@link ClientInterceptors#intercept(Channel, List)}, but while
    * still having access to the original {@code ManagedChannel}. Interceptors run in the reverse
@@ -181,15 +199,12 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * <p>This assumes prior knowledge that the target of this channel is using plaintext.  It will
    * not perform HTTP/1.1 upgrades.
    *
-   *
-   * @throws UnsupportedOperationException if plaintext mode is not supported.
    * @return this
+   * @throws UnsupportedOperationException if plaintext mode is not supported.
    * @since 1.11.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1772")
-  @SuppressWarnings("deprecation")
   public T usePlaintext() {
-    return usePlaintext(true);
+    throw new UnsupportedOperationException();
   }
 
   /**

@@ -18,9 +18,9 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.github.udpa.udpa.data.orca.v1.OrcaLoadReport;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
-import io.envoyproxy.udpa.data.orca.v1.OrcaLoadReport;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.LoadBalancer.PickResult;

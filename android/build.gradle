@@ -1,7 +1,7 @@
 apply plugin: 'com.android.library'
 
 group = "io.grpc"
-version = "1.24.0-SNAPSHOT" // CURRENT_GRPC_VERSION
+version = "1.25.0-SNAPSHOT" // CURRENT_GRPC_VERSION
 description = 'gRPC: Android'
 
 buildscript {
@@ -13,7 +13,7 @@ buildscript {
     }
     dependencies {
         classpath 'com.android.tools.build:gradle:3.3.0'
-        classpath "net.ltgt.gradle:gradle-errorprone-plugin:0.6"
+        classpath "net.ltgt.gradle:gradle-errorprone-plugin:0.8.1"
         classpath "digital.wup:android-maven-publish:3.6.2"
     }
 }
@@ -47,18 +47,22 @@ dependencies {
     errorprone 'com.google.errorprone:error_prone_core:2.3.3'
     errorproneJavac 'com.google.errorprone:javac:9+181-r4173-1'
 
-    implementation 'io.grpc:grpc-core:1.24.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+    implementation 'io.grpc:grpc-core:1.25.0-SNAPSHOT' // CURRENT_GRPC_VERSION
 
-    testImplementation 'io.grpc:grpc-okhttp:1.24.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+    testImplementation 'io.grpc:grpc-okhttp:1.25.0-SNAPSHOT' // CURRENT_GRPC_VERSION
     testImplementation 'junit:junit:4.12'
     testImplementation 'org.robolectric:robolectric:3.7.1'
-    testImplementation 'com.google.truth:truth:0.45'
+    testImplementation 'com.google.truth:truth:1.0'
 }
 
 task javadocs(type: Javadoc) {
     source = android.sourceSets.main.java.srcDirs
-    // TODO(ericgribkoff) Fix javadoc errors
-    failOnError false
+    classpath += files(android.getBootClasspath())
+    classpath += files({
+        android.libraryVariants.collect { variant ->
+            variant.javaCompileProvider.get().classpath
+        }
+    })
     options {
         // Disable JavaDoc doclint on Java 8.
         if (JavaVersion.current().isJava8Compatible()) {

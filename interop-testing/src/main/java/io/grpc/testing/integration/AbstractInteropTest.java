@@ -378,6 +378,8 @@ public abstract class AbstractInteropTest {
 
   /** Sends a cacheable unary rpc using GET. Requires that the server is behind a caching proxy. */
   public void cacheableUnary() {
+    // THIS TEST IS BROKEN. Enabling safe just on the MethodDescriptor does nothing by itself. This
+    // test would need to enable GET on the channel.
     // Set safe to true.
     MethodDescriptor<SimpleRequest, SimpleResponse> safeCacheableUnaryCallMethod =
         TestServiceGrpc.getCacheableUnaryCallMethod().toBuilder().setSafe(true).build();
@@ -412,6 +414,7 @@ public abstract class AbstractInteropTest {
 
     assertEquals(response1, response2);
     assertNotEquals(response1, response3);
+    // THIS TEST IS BROKEN. See comment at start of method.
   }
 
   @Test

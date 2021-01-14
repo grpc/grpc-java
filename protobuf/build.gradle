@@ -1,12 +1,13 @@
-description = 'gRPC: Protobuf'
+plugins {
+    id "java"
+    id "maven-publish"
 
-buildscript {
-    repositories {
-        maven { // The google mirror is less flaky than mavenCentral()
-            url "https://maven-central.storage-download.googleapis.com/repos/central/data/" }
-    }
-    dependencies { classpath libraries.protobuf_plugin }
+    id "com.google.protobuf"
+    id "me.champeau.gradle.japicmp"
+    id "ru.vyarus.animalsniffer"
 }
+
+description = 'gRPC: Protobuf'
 
 dependencies {
     compile project(':grpc-api'),

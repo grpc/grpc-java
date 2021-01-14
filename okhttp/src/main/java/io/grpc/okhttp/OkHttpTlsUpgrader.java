@@ -46,7 +46,7 @@ final class OkHttpTlsUpgrader {
       Collections.unmodifiableList(Arrays.asList(Protocol.GRPC_EXP, Protocol.HTTP_2));
 
   /**
-   * Upgrades given Socket to be a SSLSocket.
+   * Upgrades given Socket to be an SSLSocket.
    *
    * @throws IOException if an IO error was encountered during the upgrade handshake.
    * @throws RuntimeException if the upgrade negotiation failed.

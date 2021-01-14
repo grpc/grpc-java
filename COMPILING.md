@@ -23,7 +23,7 @@ $ ./gradlew publishToMavenLocal
 ```
 
 ### Notes for IntelliJ
-Building in IntelliJ works best when you import the project as a Gradle project and delegate IDE 
+Building in IntelliJ works best when you import the project as a Gradle project and delegate IDE
 build/run actions to Gradle.
 
 You can find this setting at:
@@ -42,13 +42,12 @@ The codegen plugin is C++ code and requires protobuf 3.0.0 or later.
 
 For Linux, Mac and MinGW:
 ```
-$ git clone https://github.com/google/protobuf.git
-$ cd protobuf
-$ git checkout v3.9.0
-$ ./autogen.sh
+$ PROTOBUF_VERSION=3.10.0
+$ curl -LO https://github.com/protocolbuffers/protobuf/releases/download/v$PROTOBUF_VERSION/protobuf-all-$PROTOBUF_VERSION.tar.gz
+$ tar xzf protobuf-all-$PROTOBUF_VERSION.tar.gz
+$ cd protobuf-$PROTOBUF_VERSION
 $ ./configure --disable-shared
-$ make
-$ make check
+$ make   # You may want to pass -j to make this run faster; see make --help
 $ sudo make install
 ```
 
@@ -61,13 +60,6 @@ Protobuf installs to ``/usr/local`` by default.
 
 For Visual C++, please refer to the [Protobuf README](https://github.com/google/protobuf/blob/master/cmake/README.md)
 for how to compile Protobuf. gRPC-java assumes a Release build.
-
-#### Linux and MinGW
-If ``/usr/local/lib`` is not in your library search path, you can add it by running:
-```
-$ sudo sh -c 'echo /usr/local/lib >> /etc/ld.so.conf'
-$ sudo ldconfig
-```
 
 #### Mac
 Some versions of Mac OS X (e.g., 10.10) doesn't have ``/usr/local`` in the
@@ -83,16 +75,16 @@ When building on Windows and VC++, you need to specify project properties for
 Gradle to find protobuf:
 ```
 .\gradlew publishToMavenLocal ^
-    -PvcProtobufInclude=C:\path\to\protobuf-3.9.0\src ^
-    -PvcProtobufLibs=C:\path\to\protobuf-3.9.0\vsprojects\Release ^
+    -PvcProtobufInclude=C:\path\to\protobuf-3.10.0\src ^
+    -PvcProtobufLibs=C:\path\to\protobuf-3.10.0\vsprojects\Release ^
     -PtargetArch=x86_32
 ```
 
 Since specifying those properties every build is bothersome, you can instead
 create ``<project-root>\gradle.properties`` with contents like:
 ```
-vcProtobufInclude=C:\\path\\to\\protobuf-3.9.0\\src
-vcProtobufLibs=C:\\path\\to\\protobuf-3.9.0\\vsprojects\\Release
+vcProtobufInclude=C:\\path\\to\\protobuf-3.10.0\\src
+vcProtobufLibs=C:\\path\\to\\protobuf-3.10.0\\vsprojects\\Release
 targetArch=x86_32
 ```
 
