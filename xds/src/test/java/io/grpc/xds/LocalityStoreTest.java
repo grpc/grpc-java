@@ -56,16 +56,17 @@ import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
+import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.FakeClock.ScheduledTask;
 import io.grpc.internal.FakeClock.TaskFilter;
 import io.grpc.xds.ClientLoadCounter.LoadRecordingStreamTracerFactory;
 import io.grpc.xds.ClientLoadCounter.MetricsRecordingListener;
-import io.grpc.xds.ClusterLoadAssignmentData.DropOverload;
-import io.grpc.xds.ClusterLoadAssignmentData.LbEndpoint;
-import io.grpc.xds.ClusterLoadAssignmentData.LocalityInfo;
-import io.grpc.xds.ClusterLoadAssignmentData.XdsLocality;
+import io.grpc.xds.EnvoyProtoData.DropOverload;
+import io.grpc.xds.EnvoyProtoData.LbEndpoint;
+import io.grpc.xds.EnvoyProtoData.Locality;
+import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
 import io.grpc.xds.InterLocalityPicker.WeightedChildPicker;
 import io.grpc.xds.LocalityStore.LocalityStoreImpl;
 import io.grpc.xds.LocalityStore.LocalityStoreImpl.PickerFactory;
@@ -181,10 +182,10 @@ public class LocalityStoreTest {
 
   private final FakePickerFactory pickerFactory = new FakePickerFactory();
 
-  private final XdsLocality locality1 = new XdsLocality("r1", "z1", "sz1");
-  private final XdsLocality locality2 = new XdsLocality("r2", "z2", "sz2");
-  private final XdsLocality locality3 = new XdsLocality("r3", "z3", "sz3");
-  private final XdsLocality locality4 = new XdsLocality("r4", "z4", "sz4");
+  private final Locality locality1 = new Locality("r1", "z1", "sz1");
+  private final Locality locality2 = new Locality("r2", "z2", "sz2");
+  private final Locality locality3 = new Locality("r3", "z3", "sz3");
+  private final Locality locality4 = new Locality("r4", "z4", "sz4");
 
   private final EquivalentAddressGroup eag11 =
       new EquivalentAddressGroup(new InetSocketAddress("addr11", 11));
@@ -203,16 +204,16 @@ public class LocalityStoreTest {
   private final EquivalentAddressGroup eag42 =
       new EquivalentAddressGroup(new InetSocketAddress("addr42", 42));
 
-  private final LbEndpoint lbEndpoint11 = new LbEndpoint(eag11, 11);
-  private final LbEndpoint lbEndpoint12 = new LbEndpoint(eag12, 12);
-  private final LbEndpoint lbEndpoint21 = new LbEndpoint(eag21, 21);
-  private final LbEndpoint lbEndpoint22 = new LbEndpoint(eag22, 22);
-  private final LbEndpoint lbEndpoint31 = new LbEndpoint(eag31, 31);
-  private final LbEndpoint lbEndpoint32 = new LbEndpoint(eag32, 32);
-  private final LbEndpoint lbEndpoint41 = new LbEndpoint(eag41, 41);
-  private final LbEndpoint lbEndpoint42 = new LbEndpoint(eag42, 42);
+  private final LbEndpoint lbEndpoint11 = new LbEndpoint(eag11, 11, true);
+  private final LbEndpoint lbEndpoint12 = new LbEndpoint(eag12, 12, true);
+  private final LbEndpoint lbEndpoint21 = new LbEndpoint(eag21, 21, true);
+  private final LbEndpoint lbEndpoint22 = new LbEndpoint(eag22, 22, true);
+  private final LbEndpoint lbEndpoint31 = new LbEndpoint(eag31, 31, true);
+  private final LbEndpoint lbEndpoint32 = new LbEndpoint(eag32, 32, true);
+  private final LbEndpoint lbEndpoint41 = new LbEndpoint(eag41, 41, true);
+  private final LbEndpoint lbEndpoint42 = new LbEndpoint(eag42, 42, true);
 
-  private final Map<String, XdsLocality> namedLocalities
+  private final Map<String, Locality> namedLocalities
       = ImmutableMap.of("sz1", locality1, "sz2", locality2, "sz3", locality3, "sz4", locality4);
 
   @Mock
@@ -257,22 +258,26 @@ public class LocalityStoreTest {
   @Test
   @SuppressWarnings("unchecked")
   public void updateLocalityStore_updateStatsStoreLocalityTracking() {
-    Map<XdsLocality, LocalityInfo> localityInfoMap = new HashMap<>();
+    Map<Locality, LocalityLbEndpoints> localityInfoMap = new HashMap<>();
     localityInfoMap
-        .put(locality1, new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1, 0));
+        .put(locality1,
+            new LocalityLbEndpoints(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1, 0));
     localityInfoMap
-        .put(locality2, new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 0));
+        .put(locality2,
+            new LocalityLbEndpoints(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 0));
     localityStore.updateLocalityStore(ImmutableMap.copyOf(localityInfoMap));
     verify(loadStatsStore).addLocality(locality1);
     verify(loadStatsStore).addLocality(locality2);
 
     localityInfoMap
-        .put(locality3, new LocalityInfo(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3, 0));
+        .put(locality3,
+            new LocalityLbEndpoints(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3, 0));
     localityStore.updateLocalityStore(ImmutableMap.copyOf(localityInfoMap));
     verify(loadStatsStore).addLocality(locality3);
 
     localityInfoMap = ImmutableMap
-        .of(locality4, new LocalityInfo(ImmutableList.of(lbEndpoint41, lbEndpoint42), 4, 0));
+        .of(locality4,
+            new LocalityLbEndpoints(ImmutableList.of(lbEndpoint41, lbEndpoint42), 4, 0));
     localityStore.updateLocalityStore(ImmutableMap.copyOf(localityInfoMap));
     verify(loadStatsStore).removeLocality(locality1);
     verify(loadStatsStore).removeLocality(locality2);
@@ -286,10 +291,10 @@ public class LocalityStoreTest {
   @Test
   public void updateLocalityStore_pickResultInterceptedForLoadRecordingWhenSubchannelReady() {
     // Simulate receiving two localities.
-    LocalityInfo localityInfo1 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1, 0);
-    LocalityInfo localityInfo2 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 0);
+    LocalityLbEndpoints localityInfo1 =
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1, 0);
+    LocalityLbEndpoints localityInfo2 =
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 0);
     localityStore.updateLocalityStore(ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2));
 
@@ -326,7 +331,7 @@ public class LocalityStoreTest {
 
     // Verify each PickResult picked is intercepted with client stream tracer factory for
     // recording load and backend metrics.
-    Map<Subchannel, XdsLocality> localitiesBySubchannel
+    Map<Subchannel, Locality> localitiesBySubchannel
         = ImmutableMap.of(subchannel1, locality1, subchannel2, locality2);
     Map<Subchannel, ClientStreamTracer.Factory> metricsTracingFactoriesBySubchannel
         = ImmutableMap.of(subchannel1, metricsTracingFactory1, subchannel2, metricsTracingFactory2);
@@ -334,7 +339,7 @@ public class LocalityStoreTest {
       pickerFactory.nextIndex = i;
       PickResult pickResult = interLocalityPicker.pickSubchannel(pickSubchannelArgs);
       Subchannel expectedSubchannel = pickResult.getSubchannel();
-      XdsLocality expectedLocality = localitiesBySubchannel.get(expectedSubchannel);
+      Locality expectedLocality = localitiesBySubchannel.get(expectedSubchannel);
       ArgumentCaptor<OrcaPerRequestReportListener> listenerCaptor = ArgumentCaptor.forClass(null);
       verify(orcaPerRequestUtil, times(i + 1))
           .newOrcaClientStreamTracerFactory(any(ClientStreamTracer.Factory.class),
@@ -357,10 +362,10 @@ public class LocalityStoreTest {
   @Test
   public void childLbPerformOobBackendMetricsAggregation() {
     // Simulate receiving two localities.
-    LocalityInfo localityInfo1 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1, 0);
-    LocalityInfo localityInfo2 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 0);
+    LocalityLbEndpoints localityInfo1 =
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1, 0);
+    LocalityLbEndpoints localityInfo2 =
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 0);
     localityStore.updateLocalityStore(ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2));
 
@@ -382,7 +387,7 @@ public class LocalityStoreTest {
       }
     }
 
-    Map<String, XdsLocality> localities = ImmutableMap.of("sz1", locality1, "sz2", locality2);
+    Map<String, Locality> localities = ImmutableMap.of("sz1", locality1, "sz2", locality2);
     for (Helper h : childHelpers.values()) {
       ArgumentCaptor<OrcaOobReportListener> listenerCaptor = ArgumentCaptor.forClass(null);
       verify(orcaOobUtil)
@@ -415,10 +420,10 @@ public class LocalityStoreTest {
     assertThat(loadBalancers).isEmpty();
 
     // Simulate receiving two localities.
-    LocalityInfo localityInfo1 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1, 0);
-    LocalityInfo localityInfo2 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 0);
+    LocalityLbEndpoints localityInfo1 =
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1, 0);
+    LocalityLbEndpoints localityInfo2 =
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 0);
     localityStore.updateLocalityStore(ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2));
 
@@ -434,13 +439,13 @@ public class LocalityStoreTest {
   @Test
   public void updateLoaclityStore_withEmptyDropList() {
     localityStore.updateDropPercentage(ImmutableList.<DropOverload>of());
-    LocalityInfo localityInfo1 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1, 0);
-    LocalityInfo localityInfo2 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 0);
-    LocalityInfo localityInfo3 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3, 0);
-    ImmutableMap<XdsLocality, LocalityInfo> localityInfoMap = ImmutableMap.of(
+    LocalityLbEndpoints localityInfo1 =
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1, 0);
+    LocalityLbEndpoints localityInfo2 =
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 0);
+    LocalityLbEndpoints localityInfo3 =
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3, 0);
+    ImmutableMap<Locality, LocalityLbEndpoints> localityInfoMap = ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2, locality3, localityInfo3);
     localityStore.updateLocalityStore(localityInfoMap);
     verify(helper).updateBalancingState(CONNECTING, BUFFER_PICKER);
@@ -514,9 +519,9 @@ public class LocalityStoreTest {
 
     // update with new addresses
     localityInfo1 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint11), 1, 0);
-    LocalityInfo localityInfo4 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint41, lbEndpoint42), 4, 0);
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint11), 1, 0);
+    LocalityLbEndpoints localityInfo4 =
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint41, lbEndpoint42), 4, 0);
     localityInfoMap = ImmutableMap.of(
         locality2, localityInfo2, locality4, localityInfo4, locality1, localityInfo1);
     localityStore.updateLocalityStore(localityInfoMap);
@@ -544,13 +549,13 @@ public class LocalityStoreTest {
 
   @Test
   public void updateLoaclityStore_deactivateAndReactivate() {
-    LocalityInfo localityInfo1 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1, 0);
-    LocalityInfo localityInfo2 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 0);
-    LocalityInfo localityInfo3 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3, 0);
-    ImmutableMap<XdsLocality, LocalityInfo> localityInfoMap = ImmutableMap.of(
+    LocalityLbEndpoints localityInfo1 =
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1, 0);
+    LocalityLbEndpoints localityInfo2 =
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 0);
+    LocalityLbEndpoints localityInfo3 =
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3, 0);
+    ImmutableMap<Locality, LocalityLbEndpoints> localityInfoMap = ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2, locality3, localityInfo3);
     localityStore.updateLocalityStore(localityInfoMap);
 
@@ -578,8 +583,8 @@ public class LocalityStoreTest {
     childHelpers.get("sz3").updateBalancingState(READY, subchannelPicker3);
 
     // update localities, removing sz1, sz2, keeping sz3, and adding sz4
-    LocalityInfo localityInfo4 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint41, lbEndpoint42), 4, 0);
+    LocalityLbEndpoints localityInfo4 =
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint41, lbEndpoint42), 4, 0);
     localityInfoMap = ImmutableMap.of(locality3, localityInfo3, locality4, localityInfo4);
     localityStore.updateLocalityStore(localityInfoMap);
 
@@ -671,13 +676,13 @@ public class LocalityStoreTest {
     localityStore.updateDropPercentage(ImmutableList.of(
         new DropOverload("throttle", 365),
         new DropOverload("lb", 1234)));
-    LocalityInfo localityInfo1 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1, 0);
-    LocalityInfo localityInfo2 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 0);
-    LocalityInfo localityInfo3 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3, 0);
-    ImmutableMap<XdsLocality, LocalityInfo> localityInfoMap = ImmutableMap.of(
+    LocalityLbEndpoints localityInfo1 =
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1, 0);
+    LocalityLbEndpoints localityInfo2 =
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 0);
+    LocalityLbEndpoints localityInfo3 =
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3, 0);
+    ImmutableMap<Locality, LocalityLbEndpoints> localityInfoMap = ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2, locality3, localityInfo3);
     localityStore.updateLocalityStore(localityInfoMap);
 
@@ -769,13 +774,13 @@ public class LocalityStoreTest {
     localityStore.updateDropPercentage(ImmutableList.of(
         new DropOverload("throttle", 365),
         new DropOverload("lb", 1000_000)));
-    LocalityInfo localityInfo1 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1, 0);
-    LocalityInfo localityInfo2 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 0);
-    LocalityInfo localityInfo3 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3, 0);
-    ImmutableMap<XdsLocality, LocalityInfo> localityInfoMap = ImmutableMap.of(
+    LocalityLbEndpoints localityInfo1 =
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1, 0);
+    LocalityLbEndpoints localityInfo2 =
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 0);
+    LocalityLbEndpoints localityInfo3 =
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3, 0);
+    ImmutableMap<Locality, LocalityLbEndpoints> localityInfoMap = ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2, locality3, localityInfo3);
     localityStore.updateLocalityStore(localityInfoMap);
 
@@ -789,14 +794,113 @@ public class LocalityStoreTest {
   }
 
   @Test
+  public void updateLoaclityStore_withUnHealthyEndPoints() {
+    LbEndpoint lbEndpoint11 = new LbEndpoint(eag11, 11, true);
+    LbEndpoint lbEndpoint12 = new LbEndpoint(eag12, 12, true);
+    LbEndpoint lbEndpoint21 = new LbEndpoint(eag21, 21, false); // unhealthy
+    LbEndpoint lbEndpoint22 = new LbEndpoint(eag22, 22, true);
+    LbEndpoint lbEndpoint31 = new LbEndpoint(eag31, 31, false); // unhealthy
+    LbEndpoint lbEndpoint32 = new LbEndpoint(eag32, 32, false); // unhealthy
+    LbEndpoint lbEndpoint41 = new LbEndpoint(eag41, 41, true);
+    LbEndpoint lbEndpoint42 = new LbEndpoint(eag42, 42, true);
+    LocalityLbEndpoints localityInfo1 =
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1, 0);
+    LocalityLbEndpoints localityInfo2 =
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 0);
+    LocalityLbEndpoints localityInfo3 =
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3, 0);
+    LocalityLbEndpoints localityInfo4 =
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint41, lbEndpoint42), 4, 0);
+    ImmutableMap<Locality, LocalityLbEndpoints> localityInfoMap = ImmutableMap.of(
+        locality1, localityInfo1, locality2, localityInfo2, locality3, localityInfo3,
+        locality4, localityInfo4);
+    localityStore.updateLocalityStore(localityInfoMap);
+    verify(helper).updateBalancingState(CONNECTING, BUFFER_PICKER);
+
+    assertThat(loadBalancers).hasSize(4);
+    assertThat(loadBalancers.keySet()).containsExactly("sz1", "sz2", "sz3", "sz4");
+    ArgumentCaptor<ResolvedAddresses> resolvedAddressesCaptor1 =
+        ArgumentCaptor.forClass(ResolvedAddresses.class);
+    verify(loadBalancers.get("sz1")).handleResolvedAddresses(resolvedAddressesCaptor1.capture());
+    assertThat(resolvedAddressesCaptor1.getValue().getAddresses()).containsExactly(eag11, eag12);
+    ArgumentCaptor<ResolvedAddresses> resolvedAddressesCaptor2 =
+        ArgumentCaptor.forClass(ResolvedAddresses.class);
+    verify(loadBalancers.get("sz2")).handleResolvedAddresses(resolvedAddressesCaptor2.capture());
+    assertThat(resolvedAddressesCaptor2.getValue().getAddresses()).containsExactly(eag22);
+    verify(loadBalancers.get("sz3"), never()).handleResolvedAddresses(any(ResolvedAddresses.class));
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
+    verify(loadBalancers.get("sz3")).handleNameResolutionError(statusCaptor.capture());
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    ArgumentCaptor<ResolvedAddresses> resolvedAddressesCaptor4 =
+        ArgumentCaptor.forClass(ResolvedAddresses.class);
+    verify(loadBalancers.get("sz4")).handleResolvedAddresses(resolvedAddressesCaptor4.capture());
+    assertThat(resolvedAddressesCaptor4.getValue().getAddresses()).containsExactly(eag41, eag42);
+    // verify no more updateBalancingState except the initial CONNECTING state
+    verify(helper, times(1)).updateBalancingState(
+        any(ConnectivityState.class), any(SubchannelPicker.class));
+
+    // update with different healthy status
+    lbEndpoint11 = new LbEndpoint(eag11, 11, false); // unhealthy
+    lbEndpoint12 = new LbEndpoint(eag12, 12, false); // unhealthy
+    lbEndpoint21 = new LbEndpoint(eag21, 21, true);
+    lbEndpoint22 = new LbEndpoint(eag22, 22, false); // unhealthy
+    lbEndpoint31 = new LbEndpoint(eag31, 31, true);
+    lbEndpoint32 = new LbEndpoint(eag32, 32, false); // unhealthy
+    localityInfo1 =
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1, 0);
+    localityInfo2 =
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 0);
+    localityInfo3 =
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3, 0);
+    localityInfoMap = ImmutableMap.of(
+        locality1, localityInfo1, locality2, localityInfo2, locality3, localityInfo3);
+    localityStore.updateLocalityStore(localityInfoMap);
+
+    verify(loadBalancers.get("sz1"), times(1))
+        .handleResolvedAddresses(any(ResolvedAddresses.class));
+    verify(loadBalancers.get("sz1"), times(1)).handleNameResolutionError(statusCaptor.capture());
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    verify(loadBalancers.get("sz2"), times(2))
+        .handleResolvedAddresses(resolvedAddressesCaptor2.capture());
+    assertThat(resolvedAddressesCaptor2.getValue().getAddresses()).containsExactly(eag21);
+    ArgumentCaptor<ResolvedAddresses> resolvedAddressesCaptor3 =
+        ArgumentCaptor.forClass(ResolvedAddresses.class);
+    verify(loadBalancers.get("sz3")).handleResolvedAddresses(resolvedAddressesCaptor3.capture());
+    assertThat(resolvedAddressesCaptor3.getValue().getAddresses()).containsExactly(eag31);
+    verify(helper, times(2)).updateBalancingState(CONNECTING, BUFFER_PICKER);
+
+    // update with all endpoints unhealthy
+    lbEndpoint11 = new LbEndpoint(eag11, 11, false); // unhealthy
+    lbEndpoint12 = new LbEndpoint(eag12, 12, false); // unhealthy
+    lbEndpoint31 = new LbEndpoint(eag31, 31, false); // unhealthy
+    lbEndpoint32 = new LbEndpoint(eag32, 32, false); // unhealthy
+    localityInfo1 =
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1, 0);
+    localityInfo3 =
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3, 0);
+    localityInfoMap = ImmutableMap.of(locality1, localityInfo1, locality3, localityInfo3);
+    localityStore.updateLocalityStore(localityInfoMap);
+
+    verify(loadBalancers.get("sz1"), times(2)).handleNameResolutionError(statusCaptor.capture());
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    verify(loadBalancers.get("sz3"), times(2)).handleNameResolutionError(statusCaptor.capture());
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+
+    // mimic child balancers update subchannels to TRANSIENT_FAILURE after handleNameResolutionError
+    childHelpers.get("sz1").updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(UNAVAILABLE));
+    childHelpers.get("sz3").updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(UNAVAILABLE));
+    verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
+  }
+
+  @Test
   public void updateLocalityStore_OnlyUpdatingWeightsStillUpdatesPicker() {
-    LocalityInfo localityInfo1 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1, 0);
-    LocalityInfo localityInfo2 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 0);
-    LocalityInfo localityInfo3 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3, 0);
-    ImmutableMap<XdsLocality, LocalityInfo> localityInfoMap = ImmutableMap.of(
+    LocalityLbEndpoints localityInfo1 =
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1, 0);
+    LocalityLbEndpoints localityInfo2 =
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 0);
+    LocalityLbEndpoints localityInfo3 =
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3, 0);
+    ImmutableMap<Locality, LocalityLbEndpoints> localityInfoMap = ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2, locality3, localityInfo3);
     localityStore.updateLocalityStore(localityInfoMap);
 
@@ -805,16 +909,16 @@ public class LocalityStoreTest {
     assertThat(pickerFactory.totalReadyLocalities).isEqualTo(0);
 
     // Update locality weights before any subchannel becomes READY.
-    localityInfo1 = new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 4, 0);
-    localityInfo2 = new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 5, 0);
-    localityInfo3 = new LocalityInfo(ImmutableList.of(lbEndpoint31, lbEndpoint32), 6, 0);
+    localityInfo1 = new LocalityLbEndpoints(ImmutableList.of(lbEndpoint11, lbEndpoint12), 4, 0);
+    localityInfo2 = new LocalityLbEndpoints(ImmutableList.of(lbEndpoint21, lbEndpoint22), 5, 0);
+    localityInfo3 = new LocalityLbEndpoints(ImmutableList.of(lbEndpoint31, lbEndpoint32), 6, 0);
     localityInfoMap = ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2, locality3, localityInfo3);
     localityStore.updateLocalityStore(localityInfoMap);
 
     assertThat(pickerFactory.totalReadyLocalities).isEqualTo(0);
 
-    final Map<Subchannel, XdsLocality> localitiesBySubchannel = new HashMap<>();
+    final Map<Subchannel, Locality> localitiesBySubchannel = new HashMap<>();
     for (final Helper h : childHelpers.values()) {
       h.updateBalancingState(READY, new SubchannelPicker() {
         @Override
@@ -833,17 +937,18 @@ public class LocalityStoreTest {
       Subchannel subchannel
           = weightedChildPicker.getPicker().pickSubchannel(pickSubchannelArgs).getSubchannel();
       assertThat(weightedChildPicker.getWeight())
-          .isEqualTo(localityInfoMap.get(localitiesBySubchannel.get(subchannel)).localityWeight);
+          .isEqualTo(
+              localityInfoMap.get(localitiesBySubchannel.get(subchannel)).getLocalityWeight());
     }
   }
 
   @Test
   public void reset() {
-    LocalityInfo localityInfo1 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1, 0);
-    LocalityInfo localityInfo2 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 0);
-    ImmutableMap<XdsLocality, LocalityInfo> localityInfoMap = ImmutableMap.of(
+    LocalityLbEndpoints localityInfo1 =
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1, 0);
+    LocalityLbEndpoints localityInfo2 =
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 0);
+    ImmutableMap<Locality, LocalityLbEndpoints> localityInfoMap = ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2);
     localityStore.updateLocalityStore(localityInfoMap);
 
@@ -893,15 +998,15 @@ public class LocalityStoreTest {
   @Test
   public void multipriority() {
     // EDS update: P0 sz1; P1 sz2; P2 sz3; P3 sz4 - P0 C, P1 N/A, P2 N/A, P3 N/A
-    LocalityInfo localityInfo1 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1, 0);
-    LocalityInfo localityInfo2 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 1);
-    LocalityInfo localityInfo3 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3, 2);
-    LocalityInfo localityInfo4 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint41, lbEndpoint42), 3, 3);
-    final ImmutableMap<XdsLocality, LocalityInfo> localityInfoMap = ImmutableMap.of(
+    LocalityLbEndpoints localityInfo1 =
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1, 0);
+    LocalityLbEndpoints localityInfo2 =
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 1);
+    LocalityLbEndpoints localityInfo3 =
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3, 2);
+    LocalityLbEndpoints localityInfo4 =
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint41, lbEndpoint42), 3, 3);
+    final ImmutableMap<Locality, LocalityLbEndpoints> localityInfoMap = ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2, locality3, localityInfo3, locality4,
         localityInfo4);
     syncContext.execute(new Runnable() {
@@ -1129,14 +1234,14 @@ public class LocalityStoreTest {
 
     // EDS update, localities moved: P0 sz1, sz3; P1 sz4; P2 sz2 - P0 C, P1 R, P2 R&D
     localityInfo1 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint12), 1, 0);
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint12), 1, 0);
     localityInfo2 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint22), 2, 2);
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint22), 2, 2);
     localityInfo3 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint32), 3, 0);
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint32), 3, 0);
     localityInfo4 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint42), 4, 1);
-    final ImmutableMap<XdsLocality, LocalityInfo> localityInfoMap2 = ImmutableMap.of(
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint42), 4, 1);
+    final ImmutableMap<Locality, LocalityLbEndpoints> localityInfoMap2 = ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2, locality3, localityInfo3, locality4,
         localityInfo4);
     syncContext.execute(new Runnable() {
@@ -1175,10 +1280,10 @@ public class LocalityStoreTest {
 
     // EDS update, locality removed: P0 sz1, sz3, - P0 C, P1 N/A, sz4 R&D
     localityInfo1 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint11), 1, 0);
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint11), 1, 0);
     localityInfo3 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint31), 3, 0);
-    final ImmutableMap<XdsLocality, LocalityInfo> localityInfoMap3 = ImmutableMap.of(
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint31), 3, 0);
+    final ImmutableMap<Locality, LocalityLbEndpoints> localityInfoMap3 = ImmutableMap.of(
         locality1, localityInfo1,locality3, localityInfo3);
     syncContext.execute(new Runnable() {
       @Override
@@ -1225,10 +1330,10 @@ public class LocalityStoreTest {
 
     // EDS update, locality comes back and another removed: P0 sz1, P1 sz4 - P0 C, P1 R, sz3 R&D
     localityInfo1 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint11), 1, 0);
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint11), 1, 0);
     localityInfo4 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint41), 4, 1);
-    final ImmutableMap<XdsLocality, LocalityInfo> localityInfoMap4 = ImmutableMap.of(
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint41), 4, 1);
+    final ImmutableMap<Locality, LocalityLbEndpoints> localityInfoMap4 = ImmutableMap.of(
         locality1, localityInfo1,locality4, localityInfo4);
     syncContext.execute(new Runnable() {
       @Override
@@ -1264,7 +1369,7 @@ public class LocalityStoreTest {
 
   private static final class FakeLoadStatsStore implements LoadStatsStore {
 
-    Map<XdsLocality, ClientLoadCounter> localityCounters = new HashMap<>();
+    Map<Locality, ClientLoadCounter> localityCounters = new HashMap<>();
 
     @Override
     public ClusterStats generateLoadReport() {
@@ -1272,20 +1377,20 @@ public class LocalityStoreTest {
     }
 
     @Override
-    public void addLocality(XdsLocality locality) {
+    public void addLocality(Locality locality) {
       assertThat(localityCounters).doesNotContainKey(locality);
       localityCounters.put(locality, new ClientLoadCounter());
     }
 
     @Override
-    public void removeLocality(XdsLocality locality) {
+    public void removeLocality(Locality locality) {
       assertThat(localityCounters).containsKey(locality);
       localityCounters.remove(locality);
     }
 
     @Nullable
     @Override
-    public ClientLoadCounter getLocalityCounter(XdsLocality locality) {
+    public ClientLoadCounter getLocalityCounter(Locality locality) {
       return localityCounters.get(locality);
     }
 

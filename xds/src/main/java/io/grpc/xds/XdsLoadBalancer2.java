@@ -27,7 +27,7 @@ import io.grpc.LoadBalancer;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.util.ForwardingLoadBalancerHelper;
-import io.grpc.xds.LookasideChannelLb.LookasideChannelCallback;
+import io.grpc.xds.LookasideLb.EdsUpdateCallback;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.CheckForNull;
 import javax.annotation.Nullable;
@@ -46,7 +46,7 @@ final class XdsLoadBalancer2 extends LoadBalancer {
   private final Helper helper;
   private final LoadBalancer lookasideLb;
   private final LoadBalancer.Factory fallbackLbFactory;
-  private final LookasideChannelCallback lookasideChannelCallback = new LookasideChannelCallback() {
+  private final EdsUpdateCallback edsUpdateCallback = new EdsUpdateCallback() {
     @Override
     public void onWorking() {
       if (childPolicyHasBeenReady) {
@@ -94,7 +94,7 @@ final class XdsLoadBalancer2 extends LoadBalancer {
       LoadBalancer.Factory fallbackLbFactory) {
     this.helper = helper;
     this.lookasideLb = lookasideLbFactory.newLoadBalancer(new LookasideLbHelper(),
-        lookasideChannelCallback);
+        edsUpdateCallback);
     this.fallbackLbFactory = fallbackLbFactory;
   }
 
@@ -247,14 +247,14 @@ final class XdsLoadBalancer2 extends LoadBalancer {
   /** Factory of a look-aside load balancer. The interface itself is for convenience in test. */
   @VisibleForTesting
   interface LookasideLbFactory {
-    LoadBalancer newLoadBalancer(Helper helper, LookasideChannelCallback lookasideChannelCallback);
+    LoadBalancer newLoadBalancer(Helper helper, EdsUpdateCallback edsUpdateCallback);
   }
 
   private static final class LookasideLbFactoryImpl implements LookasideLbFactory {
     @Override
     public LoadBalancer newLoadBalancer(
-        Helper lookasideLbHelper, LookasideChannelCallback lookasideChannelCallback) {
-      return new LookasideLb(lookasideLbHelper, lookasideChannelCallback);
+        Helper lookasideLbHelper, EdsUpdateCallback edsUpdateCallback) {
+      return new LookasideLb(lookasideLbHelper, edsUpdateCallback);
     }
   }
 

@@ -137,12 +137,12 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private final NameResolver.Args nameResolverArgs;
   private final AutoConfiguredLoadBalancerFactory loadBalancerFactory;
   private final ClientTransportFactory transportFactory;
-  private final ScheduledExecutorForBalancer scheduledExecutorForBalancer;
+  private final RestrictedScheduledExecutor scheduledExecutor;
   private final Executor executor;
   private final ObjectPool<? extends Executor> executorPool;
   private final ObjectPool<? extends Executor> balancerRpcExecutorPool;
   private final ExecutorHolder balancerRpcExecutorHolder;
-  private final ExecutorHolder blockingExecutorHolder;
+  private final ExecutorHolder offloadExecutorHolder;
   private final TimeProvider timeProvider;
   private final int maxTraceEvents;
 
@@ -561,54 +561,55 @@ final class ManagedChannelImpl extends ManagedChannel implements
       final TimeProvider timeProvider) {
     this.target = checkNotNull(builder.target, "target");
     this.logId = InternalLogId.allocate("Channel", target);
+    this.timeProvider = checkNotNull(timeProvider, "timeProvider");
+    this.executorPool = checkNotNull(builder.executorPool, "executorPool");
+    this.executor = checkNotNull(executorPool.getObject(), "executor");
+    this.transportFactory =
+        new CallCredentialsApplyingTransportFactory(clientTransportFactory, this.executor);
+    this.scheduledExecutor =
+        new RestrictedScheduledExecutor(transportFactory.getScheduledExecutorService());
+    maxTraceEvents = builder.maxTraceEvents;
+    channelTracer = new ChannelTracer(
+        logId, builder.maxTraceEvents, timeProvider.currentTimeNanos(),
+        "Channel for '" + target + "'");
+    channelLogger = new ChannelLoggerImpl(channelTracer, timeProvider);
     this.nameResolverFactory = builder.getNameResolverFactory();
     ProxyDetector proxyDetector =
         builder.proxyDetector != null ? builder.proxyDetector : GrpcUtil.DEFAULT_PROXY_DETECTOR;
     this.retryEnabled = builder.retryEnabled && !builder.temporarilyDisableRetry;
     this.loadBalancerFactory = new AutoConfiguredLoadBalancerFactory(builder.defaultLbPolicy);
-    this.blockingExecutorHolder =
+    this.offloadExecutorHolder =
         new ExecutorHolder(
-            checkNotNull(builder.blockingExecutorPool, "blockingExecutorPool"));
+            checkNotNull(builder.offloadExecutorPool, "offloadExecutorPool"));
     this.nameResolverRegistry = builder.nameResolverRegistry;
     this.nameResolverArgs =
         NameResolver.Args.newBuilder()
             .setDefaultPort(builder.getDefaultPort())
             .setProxyDetector(proxyDetector)
             .setSynchronizationContext(syncContext)
+            .setScheduledExecutorService(scheduledExecutor)
             .setServiceConfigParser(
                 new ScParser(
                     retryEnabled,
                     builder.maxRetryAttempts,
                     builder.maxHedgedAttempts,
                     loadBalancerFactory))
-            .setBlockingExecutor(
-                // Avoid creating the blockingExecutor until it is first used
+            .setChannelLogger(channelLogger)
+            .setOffloadExecutor(
+                // Avoid creating the offloadExecutor until it is first used
                 new Executor() {
                   @Override
                   public void execute(Runnable command) {
-                    blockingExecutorHolder.getExecutor().execute(command);
+                    offloadExecutorHolder.getExecutor().execute(command);
                   }
                 })
             .build();
     this.nameResolver = getNameResolver(target, nameResolverFactory, nameResolverArgs);
-    this.timeProvider = checkNotNull(timeProvider, "timeProvider");
-    maxTraceEvents = builder.maxTraceEvents;
-    channelTracer = new ChannelTracer(
-        logId, builder.maxTraceEvents, timeProvider.currentTimeNanos(),
-        "Channel for '" + target + "'");
-    channelLogger = new ChannelLoggerImpl(channelTracer, timeProvider);
-    this.executorPool = checkNotNull(builder.executorPool, "executorPool");
     this.balancerRpcExecutorPool = checkNotNull(balancerRpcExecutorPool, "balancerRpcExecutorPool");
     this.balancerRpcExecutorHolder = new ExecutorHolder(balancerRpcExecutorPool);
-    this.executor = checkNotNull(executorPool.getObject(), "executor");
     this.delayedTransport = new DelayedClientTransport(this.executor, this.syncContext);
     this.delayedTransport.start(delayedTransportListener);
     this.backoffPolicyProvider = backoffPolicyProvider;
-    this.transportFactory =
-        new CallCredentialsApplyingTransportFactory(clientTransportFactory, this.executor);
-    this.scheduledExecutorForBalancer =
-        new ScheduledExecutorForBalancer(transportFactory.getScheduledExecutorService());
-
     serviceConfigInterceptor = new ServiceConfigInterceptor(
         retryEnabled, builder.maxRetryAttempts, builder.maxHedgedAttempts);
     this.defaultServiceConfig = builder.defaultServiceConfig;
@@ -900,7 +901,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       terminatedLatch.countDown();
       executorPool.returnObject(executor);
       balancerRpcExecutorHolder.release();
-      blockingExecutorHolder.release();
+      offloadExecutorHolder.release();
       // Release the transport factory so that it can deallocate any resources.
       transportFactory.close();
     }
@@ -1268,7 +1269,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
     @Override
     public ScheduledExecutorService getScheduledExecutorService() {
-      return scheduledExecutorForBalancer;
+      return scheduledExecutor;
     }
 
     @Override
@@ -1735,10 +1736,10 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
   }
 
-  private static final class ScheduledExecutorForBalancer implements ScheduledExecutorService {
+  private static final class RestrictedScheduledExecutor implements ScheduledExecutorService {
     final ScheduledExecutorService delegate;
 
-    private ScheduledExecutorForBalancer(ScheduledExecutorService delegate) {
+    private RestrictedScheduledExecutor(ScheduledExecutorService delegate) {
       this.delegate = checkNotNull(delegate, "delegate");
     }
 
@@ -1857,7 +1858,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     public ConfigOrError parseServiceConfig(Map<String, ?> rawServiceConfig) {
       try {
         Object loadBalancingPolicySelection;

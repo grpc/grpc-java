@@ -22,18 +22,14 @@ dependencies {
     }
 
     testCompile project(':grpc-core')
-    testProtobuf libraries.protobuf
 
     signature "org.codehaus.mojo.signature:java17:1.0@signature"
     signature "net.sf.androidscents.signature:android-api-level-14:4.0_r4@signature"
 }
 
 compileTestJava {
-    // Protobuf-generated Lite produces quite a few warnings.
     options.compilerArgs += [
-        "-Xlint:-rawtypes",
-        "-Xlint:-unchecked",
-        "-Xlint:-fallthrough"
+        "-Xlint:-cast"
     ]
     options.errorprone.excludedPaths = ".*/build/generated/source/proto/.*"
 }
@@ -46,19 +42,11 @@ protobuf {
             artifact = "com.google.protobuf:protoc:${protocVersion}"
         }
     }
-    plugins {
-        javalite {
-            if (project.hasProperty('protoc-gen-javalite')) {
-                path = project['protoc-gen-javalite']
-            } else {
-                artifact = libraries.protoc_lite
-            }
-        }
-    }
     generateProtoTasks {
         ofSourceSet('test')*.each { task ->
-            task.builtins { remove java }
-            task.plugins { javalite {} }
+            task.builtins {
+                java { option 'lite' }
+            }
         }
     }
 }

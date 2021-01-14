@@ -20,6 +20,7 @@ import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
@@ -44,16 +45,19 @@ final class CertificateUtils {
    *
    * @param file a {@link File} containing the cert data
    */
-  static synchronized X509Certificate[] toX509Certificates(File file)
+  static X509Certificate[] toX509Certificates(File file) throws CertificateException, IOException {
+    FileInputStream fis = new FileInputStream(file);
+    return toX509Certificates(new BufferedInputStream(fis));
+  }
+
+  static synchronized X509Certificate[] toX509Certificates(InputStream inputStream)
       throws CertificateException, IOException {
     initInstance();
-    FileInputStream fis = new FileInputStream(file);
-    BufferedInputStream bis = new BufferedInputStream(fis);
     try {
-      Collection<? extends Certificate> certs = factory.generateCertificates(bis);
+      Collection<? extends Certificate> certs = factory.generateCertificates(inputStream);
       return certs.toArray(new X509Certificate[0]);
     } finally {
-      bis.close();
+      inputStream.close();
     }
   }
 

@@ -82,7 +82,7 @@ public abstract class CallCredentials {
   }
 
   /**
-   * The request-related information passed to {@code CallCredentials2.applyRequestMetadata()}.
+   * The request-related information passed to {@code CallCredentials.applyRequestMetadata()}.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1914")
   public abstract static class RequestInfo {

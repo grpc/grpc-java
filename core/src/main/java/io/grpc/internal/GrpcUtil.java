@@ -195,7 +195,7 @@ public final class GrpcUtil {
 
   public static final Splitter ACCEPT_ENCODING_SPLITTER = Splitter.on(',').trimResults();
 
-  private static final String IMPLEMENTATION_VERSION = "1.25.0-SNAPSHOT"; // CURRENT_GRPC_VERSION
+  private static final String IMPLEMENTATION_VERSION = "1.26.0-SNAPSHOT"; // CURRENT_GRPC_VERSION
 
   /**
    * The default timeout in nanos for a keepalive ping request.
@@ -441,6 +441,13 @@ public final class GrpcUtil {
     builder.append('/');
     builder.append(IMPLEMENTATION_VERSION);
     return builder.toString();
+  }
+
+  /**
+   * Returns the build version of gRPC.
+   */
+  public static String getGrpcBuildVersion() {
+    return "gRPC Java " + IMPLEMENTATION_VERSION;
   }
 
   /**

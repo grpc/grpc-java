@@ -17,7 +17,7 @@ subprojects {
     apply plugin: "net.ltgt.errorprone"
 
     group = "io.grpc"
-    version = "1.25.0-SNAPSHOT" // CURRENT_GRPC_VERSION
+    version = "1.26.0-SNAPSHOT" // CURRENT_GRPC_VERSION
 
     repositories {
         maven { // The google mirror is less flaky than mavenCentral()
@@ -46,10 +46,10 @@ subprojects {
 
         nettyVersion = '4.1.42.Final'
         guavaVersion = '28.1-android'
-        googleauthVersion = '0.17.1'
-        protobufVersion = '3.10.0'
+        googleauthVersion = '0.18.0'
+        protobufVersion = '3.11.0'
         protocVersion = protobufVersion
-        opencensusVersion = '0.21.0'
+        opencensusVersion = '0.24.0'
 
         configureProtoCompilation = {
             String generatedSourcePath = "${projectDir}/src/generated"
@@ -105,11 +105,6 @@ subprojects {
             }
 
             tasks.withType(JavaCompile) {
-                // Protobuf-generated code produces some warnings.
-                // https://github.com/google/protobuf/issues/2718
-                it.options.compilerArgs += [
-                    "-Xlint:-cast",
-                ]
                 it.options.errorprone.excludedPaths = ".*/src/generated/[^/]+/java/.*" +
                         "|.*/build/generated/source/proto/[^/]+/java/.*"
             }
@@ -119,7 +114,7 @@ subprojects {
             android_annotations: "com.google.android:annotations:4.1.1.4",
             animalsniffer_annotations: "org.codehaus.mojo:animal-sniffer-annotations:1.17",
             errorprone: "com.google.errorprone:error_prone_annotations:2.3.3",
-            gson: "com.google.code.gson:gson:2.8.5",
+            gson: "com.google.code.gson:gson:2.8.6",
             guava: "com.google.guava:guava:${guavaVersion}",
             hpack: 'com.twitter:hpack:0.10.1',
             javax_annotation: 'javax.annotation:javax.annotation-api:1.2',
@@ -137,8 +132,7 @@ subprojects {
             perfmark: 'io.perfmark:perfmark-api:0.19.0',
             pgv: 'io.envoyproxy.protoc-gen-validate:pgv-java-stub:0.2.0',
             protobuf: "com.google.protobuf:protobuf-java:${protobufVersion}",
-            protobuf_lite: "com.google.protobuf:protobuf-lite:3.0.1",
-            protoc_lite: "com.google.protobuf:protoc-gen-javalite:3.0.0",
+            protobuf_lite: "com.google.protobuf:protobuf-javalite:${protobufVersion}",
             protobuf_util: "com.google.protobuf:protobuf-java-util:${protobufVersion}",
             lang: "org.apache.commons:commons-lang3:3.5",
 
@@ -157,7 +151,7 @@ subprojects {
 
             // Test dependencies.
             junit: 'junit:junit:4.12',
-            mockito: 'org.mockito:mockito-core:2.25.1',
+            mockito: 'org.mockito:mockito-core:2.28.2',
             truth: 'com.google.truth:truth:1.0',
             guava_testlib: "com.google.guava:guava-testlib:${guavaVersion}",
 

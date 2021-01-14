@@ -21,6 +21,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 
+import io.grpc.ChannelLogger;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.Factory;
 import io.grpc.NameResolver.ServiceConfigParser;
@@ -40,6 +41,7 @@ public class ManagedChannelImplGetNameResolverTest {
       .setProxyDetector(mock(ProxyDetector.class))
       .setSynchronizationContext(new SynchronizationContext(mock(UncaughtExceptionHandler.class)))
       .setServiceConfigParser(mock(ServiceConfigParser.class))
+      .setChannelLogger(mock(ChannelLogger.class))
       .build();
 
   @Test

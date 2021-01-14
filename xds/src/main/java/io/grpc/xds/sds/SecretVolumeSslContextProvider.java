@@ -37,36 +37,31 @@ import java.io.IOException;
 import java.security.cert.CertStoreException;
 import java.security.cert.CertificateException;
 import java.util.concurrent.Executor;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
  * An SslContext provider that uses file-based secrets (secret volume). Used for both server and
  * client SslContexts
  */
-final class SslContextSecretVolumeSecretProvider implements SecretProvider<SslContext> {
+final class SecretVolumeSslContextProvider<K> extends SslContextProvider<K> {
 
-  private static final Logger logger =
-      Logger.getLogger(SslContextSecretVolumeSecretProvider.class.getName());
-
-  private final boolean server;
   @Nullable private final String privateKey;
   @Nullable private final String privateKeyPassword;
   @Nullable private final String certificateChain;
   @Nullable private final CertificateValidationContext certContext;
 
-  private SslContextSecretVolumeSecretProvider(
+  private SecretVolumeSslContextProvider(
       @Nullable String privateKey,
       @Nullable String privateKeyPassword,
       @Nullable String certificateChain,
       @Nullable CertificateValidationContext certContext,
-      boolean server) {
+      boolean server,
+      K source) {
+    super(source, server);
     this.privateKey = privateKey;
     this.privateKeyPassword = privateKeyPassword;
     this.certificateChain = certificateChain;
     this.certContext = certContext;
-    this.server = server;
   }
 
   @VisibleForTesting
@@ -106,7 +101,7 @@ final class SslContextSecretVolumeSecretProvider implements SecretProvider<SslCo
     return tlsCertificate;
   }
 
-  static SslContextSecretVolumeSecretProvider getProviderForServer(
+  static SecretVolumeSslContextProvider<DownstreamTlsContext> getProviderForServer(
       DownstreamTlsContext downstreamTlsContext) {
     checkNotNull(downstreamTlsContext, "downstreamTlsContext");
     CommonTlsContext commonTlsContext = downstreamTlsContext.getCommonTlsContext();
@@ -125,15 +120,16 @@ final class SslContextSecretVolumeSecretProvider implements SecretProvider<SslCo
     }
     String privateKeyPassword =
         tlsCertificate.hasPassword() ? tlsCertificate.getPassword().getInlineString() : null;
-    return new SslContextSecretVolumeSecretProvider(
+    return new SecretVolumeSslContextProvider<>(
         tlsCertificate.getPrivateKey().getFilename(),
         privateKeyPassword,
         tlsCertificate.getCertificateChain().getFilename(),
         certificateValidationContext,
-        /* server= */ true);
+        /* server= */ true,
+        downstreamTlsContext);
   }
 
-  static SslContextSecretVolumeSecretProvider getProviderForClient(
+  static SecretVolumeSslContextProvider<UpstreamTlsContext> getProviderForClient(
       UpstreamTlsContext upstreamTlsContext) {
     checkNotNull(upstreamTlsContext, "upstreamTlsContext");
     CommonTlsContext commonTlsContext = upstreamTlsContext.getCommonTlsContext();
@@ -159,12 +155,13 @@ final class SslContextSecretVolumeSecretProvider implements SecretProvider<SslCo
       }
       certificateChain = tlsCertificate.getCertificateChain().getFilename();
     }
-    return new SslContextSecretVolumeSecretProvider(
+    return new SecretVolumeSslContextProvider<>(
         privateKey,
         privateKeyPassword,
         certificateChain,
         certificateValidationContext,
-        /* server= */ false);
+        /* server= */ false,
+        upstreamTlsContext);
   }
 
   private static CertificateValidationContext getCertificateValidationContext(
@@ -181,30 +178,24 @@ final class SslContextSecretVolumeSecretProvider implements SecretProvider<SslCo
   }
 
   @Override
-  public void addCallback(final Callback<SslContext> callback, Executor executor) {
+  public void addCallback(final Callback callback, Executor executor) {
     checkNotNull(callback, "callback");
     checkNotNull(executor, "executor");
-    executor.execute(
-        new Runnable() {
+    // as per the contract we will read the current secrets on disk
+    // this involves I/O which can potentially block the executor
+    performCallback(
+        new SslContextGetter() {
           @Override
-          public void run() {
-            // as per the contract we will read the current secrets on disk
-            // this involves I/O which can potentially block the executor or event loop
-            SslContext sslContext = null;
-            try {
-              sslContext = buildSslContextFromSecrets();
-              try {
-                callback.updateSecret(sslContext);
-              } catch (Throwable t) {
-                logger.log(Level.SEVERE, "Exception from callback.updateSecret", t);
-              }
-            } catch (Throwable e) {
-              logger.log(Level.SEVERE, "Exception from buildSslContextFromSecrets", e);
-              callback.onException(e);
-            }
+          public SslContext get() throws CertificateException, IOException, CertStoreException {
+            return buildSslContextFromSecrets();
           }
-        });
+        },
+        callback,
+        executor);
   }
+
+  @Override
+  public void close() {}
 
   @VisibleForTesting
   SslContext buildSslContextFromSecrets()
