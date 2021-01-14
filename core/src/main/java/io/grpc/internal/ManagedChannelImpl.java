@@ -1391,12 +1391,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
     @Override
     public AbstractSubchannel createSubchannel(CreateSubchannelArgs args) {
       syncContext.throwIfNotInThisSynchronizationContext();
-      return createSubchannelInternal(args);
-    }
-
-    private SubchannelImpl createSubchannelInternal(CreateSubchannelArgs args) {
-      // TODO(ejona): can we be even stricter? Like loadBalancer == null?
-      checkState(!terminated, "Channel is terminated");
+      // No new subchannel should be created after load balancer has been shutdown.
+      checkState(!terminating, "Channel is being terminated");
       return new SubchannelImpl(args, this);
     }
 
@@ -1823,18 +1819,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
     private void internalStart(final SubchannelStateListener listener) {
       checkState(!started, "already started");
       checkState(!shutdown, "already shutdown");
+      checkState(!terminating, "Channel is being terminated");
       started = true;
-      // TODO(zhangkun): possibly remove the volatile of terminating when this whole method is
-      // required to be called from syncContext
-      if (terminating) {
-        syncContext.execute(new Runnable() {
-            @Override
-            public void run() {
-              listener.onSubchannelState(ConnectivityStateInfo.forNonError(SHUTDOWN));
-            }
-          });
-        return;
-      }
       final class ManagedInternalSubchannelCallback extends InternalSubchannel.Callback {
         // All callbacks are run in syncContext
         @Override
