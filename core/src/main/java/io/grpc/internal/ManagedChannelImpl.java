@@ -253,7 +253,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
   // Must only be mutated and read from syncContext
   private boolean shutdownNowed;
   // Must only be mutated from syncContext
-  private volatile boolean terminating;
+  private boolean terminating;
   // Must be mutated from syncContext
   private volatile boolean terminated;
   private final CountDownLatch terminatedLatch = new CountDownLatch(1);
@@ -1399,9 +1399,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
     @Override
     public void updateBalancingState(
         final ConnectivityState newState, final SubchannelPicker newPicker) {
+      syncContext.throwIfNotInThisSynchronizationContext();
       checkNotNull(newState, "newState");
       checkNotNull(newPicker, "newPicker");
-      logWarningIfNotInSyncContext("updateBalancingState()");
       final class UpdateBalancingState implements Runnable {
         @Override
         public void run() {
@@ -1424,7 +1424,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
     @Override
     public void refreshNameResolution() {
-      logWarningIfNotInSyncContext("refreshNameResolution()");
+      syncContext.throwIfNotInThisSynchronizationContext();
       final class LoadBalancerRefreshNameResolution implements Runnable {
         @Override
         public void run() {
@@ -1814,9 +1814,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
       subchannelLogger = new ChannelLoggerImpl(subchannelTracer, timeProvider);
     }
 
-    // This can be called either in or outside of syncContext
-    // TODO(zhangkun83): merge it back into start() once the caller createSubchannel() is deleted.
-    private void internalStart(final SubchannelStateListener listener) {
+    @Override
+    public void start(final SubchannelStateListener listener) {
+      syncContext.throwIfNotInThisSynchronizationContext();
       checkState(!started, "already started");
       checkState(!shutdown, "already shutdown");
       checkState(!terminating, "Channel is being terminated");
@@ -1872,21 +1872,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
           .build());
 
       this.subchannel = internalSubchannel;
-      // TODO(zhangkun83): no need to schedule on syncContext when this whole method is required
-      // to be called from syncContext
-      syncContext.execute(new Runnable() {
-          @Override
-          public void run() {
-            channelz.addSubchannel(internalSubchannel);
-            subchannels.add(internalSubchannel);
-          }
-        });
-    }
-
-    @Override
-    public void start(SubchannelStateListener listener) {
-      syncContext.throwIfNotInThisSynchronizationContext();
-      internalStart(listener);
+      channelz.addSubchannel(internalSubchannel);
+      subchannels.add(internalSubchannel);
     }
 
     @Override
@@ -1897,18 +1884,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
     @Override
     public void shutdown() {
-      // TODO(zhangkun83): replace shutdown() with internalShutdown() to turn the warning into an
-      // exception.
-      logWarningIfNotInSyncContext("Subchannel.shutdown()");
-      syncContext.execute(new Runnable() {
-          @Override
-          public void run() {
-            internalShutdown();
-          }
-        });
-    }
-
-    private void internalShutdown() {
       syncContext.throwIfNotInThisSynchronizationContext();
       if (subchannel == null) {
         // start() was not successful
@@ -1957,14 +1932,14 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
     @Override
     public void requestConnection() {
-      logWarningIfNotInSyncContext("Subchannel.requestConnection()");
+      syncContext.throwIfNotInThisSynchronizationContext();
       checkState(started, "not started");
       subchannel.obtainActiveTransport();
     }
 
     @Override
     public List<EquivalentAddressGroup> getAllAddresses() {
-      logWarningIfNotInSyncContext("Subchannel.getAllAddresses()");
+      syncContext.throwIfNotInThisSynchronizationContext();
       checkState(started, "not started");
       return subchannel.getAddressGroups();
     }
@@ -2235,17 +2210,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
         return ConfigOrError.fromError(
             Status.UNKNOWN.withDescription("failed to parse service config").withCause(e));
       }
-    }
-  }
-
-  private void logWarningIfNotInSyncContext(String method) {
-    try {
-      syncContext.throwIfNotInThisSynchronizationContext();
-    } catch (IllegalStateException e) {
-      logger.log(Level.WARNING,
-          method + " should be called from SynchronizationContext. "
-          + "This warning will become an exception in a future release. "
-          + "See https://github.com/grpc/grpc-java/issues/5015 for more details", e);
     }
   }
 
