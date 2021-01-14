@@ -29,9 +29,11 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.SecurityLevel;
 import io.grpc.Status;
+import io.grpc.internal.MetadataApplierImpl.MetadataApplierListener;
 import java.net.SocketAddress;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.atomic.AtomicLong;
 
 final class CallCredentialsApplyingTransportFactory implements ClientTransportFactory {
   private final ClientTransportFactory delegate;
@@ -66,6 +68,8 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
   private class CallCredentialsApplyingTransport extends ForwardingConnectionClientTransport {
     private final ConnectionClientTransport delegate;
     private final String authority;
+    private final AtomicLong pendingApplier = new AtomicLong(0);
+    private volatile CallCredentialsApplyingTransportListener listener;
 
     CallCredentialsApplyingTransport(ConnectionClientTransport delegate, String authority) {
       this.delegate = checkNotNull(delegate, "delegate");
@@ -81,6 +85,7 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
     @SuppressWarnings("deprecation")
     public ClientStream newStream(
         final MethodDescriptor<?, ?> method, Metadata headers, final CallOptions callOptions) {
+      checkNotNull(listener, "listener");
       CallCredentials creds = callOptions.getCredentials();
       if (creds == null) {
         creds = channelCallCredentials;
@@ -88,8 +93,17 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
         creds = new CompositeCallCredentials(channelCallCredentials, creds);
       }
       if (creds != null) {
+        MetadataApplierListener applierListener = new MetadataApplierListener() {
+          @Override
+          public void onComplete() {
+            if (pendingApplier.decrementAndGet() == 0) {
+              listener.maybeTerminated();
+            }
+          }
+        };
         MetadataApplierImpl applier = new MetadataApplierImpl(
-            delegate, method, headers, callOptions);
+            delegate, method, headers, callOptions, applierListener);
+        pendingApplier.incrementAndGet();
         RequestInfo requestInfo = new RequestInfo() {
             @Override
             public MethodDescriptor<?, ?> getMethodDescriptor() {
@@ -124,6 +138,51 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
         return applier.returnStream();
       } else {
         return delegate.newStream(method, headers, callOptions);
+      }
+    }
+
+    @Override
+    public Runnable start(Listener listener) {
+      this.listener = new CallCredentialsApplyingTransportListener(listener);
+      return super.start(this.listener);
+    }
+    // TODO(zivy@): cancel pending appliers when shutdownNow.
+
+    private class CallCredentialsApplyingTransportListener implements Listener {
+      private final Listener delegateListener;
+      private volatile boolean savedTransportTerminated;
+
+      public CallCredentialsApplyingTransportListener(Listener listener) {
+        this.delegateListener = listener;
+      }
+
+      @Override
+      public void transportShutdown(Status s) {
+        delegateListener.transportShutdown(s);
+      }
+
+      @Override
+      public void transportTerminated() {
+        savedTransportTerminated = true;
+        maybeTerminated();
+      }
+
+      @Override
+      public void transportReady() {
+        delegateListener.transportReady();
+      }
+
+      @Override
+      public void transportInUse(boolean inUse) {
+        delegateListener.transportInUse(inUse);
+      }
+
+      public void maybeTerminated() {
+        synchronized (this) {
+          if (pendingApplier.get() == 0 && savedTransportTerminated) {
+            delegateListener.transportTerminated();
+          }
+        }
       }
     }
   }

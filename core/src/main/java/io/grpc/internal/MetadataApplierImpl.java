@@ -35,6 +35,7 @@ final class MetadataApplierImpl extends MetadataApplier {
   private final Metadata origHeaders;
   private final CallOptions callOptions;
   private final Context ctx;
+  private final MetadataApplierListener listener;
 
   private final Object lock = new Object();
 
@@ -51,12 +52,13 @@ final class MetadataApplierImpl extends MetadataApplier {
 
   MetadataApplierImpl(
       ClientTransport transport, MethodDescriptor<?, ?> method, Metadata origHeaders,
-      CallOptions callOptions) {
+      CallOptions callOptions, MetadataApplierListener listener) {
     this.transport = transport;
     this.method = method;
     this.origHeaders = origHeaders;
     this.callOptions = callOptions;
     this.ctx = Context.current();
+    this.listener = listener;
   }
 
   @Override
@@ -84,18 +86,24 @@ final class MetadataApplierImpl extends MetadataApplier {
   private void finalizeWith(ClientStream stream) {
     checkState(!finalized, "already finalized");
     finalized = true;
+    boolean directStream = false;
     synchronized (lock) {
       if (returnedStream == null) {
         // Fast path: returnStream() hasn't been called, the call will use the
         // real stream directly.
         returnedStream = stream;
-        return;
+        directStream = true;
       }
+    }
+    if (directStream) {
+      listener.onComplete();
+      return;
     }
     // returnStream() has been called before me, thus delayedStream must have been
     // created.
     checkState(delayedStream != null, "delayedStream is null");
     delayedStream.setStream(stream);
+    listener.onComplete();
   }
 
   /**
@@ -111,5 +119,12 @@ final class MetadataApplierImpl extends MetadataApplier {
         return returnedStream;
       }
     }
+  }
+
+  public interface MetadataApplierListener {
+    /**
+     * Notify that the metadata has been successfully applied, or failed.
+     * */
+    void onComplete();
   }
 }
