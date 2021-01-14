@@ -46,8 +46,8 @@ public class AutoWindowSizingOnTest extends AbstractInteropTest {
     NettyChannelBuilder builder = NettyChannelBuilder.forAddress(getListenAddress())
         .negotiationType(NegotiationType.PLAINTEXT)
         .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE);
-    io.grpc.internal.TestingAccessor.setStatsImplementation(
-        builder, createClientCensusStatsModule());
-    return builder.build();
+    // Disable the default census stats interceptor, use testing interceptor instead.
+    io.grpc.internal.TestingAccessor.setStatsEnabled(builder, false);
+    return builder.intercept(createCensusStatsClientInterceptor()).build();
   }
 }

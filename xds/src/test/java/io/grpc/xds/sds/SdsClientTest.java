@@ -43,6 +43,7 @@ import io.envoyproxy.envoy.api.v2.core.GrpcService;
 import io.envoyproxy.envoy.api.v2.core.GrpcService.GoogleGrpc;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.grpc.Status;
+import io.grpc.Status.Code;
 import io.grpc.internal.testing.TestUtils;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -64,11 +65,11 @@ import org.mockito.stubbing.Answer;
 @RunWith(JUnit4.class)
 public class SdsClientTest {
 
-  private static final String SERVER_0_PEM_FILE = "server0.pem";
-  private static final String SERVER_0_KEY_FILE = "server0.key";
-  private static final String SERVER_1_PEM_FILE = "server1.pem";
-  private static final String SERVER_1_KEY_FILE = "server1.key";
-  private static final String CA_PEM_FILE = "ca.pem";
+  static final String SERVER_0_PEM_FILE = "server0.pem";
+  static final String SERVER_0_KEY_FILE = "server0.key";
+  static final String SERVER_1_PEM_FILE = "server1.pem";
+  static final String SERVER_1_KEY_FILE = "server1.key";
+  static final String CA_PEM_FILE = "ca.pem";
 
   private TestSdsServer.ServerMock serverMock;
   private TestSdsServer server;
@@ -108,7 +109,7 @@ public class SdsClientTest {
   public void setUp() throws IOException {
     serverMock = mock(TestSdsServer.ServerMock.class);
     server = new TestSdsServer(serverMock);
-    server.startServer("inproc", false);
+    server.startServer("inproc", /* useUds= */ false, /* useInterceptor= */ false);
     ConfigSource configSource = buildConfigSource("inproc", "inproc");
     sdsSecretConfig =
         SdsSecretConfig.newBuilder().setSdsConfig(configSource).setName("name1").build();
@@ -261,7 +262,7 @@ public class SdsClientTest {
     assertThat(server.lastNack.getVersionInfo()).isEmpty();
     assertThat(server.lastNack.getResponseNonce()).isEmpty();
     com.google.rpc.Status errorDetail = server.lastNack.getErrorDetail();
-    assertThat(errorDetail.getCode()).isEqualTo(Status.Code.INTERNAL.value());
+    assertThat(errorDetail.getCode()).isEqualTo(Code.UNKNOWN.value());
     assertThat(errorDetail.getMessage()).isEqualTo("Secret not updated");
   }
 

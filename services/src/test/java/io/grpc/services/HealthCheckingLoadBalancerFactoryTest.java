@@ -1094,6 +1094,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     assertThat(healthImpls[0].calls).hasSize(1);
   }
 
+  @SuppressWarnings("deprecation")  // TODO(creamsoup) migrate to parsed object
   private Attributes attrsWithHealthCheckService(@Nullable String serviceName) {
     HashMap<String, Object> serviceConfig = new HashMap<>();
     HashMap<String, Object> hcConfig = new HashMap<>();

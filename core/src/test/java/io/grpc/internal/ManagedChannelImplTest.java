@@ -152,6 +152,7 @@ import org.mockito.junit.MockitoRule;
 import org.mockito.stubbing.Answer;
 
 /** Unit tests for {@link ManagedChannelImpl}. */
+@Deprecated // to be migrated to ManagedChannelImplTest2
 @RunWith(JUnit4.class)
 public class ManagedChannelImplTest {
   private static final int DEFAULT_PORT = 447;
@@ -3416,7 +3417,7 @@ public class ManagedChannelImplTest {
       public void shutdown() {}
     }
 
-    final class FakeNameResolverFactory extends NameResolver.Factory {
+    final class FakeNameResolverFactory2 extends NameResolver.Factory {
       FakeNameResolver resolver;
 
       @Nullable
@@ -3431,7 +3432,7 @@ public class ManagedChannelImplTest {
       }
     }
 
-    FakeNameResolverFactory factory = new FakeNameResolverFactory();
+    FakeNameResolverFactory2 factory = new FakeNameResolverFactory2();
     final class CustomBuilder extends AbstractManagedChannelImplBuilder<CustomBuilder> {
 
       CustomBuilder() {
@@ -3477,7 +3478,7 @@ public class ManagedChannelImplTest {
         CallOptions.DEFAULT.withDeadlineAfter(5, TimeUnit.SECONDS));
     ListenableFuture<Void> future2 = ClientCalls.futureUnaryCall(call2, null);
 
-    timer.forwardTime(1234, TimeUnit.SECONDS);
+    timer.forwardTime(5, TimeUnit.SECONDS);
 
     executor.runDueTasks();
     try {
@@ -3488,6 +3489,9 @@ public class ManagedChannelImplTest {
     }
 
     mychannel.shutdownNow();
+    // Now for Deadline_exceeded, stream shutdown is delayed, calling shutdownNow() on a open stream
+    // will add a task to executor. Cleaning that task here.
+    executor.runDueTasks();
   }
 
   @Deprecated

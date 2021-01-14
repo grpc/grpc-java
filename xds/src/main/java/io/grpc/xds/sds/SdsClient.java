@@ -26,7 +26,6 @@ import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
-import com.google.rpc.Code;
 import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
 import io.envoyproxy.envoy.api.v2.auth.SdsSecretConfig;
@@ -39,6 +38,7 @@ import io.envoyproxy.envoy.api.v2.core.GrpcService.GoogleGrpc;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.service.discovery.v2.SecretDiscoveryServiceGrpc;
 import io.envoyproxy.envoy.service.discovery.v2.SecretDiscoveryServiceGrpc.SecretDiscoveryServiceStub;
+import io.grpc.CallCredentials;
 import io.grpc.Internal;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
@@ -78,6 +78,7 @@ final class SdsClient {
   private final SdsSecretConfig sdsSecretConfig;
   private final Node clientNode;
   private final Executor watcherExecutor;
+  private final CallCredentials callCredentials;
   private EventLoopGroup eventLoopGroup;
   private ManagedChannel channel;
   private SecretDiscoveryServiceStub secretDiscoveryServiceStub;
@@ -101,7 +102,12 @@ final class SdsClient {
         ManagedChannel channel =
             InProcessChannelBuilder.forName(targetUri).executor(channelExecutor).build();
         return new SdsClient(
-            sdsSecretConfig, node, watcherExecutor, channel, /* eventLoopGroup= */ null);
+            sdsSecretConfig,
+            node,
+            watcherExecutor,
+            channel,
+            /* eventLoopGroup= */ null,
+            channelInfo.callCredentials);
       }
       NettyChannelBuilder builder;
       EventLoopGroup eventLoopGroup = null;
@@ -120,7 +126,13 @@ final class SdsClient {
         builder = builder.executor(channelExecutor);
       }
       ManagedChannel channel = builder.build();
-      return new SdsClient(sdsSecretConfig, node, watcherExecutor, channel, eventLoopGroup);
+      return new SdsClient(
+          sdsSecretConfig,
+          node,
+          watcherExecutor,
+          channel,
+          eventLoopGroup,
+          channelInfo.callCredentials);
     }
 
     @VisibleForTesting
@@ -140,12 +152,7 @@ final class SdsClient {
           grpcService.hasGoogleGrpc() && !grpcService.hasEnvoyGrpc(),
           "only GoogleGrpc expected in GrpcService");
       GoogleGrpc googleGrpc = grpcService.getGoogleGrpc();
-      // for now don't support any credentials
-      checkArgument(
-          !googleGrpc.hasChannelCredentials()
-              && googleGrpc.getCallCredentialsCount() == 0
-              && Strings.isNullOrEmpty(googleGrpc.getCredentialsFactoryName()),
-          "No credentials supported in GoogleGrpc");
+      CallCredentials callCredentials = getVerifiedCredentials(googleGrpc);
       String targetUri = googleGrpc.getTargetUri();
       String channelType = null;
       if (googleGrpc.hasConfig()) {
@@ -154,7 +161,37 @@ final class SdsClient {
         channelType = value.getStringValue();
       }
       checkArgument(!Strings.isNullOrEmpty(targetUri), "targetUri in GoogleGrpc is empty!");
-      return new ChannelInfo(targetUri, channelType);
+      return new ChannelInfo(targetUri, channelType, callCredentials);
+    }
+
+    private static CallCredentials getVerifiedCredentials(GoogleGrpc googleGrpc) {
+      final String credentialsFactoryName = googleGrpc.getCredentialsFactoryName();
+      if (credentialsFactoryName.isEmpty()) {
+        // without factory name, no creds expected
+        checkArgument(
+            !googleGrpc.hasChannelCredentials() && googleGrpc.getCallCredentialsCount() == 0,
+            "No credentials supported in GoogleGrpc");
+        logger.warning("No CallCredentials specified.");
+        return null;
+      }
+      checkArgument(
+          credentialsFactoryName.equals(FileBasedPluginCredential.PLUGIN_NAME),
+          "factory name should be %s", FileBasedPluginCredential.PLUGIN_NAME);
+      if (googleGrpc.hasChannelCredentials()) {
+        checkArgument(
+            googleGrpc.getChannelCredentials().hasLocalCredentials(),
+            "only GoogleLocalCredentials supported");
+      }
+      if (googleGrpc.getCallCredentialsCount() > 0) {
+        checkArgument(
+            googleGrpc.getCallCredentialsCount() == 1,
+            "Exactly one CallCredential expected in GoogleGrpc");
+        GoogleGrpc.CallCredentials callCreds = googleGrpc.getCallCredentials(0);
+        checkArgument(callCreds.hasFromPlugin(), "only plugin credential supported");
+        return new FileBasedPluginCredential(callCreds.getFromPlugin());
+      }
+      logger.warning("No CallCredentials specified.");
+      return null;
     }
   }
 
@@ -162,10 +199,12 @@ final class SdsClient {
   static final class ChannelInfo {
     @VisibleForTesting final String targetUri;
     @VisibleForTesting final String channelType;
+    @VisibleForTesting final CallCredentials callCredentials;
 
-    private ChannelInfo(String targetUri, String channelType) {
+    private ChannelInfo(String targetUri, String channelType, CallCredentials callCredentials) {
       this.targetUri = targetUri;
       this.channelType = channelType;
+      this.callCredentials = callCredentials;
     }
   }
 
@@ -174,7 +213,8 @@ final class SdsClient {
       Node node,
       Executor watcherExecutor,
       ManagedChannel channel,
-      EventLoopGroup eventLoopGroup) {
+      EventLoopGroup eventLoopGroup,
+      CallCredentials callCredentials) {
     checkNotNull(sdsSecretConfig, "sdsSecretConfig");
     checkNotNull(node, "node");
     this.sdsSecretConfig = sdsSecretConfig;
@@ -183,6 +223,7 @@ final class SdsClient {
     this.eventLoopGroup = eventLoopGroup;
     checkNotNull(channel, "channel");
     this.channel = channel;
+    this.callCredentials = callCredentials;
   }
 
   /**
@@ -192,8 +233,13 @@ final class SdsClient {
   void start() {
     if (requestObserver == null) {
       secretDiscoveryServiceStub = SecretDiscoveryServiceGrpc.newStub(channel);
+      if (callCredentials != null) {
+        secretDiscoveryServiceStub =
+            secretDiscoveryServiceStub.withCallCredentials(callCredentials);
+      }
       responseObserver = new ResponseObserver();
       requestObserver = secretDiscoveryServiceStub.streamSecrets(responseObserver);
+      logger.log(Level.FINEST, "Stream created for {0}", sdsSecretConfig);
     }
   }
 
@@ -215,6 +261,7 @@ final class SdsClient {
 
     @Override
     public void onNext(DiscoveryResponse discoveryResponse) {
+      logger.log(Level.FINEST, "response={0}", discoveryResponse);
       processDiscoveryResponse(discoveryResponse);
     }
 
@@ -226,6 +273,7 @@ final class SdsClient {
     @Override
     public void onCompleted() {
       // TODO(sanjaypujare): add retry logic once client implementation is final
+      logger.warning("Stream unexpectedly completed.");
     }
   }
 
@@ -234,8 +282,10 @@ final class SdsClient {
         new Runnable() {
           @Override
           public void run() {
-            if (!processSecretsFromDiscoveryResponse(response)) {
-              sendNack(Code.INTERNAL_VALUE, "Secret not updated");
+            try {
+              processSecretsFromDiscoveryResponse(response);
+            } catch (Throwable exceptionSeen) {
+              sendNack(exceptionSeen);
               return;
             }
             lastResponse = response;
@@ -245,7 +295,7 @@ final class SdsClient {
         });
   }
 
-  private void sendNack(int errorCode, String errorMessage) {
+  private void sendNack(Throwable exceptionSeen) {
     String nonce = "";
     String versionInfo = "";
 
@@ -253,6 +303,7 @@ final class SdsClient {
       nonce = lastResponse.getNonce();
       versionInfo = lastResponse.getVersionInfo();
     }
+    Status grpcStatus = Status.fromThrowable(exceptionSeen);
     DiscoveryRequest.Builder builder =
         DiscoveryRequest.newBuilder()
             .setTypeUrl(SECRET_TYPE_URL)
@@ -261,12 +312,14 @@ final class SdsClient {
             .addResourceNames(sdsSecretConfig.getName())
             .setErrorDetail(
                 com.google.rpc.Status.newBuilder()
-                    .setCode(errorCode)
-                    .setMessage(errorMessage)
+                    .setCode(grpcStatus.getCode().value())
+                    .setMessage(grpcStatus.getDescription() != null ? grpcStatus.getDescription()
+                        : "Secret not updated")
                     .build())
             .setNode(clientNode);
 
     DiscoveryRequest req = builder.build();
+    logger.log(Level.FINEST, "Sending NACK req={0}", req);
     requestObserver.onNext(req);
   }
 
@@ -287,42 +340,26 @@ final class SdsClient {
     }
   }
 
-  private boolean processSecretsFromDiscoveryResponse(DiscoveryResponse response) {
+  private void processSecretsFromDiscoveryResponse(DiscoveryResponse response)
+      throws InvalidProtocolBufferException {
     List<Any> resources = response.getResourcesList();
     checkState(resources.size() == 1, "exactly one resource expected");
-    boolean noException = true;
-    for (Any any : resources) {
-      final String typeUrl = any.getTypeUrl();
-      checkState(SECRET_TYPE_URL.equals(typeUrl), "wrong value for typeUrl %s", typeUrl);
-      Secret secret = null;
-      try {
-        secret = Secret.parseFrom(any.getValue());
-        if (!processSecret(secret)) {
-          noException = false;
-        }
-      } catch (InvalidProtocolBufferException e) {
-        logger.log(Level.SEVERE, "exception from parseFrom", e);
-      }
-    }
-    return noException;
+    Any any = resources.get(0);
+    final String typeUrl = any.getTypeUrl();
+    checkState(SECRET_TYPE_URL.equals(typeUrl), "wrong value for typeUrl %s", typeUrl);
+    Secret secret = Secret.parseFrom(any.getValue());
+    processSecret(secret);
   }
 
-  private boolean processSecret(Secret secret) {
+  private void processSecret(Secret secret) {
     checkState(
         sdsSecretConfig.getName().equals(secret.getName()),
         "expected secret name %s",
         sdsSecretConfig.getName());
-    boolean noException = true;
     final SecretWatcher localCopy = watcher;
     if (localCopy != null) {
-      try {
-        localCopy.onSecretChanged(secret);
-      } catch (Throwable throwable) {
-        noException = false;
-        logger.log(Level.SEVERE, "exception from onSecretChanged", throwable);
-      }
+      localCopy.onSecretChanged(secret);
     }
-    return noException;
   }
 
   /** Registers a secret watcher for this client's SdsSecretConfig. */
@@ -337,7 +374,11 @@ final class SdsClient {
           new Runnable() {
             @Override
             public void run() {
-              processSecretsFromDiscoveryResponse(lastResponse);
+              try {
+                processSecretsFromDiscoveryResponse(lastResponse);
+              } catch (Throwable throwable) {
+                logger.log(Level.SEVERE, "from watcherExecutor.execute", throwable);
+              }
             }
           });
     }
@@ -386,10 +427,12 @@ final class SdsClient {
   private void sendDiscoveryRequestOnStream() {
     String nonce = "";
     String versionInfo = "";
+    String requestType = "Sending initial req={0}";
 
     if (lastResponse != null) {
       nonce = lastResponse.getNonce();
       versionInfo = lastResponse.getVersionInfo();
+      requestType = "Sending ACK req={0}";
     }
     DiscoveryRequest.Builder builder =
         DiscoveryRequest.newBuilder()
@@ -400,6 +443,7 @@ final class SdsClient {
             .setNode(clientNode);
 
     DiscoveryRequest req = builder.build();
+    logger.log(Level.FINEST, requestType, req);
     requestObserver.onNext(req);
   }
 }

@@ -47,6 +47,7 @@ import org.mockito.MockitoAnnotations;
 /**
  * Unit tests for {@link ServiceConfigInterceptor}.
  */
+@Deprecated  // migrate to ServiceConfigInterceptor(Test)?2
 @RunWith(JUnit4.class)
 public class ServiceConfigInterceptorTest {
 

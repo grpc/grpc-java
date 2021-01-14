@@ -30,6 +30,8 @@ import java.util.List;
 import java.util.Locale;
 import javax.annotation.Nullable;
 import javax.net.ssl.SSLEngine;
+import javax.net.ssl.SSLParameters;
+import javax.net.ssl.SSLSocket;
 import javax.net.ssl.X509ExtendedTrustManager;
 import javax.net.ssl.X509TrustManager;
 
@@ -256,6 +258,14 @@ final class SdsX509TrustManager extends X509ExtendedTrustManager implements X509
   @Override
   public void checkServerTrusted(X509Certificate[] chain, String authType, Socket socket)
       throws CertificateException {
+    if (socket instanceof SSLSocket) {
+      SSLSocket sslSocket = (SSLSocket) socket;
+      SSLParameters sslParams = sslSocket.getSSLParameters();
+      if (sslParams != null) {
+        sslParams.setEndpointIdentificationAlgorithm(null);
+        sslSocket.setSSLParameters(sslParams);
+      }
+    }
     delegate.checkServerTrusted(chain, authType, socket);
     verifySubjectAltNameInChain(chain);
   }
@@ -263,6 +273,11 @@ final class SdsX509TrustManager extends X509ExtendedTrustManager implements X509
   @Override
   public void checkServerTrusted(X509Certificate[] chain, String authType, SSLEngine sslEngine)
       throws CertificateException {
+    SSLParameters sslParams = sslEngine.getSSLParameters();
+    if (sslParams != null) {
+      sslParams.setEndpointIdentificationAlgorithm(null);
+      sslEngine.setSSLParameters(sslParams);
+    }
     delegate.checkServerTrusted(chain, authType, sslEngine);
     verifySubjectAltNameInChain(chain);
   }

@@ -29,8 +29,9 @@ import io.grpc.netty.InternalProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.netty.NettyChannelBuilder;
+import io.grpc.xds.XdsAttributes;
 import io.grpc.xds.sds.SslContextProvider;
-import io.grpc.xds.sds.TlsContextManager;
+import io.grpc.xds.sds.TlsContextManagerImpl;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerAdapter;
 import io.netty.channel.ChannelHandlerContext;
@@ -39,6 +40,8 @@ import io.netty.handler.ssl.SslContext;
 import io.netty.util.AsciiString;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
@@ -47,6 +50,8 @@ import javax.annotation.Nullable;
  */
 @Internal
 public final class SdsProtocolNegotiators {
+
+  private static final Logger logger = Logger.getLogger(SdsProtocolNegotiators.class.getName());
 
   private static final AsciiString SCHEME = AsciiString.of("https");
 
@@ -109,7 +114,7 @@ public final class SdsProtocolNegotiators {
   @VisibleForTesting
   static final class ClientSdsProtocolNegotiator implements ProtocolNegotiator {
 
-    // TODO (sanjaypujare) integrate with xDS client to get upstreamTlsContext from CDS
+    // TODO (sanjaypujare) remove once we get this from CDS & don't need for testing
     UpstreamTlsContext upstreamTlsContext;
 
     ClientSdsProtocolNegotiator(UpstreamTlsContext upstreamTlsContext) {
@@ -123,12 +128,16 @@ public final class SdsProtocolNegotiators {
 
     @Override
     public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
-      // once CDS is implemented we will retrieve upstreamTlsContext as follows:
-      // grpcHandler.getEagAttributes().get(XdsAttributes.ATTR_UPSTREAM_TLS_CONTEXT);
-      if (isTlsContextEmpty(upstreamTlsContext)) {
+      // check if UpstreamTlsContext was passed via attributes
+      UpstreamTlsContext localUpstreamTlsContext =
+          grpcHandler.getEagAttributes().get(XdsAttributes.ATTR_UPSTREAM_TLS_CONTEXT);
+      if (localUpstreamTlsContext == null) {
+        localUpstreamTlsContext = upstreamTlsContext;
+      }
+      if (isTlsContextEmpty(localUpstreamTlsContext)) {
         return InternalProtocolNegotiators.plaintext().newHandler(grpcHandler);
       }
-      return new ClientSdsHandler(grpcHandler, upstreamTlsContext);
+      return new ClientSdsHandler(grpcHandler, localUpstreamTlsContext);
     }
 
     private static boolean isTlsContextEmpty(UpstreamTlsContext upstreamTlsContext) {
@@ -162,6 +171,12 @@ public final class SdsProtocolNegotiators {
         super.channelReadComplete(ctx);
       }
     }
+
+    @Override
+    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+      logger.log(Level.SEVERE, "exceptionCaught", cause);
+      ctx.fireExceptionCaught(cause);
+    }
   }
 
   @VisibleForTesting
@@ -192,14 +207,19 @@ public final class SdsProtocolNegotiators {
       final BufferReadsHandler bufferReads = new BufferReadsHandler();
       ctx.pipeline().addBefore(ctx.name(), null, bufferReads);
 
-      SslContextProvider<UpstreamTlsContext> sslContextProvider =
-          TlsContextManager.getInstance().findOrCreateClientSslContextProvider(upstreamTlsContext);
+      final SslContextProvider<UpstreamTlsContext> sslContextProvider =
+          TlsContextManagerImpl.getInstance()
+              .findOrCreateClientSslContextProvider(upstreamTlsContext);
 
       sslContextProvider.addCallback(
           new SslContextProvider.Callback() {
 
             @Override
             public void updateSecret(SslContext sslContext) {
+              logger.log(
+                  Level.FINEST,
+                  "ClientSdsHandler.updateSecret authority={0}, ctx.name={1}",
+                  new Object[]{grpcHandler.getAuthority(), ctx.name()});
               ChannelHandler handler =
                   InternalProtocolNegotiators.tls(sslContext).newHandler(grpcHandler);
 
@@ -207,6 +227,8 @@ public final class SdsProtocolNegotiators {
               ctx.pipeline().addAfter(ctx.name(), null, handler);
               fireProtocolNegotiationEvent(ctx);
               ctx.pipeline().remove(bufferReads);
+              TlsContextManagerImpl.getInstance()
+                  .releaseClientSslContextProvider(sslContextProvider);
             }
 
             @Override
@@ -215,6 +237,13 @@ public final class SdsProtocolNegotiators {
             }
           },
           ctx.executor());
+    }
+
+    @Override
+    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause)
+        throws Exception {
+      logger.log(Level.SEVERE, "exceptionCaught", cause);
+      ctx.fireExceptionCaught(cause);
     }
   }
 
@@ -277,8 +306,8 @@ public final class SdsProtocolNegotiators {
       final BufferReadsHandler bufferReads = new BufferReadsHandler();
       ctx.pipeline().addBefore(ctx.name(), null, bufferReads);
 
-      SslContextProvider<DownstreamTlsContext> sslContextProvider =
-          TlsContextManager.getInstance()
+      final SslContextProvider<DownstreamTlsContext> sslContextProvider =
+          TlsContextManagerImpl.getInstance()
               .findOrCreateServerSslContextProvider(downstreamTlsContext);
 
       sslContextProvider.addCallback(
@@ -293,6 +322,8 @@ public final class SdsProtocolNegotiators {
               ctx.pipeline().addAfter(ctx.name(), null, handler);
               fireProtocolNegotiationEvent(ctx);
               ctx.pipeline().remove(bufferReads);
+              TlsContextManagerImpl.getInstance()
+                  .releaseServerSslContextProvider(sslContextProvider);
             }
 
             @Override

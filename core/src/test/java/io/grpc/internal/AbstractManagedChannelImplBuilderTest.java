@@ -24,6 +24,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.junit.Assume.assumeTrue;
 import static org.mockito.Mockito.mock;
 
 import com.google.common.util.concurrent.MoreExecutors;
@@ -35,9 +36,6 @@ import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
 import io.grpc.MethodDescriptor;
 import io.grpc.NameResolver;
-import io.grpc.internal.testing.StatsTestUtils.FakeStatsRecorder;
-import io.grpc.internal.testing.StatsTestUtils.FakeTagContextBinarySerializer;
-import io.grpc.internal.testing.StatsTestUtils.FakeTagger;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.URI;
@@ -283,10 +281,10 @@ public class AbstractManagedChannelImplBuilderTest {
     builder.intercept(DUMMY_USER_INTERCEPTOR);
     List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors();
     assertEquals(3, effectiveInterceptors.size());
-    assertThat(effectiveInterceptors.get(0))
-        .isInstanceOf(CensusTracingModule.TracingClientInterceptor.class);
-    assertThat(effectiveInterceptors.get(1))
-        .isInstanceOf(CensusStatsModule.StatsClientInterceptor.class);
+    assertThat(effectiveInterceptors.get(0).getClass().getName())
+        .isEqualTo("io.grpc.census.CensusTracingModule$TracingClientInterceptor");
+    assertThat(effectiveInterceptors.get(1).getClass().getName())
+        .isEqualTo("io.grpc.census.CensusStatsModule$StatsClientInterceptor");
     assertThat(effectiveInterceptors.get(2)).isSameInstanceAs(DUMMY_USER_INTERCEPTOR);
   }
 
@@ -296,8 +294,8 @@ public class AbstractManagedChannelImplBuilderTest {
     builder.setStatsEnabled(false);
     List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors();
     assertEquals(2, effectiveInterceptors.size());
-    assertThat(effectiveInterceptors.get(0))
-        .isInstanceOf(CensusTracingModule.TracingClientInterceptor.class);
+    assertThat(effectiveInterceptors.get(0).getClass().getName())
+        .isEqualTo("io.grpc.census.CensusTracingModule$TracingClientInterceptor");
     assertThat(effectiveInterceptors.get(1)).isSameInstanceAs(DUMMY_USER_INTERCEPTOR);
   }
 
@@ -307,8 +305,8 @@ public class AbstractManagedChannelImplBuilderTest {
     builder.setTracingEnabled(false);
     List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors();
     assertEquals(2, effectiveInterceptors.size());
-    assertThat(effectiveInterceptors.get(0))
-        .isInstanceOf(CensusStatsModule.StatsClientInterceptor.class);
+    assertThat(effectiveInterceptors.get(0).getClass().getName())
+        .isEqualTo("io.grpc.census.CensusStatsModule$StatsClientInterceptor");
     assertThat(effectiveInterceptors.get(1)).isSameInstanceAs(DUMMY_USER_INTERCEPTOR);
   }
 
@@ -483,27 +481,26 @@ public class AbstractManagedChannelImplBuilderTest {
     assertThat(builder.lookUpServiceConfig).isFalse();
   }
 
+  @Test
+  public void enableServiceConfigErrorHandling() {
+    String propertyValue = System.getProperty(
+        AbstractManagedChannelImplBuilder.ENABLE_SERVICE_CONFIG_ERROR_HANDLING_PROPERTY);
+    assumeTrue(propertyValue == null);
+
+    Builder builder = new Builder("target");
+    assertThat(builder.enableServiceConfigErrorHandling).isFalse();
+
+    builder.enableServiceConfigErrorHandling();
+    assertThat(builder.enableServiceConfigErrorHandling).isTrue();
+  }
+
   static class Builder extends AbstractManagedChannelImplBuilder<Builder> {
     Builder(String target) {
       super(target);
-      overrideCensusStatsModule(
-          new CensusStatsModule(
-              new FakeTagger(),
-              new FakeTagContextBinarySerializer(),
-              new FakeStatsRecorder(),
-              GrpcUtil.STOPWATCH_SUPPLIER,
-              true, true, true, true));
     }
 
     Builder(SocketAddress directServerAddress, String authority) {
       super(directServerAddress, authority);
-      overrideCensusStatsModule(
-          new CensusStatsModule(
-              new FakeTagger(),
-              new FakeTagContextBinarySerializer(),
-              new FakeStatsRecorder(),
-              GrpcUtil.STOPWATCH_SUPPLIER,
-              true, true, true, true));
     }
 
     @Override

@@ -18,13 +18,8 @@ package io.grpc.xds.sds;
 
 import static com.google.common.truth.Truth.assertThat;
 
-import com.google.common.base.Strings;
-import io.envoyproxy.envoy.api.v2.auth.CertificateValidationContext;
 import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
-import io.envoyproxy.envoy.api.v2.auth.SdsSecretConfig;
-import io.envoyproxy.envoy.api.v2.auth.TlsCertificate;
 import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
-import io.envoyproxy.envoy.api.v2.core.DataSource;
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -41,75 +36,6 @@ public class ClientSslContextProviderFactoryTest {
   ClientSslContextProviderFactory clientSslContextProviderFactory =
       new ClientSslContextProviderFactory();
 
-  static CommonTlsContext buildCommonTlsContextFromSdsConfigForTlsCertificate(
-      String name, String targetUri, String trustCa) {
-
-    SdsSecretConfig sdsSecretConfig =
-        buildSdsSecretConfig(name, targetUri, /* channelType= */ null);
-    CommonTlsContext.Builder builder =
-        CommonTlsContext.newBuilder().addTlsCertificateSdsSecretConfigs(sdsSecretConfig);
-
-    if (!Strings.isNullOrEmpty(trustCa)) {
-      builder.setValidationContext(
-          CertificateValidationContext.newBuilder()
-              .setTrustedCa(DataSource.newBuilder().setFilename(trustCa))
-              .build());
-    }
-    return builder.build();
-  }
-
-  static CommonTlsContext buildCommonTlsContextFromSdsConfigForValidationContext(
-      String name, String targetUri, String privateKey, String certChain) {
-    SdsSecretConfig sdsSecretConfig =
-        buildSdsSecretConfig(name, targetUri, /* channelType= */ null);
-
-    CommonTlsContext.Builder builder =
-        CommonTlsContext.newBuilder().setValidationContextSdsSecretConfig(sdsSecretConfig);
-
-    if (!Strings.isNullOrEmpty(privateKey) && !Strings.isNullOrEmpty(certChain)) {
-      builder.addTlsCertificates(
-          TlsCertificate.newBuilder()
-              .setCertificateChain(DataSource.newBuilder().setFilename(certChain))
-              .setPrivateKey(DataSource.newBuilder().setFilename(privateKey))
-              .build());
-    }
-    return builder.build();
-  }
-
-  private static SdsSecretConfig buildSdsSecretConfig(
-      String name, String targetUri, String channelType) {
-    SdsSecretConfig sdsSecretConfig = null;
-    if (!Strings.isNullOrEmpty(name) && !Strings.isNullOrEmpty(targetUri)) {
-      sdsSecretConfig =
-          SdsSecretConfig.newBuilder()
-              .setName(name)
-              .setSdsConfig(SdsClientTest.buildConfigSource(targetUri, channelType))
-              .build();
-    }
-    return sdsSecretConfig;
-  }
-
-  static CommonTlsContext buildCommonTlsContextFromSdsConfigsForAll(
-      String certName,
-      String certTargetUri,
-      String validationContextName,
-      String validationContextTargetUri,
-      String channelType) {
-
-    CommonTlsContext.Builder builder = CommonTlsContext.newBuilder();
-
-    SdsSecretConfig sdsSecretConfig = buildSdsSecretConfig(certName, certTargetUri, channelType);
-    if (sdsSecretConfig != null) {
-      builder.addTlsCertificateSdsSecretConfigs(sdsSecretConfig);
-    }
-    sdsSecretConfig =
-        buildSdsSecretConfig(validationContextName, validationContextTargetUri, channelType);
-    if (sdsSecretConfig != null) {
-      builder.setValidationContextSdsSecretConfig(sdsSecretConfig);
-    }
-    return builder.build();
-  }
-
   @Test
   public void createSslContextProvider_allFilenames() {
     UpstreamTlsContext upstreamTlsContext =
@@ -124,7 +50,7 @@ public class ClientSslContextProviderFactoryTest {
   @Test
   public void createSslContextProvider_sdsConfigForTlsCert_expectException() {
     CommonTlsContext commonTlsContext =
-        buildCommonTlsContextFromSdsConfigForTlsCertificate(
+        CommonTlsContextTestsUtil.buildCommonTlsContextFromSdsConfigForTlsCertificate(
             /* name= */ "name", /* targetUri= */ "unix:/tmp/sds/path", CA_PEM_FILE);
     UpstreamTlsContext upstreamTlsContext =
         SecretVolumeSslContextProviderTest.buildUpstreamTlsContext(commonTlsContext);
@@ -143,7 +69,7 @@ public class ClientSslContextProviderFactoryTest {
   @Test
   public void createSslContextProvider_sdsConfigForCertValidationContext_expectException() {
     CommonTlsContext commonTlsContext =
-        buildCommonTlsContextFromSdsConfigForValidationContext(
+        CommonTlsContextTestsUtil.buildCommonTlsContextFromSdsConfigForValidationContext(
             /* name= */ "name",
             /* targetUri= */ "unix:/tmp/sds/path",
             CLIENT_KEY_FILE,

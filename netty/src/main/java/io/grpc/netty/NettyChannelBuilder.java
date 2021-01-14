@@ -40,7 +40,6 @@ import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SharedResourcePool;
 import io.grpc.internal.TransportTracer;
-import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFactory;
 import io.netty.channel.ChannelOption;
@@ -52,6 +51,7 @@ import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.CheckReturnValue;
@@ -75,8 +75,6 @@ public final class NettyChannelBuilder
       new ReflectiveChannelFactory<>(Utils.DEFAULT_CLIENT_CHANNEL_TYPE);
   private static final ObjectPool<? extends EventLoopGroup> DEFAULT_EVENT_LOOP_GROUP_POOL =
       SharedResourcePool.forResource(Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP);
-  private static final ObjectPool<ByteBufAllocator> ALLOCATOR_POOL =
-      SharedResourcePool.forResource(Utils.BYTE_BUF_ALLOCATOR);
 
   private final Map<ChannelOption<?>, Object> channelOptions =
       new HashMap<>();
@@ -401,12 +399,13 @@ public final class NettyChannelBuilder
           throw new RuntimeException(ex);
         }
       }
-      negotiator = createProtocolNegotiatorByType(negotiationType, localSslContext);
+      negotiator = createProtocolNegotiatorByType(negotiationType, localSslContext,
+          this.getOffloadExecutorPool());
     }
 
     return new NettyTransportFactory(
         negotiator, channelFactory, channelOptions,
-        eventLoopGroupPool, ALLOCATOR_POOL, flowControlWindow, maxInboundMessageSize(),
+        eventLoopGroupPool, flowControlWindow, maxInboundMessageSize(),
         maxHeaderListSize, keepAliveTimeNanos, keepAliveTimeoutNanos, keepAliveWithoutCalls,
         transportTracerFactory, localSocketPicker, useGetForSafeMethods);
   }
@@ -444,14 +443,15 @@ public final class NettyChannelBuilder
   @CheckReturnValue
   static ProtocolNegotiator createProtocolNegotiatorByType(
       NegotiationType negotiationType,
-      SslContext sslContext) {
+      SslContext sslContext,
+      ObjectPool<? extends Executor> executorPool) {
     switch (negotiationType) {
       case PLAINTEXT:
         return ProtocolNegotiators.plaintext();
       case PLAINTEXT_UPGRADE:
         return ProtocolNegotiators.plaintextUpgrade();
       case TLS:
-        return ProtocolNegotiators.tls(sslContext);
+        return ProtocolNegotiators.tls(sslContext, executorPool);
       default:
         throw new IllegalArgumentException("Unsupported negotiationType: " + negotiationType);
     }
@@ -521,8 +521,6 @@ public final class NettyChannelBuilder
     private final Map<ChannelOption<?>, ?> channelOptions;
     private final ObjectPool<? extends EventLoopGroup> groupPool;
     private final EventLoopGroup group;
-    private final ObjectPool<? extends ByteBufAllocator> allocatorPool;
-    private final ByteBufAllocator allocator;
     private final int flowControlWindow;
     private final int maxMessageSize;
     private final int maxHeaderListSize;
@@ -538,7 +536,6 @@ public final class NettyChannelBuilder
     NettyTransportFactory(ProtocolNegotiator protocolNegotiator,
         ChannelFactory<? extends Channel> channelFactory,
         Map<ChannelOption<?>, ?> channelOptions, ObjectPool<? extends EventLoopGroup> groupPool,
-        ObjectPool<? extends ByteBufAllocator> allocatorPool,
         int flowControlWindow, int maxMessageSize, int maxHeaderListSize,
         long keepAliveTimeNanos, long keepAliveTimeoutNanos, boolean keepAliveWithoutCalls,
         TransportTracer.Factory transportTracerFactory, LocalSocketPicker localSocketPicker,
@@ -548,8 +545,6 @@ public final class NettyChannelBuilder
       this.channelOptions = new HashMap<ChannelOption<?>, Object>(channelOptions);
       this.groupPool = groupPool;
       this.group = groupPool.getObject();
-      this.allocatorPool = allocatorPool;
-      this.allocator = allocatorPool.getObject();
       this.flowControlWindow = flowControlWindow;
       this.maxMessageSize = maxMessageSize;
       this.maxHeaderListSize = maxHeaderListSize;
@@ -588,7 +583,7 @@ public final class NettyChannelBuilder
 
       // TODO(carl-mastrangelo): Pass channelLogger in.
       NettyClientTransport transport = new NettyClientTransport(
-          serverAddress, channelFactory, channelOptions, group, allocator,
+          serverAddress, channelFactory, channelOptions, group,
           localNegotiator, flowControlWindow,
           maxMessageSize, maxHeaderListSize, keepAliveTimeNanosState.get(), keepAliveTimeoutNanos,
           keepAliveWithoutCalls, options.getAuthority(), options.getUserAgent(),
@@ -609,7 +604,6 @@ public final class NettyChannelBuilder
       }
       closed = true;
 
-      allocatorPool.returnObject(allocator);
       protocolNegotiator.close();
       groupPool.returnObject(group);
     }

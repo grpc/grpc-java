@@ -316,6 +316,7 @@ public abstract class NameResolver {
     @Deprecated
     public final void onAddresses(
         List<EquivalentAddressGroup> servers, @ResolutionResultAttr Attributes attributes) {
+      // TODO(jihuncho) need to promote Listener2 if we want to use ConfigOrError
       onResult(
           ResolutionResult.newBuilder().setAddresses(servers).setAttributes(attributes).build());
     }
@@ -330,8 +331,8 @@ public abstract class NameResolver {
     public abstract void onResult(ResolutionResult resolutionResult);
 
     /**
-     * Handles an error from the resolver. The listener is responsible for eventually invoking
-     * {@link NameResolver#refresh()} to re-attempt resolution.
+     * Handles a name resolving error from the resolver. The listener is responsible for eventually
+     * invoking {@link NameResolver#refresh()} to re-attempt resolution.
      *
      * @param error a non-OK status
      * @since 1.21.0
@@ -895,6 +896,23 @@ public abstract class NameResolver {
     @Nullable
     public Status getError() {
       return status;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      ConfigOrError that = (ConfigOrError) o;
+      return Objects.equal(status, that.status) && Objects.equal(config, that.config);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hashCode(status, config);
     }
 
     @Override
