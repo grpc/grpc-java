@@ -80,7 +80,8 @@ public final class GoogleDefaultChannelCredentials {
       clusterNameAttrKey =
           (Attributes.Key<String>) klass.getField("ATTR_CLUSTER_NAME").get(null);
     } catch (ClassNotFoundException | NoSuchFieldException | IllegalAccessException e) {
-      logger.log(Level.FINE, "Unable to load xDS endpoint cluster name key, this may be expected");
+      logger.log(Level.FINE,
+          "Unable to load xDS endpoint cluster name key, this may be expected", e);
     }
     return new GoogleDefaultProtocolNegotiatorFactory(
         /* targetServiceAccounts= */ ImmutableList.<String>of(),
