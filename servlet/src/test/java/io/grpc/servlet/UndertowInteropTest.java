@@ -116,8 +116,8 @@ public class UndertowInteropTest extends AbstractInteropTest {
         (AbstractManagedChannelImplBuilder<?>) ManagedChannelBuilder.forAddress(HOST, port)
           .usePlaintext()
           .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE);
-    io.grpc.internal.TestingAccessor.setStatsImplementation(
-        builder, createClientCensusStatsModule());
+    io.grpc.internal.TestingAccessor.setStatsEnabled(builder, false);
+    builder.intercept(createCensusStatsClientInterceptor());
     return builder.build();
   }
 
