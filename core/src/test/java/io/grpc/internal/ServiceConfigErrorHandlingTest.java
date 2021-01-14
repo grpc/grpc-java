@@ -95,7 +95,7 @@ public class ServiceConfigErrorHandlingTest {
         @Override
         public boolean shouldAccept(Runnable command) {
           return command.toString().contains(
-              ManagedChannelImpl2.DelayedNameResolverRefresh.class.getName());
+              ManagedChannelImpl.DelayedNameResolverRefresh.class.getName());
         }
       };
 
@@ -104,7 +104,7 @@ public class ServiceConfigErrorHandlingTest {
   @Rule public final ExpectedException thrown = ExpectedException.none();
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
-  private ManagedChannelImpl2 channel;
+  private ManagedChannelImpl channel;
   private final AtomicReference<Status> nextLbPolicyConfigError = new AtomicReference<>();
 
   private FakeLoadBalancer mockLoadBalancer =
@@ -153,13 +153,11 @@ public class ServiceConfigErrorHandlingTest {
   private Executor blockingExecutor;
   private ChannelBuilder channelBuilder;
 
-
-
   private void createChannel(ClientInterceptor... interceptors) {
     checkState(channel == null);
 
     channel =
-        new ManagedChannelImpl2(
+        new ManagedChannelImpl(
             channelBuilder,
             mockTransportFactory,
             new FakeBackoffPolicyProvider(),
@@ -177,7 +175,7 @@ public class ServiceConfigErrorHandlingTest {
         channel.exitIdleMode();
       }
     });
-    if (channelBuilder.idleTimeoutMillis != ManagedChannelImpl2.IDLE_TIMEOUT_MILLIS_DISABLE) {
+    if (channelBuilder.idleTimeoutMillis != ManagedChannelImpl.IDLE_TIMEOUT_MILLIS_DISABLE) {
       numExpectedTasks += 1;
     }
 
@@ -270,7 +268,7 @@ public class ServiceConfigErrorHandlingTest {
     verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
     ResolvedAddresses resolvedAddresses = resultCaptor.getValue();
     assertThat(resolvedAddresses.getAddresses()).containsExactly(addressGroup);
-    assertThat(getLbPolicyConfig(resolvedAddresses)).isEqualTo("12");
+    assertThat(resolvedAddresses.getLoadBalancingPolicyConfig()).isEqualTo("12");
     assertThat(resolvedAddresses.getAttributes().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG))
         .isEqualTo(rawServiceConfig);
     verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
@@ -315,7 +313,7 @@ public class ServiceConfigErrorHandlingTest {
 
     ResolvedAddresses resolvedAddresses = resultCaptor.getValue();
     assertThat(resolvedAddresses.getAddresses()).isEmpty();
-    assertThat(getLbPolicyConfig(resolvedAddresses)).isEqualTo("val");;
+    assertThat(resolvedAddresses.getLoadBalancingPolicyConfig()).isEqualTo("val");;
 
     verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
     assertThat(channel.getState(false)).isNotEqualTo(ConnectivityState.TRANSIENT_FAILURE);
@@ -340,7 +338,7 @@ public class ServiceConfigErrorHandlingTest {
     verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
     ResolvedAddresses resolvedAddresses = resultCaptor.getValue();
     assertThat(resolvedAddresses.getAddresses()).containsExactly(addressGroup);
-    assertThat(getLbPolicyConfig(resolvedAddresses)).isEqualTo("foo");
+    assertThat(resolvedAddresses.getLoadBalancingPolicyConfig()).isEqualTo("foo");
     verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
 
     assertThat(channel.getState(false)).isNotEqualTo(ConnectivityState.TRANSIENT_FAILURE);
@@ -362,7 +360,7 @@ public class ServiceConfigErrorHandlingTest {
     verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
     ResolvedAddresses resolvedAddresses = resultCaptor.getValue();
     assertThat(resolvedAddresses.getAddresses()).containsExactly(addressGroup);
-    assertThat(getLbPolicyConfig(resolvedAddresses)).isNull();
+    assertThat(resolvedAddresses.getLoadBalancingPolicyConfig()).isNull();
     assertThat(resolvedAddresses.getAttributes().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG))
         .isEmpty();
     verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
@@ -390,7 +388,7 @@ public class ServiceConfigErrorHandlingTest {
     verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
     ResolvedAddresses resolvedAddresses = resultCaptor.getValue();
     assertThat(resolvedAddresses.getAddresses()).containsExactly(addressGroup);
-    assertThat(getLbPolicyConfig(resolvedAddresses)).isEqualTo("foo");
+    assertThat(resolvedAddresses.getLoadBalancingPolicyConfig()).isEqualTo("foo");
     assertThat(resolvedAddresses.getAttributes().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG))
         .isEqualTo(defaultServiceConfig);
     verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
@@ -438,7 +436,7 @@ public class ServiceConfigErrorHandlingTest {
 
     ResolvedAddresses resolvedAddresses = resultCaptor.getValue();
     assertThat(resolvedAddresses.getAddresses()).containsExactly(addressGroup);
-    assertThat(getLbPolicyConfig(resolvedAddresses)).isEqualTo("mate");
+    assertThat(resolvedAddresses.getLoadBalancingPolicyConfig()).isEqualTo("mate");
     assertThat(resolvedAddresses.getAttributes().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG))
         .isEqualTo(defaultServiceConfig);
     verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
@@ -465,7 +463,7 @@ public class ServiceConfigErrorHandlingTest {
     verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
     ResolvedAddresses resolvedAddresses = resultCaptor.getValue();
     assertThat(resolvedAddresses.getAddresses()).containsExactly(addressGroup);
-    assertThat(getLbPolicyConfig(resolvedAddresses)).isEqualTo("1st raw config");
+    assertThat(resolvedAddresses.getLoadBalancingPolicyConfig()).isEqualTo("1st raw config");
     assertThat(resolvedAddresses.getAttributes().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG))
         .isEqualTo(rawServiceConfig);
     verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
@@ -481,7 +479,7 @@ public class ServiceConfigErrorHandlingTest {
     verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
     ResolvedAddresses newResolvedAddress = resultCaptor.getValue();
     // should use previous service config because new service config is invalid.
-    assertThat(getLbPolicyConfig(resolvedAddresses)).isEqualTo("1st raw config");
+    assertThat(resolvedAddresses.getLoadBalancingPolicyConfig()).isEqualTo("1st raw config");
     assertThat(newResolvedAddress.getAttributes()).isNotEqualTo(Attributes.EMPTY);
     assertThat(newResolvedAddress.getAttributes().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG))
         .isEqualTo(rawServiceConfig);
@@ -660,13 +658,5 @@ public class ServiceConfigErrorHandlingTest {
   @SuppressWarnings("unchecked")
   private static Map<String, Object> parseJson(String json) throws Exception {
     return (Map<String, Object>) JsonParser.parse(json);
-  }
-
-  @Nullable
-  private static Object getLbPolicyConfig(ResolvedAddresses resolvedAddresses) {
-    ConfigOrError loadBalancingPolicyConfig =
-        (ConfigOrError) resolvedAddresses.getLoadBalancingPolicyConfig();
-    return
-        loadBalancingPolicyConfig == null ? null : loadBalancingPolicyConfig.getConfig();
   }
 }

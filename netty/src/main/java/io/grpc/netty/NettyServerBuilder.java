@@ -89,6 +89,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
       DEFAULT_BOSS_EVENT_LOOP_GROUP_POOL;
   private ObjectPool<? extends EventLoopGroup> workerEventLoopGroupPool =
       DEFAULT_WORKER_EVENT_LOOP_GROUP_POOL;
+  private boolean forceHeapBuffer;
   private SslContext sslContext;
   private ProtocolNegotiator protocolNegotiator;
   private int maxConcurrentCallsPerConnection = Integer.MAX_VALUE;
@@ -266,6 +267,13 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
     this.workerEventLoopGroupPool =
         checkNotNull(workerEventLoopGroupPool, "workerEventLoopGroupPool");
     return this;
+  }
+
+  /**
+   * Force using heap buffer when custom allocator is enabled.
+   */
+  void setForceHeapBuffer(boolean value) {
+    forceHeapBuffer = value;
   }
 
   /**
@@ -542,7 +550,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
     for (SocketAddress listenAddress : listenAddresses) {
       NettyServer transportServer = new NettyServer(
           listenAddress, channelFactory, channelOptions, bossEventLoopGroupPool,
-          workerEventLoopGroupPool, negotiator, streamTracerFactories,
+          workerEventLoopGroupPool, forceHeapBuffer, negotiator, streamTracerFactories,
           getTransportTracerFactory(), maxConcurrentCallsPerConnection, flowControlWindow,
           maxMessageSize, maxHeaderListSize, keepAliveTimeInNanos, keepAliveTimeoutInNanos,
           maxConnectionIdleInNanos, maxConnectionAgeInNanos, maxConnectionAgeGraceInNanos,

@@ -56,7 +56,6 @@ import java.net.SocketAddress;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -74,6 +73,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
   private final int maxStreamsPerConnection;
   private final ObjectPool<? extends EventLoopGroup> bossGroupPool;
   private final ObjectPool<? extends EventLoopGroup> workerGroupPool;
+  private final boolean forceHeapBuffer;
   private EventLoopGroup bossGroup;
   private EventLoopGroup workerGroup;
   private ServerListener listener;
@@ -93,15 +93,15 @@ class NettyServer implements InternalServer, InternalWithLogId {
   private final List<? extends ServerStreamTracer.Factory> streamTracerFactories;
   private final TransportTracer.Factory transportTracerFactory;
   private final InternalChannelz channelz;
-  // Only modified in event loop but safe to read any time. Set at startup and unset at shutdown.
-  private final AtomicReference<InternalInstrumented<SocketStats>> listenSocketStats =
-      new AtomicReference<>();
+  // Only modified in event loop but safe to read any time.
+  private volatile InternalInstrumented<SocketStats> listenSocketStats;
 
   NettyServer(
       SocketAddress address, ChannelFactory<? extends ServerChannel> channelFactory,
       Map<ChannelOption<?>, ?> channelOptions,
       ObjectPool<? extends EventLoopGroup> bossGroupPool,
       ObjectPool<? extends EventLoopGroup> workerGroupPool,
+      boolean forceHeapBuffer,
       ProtocolNegotiator protocolNegotiator,
       List<? extends ServerStreamTracer.Factory> streamTracerFactories,
       TransportTracer.Factory transportTracerFactory,
@@ -117,6 +117,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
     this.channelOptions = new HashMap<ChannelOption<?>, Object>(channelOptions);
     this.bossGroupPool = checkNotNull(bossGroupPool, "bossGroupPool");
     this.workerGroupPool = checkNotNull(workerGroupPool, "workerGroupPool");
+    this.forceHeapBuffer = forceHeapBuffer;
     this.bossGroup = bossGroupPool.getObject();
     this.workerGroup = workerGroupPool.getObject();
     this.protocolNegotiator = checkNotNull(protocolNegotiator, "protocolNegotiator");
@@ -149,7 +150,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
 
   @Override
   public InternalInstrumented<SocketStats> getListenSocketStats() {
-    return listenSocketStats.get();
+    return listenSocketStats;
   }
 
   @Override
@@ -157,8 +158,8 @@ class NettyServer implements InternalServer, InternalWithLogId {
     listener = checkNotNull(serverListener, "serverListener");
 
     ServerBootstrap b = new ServerBootstrap();
-    b.option(ALLOCATOR, Utils.getByteBufAllocator());
-    b.childOption(ALLOCATOR, Utils.getByteBufAllocator());
+    b.option(ALLOCATOR, Utils.getByteBufAllocator(forceHeapBuffer));
+    b.childOption(ALLOCATOR, Utils.getByteBufAllocator(forceHeapBuffer));
     b.group(bossGroup, workerGroup);
     b.channelFactory(channelFactory);
     // For non-socket based channel, the option will be ignored.
@@ -251,19 +252,13 @@ class NettyServer implements InternalServer, InternalWithLogId {
       throw new IOException("Failed to bind", future.cause());
     }
     channel = future.channel();
-    Future<?> channelzFuture = channel.eventLoop().submit(new Runnable() {
+    channel.eventLoop().execute(new Runnable() {
       @Override
       public void run() {
-        InternalInstrumented<SocketStats> listenSocket = new ListenSocket(channel);
-        listenSocketStats.set(listenSocket);
-        channelz.addListenSocket(listenSocket);
+        listenSocketStats = new ListenSocket(channel);
+        channelz.addListenSocket(listenSocketStats);
       }
     });
-    try {
-      channelzFuture.await();
-    } catch (InterruptedException ex) {
-      throw new RuntimeException("Interrupted while registering listen socket to channelz", ex);
-    }
   }
 
   @Override
@@ -278,7 +273,8 @@ class NettyServer implements InternalServer, InternalWithLogId {
         if (!future.isSuccess()) {
           log.log(Level.WARNING, "Error shutting down server", future.cause());
         }
-        InternalInstrumented<SocketStats> stats = listenSocketStats.getAndSet(null);
+        InternalInstrumented<SocketStats> stats = listenSocketStats;
+        listenSocketStats = null;
         if (stats != null) {
           channelz.removeListenSocket(stats);
         }

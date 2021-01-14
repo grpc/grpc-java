@@ -18,7 +18,6 @@ package io.grpc.netty;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
-import static io.grpc.netty.GrpcSslContexts.NEXT_PROTOCOL_VERSIONS;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -53,6 +52,7 @@ import io.netty.handler.ssl.OpenSslEngine;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.ssl.SslHandshakeCompletionEvent;
+import io.netty.handler.ssl.SslProvider;
 import io.netty.util.AsciiString;
 import io.netty.util.Attribute;
 import io.netty.util.AttributeMap;
@@ -190,7 +190,8 @@ final class ProtocolNegotiators {
           return;
         }
         SslHandler sslHandler = ctx.pipeline().get(SslHandler.class);
-        if (!NEXT_PROTOCOL_VERSIONS.contains(sslHandler.applicationProtocol())) {
+        if (!sslContext.applicationProtocolNegotiator().protocols().contains(
+                sslHandler.applicationProtocol())) {
           logSslEngineDetails(Level.FINE, ctx, "TLS negotiation failed for new client.", null);
           ctx.fireExceptionCaught(unavailableException(
               "Failed protocol negotiation: Unable to find compatible protocol"));
@@ -276,7 +277,7 @@ final class ProtocolNegotiators {
       } else {
         nettyProxyHandler = new HttpProxyHandler(address, userName, password);
       }
-      ctx.pipeline().addBefore(ctx.name(), /* newName= */ null, nettyProxyHandler);
+      ctx.pipeline().addBefore(ctx.name(), /* name= */ null, nettyProxyHandler);
     }
 
     @Override
@@ -359,7 +360,8 @@ final class ProtocolNegotiators {
         SslHandshakeCompletionEvent handshakeEvent = (SslHandshakeCompletionEvent) evt;
         if (handshakeEvent.isSuccess()) {
           SslHandler handler = ctx.pipeline().get(SslHandler.class);
-          if (NEXT_PROTOCOL_VERSIONS.contains(handler.applicationProtocol())) {
+          if (sslContext.applicationProtocolNegotiator().protocols()
+              .contains(handler.applicationProtocol())) {
             // Successfully negotiated the protocol.
             logSslEngineDetails(Level.FINER, ctx, "TLS negotiation succeeded.", null);
             propagateTlsComplete(ctx, handler.engine().getSession());
@@ -554,7 +556,7 @@ final class ProtocolNegotiators {
       builder.append("    OpenSSL, ");
       builder.append("Version: 0x").append(Integer.toHexString(OpenSsl.version()));
       builder.append(" (").append(OpenSsl.versionString()).append("), ");
-      builder.append("ALPN supported: ").append(OpenSsl.isAlpnSupported());
+      builder.append("ALPN supported: ").append(SslProvider.isAlpnSupported(SslProvider.OPENSSL));
     } else if (JettyTlsUtil.isJettyAlpnConfigured()) {
       builder.append("    Jetty ALPN");
     } else if (JettyTlsUtil.isJettyNpnConfigured()) {

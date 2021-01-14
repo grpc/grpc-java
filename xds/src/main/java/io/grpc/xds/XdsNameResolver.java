@@ -25,7 +25,7 @@ import com.google.common.collect.ImmutableList;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.LoadBalancerRegistry;
+import io.grpc.InternalLogId;
 import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.Status.Code;
@@ -41,6 +41,7 @@ import io.grpc.xds.XdsClient.ConfigWatcher;
 import io.grpc.xds.XdsClient.RefCountedXdsClientObjectPool;
 import io.grpc.xds.XdsClient.XdsChannelFactory;
 import io.grpc.xds.XdsClient.XdsClientFactory;
+import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.io.IOException;
 import java.net.URI;
 import java.util.List;
@@ -51,19 +52,21 @@ import javax.annotation.Nullable;
 /**
  * A {@link NameResolver} for resolving gRPC target names with "xds-experimental" scheme.
  *
- * <p>Resolving a gRPC target involves contacting the traffic director via xDS protocol to
- * retrieve service information and produce a service config to the caller.
+ * <p>Resolving a gRPC target involves contacting the control plane management server via xDS
+ * protocol to retrieve service information and produce a service config to the caller.
  *
  * @see XdsNameResolverProvider
  */
 final class XdsNameResolver extends NameResolver {
 
+  private final XdsLogger logger;
   private final String authority;
   private final String hostName;
   private final int port;
   private final XdsChannelFactory channelFactory;
   private final SynchronizationContext syncContext;
   private final ScheduledExecutorService timeService;
+  private final ServiceConfigParser serviceConfigParser;
   private final BackoffPolicy.Provider backoffPolicyProvider;
   private final Supplier<Stopwatch> stopwatchSupplier;
   private final Bootstrapper bootstrapper;
@@ -89,9 +92,12 @@ final class XdsNameResolver extends NameResolver {
     this.channelFactory = checkNotNull(channelFactory, "channelFactory");
     this.syncContext = checkNotNull(args.getSynchronizationContext(), "syncContext");
     this.timeService = checkNotNull(args.getScheduledExecutorService(), "timeService");
+    this.serviceConfigParser = checkNotNull(args.getServiceConfigParser(), "serviceConfigParser");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
     this.bootstrapper = checkNotNull(bootstrapper, "bootstrapper");
+    logger = XdsLogger.withLogId(InternalLogId.allocate("xds-resolver", name));
+    logger.log(XdsLogLevel.INFO, "Created resolver for {0}", name);
   }
 
   @Override
@@ -113,7 +119,7 @@ final class XdsNameResolver extends NameResolver {
     final Node node = bootstrapInfo.getNode();
     if (serverList.isEmpty()) {
       listener.onError(
-          Status.UNAVAILABLE.withDescription("No traffic director provided by bootstrap"));
+          Status.UNAVAILABLE.withDescription("No management server provided by bootstrap"));
       return;
     }
 
@@ -122,6 +128,7 @@ final class XdsNameResolver extends NameResolver {
       XdsClient createXdsClient() {
         return
             new XdsClientImpl(
+                authority,
                 serverList,
                 channelFactory,
                 node,
@@ -136,6 +143,10 @@ final class XdsNameResolver extends NameResolver {
     xdsClient.watchConfigData(hostName, port, new ConfigWatcher() {
       @Override
       public void onConfigChanged(ConfigUpdate update) {
+        logger.log(
+            XdsLogLevel.INFO,
+            "Received config update from xDS client {0}: cluster_name={1}",
+            xdsClient, update.getClusterName());
         String serviceConfig = "{\n"
             + "  \"loadBalancingConfig\": [\n"
             + "    {\n"
@@ -153,19 +164,18 @@ final class XdsNameResolver extends NameResolver {
               Status.UNKNOWN.withDescription("Invalid service config").withCause(e));
           return;
         }
+        logger.log(XdsLogLevel.INFO, "Generated service config:\n{0}", serviceConfig);
         Attributes attrs =
             Attributes.newBuilder()
                 .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, config)
                 .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
                 .build();
-        ConfigOrError xdsServiceConfig =
-            XdsLoadBalancerProvider
-                .parseLoadBalancingConfigPolicy(config, LoadBalancerRegistry.getDefaultRegistry());
+        ConfigOrError parsedServiceConfig = serviceConfigParser.parseServiceConfig(config);
         ResolutionResult result =
             ResolutionResult.newBuilder()
                 .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
                 .setAttributes(attrs)
-                .setServiceConfig(xdsServiceConfig)
+                .setServiceConfig(parsedServiceConfig)
                 .build();
         listener.onResult(result);
       }
@@ -178,15 +188,20 @@ final class XdsNameResolver extends NameResolver {
         // TODO(chengyuanzhang): Returning an empty resolution result based on status code is
         //  a temporary solution. More design discussion needs to be done.
         if (error.getCode().equals(Code.NOT_FOUND)) {
+          logger.log(
+              XdsLogLevel.WARNING,
+              "Received error from xDS client {0}: {1}", xdsClient, error.getDescription());
           listener.onResult(ResolutionResult.newBuilder().build());
+          return;
         }
-        listener.onError(error);
+        listener.onError(Status.UNAVAILABLE.withDescription(error.getDescription()));
       }
     });
   }
 
   @Override
   public void shutdown() {
+    logger.log(XdsLogLevel.INFO, "Shutdown");
     if (xdsClient != null) {
       xdsClient = xdsClientPool.returnObject(xdsClient);
     }

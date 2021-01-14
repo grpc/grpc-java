@@ -18,7 +18,7 @@ subprojects {
     apply plugin: "net.ltgt.errorprone"
 
     group = "io.grpc"
-    version = "1.27.0-SNAPSHOT" // CURRENT_GRPC_VERSION
+    version = "1.28.0-SNAPSHOT" // CURRENT_GRPC_VERSION
 
     repositories {
         maven { // The google mirror is less flaky than mavenCentral()
@@ -45,9 +45,9 @@ subprojects {
         protocPluginBaseName = 'protoc-gen-grpc-java'
         javaPluginPath = "$rootDir/compiler/build/exe/java_plugin/$protocPluginBaseName$exeSuffix"
 
-        nettyVersion = '4.1.42.Final'
+        nettyVersion = '4.1.45.Final'
         guavaVersion = '28.1-android'
-        googleauthVersion = '0.19.0'
+        googleauthVersion = '0.20.0'
         protobufVersion = '3.11.0'
         protocVersion = protobufVersion
         opencensusVersion = '0.24.0'
@@ -125,7 +125,7 @@ subprojects {
             google_api_protos: 'com.google.api.grpc:proto-google-common-protos:1.17.0',
             google_auth_credentials: "com.google.auth:google-auth-library-credentials:${googleauthVersion}",
             google_auth_oauth2_http: "com.google.auth:google-auth-library-oauth2-http:${googleauthVersion}",
-            okhttp: 'com.squareup.okhttp:okhttp:2.5.0',
+            okhttp: 'com.squareup.okhttp:okhttp:2.7.4',
             okio: 'com.squareup.okio:okio:1.13.0',
             opencensus_api: "io.opencensus:opencensus-api:${opencensusVersion}",
             opencensus_contrib_grpc_metrics: "io.opencensus:opencensus-contrib-grpc-metrics:${opencensusVersion}",
@@ -147,7 +147,7 @@ subprojects {
             // SECURITY.md (multiple occurrences)
             // examples/example-tls/build.gradle
             // examples/example-tls/pom.xml
-            netty_tcnative: 'io.netty:netty-tcnative-boringssl-static:2.0.26.Final',
+            netty_tcnative: 'io.netty:netty-tcnative-boringssl-static:2.0.28.Final',
 
             conscrypt: 'org.conscrypt:conscrypt-openjdk-uber:2.2.1',
             re2j: 'com.google.re2j:re2j:1.2',

@@ -47,8 +47,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -185,10 +183,9 @@ public final class XdsTestClient {
   }
 
 
-  private void runQps() throws InterruptedException, ExecutionException, TimeoutException {
+  private void runQps() throws InterruptedException, ExecutionException {
     final SettableFuture<Void> failure = SettableFuture.create();
     final class PeriodicRpc implements Runnable {
-      final AtomicLong messageIds = new AtomicLong();
 
       @Override
       public void run() {
@@ -208,17 +205,17 @@ public final class XdsTestClient {
                 CallOptions.DEFAULT.withDeadlineAfter(rpcTimeoutSec, TimeUnit.SECONDS));
         call.start(
             new ClientCall.Listener<SimpleResponse>() {
-              private String serverId;
+              private String hostname;
 
               @Override
               public void onMessage(SimpleResponse response) {
-                serverId = response.getServerId();
+                hostname = response.getHostname();
                 // TODO(ericgribkoff) Currently some test environments cannot access the stats RPC
                 // service and rely on parsing stdout.
                 if (printResponse) {
                   System.out.println(
                       "Greeting: Hello world, this is "
-                          + response.getHostname()
+                          + hostname
                           + ", from "
                           + call.getAttributes().get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR));
                 }
@@ -226,8 +223,11 @@ public final class XdsTestClient {
 
               @Override
               public void onClose(Status status, Metadata trailers) {
+                if (!status.isOk()) {
+                  logger.log(Level.WARNING, "Greeting RPC failed with status {0}", status);
+                }
                 for (XdsStatsWatcher watcher : savedWatchers) {
-                  watcher.rpcCompleted(requestId, serverId);
+                  watcher.rpcCompleted(requestId, hostname);
                 }
               }
             },
@@ -295,14 +295,14 @@ public final class XdsTestClient {
       this.endId = endId;
     }
 
-    void rpcCompleted(long requestId, @Nullable String serverId) {
+    void rpcCompleted(long requestId, @Nullable String hostname) {
       synchronized (lock) {
         if (startId <= requestId && requestId < endId) {
-          if (serverId != null) {
-            if (rpcsByPeer.containsKey(serverId)) {
-              rpcsByPeer.put(serverId, rpcsByPeer.get(serverId) + 1);
+          if (hostname != null) {
+            if (rpcsByPeer.containsKey(hostname)) {
+              rpcsByPeer.put(hostname, rpcsByPeer.get(hostname) + 1);
             } else {
-              rpcsByPeer.put(serverId, 1);
+              rpcsByPeer.put(hostname, 1);
             }
           } else {
             noRemotePeer += 1;

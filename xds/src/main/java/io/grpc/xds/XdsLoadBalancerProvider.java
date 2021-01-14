@@ -27,6 +27,7 @@ import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
+import io.grpc.internal.JsonUtil;
 import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import java.util.List;
@@ -63,7 +64,7 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
 
   @Override
   public LoadBalancer newLoadBalancer(Helper helper) {
-    return new XdsLoadBalancer2(helper);
+    return new XdsLoadBalancer(helper);
   }
 
   @Override
@@ -76,25 +77,26 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
   static ConfigOrError parseLoadBalancingConfigPolicy(
       Map<String, ?> rawLoadBalancingPolicyConfig, LoadBalancerRegistry registry) {
     try {
+      String cluster = JsonUtil.getString(rawLoadBalancingPolicyConfig, "cluster");
       LbConfig childPolicy = selectChildPolicy(rawLoadBalancingPolicyConfig, registry);
       LbConfig fallbackPolicy = selectFallbackPolicy(rawLoadBalancingPolicyConfig, registry);
-      String edsServiceName =
-          ServiceConfigUtil.getEdsServiceNameFromXdsConfig(rawLoadBalancingPolicyConfig);
+      String edsServiceName = JsonUtil.getString(rawLoadBalancingPolicyConfig, "edsServiceName");
       String lrsServerName =
-          ServiceConfigUtil.getLrsServerNameFromXdsConfig(rawLoadBalancingPolicyConfig);
+          JsonUtil.getString(rawLoadBalancingPolicyConfig, "lrsLoadReportingServerName");
       return ConfigOrError.fromConfig(
-          new XdsConfig(childPolicy, fallbackPolicy, edsServiceName, lrsServerName));
+          new XdsConfig(cluster, childPolicy, fallbackPolicy, edsServiceName, lrsServerName));
     } catch (RuntimeException e) {
       return ConfigOrError.fromError(
-          Status.UNKNOWN.withDescription("Failed to parse config " + e.getMessage()).withCause(e));
+          Status.fromThrowable(e).withDescription(
+              "Failed to parse XDS LB config: " + rawLoadBalancingPolicyConfig));
     }
   }
 
   @VisibleForTesting
   static LbConfig selectFallbackPolicy(
       Map<String, ?> rawLoadBalancingPolicyConfig, LoadBalancerRegistry lbRegistry) {
-    List<LbConfig> fallbackConfigs =
-        ServiceConfigUtil.getFallbackPolicyFromXdsConfig(rawLoadBalancingPolicyConfig);
+    List<LbConfig> fallbackConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
+        JsonUtil.getListOfObjects(rawLoadBalancingPolicyConfig, "fallbackPolicy"));
     LbConfig fallbackPolicy = selectSupportedLbPolicy(fallbackConfigs, lbRegistry);
     return fallbackPolicy == null ? DEFAULT_FALLBACK_POLICY : fallbackPolicy;
   }
@@ -103,8 +105,8 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
   @VisibleForTesting
   static LbConfig selectChildPolicy(
       Map<String, ?> rawLoadBalancingPolicyConfig, LoadBalancerRegistry lbRegistry) {
-    List<LbConfig> childConfigs =
-        ServiceConfigUtil.getChildPolicyFromXdsConfig(rawLoadBalancingPolicyConfig);
+    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
+        JsonUtil.getListOfObjects(rawLoadBalancingPolicyConfig, "childPolicy"));
     return selectSupportedLbPolicy(childConfigs, lbRegistry);
   }
 
@@ -127,6 +129,9 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
    * Represents a successfully parsed and validated LoadBalancingConfig for XDS.
    */
   static final class XdsConfig {
+    // FIXME(chengyuanzhang): make cluster name required.
+    @Nullable
+    final String cluster;
     // TODO(carl-mastrangelo): make these Object's containing the fully parsed child configs.
     @Nullable
     final LbConfig childPolicy;
@@ -143,10 +148,12 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
     final String lrsServerName;
 
     XdsConfig(
+        @Nullable String cluster,
         @Nullable LbConfig childPolicy,
         @Nullable LbConfig fallbackPolicy,
         @Nullable String edsServiceName,
         @Nullable String lrsServerName) {
+      this.cluster = cluster;
       this.childPolicy = childPolicy;
       this.fallbackPolicy = fallbackPolicy;
       this.edsServiceName = edsServiceName;
@@ -156,6 +163,7 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(this)
+          .add("cluster", cluster)
           .add("childPolicy", childPolicy)
           .add("fallbackPolicy", fallbackPolicy)
           .add("edsServiceName", edsServiceName)
@@ -169,7 +177,8 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
         return false;
       }
       XdsConfig that = (XdsConfig) obj;
-      return Objects.equal(this.childPolicy, that.childPolicy)
+      return Objects.equal(this.cluster, that.cluster)
+          && Objects.equal(this.childPolicy, that.childPolicy)
           && Objects.equal(this.fallbackPolicy, that.fallbackPolicy)
           && Objects.equal(this.edsServiceName, that.edsServiceName)
           && Objects.equal(this.lrsServerName, that.lrsServerName);
@@ -177,7 +186,7 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
 
     @Override
     public int hashCode() {
-      return Objects.hashCode(childPolicy, fallbackPolicy, edsServiceName, lrsServerName);
+      return Objects.hashCode(cluster, childPolicy, fallbackPolicy, edsServiceName, lrsServerName);
     }
   }
 }
