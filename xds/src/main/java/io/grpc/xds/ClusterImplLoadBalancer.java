@@ -25,7 +25,6 @@ import io.grpc.ClientStreamTracer;
 import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.InternalGoogleDefaultConstants;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
 import io.grpc.Metadata;
@@ -199,7 +198,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
       List<EquivalentAddressGroup> addresses = new ArrayList<>();
       for (EquivalentAddressGroup eag : args.getAddresses()) {
         Attributes.Builder attrBuilder = eag.getAttributes().toBuilder().set(
-            InternalGoogleDefaultConstants.ATTR_XDS_CLUSTER_NAME, cluster);
+            XdsAttributes.ATTR_CLUSTER_NAME, cluster);
         if (enableSecurity && sslContextProviderSupplier != null) {
           attrBuilder.set(
               XdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER, sslContextProviderSupplier);

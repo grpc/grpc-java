@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import io.grpc.Attributes;
+import io.grpc.EquivalentAddressGroup;
 import io.grpc.Grpc;
 import io.grpc.Internal;
 import io.grpc.NameResolver;
@@ -48,6 +49,13 @@ public final class XdsAttributes {
   @NameResolver.ResolutionResultAttr
   static final Attributes.Key<CallCounterProvider> CALL_COUNTER_PROVIDER =
       Attributes.Key.create("io.grpc.xds.XdsAttributes.callCounterProvider");
+
+  /**
+   * Name of the cluster that provides this EquivalentAddressGroup.
+   */
+  @EquivalentAddressGroup.Attr
+  public static final Attributes.Key<String> ATTR_CLUSTER_NAME =
+      Attributes.Key.create("io.grpc.xds.XdsAttributes.clusterName");
 
   // TODO (chengyuanzhang): temporary solution for migrating to LRS policy. Should access
   //   stats object via XdsClient interface.

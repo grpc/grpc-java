@@ -27,7 +27,6 @@ import io.grpc.Attributes;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.InternalGoogleDefaultConstants;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
@@ -393,7 +392,7 @@ public class ClusterImplLoadBalancerTest {
             .build();
     Subchannel subchannel = leafBalancer.helper.createSubchannel(args);
     for (EquivalentAddressGroup eag : subchannel.getAllAddresses()) {
-      assertThat(eag.getAttributes().get(InternalGoogleDefaultConstants.ATTR_XDS_CLUSTER_NAME))
+      assertThat(eag.getAttributes().get(XdsAttributes.ATTR_CLUSTER_NAME))
           .isEqualTo(CLUSTER);
     }
   }
