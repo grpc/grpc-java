@@ -52,8 +52,8 @@ import javax.annotation.Nullable;
 
 /**
  * Load balancer for cds_experimental LB policy. One instance per top-level cluster.
- * The top-level cluster may be a plain EDS/logical-DNS cluster or an aggregate cluster that
- * formed by a group of sub-clusters in a tree hierarchy.
+ * The top-level cluster may be a plain EDS/logical-DNS cluster or an aggregate cluster formed
+ * by a group of sub-clusters in a tree hierarchy.
  */
 final class CdsLoadBalancer2 extends LoadBalancer {
   private final XdsLogger logger;
@@ -120,7 +120,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
    * receiving the CDS LB policy config with the top-level cluster name.
    */
   private final class CdsLbState {
-    private ClusterState root;
+    private final ClusterState root;
     private LoadBalancer childLb;
 
     private CdsLbState(String rootCluster) {
