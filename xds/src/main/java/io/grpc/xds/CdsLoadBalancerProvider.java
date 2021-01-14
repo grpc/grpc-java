@@ -55,7 +55,7 @@ public class CdsLoadBalancerProvider extends LoadBalancerProvider {
 
   @Override
   public LoadBalancer newLoadBalancer(Helper helper) {
-    return new CdsLoadBalancer(helper);
+    return new CdsLoadBalancer2(helper);
   }
 
   @Override
