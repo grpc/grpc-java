@@ -85,7 +85,7 @@ abstract class XdsClient {
         return false;
       }
       LdsUpdate that = (LdsUpdate) o;
-      return Objects.equals(httpMaxStreamDurationNano, that.httpMaxStreamDurationNano)
+      return httpMaxStreamDurationNano == that.httpMaxStreamDurationNano
           && Objects.equals(rdsName, that.rdsName)
           && Objects.equals(virtualHosts, that.virtualHosts);
     }
