@@ -444,7 +444,7 @@ public class XdsNameResolverTest {
     assertThat(result.getAddresses()).isEmpty();
     assertServiceConfigForLoadBalancingConfig(
         Arrays.asList(cluster1, cluster2), (Map<String, ?>) result.getServiceConfig().getConfig());
-    assertThat(result.getAttributes().get(XdsAttributes.XDS_CLIENT_POOL)).isNotNull();
+    assertThat(result.getAttributes().get(InternalXdsAttributes.XDS_CLIENT_POOL)).isNotNull();
     InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
     assertCallSelectResult(call1, configSelector, cluster2, 20.0);
     assertCallSelectResult(call1, configSelector, cluster1, 20.0);
@@ -504,8 +504,8 @@ public class XdsNameResolverTest {
     assertThat(result.getAddresses()).isEmpty();
     assertServiceConfigForLoadBalancingConfig(
         Arrays.asList(cluster1, cluster2), (Map<String, ?>) result.getServiceConfig().getConfig());
-    assertThat(result.getAttributes().get(XdsAttributes.XDS_CLIENT_POOL)).isNotNull();
-    assertThat(result.getAttributes().get(XdsAttributes.CALL_COUNTER_PROVIDER)).isNotNull();
+    assertThat(result.getAttributes().get(InternalXdsAttributes.XDS_CLIENT_POOL)).isNotNull();
+    assertThat(result.getAttributes().get(InternalXdsAttributes.CALL_COUNTER_PROVIDER)).isNotNull();
     return result.getAttributes().get(InternalConfigSelector.KEY);
   }
 
@@ -745,12 +745,7 @@ public class XdsNameResolverTest {
           if (!resourceName.equals(ldsResource)) {
             return;
           }
-          LdsUpdate.Builder updateBuilder = LdsUpdate.newBuilder();
-          updateBuilder.setHttpMaxStreamDurationNano(httpMaxStreamDurationNano);
-          for (VirtualHost virtualHost : virtualHosts) {
-            updateBuilder.addVirtualHost(virtualHost);
-          }
-          ldsWatcher.onChanged(updateBuilder.build());
+          ldsWatcher.onChanged(new LdsUpdate(httpMaxStreamDurationNano, virtualHosts));
         }
       });
     }
@@ -764,7 +759,7 @@ public class XdsNameResolverTest {
           }
           VirtualHost virtualHost =
               new VirtualHost("virtual-host", Collections.singletonList(AUTHORITY), routes);
-          ldsWatcher.onChanged(LdsUpdate.newBuilder().addVirtualHost(virtualHost).build());
+          ldsWatcher.onChanged(new LdsUpdate(0, Collections.singletonList(virtualHost)));
         }
       });
     }
@@ -776,7 +771,7 @@ public class XdsNameResolverTest {
           if (!resourceName.equals(ldsResource)) {
             return;
           }
-          ldsWatcher.onChanged(LdsUpdate.newBuilder().setRdsName(rdsName).build());
+          ldsWatcher.onChanged(new LdsUpdate(0, rdsName));
         }
       });
     }
@@ -800,7 +795,7 @@ public class XdsNameResolverTest {
           if (!resourceName.equals(rdsResource)) {
             return;
           }
-          rdsWatcher.onChanged(RdsUpdate.fromVirtualHosts(virtualHosts));
+          rdsWatcher.onChanged(new RdsUpdate(virtualHosts));
         }
       });
     }

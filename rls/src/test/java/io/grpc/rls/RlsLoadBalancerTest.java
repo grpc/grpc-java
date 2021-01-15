@@ -50,7 +50,6 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.MethodDescriptor.MethodType;
-import io.grpc.NameResolver;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
@@ -469,12 +468,6 @@ public class RlsLoadBalancerTest {
     public void updateBalancingState(
         @Nonnull ConnectivityState newState, @Nonnull SubchannelPicker newPicker) {
       // no-op
-    }
-
-    @Override
-    @Deprecated
-    public NameResolver.Factory getNameResolverFactory() {
-      throw new UnsupportedOperationException();
     }
 
     @Override

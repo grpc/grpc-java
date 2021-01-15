@@ -396,7 +396,7 @@ public class XdsSdsClientServerTest {
     Attributes attrs =
         (upstreamTlsContext != null)
             ? Attributes.newBuilder()
-                .set(XdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
+                .set(InternalXdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
                     new SslContextProviderSupplier(
                         upstreamTlsContext, new TlsContextManagerImpl(mockBootstrapper)))
                 .build()
@@ -425,7 +425,7 @@ public class XdsSdsClientServerTest {
     Attributes attrs =
         (upstreamTlsContext != null)
             ? Attributes.newBuilder()
-                .set(XdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
+                .set(InternalXdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
                     new SslContextProviderSupplier(
                         upstreamTlsContext, new TlsContextManagerImpl(mockBootstrapper)))
                 .build()

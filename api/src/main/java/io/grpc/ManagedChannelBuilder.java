@@ -386,9 +386,10 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   }
 
   /**
-   * Sets max number of retry attempts. The total number of retry attempts for each RPC will not
-   * exceed this number even if service config may allow a higher number. Setting this number to
-   * zero is not effectively the same as {@code disableRetry()} because the former does not disable
+   * Sets the maximum number of retry attempts that may be configured by the service config. If the
+   * service config specifies a larger value it will be reduced to this value.  Setting this number
+   * to zero is not effectively the same as {@code disableRetry()} because the former does not
+   * disable
    * <a
    * href="https://github.com/grpc/proposal/blob/master/A6-client-retries.md#transparent-retries">
    * transparent retry</a>.
@@ -405,8 +406,8 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   }
 
   /**
-   * Sets max number of hedged attempts. The total number of hedged attempts for each RPC will not
-   * exceed this number even if service config may allow a higher number.
+   * Sets the maximum number of hedged attempts that may be configured by the service config. If the
+   * service config specifies a larger value it will be reduced to this value.
    *
    * <p>This method may not work as expected for the current release because retry is not fully
    * implemented yet.
@@ -456,7 +457,7 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
 
 
   /**
-   * Disables the retry and hedging mechanism provided by the gRPC library. This is designed for the
+   * Disables the retry and hedging subsystem provided by the gRPC library. This is designed for the
    * case when users have their own retry implementation and want to avoid their own retry taking
    * place simultaneously with the gRPC library layer retry.
    *
@@ -469,7 +470,11 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   }
 
   /**
-   * Enables the retry and hedging mechanism provided by the gRPC library.
+   * Enables the retry and hedging subsystem which will use
+   * <a href="https://github.com/grpc/proposal/blob/master/A6-client-retries.md#integration-with-service-config">
+   * per-method configuration</a>. If a method is unconfigured, it will be limited to
+   * transparent retries, which are safe for non-idempotent RPCs. Service config is ideally provided
+   * by the name resolver, but may also be specified via {@link #defaultServiceConfig}.
    *
    * <p>For the current release, this method may have a side effect that disables Census stats and
    * tracing.

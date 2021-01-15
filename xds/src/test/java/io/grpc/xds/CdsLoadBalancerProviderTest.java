@@ -17,8 +17,15 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
+import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancer.Helper;
+import io.grpc.LoadBalancerProvider;
+import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver.ConfigOrError;
+import io.grpc.SynchronizationContext;
 import io.grpc.internal.JsonParser;
 import io.grpc.xds.CdsLoadBalancerProvider.CdsConfig;
 import java.io.IOException;
@@ -44,5 +51,29 @@ public class CdsLoadBalancerProviderTest {
     assertThat(result.getConfig()).isNotNull();
     CdsConfig config = (CdsConfig) result.getConfig();
     assertThat(config.name).isEqualTo("cluster-foo.googleapis.com");
+  }
+
+  @Test
+  public void provided() {
+    LoadBalancerProvider provider =
+        LoadBalancerRegistry.getDefaultRegistry().getProvider(XdsLbPolicies.CDS_POLICY_NAME);
+    assertThat(provider).isInstanceOf(CdsLoadBalancerProvider.class);
+  }
+
+  @Test
+  public void providesLoadBalancer()  {
+    Helper helper = mock(Helper.class);
+
+    SynchronizationContext syncContext = new SynchronizationContext(
+        new Thread.UncaughtExceptionHandler() {
+          @Override
+          public void uncaughtException(Thread t, Throwable e) {
+            throw new AssertionError(e);
+          }
+        });
+    when(helper.getSynchronizationContext()).thenReturn(syncContext);
+    LoadBalancerProvider provider = new CdsLoadBalancerProvider();
+    LoadBalancer loadBalancer = provider.newLoadBalancer(helper);
+    assertThat(loadBalancer).isInstanceOf(CdsLoadBalancer2.class);
   }
 }

@@ -253,7 +253,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
   // Must only be mutated and read from syncContext
   private boolean shutdownNowed;
   // Must only be mutated from syncContext
-  private volatile boolean terminating;
+  private boolean terminating;
   // Must be mutated from syncContext
   private volatile boolean terminated;
   private final CountDownLatch terminatedLatch = new CountDownLatch(1);
@@ -1388,54 +1388,20 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private class LbHelperImpl extends LoadBalancer.Helper {
     AutoConfiguredLoadBalancer lb;
 
-    @Deprecated
-    @Override
-    public AbstractSubchannel createSubchannel(
-        List<EquivalentAddressGroup> addressGroups, Attributes attrs) {
-      logWarningIfNotInSyncContext("createSubchannel()");
-      // TODO(ejona): can we be even stricter? Like loadBalancer == null?
-      checkNotNull(addressGroups, "addressGroups");
-      checkNotNull(attrs, "attrs");
-      final SubchannelImpl subchannel = createSubchannelInternal(
-          CreateSubchannelArgs.newBuilder()
-              .setAddresses(addressGroups)
-              .setAttributes(attrs)
-              .build());
-
-      final SubchannelStateListener listener =
-          new LoadBalancer.SubchannelStateListener() {
-            @Override
-            public void onSubchannelState(ConnectivityStateInfo newState) {
-              // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
-              if (LbHelperImpl.this != ManagedChannelImpl.this.lbHelper) {
-                return;
-              }
-              lb.handleSubchannelState(subchannel, newState);
-            }
-          };
-
-      subchannel.internalStart(listener);
-      return subchannel;
-    }
-
     @Override
     public AbstractSubchannel createSubchannel(CreateSubchannelArgs args) {
       syncContext.throwIfNotInThisSynchronizationContext();
-      return createSubchannelInternal(args);
-    }
-
-    private SubchannelImpl createSubchannelInternal(CreateSubchannelArgs args) {
-      // TODO(ejona): can we be even stricter? Like loadBalancer == null?
-      checkState(!terminated, "Channel is terminated");
+      // No new subchannel should be created after load balancer has been shutdown.
+      checkState(!terminating, "Channel is being terminated");
       return new SubchannelImpl(args, this);
     }
 
     @Override
     public void updateBalancingState(
         final ConnectivityState newState, final SubchannelPicker newPicker) {
+      syncContext.throwIfNotInThisSynchronizationContext();
       checkNotNull(newState, "newState");
       checkNotNull(newPicker, "newPicker");
-      logWarningIfNotInSyncContext("updateBalancingState()");
       final class UpdateBalancingState implements Runnable {
         @Override
         public void run() {
@@ -1458,7 +1424,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
     @Override
     public void refreshNameResolution() {
-      logWarningIfNotInSyncContext("refreshNameResolution()");
+      syncContext.throwIfNotInThisSynchronizationContext();
       final class LoadBalancerRefreshNameResolution implements Runnable {
         @Override
         public void run() {
@@ -1467,16 +1433,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
       }
 
       syncContext.execute(new LoadBalancerRefreshNameResolution());
-    }
-
-    @Deprecated
-    @Override
-    public void updateSubchannelAddresses(
-        LoadBalancer.Subchannel subchannel, List<EquivalentAddressGroup> addrs) {
-      checkArgument(subchannel instanceof SubchannelImpl,
-          "subchannel must have been returned from createSubchannel");
-      logWarningIfNotInSyncContext("updateSubchannelAddresses()");
-      ((InternalSubchannel) subchannel.getInternalSubchannel()).updateAddresses(addrs);
     }
 
     @Override
@@ -1614,12 +1570,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
     @Override
     public String getAuthority() {
       return ManagedChannelImpl.this.authority();
-    }
-
-    @Deprecated
-    @Override
-    public NameResolver.Factory getNameResolverFactory() {
-      return nameResolverFactory;
     }
 
     @Override
@@ -1864,23 +1814,13 @@ final class ManagedChannelImpl extends ManagedChannel implements
       subchannelLogger = new ChannelLoggerImpl(subchannelTracer, timeProvider);
     }
 
-    // This can be called either in or outside of syncContext
-    // TODO(zhangkun83): merge it back into start() once the caller createSubchannel() is deleted.
-    private void internalStart(final SubchannelStateListener listener) {
+    @Override
+    public void start(final SubchannelStateListener listener) {
+      syncContext.throwIfNotInThisSynchronizationContext();
       checkState(!started, "already started");
       checkState(!shutdown, "already shutdown");
+      checkState(!terminating, "Channel is being terminated");
       started = true;
-      // TODO(zhangkun): possibly remove the volatile of terminating when this whole method is
-      // required to be called from syncContext
-      if (terminating) {
-        syncContext.execute(new Runnable() {
-            @Override
-            public void run() {
-              listener.onSubchannelState(ConnectivityStateInfo.forNonError(SHUTDOWN));
-            }
-          });
-        return;
-      }
       final class ManagedInternalSubchannelCallback extends InternalSubchannel.Callback {
         // All callbacks are run in syncContext
         @Override
@@ -1932,21 +1872,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
           .build());
 
       this.subchannel = internalSubchannel;
-      // TODO(zhangkun83): no need to schedule on syncContext when this whole method is required
-      // to be called from syncContext
-      syncContext.execute(new Runnable() {
-          @Override
-          public void run() {
-            channelz.addSubchannel(internalSubchannel);
-            subchannels.add(internalSubchannel);
-          }
-        });
-    }
-
-    @Override
-    public void start(SubchannelStateListener listener) {
-      syncContext.throwIfNotInThisSynchronizationContext();
-      internalStart(listener);
+      channelz.addSubchannel(internalSubchannel);
+      subchannels.add(internalSubchannel);
     }
 
     @Override
@@ -1957,18 +1884,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
     @Override
     public void shutdown() {
-      // TODO(zhangkun83): replace shutdown() with internalShutdown() to turn the warning into an
-      // exception.
-      logWarningIfNotInSyncContext("Subchannel.shutdown()");
-      syncContext.execute(new Runnable() {
-          @Override
-          public void run() {
-            internalShutdown();
-          }
-        });
-    }
-
-    private void internalShutdown() {
       syncContext.throwIfNotInThisSynchronizationContext();
       if (subchannel == null) {
         // start() was not successful
@@ -2017,14 +1932,14 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
     @Override
     public void requestConnection() {
-      logWarningIfNotInSyncContext("Subchannel.requestConnection()");
+      syncContext.throwIfNotInThisSynchronizationContext();
       checkState(started, "not started");
       subchannel.obtainActiveTransport();
     }
 
     @Override
     public List<EquivalentAddressGroup> getAllAddresses() {
-      logWarningIfNotInSyncContext("Subchannel.getAllAddresses()");
+      syncContext.throwIfNotInThisSynchronizationContext();
       checkState(started, "not started");
       return subchannel.getAddressGroups();
     }
@@ -2295,17 +2210,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
         return ConfigOrError.fromError(
             Status.UNKNOWN.withDescription("failed to parse service config").withCause(e));
       }
-    }
-  }
-
-  private void logWarningIfNotInSyncContext(String method) {
-    try {
-      syncContext.throwIfNotInThisSynchronizationContext();
-    } catch (IllegalStateException e) {
-      logger.log(Level.WARNING,
-          method + " should be called from SynchronizationContext. "
-          + "This warning will become an exception in a future release. "
-          + "See https://github.com/grpc/grpc-java/issues/5015 for more details", e);
     }
   }
 
