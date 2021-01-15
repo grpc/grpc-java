@@ -26,7 +26,6 @@ import io.grpc.TlsChannelCredentials;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.GrpcUtil.GrpcBuildVersion;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
-import io.grpc.xds.Bootstrapper.FileReader;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.Node;
@@ -43,7 +42,7 @@ import org.junit.runners.JUnit4;
 
 /** Unit tests for {@link Bootstrapper}. */
 @RunWith(JUnit4.class)
-public class BootstrapperTest {
+public class BootstrapperImplTest {
 
   private static final String BOOTSTRAP_FILE_PATH = "/home/grpc-java/xds/src/test/bootstrap.json";
   private static final String SERVER_URI = "trafficdirector.googleapis.com:443";
@@ -51,25 +50,28 @@ public class BootstrapperTest {
   @Rule
   public final ExpectedException thrown = ExpectedException.none();
 
-  private final Bootstrapper bootstrapper = new Bootstrapper();
+  private final BootstrapperImpl bootstrapper = new BootstrapperImpl();
   private String originalBootstrapPathFromEnvVar;
   private String originalBootstrapPathFromSysProp;
+  private boolean originalEnableV3Protocol;
 
   @Before
   public void setUp() {
     saveEnvironment();
-    Bootstrapper.bootstrapPathFromEnvVar = BOOTSTRAP_FILE_PATH;
+    BootstrapperImpl.bootstrapPathFromEnvVar = BOOTSTRAP_FILE_PATH;
   }
 
   private void saveEnvironment() {
-    originalBootstrapPathFromEnvVar = Bootstrapper.bootstrapPathFromEnvVar;
-    originalBootstrapPathFromSysProp = Bootstrapper.bootstrapPathFromSysProp;
+    originalBootstrapPathFromEnvVar = BootstrapperImpl.bootstrapPathFromEnvVar;
+    originalBootstrapPathFromSysProp = BootstrapperImpl.bootstrapPathFromSysProp;
+    originalEnableV3Protocol = BootstrapperImpl.enableV3Protocol;
   }
 
   @After
   public void restoreEnvironment() {
-    Bootstrapper.bootstrapPathFromEnvVar = originalBootstrapPathFromEnvVar;
-    Bootstrapper.bootstrapPathFromSysProp = originalBootstrapPathFromSysProp;
+    BootstrapperImpl.bootstrapPathFromEnvVar = originalBootstrapPathFromEnvVar;
+    BootstrapperImpl.bootstrapPathFromSysProp = originalBootstrapPathFromSysProp;
+    BootstrapperImpl.enableV3Protocol = originalEnableV3Protocol;
   }
 
   @Test
@@ -582,10 +584,8 @@ public class BootstrapperTest {
 
   @Test
   public void supportV3Protocol_enabled() throws XdsInitializationException {
-    boolean originalEnableV3Protocol = Bootstrapper.enableV3Protocol;
-    Bootstrapper.enableV3Protocol = true;
+    BootstrapperImpl.enableV3Protocol = true;
     subtestSupportV3Protocol(true);
-    Bootstrapper.enableV3Protocol = originalEnableV3Protocol;
   }
 
   private void subtestSupportV3Protocol(boolean enabled) throws XdsInitializationException {
@@ -613,8 +613,9 @@ public class BootstrapperTest {
     }
   }
 
-  private static FileReader createFileReader(final String expectedPath, final String rawData) {
-    return new FileReader() {
+  private static BootstrapperImpl.FileReader createFileReader(
+      final String expectedPath, final String rawData) {
+    return new BootstrapperImpl.FileReader() {
       @Override
       public String readFile(String path) throws IOException {
         assertThat(path).isEqualTo(expectedPath);
@@ -630,6 +631,6 @@ public class BootstrapperTest {
             .setBuildVersion(buildVersion.toString())
             .setUserAgentName(buildVersion.getUserAgent())
             .setUserAgentVersion(buildVersion.getImplementationVersion())
-            .addClientFeatures(Bootstrapper.CLIENT_FEATURE_DISABLE_OVERPROVISIONING);
+            .addClientFeatures(BootstrapperImpl.CLIENT_FEATURE_DISABLE_OVERPROVISIONING);
   }
 }
