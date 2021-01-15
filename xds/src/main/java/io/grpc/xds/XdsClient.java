@@ -474,6 +474,7 @@ abstract class XdsClient {
    * Shutdown this {@link XdsClient} and release resources.
    */
   void shutdown() {
+    throw new UnsupportedOperationException();
   }
 
   /**
@@ -487,54 +488,63 @@ abstract class XdsClient {
    * Registers a data watcher for the given LDS resource.
    */
   void watchLdsResource(String resourceName, LdsResourceWatcher watcher) {
+    throw new UnsupportedOperationException();
   }
 
   /**
    * Unregisters the given LDS resource watcher.
    */
   void cancelLdsResourceWatch(String resourceName, LdsResourceWatcher watcher) {
+    throw new UnsupportedOperationException();
   }
 
   /**
    * Registers a data watcher for the given RDS resource.
    */
   void watchRdsResource(String resourceName, RdsResourceWatcher watcher) {
+    throw new UnsupportedOperationException();
   }
 
   /**
    * Unregisters the given RDS resource watcher.
    */
   void cancelRdsResourceWatch(String resourceName, RdsResourceWatcher watcher) {
+    throw new UnsupportedOperationException();
   }
 
   /**
    * Registers a data watcher for the given CDS resource.
    */
   void watchCdsResource(String resourceName, CdsResourceWatcher watcher) {
+    throw new UnsupportedOperationException();
   }
 
   /**
    * Unregisters the given CDS resource watcher.
    */
   void cancelCdsResourceWatch(String resourceName, CdsResourceWatcher watcher) {
+    throw new UnsupportedOperationException();
   }
 
   /**
    * Registers a data watcher for the given EDS resource.
    */
   void watchEdsResource(String resourceName, EdsResourceWatcher watcher) {
+    throw new UnsupportedOperationException();
   }
 
   /**
    * Unregisters the given EDS resource watcher.
    */
   void cancelEdsResourceWatch(String resourceName, EdsResourceWatcher watcher) {
+    throw new UnsupportedOperationException();
   }
 
   /**
    * Registers a watcher for a Listener with the given port.
    */
   void watchListenerData(int port, ListenerWatcher watcher) {
+    throw new UnsupportedOperationException();
   }
 
   /**
