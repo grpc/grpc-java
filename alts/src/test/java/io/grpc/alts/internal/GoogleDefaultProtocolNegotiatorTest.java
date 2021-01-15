@@ -52,9 +52,9 @@ public final class GoogleDefaultProtocolNegotiatorTest {
 
   private ProtocolNegotiator googleProtocolNegotiator;
 
-  // Same as io.grpc.xds.XdsAttributes.ATTR_CLUSTER_NAME
+  // Same as io.grpc.xds.InternalXdsAttributes.ATTR_CLUSTER_NAME
   private final Attributes.Key<String> clusterNameAttrKey =
-      Attributes.Key.create("io.grpc.xds.XdsAttributes.clusterName");
+      Attributes.Key.create("io.grpc.xds.InternalXdsAttributes.clusterName");
   private final ObjectPool<Channel> handshakerChannelPool = new ObjectPool<Channel>() {
 
     @Override

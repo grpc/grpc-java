@@ -76,7 +76,7 @@ public final class GoogleDefaultChannelCredentials {
     }
     Attributes.Key<String> clusterNameAttrKey = null;
     try {
-      Class<?> klass = Class.forName("io.grpc.xds.XdsAttributes");
+      Class<?> klass = Class.forName("io.grpc.xds.InternalXdsAttributes");
       clusterNameAttrKey =
           (Attributes.Key<String>) klass.getField("ATTR_CLUSTER_NAME").get(null);
     } catch (ClassNotFoundException e) {
