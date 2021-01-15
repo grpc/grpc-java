@@ -79,7 +79,13 @@ public final class GoogleDefaultChannelCredentials {
       Class<?> klass = Class.forName("io.grpc.xds.XdsAttributes");
       clusterNameAttrKey =
           (Attributes.Key<String>) klass.getField("ATTR_CLUSTER_NAME").get(null);
-    } catch (ClassNotFoundException | NoSuchFieldException | IllegalAccessException e) {
+    } catch (ClassNotFoundException e) {
+      logger.log(Level.FINE,
+          "Unable to load xDS endpoint cluster name key, this may be expected", e);
+    } catch (NoSuchFieldException e) {
+      logger.log(Level.FINE,
+          "Unable to load xDS endpoint cluster name key, this may be expected", e);
+    } catch (IllegalAccessException e) {
       logger.log(Level.FINE,
           "Unable to load xDS endpoint cluster name key, this may be expected", e);
     }
