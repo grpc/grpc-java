@@ -613,6 +613,26 @@ public class BootstrapperImplTest {
     }
   }
 
+  @Test
+  public void fallbackToFilePathFromSystemProperty() throws XdsInitializationException {
+    final String customPath = "/home/bootstrap.json";
+    BootstrapperImpl.bootstrapPathFromEnvVar = null;
+    BootstrapperImpl.bootstrapPathFromSysProp = customPath;
+    String rawData = "{\n"
+        + "  \"xds_servers\": [\n"
+        + "    {\n"
+        + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+        + "      \"channel_creds\": [\n"
+        + "        {\"type\": \"insecure\"}\n"
+        + "      ]\n"
+        + "    }\n"
+        + "  ]\n"
+        + "}";
+
+    bootstrapper.setFileReader(createFileReader(customPath, rawData));
+    bootstrapper.bootstrap();
+  }
+
   private static BootstrapperImpl.FileReader createFileReader(
       final String expectedPath, final String rawData) {
     return new BootstrapperImpl.FileReader() {
