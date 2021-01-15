@@ -86,7 +86,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
     }
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     this.resolvedAddresses = resolvedAddresses;
-    xdsClientPool = resolvedAddresses.getAttributes().get(XdsAttributes.XDS_CLIENT_POOL);
+    xdsClientPool = resolvedAddresses.getAttributes().get(InternalXdsAttributes.XDS_CLIENT_POOL);
     xdsClient = xdsClientPool.getObject();
     CdsConfig config = (CdsConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
     logger.log(XdsLogLevel.INFO, "Config: {0}", config);

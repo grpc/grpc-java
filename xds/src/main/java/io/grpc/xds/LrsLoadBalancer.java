@@ -52,8 +52,8 @@ final class LrsLoadBalancer extends LoadBalancer {
   @Override
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     LrsConfig config = (LrsConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
-    LoadStatsStore store =
-        resolvedAddresses.getAttributes().get(XdsAttributes.ATTR_CLUSTER_SERVICE_LOAD_STATS_STORE);
+    LoadStatsStore store = resolvedAddresses.getAttributes().get(
+        InternalXdsAttributes.ATTR_CLUSTER_SERVICE_LOAD_STATS_STORE);
     checkNotNull(config, "missing LRS lb config");
     checkNotNull(store, "missing cluster service stats object");
     checkAndSetUp(config, store);

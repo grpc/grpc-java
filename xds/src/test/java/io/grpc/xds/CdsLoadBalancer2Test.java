@@ -130,7 +130,9 @@ public class CdsLoadBalancer2Test {
             .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
             .setAttributes(
                 // Other attributes not used by cluster_resolver LB are omitted.
-                Attributes.newBuilder().set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool).build())
+                Attributes.newBuilder()
+                    .set(InternalXdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
+                    .build())
             .setLoadBalancingPolicyConfig(new CdsConfig(CLUSTER))
             .build());
     assertThat(Iterables.getOnlyElement(xdsClient.watchers.keySet())).isEqualTo(CLUSTER);

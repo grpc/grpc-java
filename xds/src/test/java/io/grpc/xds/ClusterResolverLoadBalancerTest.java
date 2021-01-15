@@ -736,7 +736,9 @@ public class ClusterResolverLoadBalancerTest {
             .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
             .setAttributes(
                 // Other attributes not used by cluster_resolver LB are omitted.
-                Attributes.newBuilder().set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool).build())
+                Attributes.newBuilder()
+                    .set(InternalXdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
+                    .build())
             .setLoadBalancingPolicyConfig(config)
             .build());
   }

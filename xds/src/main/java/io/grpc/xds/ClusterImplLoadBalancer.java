@@ -102,11 +102,11 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     Attributes attributes = resolvedAddresses.getAttributes();
     if (xdsClientPool == null) {
-      xdsClientPool = attributes.get(XdsAttributes.XDS_CLIENT_POOL);
+      xdsClientPool = attributes.get(InternalXdsAttributes.XDS_CLIENT_POOL);
       xdsClient = xdsClientPool.getObject();
     }
     if (callCounterProvider == null) {
-      callCounterProvider = attributes.get(XdsAttributes.CALL_COUNTER_PROVIDER);
+      callCounterProvider = attributes.get(InternalXdsAttributes.CALL_COUNTER_PROVIDER);
     }
     ClusterImplConfig config =
         (ClusterImplConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
@@ -130,7 +130,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     childLbHelper.updateSslContextProviderSupplier(config.tlsContext);
     if (loadStatsStore != null) {
       attributes = attributes.toBuilder()
-          .set(XdsAttributes.ATTR_CLUSTER_SERVICE_LOAD_STATS_STORE, loadStatsStore).build();
+          .set(InternalXdsAttributes.ATTR_CLUSTER_SERVICE_LOAD_STATS_STORE, loadStatsStore).build();
     }
     childLb.handleResolvedAddresses(
         resolvedAddresses.toBuilder()
@@ -200,7 +200,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
         for (EquivalentAddressGroup eag : args.getAddresses()) {
           Attributes attributes =
               eag.getAttributes().toBuilder()
-                  .set(XdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
+                  .set(InternalXdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
                       sslContextProviderSupplier)
                   .build();
           addresses.add(new EquivalentAddressGroup(eag.getAddresses(), attributes));

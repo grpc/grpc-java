@@ -26,17 +26,21 @@ import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
 import io.grpc.xds.internal.sds.SslContextProviderSupplier;
 
 /**
- * Special attributes that are only useful to gRPC in the XDS context.
+ * Internal attributes used for xDS implementation. Do not use.
  */
 @Internal
-public final class XdsAttributes {
+public final class InternalXdsAttributes {
 
+  // TODO(sanjaypujare): move to xds internal package.
   /** Attribute key for SslContextProviderSupplier (used from client) for a subchannel. */
   @Grpc.TransportAttr
   public static final Attributes.Key<SslContextProviderSupplier>
       ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER =
           Attributes.Key.create("io.grpc.xds.internal.sds.SslContextProviderSupplier");
 
+  /**
+   * Attribute key for passing around the XdsClient object pool across NameResolver/LoadBalancers.
+   */
   @NameResolver.ResolutionResultAttr
   static final Attributes.Key<ObjectPool<XdsClient>> XDS_CLIENT_POOL =
       Attributes.Key.create("io.grpc.xds.XdsAttributes.xdsClientPool");
@@ -54,5 +58,5 @@ public final class XdsAttributes {
   static final Attributes.Key<LoadStatsStore> ATTR_CLUSTER_SERVICE_LOAD_STATS_STORE =
       Attributes.Key.create("io.grpc.xds.XdsAttributes.loadStatsStore");
 
-  private XdsAttributes() {}
+  private InternalXdsAttributes() {}
 }
