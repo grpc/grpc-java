@@ -73,28 +73,28 @@ public class InProcessChannelBuilderTest {
     InProcessChannelBuilder builder = InProcessChannelBuilder.forName("foo");
     ClientTransportFactory transportFactory = builder.buildTransportFactory();
     ClientTransportFactory factoryWithInsecure =
-        transportFactory.withNewChannelCredential(InsecureChannelCredentials.create());
+        transportFactory.withNewChannelCredentials(InsecureChannelCredentials.create());
     assertThat(factoryWithInsecure).isSameInstanceAs(transportFactory);
 
-    ClientTransportFactory factoryWithChoice = transportFactory.withNewChannelCredential(
+    ClientTransportFactory factoryWithChoice = transportFactory.withNewChannelCredentials(
         ChoiceChannelCredentials.create(
             mock(ChannelCredentials.class), mock(ChannelCredentials.class)));
     assertThat(factoryWithChoice).isNull();
-    factoryWithChoice = transportFactory.withNewChannelCredential(
+    factoryWithChoice = transportFactory.withNewChannelCredentials(
         ChoiceChannelCredentials.create(
             mock(ChannelCredentials.class), InsecureChannelCredentials.create()));
     assertThat(factoryWithChoice).isSameInstanceAs(transportFactory);
 
-    ClientTransportFactory factoryWithComposite = transportFactory.withNewChannelCredential(
+    ClientTransportFactory factoryWithComposite = transportFactory.withNewChannelCredentials(
         CompositeChannelCredentials.create(
             mock(ChannelCredentials.class), mock(CallCredentials.class)));
     assertThat(factoryWithComposite).isNull();
-    factoryWithComposite = transportFactory.withNewChannelCredential(
+    factoryWithComposite = transportFactory.withNewChannelCredentials(
         CompositeChannelCredentials.create(
             InsecureChannelCredentials.create(), mock(CallCredentials.class)));
     assertThat(factoryWithComposite).isSameInstanceAs(transportFactory);
 
-    ClientTransportFactory factoryWithSecure = transportFactory.withNewChannelCredential(
+    ClientTransportFactory factoryWithSecure = transportFactory.withNewChannelCredentials(
         mock(ChannelCredentials.class));
     assertThat(factoryWithSecure).isNull();
   }

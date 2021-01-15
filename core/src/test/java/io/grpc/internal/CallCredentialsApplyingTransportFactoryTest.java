@@ -47,7 +47,7 @@ public class CallCredentialsApplyingTransportFactoryTest {
     ClientTransportFactory delegateWithNewCreds = mock(ClientTransportFactory.class);
     ClientTransportFactory delegate = mock(ClientTransportFactory.class);
     doReturn(delegateWithNewCreds).when(delegate)
-        .withNewChannelCredential(any(ChannelCredentials.class));
+        .withNewChannelCredentials(any(ChannelCredentials.class));
     doReturn(mockTransport).when(delegateWithNewCreds)
         .newClientTransport(
             any(SocketAddress.class), any(ClientTransportOptions.class), any(ChannelLogger.class));
@@ -73,7 +73,7 @@ public class CallCredentialsApplyingTransportFactoryTest {
         delegate, callCredentials, appExecutor);
 
     ClientTransportFactory factoryWithNewCreds =
-        factory.withNewChannelCredential(mock(ChannelCredentials.class));
+        factory.withNewChannelCredentials(mock(ChannelCredentials.class));
     assertThat(factoryWithNewCreds).isInstanceOf(CallCredentialsApplyingTransportFactory.class);
     CallCredentialsApplyingTransportFactory newCallCredsApplyingFactory =
          (CallCredentialsApplyingTransportFactory) factoryWithNewCreds;

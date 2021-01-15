@@ -251,7 +251,7 @@ public final class InProcessChannelBuilder extends
     }
 
     @Override
-    public ClientTransportFactory withNewChannelCredential(ChannelCredentials channelCreds) {
+    public ClientTransportFactory withNewChannelCredentials(ChannelCredentials channelCreds) {
       checkNotNull(channelCreds, "channelCreds");
       // InProcessChannel does not do any channel authentication, so it only supports insecure
       // creds, otherwise return null to indicate fallback.
@@ -261,7 +261,7 @@ public final class InProcessChannelBuilder extends
       if (channelCreds instanceof ChoiceChannelCredentials) {
         ChoiceChannelCredentials ccc = (ChoiceChannelCredentials) channelCreds;
         for(ChannelCredentials cc : ccc.getCredentialsList()) {
-          ClientTransportFactory factory = withNewChannelCredential(cc);
+          ClientTransportFactory factory = withNewChannelCredentials(cc);
           if (factory != null) {
             return factory;
           }
@@ -269,7 +269,7 @@ public final class InProcessChannelBuilder extends
       }
       if (channelCreds instanceof CompositeChannelCredentials) {
         CompositeChannelCredentials ccc = (CompositeChannelCredentials) channelCreds;
-        return withNewChannelCredential(ccc.getChannelCredentials());
+        return withNewChannelCredentials(ccc.getChannelCredentials());
       }
       return null;
     }

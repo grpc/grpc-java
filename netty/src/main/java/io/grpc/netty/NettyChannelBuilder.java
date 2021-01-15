@@ -707,7 +707,7 @@ public final class NettyChannelBuilder extends
     }
 
     @Override
-    public ClientTransportFactory withNewChannelCredential(ChannelCredentials channelCreds) {
+    public ClientTransportFactory withNewChannelCredentials(ChannelCredentials channelCreds) {
       checkNotNull(channelCreds, "channelCreds");
       FromChannelCredentialsResult result = ProtocolNegotiators.from(channelCreds);
       if (result.error != null) {

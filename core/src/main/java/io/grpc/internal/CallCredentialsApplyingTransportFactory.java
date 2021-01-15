@@ -60,9 +60,9 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
   }
 
   @Override
-  public ClientTransportFactory withNewChannelCredential(ChannelCredentials channelCreds) {
+  public ClientTransportFactory withNewChannelCredentials(ChannelCredentials channelCreds) {
     return new CallCredentialsApplyingTransportFactory(
-        delegate.withNewChannelCredential(channelCreds), channelCallCredentials, appExecutor);
+        delegate.withNewChannelCredentials(channelCreds), channelCallCredentials, appExecutor);
   }
 
   @Override
