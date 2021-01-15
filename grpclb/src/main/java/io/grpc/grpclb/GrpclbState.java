@@ -203,9 +203,20 @@ final class GrpclbState {
     if (config.getMode() == Mode.ROUND_ROBIN && newState.getState() == IDLE) {
       subchannel.requestConnection();
     }
-    subchannel.getAttributes().get(STATE_INFO).set(newState);
-    maybeUseFallbackBackends();
-    maybeUpdatePicker();
+    AtomicReference<ConnectivityStateInfo> stateInfoRef =
+        subchannel.getAttributes().get(STATE_INFO);
+    // If all RR servers are unhealthy, it's possible that at least one connection is CONNECTING at
+    // every moment which causes RR to stay in CONNECTING. It's better to keep the TRANSIENT_FAILURE
+    // state in that case so that fail-fast RPCs can fail fast.
+    boolean keepState =
+        config.getMode() == Mode.ROUND_ROBIN
+        && stateInfoRef.get().getState() == TRANSIENT_FAILURE
+        && (newState.getState() == CONNECTING || newState.getState() == IDLE);
+    if (!keepState) {
+      stateInfoRef.set(newState);
+      maybeUseFallbackBackends();
+      maybeUpdatePicker();
+    }
   }
 
   /**
